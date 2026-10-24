@@ -1,0 +1,67 @@
+.note {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35em;
+  transform: rotate(var(--rot, -2deg));
+  max-width: 22ch;
+}
+.text {
+  text-wrap: balance;
+}
+.arrow {
+  width: 2.2em;
+  height: 1.3em;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  overflow: visible;
+}
+.arrow_right .arrow {
+  order: 1;
+}
+.arrow_left {
+  flex-direction: row;
+}
+.arrow_left .arrow {
+  order: -1;
+  transform: scaleX(-1);
+}
+.arrow_down {
+  flex-direction: column;
+  align-items: flex-start;
+}
+.arrow_down .arrow {
+  order: 1;
+  transform: rotate(80deg);
+  margin-left: 0.6em;
+}
+.arrow_up {
+  flex-direction: column;
+  align-items: flex-start;
+}
+.arrow_up .arrow {
+  order: -1;
+  transform: rotate(-80deg);
+  margin-left: 0.6em;
+}
+/* Tones set --hand-color as well (the variable .t-hand reads), so the tone survives any CSS
+   order: cream/chartreuse notes stay readable on the green and forest blocks. */
+.cocoa {
+  --hand-color: var(--cocoa);
+  color: var(--cocoa);
+}
+.cream {
+  --hand-color: var(--cream);
+  color: var(--cream);
+}
+.chartreuse {
+  --hand-color: var(--chartreuse);
+  color: var(--chartreuse);
+}
+.green {
+  --hand-color: var(--green);
+  color: var(--green);
+}

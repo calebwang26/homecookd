@@ -1,0 +1,193 @@
+.btn {
+  --h: 60px;
+  --circle: 44px;
+  --pad-x: 28px;
+  --bg: var(--btn-primary-bg);
+  --fg: var(--btn-primary-fg);
+  --circle-bg: var(--cream);
+  --circle-fg: var(--green);
+  --border: transparent;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  min-height: var(--h);
+  padding: 0 var(--pad-x);
+  border-radius: var(--r-pill);
+  border: 1.5px solid var(--border);
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--ff-text);
+  font-weight: 600;
+  font-size: var(--fs-ui-lg);
+  line-height: 1;
+  letter-spacing: 0.005em;
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color 240ms var(--ease-soft),
+    color 240ms var(--ease-soft),
+    border-color 240ms var(--ease-soft),
+    transform var(--d-spring) var(--ease-spring);
+}
+/* press: a quick squeeze in, a spring back out on release */
+.btn:active {
+  transform: scale(0.97);
+  transition-duration: 240ms, 240ms, 240ms, 120ms;
+  transition-timing-function: var(--ease-soft);
+}
+.btn:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+.btn[data-theme='dark']:focus-visible {
+  outline-color: var(--chartreuse);
+}
+
+/* sizes */
+.lg {
+  --h: 68px;
+  --circle: 52px;
+  --pad-x: 32px;
+  font-size: 1.1875rem;
+}
+.md {
+  --h: 60px;
+  --circle: 44px;
+  --pad-x: 28px;
+}
+.sm {
+  --h: 48px;
+  --circle: 36px;
+  --pad-x: 22px;
+  font-size: var(--fs-ui);
+}
+.withArrow {
+  padding-right: calc(var(--circle) + 8px + 16px);
+}
+.block {
+  display: flex;
+  width: 100%;
+}
+
+.label {
+  display: inline-flex;
+  align-items: center;
+  gap: 14px;
+  transition: transform var(--d-spring) var(--ease-spring);
+}
+.icon {
+  display: inline-grid;
+  place-items: center;
+  margin-left: -4px;
+}
+.circle {
+  position: absolute;
+  right: 8px;
+  top: 50%;
+  display: grid;
+  place-items: center;
+  width: var(--circle);
+  height: var(--circle);
+  margin-top: calc(var(--circle) / -2);
+  border-radius: 50%;
+  background: var(--circle-bg);
+  color: var(--circle-fg);
+  transition: transform var(--d-spring) var(--ease-spring);
+}
+.circle > :global(svg) {
+  transition: transform var(--d-spring) var(--ease-spring);
+}
+@media (hover: hover) {
+  .btn:hover .circle {
+    transform: translateX(4px);
+  }
+  .btn:hover .label {
+    transform: translateX(2px);
+  }
+  .btn:hover .circle > :global(svg) {
+    transform: translateX(2px);
+  }
+}
+/* keyboard focus gets the same nudge as hover, so nothing depends on a mouse */
+.btn:focus-visible .circle {
+  transform: translateX(4px);
+}
+.btn:focus-visible .label {
+  transform: translateX(2px);
+}
+
+/* variants */
+.hero {
+  --bg: var(--btn-hero-bg);
+  --fg: var(--btn-hero-fg);
+  --circle-bg: var(--forest);
+  --circle-fg: var(--chartreuse);
+}
+.hero:hover {
+  --bg: var(--chartreuse-swirl);
+}
+.primary {
+  --bg: var(--btn-primary-bg);
+  --fg: var(--btn-primary-fg);
+  --circle-bg: var(--cream);
+  --circle-fg: var(--green);
+}
+.primary:hover {
+  --bg: var(--btn-primary-hover);
+}
+.soft {
+  --bg: var(--btn-soft-bg);
+  --fg: var(--btn-soft-fg);
+  --circle-bg: var(--green);
+  --circle-fg: var(--cream);
+}
+.soft:hover {
+  --bg: var(--lime-wash);
+}
+.outlineCream {
+  --bg: transparent;
+  --fg: var(--cream);
+  --border: rgba(255, 253, 247, 0.7);
+  --circle-bg: var(--cream);
+  --circle-fg: var(--forest);
+}
+.outlineCream:hover {
+  --bg: rgba(255, 253, 247, 0.12);
+  --border: var(--cream);
+}
+.outlineInk {
+  --bg: transparent;
+  --fg: var(--ink);
+  --border: rgba(30, 36, 16, 0.35);
+  --circle-bg: var(--ink);
+  --circle-fg: var(--cream);
+}
+.outlineInk:hover {
+  --bg: rgba(30, 36, 16, 0.05);
+  --border: var(--ink);
+}
+.black {
+  --bg: var(--black);
+  --fg: var(--canvas);
+  --circle-bg: var(--chartreuse);
+  --circle-fg: var(--ink);
+}
+.black:hover {
+  --bg: #23261d;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn,
+  .label,
+  .circle,
+  .circle > :global(svg) {
+    transition: none;
+  }
+  .btn:active {
+    transform: none;
+  }
+}

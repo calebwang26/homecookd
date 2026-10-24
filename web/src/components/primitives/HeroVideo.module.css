@@ -1,0 +1,74 @@
+.hero {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: var(--hero-dark);
+}
+.poster,
+.video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: var(--focus);
+}
+.poster {
+  z-index: 1;
+  transition: opacity 600ms var(--ease-soft);
+}
+.video {
+  z-index: 0;
+}
+.isPlaying .poster {
+  opacity: 0;
+}
+@media (max-width: 767px) {
+  .poster,
+  .video {
+    object-position: var(--focus-m, var(--focus));
+  }
+}
+.play {
+  position: absolute;
+  z-index: 2;
+  left: 50%;
+  top: 38%;
+  translate: -50% -50%;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 60px;
+  padding: 6px 22px 6px 6px;
+  border-radius: var(--r-pill);
+  background: rgba(30, 36, 16, 0.42);
+  color: var(--cream);
+  font-family: var(--ff-text);
+  font-weight: 600;
+  font-size: var(--fs-ui-lg);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+  border: 1.5px solid rgba(255, 253, 247, 0.55);
+}
+.play:focus-visible {
+  outline-color: var(--chartreuse);
+}
+.playDisc {
+  display: grid;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: var(--cream);
+  color: var(--ink);
+}
+
+/* Phones: no backdrop blur over the playing video (see DeckFilm.module.css). */
+@media (max-width: 1023px) {
+  .play {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: rgba(30, 36, 16, 0.6);
+  }
+}

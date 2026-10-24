@@ -1,0 +1,133 @@
+/* A modern phone, sized by --w. Everything inside is in cqw of the device width.
+   Outline 620:1275 (iPhone proportions); screen inset 4.62cqw → exactly 780:1688. */
+.device {
+  --w: 300px;
+  --rim-a: #b9bcae;
+  --rim-b: #4d5045;
+  --rim-c: #2b2d27;
+  --rim-d: #6c6f62;
+  position: relative;
+  flex: none;
+  width: var(--w);
+  aspect-ratio: 620 / 1275;
+  container-type: inline-size;
+}
+
+/* titanium rim + black bezel */
+.body {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: 16cqw;
+  background:
+    linear-gradient(#0b0c09, #0b0c09) padding-box,
+    linear-gradient(155deg, var(--rim-a) 0%, var(--rim-b) 14%, var(--rim-c) 38%, var(--rim-c) 62%, var(--rim-d) 84%, var(--rim-a) 100%) border-box;
+  border: 1.15cqw solid transparent;
+  box-shadow:
+    inset 0 0 0 0.35cqw rgba(255, 255, 255, 0.06),
+    inset 0 0.5cqw 0.6cqw rgba(255, 255, 255, 0.05);
+}
+.shadow .body {
+  box-shadow:
+    inset 0 0 0 0.35cqw rgba(255, 255, 255, 0.06),
+    inset 0 0.5cqw 0.6cqw rgba(255, 255, 255, 0.05),
+    0 1.2cqw 2.4cqw rgba(12, 16, 4, 0.28),
+    0 14cqw 28cqw -8cqw rgba(12, 16, 4, 0.5);
+}
+
+.screen {
+  position: absolute;
+  /* 4.62cqw from the device's outer edge; the border above already takes 1.15cqw */
+  left: 3.47cqw;
+  top: 3.47cqw;
+  width: calc(100cqw - 9.24cqw);
+  aspect-ratio: 780 / 1688;
+  border-radius: 11.6cqw;
+  overflow: hidden;
+  background: var(--canvas);
+  isolation: isolate;
+  /* Safari: keep the rounded clip on composited video */
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+}
+.screen > :global(*) {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+
+/* Dynamic Island: 32% of the screen wide, 11pt from the top (iPhone 15 Pro) */
+.island {
+  position: absolute;
+  z-index: 2;
+  top: calc(3.47cqw + 2.55cqw);
+  left: 50%;
+  width: 29cqw;
+  height: 8.5cqw;
+  translate: -50% 0;
+  border-radius: 999px;
+  background:
+    radial-gradient(circle at 80% 50%, #22303c 0 0.9cqw, #0d1217 1.4cqw, transparent 1.5cqw),
+    #050605;
+  pointer-events: none;
+}
+
+/* side buttons: same titanium, a hair proud of the rim */
+.btnAction,
+.btnVolUp,
+.btnVolDown,
+.btnPower {
+  position: absolute;
+  z-index: 0;
+  width: 1.6cqw;
+  border-radius: 0.8cqw;
+  background: linear-gradient(90deg, var(--rim-c), var(--rim-d) 45%, var(--rim-b));
+}
+.btnAction,
+.btnVolUp,
+.btnVolDown {
+  left: -0.75cqw;
+}
+.btnPower {
+  right: -0.75cqw;
+}
+.btnAction {
+  top: 17.6%;
+  height: 3%;
+}
+.btnVolUp {
+  top: 23.6%;
+  height: 5.4%;
+}
+.btnVolDown {
+  top: 30.6%;
+  height: 5.4%;
+}
+.btnPower {
+  top: 25%;
+  height: 8.6%;
+}
+
+/* ---------- the hand ---------- */
+/* The hand image box, placed so the (mirrored) bumper box = the device box. */
+.hand {
+  position: absolute;
+  left: -81.37cqw;
+  top: -1.61cqw;
+  width: 198.06cqw;
+  height: 288.55cqw;
+  max-width: none;
+  transform: scaleX(-1);
+  pointer-events: none;
+  overflow: visible;
+}
+.hand:not(.handThumb) {
+  z-index: 0;
+}
+.handThumb {
+  z-index: 3;
+}
+.held .btnVolDown {
+  /* the thumb sits right under it; keep it clear of the knuckle */
+  height: 4.6%;
+}

@@ -1,0 +1,35 @@
+.clock {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  white-space: nowrap;
+}
+.glyph {
+  width: 1em;
+  height: 1em;
+  flex: none;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  translate: 0 0.04em;
+}
+/* Tones set --hand-color as well (the variable .t-hand reads), so the tone survives any CSS
+   order: cream/chartreuse notes stay readable on the green and forest blocks. */
+.cocoa {
+  --hand-color: var(--cocoa);
+  color: var(--cocoa);
+}
+.cream {
+  --hand-color: var(--cream);
+  color: var(--cream);
+}
+.chartreuse {
+  --hand-color: var(--chartreuse);
+  color: var(--chartreuse);
+}
+.green {
+  --hand-color: var(--green);
+  color: var(--green);
+}

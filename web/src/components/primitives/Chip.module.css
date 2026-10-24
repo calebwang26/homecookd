@@ -1,0 +1,186 @@
+.chip {
+  --bg: var(--surface);
+  --fg: var(--ink);
+  --origin: 24px calc(100% + 11px);
+  position: relative;
+  display: inline-block;
+  transform: rotate(var(--rot, 0deg));
+  font-family: var(--ff-text);
+  font-weight: 500;
+  font-size: clamp(1rem, 0.9rem + 0.3vw, 1.25rem);
+  line-height: 1.2;
+  letter-spacing: 0.005em;
+  white-space: nowrap;
+}
+.pop {
+  display: inline-block;
+  transform-origin: var(--origin);
+}
+.wobble {
+  display: inline-block;
+  transform-origin: var(--origin);
+}
+.wobbling {
+  animation:
+    chipRot 3.6s ease-in-out infinite,
+    chipLift 3.6s ease-in-out infinite;
+  animation-delay: var(--phase, 0s), calc(var(--phase, 0s) - 0.9s);
+}
+.bubble {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  padding: 0.55em 1em;
+  border-radius: 1.1em;
+  background: var(--bg);
+  color: var(--fg);
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.28),
+    0 1px 2px rgba(30, 36, 16, 0.06),
+    0 10px 24px -12px rgba(30, 36, 16, 0.32);
+}
+.tail {
+  position: absolute;
+  top: calc(100% - 1px);
+  width: 20px;
+  height: 12px;
+  fill: var(--bg);
+}
+.tail_bl .tail {
+  left: 14px;
+}
+.tail_bc {
+  --origin: 50% calc(100% + 11px);
+}
+.tail_bc .tail {
+  left: calc(50% - 10px);
+}
+.tail_br {
+  --origin: calc(100% - 24px) calc(100% + 11px);
+}
+.tail_br .tail {
+  right: 14px;
+  transform: scaleX(-1);
+}
+.noTail {
+  --origin: 50% 50%;
+}
+
+/* tones (palette-type.md pairs) */
+.forest {
+  --bg: var(--forest);
+  --fg: var(--chartreuse);
+}
+.sun {
+  --bg: var(--sun);
+  --fg: var(--ink);
+}
+.green {
+  --bg: var(--green);
+  --fg: var(--cream);
+}
+.tomato {
+  --bg: var(--tomato);
+  --fg: var(--ink);
+}
+.cream {
+  --bg: var(--surface);
+  --fg: var(--ink);
+}
+.cream .bubble {
+  box-shadow:
+    0 0 0 1px var(--hairline),
+    0 1px 2px rgba(30, 36, 16, 0.05),
+    0 12px 28px -12px rgba(30, 36, 16, 0.28);
+}
+.black {
+  --bg: var(--black);
+  --fg: var(--canvas);
+}
+
+/* typing dots: a small bubble at the tail that shows first */
+.dots {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  display: none;
+  gap: 4px;
+  align-items: center;
+  padding: 0.7em 0.85em;
+  border-radius: 1.1em;
+  background: var(--bg);
+  transform-origin: var(--origin);
+  box-shadow: 0 10px 24px -12px rgba(30, 36, 16, 0.32);
+}
+.tail_bc .dots {
+  left: 50%;
+  translate: -50% 0;
+}
+.tail_br .dots {
+  left: auto;
+  right: 0;
+}
+.dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--fg);
+  opacity: 0.5;
+  /* finite: the dots only show for ~0.6s per pop */
+  animation: dot 900ms ease-in-out 4;
+}
+:global(html[data-paused]) .dots i {
+  animation-play-state: paused;
+}
+.dots i:nth-child(2) {
+  animation-delay: 150ms;
+}
+.dots i:nth-child(3) {
+  animation-delay: 300ms;
+}
+
+/* hidden start only when motion is on and the chip pops */
+:global(html[data-motion='on']) .chip[data-pop]:not([data-revealed]) .pop {
+  transform: scale(0);
+  opacity: 0;
+}
+
+/* rotation and lift are separate properties running a quarter-cycle apart, so the chip sways and
+   bobs like it's breathing; each eases smoothly between its extremes (no stop at the midpoint) */
+@keyframes chipRot {
+  0%,
+  100% {
+    rotate: -3deg;
+  }
+  50% {
+    rotate: 3deg;
+  }
+}
+@keyframes chipLift {
+  0%,
+  100% {
+    translate: 0 3px;
+  }
+  50% {
+    translate: 0 -3px;
+  }
+}
+@keyframes dot {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.45;
+  }
+  50% {
+    transform: translateY(-3px);
+    opacity: 1;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wobbling,
+  .dots i {
+    animation: none;
+  }
+}

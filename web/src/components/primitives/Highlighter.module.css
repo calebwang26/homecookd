@@ -1,0 +1,30 @@
+.hl {
+  background: linear-gradient(var(--hl-color, var(--highlighter)), var(--hl-color, var(--highlighter))) no-repeat 0 85% / var(--hl, 100%) 78%;
+  -webkit-box-decoration-break: clone;
+  box-decoration-break: clone;
+  padding: 0 0.12em;
+  margin: 0 -0.04em;
+  border-radius: 3px;
+  color: inherit;
+}
+.auto,
+.controlled {
+  transition: background-size var(--d-highlight) var(--ease-out-quart);
+}
+/* hidden start only when motion is on */
+:global(html[data-motion='on']) .auto:not([data-drawn]) {
+  --hl: 0%;
+}
+.controlled:not([data-drawn]) {
+  --hl: 0%;
+}
+/* scrub: GSAP drives --hl inline (0% → 100%), no transition lag */
+.scrub {
+  transition: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .auto,
+  .controlled {
+    transition: none;
+  }
+}

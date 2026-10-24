@@ -1,0 +1,55 @@
+.clip {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  background: var(--canvas);
+  container-type: inline-size;
+}
+.video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 0%;
+}
+.play {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(180deg, rgba(30, 36, 16, 0) 40%, rgba(30, 36, 16, 0.18));
+  transition: opacity 200ms var(--ease-soft);
+}
+.playDisc {
+  transition: transform var(--d-spring) var(--ease-spring);
+}
+@media (hover: hover) {
+  .play:hover .playDisc {
+    transform: scale(1.06);
+  }
+}
+.play:active .playDisc {
+  transform: scale(0.94);
+  transition-duration: 120ms;
+}
+.playHidden {
+  opacity: 0;
+}
+.playHidden:hover,
+.playHidden:focus-visible {
+  opacity: 1;
+}
+/* scales with the phone (never under the 48px target) */
+.playDisc {
+  display: grid;
+  place-items: center;
+  width: clamp(48px, 22cqw, 64px);
+  height: clamp(48px, 22cqw, 64px);
+  border-radius: 50%;
+  background: rgba(255, 253, 247, 0.92);
+  color: var(--ink);
+  box-shadow: var(--shadow-card);
+}
+.play:focus-visible {
+  outline-offset: -6px;
+}
