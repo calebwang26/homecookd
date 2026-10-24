@@ -447,4 +447,5 @@ Before starting work, compare the last commit here with `git log origin/main` to
     `place '{"familyId": …}'` for Serene's, Caleb's and Salik's families; Vercel needs no new env (the site URL has
     a public default). `DEMO_LOCATION` is still the MIT placeholder (`TODO(caleb)`). No `setLocation` caller. Not tried
     on a phone: the share sheet's dinner variant, the deep link, VoiceOver. "Host a dinner" still shows on your own
-    dish's card. A floormate dish has no in-app off switch.
+    dish's card. A floormate dish has no in-app off switch. With #35 in main, homie's corner pot sits over the dinner
+    photo's glow (the canvas has none there; `/d` hides it like `/i` and `/r`).
