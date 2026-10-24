@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mom · Send your dumplings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..700&amp;family=DM+Sans:opsz,wght@9..40,400..700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F7F7F2; font-family: 'DM Sans', system-ui, sans-serif; color: #2D3222">
+
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 300px; background: linear-gradient(180deg, #F9E3CF 0%, #F7F7F2 100%)"></div>
+
+  <div style="position: absolute; left: 24px; right: 24px; top: 56px; display: flex; flex-direction: column; gap: 24px">
+
+    <a href="Parent-Home.dc.html" style="align-self: flex-start; height: 48px; padding: 0 18px 0 12px; border-radius: 999px; background: #FFFDF7; box-shadow: 0 4px 14px rgba(30,36,16,0.08); color: #1E2410; display: flex; align-items: center; gap: 4px; font-size: 16px; font-weight: 700">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+      Back
+    </a>
+
+    <h1 style="margin: 0; font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 34px; line-height: 1.1; letter-spacing: -0.02em; color: #1E2410">Send your dumplings</h1>
+
+    <!-- Videos -->
+    <section style="display: flex; flex-direction: column; gap: 12px">
+      <h2 style="margin: 0; font-size: 17px; font-weight: 700; color: #1E2410">Today's videos</h2>
+      <div style="display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px">
+        <sc-for list="{{videos}}" as="v" hint-placeholder-count="3">
+          <button aria-pressed="{{v.pressed}}" aria-label="{{v.label}}" onClick="{{v.toggle}}" style="padding: 0; border: none; background: none; display: flex; flex-direction: column; gap: 6px; cursor: pointer; text-align: left">
+            <span style="position: relative; display: block; width: 100%; height: 120px; border-radius: 20px; overflow: hidden; box-shadow: {{v.ring}}">
+              <img src="{{v.src}}" alt="" style="position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: {{v.opacity}}">
+              <span style="position: absolute; right: 8px; top: 8px; width: 26px; height: 26px; box-sizing: border-box; border-radius: 50%; background: {{v.checkBg}}; border: {{v.checkBorder}}; color: #FFFDF7; display: flex; align-items: center; justify-content: center">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>
+              </span>
+            </span>
+            <span style="font-size: 14px; color: #5F6352"><span style="font-weight: 700; color: #1E2410">{{v.time}}</span> · {{v.len}}</span>
+          </button>
+        </sc-for>
+      </div>
+    </section>
+
+    <!-- Who -->
+    <section style="display: flex; flex-direction: column; gap: 12px">
+      <h2 style="margin: 0; font-size: 17px; font-weight: 700; color: #1E2410">Who is it for?</h2>
+      <div style="display: flex; gap: 10px">
+        <sc-for list="{{people}}" as="p" hint-placeholder-count="3">
+          <button aria-pressed="{{p.pressed}}" onClick="{{p.pick}}" style="height: 52px; padding: {{p.pad}}; border: none; border-radius: 999px; background: {{p.bg}}; color: {{p.fg}}; box-shadow: 0 2px 8px rgba(30,36,16,0.06); display: flex; align-items: center; gap: 8px; font-size: 16px; font-weight: 700; cursor: pointer">
+            <sc-if value="{{p.isLeo}}" hint-placeholder-val="{{ false }}">
+              <span style="width: 40px; height: 40px; border-radius: 50%; overflow: hidden"><img src="/_blob/0503d233d0ec31faf84025ed4c3c73e6" alt="" style="width: 100%; height: 100%; object-fit: cover; object-position: 42% 36%; transform: scale(3); transform-origin: 40% 35%"></span>
+            </sc-if>
+            <sc-if value="{{p.isMaya}}" hint-placeholder-val="{{ false }}">
+              <span aria-hidden="true" style="width: 40px; height: 40px; border-radius: 50%; background: #EDF2BE; color: #3C4A0B; font-family: 'Fraunces', Georgia, serif; font-weight: 600; font-size: 18px; display: flex; align-items: center; justify-content: center">M</span>
+            </sc-if>
+            {{p.name}}
+          </button>
+        </sc-for>
+      </div>
+    </section>
+
+    <!-- Voice note -->
+    <div role="group" aria-label="Voice note, optional" style="border-radius: 24px; background: #FFFDF7; box-shadow: 0 8px 24px rgba(30,36,16,0.06); padding: 14px 14px 14px 20px; display: flex; align-items: center; gap: 14px">
+      <span style="flex: 1; display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 16px; font-weight: 700; color: #1E2410">Add a hello</span>
+        <span style="font-size: 14px; color: #5F6352">If you like</span>
+      </span>
+      <button aria-label="Tap to talk. Tap again to stop." style="width: 52px; height: 52px; border: none; border-radius: 50%; background: #F9E3CF; color: #6E4A33; display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none">
+        <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Send -->
+  <div style="position: absolute; left: 24px; right: 24px; bottom: 24px; display: flex; flex-direction: column; align-items: center; gap: 10px">
+    <a href="Parent-Home.dc.html" style="align-self: stretch; height: 64px; border-radius: 999px; background: #5B6F00; color: #FFFDF7; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 19px; font-weight: 700; box-shadow: 0 10px 24px rgba(52,67,12,0.25)">
+      <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 12l16-8-6 16-2.5-6.5z"/></svg>
+      {{sendLabel}}
+    </a>
+    <p style="margin: 0; font-size: 14px; color: #5F6352">You can close the app. We'll let you know.</p>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { picked: [true, true, true], who: 'Leo' }; }
+  renderVals() {
+    const vids = [
+      { src: '/_blob/3861abcfb12d9972d2e75f45b3d0b0ab', time: '2:10', len: '12 min', what: 'making the dough' },
+      { src: '/_blob/5f6691812e5cae66ec7796f79da7ff26', time: '2:34', len: '14 min', what: 'folding' },
+      { src: '/_blob/9cb95d38ad7fe5fb0ff88214ae5833fe', time: '3:05', len: '9 min', what: 'boiling' }
+    ];
+    const picked = this.state.picked;
+    const who = this.state.who;
+    return {
+      videos: vids.map((v, i) => ({
+        ...v,
+        pressed: picked[i] ? 'true' : 'false',
+        label: 'Your ' + v.time + ' pm video, ' + v.what + ', ' + v.len + (picked[i] ? ', picked' : ''),
+        ring: picked[i] ? '0 0 0 3px #5B6F00' : 'none',
+        opacity: picked[i] ? 1 : 0.55,
+        checkBg: picked[i] ? '#5B6F00' : 'rgba(30,36,16,0.25)',
+        checkBorder: picked[i] ? 'none' : '2px solid #FFFDF7',
+        toggle: () => { const p = picked.slice(); p[i] = !p[i]; this.setState({ picked: p }); }
+      })),
+      people: ['Leo', 'Maya', 'Everyone'].map((n) => ({
+        name: n,
+        isLeo: n === 'Leo',
+        isMaya: n === 'Maya',
+        pad: n === 'Everyone' ? '0 20px' : '0 18px 0 6px',
+        pressed: who === n ? 'true' : 'false',
+        bg: who === n ? '#1E2410' : '#FFFDF7',
+        fg: who === n ? '#FFFDF7' : '#1E2410',
+        pick: () => this.setState({ who: n })
+      })),
+      sendLabel: who === 'Everyone' ? 'Send to everyone' : 'Send to ' + who
+    };
+  }
+}
+</script>
+</body>
+</html>

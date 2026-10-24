@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Leo · All recipes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..700&amp;family=DM+Sans:opsz,wght@9..40,400..700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F7F7F2; font-family: 'DM Sans', system-ui, sans-serif; color: #2D3222">
+
+  <div aria-hidden="true" style="position: absolute; left: 0; right: 0; top: 0; height: 300px; background: linear-gradient(180deg, #ECE6F2 0%, #F7F7F2 100%)"></div>
+
+  <div style="position: absolute; left: 0; right: 0; top: 60px; display: flex; flex-direction: column; gap: 20px">
+
+    <div style="padding: 0 24px; display: flex; flex-direction: column; gap: 6px">
+      <h1 style="margin: 0; font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 32px; line-height: 1.1; letter-spacing: -0.02em; color: #1E2410">Our family table</h1>
+      <p style="margin: 0; font-size: 16px; color: #5F6352">9 recipes from 4 cooks</p>
+    </div>
+
+    <!-- Search -->
+    <div style="padding: 0 24px; display: flex; gap: 10px">
+      <label style="flex: 1; height: 52px; box-sizing: border-box; padding: 0 18px; border-radius: 999px; background: #FFFDF7; box-shadow: 0 4px 14px rgba(30,36,16,0.06); display: flex; align-items: center; gap: 10px; color: #5F6352">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><circle cx="11" cy="11" r="6.5"/><path d="M20 20l-4-4"/></svg>
+        <span style="position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%)">Search recipes</span>
+        <input type="search" placeholder="A dish, a cook, a craving…" style="flex: 1; min-width: 0; border: none; outline: none; background: transparent; font: inherit; font-size: 15px; color: #1E2410">
+      </label>
+      <button aria-label="Search by voice" style="width: 52px; height: 52px; border: none; border-radius: 50%; background: #FFFDF7; box-shadow: 0 4px 14px rgba(30,36,16,0.06); color: #1E2410; display: flex; align-items: center; justify-content: center; cursor: pointer; flex: none">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21"/></svg>
+      </button>
+    </div>
+
+    <!-- Cook chips -->
+    <div role="group" aria-label="Show recipes from" style="padding: 0 24px; display: flex; gap: 8px; white-space: nowrap">
+      <sc-for list="{{chips}}" as="chip" hint-placeholder-count="5">
+        <button aria-pressed="{{chip.pressed}}" onClick="{{chip.pick}}" style="height: 40px; padding: 0 16px; border: none; border-radius: 999px; background: {{chip.bg}}; box-shadow: 0 2px 8px rgba(30,36,16,0.05); font-size: 15px; font-weight: 600; color: #1E2410; cursor: pointer; flex: none">{{chip.label}}</button>
+      </sc-for>
+    </div>
+
+    <!-- Mom's kitchen -->
+    <section style="padding: 0 24px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 10px">
+        <span style="width: 28px; height: 28px; border-radius: 50%; overflow: hidden"><img src="/_blob/7bbeacdc28a70fc73cb3459375580ad2" alt="" style="width: 100%; height: 100%; object-fit: cover; object-position: 43% 35%; transform: scale(1.8); transform-origin: 29% 24%"></span>
+        <h2 style="margin: 0; flex: 1; font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 20px; color: #1E2410">Mom's kitchen</h2>
+        <span style="font-size: 14px; color: #5F6352">3</span>
+      </div>
+      <div style="border-radius: 28px; background: #FFFDF7; box-shadow: 0 8px 24px rgba(30,36,16,0.06); padding: 6px 12px">
+        <div style="display: flex; align-items: center; gap: 14px; padding: 8px 0; border-bottom: 1px solid #EFEFE6">
+          <a href="Kid-Recipe.dc.html" style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px">
+            <img src="/_blob/5f6691812e5cae66ec7796f79da7ff26" alt="" style="width: 64px; height: 64px; border-radius: 18px; object-fit: cover; flex: none">
+            <span style="display: flex; flex-direction: column; gap: 3px">
+              <span style="font-size: 16px; font-weight: 700; color: #1E2410">Pork &amp; Chive Dumplings</span>
+              <span style="font-size: 14px; color: #5F6352"><span style="font-weight: 700; color: #4C5A10">New</span> · 1 hr 20 min</span>
+            </span>
+          </a>
+          <button aria-label="Saved: Pork and Chive Dumplings" aria-pressed="true" style="width: 44px; height: 44px; border: none; border-radius: 50%; background: transparent; color: #9A4F47; display: flex; align-items: center; justify-content: center; cursor: pointer">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>
+          </button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 14px; padding: 8px 0; border-bottom: 1px solid #EFEFE6">
+          <a href="Kid-Recipe.dc.html" style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px">
+            <img src="/_blob/08296476270194781cf5bae7bfb372a8" alt="" style="width: 64px; height: 64px; border-radius: 18px; object-fit: cover; flex: none">
+            <span style="display: flex; flex-direction: column; gap: 3px">
+              <span style="font-size: 16px; font-weight: 700; color: #1E2410">Ramen, Mom's Way</span>
+              <span style="font-size: 14px; color: #5F6352">You cooked it · 10 min</span>
+            </span>
+          </a>
+          <button aria-label="Save Ramen, Mom's Way" aria-pressed="false" style="width: 44px; height: 44px; border: none; border-radius: 50%; background: transparent; color: #5F6352; display: flex; align-items: center; justify-content: center; cursor: pointer">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>
+          </button>
+        </div>
+        <div style="display: flex; align-items: center; gap: 14px; padding: 8px 0">
+          <a href="Kid-Recipe.dc.html" style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 14px">
+            <img src="/_blob/a1cf4576719825ad97924bacf18fac4d" alt="" style="width: 64px; height: 64px; border-radius: 18px; object-fit: cover; flex: none">
+            <span style="display: flex; flex-direction: column; gap: 3px">
+              <span style="font-size: 16px; font-weight: 700; color: #1E2410">Banana Bread</span>
+              <span style="font-size: 14px; color: #5F6352">For her birthday · 1 hr</span>
+            </span>
+          </a>
+          <button aria-label="Save Banana Bread" aria-pressed="false" style="width: 44px; height: 44px; border: none; border-radius: 50%; background: transparent; color: #5F6352; display: flex; align-items: center; justify-content: center; cursor: pointer">
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- Dad's kitchen (continues under the bar) -->
+    <section style="padding: 0 24px; display: flex; flex-direction: column; gap: 12px">
+      <div style="display: flex; align-items: center; gap: 10px">
+        <span style="width: 28px; height: 28px; border-radius: 50%; overflow: hidden"><img src="/_blob/4dfa7d066411045fd843c770f03c1693" alt="" style="width: 100%; height: 100%; object-fit: cover; object-position: 37% 30%; transform: scale(2.2); transform-origin: 25% 16%"></span>
+        <h2 style="margin: 0; flex: 1; font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 20px; color: #1E2410">Dad's kitchen</h2>
+        <span style="font-size: 14px; color: #5F6352">3</span>
+      </div>
+      <div style="border-radius: 28px; background: #FFFDF7; box-shadow: 0 8px 24px rgba(30,36,16,0.06); padding: 6px 12px">
+        <a href="Kid-Recipe.dc.html" style="display: flex; align-items: center; gap: 14px; padding: 8px 0">
+          <img src="/_blob/babd054d215cf4155b943bb71586aaba" alt="" style="width: 64px; height: 64px; border-radius: 18px; object-fit: cover; flex: none">
+          <span style="display: flex; flex-direction: column; gap: 3px">
+            <span style="font-size: 16px; font-weight: 700; color: #1E2410">Sunday Chili</span>
+            <span style="font-size: 14px; color: #5F6352">Lunch all week · 50 min</span>
+          </span>
+        </a>
+      </div>
+    </section>
+  </div>
+
+  <!-- Floating tab bar -->
+  <nav aria-label="Main" style="position: absolute; left: 20px; right: 20px; bottom: 24px; height: 76px; box-sizing: border-box; padding: 8px; border-radius: 999px; background: rgba(255,253,247,0.96); box-shadow: 0 10px 30px rgba(30,36,16,0.14), 0 0 0 1px rgba(30,36,16,0.04); display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 4px">
+    <a href="Kid-Home.dc.html" aria-label="Home" style="border-radius: 999px; color: #2D3222; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 10.5 12 4l8 6.5V19a1 1 0 0 1-1 1h-4v-5h-6v5H5a1 1 0 0 1-1-1z"/></svg>
+      <span style="font-size: 13px; font-weight: 600">Home</span>
+    </a>
+    <a href="Kid-Browse.dc.html" aria-current="page" aria-label="Recipes" style="border-radius: 999px; background: #1E2410; color: #FFFDF7; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="4" y="4" width="7" height="7" rx="2"/><rect x="13" y="4" width="7" height="7" rx="2"/><rect x="4" y="13" width="7" height="7" rx="2"/><rect x="13" y="13" width="7" height="7" rx="2"/></svg>
+      <span style="font-size: 13px; font-weight: 700">Recipes</span>
+    </a>
+    <a href="Kid-Messages.dc.html" aria-label="Ask" style="border-radius: 999px; color: #2D3222; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.2A8 8 0 1 1 20 12z"/></svg>
+      <span style="font-size: 13px; font-weight: 600">Ask</span>
+    </a>
+  </nav>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { cook: 'Everyone' }; }
+  renderVals() {
+    const cooks = ['Everyone', 'Mom', 'Dad', 'Nai Nai', 'Auntie Lin'];
+    return {
+      chips: cooks.map((c) => ({
+        label: c,
+        pressed: this.state.cook === c ? 'true' : 'false',
+        bg: this.state.cook === c ? '#FEBE29' : '#FFFDF7',
+        pick: () => this.setState({ cook: c })
+      }))
+    };
+  }
+}
+</script>
+</body>
+</html>

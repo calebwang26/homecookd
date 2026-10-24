@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Leo · Mom's recipe</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400..700;1,9..144,400..700&amp;family=DM+Sans:opsz,wght@9..40,400..700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}
+button{font:inherit;color:inherit}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F7F7F2; font-family: 'DM Sans', system-ui, sans-serif; color: #2D3222">
+
+  <!-- Hero -->
+  <img src="/_blob/5f6691812e5cae66ec7796f79da7ff26" alt="Mom's pork and chive dumplings on a steamer tray" style="position: absolute; left: 0; top: 0; width: 390px; height: 380px; object-fit: cover">
+  <a href="Kid-Home.dc.html" aria-label="Back" style="position: absolute; left: 24px; top: 56px; width: 48px; height: 48px; border-radius: 50%; background: rgba(255,253,247,0.92); color: #1E2410; display: flex; align-items: center; justify-content: center">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7"/></svg>
+  </a>
+  <button aria-label="Saved. Tap to unsave this recipe" aria-pressed="true" style="position: absolute; right: 24px; top: 56px; width: 48px; height: 48px; border: none; border-radius: 50%; background: rgba(255,253,247,0.92); color: #9A4F47; display: flex; align-items: center; justify-content: center; cursor: pointer">
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7-4.4-7-10a4 4 0 0 1 7-2.6A4 4 0 0 1 19 10c0 5.6-7 10-7 10z"/></svg>
+  </button>
+
+  <!-- Sheet -->
+  <div style="position: absolute; left: 0; right: 0; top: 336px; bottom: 0; box-sizing: border-box; border-radius: 32px 32px 0 0; background: #F7F7F2; padding: 28px 24px 0; display: flex; flex-direction: column; gap: 20px">
+
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <h1 style="margin: 0; font-family: 'Fraunces', Georgia, serif; font-weight: 500; font-size: 30px; line-height: 1.1; letter-spacing: -0.02em; color: #1E2410">Pork &amp; Chive Dumplings</h1>
+      <div style="display: flex; align-items: center; gap: 8px; font-size: 15px; color: #5F6352">
+        <span style="width: 24px; height: 24px; border-radius: 50%; overflow: hidden"><img src="/_blob/7bbeacdc28a70fc73cb3459375580ad2" alt="" style="width: 100%; height: 100%; object-fit: cover; object-position: 43% 35%; transform: scale(1.8); transform-origin: 29% 24%"></span>
+        by Mom · 1 hr 20 min · makes ~40
+      </div>
+    </div>
+
+    <p style="margin: 0; padding: 16px 20px; border-radius: 20px; background: #F9E3CF; font-family: 'Fraunces', Georgia, serif; font-style: italic; font-size: 17px; line-height: 1.4; color: #1E2410">“Fold them like you’re tucking in a baby. Not too tight.”</p>
+
+    <!-- Cooking for: segmented -->
+    <div role="group" aria-label="Cooking for" style="padding: 6px; border-radius: 22px; background: #EFEFE6; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px">
+      <button aria-pressed="{{meOn}}" onClick="{{pickMe}}" style="height: 60px; border: none; border-radius: 16px; background: {{meBg}}; box-shadow: {{meShadow}}; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer">
+        <span style="font-size: 16px; font-weight: 700; color: #1E2410">Just me</span>
+        <span style="font-size: 13px; color: #5F6352">Boil 10, freeze 30</span>
+      </button>
+      <button aria-pressed="{{friendsOn}}" onClick="{{pickFriends}}" style="height: 60px; border: none; border-radius: 16px; background: {{friendsBg}}; box-shadow: {{friendsShadow}}; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; cursor: pointer">
+        <span style="font-size: 16px; font-weight: 700; color: #1E2410">Friends</span>
+        <span style="font-size: 13px; color: #5F6352">Cook all 40</span>
+      </button>
+    </div>
+
+    <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px">
+      <button aria-label="Watch Mom fold, 48 seconds" style="height: 52px; border: 1.5px solid rgba(30,36,16,0.12); border-radius: 999px; background: #FFFDF7; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px; font-weight: 600; color: #1E2410; cursor: pointer">
+        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><path d="M7 4.5v15l12.5-7.5z" fill="currentColor"/></svg>
+        Watch · 0:48
+      </button>
+      <button aria-label="Hear Mom, 24 seconds" style="height: 52px; border: 1.5px solid rgba(30,36,16,0.12); border-radius: 999px; background: #FFFDF7; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 15px; font-weight: 600; color: #1E2410; cursor: pointer">
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 9v6M8 6v12M12 3v18M16 7v10M20 10v4"/></svg>
+        Hear Mom · 0:24
+      </button>
+    </div>
+  </div>
+
+  <!-- CTA -->
+  <a href="Kid-Ingredients.dc.html" style="position: absolute; left: 24px; right: 24px; bottom: 28px; height: 60px; border-radius: 999px; background: #5B6F00; color: #FFFDF7; display: flex; align-items: center; justify-content: center; gap: 10px; font-size: 18px; font-weight: 700; box-shadow: 0 10px 24px rgba(52,67,12,0.25)">
+    Start cooking
+    <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg>
+  </a>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { forWho: 'me' }; }
+  renderVals() {
+    const me = this.state.forWho === 'me';
+    const on = '#FFFDF7', off = 'transparent', sh = '0 2px 8px rgba(30,36,16,0.08)';
+    return {
+      meOn: me ? 'true' : 'false',
+      friendsOn: me ? 'false' : 'true',
+      meBg: me ? on : off,
+      friendsBg: me ? off : on,
+      meShadow: me ? sh : 'none',
+      friendsShadow: me ? 'none' : sh,
+      pickMe: () => this.setState({ forWho: 'me' }),
+      pickFriends: () => this.setState({ forWho: 'friends' })
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,57 @@
+{
+ "v": 3,
+ "createdOnFiles": {
+  "v": 1,
+  "at": "2026-10-15T12:30:00Z"
+ },
+ "title": "homecookd · Hearth, Redesigned",
+ "launch": {
+  "view": "canvas"
+ },
+ "pages": [],
+ "boards": {
+  "Main.dc.html": { "x": 0, "y": 320, "w": 390, "h": 844, "title": "Profiles", "is_interactive": true, "radius": 40 },
+  "Kid-Home.dc.html": { "x": 470, "y": 320, "w": 390, "h": 844, "title": "Leo · Home", "is_interactive": true, "radius": 40 },
+  "Kid-Home-Scrolled.dc.html": { "x": 940, "y": 320, "w": 390, "h": 844, "title": "Leo · Home, scrolled", "is_interactive": true, "radius": 40 },
+  "Kid-Recipe.dc.html": { "x": 1410, "y": 320, "w": 390, "h": 844, "title": "Leo · Mom's recipe", "is_interactive": true, "radius": 40 },
+  "Kid-Ingredients.dc.html": { "x": 1880, "y": 320, "w": 390, "h": 844, "title": "Leo · Ingredients", "is_interactive": true, "radius": 40 },
+  "Kid-Step.dc.html": { "x": 2350, "y": 320, "w": 390, "h": 844, "title": "Leo · Step by step", "is_interactive": true, "radius": 40 },
+  "Kid-Step-Open.dc.html": { "x": 2820, "y": 320, "w": 390, "h": 844, "title": "Leo · Step, more from Mom open", "is_interactive": true, "radius": 40 },
+  "Kid-Browse.dc.html": { "x": 3290, "y": 320, "w": 390, "h": 844, "title": "Leo · All recipes", "is_interactive": true, "radius": 40 },
+  "Kid-Ask.dc.html": { "x": 3760, "y": 320, "w": 390, "h": 844, "title": "Leo · Ask, simpler version", "is_interactive": true, "radius": 40 },
+  "Kid-Messages.dc.html": { "x": 4230, "y": 320, "w": 390, "h": 844, "title": "Leo · Ask (messages)", "is_interactive": true, "radius": 40 },
+  "Kid-Chat.dc.html": { "x": 4700, "y": 320, "w": 390, "h": 844, "title": "Leo · Chat with Mom", "is_interactive": true, "radius": 40 },
+  "Parent-Home.dc.html": { "x": 470, "y": 1600, "w": 390, "h": 844, "title": "Mom · Home", "is_interactive": true, "radius": 40 },
+  "Parent-Home-Scrolled.dc.html": { "x": 940, "y": 1600, "w": 390, "h": 844, "title": "Mom · My recipes", "is_interactive": true, "radius": 40 },
+  "Parent-Record.dc.html": { "x": 1410, "y": 1600, "w": 390, "h": 844, "title": "Mom · Record", "is_interactive": true, "radius": 40 },
+  "Parent-Messages.dc.html": { "x": 1880, "y": 1600, "w": 390, "h": 844, "title": "Mom · Messages", "is_interactive": true, "radius": 40 },
+  "Parent-Chat.dc.html": { "x": 2350, "y": 1600, "w": 390, "h": 844, "title": "Mom · Chat with Leo", "is_interactive": true, "radius": 40 },
+  "Parent-Recipe.dc.html": { "x": 2820, "y": 1600, "w": 390, "h": 844, "title": "Mom · Her recipe", "is_interactive": true, "radius": 40 },
+  "Parent-Send.dc.html": { "x": 3290, "y": 1600, "w": 390, "h": 844, "title": "Mom · Send a recipe", "is_interactive": true, "radius": 40 }
+ },
+ "order": [
+  "Main.dc.html",
+  "Kid-Home.dc.html",
+  "Kid-Home-Scrolled.dc.html",
+  "Kid-Recipe.dc.html",
+  "Kid-Ingredients.dc.html",
+  "Kid-Step.dc.html",
+  "Kid-Step-Open.dc.html",
+  "Kid-Browse.dc.html",
+  "Kid-Ask.dc.html",
+  "Kid-Messages.dc.html",
+  "Kid-Chat.dc.html",
+  "Parent-Home.dc.html",
+  "Parent-Home-Scrolled.dc.html",
+  "Parent-Record.dc.html",
+  "Parent-Messages.dc.html",
+  "Parent-Chat.dc.html",
+  "Parent-Recipe.dc.html",
+  "Parent-Send.dc.html"
+ ],
+ "notes": {
+  "row1": { "x": 0, "y": 50, "text": "Leo · the one who misses home", "kind": "title1", "maxW": 5090 },
+  "row2": { "x": 470, "y": 1330, "text": "Mom · one clear thing per screen", "kind": "title1", "maxW": 3210 }
+ },
+ "designSystems": []
+}
