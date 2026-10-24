@@ -567,7 +567,8 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - **Open:** a timer on the open socket can leave without a buzz: its `timer_done` lands at the same moment as
     the phone's own zero (both 5 s after the `timer` message) and takes it first (2 of 3 live runs; homie still
     says it's done). Not changed here (it was so before); nothing on an iPhone yet.
-- Oct 24 · #51 · Claude · Cook mode timers: a `timer_done` before the phone's own zero buzzes (closes #36 round 6's
+- Oct 24 · #51 · Claude · iPhone test fixes (Caleb on TestFlight, sample dish Auntie Lin's scallion pancakes): (1) the phone's read-aloud repeated step 1 on every step: speak.ts reused file names (homie-say-<turn % 3>.wav, and a step change moves turn by 3, so always the same name) and lib/media reuses a player whose URL is unchanged, so the old audio played. Each line now gets a new file name (the last 3 are kept). (2) On a dish the voice service doesn't have (any sample library dish), a tap on homie no longer opens the live line and says "homie can't cook this dish by voice yet": the line isn't tried, and while the phone reads, a tap reads the current step again. Checks: app tsc, lint, every app test script.
+- Oct 24 · #52 · Claude · Cook mode timers: a `timer_done` before the phone's own zero buzzes (closes #36 round 6's
   open item), and the Oct 24 live deploys recorded.
   - **The fix:** on the socket that's still open, the service's `timer_done` usually arrives before the phone's
     own zero (both are 5 s after the `timer` message), and it took the timer away before it buzzed: no haptic, no
