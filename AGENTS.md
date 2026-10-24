@@ -71,6 +71,10 @@ and homesick college kids. It's a family product, not a tool.
   credential in `app/` or `web/`, or in any tracked file. `EXPO_PUBLIC_*` and `NEXT_PUBLIC_*` values ship to users.
   Never print `.env` values. Keys live only in the gitignored root `.env`, Convex env, Cloud Run secrets and
   Supabase edge-function secrets (which key goes where: `docs/build/STACK.md`, "Keys").
+- **One `.env` for every key:** `/Users/calebwang/Documents/GitHub/hackathon-homecookd/.env` (the main checkout).
+  Add or change keys only there. A worktree never gets its own copy: link it with
+  `ln -s /Users/calebwang/Documents/GitHub/hackathon-homecookd/.env .env` from the worktree root. Only `app/.env`
+  (public `EXPO_PUBLIC_*` settings) and `web/.env.local` (written by the Vercel CLI) stay where their tools read them.
 - **Cartesia (voice):** Ink and Sonic run in the live voice service, plus a Convex action for voice-note
   transcription. Send `Cartesia-Version: 2026-08-14` on every call, and read https://docs.cartesia.ai/llms.txt
   before guessing fields or voice ids. A cloned voice needs that person's consent (`people.voiceClone`).
