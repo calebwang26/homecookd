@@ -134,8 +134,12 @@ HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-o
 
 **Claude's tools** (one per turn): `next_step`, `previous_step`, `repeat_step`, `go_to_step(n)`,
 `find_moment(query)` (Moss search over the family's index), `play_clip(startS, endS)`, `ask_cook(question)`,
-`say(text)`. The system prompt says: never state anything the cook didn't say. Answer with the cook's clip or
-ask the cook.
+`say(text)`, plus the kid-side `give_hint(hint, question)` and `set_timer(seconds, label)`. The system prompt says:
+never state anything the cook didn't say. Answer with the cook's clip or ask the cook. A question takes one Claude
+call: the service searches Moss with the kid's words before asking Claude and says what it found, or that it found
+nothing (then Claude doesn't search again; `find_moment` is only for other words when the kid's were vague).
+`give_hint` is one step: the labelled hint (under 15 words), then the question goes to the cook as `ask_cook` does
+(`/voice/question`, `asked_cook`, "I'll ask Grandma too." as soon as the hint has played), with no second call.
 
 ## Oct 24 additions: homie, translation, glasses VM, Community (PLAN.pdf v2)
 

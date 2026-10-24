@@ -1,6 +1,6 @@
 // Convex HTTP actions for the voice service (docs/build/STACK.md, "Voice service → Convex" and "Voice
 // service → Convex for homie"), with the x-voice-secret header. VOICE_STUB=1 (or no CONVEX_SITE_URL)
-// uses a stub instead: fixtures/stub-session.json (Grandma's red-braised pork) for /cook and
+// uses a stub instead: fixtures/stub-session.json (Grandma's red-braised pork, no Moss index) for /cook and
 // fixtures/stub-recording.json (Rajani Aaji, recording "stub-mr" or "stub-en") for /record. The stub
 // accepts any session token.
 import { randomUUID } from "node:crypto";
