@@ -9,9 +9,9 @@
 //   Videos I took    the camera roll, then Send (as before).
 // If homie can't start (no connection within 10 s, or live.* isn't on the server), glasses say so and
 // the phone camera opens without homie, then Send.
-// A quiet "Videos from my glasses" stays as the fallback for glasses that saved to the camera roll (the
-// job is tagged `source: "glasses"`). On the web, the camera and camera roll explain that they work in
-// the app on a phone.
+// A quiet "Record from my glasses" under it starts that glasses recording in one tap, without the
+// sheet (the dish and learner from a request, her saved language). On the web, the camera and camera
+// roll explain that they work in the app on a phone.
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -74,12 +74,7 @@ export default function RecordScreen() {
 
   const request = k.requests[0] ?? null;
   const dish = askedDish(request);
-  const ctx: PickContext = request ? { dish, requestFrom: request.other.id } : {};
 
-  /** The camera-roll fallback for glasses videos. */
-  const glassesRoll = async () => {
-    if (await pick.library({ ...ctx, glasses: true })) router.push('/send');
-  };
 
   const start = async ({ source, dish: typed, kid, everyone, language }: PreRecordChoice) => {
     setDraftMeta({ dish: typed || null, requestFrom: kid?.id ?? null, everyone, language, recordingId: null });
@@ -117,6 +112,10 @@ export default function RecordScreen() {
       setBusy(null);
     }
   };
+
+  /** One tap: a live glasses recording, with the dish and learner a request named (no sheet). */
+  const startGlasses = () =>
+    void start({ source: 'glasses', dish: dish ?? '', kid: request?.other ?? null, everyone: !request, language: null });
 
   const waiting = draft.clips.length;
 
@@ -183,14 +182,14 @@ export default function RecordScreen() {
           </PressableScale>
 
           <PressableScale
-            onPress={() => void glassesRoll()}
-            disabled={!!pick.busy}
+            onPress={startGlasses}
+            disabled={!!busy || !!pick.busy}
             accessibilityRole="button"
-            accessibilityLabel="Videos from my glasses"
-            accessibilityHint="Opens your videos. Pick the ones your smart glasses saved to this phone."
+            accessibilityLabel="Record from my glasses"
+            accessibilityHint="Starts filming from your glasses right away. Keep the phone near the stove: homie listens."
             style={styles.glasses}>
             <Txt variant="label" size={16} weight={700} color={colors.greenDeep}>
-              Videos from my glasses
+              {busy === 'glasses' ? 'Starting…' : 'Record from my glasses'}
             </Txt>
           </PressableScale>
 
