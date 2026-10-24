@@ -151,6 +151,11 @@ npx convex deploy --preview-name hackathon -y                      # deploy (CON
 npx --yes deno@2 test --node-modules-dir=none --allow-env --allow-read supabase/tests/   # unit tests
 npx --yes deno@2 check --node-modules-dir=none supabase/functions/api/*.ts              # typecheck
 
+# voice service (voice/README.md)
+cd voice && npm ci && npm run dev                                  # ws://localhost:8080/cook (VOICE_STUB=1: stub recipe, any token)
+cd voice && npm run test-client -- test-audio/next-step.wav test-audio/question.wav   # after npm run make-audio
+voice/deploy.sh                                                    # Cloud Run homecookd-voice, us-west1
+
 # pipeline (uses .venv)
 .venv/bin/python pipeline/schema.py data/out/*/recipe.json data/synthetic/*.json
 .venv/bin/python pipeline/test_order.py
