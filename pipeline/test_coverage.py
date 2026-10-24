@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from pipeline import coverage, process, writer  # noqa: E402
+from pipeline import align, cover, coverage, process, shorten, writer  # noqa: E402
 from pipeline.schema import RecipeDraft  # noqa: E402
 
 
@@ -224,7 +224,8 @@ def test_complete_merge_is_not_retried():
 
 def test_run_end_to_end_with_a_file_boundary():
     """process.run on cached extractions of two 150 s AI files: the merge first drops a step, the retry
-    puts it back, and recipe.json + work/coverage.json reflect that."""
+    puts it back, and recipe.json + work/coverage.json reflect that. After it, the cover pick and the substep
+    times both fail here, and neither stops the recipe: the poster falls back to the last step's middle."""
     manifest = json.loads(json.dumps(MANIFEST))
     manifest["sessions"][0]["ai_files"] = [
         {"path": "work/ai_01_00.mp4", "start_in_file_s": 0, "duration_s": 150.0},
@@ -239,6 +240,14 @@ def test_run_end_to_end_with_a_file_boundary():
     first = draft((10, 180, "Chop and fry the onions"))
     second = draft((10, 180, "Chop and fry the onions"), (210, 220, "Season with salt"))
     fake = FakeMerge(first, second)
+    calls, posters = [], []
+
+    def poster(play, at_s, out):
+        posters.append((play.name, at_s, out.name))
+
+    def broken(*_a, **_k):
+        raise RuntimeError("no Gemini here")
+
     env = {"GEMINI_API_KEY": "fake-key-for-tests", "GEMINI_MODEL": "fake-pro", "GEMINI_EXTRACT_MODEL": "",
            "GEMINI_MEDIA_RESOLUTION": "LOW", "COVERAGE_GAP_S": "",
            "RECIPE_WRITER": "gemini"}  # the fake stands in for Gemini only; never call the real Muse
@@ -247,7 +256,9 @@ def test_run_end_to_end_with_a_file_boundary():
     try:
         with tempfile.TemporaryDirectory() as tmp, \
                 patched(process, "OUT_ROOT", Path(tmp)), patched(process, "load_dotenv", lambda *a, **k: None), \
-                patched(process.genai, "Client", fake), patched(process, "make_poster", lambda *a, **k: None):
+                patched(process.genai, "Client", fake), patched(process, "make_poster", poster), \
+                patched(cover, "make_cover", broken), patched(shorten, "shorten_file", lambda p, *a: calls.append(p)), \
+                patched(align, "align_file", lambda p, *a: calls.append(p) or broken()):
             out = Path(tmp) / "t-cover"
             (out / "work").mkdir(parents=True)
             (out / "work" / "manifest.json").write_text(json.dumps(manifest))
@@ -260,6 +271,8 @@ def test_run_end_to_end_with_a_file_boundary():
             assert report["missing"] == [] and report["extracted_steps"] == 4, report
             assert [m["start_s"] for m in report["missing_before_retry"]] == [210], report
             assert len(fake.prompts) == 2
+            assert posters == [("play.mp4", 215, "poster.jpg")], posters  # step 2 is 210-220 s
+            assert calls == [out / "recipe.json"] * 2, calls  # shorten, then align, on the written recipe
     finally:
         for k, v in saved_env.items():
             if v is None:

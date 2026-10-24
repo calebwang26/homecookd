@@ -29,6 +29,8 @@ SHORTEN_PROMPT.format(recipe=<json>)   (pipeline/shorten.py: cook mode's short s
 SHORTEN_RETRY_SUFFIX.format(errors=..., previous=<json>)
 ALIGN_PROMPT.format(title=<json string>), ALIGN_STEP.format(...), ALIGN_RETRY_SUFFIX.format(errors=...)
     (pipeline/align.py: when each substep starts in its step's audio clip; clip times are MM:SS like extraction's)
+COVER_PROMPT.format(title=<json string>, clip_mmss=...)
+    (pipeline/cover.py: the second in the video's last minutes where the finished dish looks best; the cover photo)
 """
 
 EXTRACT_PROMPT = """\
@@ -434,4 +436,18 @@ ALIGN_RETRY_SUFFIX = """\
 An earlier answer for these steps was rejected:
 {errors}
 Answer again for the steps below only, following all the rules above.
+"""
+
+COVER_PROMPT = """\
+This is the end of a home video of a cook making {title}. The clip is {clip_mmss} long. We need the recipe's
+cover photo: one real frame from this clip, shown big on the family's phones.
+
+Find the moment where the FINISHED dish looks best: cooked, and ideally served on a plate or in a bowl, with
+any garnish on. Prefer a frame where the food is in focus, well lit, seen from above or close up, fills a good
+part of the frame and is not hidden by hands, a spoon, steam or a lid. Food still cooking in the pan counts
+only if the finished dish is never shown served. Never pick a closed container or a raw ingredient, and avoid
+frames where people (the cook or anyone watching) take up much of the picture: the food is the subject.
+
+Return found = true and at = the MM:SS time in THIS clip (from 00:00) of that moment. If the finished dish is
+never clearly visible, return found = false and at = "00:00".
 """
