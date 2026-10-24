@@ -27,7 +27,7 @@ import { PreRecordSheet, type CaptureSource, type PreRecordChoice } from '@/comp
 import { PhoneOnlySheet } from '@/components/record/sheets';
 import { usePickVideos, type PickContext } from '@/components/record/usePickVideos';
 import { ArrowRightIcon, Avatar, BackPill, listEnter, PressableScale, ScreenWash, Txt, useToast } from '@/components/ui';
-import { convexPersonIdByName, startRecording } from '@/lib/live/convex';
+import { convexKidIds, startRecording } from '@/lib/live/convex';
 import { getCachedEntry } from '@/lib/recipes';
 import { colors, radii, shadows, space } from '@/theme/tokens';
 
@@ -77,9 +77,10 @@ export default function RecordScreen() {
   const dish = askedDish(request);
 
 
-  const start = async ({ source, dish: typed, kid, everyone, language }: PreRecordChoice) => {
-    setDraftMeta({ dish: typed || null, requestFrom: kid?.id ?? null, everyone, language, recordingId: null });
-    const picked: PickContext = { dish: typed || null, requestFrom: kid?.id ?? null };
+  const start = async ({ source, dish: typed, kids, everyone, label, who, language }: PreRecordChoice) => {
+    const first = kids[0]?.id ?? null;
+    setDraftMeta({ dish: typed || null, requestFrom: first, forKids: who, everyone, language, recordingId: null });
+    const picked: PickContext = { dish: typed || null, requestFrom: first };
     if (source === 'library' || (source === 'camera' && phoneOnly)) {
       setSheet(false);
       await after(SHEET_GONE_MS);
@@ -90,15 +91,15 @@ export default function RecordScreen() {
     try {
       const { recordingId } = await withTimeout(
         (async () => {
-          const forKidId = (await convexPersonIdByName(kid?.name)) ?? undefined;
-          return startRecording({ dish: typed || undefined, forKidId, language: language ?? undefined, source: source === 'glasses' ? 'glasses' : 'phone' });
+          const forKidIds = await convexKidIds(kids);
+          return startRecording({ dish: typed || undefined, forKidIds, language: language ?? undefined, source: source === 'glasses' ? 'glasses' : 'phone' });
         })(),
         START_TIMEOUT_MS,
       );
       if (source === 'camera') setDraftMeta({ recordingId });
       setSheet(false);
       await after(SHEET_GONE_MS);
-      router.push({ pathname: '/recording', params: { id: recordingId, source: source === 'glasses' ? 'glasses' : 'phone', kid: kid?.name ?? '', lang: language ?? '' } });
+      router.push({ pathname: '/recording', params: { id: recordingId, source: source === 'glasses' ? 'glasses' : 'phone', kid: everyone ? '' : (label ?? ''), lang: language ?? '' } });
     } catch (e) {
       console.warn('[record] startRecording', String(e).slice(0, 160));
       if (source === 'glasses') {
