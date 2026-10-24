@@ -500,3 +500,17 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - **Open:** nothing on an iPhone yet (real AppState, the permission prompt, iOS 'inactive' sheets). A kitchen timer
     the service set dies with the socket in the background; the phone still counts it down and buzzes. Each reopen
     is a new service session, so a kid who never answered the read offer hears the hello and the offer again.
+- Oct 24 · #36 · Claude · Track I-kid round 4: one `/cook` socket at a time, and main merged again (#33; AGENTS.md
+  and STATE.md kept both sides, no app/ overlap).
+  - **The race (verifier):** a dropped socket's retry (1.5 to 4.5 s) survived a pause, so background and foreground
+    inside that wait opened two sockets and left one open, still driving homie. A pause and resume while a connect
+    waited for its Convex session did the same. Now each hang-up (`stop()`) starts a new line, and a retry or a
+    connect opens a socket only on the line it began on, and only with none open (`voiceLogic` `lineMayOpen`). Only
+    the current socket's messages and open are heard, as in `lib/live/homie.ts`.
+  - **Tests:** `test-voice-ui.mjs` 39 pass (3 new: `lineMayOpen`, drop then pause then resume before the retry,
+    pause and resume during the first connect; the old rule fails the drop test). tsc, lint, every app test script,
+    `test-profile-navigation` (6 ok) and the driverless kid2 web shots (14) pass. Live on Expo web, a proxy in front
+    of a local voice service from main (`VOICE_STUB=1`, real Ink 2 and Sonic), the fake recorder (not committed):
+    10 checks pass (a 1011 drop then background and foreground in the retry wait leaves one socket; a pause and
+    resume during a 1.5 s session wait opens one; background leaves none, no frame after a close; a tap declines with
+    no 'thinking'). The old code in the same run left sockets #2 and #4 open until the page closed.
