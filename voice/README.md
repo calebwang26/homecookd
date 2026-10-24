@@ -198,7 +198,7 @@ What happens
    takes over 7 s or fails, a hand-written one is said instead (`lines.ts`, Marathi or English).
 2. `start`: Convex sets `startedAt` once; every line's `atS` counts from it (the hello's is negative).
 3. While she cooks, every 2 s the code checks the pacing (`pacing.ts`): normal = first question no earlier than
-   4 min, 4.5 min gaps, doubled after an ignored one, at most 6 live; `HOMIE_DEMO=1` = 40 s, 90 s, at most 2. Never
+   4 min, 4.5 min gaps, doubled after an ignored one, at most 6 live; `HOMIE_DEMO=1` = 40 s, 90 s, at most 2; `HOMIE_SCRIPTED=1` (the filmed demo) = a fixed question from `lines.ts` every 5 min, in turn, with no backing off and no Claude deciding. Never
    while she talks (speech in the last 3 s). When a question is allowed, or she said something long that may be a
    story, Claude sees the transcript (and the newest glasses frame) and returns ask, react or stay quiet. Priority:
    vague amounts, then "how do you know it's ready", then substitutions for a college kitchen, then stories during

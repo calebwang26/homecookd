@@ -45,3 +45,14 @@ test("never more than maxLive live questions", () => {
   p.onAsk(130);
   assert.equal(p.mayAsk(10_000), false);
 });
+
+test("SCRIPTED: every 5 minutes, and an ignored question doesn't push the next one back", async () => {
+  const { SCRIPTED } = await import("../src/pacing.js");
+  const p = new Pacer(SCRIPTED);
+  assert.equal(p.mayAsk(299), false);
+  assert.equal(p.mayAsk(300), true);
+  p.onAsk(300);
+  p.ignored();
+  assert.equal(p.mayAsk(599), false);
+  assert.equal(p.mayAsk(600), true);
+});

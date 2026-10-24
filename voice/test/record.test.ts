@@ -523,3 +523,21 @@ test("a new socket that finds it ended also ends an older one still open", async
   assert.equal(w.calls.length, before, "the old one writes nothing more (no heartbeat)");
   assert.equal(warn.mock.callCount(), 0);
 });
+
+test("HOMIE_SCRIPTED: a fixed question on the clock, with no Claude deciding, even when she's ignored one", async () => {
+  const w = world();
+  w.deps.rules = { firstS: 10, gapS: 30, maxLive: 12, maxEnd: 2, backoff: false };
+  w.deps.scripted = true;
+  const c = w.connect("rec-scripted");
+  await helloDone(c);
+  c.send({ type: "start" });
+  await waitFor("the first scripted question", () => c.ws.of("ask").length === 1, 30_000);
+  const first = c.ws.of("ask")[0];
+  assert.equal(first.kind, "amount");
+  assert.match(String(first.textEn), /what did you just add, and about how much\?/);
+  assert.equal(w.decided.length, 0, "Claude never decides in scripted mode");
+  // No answer: it fades, and the next one still comes a single gap later (no backing off).
+  await waitFor("the second scripted question", () => c.ws.of("ask").length === 2, 60_000);
+  assert.equal(c.ws.of("ask")[1].kind, "story");
+  assert.equal(w.named("logPrompt").filter((p) => p.args[0] === "story").length, 1, "logged like any question");
+});

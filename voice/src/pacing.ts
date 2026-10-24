@@ -2,11 +2,13 @@
 // so the model can't talk more than this: the first question no earlier than 4 minutes in, then 4.5
 // minute gaps that double after each ignored question, at most 6 live questions plus 2 at the end.
 // HOMIE_DEMO=1: the first at ~40 s, 90 s gaps, at most 2 live.
+// HOMIE_SCRIPTED=1 (the filmed demo): a fixed question every 5 minutes, no backing off after an ignored one.
 
-export type PaceRules = { firstS: number; gapS: number; maxLive: number; maxEnd: number };
+export type PaceRules = { firstS: number; gapS: number; maxLive: number; maxEnd: number; backoff?: boolean };
 
 export const NORMAL: PaceRules = { firstS: 240, gapS: 270, maxLive: 6, maxEnd: 2 };
 export const DEMO: PaceRules = { firstS: 40, gapS: 90, maxLive: 2, maxEnd: 2 };
+export const SCRIPTED: PaceRules = { firstS: 300, gapS: 300, maxLive: 12, maxEnd: 2, backoff: false };
 
 export class Pacer {
   private asked = 0;
@@ -18,7 +20,8 @@ export class Pacer {
   /** True when the clock and the count allow a question now (`nowS` = seconds since filming started). */
   mayAsk(nowS: number): boolean {
     if (this.asked >= this.rules.maxLive || nowS < this.rules.firstS) return false;
-    return nowS - this.lastAskS >= this.rules.gapS * 2 ** Math.min(this.ignoredInARow, 3);
+    const backoff = this.rules.backoff === false ? 0 : Math.min(this.ignoredInARow, 3);
+    return nowS - this.lastAskS >= this.rules.gapS * 2 ** backoff;
   }
 
   onAsk(nowS: number) {

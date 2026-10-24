@@ -10,8 +10,8 @@ import WebSocket from "ws";
 import * as convex from "./convex.js";
 import { env } from "./env.js";
 import { HomieAgent, isNotNow, translate, type AskKind, type Heard, type Line, type Who } from "./homie.js";
-import { fixedLine } from "./lines.js";
-import { DEMO, NORMAL, Pacer, type PaceRules } from "./pacing.js";
+import { fixedLine, scriptedQuestion } from "./lines.js";
+import { DEMO, NORMAL, Pacer, SCRIPTED, type PaceRules } from "./pacing.js";
 import { SONIC_SAMPLE_RATE, type AudioFormat } from "./sonic.js";
 import { createStt, speak } from "./speech.js";
 import type { Stt } from "./stt.js";
@@ -75,6 +75,8 @@ export type RecordingDeps = {
   agent: (who: Who) => Pick<HomieAgent, "intro" | "decide" | "endQuestions" | "yesNo" | "setWho">;
   translate: typeof translate;
   rules: PaceRules;
+  /** HOMIE_SCRIPTED: when the pacing allows a question, ask the next fixed one instead of asking Claude. */
+  scripted?: boolean;
   glasses?: { url: string; secret: string };
 };
 
@@ -84,7 +86,8 @@ const LIVE: RecordingDeps = {
   speak,
   agent: (who) => new HomieAgent(who),
   translate,
-  rules: env.homieDemo ? DEMO : NORMAL,
+  rules: env.homieScripted ? SCRIPTED : env.homieDemo ? DEMO : NORMAL,
+  scripted: env.homieScripted,
   glasses: env.glassesUrl && env.glassesSecret ? { url: env.glassesUrl, secret: env.glassesSecret } : undefined,
 };
 
@@ -489,6 +492,21 @@ export class Recording {
     const now = Date.now();
     if (now - this.lastSpeechAt < QUIET_MS || now - this.lastDecideAt < DECIDE_EVERY_MS) return;
     const nowS = this.atS(now);
+    if (this.deps.scripted) {
+      // The filmed demo: the next fixed question, on the clock. No Claude, so no stories or reactions.
+      if (!this.pacer.mayAsk(nowS)) return;
+      this.deciding = true;
+      this.lastDecideAt = now;
+      try {
+        const q = await scriptedQuestion(this.mem.asked.length, this.who, this.whoLatin);
+        console.log(`homie scripted at ${nowS.toFixed(0)}s: ${q.line.textEn}`);
+        if (this.closed || this.phase !== "recording" || Date.now() - this.lastSpeechAt < QUIET_MS) return;
+        this.flow(() => this.ask(q.kind, q.line));
+      } finally {
+        this.deciding = false;
+      }
+      return;
+    }
     // Never ask while she's telling a story: that rule is code, like the rest of the pacing.
     const mayAsk = this.pacer.mayAsk(nowS) && !this.storyInProgress;
     const fresh = this.mem.heard.slice(this.decidedThrough);

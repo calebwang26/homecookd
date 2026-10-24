@@ -66,4 +66,6 @@ export const env = {
   glassesSecret: get("GLASSES_SECRET"),
   /** Demo pacing: homie's first question at ~40 s instead of 4 min. */
   homieDemo: get("HOMIE_DEMO") === "1",
+  /** The filmed demo: a fixed question every 5 minutes (lines.ts scriptedQuestion), no Claude deciding. Wins over HOMIE_DEMO. */
+  homieScripted: get("HOMIE_SCRIPTED") === "1",
 };
