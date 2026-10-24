@@ -7,25 +7,21 @@
 //   useWaited(ms)        true after `ms`: until then an empty answer may just be loading
 import { useEffect, useState } from 'react';
 
+import type { FamilyRecipe } from '@/lib/familyLibrary';
 import type { FeedRecipe } from '@/lib/live/community';
 import { useLive } from '@/lib/live/convex';
 
-export type FamilyRecipe = {
-  _id: string;
-  title: string;
-  status: 'processing' | 'ready' | 'failed';
-  libraryId?: string;
-  cookName: string;
-  sharedAt?: number;
-};
+/** A recipes.list row, with the cook's share switch (set = shared with people nearby). */
+export type SharableRecipe = FamilyRecipe & { sharedAt?: number };
 
-const noRecipes = (onData: (v: FamilyRecipe[] | null) => void) => {
+const noRecipes = (onData: (v: SharableRecipe[] | null) => void) => {
   onData([]);
   return () => {};
 };
 
-export function useFamilyRecipes(enabled = true): FamilyRecipe[] | null {
-  return useLive<FamilyRecipe[] | null>('recipes:list', null, noRecipes, enabled);
+/** The same live query the library reads (lib/recipes.ts); Convex shares one subscription. */
+export function useFamilyRecipes(enabled = true): SharableRecipe[] | null {
+  return useLive<SharableRecipe[] | null>('recipes:list', null, noRecipes, enabled);
 }
 
 const covers = new Map<string, string>();
