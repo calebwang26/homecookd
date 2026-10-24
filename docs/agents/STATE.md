@@ -46,8 +46,11 @@ older note in `memory/` disagrees, this file wins.
     `seed:demo` (`npx convex run seed:claim '{"supabaseFamilyId":"…"}'` points it at the real one). Env:
     CARTESIA, MOSS, MUSE, WORKER_SECRET, VOICE_SECRET. Redeploy with `--preview-name hackathon`, never
     `--preview-create`: that recreated the deployment and deleted `energized-starfish-920`.
-  - **Moss** refuses writes: "usage limit has been reached; billing must be updated" (Oct 23). Indexing then
-    fails softly and questions go to the cook. Once billing is fixed: `npx convex run worker:reindexMissing`.
+  - **Moss** works again (billing fixed Oct 24). One index is left: `family-j97ctx…` (the demo family: 4 recipes,
+    50 docs). `homecookd-app` (a crawl of the lander that nothing used) and the TEST family's Biryani index were
+    deleted with Caleb's OK. The free plan caps Moss at 3 indexes, one per family. Writes to each family's index
+    now wait their turn (`families.mossSync`, live since the Oct 24 deploy of main `4f075ffac`); before that, two
+    at once could silently drop a recipe.
   - **Supabase** `bsudybxsqvtwftsdmwmz` ("calhacks-touse") is this repo's own copy: tables, buckets and the demo and
     TEST families are seeded. The `api` is live at **v1** (deployed Oct 23, 21:21 PT, before `APP_BUNDLE_ID` was
     set in code), so the secret `APPLE_AUDIENCES=host.exp.Exponent,com.salik.homecookd` is what lets TestFlight's
@@ -155,4 +158,23 @@ Before starting work, compare the last commit here with `git log origin/main` to
 - Oct 24 · Track 0 (this PR) · Claude · Contracts for Caleb's PLAN.pdf v2 (homie live companion, Marathi both ways, ESP32 glasses → free GCP VM, Community MVP), so Tracks E–I can build in parallel. `convex/schema.ts`: `people.relation/approx/campus`, `families.publicName`, recipe `language`, `steps[].quoteOriginal`, `sharedAt`, `storyCard`, job `title/language/forKidId/recordingId` + stage `uploading`, `questions.textForCook`, new tables `recordings`, `homiePrompts`, `dinners`, `dinnerRequests` (all optional or new, so live data still validates). HTTP helpers moved to `convex/lib/http.ts`; homie and glasses routes get their own files (`lib/liveRoutes.ts`, `lib/glassesRoutes.ts`, empty for now). App: `call`, `useLive` (now with args) and `token` exported from `lib/live/convex.ts`. Contracts in `docs/build/STACK.md` "Oct 24 additions" (the `/record` socket, `/speak`, `/live/*`, `/glasses/*`, kid-side `say.kind`/timers/hints, worker claim + `/worker/release`); firmware protocol in `glasses/INGEST.md`. Caleb's calls: labelled AI hint + always ask the cook; Gemini hears Marathi live, Sonic speaks it; the glasses stream to a VM; pot on every screen. Not deployed (schema is backward compatible). Open: Tracks E–I.
 - Oct 24 · (this PR) · Claude · Recorded the PR merge rule in `memory/pr-merge-organizer.md`: sessions send ready PRs to the organizer session instead of merging or asking Caleb.
 - Oct 24 · #21 · Claude · STATE fix: #16's Moss note was wrong. The project has a free index slot (2 of 3 used: the seeded family and `homecookd-app`), but it's kept for Caleb's demo family, so Marathi search gets checked on the Oct 25 recording.
+- Oct 24 · #22 · Claude · Moss write race fixed (`convex/moss.ts`, `convex/worker.ts`):
+  - **Cause:** Moss rebuilds the whole index on each write, so recipes saved close together lost one. It dropped
+    2 of the 4 demo recipes; I re-sent them one at a time.
+  - **Fix:** one sync per family at a time (`families.mossSync`). A sync sends every ready recipe and deletes stale
+    docs. A change during a sync triggers one more pass, and a stuck sync stops blocking after 10 minutes.
+    `indexRecipe` is replaced by `syncFamily`.
+  - **Tests:** 14 pass.
+  - **Moss cleanup:** deleted `homecookd-app` and the TEST Biryani index (Caleb's OK). Only the demo family index is left.
+  - **Open:** none. Deployed in the next line.
+- Oct 24 · #23 · Claude · Deployed main `4f075ffac` (#22) to the Convex preview `grand-dragon-649`
+  (`--preview-name hackathon`, Caleb's OK).
+  - **Also went live:** the schema and indexes from earlier merged PRs that were never deployed (dinners, homie
+    prompts, recordings, `recipes.by_sharedAt`).
+  - **Moss check:** ran one `moss:syncFamily` on the demo family. The index still holds all 4 recipes (50 docs),
+    every `mossIndexedAt` was refreshed, and `mossSync` cleared. `reindexMissing` found nothing missing.
+  - **Fix:** committed the regenerated `convex/_generated/api.d.ts`, which was missing `lib/glassesRoutes`,
+    `lib/http` and `lib/liveRoutes`.
+  - **Open:** the TEST family's Biryani still says `mossIndexedAt`, but its index was deleted on purpose; it
+    re-indexes on its next publish.
 - Oct 24 · #PR · Claude · Track G: Community backend + app helper (no screens yet). `community.feed` (shared recipes from other families, nearest first, plus open dinners; whitelisted fields only, `coverUrl` only for our own stock/cover photos), `community.recipe` (text only), `community.setShare` (the recipe's cook only; Muse Spark writes a ≤25-word story card once, stories only if `memoriesOptIn`, a plain template without `MUSE_API_KEY`), `community.setLocation` (rounded to ~1 km), `dinners.create/get/mine/requestJoin/respond` (the address only for the host and accepted guests; full once every seat is accepted). `convex/lib/geo.ts`, `convex/seedCommunity.ts` (8 neighbor families 0.5–3 mi out, `place`, `publicName`), `app/src/lib/live/community.ts`. 7 new convex-tests (20 pass). Open: `DEMO_LOCATION` is a Cambridge MA placeholder (`TODO(caleb)`: the venue's coordinates); not deployed; run `seedCommunity:neighbors`, then `place` for the floormates and `publicName` for the Pawars after the deploy; screens wait for Caleb's mockups.
