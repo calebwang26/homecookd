@@ -34,9 +34,12 @@ and homesick college kids. It's a family product, not a tool.
 
 ## Where the truth lives (read in this order)
 
+0. `docs/build/STACK.md`: **the hackathon stack and build plan** (Convex, live voice service, Cartesia, Moss, Claude,
+   Muse Spark, glasses), the contracts between the pieces, and the 2-day build order. It beats everything below
+   where they conflict. The data model is `convex/schema.ts`.
 1. `docs/agents/STATE.md`: what's live, what's open, the change log.
 2. `docs/build/SPEC.md`: app architecture and the binding brand-rename banner.
-3. `docs/build/API.md`: Supabase `api` edge function routes, auth, errors and the security model.
+3. `docs/build/API.md`: Supabase `api` edge function routes, auth, errors and the security model (frozen: see STACK.md).
 4. `docs/build/RETENTION-HANDOFF.md` and `RETENTION-WIRING.md`: the retention features (shipped Oct 18).
 5. `docs/build/FEEDBACK-OCT16c.md`: sign-in and invites. It beats SPEC.md where they conflict.
 6. `docs/design/hearth-bible/`: "the bible". Match the app UI almost 1 to 1. Motion: `docs/design/ANIMATIONS.md`.
@@ -55,17 +58,36 @@ and homesick college kids. It's a family product, not a tool.
 - **Ship via PR, never straight to main.** Branch from `origin/main`, commit, `git fetch && git merge origin/main`,
   push, `gh pr create`, then check that `gh pr view --json mergeStateStatus` is `CLEAN`. Stage files by name, never
   `git add -A`: the tree holds untracked demo PNGs and Finder " 2" duplicates.
-- **Deploying the `api` edge function** (Supabase project ref `qeiednrjkiyzbolkepbk`, verify_jwt false):
+- **Supabase is frozen for the hackathon.** It keeps today's sign-in, invites and older screens running; build new
+  features in Convex (`docs/build/STACK.md`).
+- **Deploying the `api` edge function** (Supabase project ref `bsudybxsqvtwftsdmwmz`, verify_jwt false):
   deploy only from merged main, apply that release's migrations first, and send **every** file in
   `supabase/functions/api/`, or the routes from the missing files go down. Check the live version first. Salik also
   deploys, so check with Caleb that Salik's work is merged and no deploy is in flight, and log the new version in
   STATE.md. After a deploy, run:
   `node supabase/tests/two_sided_live.mjs`, `node app/scripts/api-smoke.mjs` and `node supabase/tests/retention_live.mjs`.
   They need `docs/build/.test-family-code` (gitignored). Use only the TEST family.
-- **Secrets:** never put a Gemini key, Supabase service key or GCP credential in `app/` or `web/`. `EXPO_PUBLIC_*` and
-  `NEXT_PUBLIC_*` values ship to users. Never print `.env` values.
-- **No TestFlight build yet.** Invite and recipe links can't install or open the app. Treat that as a known gap,
-  not a bug. Test invites in two halves (see `docs/agents/memory/no-testflight-yet.md`).
+- **Secrets:** never put a Gemini, Cartesia, Moss, Anthropic or Muse key, a Supabase service key or a GCP
+  credential in `app/` or `web/`, or in any tracked file. `EXPO_PUBLIC_*` and `NEXT_PUBLIC_*` values ship to users.
+  Never print `.env` values. Keys live only in the gitignored root `.env`, Convex env, Cloud Run secrets and
+  Supabase edge-function secrets (which key goes where: `docs/build/STACK.md`, "Keys").
+- **One `.env` for every key:** `/Users/calebwang/Documents/GitHub/hackathon-homecookd/.env` (the main checkout).
+  Add or change keys only there. A worktree never gets its own copy: link it with
+  `ln -s /Users/calebwang/Documents/GitHub/hackathon-homecookd/.env .env` from the worktree root. Only `app/.env`
+  (public `EXPO_PUBLIC_*` settings) and `web/.env.local` (written by the Vercel CLI) stay where their tools read them.
+- **Cartesia (voice):** Ink and Sonic run in the live voice service, plus a Convex action for voice-note
+  transcription. Send `Cartesia-Version: 2026-08-14` on every call, and read https://docs.cartesia.ai/llms.txt
+  before guessing fields or voice ids. A cloned voice needs that person's consent (`people.voiceClone`).
+  Key check: `node scripts/check-cartesia.mjs`.
+- **Moss (search):** filled from Convex, searched from the live voice service; one index per family
+  (`family-<familyId>`). Moss only finds moments: never use Moss Inference to write answers
+  (https://docs.moss.dev/llms.txt). Key check: `node scripts/check-moss.mjs`.
+- **Convex:** at the repo root (`convex/`, data model in `convex/schema.ts`). Deploy with
+  `npx convex deploy --preview-create hackathon -y` (preview `CONVEX_DEPLOY_KEY` in `.env`); the last deploy went
+  to https://energized-starfish-920.convex.cloud. Read `convex/_generated/ai/guidelines.md` before writing Convex
+  code; the skills are in `.agents/skills` (Codex) and `.claude/skills` (Claude Code).
+- **TestFlight is live.** Teammates, judges and the demo use TestFlight builds; use an EAS dev build while coding
+  and EAS Update for JS-only fixes. Expo Go can't load the native mic-streaming module.
 - **`TODO(caleb)`** marks a decision only Caleb can make. Use the documented default and leave the marker.
 - English only.
 
@@ -84,12 +106,14 @@ and homesick college kids. It's a family product, not a tool.
 ## Layout
 
 ```
-app/        Expo app (expo-router, TypeScript). Run in Expo Go on an iPhone; iOS Simulator is the backup.
+app/        Expo app (expo-router, TypeScript). EAS dev build while coding, TestFlight for the team and the demo.
 web/        Next.js site: the lander, homecookd.app/r (recipe share page) and /i (invites). Vercel project "homecookd".
-supabase/   functions/api (the backend), functions/transcribe, migrations/, tests/ (deno + live .mjs)
-pipeline/   Python: prep.py → process.py (Gemini) → publish.py, and worker.py for phone uploads
+convex/     The hackathon backend: schema.ts, functions, http.ts (worker + voice service endpoints)
+voice/      Live voice service (Cloud Run): WebSocket cooking loop with Cartesia, Claude and Moss
+supabase/   Frozen: functions/api (today's sign-in, invites, older screens), migrations/, tests/
+pipeline/   Python: prep.py → process.py (Gemini) → Muse Spark → publish.py, and worker.py (claims jobs from Convex)
 cloud/      GCS upload signer (Cloud Run) + IAM scripts
-scripts/    set-apple-ids.mjs (launch prep; see docs/build/LAUNCH-LINKS.md)
+scripts/    check-cartesia.mjs, check-moss.mjs (key checks), set-apple-ids.mjs (launch prep)
 data/       sample + synthetic recipes; data/out/ is pipeline output (gitignored)
 docs/       specs, design bible, QA, learning notes; docs/agents/ = shared agent state + memory
 ```

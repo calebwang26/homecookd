@@ -4,7 +4,7 @@
 const trim = (s: string) => s.trim().replace(/\/+$/, '');
 
 export const API_URL = trim(
-  process.env.NEXT_PUBLIC_API_URL || 'https://qeiednrjkiyzbolkepbk.supabase.co/functions/v1/api',
+  process.env.NEXT_PUBLIC_API_URL || 'https://bsudybxsqvtwftsdmwmz.supabase.co/functions/v1/api',
 );
 
 export const BUCKET_URL = trim(

@@ -17,7 +17,8 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [git-pr-workflow](memory/git-pr-workflow.md) | PR-only shipping, merge main first, stage by name, the Vercel Root Directory gotcha |
 | [api-deploy-rules](memory/api-deploy-rules.md) | Deploy from main only, all files, live tests after |
 | [api-deploy-method](memory/api-deploy-method.md) | How the multi-module api was deployed without the CLI |
-| [no-testflight-yet](memory/no-testflight-yet.md) | Why invite links can't open the app; how to test in two halves |
+| [hackathon-stack-oct23](memory/hackathon-stack-oct23.md) | Oct 23: PLAN.pdf is the guideline; Convex + voice service stack, the 2-day cuts (docs/build/STACK.md) |
+| [testflight-live](memory/testflight-live.md) | Oct 23: Apple account + TestFlight work; dev build while coding, TestFlight for the demo |
 | [dual-icp-playbook](memory/dual-icp-playbook.md) | Parent vs kid: sign-in, invites, lander decisions and Caleb's rulings |
 | [qa-build-list](memory/qa-build-list.md) | The Oct 17 persona QA and what shipped |
 | [ios-app-design-references](memory/ios-app-design-references.md) | App UI priorities, the 8 references, why Hearth won |

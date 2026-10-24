@@ -22,7 +22,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const API = (process.env.API_URL || "https://qeiednrjkiyzbolkepbk.supabase.co/functions/v1/api").replace(/\/+$/, "");
+const API = (process.env.API_URL || "https://bsudybxsqvtwftsdmwmz.supabase.co/functions/v1/api").replace(/\/+$/, "");
 const here = dirname(fileURLToPath(import.meta.url));
 const CODE = readFileSync(join(here, "../../docs/build/.test-family-code"), "utf8").trim();
 const SIGNED_OUT = "This phone was signed out.";
