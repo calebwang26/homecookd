@@ -1,13 +1,15 @@
 // Runs one homie recording against the voice service like the phone by the stove would: hears the
 // hello, sends start, says a line with a vague amount, answers homie's question, sends done, answers
 // the end questions and the stories opt-in, and waits for the goodbye. The mic streams silence
-// between lines. Prints every event with timings and saves homie's lines to test-audio/out/.
+// between lines. Prints every event with timings and saves homie's lines to test-audio/out/. It streams the recorded
+// audio for real; FAKE=1 against `npm run dev:fake` sends the cook's lines as text instead (scripts/guard.ts).
 //   VOICE_STUB=1 HOMIE_DEMO=1 npm run dev                       (in another terminal)
 //   npm run test-record                                          Marathi (stub recording "stub-mr")
 //   COOK_LANG=en npm run test-record                                  English ("stub-en")
 //   SESSION=<cook's sessionToken> RECORDING=<recordings _id> npm run test-record   live Convex
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import WebSocket from "ws";
+import { guard, live, wordsOf } from "./guard.js";
 
 const base = process.env.URL ?? "ws://localhost:8080";
 const lang = process.env.COOK_LANG === "en" ? "en" : "mr";
@@ -16,6 +18,7 @@ const recording = process.env.RECORDING ?? `stub-${lang}`;
 const audioDir = new URL("../test-audio/", import.meta.url);
 const outDir = new URL("out/", audioDir);
 mkdirSync(outDir, { recursive: true });
+await guard(base);
 
 function pcmOf(name: string): Buffer {
   const wav = readFileSync(new URL(`cook-${lang}-${name}.wav`, audioDir));
@@ -53,6 +56,14 @@ const mic = setInterval(() => {
   if (chunk && !queue.length) speechEndAt = Date.now();
 }, 100);
 function say(name: string) {
+  if (!live) {
+    // FAKE=1: fake speech hears nothing, so send the line's words, as the phone does for a typed answer.
+    const text = wordsOf(`cook-${lang}-${name}`);
+    console.log(`${stamp()}  ▶ cook says ${name} as text "${text}"`);
+    ws.send(JSON.stringify({ type: "text", text }));
+    speechEndAt = Date.now();
+    return;
+  }
   const pcm = pcmOf(name);
   console.log(`${stamp()}  ▶ cook says ${name} (${(pcm.length / 32000).toFixed(1)}s)`);
   queue = [];

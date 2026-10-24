@@ -48,6 +48,27 @@ export const startRecording = mutation({
   },
 });
 
+/**
+ * The stop button when the app can't reach the voice service: ends the cook's own recording here, so the
+ * glasses VM finalizes the video without homie. Only `recording` or `wrapping_up` moves to `ended`; calling it
+ * again is fine. `ok` is false when there's nothing to end (still at the hello, or abandoned).
+ */
+export const endRecording = mutation({
+  args: { sessionToken: v.string(), recordingId: v.id("recordings") },
+  returns: v.object({ ok: v.boolean() }),
+  handler: async (ctx, { sessionToken, recordingId }) => {
+    const signed = await requireSession(ctx, sessionToken);
+    requireCook(signed);
+    const row = await ctx.db.get("recordings", recordingId);
+    if (!row || row.cookId !== signed.person._id) throw new ConvexError("That recording isn't yours.");
+    if (row.status === "ended") return { ok: true };
+    if (row.status !== "recording" && row.status !== "wrapping_up") return { ok: false };
+    const now = Date.now();
+    await ctx.db.patch("recordings", row._id, { status: "ended", endedAt: now, updatedAt: now });
+    return { ok: true };
+  },
+});
+
 /** The recording screen's live view of one recording (own family only). */
 export const recording = query({
   args: { sessionToken: v.string(), recordingId: v.id("recordings") },
@@ -166,6 +187,9 @@ export const addPrompt = internalMutation({
   handler: async (ctx, { sessionToken, recordingId, ...prompt }) => {
     const found = await own(ctx, sessionToken, recordingId);
     if ("error" in found) return found;
+    // Nothing is said after the end. Only the goodbye may land then: it races the "ended" status write.
+    const { status } = found.row;
+    if (status === "abandoned" || (status === "ended" && prompt.kind !== "closing")) return { error: "ended" as const };
     const promptId = await ctx.db.insert("homiePrompts", { ...prompt, recordingId: found.row._id, familyId: found.row.familyId });
     await ctx.db.patch("recordings", found.row._id, { updatedAt: Date.now() });
     return { promptId };

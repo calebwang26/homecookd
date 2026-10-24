@@ -83,6 +83,11 @@ and homesick college kids. It's a family product, not a tool.
   transcription. Send `Cartesia-Version: 2026-08-14` on every call, and read https://docs.cartesia.ai/llms.txt
   before guessing fields or voice ids. A cloned voice needs that person's consent (`people.voiceClone`).
   Key check: `node scripts/check-cartesia.mjs`.
+- **Live Cartesia tests are encouraged.** We have the credits (1.24M on Oct 24), and Caleb wants them used to check
+  voice quality, so `test-client` and `test-record` stream to real Ink 2 and Sonic by default. `FAKE=1` against
+  `npm run dev:fake` (`VOICE_FAKE_SPEECH=1`: no Cartesia or Gemini Live) is an opt-in for quick offline checks. Every
+  run stops at `MAX_S` (default 15 min) only so a stuck run can't stream for hours. The waste worth cutting is in real
+  use (a socket left open streams silence at 3 credits a second), not in testing.
 - **Moss (search):** filled from Convex, searched from the live voice service; one index per family
   (`family-<familyId>`). Moss only finds moments: never use Moss Inference to write answers
   (https://docs.moss.dev/llms.txt). Key check: `node scripts/check-moss.mjs`.
@@ -158,7 +163,8 @@ npx --yes deno@2 check --node-modules-dir=none supabase/functions/api/*.ts      
 
 # voice service (voice/README.md)
 cd voice && npm ci && npm run dev                                  # ws://localhost:8080/cook (VOICE_STUB=1: stub recipe, any token)
-cd voice && npm run test-client -- test-audio/next-step.wav test-audio/question.wav   # after npm run make-audio
+cd voice && VOICE_STUB=1 npm run dev:fake                          # the same with fake speech (offline checks)
+cd voice && npm run test-client -- test-audio/next-step.wav test-audio/question.wav   # real Ink + Sonic; FAKE=1 = offline
 cd voice && npm run typecheck && npm test                          # src + tests; unit tests (pacing, /record phases; fakes only)
 voice/deploy.sh                                                    # Cloud Run homecookd-voice, us-west1
 
