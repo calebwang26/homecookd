@@ -3,7 +3,7 @@
 // to what, when voice starts on its own, when the phone reads aloud itself, app-only moments and the
 // read-aloud offer's end, the kid's spoken yes or no, when homie is 'thinking', the kitchen timers the
 // app counts down, what the pot shows, which of the cook's answers to offer the kid, and what keeps
-// Cartesia from billing for audio nobody said (which mic frames go out, the app leaving the screen).
+// Cartesia from billing for audio nobody said (which mic frames go out, the app in the background).
 import type { HomieMoment, HomieState } from '@/lib/homie/store';
 
 export type SayKind = 'step' | 'reply' | 'hint' | 'translation' | 'nudge' | 'offer' | 'greeting' | 'timer';
@@ -132,49 +132,98 @@ export function readAfterOfferClosed(current: 'yes' | 'no' | null, accepted: boo
  */
 export const DECLINE_TEXT = 'no';
 
-// What homie takes for yes and for no (voice/src/cook.ts), so the phone and homie agree: yes is its
-// `isYes` (a yes and anything after it, never a command), no is its `NO_REPLY` (a whole no, after
-// fillers and "thanks"), and a no wins, as it does there ("ok, no" declines).
-const YES = /^(yes|yeah|yep|yup|sure|ok|okay|please|go ahead|read it|read it out loud|do it|let'?s hear it)( .*)?$/;
-const NO = /^(no|nope|nah|no no|not now|not right now|not yet|later|maybe later|no not now|no maybe later|i'?m good|no i'?m good|skip it)$/;
-const COMMANDS = /^(next|next step|next one|what'?s next|done|go on|go back|back|previous|previous step|last step|step back|repeat|repeat that|again|say that again|one more time|what)$/;
-const normalize = (t: string) => t.toLowerCase().replace(/[^a-z' ]/g, ' ').replace(/\s+/g, ' ').trim();
-const command = (t: string) =>
-  normalize(t)
-    .replace(/^((um|uh|wait|okay|ok|so|hey|alright|and|now) )+/, '')
+// The kid's spoken yes or no, for homie's offers and the app's own moments: a copy of the service's
+// voice/src/yesNo.ts (#47), same rules, so the phone and homie agree (test-voice-ui checks the two
+// against each other). A yes word is a yes whatever follows ("Sure, read it."); okay, alright and
+// please only without a command or a question after them. A no counts whatever follows ("No, not
+// right now.", "Don't.") and wins ("Okay, no."). "Not yet", "later", "skip it" and "I'm good" count
+// only alone; "no problem", "no idea" and "oh no, I burned it" are neither.
+const FILLERS = /^((um|uh|oh|ah|hmm|mm|well|wait|so|hey|and|now|but) )+/;
+const OH_NO = /^((um|uh|ah|hmm|mm|well|wait|so|hey|and|now|but) )*oh no\b/;
+/** Yes words, okays and fillers before the rest of the reply ("okay um yes but"). */
+const LEAD = /^((yes|yeah|yep|yup|sure|of course(?! not\b)|ok|okay|alright|all right|please|um|uh|oh|ah|hmm|mm|well|so|hey|and|now|but)( |$))+/;
+const SAID_YES = /\b(yes|yeah|yep|yup|sure|of course)\b/;
+const SAID_OK = /\b(ok|okay|alright|all right|please)\b/;
+const YES = /^(go ahead|do it|play it|read it|let'?s hear it|can do|will do)\b/;
+/** A no keeps the "no" of "no need", "no point" and "no reason", so NO_FILLER sees "no need to read it". */
+const NO = /^(?=no (need|point|reason)\b)|^(no( no(?! (need|point|reason)\b))*(?! (problem|worries|idea|clue|one|doubt|matter|wonder)\b)|nah|nope|not now|not right now|of course not|don'?t(?= (bother|worry|read|play|do|want|need)\b|$))( |$)/;
+const WHOLE_NO = /^(not yet|not really|later|maybe later|maybe not|skip it|i'?m good)$/;
+/** One of the no's own words, before a command or a filler: "no thanks, next step", "nah, no need, next step". */
+const NO_WORD = /^(no (need|point|reason)|no|nah|nope|not now|not right now|thanks|thank you|but|just|um|uh|so|well|then|ok|okay)( |$)/;
+/** A command or a question (what the service's fast commands, timers and Claude are for). */
+const COMMAND = /^(next|done|go on|go back|back|previous|last step|step back|repeat|again|say that|one more time|what|how|when|where|why|who|which|can|could|should|would|will|is|are|am i|do i|do you|do we|does|did|set|start|stop|pause|wait|hold on|hang on|help)\b|\btimer\b/;
+/** What a no can trail and still be only the no: "No, I'm good for now.", "Nah, no need for that.", "No, I got it." */
+const NO_FILLER = new RegExp(
+  '^(' +
+    [
+      "i'?m (all right|(all )?(good|fine|okay|ok|alright|set))( (on|with) (that|it|this))?",
+      "(that'?s|it'?s) (fine|okay|ok|alright|all right)",
+      "all good|never ?mind|i'?d rather not|skip( it| that)?",
+      "(there'?s )?no (need|point|reason)( to( (read|play|do)( it| that| them)?( out loud)?)?| for (it|that))?",
+      "i('?ve)? got (it|this)|i can do (it|this)|you don'?t (have|need) to",
+      '(maybe )?(not|later|next time|another time)|not (yet|really|today|this time)',
+      "don'?t( (bother|worry|read|play|do|want|need)( it| that| about it| to)?( out loud)?)?",
+      "i don'?t (want|need) (it|that|this|one|any|to|to hear it)",
+    ].join('|') +
+    ')( (for now|right now|today|though|anyway|really|thanks( so much)?|thank you( so much)?))*$',
+);
+
+function parseYesNo(text: string) {
+  const all = text
+    .toLowerCase()
+    .replace(/[‘’]/g, "'")
+    .replace(/[^a-z0-9' ]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
     .replace(/( (please|thanks|thank you))+$/, '');
-const reply = (t: string) =>
-  normalize(t)
-    .replace(/^((um|uh|oh|ah|hmm|mm|well|wait|okay|ok|so|hey|alright|and|now) )+/, '')
-    .replace(/( (please|thanks|thank you))+$/, '');
+  const reply = all.replace(FILLERS, '');
+  const lead = reply.match(LEAD)?.[0] ?? '';
+  const rest = reply.slice(lead.length);
+  const no = NO.exec(rest);
+  const tail = no ? rest.slice(no[0].length) : '';
+  // "Oh no" is a no only when a no follows it, or nothing does.
+  const isNo = no ? !OH_NO.test(all) || !tail || NO.test(tail) || WHOLE_NO.test(tail) : WHOLE_NO.test(rest);
+  return { lead, rest, isNo, tail };
+}
 
 /** The kid's answer to homie's yes-or-no question, out loud; null for anything else ("next", a question). */
 export function yesNo(text: string): 'yes' | 'no' | null {
-  if (COMMANDS.test(command(text))) return null;
-  if (NO.test(reply(text))) return 'no';
-  return YES.test(normalize(text)) ? 'yes' : null;
-}
-
-// The service's `yesOrNo`: a whole reply that is only a yes ("yes please", "play it") or only a no.
-const WHOLE_YES = /^(yes|yeah|yep|yup|sure|ok|okay|alright|please|of course|go ahead|do it|read it|read it to me|read it out loud|let'?s hear it|play it)( (yes|yeah|yep|sure|ok|okay|please))*$/;
-
-/** A whole yes or no (voice/src/cook.ts yesOrNo): what the service holds for an app-only moment. */
-export function wholeYesNo(text: string): 'yes' | 'no' | null {
-  const c = reply(text);
-  return WHOLE_YES.test(c) ? 'yes' : NO.test(c) ? 'no' : null;
+  const { lead, rest, isNo } = parseYesNo(text);
+  if (isNo) return 'no';
+  if (SAID_YES.test(lead) || YES.test(rest)) return 'yes';
+  if (!SAID_OK.test(lead)) return null;
+  return rest && (COMMAND.test(rest) || /\?\s*$/.test(text)) ? null : 'yes';
 }
 
 /**
- * The kid's finished words: does homie start 'thinking' (an answer is on its way)? Not for the echo
- * of this phone's own text (a chip's, or the "no" for a tap on the offer), not for a whole yes or no
- * while an app-only moment is up (the service holds it for the phone), and not for a whole no while
- * any moment is up (the service closes its offer and says nothing back).
+ * What's left after a spoken no. `more`: the kid said more than the no ("No, I'm out of ginger.", but
+ * not "No thanks, I'm good for now."); the service then gives Claude the whole sentence. `fastTail`:
+ * the rest without the no's own words ("No thanks, next step." → "next step"), for a plain command.
+ */
+export function afterNo(text: string): { more: boolean; fastTail: string } {
+  const { isNo, tail } = parseYesNo(text);
+  // Peel off the no's own words ("thanks", "no need", "but") until what's left is nothing, a filler, or the rest.
+  let rest = isNo ? tail : '';
+  let word: RegExpExecArray | null;
+  while (rest && !NO_FILLER.test(rest) && (word = NO_WORD.exec(rest))) rest = rest.slice(word[0].length);
+  const more = !!rest && !NO_FILLER.test(rest);
+  return { more, fastTail: more ? rest : '' };
+}
+
+/**
+ * The kid's finished words: does homie start 'thinking'? Only when the service will answer (its
+ * voice/src/cook.ts heard() and turn()). Never for the echo of this phone's own text (a chip's, or the
+ * "no" for a tap on the offer). While an app-only moment is up, the service holds a yes, or a no with
+ * nothing more, for the phone; what follows a no is still its own ("No, I'm out of ginger. Can I skip
+ * it?"). While its own offer is up (the read-aloud offer, a story), a no with nothing more closes it
+ * and nothing is said.
  */
 export function thinksAfter(v: { echo: boolean; appMoment: boolean; momentUp: boolean; text: string }): boolean {
   if (v.echo) return false;
-  const yn = wholeYesNo(v.text);
-  if (v.appMoment && yn) return false;
-  return !(v.momentUp && yn === 'no');
+  const yn = yesNo(v.text);
+  const onlyNo = yn === 'no' && !afterNo(v.text).more;
+  if (v.appMoment) return yn !== 'yes' && !onlyNo;
+  return !(v.momentUp && onlyNo);
 }
 
 /** Messages that are homie doing something (an answer to the kid). */
@@ -214,28 +263,36 @@ export type CookTimer = { id: string; label: string; endsAt: number; totalS: num
 const MAX_TIMER_S = 24 * 3600;
 
 /**
- * A `timer` message as this phone's countdown: it ends `seconds` from now on our clock (the service's
- * `endsAt` is on its clock). Null when it is malformed.
+ * A timer's id on this phone: the service's id on that socket (`socket`, counted up on each open). The
+ * service starts its ids again at "timer-1" on every socket, and a pause and resume opens a new one.
  */
-export function parseTimer(m: { id?: unknown; seconds?: unknown; label?: unknown }, now: number): CookTimer | null {
+export function socketTimerId(socket: number, id: unknown): string {
+  return `${socket}/${String(id)}`;
+}
+
+/**
+ * A `timer` message from socket `socket` as this phone's countdown: it ends `seconds` from now on our
+ * clock (the service's `endsAt` is on its clock). Null when it is malformed.
+ */
+export function parseTimer(m: { id?: unknown; seconds?: unknown; label?: unknown }, now: number, socket: number): CookTimer | null {
   const seconds = Number(m.seconds);
   if (typeof m.id !== 'string' || !m.id || !Number.isFinite(seconds) || seconds <= 0 || seconds > MAX_TIMER_S) return null;
   const label = typeof m.label === 'string' && m.label.trim() ? m.label.trim() : 'timer';
-  return { id: m.id, label, endsAt: now + Math.round(seconds * 1000), totalS: seconds };
+  return { id: socketTimerId(socket, m.id), label, endsAt: now + Math.round(seconds * 1000), totalS: seconds };
 }
 
-/** Soonest first; a timer with the same id replaces the old one. */
+/**
+ * Soonest first; a timer with the same id replaces the old one. A timer from an older socket stays: it
+ * counts down and buzzes here, and leaves on its own, since that socket's `timer_done` can't come.
+ */
 export function withTimer(list: readonly CookTimer[], t: CookTimer): CookTimer[] {
   return [...list.filter((x) => x.id !== t.id), t].sort((a, b) => a.endsAt - b.endsAt);
 }
 
-export function withoutTimer(list: readonly CookTimer[], id: string): CookTimer[] {
-  return list.filter((x) => x.id !== id);
-}
-
-/** One timer, not just its id: the service starts its ids again at "timer-1" on each socket. */
-export function timerKey(t: Pick<CookTimer, 'id' | 'endsAt'>): string {
-  return `${t.id}:${t.endsAt}`;
+/** `timer_done` from socket `socket`: only that socket's timer leaves. */
+export function withoutTimer(list: readonly CookTimer[], socket: number, id: unknown): CookTimer[] {
+  const gone = socketTimerId(socket, id);
+  return list.filter((x) => x.id !== gone);
 }
 
 /** Whole seconds left, rounded up: 0 only once it is done. */
@@ -303,20 +360,25 @@ export function cookSendsFrame(v: { quiet: boolean; focused: boolean }): boolean
   return !v.quiet && v.focused;
 }
 
-/** The app is on screen (React Native AppState): not in the background, nor under a system sheet. */
+/**
+ * The app is on screen (React Native AppState): anything but the background. iOS 'inactive' (Control
+ * Center, the notification shade, a call banner, the mic's permission prompt) leaves it on screen.
+ */
 export function appInForeground(state: string | null | undefined): boolean {
-  return state !== 'background' && state !== 'inactive';
+  return state !== 'background';
 }
 
 /**
  * What cook mode's voice line does when the app's state changes (Cartesia credit fix B). In the
- * background or under a system sheet ('inactive') the line was on (`lineOn`): it closes ('pause'),
- * so nothing streams. Back on top after a pause: it opens again ('resume'; the mic only if the kid
- * hadn't turned it off). The mic's own permission prompt (`asking`) makes iOS 'inactive' too: not a pause.
+ * background, a line that was on (`lineOn`) closes ('pause'), so nothing streams. Back on top
+ * ('active') after a pause: it opens again ('resume'; the mic only if the kid hadn't turned it off).
+ * iOS 'inactive' is never a pause: the app is still on screen, and closing the line there would only
+ * churn sockets. So the mic's own permission prompt (`asking`, also 'inactive') never pauses it either;
+ * going home meanwhile does.
  */
 export function appStateStep(v: { next: string; lineOn: boolean; paused: boolean; asking: boolean }): 'pause' | 'resume' | null {
-  if (appInForeground(v.next)) return v.next === 'active' && v.paused ? 'resume' : null;
-  if (v.next === 'inactive' && v.asking) return null;
+  if (v.next === 'active') return v.paused ? 'resume' : null;
+  if (v.next !== 'background') return null;
   return v.lineOn && !v.paused ? 'pause' : null;
 }
 

@@ -321,10 +321,16 @@ voice, in `lang` or the person's language). `translate: true` first turns Englis
   moment up, anything after it that isn't just more no is still the service's: a plain command or a timer that is
   the whole ask takes the fast path ("No, next step"), and anything else goes to Claude as the kid's whole sentence,
   never a cut-down copy, with a note that the offer was declined ("No, I'm out of ginger. Can I skip it?"). "No,
-  maybe later" is only the no.
-- The app sends silence while a `say` or clip plays (half duplex): `lib/live/mic` zeroes every frame (same
-  length; the recorder keeps running) while homie is lit or speaking, anything plays on the shared player, or a
-  step video plays.
+  maybe later" is only the no. The app's `yesNo` and `afterNo` (`app/src/lib/live/voiceLogic.ts`) are a copy of
+  it, so the phone's own moments and the service agree.
+- Half duplex: while the app makes sound (homie lit or speaking, anything on the shared player, a step video
+  playing), `lib/live/mic` zeroes every frame (same length; the recorder keeps running). `/record` still gets those
+  zeroed frames; `/cook` gets no frames at all while the app makes sound or another screen is on top (Ink bills
+  every second it gets, silence too). The cook line closes when the app goes to the background (not for iOS
+  'inactive': Control Center, the notification shade, a call banner) and reopens on return. Each reopen is a new
+  socket, where the service starts its timer ids again at `timer-1`, so timer ids are per socket on the phone: a
+  timer from an older socket keeps counting down and buzzing there, and leaves on its own (its `timer_done` can't
+  come).
 - What the app sends (Track I-kid): the chips under homie send `{ type: "text", text: "back" | "repeat" }` (no
   Next chip; the big "Next step" button sends `{ type: "step" }`). The service's echo of the text (a `transcript`
   with `final: true`) counts as its answer; a chip acts on its own only if nothing (echo, step, clip, line, timer)

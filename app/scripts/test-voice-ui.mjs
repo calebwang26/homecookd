@@ -4,9 +4,10 @@
 //                               service's echo of a text, waiting for the "Let Mom see" answer (none for
 //                               a memorial cook), when the phone reads aloud itself, app-only moments and
 //                               the offer's end (the shared contract's messages; the service's answer
-//                               kept), a spoken yes or no (and a whole one, as the service has it), when
-//                               homie is 'thinking', the no-buttons yes-or-no moment, what the pot shows,
-//                               kitchen timers on the phone's clock (parse, order, key, countdown, words),
+//                               kept), a spoken yes or no and what follows a no (the service's own rules,
+//                               checked against voice/src/yesNo.ts), when homie is 'thinking', the
+//                               no-buttons yes-or-no moment, what the pot shows, kitchen timers on the
+//                               phone's clock (parse, order, ids per socket, countdown, words),
 //                               which of the cook's answers to offer, the silence the mic hands on, the
 //                               Cartesia credit fixes (which frames go to /cook, the app leaving), and one
 //                               socket at a time (a retry or a connect from before a pause)
@@ -28,6 +29,8 @@ registerHooks({
 });
 
 const V = await import(pathToFileURL(join(root, 'src/lib/live/voiceLogic.ts')).href);
+// The service's own yes and no (#47), so the phone's copy can't drift from it.
+const S = await import(pathToFileURL(join(root, '..', 'voice', 'src', 'yesNo.ts')).href);
 
 let passed = 0;
 const test = async (name, fn) => {
@@ -156,33 +159,90 @@ await test('the shared contract: { type: "moment" } open with its kind, closed w
   assert.equal(V.offerClosed({ type: 'offer_closed', accepted: 'yes' }), false);
 });
 
-await test('a spoken yes or no is what homie takes for one (voice/src/cook.ts isYes and NO_REPLY); commands are neither', () => {
-  for (const t of ['yes', 'Yes!', 'yeah', 'sure, read it', 'okay', 'ok', 'please', 'yes please', 'Let\'s hear it', 'go ahead', 'yes, play it']) assert.equal(V.yesNo(t), 'yes', t);
-  for (const t of ['no', 'No.', 'nope', 'nah', 'not now', 'no thanks', 'no thank you', 'later', 'maybe later', 'um, no', 'skip it', 'not right now', 'I\'m good', 'no, not now', 'well, nah']) assert.equal(V.yesNo(t), 'no', t);
-  // A no wins, as on the service: "ok, no" declines.
-  assert.equal(V.yesNo('ok, no'), 'no');
-  // Only a whole no is a no there; a no with more after it goes the usual way, so it isn't one here either.
-  for (const t of ['no I want to read it myself', 'don\'t', 'skip']) assert.equal(V.yesNo(t), null, t);
-  // Commands go the usual way, as on the service ("ok next" is next, not yes).
-  for (const t of ['next', 'ok next', 'go back', 'repeat', 'again', 'what', 'um, next please']) assert.equal(V.yesNo(t), null, t);
-  for (const t of ['how much salt?', 'I don’t know', '', 'nobody told me']) assert.equal(V.yesNo(t), null, t);
+// The phrases of the service's own tests (voice/test/yesNo.test.ts, #47).
+const SAID_YES = [
+  'Yes.', 'Yes please.', 'Yeah.', 'Yep!', 'Yup', 'Sure.', 'Okay.', 'OK', 'Alright.', 'All right.', 'Please.',
+  'Of course.', 'Go ahead.', 'Do it.', 'Play it.', 'Read it.', "Let's hear it.", 'Read it out loud.', 'Can do.',
+  'Sure, read it.', 'Yeah, go ahead.', 'Yes, play it.', 'Yes, I want to hear it.', 'Okay sure.', 'Okay, yes please.',
+  'Um, yes.', 'Oh, okay.', 'Okay, go ahead and read it.', 'Please read it to me.', 'Okay, thanks.', 'Okay?',
+  'Yes, but how much ginger?', 'Yes, no problem.', 'Sure, no worries.',
+  'Please do.', "Okay, let's do it.", 'Okay, sounds good.', 'Okay cool.', 'Ok go.', 'Okay, I want to hear it.',
+  'Please read the recipe.', "Alright, let's hear it.", 'Okay, will do.',
+];
+const SAID_NO = [
+  'No.', 'No thanks.', 'No, thank you.', 'Nope.', 'Nah.', "Don't.", 'Dont', 'Don’t.', 'Not now.', 'Not right now.',
+  'No, not right now.', "Nah, I'm good.", "I'm good.", 'Im good, thanks.', "No, I don't want that.", 'Not really.',
+  'Not yet.', 'Later.', 'Maybe later.', 'Skip it.', 'No, maybe later.', 'Um, no.', 'Well, not now.',
+  'Okay, no.', 'Okay, no thanks.', "Please don't.", 'No no no.', 'Not now, thanks.', "Don't read it.",
+  "Don't bother.", "Don't worry about it.", 'Of course not.', 'Not really, thanks.', "No, it's fine.",
+  'Oh, no thanks.', 'Oh no, not now.', 'Oh, no.', "Oh no, I'm good.", 'Oh no no, maybe later.',
+  'Yeah, no.', "Yeah no, I'm good.", 'Yes, not now.', 'Sure, but not right now.',
+];
+const SAID_NEITHER = [
+  'Next step.', "What's the next step?", "Okay, what's the next step?", 'Okay, next step.', 'Okay, next.', 'Please go back.',
+  'Wait, go back.', 'Repeat that.', 'Say that again.', 'What?', 'Now what?', 'Okay, now what?', 'Okay, how much salt do I add?',
+  'How hot should the oil be?', 'Okay, set a timer for 5 minutes.', 'Set a timer for five minutes.', 'Okay, go on.',
+  'Okay, done.', 'Okay, wait.', 'Alright, is the oil hot enough?', 'Please, a timer for 5 minutes.', 'Okay, the rice is soft?',
+  'Okay, do I add the salt now?', 'Please say that again.',
+  'Know what?', 'Nothing.', 'Now.', 'Nobody told me.', 'Not yet sure how much salt.', "Later I'll add the ginger.",
+  'Yesterday Grandma said so.', "Surely it's done.", 'No problem.', 'No worries.', 'No idea how much ginger.',
+  "Don't know how much salt.", "Don't understand step two.", 'Thanks.', 'Um', '', '...', 'Okayish.', "I'm sure it's fine.",
+  'Not really sure how much salt.', 'No clue how much ginger.', 'No one told me how much salt.', "I'm good at this.",
+  "Don't forget the timer.", 'Oh no, I burned it!', "Oh no, it's boiling over.", 'Oh no no no, the rice!',
+];
+// A plain command right after a no: the service still runs it, without Claude.
+const NO_THEN_COMMAND = [
+  ['No, next step.', 'next step'], ['No, go back.', 'go back'], ["Nah, what's next?", "what's next"],
+  ['No thanks, next step please.', 'next step'], ['Not now, set a timer for 5 minutes.', 'set a timer for 5 minutes'],
+  ['Okay, no, go back.', 'go back'], ['Nah, no need, next step.', 'next step'], ['No, but repeat that.', 'repeat that'],
+];
+// More than the no: the service gives Claude the whole sentence.
+const MORE_AFTER_NO = [
+  'No point in reading it.', 'No, no point reading it out loud.', 'No, no need at all to read it.', 'No, no need of reading it.',
+  'Nah, no need really to read it.', "No, I'm out of ginger. Can I skip it?", "No, it's burning, what do I do?",
+  "No, the oil's too hot?", 'No, too hot?', 'No, go to step 3.', 'No, play the video.', 'No, tell me the story.',
+  'Nah, show me the video.', 'No, skip this step.', 'No, why?', 'No, but how much salt do I add?', 'No, just read it.',
+  'No? Fine.', 'No, too salty.', "No, don't set a timer for 5 minutes.",
+];
+// Only the no: nothing goes on.
+const ONLY_NO = [
+  'No.', 'No, thanks.', 'No thanks.', 'No, not now.', "Nah, I'm good.", 'No, maybe later.', "No, I'm good for now.",
+  "Nah, that's okay.", "No, it's fine.", "No, don't read it.", 'No, skip it.', 'No, not today, thanks.', "No, I'm all good.",
+  'No, no need.', "No, I don't want to hear it.", "No, I don't want that.",
+  'No, no need to read it.', 'Nope, no need to read it out loud.', 'Nah, no need for that.', 'No, no need to play it.',
+  'No need to read it.', 'No need.', "No, there's no need.", 'No, no need to.', 'Nah, no need for now.',
+  "No, no need, I'm good.", 'Oh no, no need to read it.', 'No thanks, no need to read it.', 'No point.',
+  "No, I'm all right.", 'No, I got it.', "No, I've got it.", 'No, I can do it.', "No, I'm good on that.",
+  "Nah, I'm fine with that.", "No, you don't have to.", "No, I'm good, thank you so much.",
+];
+
+await test('a spoken yes or no follows the service’s rules (#47): a yes word whatever follows, a no wins', () => {
+  for (const t of SAID_YES) assert.equal(V.yesNo(t), 'yes', t);
+  for (const t of SAID_NO) assert.equal(V.yesNo(t), 'no', t);
+  for (const t of SAID_NEITHER) assert.equal(V.yesNo(t), null, t);
 });
 
-await test('a whole yes or no is the service’s own (voice/src/cook.ts yesOrNo): "yes, play it" isn’t one', () => {
-  for (const t of ['yes', 'Yes please', 'play it', 'sure', 'ok', 'of course', 'read it to me', 'yes yes', 'um, yeah']) assert.equal(V.wholeYesNo(t), 'yes', t);
-  for (const t of ['no', 'No thanks', 'not now', 'ok, no', 'nah', "I'm good"]) assert.equal(V.wholeYesNo(t), 'no', t);
-  for (const t of ['yes, play it', 'yes read it', 'no I want to read it myself', 'next', 'how much salt?', '']) assert.equal(V.wholeYesNo(t), null, t);
-  // The same answers as the service's own regexes, read from its source (so the two can't drift).
-  const src = readFileSync(join(root, '..', 'voice', 'src', 'cook.ts'), 'utf8');
-  const re = (name) => new RegExp(src.match(new RegExp(`const ${name} = /(.+)/;`))[1]);
-  const [yes, no] = [re('YES_REPLY'), re('NO_REPLY')];
-  const reply = (t) =>
-    t.toLowerCase().replace(/[^a-z' ]/g, ' ').replace(/\s+/g, ' ').trim()
-      .replace(/^((um|uh|oh|ah|hmm|mm|well|wait|okay|ok|so|hey|alright|and|now) )+/, '')
-      .replace(/( (please|thanks|thank you))+$/, '');
-  const service = (t) => (yes.test(reply(t)) ? 'yes' : no.test(reply(t)) ? 'no' : null);
-  for (const t of ['yes', 'yes please', 'play it', 'alright', 'yes, play it', 'no', 'no no', 'maybe later', 'ok, no', 'skip it', 'next', 'go ahead', 'let’s hear it', "let's hear it"]) {
-    assert.equal(V.wholeYesNo(t), service(t), t);
+await test('after a no: a plain command is the fast tail, more is more, and more no is only the no', () => {
+  for (const [t, fastTail] of NO_THEN_COMMAND) {
+    assert.deepEqual(V.afterNo(t), { more: true, fastTail }, t);
+    assert.equal(V.yesNo(t), 'no', t);
+  }
+  for (const t of MORE_AFTER_NO) {
+    assert.equal(V.afterNo(t).more, true, t);
+    assert.equal(V.yesNo(t), 'no', t);
+  }
+  for (const t of ONLY_NO) {
+    assert.deepEqual(V.afterNo(t), { more: false, fastTail: '' }, t);
+    assert.equal(V.yesNo(t), 'no', t);
+  }
+  for (const t of ['Yes, next step.', 'Next step.', 'Oh no, go back!', 'How much salt?']) assert.deepEqual(V.afterNo(t), { more: false, fastTail: '' }, t);
+});
+
+await test('the phone’s yes and no are the service’s own (voice/src/yesNo.ts), phrase for phrase', () => {
+  const all = [...SAID_YES, ...SAID_NO, ...SAID_NEITHER, ...NO_THEN_COMMAND.map(([t]) => t), ...MORE_AFTER_NO, ...ONLY_NO];
+  for (const t of all) {
+    assert.equal(V.yesNo(t), S.yesNo(t), t);
+    assert.deepEqual(V.afterNo(t), S.afterNo(t), t);
   }
 });
 
@@ -194,22 +254,28 @@ await test('thinking: never for the echo of the phone’s own text (a tapped "no
   // The kid's own words get an answer.
   assert.equal(V.thinksAfter({ ...base, text: 'how much salt?' }), true);
   assert.equal(V.thinksAfter({ ...base, text: 'next' }), true);
-  // A "no" with nothing up goes to homie's AI, which answers.
-  assert.equal(V.thinksAfter({ ...base, text: 'no' }), true);
+  // A yes or a no with nothing up goes to homie's AI, which answers.
+  for (const t of ['no', 'No, not right now.', "Don't.", 'Sure, read it.']) assert.equal(V.thinksAfter({ ...base, text: t }), true, t);
 });
 
-await test('thinking: not for a whole yes or no while an app-only moment is up (the service holds it)', () => {
+await test('thinking: not for a yes, or a no with nothing more, while an app-only moment is up (the service holds it)', () => {
   const up = { echo: false, appMoment: true, momentUp: true };
-  for (const t of ['yes', 'yes please', 'play it', 'no', 'not now', 'ok, no']) assert.equal(V.thinksAfter({ ...up, text: t }), false, t);
-  // More than a yes, or a question, still reaches homie's AI.
-  for (const t of ['yes, play it', 'how long do I fry it?', 'next']) assert.equal(V.thinksAfter({ ...up, text: t }), true, t);
+  for (const t of ['yes', 'Sure, read it.', 'Yes, play it.', 'Please do.', 'Yes, but how much ginger?', 'no', 'No, not right now.', "Don't.", 'Okay, no.', 'No, no need to read it.']) {
+    assert.equal(V.thinksAfter({ ...up, text: t }), false, t);
+  }
+  // More after a no, a command or a question still reaches homie (the fast path or its AI).
+  for (const t of ["No, I'm out of ginger. Can I skip it?", 'No, next step.', 'No point in reading it.', "Okay, what's the next step?", 'how long do I fry it?', 'next']) {
+    assert.equal(V.thinksAfter({ ...up, text: t }), true, t);
+  }
 });
 
-await test('thinking: not for a whole no to the service’s own offer (it closes it and says nothing)', () => {
+await test('thinking: not for a no with nothing more to the service’s own offer (it closes it and says nothing)', () => {
   const offer = { echo: false, appMoment: false, momentUp: true };
-  for (const t of ['no', 'nope', 'not now', 'no thanks']) assert.equal(V.thinksAfter({ ...offer, text: t }), false, t);
-  // A yes to the offer gets an answer (it reads, or her clip plays).
-  for (const t of ['yes', 'sure, read it', 'yes please']) assert.equal(V.thinksAfter({ ...offer, text: t }), true, t);
+  for (const t of ['no', 'nope', 'No, not right now.', "Don't.", 'No thanks.', "Nah, I'm good.", 'Oh, no thanks.']) assert.equal(V.thinksAfter({ ...offer, text: t }), false, t);
+  // A yes gets an answer (it reads, or her clip plays), and so does more after a no.
+  for (const t of ['yes', 'Sure, read it.', 'yes please', "No, I'm out of ginger. Can I skip it?", 'No, next step.', 'No point in reading it.']) {
+    assert.equal(V.thinksAfter({ ...offer, text: t }), true, t);
+  }
 });
 
 await test('thinking ends with homie’s answer: an action, a line, or the offer closing', () => {
@@ -277,41 +343,63 @@ await test('the pot: a timer shows when the mic is off, and a timer at zero wins
 // Timers
 
 await test('a timer ends `seconds` from now on the phone’s clock, not the service’s endsAt', () => {
-  const t = V.parseTimer({ id: 'timer-1', seconds: 300, label: 'rice', endsAt: 99 }, 1_000_000);
-  assert.deepEqual(t, { id: 'timer-1', label: 'rice', endsAt: 1_300_000, totalS: 300 });
+  const t = V.parseTimer({ id: 'timer-1', seconds: 300, label: 'rice', endsAt: 99 }, 1_000_000, 1);
+  assert.deepEqual(t, { id: '1/timer-1', label: 'rice', endsAt: 1_300_000, totalS: 300 });
 });
 
 await test('a timer without a label is "timer"; a malformed one is dropped', () => {
-  assert.equal(V.parseTimer({ id: 't', seconds: 60 }, 0).label, 'timer');
-  assert.equal(V.parseTimer({ id: 't', seconds: 60, label: '  ' }, 0).label, 'timer');
-  assert.equal(V.parseTimer({ seconds: 60 }, 0), null);
-  assert.equal(V.parseTimer({ id: '', seconds: 60 }, 0), null);
-  assert.equal(V.parseTimer({ id: 't', seconds: 0 }, 0), null);
-  assert.equal(V.parseTimer({ id: 't', seconds: -5 }, 0), null);
-  assert.equal(V.parseTimer({ id: 't', seconds: 'soon' }, 0), null);
-  assert.equal(V.parseTimer({ id: 't', seconds: 25 * 3600 }, 0), null);
+  assert.equal(V.parseTimer({ id: 't', seconds: 60 }, 0, 1).label, 'timer');
+  assert.equal(V.parseTimer({ id: 't', seconds: 60, label: '  ' }, 0, 1).label, 'timer');
+  assert.equal(V.parseTimer({ seconds: 60 }, 0, 1), null);
+  assert.equal(V.parseTimer({ id: '', seconds: 60 }, 0, 1), null);
+  assert.equal(V.parseTimer({ id: 't', seconds: 0 }, 0, 1), null);
+  assert.equal(V.parseTimer({ id: 't', seconds: -5 }, 0, 1), null);
+  assert.equal(V.parseTimer({ id: 't', seconds: 'soon' }, 0, 1), null);
+  assert.equal(V.parseTimer({ id: 't', seconds: 25 * 3600 }, 0, 1), null);
   // A string number from a loose server still counts.
-  assert.equal(V.parseTimer({ id: 't', seconds: '90' }, 0).totalS, 90);
+  assert.equal(V.parseTimer({ id: 't', seconds: '90' }, 0, 1).totalS, 90);
 });
 
 await test('timers stay soonest first; the same id replaces the old one; done ones leave', () => {
-  const a = V.parseTimer({ id: 'a', seconds: 600 }, 0);
-  const b = V.parseTimer({ id: 'b', seconds: 60 }, 0);
+  const a = V.parseTimer({ id: 'a', seconds: 600 }, 0, 1);
+  const b = V.parseTimer({ id: 'b', seconds: 60 }, 0, 1);
   let list = V.withTimer([], a);
   list = V.withTimer(list, b);
-  assert.deepEqual(list.map((t) => t.id), ['b', 'a']);
-  list = V.withTimer(list, V.parseTimer({ id: 'b', seconds: 900 }, 0));
-  assert.deepEqual(list.map((t) => t.id), ['a', 'b']);
-  assert.deepEqual(V.withoutTimer(list, 'a').map((t) => t.id), ['b']);
-  assert.deepEqual(V.withoutTimer(list, 'nope').map((t) => t.id), ['a', 'b']);
+  assert.deepEqual(list.map((t) => t.id), ['1/b', '1/a']);
+  list = V.withTimer(list, V.parseTimer({ id: 'b', seconds: 900 }, 0, 1));
+  assert.deepEqual(list.map((t) => t.id), ['1/a', '1/b']);
+  assert.deepEqual(V.withoutTimer(list, 1, 'a').map((t) => t.id), ['1/b']);
+  assert.deepEqual(V.withoutTimer(list, 1, 'nope').map((t) => t.id), ['1/a', '1/b']);
 });
 
-await test('a timer is known by its id and its end, so a new socket’s "timer-1" is a new timer', () => {
-  const first = V.parseTimer({ id: 'timer-1', seconds: 60 }, 0);
-  const again = V.parseTimer({ id: 'timer-1', seconds: 60 }, 90_000);
-  assert.equal(V.timerKey(first), 'timer-1:60000');
-  assert.notEqual(V.timerKey(first), V.timerKey(again));
-  assert.equal(V.timerKey(first), V.timerKey({ ...first }));
+// The hook's timers, step for step (lib/live/voice.ts): each socket's open counts up `socketNo`, and
+// `timer` / `timer_done` are read with the socket they came on.
+function cookTimers() {
+  const h = { socket: 0, list: [] };
+  return {
+    h,
+    open: () => void (h.socket += 1),
+    timer: (m, now) => {
+      const t = V.parseTimer(m, now, h.socket);
+      if (t) h.list = V.withTimer(h.list, t);
+    },
+    done: (id) => void (h.list = V.withoutTimer(h.list, h.socket, id)),
+  };
+}
+
+await test('timer ids are per socket: a pause and resume keeps the old "timer-1" counting down', () => {
+  const c = cookTimers();
+  c.open();
+  c.timer({ id: 'timer-1', seconds: 300, label: 'rice' }, 0);
+  // The app goes to the background and comes back: a new socket, where the service starts at timer-1 again.
+  c.open();
+  c.timer({ id: 'timer-1', seconds: 600, label: 'eggs' }, 12_000);
+  assert.deepEqual(c.h.list.map((t) => [t.id, t.label]), [['1/timer-1', 'rice'], ['2/timer-1', 'eggs']]);
+  // The new socket's timer_done takes only its own timer; the rice leaves on its own at zero (no timer_done can come).
+  c.done('timer-1');
+  assert.deepEqual(c.h.list.map((t) => [t.id, t.label]), [['1/timer-1', 'rice']]);
+  assert.equal(c.h.list[0].endsAt, 300_000);
+  assert.equal(V.socketTimerId(2, 'timer-1'), '2/timer-1');
 });
 
 await test('seconds left round up, so 0 only once it is done', () => {
@@ -398,14 +486,15 @@ await test('credit fix A: /cook gets only the kid’s frames, nothing while the 
   assert.equal(V.cookSendsFrame({ quiet: true, focused: false }), false);
 });
 
-await test('credit fix B: the app in the background or under a system sheet closes the line', () => {
+await test('credit fix B: the app in the background closes the line; iOS \'inactive\' (still on screen) never does', () => {
   const on = { lineOn: true, paused: false, asking: false };
   assert.equal(V.appStateStep({ ...on, next: 'background' }), 'pause');
-  assert.equal(V.appStateStep({ ...on, next: 'inactive' }), 'pause');
+  // Control Center, the notification shade, a call banner: the app is still on screen.
+  assert.equal(V.appStateStep({ ...on, next: 'inactive' }), null);
   // No line on (voice never started, it gave up, or the kid hung up): nothing to close or reopen.
   assert.equal(V.appStateStep({ ...on, lineOn: false, next: 'background' }), null);
   assert.equal(V.appStateStep({ ...on, lineOn: false, next: 'active' }), null);
-  // Already paused ('inactive' then 'background'): once.
+  // Already paused: once.
   assert.equal(V.appStateStep({ ...on, paused: true, next: 'background' }), null);
   // The mic's permission prompt makes iOS 'inactive': not a pause; going home meanwhile is.
   assert.equal(V.appStateStep({ ...on, asking: true, next: 'inactive' }), null);
@@ -415,12 +504,22 @@ await test('credit fix B: the app in the background or under a system sheet clos
 await test('credit fix B: back on top after a pause the line opens again; otherwise nothing changes', () => {
   assert.equal(V.appStateStep({ lineOn: false, paused: true, asking: false, next: 'active' }), 'resume');
   assert.equal(V.appStateStep({ lineOn: true, paused: false, asking: false, next: 'active' }), null);
-  // Android and iOS extension states that aren't on top or away.
-  for (const next of ['unknown', 'extension']) assert.equal(V.appStateStep({ lineOn: true, paused: true, asking: false, next }), null, next);
+  // Only 'active' resumes: not 'inactive' on the way back, nor Android and iOS extension states.
+  for (const next of ['inactive', 'unknown', 'extension']) assert.equal(V.appStateStep({ lineOn: false, paused: true, asking: false, next }), null, next);
+  // background, inactive, active: one pause and one resume.
+  const steps = [];
+  let paused = false;
+  for (const next of ['inactive', 'background', 'inactive', 'active']) {
+    const step = V.appStateStep({ lineOn: !paused, paused, asking: false, next });
+    if (step) steps.push(step);
+    if (step === 'pause') paused = true;
+    if (step === 'resume') paused = false;
+  }
+  assert.deepEqual(steps, ['pause', 'resume']);
   assert.equal(V.appInForeground('active'), true);
   assert.equal(V.appInForeground(null), true);
+  assert.equal(V.appInForeground('inactive'), true);
   assert.equal(V.appInForeground('background'), false);
-  assert.equal(V.appInForeground('inactive'), false);
 });
 
 await test('one socket at a time: a retry or a connect opens only on its own line, and only with none open', () => {

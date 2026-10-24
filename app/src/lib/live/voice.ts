@@ -8,6 +8,7 @@
 //                         doesn't know, 4404), or the line failed for good (the phone reads instead)
 //   voice.muted           the kid turned the mic off: the recorder stops, the line stays open
 //   voice.timers          kitchen timers the service set, soonest first; this phone counts them down
+//                         (ids are per socket: one from before a pause keeps going and leaves on its own)
 //   voice.askedAt         when a question last went to the cook ("I asked Grandma"); askedIds: which ones
 //   voice.listen() / stop() / setMuted(on)
 //   voice.command('back', fallback)  says it to homie as text; `fallback` runs when nobody is on the line,
@@ -19,8 +20,8 @@
 //                                    next line waits until she's done, so it never talks over her
 // Half duplex is lib/live/mic's: while the app makes sound, its frames are zeroed, and none of those
 // reach the socket (Cartesia's Ink bills every second it gets, silence too; voiceLogic cookSendsFrame).
-// The app in the background or under a system sheet (AppState) closes the line and stops the mic, and
-// back on top it opens again, with the mic only if the kid hadn't turned it off (voiceLogic
+// The app in the background (AppState; not iOS 'inactive', still on screen) closes the line and stops
+// the mic, and back on top it opens again, with the mic only if the kid hadn't turned it off (voiceLogic
 // appStateStep). One socket at a time: a retry or a connect from before a hang-up never opens one
 // after it (voiceLogic lineMayOpen), and only the current socket is heard. There's no idle timeout while the screen is open (Caleb, Oct 24: hands-free, a kid
 // may say nothing for minutes while it simmers); the service closes its own Ink stream after 2 min
@@ -74,7 +75,6 @@ import {
   sayLabel,
   sentText,
   thinksAfter,
-  timerKey,
   withoutTimer,
   withTimer,
   type AppMomentKind,
@@ -154,7 +154,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
   const [muted, setMutedState] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [timers, setTimers] = useState<CookTimer[]>([]);
-  // The timer at zero, by timerKey (the service starts its ids again on each socket).
+  // The timer at zero, by id.
   const [due, setDue] = useState<string | null>(null);
   const [askedAt, setAskedAt] = useState<number | null>(null);
   const [askedIds, setAskedIds] = useState<ReadonlySet<string>>(() => new Set());
@@ -166,6 +166,8 @@ export function useVoiceCooking(opts: VoiceOptions) {
   // Bumped by each hang-up (stop): a retry or a connect from before it never opens a socket (lineMayOpen).
   const line = useRef(0);
   const retries = useRef(0);
+  // Counted up on each socket's open: timer ids are per socket (the service starts again at "timer-1").
+  const socketNo = useRef(0);
   const micOn = useRef(false);
   const mutedRef = useRef(false);
   const liveRef = useRef(false);
@@ -366,10 +368,11 @@ export function useVoiceCooking(opts: VoiceOptions) {
         setAskedAt(Date.now());
         if (typeof m.questionId === 'string') setAskedIds((ids) => new Set(ids).add(m.questionId));
       } else if (m.type === 'timer') {
-        const t = parseTimer(m, Date.now());
+        const t = parseTimer(m, Date.now(), socketNo.current);
         if (t) setTimers((list) => withTimer(list, t));
       } else if (m.type === 'timer_done') {
-        setTimers((list) => withoutTimer(list, m.id));
+        const n = socketNo.current;
+        setTimers((list) => withoutTimer(list, n, m.id));
       } else if (m.type === 'offer_closed') {
         cb.current.onOfferClosed?.(offerClosed(m));
       } else if (m.type === 'error') {
@@ -444,6 +447,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
       };
       s.onopen = () => {
         if (sock.current !== s) return;
+        socketNo.current += 1;
         retries.current = 0;
         openSays.current = 0;
         restoring.current = 0;
@@ -568,7 +572,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
     void connect(lineAuto.current);
   }, [connect]);
 
-  // The app leaves the foreground (Cartesia credit fix B): the line closes and the mic stops, quietly
+  // The app goes to the background (Cartesia credit fix B): the line closes and the mic stops, quietly
   // (want off: no retries, no error). Back on top, on this screen, it opens again.
   const lineCtl = useRef({ stop, resume });
   useEffect(() => {
@@ -631,20 +635,20 @@ export function useVoiceCooking(opts: VoiceOptions) {
   // The soonest timer reaching zero on this phone's clock: a buzz and the pot's timer state; it leaves
   // with the service's timer_done, or on its own a little later.
   useEffect(() => {
-    const next = timers.find((t) => timerKey(t) !== due);
+    const next = timers.find((t) => t.id !== due);
     if (!next) return;
-    const key = timerKey(next);
+    const { id } = next;
     const t = setTimeout(() => {
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-      setDue(key);
-      later(() => setTimers((list) => list.filter((x) => timerKey(x) !== key)), TIMER_DUE_HOLD_MS);
+      setDue(id);
+      later(() => setTimers((list) => list.filter((x) => x.id !== id)), TIMER_DUE_HOLD_MS);
     }, Math.max(0, next.endsAt - Date.now()));
     return () => clearTimeout(t);
   }, [timers, due, later]);
 
   // What the pot shows, while this screen is the one on top.
   const ring = timers[0];
-  const timerDue = !!due && timers.some((t) => timerKey(t) === due);
+  const timerDue = !!due && timers.some((t) => t.id === due);
   useEffect(() => {
     if (!focused) return;
     setHomie({ state: cookPotState({ status, muted, thinking, timers: timers.length, timerDue }), timer: ring });
