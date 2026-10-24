@@ -27,7 +27,8 @@ mom". After the audition he said "i like riya as well".
 - Backup voice: when Sonic fails before any audio went out (402, 429, 5xx, 401, a network error, or nothing within
   4 s), Gemini TTS (`gemini-3.8-flash-tts`, prebuilt voice `en-in-assistant-3`, style "warm and gentle, like a caring
   older cousin") says the same line (`voice/src/geminiTts.ts`). Once Sonic's audio has started, a failure just ends
-  the line. Fake speech never calls either.
+  the line. If Gemini fails too (or sends nothing within 6 s), the line ends with no voice and `/speak` answers 502,
+  so the app uses the phone's voice. Fake speech never calls either.
 - The backup Caleb also heard and liked: **Sindhu tuned**, `07bc462a-c644-49f1-baf7-82d5599131be` with English as
   `{ locale: "en-IN", accent: "telangana" }` (same speed and moods). It was homie's voice before Oct 24.
 

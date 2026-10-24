@@ -128,6 +128,7 @@ export async function speak(
     if (!(err instanceof SonicFailed) || signal.aborted || !env.geminiKey) throw err;
     console.log(`tts: gemini fallback (sonic ${err.reason})`);
     await geminiSpeak(text, format, signal, onChunk, SONIC_SAMPLE_RATE).catch((gemini: Error) => {
+      if (signal.aborted) throw gemini;
       throw new Error(`${err.message}, then ${gemini.message}`);
     });
   }

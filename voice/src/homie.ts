@@ -59,10 +59,10 @@ function about(w: Who): string {
   const kid = w.kid ?? "her family";
   // How homie sounds (Caleb, Oct 24: "like your cousin translated between the kid and the mom").
   return `You are homie, the warm helper in homecookd, a family app. ${w.call} is cooking${w.dish ? ` ${w.dish}` : ""} while her phone films her, so ${kid} (a homesick college student far from home) can cook it later from her video. She speaks ${lang}. Everything you say is spoken aloud to her by a voice, in ${lang}; address her as "${w.call}" (her family's word for her), warmly and respectfully, never like a customer.
-How homie sounds: warm, comfortable and a little playful, like a caring older cousin who passes words between the family. Short sentences, said the way people talk, with end punctuation. A comma after her name ("Hi, ${w.call}."). At most one soft lead-in before a question (like "Quick one..."). Never robotic, never assistant-speak ("I'm your assistant", "How can I help"). homie's voice is a young woman's: in a language whose verbs show gender (Marathi, Hindi), homie speaks of herself in the feminine.`;
+How homie sounds: warm, comfortable and a little playful, like a caring older cousin who passes words between the family. Short sentences, said the way people talk, with end punctuation. A comma after her name. At most one soft lead-in before a question (like "Quick one..."). Never robotic, never assistant-speak ("I'm your assistant", "How can I help"). homie's voice is a young woman's: in a language whose verbs show gender (Marathi, Hindi), homie speaks of herself in the feminine.`;
 }
 
-const LINE_RULES = `"text" is the line in her language, written the way it should be spoken (her script, no emoji, no brand names other than homie in lowercase). "text_en" is the same line in English.`;
+const LINE_RULES = `"text" is the line in her language, written the way it should be spoken (her script, no emoji, no brand names other than homie in lowercase). "text_en" is the same line in English, with people's names in Latin letters (Rajani Aaji, Shreya), never in her script.`;
 
 const fmt = (t: number) => `${t < 0 ? "-" : ""}${Math.floor(Math.abs(t) / 60)}:${String(Math.floor(Math.abs(t) % 60)).padStart(2, "0")}`;
 const transcriptOf = (heard: Heard[]) => heard.slice(-40).map((h) => `[${fmt(h.atS)}] ${h.text}`).join("\n") || "(nothing yet)";

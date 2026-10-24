@@ -29,7 +29,8 @@ fixtures/       stub session (Grandma's red-braised pork) and stub recordings (R
 scripts/        test clients (/cook and /record), test-audio maker
 test/           unit tests (node:test) with a fake socket, Claude, voice and Convex: pacing, /record's phases
                 (and a recording ended underneath it), /cook's read-aloud offer and the app's moments, and
-                homie's voice (tts.test.ts: the exact Sonic requests, the moods, the Gemini fallback; fetch stubbed)
+                homie's voice (tts.test.ts: the exact Sonic requests, the moods, the Gemini fallback; fallback.test.ts: a stalled
+                Gemini still ends the line, /speak's 502; fetch stubbed)
 ```
 
 ## Run it locally
@@ -122,7 +123,9 @@ Service → app
   `audio=pcm` (default) streams raw PCM to play as it arrives. With `audio=wav`, the frames joined together are
   one WAV file. A new `say` cuts off the one before it. Every line is homie's one voice (Riya bilingual, 0.85 speed);
   an English line's `kind` sets its mood (step and hint `calm`, offer `curious`, translation `affectionate`, the rest
-  `content`). If Sonic fails before any audio, Gemini says the line in the same format (24 kHz s16le).
+  `content`). If Sonic fails before any audio, Gemini says the line in the same format (24 kHz s16le). If Gemini
+  fails too (an error, no audio at all, nothing within 6 s, or the line not done within 10 s + 100 ms a character),
+  the line ends with no voice and `say_end` still comes.
 - A `hint` is general cooking knowledge, never the cook's: "Grandma didn't say. Usually just enough water to cover
   it." It comes only when no clip answers, and `asked_cook` plus "I'll ask Grandma too" always follow. Label it as
   AI.
@@ -233,7 +236,8 @@ a whole WAV in 1.6 s (Marathi) and 2.0 s (English), and `/cook` streamed the gre
 `{ sessionToken, text, lang?, translate?: boolean, kind?: string }` → `audio/wav` (24 kHz) in homie's voice, in `lang`
 or the person's own language (`/live/person`). `translate: true` first turns English `text` into that language
 (Claude, translate only). `kind` (a `say` kind like `step`, `hint`, `reply`) picks the mood of an English line;
-without it, `content`. Gemini says it when Sonic can't. The header `x-spoken-text` (URI-encoded) is what was said. 400 bad body, 401 signed out.
+without it, `content`. Gemini says it when Sonic can't. The header `x-spoken-text` (URI-encoded) is what was said. 400 bad body, 401 signed out,
+502 when neither voice could say it (the app then uses the phone's own voice).
 
 ## Deploy (Cloud Run, us-west1)
 

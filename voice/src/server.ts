@@ -61,7 +61,8 @@ async function speakRoute(req: IncomingMessage, res: ServerResponse) {
   }
 }
 
-const server = createServer((req, res) => {
+/** Exported for the tests (PORT=0 picks a free port). */
+export const server = createServer((req, res) => {
   const path = (req.url ?? "/").split("?")[0];
   if (path === "/health" || path === "/healthz") {
     // x-fake-speech tells the test clients this service spends no Cartesia credits.

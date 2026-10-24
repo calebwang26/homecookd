@@ -8,7 +8,7 @@ process.env.ANTHROPIC_API_KEY = "test";
 process.env.GEMINI_API_KEY = "test-gemini";
 process.env.VOICE_STUB = "1";
 const sonic = await import("../src/sonic.js");
-const { geminiRequest } = await import("../src/geminiTts.js");
+const { geminiRequest, geminiTotalMs, GEMINI_FIRST_AUDIO_MS } = await import("../src/geminiTts.js");
 const { env } = await import("../src/env.js");
 
 const RIYA = "930eda72-c1af-4637-8d07-87d881d615fe";
@@ -46,15 +46,16 @@ function streamed(chunks: Uint8Array[], end: "close" | Error = "close") {
   });
 }
 
-/** Gemini's server-sent events carrying these PCM pieces. */
-function geminiEvents(pieces: Buffer[]) {
+const COMPLETED = [{ event_type: "step.stop", index: 0 }, { event_type: "interaction.completed", interaction: { id: "i1", status: "completed" } }];
+
+/** Gemini's server-sent events carrying these PCM pieces, then `end` (by default a completed interaction). */
+function geminiEvents(pieces: Buffer[], end: object[] = COMPLETED) {
   const lines = [
     { event_type: "interaction.created", interaction: { id: "i1", status: "in_progress" } },
     { event_type: "step.start", index: 0, step: { type: "model_output" } },
     ...pieces.map((p) => ({ event_type: "step.delta", index: 0, delta: { type: "audio", mime_type: "audio/l16", sample_rate: 24000, channels: 1, data: p.toString("base64") } })),
-    { event_type: "step.stop", index: 0 },
-    { event_type: "interaction.completed", interaction: { id: "i1", status: "completed" } },
-  ].map((e) => `event: ${e.event_type}\ndata: ${JSON.stringify(e)}\n\n`);
+    ...end,
+  ].map((e) => `event: ${(e as { event_type: string }).event_type}\ndata: ${JSON.stringify(e)}\n\n`);
   const text = lines.join("") + "data: [DONE]\n\n";
   // Split mid-line, the way a network delivers it.
   const bytes = Buffer.from(text);
@@ -271,8 +272,12 @@ test("an abort is respected: while Sonic waits, no Gemini; while Gemini streams,
     },
   });
   const out: Buffer[] = [];
-  await sonic.speak("Hey, the rice timer is done.", "pcm", b.signal, (c) => (out.push(c), b.abort()), { voice: env.homieVoice, kind: "timer" }).catch(() => {});
+  const result = await sonic.speak("Hey, the rice timer is done.", "pcm", b.signal, (c) => (out.push(c), b.abort()), { voice: env.homieVoice, kind: "timer" }).then(
+    () => "ok" as const,
+    (err: Error) => err,
+  );
   assert.deepEqual(out, [geminiPieces[0]]);
+  assert.ok(result instanceof Error && result.name === "AbortError", "an abort rejects, as Sonic's does");
 });
 
 test("fake speech (VOICE_FAKE_SPEECH=1) never calls Sonic or Gemini", async () => {
@@ -307,4 +312,79 @@ test("a Gemini error after Sonic's: the line fails with both reasons", async () 
   assert.ok(result instanceof Error);
   assert.match(result.message, /^402: no credits, then gemini tts 429: quota$/);
   assert.deepEqual(out, []);
+});
+
+/** A Gemini answer whose headers come, then these pieces, then nothing until the request is aborted. */
+const geminiStalls =
+  (pieces: Buffer[] = []) =>
+  (c: Call) => {
+    const delta = (p: Buffer) => `data: ${JSON.stringify({ event_type: "step.delta", delta: { type: "audio", data: p.toString("base64") } })}\n\n`;
+    return new Response(
+      new ReadableStream({
+        start(ctrl) {
+          if (pieces.length) ctrl.enqueue(new TextEncoder().encode(pieces.map(delta).join("")));
+          c.signal?.addEventListener("abort", () => ctrl.error(c.signal?.reason));
+        },
+      }),
+    );
+  };
+
+/** Lets the stubbed fetches and streams move on without moving the fake clock. */
+const settle = async () => {
+  for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r));
+};
+
+test("Gemini stalls before its first audio: the line fails at 6 s with both reasons, nothing went out", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  stub({ sonic: () => new Response("no credits", { status: 402 }), gemini: geminiStalls() });
+  let done = false;
+  const pending = say("Ready? Let's cook!", { voice: env.homieVoice, kind: "greeting" }).finally(() => (done = true));
+  await settle();
+  assert.equal(calls.length, 2, "Gemini was asked");
+  mock.timers.tick(GEMINI_FIRST_AUDIO_MS - 1);
+  await settle();
+  assert.equal(done, false, "still waiting on Gemini at 5.999 s");
+  mock.timers.tick(1);
+  const { out, result } = await pending;
+  assert.ok(result instanceof Error);
+  assert.equal(result.message, "402: no credits, then gemini tts: no audio in 6 s");
+  assert.deepEqual(out, []);
+});
+
+test("Gemini's audio starts, then stalls: the whole-line cap ends it, keeping what went out", async () => {
+  mock.timers.enable({ apis: ["setTimeout"] });
+  stub({ sonic: () => new Response("no credits", { status: 402 }), gemini: geminiStalls([geminiPieces[0]]) });
+  const text = "Step 2. Heat the ghee until it shimmers, then add the cumin.";
+  let done = false;
+  const pending = say(text, { voice: env.homieVoice, kind: "step" }).finally(() => (done = true));
+  await settle();
+  mock.timers.tick(geminiTotalMs(text) - 1);
+  await settle();
+  assert.equal(done, false, "the first audio came in time, so only the cap ends it");
+  mock.timers.tick(1);
+  const { out, result } = await pending;
+  assert.ok(result instanceof Error);
+  assert.equal(result.message, `402: no credits, then gemini tts: not done in ${geminiTotalMs(text) / 1000} s`);
+  assert.deepEqual(out, [geminiPieces[0]]);
+});
+
+test("a Gemini stream with no audio, or a failed interaction, fails the line (never a silent success)", async () => {
+  const failures: [string, object[], RegExp][] = [
+    ["no audio", COMPLETED, /^402: no credits, then gemini tts: no audio$/],
+    ["interaction.failed", [{ event_type: "interaction.failed", interaction: { id: "i1", status: "failed" } }], /then gemini tts: failed$/],
+    ["a failed status update", [{ event_type: "interaction.status_update", interaction_id: "i1", status: "budget_exceeded" }], /then gemini tts: budget_exceeded$/],
+    ["an error event", [{ event_type: "error", error: { code: "overloaded", message: "try again" } }], /then gemini tts: overloaded try again$/],
+  ];
+  for (const [what, end, message] of failures) {
+    for (const format of ["pcm", "wav"] as const) {
+      stub({ sonic: () => new Response("no credits", { status: 402 }), gemini: () => geminiEvents([], end) });
+      const { out, result } = await say("Hi, Rajani Aaji.", { language: "en", voice: env.homieVoice, kind: "intro" }, format);
+      assert.ok(result instanceof Error, `${what} (${format})`);
+      assert.match(result.message, message, `${what} (${format})`);
+      assert.deepEqual(out, [], `${what} (${format})`);
+    }
+  }
+  // /speak's speakWav rejects too, so the route answers an error instead of an empty WAV (fallback.test.ts).
+  stub({ sonic: () => new Response("no credits", { status: 402 }), gemini: () => geminiEvents([]) });
+  await assert.rejects(sonic.speakWav("Hi, Rajani Aaji.", { language: "en", kind: "intro" }), /gemini tts: no audio$/);
 });

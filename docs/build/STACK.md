@@ -161,6 +161,8 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   English as `locale: "en-IN"` plus a mood per kind of line (`generation_config.emotion`, English only); other
   languages as `language`. If Sonic fails before any audio (HTTP error, network, nothing in 4 s), Gemini TTS
   (`gemini-3.8-flash-tts`) says the line in the same 24 kHz s16le format; after audio started, the line just ends.
+  Gemini has its own guard (first audio within 6 s, the whole line within 10 s + 100 ms a character); a stall, an
+  empty stream or a failed interaction ends the line (`say_end`), and `/speak` answers 502.
 - Languages are Ink-style ISO 639-1 codes (`mr`, `en`) everywhere: `people.language`, `recordings.language`,
   `jobs.language`, `recipes.language`. Unset means `en`.
 
