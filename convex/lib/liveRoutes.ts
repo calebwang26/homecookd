@@ -15,6 +15,7 @@ function reply(result: object): Response {
   if (!("error" in result)) return json(result);
   const error = result.error;
   if (error === "signed_out") return fail(401, "signed out");
+  // The voice service knows this exact message (voice/src/convex.ts Ended): the recording was ended underneath it.
   if (error === "ended") return fail(400, "recording already ended");
   return fail(404, "no such recording");
 }

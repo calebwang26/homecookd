@@ -2,17 +2,42 @@
 // what they want, Sonic (homie's voice) for what we say. Messages are the "App ↔ voice service" contract
 // in STACK.md, with the Oct 24 kid-side additions: every `say` has a `kind`; after `ready`, homie greets in
 // the cook's language and offers to read the recipe out loud, and until the kid says yes, steps change
-// silently; timers; labelled hints; and two nudges (a step with a story, a long quiet on one step).
+// silently (a no keeps them silent for the visit); timers; labelled hints; and two nudges (a step with a
+// story, a long quiet on one step). While the app has one of its own homie moments up, the kid's yes or no
+// is that moment's answer, never ours.
 import WebSocket from "ws";
 import { TurnAgent, type Actions } from "./agent.js";
 import * as convex from "./convex.js";
 import { env } from "./env.js";
-import { InkStream } from "./ink.js";
 import { findMoments, warm } from "./moss.js";
-import { SONIC_SAMPLE_RATE, speak, type AudioFormat } from "./sonic.js";
+import { SONIC_SAMPLE_RATE, type AudioFormat } from "./sonic.js";
+import { listenInk, speak } from "./speech.js";
+import type { Stt, SttEvents } from "./stt.js";
 import { translateQuote } from "./translate.js";
 
 type SayKind = "step" | "reply" | "hint" | "translation" | "nudge" | "offer" | "greeting" | "timer";
+
+/** What a cooking session talks to. Tests pass fakes. */
+export type CookingDeps = {
+  convex: Pick<typeof convex, "startSession" | "setStep" | "logQuestion">;
+  /** The kid's speech to text (Ink 2). */
+  listen: (events: SttEvents, keyterms: string[]) => Stt;
+  speak: typeof speak;
+  agent: (session: convex.CookSession, actions: Actions) => Pick<TurnAgent, "turn">;
+  findMoments: typeof findMoments;
+  warm: typeof warm;
+  translateQuote: typeof translateQuote;
+};
+
+const LIVE: CookingDeps = {
+  convex,
+  listen: listenInk,
+  speak,
+  agent: (session, actions) => new TurnAgent(session, actions),
+  findMoments,
+  warm,
+  translateQuote,
+};
 
 // Plain commands skip Claude: they're most of what a kid says, and this saves a model call.
 const FAST: [RegExp, "next" | "previous" | "repeat"][] = [
@@ -39,6 +64,15 @@ const isYes = (t: string) => {
   const c = normalize(t);
   return YES.test(c) && !FAST.some(([re]) => re.test(command(t)));
 };
+/** A whole reply that is only a yes ("yes please", "sure") or only a no ("no thanks", "not now"). */
+const YES_REPLY = /^(yes|yeah|yep|yup|sure|ok|okay|alright|please|of course|go ahead|do it|read it|read it to me|read it out loud|let'?s hear it|play it)( (yes|yeah|yep|sure|ok|okay|please))*$/;
+const NO_REPLY = /^(no|nope|nah|no no|not now|not right now|not yet|later|maybe later|no not now|no maybe later|i'?m good|no i'?m good|skip it)$/;
+function yesOrNo(t: string): "yes" | "no" | null {
+  const c = normalize(t)
+    .replace(/^((um|uh|oh|ah|hmm|mm|well|wait|okay|ok|so|hey|alright|and|now) )+/, "")
+    .replace(/( (please|thanks|thank you))+$/, "");
+  return YES_REPLY.test(c) ? "yes" : NO_REPLY.test(c) ? "no" : null;
+}
 
 /** Mostly non-Latin letters: Ink writes the cook's Marathi (from a clip playing nearby) in Devanagari. */
 const notLatin = (t: string) => {
@@ -78,19 +112,28 @@ const duration = (s: number) => {
 };
 
 const QUIET_NUDGE_MS = 6 * 60_000;
-/** Kids who already said yes to reading, so a dropped socket doesn't greet and ask again (per instance). */
-const readers = new Map<string, number>();
-const READER_TTL_MS = 3 * 3600_000;
+/** A turn Ink started but never ended (a dropped event) stops holding the mic open after this. */
+const TURN_MAX_MS = 30_000;
+/** Each kid's answer to the read-aloud offer, so a dropped socket doesn't greet and ask again (per instance). */
+const answered = new Map<string, { at: number; reading: boolean }>();
+const ANSWER_TTL_MS = 3 * 3600_000;
+function remember(key: string, reading: boolean) {
+  const now = Date.now();
+  for (const [k, a] of answered) if (now - a.at > ANSWER_TTL_MS) answered.delete(k);
+  answered.set(key, { at: now, reading });
+}
 
 export class Cooking {
   private session!: convex.CookSession;
   private step = 1;
-  private ink?: InkStream;
-  private agent?: TurnAgent;
+  private ink?: Stt;
+  private agent?: Pick<TurnAgent, "turn">;
   private speaking: AbortController | null = null;
   private lastSpoken = { text: "", until: 0 };
   /** When the phone finishes playing our last line. */
   private playingUntil = 0;
+  /** When Ink last said the kid started talking (0 = no turn open). See `hearing`. */
+  private turnOpenSince = 0;
   /** While the cook's clip plays, the mic hears her too: only plain commands count until then. */
   private clipUntil = 0;
   /** Bumped by every new clip or step, so a translation still waiting for its clip to end is dropped. */
@@ -99,7 +142,11 @@ export class Cooking {
   private closed = false;
   /** Steps are read aloud only after the kid says yes to the offer. */
   private reading = false;
+  /** The kid said no to reading: steps stay silent this visit ("repeat" still reads the one they're on). */
+  private declined = false;
   private offer: { read: true } | { story: convex.Memory } | null = null;
+  /** The kind of app-only homie moment up on the phone (answer, story, ask, help), or null. */
+  private moment: string | null = null;
   private storiesOffered = new Set<convex.Memory>();
   private timers = new Map<string, NodeJS.Timeout>();
   private timerSeq = 0;
@@ -112,6 +159,7 @@ export class Cooking {
     private token: string,
     private recipeId: string,
     private audio: AudioFormat,
+    private deps: CookingDeps = LIVE,
   ) {}
 
   private get cook() {
@@ -123,7 +171,7 @@ export class Cooking {
 
   async start() {
     try {
-      this.session = await convex.startSession(this.token, this.recipeId);
+      this.session = await this.deps.convex.startSession(this.token, this.recipeId);
     } catch (err) {
       const unauthorized = err instanceof convex.Unauthorized;
       const notFound = err instanceof convex.NotFound;
@@ -136,13 +184,16 @@ export class Cooking {
     if (this.closed) return;
     const { recipe, cook, mossIndex } = this.session;
     this.step = this.session.stepOrder ?? 1;
-    void warm(mossIndex);
-    this.agent = new TurnAgent(this.session, this.actions);
-    this.ink = new InkStream(
+    void this.deps.warm(mossIndex);
+    this.agent = this.deps.agent(this.session, this.actions);
+    this.ink = this.deps.listen(
       {
-        onTurnStart: () => {},
+        onTurnStart: () => void (this.turnOpenSince = Date.now()),
         onPartial: (text) => this.send({ type: "transcript", text, final: false }),
-        onTurnEnd: (text) => this.heard(text),
+        onTurnEnd: (text) => {
+          this.turnOpenSince = 0;
+          this.heard(text);
+        },
         onError: (message) => console.warn(`ink: ${message}`),
       },
       [recipe.title, ...(cook ? [cook.name] : [])],
@@ -150,28 +201,46 @@ export class Cooking {
     this.send({ type: "ready", recipe: { id: recipe.id, title: recipe.title, steps: recipe.steps.length } });
     this.send({ type: "go_to_step", stepOrder: this.step });
     this.quietCheck = setInterval(() => void this.nudgeIfQuiet(), 30_000);
-    const returning = (readers.get(this.readerKey) ?? 0) > Date.now() - READER_TTL_MS;
-    console.log(`cook start: ${recipe.title}, step ${this.step}, cook ${cook?.language ?? "language unset"}, returning=${returning}, stub=${convex.usingStub}`);
-    if (returning) this.reading = true;
+    const prior = answered.get(this.readerKey);
+    const returning = prior && prior.at > Date.now() - ANSWER_TTL_MS ? prior : null;
+    console.log(
+      `cook start: ${recipe.title}, step ${this.step}, cook ${cook?.language ?? "language unset"}, returning=${!!returning}${returning && !returning.reading ? " (said no to reading)" : ""}, stub=${convex.usingStub}`,
+    );
+    if (returning?.reading) this.reading = true;
+    else if (returning) this.declined = true;
     else void this.greet().catch((err) => console.warn("greet", err.message));
   }
 
-  /** The hello in the cook's language, then one offer to read the recipe out loud. */
+  /** The hello in the cook's language, then one offer to read the recipe out loud (never over an app moment). */
   private async greet() {
     const language = this.session.cook?.language ?? "en";
     const hello = GREETINGS[language];
     if (hello) await this.say(hello[0], "greeting", { textEn: hello[1], language });
     else await this.say("Ready? Let's cook!", "greeting");
-    await this.played();
-    if (this.closed || this.reading) return;
+    await this.played(true);
+    if (this.closed || this.reading || this.declined) return;
     this.offer = { read: true };
-    await this.say(`Want me to read ${this.cook}'s recipe out loud? Say yes, or tap here.`, "offer");
+    await this.say(`Want me to read ${this.cook}'s recipe out loud? Say yes or no.`, "offer");
+  }
+
+  /**
+   * Half duplex, the server's half: while our own line plays on the phone, its mic only hears us (an echo), and
+   * Ink would bill for every second of it. Never mid-turn, though: Ink needs the audio after the kid stops to end
+   * the turn (a turn whose end never came stops counting after 30 s). The phone stops sending then too; this is
+   * the backup. The cook's clips stay the phone's to mute: we don't know when one really ends.
+   */
+  private hearing(): boolean {
+    if (this.turnOpenSince && Date.now() - this.turnOpenSince < TURN_MAX_MS) return true;
+    return !this.speaking && Date.now() >= this.playingUntil;
   }
 
   /** From the app: binary = mic audio, text = a JSON message. */
   onMessage(data: WebSocket.RawData, isBinary: boolean) {
-    if (isBinary) return this.ink?.send(data as Buffer);
-    let msg: { type?: string; stepOrder?: number; text?: string };
+    if (isBinary) {
+      if (this.hearing()) this.ink?.send(data as Buffer);
+      return;
+    }
+    let msg: { type?: string; stepOrder?: number; text?: string; open?: unknown; kind?: unknown };
     try {
       msg = JSON.parse(data.toString());
     } catch {
@@ -182,8 +251,12 @@ export class Cooking {
       this.touch();
       this.persistStep();
     } else if (msg.type === "text" && msg.text) {
-      // Typed or push-to-talk input, or a tap on the offer ("yes"): the same path as a spoken turn.
+      // Typed or push-to-talk input, or the app answering the offer ("yes", "no"): the same path as a spoken
+      // turn. It's the app's own answer, so an open moment doesn't hold it.
       this.heard(msg.text, false);
+    } else if (msg.type === "moment" && typeof msg.open === "boolean") {
+      // One of the app's own homie moments opened or closed on the phone.
+      this.moment = msg.open ? (typeof msg.kind === "string" && msg.kind ? msg.kind.slice(0, 20) : "moment") : null;
     }
   }
 
@@ -211,16 +284,26 @@ export class Cooking {
       return;
     }
     this.send({ type: "transcript", text, final: true });
-    console.log(`kid: ${text}`);
     this.touch();
-    this.turns = this.turns.then(() => this.turn(text));
+    // A moment the app has up hears the kid's yes or no itself (from that transcript): it isn't ours to act on.
+    const inMoment = spoken && this.moment !== null;
+    if (inMoment && yesOrNo(text)) {
+      console.log(`kid (to the app's ${this.moment} moment): ${text}`);
+      return;
+    }
+    console.log(`kid: ${text}`);
+    this.turns = this.turns.then(() => this.turn(text, inMoment));
   }
 
-  private async turn(text: string) {
+  /** One turn. `inMoment`: said while an app moment was up, so it never answers our own offer. */
+  private async turn(text: string, inMoment = false) {
     if (this.closed) return;
     this.clipSeq++; // the kid moved on: drop a translation still waiting
     try {
-      if (this.offer && isYes(text)) return await this.acceptOffer();
+      if (this.offer && !inMoment) {
+        if (yesOrNo(text) === "no") return this.declineOffer();
+        if (isYes(text)) return await this.acceptOffer();
+      }
       const fast = FAST.find(([re]) => re.test(command(text)))?.[1];
       const timer = timerAsk(text);
       if (timer) await this.actions.setTimer(timer.seconds, timer.label);
@@ -237,11 +320,32 @@ export class Cooking {
 
   private async acceptOffer() {
     const offer = this.offer;
-    this.offer = null;
+    // Yes to reading: goToStep turns it on (offer_closed, accepted) and reads the step they're on.
     if (offer && "read" in offer) return this.actions.goToStep(this.step, true);
+    this.offer = null;
     if (offer && "story" in offer) {
       const { moment, text } = offer.story;
       return this.actions.playClip(moment.startS, moment.endS, { caption: text });
+    }
+  }
+
+  /** "No" or "not now" to an open offer closes it, and nothing is said. To reading: steps stay silent this visit. */
+  private declineOffer() {
+    const offer = this.offer;
+    this.offer = null;
+    if (!offer || !("read" in offer)) return;
+    this.declined = true;
+    remember(this.readerKey, false);
+    this.send({ type: "offer_closed", accepted: false });
+  }
+
+  /** Reading on (a yes, or "repeat" before any answer): every step is read from now on. */
+  private startReading() {
+    this.reading = true;
+    remember(this.readerKey, true);
+    if (this.offer && "read" in this.offer) {
+      this.offer = null;
+      this.send({ type: "offer_closed", accepted: true });
     }
   }
 
@@ -257,16 +361,16 @@ export class Cooking {
   private async offerStory(order: number, seq: number) {
     const story = this.session.recipe.memories.find((m) => m.kind === "story" && m.stepOrder === order && !this.storiesOffered.has(m));
     if (!story || this.closed) return;
-    await this.played();
+    await this.played(true);
     if (seq !== this.clipSeq || this.step !== order || this.closed) return;
     this.storiesOffered.add(story);
     this.offer = { story };
     await this.say(`${this.cook} has a story about this one. Want to hear it?`, "nudge");
   }
 
-  /** Quiet on one step for a long time: one gentle check per step (not while a clip or timer runs). */
+  /** Quiet on one step for a long time: one gentle check per step (not while a clip, a timer or an app moment is up). */
   private async nudgeIfQuiet() {
-    if (!this.reading || this.closed || this.timers.size || this.speaking || Date.now() < this.clipUntil) return;
+    if (!this.reading || this.closed || this.timers.size || this.speaking || this.moment || Date.now() < this.clipUntil) return;
     if (Date.now() - this.lastActivity < QUIET_NUDGE_MS || this.quietNudged.has(this.step)) return;
     this.quietNudged.add(this.step);
     this.touch();
@@ -278,11 +382,11 @@ export class Cooking {
   }
 
   private persistStep() {
-    convex.setStep(this.token, this.recipeId, this.step).catch((err) => console.warn("voice/step", err.message));
+    this.deps.convex.setStep(this.token, this.recipeId, this.step).catch((err) => console.warn("voice/step", err.message));
   }
 
   private async askCookWith(question: string, line: string) {
-    const { questionId } = await convex.logQuestion(this.token, this.recipeId, this.step, question);
+    const { questionId } = await this.deps.convex.logQuestion(this.token, this.recipeId, this.step, question);
     this.send({ type: "asked_cook", questionId, text: question });
     await this.say(line, "reply");
   }
@@ -304,19 +408,16 @@ export class Cooking {
       this.clipUntil = 0;
       this.clipSeq++;
       if (this.offer && "story" in this.offer) this.offer = null;
-      if (read && !this.reading) {
-        this.reading = true;
-        this.offer = null;
-        readers.set(this.readerKey, Date.now());
-      }
+      if (read && !this.reading && !this.declined) this.startReading();
       this.touch();
       this.send({ type: "go_to_step", stepOrder: order });
       this.persistStep();
-      if (!this.reading) return; // until the kid says yes, steps change silently
+      // Until the kid says yes, steps change silently; after a no, only "repeat" reads one.
+      if (!this.reading && !read) return;
       await this.say(`Step ${order}. ${step.text}`, "step");
-      void this.offerStory(order, this.clipSeq).catch((err) => console.warn("story offer", err.message));
+      if (this.reading) void this.offerStory(order, this.clipSeq).catch((err) => console.warn("story offer", err.message));
     },
-    findMoment: (query, waitMs) => findMoments(this.session.mossIndex, this.session.recipe.id, query, waitMs),
+    findMoment: (query, waitMs) => this.deps.findMoments(this.session.mossIndex, this.session.recipe.id, query, waitMs),
     playClip: async (startS, endS, { question, stepOrder, caption }) => {
       this.speaking?.abort();
       this.touch();
@@ -337,7 +438,7 @@ export class Cooking {
       if (language !== "en") {
         const quote = question.quote;
         const short = language !== undefined && !notLatin(quote) && quote.split(/\s+/).length <= 30;
-        void (short ? Promise.resolve(quote) : translateQuote(quote))
+        void (short ? Promise.resolve(quote) : this.deps.translateQuote(quote))
           .then(async (english) => {
             await new Promise((r) => setTimeout(r, Math.max(0, clipEnds + 500 - Date.now())));
             if (english && seq === this.clipSeq && !this.closed) {
@@ -346,13 +447,13 @@ export class Cooking {
           })
           .catch((err) => console.warn("translate", err.message));
       }
-      await convex
+      await this.deps.convex
         .logQuestion(this.token, this.recipeId, this.step, question.text, { startS, endS, quote: question.quote })
         .catch((err) => console.warn("voice/question", err.message));
     },
     askCook: (question) => this.askCookWith(question, `Good question. I'll ask ${this.cook}.`),
     giveHint: async (hint, question) => {
-      const logged = convex.logQuestion(this.token, this.recipeId, this.step, question);
+      const logged = this.deps.convex.logQuestion(this.token, this.recipeId, this.step, question);
       const text = /didn['’]?t say/i.test(hint) ? hint : `${this.cook} didn't say. ${hint}`;
       await this.say(text, "hint");
       const { questionId } = await logged;
@@ -370,9 +471,9 @@ export class Cooking {
     say: (text) => this.say(text, "reply"),
   };
 
-  /** Waits until the phone has played what we last said. */
-  private async played() {
-    while (!this.closed && (this.speaking || Date.now() < this.playingUntil)) {
+  /** Waits until the phone has played what we last said; with `noMoment`, also until no app moment is up. */
+  private async played(noMoment = false) {
+    while (!this.closed && (this.speaking || Date.now() < this.playingUntil || (noMoment && this.moment))) {
       await new Promise((r) => setTimeout(r, Math.max(50, Math.min(500, this.playingUntil - Date.now()))));
     }
   }
@@ -392,7 +493,7 @@ export class Cooking {
     let bytes = 0;
     let firstAt = 0;
     try {
-      await speak(
+      await this.deps.speak(
         text,
         this.audio,
         ctrl.signal,

@@ -40,6 +40,10 @@ type LiveCookSession = {
 
 export class Unauthorized extends Error {}
 export class NotFound extends Error {}
+/** A /live/* write refused because the recording is over (ended, maybe by the app's stop button, or abandoned). */
+export class Ended extends Error {}
+/** convex/lib/liveRoutes.ts answers this, with 400, for a recording that's over. */
+const ENDED = "recording already ended";
 
 export const usingStub = env.voiceStub || !env.convexSiteUrl;
 
@@ -51,9 +55,18 @@ async function post<T>(path: string, body: object): Promise<T> {
   });
   if (res.status === 401) throw new Unauthorized(path);
   if (res.status === 404) throw new NotFound(path);
-  if (!res.ok) throw new Error(`convex ${path} ${res.status}: ${(await res.text()).slice(0, 200)}`);
   const text = await res.text();
+  if (res.status === 400 && errorOf(text) === ENDED) throw new Ended(path);
+  if (!res.ok) throw new Error(`convex ${path} ${res.status}: ${text.slice(0, 200)}`);
   return (text ? JSON.parse(text) : {}) as T;
+}
+
+function errorOf(body: string): unknown {
+  try {
+    return JSON.parse(body)?.error;
+  } catch {
+    return undefined;
+  }
 }
 
 const fixture = <T>(name: string): T => JSON.parse(readFileSync(new URL(`../fixtures/${name}`, import.meta.url), "utf8"));

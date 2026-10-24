@@ -318,6 +318,30 @@ Before starting work, compare the last commit here with `git log origin/main` to
   03:14) runs from `.claude/worktrees/worker-main` at main `4d703d9` (#39), which has #37 and #39.
   - **Open:** no recipe published since then has been opened on a phone, before and after the cook's yes.
     `play.mp4` and `voice.m4a` are still public at unlisted URLs.
+- Oct 24 · #42 · Claude · Track E follow-ups, the server side of the contract #35 and #36 build on (STACK.md):
+  - **Kid `/cook`:**
+    - `{type:"moment", open, kind}`: while one of the app's own homie moments is up, a spoken yes/no/sure/not
+      now is its answer. Transcripts still stream; homie's offer and story nudge ignore it; Claude never gets it.
+      No offer or nudge is said over a moment, and `{type:"text"}` answers always count.
+    - A no or "not now" (spoken or text) to the read-aloud offer sends `{type:"offer_closed", accepted:false}`.
+      Steps stay silent for the visit; commands work, and "repeat" reads one. A yes sends
+      `offer_closed` with `accepted:true`, then the step.
+    - The offer line is now "…Say yes or no.", and either answer is kept 3 h per instance.
+  - **Parent:**
+    - New Convex `live.endRecording` (cook only, her own recording): `recording`/`wrapping_up` become `ended`
+      with `endedAt`. It's idempotent, and returns `{ok:false}` for `intro`/`abandoned`.
+    - `/live/prompt` refuses new lines once a recording is over; only the goodbye may land after `ended`.
+    - A voice socket still open on a recording ended that way stops quietly at its next Convex write (phase
+      `ended`, close 4404, nothing more said or saved).
+  - **Tests:** voice 27 (new `test/cook.test.ts`, 4 new record tests, shared `test/helpers.ts`), vitest 41, both
+    typechecks pass. 20 deliberate breaks each failed a test. The kid test client on fresh stub servers: a spoken
+    no declines, then silent steps; a spoken yes reads; with a moment up a yes is held, then a text no declines.
+  - **Open:**
+    - Not deployed (`voice/deploy.sh`, Convex).
+    - The app side in #35/#36: send `moment`, send the text no on a tap-to-close, read `offer_closed`, call
+      `endRecording` when the socket is down.
+- Oct 24 · (this PR) · Claude · Cartesia credit fix C (Caleb): fake speech for voice tests. `VOICE_FAKE_SPEECH=1` (`npm run dev:fake`) swaps Ink, Gemini Live and Sonic for fakes (`voice/src/speech.ts`), so local runs cost nothing; `/health` adds `x-fake-speech: 1`. `test-client` and `test-record` refuse a service without it unless `LIVE=1`, send each recorded line's words as text (`voice/scripts/testLines.ts`, shared with `make-audio`), and stop at `MAX_S` (live at most 300 s). AGENTS.md rule: at most one live Cartesia smoke test per merge. Fixes A (server-side half duplex) and B (idle close) follow in a second PR; the phone side of A and B goes in #36.
+- Oct 24 · (this PR) · Claude · Cartesia credit fixes A and B (Caleb), the server side. A: `cook.ts` sends mic frames to Ink only when homie's own line isn't playing on the phone, and always while a turn is open (Ink needs the trailing audio to end a turn; a turn with no end stops counting after 30 s); the cook's clips stay the phone's to mute. B: `ink.ts` closes the stream after 2 min without audio and reopens it on the next frame, backs off on reconnects (250 ms to 10 s), and keeps only 2 s queued while connecting. Live smoke test (real Ink 2 + Sonic, stub recipe): yes, next step, a question, go back, all transcribed exactly and acted on in under 70 ms, and no echoes. Open: the phone side (send nothing while quiet or unfocused, close on background) goes in #36. Not deployed: needs `voice/deploy.sh` (Caleb).
 - Oct 24 · #33 · Claude · Track G screens: Caleb's simplified Community map, his v2 "one step at a time" connect
   flow, share asks, swaps, and (round 3, his final canvas) "Cook together", "Invite friends" and the motion (built on
   #24's backend):

@@ -162,6 +162,11 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 **App → Convex (new public functions; every one takes `sessionToken`)**
 - `live.startRecording({ dish?, forKidId?, language, source })` → `{ recordingId }` (cook only; status `intro`).
 - `live.recording({ recordingId })` (live): the row, for the recording screen.
+- `live.endRecording({ recordingId })` → `{ ok }` (cook only, her own recording; another family's or another
+  cook's is refused): the stop button when the `/record` socket isn't connected. A `recording` or `wrapping_up`
+  recording becomes `ended` (sets `endedAt`), so the glasses VM finalizes the video even when the voice service is
+  down. Calling it again returns `{ ok: true }` and changes nothing; `{ ok: false }` means there was nothing to
+  end (still `intro`, or `abandoned`).
 - `jobs.create` gains optional `title`, `language`, `forKidId`, `recordingId`. `recordingId` must be this cook's
   recording; the job then sets `recordings.jobId` and takes the recording's `dish`, `language` and `forKidId` for
   any not given. `language` defaults to the cook's `people.language` (else `en`); `forKidId` must be in the family.
@@ -252,7 +257,9 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   `startedAt` (server clock) once; `ended` sets `endedAt`. `{ sessionToken, recordingId, touch: true }` (no
   status) → `{ ok }` is the service's heartbeat every 10 minutes while the socket is open: it only moves
   `updatedAt`, so the 2 h idle cleanup (`live.abandonIdle`) leaves a long cook alone; 400 once ended or abandoned.
-- `/live/prompt` `{ sessionToken, recordingId, kind, text, textEn, atS, status }` → `{ promptId }`.
+- `/live/prompt` `{ sessionToken, recordingId, kind, text, textEn, atS, status }` → `{ promptId }`. `400` "recording
+  already ended" once the recording is over: only the `closing` line may land after `ended` (it races the status
+  write), nothing after `abandoned`.
 - `/live/prompt-update` `{ sessionToken, promptId, status, answer? }` → `{ ok }`.
 - `/live/optin` `{ sessionToken, recordingId, optIn }` → `{ ok }` (stored on the recording, carried to the job).
 
@@ -274,6 +281,9 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
     (or it already ended), 4409 a newer socket for the same recording took over (don't reconnect that one).
 - A reconnect picks up where the last socket stopped (same pacing, questions and transcript; the wrap-up finishes
   what's left). Details in `voice/README.md`.
+- Ended underneath (the app called `live.endRecording` while it couldn't reach the service): a socket still open
+  for it finds out at its next Convex write (heartbeat, status or homie's next line). It then says and saves
+  nothing more, sends `{ type: "phase", phase: "ended" }` and closes with 4404.
 - The service ignores incoming audio while homie speaks (+300 ms), so it never hears itself; the app also sends
   silence then. Pacing (normal): first question no earlier than 4 min, gaps of 4–5 min, doubled after an ignored
   one, at most 6 live plus 2 end questions, never while the cook talks or tells a story. `HOMIE_DEMO=1`: first
@@ -291,8 +301,18 @@ voice, in `lang` or the person's language). `translate: true` first turns Englis
 - `play_clip` gains `quote?` and `quoteEn?` for the caption.
 - `{ type: "timer", id, seconds, label, endsAt }`, `{ type: "timer_done", id, label }`. The app owns the countdown.
 - After `ready`: one `say` of kind `greeting` (a word in the cook's language + `textEn`), then `offer`
-  ("Want me to read it out loud?"). Saying or sending `{ type: "text", text: "yes" }` reads the current step.
-  Until then, steps change silently.
+  ("Want me to read Grandma's recipe out loud? Say yes or no."). Until it's answered, steps change silently.
+  - Yes (spoken, or `{ type: "text", text: "yes" }`) → `{ type: "offer_closed", accepted: true }`, then the current
+    step is read (and every step after).
+  - No or "not now" (spoken, or `{ type: "text", text: "no" }`) → `{ type: "offer_closed", accepted: false }`.
+    Reading stays off for that visit: steps change silently, plain commands still work ("repeat" reads the
+    current step once).
+  - Either answer is kept 3 h on the instance, so a reconnect gets no second hello or offer.
+- App → service: `{ type: "moment", open: true, kind: "answer" | "story" | "ask" | "help" }` when an app-only homie
+  moment opens on the kid's phone, `{ type: "moment", open: false }` when it closes. While one is open the service
+  still streams transcripts, but a spoken yes, no, sure or not now is not applied to its read-aloud offer or
+  story nudge (and doesn't reach Claude); other speech goes the usual way. It says no offer or nudge until the
+  moment closes. A `{ type: "text" }` answer is the app's own and always counts.
 - The app sends silence while a `say` or clip plays (half duplex).
 
 **Worker ↔ Convex additions**
