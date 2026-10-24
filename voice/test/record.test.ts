@@ -1,5 +1,6 @@
 // Recording's phases (record.ts) with a fake socket, speech-to-text, voice, Claude and Convex, on a fake
-// clock: start/done ordering, double start, done during a question, reconnects, a socket closed mid-wrap-up.
+// clock: start/done ordering, double start, done during a question, reconnects, a socket closed mid-wrap-up,
+// and a recording the app ended underneath an open socket.
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, mock, test } from "node:test";
 import WebSocket from "ws";
@@ -7,68 +8,35 @@ import type { RecordingStatus } from "../src/convex.js";
 import type { Decision, HomieAgent, Line } from "../src/homie.js";
 import type { RecordingDeps } from "../src/record.js";
 import type { SttEvents } from "../src/stt.js";
+import { advance, AUDIO_S, FakeSocket, fakeSpeak, settle, sleep, waitFor } from "./helpers.js";
 
 // env.ts wants these at import. Nothing here calls a real service.
 process.env.CARTESIA_API_KEY = "test";
 process.env.ANTHROPIC_API_KEY = "test";
 process.env.VOICE_STUB = "1";
 const { Recording } = await import("../src/record.js");
+const { Ended } = await import("../src/convex.js");
 
 const RULES = { firstS: 10, gapS: 30, maxLive: 2, maxEnd: 2 };
 const LATENCY_MS = 100; // every Convex call
 const THINK_MS = 1000; // every Claude call
-const AUDIO_S = 5; // every line homie says
 
 beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: Date.parse("2026-10-25T17:00:00Z") }));
-afterEach(() => mock.timers.reset());
-
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
-const settle = async () => {
-  for (let i = 0; i < 3; i++) await new Promise((r) => setImmediate(r));
-};
-/** Moves the fake clock forward in small steps, letting promises settle in between. */
-async function advance(ms: number, step = 50) {
-  for (let done = 0; done < ms; done += step) {
-    mock.timers.tick(Math.min(step, ms - done));
-    await settle();
-  }
-}
-async function waitFor(what: string, check: () => boolean, maxMs = 60_000) {
-  for (let waited = 0; !check(); waited += 50) {
-    if (waited > maxMs) assert.fail(`no ${what} within ${maxMs / 1000} s`);
-    await advance(50);
-  }
-}
+afterEach(() => {
+  mock.timers.reset();
+  mock.restoreAll();
+});
 
 const line = (textEn: string): Line => ({ text: textEn, textEn });
 const ask = (textEn: string): Decision => ({ action: "ask", kind: "amount", line: line(textEn) });
 const quiet = (storyInProgress = false): Decision => ({ action: "quiet", storyInProgress });
 
-type Ev = { type: string; [k: string]: unknown };
 type Call = { fn: string; args: unknown[]; at: number };
-
-class FakeSocket {
-  readyState: number = WebSocket.OPEN;
-  events: Ev[] = [];
-  closeCode?: number;
-  send(data: string | Buffer) {
-    if (typeof data === "string") this.events.push(JSON.parse(data));
-  }
-  close(code?: number) {
-    this.closeCode = code;
-    this.readyState = WebSocket.CLOSED;
-  }
-  of(type: string) {
-    return this.events.filter((e) => e.type === type);
-  }
-  phases() {
-    return this.of("phase").map((e) => e.phase);
-  }
-}
 
 /** One recording's backend: a Convex row, Claude's answers, the voice and the mic. */
 function world(status: RecordingStatus = "intro") {
   const row: { status: RecordingStatus; startedAt?: number } = { status };
+  const over = () => row.status === "ended" || row.status === "abandoned";
   const calls: Call[] = [];
   const decisions: Decision[] = [];
   const decided: { nowS: number; mayAsk: boolean; asked: string[]; heard: string[] }[] = [];
@@ -111,12 +79,9 @@ function world(status: RecordingStatus = "intro") {
       stt = events;
       return { send: () => {}, close: () => {} };
     },
-    speak: (text, _format, signal, onChunk) =>
-      new Promise<void>((resolve) => {
-        spoken.push(text);
-        const timer = setTimeout(() => (onChunk(Buffer.alloc(AUDIO_S * 48_000)), resolve()), 100);
-        signal.addEventListener("abort", () => (clearTimeout(timer), resolve()), { once: true });
-      }),
+    speak: fakeSpeak(spoken),
+    // Like Convex (live.ts): once a recording is over, status writes, heartbeats and new lines are refused
+    // (only the goodbye may still land).
     convex: {
       recordingSession: (_token, recordingId) =>
         convexCall("recordingSession", [recordingId], () => ({
@@ -127,12 +92,20 @@ function world(status: RecordingStatus = "intro") {
         })),
       setRecordingStatus: (_token, _id, s) =>
         convexCall("status", [s], () => {
+          if (over()) throw new Ended("/live/status");
           if (s === "recording") row.startedAt ??= Date.now();
           row.status = s;
           return { ok: true as const, startedAt: row.startedAt };
         }),
-      touchRecording: (_token, _id) => convexCall("touch", [], () => undefined),
-      logPrompt: (_token, _id, prompt) => convexCall("logPrompt", [prompt.kind, prompt.textEn], () => ({ promptId: `p${++ids}` })),
+      touchRecording: (_token, _id) =>
+        convexCall("touch", [], () => {
+          if (over()) throw new Ended("/live/status");
+        }),
+      logPrompt: (_token, _id, prompt) =>
+        convexCall("logPrompt", [prompt.kind, prompt.textEn], () => {
+          if (row.status === "abandoned" || (row.status === "ended" && prompt.kind !== "closing")) throw new Ended("/live/prompt");
+          return { promptId: `p${++ids}` };
+        }),
       updatePrompt: (_token, promptId, s) => convexCall("updatePrompt", [promptId, s], () => undefined),
       setOptIn: (_token, _id, optIn) => convexCall("setOptIn", [optIn], () => undefined),
     },
@@ -396,4 +369,86 @@ test("closed while a question is being saved: it's marked ignored and never aske
   const saved = w.named("logPrompt").filter((p) => p.args[0] === "amount");
   assert.equal(saved.length, 1);
   assert.deepEqual(w.named("updatePrompt").map((u) => u.args[1]), ["ignored"]);
+});
+
+// ---- the app's stop button ended it (live.endRecording) while this socket was still open ----
+
+/** Counts warnings: a recording ended underneath closes quietly. */
+const quietly = () => mock.method(console, "warn", () => {});
+
+test("ended underneath while she cooks: the heartbeat finds out, and nothing more is said or written", async () => {
+  const warn = quietly();
+  const w = world();
+  const c = w.connect("rec-ended-heartbeat");
+  await helloDone(c);
+  c.send({ type: "start" });
+  await advance(1000);
+  w.row.status = "ended"; // the app's stop button, while it couldn't reach us
+  const before = w.calls.length;
+  await waitFor("the close", () => c.ws.closeCode === 4404, 11 * 60_000);
+  assert.deepEqual(c.ws.phases(), ["intro", "recording", "ended"]);
+  await advance(30 * 60_000, 5000);
+  assert.deepEqual(w.calls.slice(before).map((x) => x.fn), ["touch"], "only the heartbeat that was refused");
+  assert.equal(warn.mock.callCount(), 0);
+});
+
+test("ended underneath: homie's next question is refused, so it's never asked", async () => {
+  const warn = quietly();
+  const w = world();
+  w.decisions.push(ask("How much salt is a pinch?"));
+  const c = w.connect("rec-ended-ask");
+  await helloDone(c);
+  c.send({ type: "start" });
+  await advance(1000);
+  w.row.status = "ended";
+  w.says("Now I add a pinch of salt");
+  await waitFor("the close", () => c.ws.closeCode === 4404);
+  await advance(120_000, 500);
+
+  assert.equal(c.ws.of("ask").length, 0);
+  assert.ok(!w.spoken.includes("How much salt is a pinch?"));
+  assert.deepEqual(w.named("logPrompt").map((p) => p.args[0]), ["intro", "amount"]);
+  assert.deepEqual(w.named("updatePrompt"), []);
+  assert.deepEqual(c.ws.phases(), ["intro", "recording", "ended"]);
+  assert.equal(warn.mock.callCount(), 0);
+});
+
+test("ended underneath, then done: no last questions, no opt-in, no goodbye", async () => {
+  const warn = quietly();
+  const w = world();
+  const c = w.connect("rec-ended-done");
+  await helloDone(c);
+  c.send({ type: "start" });
+  await advance(1000);
+  w.row.status = "ended";
+  c.send({ type: "done" });
+  await waitFor("the close", () => c.ws.closeCode === 4404);
+  await advance(120_000, 500);
+
+  assert.deepEqual(c.ws.phases(), ["intro", "recording", "wrapping_up", "ended"]);
+  assert.equal(c.ws.of("ask").length, 0);
+  assert.deepEqual(w.named("logPrompt").map((p) => p.args[0]), ["intro"]);
+  assert.deepEqual(w.named("status").map((s) => s.args[0]), ["recording", "wrapping_up"]);
+  assert.deepEqual(w.named("setOptIn"), []);
+  assert.equal(w.row.status, "ended");
+  assert.equal(warn.mock.callCount(), 0);
+});
+
+test("a new socket that finds it ended also ends an older one still open", async () => {
+  const warn = quietly();
+  const w = world();
+  const a = w.connect("rec-ended-reconnect");
+  await helloDone(a);
+  a.send({ type: "start" });
+  await advance(1000);
+  w.row.status = "ended";
+  const b = w.connect("rec-ended-reconnect");
+  await advance(500);
+  assert.equal(b.ws.closeCode, 4404);
+  assert.equal(a.ws.closeCode, 4404);
+  assert.equal(a.ws.phases().at(-1), "ended");
+  const before = w.calls.length;
+  await advance(15 * 60_000, 5000);
+  assert.equal(w.calls.length, before, "the old one writes nothing more (no heartbeat)");
+  assert.equal(warn.mock.callCount(), 0);
 });

@@ -4,7 +4,8 @@
 // intro (the hello) → recording ({type:"start"}) → wrapping_up ({type:"done"}: last questions, the
 // stories opt-in, goodbye) → ended. Status and every line homie says go to Convex (/live/*).
 // What homie knows about a recording (pacing, what it asked, what she said, the hello) is kept per
-// recording, so a dropped socket picks up where it left off instead of starting over.
+// recording, so a dropped socket picks up where it left off instead of starting over. A recording the
+// app ended while it couldn't reach us (live.endRecording) ends its socket quietly at the next Convex write.
 import WebSocket from "ws";
 import * as convex from "./convex.js";
 import { env } from "./env.js";
@@ -159,6 +160,8 @@ export class Recording {
     const { recording, cook, kid } = this.s;
     if (recording.status === "ended" || recording.status === "abandoned") {
       memories.delete(this.recordingId);
+      // An older socket may still think it's live (the app ended it with live.endRecording while cut off).
+      open.get(this.recordingId)?.endedUnderneath();
       this.send({ type: "error", message: "this recording has ended" });
       this.ws.close(4404);
       return;
@@ -251,6 +254,31 @@ export class Recording {
     this.close();
   }
 
+  /**
+   * Convex says the recording is over while this socket still serves it: the app ended it with
+   * live.endRecording while it couldn't reach us (or it was abandoned). Stop now and quietly: nothing more
+   * is said or written, the phone gets phase "ended", and the socket closes with 4404.
+   */
+  private endedUnderneath() {
+    if (this.closed || this.phase === "ended") return;
+    memories.delete(this.recordingId);
+    this.hush();
+    if (this.pending?.dropTimer) clearTimeout(this.pending.dropTimer);
+    this.pending = undefined;
+    this.setPhase("ended");
+    this.state("quiet");
+    this.ws.close(4404);
+    this.close();
+  }
+
+  /** For a failed Convex write: a recording that's over ends this socket; anything else is only logged. */
+  private failed(what: string) {
+    return (err: unknown) => {
+      if (err instanceof convex.Ended) this.endedUnderneath();
+      else console.warn(what, (err as Error).message);
+    };
+  }
+
   // ---- phases ----
 
   private async intro() {
@@ -288,9 +316,9 @@ export class Recording {
     try {
       ({ startedAt } = await this.saveStatus("recording"));
     } catch (err) {
-      console.warn("live/status", (err as Error).message);
+      this.failed("live/status")(err);
     }
-    // Done while that was saving went straight to the end; a closed socket stops here.
+    // Done while that was saving went straight to the end; a closed socket (or an ended recording) stops here.
     if (this.closed || this.phase !== "intro") return;
     this.mem.t0 = startedAt ?? Date.now();
     this.enterRecording();
@@ -322,7 +350,7 @@ export class Recording {
     this.timers = [];
     this.mem.t0 ??= Date.now();
     this.logIntro();
-    void this.saveStatus("wrapping_up").catch((err) => console.warn("live/status", err.message));
+    void this.saveStatus("wrapping_up").catch(this.failed("live/status"));
     this.flow(() => this.wrapUp());
   }
 
@@ -372,16 +400,17 @@ export class Recording {
     this.stt?.close();
     clearInterval(this.heartbeat);
     memories.delete(this.recordingId);
-    await this.saveStatus("ended").catch((err) => console.warn("live/status", err.message));
+    // Already ended underneath (the app's stop button) is fine: that's where this was going.
+    await this.saveStatus("ended").catch(this.failed("live/status"));
   }
 
   /** An end question: ask, wait for her next turn (or ~15 s), log the answer. Returns her words. */
   private async askAndWait(kind: "end" | "optin", line: Line): Promise<string | null> {
     if (this.closed) return null;
     const promptId = await this.log(kind, line, "spoken");
-    if (this.closed) {
-      // The socket closed while it was being saved: she never heard it.
-      void this.deps.convex.updatePrompt(this.token, promptId, "ignored").catch(() => {});
+    if (this.closed || !promptId) {
+      // The socket closed while it was being saved: she never heard it. (No id: the recording was over.)
+      if (promptId) void this.deps.convex.updatePrompt(this.token, promptId, "ignored").catch(() => {});
       return null;
     }
     if (kind === "end") {
@@ -499,10 +528,10 @@ export class Recording {
     this.pacer.onAsk(this.atS(Date.now()));
     this.mem.asked.push(line.textEn);
     const promptId = await this.log(kind, line, "spoken");
-    if (this.closed || this.phase !== "recording") {
+    if (this.closed || this.phase !== "recording" || !promptId) {
       // The socket closed, or she said she's done, while it was being saved: it's never said.
       if (this.mem.asked.at(-1) === line.textEn) this.mem.asked.pop();
-      void this.deps.convex.updatePrompt(this.token, promptId, "ignored").catch(() => {});
+      if (promptId) void this.deps.convex.updatePrompt(this.token, promptId, "ignored").catch(() => {});
       return;
     }
     const pending: Pending = { promptId, line };
@@ -592,11 +621,13 @@ export class Recording {
     this.muteUntil = 0;
   }
 
-  private log(kind: convex.PromptKind, line: Line, status: convex.PromptStatus, atS = this.atS(Date.now())): Promise<string> {
+  /** Saves one of homie's lines; null when Convex says the recording is over (this socket then ends). */
+  private log(kind: convex.PromptKind, line: Line, status: convex.PromptStatus, atS = this.atS(Date.now())): Promise<string | null> {
     return this.deps.convex
       .logPrompt(this.token, this.recordingId, { kind, text: line.text, textEn: line.textEn, atS, status })
       .then((r) => r.promptId)
       .catch((err) => {
+        if (err instanceof convex.Ended) return (this.endedUnderneath(), null);
         console.warn("live/prompt", err.message);
         return `unsaved-${Date.now()}`;
       });
@@ -612,7 +643,7 @@ export class Recording {
   /** The heartbeat: a long cook isn't idle. */
   private async touch() {
     this.mem.usedAt = Date.now();
-    await this.deps.convex.touchRecording(this.token, this.recordingId).catch((err) => console.warn("live/status touch", err.message));
+    await this.deps.convex.touchRecording(this.token, this.recordingId).catch(this.failed("live/status touch"));
   }
 
   private atS(ms: number) {

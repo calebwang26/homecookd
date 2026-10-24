@@ -2,6 +2,7 @@
 // voice service calls with the cook's own session token (lib/liveRoutes.ts).
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
 import { addRecipe, type Backend, newBackend, signIn, stubFetch } from "./test.helpers";
 
 vi.mock("@moss-js/moss", () => ({ MossClient: class {} }));
@@ -143,6 +144,62 @@ test("status, prompts, answers and the stories opt-in, on the recording's own cl
   const other = await signIn(t, "q-1");
   expect((await post(t, "/live/prompt-update", { sessionToken: other.sessionToken, promptId, status: "ignored" })).status).toBe(404);
   expect((await post(t, "/live/optin", { sessionToken: other.sessionToken, recordingId, optIn: false })).status).toBe(404);
+});
+
+test("the stop button ends the cook's own recording without the voice service, and again is fine", async () => {
+  const { t, dad, leo } = await family();
+  const sessionToken = dad.sessionToken;
+  vi.setSystemTime(new Date("2026-10-25T17:00:00Z"));
+  const start = () => t.mutation(api.live.startRecording, { sessionToken, source: "glasses" });
+  const end = (token: string, recordingId: Id<"recordings">) => t.mutation(api.live.endRecording, { sessionToken: token, recordingId });
+  const row = (recordingId: Id<"recordings">) => t.query(api.live.recording, { sessionToken, recordingId });
+  const status = (recordingId: Id<"recordings">, s: string) => post(t, "/live/status", { sessionToken, recordingId, status: s });
+
+  // Still at the hello: nothing filmed yet, nothing to end.
+  const hello = await start();
+  expect(await end(sessionToken, hello.recordingId)).toEqual({ ok: false });
+  expect((await row(hello.recordingId))?.status).toBe("intro");
+
+  const { recordingId } = await start();
+  expect((await status(recordingId, "recording")).status).toBe(200);
+  // Only her: not the kid, not another family's cook.
+  await expect(end(leo.sessionToken, recordingId)).rejects.toThrow("Only the cook");
+  stubFetch({ family: { id: "fam-2", name: "Others" }, profiles: [{ id: "q-1", name: "Sam", role: "cook" }] });
+  const other = await signIn(t, "q-1");
+  await expect(end(other.sessionToken, recordingId)).rejects.toThrow("isn't yours");
+  const cooking = await row(recordingId);
+  expect(cooking?.status).toBe("recording");
+
+  vi.setSystemTime(new Date("2026-10-25T17:40:00Z"));
+  expect(await end(sessionToken, recordingId)).toEqual({ ok: true });
+  expect(await row(recordingId)).toMatchObject({ status: "ended", startedAt: cooking!.startedAt, endedAt: Date.parse("2026-10-25T17:40:00Z") });
+  // A second tap or a retry: still ok, and nothing moves.
+  vi.setSystemTime(new Date("2026-10-25T17:41:00Z"));
+  expect(await end(sessionToken, recordingId)).toEqual({ ok: true });
+  expect((await row(recordingId))?.endedAt).toBe(Date.parse("2026-10-25T17:40:00Z"));
+
+  // The glasses VM sees it ended (so it uploads); a voice service still serving it is refused from here on,
+  // except for the goodbye.
+  process.env.GLASSES_SECRET = "glasses-secret-for-tests";
+  const glasses = await post(t, "/glasses/active", { recordingId }, { "x-glasses-secret": "glasses-secret-for-tests" });
+  expect(await glasses.json()).toMatchObject({ recordingId, status: "ended" });
+  expect((await post(t, "/live/status", { sessionToken, recordingId, touch: true })).status).toBe(400);
+  expect((await status(recordingId, "wrapping_up")).status).toBe(400);
+  const late = await post(t, "/live/prompt", { sessionToken, recordingId, kind: "amount", text: "x", textEn: "How much salt?", atS: 2400 });
+  expect([late.status, await late.json()]).toEqual([400, { error: "recording already ended" }]);
+  expect((await post(t, "/live/prompt", { sessionToken, recordingId, kind: "closing", text: "x", textEn: "Bye!", atS: 2401 })).status).toBe(200);
+
+  // From wrapping_up too. An abandoned one stays abandoned.
+  const wrapping = await start();
+  await status(wrapping.recordingId, "recording");
+  await status(wrapping.recordingId, "wrapping_up");
+  expect(await end(sessionToken, wrapping.recordingId)).toEqual({ ok: true });
+  expect((await row(wrapping.recordingId))?.status).toBe("ended");
+  const left = await start();
+  await t.run((ctx) => ctx.db.patch("recordings", left.recordingId, { status: "abandoned" }));
+  expect(await end(sessionToken, left.recordingId)).toEqual({ ok: false });
+  expect((await row(left.recordingId))?.status).toBe("abandoned");
+  expect((await post(t, "/live/prompt", { sessionToken, recordingId: left.recordingId, kind: "closing", text: "x", textEn: "Bye!", atS: 1 })).status).toBe(400);
 });
 
 test("a recording nobody touched for 2 hours is abandoned; the voice service's heartbeat keeps a long cook live", async () => {

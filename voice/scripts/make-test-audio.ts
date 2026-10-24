@@ -1,5 +1,6 @@
 // Makes the recorded test lines with Sonic, as 16 kHz mono 16-bit WAVs (what the app streams):
 //   npm run make-audio        → test-audio/next-step.wav, question.wav, …, cook-mr-*.wav, cook-en-*.wav
+//   npm run make-audio -- no  → only the lines named (test-audio/no.wav)
 import { writeFileSync } from "node:fs";
 import { env } from "../src/env.js";
 import { CARTESIA_VERSION } from "../src/ink.js";
@@ -18,6 +19,7 @@ const LINES: Record<string, Line> = {
   // For the demo family's Chicken Biryani (the cook warns about the oil at 384–404 s).
   "oil-question": { text: "How hot should the oil be?" },
   yes: { text: "Yes." },
+  no: { text: "No, thanks." },
   timer: { text: "Set a timer for five minutes." },
   // The cook while homie listens (/record): a vague amount, then her answer, then yes to the opt-in.
   "cook-mr-cooking": { text: "हो, आधी तांदूळ तीन वेळा धुवून घे. मग थोडं मीठ टाक, अंदाजाने.", voice: COOK_VOICE, lang: "mr" },
@@ -28,7 +30,10 @@ const LINES: Record<string, Line> = {
   "cook-en-yes": { text: "Yes, of course she can.", voice: COOK_VOICE },
 };
 
+const only = process.argv.slice(2);
+for (const name of only) if (!(name in LINES)) throw new Error(`no test line called ${name}`);
 for (const [name, line] of Object.entries(LINES)) {
+  if (only.length && !only.includes(name)) continue;
   const res = await fetch("https://api.cartesia.ai/tts/bytes", {
     method: "POST",
     headers: { "X-API-Key": env.cartesiaKey, "Cartesia-Version": CARTESIA_VERSION, "Content-Type": "application/json" },
