@@ -1,5 +1,5 @@
 // Makes the recorded test lines with Sonic, as 16 kHz mono 16-bit WAVs (what the app streams):
-//   npm run make-audio        → test-audio/next-step.wav, question.wav, unknown-question.wav
+//   npm run make-audio        → test-audio/next-step.wav, question.wav, unknown-question.wav, …
 import { writeFileSync } from "node:fs";
 import { env } from "../src/env.js";
 import { CARTESIA_VERSION } from "../src/ink.js";
@@ -9,6 +9,8 @@ const LINES: Record<string, string> = {
   question: "How do I know when the sugar is ready?",
   "unknown-question": "Can I use maple syrup instead of the rock sugar?",
   "go-back": "Wait, go back.",
+  // For the demo family's Chicken Biryani (the cook warns about the oil at 384–404 s).
+  "oil-question": "How hot should the oil be?",
 };
 // A different voice from the service's, so it sounds like a second person.
 const KID_VOICE = "694f9389-aac1-45b6-b726-9d9369183238";
