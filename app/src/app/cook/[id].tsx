@@ -37,6 +37,11 @@
 // sheet asks "Let Mom see when you cook their dishes?" (Yes / Not now; Not now shares nothing; Android
 // back closes it for this visit only and saves nothing). A
 // heart the cook sends from that row pops up here (HeartBurst + "Mom sent you a heart"); no push.
+// Voice cooking (docs/build/STACK.md, hackathon): the mic at the left of the bottom bar streams the
+// kid's voice to the voice service (lib/live/voice). The screen follows it: go_to_step moves the step,
+// play_clip plays that moment of the cook's video in the step's own player (moving to the step that
+// holds it), the AI's short replies play labelled "AI voice", and a question the video can't answer
+// shows "I asked Mom" (VoiceLine). Only in a build with the native mic module (not Expo Go or web).
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
@@ -45,6 +50,7 @@ import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
 import Animated, { FadeIn, FadeInLeft, FadeInRight } from 'react-native-reanimated';
 
 import { ConsentSheet } from '@/components/cooking/ConsentSheet';
+import { VoiceLine, VoiceMicButton } from '@/components/cooking/VoiceCooking';
 import { HeartBurst } from '@/components/cooking/HeartBurst';
 import { ClipVideo, type ClipVideoHandle } from '@/components/media';
 import { askForPushSoon } from '@/components/push/PushAskSheet';
@@ -78,6 +84,8 @@ import {
 import type { RecipeQuestion } from '@/lib/api';
 import { daysAgo, mmss } from '@/lib/format';
 import { madeItMilestone, madeItTitle } from '@/lib/kitchenCounts';
+import { micStreamingSupported } from '@/lib/live/mic';
+import { useVoiceCooking } from '@/lib/live/voice';
 import { stopAllMedia } from '@/lib/media';
 import { cooked, useRecipeQuestions, type CookedRef } from '@/lib/messaging';
 import { madeItWords } from '@/lib/postcardLogic';
@@ -143,6 +151,8 @@ export default function CookScreen() {
   const [dir, setDir] = useState<1 | -1>(1);
   const [stepsOpen, setStepsOpen] = useState(false);
   const [done, setDone] = useState<{ title: string; subtitle?: string; told?: boolean; card: CookedRef | null } | null>(null);
+  // A moment of the cook's video the voice service asked for (play_clip), playing in the step's player.
+  const [moment, setMoment] = useState<{ startS: number; endS: number; key: number } | null>(null);
 
   const total = recipe?.steps.length ?? 0;
   const fallback = last.loaded ? last.step || 1 : 1;
@@ -190,6 +200,7 @@ export default function CookScreen() {
 
   const goTo = (k: number) => {
     setStepsOpen(false);
+    setMoment(null);
     if (k === n) return;
     setDir(k > n ? 1 : -1);
     setChosen(k);
@@ -202,6 +213,17 @@ export default function CookScreen() {
     if (router.canGoBack()) router.back();
     else toRecipe();
   };
+
+  const voice = useVoiceCooking({
+    libraryId: recipe?.id ?? null,
+    step: n,
+    onGoTo: (k) => total && goTo(Math.min(Math.max(1, k), total)),
+    onClip: (startS, endS) => {
+      const at = recipe?.steps.findIndex((s) => startS >= s.start_s && startS < s.end_s) ?? -1;
+      if (at >= 0) goTo(at + 1);
+      setMoment({ startS, endS, key: Date.now() });
+    },
+  });
 
   const finish = async () => {
     if (!recipe) return;
@@ -307,17 +329,20 @@ export default function CookScreen() {
                   {step.title}
                 </Txt>
                 <ClipVideo
+                  key={moment ? `moment-${moment.key}` : 'step'}
                   ref={clip}
                   url={recipe.media.video_url}
                   poster={poster}
-                  start_s={step.start_s}
-                  end_s={step.end_s}
+                  start_s={moment?.startS ?? step.start_s}
+                  end_s={moment?.endS ?? step.end_s}
+                  autoPlay={!!moment}
+                  onEnded={moment ? () => setMoment(null) : undefined}
                   height={clipH}
                   radius={radii.panel}
                   aspectHint={recipe.media.width && recipe.media.height ? recipe.media.width / recipe.media.height : null}
                   accessibilityLabel={`Watch this step: ${step.title}, ${mmss(len)}`}
                   full={{ label: `Step ${n} · ${mmss(len)}`, quote: step.quote }}
-                  chapters={lineStarts(stepSubsteps(step))}
+                  chapters={moment ? null : lineStarts(stepSubsteps(step))}
                 />
               </>
             ) : (
@@ -352,17 +377,32 @@ export default function CookScreen() {
         </ScrollView>
       </ScrollHold>
 
+      <VoiceLine status={voice.status} heard={voice.heard} askedAt={voice.askedAt} error={voice.error} cookName={askTarget?.kind === 'cook' ? askTarget.cook.name : name} bottom={clearance} />
       <BottomBar>
-        <ActionButton
-          variant="outline"
-          label="Back"
-          icon={<BackIcon size={20} color={colors.ink} />}
-          padH={18}
-          labelWeight={700}
-          accessibilityLabel={n > 1 ? `Back to step ${n - 1}` : 'Back to the recipe'}
-          onPress={goBack}
-          style={styles.back}
-        />
+        {/* With the mic, Back is a round button: three in a row still fit a small phone. */}
+        {micStreamingSupported() ? (
+          <>
+            <VoiceMicButton status={voice.status} onPress={voice.toggle} />
+            <IconButton
+              tone="cream"
+              size={60}
+              icon={<BackIcon size={22} color={colors.ink} />}
+              accessibilityLabel={n > 1 ? `Back to step ${n - 1}` : 'Back to the recipe'}
+              onPress={goBack}
+            />
+          </>
+        ) : (
+          <ActionButton
+            variant="outline"
+            label="Back"
+            icon={<BackIcon size={20} color={colors.ink} />}
+            padH={18}
+            labelWeight={700}
+            accessibilityLabel={n > 1 ? `Back to step ${n - 1}` : 'Back to the recipe'}
+            onPress={goBack}
+            style={styles.back}
+          />
+        )}
         {isLast ? (
           <ActionButton
             label={lentTo ? `${lentTo.name} made it` : 'I made it'}

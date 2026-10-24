@@ -9,6 +9,9 @@
 //            over that wait. It never fills until the recipe really exists.
 //   Ready:   the recipe exists but the send to Leo hasn't reached the server yet ("Ready · sending
 //            it to Leo"), no spinner; Your recipes hides this row once the recipe card is listed.
+// Live (hackathon, docs/build/STACK.md): once the videos are in, the worker's stage from Convex
+// jobs.forFamily replaces the estimate: "Watching your video", "Writing the recipe"… and the second
+// half of the bar is its real progress.
 // A failed row says why in the worker's own words (or "send it again"), and tapping it opens Record
 // to send the videos again. A quiet x on the right stops a recording (after a confirm) or clears
 // one that failed.
@@ -19,6 +22,7 @@ import Animated, { useAnimatedStyle, useDerivedValue, withTiming } from 'react-n
 import { useVideoFrame } from '@/components/record/videoFrame';
 import { CloseIcon, IconButton, PotMark, PressableScale, Txt } from '@/components/ui';
 import { plural } from '@/lib/format';
+import type { JobStage, LiveJob } from '@/lib/live/convex';
 import { jobProgress, jobUploadLeftMs, needsPendingSend, PENDING_SEND_GIVE_UP, type JobStatus, type StoredJob } from '@/lib/uploads';
 import { colors } from '@/theme/tokens';
 
@@ -57,10 +61,26 @@ export type ProcessingView = {
   recipeId: string | null;
 };
 
-export function describeJob(job: StoredJob, status: JobStatus | undefined, now: number): ProcessingView {
+const STAGE_HINT: Record<Exclude<JobStage, 'done' | 'failed'>, string> = {
+  queued: 'Waiting its turn',
+  preparing: 'Getting your videos ready',
+  understanding: 'Watching your video',
+  writing: 'Writing the recipe',
+  indexing: 'Finding each moment',
+};
+
+export function describeJob(job: StoredJob, status: JobStatus | undefined, now: number, worker?: LiveJob): ProcessingView {
   const server = status?.status ?? 'uploading';
   const ok = { problem: false, busy: true, bar: null, action: null, recipeId: null };
   const problem = { problem: true, busy: false, bar: null, action: 'remove' as const, recipeId: null };
+
+  // The worker's live stage, once the videos are in (a published recipe still goes the usual way).
+  const uploaded = job.local_state === 'uploaded' || server === 'processing';
+  if (worker && server !== 'published' && (uploaded || worker.stage !== 'queued')) {
+    if (worker.stage === 'failed') return { ...problem, hint: worker.error || 'We couldn’t finish this one · send it again' };
+    if (worker.stage === 'done') return { ...ok, hint: 'Almost done', bar: { send: 1, write: 1 } };
+    return { ...ok, hint: STAGE_HINT[worker.stage], bar: { send: 1, write: Math.max(0.04, Math.min(1, worker.progress)) }, action: 'cancel' };
+  }
 
   // The worker's reason is plain and says what to do ("That recording is over 4 hours. Try splitting it…").
   if (server === 'failed') return { ...problem, hint: status?.message || 'We couldn’t finish this one · send it again' };

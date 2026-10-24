@@ -317,7 +317,8 @@ def sandbox(fake: FakeGemini):
     with tempfile.TemporaryDirectory(prefix="homecookd-order-") as tmp:
         out_root = Path(tmp) / "out"
         env = {"GEMINI_API_KEY": "fake-key-for-tests", "GEMINI_MODEL": "fake-pro",
-               "GEMINI_EXTRACT_MODEL": "fake-flash", "GEMINI_MEDIA_RESOLUTION": "LOW"}
+               "GEMINI_EXTRACT_MODEL": "fake-flash", "GEMINI_MEDIA_RESOLUTION": "LOW",
+               "RECIPE_WRITER": "gemini"}  # the fake stands in for Gemini only; never call the real Muse
         saved = {k: os.environ.get(k) for k in env}
         os.environ.update(env)
         try:

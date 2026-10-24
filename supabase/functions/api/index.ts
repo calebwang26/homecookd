@@ -2693,7 +2693,7 @@ onPublic("POST", "/auth/email", async ({ req, body }) => {
 // elsewhere); until it's here or in APPLE_AUDIENCES, only Expo Go's Apple tokens are accepted, and
 // Apple sign-in in a TestFlight / App Store build answers 503 "isn't set up". Set it before any
 // store build (the function logs the audience it refused).
-const APP_BUNDLE_ID = "";
+const APP_BUNDLE_ID = "com.salik.homecookd";
 // TODO(security): once the bundle id is set, drop host.exp.Exponent. Any Expo Go project can get
 // Apple tokens for that audience, so a hostile one could replay its users' tokens here.
 const EXPO_GO_BUNDLE_ID = "host.exp.Exponent";

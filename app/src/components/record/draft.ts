@@ -3,7 +3,7 @@
 // starts a fresh recording.
 //
 //   const draft = useDraft();
-//   addClips(clips, { dish, requestFrom });   toggleClip(key);   clearDraft();
+//   addClips(clips, { dish, requestFrom, glasses });   toggleClip(key);   clearDraft();
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { useSyncExternalStore } from 'react';
 
@@ -24,9 +24,11 @@ export type Draft = {
   dish: string | null;
   /** The profile who asked for it (pre-selected in "Who is it for?"). */
   requestFrom: string | null;
+  /** Filmed on smart glasses, imported from the camera roll (Convex jobs.create `source`). */
+  glasses: boolean;
 };
 
-const EMPTY: Draft = { clips: [], dish: null, requestFrom: null };
+const EMPTY: Draft = { clips: [], dish: null, requestFrom: null, glasses: false };
 
 let draft: Draft = EMPTY;
 const listeners = new Set<() => void>();
@@ -60,7 +62,7 @@ export function clipKeyFor(asset: ImagePickerAsset): string {
 }
 
 /** Adds clips (newly picked ones start selected). The request context only fills empty slots. */
-export function addClips(clips: DraftClip[], ctx: { dish?: string | null; requestFrom?: string | null } = {}) {
+export function addClips(clips: DraftClip[], ctx: { dish?: string | null; requestFrom?: string | null; glasses?: boolean } = {}) {
   // The same library video picked twice is kept once.
   const known = new Set(draft.clips.map((c) => c.asset.assetId ?? c.asset.uri));
   const fresh = clips.filter((c) => !known.has(c.asset.assetId ?? c.asset.uri));
@@ -68,6 +70,7 @@ export function addClips(clips: DraftClip[], ctx: { dish?: string | null; reques
     clips: [...draft.clips, ...fresh],
     dish: draft.dish ?? ctx.dish ?? null,
     requestFrom: draft.requestFrom ?? ctx.requestFrom ?? null,
+    glasses: draft.glasses || !!ctx.glasses,
   });
 }
 

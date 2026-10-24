@@ -2,9 +2,11 @@
   "applinks": {
     "details": [
       {
-        "appIDs": ["TEAMID.BUNDLEID"],
+        "appIDs": [
+          "73UV499FKN.com.salik.homecookd"
+        ],
         "components": [
-          { "/": "/i", "comment": "Family invite. TODO(caleb): replace TEAMID.BUNDLEID with <Apple Team ID>.<bundle id> (see web/src/lib/app-links.ts)." },
+          { "/": "/i", "comment": "Family invite." },
           { "/": "/i/*" },
           { "/": "/r", "comment": "Shared recipe" },
           { "/": "/r/*" }
@@ -13,6 +15,8 @@
     ]
   },
   "webcredentials": {
-    "apps": ["TEAMID.BUNDLEID"]
+    "apps": [
+      "73UV499FKN.com.salik.homecookd"
+    ]
   }
 }
