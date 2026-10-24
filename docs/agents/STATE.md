@@ -46,7 +46,10 @@ older note in `memory/` disagrees, this file wins.
     `seed:demo` (`npx convex run seed:claim '{"supabaseFamilyId":"…"}'` points it at the real one). Env:
     CARTESIA, MOSS, MUSE, WORKER_SECRET, VOICE_SECRET. Redeploy with `--preview-name hackathon`, never
     `--preview-create`: that recreated the deployment and deleted `energized-starfish-920`. It has #37's memory
-    fields (`step`, `id`, `title`, `why`), so the app can put a family dish's stories back.
+    fields (`step`, `id`, `title`, `why`), so the app can put a family dish's stories back. Last deployed Oct 24
+    from main `f28173a1f` (Caleb's go): new indexes `dinnerInviteOpens.by_dinnerId_and_deviceId`,
+    `dinners.by_inviteToken`, `swapRequests.by_otherFamilyId` and `swapRequests.by_requesterFamilyId`, and
+    `POST /invite/open` live with CORS for homecookd.app.
   - **Worker** (`pipeline/worker.py`, Convex mode) runs on the laptop from `.claude/worktrees/worker-main` at main
     `4d703d9` (#39, started Oct 24 03:14), so family `recipe.json` files go out without stories or tips.
   - **Moss** works again (billing fixed Oct 24). One index is left: `family-j97ctx…` (the demo family: 4 recipes,
@@ -68,7 +71,7 @@ older note in `memory/` disagrees, this file wins.
     and the voice service through `app/src/lib/live/` (one file each, with a stub until they're deployed). Needs an
     EAS dev build or TestFlight: Expo Go hides the mic. Public URLs: `EXPO_PUBLIC_CONVEX_URL` (in `eas.json`),
     `EXPO_PUBLIC_VOICE_URL` = wss://homecookd-voice-vyatb2n6oq-uw.a.run.app (Track B, Cloud Run; both in `eas.json`).
-- **Voice service** (Cloud Run `homecookd-voice`, us-west1, project `project-11b9fc8a-1108-4ea8-a3b`): `wss://homecookd-voice-vyatb2n6oq-uw.a.run.app/cook`, revision `homecookd-voice-00001-p96`, min instances 1, timeout 3600 s, keys from Secret Manager, Convex `grand-dragon-649`. Deploy: `voice/deploy.sh` (Caleb runs it; agents are blocked from Secret Manager writes). homie's voice on main is "Riya bilingual" with a Gemini TTS backup (#49); the deployed revision still speaks Sindhu until the next deploy.
+- **Voice service** (Cloud Run `homecookd-voice`, us-west1, project `project-11b9fc8a-1108-4ea8-a3b`): `wss://homecookd-voice-vyatb2n6oq-uw.a.run.app/cook`, revision `homecookd-voice-00004-nv4` (deployed Oct 24 from main `f28173a1f`, Caleb's go: homie speaks as "Riya bilingual" with a Gemini TTS backup (#49), the kid's yes and no (#47), the Cartesia credit fixes (#44); `/health` ok, a bogus session is refused with 4401/401), min instances 1, timeout 3600 s, keys from Secret Manager, Convex `grand-dragon-649`. Deploy: `voice/deploy.sh` (Caleb runs it; agents are blocked from Secret Manager writes).
 
 ## Waiting on Caleb (launch blockers)
 
@@ -564,3 +567,24 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - **Open:** a timer on the open socket can leave without a buzz: its `timer_done` lands at the same moment as
     the phone's own zero (both 5 s after the `timer` message) and takes it first (2 of 3 live runs; homie still
     says it's done). Not changed here (it was so before); nothing on an iPhone yet.
+- Oct 24 · #51 · Claude · Cook mode timers: a `timer_done` before the phone's own zero buzzes (closes #36 round 6's
+  open item), and the Oct 24 live deploys recorded.
+  - **The fix:** on the socket that's still open, the service's `timer_done` usually arrives before the phone's
+    own zero (both are 5 s after the `timer` message), and it took the timer away before it buzzed: no haptic, no
+    pot "timer" or "Done", though homie still said "Hey, the rice timer is done." `voiceLogic` `timerDone` now
+    buzzes a timer that hasn't buzzed yet (it stays, at zero, "Done", and leaves `TIMER_DUE_HOLD_MS` later like any
+    buzzed timer); one that already buzzed leaves at once, as before. `lib/live/voice` has one `buzzTimer` for both
+    (it skips an id that already buzzed, so the phone's own zero right after can't buzz it again) and keeps the
+    timer list in a ref, so `timer_done` reads the current one.
+  - **Deploys (Caleb: "Yes: deploy Convex, the voice service and homecookd.app now; only the EAS Update waits for
+    #36"):** Convex `grand-dragon-649` and the voice service revision `homecookd-voice-00004-nv4`, both from main
+    `f28173a1f` (see Live infrastructure). The EAS Update with #36 is still to come.
+  - **Tests:** `test-voice-ui.mjs` 45 pass (new: a `timer_done` before the zero buzzes once and shows "Done"; one
+    after the phone's buzz never buzzes again; two timers, one done early, buzz once each). tsc, lint, every app
+    test script and `test-profile-navigation` (6 ok, this worktree's Expo web) pass. Live on Expo web against a
+    local voice service from main (`VOICE_STUB=1`, real Ink 2 and Sonic) with a temporary e2e hook and buzz
+    counter (not committed): three 5 s timers ("set a timer for 5 seconds" as text); each `timer_done` came first
+    (4.98 to 5.0 s after the `timer`) and buzzed it, one buzz each, the pill said "Done" and the pot showed
+    "timer", and each left 10 s later.
+  - **Open:** nothing on an iPhone yet. On Expo web a real line's audio throws in `lib/live/say` (expo-file-system's
+    `File` isn't there on web); web never opens a real line without a hook, so it only matters for live web tests.
