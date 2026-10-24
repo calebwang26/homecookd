@@ -10,7 +10,7 @@ import * as convex from "./convex.js";
 import { env } from "./env.js";
 import { translate } from "./homie.js";
 import { Recording } from "./record.js";
-import { speakWav } from "./sonic.js";
+import { fakeSpeech, speakWav } from "./speech.js";
 
 const MAX_SPEAK_CHARS = 600;
 
@@ -63,7 +63,8 @@ async function speakRoute(req: IncomingMessage, res: ServerResponse) {
 const server = createServer((req, res) => {
   const path = (req.url ?? "/").split("?")[0];
   if (path === "/health" || path === "/healthz") {
-    res.writeHead(200, { "Content-Type": "text/plain" }).end("ok");
+    // x-fake-speech tells the test clients this service spends no Cartesia credits.
+    res.writeHead(200, { "Content-Type": "text/plain", ...(fakeSpeech ? { "x-fake-speech": "1" } : {}) }).end("ok");
     return;
   }
   if (path === "/speak" && req.method === "POST") return void speakRoute(req, res);
@@ -95,5 +96,5 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 server.listen(env.port, () => {
-  console.log(`voice service on :${env.port} (model ${env.claudeModel}, convex ${convex.usingStub ? "STUB" : "live"}, homie demo ${env.homieDemo})`);
+  console.log(`voice service on :${env.port} (model ${env.claudeModel}, convex ${convex.usingStub ? "STUB" : "live"}, homie demo ${env.homieDemo}${fakeSpeech ? ", FAKE SPEECH: no Cartesia" : ""})`);
 });
