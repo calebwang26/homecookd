@@ -157,19 +157,31 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 - `people.setLanguage({ language })` (self). `people.me` → `{ personId, name, role, language, relation }`.
 - `questions.forRecipe` already exists; the kid's cook mode reads it to hear the cook's answer (`answerAudioUrl`,
   `answer.translation`).
-- Community: `community.feed({ maxMiles?, now })` → `{ recipes, dinners }` (`now` is required: the client's clock,
-  rounded, to hide past dinners; queries can't read it), `community.recipe({ recipeId })` (text only),
-  `community.setLocation({ lat, lng, campus? })` (snapped to the ~1 km grid before it's stored),
+- Community: `community.feed({ maxMiles?, now })` → `{ here, recipes, dinners }` (`now` is required: the client's
+  clock, rounded, to hide past dinners; queries can't read it). `here` is my own ~1 km grid cell (the map's middle).
+  Each recipe row: `recipeId, dish, familyName, cookName, distanceLabel, approx` (the cook's grid cell, never finer;
+  no stored location = `DEMO_LOCATION`), `story`, `culture` (Muse's label, or null), `quote` (one of the cook's own
+  English step quotes, or null), `coverUrl` (our stock/cover photos only), `stepCount`, and `dinner` (the soonest
+  open one around that dish: `{ dinnerId, startsAt, seatsLeft }`, or null). `community.recipe({ recipeId })` (text
+  only), `community.setLocation({ lat, lng, campus? })` (snapped to the ~1 km grid before it's stored),
   `community.setShare({ recipeId, on })` (the recipe's cook only; a story card written from her stories shows as a
-  plain line once she says no to them, and her next share rewrites it), `dinners.create({ recipeId, startsAt,
-  placeKind, placeName, address, seats })` (the recipe must be shared first), `dinners.get({ dinnerId })`,
-  `dinners.mine`, `dinners.requestJoin({ dinnerId })`,
+  plain line, with no culture, once she says no to them, and her next share rewrites it). The story card
+  (`writeStoryCard`, Muse Spark, one JSON call) holds the sentence, `culture` and `quote`: Muse only picks a quote by
+  its number from her step quotes (≤ 20 words; never a story, never its own words); without Muse, culture is null and
+  the quote is her first step quote. A quote that stops being one of her step quotes stops showing.
+  `dinners.create({ recipeId, startsAt, placeKind, placeName, address, seats })` (the recipe must be shared first),
+  `dinners.get({ dinnerId })`, `dinners.mine`, `dinners.requestJoin({ dinnerId })`,
   `dinners.respond({ requestId, accept })` (host only). Community responses never include `libraryId`,
-  `recipeJsonUrl`, `coverUrl` of a private recipe, moments, quotes, person ids of other families, or an address
-  (except to the host and accepted guests). Distance is a label from `lib/geo.ts`. `families.publicName` is the
-  surname ("Pawar"); cards say "The Pawar family", or "Rajani's family" without one. Demo data:
-  `seedCommunity:neighbors` (8 neighbor families), `seedCommunity:place({ personId })` (puts a real account at
-  `DEMO_LOCATION`), `seedCommunity:publicName({ familyId, publicName })`.
+  `recipeJsonUrl`, `coverUrl` of a private recipe, moments, memories, quotes other than the card's one, original-
+  language quotes, person ids of other families, or an address (except to the host and accepted guests). Distance
+  is a label from `lib/geo.ts`. `families.publicName` is the surname ("Pawar"); cards say "The Pawar family", or
+  "Rajani's family" without one. Demo data: `seedCommunity:neighbors` (8 neighbor families with culture and quote,
+  the quote from `web/src/content/recipes.ts` `feelQuote`), `seedCommunity:floormateDish({ familyId, dish,
+  culture?, quote?, coverUrl?, story?, cookId?, steps: [{ title, text, quote? }] })` (one shared, text-only dish with
+  a pre-written card for a floormate's real family; the quote must be one of the steps' quotes; running it again
+  updates the same dish), `seedCommunity:place({ personId } | { familyId })` (puts one account, or a whole family,
+  at `DEMO_LOCATION`: a family's dish sits where its cook is, so `{ familyId }` puts it "In your building"),
+  `seedCommunity:publicName({ familyId, publicName })`.
 
 **Voice service → Convex for homie** (HTTP POST, `x-voice-secret`; `convex/lib/liveRoutes.ts`)
 - `/live/person` `{ sessionToken }` → `{ personId, familyId, name, role, language, relation }` (401 if signed out).

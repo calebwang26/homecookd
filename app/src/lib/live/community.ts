@@ -1,7 +1,8 @@
 // Track G boundary: the Community calls (docs/build/STACK.md "Oct 24 additions").
 //
-//   useCommunityFeed(maxMiles?)                 community.feed, live: shared recipes + open dinners nearby
-//   await getCommunityRecipe(recipeId)          community.recipe: the story card + steps (text only)
+//   useCommunityFeed(maxMiles?)                 community.feed, live: my grid cell, shared recipes + open dinners nearby
+//   useCommunityRecipe(recipeId)                community.recipe, live: the story card + steps (text only)
+//   await getCommunityRecipe(recipeId)          the same, once
 //   await setShare(recipeId, on)                community.setShare (the recipe's cook only)
 //   await setLocation(lat, lng, campus?)        community.setLocation (rounded to ~1 km on the server)
 //   await createDinner({ recipeId, … })         dinners.create
@@ -14,18 +15,24 @@ import { useState } from 'react';
 
 import { call, token, useLive } from './convex';
 
+export type LatLng = { lat: number; lng: number };
 export type FeedRecipe = {
   recipeId: string;
   dish: string;
   familyName: string;
   cookName: string;
   distanceLabel: string;
+  approx: LatLng; // the cook's ~1 km grid cell, never finer
   story: string | null; // written by Muse Spark: label it AI
+  culture: string | null; // Muse's label for the dish ("Filipino")
+  quote: string | null; // one of the cook's own step quotes
   coverUrl: string | null;
   stepCount: number;
+  dinner: { dinnerId: string; startsAt: number; seatsLeft: number } | null; // the soonest open one
 };
 export type FeedDinner = { dinnerId: string; dish: string; hostName: string; placeName: string; startsAt: number; seatsLeft: number; distanceLabel: string };
-export type CommunityFeed = { recipes: FeedRecipe[]; dinners: FeedDinner[] };
+/** `here` is my own grid cell, the map's middle (null until the feed answers). */
+export type CommunityFeed = { here: LatLng | null; recipes: FeedRecipe[]; dinners: FeedDinner[] };
 export type CommunityRecipe = {
   recipeId: string;
   dish: string;
@@ -55,7 +62,7 @@ export type Dinner = {
   requests: { requestId: string; guestName: string; status: RequestStatus }[] | null; // host only
 };
 
-const EMPTY: CommunityFeed = { recipes: [], dinners: [] };
+const EMPTY: CommunityFeed = { here: null, recipes: [], dinners: [] };
 const still =
   <T,>(value: T) =>
   (onData: (v: T) => void) => {
@@ -63,6 +70,7 @@ const still =
     return () => {};
   };
 const stubFeed = still(EMPTY);
+const stubRecipe = still<CommunityRecipe | null>(null);
 const stubDinner = still<Dinner | null>(null);
 const stubDinners = still<Dinner[]>([]);
 
@@ -71,6 +79,15 @@ export function useCommunityFeed(maxMiles?: number): CommunityFeed {
   const [now] = useState(() => Math.floor(Date.now() / 60_000) * 60_000);
   const args = maxMiles === undefined ? { now } : { now, maxMiles };
   return useLive<CommunityFeed>('community:feed', EMPTY, stubFeed, true, args);
+}
+
+/**
+ * A shared recipe's text, live with this person's session (so a cold open waits for sign-in instead of
+ * failing): undefined while it loads, null when it isn't shared (or isn't there).
+ */
+export function useCommunityRecipe(recipeId: string): CommunityRecipe | null | undefined {
+  const value = useLive<CommunityRecipe | null | undefined>('community:recipe', undefined, stubRecipe, !!recipeId, { recipeId });
+  return value && value.recipeId !== recipeId ? undefined : value;
 }
 
 export async function getCommunityRecipe(recipeId: string): Promise<CommunityRecipe | null> {

@@ -1,7 +1,7 @@
-// The dark dinner card on top of "Near you": "Dinner tonight · 7 pm", the dish, and "In your
-// building · 2 of 6 seats taken". It follows the dinner live (dinners.get), so the seats, the host's
-// new requests and "You're in" change on both phones as they happen; until that first answer it
-// shows what the feed knows ("4 seats left").
+// The dark dinner card (a tap on "You" on the Community map): "Dinner tonight · 7 pm", the dish, and
+// "In your building · 2 of 6 seats taken". It follows the dinner live (dinners.get), so the seats, the
+// host's new requests and "You're in" change on both phones as they happen; until that first answer
+// it shows what it was given ("4 seats left").
 import { StyleSheet, View } from 'react-native';
 
 import { ArrowRightIcon, Pill, PressableScale, Txt } from '@/components/ui';
@@ -27,7 +27,8 @@ export function DinnerCard({ pick, now, onOpen }: { pick: DinnerPick; now: numbe
   const known = 'mine' in pick ? pick.mine : null;
   const id = known?.dinnerId ?? ('feed' in pick ? pick.feed.dinnerId : '');
   const live = useDinner(id);
-  const full = live ?? known;
+  // useDinner keeps the last dinner's answer until the new one arrives: use it only for this dinner.
+  const full = (live?.dinnerId === id ? live : null) ?? known;
   const d = full ?? ('feed' in pick ? pick.feed : null);
   if (!d) return null;
   const when = cardWhen(d.startsAt, now);

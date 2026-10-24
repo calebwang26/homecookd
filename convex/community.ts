@@ -1,20 +1,21 @@
 // Community: recipes families chose to share with people nearby, as a story card plus the recipe's
-// text. Everything returned here is a whitelist: no video, quotes, moments, memories, library or GCS
-// links, other families' person ids, or addresses. The cook alone turns sharing on.
+// text. Everything returned here is a whitelist: no video, moments, memories, library or GCS links,
+// other families' person ids, or addresses. The only words of the cook's own are the one step quote
+// on the card. Places are the ~1 km grid cell, never finer. The cook alone turns sharing on.
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server";
 import { requireCook, requireSession } from "./lib/auth";
 import { distanceLabel, milesBetween, placeOf, roundToGrid } from "./lib/geo";
+import { type Card, fallbackCard, parseMuseCard, quoteChoices, STORY_WORDS } from "./lib/storyCard";
 import { familyRecipe } from "./recipes";
 
 const MUSE_URL = "https://api.meta.ai/v1/chat/completions";
 const MUSE_MODEL = "muse-spark-1.3"; // pinned; not a "-contributor" model, which may train on family data
-const STORY_WORDS = 25;
 
 // Only our own stock and cover photos; a recipe's poster is a frame of the family's video.
-const PUBLIC_COVER = /^https:\/\/homecookd\.app\/media\/(stock|app-covers)\/[\w.-]+\.(jpg|jpeg|png|webp)$/;
+export const PUBLIC_COVER = /^https:\/\/homecookd\.app\/media\/(stock|app-covers)\/[\w.-]+\.(jpg|jpeg|png|webp)$/;
 
 /** "The Pawar family", or "Rajani's family" when the family has no public name. */
 export function familyLabel(family: Doc<"families"> | null, cookName: string): string {
@@ -27,25 +28,37 @@ function storiesFor(r: Doc<"recipes">): string[] {
   return r.memoriesOptIn ? r.memories.filter((m) => m.kind === "story").slice(0, 3).map((m) => m.text) : [];
 }
 
-/** The story card, or the plain line once she says no to the stories it was written from. A card that
- *  doesn't record whether stories went in counts as written from them. */
-function publicStory(r: Doc<"recipes">, cookName: string, family: Doc<"families"> | null): string | null {
-  if (!r.storyCard) return null;
-  if (r.storyCard.usedStories !== false && !r.memoriesOptIn) {
-    return plainStory({ cookName, dish: r.title, publicName: family?.publicName ?? null });
+/**
+ * What neighbors see of the story card. Once she says no to the stories it was written from, the plain
+ * line instead, and no culture (Muse may have read it in a story). A card that doesn't record whether
+ * stories went in counts as written from them. The quote shows only while it's still one of her step
+ * quotes.
+ */
+function publicCard(r: Doc<"recipes">, cookName: string, family: Doc<"families"> | null): Card | { text: null; culture: null; quote: null } {
+  const card = r.storyCard;
+  if (!card) return { text: null, culture: null, quote: null };
+  const quote = card.quote && quoteChoices(r.steps).includes(card.quote) ? card.quote : null;
+  if (card.usedStories !== false && !r.memoriesOptIn) {
+    return { text: plainStory({ cookName, dish: r.title, publicName: family?.publicName ?? null }), culture: null, quote };
   }
-  return r.storyCard.text;
+  return { text: card.text, culture: card.culture ?? null, quote };
 }
 
+const latLng = v.object({ lat: v.number(), lng: v.number() });
 const feedRecipe = v.object({
   recipeId: v.id("recipes"),
   dish: v.string(),
   familyName: v.string(),
   cookName: v.string(),
   distanceLabel: v.string(),
+  approx: latLng, // the cook's ~1 km grid cell, for the map
   story: v.union(v.null(), v.string()),
+  culture: v.union(v.null(), v.string()),
+  quote: v.union(v.null(), v.string()),
   coverUrl: v.union(v.null(), v.string()),
   stepCount: v.number(),
+  // The soonest open dinner around this dish, if there is one.
+  dinner: v.union(v.null(), v.object({ dinnerId: v.id("dinners"), startsAt: v.number(), seatsLeft: v.number() })),
 });
 const feedDinner = v.object({
   dinnerId: v.id("dinners"),
@@ -66,46 +79,17 @@ export async function acceptedCount(ctx: QueryCtx, dinnerId: Id<"dinners">): Pro
 }
 
 /**
- * Shared recipes from other families, nearest first, and open dinners nearby. Queries can't read the
- * clock, so the app must pass `now` (rounded, so the subscription stays put) to hide past dinners.
+ * Shared recipes from other families, nearest first, and open dinners nearby; `here` is my own grid
+ * cell (the map's middle). Queries can't read the clock, so the app must pass `now` (rounded, so the
+ * subscription stays put) to hide past dinners.
  */
 export const feed = query({
   args: { sessionToken: v.string(), maxMiles: v.optional(v.number()), now: v.number() },
-  returns: v.object({ recipes: v.array(feedRecipe), dinners: v.array(feedDinner) }),
+  returns: v.object({ here: latLng, recipes: v.array(feedRecipe), dinners: v.array(feedDinner) }),
   handler: async (ctx, { sessionToken, maxMiles, now }) => {
     const signed = await requireSession(ctx, sessionToken);
-    const here = placeOf(signed.person);
+    const here = roundToGrid(placeOf(signed.person));
     const near = (miles: number) => maxMiles === undefined || miles <= maxMiles;
-
-    const shared = await ctx.db
-      .query("recipes")
-      .withIndex("by_sharedAt", (q) => q.gt("sharedAt", 0))
-      .order("desc")
-      .take(200);
-    const recipes = [];
-    for (const r of shared) {
-      if (r.familyId === signed.family._id || r.status !== "ready") continue;
-      const cook = await ctx.db.get("people", r.cookId);
-      const miles = milesBetween(here, placeOf(cook));
-      if (!near(miles)) continue;
-      const cookName = cook?.name ?? "";
-      const family = await ctx.db.get("families", r.familyId);
-      recipes.push({
-        miles,
-        sharedAt: r.sharedAt ?? 0,
-        row: {
-          recipeId: r._id,
-          dish: r.title,
-          familyName: familyLabel(family, cookName),
-          cookName,
-          distanceLabel: distanceLabel(miles),
-          story: publicStory(r, cookName, family),
-          coverUrl: r.coverUrl && PUBLIC_COVER.test(r.coverUrl) ? r.coverUrl : null,
-          stepCount: r.steps.length,
-        },
-      });
-    }
-    recipes.sort((a, b) => a.miles - b.miles || b.sharedAt - a.sharedAt);
 
     const open = await ctx.db
       .query("dinners")
@@ -118,6 +102,7 @@ export const feed = query({
       if (!near(miles)) continue;
       dinners.push({
         miles,
+        recipeId: d.recipeId,
         row: {
           dinnerId: d._id,
           dish: d.dish,
@@ -130,8 +115,50 @@ export const feed = query({
       });
     }
     dinners.sort((a, b) => a.row.startsAt - b.row.startsAt || a.miles - b.miles);
+    const dinnerFor = new Map<Id<"recipes">, { dinnerId: Id<"dinners">; startsAt: number; seatsLeft: number }>();
+    for (const d of dinners) {
+      if (d.row.seatsLeft > 0 && !dinnerFor.has(d.recipeId)) {
+        dinnerFor.set(d.recipeId, { dinnerId: d.row.dinnerId, startsAt: d.row.startsAt, seatsLeft: d.row.seatsLeft });
+      }
+    }
 
-    return { recipes: recipes.slice(0, 50).map((r) => r.row), dinners: dinners.slice(0, 20).map((d) => d.row) };
+    const shared = await ctx.db
+      .query("recipes")
+      .withIndex("by_sharedAt", (q) => q.gt("sharedAt", 0))
+      .order("desc")
+      .take(200);
+    const recipes = [];
+    for (const r of shared) {
+      if (r.familyId === signed.family._id || r.status !== "ready") continue;
+      const cook = await ctx.db.get("people", r.cookId);
+      const approx = roundToGrid(placeOf(cook));
+      const miles = milesBetween(here, approx);
+      if (!near(miles)) continue;
+      const cookName = cook?.name ?? "";
+      const family = await ctx.db.get("families", r.familyId);
+      const card = publicCard(r, cookName, family);
+      recipes.push({
+        miles,
+        sharedAt: r.sharedAt ?? 0,
+        row: {
+          recipeId: r._id,
+          dish: r.title,
+          familyName: familyLabel(family, cookName),
+          cookName,
+          distanceLabel: distanceLabel(miles),
+          approx,
+          story: card.text,
+          culture: card.culture,
+          quote: card.quote,
+          coverUrl: r.coverUrl && PUBLIC_COVER.test(r.coverUrl) ? r.coverUrl : null,
+          stepCount: r.steps.length,
+          dinner: dinnerFor.get(r._id) ?? null,
+        },
+      });
+    }
+    recipes.sort((a, b) => a.miles - b.miles || b.sharedAt - a.sharedAt);
+
+    return { here, recipes: recipes.slice(0, 50).map((r) => r.row), dinners: dinners.slice(0, 20).map((d) => d.row) };
   },
 });
 
@@ -160,7 +187,7 @@ export const recipe = query({
       dish: r.title,
       familyName: familyLabel(family, cookName),
       cookName,
-      story: publicStory(r, cookName, family),
+      story: publicCard(r, cookName, family).text,
       steps: r.steps.map(({ order, title, text }) => ({ order, title, text })),
     };
   },
@@ -213,7 +240,14 @@ export const storyFacts = internalQuery({
   args: { recipeId: v.id("recipes") },
   returns: v.union(
     v.null(),
-    v.object({ cookName: v.string(), dish: v.string(), publicName: v.union(v.null(), v.string()), steps: v.array(v.string()), stories: v.array(v.string()) }),
+    v.object({
+      cookName: v.string(),
+      dish: v.string(),
+      publicName: v.union(v.null(), v.string()),
+      steps: v.array(v.string()),
+      stories: v.array(v.string()),
+      quotes: v.array(v.string()), // her own step quotes; the card may show one of them
+    }),
   ),
   handler: async (ctx, { recipeId }) => {
     const r = await ctx.db.get("recipes", recipeId);
@@ -225,16 +259,25 @@ export const storyFacts = internalQuery({
       publicName: family?.publicName ?? null,
       steps: r.steps.slice(0, 3).map((s) => `${s.title}: ${s.text}`),
       stories: storiesFor(r),
+      quotes: quoteChoices(r.steps),
     };
   },
 });
 
 export const saveStoryCard = internalMutation({
-  args: { recipeId: v.id("recipes"), text: v.string(), usedStories: v.boolean() },
+  args: {
+    recipeId: v.id("recipes"),
+    text: v.string(),
+    usedStories: v.boolean(),
+    culture: v.union(v.null(), v.string()),
+    quote: v.union(v.null(), v.string()),
+  },
   returns: v.null(),
-  handler: async (ctx, { recipeId, text, usedStories }) => {
+  handler: async (ctx, { recipeId, text, usedStories, culture, quote }) => {
     if (await ctx.db.get("recipes", recipeId)) {
-      await ctx.db.patch("recipes", recipeId, { storyCard: { text, writtenAt: Date.now(), usedStories } });
+      await ctx.db.patch("recipes", recipeId, {
+        storyCard: { text, writtenAt: Date.now(), usedStories, culture: culture ?? undefined, quote: quote ?? undefined },
+      });
     }
     return null;
   },
@@ -246,34 +289,46 @@ export function plainStory(f: { cookName: string; dish: string; publicName: stri
   return f.publicName ? `${whose}, from the ${f.publicName} family.` : `${whose}.`;
 }
 
-async function museStory(f: { cookName: string; dish: string; steps: string[]; stories: string[] }, apiKey: string) {
+const CARD_SCHEMA = {
+  type: "object",
+  properties: { story: { type: "string" }, culture: { type: "string" }, quote: { type: "integer" } },
+  required: ["story", "culture", "quote"],
+  additionalProperties: false,
+};
+
+type Facts = { cookName: string; dish: string; steps: string[]; stories: string[]; quotes: string[] };
+
+/** One Muse call: the sentence, a culture label and the number of one of her quotes (lib/storyCard.ts). */
+async function museCard(f: Facts, apiKey: string): Promise<Card | null> {
   const facts = [`Cook: ${f.cookName || "a family cook"}`, `Dish: ${f.dish}`, `First steps:\n${f.steps.join("\n")}`];
   if (f.stories.length) facts.push(`What the cook said while cooking:\n${f.stories.join("\n")}`);
+  if (f.quotes.length) facts.push(`The cook's own words, by number:\n${f.quotes.map((q, i) => `${i + 1}. ${q}`).join("\n")}`);
   const res = await fetch(MUSE_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
     body: JSON.stringify({
       model: MUSE_MODEL,
       reasoning_effort: "low",
-      max_completion_tokens: 1000, // reasoning shares this budget
+      max_completion_tokens: 1200, // reasoning shares this budget
+      response_format: { type: "json_schema", json_schema: { name: "StoryCard", schema: CARD_SCHEMA } },
       messages: [
         {
           role: "system",
           content:
-            `You write one warm sentence, at most ${STORY_WORDS} words, that introduces a family's home recipe ` +
-            "to neighbors. Use only the facts given; never invent people, places, memories, history or how " +
-            "it tastes. No hashtags, no emoji, no quotation marks. Reply with the sentence only.",
+            "You write a short card that introduces a family's home recipe to neighbors, as JSON. " +
+            `story: one warm sentence, at most ${STORY_WORDS} words. Use only the facts given; never invent people, ` +
+            "places, memories, history or how it tastes. No hashtags, no emoji, no quotation marks. " +
+            "culture: the food culture the dish comes from, in one to three words (like Maharashtrian, Filipino " +
+            "or Polish American), or an empty string if you can't tell. " +
+            "quote: the number of the cook's own words that best show how they cook, or 0 if none are given.",
         },
         { role: "user", content: facts.join("\n\n") },
       ],
     }),
   });
   const body = (await res.json().catch(() => null)) as { choices?: { message?: { content?: unknown } }[] } | null;
-  const text = body?.choices?.[0]?.message?.content;
-  if (!res.ok || typeof text !== "string") return null;
-  const sentence = text.trim().replace(/^["“]|["”]$/g, "");
-  const words = sentence.split(/\s+/).filter(Boolean).length;
-  return words > 0 && words <= STORY_WORDS ? sentence : null;
+  const content = body?.choices?.[0]?.message?.content;
+  return res.ok && typeof content === "string" ? parseMuseCard(content, f.quotes) : null;
 }
 
 export const writeStoryCard = internalAction({
@@ -283,16 +338,17 @@ export const writeStoryCard = internalAction({
     const facts = await ctx.runQuery(internal.community.storyFacts, { recipeId });
     if (!facts) return null;
     const apiKey = process.env.MUSE_API_KEY;
-    let text: string | null = null;
+    let card: Card | null = null;
     if (apiKey) {
-      text = await museStory(facts, apiKey).catch((e) => {
+      card = await museCard(facts, apiKey).catch((e) => {
         console.error("Muse Spark story card failed", String(e).slice(0, 200));
         return null;
       });
     }
     // The plain line never holds a story; Muse's sentence may.
-    const usedStories = text !== null && facts.stories.length > 0;
-    await ctx.runMutation(internal.community.saveStoryCard, { recipeId, text: text ?? plainStory(facts), usedStories });
+    const usedStories = card !== null && facts.stories.length > 0;
+    const { text, culture, quote } = card ?? fallbackCard(plainStory(facts), facts.quotes);
+    await ctx.runMutation(internal.community.saveStoryCard, { recipeId, text, usedStories, culture, quote });
     return null;
   },
 });

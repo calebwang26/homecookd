@@ -75,7 +75,16 @@ export default defineSchema({
     // plus the recipe's text; the video and voice never leave the family.
     sharedAt: v.optional(v.number()),
     // Muse Spark, labelled AI. usedStories: her stories went into it (only shown while she still says yes).
-    storyCard: v.optional(v.object({ text: v.string(), writtenAt: v.number(), usedStories: v.optional(v.boolean()) })),
+    // culture: Muse's label for the dish ("Maharashtrian"). quote: one of her own step quotes, picked, never written.
+    storyCard: v.optional(
+      v.object({
+        text: v.string(),
+        writtenAt: v.number(),
+        usedStories: v.optional(v.boolean()),
+        culture: v.optional(v.string()),
+        quote: v.optional(v.string()),
+      }),
+    ),
   })
     .index("by_familyId", ["familyId"])
     .index("by_sharedAt", ["sharedAt"]),

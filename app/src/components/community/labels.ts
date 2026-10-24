@@ -2,7 +2,12 @@
 //   cardWhen        "Dinner tonight · 7 pm"            the dark dinner card
 //   detailWhen      "Tonight · 7:00 pm · 6 seats"       the dinner page
 //   seatLine        "2 of 6 seats taken" ("4 seats left" before the seat count is known)
-//   familyLine      "Okafor family · Under a mile"           a family card
+//   awayLabel       "About 1 mi away", "In your building"      the map's dish card
+//   cookLine        "Mama Ngozi · Nigerian"
+//   dinnerLine      "Dinner Friday · 7 pm · 2 seats left"
+//   spotLabel       "Jollof Rice by Mama Ngozi, under a mile away"   a map circle, for VoiceOver
+//   clusterTitle    "3 dishes in your building"
+//   newRequests, youLabel   the sun dot on "You" and "You, 1 new request"
 //   hostLine        "Hosted by Shreya · the Pawar family"
 //   privacyNote     "Rajani’s video and voice stay in the family. You’ll see the story and the recipe text."
 //   whoComing       the "Who's coming" chips
@@ -86,10 +91,57 @@ export function hostLine(hostName: string, familyName: string | null | undefined
   return family ? `${host} · ${family}` : host;
 }
 
-/** A family card's line: "Okafor family · Under a mile" (no leading "The", so it fits one line). */
-export function familyLine(familyName: string, distanceLabel: string): string {
-  const family = familyName.trim().replace(/^The /, '');
-  return [family, distanceLabel.trim()].filter(Boolean).join(' · ');
+// ---- The map ----
+
+const BUILDING = /^in your building$/i;
+
+/** "About 1 mi away", "Under a mile away"; "In your building" stays as it is. */
+export function awayLabel(distanceLabel: string): string {
+  const d = distanceLabel.trim();
+  return !d || BUILDING.test(d) ? d : `${d} away`;
+}
+
+const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
+
+/** "Mama Ngozi · Nigerian", or whichever of the two there is. */
+export function cookLine(cookName: string, culture: string | null | undefined): string {
+  return [cookName.trim(), (culture ?? '').trim()].filter(Boolean).join(' · ');
+}
+
+/** "Dinner Friday · 7 pm · 2 seats left". */
+export function dinnerLine(startsAt: number, seatsLeft: number, now: number): string {
+  return `${cardWhen(startsAt, now)} · ${seatLine(null, seatsLeft)}`;
+}
+
+type SpotDish = { dish: string; cookName: string; distanceLabel: string };
+
+const byCook = (r: SpotDish) => (r.cookName.trim() ? `${r.dish} by ${r.cookName.trim()}` : r.dish);
+
+/** "Jollof Rice by Mama Ngozi, under a mile away"; a shared circle: "3 dishes, in your building: A, B and C". */
+export function spotLabel(members: readonly SpotDish[]): string {
+  if (!members.length) return '';
+  const where = lowerFirst(awayLabel(members[0].distanceLabel));
+  if (members.length === 1) return [byCook(members[0]), where].filter(Boolean).join(', ');
+  const names = members.map(byCook);
+  const list = `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]}`;
+  return `${plural(members.length, 'dish', 'dishes')}${where ? `, ${where}` : ''}: ${list}`;
+}
+
+/** Open requests to join the dinners I host that are still ahead: the sun dot on "You". */
+export function newRequests(mine: readonly Pick<Dinner, 'isHost' | 'startsAt' | 'status' | 'requests'>[], now: number): number {
+  return mine
+    .filter((d) => d.isHost && d.startsAt > now && d.status !== 'cancelled')
+    .reduce((n, d) => n + (d.requests ?? []).filter((r) => r.status === 'pending').length, 0);
+}
+
+/** "You", "You, 1 new request" (the "You" dot, for VoiceOver). */
+export function youLabel(requests: number): string {
+  return requests ? `You, ${plural(requests, 'new request')}` : 'You';
+}
+
+/** Above a shared circle's dishes: "3 dishes in your building", "2 dishes about 1 mi away". */
+export function clusterTitle(count: number, distanceLabel: string): string {
+  return [plural(count, 'dish', 'dishes'), lowerFirst(awayLabel(distanceLabel))].filter(Boolean).join(' ');
 }
 
 /** "Rajani’s", "James’". */

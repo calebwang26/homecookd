@@ -1,5 +1,5 @@
 // Kid (learner) tabs: Home | Recipes | Community | Ask, on the bible's floating pill tab bar.
-// Community ("Near you") is one screen; its recipe and dinner pages open on the root stack.
+// Community ("Dishes near you", the map) is one screen; its recipe and dinner pages open on the root stack.
 // Recipes is a stack (list -> dish); on a dish the tab bar fades away so the page keeps the bible
 // layout (sticky "Start cooking"), and comes back on the list. While the phone is lent, each tab
 // shows "Cooking as Grandma" at the top of its own content (ActingAsBar).
