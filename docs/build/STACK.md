@@ -72,7 +72,9 @@ HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-o
   Checks the key once with Supabase `GET /family` and mirrors the family. Errors are meant to be shown as they are;
   `"This phone was signed out."` means clear the token and sign in again. `sessions.end` signs out.
 - `recipes.list`, `recipes.get({ recipeId })` (each with `cookName`; stories and tips are empty until the cook opts
-  in), `recipes.setMemoriesOptIn({ recipeId, optIn })` (the recipe's cook only; re-indexes Moss)
+  in), `recipes.setMemoriesOptIn({ recipeId, optIn })` (the recipe's cook only; re-indexes Moss).
+  The `recipeJsonUrl` file still has every story and tip, so the kid's library strips them itself when a row has no
+  `memories` and no opt-in (`app/src/lib/familyLibrary.ts`).
 - `jobs.create({ uploadPath, source })` → `{ jobId, recipeId }` (cook only; adds a `processing` recipe card),
   `jobs.forFamily` (live progress)
 - `questions.forRecipe({ recipeId })`, `questions.openForCook` (questions about this cook's recipes),

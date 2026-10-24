@@ -3,9 +3,11 @@
 // copy of the app reads, so the library is library.json (or the bundled copy) plus the family's
 // finished dishes that aren't in it yet.
 //   familyEntries(rows, profiles)   recipes.list rows -> library entries (ready ones only)
+//   withheldIds(rows)               those dishes whose stories and tips this viewer may not see
+//   withoutStories(recipe)          a recipe without the cook's stories and tips
 //   mergeLibrary(base, family)      the family's new dishes first, then library.json's, one per id
 // Pure, so scripts/test-library.mjs runs it in Node.
-import type { LibraryEntry } from './types';
+import type { LibraryEntry, Recipe } from './types';
 
 /** The fields of a Convex `recipes.list` row the library reads. */
 export type FamilyRecipe = {
@@ -17,12 +19,33 @@ export type FamilyRecipe = {
   libraryId?: string;
   recipeJsonUrl?: string;
   coverUrl?: string;
+  /** The cook's yes to sharing this video's stories and tips (recipes.setMemoriesOptIn). */
+  memoriesOptIn?: boolean;
+  /** Those stories and tips. recipes.list sends them only to the cook, or to everyone after her yes. */
+  memories?: readonly { kind: 'story' | 'tip'; text: string }[];
 };
 
 type Person = { name: string; relation: string | null };
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 const https = (s: unknown) => (typeof s === 'string' && /^https:\/\//.test(s.trim()) ? s.trim() : null);
+
+/**
+ * The rows the library lists, in `rows` order, with their library id and recipe.json: ready ones with
+ * a library id and an https recipe.json, the first (newest) per id.
+ */
+function listedRows(rows: readonly FamilyRecipe[]): { row: FamilyRecipe; id: string; url: string }[] {
+  const out: { row: FamilyRecipe; id: string; url: string }[] = [];
+  const seen = new Set<string>();
+  for (const row of rows) {
+    const id = typeof row.libraryId === 'string' ? row.libraryId.trim() : '';
+    const url = https(row.recipeJsonUrl);
+    if (row.status !== 'ready' || !id || !url || seen.has(id)) continue;
+    seen.add(id);
+    out.push({ row, id, url });
+  }
+  return out;
+}
 
 /**
  * The family's finished dishes as library entries, in `rows` order (recipes.list: newest first),
@@ -32,16 +55,10 @@ const https = (s: unknown) => (typeof s === 'string' && /^https:\/\//.test(s.tri
  * profile with the cook's name.
  */
 export function familyEntries(rows: readonly FamilyRecipe[], people: readonly Person[] = []): LibraryEntry[] {
-  const out: LibraryEntry[] = [];
-  const seen = new Set<string>();
-  for (const r of rows) {
-    const id = typeof r.libraryId === 'string' ? r.libraryId.trim() : '';
-    const url = https(r.recipeJsonUrl);
-    if (r.status !== 'ready' || !id || !url || seen.has(id)) continue;
-    seen.add(id);
+  return listedRows(rows).map(({ row: r, id, url }) => {
     const cook = typeof r.cookName === 'string' ? r.cookName.trim() : '';
     const person = cook ? people.find((p) => norm(p.name) === norm(cook)) : undefined;
-    out.push({
+    return {
       id,
       title: (typeof r.title === 'string' && r.title.trim()) || 'A family recipe',
       cook_name: cook || 'Family',
@@ -50,9 +67,48 @@ export function familyEntries(rows: readonly FamilyRecipe[], people: readonly Pe
       tags: [],
       sample: false,
       recipe_url: url,
-    });
-  }
-  return out;
+    };
+  });
+}
+
+/**
+ * Whether this viewer may see the dish's stories and tips: the cook said yes, or recipes.list sent
+ * them anyway, which it does only to the cook (convex/recipes.ts forViewer). A cook whose video has
+ * none has nothing to lose.
+ */
+export function storiesShared(row: Pick<FamilyRecipe, 'memoriesOptIn' | 'memories'>): boolean {
+  return row.memoriesOptIn === true || (Array.isArray(row.memories) && row.memories.length > 0);
+}
+
+/**
+ * The listed dishes (familyEntries) whose stories and tips this viewer may not see. Convex holds back
+ * only its own copy: the recipe.json the library loads from recipeJsonUrl has them all, so the library
+ * takes them out (withoutStories) before it caches the recipe, whichever copy of the dish it loads.
+ */
+export function withheldIds(rows: readonly FamilyRecipe[]): Set<string> {
+  return new Set(listedRows(rows).flatMap(({ row, id }) => (storiesShared(row) ? [] : [id])));
+}
+
+/**
+ * The recipe without what recipes.list holds back as `memories` (convex/lib/recipeJson.ts): its
+ * stories, special moments and step tips, the steps' links to them, and the intro, which the pipeline
+ * writes from the stories. Everything else stays. The same object when it has none of them.
+ */
+export function withoutStories(recipe: Recipe): Recipe {
+  const steps = recipe.steps ?? [];
+  const none =
+    !recipe.intro &&
+    !recipe.stories?.length &&
+    !recipe.special?.length &&
+    steps.every((s) => !s.tip && !s.story_ids?.length && !s.special_ids?.length);
+  if (none) return recipe;
+  return {
+    ...recipe,
+    intro: '',
+    stories: [],
+    special: [],
+    steps: steps.map((s) => ({ ...s, story_ids: [], special_ids: [], tip: null })),
+  };
 }
 
 /**
