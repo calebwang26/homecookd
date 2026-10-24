@@ -8,7 +8,7 @@ import { File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 import { webGetItem, webSetItem } from './legacyKeys';
 
-import { FAMILY_CODE, UPLOAD_URL, uploadsConfigured } from './uploads';
+import { signerHeaders, UPLOAD_URL, uploadsConfigured } from './uploads';
 
 const TIMEOUT_MS = 15000;
 
@@ -20,11 +20,7 @@ export async function requestDelete(id: string): Promise<void> {
   try {
     const res = await fetch(UPLOAD_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        'X-Edible-Family': FAMILY_CODE,
-      },
+      headers: await signerHeaders(),
       body: JSON.stringify({ action: 'delete', recipe_id: id }),
       signal: controller.signal,
     });
@@ -55,11 +51,7 @@ export async function requestCancel(jobId: string): Promise<void> {
   try {
     const res = await fetch(UPLOAD_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        'X-Edible-Family': FAMILY_CODE,
-      },
+      headers: await signerHeaders(),
       body: JSON.stringify({ action: 'cancel', job_id: jobId }),
       signal: controller.signal,
     });

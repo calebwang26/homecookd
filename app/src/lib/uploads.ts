@@ -12,15 +12,30 @@ import { webGetItem, webSetItem } from './legacyKeys';
 
 import { api, ApiError } from './api';
 import { cacheBuster, fetchJson } from './http';
+import { convexSession, convexSignedIn } from './live/convex';
 
-// Public signer endpoint (default for store builds without app/.env). Uploads also need the shared
-// FAMILY_CODE, which is deliberately not defaulted: baked into a store build, it would put everyone
-// in the demo family (session.tsx). TODO: let the signer accept the signed-in family's code.
+// Public signer endpoint (default for store builds without app/.env). The signer lets in a phone with
+// a Convex session (it checks the token with Convex). The shared FAMILY_CODE is only for dev builds
+// that still set it, and is deliberately not defaulted: baked into a store build, it would put
+// everyone in the demo family (session.tsx).
 export const UPLOAD_URL = (process.env.EXPO_PUBLIC_UPLOAD_URL || 'https://edible-upload-vyatb2n6oq-uw.a.run.app').trim();
-export const FAMILY_CODE = (process.env.EXPO_PUBLIC_FAMILY_CODE ?? '').trim();
+const FAMILY_CODE = (process.env.EXPO_PUBLIC_FAMILY_CODE ?? '').trim();
 
-export function uploadsConfigured(): boolean {
-  return !!UPLOAD_URL && !!FAMILY_CODE;
+/** Screens pass the signed-in person's id from useSession() (the module snapshot can lag a render). */
+export function uploadsConfigured(profileId?: string | null): boolean {
+  return !!UPLOAD_URL && (!!FAMILY_CODE || convexSignedIn(profileId ?? undefined));
+}
+
+/** Headers for a signer call: the Convex session when there is one, the family code when it's set. */
+export async function signerHeaders(): Promise<Record<string, string>> {
+  const token = convexSignedIn() ? await convexSession() : null;
+  if (!token && !FAMILY_CODE) throw new Error('Please sign in again.');
+  return {
+    'Content-Type': 'application/json',
+    Accept: 'application/json',
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    ...(FAMILY_CODE ? { 'X-Edible-Family': FAMILY_CODE } : {}),
+  };
 }
 
 /** Background uploads need the native file system; the web build can only preview the form. */
@@ -281,11 +296,7 @@ export async function startUpload(input: StartUploadInput): Promise<StoredJob> {
   try {
     const res = await fetch(UPLOAD_URL, {
       method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Accept: 'application/json',
-        'X-Edible-Family': FAMILY_CODE,
-      },
+      headers: await signerHeaders(),
       body: JSON.stringify({ title: input.title, cook_name: input.cook_name, relation: input.relation, files }),
       signal: controller.signal,
     });

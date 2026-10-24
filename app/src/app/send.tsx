@@ -124,7 +124,7 @@ export default function SendScreen() {
 
   let helper = '';
   let blocked = false;
-  if (!phoneOnly && !uploadsConfigured()) {
+  if (!phoneOnly && !uploadsConfigured(me?.id)) {
     helper = 'Sending isn’t set up in this build yet.';
     blocked = true;
   } else if (selected.length === 0) {

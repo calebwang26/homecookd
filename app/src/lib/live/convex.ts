@@ -154,6 +154,11 @@ export async function call<T>(
 type ConvexSession = { sessionToken: string; familyId: string; personId: string; role: 'cook' | 'kid' };
 let session: { key: string; run: Promise<ConvexSession | null> } | null = null;
 
+/** True when this phone can get a real Convex session (not the stub): the upload signer accepts it. */
+export function convexSignedIn(profileId = getSession()?.me?.id): boolean {
+  return !stubbed && !!profileId;
+}
+
 /**
  * This phone's Convex session for the current person, or null before sign-in. Hooks pass `profileId`
  * from useSession(): the module snapshot (getSession) is published in SessionProvider's effect, which
