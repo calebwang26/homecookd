@@ -1,10 +1,10 @@
 // The recording screen's rules, pure (node scripts/test-recording-ui.mjs): the line under the big
 // button in each of homie's phases, when filming starts by itself, the pot for the voice service's
-// state, and what "not now" sends.
+// state, what "not now" sends, what the mic sends while the phone plays sound (half duplex), and how
+// long the wrap-up may sit still before the app ends the recording without homie.
 import type { HomieState } from '@/lib/homie/store';
-import type { CookWords, Line } from '@/lib/homie/strings';
 
-import type { RecordWords } from './words';
+import type { Line, RecordWords } from './words';
 
 export type RecordPhase = 'connecting' | 'intro' | 'recording' | 'wrapping_up' | 'ended';
 export type ServerState = 'listening' | 'thinking' | 'speaking' | 'quiet';
@@ -19,17 +19,17 @@ export type RecordingView = {
 };
 
 /** Before filming the button rests under "homie is saying hello"; while filming it is the stop button. */
-export function recordingView(phase: RecordPhase, w: { cook: CookWords; record: RecordWords }): RecordingView {
+export function recordingView(phase: RecordPhase, w: RecordWords): RecordingView {
   switch (phase) {
     case 'connecting':
-      return { line: w.cook.line('gettingReady'), live: false };
+      return { line: w.line('gettingReady'), live: false };
     case 'intro':
-      return { line: w.cook.line('sayingHello'), live: false };
+      return { line: w.line('sayingHello'), live: false };
     case 'recording':
-      return { line: w.record.line('stop'), live: true };
+      return { line: w.line('stop'), live: true };
     case 'wrapping_up':
     case 'ended':
-      return { line: w.cook.line('wrappingUp'), live: false };
+      return { line: w.line('wrappingUp'), live: false };
   }
 }
 
@@ -58,4 +58,36 @@ export function notNowMessage(kind: AskKind): { type: 'not_now' } | { type: 'tex
 export function askLine(ask: Pick<Ask, 'text' | 'textEn'>): Line {
   const en = ask.textEn?.trim();
   return { text: ask.text, en: en && en !== ask.text.trim() ? en : null };
+}
+
+/**
+ * Half duplex (docs/build/STACK.md): while homie is lit or speaking, or anything plays on the phone's
+ * shared player (homie's say, a clip), the voice service gets silence instead of the mic, so it never
+ * hears the phone's own sound as her words. The recorder itself keeps running.
+ */
+export function micQuiet(homie: HomieState, player: { key: string | null; phase: string }): boolean {
+  if (homie === 'lit' || homie === 'speaking') return true;
+  return !!player.key && (player.phase === 'loading' || player.phase === 'playing');
+}
+
+const silences = new Map<number, ArrayBuffer>();
+
+/** Zeros the size of a mic chunk: what the socket gets instead of the mic while the phone plays sound. */
+export function silence(bytes: number): ArrayBuffer {
+  let s = silences.get(bytes);
+  if (!s) {
+    s = new ArrayBuffer(bytes);
+    silences.set(bytes, s);
+  }
+  return s;
+}
+
+/** homie's wrap-up with nothing moving (no phase, question or line) for this long has stalled. */
+export const WRAP_STALL_MS = 120_000;
+/** ...or this long once the voice service reported an error or its connection was lost. */
+export const WRAP_TROUBLE_MS = 20_000;
+
+/** How long the wrap-up may sit still before the app ends the recording itself (live.endRecording). */
+export function wrapStallMs(trouble: boolean): number {
+  return trouble ? WRAP_TROUBLE_MS : WRAP_STALL_MS;
 }

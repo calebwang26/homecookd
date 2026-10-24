@@ -2,40 +2,48 @@
 // kid's question out loud, with no buttons. The peach wash and warm glow of the recording screen, a
 // small cream × top-left, and one centred column (components/record/RecordWash COLUMN): "Shreya ने
 // विचारलं", the question big in her language (questions.textForCook, else what homie said when it
-// translated it), the kid's English small under it marked "Translated", then homie big and glowing,
-// then "बोला, मी ऐकतोय" / "Just answer out loud". homie reads the question when it opens (lib/live/speak,
-// labelled "AI voice"); then it listens, sends her voice note when she stops, and says and shows
-// "Shreya ला पाठवलं" before the screen closes by itself (components/record/useWalkie). A tap on the
-// question reads it again. The corner pot is hidden here: the big one is homie.
-// Dev aid (web screenshots only): /answer/preview?lang=mr[&step=listening|sending|sent] shows a
-// made-up question from Shreya, standing still.
+// translated it), the kid's English small under it marked "Translated", then homie big and glowing
+// (the glow breathes), then five green listening bars that move with her voice and "बोला, मी ऐकतोय" /
+// "Just answer out loud". homie reads the question when it opens (lib/live/speak, labelled "AI
+// voice"; a translated question in her language even before people.me has loaded); then it listens,
+// sends her voice note when she stops, and says "Shreya ला पाठवलं" while a check pops in, before the
+// screen closes by itself (components/record/useWalkie). A tap on the question reads it again. The
+// corner pot is hidden here: the big one is homie.
+// A share ask (questions.kind 'share': someone wants her dish on the Community map) comes the same
+// way: "Shreya ने विचारलं", the ask in her language, and her spoken yes or no (a short word is enough)
+// goes as the voice note; the server reads it, and only a clear yes shares the dish.
+// Dev aid (web screenshots only): /answer/preview?lang=mr[&step=listening|sending|sent][&kind=share]
+// shows a made-up question from Shreya, standing still.
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import Animated, { FadeIn, FadeInDown, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BiLine } from '@/components/record/BiLine';
 import { GlowHomie } from '@/components/record/GlowHomie';
+import { ListeningBars } from '@/components/record/ListeningBars';
 import { COLUMN, RecordWash, WarmGlow } from '@/components/record/RecordWash';
 import { useWalkie, type WalkieStep } from '@/components/record/useWalkie';
-import { recordWords } from '@/components/record/words';
+import { questionFit, questionLines } from '@/components/record/walkieLogic';
+import { recordWords, type Line, type RecordWords } from '@/components/record/words';
 import { CheckIcon, CloseIcon, IconButton, Txt, useToast } from '@/components/ui';
 import { useHomieScreen } from '@/lib/homie/hooks';
 import { potState, sayPhase, speakingLabel } from '@/lib/homie/logic';
 import { useHomie } from '@/lib/homie/store';
-import { cookWords, type Line } from '@/lib/homie/strings';
 import { answerQuestion, useCookQuestions, useMe, type CookQuestion } from '@/lib/live/convex';
 import { speak, stopSpeaking } from '@/lib/live/speak';
 import { useNowPlaying } from '@/lib/media';
 import { useSession } from '@/lib/session';
 import { colors, motion, space } from '@/theme/tokens';
 
-const HOMIE_SIZE = 200;
-/** Read the question even if people.me never answers (her language then reads as English). */
+/** The × (IconButton's 48 pt): the column starts below it. */
+const CLOSE_SIZE = 48;
+/** Read the question even if people.me never answers (an English question then reads in English). */
 const LANGUAGE_WAIT_MS = 2000;
 const MISSING_MS = 5000;
 const STEPS: readonly WalkieStep[] = ['waiting', 'reading', 'listening', 'sending', 'sent', 'retry', 'nomic', 'nomicHere'];
+const TRANSLATED_LABEL = 'Translated · AI voice';
 
 const PREVIEW: CookQuestion = {
   _id: 'preview',
@@ -47,14 +55,27 @@ const PREVIEW: CookQuestion = {
   askedByName: 'Shreya',
 };
 const PREVIEW_EN: CookQuestion = { ...PREVIEW, textForCook: undefined };
+// convex/shareRequests.ts shareQuestion's words, and a draft of their Marathi (Track F translates the real one).
+const PREVIEW_SHARE: CookQuestion = {
+  ...PREVIEW,
+  stepOrder: undefined,
+  kind: 'share',
+  text: 'Shreya wants to put your Kanda Poha on the map for neighbors. They’d see the recipe and one line you said, never your video. Is that okay?',
+  textForCook: 'श्रेयाला तुमचे कांदा पोहे शेजाऱ्यांसाठी नकाशावर ठेवायचे आहेत. त्यांना रेसिपी आणि तुमचं एक वाक्य दिसेल, तुमचा व्हिडिओ कधीच नाही. चालेल का?',
+};
 
 function goBack() {
   if (router.canGoBack()) router.back();
   else router.replace('/parent/home');
 }
 
+function previewQuestion(lang?: string, kind?: string): CookQuestion {
+  if (kind === 'share') return lang === 'mr' ? PREVIEW_SHARE : { ...PREVIEW_SHARE, textForCook: undefined };
+  return lang === 'mr' ? PREVIEW : PREVIEW_EN;
+}
+
 export default function AnswerScreen() {
-  const { id, lang: previewLang, step: previewStep } = useLocalSearchParams<{ id: string; lang?: string; step?: string }>();
+  const { id, lang: previewLang, step: previewStep, kind: previewKind } = useLocalSearchParams<{ id: string; lang?: string; step?: string; kind?: string }>();
   const preview = __DEV__ && Platform.OS === 'web' && id === 'preview';
   const insets = useSafeAreaInsets();
   const reduce = useReducedMotion();
@@ -65,7 +86,7 @@ export default function AnswerScreen() {
   useHomieScreen({ hidden: true });
 
   // Kept once seen: an answered question leaves the open list.
-  const found = preview ? (previewLang === 'mr' ? PREVIEW : PREVIEW_EN) : (questions.find((x) => x._id === id) ?? null);
+  const found = preview ? previewQuestion(previewLang, previewKind) : (questions.find((x) => x._id === id) ?? null);
   const [kept, setKept] = useState<CookQuestion | null>(null);
   if (found && found !== kept) setKept(found);
   const q = found ?? kept;
@@ -82,8 +103,7 @@ export default function AnswerScreen() {
     return () => clearTimeout(t);
   }, []);
   const lang = (preview && previewLang) || (convexMe?.language ?? 'en');
-  const w = useMemo(() => cookWords(lang), [lang]);
-  const rw = useMemo(() => recordWords(lang), [lang]);
+  const w = useMemo(() => recordWords(lang), [lang]);
   const kid = q?.askedByName?.trim() || null;
 
   const h = useHomie();
@@ -93,14 +113,17 @@ export default function AnswerScreen() {
 
   // What homie said when it translated the question itself (no textForCook yet).
   const [spoken, setSpoken] = useState<string | null>(null);
+  const herLanguage = convexMe?.language;
   const read = useCallback(async () => {
     if (!q) return { via: 'none' as const };
+    // Already in her language: said in it. Unloaded people.me leaves `lang` unset: /speak then uses
+    // the language the server has for her.
+    if (q.textForCook?.trim()) return speak(q.textForCook, { lang: herLanguage, label: TRANSLATED_LABEL, profileId: me?.id });
     if (lang === 'en') return speak(q.text, { lang: 'en', profileId: me?.id });
-    if (q.textForCook) return speak(q.textForCook, { lang, label: 'Translated · AI voice', profileId: me?.id });
-    const said = await speak(q.text, { lang, translate: true, label: 'Translated · AI voice', profileId: me?.id });
+    const said = await speak(q.text, { lang, translate: true, label: TRANSLATED_LABEL, profileId: me?.id });
     if (said.via === 'homie' && said.text && said.text !== q.text) setSpoken(said.text);
     return said;
-  }, [q, lang, me?.id]);
+  }, [q, lang, herLanguage, me?.id]);
 
   const close = useCallback(
     (failed?: boolean) => {
@@ -114,6 +137,7 @@ export default function AnswerScreen() {
 
   const walkie = useWalkie({
     ready: !preview && !!q && (!!convexMe || waitedForLanguage),
+    kind: q?.kind,
     talking,
     read,
     send: (note) => answerQuestion(q!._id, { audioUri: note.uri, contentType: note.contentType }),
@@ -123,18 +147,23 @@ export default function AnswerScreen() {
   });
   const step: WalkieStep = preview && STEPS.includes(previewStep as WalkieStep) ? (previewStep as WalkieStep) : preview ? 'listening' : walkie.step;
 
-  const question = q ? (q.textForCook ?? spoken ?? q.text) : null;
-  const translated = !!q && question !== q.text;
+  const lines = q ? questionLines(q, spoken) : null;
+  const fit = questionFit(lines?.main ?? '');
   const asked = w.text('kidAsked', { kid: kid ?? undefined });
-  const label = labelFor(step, w, rw, kid);
+  const label = labelFor(step, w, kid);
   const homieState = talking ? voice : step === 'sending' ? 'thinking' : step === 'listening' ? 'listening' : 'off';
   const enter = (i: number) => (reduce ? FadeIn.duration(motion.reducedFadeMs) : FadeInDown.duration(380).delay(i * 60));
+  // The column clears the × (a long question would otherwise reach it) and scrolls if it must. The
+  // same room at the bottom keeps a short one centred on the screen, as in the mockup.
+  const top = Math.max(space.topDetail, insets.top + 4);
+  const clear = top + CLOSE_SIZE + 12;
+  const room = { paddingTop: clear, paddingBottom: fit.compact ? Math.max(24, insets.bottom + 16) : Math.max(clear, insets.bottom + 16) };
 
   return (
     <View style={styles.page}>
       <RecordWash />
-      {q ? (
-        <View style={styles.column}>
+      {q && lines ? (
+        <ScrollView contentContainerStyle={[styles.column, room]} bounces={false} showsVerticalScrollIndicator={false}>
           <Animated.View entering={enter(0)} style={styles.words}>
             <Txt variant="label" size={18} weight={600} color={colors.peachInk} align="center">
               {asked}
@@ -142,67 +171,81 @@ export default function AnswerScreen() {
             <Pressable
               onPress={walkie.again}
               accessibilityRole="button"
-              accessibilityLabel={question ?? ''}
+              accessibilityLabel={lines.main}
               accessibilityHint="homie reads it again"
               disabled={preview}>
-              <Txt variant="label" size={36} weight={700} leading={1.3} color={colors.ink} align="center">
-                {question}
+              <Txt variant="label" size={fit.font} weight={700} leading={1.3} color={colors.ink} align="center">
+                {lines.main}
               </Txt>
             </Pressable>
-            {translated ? (
+            {/* Gemini's or homie's translation of the kid's words: AI words are always labelled. */}
+            {lines.en ? (
               <Txt variant="meta" size={15} color={colors.muted} align="center">
-                Translated · “{q.text}”
+                Translated · “{lines.en}”
               </Txt>
             ) : null}
           </Animated.View>
-          <Animated.View entering={enter(1)} style={styles.hero}>
-            <WarmGlow box={HOMIE_SIZE} />
-            <GlowHomie size={HOMIE_SIZE} state={homieState} level={walkie.level} label={talking ? speakingLabel(h, now.key) : null} />
+          <Animated.View entering={enter(1)} style={[styles.hero, { width: fit.homie, height: fit.homie }]}>
+            <WarmGlow box={fit.homie} />
+            <GlowHomie size={fit.homie} state={homieState} level={walkie.level} label={talking ? speakingLabel(h, now.key) : null} breathe={step !== 'sent'} />
           </Animated.View>
           <Animated.View key={step === 'sent' ? 'sent' : 'ask'} entering={enter(2)} style={[styles.label, (step === 'reading' || step === 'waiting') && styles.soft]} accessibilityLiveRegion="polite">
-            {step === 'sent' ? (
-              <View style={styles.check}>
-                <CheckIcon size={22} color={colors.card} />
-              </View>
-            ) : null}
+            {step === 'sent' ? <SentCheck /> : null}
+            {step === 'listening' ? <ListeningBars level={walkie.level} color={colors.green} /> : null}
             {step === 'sending' ? <ActivityIndicator color={colors.green} /> : null}
             <BiLine line={label} size={26} weight={700} enSize={15} enColor={colors.muted} color={step === 'nomic' || step === 'nomicHere' || step === 'retry' ? colors.danger : colors.ink} />
           </Animated.View>
-        </View>
+        </ScrollView>
       ) : (
-        <View style={styles.column}>{missing ? <BiLine line={w.line('answered')} size={22} /> : <ActivityIndicator color={colors.green} />}</View>
+        <View style={[styles.column, styles.fill]}>{missing ? <BiLine line={w.line('answered')} size={22} /> : <ActivityIndicator color={colors.green} />}</View>
       )}
-      <View style={[styles.top, { paddingTop: Math.max(space.topDetail, insets.top + 4) }]} pointerEvents="box-none">
+      <View style={[styles.top, { paddingTop: top }]} pointerEvents="box-none">
         <IconButton icon={<CloseIcon size={20} color={colors.ink} />} accessibilityLabel="Close" onPress={goBack} />
       </View>
     </View>
   );
 }
 
+/** The check next to "Sent to Shreya": it pops in (a spring). Reduce Motion: it just fades in with the line. */
+function SentCheck() {
+  const reduce = useReducedMotion();
+  const pop = useSharedValue(reduce ? 1 : 0);
+  useEffect(() => {
+    if (!reduce) pop.set(withSpring(1, { damping: 10, stiffness: 240, mass: 0.8 }));
+  }, [reduce, pop]);
+  const style = useAnimatedStyle(() => ({ opacity: Math.min(1, pop.value * 2), transform: [{ scale: 0.3 + 0.7 * pop.value }] }));
+  return (
+    <Animated.View style={[styles.check, style]}>
+      <CheckIcon size={22} color={colors.card} />
+    </Animated.View>
+  );
+}
+
 /** The line under homie for each step. */
-function labelFor(step: WalkieStep, w: ReturnType<typeof cookWords>, rw: ReturnType<typeof recordWords>, kid: string | null): Line {
+function labelFor(step: WalkieStep, w: RecordWords, kid: string | null): Line {
   switch (step) {
     case 'sending':
-      return rw.line('sendingNow');
+      return w.line('sendingNow');
     case 'sent':
       return w.line('sentTo', { kid: kid ?? undefined });
     case 'retry':
-      return rw.line('couldntSend');
+      return w.line('couldntSend');
     case 'nomic':
-      return rw.line('micOff');
+      return w.line('micOff');
     case 'nomicHere':
-      return rw.line('noMicHere');
+      return w.line('noMicHere');
     default:
-      return rw.line('listening');
+      return w.line('listening');
   }
 }
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colors.page },
   top: { position: 'absolute', left: 0, right: 0, top: 0, paddingHorizontal: space.gutter, flexDirection: 'row' },
-  column: { flex: 1, paddingHorizontal: COLUMN.side, alignItems: 'center', justifyContent: 'center' },
+  column: { flexGrow: 1, paddingHorizontal: COLUMN.side, alignItems: 'center', justifyContent: 'center' },
+  fill: { flex: 1 },
   words: { alignItems: 'center', gap: 8 },
-  hero: { marginTop: COLUMN.toHero, width: HOMIE_SIZE, height: HOMIE_SIZE },
+  hero: { marginTop: COLUMN.toHero },
   label: { marginTop: COLUMN.toLabel, alignItems: 'center', gap: 10 },
   soft: { opacity: 0.45 },
   check: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },

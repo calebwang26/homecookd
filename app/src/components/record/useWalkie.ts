@@ -1,14 +1,14 @@
 // The walkie-talkie's flow (app/answer/[id], Caleb's v2), with no buttons:
 //   reading    homie reads the kid's question aloud in her language
 //   listening  once that has played, the recorder runs with metering (walkieLogic): ~2 s quiet after
-//              at least ~1 s of talking ends her answer
+//              at least ~1 s of talking ends her answer (a share ask's yes or no: a short word)
 //   sending    the voice note goes (questions.answer)
 //   sent       homie says and shows "Shreya ला पाठवलं", then the screen closes by itself
 // No answer in ~15 s: homie asks once more, then the screen closes with nothing sent. A failed send
 // listens again once; a second failure closes with a toast. `again()` (a tap on the question) reads it
 // again. `nomic`: the microphone is off (or this isn't a phone): the screen says so.
 //
-//   const walkie = useWalkie({ ready, talking, read, send, thank, close });
+//   const walkie = useWalkie({ ready, kind, talking, read, send, thank, close });
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { recordingSupported, useVoiceRecorder, type VoiceRecording } from '@/lib/voice';
@@ -27,6 +27,8 @@ const RETRY_PAUSE_MS = 1200;
 type Props = {
   /** The question and her language are known. */
   ready: boolean;
+  /** The question's kind: 'share' (a yes or no to the Community map) takes a short answer. */
+  kind?: string | null;
   /** homie is lit or speaking (the pot's state). */
   talking: boolean;
   /** homie reads the question; resolves once its voice starts (or didn't: 'none'). */
@@ -62,7 +64,7 @@ export function useWalkie(props: Props) {
     const ok = await latest.current.rec.start();
     if (stepRef.current !== 'listening') return; // a tap on the question meanwhile (the effect below stops the recorder)
     if (!ok) return go(recordingSupported() ? 'nomic' : 'nomicHere');
-    listen.current = startListening(Date.now());
+    listen.current = startListening(Date.now(), latest.current.props.kind);
   }, [go]);
 
   const readIt = useCallback(async () => {

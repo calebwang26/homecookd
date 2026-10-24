@@ -11,6 +11,7 @@
 //   invalidateConvexRecipes()                            after the family's recipe list changes (lib/recipes.ts)
 //   const { recordingId } = await startRecording({ dish, forKidId, language?, source })   live.startRecording
 //   useRecording(recordingId)                            live.recording, live (the recording screen)
+//   await endRecording(recordingId)                      live.endRecording: the stop button with no voice line
 //   useMe()  /  await setLanguage('mr')                  people.me (live) / people.setLanguage
 //   await convexPersonIdByName('Shreya')                 a family member's Convex id, from rows that name them
 //   await libraryIdOf(recipeId)                          a Convex recipe's library id (recipes.list)
@@ -19,7 +20,8 @@
 // are deployed, Convex's "Could not find public function" gives their stub value without moving every
 // other call to the stub. The writes (live.startRecording, people.setLanguage) are "strict": a missing
 // function throws, so the screen says it didn't work instead of pretending (a stub recording has no
-// glasses video behind it, and a stub language isn't saved anywhere).
+// glasses video behind it, and a stub language isn't saved anywhere). live.endRecording is soft, but
+// its stub only ends a stub recording: a live one answers "not ended", and the stop button falls back.
 //
 // Functions are called by name, so the app builds before Track A's convex/ code exists. Until it is
 // deployed (no EXPO_PUBLIC_CONVEX_URL, or Convex says "Could not find public function"), every call
@@ -52,6 +54,13 @@ export type CookQuestion = {
   askedBy?: string;
   /** The question in the cook's language, when it isn't English (Track F translates it). */
   textForCook?: string;
+  /**
+   * Unset: a kid's cooking question. 'share' (Community, convex/shareRequests.ts): someone in the
+   * family asks her to put `shareRecipeId` on the map; only her clear yes shares it. Any other value
+   * from a newer server reads as a plain question.
+   */
+  kind?: string;
+  shareRecipeId?: string;
   answer?: { translation?: string };
 };
 
@@ -259,6 +268,23 @@ export async function startRecording(input: { dish?: string; forKidId?: string; 
   return call('mutation', 'live:startRecording', { sessionToken, ...present(input) }, () => stub.startRecording(input), { strict: true });
 }
 
+/**
+ * live.endRecording: ends her recording without the voice service ('recording' or 'wrapping_up' ->
+ * 'ended'), so the glasses' computer finishes and uploads the video even when homie's line is down.
+ * Idempotent. True once Convex says so; false when it couldn't (offline, not deployed yet, refused).
+ * A stub recording ends on the stub.
+ */
+export async function endRecording(recordingId: string): Promise<boolean> {
+  try {
+    const sessionToken = await token();
+    const r = await call<{ ok: boolean }>('mutation', 'live:endRecording', { sessionToken, recordingId }, () => stub.endRecording(recordingId), { soft: true });
+    return !!r?.ok;
+  } catch (e) {
+    console.warn('[convex] live.endRecording', String(e).slice(0, 160));
+    return false;
+  }
+}
+
 /** The recording, live: null while it loads, or when it isn't this family's. */
 export function useRecording(recordingId: string | null | undefined): LiveRecording | null {
   const id = recordingId ?? '';
@@ -428,6 +454,14 @@ const stub = (() => {
   const emitQs = () => qL.forEach((l) => l(questions));
   // A stub job walks the stages a few seconds apart, so the progress row can be seen moving.
   const STAGES: JobStage[] = ['queued', 'preparing', 'understanding', 'writing', 'indexing', 'done'];
+  const setRecordingStatus = (id: string, status: RecordingStatus) => {
+    const r = recordings.get(id);
+    if (!r) return;
+    const now = Date.now();
+    const next: LiveRecording = { ...r, status, startedAt: r.startedAt ?? (status === 'recording' ? now : undefined), endedAt: status === 'ended' ? now : r.endedAt };
+    recordings.set(id, next);
+    recL.get(id)?.forEach((l) => l(next));
+  };
   return {
     session: (): ConvexSession => ({ sessionToken: 'stub', familyId: 'stub', personId: getSession()?.me?.id ?? 'stub', role: getSession()?.me?.role === 'cook' ? 'cook' : 'kid' }),
     watchJobs: watch(jobL, () => jobs),
@@ -467,13 +501,17 @@ const stub = (() => {
       onData(recordings.get(id) ?? null);
       return () => void set.delete(onData);
     },
-    setRecordingStatus(id: string, status: RecordingStatus) {
+    setRecordingStatus,
+    /**
+     * live.endRecording on the stub: a filming or wrapping-up stub recording ends (again: still ok).
+     * A live recording isn't here (the function isn't deployed yet): not ok, so the app falls back.
+     */
+    endRecording(id: string): { ok: boolean } {
       const r = recordings.get(id);
-      if (!r) return;
-      const now = Date.now();
-      const next: LiveRecording = { ...r, status, startedAt: r.startedAt ?? (status === 'recording' ? now : undefined), endedAt: status === 'ended' ? now : r.endedAt };
-      recordings.set(id, next);
-      recL.get(id)?.forEach((l) => l(next));
+      // A stub recording opened by its link (web screenshots) has no row to move.
+      if (!r) return { ok: id.startsWith('stub-') };
+      if (r.status === 'recording' || r.status === 'wrapping_up') setRecordingStatus(id, 'ended');
+      return { ok: recordings.get(id)?.status === 'ended' };
     },
     watchMe: (me: StubPerson, onData: (v: Me | null) => void) => {
       meL.set(onData, me);

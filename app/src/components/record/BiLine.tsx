@@ -1,10 +1,11 @@
-// A line in the cook's language with its English small under it (lib/homie/strings). An English
-// line is just the line.
+// A line in the cook's language with its English small under it (./words). An English line is just
+// the line.
 import { StyleSheet, View, type StyleProp, type TextStyle, type ViewStyle } from 'react-native';
 
 import { Txt } from '@/components/ui';
-import type { Line } from '@/lib/homie/strings';
 import { colors, type SansWeight } from '@/theme/tokens';
+
+import type { Line } from './words';
 
 export function BiLine({
   line,

@@ -1,5 +1,6 @@
-// "I'm listening": five soft bars that move with the mic level (0..1), the middle ones most. Reduce
-// Motion: they stand still and only brighten while she talks.
+// "I'm listening": five soft green bars that move with the mic level (0..1), the middle ones most
+// (limeWash on homie's dark moment, green on the walkie-talkie's peach). Reduce Motion: they stand
+// still and only brighten while she talks.
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withTiming, type SharedValue } from 'react-native-reanimated';

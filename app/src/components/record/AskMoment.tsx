@@ -1,12 +1,13 @@
-// homie asks the cook something while she records (Caleb's v4): no buttons. Over the blurred, dimmed
-// recording screen, one centred column (the COLUMN rhythm): the question in her language (32 pt) with
-// the English under it, homie big and glowing (its steam follows her voice; "AI voice" while it says
-// the question), then five listening bars and "बोला, मी ऐकतोय" / "Just answer out loud". She answers out
-// loud: the service hears it, and fades the question when she says "not now" or after ~10 s of quiet
-// (on the stories opt-in, quiet is a no). Without a mic stream (Expo Go, the web) a tap anywhere closes
-// it instead. VoiceOver's escape gesture is "not now".
-// Motion: the dim and blur come up while homie grows in (0-400 ms), then the words rise; closing plays
-// it backwards. Reduce Motion: everything fades in place (150 ms).
+// homie asks the cook something while she records (Caleb's v4, canvas frame 2): no buttons. Over the
+// blurred, dimmed recording screen, one centred column: homie big and glowing (its steam follows her
+// voice, its glow breathes; "AI voice" while it says the question), the question under it in her
+// language (32 pt) with the English small, then five green listening bars that move with her voice
+// and "बोला, मी ऐकतोय" / "Just answer out loud". She answers out loud: the service hears it, and fades
+// the question when she says "not now" or after ~10 s of quiet (on the stories opt-in, quiet is a no).
+// A tap anywhere closes it too ("not now"): the only way out without a mic stream (Expo Go, the web,
+// where it says so), and an escape if the service never fades it. VoiceOver's escape gesture is the same.
+// Motion: the dim and blur come up while homie grows in (0-400 ms), then the words rise under it;
+// closing plays it backwards. Reduce Motion: everything fades in place (150 ms), nothing loops.
 // The shared HomieMoment (components/homie) has big buttons and a green listening pill; this screen
 // needs neither, so it draws its own.
 import { BlurView } from 'expo-blur';
@@ -110,7 +111,10 @@ export function AskMoment({ ask, words, micOn, onNotNow, onActive }: { ask: Ask 
       onAccessibilityEscape={onNotNow}>
       <AnimatedBlurView tint="dark" style={StyleSheet.absoluteFill} animatedProps={blurProps} />
       <Animated.View style={[StyleSheet.absoluteFill, styles.tint, dimStyle]} />
-      <Pressable style={styles.column} onPress={micOn ? undefined : onNotNow} accessible={false}>
+      <Pressable style={styles.column} onPress={onNotNow} accessible={false}>
+        <Animated.View style={potStyle}>
+          <GlowHomie size={ASK_HOMIE_SIZE} state={talking ? pot : micOn ? 'listening' : 'off'} level={h.level} label={talking ? speakingLabel(h, now.key) : null} breathe={!closing} />
+        </Animated.View>
         <Animated.View style={[styles.words, riseStyle]}>
           <Txt variant="label" size={32} weight={700} leading={1.3} color={colors.card} align="center" accessibilityRole="header">
             {q.text}
@@ -121,11 +125,8 @@ export function AskMoment({ ask, words, micOn, onNotNow, onActive }: { ask: Ask 
             </Txt>
           ) : null}
         </Animated.View>
-        <Animated.View style={[styles.hero, potStyle]}>
-          <GlowHomie size={ASK_HOMIE_SIZE} state={talking ? pot : micOn ? 'listening' : 'off'} level={h.level} label={talking ? speakingLabel(h, now.key) : null} />
-        </Animated.View>
         <Animated.View style={[styles.label, riseStyle]} accessible accessibilityLabel={hint.en ? `${hint.text}. ${hint.en}` : hint.text}>
-          {micOn ? <ListeningBars level={talking ? 0 : h.level} color={colors.card} /> : null}
+          {micOn ? <ListeningBars level={talking ? 0 : h.level} color={colors.limeWash} /> : null}
           <Txt variant="label" size={24} weight={700} color={colors.card} align="center">
             {hint.text}
           </Txt>
@@ -143,7 +144,7 @@ export function AskMoment({ ask, words, micOn, onNotNow, onActive }: { ask: Ask 
 const styles = StyleSheet.create({
   tint: { backgroundColor: TINT },
   column: { flex: 1, paddingHorizontal: COLUMN.side, alignItems: 'center', justifyContent: 'center' },
-  words: { alignItems: 'center', gap: 8 },
-  hero: { marginTop: COLUMN.toHero },
-  label: { marginTop: COLUMN.toLabel, alignItems: 'center', gap: 8 },
+  // Below the sun ring (18 pt round the disc), as far as the label is below the words.
+  words: { marginTop: COLUMN.toLabel, alignItems: 'center', gap: 8 },
+  label: { marginTop: COLUMN.toLabel, alignItems: 'center', gap: 10 },
 });

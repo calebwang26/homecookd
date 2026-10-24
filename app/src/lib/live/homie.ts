@@ -5,29 +5,37 @@
 //   homie.phase          'connecting' | 'intro' | 'recording' | 'wrapping_up' | 'ended'
 //   homie.introDone      homie finished its hello (the screen then starts filming by itself)
 //   homie.ask            homie's question while it waits for her spoken answer (null when none)
-//   homie.start()        filming starts (glasses)      homie.done()   "I'm done"
-//   homie.notNow()       closes the question (VoiceOver's escape; a tap where there's no mic)
+//   homie.start()        filming starts (glasses)
+//   homie.done()         "I'm done" (the stop button): over the socket when it's open; with no socket,
+//                        Convex ends the recording itself (live.endRecording), so the glasses' computer
+//                        still uploads; if that fails too, "done" goes once the socket is back
+//   await homie.end()    ends the recording through Convex without homie (a stalled wrap-up)
+//   homie.notNow()       closes the question (a tap on it, VoiceOver's escape)
 //   await homie.filmWithPhone(record)   a phone recording: start, wait until the server has saved
 //                        that filming began, close the socket and the mic, run the phone's camera, then
 //                        reconnect and end (the server finishes with homie's last questions)
 //   homie.error          'lostConnection' | 'signedOut' | 'ended' | 'elsewhere' (components/record/words)
+//   homie.serverError    the service reported an error after "I'm done" (the wrap-up may be stuck)
 //
-// The phone by the stove streams the mic (16 kHz PCM) the whole time, except while homie speaks (half
-// duplex: no frames while a say plays; the recorder keeps running). homie's lines play on the shared
+// The phone by the stove streams the mic (16 kHz PCM) the whole time. Half duplex: while homie is lit
+// or speaking, or anything plays on the phone, the socket gets zeros of the same length instead
+// (recordingLogic micQuiet / silence); the recorder keeps running. homie's lines play on the shared
 // player (lib/live/say). The pot follows the service: lit just before a say, then speaking; listening
 // with the mic level, thinking. Her answers are spoken: the service hears them, and fades the question
 // itself when she says "not now" or after ~10 s of quiet. At `ended` the mic stops.
+// One socket at a time: a connect waits while another is on its way or open, and a socket that is no
+// longer the current one is not heard. A new socket has no open question (the server keeps it per
+// socket; the wrap-up asks again whatever is left).
 // Without EXPO_PUBLIC_VOICE_URL, with the Convex stub, or for a stub recording, a local stub plays the
 // service's part with the phone's own voice, so the screens can be tried on one phone.
 import { useCallback, useEffect, useRef, useState } from 'react';
 
-import { notNowMessage, potFor, type Ask, type RecordPhase, type ServerState } from '@/components/record/recordingLogic';
-import { useAiSpeaking } from '@/lib/homie/hooks';
-import { doneSpeaking, pulseLit, setHomie, setHomieLevel } from '@/lib/homie/store';
+import { micQuiet, notNowMessage, potFor, silence, type Ask, type RecordPhase, type ServerState } from '@/components/record/recordingLogic';
+import { doneSpeaking, getHomie, pulseLit, setHomie, setHomieLevel } from '@/lib/homie/store';
 import { stopAudio, useNowPlaying } from '@/lib/media';
 import { useSession } from '@/lib/session';
 
-import { convexSession, stubRecordingStatus } from './convex';
+import { convexSession, endRecording, stubRecordingStatus } from './convex';
 import { micStreamingSupported, useMicStream } from './mic';
 import { playSay, SAY_KEY_PREFIX } from './say';
 import { speak, stopSpeaking } from './speak';
@@ -78,12 +86,18 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
   const [micOn, setMicOn] = useState(false);
   const [micDenied, setMicDenied] = useState(false);
   const [error, setError] = useState<HomieError | null>(null);
+  const [serverError, setServerError] = useState(false);
 
   const sock = useRef<Socket | null>(null);
+  /** A connect is waiting for the Convex session (no second one meanwhile). */
+  const connecting = useRef(false);
+  /** "I'm done" went over a socket: from then on the service is wrapping up. */
+  const doneSent = useRef(false);
+  const ending = useRef<Promise<boolean> | null>(null);
   const want = useRef(false);
   const paused = useRef(false);
   const retries = useRef(0);
-  const afterReady = useRef<object[]>([]);
+  const afterReady = useRef<{ type: string }[]>([]);
   const introHeard = useRef(false);
   const phaseRef = useRef<RecordPhase>('connecting');
   const phaseWaiters = useRef(new Set<() => void>());
@@ -98,24 +112,25 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
     stubRef.current = stubInfo;
   });
 
-  // Half duplex: no frames (and no steam from the speaker) while homie or a say is speaking.
-  const aiSpeaking = useAiSpeaking();
-  const speaking = useRef(aiSpeaking);
+  // Half duplex: silence instead of the mic (and no steam from the speaker) while the phone talks.
+  // The pot's state is read from the store at each chunk, so the lit beat counts from its first frame.
   const now = useNowPlaying();
+  const player = useRef({ key: now.key, phase: now.phase as string });
   const playingKey = useRef(now.key);
   useEffect(() => {
-    speaking.current = aiSpeaking;
+    player.current = { key: now.key, phase: now.phase };
     playingKey.current = now.key;
   });
+  const quiet = () => micQuiet(getHomie().state, player.current);
 
   const mic = useMicStream(
     (pcm) => {
       const s = sock.current;
-      if (!s || s.readyState !== 1 || paused.current || speaking.current) return;
-      s.send(pcm);
+      if (!s || s.readyState !== 1 || paused.current) return;
+      s.send(quiet() ? silence(pcm.byteLength) : pcm);
     },
     (level) => {
-      if (!speaking.current && !paused.current) setHomieLevel(level);
+      if (!paused.current) setHomieLevel(quiet() ? 0 : level);
     },
   );
   const micRef = useRef(mic);
@@ -123,9 +138,11 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
     micRef.current = mic;
   });
 
-  const send = useCallback((msg: object) => {
+  const send = useCallback((msg: { type: string }) => {
     const s = sock.current;
-    if (s && s.readyState === 1) s.send(JSON.stringify(msg));
+    if (!s || s.readyState !== 1) return;
+    s.send(JSON.stringify(msg));
+    if (msg.type === 'done') doneSent.current = true;
   }, []);
 
   const startMic = useCallback(async () => {
@@ -210,6 +227,8 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
         case 'ready': {
           const r = m.recording;
           setInfo({ language: r.language, cookName: r.cookName, kidName: r.kidName, dish: r.dish });
+          // A new socket has no open question: the old one's drop or answered never comes.
+          showAsk(null);
           if (introHeard.current) setIntroDone(true);
           for (const msg of afterReady.current.splice(0)) send(msg);
           return;
@@ -252,6 +271,8 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
           return;
         case 'error':
           console.warn('[homie] the voice service said', m.message);
+          // After "I'm done" the screen may end the recording without homie (recording.tsx).
+          if (doneSent.current || phaseRef.current === 'wrapping_up') setServerError(true);
           return;
       }
     },
@@ -274,26 +295,43 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
   }, [stopMic]);
 
   const connect = useCallback(async () => {
-    if (!recordingId) return;
+    if (!recordingId || connecting.current) return;
+    // One socket at a time: a retry timer and a tap on stop may both ask for one.
+    const open = sock.current;
+    if (open && (open.readyState === 0 || open.readyState === 1)) return;
+    connecting.current = true;
     setError(null);
     const token = await convexSession(meId.current).catch(() => null);
-    if (!want.current || paused.current) return;
+    connecting.current = false;
+    if (!want.current || paused.current || sock.current) return;
     const stub = !VOICE_URL || token === 'stub' || recordingId.startsWith('stub-');
     // A live recording with no session (sessions.start failed): a failed connect, never the stub.
     if (!stub && !token) return lost();
-    const s: Socket = stub
-      ? stubSocket(recordingId, stubRef.current)
-      : (new WebSocket(`${VOICE_URL}/record?session=${encodeURIComponent(token!)}&recording=${encodeURIComponent(recordingId)}`) as unknown as Socket);
+    let s: Socket;
+    try {
+      s = stub
+        ? stubSocket(recordingId, stubRef.current)
+        : (new WebSocket(`${VOICE_URL}/record?session=${encodeURIComponent(token!)}&recording=${encodeURIComponent(recordingId)}`) as unknown as Socket);
+    } catch (e) {
+      console.warn('[homie] could not open the socket', String(e).slice(0, 120));
+      return lost();
+    }
     if ('binaryType' in s) (s as unknown as WebSocket).binaryType = 'arraybuffer';
     sock.current = s;
-    s.onmessage = (e) => onMessage(e.data);
+    // Only the current socket is heard: an older one's messages, open or close change nothing.
+    s.onmessage = (e) => {
+      if (sock.current === s) onMessage(e.data);
+    };
     s.onopen = () => {
+      if (sock.current !== s) return;
       retries.current = 0;
       if (!paused.current) void startMic();
     };
     s.onclose = (e) => {
       if (sock.current !== s) return;
       sock.current = null;
+      // Its question went with it (the server keeps it per socket): nobody would hear her answer.
+      showAsk(null);
       const final = e?.code ? FINAL_CLOSE[e.code] : undefined;
       if (final) {
         want.current = false;
@@ -303,7 +341,7 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
       }
       lost();
     };
-  }, [recordingId, onMessage, startMic, stopMic, lost]);
+  }, [recordingId, onMessage, startMic, stopMic, lost, showAsk]);
   useEffect(() => {
     connectRef.current = connect;
   });
@@ -335,7 +373,7 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
 
   /** Sends now, or once the socket is back (a dropped connection). */
   const sendOrQueue = useCallback(
-    (msg: object) => {
+    (msg: { type: string }) => {
       if (sock.current?.readyState === 1) return send(msg);
       afterReady.current.push(msg);
       if (!sock.current && !paused.current) {
@@ -401,6 +439,37 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
     void connectRef.current?.();
   }, []);
 
+  /**
+   * Ends the recording through Convex, without the voice service (live.endRecording): the glasses'
+   * computer then finishes the video. Here it then counts as ended: no socket, no mic, no reconnect.
+   * True once it has ended. Calls while one is on its way share it.
+   */
+  const end = useCallback((): Promise<boolean> => {
+    if (!recordingId) return Promise.resolve(false);
+    if (phaseRef.current === 'ended') return Promise.resolve(true);
+    ending.current ??= endRecording(recordingId).then((ok) => {
+      ending.current = null;
+      if (ok && phaseRef.current !== 'ended') {
+        want.current = false;
+        closeSocket();
+        hush();
+        setError(null);
+        goPhase('ended');
+      }
+      return ok;
+    });
+    return ending.current;
+  }, [recordingId, closeSocket, hush, goPhase]);
+
+  /** The stop button: "done" over an open socket; with none, Convex ends it (else "done" waits for one). */
+  const done = useCallback(() => {
+    if (sock.current?.readyState === 1) return send({ type: 'done' });
+    if (ending.current) return; // a second tap while Convex is ending it
+    void end().then((ok) => {
+      if (!ok) sendOrQueue({ type: 'done' });
+    });
+  }, [send, end, sendOrQueue]);
+
   return {
     phase,
     info,
@@ -409,8 +478,10 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
     micOn,
     micDenied,
     error,
+    serverError,
     start: useCallback(() => sendOrQueue({ type: 'start' }), [sendOrQueue]),
-    done: useCallback(() => sendOrQueue({ type: 'done' }), [sendOrQueue]),
+    done,
+    end,
     notNow,
     filmWithPhone,
     retry,

@@ -333,8 +333,8 @@ Before starting work, compare the last commit here with `git log origin/main` to
     function throws instead of faking a recording); homie's start gives up after 10 s offline.
   - **`/recording` v3:** one 232 pt red stop button on a full-height peach wash with a warm glow, one line under it
     ("माझं झालं" / "Tap when you're done"), homie top-right, nothing else. Filming starts by itself once homie's hello
-    has played. homie's questions are `AskMoment`s with no buttons: the question, homie glowing, five listening bars,
-    "बोला, मी ऐकतोय" / "Just answer out loud" (no mic stream: tap anywhere to close). Then the new done view: homie
+    has played. homie's questions are `AskMoment`s with no buttons: homie glowing, the question, five listening bars,
+    "बोला, मी ऐकतोय" / "Just answer out loud" (a tap anywhere closes it). Then the new done view: homie
     waves, "झालं! Shreya ला पाठवतोय", home after ~4 s. A phone recording starts filming on the server, closes the
     socket and mic (awaited) while the system camera is up, then reconnects and ends, and the done view sends the
     video itself (`components/record/sendDraft.ts`, shared with Send). The mic stops at `ended`; a lost connection
@@ -349,10 +349,24 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - **Parent Home:** a translated question says "Translated"; the 'uploading' stage keeps the sending half short of
     full ("Still sending the video"); a live Convex job is dropped once it's 'done' and its recipe is in the library
     (`libraryIdOf` in convex.ts).
-  - **Tests:** `test-recording-ui.mjs` 17 pass, new `test-parent-jobs.mjs` 4 pass; tsc, lint and the other app
-    scripts pass. On Expo web (Convex and voice stubbed) the glasses flow ran from hello to Home; screenshots of every
-    state.
-  - **Open:** nothing on an iPhone yet (mic metering, the camera after the mic, the phone send). With the voice service
-    down a glasses recording can't be ended from the app (no app-side `live` end mutation), so the VM waits for the
-    2 h idle cleanup. Unused lines remain in `lib/homie/strings.ts` (left for the kid PR's round). No public query
-    maps a kid to a Convex person id (found by name).
+  - **Round 3 (verifier fixes + the shared contract):** the stop button with no `/record` socket ends the recording
+    through Convex `live.endRecording` (by name, soft; its stub ends only a stub recording), so the glasses' VM still
+    finalizes; if that fails, "done" waits for the socket. A wrap-up that stalls (2 min with nothing moving, 20 s
+    after a service error or a lost line) ends the same way, and a phone video then sends anyway. One socket at a
+    time (a connect waits while one is on its way; an older socket is ignored); a closed or new socket clears homie's
+    question, and a tap always closes it. Half duplex sends zeros of the same length while homie is lit/speaking or
+    anything plays. The asks moment follows canvas frame 2 (homie, then the question, then green bars); homie's glow
+    breathes; the rings pulse every 1.6 s; the done view's arm waves 3 times; the walkie's check pops in and its
+    bars move with her voice. The walkie reads `textForCook` in her language even before `people.me` loads. A share
+    ask (`questions.kind` 'share', #33) reads through the same rows and walkie: no step, a short yes/no is enough,
+    long text gets smaller type. Parent Home's date keeps clear of the pot (`ProfileButton homieRoom`; it wraps).
+    `lib/homie/strings.ts` is gone: its used lines moved to `components/record/words.ts`.
+  - **Tests:** `test-recording-ui.mjs` 23 pass, `test-parent-jobs.mjs` 4 pass; tsc, lint and every other app script
+    pass (`test-profile-navigation` against the web server). On Expo web (Convex and voice stubbed) the glasses flow
+    ran from hello to Home; screenshots of every state, and frame diffs show the rings, glow, arm and check moving
+    (still under Reduce Motion).
+  - **Open:** nothing on an iPhone yet (mic metering, the camera after the mic, the phone send, half duplex).
+    `live.endRecording` isn't deployed yet (the Track E follow-up), and the no-socket stop path couldn't be run on the
+    web stub (the stub socket never drops). GlowHomie's disc is cream, not the canvas's butter (HomiePot draws its
+    own disc; a disc color prop in components/homie would fix it). No public query maps a kid to a Convex person id
+    (found by name).

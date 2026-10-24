@@ -1,12 +1,13 @@
 // Unit tests for the cook's recording and walkie-talkie screens (TS run by Node's type stripping):
-//   src/lib/homie/strings.ts                 every line in English and Marathi, names and step numbers
-//                                            filled in, Devanagari digits, English for other languages
-//   src/components/record/words.ts           the v3/v4 lines (the stop button, "Just answer out loud",
-//                                            the done screen, the errors), with their small English
+//   src/components/record/words.ts           every line in English and Marathi (the stop button, "Just
+//                                            answer out loud", the done screen, the errors), with their
+//                                            small English, names filled in, English for other languages
 //   src/components/record/recordingLogic.ts  the line under the button in each phase, when filming
 //                                            starts by itself, the pot for the service's state, what
-//                                            "not now" sends, homie's question with its English
-//   src/components/record/walkieLogic.ts     when her spoken answer is over, when nobody answered
+//                                            "not now" sends, homie's question with its English, half
+//                                            duplex (silence while the phone talks), the wrap-up watchdog
+//   src/components/record/walkieLogic.ts     when her spoken answer is over (a share ask's short yes
+//                                            too), when nobody answered, how a question reads
 //   src/lib/languages.ts                     the picker's list and search (Track F's API)
 //   node scripts/test-recording-ui.mjs
 import assert from 'node:assert/strict';
@@ -25,7 +26,6 @@ registerHooks({
   },
 });
 
-const S = await import(pathToFileURL(join(root, 'src/lib/homie/strings.ts')).href);
 const W = await import(pathToFileURL(join(root, 'src/components/record/words.ts')).href);
 const R = await import(pathToFileURL(join(root, 'src/components/record/recordingLogic.ts')).href);
 const K = await import(pathToFileURL(join(root, 'src/components/record/walkieLogic.ts')).href);
@@ -44,23 +44,18 @@ const test = (name, fn) => {
 };
 
 const DEVANAGARI = /[ऀ-ॿ]/;
-const mr = S.cookWords('mr');
-const en = S.cookWords('en');
 const rmr = W.recordWords('mr');
 const ren = W.recordWords('en');
-const both = { cook: mr, record: rmr };
 
 test('every line has English and Marathi; Marathi is in Devanagari', () => {
-  const tables = [S.wordTable(), W.recordWordTable()];
-  for (const table of tables) {
-    for (const [key, w] of Object.entries(table)) {
-      assert.ok(w.en.trim(), `${key} en`);
-      assert.ok(w.mr.trim(), `${key} mr`);
-      assert.match(w.mr, DEVANAGARI, `${key} mr is Marathi`);
-      for (const t of [w.en, w.mr]) for (const hole of t.match(/\{[a-z]+\}/g) ?? []) assert.ok(['{kid}', '{n}', '{language}'].includes(hole), `${key} ${hole}`);
-    }
+  const table = W.recordWordTable();
+  for (const [key, w] of Object.entries(table)) {
+    assert.ok(w.en.trim(), `${key} en`);
+    assert.ok(w.mr.trim(), `${key} mr`);
+    assert.match(w.mr, DEVANAGARI, `${key} mr is Marathi`);
+    for (const t of [w.en, w.mr]) for (const hole of t.match(/\{[a-z]+\}/g) ?? []) assert.equal(hole, '{kid}', `${key} ${hole}`);
   }
-  assert.ok(Object.keys(tables[1]).length >= 15);
+  assert.ok(Object.keys(table).length >= 20);
 });
 
 test('Caleb’s lines are the ones on screen', () => {
@@ -69,9 +64,9 @@ test('Caleb’s lines are the ones on screen', () => {
   assert.deepEqual(ren.line('stop'), { text: 'I’m done', en: 'Tap when you’re done' });
   assert.deepEqual(rmr.line('listening'), { text: 'बोला, मी ऐकतोय', en: 'Just answer out loud' });
   assert.deepEqual(ren.line('listening'), { text: 'Go ahead, I’m listening', en: 'Just answer out loud' });
-  assert.equal(mr.text('kidAsked', { kid: 'Shreya' }), 'Shreya ने विचारलं');
-  assert.equal(mr.text('sentTo', { kid: 'Shreya' }), 'Shreya ला पाठवलं');
-  assert.equal(mr.text('sayingHello'), 'homie नमस्कार करतोय');
+  assert.equal(rmr.text('kidAsked', { kid: 'Shreya' }), 'Shreya ने विचारलं');
+  assert.deepEqual(rmr.line('sentTo', { kid: 'Shreya' }), { text: 'Shreya ला पाठवलं', en: 'Sent to Shreya' });
+  assert.equal(rmr.text('sayingHello'), 'homie नमस्कार करतोय');
 });
 
 test('the done screen says who it goes to', () => {
@@ -91,28 +86,27 @@ test('errors are in her language too, with the English under them', () => {
   }
 });
 
-test('names and step numbers are filled in; Marathi digits are Devanagari', () => {
-  assert.deepEqual(mr.line('step', { n: 3 }), { text: 'पायरी ३', en: 'Step 3' });
-  assert.equal(S.localDigits(12, 'mr'), '१२');
-  assert.equal(S.localDigits(12, 'en'), '12');
-  assert.equal(en.text('sentTo', { kid: '' }), 'Sent to your family');
+test('names are filled in; no name reads "your family"', () => {
+  assert.equal(ren.text('sentTo', { kid: '' }), 'Sent to your family');
+  assert.equal(rmr.text('sentTo', { kid: ' ' }), 'घरच्यां ला पाठवलं');
+  assert.equal(ren.text('kidAsked', { kid: 'Shreya' }), 'Shreya asked');
 });
 
 test('English, and languages these screens aren’t written in, read English', () => {
-  assert.deepEqual(en.line('imDone'), { text: 'I’m done', en: null });
-  assert.deepEqual(S.cookWords('fr').line('imDone'), { text: 'I’m done', en: null });
+  assert.deepEqual(ren.line('wrappingUp'), { text: 'Almost done', en: null });
+  assert.deepEqual(W.recordWords('fr').line('tryAgain'), { text: 'Try again', en: null });
   assert.deepEqual(W.recordWords('fr').line('leave'), { text: 'Leave', en: null });
   assert.deepEqual(W.recordWords(undefined).line('stop'), { text: 'I’m done', en: 'Tap when you’re done' });
   assert.equal(W.recordWords('MR').line('leave').text, 'बाहेर पडा');
 });
 
 test('the line under the button in each phase; it is the stop button only while filming', () => {
-  assert.deepEqual(R.recordingView('connecting', both), { line: { text: 'homie तयार होतोय', en: 'homie is getting ready' }, live: false });
-  assert.deepEqual(R.recordingView('intro', both), { line: { text: 'homie नमस्कार करतोय', en: 'homie is saying hello' }, live: false });
-  assert.deepEqual(R.recordingView('recording', both), { line: { text: 'माझं झालं', en: 'Tap when you’re done' }, live: true });
-  assert.deepEqual(R.recordingView('wrapping_up', both), { line: { text: 'जवळजवळ झालं', en: 'Almost done' }, live: false });
-  assert.equal(R.recordingView('ended', both).live, false);
-  assert.equal(R.recordingView('recording', { cook: en, record: ren }).line.text, 'I’m done');
+  assert.deepEqual(R.recordingView('connecting', rmr), { line: { text: 'homie तयार होतोय', en: 'homie is getting ready' }, live: false });
+  assert.deepEqual(R.recordingView('intro', rmr), { line: { text: 'homie नमस्कार करतोय', en: 'homie is saying hello' }, live: false });
+  assert.deepEqual(R.recordingView('recording', rmr), { line: { text: 'माझं झालं', en: 'Tap when you’re done' }, live: true });
+  assert.deepEqual(R.recordingView('wrapping_up', rmr), { line: { text: 'जवळजवळ झालं', en: 'Almost done' }, live: false });
+  assert.equal(R.recordingView('ended', rmr).live, false);
+  assert.equal(R.recordingView('recording', ren).line.text, 'I’m done');
 });
 
 test('filming starts by itself once the hello has been said and has played', () => {
@@ -146,9 +140,36 @@ test('homie’s question: her words, the English under them once', () => {
   assert.deepEqual(R.askLine({ text: 'How much ginger?', textEn: '' }), { text: 'How much ginger?', en: null });
 });
 
+test('half duplex: silence while homie is lit or speaking, or anything plays on the phone', () => {
+  const idle = { key: null, phase: 'idle' };
+  assert.equal(R.micQuiet('listening', idle), false);
+  assert.equal(R.micQuiet('off', idle), false);
+  assert.equal(R.micQuiet('lit', idle), true, 'the beat before homie speaks');
+  assert.equal(R.micQuiet('speaking', idle), true);
+  assert.equal(R.micQuiet('listening', { key: 'say:3', phase: 'loading' }), true, 'a say on its way');
+  assert.equal(R.micQuiet('listening', { key: 'say:3', phase: 'playing' }), true);
+  assert.equal(R.micQuiet('listening', { key: 'clip:abc', phase: 'playing' }), true, 'a clip');
+  assert.equal(R.micQuiet('listening', { key: 'say:3', phase: 'ended' }), false);
+  assert.equal(R.micQuiet('listening', { key: 'say:3', phase: 'paused' }), false);
+});
+
+test('half duplex: the silence is zeros the size of the mic chunk', () => {
+  const z = R.silence(3200);
+  assert.equal(z.byteLength, 3200);
+  assert.ok(new Int16Array(z).every((v) => v === 0));
+  assert.equal(R.silence(3200), z, 'reused, not made for every chunk');
+  assert.equal(R.silence(320).byteLength, 320);
+});
+
+test('the wrap-up watchdog: 2 min of nothing, 20 s once there is trouble', () => {
+  assert.equal(R.wrapStallMs(false), 120_000);
+  assert.equal(R.wrapStallMs(true), 20_000);
+  assert.ok(R.WRAP_TROUBLE_MS < R.WRAP_STALL_MS);
+});
+
 // The walkie-talkie listens at ~10 readings a second.
-function run(levels, stepMs = 100) {
-  let l = K.startListening(0);
+function run(levels, stepMs = 100, kind) {
+  let l = K.startListening(0, kind);
   let t = 0;
   for (const level of levels) {
     t += stepMs;
@@ -193,6 +214,40 @@ test('walkie: a stalled meter counts at most 300 ms a reading', () => {
 test('walkie: no answer asks once more, then closes', () => {
   assert.equal(K.afterNoAnswer(1), 'ask_again');
   assert.equal(K.afterNoAnswer(K.ASKS), 'close');
+});
+
+test('walkie: a share ask takes a short yes or no; a cooking question still needs a sentence', () => {
+  // "हो" (yes): about 0.4 s of voice.
+  const yes = [...quiet(1000), ...loud(400), ...quiet(3000)];
+  const r = run(yes, 100, 'share');
+  assert.equal(r.v, 'send');
+  assert.equal(r.t, 1000 + 400 + K.END_SILENCE_MS);
+  assert.equal(run(yes, 100, undefined).v, 'listening', 'a kid question: a short sound is not the answer yet');
+  assert.equal(run(yes, 100, 'something-new').v, 'listening', 'an unknown kind reads as a plain question');
+  assert.equal(K.startListening(0, 'share').minSpeechMs, K.MIN_YES_NO_MS);
+  assert.equal(K.startListening(0).minSpeechMs, K.MIN_SPEECH_MS);
+  // Nothing at all is still no answer.
+  assert.equal(run(quiet(20_000), 100, 'share').v, 'no_answer');
+});
+
+test('a question reads in her language first, the kid’s English small (marked translated)', () => {
+  assert.deepEqual(K.questionLines({ text: 'How much ginger?', textForCook: 'आलं किती?' }), { main: 'आलं किती?', en: 'How much ginger?' });
+  assert.deepEqual(K.questionLines({ text: 'How much ginger?' }), { main: 'How much ginger?', en: null });
+  assert.deepEqual(K.questionLines({ text: 'How much ginger?', textForCook: '  ' }), { main: 'How much ginger?', en: null }, 'an empty translation');
+  // What homie said when it translated it itself, until Track F's arrives.
+  assert.deepEqual(K.questionLines({ text: 'How much ginger?' }, 'आलं किती घालायचं?'), { main: 'आलं किती घालायचं?', en: 'How much ginger?' });
+  assert.deepEqual(K.questionLines({ text: 'How much ginger?', textForCook: 'आलं किती?' }, 'other'), { main: 'आलं किती?', en: 'How much ginger?' }, 'Track F’s wins');
+  // A share ask (convex/shareRequests.ts) reads the same way.
+  const share = { kind: 'share', text: 'Shreya wants to put your Poha on the map for neighbors. Is that okay?', textForCook: 'श्रेयाला तुमचे पोहे नकाशावर ठेवायचे आहेत. चालेल का?' };
+  assert.equal(K.questionLines(share).main, share.textForCook);
+  assert.equal(K.questionLines(share).en, share.text);
+});
+
+test('a long question (a share ask) gets smaller type and a smaller homie, so it fits the phone', () => {
+  assert.deepEqual(K.questionFit('आलं किती घालायचं?'), { font: 36, homie: 200, compact: false });
+  assert.equal(K.questionFit('x'.repeat(100)).font, 30);
+  const share = K.questionFit('Shreya wants to put your Kanda Poha on the map for neighbors. They’d see the recipe and one line you said, never your video. Is that okay?');
+  assert.deepEqual(share, { font: 24, homie: 150, compact: true });
 });
 
 test('languages: English first; "mar" and "मरा" find Marathi', () => {

@@ -4,12 +4,15 @@
 // with the kid's own words), "Answer" (the walkie-talkie, /answer/<id>: homie reads it to her and she
 // answers out loud), and the small "Hold to talk" pill as the quick way. Her voice is the answer, sent
 // as a voice note and transcribed on the server. An answered question leaves the list by itself.
+// A share ask (questions.kind 'share', from Community: "Shreya wants to put your Poha on the map…")
+// is a row like the others, with no step; her spoken yes or no answers it.
 // Nothing open: no card.
 import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import Animated, { LinearTransition } from 'react-native-reanimated';
 
 import { HoldToTalk } from '@/components/postcard/HoldToTalk';
+import { questionLines } from '@/components/record/walkieLogic';
 import { ChevronRightIcon, fadeOutFast, listEnter, PressableScale, Txt } from '@/components/ui';
 import { answerQuestion, useCookQuestions, type CookQuestion } from '@/lib/live/convex';
 import { getCachedEntry } from '@/lib/recipes';
@@ -19,10 +22,10 @@ import { colors, radii, shadows, space } from '@/theme/tokens';
 import { dishName } from './kitchen';
 
 function who(q: CookQuestion): string {
-  const name = q.askedByName ?? 'Your family';
+  const name = q.askedByName?.trim() || 'Your family';
   const e = getCachedEntry(q.recipeId);
-  const dish = q.recipeTitle ?? (e ? dishName(e.title, e.cook_name) : null);
-  const step = q.stepOrder ? ` · step ${q.stepOrder}` : '';
+  const dish = q.recipeTitle || (e ? dishName(e.title, e.cook_name) : null);
+  const step = q.stepOrder && q.kind !== 'share' ? ` · step ${q.stepOrder}` : '';
   return dish ? `${name} · ${dish}${step}` : `${name} asked`;
 }
 
@@ -33,43 +36,46 @@ export function LiveQuestions({ enterIndex = 0 }: { enterIndex?: number }) {
   return (
     <Animated.View entering={listEnter(enterIndex)} exiting={fadeOutFast} layout={LinearTransition.duration(220)} style={styles.card}>
       {questions.map((q) => (
-        <Animated.View key={q._id} exiting={fadeOutFast} layout={LinearTransition.duration(220)} style={styles.row}>
-          <PressableScale
-            onPress={() => router.push({ pathname: '/answer/[id]', params: { id: q._id } })}
-            scaleTo={0.98}
-            accessibilityRole="button"
-            accessibilityLabel={q.textForCook ? `${who(q)}: ${q.textForCook}. Translated from: ${q.text}` : `${who(q)}: ${q.text}`}
-            accessibilityHint="Opens the question. homie reads it to you, and you answer out loud."
-            style={styles.open}>
-            <Txt variant="label" size={15} weight={700} color={colors.greenDeep} numberOfLines={1}>
-              {who(q)}
-            </Txt>
-            <Txt variant="title" size={20} leading={1.25} color={colors.ink}>
-              “{q.textForCook ?? q.text}”
-            </Txt>
-            {/* Gemini's translation of the kid's words: AI words are always labelled. */}
-            {q.textForCook ? (
-              <Txt variant="meta" size={14}>
-                Translated · “{q.text}”
-              </Txt>
-            ) : null}
-          </PressableScale>
-          <View style={styles.actions}>
-            <HoldToTalk toName={q.askedByName ?? 'them'} onSend={(rec) => answerQuestion(q._id, { audioUri: rec.uri, contentType: rec.contentType })} />
-            <PressableScale
-              onPress={() => router.push({ pathname: '/answer/[id]', params: { id: q._id } })}
-              accessibilityRole="button"
-              accessibilityLabel="Answer"
-              hitSlop={8}
-              style={styles.answer}>
-              <Txt variant="label" size={15} weight={700} color={colors.greenDeep}>
-                Answer
-              </Txt>
-              <ChevronRightIcon size={16} color={colors.greenDeep} />
-            </PressableScale>
-          </View>
-        </Animated.View>
+        <QuestionRow key={q._id} q={q} />
       ))}
+    </Animated.View>
+  );
+}
+
+function QuestionRow({ q }: { q: CookQuestion }) {
+  const lines = questionLines(q);
+  const open = () => router.push({ pathname: '/answer/[id]', params: { id: q._id } });
+  return (
+    <Animated.View exiting={fadeOutFast} layout={LinearTransition.duration(220)} style={styles.row}>
+      <PressableScale
+        onPress={open}
+        scaleTo={0.98}
+        accessibilityRole="button"
+        accessibilityLabel={lines.en ? `${who(q)}: ${lines.main}. Translated from: ${lines.en}` : `${who(q)}: ${lines.main}`}
+        accessibilityHint="Opens the question. homie reads it to you, and you answer out loud."
+        style={styles.open}>
+        <Txt variant="label" size={15} weight={700} color={colors.greenDeep} numberOfLines={1}>
+          {who(q)}
+        </Txt>
+        <Txt variant="title" size={20} leading={1.25} color={colors.ink}>
+          “{lines.main}”
+        </Txt>
+        {/* Gemini's translation of the kid's words: AI words are always labelled. */}
+        {lines.en ? (
+          <Txt variant="meta" size={14}>
+            Translated · “{lines.en}”
+          </Txt>
+        ) : null}
+      </PressableScale>
+      <View style={styles.actions}>
+        <HoldToTalk toName={q.askedByName ?? 'them'} onSend={(rec) => answerQuestion(q._id, { audioUri: rec.uri, contentType: rec.contentType })} />
+        <PressableScale onPress={open} accessibilityRole="button" accessibilityLabel="Answer" hitSlop={8} style={styles.answer}>
+          <Txt variant="label" size={15} weight={700} color={colors.greenDeep}>
+            Answer
+          </Txt>
+          <ChevronRightIcon size={16} color={colors.greenDeep} />
+        </PressableScale>
+      </View>
     </Animated.View>
   );
 }
