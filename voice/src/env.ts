@@ -44,6 +44,9 @@ export const env = {
   voiceStub: get("VOICE_STUB") === "1",
   /** Overridable without a code change if latency needs a smaller model. */
   claudeModel: get("CLAUDE_MODEL") || "claude-opus-5-5",
+  /** The "should homie speak now?" check while a cook records (homie.ts decide), every 15 s or so: the call
+   *  that adds up. Empty = claudeModel. A cheaper model fits here (e.g. claude-haiku-5-5). */
+  homieDecideModel: get("HOMIE_DECIDE_MODEL"),
   /** Opus fast mode (beta, premium price): up to 2.5x faster output. */
   claudeFast: get("CLAUDE_FAST") === "1",
   /** homie's voice everywhere it talks: the kid cooking, a cook recording, and /speak. Default "Riya bilingual"

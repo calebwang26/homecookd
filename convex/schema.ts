@@ -208,6 +208,9 @@ export default defineSchema({
     // Glasses through the laptop bridge: the full video it built from its backup, for the cook to save to
     // Photos and send through the app herself (glasses/BRIDGE.md). Public, unguessable URL.
     videoUrl: v.optional(v.string()),
+    // A phone recording filmed in the app: the photo of the finished plate homie asked for at the end,
+    // for the recipe's cover (the worker's claim hands its URL to the pipeline).
+    coverStorageId: v.optional(v.id("_storage")),
     updatedAt: v.number(),
   })
     .index("by_familyId", ["familyId"])
@@ -224,14 +227,19 @@ export default defineSchema({
       v.literal("cue"),
       v.literal("substitution"),
       v.literal("story"),
+      v.literal("show"), // homie asks her to show or hold something up for the camera (in-app filming)
       v.literal("reaction"),
       v.literal("end"),
+      v.literal("plate"), // "show me the plate": the app takes the cover photo
       v.literal("closing"),
       v.literal("optin"),
     ),
     text: v.string(), // what homie said, in the cook's language
     textEn: v.string(),
     atS: v.number(), // seconds after recordings.startedAt (negative: before filming started)
+    // When homie's voice played on the phone (same clock as atS). Its voice is in the phone's video too, so
+    // the pipeline can lower or cut these spans.
+    said: v.optional(v.object({ atS: v.number(), endS: v.number() })),
     status: v.union(v.literal("spoken"), v.literal("answered"), v.literal("ignored"), v.literal("not_now")),
     answer: v.optional(
       v.object({ transcript: v.string(), transcriptEn: v.optional(v.string()), atS: v.number(), endS: v.number() }),

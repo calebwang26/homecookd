@@ -6,6 +6,13 @@
 // What homie knows about a recording (pacing, what it asked, what she said, the hello) is kept per
 // recording, so a dropped socket picks up where it left off instead of starting over. A recording the
 // app ended while it couldn't reach us (live.endRecording) ends its socket quietly at the next Convex write.
+// Filmed in the app (`{type:"start", camera:true}`, STACK.md "homie while recording"): the socket stays open
+// while the phone's camera films. The phone sends a small still about every 5 s ({type:"frame", jpeg}) in
+// place of the glasses' picture; {type:"pause"} when the camera stopped (she left the app, a call, the lock:
+// homie goes quiet) and {type:"resume", gapS} when it films again, so every atS stays on the video's clock
+// (wall time minus the seconds the video doesn't have). At the end homie asks for a photo of the plate
+// ({type:"ask", kind:"plate"}); the phone takes it and answers {type:"plate", ok}. Each line homie says is
+// saved with `said` (when its voice played), so the pipeline can lower or cut it in the video.
 import WebSocket from "ws";
 import * as convex from "./convex.js";
 import { env } from "./env.js";
@@ -29,6 +36,10 @@ const END_ANSWER_MS = 15_000;
 const MUTE_AFTER_MS = 300;
 const INTRO_WAIT_MS = 7000; // then the hand-written hello
 const FRAME_EVERY_MS = 5000;
+const FRAME_FRESH_MS = 20_000; // an older picture isn't shown to Claude
+const FRAME_MAX_BYTES = 800_000;
+const PLATE_WAIT_MS = 75_000; // for the phone's plate photo (or her "not now")
+const MAX_GAP_S = 4 * 3600;
 const HEARTBEAT_MS = 10 * 60_000; // Convex abandons a recording nobody touched for 2 h
 const MEMORY_TTL_MS = 3 * 3600_000;
 
@@ -44,9 +55,18 @@ type Memory = {
   introLogged: boolean;
   /** t0 for every atS: Convex's startedAt, or (if she ends before starting) the moment she ended. */
   t0?: number;
+  /** The hello's voice, wall-clock ms (logged with the hello once t0 is known). */
+  introSaid?: { start: number; end: number };
   reactedAt: number;
   endAsked: number;
   optInDone: boolean;
+  /** Filmed with the phone's camera in the app: it sends frames, can pause, and takes the plate photo. */
+  camera: boolean;
+  /** Seconds of wall time since t0 that the video doesn't have (paused, between clips): off every atS. */
+  gapS: number;
+  /** The camera is stopped right now (she left the app): homie asks nothing. */
+  paused: boolean;
+  plateDone: boolean;
   usedAt: number;
 };
 const memories = new Map<string, Memory>();
@@ -62,14 +82,28 @@ function memoryOf(recordingId: string, rules: PaceRules, fresh: boolean): Memory
     old.usedAt = now;
     return old;
   }
-  const m: Memory = { pacer: new Pacer(rules), asked: [], heard: [], intro: old?.intro, introLogged: false, reactedAt: 0, endAsked: 0, optInDone: false, usedAt: now };
+  const m: Memory = {
+    pacer: new Pacer(rules),
+    asked: [],
+    heard: [],
+    intro: old?.intro,
+    introLogged: false,
+    reactedAt: 0,
+    endAsked: 0,
+    optInDone: false,
+    camera: false,
+    gapS: 0,
+    paused: false,
+    plateDone: false,
+    usedAt: now,
+  };
   memories.set(recordingId, m);
   return m;
 }
 
 /** What a Recording talks to. Tests pass fakes. */
 export type RecordingDeps = {
-  convex: Pick<typeof convex, "recordingSession" | "setRecordingStatus" | "touchRecording" | "logPrompt" | "updatePrompt" | "setOptIn">;
+  convex: Pick<typeof convex, "recordingSession" | "setRecordingStatus" | "touchRecording" | "logPrompt" | "updatePrompt" | "promptSaid" | "setOptIn">;
   createStt: typeof createStt;
   speak: typeof speak;
   agent: (who: Who) => Pick<HomieAgent, "intro" | "decide" | "endQuestions" | "yesNo" | "setWho">;
@@ -131,6 +165,9 @@ export class Recording {
   private playing?: AbortController;
   private muteUntil = 0;
   private frame?: Buffer;
+  private frameAt = 0;
+  /** The plate step waits on the phone's {type:"plate"} through this. */
+  private plateWaiter?: (ok: boolean) => void;
   private timers: NodeJS.Timeout[] = [];
   private heartbeat?: NodeJS.Timeout;
   private flows: Promise<void> = Promise.resolve();
@@ -229,8 +266,14 @@ export class Recording {
     } catch {
       return;
     }
-    if (msg.type === "start") void this.begin();
-    else if (msg.type === "done") this.done();
+    if (msg.type === "start") {
+      if ((msg as { camera?: unknown }).camera === true) this.mem.camera = true;
+      void this.begin();
+    } else if (msg.type === "done") this.done();
+    else if (msg.type === "frame") this.onFrame((msg as { jpeg?: unknown }).jpeg);
+    else if (msg.type === "pause") this.pauseFilming();
+    else if (msg.type === "resume") this.resumeFilming((msg as { gapS?: unknown }).gapS);
+    else if (msg.type === "plate") this.plateWaiter?.((msg as { ok?: unknown }).ok === true);
     else if (msg.type === "text" && typeof msg.text === "string" && msg.text) {
       this.turnStartedAt = Date.now();
       this.heard(msg.text);
@@ -249,6 +292,7 @@ export class Recording {
     clearInterval(this.heartbeat);
     if (this.pending?.dropTimer) clearTimeout(this.pending.dropTimer);
     this.waiter?.(null);
+    this.plateWaiter?.(false);
   }
 
   /** A newer socket for the same recording took over (this one was most likely already dead). */
@@ -299,7 +343,8 @@ export class Recording {
     // She may have tapped start or done while it was being written: then there's no hello.
     if (this.closed || this.phase !== "intro" || this.starting) return;
     this.mem.introAt = Date.now();
-    await this.say(line, "intro");
+    const said = await this.say(line, "intro");
+    if (said) this.mem.introSaid = said;
     if (this.phase === "intro" && !this.starting) this.state("quiet");
   }
 
@@ -340,10 +385,10 @@ export class Recording {
 
   /** The hello is logged once filming starts (once per recording), so its atS (negative) is on the video's clock. */
   private logIntro() {
-    const { intro, introAt, t0 } = this.mem;
+    const { intro, introAt, introSaid, t0 } = this.mem;
     if (!intro || introAt === undefined || t0 === undefined || this.mem.introLogged) return;
     this.mem.introLogged = true;
-    void this.log("intro", intro, "spoken", (introAt - t0) / 1000);
+    void this.log("intro", intro, "spoken", (introAt - t0) / 1000, introSaid && this.span(introSaid));
   }
 
   /** "I'm done": stop what homie is saying and drop its question now, then the end flow. */
@@ -383,6 +428,12 @@ export class Recording {
       if (this.closed) return;
     }
 
+    // Filmed in the app: a photo of the plate for the cover. The phone takes it; she can skip it.
+    if (this.mem.camera && !this.mem.plateDone) {
+      await this.plate();
+      if (this.closed) return;
+    }
+
     if (!this.mem.optInDone) {
       const optIn = await fixedLine("optIn", this.who, this.whoLatin);
       const reply = await this.askAndWait("optin", optIn);
@@ -398,9 +449,9 @@ export class Recording {
 
     const closing = await fixedLine("closing", this.who, this.whoLatin);
     if (this.closed) return;
-    await this.say(closing, "closing");
+    const closingSaid = await this.say(closing, "closing");
     if (this.closed) return; // she may not have heard the goodbye: a reconnect says it again
-    void this.log("closing", closing, "spoken");
+    void this.log("closing", closing, "spoken", undefined, closingSaid && this.span(closingSaid));
     this.setPhase("ended");
     this.state("quiet");
     this.stt?.close();
@@ -424,7 +475,7 @@ export class Recording {
       this.mem.asked.push(line.textEn);
     }
     this.send({ type: "ask", promptId, text: line.text, textEn: line.textEn, kind });
-    await this.say(line, kind);
+    this.markSaid(promptId, await this.say(line, kind));
     const reply = await new Promise<string | null>((resolve) => {
       if (this.closed) return resolve(null);
       const timer = setTimeout(() => resolve(null), END_ANSWER_MS);
@@ -443,6 +494,68 @@ export class Recording {
     this.send({ type: "drop", promptId });
     void this.deps.convex.updatePrompt(this.token, promptId, reply ? "not_now" : "ignored").catch(() => {});
     return null;
+  }
+
+  /**
+   * "Show me the plate": homie asks, the phone shows its camera big and takes the photo (it uploads it to
+   * Convex itself, live.setCover), then sends {type:"plate", ok}. No answer within PLATE_WAIT_MS, or a
+   * closed socket, is a skip; a reconnect doesn't ask again once it was answered.
+   */
+  private async plate() {
+    const line = await fixedLine("plate", this.who, this.whoLatin);
+    const promptId = await this.log("plate", line, "spoken");
+    if (this.closed || !promptId) return;
+    this.send({ type: "ask", promptId, text: line.text, textEn: line.textEn, kind: "plate" });
+    this.markSaid(promptId, await this.say(line, "plate"));
+    const ok = await new Promise<boolean | null>((resolve) => {
+      if (this.closed) return resolve(null);
+      const timer = setTimeout(() => resolve(false), PLATE_WAIT_MS);
+      this.plateWaiter = (got) => {
+        clearTimeout(timer);
+        resolve(this.closed ? null : got);
+      };
+    });
+    this.plateWaiter = undefined;
+    if (ok === null) return; // the socket closed: a reconnect asks again
+    this.mem.plateDone = true;
+    this.send({ type: ok ? "answered" : "drop", promptId });
+    void this.deps.convex.updatePrompt(this.token, promptId, ok ? "answered" : "ignored").catch(() => {});
+    if (ok) await this.say(await fixedLine("plateThanks", this.who, this.whoLatin), "reaction");
+  }
+
+  // ---- filming in the app ----
+
+  /** A still from the phone's camera (base64 JPEG): homie's look at the stove, like the glasses' frame. */
+  private onFrame(jpeg: unknown) {
+    if (typeof jpeg !== "string" || jpeg.length > (FRAME_MAX_BYTES * 4) / 3 + 4) return;
+    const buf = Buffer.from(jpeg, "base64");
+    // A JPEG starts FF D8.
+    if (buf.length < 100 || buf[0] !== 0xff || buf[1] !== 0xd8) return;
+    this.frame = buf;
+    this.frameAt = Date.now();
+  }
+
+  /** The phone's camera stopped (she left the app, a call, the lock): homie stops talking and waits. */
+  private pauseFilming() {
+    if (this.phase !== "recording" || this.mem.paused) return;
+    this.mem.paused = true;
+    this.hush();
+    if (this.pending) this.drop("ignored");
+    this.frame = undefined;
+    this.state("quiet");
+    console.log(`record paused at ${this.atS(Date.now()).toFixed(0)}s`);
+  }
+
+  /** The camera films again; `gapS` = seconds since the last clip that the video doesn't have. */
+  private resumeFilming(gapS: unknown) {
+    if (this.phase !== "recording" && this.phase !== "intro") return;
+    if (typeof gapS === "number" && Number.isFinite(gapS) && gapS > 0) this.mem.gapS = Math.min(MAX_GAP_S, this.mem.gapS + gapS);
+    if (this.mem.paused) {
+      this.mem.paused = false;
+      this.lastDecideAt = Date.now(); // listen a while before deciding anything
+      console.log(`record resumed (video is ${this.mem.gapS.toFixed(1)}s behind the clock)`);
+      if (this.phase === "recording") this.state("listening");
+    }
   }
 
   // ---- listening ----
@@ -464,6 +577,8 @@ export class Recording {
     this.mem.heard.push({ atS: this.atS(this.turnStartedAt || Date.now()), text });
     console.log(`cook: ${text}`);
     if (this.waiter) return this.waiter(text);
+    // "Not now" while homie waits for the plate photo skips it.
+    if (this.plateWaiter && isNotNow(text)) return this.plateWaiter(false);
     if (this.pending) {
       if (isNotNow(text)) return this.drop("not_now");
       const { promptId } = this.pending;
@@ -488,7 +603,7 @@ export class Recording {
   // ---- deciding ----
 
   private async tick() {
-    if (this.phase !== "recording" || this.deciding || this.speaking || this.pending || this.closed) return;
+    if (this.phase !== "recording" || this.mem.paused || this.deciding || this.speaking || this.pending || this.closed) return;
     const now = Date.now();
     if (now - this.lastSpeechAt < QUIET_MS || now - this.lastDecideAt < DECIDE_EVERY_MS) return;
     const nowS = this.atS(now);
@@ -522,19 +637,19 @@ export class Recording {
         nowS,
         mayAsk,
         mayReact: maybeStory && now - this.mem.reactedAt > 90_000,
-        frame: this.frame,
+        frame: this.frame && now - this.frameAt < FRAME_FRESH_MS ? this.frame : undefined,
       });
       console.log(`homie decide at ${nowS.toFixed(0)}s (mayAsk=${mayAsk}): ${d.action}${d.action === "quiet" ? ` story=${d.storyInProgress}` : ` ${d.line.textEn}`}`);
       // She may have started talking (or said she's done) while we thought; then stay quiet.
-      if (this.closed || this.phase !== "recording" || Date.now() - this.lastSpeechAt < QUIET_MS) return;
+      if (this.closed || this.phase !== "recording" || this.mem.paused || Date.now() - this.lastSpeechAt < QUIET_MS) return;
       if (d.action === "quiet") this.storyInProgress = d.storyInProgress;
       else if (d.action === "react") {
         this.storyInProgress = false;
         this.mem.reactedAt = Date.now();
         this.flow(async () => {
           if (this.closed || this.phase !== "recording") return;
-          await this.say(d.line, "reaction");
-          if (!this.closed) void this.log("reaction", d.line, "spoken");
+          const said = await this.say(d.line, "reaction");
+          if (!this.closed) void this.log("reaction", d.line, "spoken", undefined, said && this.span(said));
         });
       } else this.flow(() => this.ask(d.kind, d.line));
     } catch (err) {
@@ -545,7 +660,7 @@ export class Recording {
   }
 
   private async ask(kind: AskKind, line: Line) {
-    if (this.closed || this.phase !== "recording") return;
+    if (this.closed || this.phase !== "recording" || this.mem.paused) return;
     this.pacer.onAsk(this.atS(Date.now()));
     this.mem.asked.push(line.textEn);
     const promptId = await this.log(kind, line, "spoken");
@@ -558,7 +673,7 @@ export class Recording {
     const pending: Pending = { promptId, line };
     this.pending = pending;
     this.send({ type: "ask", promptId, text: line.text, textEn: line.textEn, kind });
-    await this.say(line, kind);
+    this.markSaid(promptId, await this.say(line, kind));
     // ~10 s after she heard it with no answer, the card fades (her starting to talk holds it).
     if (this.pending === pending) pending.dropTimer = setTimeout(() => this.pending === pending && this.drop("ignored"), DROP_MS);
   }
@@ -583,7 +698,10 @@ export class Recording {
       });
       if (res.ok && (res.headers.get("content-type") ?? "").includes("image/jpeg")) {
         const jpeg = Buffer.from(await res.arrayBuffer());
-        if (jpeg.length < 4_000_000) this.frame = jpeg;
+        if (jpeg.length < 4_000_000) {
+          this.frame = jpeg;
+          this.frameAt = Date.now();
+        }
       }
     } catch {
       // No glasses frame: homie just listens.
@@ -600,8 +718,11 @@ export class Recording {
     });
   }
 
-  /** Speaks in her language with homie's voice; resolves once the phone should have finished playing it. */
-  private async say(line: Line, kind: string): Promise<void> {
+  /**
+   * Speaks in her language with homie's voice; resolves once the phone should have finished playing it, with
+   * when its voice played (wall-clock ms; cut short if it was interrupted), or nothing when no audio went out.
+   */
+  private async say(line: Line, kind: string): Promise<{ start: number; end: number } | undefined> {
     if (this.closed) return;
     this.speaking?.abort();
     const ctrl = new AbortController();
@@ -632,6 +753,18 @@ export class Recording {
     await pause(playEnd - Date.now(), ctrl.signal);
     if (this.playing === ctrl) this.playing = undefined;
     if (!this.speaking) this.state(this.phase === "ended" ? "quiet" : "listening");
+    return first ? { start: first, end: Math.min(playEnd, Date.now()) } : undefined;
+  }
+
+  /** A wall-clock span as `said` on the recording's clock. */
+  private span(s: { start: number; end: number }): convex.Said {
+    return { atS: this.atS(s.start), endS: this.atS(s.end) };
+  }
+
+  /** Saves when a question's voice played (it was logged before it was said). */
+  private markSaid(promptId: string, said: { start: number; end: number } | undefined) {
+    if (!said || promptId.startsWith("unsaved-") || this.mem.t0 === undefined) return;
+    void this.deps.convex.promptSaid(this.token, promptId, this.span(said)).catch((err) => console.warn("live/prompt-said", (err as Error).message));
   }
 
   /** Stop homie now: the line Sonic is still making, or the one the phone is still playing (an extra say_end). */
@@ -643,9 +776,9 @@ export class Recording {
   }
 
   /** Saves one of homie's lines; null when Convex says the recording is over (this socket then ends). */
-  private log(kind: convex.PromptKind, line: Line, status: convex.PromptStatus, atS = this.atS(Date.now())): Promise<string | null> {
+  private log(kind: convex.PromptKind, line: Line, status: convex.PromptStatus, atS = this.atS(Date.now()), said?: convex.Said): Promise<string | null> {
     return this.deps.convex
-      .logPrompt(this.token, this.recordingId, { kind, text: line.text, textEn: line.textEn, atS, status })
+      .logPrompt(this.token, this.recordingId, { kind, text: line.text, textEn: line.textEn, atS, status, ...(said ? { said } : {}) })
       .then((r) => r.promptId)
       .catch((err) => {
         if (err instanceof convex.Ended) return (this.endedUnderneath(), null);
@@ -667,8 +800,9 @@ export class Recording {
     await this.deps.convex.touchRecording(this.token, this.recordingId).catch(this.failed("live/status touch"));
   }
 
+  /** Seconds into the video: from t0, less the time the video doesn't have (in-app pauses). */
   private atS(ms: number) {
-    return this.mem.t0 === undefined ? 0 : Math.round((ms - this.mem.t0) / 100) / 10;
+    return this.mem.t0 === undefined ? 0 : Math.round((ms - this.mem.t0 - this.mem.gapS * 1000) / 100) / 10;
   }
 
   private setPhase(phase: Exclude<Phase, "loading">) {

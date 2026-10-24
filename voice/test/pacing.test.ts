@@ -6,16 +6,16 @@ import { DEMO, NORMAL, Pacer } from "../src/pacing.js";
 test("the first question comes no earlier than firstS", () => {
   const p = new Pacer(NORMAL);
   assert.equal(p.mayAsk(0), false);
-  assert.equal(p.mayAsk(239), false);
-  assert.equal(p.mayAsk(240), true);
+  assert.equal(p.mayAsk(119), false);
+  assert.equal(p.mayAsk(120), true);
   assert.equal(new Pacer(DEMO).mayAsk(40), true);
 });
 
 test("after a question, the next waits a full gap", () => {
   const p = new Pacer(NORMAL);
   p.onAsk(300);
-  assert.equal(p.mayAsk(300 + 269), false);
-  assert.equal(p.mayAsk(300 + 270), true);
+  assert.equal(p.mayAsk(300 + 209), false);
+  assert.equal(p.mayAsk(300 + 210), true);
 });
 
 test("each ignored question doubles the gap, up to 8x; an answer resets it", () => {

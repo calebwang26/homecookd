@@ -20,6 +20,13 @@ const FIXED = {
   }),
   beforeYouGo2: () => ({ en: "Before you go, two quick ones.", mr: "जाण्याआधी दोन छोटे प्रश्न." }),
   beforeYouGo1: () => ({ en: "Before you go, one quick one.", mr: "जाण्याआधी एक छोटा प्रश्न." }),
+  // Filmed in the app: the last thing homie asks for is a photo of the plate (the recipe's cover).
+  // TODO(caleb): native Marathi check, like the lines above.
+  plate: (w) => ({
+    en: `Last thing, ${w.call}. Hold the plate up to the camera, so ${w.kid ?? "your family"} can see how it looks.`,
+    mr: `शेवटचं, ${w.call}. ताट कॅमेऱ्यासमोर धरा, म्हणजे ${w.kid ? `${w.kid} ला` : "घरच्यांना"} दिसेल ते कसं दिसतं.`,
+  }),
+  plateThanks: () => ({ en: "Got it. Thank you!", mr: "मिळालं. धन्यवाद!" }),
   optIn: (w) => ({
     en: w.kid ? `Can ${w.kid} hear your stories too?` : "Can your family hear your stories too?",
     mr: w.kid ? `${w.kid} ला तुमच्या गोष्टी पण ऐकू द्यायच्या का?` : "घरच्यांना तुमच्या गोष्टी पण ऐकू द्यायच्या का?",

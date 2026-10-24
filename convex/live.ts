@@ -13,6 +13,7 @@ const LIVE = ["intro", "recording", "wrapping_up"] as const;
 const promptKind = schema.tables.homiePrompts.validator.fields.kind;
 const promptStatus = schema.tables.homiePrompts.validator.fields.status;
 const answer = schema.tables.homiePrompts.validator.fields.answer;
+const said = schema.tables.homiePrompts.validator.fields.said;
 const failure = v.object({ error: v.union(v.literal("signed_out"), v.literal("not_found"), v.literal("ended")) });
 
 export const startRecording = mutation({
@@ -85,6 +86,25 @@ export const startFilming = mutation({
     if (row.status !== "intro") return { ok: false };
     const now = Date.now();
     await ctx.db.patch("recordings", row._id, { status: "recording", startedAt: row.startedAt ?? now, updatedAt: now });
+    return { ok: true };
+  },
+});
+
+/**
+ * The photo of the finished plate homie asked for (a phone recording filmed in the app), uploaded with
+ * files.uploadUrl: the recipe's cover. A newer photo replaces the older one (its file is deleted).
+ */
+export const setCover = mutation({
+  args: { sessionToken: v.string(), recordingId: v.id("recordings"), storageId: v.id("_storage") },
+  returns: v.object({ ok: v.boolean() }),
+  handler: async (ctx, { sessionToken, recordingId, storageId }) => {
+    const signed = await requireSession(ctx, sessionToken);
+    requireCook(signed);
+    const row = await ctx.db.get("recordings", recordingId);
+    if (!row || row.cookId !== signed.person._id) throw new ConvexError("That recording isn't yours.");
+    if (row.status === "abandoned") return { ok: false };
+    if (row.coverStorageId && row.coverStorageId !== storageId) await ctx.storage.delete(row.coverStorageId);
+    await ctx.db.patch("recordings", row._id, { coverStorageId: storageId, updatedAt: Date.now() });
     return { ok: true };
   },
 });
@@ -209,6 +229,7 @@ export const addPrompt = internalMutation({
     textEn: v.string(),
     atS: v.number(),
     status: promptStatus,
+    said,
   },
   returns: v.union(failure, v.object({ promptId: v.id("homiePrompts") })),
   handler: async (ctx, { sessionToken, recordingId, ...prompt }) => {
@@ -234,6 +255,21 @@ export const updatePrompt = internalMutation({
     if ("error" in found) return found;
     await ctx.db.patch("homiePrompts", prompt._id, { status, ...(answer ? { answer } : {}) });
     await ctx.db.patch("recordings", found.row._id, { updatedAt: Date.now() });
+    return { ok: true as const };
+  },
+});
+
+/** When homie's voice for a prompt finished playing (asks are saved before they're said). */
+export const promptSaid = internalMutation({
+  args: { sessionToken: v.string(), promptId: v.string(), said: v.object({ atS: v.number(), endS: v.number() }) },
+  returns: v.union(failure, v.object({ ok: v.literal(true) })),
+  handler: async (ctx, { sessionToken, promptId, said }) => {
+    const id = ctx.db.normalizeId("homiePrompts", promptId);
+    const prompt = id && (await ctx.db.get("homiePrompts", id));
+    if (!prompt) return { error: "not_found" as const };
+    const found = await own(ctx, sessionToken, prompt.recordingId);
+    if ("error" in found) return found;
+    await ctx.db.patch("homiePrompts", prompt._id, { said });
     return { ok: true as const };
   },
 });
