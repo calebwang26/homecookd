@@ -113,6 +113,8 @@ export type RecordingSession = {
   cook: { name: string; relation?: string; language: string };
   kid?: { name: string };
   dish?: string;
+  /** homie has recorded with her before: a welcome back instead of the introduction. Missing (an older Convex) = no. */
+  metBefore?: boolean;
 };
 export type PromptKind = "intro" | "amount" | "cue" | "substitution" | "story" | "reaction" | "end" | "closing" | "optin";
 export type PromptStatus = "spoken" | "answered" | "ignored" | "not_now";
@@ -129,7 +131,8 @@ export async function person(sessionToken: string): Promise<Person> {
 }
 
 export async function recordingSession(sessionToken: string, recordingId: string): Promise<RecordingSession> {
-  if (usingStub) return stubRecordings()[recordingId === "stub-en" ? "en" : "mr"];
+  // "stub-mr-again" / "stub-en-again": a cook homie has recorded with before (the short hello).
+  if (usingStub) return { ...stubRecordings()[recordingId.startsWith("stub-en") ? "en" : "mr"], metBefore: recordingId.endsWith("-again") };
   return post("/live/session", { sessionToken, recordingId });
 }
 

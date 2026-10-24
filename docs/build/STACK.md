@@ -264,7 +264,8 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 **Voice service → Convex for homie** (HTTP POST, `x-voice-secret`; `convex/lib/liveRoutes.ts`)
 - `/live/person` `{ sessionToken }` → `{ personId, familyId, name, role, language, relation }` (401 if signed out).
 - `/live/session` `{ sessionToken, recordingId }` → `{ recording, cook: { name, relation, language }, kid?: { name },
-  dish? }` (404 if it isn't this cook's).
+  dish?, metBefore }` (404 if it isn't this cook's). `metBefore`: another of her recordings started filming, so
+  homie's hello is a short welcome back that never introduces homie again (`voice/src/homie.ts` `intro`).
 - `/live/status` `{ sessionToken, recordingId, status }` → `{ ok, startedAt? }`. Moving to `recording` sets
   `startedAt` (server clock) once; `ended` sets `endedAt`. `{ sessionToken, recordingId, touch: true }` (no
   status) → `{ ok }` is the service's heartbeat every 10 minutes while the socket is open: it only moves

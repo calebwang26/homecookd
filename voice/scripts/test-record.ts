@@ -6,6 +6,7 @@
 //   VOICE_STUB=1 HOMIE_DEMO=1 npm run dev                       (in another terminal)
 //   npm run test-record                                          Marathi (stub recording "stub-mr")
 //   COOK_LANG=en npm run test-record                                  English ("stub-en")
+//   RECORDING=stub-mr-again npm run test-record                       a cook homie has met (the short hello)
 //   SESSION=<cook's sessionToken> RECORDING=<recordings _id> npm run test-record   live Convex
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import WebSocket from "ws";

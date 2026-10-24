@@ -124,6 +124,8 @@ export const sessionView = internalQuery({
       cook: v.object({ name: v.string(), relation: v.optional(v.string()), language: v.string() }),
       kid: v.optional(v.object({ name: v.string() })),
       dish: v.optional(v.string()),
+      /** homie has recorded with her before (another of her recordings started filming): no second introduction. */
+      metBefore: v.boolean(),
     }),
   ),
   handler: async (ctx, { sessionToken, recordingId }) => {
@@ -131,11 +133,16 @@ export const sessionView = internalQuery({
     if ("error" in found) return found;
     const { signed, row } = found;
     const kid = row.forKidId ? await ctx.db.get("people", row.forKidId) : null;
+    const started = await ctx.db
+      .query("recordings")
+      .withIndex("by_cookId_and_startedAt", (q) => q.eq("cookId", row.cookId).gt("startedAt", 0))
+      .take(2);
     return {
       recording: row,
       cook: { name: signed.person.name, relation: signed.person.relation, language: signed.person.language ?? "en" },
       kid: kid ? { name: kid.name } : undefined,
       dish: row.dish,
+      metBefore: started.some((r) => r._id !== row._id),
     };
   },
 });

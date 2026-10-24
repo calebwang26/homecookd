@@ -91,7 +91,32 @@ test("the voice service reads the person and the cook's own recording, behind th
     cook: { name: "Dad", language: "en" },
     kid: { name: "Leo" },
     dish: "Chili",
+    metBefore: false,
   });
+});
+
+test("metBefore: homie has met her once another of her recordings started filming", async () => {
+  const { t, dad } = await family();
+  const view = async (sessionToken: string, recordingId: string) =>
+    (await (await post(t, "/live/session", { sessionToken, recordingId })).json()).metBefore;
+  const first = await t.mutation(api.live.startRecording, { sessionToken: dad.sessionToken, source: "phone" });
+  // A recording left at the hello (never filmed) doesn't count.
+  const unfilmed = await t.mutation(api.live.startRecording, { sessionToken: dad.sessionToken, source: "phone" });
+  expect(await view(dad.sessionToken, first.recordingId)).toBe(false);
+  expect(await view(dad.sessionToken, unfilmed.recordingId)).toBe(false);
+
+  await post(t, "/live/status", { sessionToken: dad.sessionToken, recordingId: first.recordingId, status: "recording" });
+  // Her own filming isn't meeting her before (a reconnect mid-recording).
+  expect(await view(dad.sessionToken, first.recordingId)).toBe(false);
+  expect(await view(dad.sessionToken, unfilmed.recordingId)).toBe(true);
+  const next = await t.mutation(api.live.startRecording, { sessionToken: dad.sessionToken, source: "glasses" });
+  expect(await view(dad.sessionToken, next.recordingId)).toBe(true);
+
+  // Another cook is still new to homie.
+  stubFetch({ family: { id: "fam-2", name: "Others" }, profiles: [{ id: "q-1", name: "Sam", role: "cook" }] });
+  const sam = await signIn(t, "q-1");
+  const hers = await t.mutation(api.live.startRecording, { sessionToken: sam.sessionToken, source: "phone" });
+  expect(await view(sam.sessionToken, hers.recordingId)).toBe(false);
 });
 
 test("status, prompts, answers and the stories opt-in, on the recording's own clock", async () => {

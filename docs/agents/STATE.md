@@ -607,3 +607,20 @@ Before starting work, compare the last commit here with `git log origin/main` to
     kid Home heard the hello, then "I’m right here.", and "I’m right here." again after a full reload.
   - **Open:** the voice service's recording hello still says "I'm homie" on every recording (a voice change and
     deploy). Kid "Ask" keeps the default lines. Not on an iPhone yet (JS only: an EAS Update covers it).
+- Oct 24 · #PR · Claude · The recording hello introduces homie only once (Caleb: "fix this", after #53).
+  - **Convex:** `live.sessionView` (`/live/session`) returns `metBefore`: another of this cook's recordings started
+    filming (new index `recordings.by_cookId_and_startedAt`). Her own recording doesn't count (a reconnect), and a
+    recording left at the hello doesn't either.
+  - **Voice:** with `metBefore` the hello is a short welcome back that never introduces homie or explains the
+    questions again (`homie.ts` `intro(true)`, at most 20 words; written fallback `lines.ts` `introAgain`, its
+    Marathi built from the intro's sentences plus a new "पुन्हा भेटून छान वाटलं.", under the native-speaker
+    TODO(caleb)). Missing `metBefore` (Convex not yet deployed) = the full hello, so either deploy can go first.
+    Stub: `RECORDING=stub-mr-again` / `stub-en-again` is a cook homie has met.
+  - **Tests:** Convex 65 pass (new: metBefore), `tsc -p convex`; voice 91 pass (3 new: the welcome back, its written
+    fallback without "homie", a first recording or a missing flag still introduces), typecheck. Live (local voice
+    service, `VOICE_STUB=1`, real Claude, Ink and Sonic): `stub-mr-again` said a 9.8 s Marathi welcome back
+    ("तुमच्यासोबत पुन्हा स्वयंपाक करायला मला खूप आनंद होतोय…"), `stub-en-again` 6.8 s ("so good to be back
+    with you!"), first-time `stub-mr` the full 18.8 s hello.
+  - **Open:** not deployed (Convex `grand-dragon-649` and the voice service both need it; waiting on Caleb). For the
+    Oct 25 demo: if the demo cook's profile has filmed before (rehearsals), she hears the short hello, not the
+    full one.

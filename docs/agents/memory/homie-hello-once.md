@@ -1,6 +1,6 @@
 ---
 name: homie-hello-once
-description: "Oct 24: homie introduces itself once per person on a phone, then never again"
+description: "Oct 24: homie introduces itself once (the pot per person on a phone; the recording hello per cook), then never again"
 metadata:
   type: project
 ---
@@ -19,6 +19,8 @@ On 2026-10-24 Caleb said: "After homie introduces itself once, it doesn't have t
 
 **How to apply:**
 - Any new place homie greets someone checks `takeTapLine` / `markIntroduced` instead of saying its name again.
-- Not done yet: the voice service's recording hello still says "I'm homie" on every recording (`voice/src/lines.ts`,
-  `homie.ts` `intro()`). Shortening it for a cook who has recorded before needs a voice-service change and deploy.
+- The recording hello (voice service, Oct 24, Caleb: "fix this"): a cook homie has recorded with before (Convex
+  `live.sessionView` `metBefore`: another of her recordings started filming) gets a short welcome back with no
+  "I'm homie" and no explaining (`homie.ts` `intro(true)`, fallback `lines.ts` `introAgain`). This one is per
+  person everywhere, not per phone: Convex knows her recordings.
 - Related: [[homie-voice]], [[homie-talks-no-bubble]], [[declutter-first]].

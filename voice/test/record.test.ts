@@ -1,6 +1,6 @@
 // Recording's phases (record.ts) with a fake socket, speech-to-text, voice, Claude and Convex, on a fake
 // clock: start/done ordering, double start, done during a question, reconnects, a socket closed mid-wrap-up,
-// and a recording the app ended underneath an open socket.
+// a recording the app ended underneath an open socket, and the hello for a cook homie has met before.
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, mock, test } from "node:test";
 import WebSocket from "ws";
@@ -36,7 +36,7 @@ const quiet = (storyInProgress = false): Decision => ({ action: "quiet", storyIn
 type Call = { fn: string; args: unknown[]; at: number };
 
 /** One recording's backend: a Convex row, Claude's answers, the voice and the mic. */
-function world(status: RecordingStatus = "intro") {
+function world(status: RecordingStatus = "intro", metBefore?: boolean) {
   const row: { status: RecordingStatus; startedAt?: number } = { status };
   const over = () => row.status === "ended" || row.status === "abandoned";
   const calls: Call[] = [];
@@ -46,6 +46,9 @@ function world(status: RecordingStatus = "intro") {
   const endCalls: { asked: string[]; max: number }[] = [];
   const spoken: string[] = [];
   const voices: Voice[] = [];
+  /** Each hello Claude was asked for: true = a welcome back. `hello.fails`: Claude can't write it. */
+  const intros: boolean[] = [];
+  const hello = { fails: false };
   let stt: SttEvents | undefined;
   let ids = 0;
 
@@ -56,7 +59,11 @@ function world(status: RecordingStatus = "intro") {
   }
 
   const agent: ReturnType<RecordingDeps["agent"]> = {
-    intro: async () => (await sleep(THINK_MS), line("Hello Rajani Aaji!")),
+    intro: async (again = false) => {
+      intros.push(again);
+      await sleep(THINK_MS);
+      return hello.fails ? null : line(again ? "Good to see you again, Rajani Aaji!" : "Hello Rajani Aaji!");
+    },
     decide: async (input: Parameters<HomieAgent["decide"]>[0]) => {
       decided.push({ nowS: input.nowS, mayAsk: input.mayAsk, asked: [...input.asked], heard: input.heard.map((h) => h.text) });
       await sleep(THINK_MS);
@@ -92,6 +99,7 @@ function world(status: RecordingStatus = "intro") {
           cook: { name: "Rajani", relation: "Aaji", language: "en" },
           kid: { name: "Shreya" },
           dish: "Dal Tadka",
+          metBefore,
         })),
       setRecordingStatus: (_token, _id, s) =>
         convexCall("status", [s], () => {
@@ -136,7 +144,7 @@ function world(status: RecordingStatus = "intro") {
   }
 
   const named = (fn: string) => calls.filter((c) => c.fn === fn);
-  return { row, calls, named, decisions, decided, endQuestions, endCalls, spoken, voices, connect, says, deps };
+  return { row, calls, named, decisions, decided, endQuestions, endCalls, spoken, voices, intros, hello, connect, says, deps };
 }
 
 type Phone = ReturnType<ReturnType<typeof world>["connect"]>;
@@ -150,6 +158,45 @@ async function heardOut(c: Phone, what: string) {
 
 /** Loads the recording and waits out the hello (written, then ~5 s of audio). */
 const helloDone = (c: Phone) => heardOut(c, "hello");
+
+test("a cook homie has recorded with before gets a welcome back, not the introduction", async () => {
+  const w = world("intro", true);
+  const c = w.connect("rec-met-before");
+  await helloDone(c);
+
+  assert.deepEqual(w.intros, [true]);
+  assert.deepEqual(w.spoken, ["Good to see you again, Rajani Aaji!"]);
+  // It goes to Convex as the hello once filming starts.
+  c.send({ type: "start" });
+  await waitFor("the hello in Convex", () => w.named("logPrompt").length > 0);
+  assert.deepEqual(w.named("logPrompt").map((p) => p.args), [["intro", "Good to see you again, Rajani Aaji!"]]);
+  c.drop();
+});
+
+test("when Claude can't write the hello: the written welcome back never says homie's name", async () => {
+  const w = world("intro", true);
+  w.hello.fails = true;
+  const c = w.connect("rec-met-before-written");
+  await helloDone(c);
+
+  assert.equal(w.spoken.length, 1);
+  assert.equal(w.spoken[0], "Hi, Rajani Aaji. Good to see you again. You're making Dal Tadka for Shreya today. How lovely. Start whenever you're ready.");
+  assert.doesNotMatch(w.spoken[0], /homie/i);
+  c.drop();
+});
+
+test("a first recording, or a Convex that doesn't say (metBefore missing), still gets the introduction", async () => {
+  for (const metBefore of [false, undefined]) {
+    const w = world("intro", metBefore);
+    w.hello.fails = true;
+    const c = w.connect(`rec-first-${metBefore}`);
+    await helloDone(c);
+
+    assert.deepEqual(w.intros, [false]);
+    assert.match(w.spoken[0], /^Hi, Rajani Aaji\. I'm homie\./);
+    c.drop();
+  }
+});
 
 test("done while start is still saving: straight to the end, recording never comes back", async () => {
   const w = world();
