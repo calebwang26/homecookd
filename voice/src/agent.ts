@@ -34,6 +34,8 @@ export type Actions = {
 };
 
 const MAX_CALLS_PER_TURN = 3;
+/** The search before Claude's first call waits this long (find_moment itself waits up to 15 s). */
+const UPFRONT_SEARCH_MS = 2000;
 
 const obj = (properties: Record<string, object>, required: string[] = []) => ({
   type: "object" as const,
@@ -115,7 +117,7 @@ How you sound, in every line you say: warm and a little playful, like an older c
 
 Each turn, call exactly one tool:
 - "next", "done", "what's next", "ok go on" → next_step. "back", "last step" → previous_step. "again", "what?", "say that again" → repeat_step. "step 4", "go to the sauce part" → go_to_step.
-- A question about the dish (how much, how long, what should it look like, why, can I swap something): the message lists the moments from ${cook}'s video that may match, or says the search found nothing. If one clearly answers it, play_clip with its start_s and end_s. Use find_moment only when moments are listed but the kid's words were vague and other words would clearly find a better one; when the search found nothing, don't search again. If no moment answers it: give_hint when it's general cooking knowledge you're sure of (it's labelled as yours, and the same call sends the question to ${cook}); otherwise ask_cook.
+- A question about the dish (how much, how long, what should it look like, why, can I swap something): the message lists the moments from ${cook}'s video that may match, or says the search found nothing. If one clearly answers it, play_clip with its start_s and end_s. Use find_moment only when moments are listed but the kid's words were vague and other words would clearly find a better one; when the search found nothing, don't search again (but when it says the search didn't finish in time, use find_moment first). If no moment answers it: give_hint when it's general cooking knowledge you're sure of (it's labelled as yours, and the same call sends the question to ${cook}); otherwise ask_cook.
 - "show me how you did this step" → play_clip with the step's own video times.
 - "set a timer for five minutes", "time the rice for 20" → set_timer.
 - Small talk or thanks → say, briefly and warmly.
@@ -155,11 +157,17 @@ export class TurnAgent {
     const context = `[On step ${now?.order ?? "?"} of ${steps.length}: ${now?.title ?? ""}]${note ? `\n[${note}]` : ""}`;
     // Search the video up front (in-memory, ~10 ms), so a question needs one model call, not two. Saying when
     // nothing matched matters as much: otherwise Claude searches again first (a whole extra call, ~3 s).
-    let foundThisTurn = await this.actions.findMoment(utterance, 2000).catch(() => [] as Hit[]);
+    // But an empty answer that took the whole wait is a search still loading (the first question on a fresh
+    // server), not "nothing in her video": then Claude may search itself, so her own clip isn't lost.
+    const searchStart = Date.now();
+    let foundThisTurn = await this.actions.findMoment(utterance, UPFRONT_SEARCH_MS).catch(() => [] as Hit[]);
+    const searchTimedOut = !foundThisTurn.length && Date.now() - searchStart >= UPFRONT_SEARCH_MS - 100;
     this.playable.push(...foundThisTurn.map((h) => ({ startS: h.startS, endS: h.endS, quote: h.quote, stepOrder: h.stepOrder })));
     const moments = foundThisTurn.length
       ? `\nMoments from ${this.cook}'s video that may match: ${momentsJson(foundThisTurn)}`
-      : `\nSearching ${this.cook}'s video found nothing for this.`;
+      : searchTimedOut
+        ? `\nSearching ${this.cook}'s video didn't finish in time. If this is about the dish, use find_moment before anything else.`
+        : `\nSearching ${this.cook}'s video found nothing for this.`;
     this.pushUser([...this.pending, { type: "text", text: `${context}\n${this.session.kid.name}: "${utterance}"${moments}` }]);
     this.pending = [];
 

@@ -121,3 +121,22 @@ test("an action that fails still gets its tool_result, so the next turn isn't re
   assert.equal(opener.is_error, true);
   assert.deepEqual(calls.at(-1), ["goToStep", 2]);
 });
+
+test("a search still loading isn't 'nothing found': Claude may search, so the cook's own clip isn't lost", { timeout: 10_000 }, async () => {
+  const clip: Hit = { text: "Always hot water, never cold.", quote: "Always hot water, never cold.", kind: "tip", startS: 40, endS: 55, stepOrder: 2, score: 0.9 };
+  const claude = fakeClaude([{ name: "find_moment", input: { query: "hot or cold water" } }, { name: "play_clip", input: { start_s: 40, end_s: 55 } }]);
+  const { calls, actions } = fakeActions();
+  let searches = 0;
+  // The up-front search runs out its whole wait empty (the index is still loading); find_moment then finds the clip.
+  actions.findMoment = async (query, waitMs) => {
+    calls.push(["findMoment", query]);
+    if (searches++ === 0) return new Promise<Hit[]>((r) => setTimeout(() => r([]), waitMs));
+    return [clip];
+  };
+  const agent = new TurnAgent(session, actions, claude.client);
+  await agent.turn("Can I use cold water for the braise?");
+
+  assert.match(lastUserText(claude.requests[0]), /didn't finish in time\. If this is about the dish, use find_moment/);
+  assert.doesNotMatch(lastUserText(claude.requests[0]), /found nothing/);
+  assert.ok(calls.some(([name]) => name === "playClip"), "her clip plays");
+});
