@@ -149,7 +149,7 @@ export const neighbors = internalMutation({
         memories: [],
         memoriesOptIn: false,
         sharedAt: now - familiesAdded * 3600_000,
-        storyCard: { text: n.story, writtenAt: now },
+        storyCard: { text: n.story, writtenAt: now, usedStories: false },
       });
       familiesAdded++;
     }
