@@ -40,8 +40,14 @@ older note in `memory/` disagrees, this file wins.
   `web`. A red Vercel check on a PR has usually meant that setting, not the code.
 - **GCS** buckets `edible-media-*` (public, no listing) and `edible-uploads-*` (private), plus the Cloud Run upload signer. See `README.md`.
 - **Hackathon (Oct 23–25), `docs/build/STACK.md`:**
-  - **Convex** project "homecookd": the schema is deployed to the preview deployment
-    https://energized-starfish-920.convex.cloud. No functions yet.
+  - **Convex** project "homecookd", preview deployment `hackathon` → https://grand-dragon-649.convex.cloud
+    (HTTP routes on `.convex.site`). Track A is deployed: sign-in bridge, app functions, worker and voice routes,
+    Muse photo note, Ink transcripts, Moss indexing. The demo family is seeded under the placeholder id
+    `seed:demo` (`npx convex run seed:claim '{"supabaseFamilyId":"…"}'` points it at the real one). Env:
+    CARTESIA, MOSS, MUSE, WORKER_SECRET, VOICE_SECRET. Redeploy with `--preview-name hackathon`, never
+    `--preview-create`: that recreated the deployment and deleted `energized-starfish-920`.
+  - **Moss** refuses writes: "usage limit has been reached; billing must be updated" (Oct 23). Indexing then
+    fails softly and questions go to the cook. Once billing is fixed: `npx convex run worker:reindexMissing`.
   - **Supabase** `bsudybxsqvtwftsdmwmz` ("calhacks-touse") is this repo's own copy: tables, buckets and the demo and
     TEST families are seeded. The `api` isn't deployed yet and its secrets aren't set (needs a Supabase access
     token). Frozen otherwise.
@@ -105,3 +111,22 @@ Before starting work, compare the last commit here with `git log origin/main` to
 - Oct 22 · #44 · Claude · iPhone test round 3 (cook step + Home): pots show the current step (furthest stays in All steps and Continue at step N); All steps shows done steps as dark green with a light green check and not-done steps as light green with a dark green number; Hear removed from the cook step (the video carries the voice; stories still use it); tapping a substep plays the step video from that substep (and expands it); step order is title, video, substeps, ingredients, tip, story, Ask; Home label reads '1/10 recipes'. Open: iPhone check of the seek-on-tap.
 - Oct 23 · #1 (hackathon-homecookd) · Claude · Hackathon stack from Caleb's PLAN.pdf: `docs/build/STACK.md` (stack, 2-day cuts, contracts, build order), `convex/schema.ts` (deployed to the preview), Cartesia/Moss/Convex keys in `.env` with checks in `scripts/`. Removed the Supabase `/voice/token` and `/moss/ask` routes (they no longer fit the plan). Repo pointed at its own Supabase project (fork session). Memory: hackathon-stack-oct23, testflight-live (replaces no-testflight-yet). Open: the four build tracks, Supabase api deploy + secrets, Muse and Anthropic keys.
 - Oct 23 · #1 (hackathon-homecookd) · Claude · Hackathon Supabase project `bsudybxsqvtwftsdmwmz` is live: migrations, seed (demo + TEST family, fresh test code), api deployed, secrets and hourly cron set; two_sided 129, retention 61 and api-smoke 23 pass. Cartesia + Moss keys set in Convex env on `energized-starfish-920`. All keys now in one main-checkout `.env`; worktree copies are symlinks to it (AGENTS.md rule).
+- Oct 23 · #4 (hackathon-homecookd) · Claude · Track A, Convex core (`convex/`):
+  - **Sign-in bridge:** `sessions.start` checks the device key with Supabase `GET /family`, mirrors the family and
+    returns a session token (only its hash is stored, 30 days). One `requireSession` check guards every public
+    function.
+  - **Functions and routes:** recipes, jobs, questions, messages, files and cooking from STACK.md; `http.ts`
+    worker and voice routes.
+  - **AI actions:** Muse Spark photo-note draft (`muse-spark-1.3`, nothing sent until the kid sends it); Cartesia
+    Ink batch transcripts of voice-note answers; Moss indexing per family (JS SDK, external package).
+  - **Seed and tests:** demo seed; 10 convex-test tests.
+  - **Schema:** `cookingSessions.updatedAt`, `sessions.by_expiresAt`, `steps[].quote`.
+  - **Deploy:** to `grand-dragon-649`, which replaced `energized-starfish-920` (`--preview-create` recreated
+    it). Generated `WORKER_SECRET` and `VOICE_SECRET` into `.env` and set Convex env.
+  - **Live checks:** a curl against every HTTP route; the worker flow from `queued` to `done`; Ink transcribed a
+    spoken answer; Muse drafted a note.
+  - **Open:**
+    - Moss billing limit; nothing is indexed yet.
+    - The bridge's success path was tested only in convex-test: `docs/build/.test-family-code` isn't recognised by
+      the new Supabase project, so no live TEST-family device key.
+    - The real demo family's Supabase id still needs `seed:claim`.
