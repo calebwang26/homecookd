@@ -178,7 +178,7 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - **Open:** the TEST family's Biryani still says `mossIndexedAt`, but its index was deleted on purpose; it
     re-indexes on its next publish.
 - Oct 24 · (this PR) · Claude · Memory: demo-family-shreya (the demo is Shreya Pawar's family; her grandma cooks and records in Marathi; Serene isn't in the demo).
-- Oct 24 · #TBD · Claude · Track E: homie, the live companion. Convex `live.ts` (`startRecording`, `recording`) and
+- Oct 24 · #29 · Claude · Track E: homie, the live companion. Convex `live.ts` (`startRecording`, `recording`) and
   `/live/person|session|status|prompt|prompt-update|optin` (`lib/liveRoutes.ts`), idle recordings abandoned after
   2 h (cron); `/voice/session` adds the cook's language, relation, `quoteOriginal` and each story's step. Voice
   service: `/record` (hello → questions while she cooks → last questions, stories opt-in, goodbye; Gemini Live
