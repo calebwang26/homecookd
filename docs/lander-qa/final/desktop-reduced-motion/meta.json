@@ -1,0 +1,99 @@
+{
+ "W": 1440,
+ "H": 900,
+ "range": {
+  "start": 0,
+  "end": 11421,
+  "total": 12321
+ },
+ "meta": [
+  {
+   "i": 0,
+   "y": 0,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 1,
+   "y": 879,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 2,
+   "y": 1757,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 3,
+   "y": 2636,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 4,
+   "y": 3514,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 5,
+   "y": 4393,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 6,
+   "y": 5271,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 7,
+   "y": 6150,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 8,
+   "y": 7028,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 9,
+   "y": 7907,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 10,
+   "y": 8785,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 11,
+   "y": 9664,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 12,
+   "y": 10542,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 13,
+   "y": 11421,
+   "overflowX": 0,
+   "playing": []
+  }
+ ],
+ "logs": [
+  "[warning] You have Reduced Motion enabled on your device. Animations may not appear as expected.. For more information and steps for solving, visit https://motion.dev/troubleshooting/reduced-motion-disabled"
+ ],
+ "bad": []
+}
