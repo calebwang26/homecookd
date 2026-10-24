@@ -1,11 +1,13 @@
 // The voice service's spoken replies ({ type: "say" } + binary audio): written to a small WAV in the
 // cache and played on the app's one shared player (lib/media), so it stops the step video and a
-// story's voice, like any other voice. The cook screen labels it "AI voice" while its key plays.
+// story's voice, like any other voice. The cook screen labels it "AI voice" while its key plays, or
+// "Translated from Grandma" for a translation of the clip that just played (its key: TRANSLATION_KEY_PREFIX).
 import { File, Paths } from 'expo-file-system';
 
 import { playClip } from '@/lib/media';
 
 export const SAY_KEY_PREFIX = 'say:';
+export const TRANSLATION_KEY_PREFIX = 'say:translation:';
 
 /** A 44-byte WAV header for mono 16-bit PCM. */
 function wavHeader(bytes: number, sampleRate: number): Uint8Array {
@@ -40,7 +42,7 @@ function concat(parts: Uint8Array[]): Uint8Array {
 let seq = 0;
 
 /** Plays one reply. A WAV from the server plays as is; raw PCM is s16le at `sampleRate`. */
-export function playSay(chunks: ArrayBuffer[], sampleRate = 24000): void {
+export function playSay(chunks: ArrayBuffer[], sampleRate = 24000, translation = false): void {
   if (!chunks.length) return;
   const body = concat(chunks.map((c) => new Uint8Array(c)));
   const isWav = body.length > 4 && String.fromCharCode(...body.slice(0, 4)) === 'RIFF';
@@ -55,5 +57,5 @@ export function playSay(chunks: ArrayBuffer[], sampleRate = 24000): void {
     console.warn('[say] could not write the reply', String(e));
     return;
   }
-  playClip({ url: file.uri, key: `${SAY_KEY_PREFIX}${seq}` });
+  playClip({ url: file.uri, key: `${translation ? TRANSLATION_KEY_PREFIX : SAY_KEY_PREFIX}${seq}` });
 }
