@@ -5,8 +5,10 @@
 //   From my glasses  live.startRecording (source glasses) -> /recording: homie listens on the phone by
 //                    the stove; the glasses' video reaches the job from the VM.
 //   Phone camera     live.startRecording (source phone) -> /recording: homie's hello, then the phone's
-//                    camera, then homie's last questions there, then Send.
+//                    camera, then homie's last questions there, and the video sends itself.
 //   Videos I took    the camera roll, then Send (as before).
+// If homie can't start (no connection within 10 s, or live.* isn't on the server), glasses say so and
+// the phone camera opens without homie, then Send.
 // A quiet "Videos from my glasses" stays as the fallback for glasses that saved to the camera roll (the
 // job is tagged `source: "glasses"`). On the web, the camera and camera roll explain that they work in
 // the app on a phone.
@@ -30,7 +32,18 @@ import { colors, radii, shadows, space } from '@/theme/tokens';
 
 /** The sheet's native Modal has to be gone before the next screen, camera or picker presents (iOS). */
 const SHEET_GONE_MS = 600;
+/** Convex waits for a connection with no limit; offline, homie's start gives up after this. */
+const START_TIMEOUT_MS = 10_000;
 const after = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+/** `work`, or a throw after `ms` (into the caller's catch). */
+function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
+  let t: ReturnType<typeof setTimeout> | null = null;
+  const late = new Promise<never>((_, reject) => {
+    t = setTimeout(() => reject(new Error('timed out')), ms);
+  });
+  return Promise.race([work, late]).finally(() => t && clearTimeout(t));
+}
 
 const tripod = require('@/components/record/tripod.jpg');
 
@@ -68,8 +81,8 @@ export default function RecordScreen() {
     if (await pick.library({ ...ctx, glasses: true })) router.push('/send');
   };
 
-  const start = async ({ source, dish: typed, kid, language }: PreRecordChoice) => {
-    setDraftMeta({ dish: typed || null, requestFrom: kid?.id ?? null, language, recordingId: null });
+  const start = async ({ source, dish: typed, kid, everyone, language }: PreRecordChoice) => {
+    setDraftMeta({ dish: typed || null, requestFrom: kid?.id ?? null, everyone, language, recordingId: null });
     const picked: PickContext = { dish: typed || null, requestFrom: kid?.id ?? null };
     if (source === 'library' || (source === 'camera' && phoneOnly)) {
       setSheet(false);
@@ -79,12 +92,17 @@ export default function RecordScreen() {
     }
     setBusy(source);
     try {
-      const forKidId = (await convexPersonIdByName(kid?.name)) ?? undefined;
-      const { recordingId } = await startRecording({ dish: typed || undefined, forKidId, language, source: source === 'glasses' ? 'glasses' : 'phone' });
+      const { recordingId } = await withTimeout(
+        (async () => {
+          const forKidId = (await convexPersonIdByName(kid?.name)) ?? undefined;
+          return startRecording({ dish: typed || undefined, forKidId, language: language ?? undefined, source: source === 'glasses' ? 'glasses' : 'phone' });
+        })(),
+        START_TIMEOUT_MS,
+      );
       if (source === 'camera') setDraftMeta({ recordingId });
       setSheet(false);
       await after(SHEET_GONE_MS);
-      router.push({ pathname: '/recording', params: { id: recordingId, source: source === 'glasses' ? 'glasses' : 'phone', kid: kid?.name ?? '', lang: language } });
+      router.push({ pathname: '/recording', params: { id: recordingId, source: source === 'glasses' ? 'glasses' : 'phone', kid: kid?.name ?? '', lang: language ?? '' } });
     } catch (e) {
       console.warn('[record] startRecording', String(e).slice(0, 160));
       if (source === 'glasses') {

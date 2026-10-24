@@ -1,38 +1,45 @@
-// Grandma's recording screen: /recording?id=<recordingId>&source=glasses|phone (from Record's
-// pre-record sheet). homie rests top-right and talks with her over the /record socket
-// (lib/live/homie useHomieRecording). Everything is in her language with small English under it.
-//   intro        homie says hello; then one huge "Start cooking".
-//   recording    (glasses) the status pill "Recording from the glasses", the big elapsed clock, "for
-//                Shreya · Chicken biryani", the calm line, one huge "I'm done" (it asks once:
-//                "Done cooking?"). homie's questions come up as moments.
-//                (phone) "Start cooking" opens the phone's camera instead; homie waits meanwhile.
-//   wrapping_up  homie's last questions and "Can Shreya hear your stories too?", as moments.
-//   ended        glasses: back home, "Your recording is on its way" (the glasses VM uploads it);
-//                phone: Send, with the camera's video and this recording in the draft.
-// The screen stays awake (its own keep-awake tag) and can't be swiped away once filming started.
+// Grandma's recording screen (Caleb's v3): /recording?id=<recordingId>&source=glasses|phone[&kid&lang]
+// (from Record's pre-record sheet). One big red record button in the middle of a warm peach screen,
+// one line under it, and homie resting top-right, talking with her over the /record socket
+// (lib/live/homie). Her language big, small English under it. Nothing else.
+//   connecting, intro  homie says hello while the button rests ("homie is saying hello"). Then filming
+//                      starts by itself.
+//   recording          glasses: the button breathes; a tap is "I'm done" ("माझं झालं" / "Tap when you're
+//                      done"). phone: the phone's own camera opens instead (homie waits, its socket
+//                      closed); when the video is back, homie wraps up. No video: back to Record.
+//   wrapping_up        homie's last questions and "Can Shreya hear your stories too?".
+//   ended              the done view (components/record/DoneView): homie waves, the video goes, home.
+// homie's questions come up as AskMoments: answered out loud, no buttons.
+// If homie's connection is lost: the reason, "Try again" and the × (a phone recording can also film
+// without homie; one already filmed goes straight to the done view and sends). The screen stays
+// awake, and can't be swiped away once filming started.
+// Dev aids (web screenshots only): ?preview=done shows the done view without sending; ?preview=ask
+// shows a made-up question from homie as a phone with a microphone would (the listening bars).
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
-import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
+import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { AskMoment } from '@/components/record/AskMoment';
 import { BiLine } from '@/components/record/BiLine';
+import { DoneView } from '@/components/record/DoneView';
 import { useDraft } from '@/components/record/draft';
-import { afterEnd, elapsedLabel, forLine, recordingView } from '@/components/record/recordingLogic';
+import { RecordButton } from '@/components/record/RecordButton';
+import { recordingView, shouldAutoStart, type Ask } from '@/components/record/recordingLogic';
+import { COLUMN, RecordWash } from '@/components/record/RecordWash';
 import { usePickVideos } from '@/components/record/usePickVideos';
-import { ActionButton, CloseIcon, IconButton, PressableScale, ScreenWash, Txt, useToast } from '@/components/ui';
-import { useAiSpeaking } from '@/lib/homie/hooks';
-import { showMoment } from '@/lib/homie/store';
+import { recordWords } from '@/components/record/words';
+import { ActionButton, CloseIcon, IconButton } from '@/components/ui';
+import { useAiSpeaking, useHomieScreen } from '@/lib/homie/hooks';
 import { cookWords, type Line } from '@/lib/homie/strings';
 import { useRecording } from '@/lib/live/convex';
 import { useHomieRecording } from '@/lib/live/homie';
-import { speak } from '@/lib/live/speak';
-import { alpha, colors, fonts, motion, shadows, space } from '@/theme/tokens';
+import { colors, motion, space } from '@/theme/tokens';
 
 const AWAKE_TAG = 'homecookd-recording';
-/** After homie's goodbye, a beat before the screen changes. */
-const ENDED_HOLD_MS = 700;
+const PREVIEW_ASK: Ask = { promptId: 'preview', text: 'आजी, आलं साधारण किती घातलं?', textEn: 'About how much ginger was that?', kind: 'amount' };
 
 function useRecordingAwake() {
   useEffect(() => {
@@ -50,215 +57,136 @@ function useRecordingAwake() {
   }, []);
 }
 
-/** Now, every second while `on`. */
-function useNow(on: boolean): number {
-  const [now, setNow] = useState(() => Date.now());
-  useEffect(() => {
-    if (!on) return;
-    const t = setInterval(() => setNow(Date.now()), 1000);
-    return () => clearInterval(t);
-  }, [on]);
-  return now;
-}
-
 function leave() {
   if (router.canGoBack()) router.back();
   else router.replace('/parent/home');
 }
 
+/** A button's one label: her words · the English. */
+const both = (l: Line) => (l.en ? `${l.text} · ${l.en}` : l.text);
+
 export default function RecordingScreen() {
   useRecordingAwake();
-  const params = useLocalSearchParams<{ id?: string; source?: string; kid?: string; lang?: string }>();
-  const id = params.id || null;
+  const params = useLocalSearchParams<{ id?: string; source?: string; kid?: string; lang?: string; preview?: string }>();
+  const devPreview = __DEV__ && Platform.OS === 'web' && (params.preview === 'done' || params.preview === 'ask') ? params.preview : null;
+  const preview = devPreview === 'done';
+  const id = devPreview ? null : params.id || null;
   const insets = useSafeAreaInsets();
   const reduce = useReducedMotion();
-  const toast = useToast();
   const draft = useDraft();
   const pick = usePickVideos();
   const rec = useRecording(id);
   const source = rec?.source ?? (params.source === 'phone' ? 'phone' : 'glasses');
   const homie = useHomieRecording(id, { language: params.lang || 'en', kidName: params.kid || undefined, dish: draft.dish ?? undefined });
-  const lang = homie.info?.language ?? rec?.language ?? params.lang ?? 'en';
-  const w = useMemo(() => cookWords(lang), [lang]);
+  const lang = homie.info?.language ?? rec?.language ?? (params.lang || 'en');
+  const words = useMemo(() => ({ cook: cookWords(lang), record: recordWords(lang) }), [lang]);
   const kid = homie.info?.kidName ?? (params.kid || null);
-  const dish = homie.info?.dish ?? rec?.dish ?? draft.dish;
   const ended = homie.phase === 'ended' || rec?.status === 'ended' || rec?.status === 'abandoned';
-  const view = recordingView(ended ? 'ended' : homie.phase, source, homie.introDone);
+  // A phone recording is over once its camera is back: homie only wraps up.
+  const [phoneFilmed, setPhoneFilmed] = useState(false);
+  const view = recordingView(ended ? 'ended' : phoneFilmed && homie.phase === 'recording' ? 'wrapping_up' : homie.phase, words);
 
-  // The clock: Convex's startedAt (the server's), else when this phone heard filming began. A phone
-  // recording shows its video's length once the camera is back.
-  const now = useNow(view.clock === 'running');
-  const startedAt = rec?.startedAt ?? homie.recordingSince;
-  const stoppedAt = rec?.endedAt ?? homie.stoppedSince;
-  const cameraMs = draft.clips.filter((c) => c.selected).reduce((a, c) => a + (c.asset.duration ?? 0), 0);
-  const clockMs = source === 'phone' ? cameraMs || null : startedAt ? (view.clock === 'stopped' && stoppedAt ? stoppedAt : now) - startedAt : null;
+  // Filmed without homie (its connection was lost before filming): straight to the done view.
+  const [filmedAlone, setFilmedAlone] = useState(false);
+  // homie's goodbye has been said: the done view. Once shown it stays (it sends a phone recording
+  // once, when it first shows). A phone video that is already filmed goes even if homie is lost.
+  const aiSpeaking = useAiSpeaking();
+  const [finished, setFinished] = useState(false);
+  if (!finished && (preview || filmedAlone || (phoneFilmed && !!homie.error) || (ended && !aiSpeaking))) setFinished(true);
 
-  // No swiping away once she's filming.
+  // No swiping away once she's filming (the × comes back if homie's connection is lost).
   const navigation = useNavigation();
   const filming = homie.phase === 'recording' || homie.phase === 'wrapping_up';
   useEffect(() => {
-    navigation.setOptions({ gestureEnabled: !filming });
-  }, [navigation, filming]);
+    navigation.setOptions({ gestureEnabled: !filming && !finished });
+  }, [navigation, filming, finished]);
 
-  // homie's goodbye has been said: glasses go home (the VM uploads); a phone recording goes to Send.
-  const aiSpeaking = useAiSpeaking();
-  const left = useRef(false);
+  // The corner pot hides while homie asks (it comes to the centre) and on the done view.
+  const [asking, setAsking] = useState(false);
+  useHomieScreen({ hidden: asking || finished });
+
+  // A phone recording: the system camera films; homie waits with its socket closed.
+  const film = homie.filmWithPhone;
+  const record = pick.record;
+  const filmOnPhone = useCallback(async () => {
+    const ok = await film(() => record({ dish: draft.dish, requestFrom: draft.requestFrom }));
+    if (ok) setPhoneFilmed(true);
+    else leave(); // no video: back to Record
+  }, [film, record, draft.dish, draft.requestFrom]);
+
+  // Filming starts by itself once homie's hello has played (once).
+  const started = useRef(false);
+  const autoStart = shouldAutoStart({ phase: homie.phase, introDone: homie.introDone, aiSpeaking, error: !!homie.error });
+  const begin = useRef(() => {});
   useEffect(() => {
-    if (!ended || aiSpeaking || left.current) return;
-    const t = setTimeout(() => {
-      left.current = true;
-      if (afterEnd(source) === 'send') return router.replace('/send');
-      const done = w.line('onItsWay');
-      toast.show(done.en ? `${done.text}\n${done.en}` : done.text, { tone: 'success', durationMs: 4000 });
-      if (router.canGoBack()) router.dismissTo('/parent/home');
-      else router.replace('/parent/home');
-    }, ENDED_HOLD_MS);
-    return () => clearTimeout(t);
-  }, [ended, aiSpeaking, source, toast, w]);
+    begin.current = source === 'glasses' ? homie.start : () => void filmOnPhone();
+  });
+  useEffect(() => {
+    if (!autoStart || started.current) return;
+    started.current = true;
+    begin.current();
+  }, [autoStart]);
 
-  const startCooking = async () => {
-    if (source === 'glasses') return homie.start();
-    // The phone films in its own camera; homie waits (no mic, no voice) until it's back.
-    homie.pause();
-    const ok = await pick.record({ dish: draft.dish, requestFrom: draft.requestFrom });
-    homie.resume(ok);
+  const filmWithoutHomie = async () => {
+    started.current = true;
+    if (await pick.record({ dish: draft.dish, requestFrom: draft.requestFrom })) setFilmedAlone(true);
   };
 
-  const askDone = () => {
-    const q = w.line('doneAsk');
-    const yes = w.line('yesDone');
-    const no = w.line('notYet');
-    showMoment({
-      id: `done:${Date.now()}`,
-      question: q.text,
-      questionEn: q.en ?? undefined,
-      options: [
-        { id: 'yes', label: yes.text, sublabel: yes.en ?? undefined, kind: 'primary' },
-        { id: 'not_now', label: no.text, sublabel: no.en ?? undefined },
-      ],
-      onChoose: (choice) => choice === 'yes' && homie.done(),
-    });
-    void speak(q.text, { lang: w.lang });
-  };
-
-  const status = w.line(view.status);
-  const forWhat = forLine(w, kid, dish);
-  const enter = (i: number) => (reduce ? FadeIn.duration(motion.reducedFadeMs) : FadeInDown.duration(380).delay(i * 40));
+  const error = homie.error ? words.record.line(homie.error) : null;
+  const micOff = homie.micDenied ? words.record.line('micOff') : null;
+  const showClose = !!homie.error || (!filming && !finished);
+  const beforeFilming = homie.phase === 'connecting' || homie.phase === 'intro';
 
   return (
     <View style={styles.page}>
-      <ScreenWash tone="parent" height={320} />
-      <View style={[styles.top, { paddingTop: Math.max(space.topDetail, insets.top + 4) }]}>
-        {filming ? <View style={styles.topSpacer} /> : <IconButton icon={<CloseIcon size={20} color={colors.ink} />} accessibilityLabel="Close" onPress={leave} />}
-      </View>
-
-      <View style={styles.col}>
-        <Animated.View key={view.status} entering={FadeIn.duration(reduce ? motion.reducedFadeMs : 220)} style={styles.statusCol}>
-          <View style={styles.pill} accessibilityRole="text" accessibilityLabel={status.en ? `${status.text}. ${status.en}` : status.text}>
-            <View style={[styles.dot, view.live ? styles.dotLive : styles.dotCalm]} />
-            <Txt variant="label" size={17} weight={600} color={colors.ink}>
-              {status.text}
-            </Txt>
-          </View>
-          {status.en ? (
-            <Txt variant="caption" size={13} color={colors.peachInk}>
-              {status.en}
-            </Txt>
-          ) : null}
-        </Animated.View>
-
-        {view.clock !== 'none' && clockMs != null ? (
-          <Txt style={styles.clock} accessibilityRole="timer" accessibilityLabel={`${elapsedLabel(clockMs)} recorded`}>
-            {elapsedLabel(clockMs)}
-          </Txt>
-        ) : null}
-
-        {forWhat ? (
-          <Txt variant="label" size={20} weight={500} color={colors.peachInk} align="center" numberOfLines={2}>
-            {forWhat}
-          </Txt>
-        ) : null}
-
-        <BiLine line={w.line('cookAsAlways')} size={18} weight={400} color={colors.muted} leading={1.5} style={styles.calm} />
-
-        {homie.micDenied ? (
-          <Txt variant="meta" size={15} color={colors.danger} align="center">
-            homie can’t hear you: homecookd needs the microphone. Turn it on in Settings.
-          </Txt>
-        ) : null}
-        {homie.error ? (
-          <View style={styles.error}>
-            <Txt variant="meta" size={15} color={colors.danger} align="center">
-              {homie.error}
-            </Txt>
-            <ActionButton label="Try again" variant="outline" size="sm" onPress={homie.retry} />
-          </View>
-        ) : null}
-      </View>
-
-      <View style={[styles.bottom, { paddingBottom: Math.max(36, insets.bottom + 16) }]}>
-        {view.button ? (
-          <Animated.View key={view.button} entering={enter(0)}>
-            <BigButton
-              line={w.line(view.button === 'start' ? 'startCooking' : 'imDone')}
-              tone={view.button === 'start' ? 'green' : 'ink'}
-              disabled={!!pick.busy}
-              onPress={view.button === 'start' ? () => void startCooking() : askDone}
+      <RecordWash />
+      {finished ? (
+        <DoneView source={source} lang={lang} kidName={kid} preview={preview} />
+      ) : (
+        <>
+          <View style={styles.column}>
+            <RecordButton
+              live={view.live}
+              disabled={!view.live || !!pick.busy}
+              onPress={homie.done}
+              accessibilityLabel={view.live ? 'Recording. Tap when you’re done.' : view.line.en ?? view.line.text}
             />
-          </Animated.View>
-        ) : null}
-      </View>
-    </View>
-  );
-}
-
-/** The one huge button: 92 pt, her words big, the English small under them. */
-function BigButton({ line, tone, onPress, disabled }: { line: Line; tone: 'green' | 'ink'; onPress: () => void; disabled?: boolean }) {
-  return (
-    <PressableScale
-      onPress={onPress}
-      haptic="medium"
-      disabled={disabled}
-      accessibilityRole="button"
-      accessibilityLabel={line.en ? `${line.text}. ${line.en}` : line.text}
-      style={[styles.big, tone === 'green' ? styles.bigGreen : styles.bigInk, disabled && styles.dim]}>
-      <Txt variant="button" size={30} weight={700} color={colors.card} leading={1.2} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.7}>
-        {line.text}
-      </Txt>
-      {line.en ? (
-        <Txt variant="meta" size={14} color="rgba(255,253,247,0.75)">
-          {line.en}
-        </Txt>
+            <Animated.View key={view.line.text} entering={FadeIn.duration(reduce ? motion.reducedFadeMs : 220)} style={styles.label}>
+              <BiLine line={view.line} size={30} weight={700} enSize={15} leading={1.3} />
+            </Animated.View>
+            {micOff || error ? (
+              <View style={styles.problem}>
+                {micOff ? <BiLine line={micOff} size={16} weight={600} color={colors.danger} enColor={colors.danger} /> : null}
+                {error ? <BiLine line={error} size={16} weight={600} color={colors.danger} enColor={colors.danger} /> : null}
+                {homie.error === 'lostConnection' ? <ActionButton label={both(words.cook.line('tryAgain'))} variant="outline" size="sm" onPress={homie.retry} /> : null}
+                {homie.error && source === 'phone' && beforeFilming ? (
+                  <ActionButton label={both(words.record.line('filmWithoutHomie'))} variant="outline" size="sm" onPress={() => void filmWithoutHomie()} />
+                ) : null}
+              </View>
+            ) : null}
+          </View>
+          <AskMoment
+            ask={devPreview === 'ask' ? PREVIEW_ASK : homie.ask}
+            words={words.record}
+            micOn={devPreview === 'ask' || homie.micOn}
+            onNotNow={homie.notNow}
+            onActive={setAsking}
+          />
+        </>
+      )}
+      {showClose && !asking ? (
+        <View style={[styles.top, { paddingTop: Math.max(space.topDetail, insets.top + 4) }]} pointerEvents="box-none">
+          <IconButton icon={<CloseIcon size={20} color={colors.ink} />} accessibilityLabel={words.record.line('leave').en ?? 'Leave'} onPress={leave} />
+        </View>
       ) : null}
-    </PressableScale>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colors.page },
-  top: { paddingHorizontal: space.gutter, flexDirection: 'row' },
-  topSpacer: { height: 48 },
-  col: { paddingHorizontal: space.gutter, paddingTop: 34, alignItems: 'center', gap: 12 },
-  statusCol: { alignItems: 'center', gap: 6 },
-  pill: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
-    borderRadius: 999,
-    backgroundColor: colors.card,
-    boxShadow: shadows.chip,
-  },
-  dot: { width: 12, height: 12, borderRadius: 6 },
-  dotLive: { backgroundColor: colors.danger, boxShadow: `0 0 0 5px ${alpha.recordHalo}` },
-  dotCalm: { backgroundColor: colors.green, boxShadow: '0 0 0 5px rgba(91,111,0,0.16)' },
-  clock: { fontFamily: fonts.serifMedium, fontSize: 96, lineHeight: 104, letterSpacing: -1.9, color: colors.ink, fontVariant: ['tabular-nums'] },
-  calm: { marginTop: 22 },
-  error: { alignItems: 'center', gap: 10, marginTop: 8 },
-  bottom: { position: 'absolute', left: 16, right: 16, bottom: 0 },
-  big: { height: 92, borderRadius: 46, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 },
-  bigInk: { backgroundColor: colors.ink },
-  bigGreen: { backgroundColor: colors.green, boxShadow: shadows.cta },
-  dim: { opacity: 0.6 },
+  top: { position: 'absolute', left: 0, right: 0, top: 0, paddingHorizontal: space.gutter, flexDirection: 'row' },
+  column: { flex: 1, paddingHorizontal: COLUMN.side, alignItems: 'center', justifyContent: 'center' },
+  label: { marginTop: COLUMN.toLabel },
+  problem: { marginTop: 24, alignItems: 'center', gap: 10 },
 });

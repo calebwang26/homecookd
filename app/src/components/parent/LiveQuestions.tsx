@@ -1,9 +1,10 @@
 // Parent Home: questions a kid asked while cooking that the video couldn't answer (Convex
 // questions.openForCook, live; docs/build/STACK.md "Close the loop"). One row per question: who and
-// which dish, the question (in the cook's language when Track F translated it, the kid's words under
-// it), "Answer" (the walkie-talkie, /answer/<id>: homie reads it to her, she holds a big pot), and the
-// small "Hold to talk" pill as the quick way. Her voice is the answer, sent as a voice note and
-// transcribed on the server. An answered question leaves the list by itself. Nothing open: no card.
+// which dish, the question (in the cook's language when Track F translated it, marked "Translated"
+// with the kid's own words), "Answer" (the walkie-talkie, /answer/<id>: homie reads it to her and she
+// answers out loud), and the small "Hold to talk" pill as the quick way. Her voice is the answer, sent
+// as a voice note and transcribed on the server. An answered question leaves the list by itself.
+// Nothing open: no card.
 import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 import Animated, { LinearTransition } from 'react-native-reanimated';
@@ -37,8 +38,8 @@ export function LiveQuestions({ enterIndex = 0 }: { enterIndex?: number }) {
             onPress={() => router.push({ pathname: '/answer/[id]', params: { id: q._id } })}
             scaleTo={0.98}
             accessibilityRole="button"
-            accessibilityLabel={`${who(q)}: ${q.textForCook ?? q.text}`}
-            accessibilityHint="Opens the question. homie reads it to you, and you hold to answer."
+            accessibilityLabel={q.textForCook ? `${who(q)}: ${q.textForCook}. Translated from: ${q.text}` : `${who(q)}: ${q.text}`}
+            accessibilityHint="Opens the question. homie reads it to you, and you answer out loud."
             style={styles.open}>
             <Txt variant="label" size={15} weight={700} color={colors.greenDeep} numberOfLines={1}>
               {who(q)}
@@ -46,9 +47,10 @@ export function LiveQuestions({ enterIndex = 0 }: { enterIndex?: number }) {
             <Txt variant="title" size={20} leading={1.25} color={colors.ink}>
               “{q.textForCook ?? q.text}”
             </Txt>
+            {/* Gemini's translation of the kid's words: AI words are always labelled. */}
             {q.textForCook ? (
               <Txt variant="meta" size={14}>
-                {q.text}
+                Translated · “{q.text}”
               </Txt>
             ) : null}
           </PressableScale>

@@ -3,7 +3,7 @@
 // service"). Native only (@siteed/audio-studio needs a dev build, not Expo Go); nothing is saved.
 //
 //   const mic = useMicStream((pcm) => socket.send(pcm), (level) => setHomieLevel(level));
-//   await mic.start();  mic.stop();  mic.on
+//   await mic.start();  await mic.stop();  mic.on
 //
 // The iOS session is PlayAndRecord in VoiceChat mode, and DefaultToSpeaker keeps playback off the
 // earpiece. VoiceChat alone does NOT cancel echo: Apple only does that with voice processing (the
@@ -78,9 +78,10 @@ export function useMicStream(onChunk: (pcm: ArrayBuffer) => void, onLevel?: (lev
     }
   }, [rec]);
 
-  const stop = useCallback(() => {
+  /** Resolves once the recorder has let go of the audio session (await it before the camera opens). */
+  const stop = useCallback(async (): Promise<void> => {
     setOn(false);
-    void rec?.stopRecording().catch(() => {});
+    await rec?.stopRecording().catch(() => {});
   }, [rec]);
 
   // Leaving the screen never leaves the microphone on.

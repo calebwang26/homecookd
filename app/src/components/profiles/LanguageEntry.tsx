@@ -26,8 +26,8 @@ export function LanguageEntry() {
     if (code === current) return;
     setPicked(code);
     try {
-      await setLanguage(code, me?.id);
-      toast.show(`homie will talk with you in ${languageName(code)}`);
+      // Only a save that reached Convex is worth a "done"; the local stub keeps it for this launch only.
+      if ((await setLanguage(code, me?.id)) === 'saved') toast.show(`homie will talk with you in ${languageName(code)}`);
     } catch (e) {
       setPicked(null);
       toast.show('That didn’t save. Check the connection and try again.', { tone: 'error' });

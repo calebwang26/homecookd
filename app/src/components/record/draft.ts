@@ -4,7 +4,7 @@
 //
 //   const draft = useDraft();
 //   addClips(clips, { dish, requestFrom, glasses });   toggleClip(key);   clearDraft();
-//   setDraftMeta({ dish, requestFrom, language, recordingId })   the pre-record sheet's answers
+//   setDraftMeta({ dish, requestFrom, everyone, language, recordingId })   the pre-record sheet's answers
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { useSyncExternalStore } from 'react';
 
@@ -25,15 +25,17 @@ export type Draft = {
   dish: string | null;
   /** The profile who asked for it (pre-selected in "Who is it for?"). */
   requestFrom: string | null;
+  /** The pre-record sheet's "Everyone" (instead of one kid). */
+  everyone: boolean;
   /** Filmed on smart glasses, imported from the camera roll (Convex jobs.create `source`). */
   glasses: boolean;
-  /** The language she cooked in (an ISO 639-1 code), when the pre-record sheet asked. */
+  /** The language she cooked in (an ISO 639-1 code), when she picked it or people.me had loaded. */
   language: string | null;
   /** homie's live session for these videos (phone camera), for jobs.create. */
   recordingId: string | null;
 };
 
-const EMPTY: Draft = { clips: [], dish: null, requestFrom: null, glasses: false, language: null, recordingId: null };
+const EMPTY: Draft = { clips: [], dish: null, requestFrom: null, everyone: false, glasses: false, language: null, recordingId: null };
 
 let draft: Draft = EMPTY;
 const listeners = new Set<() => void>();
@@ -81,7 +83,7 @@ export function addClips(clips: DraftClip[], ctx: { dish?: string | null; reques
 }
 
 /** What the pre-record sheet settled, before any video is in. It replaces what was there. */
-export function setDraftMeta(meta: Partial<Pick<Draft, 'dish' | 'requestFrom' | 'language' | 'recordingId'>>) {
+export function setDraftMeta(meta: Partial<Pick<Draft, 'dish' | 'requestFrom' | 'everyone' | 'language' | 'recordingId'>>) {
   set({ ...draft, ...meta });
 }
 

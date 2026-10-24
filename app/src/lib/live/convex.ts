@@ -9,14 +9,17 @@
 //   await sendPhoto(shared, text)                        messages.send: the photo + the kid's note, to the cook
 //   await convexRecipeId(libraryId)                      the recipe's Convex _id (the voice socket needs it)
 //   invalidateConvexRecipes()                            after the family's recipe list changes (lib/recipes.ts)
-//   const { recordingId } = await startRecording({ dish, forKidId, language, source })   live.startRecording
+//   const { recordingId } = await startRecording({ dish, forKidId, language?, source })   live.startRecording
 //   useRecording(recordingId)                            live.recording, live (the recording screen)
 //   useMe()  /  await setLanguage('mr')                  people.me (live) / people.setLanguage
 //   await convexPersonIdByName('Shreya')                 a family member's Convex id, from rows that name them
+//   await libraryIdOf(recipeId)                          a Convex recipe's library id (recipes.list)
 //
-// The calls added for the Oct 24 tracks (live.*, people.*) are "soft": until those functions are
-// deployed, Convex's "Could not find public function" gives their stub value without moving every
-// other call to the stub.
+// The reads added for the Oct 24 tracks (live.recording, people.me) are "soft": until those functions
+// are deployed, Convex's "Could not find public function" gives their stub value without moving every
+// other call to the stub. The writes (live.startRecording, people.setLanguage) are "strict": a missing
+// function throws, so the screen says it didn't work instead of pretending (a stub recording has no
+// glasses video behind it, and a stub language isn't saved anywhere).
 //
 // Functions are called by name, so the app builds before Track A's convex/ code exists. Until it is
 // deployed (no EXPO_PUBLIC_CONVEX_URL, or Convex says "Could not find public function"), every call
@@ -66,6 +69,8 @@ export type LiveRecording = {
   jobId?: string;
 };
 export type Me = { personId: string; name: string; role: 'cook' | 'kid'; language: string; relation?: string };
+/** Who a stub people.me is for (useSession's `me`). */
+type StubPerson = { id: string; name: string; role: string; relation: string | null } | null | undefined;
 
 // ---------------------------------------------------------------------------
 // Live or stub
@@ -99,13 +104,14 @@ const ref = <T extends FunctionType>(name: string) => makeFunctionReference<T>(n
 /**
  * Runs `name` on Convex, or `fallback` while stubbed (or once Convex says the function isn't there).
  * `soft`: a missing function gives `fallback` for this call only (a function not deployed yet).
+ * `strict`: a missing function throws (a write that must really happen).
  */
 export async function call<T>(
   type: 'mutation' | 'action' | 'query',
   name: string,
   args: Record<string, unknown>,
   fallback: () => T | Promise<T>,
-  opts: { soft?: boolean } = {},
+  opts: { soft?: boolean; strict?: boolean } = {},
 ): Promise<T> {
   if (stubbed || !client) return fallback();
   try {
@@ -115,6 +121,7 @@ export async function call<T>(
   } catch (e) {
     if (signedOut(e)) session = null;
     if (!isMissing(e)) throw e;
+    if (opts.strict) throw new Error(`${name} isn't on the server yet.`);
     if (opts.soft) {
       console.warn(`[convex] ${name} isn't deployed yet; using its stub`);
       return fallback();
@@ -243,10 +250,13 @@ export async function createJob(uploadPath: string, source: JobSource, extras: J
   }
 }
 
-/** homie's live session while a cook records (Track E). It starts in `intro`. */
-export async function startRecording(input: { dish?: string; forKidId?: string; language: string; source: RecordingSource }): Promise<{ recordingId: string }> {
+/**
+ * homie's live session while a cook records (Track E). It starts in `intro`. Without `language` the
+ * server uses her people.language (send one only when she picked it or it loaded).
+ */
+export async function startRecording(input: { dish?: string; forKidId?: string; language?: string; source: RecordingSource }): Promise<{ recordingId: string }> {
   const sessionToken = await token();
-  return call('mutation', 'live:startRecording', { sessionToken, ...present(input) }, () => stub.startRecording(input), { soft: true });
+  return call('mutation', 'live:startRecording', { sessionToken, ...present(input) }, () => stub.startRecording(input), { strict: true });
 }
 
 /** The recording, live: null while it loads, or when it isn't this family's. */
@@ -268,14 +278,28 @@ function stubRecordingWatcher(id: string) {
 
 /** Who this is on Convex, with their language ('en' when unset). Null until it loads. */
 export function useMe(enabled = true): Me | null {
-  return useLive<Me | null>('people:me', null, stub.watchMe, enabled, {}, true);
+  // The stub's value comes from the hook's own person (useSession), not the module snapshot, which
+  // isn't published yet right after sign-in; useLive subscribes again when that person changes.
+  const { me } = useSession();
+  const fallback = (onData: (v: Me | null) => void) => stub.watchMe(me, onData);
+  return useLive<Me | null>('people:me', null, fallback, enabled, {}, true);
 }
 
-/** Sets the person's language (an ISO 639-1 code). Pass `profileId` right after sign-in (see convexSession). */
-export async function setLanguage(language: string, profileId?: string): Promise<void> {
+/**
+ * Sets the person's language (an ISO 639-1 code). Pass `profileId` right after sign-in (see
+ * convexSession). 'saved' once Convex has it; 'stub' while the app runs on the local stub (kept on
+ * this phone until it closes). Throws when it didn't save.
+ */
+export async function setLanguage(language: string, profileId?: string): Promise<'saved' | 'stub'> {
   const sessionToken = await convexSession(profileId);
   if (!sessionToken) throw new Error('Sign in first.');
-  await call('mutation', 'people:setLanguage', { sessionToken, language }, () => stub.setLanguage(language), { soft: true });
+  let viaStub = false;
+  const onStub = () => {
+    viaStub = true;
+    stub.setLanguage(language);
+  };
+  await call('mutation', 'people:setLanguage', { sessionToken, language }, onStub, { strict: true });
+  return viaStub ? 'stub' : 'saved';
 }
 
 /**
@@ -343,17 +367,31 @@ export async function sendPhoto(shared: SharedPhoto, text: string): Promise<void
 type RecipeRef = { recipeId: string; cookId: string | null };
 let recipes: Promise<Map<string, RecipeRef>> | null = null;
 
-/** The Convex recipe for a library dish (recipes.libraryId) and its cook; the library id while stubbed. */
-async function convexRecipe(libraryId: string): Promise<RecipeRef> {
+/** library id -> the Convex recipe and its cook (recipes.list), read once until invalidated. Null while stubbed. */
+async function recipeMap(): Promise<Map<string, RecipeRef> | null> {
   const sessionToken = stubbed ? null : await convexSession();
-  if (!sessionToken) return { recipeId: libraryId, cookId: null };
+  if (!sessionToken) return null;
   recipes ??= call<{ _id: string; libraryId?: string; cookId: string }[]>('query', 'recipes:list', { sessionToken }, () => [])
     .then((rows) => new Map(rows.filter((r) => r.libraryId).map((r) => [r.libraryId!, { recipeId: r._id, cookId: r.cookId }])))
     .catch(() => {
       recipes = null;
       return new Map();
     });
-  return (await recipes).get(libraryId) ?? { recipeId: libraryId, cookId: null };
+  return recipes;
+}
+
+/** The Convex recipe for a library dish (recipes.libraryId) and its cook; the library id while stubbed. */
+async function convexRecipe(libraryId: string): Promise<RecipeRef> {
+  return (await recipeMap())?.get(libraryId) ?? { recipeId: libraryId, cookId: null };
+}
+
+/**
+ * The library id of a Convex recipe (a finished job's `recipeId`), or null while recipes.list doesn't
+ * list it yet. The map is read again whenever the family's recipes change (invalidateConvexRecipes).
+ */
+export async function libraryIdOf(recipeId: string): Promise<string | null> {
+  for (const [libraryId, r] of (await recipeMap()) ?? []) if (r.recipeId === recipeId) return libraryId;
+  return null;
 }
 
 export async function convexRecipeId(libraryId: string): Promise<string> {
@@ -375,11 +413,10 @@ const stub = (() => {
   let language = 'en';
   const recordings = new Map<string, LiveRecording>();
   const recL = new Map<string, Set<(v: LiveRecording | null) => void>>();
-  const meL = new Set<(v: Me | null) => void>();
-  const stubMe = (): Me | null => {
-    const me = getSession()?.me;
-    return me ? { personId: me.id, name: me.name, role: me.role === 'cook' ? 'cook' : 'kid', language, relation: me.relation ?? undefined } : null;
-  };
+  // Each people.me watcher, with the person its hook is for.
+  const meL = new Map<(v: Me | null) => void, StubPerson>();
+  const stubMe = (me: StubPerson): Me | null =>
+    me ? { personId: me.id, name: me.name, role: me.role === 'cook' ? 'cook' : 'kid', language, relation: me.relation ?? undefined } : null;
   const jobL = new Set<(v: LiveJob[]) => void>();
   const qL = new Set<(v: CookQuestion[]) => void>();
   const watch = <T>(set: Set<(v: T) => void>, get: () => T) => (onData: (v: T) => void) => {
@@ -418,9 +455,9 @@ const stub = (() => {
       emitQs();
     },
     draft: () => ({ draft: 'I made it! It tasted like home. Thank you for teaching me.' }),
-    startRecording(input: { dish?: string; forKidId?: string; language: string; source: RecordingSource }) {
+    startRecording(input: { dish?: string; forKidId?: string; language?: string; source: RecordingSource }) {
       const _id = `stub-rec-${Date.now()}`;
-      recordings.set(_id, { _id, source: input.source, status: 'intro', language: input.language, dish: input.dish, forKidId: input.forKidId });
+      recordings.set(_id, { _id, source: input.source, status: 'intro', language: input.language ?? language, dish: input.dish, forKidId: input.forKidId });
       return { recordingId: _id };
     },
     watchRecording(id: string, onData: (v: LiveRecording | null) => void) {
@@ -438,14 +475,14 @@ const stub = (() => {
       recordings.set(id, next);
       recL.get(id)?.forEach((l) => l(next));
     },
-    watchMe: (onData: (v: Me | null) => void) => {
-      meL.add(onData);
-      onData(stubMe());
+    watchMe: (me: StubPerson, onData: (v: Me | null) => void) => {
+      meL.set(onData, me);
+      onData(stubMe(me));
       return () => void meL.delete(onData);
     },
     setLanguage(code: string) {
       language = code;
-      meL.forEach((l) => l(stubMe()));
+      meL.forEach((me, l) => l(stubMe(me)));
     },
   };
 })();

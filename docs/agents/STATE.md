@@ -292,11 +292,34 @@ Before starting work, compare the last commit here with `git log origin/main` to
     in the app). `rebuild_library` lists every `*/recipe.json` in the bucket, so any `publish.py` run puts family
     recipes into the shared `library.json` and the app bundle. The intro isn't kept anywhere now (no screen shows it).
 - Oct 24 · (this PR) · Claude · Root devDependency `@types/node`: `convex deploy` typechecks `convex/`, and a clean `npm ci` had no Node types, so every `process.env` failed (37 errors) and the deploy stopped. Now tsc is 0 and vitest 40/40.
-- Oct 24 · #35 · Claude · Track I-parent, the cook's side of homie (builds on #32; needs #26 merged first for `app/src/lib/languages.ts`):
-  - **Record:** "Start recording" opens a pre-record sheet (dish, who it's for, her language from `people.me`, then From my glasses / Phone camera / Videos I took). Glasses and phone call `live.startRecording` and open `/recording`; the camera roll goes to Send as before; "Videos from my glasses" stays as the camera-roll fallback.
-  - **`/recording`:** homie over `/record` (`lib/live/homie.ts`): hello, "Start cooking", status pill, big clock, "Shreya साठी", the calm line, one huge "माझं झालं" (asks once). Questions and the stories opt-in are homie moments. Half duplex: no mic frames while a say plays. Glasses end at home with a toast; a phone recording runs the system camera between the hello and the end questions, then Send. A local stub stands in without the voice service.
-  - **`/answer/[id]`:** the walkie-talkie (question in her language, homie reads it, a 260 pt pot to hold and talk, 3 s Undo, "Sent to Shreya"). `HoldToTalk` gained `body`, `bodyStyle`, `onSent`. Parent Home question rows open it.
-  - **Language:** `components/record/LanguagePicker.tsx`; a join step for a new cook; "Your language" in the gateway's foot. `lib/homie/strings.ts` has every line in English and Marathi (`TODO(caleb)`: native check).
-  - **convex.ts:** `startRecording`, `useRecording`, `useMe`, `setLanguage`, `createJob` extras (retried without them on an older deployment), `convexPersonIdByName`. New calls are soft: a function not deployed yet doesn't move the app to the stub.
-  - **Tests:** new `app/scripts/test-recording-ui.mjs` (13 pass); tsc, lint, the other app scripts pass; clicked through on Expo web (stubbed).
-  - **Open:** nothing on an iPhone yet. `/record` has no repeat message, so "Say it again" replays the audio on the phone. No public query maps a kid to a Convex person id (found by name from questions / cooking / messages). Without the voice service a glasses recording never reaches `ended`. A phone recording's `startedAt` can land at the end of cooking.
+- Oct 24 · #35 · Claude · Track I-parent, the cook's side of homie (contains #32's homie core; #26 is in main now,
+  so it builds on its own). Final round: Caleb's v3/v4 screens, the review fixes and the #29 protocol follow-ups.
+  - **Record:** "Start recording" opens a pre-record sheet (dish, who it's for or Everyone, her language, then From my
+    glasses / Phone camera / Videos I took). Her language is sent only once she picked it or `people.me` loaded, so an
+    unknown one never overrides her saved one. `live.startRecording` and `people.setLanguage` are strict (a missing
+    function throws instead of faking a recording); homie's start gives up after 10 s offline.
+  - **`/recording` v3:** one 232 pt red stop button on a full-height peach wash with a warm glow, one line under it
+    ("माझं झालं" / "Tap when you're done"), homie top-right, nothing else. Filming starts by itself once homie's hello
+    has played. homie's questions are `AskMoment`s with no buttons: the question, homie glowing, five listening bars,
+    "बोला, मी ऐकतोय" / "Just answer out loud" (no mic stream: tap anywhere to close). Then the new done view: homie
+    waves, "झालं! Shreya ला पाठवतोय", home after ~4 s. A phone recording starts filming on the server, closes the
+    socket and mic (awaited) while the system camera is up, then reconnects and ends, and the done view sends the
+    video itself (`components/record/sendDraft.ts`, shared with Send). The mic stops at `ended`; a lost connection
+    shows the reason, Try again and the × (a phone recording can film without homie).
+  - **`/record` protocol (#29):** close 4409 is final (no reconnect); an extra `say_end interrupted` stops the line
+    already playing. A live recording with no session retries and never falls back to the stub. Lines end on
+    `say_end` (a 3 s gap timer is only a safety net).
+  - **`/answer/[id]` v2:** the walkie-talkie with no buttons: homie reads the question, the expo-audio recorder listens
+    with metering, ~2 s quiet after ≥1 s of talking sends it (`questions.answer`), homie says and shows "Shreya ला
+    पाठवलं", then it closes. No answer in 15 s: asked once more, then closes with nothing sent. A tap on the
+    question reads it again. `HoldToTalk` is back to main's version.
+  - **Parent Home:** a translated question says "Translated"; the 'uploading' stage keeps the sending half short of
+    full ("Still sending the video"); a live Convex job is dropped once it's 'done' and its recipe is in the library
+    (`libraryIdOf` in convex.ts).
+  - **Tests:** `test-recording-ui.mjs` 17 pass, new `test-parent-jobs.mjs` 4 pass; tsc, lint and the other app
+    scripts pass. On Expo web (Convex and voice stubbed) the glasses flow ran from hello to Home; screenshots of every
+    state.
+  - **Open:** nothing on an iPhone yet (mic metering, the camera after the mic, the phone send). With the voice service
+    down a glasses recording can't be ended from the app (no app-side `live` end mutation), so the VM waits for the
+    2 h idle cleanup. Unused lines remain in `lib/homie/strings.ts` (left for the kid PR's round). No public query
+    maps a kid to a Convex person id (found by name).

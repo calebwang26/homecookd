@@ -17,7 +17,11 @@ import { colors, fonts, shadows, space } from '@/theme/tokens';
 import { LanguagePicker, languageLabel, LANGUAGE_QUESTION } from './LanguagePicker';
 
 export type CaptureSource = 'glasses' | 'camera' | 'library';
-export type PreRecordChoice = { source: CaptureSource; dish: string; kid: Profile | null; language: string };
+/**
+ * `language` is null until she picked one or people.me loaded: the server then uses her saved
+ * language (an explicit 'en' would beat it). `everyone`: "Everyone" rather than one kid.
+ */
+export type PreRecordChoice = { source: CaptureSource; dish: string; kid: Profile | null; everyone: boolean; language: string | null };
 
 const MAX_DISH = 120;
 
@@ -59,7 +63,7 @@ export function PreRecordSheet({
   const defaultWho = (requestFrom && others.some((p) => p.id === requestFrom) ? requestFrom : null) ?? people[0]?.id ?? (others.length ? 'everyone' : null);
   const whoNow = who ?? defaultWho;
   const kid = whoNow && whoNow !== 'everyone' ? others.find((p) => p.id === whoNow) ?? null : null;
-  const language = picked ?? convexMe?.language ?? 'en';
+  const language = picked ?? convexMe?.language ?? null;
   const dishNow = dish ?? initialDish ?? '';
 
   const pickLanguage = (code: string) => {
@@ -70,7 +74,7 @@ export function PreRecordSheet({
 
   const start = (source: CaptureSource) => {
     if (busy) return;
-    onStart({ source, dish: dishNow.trim().slice(0, MAX_DISH), kid, language });
+    onStart({ source, dish: dishNow.trim().slice(0, MAX_DISH), kid, everyone: whoNow === 'everyone', language });
   };
 
   const close = () => {
@@ -86,7 +90,7 @@ export function PreRecordSheet({
             {LANGUAGE_QUESTION}
           </Txt>
           <ScrollView style={styles.languages} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
-            <LanguagePicker value={language} onChange={pickLanguage} onSheet />
+            <LanguagePicker value={language ?? 'en'} onChange={pickLanguage} onSheet />
           </ScrollView>
         </Animated.View>
       ) : (
