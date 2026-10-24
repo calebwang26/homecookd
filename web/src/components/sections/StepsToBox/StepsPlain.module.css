@@ -1,0 +1,131 @@
+/* StepsPlain (parent version of How it works). Mobile first, then ≥1024.
+   The root is the canvas sheet that slides over the hero's last 40px (the pass-down sheet's place on
+   /learn), so the hero → how-it-works seam keeps the same 40px radius and shadow. */
+
+.root {
+  position: relative;
+  z-index: 3;
+  margin-top: -40px;
+  padding: 0 var(--gutter);
+  border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+  background: var(--canvas);
+  box-shadow: var(--shadow-sheet);
+  color: var(--ink);
+}
+
+.h2 {
+  margin: 0;
+  color: var(--ink);
+}
+.accent {
+  color: var(--green);
+}
+/* word spans for the scroll fill (wordFill.ts targets .w) */
+.word {
+  display: inline-block;
+}
+/* line 1: the cook's name alone, so its width never reflows the rest of the heading */
+.nameLine {
+  display: block;
+}
+.name {
+  position: relative;
+}
+.nameIn {
+  display: inline-block;
+  animation: nameIn 700ms var(--ease-soft, cubic-bezier(0.22, 1, 0.36, 1)) 180ms both;
+}
+.nameOut {
+  position: absolute;
+  left: 0;
+  top: 0;
+  white-space: nowrap;
+  animation: nameOut 500ms ease-in both;
+}
+@keyframes nameIn {
+  from {
+    opacity: 0;
+    transform: translateY(0.35em);
+  }
+}
+@keyframes nameOut {
+  to {
+    opacity: 0;
+    transform: translateY(-0.35em);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .nameIn,
+  .nameOut {
+    animation: none;
+  }
+  .nameOut {
+    display: none;
+  }
+}
+
+/* ---------- screen 2: what it does + the three steps ----------
+   The green demo (#see-it-work) overlaps the bottom by one sheet radius, so the bottom padding is
+   that radius plus the visible gap. */
+.how {
+  padding-block: clamp(56px, 8vh, 80px) calc(var(--r-sheet) + clamp(48px, 7vh, 72px));
+}
+.howH2 {
+  font-size: clamp(2.125rem, 8.6vw, 3rem);
+  line-height: 1;
+  max-width: 18ch;
+}
+.steps {
+  display: grid;
+  gap: 12px;
+  margin: 28px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.step {
+  position: relative;
+}
+/* a staircase: each step sits a little further right than the one before (Caleb, Oct 17) */
+.step:nth-child(2) {
+  margin-left: 14px;
+}
+.step:nth-child(3) {
+  margin-left: 28px;
+}
+
+@media (min-width: 768px) {
+  .steps {
+    --row-media: clamp(132px, 18vw, 168px);
+    max-width: 640px;
+  }
+}
+
+/* ---------- desktop: heading left, steps right ---------- */
+@media (min-width: 1024px) {
+  .how {
+    display: grid;
+    grid-template-columns: minmax(0, 1.08fr) minmax(0, 0.92fr);
+    column-gap: 5vw;
+    align-items: center;
+    padding-block: clamp(88px, 11vh, 120px) calc(var(--r-sheet) + clamp(64px, 9vh, 104px));
+  }
+  .howH2 {
+    font-size: clamp(2.75rem, 4.3vw, 5.25rem);
+    line-height: 0.98;
+    max-width: 15ch;
+  }
+  .steps {
+    --row-media: clamp(120px, 10.5vw, 168px);
+    margin: 0;
+    max-width: none;
+  }
+  .step {
+    width: 88%;
+  }
+  .step:nth-child(2) {
+    margin-left: 6%;
+  }
+  .step:nth-child(3) {
+    margin-left: 12%;
+  }
+}

@@ -1,0 +1,38 @@
+/* The ▶ beside a poster-only recording (never on it). AppClip's own ▶ is the button right after
+   its <video>; inside a host it is hidden and OuterPlay presses it instead. */
+.host video + button {
+  display: none;
+}
+
+.btn {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  box-shadow: var(--shadow-card);
+  transition:
+    background-color 200ms var(--ease-soft),
+    color 200ms var(--ease-soft);
+}
+.cream {
+  background: var(--surface);
+  color: var(--ink);
+}
+.green {
+  background: var(--green);
+  color: var(--cream);
+}
+@media (hover: hover) {
+  .cream:hover {
+    background: var(--chartreuse);
+  }
+  .green:hover {
+    background: var(--green-deep);
+  }
+}
+
+/* without JS nothing can play, so no button (html[data-motion] is set by the head script) */
+:global(html:not([data-motion])) .btn {
+  display: none;
+}

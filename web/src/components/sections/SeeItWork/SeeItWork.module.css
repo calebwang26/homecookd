@@ -1,0 +1,610 @@
+/* 8.6 See it work. One green, edge to edge. Cream text (5.55:1); chartreuse only on fills with
+   ink text, or as large display words (3.89:1). Nothing ever sits on top of a recording (a
+   poster's ▶ sits on the phone's corner, outside the screen). */
+
+.section {
+  position: relative;
+  background: var(--green);
+  color: var(--cream);
+  overflow-x: clip;
+  isolation: isolate;
+}
+
+/* /teach: the green lands over How it works' canvas sheet (z-index 3), so its rounded top corners
+   show like the page's other colour blocks (/learn keeps globals.css's z-index 1; the id here
+   outranks that #see-it-work rule). */
+:global(#see-it-work).overSheet {
+  z-index: 4;
+}
+
+/* ---------- intro (shared) ---------- */
+.intro {
+  position: relative;
+  z-index: 2;
+}
+.eyebrow {
+  color: var(--cream);
+}
+.eyebrowPill {
+  display: inline-block;
+  margin-left: 0.15em;
+  padding: 0.28em 0.6em 0.22em;
+  border-radius: var(--r-pill);
+  background: var(--chartreuse);
+  color: var(--ink);
+}
+.h2 {
+  margin-top: var(--stack-eyebrow-h2);
+  max-width: 11ch;
+}
+.note {
+  margin-top: 20px;
+}
+/* the parent version's H2 (PlainHeading): cream like WordReveal's cream tone, and no eyebrow above it */
+.h2Plain {
+  color: var(--cream);
+}
+.h2Top {
+  margin-top: 0;
+}
+
+/* ---------- the stage (shared bits) ---------- */
+.blob {
+  position: absolute;
+  z-index: 0;
+  width: calc(var(--phone-w) * 1.9);
+  aspect-ratio: 1;
+  border-radius: 50%;
+  background: var(--chartreuse);
+  opacity: 0.3;
+  filter: blur(60px);
+  pointer-events: none;
+}
+.ribbon {
+  position: absolute;
+  z-index: 0;
+  overflow: visible;
+  pointer-events: none;
+}
+.ribbon path {
+  fill: none;
+  stroke: var(--green-swirl);
+  stroke-width: 48px;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+:global(html[data-motion='on']) .ribbon:not([data-drawn]) path {
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 1;
+}
+:global(html[data-motion='on']) .ribbon[data-drawn] path {
+  stroke-dasharray: 1 1;
+  stroke-dashoffset: 0;
+  transition: stroke-dashoffset 2.6s var(--ease-soft);
+}
+.phoneSettle {
+  position: relative;
+}
+
+/* the ▶ for a poster (OuterPlay, 52px): seated on the phone's lower-right corner, 3px over the
+   rim's corner arc and clear of the screen. --op-w is the phone width; Handset's rim radius is
+   16% of it, so the disc's edge sits 0.0469·w − 42px from the box's right and bottom edges. */
+.posterPlay {
+  position: absolute;
+  z-index: 3;
+  right: calc(var(--op-w) * 0.0469 - 42px);
+  bottom: calc(var(--op-w) * 0.0469 - 42px);
+}
+
+/* stacked recordings: the incoming clip fades in on top of the outgoing one */
+.slide {
+  opacity: 0;
+  z-index: 0;
+  transition: opacity var(--d-swap) var(--ease-soft);
+}
+.slide[data-state='on'] {
+  opacity: 1;
+  z-index: 2;
+}
+.slide[data-state='prev'] {
+  opacity: 1;
+  z-index: 1;
+  transition: none;
+}
+.slideInstant {
+  transition: none;
+}
+
+/* ---------- share bubble ---------- */
+.bubbleWrap {
+  position: relative;
+  z-index: 4;
+  width: max-content;
+  max-width: 17.5rem;
+}
+.bubbleLabel {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--cream);
+  margin-bottom: 8px;
+}
+.bubbleLabel::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--chartreuse);
+}
+.bubble {
+  position: relative;
+  padding: 14px 18px 15px;
+  border-radius: 22px 22px 22px 6px;
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--ff-text);
+  font-size: var(--fs-ui-lg);
+  font-weight: 500;
+  line-height: 1.38;
+  box-shadow: var(--shadow-float);
+  text-wrap: pretty;
+}
+.bubble_stage {
+  position: absolute;
+  /* the Share button is at the screen's top-right; the bubble hangs off the phone's right edge */
+  left: calc(100% + 26px);
+  top: 4%;
+  transform-origin: 0% 100%;
+}
+.bubble_stage .bubble::before {
+  /* a short hairline from the Share button to the bubble */
+  content: '';
+  position: absolute;
+  right: 100%;
+  top: 18px;
+  width: 22px;
+  height: 2px;
+  border-radius: 2px;
+  background: rgba(255, 253, 247, 0.6);
+}
+.bubble_row {
+  margin-top: 22px;
+  transform-origin: 0% 100%;
+}
+.bubble_stage,
+.bubble_row {
+  max-width: 15rem;
+}
+/* hidden until the recording's Share tap (space stays reserved, so nothing shifts) */
+:global(html[data-motion='on']) :is(.bubble_stage, .bubble_row) {
+  opacity: 0;
+  transform: translate3d(-10px, 6px, 0) scale(0.86);
+  transition:
+    opacity 260ms var(--ease-soft),
+    transform 260ms var(--ease-soft);
+}
+:global(html[data-motion='on']) :is(.bubble_stage, .bubble_row)[data-shown] {
+  opacity: 1;
+  transform: none;
+  transition:
+    opacity 300ms var(--ease-soft),
+    transform 520ms var(--ease-back);
+}
+@media (max-width: 1279px) {
+  .bubble_stage {
+    display: none;
+  }
+}
+@media (min-width: 1280px) {
+  .bubble_row {
+    display: none;
+  }
+}
+.bubble_panel,
+.bubble_static {
+  margin-top: 16px;
+}
+.bubble_panel .bubble {
+  font-size: var(--fs-ui);
+  padding: 12px 16px 13px;
+  max-width: 19rem;
+}
+.bubble_panel .bubbleLabel {
+  margin-bottom: 6px;
+}
+
+/* ---------- row words (desktop + static) ---------- */
+.num {
+  display: inline-flex;
+  align-items: center;
+  height: 36px;
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  border: 1.5px solid rgba(255, 253, 247, 0.55);
+  color: var(--cream);
+  font-family: var(--ff-text);
+  font-weight: 600;
+  font-size: 1.0625rem;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  transition:
+    background-color 300ms var(--ease-soft),
+    color 300ms var(--ease-soft),
+    border-color 300ms var(--ease-soft);
+}
+.h3 {
+  margin-top: 18px;
+  color: var(--cream);
+  max-width: 14ch;
+}
+/* desktop rows have room for a whole sentence per line; the narrow static columns keep normal
+   wrapping ("Record it. Or / pick videos." beats three lines) */
+.l_desktop .sentence {
+  display: inline-block;
+}
+.body {
+  margin-top: 14px;
+  color: var(--cream);
+  max-width: 30ch;
+  text-wrap: pretty; /* no one- or two-word last line ("dish took.", "says them.") */
+}
+.chipLine {
+  display: block;
+  margin-top: 22px;
+}
+/* the cook-it row's "Watch · Mix the dough": a plain caption in the chip's place (QA B25) */
+.caption {
+  font-family: var(--ff-text);
+  font-weight: 500;
+  font-size: var(--fs-ui-lg);
+  line-height: 1.35;
+  color: currentColor;
+}
+
+/* =====================================================================
+   DESKTOP: sticky phone (left half), rows scroll past (right, from 55vw)
+   Budget: intro ≈ 45–51 + 4 rows × 44 + tail 25 ≈ 246–252svh.
+   ===================================================================== */
+.desk {
+  --phone-top: max(12svh, calc(var(--nav-h) + 24px));
+  --phone-w: min(clamp(260px, 21vw, 330px), calc((100svh - var(--phone-top) - 96px) / 2.0565));
+  display: grid;
+  grid-template-columns: 50vw minmax(0, 1fr);
+}
+.stageCol {
+  position: relative;
+}
+.stage {
+  position: sticky;
+  top: 0;
+  height: 100svh;
+  /* clip the hand at the bottom edge; let the ribbon run under the rows */
+  overflow-x: visible;
+  overflow-y: clip;
+}
+.desk .blob {
+  left: 25vw;
+  top: calc(var(--phone-top) + var(--phone-w) * 0.9);
+  translate: -50% -50%;
+}
+.ribbonDesk {
+  inset: -4svh -6vw -4svh -8vw;
+  width: calc(100% + 14vw);
+  height: 108svh;
+}
+.phoneRise {
+  position: absolute;
+  z-index: 1;
+  top: var(--phone-top);
+  left: 25vw;
+  translate: -50% 0;
+}
+.progress {
+  position: absolute;
+  z-index: 2;
+  top: calc(var(--phone-top) + var(--phone-w) * 2.0565 + 26px);
+  /* right half under the phone: the hand's palm is under the left half */
+  left: calc(25vw + var(--phone-w) * 0.5);
+  translate: -100% 0;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.dots {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  list-style: none;
+  padding: 0;
+}
+.dot {
+  width: 8px;
+  height: 8px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 253, 247, 0.4);
+  transition:
+    width var(--d-swap) var(--ease-soft),
+    background-color var(--d-swap) var(--ease-soft);
+}
+.dot[data-on] {
+  width: 28px;
+  background: var(--chartreuse);
+}
+
+.flow {
+  position: relative;
+  z-index: 2;
+  padding-left: 5vw;
+  padding-right: var(--gutter);
+}
+.introDesk .note {
+  max-width: 19em;
+}
+.introDesk {
+  min-height: 40svh;
+  /* the eyebrow lines up with the phone's top edge */
+  padding-top: var(--phone-top);
+  max-width: 34rem;
+}
+.rows {
+  list-style: none;
+  padding: 0;
+}
+.row {
+  min-height: 44svh;
+  display: flex;
+  align-items: center;
+  /* centre the words a touch above the row's middle, so row 04 reaches the viewport middle
+     before the sticky stage lets go */
+  padding-bottom: 4svh;
+  max-width: 34rem;
+}
+.rowInner {
+  position: relative;
+  padding-left: 28px;
+}
+.rowInner::before {
+  /* the 2px chartreuse rule on the active row's left edge */
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--chartreuse);
+  transform: scaleY(0);
+  transform-origin: 50% 0%;
+  transition: transform 450ms var(--ease-soft);
+}
+.row[data-active] .rowInner::before {
+  transform: scaleY(1);
+}
+.l_desktop .row .h3 {
+  opacity: 0.64; /* 3.3:1 on green, large text */
+  transition: opacity 300ms var(--ease-soft);
+}
+.l_desktop .row[data-active] .h3 {
+  opacity: 1;
+}
+.l_desktop .row[data-active] .num {
+  background: var(--chartreuse);
+  border-color: var(--chartreuse);
+  color: var(--ink);
+}
+.tail {
+  height: 25svh;
+}
+
+/* =====================================================================
+   MOBILE / TABLET: intro, one phone, 2×2 tabs, one panel (≤ 1.4 viewports)
+   ===================================================================== */
+.mob {
+  --phone-w: min(62vw, 260px, calc((100svh - 280px) / 2.0565));
+  padding: 52px var(--gutter) 44px;
+}
+.introMob {
+  max-width: 36rem;
+}
+.introMob .h2 {
+  max-width: 12ch;
+}
+.introMob .note {
+  margin-top: 14px;
+  max-width: 19em;
+}
+.introMob .note svg {
+  /* the phone sits right under the note here; the arrow only added height */
+  display: none;
+}
+.mStage {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  margin-top: 16px;
+  /* the hand fades out just under the phone instead of running into the tabs */
+  padding-bottom: calc(var(--phone-w) * 0.06);
+}
+.mob .blob {
+  left: 50%;
+  top: 50%;
+  translate: -50% -50%;
+}
+.ribbonMob {
+  left: calc(var(--gutter) * -1);
+  top: -6%;
+  width: calc(100% + 2 * var(--gutter));
+  height: 112%;
+}
+.mPhone {
+  --op-w: var(--phone-w);
+  position: relative;
+  z-index: 1;
+}
+/* posters: room under the phone for the corner ▶ before the tabs */
+.mStageLean {
+  padding-bottom: calc(var(--phone-w) * 0.06 + 24px);
+}
+.mob .phoneSettle :global(svg) {
+  -webkit-mask-image: linear-gradient(to bottom, #000 64%, transparent 73.5%);
+  mask-image: linear-gradient(to bottom, #000 64%, transparent 73.5%);
+}
+.mPause {
+  /* top-right of the stage: clear of the fingers and of the recording */
+  position: absolute;
+  z-index: 3;
+  right: calc(var(--gutter) * -0.45);
+  top: 0;
+}
+
+.tabs {
+  position: relative;
+  z-index: 2;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 20px;
+}
+.tab {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 64px;
+  padding: 10px 14px;
+  border-radius: 20px;
+  border: 1.5px solid rgba(255, 253, 247, 0.6);
+  color: var(--cream);
+  text-align: left;
+  transition:
+    background-color 300ms var(--ease-soft),
+    border-color 300ms var(--ease-soft),
+    color 300ms var(--ease-soft);
+}
+.tab[aria-selected='true'] {
+  background: var(--chartreuse);
+  border-color: var(--chartreuse);
+  color: var(--ink);
+}
+.tab:focus-visible {
+  outline: 3px solid var(--chartreuse);
+  outline-offset: 3px;
+}
+.tab[aria-selected='true']:focus-visible {
+  outline-color: var(--cream);
+}
+.tabNum {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1.5px solid currentColor;
+  font-family: var(--ff-text);
+  font-weight: 600;
+  font-size: 0.875rem;
+  font-variant-numeric: tabular-nums;
+}
+.tabLabel {
+  font-family: var(--ff-text);
+  font-weight: 600;
+  font-size: var(--fs-ui-lg);
+  line-height: 1.15;
+}
+/* 360px phones: a little less padding keeps two-word labels ("Her words") on one line */
+@media (max-width: 374px) {
+  .tab {
+    gap: 6px;
+    padding-inline: 9px;
+  }
+}
+.panel {
+  position: relative;
+  z-index: 2;
+  margin-top: 18px;
+}
+.panelBody {
+  color: var(--cream);
+  max-width: 34ch;
+  text-wrap: pretty;
+}
+.panelMeta {
+  margin-top: 14px;
+}
+
+/* =====================================================================
+   STATIC (SSR / no JS / desktop reduced motion): rows in flow, one phone each
+   ===================================================================== */
+.stat {
+  --s-phone-w: min(56vw, 230px);
+  padding: var(--section-pad-y) var(--gutter);
+  max-width: calc(var(--content-max) + 2 * var(--gutter));
+  margin-inline: auto;
+}
+.sRows {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: 56px;
+  margin-top: 48px;
+}
+.sRow {
+  display: grid;
+  gap: 24px;
+}
+.sPhone {
+  display: grid;
+  justify-items: center;
+}
+.sDevice {
+  --op-w: var(--s-phone-w);
+  position: relative;
+}
+/* no-JS only: the poster over the (unplayable) video */
+.sPoster {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 0%;
+}
+.sText .chipLine {
+  margin-top: 18px;
+}
+
+@media (min-width: 768px) {
+  .sRows {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 64px 48px;
+  }
+  .sRow {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    /* the corner ▶ hangs ~32px off the phone's right edge */
+    column-gap: 44px;
+  }
+  .stat {
+    --s-phone-w: clamp(180px, 16vw, 230px);
+  }
+}
+
+/* tablet: the mobile tour, a little roomier */
+@media (min-width: 768px) {
+  .mob {
+    --phone-w: min(34vw, 300px, calc((100svh - 300px) / 2.0565));
+    padding-block: 88px;
+  }
+  .introMob,
+  .tabs,
+  .panel {
+    max-width: 40rem;
+    margin-inline: auto;
+  }
+}
+
+/* static rows have no "active" one: every number pill is filled */
+.l_static .num {
+  background: var(--chartreuse);
+  border-color: var(--chartreuse);
+  color: var(--ink);
+}

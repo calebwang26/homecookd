@@ -1,0 +1,484 @@
+/* StepsToBox (brief 8.4–8.5). Mobile-first; then the static desktop layout; then the film.
+   The film CSS only applies under html[data-motion='on'] on ≥1024×600 with motion allowed, so the
+   SSR / reduced-motion / no-JS page is always the readable static layout. */
+
+/* =========================================================================================
+   Base (mobile < 1024; also the shared pieces)
+   ========================================================================================= */
+.root {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  padding: clamp(44px, 6vh, 96px) var(--gutter) clamp(36px, 5vh, 88px);
+  background: var(--canvas);
+}
+
+.block {
+  position: relative;
+  z-index: 2;
+}
+.blockInner {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+}
+.eyebrowRow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 18px;
+  row-gap: 4px;
+}
+.clock {
+  --hand-color: var(--cocoa);
+}
+.h2 {
+  margin-top: var(--stack-eyebrow-h2);
+  color: var(--ink);
+}
+.h2.stepsH2 {
+  /* phones: each line stays on one line (the longest, 'From their kitchen', is ~8.35em wide), so the
+     H2 reads as its three set lines with a full gutter on the right, down to 320px */
+  font-size: min(var(--fs-h2), calc((100vw - 2 * var(--gutter)) / 8.7));
+}
+.body {
+  margin-top: var(--stack-h2-body);
+  color: var(--text);
+  max-width: 34ch;
+}
+.cta {
+  margin-top: 28px;
+}
+.srSteps {
+  display: none;
+}
+
+/* mobile: three step rows */
+.rows {
+  display: grid;
+  gap: 12px;
+  margin: 24px 0 0;
+  padding: 0;
+  list-style: none;
+}
+.rowItem {
+  position: relative;
+}
+/* room for step 3's seal, which hangs lower on narrow phones (StepCard.module.css) */
+@media (max-width: 379px) {
+  .rowItem:last-child {
+    margin-bottom: 18px;
+  }
+}
+.rowMascot {
+  position: absolute;
+  right: 92px;
+  top: -34px;
+  z-index: 4;
+  pointer-events: none;
+}
+
+/* block 2 */
+.block2 {
+  margin-top: clamp(40px, 5.5vh, 72px);
+}
+.noteWrap {
+  margin-top: 16px;
+}
+/* the note is two set lines ("three cooks so far." / "who's next?"), never a balanced split mid-phrase */
+.noteWrap .noteRight,
+.noteWrap .noteDown {
+  max-width: none;
+}
+.noteLine {
+  display: block;
+  white-space: nowrap;
+}
+/* (two classes: HandNote's own display rule must never win and show both notes) */
+.noteWrap .noteRight {
+  display: none;
+}
+.noteWrap .noteDown {
+  --hand-color: var(--green);
+}
+
+/* icon cluster (a7 M14) */
+.cluster {
+  position: relative;
+  width: 320px;
+  max-width: 100%;
+  height: 66px;
+  margin: 16px 0 2px;
+}
+.bubble {
+  position: absolute;
+  left: var(--mx);
+  top: var(--my);
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: var(--surface);
+  color: var(--green-deep);
+  box-shadow: var(--shadow-card);
+  rotate: var(--r);
+}
+.bubble > svg {
+  width: 24px;
+  height: 24px;
+}
+.bubble:nth-child(n + 7) {
+  display: none;
+}
+:global(html[data-motion='on']) .cluster:not([data-revealed]) .bubble {
+  opacity: 0;
+}
+
+/* deck photo faces (film only; the box is positioned in every mode for next/image's fill) */
+.photoBox {
+  position: relative;
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+}
+.photoImg {
+  object-fit: cover;
+}
+
+/* the stage: in flow its children join the column (only the live folder shows) */
+.stage {
+  display: contents;
+}
+.deck,
+.phone,
+.stairsStatic {
+  display: none;
+}
+.liveFolder {
+  /* phones: 2 columns, so each tile is wide enough to show its dish name at 16px */
+  --cols: 2;
+  --card-ratio: 1.04;
+  --grid-ratio: 0.7;
+  margin-top: 16px;
+}
+/* phones under 375px: a little less chrome and a taller tile, so every tile keeps its dish name
+   (FolderGrid gives the photo a smaller share at this size) */
+@media (max-width: 374px) {
+  .liveFolder {
+    --gap: 8px;
+    --pad: 8px;
+    --card-ratio: 0.92;
+  }
+}
+@media (min-width: 768px) {
+  .liveFolder {
+    --cols: 3;
+    --card-ratio: 0.9;
+    --grid-ratio: 1.35;
+  }
+}
+
+/* =========================================================================================
+   Static desktop (≥1024 without the film): [text | stairs] then [text | folder]
+   ========================================================================================= */
+@media (min-width: 1024px) {
+  .root {
+    padding-block: var(--section-pad-y);
+    display: grid;
+    grid-template-columns: minmax(0, 0.82fr) minmax(0, 1.18fr);
+    column-gap: 4vw;
+    row-gap: clamp(72px, 12vh, 140px);
+    align-items: center;
+  }
+  .block1 {
+    grid-column: 1;
+    grid-row: 1;
+  }
+  .stairsStatic {
+    display: block;
+    grid-column: 2;
+    grid-row: 1;
+    padding-block: 4vw 2vw;
+  }
+  .rows {
+    display: none;
+  }
+  .block2 {
+    grid-column: 1;
+    grid-row: 2;
+    margin-top: 0;
+  }
+  .liveFolder {
+    grid-column: 2;
+    grid-row: 2;
+    margin-top: 0;
+  }
+  .h2,
+  .h2.stepsH2 {
+    font-size: clamp(2.75rem, 4.4vw, 6.25rem);
+  }
+  /* the set lines never wrap, and the longest (~8.35em) may pass ~23% over the text column into the
+     gap before the stairs, no further: on 1024–1080px screens this trims the size so 'From their
+     kitchen' stays clear of the stack falling onto card 1 (wider screens are unaffected) */
+  .h2.stepsH2 {
+    font-size: min(clamp(2.75rem, 4.4vw, 6.25rem), calc(100cqw / 6.8));
+  }
+  .stepsH2 :global(.line) {
+    white-space: nowrap;
+  }
+  .noteWrap .noteRight {
+    display: inline-flex;
+    --hand-color: var(--green);
+  }
+  .noteWrap .noteDown {
+    display: none;
+  }
+  .clusterPos {
+    order: 10;
+  }
+  /* the cluster is drawn in a 348×214 box; --k is 1px when the text column fits it and shrinks with a
+     narrower column (1024–1126px screens), so no bubble reaches over the folder */
+  .blockInner {
+    container-type: inline-size;
+  }
+  .cluster {
+    --k: min(1px, calc((100cqw - 4px) / 348));
+    width: calc(348 * var(--k));
+    height: calc(214 * var(--k));
+    margin: calc(36 * var(--k)) 0 0 4px;
+  }
+  .bubble {
+    left: calc(var(--x) * var(--k));
+    top: calc(var(--y) * var(--k));
+    width: calc(64 * var(--k));
+    height: calc(64 * var(--k));
+  }
+  .bubble > svg {
+    width: calc(30 * var(--k));
+    height: calc(30 * var(--k));
+  }
+  .liveFolder {
+    --card-ratio: 0.9;
+    --grid-ratio: 1.35;
+  }
+  .bubble:nth-child(n + 7) {
+    display: grid;
+  }
+}
+
+/* =========================================================================================
+   Film (desktop ≥1024×600, motion on)
+   ========================================================================================= */
+@media (min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
+  /* the stage track is 60vw, but never under 676px: on 1024–1126px screens that keeps three tiles of
+     at least 150px (RecipeCard shows the dish name from 140px up) beside the phone. The deck's stairs
+     add --stair-dx (and timeline.ts the same offset), so they keep their place on screen. */
+  :global(html[data-motion='on']) .root {
+    grid-template-columns: var(--gutter) minmax(0, 1fr) max(60vw, 676px);
+    grid-template-rows: auto auto 1fr;
+    min-height: 230vh;
+    padding: 0;
+    gap: 0;
+    align-items: stretch;
+  }
+  :global(html[data-motion='on']) .block {
+    display: flex;
+    align-items: center;
+    grid-column: 2;
+  }
+  /* block 1 is 80vh (not 100) so 'How it works' arrives right under the pass-down; block 2 takes the
+     rest of the 230vh track and reaches the middle of the screen just as the folder goes live */
+  :global(html[data-motion='on']) .block1 {
+    grid-row: 1;
+    min-height: 80vh;
+    min-height: 80svh;
+  }
+  :global(html[data-motion='on']) .block2 {
+    grid-row: 2;
+    min-height: 150vh;
+    min-height: 150svh;
+    margin: 0;
+  }
+  :global(html[data-motion='on']) .blockInner {
+    width: 100%;
+    padding-block: 12vh;
+  }
+  :global(html[data-motion='on']) .stairsStatic,
+  :global(html[data-motion='on']) .rows {
+    display: none;
+  }
+  :global(html[data-motion='on']) .srSteps {
+    display: block;
+  }
+
+  /* geometry shared by the deck copy, the live folder and the phone */
+  :global(html[data-motion='on']) .stage {
+    --gap: 1vw;
+    --pad: 0.9vw;
+    --tabs-h: 64px;
+    --head-h: 60px;
+    --card-ratio: 0.9;
+    --stair-dx: max(0px, calc(676px - 60vw));
+    /* the phone (real app, readable) rests in front of the panel's bottom-right corner: its left edge
+       on the tile column's right edge, so it covers the panel's margin and never a tile. --folder-r is
+       the folder's distance from the stage's right edge. */
+    --phone-w: clamp(150px, 15vw, 260px);
+    --folder-r: calc(var(--gutter) + 9.2vw);
+    /* tiles never drop under 150px (below 140px RecipeCard hides the dish name) */
+    --gw: max(150px, min(13.2vw, calc((80vh - var(--head-h) - var(--tabs-h) - var(--gap) - var(--pad)) / 2 * 0.9)));
+    --gh: calc(var(--gw) / 0.9);
+    --col: var(--gw);
+    --panel-w: calc(3 * var(--gw) + 2 * var(--gap) + 2 * var(--pad));
+    --folder-h: calc(var(--head-h) + var(--tabs-h) + 2 * var(--gh) + var(--gap) + var(--pad));
+    --folder-top: max(calc(var(--nav-h) + 12px), calc(50% - var(--folder-h) / 2));
+
+    display: block;
+    grid-column: 3;
+    grid-row: 1 / -1;
+    position: sticky;
+    top: 0;
+    z-index: 1;
+    align-self: start;
+    height: 100vh;
+    height: 100svh;
+    overflow: clip;
+  }
+  /* while the stack falls in and the deck is lifted (timeline 0 → P.stick), the clip reaches above the
+     stage's top edge so a card is never sliced there (and never faded: it stays opaque throughout),
+     and past its left edge, where the tilted stack's lower corner swings over the text column (the
+     text stays above it) */
+  :global(html[data-motion='on']) .stage[data-falling] {
+    overflow: visible;
+    clip-path: inset(-45vh 0 0 -30vw);
+  }
+
+  :global(html[data-motion='on']) .deck {
+    display: block;
+    position: absolute;
+    inset: 0;
+    transition: opacity 150ms linear, visibility 0s linear 0s;
+  }
+  :global(html[data-motion='on']) .root[data-box] .deck {
+    opacity: 0;
+    visibility: hidden;
+    transition: opacity 150ms linear, visibility 0s linear 150ms;
+  }
+  .drift {
+    position: absolute;
+    inset: 0;
+  }
+
+  /* the folder: decorative copy (.shell) and the live FolderGrid share this geometry */
+  :global(html[data-motion='on']) .folder {
+    position: absolute;
+    right: var(--folder-r);
+    top: var(--folder-top);
+    width: var(--panel-w);
+    margin: 0;
+  }
+  .shell > * {
+    visibility: hidden;
+  }
+  :global(html[data-motion='on']) .folder [data-folder-grid],
+  :global(html[data-motion='on']) .folder [data-folder-grid-copy] {
+    aspect-ratio: auto;
+    min-height: calc(2 * var(--gh) + var(--gap));
+  }
+  :global(html[data-motion='on']) .liveFolder {
+    z-index: 3;
+    transition: opacity 150ms linear;
+  }
+  :global(html[data-motion='on']) .root:not([data-box]) .liveFolder {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  /* deck cards: the box is the grid cell; GSAP poses them (CSS default = the stairs) */
+  .deckCard {
+    position: absolute;
+    left: 0;
+    top: 0;
+    width: var(--gw);
+    height: var(--gh);
+    transform: translate(calc(var(--sx) - 50%), calc(var(--sy) - 50%)) scale(var(--ss, 1));
+    transform-style: preserve-3d;
+  }
+  .deck:global(.is-active) .deckCard,
+  .deck:global(.is-active) .face {
+    will-change: transform;
+  }
+  .face {
+    position: absolute;
+    inset: 0;
+    backface-visibility: hidden;
+    -webkit-backface-visibility: hidden;
+  }
+  .front {
+    inset: auto;
+    left: calc(50% - 9vw);
+    top: calc(50% - 12vw);
+    width: 18vw;
+    height: 24vw;
+  }
+  .backFace {
+    transform: rotateY(180deg);
+  }
+  /* the stairs' photo-only tail (a7 M13): the recipe photo on its tint, no text */
+  .photoFace {
+    padding: 8px;
+    border-radius: 22px;
+    background: var(--tint-bg, var(--sage));
+    box-shadow: var(--shadow-card), 0 0 0 6px var(--halo);
+  }
+
+  .mascot {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 12;
+    display: block;
+    width: 64px;
+    margin-bottom: -7px;
+    visibility: hidden;
+    filter: drop-shadow(0 6px 8px rgba(30, 36, 16, 0.18));
+  }
+  .mascot > svg {
+    display: block;
+    translate: 0 7px;
+  }
+  .puff {
+    position: absolute;
+    left: 0;
+    top: 0;
+    z-index: 11;
+    visibility: hidden;
+  }
+
+  /* the phone: real app-library recording in front of the panel's bottom-right corner. Its left edge
+     sits on the tile column's right edge (the 4° rest tilt swings its foot ~0.07 × width over the last
+     tile's photo, clear of the title), its foot 2vh below the panel and never closer than 3vh to the
+     stage's bottom edge, the green seam (Handset height = 2.056 × width) */
+  :global(html[data-motion='on']) .phone {
+    display: block;
+    position: absolute;
+    z-index: 5;
+    right: max(16px, calc(var(--folder-r) + var(--pad) - var(--phone-w)));
+    top: min(
+      calc(var(--folder-top) + var(--folder-h) + 2vh - 2.056 * var(--phone-w)),
+      calc(100% - 2.056 * var(--phone-w) - 3vh)
+    );
+    width: var(--phone-w);
+  }
+
+  /* text sits above the stage (a7: text passes over the deck) */
+  :global(html[data-motion='on']) .h2 {
+    position: relative;
+    z-index: 3;
+  }
+  :global(html[data-motion='on']) .body {
+    max-width: 30vw;
+  }
+}

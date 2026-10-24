@@ -1,0 +1,257 @@
+/* Step cards (brief 8.4). The card is its own size container: everything scales with cqw and
+   keeps 16px floors (20px for the Fraunces title). Size the card from the outside. */
+.root {
+  --tint-bg: var(--sage);
+  --tint-ink: var(--olive-ink);
+  position: relative;
+  display: block;
+  container-type: inline-size;
+  color: var(--tint-ink);
+  text-align: left;
+}
+
+/* ---------- vertical card (deck face, static stairs) ---------- */
+.vertical {
+  width: 100%;
+  height: 100%;
+}
+.vertical .panel {
+  --inset: min(8px, 3.2cqw);
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-rows: 63% 1fr;
+  padding: var(--inset) var(--inset) 0;
+  border-radius: min(24px, 9.5cqw);
+  background: var(--tint-bg);
+  box-shadow: var(--shadow-card), 0 0 0 min(6px, 2.4cqw) var(--halo);
+  overflow: hidden;
+}
+.media {
+  position: relative;
+  min-height: 0;
+  border-radius: min(18px, 7cqw);
+  overflow: hidden;
+  isolation: isolate;
+  background: color-mix(in srgb, var(--tint-ink) 10%, var(--tint-bg));
+}
+.photo {
+  object-fit: cover;
+}
+.numeral {
+  position: absolute;
+  z-index: 2;
+  top: 2.5cqw;
+  left: 5.5cqw;
+  font-size: 36cqw;
+  line-height: 0.8;
+  color: rgba(255, 253, 247, 0.92);
+  text-shadow: 0 2px 18px rgba(30, 36, 16, 0.28);
+  pointer-events: none;
+}
+.vertical .body {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 0.4em;
+  min-height: 0;
+  padding: 0 4cqw 1cqw 4.5cqw;
+}
+.title {
+  font-family: var(--ff-display);
+  font-weight: 600;
+  font-variation-settings: 'SOFT' 100, 'WONK' 0;
+  font-size: max(1.25rem, 9.6cqw);
+  line-height: 1.04;
+  letter-spacing: -0.015em;
+  color: var(--tint-ink);
+  text-wrap: balance;
+  /* the next stair covers this card's bottom-right corner */
+  max-width: 78%;
+}
+
+/* garnish (selectors doubled to win over Pill's own module) */
+.root .photoPill,
+.root .recPill,
+.root .moonChip,
+.root .moonInline,
+.root .rowPill {
+  font-size: max(0.875rem, 6cqw);
+  white-space: normal;
+  text-wrap: balance;
+  min-height: 0;
+  line-height: 1.15;
+}
+.root .photoPill {
+  position: absolute;
+  z-index: 2;
+  left: 4cqw;
+  bottom: 4cqw;
+  /* (of the photo) the next stair starts at 78% of this card, its halo at ~75%: end well before it */
+  max-width: 66%;
+  padding-inline: 0.75em;
+}
+.root .recPill {
+  position: absolute;
+  z-index: 2;
+  top: 4.5cqw;
+  right: 4.5cqw;
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+.root .moonChip {
+  /* inside its own card (it used to straddle the seam with card 1) */
+  position: absolute;
+  z-index: 3;
+  left: 4.5cqw;
+  bottom: calc(37% + 3cqw);
+  /* two set lines, so the chip hugs its text; it ends before the next stair (78% of this card, its
+     halo at ~75%) */
+  font-size: max(0.875rem, 5.4cqw);
+  max-width: 68%;
+  padding-inline: 0.55em 0.75em;
+  gap: 0.35em;
+  rotate: -3deg;
+  box-shadow: 0 10px 24px -10px rgba(30, 36, 16, 0.4), 0 1px 2px rgba(30, 36, 16, 0.08);
+}
+.chipLine {
+  display: block;
+}
+/* cards under ~210px (1024–1160px screens): the two set lines plus the moon don't fit before the next
+   stair, so the moon goes (the words already say "overnight") and the chip keeps its two lines */
+@container (max-width: 210px) {
+  .root .moonChip {
+    max-width: 72%;
+    padding-inline: 0.6em;
+  }
+  .root .moonChip > :first-child:not(:last-child) {
+    display: none;
+  }
+}
+.sticker {
+  /* hangs over its own card's corner only, never over the next stair; never under 92px, so its two
+     lines ("Love," / "Grandma") stay 12px+ and inside the seal */
+  position: absolute;
+  z-index: 3;
+  top: -6cqw;
+  right: -4cqw;
+  width: max(40cqw, 92px);
+  aspect-ratio: 1;
+}
+/* a signature, so it's set as written ("Love, Grandma"), not in capitals: the longest line is ~4.8em,
+   which at 13% of the seal keeps it ~62% wide, inside the dashed ring */
+.sticker svg + span {
+  font-size: 13cqw;
+  letter-spacing: 0;
+  text-transform: none;
+  max-width: 70%;
+}
+
+/* card 3: a real app frame as a mini screen (not a phone) */
+.s2 .media {
+  background: var(--lemon);
+}
+.screen {
+  position: absolute;
+  left: 30%;
+  right: 8%;
+  top: 13%;
+  bottom: -14%;
+  border-radius: min(14px, 5.5cqw);
+  overflow: hidden;
+  background: var(--surface);
+  border: 1px solid var(--hairline);
+  box-shadow: 0 2px 4px rgba(30, 36, 16, 0.06), 0 18px 36px -18px rgba(30, 36, 16, 0.35);
+  rotate: 3deg;
+}
+.s2 .numeral {
+  color: var(--forest);
+  text-shadow: none;
+}
+
+/* ---------- mobile row ---------- */
+.row {
+  width: 100%;
+}
+.row .panel {
+  position: relative;
+  display: grid;
+  /* --row-media: the parent version's desktop rows set a fixed photo size */
+  grid-template-columns: var(--row-media, 28vw) minmax(0, 1fr);
+  align-items: center;
+  gap: 14px;
+  padding: 8px;
+  border-radius: var(--r-card);
+  background: var(--tint-bg);
+  box-shadow: var(--shadow-card);
+}
+.row .media {
+  aspect-ratio: 1;
+  border-radius: var(--r-photo);
+}
+.row .numeral {
+  font-size: clamp(2.75rem, 13vw, 4rem);
+  top: 6px;
+  left: 10px;
+}
+.row .body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 4px 6px 4px 0;
+}
+.row .title {
+  font-size: clamp(1.375rem, 5.8vw, 1.75rem);
+  max-width: none;
+}
+.row .photoPill {
+  display: none;
+}
+.row .recPill {
+  /* bottom of the square photo (the numeral owns the top), 16px like every other label */
+  top: auto;
+  right: auto;
+  bottom: 6px;
+  left: 6px;
+  font-size: 1rem;
+  padding: 0.28em 0.45em;
+}
+.row .moonInline,
+.row .rowPill {
+  font-size: 1rem;
+}
+.row .rowPill {
+  background: var(--surface);
+}
+/* the row's top-right corner is the title's (and the mascot's): the seal hangs off the bottom-right
+   corner instead, clear of "videos. Sent." 92px keeps "Love," / "Grandma" at 12px (13% of the seal) */
+.row .sticker {
+  width: 92px;
+  top: auto;
+  bottom: -40px;
+  right: -20px;
+}
+/* narrow phones: the title's "videos. Sent." runs to the row's right edge, so the seal is a little
+   smaller and hangs lower, clear of it (its text keeps an 11px floor; the rows list makes room below) */
+@media (max-width: 379px) {
+  .row .sticker {
+    width: 80px;
+    bottom: -52px;
+    right: -16px;
+  }
+  .row .sticker svg + span {
+    font-size: max(11px, 13cqw);
+  }
+}
+.row .screen {
+  left: 14%;
+  right: 8%;
+  top: 14%;
+  bottom: -18%;
+}
+.row.s2 .numeral {
+  font-size: clamp(2.25rem, 10vw, 3rem);
+  top: 4px;
+  left: 6px;
+}

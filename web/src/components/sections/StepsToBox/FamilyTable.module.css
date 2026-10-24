@@ -1,0 +1,84 @@
+/* FamilyTable (parent version of the family table, #recipe-box). Mobile first, then ≥768, ≥1200.
+   A forest sheet with the VERO swirl, laid over the green demo above it like the page's other loud
+   blocks (rounded top corners overlapping by one radius, the hero sheet's shadow). Cream type on
+   forest, chartreuse only as large display words (palette-type pairs). */
+
+.section {
+  position: relative;
+  z-index: 5; /* over #see-it-work (z-index 4 on /teach) */
+  isolation: isolate;
+  margin-top: calc(-1 * var(--r-sheet));
+  padding: clamp(72px, 10vh, 96px) var(--gutter) clamp(64px, 9vh, 88px);
+  border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+  background: var(--forest) var(--swirl) center / cover no-repeat;
+  box-shadow: var(--shadow-sheet);
+  color: var(--cream);
+  text-align: center;
+  /* an anchor (#recipe-box) lands flush with the viewport top; the padding clears the nav */
+  scroll-margin-top: -88px;
+}
+
+.h2 {
+  margin: 0 auto;
+  max-width: 16ch;
+  color: var(--cream);
+}
+.accent {
+  display: block;
+  color: var(--chartreuse);
+}
+
+.folderWrap {
+  max-width: 1232px;
+  margin: clamp(32px, 4.5vw, 56px) auto 0;
+  text-align: left;
+}
+.folder {
+  /* phones: 2 columns, so each tile is wide enough to show its dish name at 16px */
+  --cols: 2;
+  --card-ratio: 1.04;
+  /* three rows of cards (≈ 0.683–0.688 across 375–767px), so a filter never changes the height */
+  --grid-ratio: 0.68;
+}
+@media (max-width: 374px) {
+  .folder {
+    --gap: 8px;
+    --pad: 8px;
+    --card-ratio: 0.92;
+    --grid-ratio: 0.6; /* three rows need ≈ 0.609 */
+  }
+}
+
+@media (min-width: 768px) {
+  .section {
+    padding-block: clamp(104px, 13vh, 136px) clamp(88px, 11vh, 120px);
+  }
+  .h2 {
+    max-width: none;
+    font-size: clamp(2.75rem, 1.2rem + 4.2vw, 5.5rem);
+  }
+  .folderWrap {
+    max-width: 760px;
+  }
+  .folder {
+    --cols: 3;
+    --card-ratio: 0.9;
+    --grid-ratio: 1.35;
+  }
+}
+
+/* wide screens: the whole table in one row, six dishes side by side */
+@media (min-width: 1200px) {
+  .section {
+    padding-block: clamp(104px, 13vh, 136px) clamp(96px, 12vh, 128px);
+  }
+  .folderWrap {
+    max-width: 1232px;
+  }
+  .folder {
+    --cols: 6;
+    --card-ratio: 0.8;
+    /* one row: the cards set the height, so a filter never changes it */
+    --grid-ratio: 99;
+  }
+}

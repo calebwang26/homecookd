@@ -1,0 +1,230 @@
+/* The family recipe box: one rounded cream panel with a header (the app's "Our family table" title +
+   an "+ Add a recipe" pill), the filter tabs and a 3-column grid (--cols). Geometry vars are inherited
+   from the parent (StepsToBox.module.css), with defaults:
+     --head-h     header row height (title + add pill), including the panel's top padding
+     --col        grid column size (default: equal fractions)
+     --gap        grid gap
+     --pad        panel padding
+     --tabs-h     tab row height
+     --card-ratio card width / height
+     --cols       grid columns (default 3) */
+.folder {
+  position: relative;
+}
+
+/* ---------- panel ---------- */
+.panel {
+  position: relative;
+  padding: 0 var(--pad, 12px) var(--pad, 12px);
+  border-radius: var(--r-media);
+  background: var(--surface);
+  box-shadow: var(--shadow-card), 0 0 0 8px var(--halo);
+}
+
+/* ---------- header: title + add ---------- */
+.head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 12px;
+  min-height: var(--head-h, 60px);
+  padding: 12px 0 0 6px;
+}
+.title {
+  color: var(--ink);
+  font-family: var(--ff-display);
+  font-weight: 600;
+  font-optical-sizing: auto;
+  font-variation-settings: 'SOFT' 100, 'WONK' 0;
+  font-size: clamp(1.25rem, 1.05rem + 0.6vw, 1.625rem);
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  user-select: none;
+}
+.title em {
+  font-style: italic;
+  font-variation-settings: 'SOFT' 100, 'WONK' 1;
+  color: var(--green);
+}
+.addWrap {
+  display: flex;
+}
+.add {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  min-height: 48px;
+  padding: 0 18px 0 14px;
+  border-radius: var(--r-pill);
+  background: var(--btn-soft-bg);
+  color: var(--btn-soft-fg);
+  font-family: var(--ff-text);
+  font-weight: 600;
+  font-size: var(--fs-ui);
+  line-height: 1;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.addLink {
+  transition: background-color 200ms var(--ease-soft);
+}
+.addLink:hover {
+  background: var(--lime-wash);
+}
+.addLink:focus-visible {
+  outline-offset: 2px;
+}
+@media (max-width: 767px) {
+  .add {
+    padding: 0 14px 0 12px;
+  }
+}
+/* under 414px the title and the full pill don't fit on one row: the pill reads "+ Add" */
+@media (max-width: 413px) {
+  .addMore {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+}
+
+.tabsRow {
+  display: flex;
+  align-items: center;
+  min-height: var(--tabs-h, 64px);
+  padding-block: 10px 6px;
+}
+.tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+/* phones: the four tabs never fit one row; two even rows of two, never three and a lone "Grandma" */
+@media (max-width: 499px) {
+  .tabs {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    width: 100%;
+  }
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 48px;
+  padding: 0 18px;
+  border-radius: var(--r-pill);
+  background: var(--sunken);
+  color: var(--ink);
+  font-family: var(--ff-text);
+  font-weight: 500;
+  font-size: var(--fs-ui);
+  line-height: 1;
+  white-space: nowrap;
+  user-select: none;
+}
+.tabBtn {
+  cursor: pointer;
+  transition: background-color 220ms var(--ease-soft), color 220ms var(--ease-soft);
+}
+.tabBtn:hover:not(.active) {
+  background: #e3e5d6;
+}
+.tab.active {
+  background: var(--black);
+  color: var(--cream);
+}
+
+/* ---------- grid ---------- */
+.grid {
+  position: relative;
+  display: grid;
+  grid-template-columns: repeat(var(--cols, 3), var(--col, minmax(0, 1fr)));
+  gap: var(--gap, 12px);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  /* keep two rows of room when a filter shows fewer cards, so the folder never jumps */
+  aspect-ratio: var(--grid-ratio, 1.35);
+}
+.cell {
+  position: relative;
+  aspect-ratio: var(--card-ratio, 0.9);
+  min-width: 0;
+}
+/* each tile is a link to the app tour (QA B25) */
+.cardLink {
+  display: block;
+  width: 100%;
+  height: 100%;
+  border-radius: var(--r-card);
+  color: inherit;
+  text-decoration: none;
+}
+.cardLink:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+/* Tiles stay light (a7's clean image grid): photo, title (≥ 16px) and "by {cook}"; the time and the
+   ~estimate live in the screen-reader text. The cook's words show on large tiles only (RecipeCard's
+   ≥ 220px tier), quote only, ≥ 16px. */
+.card [data-card-photo] + * > :first-child {
+  font-size: max(1rem, 8.6cqw);
+}
+.card [data-card-photo] + * > :nth-child(2) > span:nth-child(2) {
+  display: none;
+}
+.card [data-garnish='feel'] {
+  max-width: 88%;
+}
+.card [data-garnish='feel'] > * {
+  font-size: max(1rem, 6.8cqw);
+}
+/* phones: the title already names the cook, so a tile is photo + the full title (up to 3 lines,
+   never an ellipsis); the photo gives up a little height for it */
+@media (max-width: 767px) {
+  .card > :first-child {
+    grid-template-rows: calc(56% - var(--inset, 8px)) 1fr;
+  }
+  .card [data-card-photo] + * > :nth-child(2) {
+    display: none;
+  }
+  /* (display: tiles under 140px are RecipeCard's photo-only tier, which hides the body and shows a
+     cook tag; here the rows above keep room for the title, so it stays and the tag goes) */
+  .card [data-card-photo] + * {
+    display: flex;
+    justify-content: flex-start;
+    padding-top: 0.4em;
+  }
+  .card [data-garnish='tag'] {
+    display: none;
+  }
+  .card [data-card-photo] + * > :first-child {
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+  }
+}
+/* small tiles on desktop (1024–1180px screens, ~150–180px): like phones, the title gets up to three
+   lines (never an ellipsis) and "by {cook}" goes, since the title names the cook */
+@container (max-width: 179px) {
+  .card > :first-child {
+    grid-template-rows: calc(58% - var(--inset, 8px)) 1fr;
+  }
+  .card [data-card-photo] + * > :nth-child(2) {
+    display: none;
+  }
+  .card [data-card-photo] + * > :first-child {
+    -webkit-line-clamp: 3;
+    line-clamp: 3;
+  }
+}
+/* the smallest phones: half the tile for the photo, so a three-line title still fits */
+@media (max-width: 374px) {
+  .card > :first-child {
+    grid-template-rows: calc(50% - var(--inset, 8px)) 1fr;
+  }
+}
