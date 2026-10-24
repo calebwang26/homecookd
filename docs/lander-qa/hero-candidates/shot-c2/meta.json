@@ -1,0 +1,29 @@
+{
+ "W": 1440,
+ "H": 900,
+ "range": {
+  "start": 0,
+  "end": 2205,
+  "total": 13830
+ },
+ "meta": [
+  {
+   "i": 0,
+   "file": "000.jpg",
+   "y": 0,
+   "overflowX": 0,
+   "playing": [
+    "hero-c2-1920.mp4"
+   ]
+  },
+  {
+   "i": 1,
+   "file": "001.jpg",
+   "y": 2205,
+   "overflowX": 0,
+   "playing": []
+  }
+ ],
+ "logs": [],
+ "bad": []
+}
