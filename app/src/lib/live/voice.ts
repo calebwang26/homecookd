@@ -140,12 +140,12 @@ export function useVoiceCooking(opts: { libraryId: string | null; step: number; 
     s.onclose = (e) => {
       if (sock.current !== s) return;
       sock.current = null;
-      if (e?.code === 4401) {
-        // The service refused the session token: no retry, sign in again.
+      // 4401: the session token was refused. 4404: this recipe isn't ready for voice. Neither gets better on retry.
+      if (e?.code === 4401 || e?.code === 4404) {
         mic.stop();
         micOn.current = false;
         want.current = false;
-        setError('Signed out. Open homecookd again to sign in.');
+        setError(e.code === 4401 ? 'Signed out. Open homecookd again to sign in.' : 'Voice isn’t ready for this recipe yet.');
         setStatus('error');
         return;
       }
