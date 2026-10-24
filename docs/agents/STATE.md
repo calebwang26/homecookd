@@ -167,7 +167,7 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - **Tests:** 14 pass.
   - **Moss cleanup:** deleted `homecookd-app` and the TEST Biryani index (Caleb's OK). Only the demo family index is left.
   - **Open:** none. Deployed in the next line.
-- Oct 24 · (this PR) · Claude · Deployed main `4f075ffac` (#22) to the Convex preview `grand-dragon-649`
+- Oct 24 · #23 · Claude · Deployed main `4f075ffac` (#22) to the Convex preview `grand-dragon-649`
   (`--preview-name hackathon`, Caleb's OK).
   - **Also went live:** the schema and indexes from earlier merged PRs that were never deployed (dinners, homie
     prompts, recordings, `recipes.by_sharedAt`).
