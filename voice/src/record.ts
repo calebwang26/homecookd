@@ -599,7 +599,7 @@ export class Recording {
         }
         bytes += chunk.length;
         if (this.ws.readyState === WebSocket.OPEN) this.ws.send(chunk);
-      }, { language: this.who.language, voice: env.homieVoice, speed: 0.9 });
+      }, { language: this.who.language, voice: env.homieVoice, kind });
     } catch (err) {
       if (!ctrl.signal.aborted) console.warn("sonic", (err as Error).message);
     }

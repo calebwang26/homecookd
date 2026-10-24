@@ -218,7 +218,7 @@ Run what the PR touches; for anything shared (schema, contracts), run every area
 | `convex/` | `npx tsc -p convex --noEmit` and `npx vitest run` (repo root) |
 | `app/` | `cd app && npx tsc --noEmit && npx expo lint`, plus the matching `node scripts/test-*.mjs` |
 | `web/` | `cd web && npm ci && npm run build` |
-| `voice/` | `cd voice && npm ci && npm run typecheck && npm test` (unit tests, no keys or network). For the socket end to end: `VOICE_STUB=1 npm run dev:fake`, then `FAKE=1 npm run test-client -- test-audio/next-step.wav`. Without `FAKE=1` the test client uses real Cartesia (the default since #45), which costs credits |
+| `voice/` | `cd voice && npm ci && npm run typecheck && npm test` (unit tests, no keys or network). Then a live test with real Cartesia (the default since #45; Caleb wants the credits used to check voice quality, `memory/cartesia-credits-for-tests.md`): `VOICE_STUB=1 HOMIE_DEMO=1 PORT=<free port> npm run dev`, then `URL=ws://localhost:<port> npm run test-client -- test-audio/yes.wav test-audio/next-step.wav` and `test-record` (Marathi, and `COOK_LANG=en`). `FAKE=1` against `npm run dev:fake` is only for a quick offline check |
 | `pipeline/` | `.venv/bin/python pipeline/schema.py data/synthetic/*.json`, `test_order.py`, `test_shorten.py`, `test_coverage.py` |
 | `supabase/` (frozen) | `npx --yes deno@2 test --node-modules-dir=none --allow-env --allow-read supabase/tests/` |
 

@@ -7,6 +7,7 @@ import WebSocket from "ws";
 import type { RecordingStatus } from "../src/convex.js";
 import type { Decision, HomieAgent, Line } from "../src/homie.js";
 import type { RecordingDeps } from "../src/record.js";
+import type { Voice } from "../src/sonic.js";
 import type { SttEvents } from "../src/stt.js";
 import { advance, AUDIO_S, FakeSocket, fakeSpeak, settle, sleep, waitFor } from "./helpers.js";
 
@@ -16,6 +17,7 @@ process.env.ANTHROPIC_API_KEY = "test";
 process.env.VOICE_STUB = "1";
 const { Recording } = await import("../src/record.js");
 const { Ended } = await import("../src/convex.js");
+const { env } = await import("../src/env.js");
 
 const RULES = { firstS: 10, gapS: 30, maxLive: 2, maxEnd: 2 };
 const LATENCY_MS = 100; // every Convex call
@@ -43,6 +45,7 @@ function world(status: RecordingStatus = "intro") {
   const endQuestions: { kind: "cue"; line: Line }[] = [{ kind: "cue", line: line("How do you know the dal is done?") }];
   const endCalls: { asked: string[]; max: number }[] = [];
   const spoken: string[] = [];
+  const voices: Voice[] = [];
   let stt: SttEvents | undefined;
   let ids = 0;
 
@@ -79,7 +82,7 @@ function world(status: RecordingStatus = "intro") {
       stt = events;
       return { send: () => {}, close: () => {} };
     },
-    speak: fakeSpeak(spoken),
+    speak: fakeSpeak(spoken, voices),
     // Like Convex (live.ts): once a recording is over, status writes, heartbeats and new lines are refused
     // (only the goodbye may still land).
     convex: {
@@ -133,7 +136,7 @@ function world(status: RecordingStatus = "intro") {
   }
 
   const named = (fn: string) => calls.filter((c) => c.fn === fn);
-  return { row, calls, named, decisions, decided, endQuestions, endCalls, spoken, connect, says, deps };
+  return { row, calls, named, decisions, decided, endQuestions, endCalls, spoken, voices, connect, says, deps };
 }
 
 type Phone = ReturnType<ReturnType<typeof world>["connect"]>;
@@ -259,6 +262,27 @@ test("a reconnect while recording keeps the pacing, the questions and what she s
   await advance(300_000, 500);
   assert.equal(b.ws.of("ask").length, 1);
   b.drop();
+});
+
+test("every line goes to Sonic in homie's voice, in her language, with its kind (the mood)", async () => {
+  const w = world();
+  w.decisions.push(ask("How much salt is a pinch?"));
+  const c = w.connect("rec-voices");
+  await helloDone(c);
+  c.send({ type: "start" });
+  await advance(1000);
+  w.says("Now I add a pinch of salt");
+  await waitFor("the question", () => c.ws.of("say_end").length === 2);
+  await advance(AUDIO_S * 1000);
+  w.says("About half a teaspoon");
+  c.send({ type: "done" });
+  await heardOut(c, "the end question");
+  w.says("When it smells nutty");
+  await heardOut(c, "the opt-in");
+  w.says("Yes, of course");
+  await waitFor("the end", () => c.ws.phases().includes("ended"), 120_000);
+  assert.deepEqual(w.voices.map((v) => v.kind), ["intro", "amount", "end", "optin", "closing"]);
+  assert.ok(w.voices.every((v) => v.voice === env.homieVoice && v.language === "en"));
 });
 
 test("a socket closed during the wrap-up writes nothing more; the reconnect finishes it once", async () => {

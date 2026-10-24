@@ -83,12 +83,15 @@ and homesick college kids. It's a family product, not a tool.
 - **Cartesia (voice):** Ink and Sonic run in the live voice service, plus a Convex action for voice-note
   transcription. Send `Cartesia-Version: 2026-08-14` on every call, and read https://docs.cartesia.ai/llms.txt
   before guessing fields or voice ids. A cloned voice needs that person's consent (`people.voiceClone`).
-  Key check: `node scripts/check-cartesia.mjs`.
+  homie's voice (Riya bilingual), its locale fields, speed and moods are Caleb's pick (`voice/src/sonic.ts`,
+  `docs/agents/memory/homie-voice.md`): change them only after he has heard samples. Gemini TTS is the backup voice
+  when Sonic fails before a line starts. Key check: `node scripts/check-cartesia.mjs`.
 - **Live Cartesia tests are encouraged.** We have the credits (1.24M on Oct 24), and Caleb wants them used to check
   voice quality, so `test-client` and `test-record` stream to real Ink 2 and Sonic by default. `FAKE=1` against
   `npm run dev:fake` (`VOICE_FAKE_SPEECH=1`: no Cartesia or Gemini Live) is an opt-in for quick offline checks. Every
   run stops at `MAX_S` (default 15 min) only so a stuck run can't stream for hours. The waste worth cutting is in real
-  use (a socket left open streams silence at 3 credits a second), not in testing.
+  use (a socket left open streams silence at 3 credits a second), not in testing. A PR that touches `voice/` gets a
+  live run in Marathi and English before it's done (`docs/agents/memory/cartesia-credits-for-tests.md`).
 - **Moss (search):** filled from Convex, searched from the live voice service; one index per family
   (`family-<familyId>`). Moss only finds moments: never use Moss Inference to write answers
   (https://docs.moss.dev/llms.txt). Key check: `node scripts/check-moss.mjs`.
@@ -124,7 +127,8 @@ app/        Expo app (expo-router, TypeScript). EAS dev build while coding, Test
             src/lib/live/ = the Convex client, the voice socket and the mic (Expo Go hides the mic).
 web/        Next.js site: the lander, homecookd.app/r (recipe share page), /i (invites) and /d (dinner invites). Vercel project "homecookd".
 convex/     The hackathon backend: schema.ts, functions, http.ts (worker + voice service endpoints)
-voice/      Live voice service (Cloud Run): the kid's cooking loop (/cook) and homie while a cook records (/record)
+voice/      Live voice service (Cloud Run): the kid's cooking loop (/cook) and homie while a cook records (/record);
+            homie speaks with Sonic, and Gemini TTS when Sonic fails
 glasses/    ESP32 glasses → GCP VM (Python): WS ingest, MP4 mux, GCS upload, Convex job (glasses/README.md)
 supabase/   Frozen: functions/api (today's sign-in, invites, older screens), migrations/, tests/
 pipeline/   Python: prep.py → process.py (Gemini) → Muse Spark → publish.py, and worker.py (claims jobs from Convex)

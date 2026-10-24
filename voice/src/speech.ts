@@ -2,6 +2,7 @@
 // Cartesia or Gemini Live at all, so local test runs cost nothing: the listeners hear nothing (send the kid's words as
 // { type: "text" }, which the test client does by default), and every spoken line is silence about as long as it
 // would take to say. Never set it on Cloud Run.
+import { wavHeader } from "./geminiTts.js";
 import { InkStream } from "./ink.js";
 import { SONIC_SAMPLE_RATE, speak as sonicSpeak, speakWav as sonicSpeakWav, type Voice } from "./sonic.js";
 import { createStt as realCreateStt, type Stt, type SttEvents } from "./stt.js";
@@ -21,21 +22,12 @@ export const createStt: typeof realCreateStt = (language, events, keyterms = [])
 /** Roughly how long a line takes to say: 15 characters a second, 0.5–8 s. */
 const seconds = (text: string) => Math.min(8, Math.max(0.5, text.length / 15));
 
-function wavHeader(bytes: number): Buffer {
-  const h = Buffer.alloc(44);
-  h.write("RIFF", 0); h.writeUInt32LE(36 + bytes, 4); h.write("WAVE", 8); h.write("fmt ", 12);
-  h.writeUInt32LE(16, 16); h.writeUInt16LE(1, 20); h.writeUInt16LE(1, 22); h.writeUInt32LE(SONIC_SAMPLE_RATE, 24);
-  h.writeUInt32LE(SONIC_SAMPLE_RATE * 2, 28); h.writeUInt16LE(2, 32); h.writeUInt16LE(16, 34); h.write("data", 36);
-  h.writeUInt32LE(bytes, 40);
-  return h;
-}
-
 /** Sonic, faked: the line's length in silence, 100 ms after the call. An abort ends it with no audio. */
 const fakeSpeak: typeof sonicSpeak = (text, format, signal, onChunk) =>
   new Promise<void>((resolve) => {
     const timer = setTimeout(() => {
       const pcm = Buffer.alloc(Math.round(seconds(text) * SONIC_SAMPLE_RATE) * 2);
-      onChunk(format === "wav" ? Buffer.concat([wavHeader(pcm.length), pcm]) : pcm);
+      onChunk(format === "wav" ? Buffer.concat([wavHeader(pcm.length, SONIC_SAMPLE_RATE), pcm]) : pcm);
       resolve();
     }, 100);
     signal.addEventListener("abort", () => (clearTimeout(timer), resolve()), { once: true });
