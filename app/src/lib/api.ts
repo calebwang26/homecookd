@@ -19,7 +19,7 @@
 
 // Public addresses, so a store build works without app/.env (EAS cloud builds never see that
 // gitignored file, and an empty API_URL made every sign-in fail). .env still overrides them.
-const RAW = process.env.EXPO_PUBLIC_API_URL || 'https://qeiednrjkiyzbolkepbk.supabase.co/functions/v1/api';
+const RAW = process.env.EXPO_PUBLIC_API_URL || 'https://aaxyabymvwxlxrxwxgwv.supabase.co/functions/v1/api';
 export const API_URL = RAW.trim().replace(/\/+$/, '');
 export const WEB_URL = (process.env.EXPO_PUBLIC_WEB_URL || 'https://homecookd.app').trim().replace(/\/+$/, '');
 

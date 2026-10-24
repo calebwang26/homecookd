@@ -71,7 +71,7 @@ security definer
 set search_path = ''
 as $$
   select net.http_post(
-    url := 'https://qeiednrjkiyzbolkepbk.supabase.co/functions/v1/api/cron/hourly',
+    url := 'https://aaxyabymvwxlxrxwxgwv.supabase.co/functions/v1/api/cron/hourly',
     body := case when p_now is null then '{}'::jsonb else jsonb_build_object('now', p_now) end,
     params := '{}'::jsonb,
     headers := jsonb_build_object(

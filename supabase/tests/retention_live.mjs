@@ -23,7 +23,7 @@ import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const API = (process.env.API_URL || "https://qeiednrjkiyzbolkepbk.supabase.co/functions/v1/api").replace(/\/+$/, "");
+const API = (process.env.API_URL || "https://aaxyabymvwxlxrxwxgwv.supabase.co/functions/v1/api").replace(/\/+$/, "");
 // Like two_sided_live.mjs: the gitignored code file in this checkout (copy it into a worktree, or set CODE_FILE).
 const here = dirname(fileURLToPath(import.meta.url));
 const CODE_FILE = process.env.CODE_FILE || join(here, "../../docs/build/.test-family-code");
