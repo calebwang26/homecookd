@@ -114,7 +114,8 @@ export default defineSchema({
     source: v.union(v.literal("phone"), v.literal("glasses")),
     title: v.optional(v.string()), // the dish the cook named before or after recording
     language: v.optional(v.string()), // what the cook speaks in the video (Ink code)
-    forKidId: v.optional(v.id("people")),
+    forKidId: v.optional(v.id("people")), // the one kid it's for (lib/forKids.ts)
+    forKidIds: v.optional(v.array(v.id("people"))), // every kid it's for (Oct 24); read both
     recordingId: v.optional(v.id("recordings")), // homie's live session, when there was one
     stage: v.union(
       v.literal("uploading"), // the worker found the upload incomplete and handed it back
@@ -189,7 +190,8 @@ export default defineSchema({
   recordings: defineTable({
     familyId: v.id("families"),
     cookId: v.id("people"),
-    forKidId: v.optional(v.id("people")),
+    forKidId: v.optional(v.id("people")), // the one kid it's for (lib/forKids.ts)
+    forKidIds: v.optional(v.array(v.id("people"))), // every kid it's for (Oct 24); read both
     dish: v.optional(v.string()),
     language: v.string(), // Ink code; "en" by default
     source: v.union(v.literal("phone"), v.literal("glasses")),

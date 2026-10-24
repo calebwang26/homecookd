@@ -102,6 +102,7 @@ export const finished = internalMutation({
       title: rec.dish,
       language: rec.language,
       forKidId: rec.forKidId,
+      forKidIds: rec.forKidIds,
       recordingId: rec._id,
       stage: "queued",
       progress: 0,
