@@ -56,7 +56,9 @@ export function registerLiveRoutes(http: HttpRouter): void {
   http.route({
     path: "/live/status",
     method: "POST",
-    handler: route(true, async (ctx, { sessionToken, recordingId, status }) => {
+    handler: route(true, async (ctx, { sessionToken, recordingId, status, touch }) => {
+      // { touch: true } instead of a status: the heartbeat, which only marks the recording as still in use.
+      if (touch === true && status === undefined) return reply(await ctx.runMutation(internal.live.touch, { sessionToken, recordingId }));
       if (!oneOf(STATUSES, status)) return fail(400, `status must be one of ${STATUSES.join(", ")}`);
       return reply(await ctx.runMutation(internal.live.setStatus, { sessionToken, recordingId, status }));
     }),

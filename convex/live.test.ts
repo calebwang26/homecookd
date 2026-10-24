@@ -145,26 +145,43 @@ test("status, prompts, answers and the stories opt-in, on the recording's own cl
   expect((await post(t, "/live/optin", { sessionToken: other.sessionToken, recordingId, optIn: false })).status).toBe(404);
 });
 
-test("a recording nobody touched for 2 hours is abandoned", async () => {
-  const { t, dad } = await family();
+test("a recording nobody touched for 2 hours is abandoned; the voice service's heartbeat keeps a long cook live", async () => {
+  const { t, dad, leo } = await family();
+  const sessionToken = dad.sessionToken;
   vi.setSystemTime(new Date("2026-10-25T17:00:00Z"));
-  const old = await t.mutation(api.live.startRecording, { sessionToken: dad.sessionToken, source: "phone" });
+  const old = await t.mutation(api.live.startRecording, { sessionToken, source: "phone" });
+  const cooking = await t.mutation(api.live.startRecording, { sessionToken, source: "phone" });
+  expect((await post(t, "/live/status", { sessionToken, recordingId: cooking.recordingId, status: "recording" })).status).toBe(200);
   vi.setSystemTime(new Date("2026-10-25T18:30:00Z"));
-  const fresh = await t.mutation(api.live.startRecording, { sessionToken: dad.sessionToken, source: "phone" });
+  const fresh = await t.mutation(api.live.startRecording, { sessionToken, source: "phone" });
+  // The heartbeat only marks the recording as in use; a bad one, or someone else's, is refused.
+  expect(await (await post(t, "/live/status", { sessionToken, recordingId: cooking.recordingId, touch: true })).json()).toEqual({ ok: true });
+  expect((await post(t, "/live/status", { sessionToken, recordingId: cooking.recordingId, touch: "yes" })).status).toBe(400);
+  expect((await post(t, "/live/status", { sessionToken: leo.sessionToken, recordingId: cooking.recordingId, touch: true })).status).toBe(404);
   vi.setSystemTime(new Date("2026-10-25T19:01:00Z"));
   await t.mutation(internal.live.abandonIdle, {});
-  const status = async (recordingId: typeof old.recordingId) =>
-    (await t.query(api.live.recording, { sessionToken: dad.sessionToken, recordingId }))?.status;
-  expect(await status(old.recordingId)).toBe("abandoned");
-  expect(await status(fresh.recordingId)).toBe("intro");
+  const row = (recordingId: typeof old.recordingId) => t.query(api.live.recording, { sessionToken, recordingId });
+  expect((await row(old.recordingId))?.status).toBe("abandoned");
+  expect((await row(fresh.recordingId))?.status).toBe("intro");
+  const cook = await row(cooking.recordingId);
+  expect(cook?.status).toBe("recording");
+  expect(cook!.startedAt! - Date.parse("2026-10-25T17:00:00Z")).toBeLessThan(1000);
+  // A heartbeat can't bring an abandoned recording back.
+  expect((await post(t, "/live/status", { sessionToken, recordingId: old.recordingId, touch: true })).status).toBe(400);
+  expect((await row(old.recordingId))?.status).toBe("abandoned");
 });
 
-test("the kid's /voice/session carries the cook's language and which step each story belongs to", async () => {
+test("the kid's /voice/session carries the cook's language (absent when unknown) and which step each story belongs to", async () => {
   const { t, dad, leo } = await family();
   const recipeId = await addRecipe(t, dad.familyId, dad.personId);
+  const recipe = async () => (await (await post(t, "/voice/session", { sessionToken: leo.sessionToken, recipeId })).json()).recipe;
+  // Neither the cook nor the recipe has a language: absent, not "en", so the voice still says her clips in English.
+  expect(await recipe()).not.toHaveProperty("cookLanguage");
+  await t.run((ctx) => ctx.db.patch("recipes", recipeId, { language: "hi" }));
+  expect((await recipe()).cookLanguage).toBe("hi");
   await t.mutation(internal.seed.language, { personId: dad.personId as never, language: "mr" });
-  const session = await (await post(t, "/voice/session", { sessionToken: leo.sessionToken, recipeId })).json();
-  expect(session.recipe).toMatchObject({ cookName: "Dad", cookLanguage: "mr" });
+  const view = await recipe();
+  expect(view).toMatchObject({ cookName: "Dad", cookLanguage: "mr" });
   // The story (130–230 s) was told during step 1 (60–330 s).
-  expect(session.recipe.memories).toEqual([{ kind: "story", text: "My first apartment had one pot.", moment: { startS: 130, endS: 230 }, stepOrder: 1 }]);
+  expect(view.memories).toEqual([{ kind: "story", text: "My first apartment had one pot.", moment: { startS: 130, endS: 230 }, stepOrder: 1 }]);
 });

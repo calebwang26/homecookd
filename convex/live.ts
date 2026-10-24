@@ -139,6 +139,19 @@ export const setStatus = internalMutation({
   },
 });
 
+/** The voice service's heartbeat while her socket is open, so a long cook isn't taken for idle. */
+export const touch = internalMutation({
+  args: { sessionToken: v.string(), recordingId: v.string() },
+  returns: v.union(failure, v.object({ ok: v.literal(true) })),
+  handler: async (ctx, { sessionToken, recordingId }) => {
+    const found = await own(ctx, sessionToken, recordingId);
+    if ("error" in found) return found;
+    if (found.row.status === "ended" || found.row.status === "abandoned") return { error: "ended" as const };
+    await ctx.db.patch("recordings", found.row._id, { updatedAt: Date.now() });
+    return { ok: true as const };
+  },
+});
+
 export const addPrompt = internalMutation({
   args: {
     sessionToken: v.string(),
@@ -185,7 +198,10 @@ export const setOptIn = internalMutation({
   },
 });
 
-/** A recording nobody touched for 2 hours was left behind (the app closed mid-intro, say). */
+/**
+ * A recording nobody touched for 2 hours was left behind (the app closed mid-intro, say). While her socket
+ * is open the voice service touches it every 10 minutes, so a long cook stays live.
+ */
 export const abandonIdle = internalMutation({
   args: {},
   returns: v.null(),

@@ -151,7 +151,7 @@ export class Cooking {
     this.send({ type: "go_to_step", stepOrder: this.step });
     this.quietCheck = setInterval(() => void this.nudgeIfQuiet(), 30_000);
     const returning = (readers.get(this.readerKey) ?? 0) > Date.now() - READER_TTL_MS;
-    console.log(`cook start: ${recipe.title}, step ${this.step}, cook ${cook?.language ?? "en"}, returning=${returning}, stub=${convex.usingStub}`);
+    console.log(`cook start: ${recipe.title}, step ${this.step}, cook ${cook?.language ?? "language unset"}, returning=${returning}, stub=${convex.usingStub}`);
     if (returning) this.reading = true;
     else void this.greet().catch((err) => console.warn("greet", err.message));
   }
@@ -331,10 +331,12 @@ export class Cooking {
       const words = original ? { quote: original, quoteEn: english } : english ? { quote: english } : {};
       this.send({ type: "play_clip", startS, endS, ...words });
       if (!question) return;
-      // A cook who doesn't speak English: her words in English, once the clip has finished (she isn't talked over).
-      if ((this.session.cook?.language ?? "en") !== "en") {
+      // Her words in English, once the clip has finished (she isn't talked over). Skipped only for a cook we know
+      // speaks English; an unknown language gets Claude's translation, as before languages were recorded.
+      const language = this.session.cook?.language;
+      if (language !== "en") {
         const quote = question.quote;
-        const short = !notLatin(quote) && quote.split(/\s+/).length <= 30;
+        const short = language !== undefined && !notLatin(quote) && quote.split(/\s+/).length <= 30;
         void (short ? Promise.resolve(quote) : translateQuote(quote))
           .then(async (english) => {
             await new Promise((r) => setTimeout(r, Math.max(0, clipEnds + 500 - Date.now())));

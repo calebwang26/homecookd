@@ -26,6 +26,7 @@ src/moss.ts     Moss search over family-<familyId> (@moss-js/moss, in-memory que
 src/convex.ts   Convex HTTP actions (/voice/*, /live/*) + the local stub
 fixtures/       stub session (Grandma's red-braised pork) and stub recordings (Rajani Aaji, mr and en)
 scripts/        test clients (/cook and /record), test-audio maker
+test/           unit tests (node:test): pacing, and /record's phases with a fake socket, Claude, voice and Convex
 ```
 
 ## Run it locally
@@ -51,7 +52,8 @@ VOICE_STUB=1 HOMIE_DEMO=1 npm run dev         # then, in another terminal:
 npm run test-record                           # a whole recording with homie, in Marathi (stub "stub-mr")
 COOK_LANG=en npm run test-record              # the same in English ("stub-en")
 SESSION=<cook's sessionToken> RECORDING=<recordings _id> npm run test-record   # live Convex
-npm run typecheck
+npm run typecheck                             # src/ and test/
+npm test                                      # unit tests on a fake clock; no keys or network needed
 ```
 
 The stub has no Moss index (the Moss plan allows 3 indexes, so don't make test ones): with `VOICE_STUB=1`,
@@ -80,10 +82,10 @@ Service → app
 - `{ type: "go_to_step", stepOrder }`: show that step. Its text is spoken right after.
 - `{ type: "play_clip", startS, endS, quote?, quoteEn? }`: play that span of the cook's video. Nothing is spoken
   over it. `quote` is her words for the caption (the Devanagari `quoteOriginal` when the clip is a step's own
-  moment), `quoteEn` the English when they differ. When the clip answers a question and the cook doesn't speak
-  English, half a second after it ends comes `{ type: "say", kind: "translation", text: "Grandma says: …",
-  translation: true }`: her words in short English. Show it labeled as a translation. A step change or a new turn
-  before then drops it.
+  moment), `quoteEn` the English when they differ. When the clip answers a question, half a second after it ends
+  comes `{ type: "say", kind: "translation", text: "Grandma says: …", translation: true }`: her words in short
+  English. Show it labeled as a translation. It's skipped only when Convex says the cook speaks English (an unset
+  language still gets it). A step change or a new turn before then drops it.
 - `{ type: "asked_cook", questionId, text }`: the question went to the cook. "I'll ask Grandma" follows.
 - `{ type: "say", text, kind, textEn?, ai: true, audio: { format, encoding: "pcm_s16le", sampleRate: 24000 } }`,
   then the audio as binary frames, then `{ type: "say_end", interrupted }`. `kind` is one of `step`, `reply`,
@@ -138,11 +140,12 @@ Service → app
 - `{ type: "say", text, textEn, kind, ai: true, audio }`, the audio as binary frames, then
   `{ type: "say_end", interrupted }`. `text` is in her language, `textEn` the English; `kind` is a
   `homiePrompts.kind` (`intro`, `amount`, `cue`, `substitution`, `story`, `reaction`, `end`, `optin`, `closing`).
-  When she taps start while the hello is still playing, an extra `say_end` with `interrupted: true` says stop it.
+  When she taps start or done while homie's line is still playing, an extra `say_end` with `interrupted: true`
+  says stop it.
 - `{ type: "ask", promptId, text, textEn, kind }` (show the caption card), then `{ type: "drop", promptId }` (fade
-  it: no answer within ~10 s of hearing it, or "not now") or `{ type: "answered", promptId }`.
+  it: no answer within ~10 s of hearing it, "not now", or she said she's done) or `{ type: "answered", promptId }`.
 - `{ type: "transcript", text, final }`, `{ type: "error", message }`. Close 4401 signed out, 4404 no such recording
-  (or it already ended).
+  (or it already ended), 4409 a newer socket for the same recording took over (don't reconnect this one).
 
 What happens
 1. Hello (phase `intro`): Claude writes it from fixed rules (her name the family's way, "Rajani Aaji"; the kid and
@@ -158,8 +161,16 @@ What happens
    ("Oh, I love that"), not counted as a question.
 4. Her next turn after a question is the answer (`/live/prompt-update`, with English when she spoke Marathi).
    "Not now", "later", "आत्ता नाही", "नंतर" in a short turn drops it.
-5. `done`: up to 2 end questions ("Before you go, two quick ones…"), then "Can Shreya hear your stories too?"
-   (yes/no → `/live/optin`), then the closing, then phase `ended`.
+5. `done`: homie stops talking and drops an open question, then up to 2 end questions ("Before you go, two quick
+   ones…"), then "Can Shreya hear your stories too?" (yes/no → `/live/optin`), then the closing, then phase `ended`.
+
+Reconnects: what homie knows about a recording (the pacing counters, the questions it asked, what she said, the
+hello) is kept per recording on the instance (Cloud Run's session affinity sends her back to it) until it ends,
+or for 3 h. A socket back in `recording` listens 15 s before deciding anything and keeps the gaps and the limit. A
+socket that closes during the wrap-up stops without writing anything more and leaves Convex at `wrapping_up`; the
+next one asks only what's left (no second opt-in once she answered) and says goodbye. Text messages sent before
+the recording has loaded are handled once it has. While the socket is open, the service touches the recording
+every 10 minutes (`/live/status` `{ touch: true }`), so a long cook isn't abandoned as idle after 2 h.
 
 Half duplex: incoming audio is dropped while homie speaks and 300 ms after the phone should have finished playing.
 

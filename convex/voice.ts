@@ -32,7 +32,9 @@ export const sessionView = internalQuery({
         recipeId: v.id("recipes"),
         title: v.string(),
         cookName: v.string(),
-        cookLanguage: v.string(), // the cook's own language (Ink code), for homie's greeting word
+        // The cook's language (Ink code), else the recipe's. Absent when neither is set: the voice service then
+        // still says her clip's words in English, as it did before languages were recorded.
+        cookLanguage: v.optional(v.string()),
         cookRelation: v.optional(v.string()),
         steps: v.array(
           v.object({
@@ -67,7 +69,7 @@ export const sessionView = internalQuery({
         recipeId: recipe._id,
         title: recipe.title,
         cookName: cook?.name ?? "",
-        cookLanguage: cook?.language ?? recipe.language ?? "en",
+        cookLanguage: cook?.language ?? recipe.language,
         cookRelation: cook?.relation,
         steps: recipe.steps,
         memories: recipe.memoriesOptIn ? recipe.memories.map((m) => ({ ...m, stepOrder: stepOf(recipe.steps, m.moment) })) : [],

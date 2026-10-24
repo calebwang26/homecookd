@@ -14,7 +14,8 @@ export type CookSession = {
   familyId: string;
   mossIndex: string;
   kid: { id: string; name: string };
-  cook?: { name: string; language: string; relation?: string };
+  /** `language` is undefined when Convex doesn't know it (most recipes made before languages were recorded). */
+  cook?: { name: string; language?: string; relation?: string };
   recipe: { id: string; title: string; steps: Step[]; memories: Memory[] };
   stepOrder?: number;
 };
@@ -65,7 +66,7 @@ export async function startSession(sessionToken: string, recipeId: string): Prom
     familyId: live.familyId,
     mossIndex: live.mossIndex,
     kid: { id: live.kid.personId, name: live.kid.name },
-    cook: r.cookName ? { name: r.cookName, language: r.cookLanguage ?? "en", relation: r.cookRelation } : undefined,
+    cook: r.cookName ? { name: r.cookName, language: r.cookLanguage, relation: r.cookRelation } : undefined,
     recipe: { id: r.recipeId, title: r.title, steps: r.steps, memories: r.memories ?? [] },
     stepOrder: live.stepOrder,
   };
@@ -134,6 +135,12 @@ export async function setRecordingStatus(
   return post("/live/status", { sessionToken, recordingId, status });
 }
 const stubStarted = new Map<string, number>();
+
+/** The heartbeat while her socket is open: marks the recording as in use, so the 2 h idle cleanup leaves it. */
+export async function touchRecording(sessionToken: string, recordingId: string): Promise<void> {
+  if (usingStub) return;
+  await post("/live/status", { sessionToken, recordingId, touch: true });
+}
 
 export async function logPrompt(
   sessionToken: string,

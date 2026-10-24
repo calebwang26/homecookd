@@ -196,3 +196,20 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - **Checked:** convex-tests and both typechecks; `test-record` end to end on the stub in Marathi and English.
   - **Open:** not deployed (Convex or Cloud Run); never run against live Convex or a phone; the glasses frame pull
     is untested (no VM yet); `GEMINI_API_KEY` and `HOMIE_VOICE` aren't Cloud Run secrets/env yet (deploy.sh adds them).
+- Oct 24 · #29 (review fixes) · Claude · Track E after review:
+  - **Kid side (#13 kept):** `/voice/session` `cookLanguage` is now optional, absent when neither the cook nor the
+    recipe has a language. The English line after a clip is skipped only for a cook marked `en`, so older recipes
+    and the unseeded demo cook still get "Grandma says: …". The `/cook` guards from #13 are unchanged.
+  - **`/record`:** what homie knows (pacing counters, questions asked, transcript, hello) is kept per recording
+    across reconnects (cleared at `ended`, 3 h TTL). A reconnect into `recording` listens 15 s before deciding.
+    `start`/`done` are guarded synchronously, so there's no double start and no live question after `done`.
+    Status writes go out in order. `done` stops homie (an extra `say_end`) and drops an open question first. A
+    story in progress blocks questions in code. A socket closed mid-wrap-up writes nothing more and leaves
+    `wrapping_up`, and the reconnect finishes only what's left. A newer socket replaces an older one (close 4409).
+    Messages that arrive before loading are kept.
+  - **Heartbeat:** `/live/status` `{ touch: true }` every 10 min while the socket is open (`live.touch`), so a long
+    cook isn't abandoned.
+  - **Tests:** new `voice/test/` (node:test + tsx, no new deps; `npm test`), 14 pass. Convex 19 pass (heartbeat,
+    `cookLanguage` absent).
+  - **Open:** same as above (not deployed). The post-clip translation path needs a Moss hit, so it isn't exercised
+    on the stub.
