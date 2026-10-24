@@ -9,6 +9,9 @@
 //   src/components/record/walkieLogic.ts     when her spoken answer is over (a share ask's short yes
 //                                            too), when nobody answered, how a question reads
 //   src/lib/languages.ts                     the picker's list and search (Track F's API)
+//   src/components/record/cameraLogic.ts     filming in the app: file names, the gap between two files,
+//                                            the clock, when leaving stops the camera and coming back
+//                                            films again by itself, the clip each file becomes
 //   node scripts/test-recording-ui.mjs
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
@@ -30,6 +33,7 @@ const W = await import(pathToFileURL(join(root, 'src/components/record/words.ts'
 const R = await import(pathToFileURL(join(root, 'src/components/record/recordingLogic.ts')).href);
 const K = await import(pathToFileURL(join(root, 'src/components/record/walkieLogic.ts')).href);
 const L = await import(pathToFileURL(join(root, 'src/lib/languages.ts')).href);
+const C = await import(pathToFileURL(join(root, 'src/components/record/cameraLogic.ts')).href);
 
 let passed = 0;
 const test = (name, fn) => {
@@ -260,6 +264,44 @@ test('languages: English first; "mar" and "मरा" find Marathi', () => {
   assert.equal(L.languageName(undefined), 'English');
   const marathi = L.LANGUAGES.find((l) => l.code === 'mr');
   assert.equal(marathi.native, 'मराठी');
+});
+
+test('in-app camera: 5-minute files named in order, and the wall time between them that the video skips', () => {
+  assert.equal(C.CHUNK_MS, 300_000);
+  assert.equal(C.chunkName(1), 'part-01.mp4');
+  assert.equal(C.chunkName(12), 'part-12.mp4');
+  // Names sort in filming order (the worker downloads in name order; prep.py orders by file time).
+  assert.deepEqual([C.chunkName(10), C.chunkName(2)].sort(), ['part-02.mp4', 'part-10.mp4']);
+  assert.equal(C.gapS(undefined, 5000), 0, 'the first file has no gap');
+  const prev = { startedAt: 1_000_000, durationMs: 300_000 };
+  assert.equal(C.gapS(prev, 1_300_400), 0.4, 'a roll-over: under a second');
+  assert.equal(C.gapS(prev, 1_420_000), 120, 'a phone call: two minutes');
+  assert.equal(C.gapS(prev, 1_200_000), 0, 'never negative');
+});
+
+test('in-app camera: what has been filmed, and the clock on the card', () => {
+  assert.equal(C.filmedMs([{ durationMs: 300_000 }, { durationMs: 1000 }], null, 0), 301_000);
+  assert.equal(C.filmedMs([{ durationMs: 300_000 }], 10_000, 12_500), 302_500);
+  assert.equal(C.clockLabel(0), '0:00');
+  assert.equal(C.clockLabel(247_000), '4:07');
+  assert.equal(C.clockLabel(3_753_000), '1:02:33');
+});
+
+test('in-app camera: leaving the app stops the file; a short trip films again by itself, a real one waits for her', () => {
+  assert.equal(C.stopsFilming('active'), false);
+  assert.equal(C.stopsFilming('inactive'), true, 'Control Center, a call screen, the lock: before iOS takes the camera');
+  assert.equal(C.stopsFilming('background'), true);
+  assert.equal(C.resumesBySelf(2000, false), true, 'pulled down Control Center');
+  assert.equal(C.resumesBySelf(2000, true), false, 'went to the home screen');
+  assert.equal(C.resumesBySelf(60_000, false), false, 'a long call');
+});
+
+test('in-app camera: each file becomes a selected camera clip for the Send path', () => {
+  const clip = C.chunkClip({ uri: 'file:///doc/recordings/r1/part-02.mp4', startedAt: Date.parse('2026-10-25T17:05:00Z'), durationMs: 300_000, width: 1080, height: 1920 }, 2);
+  assert.equal(clip.source, 'camera');
+  assert.equal(clip.selected, true);
+  assert.equal(clip.recordedAt, '2026-10-25T17:05:00.000Z');
+  assert.deepEqual(clip.asset, { uri: 'file:///doc/recordings/r1/part-02.mp4', width: 1080, height: 1920, type: 'video', duration: 300_000, fileName: 'part-02.mp4', mimeType: 'video/mp4' });
 });
 
 console.log(`\n${passed} passed`);
