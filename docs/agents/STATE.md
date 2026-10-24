@@ -289,7 +289,7 @@ Before starting work, compare the last commit here with `git log origin/main` to
     in the app). `rebuild_library` lists every `*/recipe.json` in the bucket, so any `publish.py` run puts family
     recipes into the shared `library.json` and the app bundle. The intro isn't kept anywhere now (no screen shows it).
 - Oct 24 · (this PR) · Claude · Root devDependency `@types/node`: `convex deploy` typechecks `convex/`, and a clean `npm ci` had no Node types, so every `process.env` failed (37 errors) and the deploy stopped. Now tsc is 0 and vitest 40/40.
-- Oct 24 · #PRNUM · Claude · Family recipes stay out of the shared library, plus a scrub for the old ones (follow-up
+- Oct 24 · #39 · Claude · Family recipes stay out of the shared library, plus a scrub for the old ones (follow-up
   to #37). A family recipe's public `recipe.json` now says `"family": true` (`pipeline/schema.py` `Recipe.family`,
   set by `publish.without_memories`). `rebuild_library` leaves those out of `library.json` and the app's bundle
   (`publish.is_family`, which also honours `data/out/<id>/.family` for one published before the mark).
