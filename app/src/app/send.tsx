@@ -29,6 +29,7 @@ import { LidPot } from '@/components/record/LidPot';
 import { ActionButton, Avatar, BackPill, Chip, PressableScale, ScreenWash, SendIcon, SuccessBurst, Txt, type ActionState } from '@/components/ui';
 import { WEB_URL, errorMessage, type Profile } from '@/lib/api';
 import { daysAgo } from '@/lib/format';
+import { createJob } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
 import { ensurePendingSend, MAX_RECORDING_HOURS, startUpload, uploadsConfigured } from '@/lib/uploads';
 import { uploadVoice, type VoiceRecording } from '@/lib/voice';
@@ -198,6 +199,9 @@ export default function SendScreen() {
       // The videos are a job now (the home card tracks it): the draft must not outlive this screen,
       // or Record would offer them for sending again. (Cleared on unmount; kept on screen until then.)
       sentJob.current = true;
+      // The live progress (Convex jobs, hackathon): the worker finds the videos in "<job_id>/". A
+      // failure here never stops the send; the row falls back to the status file.
+      void createJob(`${job.job_id}/`, draft.glasses ? 'glasses' : 'phone').catch((e) => console.warn('[send] jobs.create failed', String(e)));
       // Who gets it once it's written. If this fails, the home card keeps retrying.
       if (recipients.length > 0) await ensurePendingSend(job);
       const wait = motion.loadingMinMs - (Date.now() - started);

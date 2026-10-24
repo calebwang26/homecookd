@@ -54,7 +54,13 @@ older note in `memory/` disagrees, this file wins.
   - **Keys** for Cartesia, Moss and Convex are in the root `.env` (gitignored); checks: `node scripts/check-cartesia.mjs`,
     `node scripts/check-moss.mjs`. Still needed: `ANTHROPIC_API_KEY` (in `.env`), a Muse Spark key, and the
     Cloud Run and Convex env copies.
-  - **TestFlight** works (Apple developer account in place).
+  - **TestFlight** works (Apple developer account in place). EAS project `ef88fb83-09cf-4c73-9684-de9a95a1f1ef`
+    belongs to Salik's Expo account `salikm1234` (`owner` in `app/app.json`); bundle id `com.salik.homecookd`, Apple
+    Team `73UV499FKN`. EAS commands must run signed in as `salikm1234` (or as a member of that project).
+  - **App (Track D):** voice cooking, live job progress, live questions, photo note and glasses import call Convex
+    and the voice service through `app/src/lib/live/` (one file each, with a stub until they're deployed). Needs an
+    EAS dev build or TestFlight: Expo Go hides the mic. Public URLs: `EXPO_PUBLIC_CONVEX_URL` (in `eas.json`),
+    `EXPO_PUBLIC_VOICE_URL` (empty until Track B deploys; the local stub stands in).
 
 ## Waiting on Caleb (launch blockers)
 
@@ -130,3 +136,4 @@ Before starting work, compare the last commit here with `git log origin/main` to
     - The bridge's success path was tested only in convex-test: `docs/build/.test-family-code` isn't recognised by
       the new Supabase project, so no live TEST-family device key.
     - The real demo family's Supabase id still needs `seed:claim`.
+- Oct 24 · #5 · Claude · Track D, the app (STACK.md): cook screen streams the mic as 16 kHz PCM (`@siteed/audio-studio`) to the voice service and follows `go_to_step`, `play_clip` (in the step's own player) and `say` ("AI voice" label, "I asked Mom"); parent Home shows the newest recording's live stage from `jobs.forFamily` and the kids' open questions with Hold to talk (`questions.answer`); the kid's postcard sends the photo to Convex and shows Muse's draft to edit (pots cut); Record has "From my glasses" (`source: "glasses"`). Convex and voice calls live in `app/src/lib/live/convex.ts` and `voice.ts`, each with a stub. `app/scripts/pcm-echo-server.mjs` is the first-hour mic test socket. EAS: `expo-dev-client`, `expo-updates`, a `development` profile, channels, Salik's project id; `scripts/set-apple-ids.mjs` run with `com.salik.homecookd` / `73UV499FKN` (AASA, api `APP_BUNDLE_ID`). Open: the dev build and the TestFlight build need EAS signed in as `salikm1234`; mic streaming not yet checked on a real iPhone; `EXPO_PUBLIC_VOICE_URL` once Track B deploys; the old TEST family code doesn't work on the hackathon Supabase, so the live sign-in smoke didn't run.
