@@ -1,4 +1,5 @@
-// Kid (learner) tabs: Home | Recipes | Ask, on the bible's floating pill tab bar.
+// Kid (learner) tabs: Home | Recipes | Community | Ask, on the bible's floating pill tab bar.
+// Community ("Near you") is one screen; its recipe and dinner pages open on the root stack.
 // Recipes is a stack (list -> dish); on a dish the tab bar fades away so the page keeps the bible
 // layout (sticky "Start cooking"), and comes back on the list. While the phone is lent, each tab
 // shows "Cooking as Grandma" at the top of its own content (ActingAsBar).
@@ -8,6 +9,7 @@ import { useEffect, useState, type ComponentProps } from 'react';
 import { StyleSheet } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
+import { CommunityIcon } from '@/components/community/CommunityIcon';
 import { ChatIcon, FloatingTabBar, GridIcon, HomeIcon } from '@/components/ui';
 import { useKidTabsPresence } from '@/lib/navigation';
 import { useUnread } from '@/lib/session';
@@ -73,6 +75,7 @@ export default function KidTabs() {
       screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.page } }}>
       <Tabs.Screen name="home" options={{ title: 'Home', tabBarIcon: ({ color }) => <HomeIcon color={String(color)} /> }} />
       <Tabs.Screen name="recipes" options={{ title: 'Recipes', tabBarIcon: ({ color }) => <GridIcon color={String(color)} /> }} />
+      <Tabs.Screen name="community" options={{ title: 'Community', tabBarIcon: ({ color }) => <CommunityIcon color={String(color)} /> }} />
       <Tabs.Screen
         name="ask"
         options={{ title: 'Ask', tabBarBadge: ask || undefined, tabBarIcon: ({ color }) => <ChatIcon color={String(color)} /> }}
