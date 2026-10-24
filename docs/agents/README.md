@@ -32,6 +32,8 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [declutter-first](memory/declutter-first.md) | Oct 22, non-negotiable: cut words and features before adding UI; video and voice above text |
 | [homie-talks-no-bubble](memory/homie-talks-no-bubble.md) | Oct 24: homie talking = no text (pot lights, lid lifts, "AI voice"); asking = centred, no buttons, answer out loud |
 | [homie-hello-once](memory/homie-hello-once.md) | Oct 24: homie introduces itself once: the pot per person on a phone, the recording hello per cook (`metBefore`) |
+| [homie-guidance-only](memory/homie-guidance-only.md) | Oct 24: while a cook films, homie gives guidance (how much, show it to the camera, the plate), never cooking advice |
+| [in-app-recording](memory/in-app-recording.md) | Oct 24: phone recording films inside the app at 1080p (VisionCamera 4) so homie stays live; the audio-session rules |
 | [lander-design-references](memory/lander-design-references.md) | Lander taste: video hero, giant type, footer wordmark animation |
 | [lander-copy-feedback](memory/lander-copy-feedback.md) | Copy rules: sell emotion, 3-second demo steps, instantly intuitive |
 | [lander-icp-problems](memory/lander-icp-problems.md) | Kid and parent problem lists and the big vision |

@@ -173,6 +173,9 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 **App → Convex (new public functions; every one takes `sessionToken`)**
 - `live.startRecording({ dish?, forKidId?, language, source })` → `{ recordingId }` (cook only; status `intro`).
 - `live.recording({ recordingId })` (live): the row, for the recording screen.
+- `live.setCover({ recordingId, storageId })` → `{ ok }` (cook only, her own recording): the plate photo
+  (uploaded with `files.uploadUrl`) becomes `recordings.coverStorageId`; a newer one replaces it and deletes the
+  old file. `{ ok: false }` once abandoned.
 - `live.endRecording({ recordingId })` → `{ ok }` (cook only, her own recording; another family's or another
   cook's is refused): the stop button when the `/record` socket isn't connected. A `recording` or `wrapping_up`
   recording becomes `ended` (sets `endedAt`), so the glasses VM finalizes the video even when the voice service is
@@ -270,9 +273,13 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   `startedAt` (server clock) once; `ended` sets `endedAt`. `{ sessionToken, recordingId, touch: true }` (no
   status) → `{ ok }` is the service's heartbeat every 10 minutes while the socket is open: it only moves
   `updatedAt`, so the 2 h idle cleanup (`live.abandonIdle`) leaves a long cook alone; 400 once ended or abandoned.
-- `/live/prompt` `{ sessionToken, recordingId, kind, text, textEn, atS, status }` → `{ promptId }`. `400` "recording
+- `/live/prompt` `{ sessionToken, recordingId, kind, text, textEn, atS, status, said? }` → `{ promptId }`. `400` "recording
   already ended" once the recording is over: only the `closing` line may land after `ended` (it races the status
-  write), nothing after `abandoned`.
+  write), nothing after `abandoned`. `said` `{ atS, endS }`: when homie's voice played on the phone (same clock as
+  `atS`), for lines saved after they were said (the hello, reactions, the goodbye).
+- `/live/prompt-said` `{ sessionToken, promptId, said: { atS, endS } }` → `{ ok }`: a question's voice span, saved
+  once it has played (questions are saved before they're said). homie's voice is in the phone's own video, so the
+  worker's `homieLog` carries `said` (video seconds) and the pipeline can lower or cut those spans.
 - `/live/prompt-update` `{ sessionToken, promptId, status, answer? }` → `{ ok }`.
 - `/live/optin` `{ sessionToken, recordingId, optIn }` → `{ ok }` (stored on the recording, carried to the job).
 
@@ -280,6 +287,13 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 - App → service: binary 16 kHz mono s16le PCM (the phone by the stove), always streaming;
   `{ type: "start" }` when the cook starts cooking after the intro; `{ type: "done" }` on "I'm done";
   `{ type: "text", text }` (typed answer, tests); `{ type: "not_now" }` (tap on the caption card).
+- Filmed in the app (Oct 24, `app/src/components/record/useInAppCamera.ts`; older builds use the system camera and
+  close the socket while it's up): `{ type: "start", camera: true }`; the socket and the mic stay open while the
+  phone's camera films. `{ type: "frame", jpeg }` (base64 JPEG, ~640 px, about every 5 s) replaces the glasses'
+  frame; Claude sees it only while it's under 20 s old. `{ type: "pause" }` when the camera stopped (she left
+  the app, a call, the lock): homie hushes, drops its question and asks nothing. `{ type: "resume", gapS }` when it
+  films again, and at each 5-minute file roll: `gapS` is the wall time the video skipped, so every later `atS` is
+  on the video's clock (the clips concatenated). `{ type: "plate", ok }` answers the plate ask below.
 - Service → app:
   - `{ type: "ready", recording: { id, language, cookName, kidName?, dish? } }`
   - `{ type: "phase", phase: "intro" | "recording" | "wrapping_up" | "ended" }`
@@ -289,7 +303,10 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
     done while homie's line is still playing, an extra `{ type: "say_end", interrupted: true }` tells the app to
     stop it.
   - `{ type: "ask", promptId, text, textEn, kind }`: show the caption card. `{ type: "drop", promptId }`: fade it
-    (no answer in ~10 s, "not now", or she's done). `{ type: "answered", promptId }`.
+    (no answer in ~10 s, "not now", or she's done). `{ type: "answered", promptId }`. Kind `show` (filmed in the
+    app): "Can you tilt the pan toward me?". Kind `plate` (filmed in the app, in the wrap-up after the last
+    questions): the app shows the camera big and takes the photo (`live.setCover`), then sends
+    `{ type: "plate", ok }`; no answer in 75 s, or "not now", skips it.
   - `{ type: "transcript", text, final }`, `{ type: "error", message }`. Close 4401 signed out, 4404 no such recording
     (or it already ended), 4409 a newer socket for the same recording took over (don't reconnect that one).
 - A reconnect picks up where the last socket stopped (same pacing, questions and transcript; the wrap-up finishes
@@ -298,11 +315,13 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   for it finds out at its next Convex write (heartbeat, status or homie's next line). It then says and saves
   nothing more, sends `{ type: "phase", phase: "ended" }` and closes with 4404.
 - The service ignores incoming audio while homie speaks (+300 ms), so it never hears itself; the app also sends
-  silence then. Pacing (normal): first question no earlier than 4 min, gaps of 4–5 min, doubled after an ignored
-  one, at most 6 live plus 2 end questions, never while the cook talks or tells a story. `HOMIE_DEMO=1`: first
+  silence then. homie gives guidance, never cooking advice (`docs/agents/memory/homie-guidance-only.md`). Pacing
+  (normal, Oct 24): first question no earlier than 2 min, gaps of 3.5 min, doubled after an ignored one, at most 8
+  live plus 2 end questions, never while the cook talks or tells a story. `HOMIE_DEMO=1`: first
   question at ~40 s, then 90 s gaps, at most 2 live.
 - Glasses frames: when `GLASSES_URL` is set, the service pulls `GET <GLASSES_URL>/frame/latest?recording=<id>`
-  (`x-glasses-secret`) every ~5 s and gives the newest JPEG to homie's decision.
+  (`x-glasses-secret`) every ~5 s and gives the newest JPEG to homie's decision. `HOMIE_DECIDE_MODEL` (empty =
+  `CLAUDE_MODEL`) picks the model for that decision, the call that adds up (`voice/scripts/try-decide.ts`).
 
 **Voice service HTTP** `POST /speak` `{ sessionToken, text, lang?, translate?: boolean, kind?: string }` → `audio/wav`
 (24 kHz, homie's voice, in `lang` or the person's language). `translate: true` first turns English `text` into `lang`.
@@ -376,7 +395,11 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   `forKidName?`, `memoriesOptIn?` (the recording's) and `homieLog: [{ atS, kind, text, textEn, answer?: { transcript,
   transcriptEn?, atS, endS } }]`, sorted, with times on the **video's** clock (`atS + (startedAt − videoStartedAt) /
   1000` when `videoStartedAt` is set, else `atS`; answers shifted the same). Prompts said before the video started
-  (negative video time, e.g. the intro) are left out.
+  (negative video time, e.g. the intro) are left out. Each entry may carry `said: { atS, endS }` (Oct 24): when
+  homie's own voice played, which is in the phone's video too (lower or cut it there). `coverUrl?` (Oct 24): the
+  plate photo homie asked for at the end of an in-app phone recording (`recordings.coverStorageId`); use it as the
+  recipe's cover. In-app phone clips are `part-01.mp4`, `part-02.mp4`, ... (signer objects `01.mp4`, `02.mp4` in
+  the same order) with no creation-date tag: their order is the upload order.
 - `/worker/release` `{ jobId }` → `{ ok }`: the upload isn't complete yet. The job shows stage `uploading` and goes
   back to `queued` after 30 s. `404` unless the job is `preparing`. The worker waits up to 45 s for every file the
   signer's `jobs/<job_id>.json` lists before releasing; with no signer file, for anything at `uploadPath`. It fails
