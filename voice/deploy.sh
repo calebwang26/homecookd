@@ -49,4 +49,4 @@ gcloud run deploy $SERVICE --project "$P" --region $REGION --source . \
 
 URL=$(gcloud run services describe $SERVICE --project "$P" --region $REGION --format='value(status.url)')
 echo "$URL  (app: ${URL/https:/wss:}/cook?session=…&recipe=…)"
-curl -sf "$URL/healthz" && echo "  healthz ok"
+curl -sf "$URL/health" && echo "  health ok"
