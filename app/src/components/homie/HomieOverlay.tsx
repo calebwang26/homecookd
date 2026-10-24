@@ -52,8 +52,10 @@ export function HomieOverlay() {
   };
 
   const resting = !!me && !route.hidden && !h.hidden && !inMoment;
+  // While a moment is up the overlay is modal: VoiceOver ignores its siblings, the app's screens
+  // (iOS reads accessibilityViewIsModal; the web build reads aria-modal).
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none" accessibilityViewIsModal={inMoment}>
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none" accessibilityViewIsModal={inMoment} aria-modal={inMoment}>
       {me ? <RestingPot frame={frame} shown={resting} inMoment={inMoment} h={h} state={state} label={label} progress={progress} onPress={onPress} /> : null}
       <HomieMoment from={frame} state={state} level={h.level} label={label} onActive={setInMoment} />
     </View>
