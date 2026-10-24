@@ -3,6 +3,7 @@
 //                      Red while listening.
 //   <VoiceLine/>       one short line just above the bottom bar, only while voice is on:
 //                      "Listening…" / what the kid said / "AI voice" while the AI's reply plays /
+//                      "Translated from Mom" while the AI voices the clip that just played in English /
 //                      "I asked Mom" for a few seconds after a question went to the cook.
 // The cook's own clips are never labelled: only the AI's voice is.
 import { useEffect, useState } from 'react';
@@ -11,7 +12,7 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { IconButton, MicIcon, Txt } from '@/components/ui';
 import type { VoiceStatus } from '@/lib/live/voice';
-import { SAY_KEY_PREFIX } from '@/lib/live/say';
+import { SAY_KEY_PREFIX, TRANSLATION_KEY_PREFIX } from '@/lib/live/say';
 import { useNowPlaying } from '@/lib/media';
 import { colors, radii, shadows } from '@/theme/tokens';
 
@@ -35,6 +36,7 @@ export function VoiceMicButton({ status, onPress }: { status: VoiceStatus; onPre
 export function VoiceLine({ status, heard, askedAt, error, cookName, bottom }: { status: VoiceStatus; heard: string | null; askedAt: number | null; error: string | null; cookName: string; bottom: number }) {
   const now = useNowPlaying();
   const aiSpeaking = now.phase === 'playing' && !!now.key?.startsWith(SAY_KEY_PREFIX);
+  const translating = aiSpeaking && !!now.key?.startsWith(TRANSLATION_KEY_PREFIX);
   // "I asked Mom" shows for a few seconds after each question.
   const [expired, setExpired] = useState<number | null>(null);
   useEffect(() => {
@@ -48,6 +50,7 @@ export function VoiceLine({ status, heard, askedAt, error, cookName, bottom }: {
     status === 'error' ? error
     : status === 'off' ? null
     : asked ? `I asked ${cookName}`
+    : translating ? `Translated from ${cookName}`
     : aiSpeaking ? 'AI voice'
     : status === 'connecting' ? 'Connecting…'
     : heard ? `“${heard}”`
