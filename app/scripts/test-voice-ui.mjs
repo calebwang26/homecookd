@@ -7,7 +7,8 @@
 //                               kept), a spoken yes or no and what follows a no (the service's own rules,
 //                               checked against voice/src/yesNo.ts), when homie is 'thinking', the
 //                               no-buttons yes-or-no moment, what the pot shows, kitchen timers on the
-//                               phone's clock (parse, order, ids per socket, each buzzing once, countdown,
+//                               phone's clock (parse, order, ids per socket, each buzzing once, at its
+//                               zero here or the service's timer_done, whichever comes first, countdown,
 //                               words),
 //                               which of the cook's answers to offer, the silence the mic hands on, the
 //                               Cartesia credit fixes (which frames go to /cook, the app leaving), and one
@@ -374,18 +375,45 @@ await test('timers stay soonest first; the same id replaces the old one; done on
 });
 
 // The hook's timers, step for step (lib/live/voice.ts): each socket's open counts up `socketNo`, and
-// `timer` / `timer_done` are read with the socket they came on.
+// `timer` / `timer_done` are read with the socket they came on. `run` is the due-timer effect, run until
+// it waits: each pass picks the soonest timer still to buzz; one at zero by `now` buzzes (its
+// setTimeout(0) fires) and the effect runs again. `buzz` is the hook's buzzTimer, which both the phone's
+// zero and an early timer_done call: once per timer. `leave`: a timer leaving on its own (the hook's
+// TIMER_DUE_HOLD_MS after its buzz).
 function cookTimers() {
-  const h = { socket: 0, list: [] };
-  return {
+  const h = { socket: 0, list: [], buzzed: new Set(), buzzes: [], due: false };
+  const buzz = (id) => {
+    if (h.buzzed.has(id)) return;
+    h.buzzed.add(id);
+    h.buzzes.push(id);
+  };
+  const c = {
     h,
     open: () => void (h.socket += 1),
     timer: (m, now) => {
       const t = V.parseTimer(m, now, h.socket);
       if (t) h.list = V.withTimer(h.list, t);
     },
-    done: (id) => void (h.list = V.withoutTimer(h.list, h.socket, id)),
+    done: (id, now) => {
+      const r = V.timerDone(h.list, h.buzzed, h.socket, id, now);
+      h.list = r.list;
+      if (r.buzz) buzz(r.buzz);
+      c.run(now);
+    },
+    run: (now) => {
+      for (let pass = 0; pass < 20; pass++) {
+        const { next, kept, due } = V.timerBuzz(h.list, h.buzzed);
+        h.buzzed = kept;
+        h.due = due;
+        if (!next || next.endsAt > now) return;
+        buzz(next.id);
+      }
+      throw new Error('the due timers never settle');
+    },
+    buzz,
+    leave: (id) => void (h.list = h.list.filter((t) => t.id !== id)),
   };
+  return c;
 }
 
 await test('timer ids are per socket: a pause and resume keeps the old "timer-1" counting down', () => {
@@ -394,82 +422,116 @@ await test('timer ids are per socket: a pause and resume keeps the old "timer-1"
   c.timer({ id: 'timer-1', seconds: 300, label: 'rice' }, 0);
   // The app goes to the background and comes back: a new socket, where the service starts at timer-1 again.
   c.open();
-  c.timer({ id: 'timer-1', seconds: 600, label: 'eggs' }, 12_000);
-  assert.deepEqual(c.h.list.map((t) => [t.id, t.label]), [['1/timer-1', 'rice'], ['2/timer-1', 'eggs']]);
-  // The new socket's timer_done takes only its own timer; the rice leaves on its own at zero (no timer_done can come).
-  c.done('timer-1');
+  c.timer({ id: 'timer-1', seconds: 60, label: 'eggs' }, 12_000);
+  assert.deepEqual(c.h.list.map((t) => [t.id, t.label]), [['2/timer-1', 'eggs'], ['1/timer-1', 'rice']]);
+  // The new socket's timer_done is only about its own timer (the eggs buzz); the rice keeps counting down,
+  // and leaves on its own at zero (no timer_done can come).
+  c.done('timer-1', 71_990);
+  assert.deepEqual(c.h.buzzes, ['2/timer-1']);
+  c.leave('2/timer-1');
   assert.deepEqual(c.h.list.map((t) => [t.id, t.label]), [['1/timer-1', 'rice']]);
   assert.equal(c.h.list[0].endsAt, 300_000);
   assert.equal(V.socketTimerId(2, 'timer-1'), '2/timer-1');
 });
 
-// The hook's due-timer effect, run until it waits (lib/live/voice.ts): each pass picks the soonest
-// timer still to buzz; one at zero by `now` buzzes (its setTimeout(0) fires) and the effect runs again.
-function cookBuzzer(c) {
-  const b = { buzzed: new Set(), buzzes: [], due: false };
-  b.run = (now) => {
-    for (let pass = 0; pass < 20; pass++) {
-      const { next, kept, due } = V.timerBuzz(c.h.list, b.buzzed);
-      b.buzzed = kept;
-      b.due = due;
-      if (!next || next.endsAt > now) return;
-      b.buzzed.add(next.id);
-      b.buzzes.push(next.id);
-    }
-    throw new Error('the due timers never settle');
-  };
-  // A timer leaving on its own (the hook's TIMER_DUE_HOLD_MS after its buzz).
-  b.leave = (id) => void (c.h.list = c.h.list.filter((t) => t.id !== id));
-  return b;
-}
-
 await test('two timers at zero together buzz once each (old-socket timers after a pause get no timer_done)', () => {
   const c = cookTimers();
-  const b = cookBuzzer(c);
   c.open();
   c.timer({ id: 'timer-1', seconds: 60, label: 'rice' }, 0);
   c.timer({ id: 'timer-2', seconds: 90, label: 'dal' }, 0);
-  b.run(30_000);
-  assert.deepEqual(b.buzzes, []);
-  assert.equal(b.due, false);
+  c.run(30_000);
+  assert.deepEqual(c.h.buzzes, []);
+  assert.equal(c.h.due, false);
   // Away past both, then back on a new socket: both old timers are at zero at once.
   c.open();
-  b.run(200_000);
-  assert.deepEqual(b.buzzes, ['1/timer-1', '1/timer-2']);
-  assert.equal(b.due, true);
+  c.run(200_000);
+  assert.deepEqual(c.h.buzzes, ['1/timer-1', '1/timer-2']);
+  assert.equal(c.h.due, true);
   // Again and again (every re-render) while they're held on screen: still two.
-  for (const now of [200_000, 201_000, 205_000]) b.run(now);
-  assert.equal(b.buzzes.length, 2);
-  b.leave('1/timer-1');
-  b.run(210_000);
-  assert.equal(b.due, true);
-  b.leave('1/timer-2');
-  b.run(210_000);
-  assert.deepEqual([b.buzzes.length, b.due, b.buzzed.size], [2, false, 0]);
+  for (const now of [200_000, 201_000, 205_000]) c.run(now);
+  assert.equal(c.h.buzzes.length, 2);
+  c.leave('1/timer-1');
+  c.run(210_000);
+  assert.equal(c.h.due, true);
+  c.leave('1/timer-2');
+  c.run(210_000);
+  assert.deepEqual([c.h.buzzes.length, c.h.due, c.h.buzzed.size], [2, false, 0]);
 });
 
 await test('a timer_done for one timer at zero leaves the other one alone; a new timer after both buzzes once', () => {
   const c = cookTimers();
-  const b = cookBuzzer(c);
   c.open();
   c.timer({ id: 'timer-1', seconds: 60, label: 'rice' }, 0);
   c.timer({ id: 'timer-2', seconds: 60, label: 'eggs' }, 0);
-  b.run(60_000);
-  assert.deepEqual(b.buzzes, ['1/timer-1', '1/timer-2']);
-  c.done('timer-1');
-  b.run(61_000);
+  c.run(60_000);
+  assert.deepEqual(c.h.buzzes, ['1/timer-1', '1/timer-2']);
+  c.done('timer-1', 61_000);
   // The eggs already buzzed: no second buzz, and the pot still shows it done.
-  assert.deepEqual([b.buzzes.length, b.due, [...b.buzzed]], [2, true, ['1/timer-2']]);
-  c.done('timer-2');
-  b.run(62_000);
-  assert.deepEqual([b.due, b.buzzed.size], [false, 0]);
+  assert.deepEqual([c.h.buzzes.length, c.h.due, [...c.h.buzzed]], [2, true, ['1/timer-2']]);
+  c.done('timer-2', 62_000);
+  assert.deepEqual([c.h.due, c.h.buzzed.size], [false, 0]);
   c.timer({ id: 'timer-3', seconds: 30, label: 'tea' }, 62_000);
-  b.run(80_000);
-  assert.equal(b.buzzes.length, 2);
-  b.run(92_000);
-  b.run(93_000);
-  assert.deepEqual(b.buzzes, ['1/timer-1', '1/timer-2', '1/timer-3']);
-  assert.equal(b.due, true);
+  c.run(80_000);
+  assert.equal(c.h.buzzes.length, 2);
+  c.run(92_000);
+  c.run(93_000);
+  assert.deepEqual(c.h.buzzes, ['1/timer-1', '1/timer-2', '1/timer-3']);
+  assert.equal(c.h.due, true);
+});
+
+await test('a timer_done before the phone’s own zero buzzes it now, once, and shows it done', () => {
+  const c = cookTimers();
+  c.open();
+  c.timer({ id: 'timer-1', seconds: 5, label: 'rice' }, 1_000);
+  c.run(5_000);
+  assert.deepEqual([c.h.buzzes, c.h.due], [[], false]);
+  // The service's zero beats the phone's by a few ms: the rice buzzes now and stays, at zero.
+  c.done('timer-1', 5_960);
+  assert.deepEqual(c.h.buzzes, ['1/timer-1']);
+  assert.equal(c.h.due, true);
+  assert.deepEqual(c.h.list.map((t) => [t.id, t.endsAt]), [['1/timer-1', 5_960]]);
+  assert.equal(V.secondsLeft(c.h.list[0], 5_960), 0);
+  assert.equal(V.cookPotState({ status: 'listening', muted: false, thinking: false, timers: 1, timerDue: c.h.due }), 'timer');
+  // The phone's own zero right after (its setTimeout not cleared yet), and every re-render: still one.
+  c.buzz('1/timer-1');
+  for (const now of [6_000, 6_500, 10_000]) c.run(now);
+  assert.deepEqual(c.h.buzzes, ['1/timer-1']);
+  // It leaves a little later, like any buzzed timer.
+  c.leave('1/timer-1');
+  c.run(16_000);
+  assert.deepEqual([c.h.list.length, c.h.due, c.h.buzzed.size, c.h.buzzes.length], [0, false, 0, 1]);
+});
+
+await test('a timer_done after the phone’s own buzz never buzzes again: the timer leaves', () => {
+  const c = cookTimers();
+  c.open();
+  c.timer({ id: 'timer-1', seconds: 5, label: 'rice' }, 0);
+  c.run(5_000);
+  assert.deepEqual([c.h.buzzes, c.h.due], [['1/timer-1'], true]);
+  c.done('timer-1', 5_040);
+  assert.deepEqual([c.h.buzzes, c.h.list.length, c.h.due, c.h.buzzed.size], [['1/timer-1'], 0, false, 0]);
+  // A timer_done for a timer this phone doesn't have changes nothing.
+  assert.deepEqual(V.timerDone([], new Set(), 1, 'timer-9', 6_000), { list: [], buzz: null });
+});
+
+await test('two timers, one done early: only that one buzzes; the other buzzes once at its own zero', () => {
+  const c = cookTimers();
+  c.open();
+  c.timer({ id: 'timer-1', seconds: 60, label: 'rice' }, 0);
+  c.timer({ id: 'timer-2', seconds: 90, label: 'dal' }, 0);
+  c.done('timer-1', 59_950);
+  assert.deepEqual(c.h.buzzes, ['1/timer-1']);
+  // The dal keeps counting down, untouched.
+  assert.deepEqual(c.h.list.map((t) => [t.id, t.endsAt]), [['1/timer-1', 59_950], ['1/timer-2', 90_000]]);
+  c.run(60_000);
+  c.leave('1/timer-1');
+  c.run(70_000);
+  assert.deepEqual([c.h.buzzes, c.h.due], [['1/timer-1'], false]);
+  // The phone's zero comes first this time; the service's timer_done after it only takes it away.
+  c.run(90_000);
+  assert.deepEqual([c.h.buzzes, c.h.due], [['1/timer-1', '1/timer-2'], true]);
+  c.done('timer-2', 90_030);
+  assert.deepEqual([c.h.buzzes.length, c.h.list.length, c.h.due], [2, 0, false]);
 });
 
 await test('seconds left round up, so 0 only once it is done', () => {

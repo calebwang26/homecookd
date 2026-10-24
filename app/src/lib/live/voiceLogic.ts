@@ -296,9 +296,23 @@ export function withoutTimer(list: readonly CookTimer[], socket: number, id: unk
 }
 
 /**
- * Timers reaching zero on this phone, each buzzing once. `buzzed`: the ids that already buzzed here; the
- * ones whose timer left the list drop out (`kept`). `next`: the soonest timer still to buzz (null: none).
- * `due`: a timer that buzzed is still on screen ("Done": the pot's timer state).
+ * The service's `timer_done` from socket `socket`. It usually comes before this phone's own zero (same
+ * clock, a little latency), so a timer that hasn't buzzed here buzzes now (`buzz`: its id): it stays,
+ * at zero ("Done"), and leaves a little later like any buzzed timer. One that already buzzed here
+ * leaves now (`buzz` null), and so does nothing for an id this phone doesn't have.
+ */
+export function timerDone(list: readonly CookTimer[], buzzed: ReadonlySet<string>, socket: number, id: unknown, now: number): { list: CookTimer[]; buzz: string | null } {
+  const done = socketTimerId(socket, id);
+  const t = list.find((x) => x.id === done);
+  if (!t || buzzed.has(done)) return { list: withoutTimer(list, socket, id), buzz: null };
+  return { list: withTimer(list, { ...t, endsAt: Math.min(t.endsAt, now) }), buzz: done };
+}
+
+/**
+ * Timers reaching zero on this phone (or buzzed by an early timer_done), each buzzing once. `buzzed`:
+ * the ids that already buzzed here; the ones whose timer left the list drop out (`kept`). `next`: the
+ * soonest timer still to buzz (null: none). `due`: a timer that buzzed is still on screen ("Done": the
+ * pot's timer state).
  */
 export function timerBuzz(list: readonly CookTimer[], buzzed: ReadonlySet<string>): { next: CookTimer | null; kept: Set<string>; due: boolean } {
   const kept = new Set(list.filter((t) => buzzed.has(t.id)).map((t) => t.id));

@@ -8,7 +8,8 @@
 //                         doesn't know, 4404), or the line failed for good (the phone reads instead)
 //   voice.muted           the kid turned the mic off: the recorder stops, the line stays open
 //   voice.timers          kitchen timers the service set, soonest first; this phone counts them down
-//                         (ids are per socket: one from before a pause keeps going and leaves on its own)
+//                         (ids are per socket: one from before a pause keeps going and leaves on its own),
+//                         and each buzzes once, at its zero here or the service's timer_done, whichever is first
 //   voice.askedAt         when a question last went to the cook ("I asked Grandma"); askedIds: which ones
 //   voice.listen() / stop() / setMuted(on)
 //   voice.command('back', fallback)  says it to homie as text; `fallback` runs when nobody is on the line,
@@ -76,7 +77,7 @@ import {
   sentText,
   thinksAfter,
   timerBuzz,
-  withoutTimer,
+  timerDone,
   withTimer,
   type AppMomentKind,
   type CookTimer,
@@ -96,7 +97,7 @@ const RETRIES = 3;
 const COMMAND_WAIT_MS = 1500;
 /** 'thinking' ends on its own if homie never answers what the kid said. */
 const THINKING_MAX_MS = 10_000;
-/** A timer at zero stays on screen ("Done") this long if the service never says timer_done. */
+/** A timer that buzzed stays on screen ("Done") this long, unless the service's timer_done comes after the buzz. */
 const TIMER_DUE_HOLD_MS = 10_000;
 /** The service's go_to_step to its saved step comes right after `ready`. */
 const RESTORE_MS = 3000;
@@ -185,8 +186,10 @@ export function useVoiceCooking(opts: VoiceOptions) {
   const answers = useRef(0);
   const reconnect = useRef<((auto: boolean) => Promise<void>) | null>(null);
   const pending = useRef(new Set<ReturnType<typeof setTimeout>>());
-  // The timers that reached zero here, by id: each buzzes once (voiceLogic timerBuzz).
+  // The timers that buzzed here, by id: each buzzes once (voiceLogic timerBuzz, timerDone).
   const buzzed = useRef<Set<string>>(new Set());
+  // The timers as this hook last set them (the state follows): timer_done reads them at once.
+  const timerList = useRef<CookTimer[]>([]);
   // The step the server just moved us to: not echoed back as a kid's tap.
   const lastServerStep = useRef<number | null>(null);
   // The step her clip just moved the screen to: sent, but not read aloud.
@@ -228,6 +231,23 @@ export function useVoiceCooking(opts: VoiceOptions) {
     }, ms);
     pending.current.add(t);
   }, []);
+
+  const changeTimers = useCallback((next: (list: CookTimer[]) => CookTimer[]) => {
+    timerList.current = next(timerList.current);
+    setTimers(timerList.current);
+  }, []);
+
+  /** A timer's one buzz (its zero here, or the service's timer_done first): the haptic, "Done", and it leaves a little later. */
+  const buzzTimer = useCallback(
+    (id: string) => {
+      if (buzzed.current.has(id)) return;
+      buzzed.current.add(id);
+      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
+      setBuzzes((n) => n + 1);
+      later(() => changeTimers((list) => list.filter((x) => x.id !== id)), TIMER_DUE_HOLD_MS);
+    },
+    [later, changeTimers],
+  );
 
   const think = useCallback((on: boolean) => {
     if (thinkTimer.current) clearTimeout(thinkTimer.current);
@@ -372,17 +392,19 @@ export function useVoiceCooking(opts: VoiceOptions) {
         if (typeof m.questionId === 'string') setAskedIds((ids) => new Set(ids).add(m.questionId));
       } else if (m.type === 'timer') {
         const t = parseTimer(m, Date.now(), socketNo.current);
-        if (t) setTimers((list) => withTimer(list, t));
+        if (t) changeTimers((list) => withTimer(list, t));
       } else if (m.type === 'timer_done') {
-        const n = socketNo.current;
-        setTimers((list) => withoutTimer(list, n, m.id));
+        // Usually before this phone's own zero: a timer that hasn't buzzed buzzes now.
+        const done = timerDone(timerList.current, buzzed.current, socketNo.current, m.id, Date.now());
+        changeTimers(() => done.list);
+        if (done.buzz) buzzTimer(done.buzz);
       } else if (m.type === 'offer_closed') {
         cb.current.onOfferClosed?.(offerClosed(m));
       } else if (m.type === 'error') {
         console.warn('[voice]', m.message);
       }
     },
-    [flushSay, dropSay, sendText, sendStep, think],
+    [flushSay, dropSay, sendText, sendStep, think, changeTimers, buzzTimer],
   );
 
   const fail = useCallback((text: string) => {
@@ -637,21 +659,17 @@ export function useVoiceCooking(opts: VoiceOptions) {
   }, [opts.step, sendText]);
 
   // The soonest timer still to buzz, reaching zero on this phone's clock: one buzz and the pot's timer
-  // state; it leaves with the service's timer_done, or on its own a little later. Two at zero together
-  // (old-socket timers after a pause, with no timer_done to come) buzz once each.
+  // state (a timer_done that comes first buzzes it then instead); it leaves a little later, or with a
+  // timer_done after the buzz. Two at zero together (old-socket timers after a pause, with no timer_done
+  // to come) buzz once each.
   useEffect(() => {
     const { next, kept } = timerBuzz(timers, buzzed.current);
     buzzed.current = kept;
     if (!next) return;
     const { id } = next;
-    const t = setTimeout(() => {
-      buzzed.current.add(id);
-      if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-      setBuzzes((n) => n + 1);
-      later(() => setTimers((list) => list.filter((x) => x.id !== id)), TIMER_DUE_HOLD_MS);
-    }, Math.max(0, next.endsAt - Date.now()));
+    const t = setTimeout(() => buzzTimer(id), Math.max(0, next.endsAt - Date.now()));
     return () => clearTimeout(t);
-  }, [timers, buzzes, later]);
+  }, [timers, buzzes, buzzTimer]);
 
   // What the pot shows, while this screen is the one on top.
   useEffect(() => {
