@@ -21,6 +21,7 @@ import type * as lib_supabase from "../lib/supabase.js";
 import type * as lib_translate from "../lib/translate.js";
 import type * as messages from "../messages.js";
 import type * as moss from "../moss.js";
+import type * as people from "../people.js";
 import type * as questions from "../questions.js";
 import type * as recipes from "../recipes.js";
 import type * as seed from "../seed.js";
@@ -49,6 +50,7 @@ declare const fullApi: ApiFromModules<{
   "lib/translate": typeof lib_translate;
   messages: typeof messages;
   moss: typeof moss;
+  people: typeof people;
   questions: typeof questions;
   recipes: typeof recipes;
   seed: typeof seed;

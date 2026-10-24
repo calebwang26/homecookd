@@ -29,6 +29,17 @@ http.route({
   }),
 });
 
+http.route({
+  path: "/worker/release",
+  method: "POST",
+  handler: worker(async (ctx, body) => {
+    const id = await jobId(ctx, body.jobId);
+    if (!id) return fail(404, "no such job");
+    const ok = await ctx.runMutation(internal.worker.release, { jobId: id });
+    return ok ? json({ ok: true }) : fail(404, "no such job, or it's past preparing");
+  }),
+});
+
 const STAGES = ["preparing", "understanding", "writing", "indexing", "done", "failed"] as const;
 type Stage = (typeof STAGES)[number];
 
@@ -63,9 +74,16 @@ http.route({
     if (body.memoriesOptIn !== undefined && typeof body.memoriesOptIn !== "boolean") {
       return fail(400, "memoriesOptIn must be a boolean");
     }
+    let language = parsed.language;
+    if (body.language !== undefined) {
+      if (typeof body.language !== "string" || !/^[a-z]{2}$/.test(body.language)) {
+        return fail(400, "language must be a two-letter code");
+      }
+      language = body.language;
+    }
     const recipeId = await ctx.runMutation(internal.worker.published, {
       jobId: id,
-      recipe: { ...parsed, recipeJsonUrl },
+      recipe: { ...parsed, recipeJsonUrl, language },
       memoriesOptIn: body.memoriesOptIn as boolean | undefined,
     });
     return recipeId ? json({ recipeId }) : fail(404, "no such job");
