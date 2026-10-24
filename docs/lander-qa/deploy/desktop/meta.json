@@ -1,0 +1,113 @@
+{
+ "W": 1440,
+ "H": 900,
+ "range": {
+  "start": 0,
+  "end": 12968,
+  "total": 13868
+ },
+ "meta": [
+  {
+   "i": 0,
+   "file": "000.jpg",
+   "y": 0,
+   "motion": "on",
+   "overflowX": 0,
+   "playing": [
+    "hero-family-1920.mp4"
+   ]
+  },
+  {
+   "i": 1,
+   "file": "001.jpg",
+   "y": 1297,
+   "motion": "on",
+   "overflowX": 0,
+   "playing": [
+    "hero-family-1920.mp4"
+   ]
+  },
+  {
+   "i": 2,
+   "file": "002.jpg",
+   "y": 2594,
+   "motion": "on",
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 3,
+   "file": "003.jpg",
+   "y": 3890,
+   "motion": "on",
+   "overflowX": 0,
+   "playing": [
+    "app-library.mp4"
+   ]
+  },
+  {
+   "i": 4,
+   "file": "004.jpg",
+   "y": 5187,
+   "motion": "on",
+   "overflowX": 0,
+   "playing": [
+    "app-add.mp4"
+   ]
+  },
+  {
+   "i": 5,
+   "file": "005.jpg",
+   "y": 6484,
+   "motion": "on",
+   "overflowX": 0,
+   "playing": [
+    "app-keep.mp4"
+   ]
+  },
+  {
+   "i": 6,
+   "file": "006.jpg",
+   "y": 7781,
+   "motion": "on",
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 7,
+   "file": "007.jpg",
+   "y": 9078,
+   "motion": "on",
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 8,
+   "file": "008.jpg",
+   "y": 10374,
+   "motion": "on",
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 9,
+   "file": "009.jpg",
+   "y": 11671,
+   "motion": "on",
+   "overflowX": 0,
+   "playing": [
+    "app-questions.mp4"
+   ]
+  },
+  {
+   "i": 10,
+   "file": "010.jpg",
+   "y": 12968,
+   "motion": "on",
+   "overflowX": 0,
+   "playing": []
+  }
+ ],
+ "logs": [],
+ "bad": []
+}

@@ -1,0 +1,488 @@
+{
+ "critics": [
+  {
+   "overall": "I reviewed the live \"lander\" preview in my own tab (tab-12). I scrolled slowly through the whole page at 1440\u00d7900 and 390\u00d7844 (touch), checked ?for=grandpa, and captured reduced motion at 1440 in headless Chrome. Static files are in /private/tmp/claude-501/-Users-calebwang-Documents-venture-hackathon/abf1c928-15ce-4da5-8039-95c003a6a550/scratchpad/proxy/rm-d/ (s1.jpg, s2.jpg).\n\n**Verdict:** the page is close to the founder's bar. Every non-negotiable is met:\n- The hero is a real family cooking.\n- App UI appears only in the real recordings, and the hand-holding-phone cutout in See it work looks premium and real.\n- English is universal: no \"Ammi\", relations are balanced, and nothing about cannabis, Miles or Gordon is visible.\n- Green and yellow lead the palette; brown and black appear only as accents.\n- The brand line is verbatim in Pass-down, and \"Set up the camera. Record. Done.\" is stated twice.\n- All three problems are answered: vague amounts in The call and Measures, language in In their words, distance in Far apart.\n- Desktop scroll length is 15.4 viewports, within budget.\n- I found no console errors and no visible desktop text under 16px.\n\n**What still keeps it from best-in-class:**\n1. **Mobile hero card:** the signature hero \u2192 recipe-card moment looks broken on phones. The video card has an empty bottom third.\n2. **Far apart overlays:** on mobile, chips and bubbles cover the woman's face. On desktop, the reply bubble crosses the young man's face mid-scroll.\n3. **Personalized links contradict Far apart:** a ?for=dad or ?for=grandpa link shows \"Delivered \u00b7 Dad \u2665\" over a woman's photo, next to a \"from Grandma\" card.\n4. **Woodfire star photo:** its star crop reads as an older woman smoking a pipe.\n5. **Orphaned pause button:** the \"Pause video\" button floats on long after the video is gone.\n6. **No action for parents:** the final CTA only speaks to the learner, so a 50\u201360-year-old parent has nothing to do there.\n\n**Copy:**\n- **58-year-old:** the \"~\" convention is never explained, and \"share sheet\" is jargon.\n- **20-year-old:** it reads warm and not cheesy. \"First try!! The whole hallway came by.\" and \"not anymore.\" land.\n\n**Couldn't verify:** my pane tab stayed in the background (document.hidden), so the browser throttled videos and animations. I could not check clip playback, the share-bubble timing or intro animation speed. The integrator's headless runs cover those.",
+   "findings": [
+    {
+     "area": "DeckFilm",
+     "severity": "major",
+     "issue": "On mobile (390\u00d7844) the front video card has an empty sage bottom third: the hero video window sits in the top 66% while every other fan card shows a full-bleed photo with a cook tag. Seen from pass-down through the shrink into the call; it reads as a broken card at the signature moment.",
+     "evidence": "Screenshots at scrollY 250, 560 and 800 at 390\u00d7844. timeline.ts measure(): cw = min(0.34\u00b7W, \u2026) = 132.6px, under RecipeCard's 140px tag-level breakpoint. cardPhotoRect() (primitives/RecipeCard.tsx:67) always uses CARD_PHOTO_FRACTION.",
+     "fix": "Make the photo rect follow the card's container level: when cw < 140, use a full-card rect (inset on all sides, height = ch \u2212 2\u00b7inset) and render the cook tag over the video. Or raise mobile cw to at least 140 (e.g. min(0.36\u00b7W, 0.28\u00b7H, 240)) so the front frame shows its title and meta. Re-check the hero \u2192 card handoff at 390 and 375."
+    },
+    {
+     "area": "FarApart",
+     "severity": "major",
+     "issue": "Mobile end state is too cluttered and covers the faces. The reply bubble, the tomato 'Delivered \u00b7 Grandma \u2665' chip (across the woman's eyes) and the 'Next time, ten more minutes' bubble all pile onto the right photo. The arc card and the 'Delivered \u2713' chip cover most of the left photo, so neither face, the emotional payoff, is readable.",
+     "evidence": "390\u00d7844 at scrollY 6757 after the time-based sequence: chip at y \u2248 385\u2013410 runs across her face; reply bubble at x 163\u2013375.",
+     "fix": "On mobile, keep the photos clean: move the reply bubble, the cook's answer and the delivered chip into a short chat-style stack under the two cards, next to the H3s and pills. Or keep only the cook's answer on the photo, anchored over the lower-right corner. Drop the 'Delivered \u00b7 {R}' chip on mobile; the reply already implies delivery."
+    },
+    {
+     "area": "FarApart",
+     "severity": "major",
+     "issue": "Personalization contradicts the scene. With ?for=dad, ?for=grandpa or ?for=uncle, the right card (a woman in her sixties, the arc card 'from Grandma', 'Next time, ten more minutes \u2665') shows 'Delivered \u00b7 Grandpa \u2665' or 'Delivered \u00b7 Dad \u2665'. Shared links are the viral loop, so every non-Grandma link shows this mismatch.",
+     "evidence": "Loaded /?for=grandpa: #far-apart text 'Delivered \u00b7 Grandpa \u2665'. copy.farApart.deliveredTo uses {R}, and arcRecipeId is fixed to grandma-pork-belly.",
+     "fix": "In FarApart.tsx, fill the delivered chip from the arc recipe's cook, never from {R} (e.g. 'Delivered \u00b7 Grandma \u2665'). Or drop the name: 'Delivered \u2665'. Leave {R} to the headline-level spots (hero, call card, FAQ, final CTA)."
+    },
+    {
+     "area": "InTheirWords",
+     "severity": "major",
+     "issue": "The StarClip crop of photo-grandma-granddaughter-woodfire shows a corrugated wall, a pot, smoke and an older woman with a long bamboo tube at her mouth, while the granddaughter is cropped out (the star bleeds \u221246px off the left). Out of context it reads as someone smoking a pipe, which is risky given the founder's no-cannabis rule. It also loses the 'grandparent teaching grandchild' story.",
+     "evidence": "1440: img rect x \u221246, 358\u00d7358, object-position 47% 55%. Mobile star at top-right shows the same tube-to-mouth crop. Reduced-motion capture s2.jpg shows the same.",
+     "fix": "Swap to the brief's fallback photo-elder-hands-dumpling, or another photo where the child and the teaching are clearly visible. If keeping this photo, re-crop to the girl watching the fire (object-position about 20% 55% at about 1.3\u00d7 scale) so the tube-to-mouth never sits at the star's center, and stop the star bleeding off the left edge on desktop."
+    },
+    {
+     "area": "DeckFilm",
+     "severity": "major",
+     "issue": "The hero's 'Pause video' button stays on screen through pass-down and the whole call scene, after the video has shrunk into a card, been paused and fallen away. It then scrolls up alone, orphaned at the top-right while How it works enters. A 58-year-old sees a 'pause' control with nothing playing.",
+     "evidence": "Visible at 1440 for scrollY 0\u20132700 (orphan at top-right around y 180 at scrollY 2700). It is still labeled 'Pause video' when the video is suspended. Same on mobile at scrollY 1600 (y about 385).",
+     "fix": "In DeckFilm, fade PauseSlot out (opacity, 200ms) once the store's `suspended` flag is true or the front card leaves the stage (B \u2265 34%), and back in on reverse scroll. Never let it ride the stage out of the pin."
+    },
+    {
+     "area": "FinalCta",
+     "severity": "major",
+     "issue": "Only one of the two audiences gets an action. Every CTA speaks to the learner ('Ask them to teach you', 'Send this to Grandma'). The parent of 50\u201360 named in the copy deck ('A quieter kitchen. For the one who cooks.') gets no next step, so the page moves them but leaves them nothing to do.",
+     "evidence": "#early-access shows the H2, the email form and 'Send this to {R}' only. Far apart's 'For the one who cooks' pill is decorative.",
+     "fix": "Add one quiet secondary line under the reassurance pills, e.g. 'The one who cooks? Send this to your kids. They'll set up the phone.', as an outlineCream text link using the same navigator.share flow with a parent-voiced message ('Come home Sunday and record me making it?'). Add the key to copy.ts."
+    },
+    {
+     "area": "Measures",
+     "severity": "major",
+     "issue": "The '~' convention is the product's core idea (feel amounts made concrete), but nothing ever says '~' means 'about'. 'We just add the ~.', 'Your ~\u00bd cup' and the FAQ's 'with a ~ estimate beside them' will confuse a 58-year-old reader.",
+     "evidence": "copy.measures.body 'We never replace their words. We just add the ~.' and copy.questions.faq[4] 'with a ~ estimate beside them'.",
+     "fix": "Keep the quirk and explain it once. Measures body: 'We never replace their words. We just add a ~, for about.' (or put a 16px caption under the H2: '~ means about'). FAQ: 'Amounts stay in the cook's own words, with an estimate like ~1 cup beside them.'"
+    },
+    {
+     "area": "Shared",
+     "severity": "major",
+     "issue": "First-load JS is about 347KB gzip against the 190KB budget (integrator's number). On the Moto-G-class phones the brief targets, this delays hydration, which also gates the hero H1 intro (motion-on hidden states), so the hero risks a headline-less first second.",
+     "evidence": "Integrator QA report. Section 11 budget: \u2264190KB.",
+     "fix": "Load every section below DeckFilm with next/dynamic (ssr: true). Switch motion to LazyMotion + domAnimation with m.* components. Import ScrollTrigger only in the 3 scrubbed scenes and the footer. Check that Lenis and GSAP aren't duplicated across chunks with `ANALYZE` or `next build --profile`."
+    },
+    {
+     "area": "DeckFilm",
+     "severity": "minor",
+     "issue": "The 'one object travels' story breaks at the drop: the call's stack falls away with Grandma Rosa's Tamales (blush) in front, but the stack that lands in StepsToBox has Grandma's Sunday Dumplings in front.",
+     "evidence": "1440 at scrollY 1985 (tamales front, tilting) vs 2250\u20132450 (dumplings card landing).",
+     "fix": "Either shuffle the dumplings (video) card back to the front at B 84\u201388% before the drop, or make StepsToBox's incoming stack face the tamales card. One identity end to end."
+    },
+    {
+     "area": "DeckFilm",
+     "severity": "minor",
+     "issue": "The a4 'sheet slides over the hero' reads as a flat wipe. The video window sits above the sheet and its bottom inset tracks the sheet's top edge with square corners, so the 40px rounded sheet corners never show over the video.",
+     "evidence": "1440 at scrollY 120: hard horizontal edge across the full width, no visible radius (timeline.ts render(): bottom = H \u2212 sheetY, round r \u2248 0 early).",
+     "fix": "Add a 40px 'sheet lip' layer above the rig: a canvas bar with rounded top corners at sheetY. Extend the video clip's bottom inset 40px below sheetY so the lip covers it, and the rounded corner notches show video. This gives the a7/a4 rounded-sheet read without breaking the 'video always above the sheet' rule."
+    },
+    {
+     "area": "DeckFilm",
+     "severity": "minor",
+     "issue": "Behind the front card, the pass-down fan cards overlap so much that titles are cut mid-word ('Grandma Lucia's Lasag', 'Mom's Jollof R', 'Dad's Kimchi J', 'Grandpa Joe's Strawberry Pi'), which looks unfinished at the page's most-viewed hold.",
+     "evidence": "1440 at scrollY 1100.",
+     "fix": "For non-front fan cards, hide the title and meta (show the photo, the feel pill and a cook tag, like the mobile tag level), or clamp titles to one line with an ellipsis. Keep full text only on the front video card."
+    },
+    {
+     "area": "StepsToBox",
+     "severity": "minor",
+     "issue": "Seam dead space: once the call text scrolls up, about 0.35 viewport of blank canvas, holding only the orphaned pause button, sits above 'How it works' at 1440. During the stack's fall-in, cards 2 and 3 cover each other's H3s ('Record th\u2026 cooking', 'Add the\u2026').",
+     "evidence": "1440 at scrollY 2600\u20132750 (top 40% empty). At 2700, card H3s overlap.",
+     "fix": "Start the StepsToBox stage about 25vh earlier (overlap its track into DeckFilm's tail, or shorten the DeckFilm tail after B 88%). Keep step-card z-order so each H3 stays above the next card until the stairs settle (raise the H3 layer or delay the next card's rise by about 3%)."
+    },
+    {
+     "area": "SeeItWork",
+     "severity": "minor",
+     "issue": "Row 02 'Their words, made clear.' activates by restarting app-recipe at 0s, which shows the family table for about 2.4s and only reaches the ingredients at 4.5\u20136s. Its poster is the end frame with 'two heaping rice bowls' struck through, so the screen visibly jumps backward. Fast scrollers never see the quoted words.",
+     "evidence": "1440 at scrollY 5560: row 02 active, phone shows 'Our family table'. AppClip.tsx:76 sets currentTime = 0. app-recordings.md clip 2 timeline.",
+     "fix": "Add an optional startAt to AppClip (app-recipe: 2.4s, where the recipe opens) and use a poster frame from about 5.5s (ingredients unticked). Apply the same idea to any row whose payoff comes late in its clip."
+    },
+    {
+     "area": "SeeItWork",
+     "severity": "minor",
+     "issue": "Row 03 body 'Tap Hear Dad for his own voice.' puts a button label inline with no marking, so a 58-year-old may stumble over it.",
+     "evidence": "copy.seeItWork.rows[2].body.",
+     "fix": "'Each step shows what to look for and the story behind it. Tap \u201cHear Dad\u201d to hear it in his own voice.'"
+    },
+    {
+     "area": "FarApart",
+     "severity": "minor",
+     "issue": "Desktop mid-scrub: the reply bubble starts on the left card at face height and covers the young man's face for a stretch of scroll. The 'Delivered \u2713' chip overlaps the arc card's 'from Grandma' label.",
+     "evidence": "1440 at scrollY 9350.",
+     "fix": "Start the reply bubble's path lower on the left card (over the pan and hands, about 70% of card height) and lift its arc's control point. Offset 'Delivered \u2713' about 24px above or left of the arc card's caption pill."
+    },
+    {
+     "area": "FarApart",
+     "severity": "minor",
+     "issue": "The footnote 'Illustration. Sharing in the app uses your phone's share sheet.' uses jargon ('share sheet') and a cryptic one-word opener for a 58-year-old.",
+     "evidence": "copy.farApart.footnote.",
+     "fix": "'This part is an illustration. In the app, you send recipes with your phone's usual Share button.'"
+    },
+    {
+     "area": "InTheirWords",
+     "severity": "minor",
+     "issue": "Body and card disagree on first view: the body says 'Grandpa explains it best in Tagalog', but the card opens on \u4e2d\u6587 with 'Grandma said'.",
+     "evidence": "1440 at scrollY 8127.",
+     "fix": "Either start the translator on Tagalog (Grandpa Rey) when navigator.language matches nothing, or make the body relation-neutral: 'They explain it best in their own language. You follow along in English, with their words kept right on top.'"
+    },
+    {
+     "area": "FinalCta",
+     "severity": "minor",
+     "issue": "Star crops slice the faces. The left star (grandpa and grandson) puts both faces at the star's notched edges, with a window and mug in the center. On the right, the 'FREE EARLY ACCESS' sticker covers the abuela's hands, which are the action.",
+     "evidence": "1440 at #early-access (zoomed left star). Mobile stars also sit partly under the nav.",
+     "fix": "Adjust the left star's object-position or scale so both faces sit inside the inner radius (about 1.25\u00d7 scale, centered between them). Move the sticker to the form row's top-right (per brief) off the photo, or nudge the right star 4vw outward. On mobile, push the stars below the nav (top \u2265 80px)."
+    },
+    {
+     "area": "StepsToBox",
+     "severity": "minor",
+     "issue": "Mobile recipe box shows only photos with 11.4px cook tags and no dish names, so a 58-year-old can't tell what the six recipes are. The mobile step row's 'REC 0:42' pill is 14px visible text.",
+     "evidence": "390\u00d7844 at scrollY 3050. Text scan: FolderGrid tags 11.43px, REC pill 14px.",
+     "fix": "On mobile, render FolderGrid as 2 columns with the dish title (16px DM Sans 600) under each photo, or keep 3 columns and add a one-line 16px caption. Raise the REC pill to 16px."
+    },
+    {
+     "area": "Questions",
+     "severity": "minor",
+     "issue": "Mobile runs over the scroll budget: 13.4 viewports vs \u224812. Questions (1.29 vh vs 0.9) carries the tilted phone that the brief says to drop on mobile, and StepsToBox is 2.16 vh vs 1.8.",
+     "evidence": "390\u00d7844 section heights: questions 1090px, how-it-works + recipe-box 1819px, total 11282px.",
+     "fix": "Hide the Questions Handset below 768px (brief 8.11). Tighten the StepsToBox mobile padding between the step rows and text block 2 (and the icon-cluster height)."
+    },
+    {
+     "area": "Shared",
+     "severity": "minor",
+     "issue": "Non-green tints dilute 'green and yellow lead' in the most-watched scenes. The call's long-held front card is blush pink (Grandma Rosa's Tamales), and the fan includes ube (Dad's Kimchi) and peach cards.",
+     "evidence": "1440 scrollY 1680\u20131985: blush stack front. Pass-down fan: jollof peach, kimchi ube, adobo peach.",
+     "fix": "Retint the example (non-app) recipes in FAN and SHUFFLE to butter, lemon, limeWash or sage. Keep blush and peach only where the real app covers use them (Auntie Lin's pancakes)."
+    },
+    {
+     "area": "Shared",
+     "severity": "minor",
+     "issue": "The topographic swirl bands on sun (In their words), chartreuse (Measures) and forest (Final CTA) read busy and slightly psychedelic behind body copy, less calm than a7/VERO.",
+     "evidence": "1440 at 8127, 10600, 12164: high-frequency contour bands behind the H2 and body.",
+     "fix": "Regenerate swirls.mjs at a lower noise frequency (scale about 0.0014, 1 octave) for fewer, broader bands. Or keep the files and add a 60% canvas-to-transparent radial wash behind each text column so bands fade where text sits."
+    },
+    {
+     "area": "DeckFilm",
+     "severity": "minor",
+     "issue": "'Grandpa Joe's Strawberry Pierogi' pairs a cook photo of a grandfather slicing tomatoes with a strawberry dish, which is a visible mismatch in the first deck (the copy deck already flags this as an open question).",
+     "evidence": "Pass-down fan, second card. lander-copy-v2.md open question 4.",
+     "fix": "Apply the deck's own alternative: move that cook photo to a savory dish that shows tomatoes (e.g. 'Grandpa Earl's Tomato Pie' or the shakshuka slot), keeping the M/F balance in FAN."
+    },
+    {
+     "area": "StepsToBox",
+     "severity": "minor",
+     "issue": "Mobile 'How it works' H2 'Set up the camera.' runs to x = 387 of 390 (a 3px right gutter vs 28px left), so it looks cramped and wraps unevenly on 375px phones.",
+     "evidence": "390\u00d7844: h2 left 28, right 387, font 44px.",
+     "fix": "Give the mobile text block padding-inline equal to --gutter on both sides (or max-width: calc(100vw \u2212 2\u00b7gutter)) and let the H2 use clamp(2.5rem, 10.5vw, 2.75rem) on mobile."
+    },
+    {
+     "area": "Footer",
+     "severity": "minor",
+     "issue": "The founder's brand line appears only once, in pass-down, and dissolves into the call within one scroll. The footer (a3 Savor moment) is the natural place to echo it, and it currently says nothing about the mission.",
+     "evidence": "Footer shows the prompt, the wordmark and legal only.",
+     "fix": "Add 'Culture we want to preserve, and pass down.' as a .t-h3 line (green italic on 'pass down.') between the link row and the wordmark, or as the final line above the legal row."
+    }
+   ]
+  },
+  {
+   "findings": [
+    {
+     "area": "DeckFilm",
+     "severity": "critical",
+     "issue": "The first scroll beat has a dead frame. Between Timeline A 12% and 28%, the hero overlay is gone and the video shrinks as a letterboxed 16:9 rectangle (about 540\u00d7285 at 1440) floating alone on an empty canvas, with no card frame, brand line or deck. The card frame only arrives at a(28) and the brand line at a(30). a7 never has an empty beat: the card is already rising while the headline builds. Mobile does the same thing (a near-square video floating at the top of an empty screen).",
+     "evidence": "Desktop scroll y=270: d2/003.jpg shows only a landscape video rectangle mid-screen and the pause button. Mobile y=127: m2 sheet frame 1. In timeline.ts the win close runs a(10)\u2192a(32), front fades in at a(28) and brand at a(30).",
+     "fix": "Fill 12\u201328%. Close the window over a(8)\u2192a(26), and fade the front card frame in from a(18) (opacity 0\u21921, scale .96\u21921 over da(8)) so the video visibly lands in a card. Fade the brand line in as ghost text from a(14)\u2192a(24). Make the clip go portrait early instead of shrinking as landscape: tween the left/right insets with 'power3.out' and the top/bottom with 'power2.in' (two proxies). That way it reads as 'becoming a card' by about 40% of its travel."
+    },
+    {
+     "area": "StepsToBox",
+     "severity": "critical",
+     "issue": "The DeckFilm\u2192StepsToBox seam still breaks continuity, and the falling card reads as a rendering glitch. The call ends with Grandma Rosa's Tamales on top. That stack is hidden at b(98.5), and StepsToBox drops its own stack whose top card is Grandma's Sunday Dumplings (BOX_RECIPES[5]), so the object changes identity mid-fall. While it falls, the [data-falling] mask (transparent\u2192#000 over 18vh) makes the card a washed-out, translucent slice cut by a horizontal line. The front card also briefly sits on top of the unfurling step cards, so it reads as two objects.",
+     "evidence": "Desktop y=1980\u20132160: d2/022 (tamales stack tilting), d2/023 (no stack), d2/024\u2013026 (a ghosted 'Grandma's Sunday Dumplings' card sliced at y\u2248720). d2/028\u2013029: the dumplings card overlaps the step cards being dealt. StepsToBox.module.css:274 holds the mask.",
+     "fix": "1) Make both stacks the same object: add a 4th shuffle in DeckFilm at b(84) that slides grandma-dumplings to the front (it's the hero's dish, so the story comes full circle). Alternatively, render StepsToBox's falling front face as the call's last front card and flip it to step 1 during the deal (rotateY at 20\u201326). 2) Remove the 18vh mask. During the fall (0\u201320), render the StepsToBox deck un-clipped: set the stage to `overflow: visible` while data-falling, or put the deck in a `position: fixed; inset: 0; z-index: 45; pointer-events: none` layer. Keep the card at opacity 1 the whole way. 3) Let the step cards leave the pile only after the front card is on stair 1 (dealStart 22, front card first)."
+    },
+    {
+     "area": "DeckFilm",
+     "severity": "major",
+     "issue": "The 7-card fan is too text-heavy for a fan. Every back card's title is cut off by the next card ('Grandma Lucia's Lasag', 'Mom's Jollof R', 'Dad's Kimchi J', 'Grandpa Rey's'). Seven lemon feel pills also form a yellow band across the deck. a7's fan is image-led: when images overlap it reads as depth, when text overlaps it reads as broken. With 16vw cards spaced about 9.3vw apart, only about 58% of each back card shows, so the text can never fit.",
+     "evidence": "d1/002.jpg at y=900 (the fan at 1440\u00d7900); also the reduced-motion static fan in r1 sheet-00 frame 2.",
+     "fix": "Add a photo-only level to RecipeCard (e.g. `level=\"photo\"`): the photo fills the whole card (8px inset, radius 18), with only a 16px cook-tag chip bottom-left. Use it for the 6 non-front fan cards. Keep the full anatomy (title, meta, feel pill, \u25b6 Watch) only on the front/video card. Optionally raise the back cards' photo saturation to 1.05 so color comes from the images, as in a7."
+    },
+    {
+     "area": "DeckFilm",
+     "severity": "major",
+     "issue": "The collapse (B 0\u201320) causes text-on-text and text-on-CTA collisions. On desktop, the supporting line 'Every family has a dish only one person really knows.' prints right across the collapsing cards' titles. On mobile, the collapsing stack covers the 'Get early access' label. The fan's floor shadow also stays at 72vh as a grey smudge behind the CTA after the deck has left. In a7 M8 the CTA passes over a stack of images, never over text.",
+     "evidence": "Desktop y=1260: d2/014.jpg. Mobile y=760: m2 sheet frame 6 (the card sits between 'Get e' and 'access').",
+     "fix": "Clear the text before the deck moves. Fade and lift passFoot and the pass chips over b(0)\u2192b(8) (y \u221230vh, opacity 0), and start the card collapse at b(4) with duration db(18). Fade the floor out over db(6) instead of db(14). If cards still cross text, the photo-only card level from the fan finding removes the text-on-text case."
+    },
+    {
+     "area": "StepsToBox",
+     "severity": "major",
+     "issue": "The stairs are crowded and mix two kinds of card. Step pills hang over the card seams: the 'All-day dish? Record in pieces.' chip straddles cards 1 and 2, and the 'That's it.' sticker overlaps card 4. The trailing cards 4\u20135 are full recipe cards cut off at the viewport's right edge with truncated text ('Grandma's Braised Po', 'Dad's \u2026 with'). a7's M13 staircase is 7 clean cards with about 5 fully visible and only the tail bleeding off the bottom-right.",
+     "evidence": "Desktop y=3060: d2/034.jpg.",
+     "fix": "Render trailing cards 3\u20135 as photo-only (the same level as the fan finding) at TRAIL_W 13. Use STAIRS_TL tail [50,60],[60,72],[70,84] so only the last card bleeds, and only off the bottom. Keep the moon chip inside card 2 (left: 12px, bottom: 12px, max-width 85%). Keep the sticker inside card 3 (top: \u221214px; right: \u221210px, not over the next card)."
+    },
+    {
+     "area": "StepsToBox",
+     "severity": "major",
+     "issue": "The fold reads as an empty white board. The folder panel fades in at 54, before the cards gather, and step cards flip at 58 while still in flight. They show up as skewed edge-on slivers inside a large empty white panel, and card 5 overruns the panel and the viewport's right edge. In a7 M14 the panel appears behind the compressing grid and narrows to fit it.",
+     "evidence": "Desktop y=3420: d2/038.jpg (empty panel, cards mid-flip as slivers, a card bleeding off the right). y=3600: d2/040 (the bottom row is a different size and offset).",
+     "fix": "Set panelIn to 60 and scale the panel from .94\u21921 around the measured grid center (transform-origin = grid center) instead of a plain fade. Move flipStart to 66 so cards flip once they're in their cells (9 units, ending at 75). Clamp each card's fold path so it never passes beyond the panel's right edge (stage right \u2212 7.2vw)."
+    },
+    {
+     "area": "StepsToBox",
+     "severity": "major",
+     "issue": "The folder doesn't read as a folder. The 'tab' is a pale sage strip holding '+ Add a recipe', and the filter pills sit inside the panel. a7's most memorable fold detail is missing: a dark folder tab with a diagonal notch sliding down onto the grid, with a second tab behind it.",
+     "evidence": "d2/045.jpg: the panel's top edge is a faint sage shape with no strong tab silhouette.",
+     "fix": "Give the panel a real tab. Attach a forest (#34430C) tab to the panel's top-left, 56px tall, radius 18px 18px 0 0, with a 28px diagonal notch on its right edge via clip-path. Label it \"The family table\" in cream Fraunces 600, 22px. Put a sage tab behind it, offset +16px x and \u221210px y, holding the '+ Add a recipe' pill. Slide both from y \u221228px to 0 over tabsIn\u2192foldEnd. Keep the Everyone/Auntie Lin/Dad/Grandma filter pills on one row just under the tab."
+    },
+    {
+     "area": "StepsToBox",
+     "severity": "major",
+     "issue": "Folder grid tiles are text-dense. Each tile has a lemon feel pill covering about 55% of the photo, a 2-line title and meta, with truncation ('Dad's Grilled Fish with Ginger-Scallio\u2026', 'by Grandma \u00b7 ~2 hrs, plus o\u2026'). The grid looks like a form rather than a7's clean image grid. Ironically, the mobile grid (photo + cook tag) is closer to a7 than desktop.",
+     "evidence": "d2/045.jpg (desktop grid) vs the mobile grid in m1 sheet-00 frame 6.",
+     "fix": "In FolderGrid tiles: keep the photo, a 1-line title and 'by Dad'. Shrink the feel quote to a 1-line lemon pill at the photo's bottom-left (max-width 70%, 16px Fraunces italic) and drop the ~estimate from the tile; put it in the tile's accessible name, or reveal it on hover/focus. Use short display names in the grid ('Ginger-Scallion Fish', and '~2 hrs + overnight' \u2192 '~2 hrs')."
+    },
+    {
+     "area": "StepsToBox",
+     "severity": "major",
+     "issue": "The recipe-box phone crowds the corner. It covers the Dumplings tile and sits about 10px from the viewport's right edge (x\u22481250\u20131430 at 1440), ignoring the 7.2vw gutter every other element respects. It's also a third visual species (phone) dropped onto the folder.",
+     "evidence": "d2/045.jpg and d2/047.jpg.",
+     "fix": "Keep the phone's right edge at or inside 100vw \u2212 7.2vw (compute x from the stage rect at refresh) and drop its width to 13vw. Rest it overlapping only the panel's bottom-right corner by about 25% of its width, not a whole tile. Or move it to the left column under the HandNote, replacing the 9-icon cluster, and keep its 1.6\u00d7 parallax rise."
+    },
+    {
+     "area": "DeckFilm",
+     "severity": "major",
+     "issue": "On mobile the front (video) card is a blank, unfinished panel. At 34vw (<140px container) RecipeCard hides title and meta but keeps the 66% photo area, so the bottom ~40% of the hero card is empty sage through the whole fan. The back cards' cook tags are also clipped by the next card ('Gran').",
+     "evidence": "m1/001.jpg and m2 sheet frames 2\u20135.",
+     "fix": "At the <140px level, make the photo fill the card (inset 6px, height calc(100% \u2212 12px)). Have measure() use that full-card photo rect for the video window on mobile, so the video fills the card. Move the cook tags top-left (top: 8px; left: 8px) so the overlapping card doesn't clip them."
+    },
+    {
+     "area": "InTheirWords",
+     "severity": "major",
+     "issue": "The loud color blocks carry smaller type than the canvas sections, which inverts VERO's hierarchy. In their words H2 is 78px and Final CTA H2 is 90px, while canvas H2s are 85\u201391px. The token --fs-block (102px at 1440) exists for exactly these blocks. Separately, the How it works and Recipe box H2s, the core product message, are the smallest H2s on the page at 63px.",
+     "evidence": "Computed sizes at 1440: in-their-words H2 78.4px, early-access 90.2px, pass-down and every-family 90.9px, StepsToBox H2s 63.4px.",
+     "fix": "Apply .t-block (font-size var(--fs-block), line-height 1.0, \u2212.03em) to the In their words and Final CTA H2s. Raise the StepsToBox H2s to clamp(2.75rem, 1rem + 4vw, 5rem) (\u224874px at 1440) and widen the text column from 33vw to 36vw so 'Set up the camera.' stays on one line."
+    },
+    {
+     "area": "FinalCta",
+     "severity": "major",
+     "issue": "The right side is over-garnished and colliding. The 'FREE EARLY ACCESS' sticker sits on top of the abuela star photo, a 'Sunday? I'll make extra.' chip hangs over the star's top, and the sun ring and the Caveat note add two more decorative elements in the same area. The left star crops grandpa's face at the viewport edge, so the photo reads as a window and a back.",
+     "evidence": "crop-cta.jpg from e1/early-access-6-1800.jpg (1440\u00d7900).",
+     "fix": "Pick one garnish per star. Drop the sticker, since the 'Free in early access' pill already says it, or move it to the form's left (x = input left \u2212 96px, y = input top \u2212 56px, 120px, rotate \u221210\u00b0). Keep the chip on the abuela star. On the left star set object-position about 30% 35% and reduce the bleed to 2vw so both faces sit inside the star."
+    },
+    {
+     "area": "InTheirWords",
+     "severity": "major",
+     "issue": "The star photo (grandma-granddaughter-woodfire) reads as an abstract dark blob. The subjects are small in a dark kitchen, and the section's bottom edge cuts the star. On mobile, the 40vw star overlaps the end of 'words.' and is just as illegible.",
+     "evidence": "crop-itw.jpg (desktop, bottom-left of the sun block); m1 sheet-01 frame 3 (mobile).",
+     "fix": "Crop to faces and hands (object-position ~62% 30%, inner scale 1.35), make it 26vw, and keep it fully inside the block (bottom: 6vh, left: 4vw). If it still reads dark, swap to photo-elder-hands-dumpling or photo-mom-daughter-cooking. On mobile, move the star above the H2 (top-right, 34vw) so it never overlaps a word."
+    },
+    {
+     "area": "DeckFilm",
+     "severity": "minor",
+     "issue": "Line 1 of The call sits about 30px left of center ('You call home: how much?' spans x 298\u20131083, while lines 2\u20133 center on 720). The inline slot keeps its reserved width after the stack has grown out of it.",
+     "evidence": "d2/017.jpg and d2/025.jpg.",
+     "fix": "After b(35), collapse the slot: animate a CSS var --slot-w from 1.6em to 0 on the slot (one inline element, so the reflow cost is trivial). Or position the slot absolutely with margin-right: \u22121.6em so the line centers without it."
+    },
+    {
+     "area": "DeckFilm",
+     "severity": "minor",
+     "issue": "On mobile in The call, the 'Grandma Rosa: \"a little handful\"' chip covers the tamales card's title and meta, and the Grandpa Rey chip overlaps the stack's top-left corner.",
+     "evidence": "m2 sheet frame 8 (y\u22481013 at 390\u00d7844) and m1 sheet-00 frame 2.",
+     "fix": "Mobile callChip positions: Rosa at y = cy + 0.5\u00b7stackH + 14 (below the card, right-aligned at W \u2212 16) and Grandpa Rey at y = cy \u2212 0.5\u00b7stackH \u2212 40 (above the stack, left 16px). Keep 'un pu\u00f1ito' under the Rosa chip."
+    },
+    {
+     "area": "DeckFilm",
+     "severity": "minor",
+     "issue": "The hero's pause button stays as a floating white circle on the right through The call and into StepsToBox, long after the video it controls has become a card and then been paused.",
+     "evidence": "d2/017 (y=1440), d2/025 (y=2160), d2/028 (y=2520): the circle at x\u22481366.",
+     "fix": "Fade it out once 'suspended' is true (b(26)) and back in when scrolling back up, or show it only while the video is visible (A 0\u2013100)."
+    },
+    {
+     "area": "Measures",
+     "severity": "minor",
+     "issue": "The physics pile reads as two clumps with a hole. Three stickers sit at the left, cinnamon sits alone at 6.7D, there's an empty run of about 250px, then a tall 2-row cluster on the right. a7's M22 pile is a loose single/double layer spreading left to right along the floor.",
+     "evidence": "d1/024.jpg; pileData.ts PILE_DESKTOP.",
+     "fix": "Spread the floor layer continuously: left-anchored x \u2248 1.05, 2.15, 3.3, 4.6, 6.0, 7.5, 9.0, 10.4D and right-anchored x \u2248 1.1, 2.2, 3.3D. Keep only 2 second-layer bumps around 9.7D and 2.7D from the right, and land the mascot in the right valley as now."
+    },
+    {
+     "area": "Nav",
+     "severity": "minor",
+     "issue": "In float tone the nav is a full-width (1376px) frosted bar with a hairline and halo, much heavier than a7's transparent nav (M24). It cuts across every big headline as the page scrolls (e.g. 'Culture we want to preserve' shows above and below the bar).",
+     "evidence": "d2/014.jpg and d1/016.jpg (cloud tiles sliding under the bar).",
+     "fix": "Make the float tone two pills that hug their content: logo left and actions right (picker + CTA), with a transparent gap between them so content shows through. Or cap the bar at max-width 1120px, centered. Drop the halo ring and reduce the background to canvas at 76%."
+    },
+    {
+     "area": "Nav",
+     "severity": "minor",
+     "issue": "Below 480px the 'homecookd' wordmark is hidden, so a first-time phone visitor never sees the brand name in the first viewport (only the small pot icon).",
+     "evidence": "m1/000 and m1/001: the nav shows only the mascot, 'with Grandma \u25be' and 'Early access'.",
+     "fix": "Shorten the mobile picker to 'Grandma \u25be' (keep the accessible name 'Cooking with'), and show the wordmark at 22px next to the mascot."
+    },
+    {
+     "area": "FinalCta",
+     "severity": "minor",
+     "issue": "On mobile the 'FREE EARLY ACCESS' sticker touches the email input's top-right corner (sticker bottom \u2248355px, input top \u2248352px at 390\u00d7844), so it reads as stuck to the field.",
+     "evidence": "m1/019.jpg.",
+     "fix": "On mobile set the sticker to 96px and position it so its bottom sits 12px above the 'Your email' label row (e.g. top: \u221264px relative to the form), or tuck it beside the H2."
+    },
+    {
+     "area": "EveryFamily",
+     "severity": "minor",
+     "issue": "Each cloud tile has a 4\u20136px tinted rim (peach, lavender, butter, forest, sun) that changes from tile to tile, which makes the rows busy. a7's M15 thumbnails are borderless rounded photos with a soft shadow, and the color comes from the images.",
+     "evidence": "crop-cloud.jpg (from d1/016.jpg).",
+     "fix": "For cloud tiles, drop the tint rim: the photo fills the tile, radius 20%, with --shadow-card. Keep the cook tag. If a frame is wanted, use one uniform 3px --surface rim on every tile."
+    },
+    {
+     "area": "Shared",
+     "severity": "minor",
+     "issue": "Every seam between a loud block and the canvas is a hard horizontal cut (green\u2192canvas, canvas\u2192sun, sun\u2192canvas, canvas\u2192forest). The a4 curtain material (a 40px-radius sheet sliding over) appears only once, at the hero, so the page's material language stops after the first scene.",
+     "evidence": "d1/015 (green\u2192canvas), d1/017 (canvas\u2192sun), d1/019 (sun\u2192canvas), d1/026 (canvas\u2192forest).",
+     "fix": "Give SeeItWork, InTheirWords and FinalCta `border-radius: 40px 40px 0 0; margin-top: -40px; position: relative; z-index: 1`, so each color block lands like a sheet laid over the previous section, echoing the hero curtain. Static-safe, CSS only."
+    }
+   ],
+   "overall": "I compared the live site at 1440\u00d7900 and 390\u00d7844 with the references. The tab cap stopped me from opening a browser-pane tab, so I captured everything in headless Chrome: about 120 frames, plus reduced motion, a wheel-driven timing pass and load/enter sequences. Screenshots are in /private/tmp/claude-501/-Users-calebwang-Documents-venture-hackathon/abf1c928-15ce-4da5-8039-95c003a6a550/scratchpad/ad/. The bones are strong. The hero video and huge H1 work, the call's word fill, highlight and strike are lovely, and See it work's real phone-in-hand on one green is close to a8. Every family is close to a7 M15, and the Savor footer erosion matches a3 almost exactly. Frame timing was smooth on a warm run; the hitches in the first pass were most likely first-load overhead in the dev server.\n\nWhere it falls short of a7 is the scroll film:\n1. There is a dead beat as the hero video shrinks alone on an empty canvas (A 12\u201328%).\n2. The \"one object\" breaks at the DeckFilm\u2192StepsToBox seam. The tamales stack is swapped for a ghosted, sliced dumplings stack, so the integrator's \"seam lands\" claim only holds for timing, not identity.\n3. The decks carry too much text: the fan, the stairs and the folder grid all use the full recipe-card anatomy. Overlapping or cropped cards therefore show truncated titles and a band of lemon pills, where a7's overlapping image cards read as depth.\n\nFix those three first; a photo-only RecipeCard level plus the timeline offsets given in the findings covers most of it. Then tighten the fold (panel and flip timing, a real folder tab), keep the recipe-box phone inside the gutter, and give the loud blocks the biggest type (--fs-block). The remaining items are polish: collisions on Final CTA and mobile, the In their words star crop, the nav weight, the Measures pile spacing and a curtain on each color block."
+  },
+  {
+   "overall": "I reviewed the dev server and the static export (web/out, served locally) at 1440\u00d7900 and 390\u00d7844, plus 375 and 360 widths, reduced motion, keyboard-only use, resizing and a CPU-throttled mobile run. The browser pane's tab cap was reached (every slot belonged to another agent), so all checks ran in headless system Chrome through playwright-core. I edited no files. The static server I started is stopped.\n\nWhat passed:\n- No console errors or hydration warnings.\n- No 404s. The only failed requests are aborted video preloads.\n- Desktop scroll is smooth (p95 frame 16.7ms on the export).\n- Reduced motion on desktop has no running animations and no autoplay.\n- The hero relation word stops after one cycle and its aria-label stays the same.\n- There is one H1, the H2/H3 order is clean, landmarks and labelled sections are in place, every image has alt text, the radios are native, focus rings are 3px, and deep links land at 88px.\n\nBiggest problems:\n1. **The deployed export does not look like the dev build that was QA'd.** In the export, the global type.css loads after the CSS modules. The `.t-*` classes then override section styles: headings change size and collide with cards, and several hand-written notes turn invisible.\n2. **Phones scroll sideways.** The nav is wider than the screen at 360\u2013390px. Under reduced motion on a phone, the static DeckFilm chips widen the page to 646px.\n3. **Resizing across 1024px jumps the page back to the top.**\n4. **Fast Tab presses land focus off-screen** because Lenis keeps animating over the browser's own focus scroll.\n5. **Load performance.** LCP is the hero text, held back by entrance animation and the rotating word. Chrome never counts a full-screen poster as LCP. The hero word rotation also adds CLS. First-load JS is 347KB gzip and preloaded fonts are 633KB.\n\nNote: the repo moved during the review to /Users/calebwang/Documents/GitHub/venture-hackathon. File paths below are relative to that repo. The running \"lander\" dev server may still be serving from the old path.",
+   "findings": [
+    {
+     "area": "Shared",
+     "severity": "critical",
+     "issue": "The static export's CSS order differs from dev. CSS modules (chunk 1acw6od, 105KB) load first and global type.css (chunk 072ahb) loads after it. Global `.t-h1/.t-h2/.t-hand/.t-lead` rules then beat module classes of equal specificity, so the deployed page differs from the dev build everyone reviewed.",
+     "evidence": "Computed-style diff, dev vs out/, same DOM. Hero H1: 141px dev, 158px export. StepsToBox H2: 63px vs 85px (in the export, 'camera.' runs into step card 1 at 1440). Step numerals: 93px vs 130px on desktop, 140px vs 72px on mobile. 'not anymore.': 43px vs 26px. Hero lead: 22.4px vs 24px. 'In their words.' wraps to 3 lines and its lead paragraph collides with the star photo. Every HandNote/KitchenClock tone becomes cocoa. Cause: web/src/app/layout.tsx imports Providers (which pulls in every module's CSS) on line 4 and globals.css on line 6.",
+     "fix": "Make `import '@/styles/globals.css'` the first import in layout.tsx. Also make the order irrelevant by putting the global layers in cascade layers: in globals.css use `@import './tokens.css' layer(tokens); @import './type.css' layer(type);` and wrap the reset in `@layer reset`. Unlayered CSS-module rules then always win. Re-run visual QA on `out/` (a static server), not on `next dev`."
+    },
+    {
+     "area": "FinalCta",
+     "severity": "critical",
+     "issue": "In the export, the cream and chartreuse hand notes and kitchen clocks render cocoa #5A3A22 on dark blocks. They become unreadable, failing AA by a wide margin.",
+     "evidence": "Export at 1440 and 390: 'This Sunday, 10:00 am?' above the FinalCta H2 and 'they'll love being asked.' are cocoa on forest #34430C (about 1.3:1, effectively invisible in screenshots). 'screen recordings, straight from the app' in SeeItWork is cocoa on green #5B6F00 (1.80:1). The same elements are cream/chartreuse in dev. `.t-hand { color: var(--hand-color, var(--cocoa)) }` wins over HandNote.module.css `.cream { color: var(--cream) }` and KitchenClock's tone classes.",
+     "fix": "Have the tone classes set the variable that .t-hand reads, so cascade order stops mattering: `.cream { --hand-color: var(--cream); color: var(--cream) }`, and the same for chartreuse, green and cocoa, in web/src/components/primitives/HandNote.module.css and KitchenClock.module.css. The layer fix above also covers this."
+    },
+    {
+     "area": "DeckFilm",
+     "severity": "critical",
+     "issue": "With reduced motion on a phone, the static DeckFilm chips overflow to the right and the whole page lays out 646px wide. The nav CTA sits off-screen and the page pans sideways.",
+     "evidence": "390\u00d7844 mobile emulation with prefersReducedMotion: innerWidth 646, scrollWidth 646. The widest element is `.callChip` (Grandma Rosa chip): `left: calc(50% + 12.5vw)`, width 272, right edge 646. `.passChip` also reaches 453. Screenshot: only 'with G\u2026' of the picker is visible and 'Early access' is cut off. body `overflow-x: clip` doesn't help: it propagates to the viewport, and mobile browsers still widen the layout viewport.",
+     "fix": "In static (non-.film) mode, give `.call` and `.passDown` `overflow-x: clip`. Reposition the chips at <768px with `left: auto; right: var(--gutter); max-width: calc(100vw - 2*var(--gutter))`, or hide them there. As a page-wide guard, add `overflow-x: clip` to `main` and `footer`; clip on these wrappers doesn't break sticky. Don't rely on body."
+    },
+    {
+     "area": "Nav",
+     "severity": "critical",
+     "issue": "On phones the nav's content is wider than the viewport. The fixed header overflows, so the mobile layout viewport widens and the whole page can be dragged sideways. At 360px the CTA is clipped.",
+     "evidence": "Mobile emulation, nav measured: 390 viewport gives a 391\u2013394px layout (header 394px wide), 375 gives 386px, 360 gives 385px. At 360 the 'Early access' pill is cut off at the right edge (nav-360 crop). Logo (36) + 'with Grandma' picker (~159) + CTA (~136) + paddings don't fit in 370px.",
+     "fix": "In web/src/components/chrome/Nav/Nav.module.css at max-width 420px: set `.actions { min-width: 0; flex: 0 1 auto }` and `.picker { min-width: 0; overflow: hidden }` with `text-overflow: ellipsis` on the value. Drop the 'with' prefix below 400px ('Grandma \u25be'), reduce CTA side padding to 16px, and add `max-width: 100%` to `.bar`. Then verify at 360, 375 and 390 that `innerWidth` equals the device width."
+    },
+    {
+     "area": "Shared",
+     "severity": "major",
+     "issue": "Resizing across the 1024px desktop/mobile choreography breakpoint jumps the reader back to the top of the page, for example rotating an iPad or narrowing a browser window.",
+     "evidence": "Export at 1440\u00d7900, scrollY 7600 (EveryFamily), resized to 820\u00d71000. Within 400ms ScrollTrigger runs about 20 refresh passes, each calling scrollTo(0,0), and settles at scrollY 0. Resizing back to 1440 stays at 0. A within-desktop resize (1440 to 1024\u00d7768) keeps the scroll position.",
+     "fix": "Save an anchor before matchMedia/refresh and restore it afterwards. In MotionProvider, on `ScrollTrigger.addEventListener('refreshInit')`, store the section id under the viewport centre plus the offset into it (or skip if `ScrollTrigger.isRefreshing`). On `'refresh'`, scroll back with `lenis?.scrollTo(y, { immediate: true }) ?? window.scrollTo(0, y)`. Route every refresh through the single debounced `requestRefresh()`, and ignore ResizeObserver callbacks while `ScrollTrigger.isRefreshing`."
+    },
+    {
+     "area": "StepsToBox",
+     "severity": "major",
+     "issue": "With Lenis on, keyboard focus can land on off-screen controls. Reveal-animated controls can also receive focus while still invisible.",
+     "evidence": "Tabbing at 250ms intervals, 3 runs, same result each time. 'Add a recipe' calls jumpToBox, which runs `lenis.scrollTo(y, { duration: 0.9 })` (StepsToBox.tsx:119). The next Tab focuses 'Pause the app tour' (rect top 1966) and then 'Pause moving recipes' (top 4223) while scrollY stays at 3830. Lenis's running animation overrides the browser's focus scroll. Other stops caught mid-reveal or hidden:\n- 'Add a recipe' at opacity 0, covered by the decorative copy, with no visible ring.\n- 'See the real app' at opacity 0.32.\n- The FinalCta email field at opacity 0 and its submit button at 0.46 on first focus.",
+     "fix": "Use `{ immediate: true }` for every focus-driven scroll (jumpToBox and DeckFilm's scrollToTime). In LenisProvider, add a document `focusin` listener: if the target's rect is outside [88px, innerHeight \u2212 24px], call `lenis.scrollTo(target, { immediate: true, offset: -120 })`. In Reveal/WordReveal/form enter animations, finish the reveal on `focusin` (set final styles and `data-revealed`). Make the opacity-0 'live' layer visible or inert until the handoff completes."
+    },
+    {
+     "area": "DeckFilm",
+     "severity": "major",
+     "issue": "The hero poster can never be the LCP element, because Chrome ignores images that fill the whole viewport. LCP therefore falls to hero text that only appears after hydration-gated entrances. The rotating relation word inserts new elements, which creates later LCP candidates and layout shift.",
+     "evidence": "Verified: an img at 100vw\u00d7100vh is not reported as LCP, while the same image at 90vw\u00d790vh is. Export, desktop unthrottled: LCP candidates are h1Line at 0.69s, then P.sub at 2.2s, then `em.rotPrev 'Grandma'` at 3.3\u20133.8s. Mobile at 4\u00d7 CPU / 9Mbps: LCP is P.sub at 4.96s (budget 2.5s). CLS: 0.030 at t\u22483.73s plus 0.006 at 6.5s, sourced from `#text, .w` as the word width changes and 'does.' moves (total 0.036 against a 0.05 budget). HeroOverlay.tsx:131 inserts a new `<em rotPrev>` and re-keys LetterArc on every rotation.",
+     "fix": "Paint the H1 and lead in their final state at first paint: a CSS-only entrance under `html[data-motion=on]` that starts at load, \u2264150ms, with no JS gate on the lead. Give the rotating slot a fixed width equal to the widest word (stack all relation words in one `display:inline-grid` cell, toggling opacity/transform) so 'does.' never moves and no new, larger element is inserted. Update the brief: the H1 is the LCP element, not the poster."
+    },
+    {
+     "area": "Shared",
+     "severity": "major",
+     "issue": "First-load JS is 347KB gzip against a 190KB budget. Hydration blocks the main thread for 0.6\u20131s on mid-range phones.",
+     "evidence": "out/index.html loads 9 scripts totalling 346,861B gzip. The largest, 3i3d4f704m0ow.js (112KB gzip / 351KB raw), holds every section plus motion's layout projection: 53 'projection' and 18 'layoutId' references, from `LazyMotion features={domMax}` in FolderGrid.tsx. GSAP+Lenis is 59KB gzip. Cloud.tsx pulls `useScroll/useVelocity/useAnimationFrame` from motion/react. page.tsx imports every section statically. At 4\u00d7 CPU: a 645ms long task at hydration, about 1.3s TBT at load, and a 1017ms frame at load on unthrottled desktop. index.html is 323KB raw (50KB gzip) of inline RSC payload.",
+     "fix": "Drop `domMax`/`layout` from FolderGrid: crossfade the grid with opacity/transform under `domAnimation`, or load features lazily via `features={() => import('./motionFeatures').then(m => m.default)}`. Replace Cloud's motion/react hooks with gsap.ticker plus `ScrollTrigger.getVelocity()` (already loaded). Use `animate` from 'motion/mini' (or GSAP) for one-shot opacity/transform enters. Wrap below-the-fold sections (EveryFamily onward) in client `next/dynamic` boundaries so their code splits. Re-measure gzip of first-load scripts after each change."
+    },
+    {
+     "area": "Shared",
+     "severity": "major",
+     "issue": "Fonts are about 3\u00d7 over budget: 8 woff2 files are preloaded on first load.",
+     "evidence": "out/index.html preloads 8 font files (~633KB). In total 750KB of woff2 arrives in the first 6s: Fraunces normal+italic and DM Sans normal+italic, each in latin and latin-ext (66+130+121+105+76+63+41+31KB). The budget is about 230KB. fonts.ts declares `subsets: ['latin','latin-ext']` and both styles for Fraunces and DM Sans, plus the SOFT/WONK/opsz axes.",
+     "fix": "Use `subsets: ['latin']` for preloading; latin-ext glyphs (Espa\u00f1ol, Italiano, credit names) still load on demand through unicode-range. Remove DM Sans italic if no body copy uses it, and drop the WONK axis if no heading sets it. If italics are rare, set `preload: false` on a separate italic face. Target \u22643 preloaded files."
+    },
+    {
+     "area": "SeeItWork",
+     "severity": "major",
+     "issue": "App recordings and their posters download at page load, about 5 viewports before See it work, then get aborted and requested again. This costs about 1.4MB on cellular before the visitor scrolls.",
+     "evidence": "Export, desktop and mobile: app-record.mp4 (222KB) and app-recipe.mp4 (788KB) are requested at 0.5s next to the 3MB hero. Both show `net::ERR_ABORTED` and are then re-fetched with 206s. All six app-*-640.webp posters (~270KB) and the unoptimized app-library.jpg (139KB, the recipe-box Handset poster) load at 0.2s. Cause: ClipStack.tsx:70 sets `preload={s === slide || s === slide + 1 ? 'auto' : 'none'}` regardless of proximity. Under reduced motion on mobile the same two clips are still fully buffered (readyState 4).",
+     "fix": "Add an IntersectionObserver (rootMargin '150% 0px') to SeeItWork and use `preload={near && (s === slide || s === slide + 1) ? 'auto' : 'none'}`. Keep 'none' under reduced motion and Save-Data until the visitor taps play. Use the `_opt` WebP for the app-library poster and give AppClip posters a near-gate as well (set `poster` only once near)."
+    },
+    {
+     "area": "FinalCta",
+     "severity": "major",
+     "issue": "The early-access form says the visitor is on the list but sends the email nowhere when NEXT_PUBLIC_EARLY_ACCESS_URL is unset. That is how the current export was built: the repo has no .env.",
+     "evidence": "EarlyAccessForm.tsx lines 89\u2013104: `if (endpoint) { fetch\u2026 }`, then `setStatus('done')` unconditionally. The success state is shown and the address is lost.",
+     "fix": "Without an endpoint, either open a `mailto:` prefilled with the address (and say so in the status text), or disable submit and show an honest 'Sign-ups open soon' note. Set NEXT_PUBLIC_EARLY_ACCESS_URL in the build environment before deploying."
+    },
+    {
+     "area": "Shared",
+     "severity": "major",
+     "issue": "The export's canonical URL and OG image point at http://localhost:3000. The OG image is also served without an image content type.",
+     "evidence": "out/index.html has canonical `http://localhost:3000/` and og:image `http://localhost:3000/opengraph-image?3c47ec621e5bf89d`, because NEXT_PUBLIC_SITE_URL was unset at build. `out/opengraph-image` has no file extension and is 605KB; a static server returns `Content-type: application/octet-stream`.",
+     "fix": "In layout.tsx, resolve SITE_URL as `NEXT_PUBLIC_SITE_URL ?? (process.env.VERCEL_PROJECT_PRODUCTION_URL && 'https://' + process.env.VERCEL_PROJECT_PRODUCTION_URL)` and fail the build if it's missing in production. Emit the OG image as a static `opengraph-image.png` (or a JPEG \u2264200KB) so it carries an extension and content type."
+    },
+    {
+     "area": "DeckFilm",
+     "severity": "minor",
+     "issue": "After the film unpins, the hero 'Pause video' button floats alone above StepsToBox in an empty band of canvas. Under reduced motion, the hero shows both '\u25b6 Play video' and a '\u275a\u275a Pause video' button while nothing is playing.",
+     "evidence": "1440\u00d7900 at y\u22482699: the `.pauseWrap` pause button sits at (1366,183) over about 400px of blank canvas, with faint ghost text behind the nav. Reduced motion on mobile: 'Play video' at top-left and a pause icon at bottom-right at the same time.",
+     "fix": "Fade `.pauseWrap` out with the hero layer in the film timeline (by the end of the call beat), and tighten the seam so StepsToBox's heading enters sooner. When autoplay is off, render a single control that reflects the video's real playing state."
+    },
+    {
+     "area": "Shared",
+     "severity": "minor",
+     "issue": "Mid-scroll layout changes trigger a full ScrollTrigger refresh on mobile, causing a visible hitch.",
+     "evidence": "Export, 390px: body height changes by 8px at scrollY\u22484800 (11277 to 11269). That triggers MotionProvider's ResizeObserver and then `ScrollTrigger.refresh()`. In the trace at 4\u00d7 CPU this is a 139ms task (TimerFire, gsap chunk, 20ms Layout + 21ms style recalc). The throttled mobile run also shows 700ms and 283ms frames near y 3600 and 5400.",
+     "fix": "Reserve space where content resizes late: min-height for the translator's original and English lines (CJK/Devanagari fonts swap in there) and for CycleHeading. Delay refreshes with `requestIdleCallback` and skip them when the size change happens below every active trigger."
+    },
+    {
+     "area": "Shared",
+     "severity": "minor",
+     "issue": "Several tap targets are below the 48px rule.",
+     "evidence": "PauseButton is used at `size={40}` in SeeItWork/DesktopTour.tsx:91 ('Pause the app tour', 40\u00d740) and InTheirWords/TranslatorCard.tsx:288 ('Pause languages', 40\u00d740). The mobile nav logo link is 36\u00d748. All 28 footer photo-credit links are 32px tall.",
+     "fix": "Use the default 48px PauseButton everywhere. Pad the logo link to at least 48px wide. Give the credit links `display: inline-flex; align-items: center; min-height: 48px` (or 44px with spacing)."
+    },
+    {
+     "area": "Shared",
+     "severity": "minor",
+     "issue": "Chip typing dots loop forever, including in invisible and off-screen chips, and ignore the global pause.",
+     "evidence": "After a full scroll-through there are 18 running `dot` animations with `iterations=Infinity` on chips at opacity 0 or far off-screen: pass-down Grandma/Dad, the-call Grandpa Rey/Grandma Rosa, the far-apart answer chip and the early-access chip. They keep running while `html[data-paused]` is set. Chip.module.css:130 has `animation: dot 900ms ease-in-out infinite` and no paused rule.",
+     "fix": "Render `.dots` only while `typing` is true and give the animation a finite count (e.g. 2). Add `html[data-paused] .dots i { animation-play-state: paused }`."
+    },
+    {
+     "area": "FarApart",
+     "severity": "minor",
+     "issue": "Disclaimers and some honesty copy are set at 16px, under the 18px (mobile) / 20px (desktop) body rule for meaningful text. A 14px 'REC 0:42' pill is exposed to assistive tech.",
+     "evidence": "16px: InTheirWords `.note` ('Today the app is English only\u2026'), FarApart `.footnote` ('Illustration. Sharing in the app uses your phone's share sheet.'), Footer `.disclaimer` and `.panelIntro`. At 390px the StepCard 'REC 0:42' pill is 14px and not aria-hidden.",
+     "fix": "Raise these notes to `var(--fs-body)` (18px mobile / 20px desktop), or at least 18px. Mark the REC pill `aria-hidden` (it's decoration) or raise it to 16px."
+    },
+    {
+     "area": "Measures",
+     "severity": "minor",
+     "issue": "The marquee region is a Tab stop even when it can't scroll, so keyboard users land on a large ring around the band that does nothing.",
+     "evidence": "`div[role=region][tabindex=0]` 'Things families say instead of measurements' gets focus (stop 21, 1231\u00d7121 ring). In motion mode its overflow-x is hidden (scrollWidth 6295, clientWidth 358).",
+     "fix": "Set `tabIndex={scrollable ? 0 : -1}`, where scrollable means reduced motion or paused (when the track becomes `overflow-x: auto`). Keep the Pause button as the keyboard control."
+    },
+    {
+     "area": "DeckFilm",
+     "severity": "minor",
+     "issue": "On phones, the hero lead text crosses the cook's white apron on the poster, so contrast is borderline.",
+     "evidence": "390 reduced-motion poster: background luminance sampled between lines 2\u20133 of 'Prop up a phone while they cook\u2026' averages 0.13\u20130.18, which gives about 5.9:1 and 4.5:1 against cream. Peak areas fall to about 2.3\u20132.6:1. Brighter video frames will be worse. On desktop the lead area is fine (median 0.07, p90 0.18).",
+     "fix": "Raise the mobile bottom scrim stop under the lead (the media.ts YAVG note already flags bright frames). Alternatively add `text-shadow: 0 1px 14px rgba(20,22,12,.5)` to `.sub` at <768px."
+    },
+    {
+     "area": "InTheirWords",
+     "severity": "minor",
+     "issue": "The section copy and the translator card disagree. The lead promises Grandpa speaking Tagalog, but the card opens on Chinese with 'Grandma said'.",
+     "evidence": "Lead: 'Grandpa explains it best in Tagalog. You follow along in English\u2026'. Default radio: \u4e2d\u6587 Chinese, chip 'Grandma said', Red-Braised Pork Belly (all screenshots, dev and export).",
+     "fix": "Open the translator on the Tagalog line (Grandpa's), or make the lead generic, e.g. 'Grandma explains it best in her own language.'"
+    }
+   ]
+  }
+ ]
+}
