@@ -1,0 +1,249 @@
+{
+ "W": 1440,
+ "H": 900,
+ "range": {
+  "start": 0,
+  "end": 12930,
+  "total": 13830
+ },
+ "meta": [
+  {
+   "i": 0,
+   "file": "000.jpg",
+   "y": 0,
+   "overflowX": 0,
+   "playing": [
+    "hero-1920-loop.mp4"
+   ]
+  },
+  {
+   "i": 1,
+   "file": "001.jpg",
+   "y": 446,
+   "overflowX": 0,
+   "playing": [
+    "hero-1920-loop.mp4"
+   ]
+  },
+  {
+   "i": 2,
+   "file": "002.jpg",
+   "y": 892,
+   "overflowX": 0,
+   "playing": [
+    "hero-1920-loop.mp4"
+   ]
+  },
+  {
+   "i": 3,
+   "file": "003.jpg",
+   "y": 1338,
+   "overflowX": 0,
+   "playing": [
+    "hero-1920-loop.mp4"
+   ]
+  },
+  {
+   "i": 4,
+   "file": "004.jpg",
+   "y": 1783,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 5,
+   "file": "005.jpg",
+   "y": 2229,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 6,
+   "file": "006.jpg",
+   "y": 2675,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 7,
+   "file": "007.jpg",
+   "y": 3121,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 8,
+   "file": "008.jpg",
+   "y": 3567,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 9,
+   "file": "009.jpg",
+   "y": 4013,
+   "overflowX": 0,
+   "playing": [
+    "app-library.mp4"
+   ]
+  },
+  {
+   "i": 10,
+   "file": "010.jpg",
+   "y": 4459,
+   "overflowX": 0,
+   "playing": [
+    "app-library.mp4"
+   ]
+  },
+  {
+   "i": 11,
+   "file": "011.jpg",
+   "y": 4904,
+   "overflowX": 0,
+   "playing": [
+    "app-record.mp4"
+   ]
+  },
+  {
+   "i": 12,
+   "file": "012.jpg",
+   "y": 5350,
+   "overflowX": 0,
+   "playing": [
+    "app-recipe.mp4"
+   ]
+  },
+  {
+   "i": 13,
+   "file": "013.jpg",
+   "y": 5796,
+   "overflowX": 0,
+   "playing": [
+    "app-cook.mp4"
+   ]
+  },
+  {
+   "i": 14,
+   "file": "014.jpg",
+   "y": 6242,
+   "overflowX": 0,
+   "playing": [
+    "app-share.mp4"
+   ]
+  },
+  {
+   "i": 15,
+   "file": "015.jpg",
+   "y": 6688,
+   "overflowX": 0,
+   "playing": [
+    "app-share.mp4"
+   ]
+  },
+  {
+   "i": 16,
+   "file": "016.jpg",
+   "y": 7134,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 17,
+   "file": "017.jpg",
+   "y": 7580,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 18,
+   "file": "018.jpg",
+   "y": 8026,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 19,
+   "file": "019.jpg",
+   "y": 8471,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 20,
+   "file": "020.jpg",
+   "y": 8917,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 21,
+   "file": "021.jpg",
+   "y": 9363,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 22,
+   "file": "022.jpg",
+   "y": 9809,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 23,
+   "file": "023.jpg",
+   "y": 10255,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 24,
+   "file": "024.jpg",
+   "y": 10701,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 25,
+   "file": "025.jpg",
+   "y": 11147,
+   "overflowX": 0,
+   "playing": [
+    "app-questions.mp4"
+   ]
+  },
+  {
+   "i": 26,
+   "file": "026.jpg",
+   "y": 11592,
+   "overflowX": 0,
+   "playing": [
+    "app-questions.mp4"
+   ]
+  },
+  {
+   "i": 27,
+   "file": "027.jpg",
+   "y": 12038,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 28,
+   "file": "028.jpg",
+   "y": 12484,
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 29,
+   "file": "029.jpg",
+   "y": 12930,
+   "overflowX": 0,
+   "playing": []
+  }
+ ],
+ "logs": [],
+ "bad": []
+}
