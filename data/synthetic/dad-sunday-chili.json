@@ -1,0 +1,208 @@
+{
+  "id": "dad-sunday-chili",
+  "title": "Dad's Sunday Chili",
+  "cook": { "name": "Dad", "relation": "Dad" },
+  "intro": "Dad started making this chili in his first apartment, where he had one pot and one burner and wanted the place to smell like somebody lived there. These days the whole house drifts into the kitchen on Sunday afternoons, and Grandma's chili bean paste is the secret in the pot.",
+  "servings": "8 generous bowls",
+  "total_time": "~4 hrs",
+  "sample": true,
+  "source": null,
+  "tags": ["sunday", "beef", "one-pot"],
+  "media": { "video_url": null, "audio_url": null, "poster_url": null, "duration_s": 2400 },
+  "sessions": [
+    { "index": 1, "recorded_at": "2026-10-04T11:30:00-07:00", "offset_s": 0, "duration_s": 1620 },
+    { "index": 2, "recorded_at": "2026-10-04T15:05:00-07:00", "offset_s": 1620, "duration_s": 780 }
+  ],
+  "ingredients": [
+    { "name": "ground beef", "feel": "the whole big family tray from the store", "estimate": "~2 lb", "confidence": "high", "first_seen_s": 65 },
+    { "name": "yellow onion", "feel": "two big ones, chopped chunky", "estimate": "~2 large onions", "confidence": "high", "first_seen_s": 350 },
+    { "name": "garlic", "feel": "as many as I feel like, usually six or seven", "estimate": "~6 cloves", "confidence": "medium", "first_seen_s": 540 },
+    { "name": "chili powder", "feel": "three big shakes, about a palmful", "estimate": "~3 tbsp", "confidence": "low", "first_seen_s": 620 },
+    { "name": "cumin", "feel": "half as much as the chili powder", "estimate": "~1.5 tbsp", "confidence": "low", "first_seen_s": 660 },
+    { "name": "chili bean paste", "feel": "one big rounded soup spoon", "estimate": "~2 tbsp", "confidence": "medium", "first_seen_s": 720 },
+    { "name": "crushed tomatoes", "feel": "one big can, the tall one", "estimate": "~28 oz", "confidence": "high", "first_seen_s": 890 },
+    { "name": "kidney beans", "feel": "two cans, drained", "estimate": "~2 cans (15 oz each)", "confidence": "high", "first_seen_s": 940 },
+    { "name": "orange peel", "feel": "one strip as long as my thumb", "estimate": "~1 strip (3 in)", "confidence": "medium", "first_seen_s": 1010 }
+  ],
+  "steps": [
+    {
+      "order": 1,
+      "title": "Brown the beef hard",
+      "instruction": "Heat a heavy pot over medium-high heat, press the beef into one layer and let it sit until the bottom is deeply browned before you break it up and turn it.",
+      "sensory_cue": "a dark crust on the bottom, edges crackling, fat pooling around the meat",
+      "start_s": 60, "end_s": 330,
+      "quote": "Don't touch it. Let it sit until it argues with you, then turn it.",
+      "wait_after": null,
+      "story_ids": ["s1"], "special_ids": [],
+      "substeps": [
+        { "text": "Heat a heavy pot over **medium-high heat**.", "detail": null },
+        { "text": "Press the beef into one layer.", "detail": null },
+        { "text": "Let it sit until deeply browned.", "detail": null },
+        { "text": "Break it up and turn it.", "detail": null },
+        { "text": "Ready when **edges are crackling**.", "detail": "A dark crust on the bottom, edges crackling, fat pooling around the meat." }
+      ],
+      "uses": [
+        { "name": "ground beef", "amount": "~2 lb" }
+      ],
+      "tip": null
+    },
+    {
+      "order": 2,
+      "title": "Soften the onion, then the garlic",
+      "instruction": "Stir the chopped onion into the beef and its fat and cook until soft and sweet. Add the garlic for the last minute only.",
+      "sensory_cue": "onions turn see-through and sweet-smelling, and the garlic smells nutty, not sharp",
+      "start_s": 340, "end_s": 600,
+      "quote": "Onions first, garlic after. Garlic burns fast and then the whole pot tastes bitter.",
+      "wait_after": null,
+      "story_ids": [], "special_ids": [],
+      "substeps": [
+        { "text": "Stir the chopped onion into the beef.", "detail": null },
+        { "text": "Cook until soft and sweet.", "detail": null },
+        { "text": "Add the garlic for the last **minute** only.", "detail": null },
+        { "text": "Ready when **garlic smells nutty**.", "detail": "Onions turn see-through and sweet-smelling, and the garlic smells nutty, not sharp." }
+      ],
+      "uses": [
+        { "name": "yellow onion", "amount": "~2 large onions" },
+        { "name": "ground beef", "amount": null },
+        { "name": "garlic", "amount": "~6 cloves" }
+      ],
+      "tip": "Garlic burns fast and then the whole pot tastes bitter."
+    },
+    {
+      "order": 3,
+      "title": "Toast the spices with the bean paste",
+      "instruction": "Push the meat to one side. Add the chili powder, cumin and chili bean paste to the hot fat and stir for about a minute until the oil turns red, then mix everything together.",
+      "sensory_cue": "the oil turns brick red and the smell hits the back of your nose without scorching",
+      "start_s": 610, "end_s": 870,
+      "quote": "This is Grandma's trick. One big spoon of the bean paste and the whole pot gets a bottom note.",
+      "wait_after": null,
+      "story_ids": [], "special_ids": ["x1"],
+      "substeps": [
+        { "text": "Push the meat to one side.", "detail": null },
+        { "text": "Add chili powder, cumin and chili bean paste.", "detail": null },
+        { "text": "Stir for **about a minute**.", "detail": null },
+        { "text": "Mix everything together.", "detail": null },
+        { "text": "Ready when **oil turns brick red**.", "detail": "The oil turns brick red and the smell hits the back of your nose without scorching." }
+      ],
+      "uses": [
+        { "name": "ground beef", "amount": null },
+        { "name": "chili powder", "amount": "~3 tbsp" },
+        { "name": "cumin", "amount": "~1.5 tbsp" },
+        { "name": "chili bean paste", "amount": "~2 tbsp" }
+      ],
+      "tip": null
+    },
+    {
+      "order": 4,
+      "title": "Add the tomatoes, beans and peel",
+      "instruction": "Stir in the crushed tomatoes and the drained beans, drop in the strip of orange peel and scrape up everything stuck to the bottom. Bring it to a bubble.",
+      "sensory_cue": "a sauce the color of brick with small bubbles at the edge, and a clean pot bottom",
+      "start_s": 880, "end_s": 1180,
+      "quote": "One strip of orange peel. Don't ask, just trust me.",
+      "wait_after": null,
+      "story_ids": [], "special_ids": ["x2"],
+      "substeps": [
+        { "text": "Stir in the crushed tomatoes and drained beans.", "detail": null },
+        { "text": "Drop in the strip of orange peel.", "detail": null },
+        { "text": "Scrape up everything stuck to the bottom.", "detail": null },
+        { "text": "Bring it to a bubble.", "detail": null },
+        { "text": "Ready when **small bubbles at the edge**.", "detail": "A sauce the color of brick with small bubbles at the edge, and a clean pot bottom." }
+      ],
+      "uses": [
+        { "name": "crushed tomatoes", "amount": "~28 oz" },
+        { "name": "kidney beans", "amount": "~2 cans (15 oz each)" },
+        { "name": "orange peel", "amount": "~1 strip (3 in)" }
+      ],
+      "tip": null
+    },
+    {
+      "order": 5,
+      "title": "Simmer low and long",
+      "instruction": "Turn the heat to its lowest setting, set the lid slightly ajar and let the chili simmer about three hours, stirring now and then so the bottom does not catch.",
+      "sensory_cue": "a lazy blup every few seconds, and the sauce is thick enough to leave a trail behind the spoon",
+      "start_s": 1190, "end_s": 1600,
+      "quote": "Low and slow. If you hear it boiling, turn it down. It should just mumble.",
+      "wait_after": "a long simmer, ~3 hrs",
+      "story_ids": [], "special_ids": [],
+      "substeps": [
+        { "text": "Turn the heat to its **lowest setting**.", "detail": null },
+        { "text": "Set the lid slightly ajar.", "detail": null },
+        { "text": "Let the chili simmer **about 3 hours**.", "detail": null },
+        { "text": "Stir now and then.", "detail": "Stirring now and then so the bottom does not catch." },
+        { "text": "Ready when **sauce is thick**.", "detail": "A lazy blup every few seconds, and the sauce is thick enough to leave a trail behind the spoon." }
+      ],
+      "uses": [],
+      "tip": "If you hear it boiling, turn it down. It should just mumble."
+    },
+    {
+      "order": 6,
+      "title": "Taste, fish out the peel, fix it",
+      "instruction": "Lift out the orange peel, then taste the chili and adjust the heat with a little more chili powder if it needs it. Let it sit off the heat for ten minutes.",
+      "sensory_cue": "the beef is spoon-tender, the sauce is dark and thick, and the first taste has a little warmth at the back",
+      "start_s": 1650, "end_s": 2000,
+      "quote": "Taste it three times. First for salt, then for heat, then for whether it tastes like Sunday.",
+      "wait_after": null,
+      "story_ids": [], "special_ids": [],
+      "substeps": [
+        { "text": "Lift out the orange peel.", "detail": null },
+        { "text": "Taste the chili.", "detail": null },
+        { "text": "Adjust the heat with a little more chili powder.", "detail": null },
+        { "text": "Let it sit off the heat for **10 minutes**.", "detail": null },
+        { "text": "Ready when **beef is spoon-tender**.", "detail": "The beef is spoon-tender, the sauce is dark and thick, and the first taste has a little warmth at the back." }
+      ],
+      "uses": [
+        { "name": "orange peel", "amount": null },
+        { "name": "chili powder", "amount": null }
+      ],
+      "tip": null
+    },
+    {
+      "order": 7,
+      "title": "Serve it to the whole house",
+      "instruction": "Ladle the chili into big bowls and put the toppings on the table so everyone builds their own. Serve it hot, and leave the pot on the stove for seconds.",
+      "sensory_cue": "steam coming off the bowl and a shine of red oil on top",
+      "start_s": 2030, "end_s": 2350,
+      "quote": "Pot stays on the stove. Seconds are the whole point of Sunday.",
+      "wait_after": null,
+      "story_ids": ["s2"], "special_ids": [],
+      "substeps": [
+        { "text": "Ladle the chili into big bowls.", "detail": null },
+        { "text": "Put the toppings on the table.", "detail": "Put the toppings on the table so everyone builds their own." },
+        { "text": "Serve it hot.", "detail": null },
+        { "text": "Leave the pot on the stove.", "detail": null },
+        { "text": "Ready when **steam coming off**.", "detail": "Steam coming off the bowl and a shine of red oil on top." }
+      ],
+      "uses": [],
+      "tip": null
+    }
+  ],
+  "stories": [
+    {
+      "id": "s1", "step": 1, "start_s": 130, "end_s": 230,
+      "title": "The first pot",
+      "text": "My first apartment had one pot and one burner. I made chili because it was cheap and it made the whole place smell like somebody lived there. Your grandma called every Sunday to ask what I had eaten, and I would say vegetables. Then I started making this on Sundays so I could finally tell her I had cooked a real meal."
+    },
+    {
+      "id": "s2", "step": 7, "start_s": 2150, "end_s": 2260,
+      "title": "Sunday afternoon",
+      "text": "Every Sunday the game is on and one by one everybody drifts into the kitchen with a bowl. Your mom says it is the only afternoon the whole house is quiet, because everybody is eating. I just stand at the stove and pretend I am not smiling."
+    }
+  ],
+  "special": [
+    {
+      "id": "x1", "step": 3, "start_s": 700, "end_s": 745,
+      "text": "Stirs a spoon of Grandma's chili bean paste into the spices",
+      "why": "Most chili recipes use only chili powder; the fermented, salty paste adds a deep bottom note the family says tastes like home."
+    },
+    {
+      "id": "x2", "step": 4, "start_s": 1000, "end_s": 1040,
+      "text": "Drops in a strip of orange peel while it simmers",
+      "why": "Chili recipes rarely use citrus; the peel brightens the heavy beef and tomato without making the pot taste like orange."
+    }
+  ],
+  "follow_up_questions": [
+    { "id": "q1", "about_step": 3, "question": "Dad, how much chili bean paste would you start with for someone who is nervous about spice?" },
+    { "id": "q2", "about_step": 5, "question": "How do you know the chili is done simmering, besides the clock?" },
+    { "id": "q3", "about_step": 2, "question": "Is it onions first because Grandma taught you that, or because you burned the garlic once?" }
+  ]
+}

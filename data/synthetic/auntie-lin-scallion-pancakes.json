@@ -1,0 +1,196 @@
+{
+  "id": "auntie-lin-scallion-pancakes",
+  "title": "Auntie Lin's Scallion Pancakes",
+  "cook": { "name": "Auntie Lin", "relation": "Aunt" },
+  "intro": "Auntie Lin learned these running to a night-market griddle with Dad when they were kids, and she makes them so she never has to race for the crispy corner again. She rolls hers thin and flaky, while Grandma likes hers thick and chewy, so there are always two kinds on the table.",
+  "servings": "4 pancakes",
+  "total_time": "~1 hr",
+  "sample": true,
+  "source": null,
+  "tags": ["snack", "vegetarian", "street food"],
+  "media": { "video_url": null, "audio_url": null, "poster_url": null, "duration_s": 2100 },
+  "sessions": [
+    { "index": 1, "recorded_at": "2026-10-03T10:30:00-07:00", "offset_s": 0, "duration_s": 2100 }
+  ],
+  "ingredients": [
+    { "name": "flour", "feel": "two big scoops from the bag, a little over", "estimate": "~2.5 cups", "confidence": "medium", "first_seen_s": 70 },
+    { "name": "boiling water", "feel": "straight from the kettle, about this much, then a splash of cold if it's too dry", "estimate": "~3/4 cup", "confidence": "low", "first_seen_s": 140 },
+    { "name": "scallion", "feel": "a mountain of them, and when it looks like too much, one more handful", "estimate": "~8 scallions", "confidence": "medium", "first_seen_s": 725 },
+    { "name": "neutral oil", "feel": "a few spoons for the spread and more for the pan", "estimate": "~1/3 cup total", "confidence": "low", "first_seen_s": 760 },
+    { "name": "toasted sesame oil", "feel": "one spoon, as much as smells good", "estimate": "~1 tbsp", "confidence": "medium", "first_seen_s": 790 },
+    { "name": "salt", "feel": "a good pinch, a little more than you think", "estimate": "~1 tsp", "confidence": "low", "first_seen_s": 810 }
+  ],
+  "steps": [
+    {
+      "order": 1,
+      "title": "Make the hot-water dough",
+      "instruction": "Stir the boiling water into the flour with chopsticks until it looks shaggy, adding a splash of cold water if it is dry. Gather it into a ball and knead for a minute.",
+      "sensory_cue": "shaggy at first, then soft as a baby's cheek and bouncing back when you poke it",
+      "start_s": 60, "end_s": 360,
+      "quote": "Boiling water goes in first. That's what makes it soft. Cold water makes it tough, like a shoe.",
+      "wait_after": null,
+      "story_ids": ["s1"], "special_ids": [],
+      "substeps": [
+        { "text": "Stir the boiling water into the flour.", "detail": null },
+        { "text": "Add a splash of cold water if dry.", "detail": null },
+        { "text": "Gather it into a ball.", "detail": null },
+        { "text": "Knead for **a minute**.", "detail": null },
+        { "text": "Ready when **soft and bouncing back**.", "detail": "Ready when shaggy at first, then soft as a baby's cheek and bouncing back when you poke it." }
+      ],
+      "uses": [
+        { "name": "flour", "amount": "~2.5 cups" },
+        { "name": "boiling water", "amount": "~3/4 cup" }
+      ],
+      "tip": null
+    },
+    {
+      "order": 2,
+      "title": "Cover and rest the dough",
+      "instruction": "Cover the dough with a damp towel and let it rest for 30 minutes at room temperature.",
+      "sensory_cue": "the dough relaxes and a poke leaves a dent that slowly fills back in",
+      "start_s": 370, "end_s": 700,
+      "quote": "Thirty minutes. Go drink some tea. The dough is working while you are not.",
+      "wait_after": null,
+      "story_ids": [], "special_ids": [],
+      "substeps": [
+        { "text": "Cover the dough with a damp towel.", "detail": null },
+        { "text": "Let it rest for **30 minutes**.", "detail": null },
+        { "text": "Ready when **a poke leaves a dent**.", "detail": "Ready when the dough relaxes and a poke leaves a dent that slowly fills back in." }
+      ],
+      "uses": [],
+      "tip": null
+    },
+    {
+      "order": 3,
+      "title": "Chop the scallions, mix the spread",
+      "instruction": "Chop a big pile of scallions into tiny rings. In a small bowl, stir the salt and sesame oil into a few spoons of neutral oil.",
+      "sensory_cue": "the scallions are tiny rings and the spread smells toasty",
+      "start_s": 710, "end_s": 950,
+      "quote": "More scallion than you think. When you think it's too much, add one more handful.",
+      "wait_after": null,
+      "story_ids": [], "special_ids": ["x1"],
+      "substeps": [
+        { "text": "Chop the scallions into tiny rings.", "detail": null },
+        { "text": "Stir salt and sesame oil into a few spoons of neutral oil.", "detail": null },
+        { "text": "Ready when **the spread smells toasty**.", "detail": "Ready when the scallions are tiny rings and the spread smells toasty." }
+      ],
+      "uses": [
+        { "name": "scallion", "amount": "~8 scallions" },
+        { "name": "salt", "amount": "~1 tsp" },
+        { "name": "toasted sesame oil", "amount": "~1 tbsp" },
+        { "name": "neutral oil", "amount": null }
+      ],
+      "tip": null
+    },
+    {
+      "order": 4,
+      "title": "Roll thin, brush and sprinkle",
+      "instruction": "Divide the dough into four balls. Roll one into a very thin large circle, brush it all over with the oil spread, then cover it with scallions.",
+      "sensory_cue": "thin enough that you can see the shadow of your hand through it",
+      "start_s": 960, "end_s": 1300,
+      "quote": "Thin, thin, thinner. You should see the pattern on the counter through it.",
+      "wait_after": null,
+      "story_ids": [], "special_ids": [],
+      "substeps": [
+        { "text": "Divide the dough into **four** balls.", "detail": null },
+        { "text": "Roll one into a very thin large circle.", "detail": null },
+        { "text": "Brush it all over with the oil spread.", "detail": null },
+        { "text": "Cover it with scallions.", "detail": null },
+        { "text": "Ready when **thin enough to see your hand’s shadow**.", "detail": null }
+      ],
+      "uses": [
+        { "name": "neutral oil", "amount": null },
+        { "name": "toasted sesame oil", "amount": null },
+        { "name": "salt", "amount": null },
+        { "name": "scallion", "amount": null }
+      ],
+      "tip": null
+    },
+    {
+      "order": 5,
+      "title": "Roll into a rope, coil like a snail",
+      "instruction": "Roll the sheet up tightly into a long rope, coil the rope into a snail shape and tuck the end underneath. Press it flat with your palm to about a thumb's thickness and repeat with the others.",
+      "sensory_cue": "the coil feels springy, and no scallion is poking out of the edge",
+      "start_s": 1310, "end_s": 1600,
+      "quote": "Snail shape. Tuck the tail under so it can't escape.",
+      "wait_after": null,
+      "story_ids": ["s2"], "special_ids": [],
+      "substeps": [
+        { "text": "Roll the sheet up tightly into a long rope.", "detail": null },
+        { "text": "Coil the rope into a snail shape.", "detail": null },
+        { "text": "Tuck the end underneath.", "detail": null },
+        { "text": "Press it flat to **about a thumb's thickness**.", "detail": null },
+        { "text": "Ready when **the coil feels springy**.", "detail": "Ready when the coil feels springy, and no scallion is poking out of the edge." }
+      ],
+      "uses": [],
+      "tip": null
+    },
+    {
+      "order": 6,
+      "title": "Pan-fry until golden",
+      "instruction": "Heat a thin film of oil in a flat pan over medium heat. Fry each pancake two to three minutes a side, pressing gently with a spatula, until deep gold and crisp at the edges.",
+      "sensory_cue": "the edges bubble and turn deep gold, the smell turns toasty and the sound is a steady crackle",
+      "start_s": 1610, "end_s": 1930,
+      "quote": "Don't walk away. Medium heat, one pancake at a time, and listen. Crackle means crisp, hiss means too wet.",
+      "wait_after": null,
+      "story_ids": [], "special_ids": [],
+      "substeps": [
+        { "text": "Heat a thin film of oil over **medium heat**.", "detail": null },
+        { "text": "Fry each pancake **two to three minutes** a side.", "detail": null },
+        { "text": "Press gently with a spatula.", "detail": null },
+        { "text": "Ready when **deep gold and crisp**.", "detail": "Ready when the edges bubble and turn deep gold, the smell turns toasty and the sound is a steady crackle." }
+      ],
+      "uses": [
+        { "name": "neutral oil", "amount": null }
+      ],
+      "tip": "Listen. Crackle means crisp, hiss means too wet."
+    },
+    {
+      "order": 7,
+      "title": "Scrunch, cut and serve",
+      "instruction": "Slide the pancake onto a board and push the edges toward the center with two spatulas to loosen the layers. Cut into wedges and serve while still hot.",
+      "sensory_cue": "you can hear the layers crackle as they separate, and steam comes out between them",
+      "start_s": 1940, "end_s": 2060,
+      "quote": "Push it in, like this. Now you hear the layers cracking. That's how you know.",
+      "wait_after": null,
+      "story_ids": [], "special_ids": ["x2"],
+      "substeps": [
+        { "text": "Slide the pancake onto a board.", "detail": null },
+        { "text": "Push the edges toward the center.", "detail": "Push the edges toward the center with two spatulas to loosen the layers." },
+        { "text": "Ready when **you hear the layers crackle**.", "detail": "Ready when you can hear the layers crackle as they separate, and steam comes out between them." },
+        { "text": "Cut into wedges and serve while still hot.", "detail": null }
+      ],
+      "uses": [],
+      "tip": "Scrunching loosens the layers so they separate and stay crispy."
+    }
+  ],
+  "stories": [
+    {
+      "id": "s1", "step": 1, "start_s": 160, "end_s": 250,
+      "title": "The crispy corner",
+      "text": "When we were kids, your dad and I would walk to the night market on Fridays with two coins each. There was a lady with a big flat griddle, and the crispy corner went to whoever got there first. Your dad always ran. I always lost. So I learned to make my own, and now the corners are mine."
+    },
+    {
+      "id": "s2", "step": 5, "start_s": 1400, "end_s": 1490,
+      "title": "Thin or thick",
+      "text": "Your grandma says I roll mine too thin and too crispy. She likes hers thick and chewy. So at the table there are two kinds, hers and mine, and your dad always takes one of each and says he cannot choose."
+    }
+  ],
+  "special": [
+    {
+      "id": "x1", "step": 3, "start_s": 780, "end_s": 830,
+      "text": "Stirs toasted sesame oil and salt into the oil she brushes on",
+      "why": "Most recipes brush on plain oil; the sesame oil and salt make every layer taste toasty and seasoned."
+    },
+    {
+      "id": "x2", "step": 7, "start_s": 1960, "end_s": 2010,
+      "text": "Pushes the hot pancake in from the edges before cutting",
+      "why": "Most recipes just cut the pancake as it comes off the pan; scrunching loosens the layers so they separate and stay crispy."
+    }
+  ],
+  "follow_up_questions": [
+    { "id": "q1", "about_step": 1, "question": "Auntie Lin, how much boiling water is right for two scoops of flour?" },
+    { "id": "q2", "about_step": 4, "question": "About how many scallions go on each pancake?" },
+    { "id": "q3", "about_step": 6, "question": "Do you ever freeze them, and how do you reheat them so they stay crispy?" }
+  ]
+}
