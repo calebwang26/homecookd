@@ -1,10 +1,10 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { hashToken } from "./lib/auth";
 import { DEMO_LOCATION, distanceLabel, milesBetween, roundToGrid } from "./lib/geo";
-import { cleanCulture, parseMuseCard, quoteChoices } from "./lib/storyCard";
-import { type Backend, newBackend } from "./test.helpers";
+import { cleanCulture, parseMuseCard, quoteChoices, quoteTranslated } from "./lib/storyCard";
+import { family, person, recipe, type Who, world } from "./community.helpers";
+import type { Backend } from "./test.helpers";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
@@ -12,58 +12,6 @@ afterEach(() => {
   vi.unstubAllGlobals();
   delete process.env.MUSE_API_KEY;
 });
-
-type Who = { sessionToken: string; personId: Id<"people">; familyId: Id<"families"> };
-
-async function family(t: Backend, name: string, publicName?: string) {
-  return await t.run((ctx) => ctx.db.insert("families", { name, supabaseFamilyId: `test:${name}`, publicName }));
-}
-
-async function person(t: Backend, familyId: Id<"families">, name: string, role: "cook" | "kid", approx?: { lat: number; lng: number }): Promise<Who> {
-  const sessionToken = `token-${name}-${"x".repeat(24)}`;
-  const tokenHash = await hashToken(sessionToken);
-  const personId = await t.run(async (ctx) => {
-    const id = await ctx.db.insert("people", { familyId, supabaseProfileId: `test:${name}`, name, role, approx });
-    await ctx.db.insert("sessions", { tokenHash, familyId, personId: id, expiresAt: Date.now() + 86_400_000 });
-    return id;
-  });
-  return { sessionToken, personId, familyId };
-}
-
-async function recipe(t: Backend, who: Who, extra: Record<string, unknown> = {}) {
-  return await t.run((ctx) =>
-    ctx.db.insert("recipes", {
-      familyId: who.familyId,
-      cookId: who.personId,
-      title: "Kanda Poha",
-      status: "ready",
-      libraryId: "lib-poha-secret",
-      recipeJsonUrl: "https://storage.googleapis.com/edible-recipes/poha/recipe.json",
-      coverUrl: "https://storage.googleapis.com/edible-recipes/poha/poster.jpg",
-      steps: [
-        { order: 1, title: "Rinse the poha", text: "Rinse it twice.", quote: "Not too long, beta.", quoteOriginal: "जास्त वेळ नको", moment: { startS: 10, endS: 40 } },
-        { order: 2, title: "Temper", text: "Mustard seeds in hot oil.", moment: { startS: 50, endS: 90 } },
-      ],
-      memories: [{ kind: "story", text: "Her mother made this every Sunday in Pune.", moment: { startS: 60, endS: 80 } }],
-      memoriesOptIn: false,
-      ...extra,
-    }),
-  );
-}
-
-/** Two families: the Pawars (Grandma Rajani + Shreya) and a neighbor, plus Caleb in his own family. */
-async function world() {
-  const t = newBackend();
-  const pawar = await family(t, "Pawar home", "Pawar");
-  const rajani = await person(t, pawar, "Rajani", "cook");
-  const shreya = await person(t, pawar, "Shreya", "kid");
-  const zhang = await family(t, "Zhang home");
-  const serene = await person(t, zhang, "Serene", "kid");
-  const serenesMom = await person(t, zhang, "Mei", "cook", { lat: DEMO_LOCATION.lat + 0.02, lng: DEMO_LOCATION.lng });
-  const wang = await family(t, "Wang home");
-  const caleb = await person(t, wang, "Caleb", "kid");
-  return { t, rajani, shreya, serene, serenesMom, caleb };
-}
 
 test("geo rounds to the grid and labels distances", () => {
   expect(roundToGrid({ lat: 42.36789, lng: -71.09432 })).toEqual({ lat: 42.37, lng: -71.09 });
@@ -174,20 +122,24 @@ test("the feed and the recipe view return only whitelisted fields", async () => 
   });
 
   const feed = await t.query(api.community.feed, { sessionToken: serene.sessionToken, now: Date.now() });
-  expect(feed.recipes.map((r) => r.dish)).toEqual(["Kanda Poha"]); // Serene's own family's dumplings stay out
+  // Serene's own family's shared dumplings show too, marked as hers.
+  expect(feed.recipes.map((r) => [r.dish, r.ours])).toEqual([["Kanda Poha", false], ["Dumplings", true]]);
   expect(Object.keys(feed).sort()).toEqual(["dinners", "here", "recipes"]);
   expect(Object.keys(feed.recipes[0]).sort()).toEqual([
-    "approx", "cookName", "coverUrl", "culture", "dinner", "dish", "distanceLabel", "familyName", "quote", "recipeId", "stepCount", "story",
+    "approx", "cookName", "coverUrl", "culture", "dinner", "dish", "distanceLabel", "familyName", "ours", "quote", "quoteTranslated", "recipeId", "stepCount", "story",
   ]);
-  expect(feed.recipes[0]).toMatchObject({ familyName: "The Pawar family", cookName: "Rajani", distanceLabel: "In your building", coverUrl: null, stepCount: 2, culture: null, quote: null });
+  expect(feed.recipes[0]).toMatchObject({ familyName: "The Pawar family", cookName: "Rajani", distanceLabel: "In your building", coverUrl: null, stepCount: 2, culture: null, quote: null, quoteTranslated: false });
   expect(feed.dinners).toHaveLength(1);
   expect(Object.keys(feed.dinners[0]).sort()).toEqual(["dinnerId", "dish", "distanceLabel", "hostName", "placeName", "seatsLeft", "startsAt"]);
-  expect(Object.keys(feed.recipes[0].dinner ?? {}).sort()).toEqual(["dinnerId", "seatsLeft", "startsAt"]);
+  expect(Object.keys(feed.recipes[0].dinner ?? {}).sort()).toEqual(["dinnerId", "distanceLabel", "hostName", "seatsLeft", "startsAt"]);
   for (const word of FORBIDDEN) expect(JSON.stringify(feed)).not.toContain(word);
 
   const fromRajani = await t.query(api.community.feed, { sessionToken: rajani.sessionToken, maxMiles: 5, now: Date.now() });
-  expect(fromRajani.recipes[0]).toMatchObject({ dish: "Dumplings", familyName: "Mei's family", distanceLabel: "About 1 mi", coverUrl: "https://homecookd.app/media/stock/dish-dumplings.jpg" });
-  expect((await t.query(api.community.feed, { sessionToken: rajani.sessionToken, maxMiles: 1, now: Date.now() })).recipes).toEqual([]);
+  const dish = (name: string) => fromRajani.recipes.find((r) => r.dish === name);
+  expect(dish("Dumplings")).toMatchObject({ ours: false, familyName: "Mei's family", distanceLabel: "About 1 mi", coverUrl: "https://homecookd.app/media/stock/dish-dumplings.jpg" });
+  expect(dish("Kanda Poha")).toMatchObject({ ours: true, dinner: null }); // her own dinner is under "You", not on the dish
+  const close = await t.query(api.community.feed, { sessionToken: rajani.sessionToken, maxMiles: 1, now: Date.now() });
+  expect(close.recipes.map((r) => r.dish)).toEqual(["Kanda Poha"]);
   expect(stock).toBeTruthy();
 
   const view = await t.query(api.community.recipe, { sessionToken: serene.sessionToken, recipeId: poha });
@@ -363,6 +315,8 @@ test("without Muse the card has no culture and her first step quote, or none", a
     "Kanda Poha": [null, "Not too long, beta."],
     "Plain Rice": [null, null],
   });
+  // She said that line in Marathi (the step keeps her words), so the card's English is a translation.
+  expect(Object.fromEntries(feed.recipes.map((r) => [r.dish, r.quoteTranslated]))).toEqual({ "Kanda Poha": true, "Plain Rice": false });
   // A card quote that's no longer one of her step quotes (the recipe was redone) stops showing.
   await t.run((ctx) => ctx.db.patch("recipes", withQuote, { steps: [{ order: 1, title: "Rinse", text: "Rinse it.", moment: { startS: 0, endS: 5 } }] }));
   const again = await t.query(api.community.feed, { sessionToken: serene.sessionToken, now: Date.now() });
@@ -389,9 +343,20 @@ test("a dish's open dinner rides on its feed row", async () => {
   await host(soon + 3_600_000);
   const first = await host(soon);
   const row = async (now: number) => (await t.query(api.community.feed, { sessionToken: serene.sessionToken, now })).recipes[0];
-  expect((await row(Date.now())).dinner).toEqual({ dinnerId: first, startsAt: soon, seatsLeft: 3 });
+  expect((await row(Date.now())).dinner).toEqual({ dinnerId: first, startsAt: soon, seatsLeft: 3, hostName: "Rajani", distanceLabel: "In your building" });
   expect((await row(soon)).dinner?.startsAt).toBe(soon + 3_600_000); // the first one has started
   expect((await row(soon + 3_600_000)).dinner).toBeNull();
+});
+
+test("a dinner says how far it is itself: it sits where its host is, not where the cook is", async () => {
+  const { t, rajani, shreya, serene } = await world();
+  const poha = await recipe(t, rajani, { sharedAt: 1 });
+  await t.run((ctx) => ctx.db.patch("people", shreya.personId, { approx: { lat: DEMO_LOCATION.lat + 0.03, lng: DEMO_LOCATION.lng } }));
+  const dinnerId = await t.mutation(api.dinners.create, {
+    sessionToken: shreya.sessionToken, recipeId: poha, startsAt: Date.now() + 3_600_000, placeName: "Baker House kitchen", address: "Baker House, 362 Memorial Dr", seats: 2,
+  });
+  const row = (await t.query(api.community.feed, { sessionToken: serene.sessionToken, now: Date.now() })).recipes[0];
+  expect(row).toMatchObject({ distanceLabel: "In your building", dinner: { dinnerId, hostName: "Shreya", distanceLabel: "About 2 mi" } });
 });
 
 test("floormates' families get one pre-written dish each and cluster in your building", async () => {
@@ -450,6 +415,12 @@ test("story card rules: her quotes, the culture label, Muse's reply", () => {
     { order: 4, quote: "Stir it slowly and keep on stirring the whole time until all of the onions turn soft and golden brown at the edges. Then the poha goes in." },
   ];
   expect(quoteChoices(steps)).toEqual(["Not too long, beta.", "Wait till the seeds start to dance.", "Then the poha goes in."]);
+  const said = [
+    { order: 1, quote: "Not too long, beta.", quoteOriginal: "जास्त वेळ नको" },
+    { order: 2, quote: "Wait till the seeds start to dance." },
+    { order: 3, quote: "Keep stirring. Then the poha goes in.", quoteOriginal: "ढवळत राहा. मग पोहे घाला." },
+  ];
+  expect(["Not too long, beta.", "Wait till the seeds start to dance.", "Then the poha goes in.", "Not hers.", null].map((q) => quoteTranslated(said, q))).toEqual([true, false, true, false, false]);
   expect(cleanCulture(" Polish  American ")).toBe("Polish American");
   expect(["", "Unknown", "family", "Indo-Chinese fusion food, mostly", "<b>Thai</b>", 3].map(cleanCulture)).toEqual([null, null, null, null, null, null]);
   expect(parseMuseCard('{"story": "A sentence.", "culture": "Thai", "quote": 1}', ["Mine."])).toEqual({ text: "A sentence.", culture: "Thai", quote: "Mine." });

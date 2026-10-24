@@ -1,8 +1,9 @@
 // Host a Community dinner (dinners.create): the dish (one of the family's shared recipes; none yet =
 // ask the cook to share one first), the day and time, the kind of place (campus kitchen first, home
 // last), its public name, the exact address (private: only guests the host says yes to see it) and
-// the seats. Then it opens the new dinner's page.
-import { router } from 'expo-router';
+// the seats. Then it opens the new dinner's page. `?recipeId=` picks the dish to start with (a tap on
+// "Host a dinner" from that dish's card on the map).
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState, type ReactNode } from 'react';
 import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -36,7 +37,8 @@ export default function NewDinner() {
   const rows = useFamilyRecipes();
   const shared = (rows ?? []).filter((r) => r.status === 'ready' && !!r.sharedAt);
 
-  const [recipeId, setRecipeId] = useState<string | null>(null);
+  const params = useLocalSearchParams<{ recipeId?: string }>();
+  const [recipeId, setRecipeId] = useState<string | null>(typeof params.recipeId === 'string' ? params.recipeId : null);
   const dish = shared.find((r) => r._id === recipeId) ?? shared[0] ?? null;
 
   // Only days and times still ahead; a choice that just passed falls to the next one.

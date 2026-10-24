@@ -1,16 +1,15 @@
 // The Community screens' words, as pure functions (tested by scripts/test-community-ui.mjs):
 //   cardWhen        "Dinner tonight · 7 pm"            the dark dinner card
-//   detailWhen      "Tonight · 7:00 pm · 6 seats"       the dinner page
+//   dinnerWhen      "Friday · 7 pm"                    the dinner page and the Join row
 //   seatLine        "2 of 6 seats taken" ("4 seats left" before the seat count is known)
 //   awayLabel       "About 1 mi away", "In your building"      the map's dish card
 //   cookLine        "Mama Ngozi · Nigerian"
-//   dinnerLine      "Dinner Friday · 7 pm · 2 seats left"
 //   spotLabel       "Jollof Rice by Mama Ngozi, under a mile away"   a map circle, for VoiceOver
 //   clusterTitle    "3 dishes in your building"
 //   newRequests, youLabel   the sun dot on "You" and "You, 1 new request"
-//   hostLine        "Hosted by Shreya · the Pawar family"
-//   privacyNote     "Rajani’s video and voice stay in the family. You’ll see the story and the recipe text."
-//   whoComing       the "Who's coming" chips
+//   whose           "Rajani’s", "James’"
+//   privacyNote     "Rajani’s video and voice stay in the family. Neighbors see the recipe text and …"
+//   nightTitle, goingFaces, dinnerAction   the dinner page: "Jollof Rice Night", "4 going", its one button
 //   pickNextDinner  which dinner the Community tab puts on top
 //   dayOptions, TIMES, startsAt, firstOpenDay   the host form's day and time chips
 // Times are the phone's own clock. Nothing here imports React or the app, so Node runs it as is.
@@ -57,12 +56,6 @@ export function shortClock(at: number): string {
   return `${hour12(d)}${m ? `:${String(m).padStart(2, '0')}` : ''} ${ampm(d)}`;
 }
 
-/** "7:00 pm". */
-export function longClock(at: number): string {
-  const d = new Date(at);
-  return `${hour12(d)}:${String(d.getMinutes()).padStart(2, '0')} ${ampm(d)}`;
-}
-
 export function plural(n: number, one: string, many = `${one}s`): string {
   return `${n} ${n === 1 ? one : many}`;
 }
@@ -72,9 +65,9 @@ export function cardWhen(at: number, now: number): string {
   return `Dinner ${midSentence(dayWord(at, now))} · ${shortClock(at)}`;
 }
 
-/** "Tonight · 7:00 pm · 6 seats". */
-export function detailWhen(at: number, seats: number, now: number): string {
-  return `${dayWord(at, now)} · ${longClock(at)} · ${plural(seats, 'seat')}`;
+/** "Friday · 7 pm", "Tonight · 7:30 pm". */
+export function dinnerWhen(at: number, now: number): string {
+  return `${dayWord(at, now)} · ${shortClock(at)}`;
 }
 
 /** "2 of 6 seats taken"; with only the seats left known (the feed), "4 seats left" or "Full". */
@@ -82,13 +75,6 @@ export function seatLine(seats: number | null | undefined, seatsLeft: number): s
   const left = Math.max(0, seatsLeft);
   if (seats == null) return left > 0 ? `${plural(left, 'seat')} left` : 'Full';
   return `${Math.max(0, seats - left)} of ${plural(seats, 'seat')} taken`;
-}
-
-/** "Hosted by Shreya · the Pawar family" (the family part only when the recipe's text says whose it is). */
-export function hostLine(hostName: string, familyName: string | null | undefined): string {
-  const host = `Hosted by ${hostName.trim() || 'a neighbor'}`;
-  const family = (familyName ?? '').trim().replace(/^The /, 'the ');
-  return family ? `${host} · ${family}` : host;
 }
 
 // ---- The map ----
@@ -106,11 +92,6 @@ const lowerFirst = (s: string) => s.charAt(0).toLowerCase() + s.slice(1);
 /** "Mama Ngozi · Nigerian", or whichever of the two there is. */
 export function cookLine(cookName: string, culture: string | null | undefined): string {
   return [cookName.trim(), (culture ?? '').trim()].filter(Boolean).join(' · ');
-}
-
-/** "Dinner Friday · 7 pm · 2 seats left". */
-export function dinnerLine(startsAt: number, seatsLeft: number, now: number): string {
-  return `${cardWhen(startsAt, now)} · ${seatLine(null, seatsLeft)}`;
 }
 
 type SpotDish = { dish: string; cookName: string; distanceLabel: string };
@@ -144,22 +125,22 @@ export function clusterTitle(count: number, distanceLabel: string): string {
   return [plural(count, 'dish', 'dishes'), lowerFirst(awayLabel(distanceLabel))].filter(Boolean).join(' ');
 }
 
-/** "Rajani’s", "James’". */
-function whose(name: string): string {
+/** "Rajani’s", "James’"; "The cook’s" without a name. */
+export function whose(name: string): string {
   const n = name.trim();
   if (!n) return 'The cook’s';
   return /s$/i.test(n) ? `${n}’` : `${n}’s`;
 }
 
 /**
- * "Rajani’s video and voice stay in the family." (+ "You’ll see the story and the recipe text." when
- * there's a recipe to open).
+ * "Rajani’s video and voice stay in the family. Neighbors see the recipe text and one line Rajani
+ * said." (the line is the map card's quote).
  * TODO(caleb): the mockup says "stay with her family"; we don't know a cook's gender (Papa Vikram,
- * Grandpa Joe), so it says "in the family".
+ * Grandpa Joe), so it says "in the family". The words about the quote are new too.
  */
-export function privacyNote(cookName: string | null | undefined, canOpenRecipe: boolean): string {
-  const first = `${whose(cookName ?? '')} video and voice stay in the family.`;
-  return canOpenRecipe ? `${first} You’ll see the story and the recipe text.` : first;
+export function privacyNote(cookName: string | null | undefined): string {
+  const name = (cookName ?? '').trim();
+  return `${whose(name)} video and voice stay in the family. Neighbors see the recipe text and one line ${name || 'the cook'} said.`;
 }
 
 export const PLACE_KINDS: { key: PlaceKind; label: string }[] = [
@@ -173,17 +154,45 @@ export function placeLabel(kind: PlaceKind): string {
   return PLACE_KINDS.find((p) => p.key === kind)?.label ?? '';
 }
 
+// ---- The dinner page ----
+
+/** "Jollof Rice Night". */
+export function nightTitle(dish: string): string {
+  const d = dish.trim();
+  return /\bnight$/i.test(d) ? d : `${d} Night`;
+}
+
+const initial = (name: string) => (Array.from(name.trim())[0] ?? '').toUpperCase();
+
 /**
- * The "Who's coming" chips: the host first, then the guests the host said yes to. Only the host
- * sees guests' names, so anyone else sees "You" (once accepted) and "+2" for the rest.
+ * Who's going: "4 going" counts the host and every guest the host said yes to, and a few faces lead
+ * it (initials): the host first, then the guests by name for the host, or "you" for a guest who's
+ * in. Only the host knows guests' names, so the rest of the count has no face.
  */
-export function whoComing(d: Pick<Dinner, 'hostName' | 'isHost' | 'seats' | 'seatsLeft' | 'myRequest' | 'requests'>): string[] {
-  const host = d.isHost ? 'You · host' : `${d.hostName.trim() || 'Host'} · host`;
-  if (d.isHost) return [host, ...(d.requests ?? []).filter((r) => r.status === 'accepted').map((r) => r.guestName.trim() || 'Guest')];
-  const taken = Math.max(0, d.seats - d.seatsLeft);
-  const me = d.myRequest?.status === 'accepted';
-  const others = taken - (me ? 1 : 0);
-  return [host, ...(me ? ['You'] : []), ...(others > 0 ? [`+${others}`] : [])];
+export function goingFaces(
+  d: Pick<Dinner, 'hostName' | 'isHost' | 'seats' | 'seatsLeft' | 'myRequest' | 'requests'>,
+  myName: string,
+  max = 3,
+): { faces: string[]; label: string } {
+  const count = 1 + Math.max(0, d.seats - d.seatsLeft);
+  const names = d.isHost
+    ? [myName, ...(d.requests ?? []).filter((r) => r.status === 'accepted').map((r) => r.guestName)]
+    : [d.hostName, ...(d.myRequest?.status === 'accepted' ? [myName] : [])];
+  return { faces: names.map(initial).filter(Boolean).slice(0, Math.min(max, count)), label: `${count} going` };
+}
+
+export type DinnerAction = { kind: 'calendar' } | { kind: 'ask' } | { kind: 'waiting'; label: string } | { kind: 'note'; text: string };
+
+/** The dinner page's one action: add it to the calendar once you're in (or host), ask, wait, or a short note. */
+export function dinnerAction(d: Pick<Dinner, 'hostName' | 'isHost' | 'startsAt' | 'status' | 'seatsLeft' | 'myRequest'>, now: number): DinnerAction {
+  if (d.status === 'cancelled') return { kind: 'note', text: 'This dinner was called off.' };
+  if (d.startsAt <= now) return { kind: 'note', text: 'This dinner already happened.' };
+  const status = d.myRequest?.status;
+  if (d.isHost || status === 'accepted') return { kind: 'calendar' };
+  if (status === 'pending') return { kind: 'waiting', label: 'Asked · waiting' };
+  if (status === 'declined') return { kind: 'note', text: `${d.hostName.trim() || 'The host'} can’t fit you this time.` };
+  if (d.status !== 'open' || d.seatsLeft <= 0) return { kind: 'note', text: 'Every seat is taken.' };
+  return { kind: 'ask' };
 }
 
 type Rankable = Pick<Dinner, 'dinnerId' | 'startsAt' | 'status' | 'isHost' | 'myRequest'>;

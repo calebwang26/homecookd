@@ -1,45 +1,57 @@
-// Kid Community tab, "Dishes near you" (Caleb's simplified map, Oct 24): the title (homie rests at the
+// Kid Community tab, "Dishes near you" (Caleb's Community mockup, Oct 24): the title (homie rests at the
 // top right), one square map with a round photo for each dish nearby and "You" in the middle, and one
-// line under it. Everything else waits for a tap: a dish opens its card (whose it is, how far, the
-// cook's words, "See the recipe" or its dinner); the floormates' shared circle opens a row of their
-// dishes; "You" opens your dinners and "Host a dinner". Tap the map or the same circle to close it.
-// Live: a new dish, dinner, request or yes shows up on both phones without a refresh.
+// line under it with ONE button, "Share your recipe". Everything else waits for a tap, one step at a
+// time: a dish opens its card ("Connect with Mama Ngozi"), then the chooser (join her dinner, swap
+// recipes, host a dinner); "Share your recipe" opens its own chooser (put a family dish on the map,
+// host a dinner); the floormates' shared circle opens a row of their dishes; "You" opens your dinners
+// and swaps. Tap the map or the same circle to close it. Live: a new dish, dinner, request, swap or
+// yes shows up on both phones without a refresh.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedRef, useReducedMotion } from 'react-native-reanimated';
 
-import { ClusterRow } from '@/components/community/ClusterRow';
+import { newSwaps } from '@/components/community/choices';
 import { rememberCovers, useNow, useWaited } from '@/components/community/data';
-import { DishCard } from '@/components/community/DishCard';
 import { DishMap } from '@/components/community/DishMap';
+import { DishSteps, type DishStep } from '@/components/community/DishSteps';
 import { newRequests, pickNextDinner, youLabel } from '@/components/community/labels';
 import { layoutSpots, placeAreas } from '@/components/community/mapLayout';
+import { ShareSteps, type ShareStep } from '@/components/community/ShareSteps';
 import { YouCard } from '@/components/community/YouCard';
 import { ActingAsBar } from '@/components/profiles';
-import { LargeHeader, listEnter, ScreenWash, StickyHeader, Txt, useScrollY } from '@/components/ui';
-import { useCommunityFeed, useMyDinners } from '@/lib/live/community';
+import { ActionButton, LargeHeader, listEnter, ScreenWash, StickyHeader, Txt, useScrollY } from '@/components/ui';
+import { useCommunityFeed, useFamilyDishes, useMyDinners, useMySwaps } from '@/lib/live/community';
 import { colors, space, tabBar } from '@/theme/tokens';
 
 const TITLE = 'Dishes near you';
-/** This screen's side gutter: the map is 358 pt on a 390 pt phone. */
+/** The cards' side gutter; the map sits a little further in (330 pt on a 390 pt phone). */
 const GUTTER = 16;
+const MAP_GUTTER = 30;
 const MAX_MAP = 420;
 /** Room homie takes at the top right (its resting pot, 56 pt). */
 const HOMIE_ROOM = 56;
 /** The feed starts empty; give it this long before "nothing nearby" (it's usually back sooner). */
 const SETTLE_MS = 1500;
 
-type Picked = { key: string; member: number } | 'you' | null;
+type Panel =
+  | { kind: 'dish'; key: string; member: number; step: DishStep }
+  | { kind: 'share'; step: ShareStep }
+  | { kind: 'you' }
+  | null;
 
 export default function KidCommunity() {
   const feed = useCommunityFeed();
   const mine = useMyDinners();
+  const swaps = useMySwaps();
   const now = useNow();
   const waited = useWaited(SETTLE_MS);
   const { scrollY, onScroll } = useScrollY();
   const { width } = useWindowDimensions();
-  const size = Math.min(width - 2 * GUTTER, MAX_MAP);
-  const [picked, setPicked] = useState<Picked>(null);
+  const size = Math.min(width - 2 * MAP_GUTTER, MAX_MAP);
+  const cardWidth = Math.min(width - 2 * GUTTER, MAX_MAP + 2 * (MAP_GUTTER - GUTTER));
+  const [panel, setPanel] = useState<Panel>(null);
+  // Our own dishes: for "Share your recipe" and for what a swap can offer.
+  const dishes = useFamilyDishes(panel?.kind === 'share' || panel?.kind === 'dish');
   // The recipe and dinner pages show the same stock photo (coverFor) without asking again.
   useEffect(() => rememberCovers(feed.recipes), [feed.recipes]);
 
@@ -50,8 +62,8 @@ export default function KidCommunity() {
   const reveal = useCallback(() => {
     const { bottom, view } = frame.current;
     const y = bottom - (view - tabBar.clearance);
-    if (picked && view && y > scrollY.get() + 1) scroller.current?.scrollTo({ y, animated: !reduce });
-  }, [picked, reduce, scrollY, scroller]);
+    if (panel && view && y > scrollY.get() + 1) scroller.current?.scrollTo({ y, animated: !reduce });
+  }, [panel, reduce, scrollY, scroller]);
   useEffect(reveal, [reveal]);
   const onBodyLayout = (e: LayoutChangeEvent) => {
     frame.current.bottom = e.nativeEvent.layout.y + e.nativeEvent.layout.height;
@@ -60,10 +72,8 @@ export default function KidCommunity() {
 
   const spots = useMemo(() => layoutSpots(feed.recipes, feed.here, size), [feed.recipes, feed.here, size]);
   const areas = useMemo(() => placeAreas(feed.here, size, spots), [feed.here, size, spots]);
-  const spot = picked && picked !== 'you' ? (spots.find((s) => s.key === picked.key) ?? null) : null;
-  const dish = spot && picked && picked !== 'you' ? (spot.members[picked.member] ?? spot.members[0]) : null;
-  const asked = !!dish?.dinner && mine.some((d) => d.dinnerId === dish.dinner?.dinnerId && !!d.myRequest);
-  const requests = newRequests(mine, now);
+  const spot = panel?.kind === 'dish' ? (spots.find((s) => s.key === panel.key) ?? null) : null;
+  const requests = newRequests(mine, now) + newSwaps(swaps);
 
   const hint = feed.recipes.length
     ? 'Tap a dish to see whose it is.'
@@ -91,25 +101,49 @@ export default function KidCommunity() {
             spots={spots}
             areas={areas}
             pickedKey={spot?.key ?? null}
-            onPick={(key) => setPicked(key ? { key, member: 0 } : null)}
-            you={{ picked: picked === 'you', news: requests > 0, label: youLabel(requests), onPress: () => setPicked((p) => (p === 'you' ? null : 'you')) }}
+            onPick={(key) => setPanel(key ? { kind: 'dish', key, member: 0, step: 'info' } : null)}
+            you={{
+              picked: panel?.kind === 'you',
+              news: requests > 0,
+              label: youLabel(requests),
+              onPress: () => setPanel((p) => (p?.kind === 'you' ? null : { kind: 'you' })),
+            }}
           />
-          <View style={[styles.under, { width: size }]}>
-            {picked === 'you' ? (
+          <View style={{ width: cardWidth }}>
+            {panel?.kind === 'you' ? (
               <Animated.View key="you" entering={listEnter(0)}>
-                <YouCard next={pickNextDinner(mine, [], now)} now={now} />
+                <YouCard next={pickNextDinner(mine, [], now)} swaps={swaps} now={now} />
               </Animated.View>
-            ) : spot && dish ? (
-              <Animated.View key={spot.key} entering={listEnter(0)} style={styles.picked}>
-                {spot.members.length > 1 ? (
-                  <ClusterRow members={spot.members} picked={spot.members.indexOf(dish)} onPick={(member) => setPicked({ key: spot.key, member })} width={size} />
-                ) : null}
-                <DishCard key={dish.recipeId} recipe={dish} now={now} asked={asked} />
-              </Animated.View>
+            ) : panel?.kind === 'share' ? (
+              <ShareSteps step={panel.step} onStep={(step) => setPanel({ kind: 'share', step })} onClose={() => setPanel(null)} dishes={dishes} />
+            ) : panel?.kind === 'dish' && spot ? (
+              <DishSteps
+                spot={spot}
+                member={panel.member}
+                step={panel.step}
+                onMember={(member) => setPanel({ ...panel, member, step: 'info' })}
+                onStep={(step) => setPanel({ ...panel, step })}
+                mine={mine}
+                swaps={swaps}
+                dishes={dishes}
+                now={now}
+                width={cardWidth}
+              />
             ) : hint ? (
-              <Txt variant="body" align="center" style={styles.hint}>
-                {hint}
-              </Txt>
+              <View style={styles.idle}>
+                <Txt variant="body" size={18} leading={1.4} align="center" style={styles.hint}>
+                  {hint}
+                </Txt>
+                <ActionButton
+                  label="Share your recipe"
+                  variant="outline"
+                  size="md"
+                  padH={28}
+                  accessibilityHint="Put a family dish on the map, or host a dinner"
+                  onPress={() => setPanel({ kind: 'share', step: 'menu' })}
+                  style={styles.share}
+                />
+              </View>
             ) : null}
           </View>
         </View>
@@ -125,7 +159,7 @@ const styles = StyleSheet.create({
   header: { paddingHorizontal: GUTTER },
   homie: { width: HOMIE_ROOM, height: 48 },
   body: { marginTop: space.md, alignItems: 'center', gap: space.lg },
-  under: { gap: space.md },
-  picked: { gap: space.lg },
+  idle: { alignItems: 'center', gap: space.lg, paddingTop: 2 },
   hint: { paddingHorizontal: space.sm },
+  share: { alignSelf: 'center' },
 });

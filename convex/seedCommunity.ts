@@ -9,9 +9,9 @@
 //   npx convex run seedCommunity:publicName '{"familyId": "<id>", "publicName": "Pawar"}'
 import { v } from "convex/values";
 import { internalMutation } from "./_generated/server";
-import { plainStory, PUBLIC_COVER } from "./community";
+import { PUBLIC_COVER } from "./community";
 import { DEMO_LOCATION, roundToGrid } from "./lib/geo";
-import { cleanCulture, cleanStory, quoteChoices, unquote } from "./lib/storyCard";
+import { cleanCulture, cleanStory, plainStory, quoteChoices, unquote } from "./lib/storyCard";
 
 type Neighbor = {
   slug: string;

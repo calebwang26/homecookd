@@ -48,6 +48,7 @@ export const saveTranscript = internalMutation({
     // Only if the answer is still that voice note.
     if (q?.answer?.audioId === audioId) {
       await ctx.db.patch("questions", questionId, { answer: { ...q.answer, transcript, translation } });
+      if (q.kind === "share") await ctx.scheduler.runAfter(0, internal.shareRequests.decide, { questionId });
     }
     return null;
   },

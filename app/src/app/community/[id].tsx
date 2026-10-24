@@ -87,7 +87,7 @@ function SharedRecipe({ id, onRetry }: { id: string; onRetry: () => void }) {
           </View>
 
           <Txt variant="caption" align="center">
-            {privacyNote(recipe.cookName, false)}
+            {privacyNote(recipe.cookName)}
           </Txt>
         </>
       ) : (

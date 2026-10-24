@@ -3,7 +3,7 @@
 import { ConvexError, v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { mutation, query, type QueryCtx } from "./_generated/server";
-import { acceptedCount } from "./community";
+import { acceptedCount, PUBLIC_COVER } from "./community";
 import { requireSession, type Signed } from "./lib/auth";
 import { distanceLabel, milesBetween, placeOf, roundToGrid } from "./lib/geo";
 import { familyRecipe } from "./recipes";
@@ -17,6 +17,7 @@ const dinnerView = v.object({
   dish: v.string(),
   // Set only when the recipe's text can be opened (community.recipe): shared, or the host's family.
   recipeId: v.union(v.null(), v.id("recipes")),
+  coverUrl: v.union(v.null(), v.string()), // our stock photo of the dish, when the recipe opens and has one
   hostName: v.string(),
   placeKind,
   placeName: v.string(),
@@ -53,6 +54,7 @@ async function view(ctx: QueryCtx, signed: Signed, d: Doc<"dinners">) {
     dinnerId: d._id,
     dish: d.dish,
     recipeId: canOpen ? d.recipeId : null,
+    coverUrl: canOpen && recipe?.coverUrl && PUBLIC_COVER.test(recipe.coverUrl) ? recipe.coverUrl : null,
     hostName: (await ctx.db.get("people", d.hostId))?.name ?? "",
     placeKind: d.placeKind,
     placeName: d.placeName,

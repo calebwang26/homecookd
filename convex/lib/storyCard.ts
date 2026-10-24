@@ -67,3 +67,29 @@ export function parseMuseCard(content: string, quotes: readonly string[]): Card 
 export function fallbackCard(text: string, quotes: readonly string[]): Card {
   return { text, culture: null, quote: quotes[0] ?? null };
 }
+
+/** "Rajani's Kanda Poha, from the Pawar family." when Muse isn't set up or doesn't answer. */
+export function plainStory(f: { cookName: string; dish: string; publicName: string | null }): string {
+  const whose = f.cookName ? `${f.cookName}'s ${f.dish}` : f.dish;
+  return f.publicName ? `${whose}, from the ${f.publicName} family.` : `${whose}.`;
+}
+
+/** The cook's stories Muse may use: only if she said yes to sharing them. */
+export function storiesFor(r: { memoriesOptIn: boolean; memories: readonly { kind: string; text: string }[] }): string[] {
+  return r.memoriesOptIn ? r.memories.filter((m) => m.kind === "story").slice(0, 3).map((m) => m.text) : [];
+}
+
+/**
+ * True when the card's quote is the English of words she said in another language: its step has her
+ * original words (quoteOriginal). The app tags it "Translated".
+ */
+export function quoteTranslated(steps: readonly { order: number; quote?: string; quoteOriginal?: string }[], quote: string | null): boolean {
+  if (!quote) return false;
+  const step = [...steps]
+    .sort((a, b) => a.order - b.order)
+    .find((s) => {
+      const q = unquote(s.quote ?? "");
+      return q === quote || q.split(/(?<=[.!?])\s+/).map(unquote).includes(quote);
+    });
+  return !!step?.quoteOriginal?.trim();
+}

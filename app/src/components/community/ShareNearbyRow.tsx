@@ -1,7 +1,8 @@
 // The cook's Community switch, one quiet row at the foot of her own recipe page (my-recipe/[id]),
 // in the shape of ShareCookingRow:
 //   Share with people nearby · Off
-//   Neighbors see the recipe text, never your video or voice.
+//   Neighbors see the recipe text and one line you said, never your video or voice.
+// (The line is the map card's quote, one of her own step quotes.)
 // A tap flips it (community.setShare; a failure flips it back with a toast). The first time it goes
 // on, Muse writes the dish's story card. Hidden unless this dish has a ready Convex row and the
 // person here is its cook (the server checks that again).
@@ -14,6 +15,9 @@ import { colors } from '@/theme/tokens';
 
 import { useFamilyRecipes } from './data';
 import { errorText } from './labels';
+
+// TODO(caleb): the words a cook reads before she shares (the map card shows one line she said).
+const WHAT_NEIGHBORS_SEE = 'Neighbors see the recipe text and one line you said, never your video or voice.';
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 
@@ -61,7 +65,7 @@ export function ShareNearbyRow({ libraryId, me, style }: ShareNearbyRowProps) {
         disabled={saving}
         accessibilityRole="switch"
         accessibilityLabel="Share with people nearby"
-        accessibilityHint="Neighbors see the recipe text, never your video or voice"
+        accessibilityHint={WHAT_NEIGHBORS_SEE}
         accessibilityState={{ checked: on, busy: saving }}
         style={styles.row}>
         <Txt variant="label" weight={600} color={colors.muted}>
@@ -72,7 +76,7 @@ export function ShareNearbyRow({ libraryId, me, style }: ShareNearbyRowProps) {
         </Txt>
       </PressableScale>
       <Txt variant="caption" align="center" importantForAccessibility="no" accessibilityElementsHidden>
-        Neighbors see the recipe text, never your video or voice.
+        {WHAT_NEIGHBORS_SEE}
       </Txt>
     </View>
   );

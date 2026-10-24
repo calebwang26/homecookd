@@ -154,6 +154,10 @@ export default defineSchema({
     askedBy: v.id("people"),
     text: v.string(),
     textForCook: v.optional(v.string()), // the question in the cook's language, when it isn't English
+    // "share": not about cooking. Someone in the family asked the cook to put shareRecipeId (this
+    // recipe) on the Community map; only her clear yes shares it (convex/shareRequests.ts).
+    kind: v.optional(v.literal("share")),
+    shareRecipeId: v.optional(v.id("recipes")),
     status: v.union(v.literal("found_in_video"), v.literal("asked_cook"), v.literal("answered")),
     found: v.optional(v.object({ moment, quote: v.string() })),
     answer: v.optional(
@@ -247,6 +251,21 @@ export default defineSchema({
   })
     .index("by_dinnerId", ["dinnerId"])
     .index("by_guestId", ["guestId"]),
+
+  /**
+   * Community: one family asks another to swap recipes. Both recipes are already shared, so a swap
+   * shows no recipe text that neighbors couldn't already see.
+   */
+  swapRequests: defineTable({
+    requesterId: v.id("people"),
+    requesterFamilyId: v.id("families"),
+    theirRecipeId: v.id("recipes"), // the other family's shared recipe
+    myRecipeId: v.optional(v.id("recipes")), // one of the requester family's shared recipes, offered back
+    otherFamilyId: v.id("families"),
+    status: v.union(v.literal("pending"), v.literal("accepted"), v.literal("declined")),
+  })
+    .index("by_requesterFamilyId", ["requesterFamilyId"])
+    .index("by_otherFamilyId", ["otherFamilyId"]),
 
   /** Family messages, including the finished-dish photo and the note Muse drafted for it. */
   messages: defineTable({
