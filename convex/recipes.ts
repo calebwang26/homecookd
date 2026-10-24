@@ -1,9 +1,9 @@
 import { ConvexError, v } from "convex/values";
-import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type QueryCtx } from "./_generated/server";
 import { requireSession, type Signed } from "./lib/auth";
 import schema from "./schema";
+import { requestMossSync } from "./worker";
 
 const recipeView = schema.doc("recipes").extend({ cookName: v.string() });
 
@@ -59,7 +59,7 @@ export const setMemoriesOptIn = mutation({
     if (!recipe) throw new ConvexError("That recipe isn't here anymore.");
     if (recipe.cookId !== signed.person._id) throw new ConvexError("Only the cook can share these.");
     await ctx.db.patch("recipes", recipeId, { memoriesOptIn: optIn });
-    if (recipe.status === "ready") await ctx.scheduler.runAfter(0, internal.moss.indexRecipe, { recipeId });
+    if (recipe.status === "ready") await requestMossSync(ctx, recipe.familyId);
     return null;
   },
 });

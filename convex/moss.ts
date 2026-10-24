@@ -1,6 +1,7 @@
 "use node";
-// Fills the family's Moss index after a recipe is published (worker.published) or the cook changes
-// whether stories are shared (recipes.setMemoriesOptIn). Moss only finds moments; it never answers.
+// Brings a family's Moss index up to date. Moss only finds moments; it never answers. Moss rebuilds
+// the whole index on every write, so only one sync runs per family (worker.requestMossSync), and each
+// one sends every ready recipe and removes what shouldn't be there (a cook who took back the stories).
 // The SDK is used because Moss's REST API can't create an index (convex.json lists it as external).
 import { MossClient } from "@moss-js/moss";
 import { v } from "convex/values";
@@ -8,44 +9,39 @@ import { internal } from "./_generated/api";
 import { internalAction } from "./_generated/server";
 import { memoryDocs, mossIndexName, stepDocs } from "./lib/mossDocs";
 
-export const indexRecipe = internalAction({
-  args: { recipeId: v.id("recipes"), jobId: v.optional(v.id("jobs")) },
+export const syncFamily = internalAction({
+  args: { familyId: v.id("families") },
   returns: v.null(),
-  handler: async (ctx, { recipeId, jobId }) => {
-    const recipe = await ctx.runQuery(internal.worker.indexInput, { recipeId });
+  handler: async (ctx, { familyId }) => {
+    const recipes = await ctx.runQuery(internal.worker.syncInput, { familyId });
     const projectId = process.env.MOSS_PROJECT_ID;
     const projectKey = process.env.MOSS_PROJECT_KEY;
-    let indexed = false;
-    if (!recipe || !projectId || !projectKey) {
-      console.warn(recipe ? "MOSS_PROJECT_ID / MOSS_PROJECT_KEY aren't set" : "recipe is gone");
+    let ok = false;
+    if (!projectId || !projectKey) {
+      console.warn("MOSS_PROJECT_ID / MOSS_PROJECT_KEY aren't set");
+    } else if (!recipes.length) {
+      ok = true;
     } else {
       try {
         const moss = new MossClient(projectId, projectKey);
-        const name = mossIndexName(recipe.familyId);
-        const memories = memoryDocs(recipe);
-        const docs = [...stepDocs(recipe), ...(recipe.memoriesOptIn ? memories : [])];
-        const exists = await moss.getIndex(name).then(
-          () => true,
-          () => false,
-        );
-        // Two recipes published at once can both see no index; the loser adds to the winner's.
-        const created =
-          !exists &&
-          (await moss.createIndex(name, docs, { modelId: "moss-minilm" }).then(
-            () => true,
-            () => false,
-          ));
-        if (!created) {
+        const name = mossIndexName(familyId);
+        const docs = recipes.flatMap((r) => [...stepDocs(r), ...(r.memoriesOptIn ? memoryDocs(r) : [])]);
+        const existing = await moss.getDocs(name).catch(() => null);
+        if (!existing) {
+          await moss.createIndex(name, docs, { modelId: "moss-minilm" });
+        } else {
           await moss.addDocs(name, docs, { upsert: true });
-          if (!recipe.memoriesOptIn && memories.length) await moss.deleteDocs(name, memories.map((m) => m.id));
+          const wanted = new Set(docs.map((d) => d.id));
+          const stale = existing.map((d) => d.id).filter((id) => !wanted.has(id));
+          if (stale.length) await moss.deleteDocs(name, stale);
         }
-        indexed = true;
+        ok = true;
       } catch (e) {
-        // The recipe still works without search; the kid's questions then go to the cook.
-        console.error("Moss indexing failed", e);
+        // The recipes still work without search; the kid's questions then go to the cook.
+        console.error("Moss sync failed", e);
       }
     }
-    await ctx.runMutation(internal.worker.indexed, { recipeId, jobId, indexed });
+    await ctx.runMutation(internal.worker.synced, { familyId, recipeIds: recipes.map((r) => r._id), ok });
     return null;
   },
 });
