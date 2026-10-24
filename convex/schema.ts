@@ -14,6 +14,9 @@ export default defineSchema({
     supabaseFamilyId: v.string(),
     // Community cards say "the Pawar family"; unset means the family isn't shown by name.
     publicName: v.optional(v.string()),
+    // Moss rebuilds a whole index on every write, so two writes at once lose one. One sync runs per
+    // family at a time (worker.requestMossSync); `again` means a recipe changed while it ran.
+    mossSync: v.optional(v.object({ startedAt: v.number(), again: v.boolean() })),
   }).index("by_supabaseFamilyId", ["supabaseFamilyId"]),
 
   people: defineTable({

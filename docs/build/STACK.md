@@ -111,7 +111,11 @@ HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-o
 - **Stories and tips:** `<recipeId>:story:<i>` / `:tip:<i>`; only while the cook has opted in.
 - **Metadata (all strings):** `recipeId`, `recipeTitle`, `kind` (`step` | `story` | `tip`), `stepOrder` (steps only),
   `startS`, `endS`, `quote`.
-- After a Moss outage, `npx convex run worker:reindexMissing` re-sends what's missing.
+- Moss rebuilds the whole index on every write, so two writes at once lose one. **Only one sync runs per family**
+  (`families.mossSync`). Each sync sends every ready recipe in the family and removes docs that shouldn't be there.
+  A change that arrives during a sync triggers one more pass, and a sync that never reports back stops blocking
+  after 10 minutes.
+- After a Moss outage, `npx convex run worker:reindexMissing` re-syncs every family with a recipe Moss is missing.
 
 **App ↔ voice service** (WebSocket `wss://<voice>/cook?session=<sessionToken>&recipe=<recipeId>`)
 - App → server: binary frames of 16 kHz mono 16-bit PCM; `{ "type": "step", "stepOrder" }` when the kid taps.

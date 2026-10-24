@@ -7,10 +7,10 @@ import chili from "../data/synthetic/dad-sunday-chili.json";
 import fish from "../data/synthetic/dad-ginger-scallion-fish.json";
 import noodles from "../data/synthetic/grandma-hand-pulled-noodle-soup.json";
 import pork from "../data/synthetic/grandma-red-braised-pork.json";
-import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { internalMutation } from "./_generated/server";
 import { parseRecipeJson } from "./lib/recipeJson";
+import { requestMossSync } from "./worker";
 
 const PEOPLE = [
   { name: "Mom", role: "cook" },
@@ -65,8 +65,6 @@ export const demo = internalMutation({
         status: "ready",
         memoriesOptIn: true, // synthetic stories, shared for the demo
       });
-      // Spaced out so the first one creates the family's Moss index before the rest add to it.
-      await ctx.scheduler.runAfter(recipesAdded * 5000, internal.moss.indexRecipe, { recipeId });
       recipesAdded++;
       if (raw.id === "dad-sunday-chili") {
         await ctx.db.insert("questions", {
@@ -79,6 +77,7 @@ export const demo = internalMutation({
         });
       }
     }
+    if (recipesAdded) await requestMossSync(ctx, familyId);
     return { familyId, recipesAdded };
   },
 });
