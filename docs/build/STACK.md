@@ -73,8 +73,9 @@ HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-o
   `"This phone was signed out."` means clear the token and sign in again. `sessions.end` signs out.
 - `recipes.list`, `recipes.get({ recipeId })` (each with `cookName`; stories and tips are empty until the cook opts
   in), `recipes.setMemoriesOptIn({ recipeId, optIn })` (the recipe's cook only; re-indexes Moss).
-  The `recipeJsonUrl` file still has every story and tip, so the kid's library strips them itself when a row has no
-  `memories` and no opt-in (`app/src/lib/familyLibrary.ts`).
+  The `recipeJsonUrl` file has no stories or tips (the bucket is public): the app puts a row's `memories` back
+  into it (`withMemories`, `app/src/lib/familyLibrary.ts`). A file published before that still has them all, so
+  the kid's library strips them itself when a row has no `memories` and no opt-in.
 - `jobs.create({ uploadPath, source })` → `{ jobId, recipeId }` (cook only; adds a `processing` recipe card),
   `jobs.forFamily` (live progress)
 - `questions.forRecipe({ recipeId })`, `questions.openForCook` (questions about this cook's recipes),
@@ -96,7 +97,10 @@ HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-o
 - `/worker/published` `{ jobId, recipe, recipeJsonUrl?, memoriesOptIn? }` → `{ recipeId }`.
   - `recipe` is the pipeline's `recipe.json` as is.
   - Convex keeps `title`, `id` (as `libraryId`), `media.poster_url` (https only), each step's
-    `order/title/instruction/quote/start_s/end_s`, and `stories`, `special` and `steps[].tip` as memories.
+    `order/title/instruction/quote/start_s/end_s`, and `stories`, `special` and `steps[].tip` as memories:
+    `{ kind, text, moment, step?, id?, title?, why? }` (`convex/schema.ts` `memory`; a tip with no `id` is its
+    step's own tip). Only Convex has them: the `recipe.json` the worker puts in the media bucket leaves out
+    `stories`, `special`, `steps[].tip`, `story_ids`, `special_ids` and `intro` (`publish.without_memories`).
   - It then indexes Moss itself (`convex/moss.ts`); the job goes `indexing` → `done`.
   - `memoriesOptIn` defaults to `false`.
 

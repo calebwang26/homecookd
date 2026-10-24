@@ -3,8 +3,9 @@
 // The library also lists the signed-in family's own finished dishes from Convex (recipes.list, live;
 // familyLibrary.ts): the pipeline publishes those to Convex, never to the public library.json. Their
 // recipe.json is the row's recipeJsonUrl in the media bucket, loaded and cached like the others.
-// That file holds every story and tip, but Convex shows them only to the cook until she says yes, so
-// a family dish whose row comes without them loads without them too (forViewer, before caching).
+// That file has no stories or tips: Convex keeps them and shows them only to the cook until she says
+// yes, so the row's memories are put back into it (withMemories). An older file still holds them all,
+// so a family dish whose row comes without them loads without them too (forViewer, before caching).
 // With Convex stubbed (Expo Go, no EXPO_PUBLIC_CONVEX_URL) the library is library.json's alone.
 //
 //   const { entries, loading } = useLibrary();
@@ -20,7 +21,16 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import type { Profile } from './api';
 import { bundledLibrary, bundledRecipes } from './bundled';
 import { loadHiddenIds } from './deletes';
-import { familyEntries, mergeLibrary, withheldIds, withoutStories, type FamilyRecipe } from './familyLibrary';
+import {
+  familyEntries,
+  mergeLibrary,
+  sharedMemories,
+  withheldIds,
+  withMemories,
+  withoutStories,
+  type FamilyRecipe,
+  type Memory,
+} from './familyLibrary';
 import { cacheBuster, fetchJson } from './http';
 import { invalidateConvexRecipes, useLive } from './live/convex';
 import { useSession } from './session';
@@ -201,18 +211,25 @@ type LibraryState = { entries: LibraryEntry[]; source: Source; loading: boolean;
 let base: LibraryEntry[] = bundledLibrary.filter(isEntry).map(normalizeEntry);
 /**
  * The signed-in person's family dishes (`key`: their Supabase family and profile ids), what they were
- * built from, and the ids whose stories and tips are withheld from this person (withheldIds).
+ * built from, the ids whose stories and tips are withheld from this person (withheldIds), and the
+ * stories and tips Convex sent them (sharedMemories).
  */
-let family: { key: string | null; sig: string; entries: LibraryEntry[]; withheld: ReadonlySet<string> } = {
-  key: null,
-  sig: '',
-  entries: [],
-  withheld: new Set(),
-};
+let family: {
+  key: string | null;
+  sig: string;
+  entries: LibraryEntry[];
+  withheld: ReadonlySet<string>;
+  memories: ReadonlyMap<string, readonly Memory[]>;
+} = { key: null, sig: '', entries: [], withheld: new Set(), memories: new Map() };
 
-/** The recipe as this person may see it: a family dish whose cook kept its stories and tips loses them. */
+/**
+ * The recipe as this person may see it: a family dish whose cook kept its stories and tips loses them,
+ * and one whose recipe.json was published without them gets Convex's back.
+ */
 function forViewer(id: string, recipe: Recipe): Recipe {
-  return family.withheld.has(id) ? withoutStories(recipe) : recipe;
+  if (family.withheld.has(id)) return withoutStories(recipe);
+  const memories = family.memories.get(id);
+  return memories ? withMemories(recipe, memories) : recipe;
 }
 
 let libState: LibraryState = {
@@ -277,10 +294,11 @@ export function showFamilyRecipes(key: string | null, rows: readonly FamilyRecip
   const mine = key && rows ? rows : [];
   const entries = familyEntries(mine, people);
   const withheld = withheldIds(mine);
+  const memories = sharedMemories(mine, family.memories);
   // The recipe ids too: convex.ts maps a library id to its Convex recipe (the voice socket needs it).
   // And whose stories are withheld, so the cook's later yes loads them again, stories and all.
   const sig = JSON.stringify([entries, [...withheld], mine.map((r) => [r._id, r.libraryId ?? null, r.cookId])]);
-  if (family.key === key && family.sig === sig) return;
+  if (family.key === key && family.sig === sig && family.memories === memories) return;
   const have = new Set(base.map((e) => e.id));
   const next = new Set(entries.map((e) => e.id));
   for (const e of family.entries) {
@@ -291,11 +309,13 @@ export function showFamilyRecipes(key: string | null, rows: readonly FamilyRecip
     if (bundled) entryCache.set(e.id, bundled);
     else entryCache.delete(e.id);
   }
-  // A dish whose stories were just withheld, or shared again, was cached the other way: load it again.
+  // A dish whose stories were just withheld, or shared again, or whose stories changed, was cached the
+  // other way: load it again.
   const changed = [...family.withheld, ...withheld].filter((id) => family.withheld.has(id) !== withheld.has(id));
-  for (const id of changed) recipeCache.delete(id);
+  const memoryChanged = [...family.memories.keys(), ...memories.keys()].filter((id) => family.memories.get(id) !== memories.get(id));
+  for (const id of [...changed, ...memoryChanged]) recipeCache.delete(id);
   // The same set when nothing changed, so useRecipes reloads only when it did.
-  family = { key, sig, entries, withheld: changed.length ? withheld : family.withheld };
+  family = { key, sig, entries, withheld: changed.length ? withheld : family.withheld, memories };
   invalidateConvexRecipes();
   setLib({ entries: listed() });
 }
@@ -352,18 +372,21 @@ export function useRecipe(id: string | null | undefined): {
     () => ({ id: id ?? null, recipe: id ? getCachedRecipe(id) ?? null : null, loading: !!id, missing: false, source: null }),
   );
   const [nonce, setNonce] = useState(0);
-  // Whether its stories and tips are withheld from this person. The family's list can arrive, or the
-  // cook change her mind, after the recipe loaded: then it loses them at once and loads again.
+  // Whether its stories and tips are withheld from this person, and the ones Convex sent them. The
+  // family's list can arrive, or the cook change her mind, after the recipe loaded: then it loses or
+  // gets them at once and loads again.
   const isWithheld = () => !!id && family.withheld.has(id);
   const withheld = useSyncExternalStore(subscribeLib, isWithheld, isWithheld);
+  const memoriesOf = () => (id ? family.memories.get(id) : undefined);
+  const memories = useSyncExternalStore(subscribeLib, memoriesOf, memoriesOf);
 
   // Reset synchronously when the id changes (derived state, no flash of the previous recipe), and
-  // drop stories that were just withheld the same way.
-  const bare = withheld && state.recipe ? withoutStories(state.recipe) : state.recipe;
+  // drop or add stories the same way.
+  const shown = id && state.recipe ? forViewer(id, state.recipe) : state.recipe;
   if ((id ?? null) !== state.id) {
     setState({ id: id ?? null, recipe: id ? getCachedRecipe(id) ?? null : null, loading: !!id, missing: false, source: null });
-  } else if (bare !== state.recipe) {
-    setState({ ...state, recipe: bare });
+  } else if (shown !== state.recipe) {
+    setState({ ...state, recipe: shown });
   }
 
   useEffect(() => {
@@ -382,7 +405,7 @@ export function useRecipe(id: string | null | undefined): {
     return () => {
       alive = false;
     };
-  }, [id, nonce, withheld]);
+  }, [id, nonce, withheld, memories]);
 
   const reload = useCallback(() => setNonce((n) => n + 1), []);
   return {
@@ -395,13 +418,12 @@ export function useRecipe(id: string | null | undefined): {
   };
 }
 
-/** `map` without the stories and tips withheld from this person; the same object when it has none. */
-function withoutWithheld(map: Record<string, Recipe>, withheld: ReadonlySet<string>): Record<string, Recipe> {
+/** `map` as this person may see it (forViewer); the same object when nothing changes. */
+function mapForViewer(map: Record<string, Recipe>): Record<string, Recipe> {
   let out: Record<string, Recipe> | null = null;
   for (const id of Object.keys(map)) {
-    if (!withheld.has(id)) continue;
-    const bare = withoutStories(map[id]);
-    if (bare !== map[id]) (out ??= { ...map })[id] = bare;
+    const shown = forViewer(id, map[id]);
+    if (shown !== map[id]) (out ??= { ...map })[id] = shown;
   }
   return out ?? map;
 }
@@ -409,8 +431,9 @@ function withoutWithheld(map: Record<string, Recipe>, withheld: ReadonlySet<stri
 /** Loads several recipes at once (e.g. every dish for Kid Home's recommendation). */
 export function useRecipes(ids: string[]): Record<string, Recipe> {
   const key = ids.join('|');
-  // The dishes whose stories and tips are withheld from this person, as in useRecipe.
+  // The dishes whose stories and tips are withheld from this person, and the ones Convex sent, as in useRecipe.
   const withheld = useSyncExternalStore(subscribeLib, () => family.withheld, () => family.withheld);
+  const memories = useSyncExternalStore(subscribeLib, () => family.memories, () => family.memories);
   const [map, setMap] = useState<Record<string, Recipe>>(() => {
     const m: Record<string, Recipe> = {};
     for (const id of ids) {
@@ -419,8 +442,8 @@ export function useRecipes(ids: string[]): Record<string, Recipe> {
     }
     return m;
   });
-  const bare = withoutWithheld(map, withheld);
-  if (bare !== map) setMap(bare);
+  const shown = mapForViewer(map);
+  if (shown !== map) setMap(shown);
   useEffect(() => {
     let alive = true;
     const list = key ? key.split('|') : [];
@@ -435,8 +458,8 @@ export function useRecipes(ids: string[]): Record<string, Recipe> {
     return () => {
       alive = false;
     };
-  }, [key, withheld]);
-  return bare;
+  }, [key, withheld, memories]);
+  return shown;
 }
 
 // ---------------------------------------------------------------------------------------------

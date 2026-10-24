@@ -257,3 +257,18 @@ Before starting work, compare the last commit here with `git log origin/main` to
     row took the tip and stories off an open cook screen and the yes brought them back. `test-profile-navigation`
     passes.
   - **Open:** not checked against live Convex on a phone (needs a real kid session).
+- Oct 24 · #37 · Claude · The cook's stories and tips leave the public media bucket (built on #34). In Convex mode the
+  worker's `recipe.json` has no `stories`, `special`, `steps[].tip`, `story_ids`/`special_ids` or `intro`
+  (`publish.without_memories`, `publish_recipe(family=True)`); `data/out/<id>/.family` keeps a hand re-publish
+  (`publish.py --id`) stripped too. Convex still gets the whole recipe, and each memory now keeps `step`, `id`,
+  `title`, `why` (optional fields, `convex/schema.ts` `memory`); `/voice/session` returns only its own memory
+  fields. The app puts `recipes.list` memories back into a file that has none (`withMemories`, `sharedMemories` in
+  `familyLibrary.ts`; `forViewer`, `useRecipe`, `useRecipes` in `recipes.ts`), so a kid sees them only after the
+  cook's yes and the cook always sees hers. The web share page reads the same file, so it shows none.
+  - **Tests:** new `pipeline/test_publish.py` (4), other pipeline tests pass; vitest 40 (new `convex/memories.test.ts`,
+    2); `test-library.mjs` 29 (5 new); every other app test script, tsc and lint pass.
+  - **Open:** not deployed. Deploy Convex first, then restart the worker from main (a stripped file with old Convex
+    rows still shows the stories, placed by time, but without titles). Not checked on a phone or against live
+    Convex. Family recipes the worker published before this still have their stories in the bucket (#34 hides them
+    in the app). `rebuild_library` lists every `*/recipe.json` in the bucket, so any `publish.py` run puts family
+    recipes into the shared `library.json` and the app bundle. The intro isn't kept anywhere now (no screen shows it).

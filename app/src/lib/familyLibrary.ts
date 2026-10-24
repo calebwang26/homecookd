@@ -5,9 +5,26 @@
 //   familyEntries(rows, profiles)   recipes.list rows -> library entries (ready ones only)
 //   withheldIds(rows)               those dishes whose stories and tips this viewer may not see
 //   withoutStories(recipe)          a recipe without the cook's stories and tips
+//   sharedMemories(rows, prev)      the stories and tips Convex sent for each dish
+//   withMemories(recipe, memories)  those put back into a recipe.json published without them
 //   mergeLibrary(base, family)      the family's new dishes first, then library.json's, one per id
 // Pure, so scripts/test-library.mjs runs it in Node.
-import type { LibraryEntry, Recipe } from './types';
+import type { LibraryEntry, Recipe, Special, Story } from './types';
+
+/**
+ * A story or tip as Convex keeps it (convex/schema.ts `memory`). Since the pipeline stopped putting them
+ * in the public recipe.json, these are the only copy: `step`, `id`, `title` and `why` say where each one
+ * goes. Older rows have only kind, text and moment.
+ */
+export type Memory = {
+  kind: 'story' | 'tip';
+  text: string;
+  moment?: { startS: number; endS: number };
+  step?: number;
+  id?: string;
+  title?: string;
+  why?: string;
+};
 
 /** The fields of a Convex `recipes.list` row the library reads. */
 export type FamilyRecipe = {
@@ -22,7 +39,7 @@ export type FamilyRecipe = {
   /** The cook's yes to sharing this video's stories and tips (recipes.setMemoriesOptIn). */
   memoriesOptIn?: boolean;
   /** Those stories and tips. recipes.list sends them only to the cook, or to everyone after her yes. */
-  memories?: readonly { kind: 'story' | 'tip'; text: string }[];
+  memories?: readonly Memory[];
 };
 
 type Person = { name: string; relation: string | null };
@@ -82,7 +99,7 @@ export function storiesShared(row: Pick<FamilyRecipe, 'memoriesOptIn' | 'memorie
 
 /**
  * The listed dishes (familyEntries) whose stories and tips this viewer may not see. Convex holds back
- * only its own copy: the recipe.json the library loads from recipeJsonUrl has them all, so the library
+ * only its own copy: a recipe.json published before they left the file has them all, so the library
  * takes them out (withoutStories) before it caches the recipe, whichever copy of the dish it loads.
  */
 export function withheldIds(rows: readonly FamilyRecipe[]): Set<string> {
@@ -108,6 +125,64 @@ export function withoutStories(recipe: Recipe): Recipe {
     stories: [],
     special: [],
     steps: steps.map((s) => ({ ...s, story_ids: [], special_ids: [], tip: null })),
+  };
+}
+
+/**
+ * The stories and tips recipes.list sent for each listed dish, by library id (none: not in the map).
+ * `prev` is the last result: a dish whose memories didn't change keeps its array, and when none changed
+ * the result is `prev` itself, so only a changed dish loads again.
+ */
+export function sharedMemories(
+  rows: readonly FamilyRecipe[],
+  prev: ReadonlyMap<string, readonly Memory[]> = new Map(),
+): ReadonlyMap<string, readonly Memory[]> {
+  const next = new Map<string, readonly Memory[]>();
+  for (const { row, id } of listedRows(rows)) {
+    if (!Array.isArray(row.memories) || !row.memories.length) continue;
+    const was = prev.get(id);
+    next.set(id, was && JSON.stringify(was) === JSON.stringify(row.memories) ? was : row.memories);
+  }
+  const same = next.size === prev.size && [...next].every(([id, m]) => prev.get(id) === m);
+  return same ? prev : next;
+}
+
+/**
+ * The recipe with Convex's stories and tips put back: a family recipe.json is published without them
+ * (pipeline/publish.py without_memories). A recipe that has its own (one published before that) keeps
+ * them, and so does one with none to add: the same object comes back. A memory from an older row,
+ * without its step, goes to the step it was told in.
+ */
+export function withMemories(recipe: Recipe, memories: readonly Memory[]): Recipe {
+  const steps = recipe.steps ?? [];
+  const own = recipe.stories?.length || recipe.special?.length || steps.some((s) => s.tip);
+  if (own || !memories.length || !steps.length) return recipe;
+  const stories: Story[] = [];
+  const special: Special[] = [];
+  const tips = new Map<number, string>();
+  memories.forEach((m, i) => {
+    const start_s = m.moment?.startS ?? 0;
+    const end_s = m.moment?.endS ?? start_s;
+    const known = steps.some((s) => s.order === m.step);
+    const step = known ? m.step! : (steps.filter((s) => s.start_s <= start_s).pop() ?? steps[0]).order;
+    if (m.kind === 'story') {
+      stories.push({ id: m.id ?? `story-${i + 1}`, step, start_s, end_s, title: m.title ?? '', text: m.text });
+    } else if (!m.id && !tips.has(step)) {
+      tips.set(step, m.text); // a tip without an id is its step's own
+    } else {
+      special.push({ id: m.id ?? `special-${i + 1}`, step, start_s, end_s, text: m.text, why: m.why ?? '' });
+    }
+  });
+  return {
+    ...recipe,
+    stories,
+    special,
+    steps: steps.map((s) => ({
+      ...s,
+      tip: tips.get(s.order) ?? null,
+      story_ids: stories.filter((x) => x.step === s.order).map((x) => x.id),
+      special_ids: special.filter((x) => x.step === s.order).map((x) => x.id),
+    })),
   };
 }
 
