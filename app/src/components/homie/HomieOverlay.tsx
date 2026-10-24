@@ -4,8 +4,10 @@
 // Native Modals (sheets, the full-screen step player) cover it on their own. When homie needs you
 // (store.moment), HomieMoment takes the pot to the centre, and VoiceOver keeps to the moment (the
 // overlay is modal then: the screen behind it is out of reach).
-// A tap on the resting pot says this screen's help line (where there's none, "Hi, I’m homie." only
-// the first time: lib/homie/intro), unless the screen gave the pot its own onPress. Talking only
+// A tap on the resting pot always says something (lib/homie/tap): what's new for this person, once
+// (lib/homie/news keeps it ready), else this screen's "Explore X by doing X" line, never the same line
+// twice in a row, with "Hi, I’m homie." before the very first one (lib/homie/intro); unless the screen
+// gave the pot its own onPress. It's an answer to the tap, so it pauses a playing video. Talking only
 // (Caleb): no words on screen, the pot lights, its lid lifts and "AI voice" shows under it. While the
 // cook's own voice plays (store `shrunk`) the resting pot shrinks a little about its centre.
 import { useEffect, useRef, useState } from 'react';
@@ -15,6 +17,7 @@ import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, w
 import { PressableScale, Txt } from '@/components/ui';
 import { useHomieRoute } from '@/lib/homie/hooks';
 import { takeTapLine } from '@/lib/homie/intro';
+import { useHomieNews } from '@/lib/homie/news';
 import { HOMIE_REST_SIZE, potState, sayPhase, SHRUNK_SCALE, speakingLabel, timerProgress } from '@/lib/homie/logic';
 import { doneSpeaking, getHomie, useHomie, type Homie } from '@/lib/homie/store';
 import { speak } from '@/lib/live/speak';
@@ -38,6 +41,7 @@ export function HomieOverlay() {
   const frame = h.dock ?? rest;
   const progress = useTimerProgress(h.timer);
   const [inMoment, setInMoment] = useState(false);
+  const news = useHomieNews();
 
   // A say that stops playing (ended, stopped, failed) ends homie's speaking beat.
   const sayOn = say !== 'none';
@@ -49,7 +53,7 @@ export function HomieOverlay() {
 
   const onPress = () => {
     if (h.onPress) return h.onPress();
-    void takeTapLine(route, me?.id).then((line) => speak(line, { translate: true, profileId: me?.id }));
+    void takeTapLine(route, me?.id, news).then((line) => speak(line, { translate: true, profileId: me?.id, answer: true }));
   };
 
   const resting = !!me && !route.hidden && !h.hidden && !inMoment;

@@ -3,6 +3,8 @@
 //   WS   /cook?session=<sessionToken>&recipe=<recipeId>[&audio=pcm|wav]       the kid cooking
 //   WS   /record?session=<sessionToken>&recording=<recordingId>[&audio=pcm|wav]  homie while a cook records
 //   POST /speak { sessionToken, text, lang?, translate?, kind? }  → audio/wav in homie's voice
+//   POST /homie/line { sessionToken, factId, tab? }  → { text, written }: homie's words for one of the
+//        person's news facts (convex/homie.ts), written by Claude; the fact's plain line when Claude fails
 import { realpathSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { fileURLToPath } from "node:url";
@@ -14,6 +16,7 @@ import { translate } from "./homie.js";
 import { Recording } from "./record.js";
 import { guarded, inSession, installSafetyNet } from "./safety.js";
 import { fakeSpeech, speakWav } from "./speech.js";
+import { tapLine } from "./tapLine.js";
 
 /** This file is the program (Cloud Run, `npm run dev`), not a module a test imported. */
 function isMain(): boolean {
@@ -76,6 +79,27 @@ async function speakRoute(req: IncomingMessage, res: ServerResponse) {
   }
 }
 
+/** A tap on homie, asked ahead: the line for one fact that's new for this person (English; /speak translates). */
+async function lineRoute(req: IncomingMessage, res: ServerResponse) {
+  const body = await readJson(req);
+  const { sessionToken, factId, tab } = body ?? {};
+  if (typeof sessionToken !== "string" || typeof factId !== "string" || !factId || factId.length > 200) {
+    return fail(res, 400, "sessionToken and factId are required");
+  }
+  let news: convex.News;
+  try {
+    news = await convex.news(sessionToken);
+  } catch (err) {
+    if (err instanceof convex.Unauthorized) return fail(res, 401, "signed out");
+    console.error("homie news", (err as Error).message);
+    return fail(res, 502, "couldn't load the news");
+  }
+  const fact = news.facts.find((f) => f.id === factId);
+  if (!fact) return fail(res, 404, "no such news");
+  const line = await tapLine(news, fact, typeof tab === "string" ? tab.slice(0, 30) : undefined);
+  res.writeHead(200, { "Content-Type": "application/json" }).end(JSON.stringify(line));
+}
+
 /** Exported for the tests (PORT=0 picks a free port). */
 export const server = createServer((req, res) => {
   const path = (req.url ?? "/").split("?")[0];
@@ -88,6 +112,13 @@ export const server = createServer((req, res) => {
     // A caller that hangs up mid-body makes reading it throw ("aborted").
     return void speakRoute(req, res).catch((err) => {
       console.warn("speak:", (err as Error).message);
+      if (!res.headersSent) fail(res, 400, "couldn't read the request");
+      else res.destroy();
+    });
+  }
+  if (path === "/homie/line" && req.method === "POST") {
+    return void lineRoute(req, res).catch((err) => {
+      console.warn("homie line:", (err as Error).message);
       if (!res.headersSent) fail(res, 400, "couldn't read the request");
       else res.destroy();
     });

@@ -160,6 +160,17 @@ http.route({
   }),
 });
 
+// What's new for the person tapping homie (homie.ts), so the voice service can say it warmly (/homie/line).
+http.route({
+  path: "/homie/news",
+  method: "POST",
+  handler: voice(async (ctx, body) => {
+    if (!isStr(body.sessionToken, 200)) return fail(400, "sessionToken is required");
+    const news = await ctx.runQuery(internal.homie.newsByToken, { sessionToken: body.sessionToken, now: Date.now() });
+    return news ? json(news) : fail(401, "signed out");
+  }),
+});
+
 registerLiveRoutes(http);
 registerGlassesRoutes(http);
 registerInviteRoutes(http);

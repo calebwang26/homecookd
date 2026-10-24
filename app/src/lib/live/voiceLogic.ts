@@ -24,6 +24,19 @@ export function offerOf(kind: SayKind, text: string): OfferKind | null {
   return null;
 }
 
+/**
+ * A line homie says on its own (not an answer to the kid): it waits while a video plays (Caleb, Oct 24:
+ * homie never talks over a video). The service holds these too; this catches one already on its way.
+ */
+export function waitsForVideo(kind: SayKind): boolean {
+  return kind === 'greeting' || kind === 'offer' || kind === 'nudge' || kind === 'timer';
+}
+
+/** What /cook gets when a video (or the cook's own voice) starts or stops on the phone. */
+export function videoMessage(playing: boolean): { type: 'video'; playing: boolean } {
+  return { type: 'video', playing };
+}
+
 /** The label under the pot while a say plays; undefined is the overlay's own "AI voice". */
 export function sayLabel(kind: SayKind, cookName: string): string | undefined {
   if (kind === 'translation') return `Translated from ${cookName}`;
@@ -229,9 +242,12 @@ export function thinksAfter(v: { echo: boolean; appMoment: boolean; momentUp: bo
 /** Messages that are homie doing something (an answer to the kid). */
 export const HOMIE_ACTIONS: ReadonlySet<string> = new Set(['go_to_step', 'play_clip', 'asked_cook', 'timer', 'timer_done']);
 
-/** 'thinking' ends with homie's answer: an action, a line, or the offer closing (a no gets no line). */
+/**
+ * 'thinking' ends with homie's answer: an action, a line, the offer closing (a no gets no line), or the
+ * service's `quiet` (the words weren't for homie, so it says nothing).
+ */
 export function endsThinking(type: string): boolean {
-  return HOMIE_ACTIONS.has(type) || type === 'say' || type === 'offer_closed';
+  return HOMIE_ACTIONS.has(type) || type === 'say' || type === 'offer_closed' || type === 'quiet';
 }
 
 export const SAY_YES_NO = 'Say “yes” or “no”';

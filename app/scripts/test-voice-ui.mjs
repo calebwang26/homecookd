@@ -12,7 +12,8 @@
 //                               words),
 //                               which of the cook's answers to offer, the silence the mic hands on, the
 //                               Cartesia credit fixes (which frames go to /cook, the app leaving), and one
-//                               socket at a time (a retry or a connect from before a pause)
+//                               socket at a time (a retry or a connect from before a pause), and which
+//                               lines wait while a video plays (the same split as the service's)
 //   node scripts/test-voice-ui.mjs
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
@@ -69,6 +70,17 @@ await test('the read-aloud offer and a story nudge are offers; other nudges and 
   assert.equal(V.offerOf('nudge', 'Still on step 3? Say "next" when you’re ready.'), null);
   assert.equal(V.offerOf('reply', 'A story? I’ll ask Grandma.'), null);
   assert.equal(V.offerOf('hint', 'Grandma didn’t say. Most recipes use about a teaspoon.'), null);
+});
+
+await test('homie never talks over a video: what it says on its own waits, an answer to the kid doesn’t', () => {
+  for (const k of ['greeting', 'offer', 'nudge', 'timer']) assert.equal(V.waitsForVideo(k), true, k);
+  for (const k of ['step', 'reply', 'hint', 'translation']) assert.equal(V.waitsForVideo(k), false, k);
+  // The same split as the service's (voice/src/cook.ts UNPROMPTED).
+  const cook = readFileSync(join(root, '..', 'voice', 'src', 'cook.ts'), 'utf8');
+  const unprompted = cook.match(/const UNPROMPTED[^=]*= new Set\(\[([^\]]*)\]/)[1].match(/"(\w+)"/g).map((w) => w.slice(1, -1));
+  assert.deepEqual(unprompted.sort(), ['greeting', 'nudge', 'offer', 'timer']);
+  assert.deepEqual(V.videoMessage(true), { type: 'video', playing: true });
+  assert.deepEqual(V.videoMessage(false), { type: 'video', playing: false });
 });
 
 await test('the label under the pot: the cook named for a translation, AI for a hint, else the overlay’s own', () => {
@@ -281,7 +293,7 @@ await test('thinking: not for a no with nothing more to the service’s own offe
 });
 
 await test('thinking ends with homie’s answer: an action, a line, or the offer closing', () => {
-  for (const t of ['go_to_step', 'play_clip', 'asked_cook', 'timer', 'timer_done', 'say', 'offer_closed']) assert.equal(V.endsThinking(t), true, t);
+  for (const t of ['go_to_step', 'play_clip', 'asked_cook', 'timer', 'timer_done', 'say', 'offer_closed', 'quiet']) assert.equal(V.endsThinking(t), true, t);
   for (const t of ['transcript', 'ready', 'say_end', 'error', 'nonsense']) assert.equal(V.endsThinking(t), false, t);
   // offer_closed isn't an action: it never cuts off the line still arriving.
   assert.equal(V.HOMIE_ACTIONS.has('offer_closed'), false);
