@@ -1,0 +1,221 @@
+/* Cascade layers (static-export safety). The global layers below always LOSE to unlayered CSS, so
+   a CSS-module class beats .t-* type roles, the reset and the base styles no matter which order the
+   bundler emits the chunks in (the export used to load type.css after the modules, which made every
+   .t-h2/.t-hand/.t-lead win over the section's own sizes and colors). The same order statement opens
+   tokens.css and type.css, so the order holds even if one of them loads first. Unlayered here, on
+   purpose: Lenis, the anchor offsets, motion gating and the pause/reduced-motion switches, which must
+   keep beating module rules exactly as before. */
+@layer tokens, reset, type, base;
+@import './tokens.css';
+@import './type.css';
+
+@layer reset {
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+* {
+  margin: 0;
+}
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  background: var(--canvas);
+  scroll-padding-top: 88px;
+}
+
+body {
+  min-height: 100svh;
+  background: var(--canvas);
+  color: var(--text);
+  font-family: var(--ff-text);
+  font-size: var(--fs-body);
+  line-height: 1.55;
+  overflow-x: clip;
+}
+img,
+picture,
+video,
+canvas,
+svg {
+  display: block;
+  max-width: 100%;
+}
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+button {
+  cursor: pointer;
+  background: none;
+  border: 0;
+  padding: 0;
+}
+a {
+  color: inherit;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.18em;
+}
+p,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  overflow-wrap: break-word;
+}
+h1,
+h2,
+h3,
+h4 {
+  color: var(--ink);
+  font-weight: inherit;
+  font-size: inherit;
+}
+::selection {
+  background: var(--highlighter);
+  color: var(--ink);
+}
+} /* @layer reset */
+
+/* Kept unlayered (specificity 0,1,1, as it always was): it still beats a module's own list padding,
+   which the reviewed layout depends on (e.g. FarApart's dock icons would grow 24px wider). */
+ul[role='list'],
+ol[role='list'] {
+  list-style: none;
+  padding: 0;
+}
+
+/* Lenis (desktop wheel only) */
+html.lenis,
+html.lenis body {
+  height: auto;
+}
+.lenis.lenis-smooth {
+  scroll-behavior: auto !important;
+}
+.lenis.lenis-smooth [data-lenis-prevent] {
+  overscroll-behavior: contain;
+}
+.lenis.lenis-stopped {
+  overflow: clip;
+}
+
+/* ---------- sections ----------
+   Anchors clear the fixed nav through html's scroll-padding-top (88px) above, which native
+   scrollIntoView, Lenis.scrollTo and keyboard focus scrolling all honor. (B7: a scroll-margin-top on
+   sections as well doubled it, landing every anchor 176px down.) */
+/* Full-bleed color blocks land flush with the viewport top (their own padding clears the nav), so
+   no strip of the previous section shows above them under the nav. */
+#see-it-work,
+#in-their-words,
+#early-access {
+  scroll-margin-top: -88px;
+}
+/* The hero's curtain material, carried down the page: each loud color block lands like a sheet laid
+   over the section before it (rounded top corners, overlapping it by one radius). CSS only, so the
+   static and reduced-motion pages get it too. */
+#see-it-work,
+#in-their-words,
+#early-access {
+  position: relative;
+  z-index: 1;
+  margin-top: calc(-1 * var(--r-sheet));
+  border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+}
+
+@layer base {
+/* ---------- focus ---------- */
+:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+  border-radius: 4px;
+}
+/* Inside dark blocks (forest, green, video) use chartreuse */
+[data-theme='dark'] :focus-visible,
+:focus-visible[data-theme='dark'] {
+  outline-color: var(--focus-ring-dark);
+}
+
+/* ---------- utilities ---------- */
+.sr-only {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+.container {
+  width: 100%;
+  max-width: calc(var(--content-max) + 2 * var(--gutter));
+  margin-inline: auto;
+  padding-inline: var(--gutter);
+}
+.nowrap {
+  white-space: nowrap;
+}
+
+/* ---------- page-wide overflow guard ----------
+   Nothing may widen the page on phones (a mobile browser grows the layout viewport to fit any
+   overflowing box, and body's overflow-x is propagated to the viewport, so it can't stop that).
+   clip (not hidden) creates no scroll container, so sticky stages and GSAP's fixed pins still work. */
+main,
+footer {
+  overflow-x: clip;
+}
+/* Sections well off screen (MotionProvider sets data-offscreen): hold every CSS animation, so
+   looping decoration never repaints out of sight. They pick up where they were on return. */
+[data-offscreen] *,
+[data-offscreen] *::before,
+[data-offscreen] *::after {
+  animation-play-state: paused !important;
+}
+} /* @layer base */
+
+/* ---------- motion gating (brief 4.1) ----------
+   Hidden "before" states only exist under html[data-motion="on"] and only until an element gets
+   [data-revealed]. If JS never hydrates, the inline script flips data-motion to "off" after 4s. */
+html[data-motion='on'] [data-reveal]:not([data-revealed]) {
+  opacity: 0;
+}
+html[data-motion='on'] [data-reveal='rise']:not([data-revealed]) {
+  transform: translate3d(0, var(--reveal-y, 24px), 0);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Switching versions (/ ↔ /learn) is a plain page load; where the browser supports cross-document
+   view transitions it crossfades instead of flashing. No view-transition-name anywhere: only the
+   default root crossfade runs. Browsers without support just navigate. */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition {
+    navigation: auto;
+  }
+}
+
+/* Global pause (PauseProvider sets html[data-paused]) stops every CSS loop. */
+html[data-paused] [data-loop],
+html[data-paused] [data-loop] * {
+  animation-play-state: paused !important;
+}

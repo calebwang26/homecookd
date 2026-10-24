@@ -1,0 +1,18 @@
+{
+  "applinks": {
+    "details": [
+      {
+        "appIDs": ["TEAMID.BUNDLEID"],
+        "components": [
+          { "/": "/i", "comment": "Family invite. TODO(caleb): replace TEAMID.BUNDLEID with <Apple Team ID>.<bundle id> (see web/src/lib/app-links.ts)." },
+          { "/": "/i/*" },
+          { "/": "/r", "comment": "Shared recipe" },
+          { "/": "/r/*" }
+        ]
+      }
+    ]
+  },
+  "webcredentials": {
+    "apps": ["TEAMID.BUNDLEID"]
+  }
+}

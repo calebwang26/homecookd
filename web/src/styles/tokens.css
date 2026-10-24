@@ -1,0 +1,130 @@
+/* Design tokens (brief section 3.1, verbatim; additions below the marked line only). */
+@layer tokens, reset, type, base;
+
+@layer tokens {
+:root {
+  color-scheme: light;
+
+  /* neutrals */
+  --canvas: #F7F7F2;  --surface: #FFFDF7;  --sunken: #EFEFE6;
+  --pistachio-wash: #F2F6E1;  --footer-bg: #F1F2DC;
+  --hairline: rgba(71, 67, 42, 0.14);  --halo: rgba(71, 67, 42, 0.05);
+  --hero-dark: #1E2410;                         /* stage behind the hero sheet corners */
+
+  /* text */
+  --ink: #1E2410;  --text: #2D3222;  --muted: #5F6352;
+  --ghost: #CDD0BC;                             /* unfilled scrub words. NEVER a final state */
+  --cream: #FFFDF7;  --muted-inverse: #C9D0AE;
+
+  /* greens */
+  --forest: #34430C;  --forest-swirl: #3D4E10;  --green-deep: #4C5A10;
+  --green: #5B6F00;   --green-swirl: #64790A;   --leaf: #788C15;
+  --lime: #B2C248;    --chartreuse: #D1E043;    --chartreuse-swirl: #D9E65A;
+  --sage: #E6EBCF;    --lime-wash: #EDF2BE;     --olive-ink: #3C4A0B;
+
+  /* yellows */
+  --sun: #FEBE29;  --sun-swirl: #FFCB4F;  --highlighter: #FFD24D;
+  --lemon: #FFE59A;  --butter: #FFF1C7;
+
+  /* warm accents */
+  --tomato: #E95D3D;  --tomato-deep: #C8462A;  --tomato-ink: #A8361B;
+  --apricot: #FFB677; --apricot-soft: #FFDDBF; --apricot-ink: #8A3F12;
+  --peach: #F9E3CF;   --peach-ink: #6E4A33;    --blush: #FAD6CB;
+  --ube: #ECE6F2;     --ube-ink: #3F3558;      --lavender: #ECE6F2;
+
+  /* accent-only */
+  --cocoa: #5A3A22;  --black: #121410;
+
+  /* semantic */
+  --btn-hero-bg: var(--chartreuse);  --btn-hero-fg: var(--ink);
+  --btn-primary-bg: var(--green);    --btn-primary-fg: var(--cream);  --btn-primary-hover: var(--green-deep);
+  --btn-soft-bg: var(--sage);        --btn-soft-fg: var(--green-deep);
+  --focus-ring: var(--leaf);
+  --scrim-strong: rgba(30, 36, 16, 0.70);  --scrim-soft: rgba(30, 36, 16, 0.55);
+
+  /* type families (next/font sets the --font-* variables on <html>) */
+  --ff-display: var(--font-display), 'Iowan Old Style', Georgia, serif;
+  --ff-text: var(--font-text), system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --ff-hand: var(--font-hand), 'Bradley Hand', cursive;
+
+  /* type scale (mobile 390 → desktop 1440) */
+  --fs-hero: clamp(3.5rem, 11vw, 11rem);                    /* 56 → 158 */
+  --fs-block: clamp(3rem, 1rem + 6vw, 8rem);                /* color-block statements: 48 → 102 */
+  --fs-statement: clamp(2.5rem, 1rem + 5.2vw, 6rem);        /* brand line, centered scrub statements: 40 → 91 */
+  --fs-manifesto: clamp(2.25rem, 0.8rem + 4.2vw, 5rem);     /* the-call: 36 → 73 */
+  --fs-h2: clamp(2.75rem, 1.2rem + 4.6vw, 6.25rem);         /* 44 → 85 */
+  --fs-h3: clamp(1.875rem, 1.2rem + 2.2vw, 3.25rem);        /* 30 → 51 */
+  --fs-numeral: clamp(4.5rem, 9vw, 9rem);                   /* step-card numerals */
+  --fs-marquee: clamp(2.75rem, 1rem + 4.4vw, 5.5rem);       /* 44 → 79 */
+  --fs-card-title: clamp(1.375rem, 1.15rem + 0.5vw, 1.75rem); /* 22 → 26 */
+  --fs-cook: clamp(1.25rem, 1.05rem + 0.6vw, 1.75rem);      /* the cook's own words: 20 → 25 */
+  --fs-lead: clamp(1.25rem, 1.1rem + 0.6vw, 1.5rem);        /* 20 → 24 */
+  --fs-body: clamp(1.125rem, 1.05rem + 0.25vw, 1.25rem);    /* 18 → 20 */
+  --fs-ui: 1rem;  --fs-ui-lg: 1.125rem;  --fs-eyebrow: 1rem;
+  --fs-hand: clamp(1.375rem, 1.2rem + 0.5vw, 1.75rem);      /* Caveat 22 → 28 */
+
+  /* spacing (8pt) */
+  --s-1: 4px; --s-2: 8px; --s-3: 12px; --s-4: 16px; --s-5: 24px; --s-6: 32px;
+  --s-7: 40px; --s-8: 48px; --s-9: 64px; --s-10: 80px; --s-11: 96px; --s-12: 128px; --s-13: 160px;
+  --gutter: clamp(20px, 7.2vw, 112px);        /* a7 content gutter */
+  --gutter-hero: max(20px, 3.5vw);            /* a2 hero anchor */
+  --content-max: 1280px;
+  --section-pad-y: clamp(72px, 12vh, 168px);
+  --stack-eyebrow-h2: 16px; --stack-h2-body: 24px; --stack-body-cta: 40px; --stack-head-visual: clamp(40px, 4vw, 64px);
+
+  /* radii */
+  --r-pill: 999px; --r-sm: 12px; --r-md: 16px; --r-photo: 18px; --r-card: 24px;
+  --r-media: 28px; --r-big: 32px; --r-sheet: 40px;
+
+  /* shadows */
+  --shadow-card: 0 1px 2px rgba(30,36,16,.04), 0 12px 32px -12px rgba(30,36,16,.18);
+  --shadow-float: 0 2px 6px rgba(30,36,16,.05), 0 28px 60px -20px rgba(30,36,16,.28);
+  --shadow-sheet: 0 -24px 60px rgba(20,22,12,.18);
+  --ring-halo: 0 0 0 8px var(--halo);
+
+  /* motion */
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);     /* arrivals, glides */
+  --ease-out-quart: cubic-bezier(0.25, 1, 0.5, 1);    /* word reveals */
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);      /* scrubbed layout morphs only */
+  --ease-soft: cubic-bezier(0.22, 1, 0.36, 1);        /* cards/photos rise, video swaps */
+  --d-word: 550ms;  --d-word-color: 600ms;  --d-word-color-delay: 120ms;
+  --d-para: 400ms;  --d-card: 800ms;  --d-glide: 700ms;  --d-swap: 450ms;
+  --d-highlight: 450ms;  --d-idle: 3600ms;
+
+  /* z-index */
+  --z-deck: 2; --z-video: 3; --z-text: 4; --z-chips: 5; --z-nav: 50; --z-skip: 100;
+
+  /* ---- B0 additions (do not edit above this line) ---- */
+
+  /* tint inks (palette-type.md "Recipe-card tints") */
+  --tint-sage-bg: var(--sage);               --tint-sage-ink: var(--olive-ink);
+  --tint-limeWash-bg: var(--lime-wash);      --tint-limeWash-ink: var(--olive-ink);
+  --tint-butter-bg: var(--butter);           --tint-butter-ink: var(--ink);
+  --tint-lemon-bg: var(--lemon);             --tint-lemon-ink: var(--ink);
+  --tint-apricotSoft-bg: var(--apricot-soft); --tint-apricotSoft-ink: var(--apricot-ink);
+  --tint-peach-bg: var(--peach);             --tint-peach-ink: var(--peach-ink);
+  --tint-blush-bg: var(--blush);             --tint-blush-ink: var(--tomato-ink);
+  --tint-ube-bg: var(--ube);                 --tint-ube-ink: var(--ube-ink);
+  --tint-green-bg: var(--green);             --tint-green-ink: var(--cream);
+  --tint-forest-bg: var(--forest);           --tint-forest-ink: var(--cream);
+  --tint-sun-bg: var(--sun);                 --tint-sun-ink: var(--ink);
+  --tint-chartreuse-bg: var(--chartreuse);   --tint-chartreuse-ink: var(--forest);
+
+  --nav-h: 72px;
+  --focus-ring-dark: var(--chartreuse);
+  --ease-back: cubic-bezier(0.34, 1.4, 0.64, 1);      /* the one tiny overshoot (inline icon pop) */
+
+  /* Springs as CSS easing: linear() samples of the motion springs (lib/motion/tokens SPRING), for
+     hover/press micro-motion that CSS transitions own. Use the matching duration:
+       transition: transform var(--d-spring) var(--ease-spring);
+     Browsers without linear() get the cubic fallbacks below. */
+  --ease-spring: var(--ease-out-expo);   --d-spring: 650ms;      /* stiffness 300, damping 22: ~7% overshoot */
+  --ease-spring-pop: var(--ease-back);   --d-spring-pop: 750ms;  /* stiffness 500, damping 18: the chip pop */
+}
+@supports (transition-timing-function: linear(0, 1)) {
+  :root {
+    --ease-spring: linear(0, 0.083, 0.249, 0.444, 0.63, 0.788, 0.908, 0.992, 1.042, 1.066, 1.073, 1.067, 1.055, 1.041, 1.027, 1.016, 1.007, 1.001, 0.997, 0.995, 0.995, 0.995, 0.996, 0.997, 0.998, 0.999, 0.999, 1, 1);
+    --ease-spring-pop: linear(0, 0.194, 0.534, 0.872, 1.115, 1.233, 1.24, 1.178, 1.091, 1.012, 0.96, 0.939, 0.943, 0.962, 0.985, 1.002, 1.012, 1.015, 1.013, 1.008, 1.002, 0.999, 0.997, 0.996, 0.997, 0.998, 1, 1.001, 1);
+  }
+}
+} /* @layer tokens */
