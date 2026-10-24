@@ -47,9 +47,10 @@ older note in `memory/` disagrees, this file wins.
     CARTESIA, MOSS, MUSE, WORKER_SECRET, VOICE_SECRET. Redeploy with `--preview-name hackathon`, never
     `--preview-create`: that recreated the deployment and deleted `energized-starfish-920`. It has #37's memory
     fields (`step`, `id`, `title`, `why`), so the app can put a family dish's stories back. Last deployed Oct 24
-    from main `f28173a1f` (Caleb's go): new indexes `dinnerInviteOpens.by_dinnerId_and_deviceId`,
-    `dinners.by_inviteToken`, `swapRequests.by_otherFamilyId` and `swapRequests.by_requesterFamilyId`, and
-    `POST /invite/open` live with CORS for homecookd.app.
+    from main `ad8fd88ea` by the Merge Agent (Caleb's go; adds `recordings.by_cookId_and_startedAt`). The one
+    before, from `f28173a1f`, added `dinnerInviteOpens.by_dinnerId_and_deviceId`, `dinners.by_inviteToken`,
+    `swapRequests.by_otherFamilyId` and `swapRequests.by_requesterFamilyId`, and `POST /invite/open` with CORS
+    for homecookd.app.
   - **Worker** (`pipeline/worker.py`, Convex mode) runs on the laptop from `.claude/worktrees/worker-main` at main
     `4d703d9` (#39, started Oct 24 03:14), so family `recipe.json` files go out without stories or tips.
   - **Moss** works again (billing fixed Oct 24). One index is left: `family-j97ctx…` (the demo family: 4 recipes,
@@ -71,8 +72,8 @@ older note in `memory/` disagrees, this file wins.
     and the voice service through `app/src/lib/live/` (one file each, with a stub until they're deployed). Needs an
     EAS dev build or TestFlight: Expo Go hides the mic. Public URLs: `EXPO_PUBLIC_CONVEX_URL` (in `eas.json`),
     `EXPO_PUBLIC_VOICE_URL` = wss://homecookd-voice-vyatb2n6oq-uw.a.run.app (Track B, Cloud Run; both in `eas.json`).
-- **Voice service** (Cloud Run `homecookd-voice`, us-west1, project `project-11b9fc8a-1108-4ea8-a3b`): `wss://homecookd-voice-vyatb2n6oq-uw.a.run.app/cook`, revision `homecookd-voice-00004-nv4` (deployed Oct 24 from main `f28173a1f`, Caleb's go: homie speaks as "Riya bilingual" with a Gemini TTS backup (#49), the kid's yes and no (#47), the Cartesia credit fixes (#44); `/health` ok, a bogus session is refused with 4401/401), min instances 1, timeout 3600 s, keys from Secret Manager, Convex `grand-dragon-649`. Deploy: `voice/deploy.sh` from merged main (an agent ran it for 00004 with Caleb's go).
-- **App on TestFlight phones** (build 3, runtime 1.0.0): EAS Updates on channel `production`, built with `EXPO_NO_DOTENV=1` plus `EXPO_PUBLIC_CONVEX_URL` and `EXPO_PUBLIC_VOICE_URL` set by hand (`eas update` doesn't read eas.json's build env; `FAMILY_CODE` must never ship): group `2f1b5298-3421-47c9-8913-35b95e216fd9` from main `f176b1d9b` (#33, #35, #36, #49), then `0b0e0b64-4ab1-414d-86b0-d11d08df58ea` from main `951aeb11c` (#51: read-aloud plays each step, no live line for a sample dish).
+- **Voice service** (Cloud Run `homecookd-voice`, us-west1, project `project-11b9fc8a-1108-4ea8-a3b`): `wss://homecookd-voice-vyatb2n6oq-uw.a.run.app/cook`, revision `homecookd-voice-00005-tvg` (deployed Oct 24 from main `ad8fd88ea` by the Merge Agent, Caleb's go: adds #50 one-call hints and the crash safety net, #54 one turn for a sentence Ink splits, #55; before it, `00004-nv4` from `f28173a1f`: homie speaks as "Riya bilingual" with a Gemini TTS backup (#49), the kid's yes and no (#47), the Cartesia credit fixes (#44); `/health` ok, a bogus session is refused with 4401/401), min instances 1, timeout 3600 s, keys from Secret Manager, Convex `grand-dragon-649`. Deploy: `voice/deploy.sh` from merged main (an agent ran it for 00004 with Caleb's go).
+- **App on TestFlight phones** (build 3, runtime 1.0.0): EAS Updates on channel `production`, built with `EXPO_NO_DOTENV=1` plus `EXPO_PUBLIC_CONVEX_URL` and `EXPO_PUBLIC_VOICE_URL` set by hand (`eas update` doesn't read eas.json's build env; `FAMILY_CODE` must never ship): group `2f1b5298-3421-47c9-8913-35b95e216fd9` from main `f176b1d9b` (#33, #35, #36, #49), then `0b0e0b64-4ab1-414d-86b0-d11d08df58ea` from main `951aeb11c` (#51: read-aloud plays each step, no live line for a sample dish), then `406438fe-d271-47d2-8f05-4ca15707e0ca` from main `ad8fd88ea` (#52 timer buzz, #53 homie introduces once, #54, #55).
 - **homecookd.app** (Vercel project `homecookd`, deploys from the ORIGINAL repo `calebwang26/homecookd` main, not this one): production from `37439d9` (homecookd#46): `web/` there now matches this repo's `web/` (the /d dinner invite page, API_URL on `bsudybxsqvtwftsdmwmz`, the real app ID `73UV499FKN.com.salik.homecookd` in the AASA). A web change here must be copied there to go live.
 
 ## Waiting on Caleb (launch blockers)
@@ -625,3 +626,4 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - **Open:** not deployed (Convex `grand-dragon-649` and the voice service both need it; waiting on Caleb). For the
     Oct 25 demo: if the demo cook's profile has filmed before (rehearsals), she hears the short hello, not the
     full one.
+- Oct 24 · #PRNUM · Claude · STATE: live versions after the Merge Agent's batch (Caleb: "merge everything and then deploy as quickly as possible"): Convex `grand-dragon-649` from main `ad8fd88ea` (adds `recordings.by_cookId_and_startedAt`), voice `homecookd-voice-00005-tvg` from `ad8fd88ea`, EAS Update `406438fe-d271-47d2-8f05-4ca15707e0ca` from `ad8fd88ea`. Docs only.
