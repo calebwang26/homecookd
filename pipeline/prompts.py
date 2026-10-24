@@ -11,6 +11,9 @@ last step event; its "Format rules" and its sessions/events blocks, and the two 
 validation errors back. Completeness (no step left out): the extraction's "Steps come first" rules, the merge's
 "Keep every step" rule (grouping keeps every action; no step limit), and COVERAGE_RETRY_SUFFIX, which
 process.ensure_coverage adds when pipeline/coverage.py finds extracted steps that no recipe step covers.
+Language: the cook may narrate in Marathi, English or a mix. Extraction translates every text field into
+English (the app, cook mode and the English-only Moss index read them) and keeps the spoken Marathi of each
+quote in quote_original; the merge carries it, and align hears the Marathi but reads the English.
 
 EXTRACT_PROMPT.format(i=..., n=..., clip_mmss=...)
 EXTRACT_RETRY_SUFFIX.format(error=...)
@@ -26,7 +29,8 @@ ALIGN_PROMPT.format(title=<json string>), ALIGN_STEP.format(...), ALIGN_RETRY_SU
 
 EXTRACT_PROMPT = """\
 You are watching a first-person video of a home cook making a family dish.
-The cook narrates in English. This clip is file {i} of {n} of the recording.
+The cook may narrate in Marathi, in English, or in a mix of the two (switching mid-sentence, or
+Marathi with English words). This clip is file {i} of {n} of the recording.
 
 Return every STEP, STORY and SPECIAL moment in this clip as JSON matching the schema.
 
@@ -41,20 +45,30 @@ Steps come first: the family will cook from them, and one missing step can ruin 
 For each step:
 - start / end: timestamps from the start of THIS clip as MM:SS (e.g. "05:08"), covering the action.
 - action: one short imperative sentence.
-- ingredients added: name; "feel" = the cook's exact words for the AMOUNT only (e.g. "two big scoops",
+- ingredients added: name; "feel" = the cook's words for the AMOUNT only (e.g. "two big scoops",
   "a little touch"), or "" (empty) if she says no amount. Never put the ingredient's name or a
   description ("garlic", "fresh", "your eggs") in feel.
   "estimate" = your best US/metric estimate from what you SEE (hand size, spoon,
   pan, packaging), prefixed with "~", or "unknown" if you cannot see it.
 - sensory_cue: what the cook looks, listens or smells for, in her words if she says it.
-- quote: what she says during the step, verbatim.
+- quote: what she says during the step, in her words (in English: see Language below).
+- quote_original: see Language below.
 
 For each story (people, places, memories, why the dish matters):
-- start / end (MM:SS) and text. Keep her voice; do not summarise.
+- start / end (MM:SS) and text. Keep her voice; do not summarise: tell it all, in English.
   Greetings, sign-offs and calls to like or subscribe ("bye bye", "see you next time") are not stories.
 
 For each special moment (a technique, ingredient or order that differs from how
 this dish is usually made): start / end (MM:SS), text, and why it is unusual.
+
+Language: write every text field (action, ingredient name, feel, sensory_cue, quote, story and special
+text, why) in natural, plain English, even when the cook speaks Marathi. Translate faithfully: keep her
+meaning, her homely phrases and her amounts ("a fistful", "until it smells nutty", "two small spoons"),
+not a word-for-word gloss, and add nothing she did not say. Give ingredients their common English names
+("turmeric", "mustard seeds"); when one has none, use the name she says in Latin letters ("kokum",
+"goda masala"). Never write Devanagari or romanised Marathi sentences in these fields.
+quote_original: when she says the quote in Marathi, in whole or in part, her exact words as spoken, in
+Devanagari (English words she says stay in English); null when she speaks only English or says nothing.
 
 Rules: never invent ingredients or amounts you did not see or hear.
 Ignore silence, off-topic talk and idle waiting while nothing happens to the food (starting a
@@ -76,6 +90,9 @@ You are given events extracted from {n} consecutive files of one cooking recordi
 with timestamps already converted to seconds from the start of the full video,
 plus the recording sessions with their real-world start times.
 The family titled this recipe {title}.
+
+The cook may have spoken Marathi, English or a mix; every event's text is already in English, and an
+event's quote_original holds the cook's Marathi words for its quote.
 
 Produce one recipe matching the recipe schema:
 - Build the recipe for the dish named in the title. If the events clearly cover other, separate dishes
@@ -108,6 +125,9 @@ Produce one recipe matching the recipe schema:
   A grouped step's start_s is the start_s of its first step event and its end_s the end_s of its last
   step event (not stretched over intro talk, stories or b-roll around them); its quote is the cook's
   most useful words from those actions, verbatim; its sensory_cue keeps every cue.
+- Write every text field in English; never Devanagari. A step's quote_original is the input's quote_original
+  for the words its quote uses, copied exactly (joined with a space, in order, when the quote joins several
+  events); null when those events' quote_original are all null.
 - Write each instruction so someone who never saw the dish could follow it.
   Keep sensory cues; they matter more than times.
 - Attach each story and each special moment to the step it happened during or nearest to.
@@ -262,13 +282,14 @@ Return the complete answer again with every error above fixed, following all the
 
 
 ALIGN_PROMPT = """\
-You are listening to a home cook narrating in English while cooking {title}.
-Below, each recipe step comes with an audio clip of exactly that step: the clip starts at the step's first
-second. Each step lists its short substeps in order, and what the cook says during the step.
+You are listening to a home cook narrating while cooking {title}. The cook may speak Marathi, English or a
+mix of the two. Below, each recipe step comes with an audio clip of exactly that step: the clip starts at the
+step's first second. Each step lists its short substeps in order (in English), and what the cook says during
+the step: in English, followed by the words as spoken when the cook spoke Marathi.
 
 For every substep, give the time in its step's clip (MM:SS from the start of THAT clip) where the cook begins
-that substep: where they start doing it or start talking about it. Go by their words, and by sounds like
-sizzling, chopping, pouring or whisking.
+that substep: where they start doing it or start talking about it. Go by what they say, in any language,
+and by sounds like sizzling, chopping, pouring or whisking.
 
 Rules:
 - The first substep of every step is 00:00.

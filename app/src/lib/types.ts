@@ -36,7 +36,8 @@ export type Step = {
   sensory_cue: string | null;
   start_s: number;
   end_s: number;
-  quote: string | null;
+  quote: string | null; // in English
+  quote_original?: string | null; // the cook's words as spoken when not English (Marathi, in Devanagari)
   wait_after: string | null;
   story_ids: string[];
   special_ids: string[];
