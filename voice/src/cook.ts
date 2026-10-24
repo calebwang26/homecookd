@@ -47,6 +47,8 @@ const FAST: [RegExp, "next" | "previous" | "repeat"][] = [
   [/^(repeat|repeat that|again|say that again|one more time|what)$/, "repeat"],
 ];
 const normalize = (t: string) => t.toLowerCase().replace(/[^a-z' ]/g, " ").replace(/\s+/g, " ").trim();
+/** How long a spoken piece with no end punctuation waits for the rest of the sentence (Ink's next turn.end). */
+const HOLD_MS = 1200;
 /** "Um, wait, go back please" → "go back". */
 const command = (t: string) =>
   normalize(t)
@@ -127,6 +129,8 @@ export class Cooking {
   /** Bumped by every new clip or step, so a translation still waiting for its clip to end is dropped. */
   private clipSeq = 0;
   private turns: Promise<void> = Promise.resolve();
+  /** A spoken piece that ended mid-sentence, waiting for the rest (heard). */
+  private held: { text: string; timer: ReturnType<typeof setTimeout> } | null = null;
   private closed = false;
   /** Steps are read aloud only after the kid says yes to the offer. */
   private reading = false;
@@ -255,10 +259,34 @@ export class Cooking {
     this.speaking?.abort();
     clearInterval(this.quietCheck);
     for (const t of this.timers.values()) clearTimeout(t);
+    if (this.held) clearTimeout(this.held.timer);
+    this.held = null;
   }
 
+  /**
+   * Ink sometimes ends a turn mid-sentence ("How do I know when the sugar is" … "ready?"). A spoken piece with no
+   * end punctuation waits up to HOLD_MS for the rest, so the kid's question is one turn, not two. A plain command
+   * or a word or two ("next step", "yes") goes at once.
+   */
   private heard(text: string, spoken = true) {
     if (!text || !this.agent) return;
+    if (!spoken) return this.act(text, false);
+    if (this.held) {
+      clearTimeout(this.held.timer);
+      text = `${this.held.text} ${text}`;
+      this.held = null;
+    }
+    const short = normalize(text).split(" ").length <= 2;
+    if (!/[.?!…]["')\]]*$/.test(text.trim()) && !short && !FAST.some(([re]) => re.test(command(text)))) {
+      const piece = text;
+      this.held = { text: piece, timer: setTimeout(() => ((this.held = null), this.act(piece, true)), HOLD_MS) };
+      return;
+    }
+    this.act(text, true);
+  }
+
+  private act(text: string, spoken: boolean) {
+    if (!text || !this.agent || this.closed) return;
     const ignore = !spoken
       ? ""
       : notLatin(text)

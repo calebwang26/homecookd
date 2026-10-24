@@ -607,3 +607,4 @@ Before starting work, compare the last commit here with `git log origin/main` to
     kid Home heard the hello, then "I’m right here.", and "I’m right here." again after a full reload.
   - **Open:** the voice service's recording hello still says "I'm homie" on every recording (a voice change and
     deploy). Kid "Ask" keeps the default lines. Not on an iPhone yet (JS only: an EAS Update covers it).
+- Oct 24 · #54 · Claude · Ink sometimes ends the kid's turn mid-sentence ("How do I know when the sugar is" then "ready?" 0.8 s later, seen in the Merge Agent's live test), so the fragment got its own Claude turn and homie spoke twice after a hint ("Got it! That tip's mine…"). cook.ts heard(): a spoken piece with no end punctuation (and more than two words, and not a plain command) waits up to 1.2 s for the rest and goes as one turn; full sentences and commands go at once. Test: voice 89/89; live kid run clean.

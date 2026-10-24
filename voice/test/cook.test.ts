@@ -449,3 +449,24 @@ test("Claude can't turn reading on from the turn after a no", async () => {
   assert.equal(c.ws.of("go_to_step").at(-1)?.stepOrder, 2);
   c.close();
 });
+
+test("a question Ink ends mid-sentence waits for the rest: one turn with the whole sentence, not two", async () => {
+  const w = world();
+  const c = w.connect();
+  await offered(c);
+  w.says("How do I know when the sugar is");
+  await advance(800); // Ink's next turn.end, as seen live
+  w.says("ready?");
+  await waitFor("the joined turn", () => w.turns.length === 1);
+  await advance(2000);
+  assert.deepEqual(w.turns, ["How do I know when the sugar is ready?"]);
+  // A piece that never gets its rest still goes, after the hold.
+  w.says("Can I use butter instead of the ghee");
+  await waitFor("the held piece", () => w.turns.length === 2);
+  assert.equal(w.turns[1], "Can I use butter instead of the ghee");
+  // A plain command or a word or two never waits.
+  const mark = c.mark();
+  w.says("next step");
+  await waitFor("the step", () => mark().some((e) => e.type === "go_to_step"));
+  c.close();
+});
