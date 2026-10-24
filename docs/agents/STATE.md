@@ -284,3 +284,4 @@ Before starting work, compare the last commit here with `git log origin/main` to
     Convex. Family recipes the worker published before this still have their stories in the bucket (#34 hides them
     in the app). `rebuild_library` lists every `*/recipe.json` in the bucket, so any `publish.py` run puts family
     recipes into the shared `library.json` and the app bundle. The intro isn't kept anywhere now (no screen shows it).
+- Oct 24 · (this PR) · Claude · Root devDependency `@types/node`: `convex deploy` typechecks `convex/`, and a clean `npm ci` had no Node types, so every `process.env` failed (37 errors) and the deploy stopped. Now tsc is 0 and vitest 40/40.
