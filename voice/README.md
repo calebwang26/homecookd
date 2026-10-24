@@ -9,6 +9,7 @@ from general knowledge: a question is answered by the cook's own clip, or it goe
 src/server.ts   HTTP /health + WebSocket /cook
 src/cook.ts     one cooking session: wires Ink → (fast path | Claude) → actions → Sonic
 src/agent.ts    Claude turn agent: tools, system prompt, the one-tool-per-turn loop
+src/translate.ts  the cook's words from a played clip → short English, spoken after the clip
 src/ink.ts      Cartesia Ink 2 streaming STT (/stt/turns/websocket, built-in turn detection)
 src/sonic.ts    Cartesia Sonic TTS (/tts/bytes, streamed)
 src/moss.ts     Moss search over family-<familyId> (@moss-js/moss, in-memory queries)
@@ -54,7 +55,10 @@ Service → app
 - `{ type: "ready", recipe: { id, title, steps } }`, then `{ type: "go_to_step", stepOrder }` for where to start.
 - `{ type: "transcript", text, final }`: `final: false` while the kid talks, `true` once the turn ends.
 - `{ type: "go_to_step", stepOrder }`: show that step. Its text is spoken right after.
-- `{ type: "play_clip", startS, endS }`: play that span of the cook's video. Nothing is spoken over it.
+- `{ type: "play_clip", startS, endS }`: play that span of the cook's video. Nothing is spoken over it. When the
+  clip answers a question, half a second after it ends comes `{ type: "say", text: "Grandma says: …", ai: true,
+  translation: true }`: her words from that moment, in short English (Claude sees only her words). Show it labeled
+  as a translation. A step change or a new turn before then drops it.
 - `{ type: "asked_cook", questionId, text }`: the question went to the cook. "I'll ask Grandma" follows.
 - `{ type: "say", text, ai: true, audio: { format, encoding: "pcm_s16le", sampleRate: 24000 } }`, then the audio
   as binary frames, then `{ type: "say_end", interrupted }`. `audio=pcm` (default) streams raw PCM to play as it
