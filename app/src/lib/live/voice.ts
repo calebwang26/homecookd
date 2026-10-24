@@ -27,7 +27,7 @@ type ServerMsg =
   | { type: 'transcript'; text: string }
   | { type: 'go_to_step'; stepOrder: number }
   | { type: 'play_clip'; startS: number; endS: number }
-  | { type: 'say'; text: string; ai: true; audio?: { sampleRate?: number }; sampleRate?: number }
+  | { type: 'say'; text: string; ai: true; translation?: boolean; audio?: { sampleRate?: number }; sampleRate?: number }
   | { type: 'say_end'; interrupted?: boolean }
   | { type: 'asked_cook'; questionId: string };
 
@@ -55,7 +55,7 @@ export function useVoiceCooking(opts: { libraryId: string | null; step: number; 
   const reconnect = useRef<(() => Promise<void>) | null>(null);
   // The step the server just moved us to: not echoed back as a kid's tap.
   const lastServerStep = useRef<number | null>(null);
-  const say = useRef<{ chunks: ArrayBuffer[]; rate: number; timer: ReturnType<typeof setTimeout> | null } | null>(null);
+  const say = useRef<{ chunks: ArrayBuffer[]; rate: number; translation: boolean; timer: ReturnType<typeof setTimeout> | null } | null>(null);
   const cb = useRef(opts);
   useEffect(() => {
     cb.current = opts;
@@ -71,7 +71,7 @@ export function useVoiceCooking(opts: { libraryId: string | null; step: number; 
     say.current = null;
     if (!s) return;
     if (s.timer) clearTimeout(s.timer);
-    playSay(s.chunks, s.rate);
+    playSay(s.chunks, s.rate, s.translation);
   }, []);
 
   const onMessage = useCallback(
@@ -98,7 +98,7 @@ export function useVoiceCooking(opts: { libraryId: string | null; step: number; 
         lastServerStep.current = m.stepOrder;
         cb.current.onGoTo(m.stepOrder);
       } else if (m.type === 'play_clip') cb.current.onClip(m.startS, m.endS);
-      else if (m.type === 'say') say.current = { chunks: [], rate: m.audio?.sampleRate ?? m.sampleRate ?? 24000, timer: null };
+      else if (m.type === 'say') say.current = { chunks: [], rate: m.audio?.sampleRate ?? m.sampleRate ?? 24000, translation: !!m.translation, timer: null };
       else if (m.type === 'say_end') {
         if (m.interrupted) say.current = null; // the kid spoke over it: never play the rest
         else flushSay();
