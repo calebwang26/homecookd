@@ -16,7 +16,8 @@ English (the app, cook mode and the English-only Moss index read them) and keeps
 quote in quote_original; the merge carries it, and align hears the Marathi but reads the English.
 Oct 24 (Track F): {context} is the job's language line (language_line) plus, when homie (the AI helper that
 talks to the cook while she films) was there, its questions and her answers (homie_block), so homie's voice is
-never taken for the cook's. Steps are grouped more coarsely: about 8 to 12 for a typical home dish.
+never taken for the cook's. Glasses through the laptop bridge (glasses/BRIDGE.md) add live_block: what the live
+pass saw while she cooked, as hints to check against the video, and the spans the video has no footage for. Steps are grouped more coarsely: about 8 to 12 for a typical home dish.
 
 EXTRACT_PROMPT.format(i=..., n=..., clip_mmss=..., context=...)
 EXTRACT_RETRY_SUFFIX.format(error=...)
@@ -136,9 +137,67 @@ def homie_block(log: list[dict] | None, base_s: float = 0, clip_s: float | None 
     return HOMIE_BLOCK.format(lines="\n".join(lines)) if lines else ""
 
 
-def context(language: str | None, log: list[dict] | None, base_s: float = 0, clip_s: float | None = None) -> str:
+LIVE_BLOCK = """\
+A quick live pass watched this recording in 30-second pieces while the cook was cooking. These are its
+notes. They are hints, not facts: use them to notice things, but take every step, amount, quote and time
+from the video itself, and where the video and a note disagree, the video is right. "marker" notes are the
+cook's own button presses on her glasses when she started something new: likely step boundaries.
+{lines}{missed}{gaps}"""
+
+LIVE_MISSED = """The live pass did not look at {spans}; the video there is complete, so read it as usual.
+"""
+
+LIVE_GAPS = """The video has no footage at {spans} (a frozen frame and silence: the glasses lost those
+seconds). Never invent steps there. If a live note above falls in one of those spans, it is the only record
+of that moment: keep it, as a low-confidence step if it is a step, and keep its time.
+"""
+
+
+def live_block(live: dict | None, base_s: float = 0, clip_s: float | None = None) -> str:
+    """The laptop bridge's live analysis (Convex /worker/claim's liveLog, liveGaps, videoGaps; video seconds)
+    for a prompt. base_s/clip_s keep one clip's part and make it MM:SS within it (extraction); otherwise
+    whole seconds (merge)."""
+    live = live or {}
+
+    def at(t: float) -> str:
+        if clip_s is None:
+            return f"{round(t)} s"
+        s = max(0, round(t - base_s))
+        return f"{s // 60:02d}:{s % 60:02d}"
+
+    def inside(t0: float, t1: float) -> bool:
+        return clip_s is None or (t1 >= base_s and t0 <= base_s + clip_s)
+
+    def spans(items: list[dict]) -> str:  # cut to the clip; a span that only touches its edge isn't in it
+        lo, hi = (base_s, base_s + clip_s) if clip_s is not None else (float("-inf"), float("inf"))
+        return ", ".join(f"{at(max(g['startS'], lo))}-{at(min(g['endS'], hi))}" for g in items
+                         if g["endS"] > lo and g["startS"] < hi)
+
+    lines = []
+    for e in live.get("liveLog") or []:
+        if not inside(e["atS"], e.get("endS", e["atS"])):
+            continue
+        when = at(e["atS"]) + (f"-{at(e['endS'])}" if e.get("endS") is not None else "")
+        line = f"- {when} {e['kind']}: {e['title']}"
+        if e.get("text"):
+            line += f": {e['text']}"
+        if e.get("saidAs"):
+            line += f' (said "{e["saidAs"]}")'
+        if e.get("quoteOriginal"):
+            line += f' (spoken as "{e["quoteOriginal"]}")'
+        lines.append(line)
+    missed, gaps = spans(live.get("liveGaps") or []), spans(live.get("videoGaps") or [])
+    if not lines and not gaps:
+        return ""
+    return LIVE_BLOCK.format(lines="\n".join(lines) + "\n" if lines else "(no notes for this part)\n",
+                             missed=LIVE_MISSED.format(spans=missed) if missed and lines else "",
+                             gaps=LIVE_GAPS.format(spans=gaps) if gaps else "")
+
+
+def context(language: str | None, log: list[dict] | None, base_s: float = 0, clip_s: float | None = None,
+            live: dict | None = None) -> str:
     """{context} for EXTRACT_PROMPT and MERGE_PROMPT: "" for a plain upload, so the prompts stay as before."""
-    return language_line(language) + homie_block(log, base_s, clip_s)
+    return language_line(language) + homie_block(log, base_s, clip_s) + live_block(live, base_s, clip_s)
 
 
 EXTRACT_RETRY_SUFFIX = """\

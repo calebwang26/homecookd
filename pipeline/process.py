@@ -267,7 +267,7 @@ class Extraction:
         m = manifest or {}
         self.base_prompt = EXTRACT_PROMPT.format(
             i=i, n=n, clip_mmss=f"{clip_s // 60:02d}:{clip_s % 60:02d}",
-            context=context(m.get("language"), m.get("homie_log"), self.base_s, self.clip_len))
+            context=context(m.get("language"), m.get("homie_log"), self.base_s, self.clip_len, m.get("live")))
         self.prompt = self.base_prompt  # gains EXTRACT_RETRY_SUFFIX after a rejected answer
         self.error = "unknown error"
 
@@ -546,7 +546,7 @@ def merge(w: writer.GeminiWriter | writer.MuseWriter, manifest: dict, events: li
                                                 not (manifest.get("order") or {}).get("reordered")),
                             separators=(",", ":")),
         events=json.dumps(events, separators=(",", ":"), ensure_ascii=False),
-        context=context(manifest.get("language"), manifest.get("homie_log"))) + extra
+        context=context(manifest.get("language"), manifest.get("homie_log"), live=manifest.get("live"))) + extra
     prompt, errors, saved, model = base_prompt, ["no attempt made"], None, w.model
     tag = f"{tag} {w.name}"
     for attempt in (1, 2):
@@ -708,14 +708,15 @@ Report = Callable[[str, float], None]  # (Convex job stage, progress 0..1 across
 
 def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_s: float = BATCH_TIMEOUT_S,
         shorten: bool = True, rewrite: bool = False, report: Report | None = None,
-        language: str | None = None, homie_log: list[dict] | None = None) -> Path:
+        language: str | None = None, homie_log: list[dict] | None = None, live: dict | None = None) -> Path:
     """Extract, merge and validate one recipe. Returns the recipe.json path. Raises ProcessError on failure.
     batch=True runs the extraction as one Batch API job (half price, slower); see extract_batch.
     shorten=False skips pipeline/shorten.py's extra text call after the merge.
     rewrite=True writes recipe.json again from the cached extraction (no new Gemini video calls).
     report gets the worker's stages: understanding 0.2 -> 0.7 per extracted file, then writing 0.7 -> 0.95.
     language (ISO 639-1) and homie_log (Convex /worker/claim's homieLog, video seconds) come from the worker's
-    job; they are saved in the manifest, so a later --rewrite keeps them."""
+    job, and so does live (the glasses bridge's liveLog, liveGaps and videoGaps); they are saved in the manifest,
+    so a later --rewrite keeps them."""
     report = report or (lambda stage, progress: None)
     out_dir = OUT_ROOT / recipe_id
     work = out_dir / "work"
@@ -731,8 +732,9 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
     cfg = load_config()
     show_sdk_retries()
     manifest = json.loads(manifest_path.read_text())
-    if language is not None or homie_log is not None:
-        manifest.update({k: v for k, v in (("language", language), ("homie_log", homie_log)) if v is not None})
+    if language is not None or homie_log is not None or live is not None:
+        manifest.update({k: v for k, v in (("language", language), ("homie_log", homie_log), ("live", live))
+                         if v is not None})
         manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
     media_dur = manifest["duration_s"]
     jobs = order.chunk_jobs(manifest)  # recorded-order numbering: chunk caches survive a reorder

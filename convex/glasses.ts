@@ -12,12 +12,17 @@ const status = v.union(
   v.literal("ended"),
   v.literal("abandoned"),
 );
-const live = v.object({ recordingId: v.id("recordings"), status, startedAt: v.optional(v.number()) });
+const live = v.object({
+  recordingId: v.id("recordings"),
+  status,
+  startedAt: v.optional(v.number()),
+  jobId: v.optional(v.id("jobs")), // set once someone (the laptop bridge or the VM) has finished it
+});
 
 // A forgotten recording (the phone died mid-intro) shouldn't keep the glasses filming the next day.
 const STALE_MS = 12 * 60 * 60 * 1000;
 
-const report = (r: Doc<"recordings">) => ({ recordingId: r._id, status: r.status, startedAt: r.startedAt });
+const report = (r: Doc<"recordings">) => ({ recordingId: r._id, status: r.status, startedAt: r.startedAt, jobId: r.jobId });
 
 /**
  * The newest glasses recording that isn't over, or null. With `recordingId`, that recording in any
@@ -52,12 +57,17 @@ export const active = internalQuery({
  * the recording's dish, language and kid. Calling it again returns the same job.
  */
 export const finished = internalMutation({
-  args: { recordingId: v.string(), uploadPath: v.string(), videoStartedAt: v.number() },
+  args: {
+    recordingId: v.string(),
+    uploadPath: v.string(),
+    videoStartedAt: v.number(),
+    videoGaps: v.optional(v.array(v.object({ startS: v.number(), endS: v.number() }))),
+  },
   returns: v.union(
     v.object({ jobId: v.id("jobs"), recipeId: v.id("recipes") }),
     v.object({ error: v.string(), status: v.union(v.literal(400), v.literal(404)) }),
   ),
-  handler: async (ctx, { recordingId, uploadPath, videoStartedAt }) => {
+  handler: async (ctx, { recordingId, uploadPath, videoStartedAt, videoGaps }) => {
     const id = ctx.db.normalizeId("recordings", recordingId);
     const rec = id && (await ctx.db.get(id));
     if (!rec || rec.source !== "glasses") return { error: "no such glasses recording", status: 404 as const };
@@ -87,6 +97,7 @@ export const finished = internalMutation({
       recordingId: rec._id,
       stage: "queued",
       progress: 0,
+      videoGaps,
     });
     await ctx.db.patch(rec._id, { videoStartedAt, jobId, updatedAt: Date.now() });
     return { jobId, recipeId };

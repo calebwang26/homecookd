@@ -14,6 +14,8 @@
 //                      the recording itself; a phone video then sends anyway.
 //   ended              the done view (components/record/DoneView): homie waves, the video goes, home.
 // homie's questions come up as AskMoments: answered out loud, no buttons (a tap closes one).
+// Glasses through the laptop bridge (glasses/BRIDGE.md): while filming, one small line under the label
+// names the last step the live pass saw, so she (or whoever holds the phone) knows it's following along.
 // If homie's connection is lost: the reason, "Try again" and the × (a phone recording can also film
 // without homie; one already filmed goes straight to the done view and sends). The screen stays
 // awake, and can't be swiped away once filming started.
@@ -35,9 +37,9 @@ import { recordingView, shouldAutoStart, wrapStallMs, type Ask } from '@/compone
 import { COLUMN, RecordWash } from '@/components/record/RecordWash';
 import { usePickVideos } from '@/components/record/usePickVideos';
 import { recordWords, type Line } from '@/components/record/words';
-import { ActionButton, CloseIcon, IconButton } from '@/components/ui';
+import { ActionButton, CloseIcon, IconButton, Txt } from '@/components/ui';
 import { useAiSpeaking, useHomieScreen } from '@/lib/homie/hooks';
-import { useRecording } from '@/lib/live/convex';
+import { useLiveLog, useRecording } from '@/lib/live/convex';
 import { useHomieRecording } from '@/lib/live/homie';
 import { colors, motion, space } from '@/theme/tokens';
 
@@ -79,6 +81,9 @@ export default function RecordingScreen() {
   const draft = useDraft();
   const pick = usePickVideos();
   const rec = useRecording(id);
+  const liveLog = useLiveLog(rec?.source === 'glasses' ? id : null);
+  const steps = liveLog?.events.filter((e) => e.kind === 'step') ?? [];
+  const lastStep = steps.length ? steps[steps.length - 1] : null;
   const source = rec?.source ?? (params.source === 'phone' ? 'phone' : 'glasses');
   const homie = useHomieRecording(id, { language: params.lang || 'en', kidName: params.kid || undefined, dish: draft.dish ?? undefined });
   const lang = homie.info?.language ?? rec?.language ?? (params.lang || 'en');
@@ -182,6 +187,13 @@ export default function RecordingScreen() {
             <Animated.View key={view.line.text} entering={FadeIn.duration(reduce ? motion.reducedFadeMs : 220)} style={styles.label}>
               <BiLine line={view.line} size={30} weight={700} enSize={15} leading={1.3} />
             </Animated.View>
+            {view.live && lastStep ? (
+              <Animated.View key={lastStep.at} entering={FadeIn.duration(reduce ? motion.reducedFadeMs : 220)} style={styles.seen}>
+                <Txt variant="meta" size={14} color={colors.muted} align="center" accessibilityLabel={`Seen so far: ${steps.length} steps. Last: ${lastStep.title}`}>
+                  {`Seen so far: ${lastStep.title} · ${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`}
+                </Txt>
+              </Animated.View>
+            ) : null}
             {micOff || error ? (
               <View style={styles.problem}>
                 {micOff ? <BiLine line={micOff} size={16} weight={600} color={colors.danger} enColor={colors.danger} /> : null}
@@ -216,5 +228,6 @@ const styles = StyleSheet.create({
   top: { position: 'absolute', left: 0, right: 0, top: 0, paddingHorizontal: space.gutter, flexDirection: 'row' },
   column: { flex: 1, paddingHorizontal: COLUMN.side, alignItems: 'center', justifyContent: 'center' },
   label: { marginTop: COLUMN.toLabel },
+  seen: { marginTop: 14 },
   problem: { marginTop: 24, alignItems: 'center', gap: 10 },
 });

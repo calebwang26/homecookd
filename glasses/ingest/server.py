@@ -42,6 +42,10 @@ POLL_S = 2
 QUIET_S = 60  # wrapping up with no data this long: the glasses died or walked off; finish without them
 RETRY_S = 30
 FRESH_S = 30  # /frame/latest serves nothing older than this
+# The laptop bridge (BRIDGE.md) uploads the full video from its own backup when the cook says "I'm done".
+# Give it this long before the VM muxes its live copy; whoever finishes first makes the job.
+BRIDGE_GRACE_S = 180
+BRIDGE_FW = "edible-glasses-bridge"
 
 
 @dataclass
@@ -65,6 +69,7 @@ class Ingest:
         self.latest: tuple[float, bytes] | None = None  # (monotonic, jpeg), for homie
         self.offset_ms: float | None = None  # wall-clock ms minus device ms
         self.last_dev_us = 0
+        self.bridged = False  # the glasses stream through the laptop bridge, not directly
         self.todo: set[str] = set()  # stopped, not yet turned into a job
         self.orphans: set[str] = set()  # half-recorded when the service last stopped
         self.busy: set[str] = set()
@@ -169,12 +174,22 @@ class Ingest:
         await self.tell({"type": "stopped"})
         if upload:
             self.todo.add(rec.id)
+            if self.bridged:
+                self.retry_at[rec.id] = time.monotonic() + BRIDGE_GRACE_S
 
     async def finish(self, rid: str) -> None:
         """Mux, upload, create the job. Each step leaves a mark in meta.json, so a retry skips what's done."""
         rec = Recording(self.cfg.root, rid)
         rec.close()
         try:
+            code, row = await self.convex("/glasses/active", {"recordingId": rid})
+            if code == 200 and row and row.get("jobId"):
+                # The laptop bridge already uploaded the full video and made the job: nothing left to do here.
+                rec.mark("finished", jobId=row["jobId"], by="bridge")
+                self.todo.discard(rid)
+                self.clean(rec.dir)
+                log.info("%s: the laptop bridge already made job %s; dropped the live copy", rid, row["jobId"])
+                return
             if not rec.marked("muxed") and rec.frames == 0:
                 # The glasses were off or flat the whole time. There's no video to make a recipe from, and
                 # trying again won't change that.
@@ -257,6 +272,7 @@ class Ingest:
         except ValueError:
             return
         if isinstance(hello, dict) and hello.get("type") == "hello":
+            self.bridged = str(hello.get("fw", "")).startswith(BRIDGE_FW)
             log.info("hello: fw %s, %sx%s at %s fps", hello.get("fw"), hello.get("w"), hello.get("h"), hello.get("fps"))
 
     def wall_ms(self, dev_us: int) -> int:

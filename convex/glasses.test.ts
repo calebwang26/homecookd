@@ -153,3 +153,101 @@ test("/glasses/finished refuses bad bodies, other recordings and abandoned ones"
   expect((await post(t, "/glasses/finished", ok)).status).toBe(400);
   expect(await t.run(async (ctx) => ctx.db.query("jobs").collect())).toHaveLength(0);
 });
+
+// ---- the laptop bridge (glasses/BRIDGE.md) ----
+
+const window = (rec: string, over: Record<string, unknown> = {}) => ({
+  recordingId: rec,
+  sessionId: "a1b2c3d4e5f60718",
+  sessionStartedAt: 1_700_000_000_000,
+  windowStartS: 30,
+  windowEndS: 60,
+  ok: true,
+  events: [
+    { kind: "marker", atS: 31, title: "step marker", text: "", confidence: 1 },
+    { kind: "step", atS: 32.5, endS: 50, title: "Fry the onions", text: "Fry until golden.", confidence: 0.8 },
+    { kind: "ingredient", atS: 33, title: "salt", text: "~1 tsp", saidAs: "thoda sa", confidence: 0.8 },
+  ],
+  ...over,
+});
+
+test("/glasses/live-events needs the secret and a well-formed window", async () => {
+  const t = newBackend();
+  const f = await family(t);
+  const rec = await recording(t, f, "recording");
+  expect((await post(t, "/glasses/live-events", window(rec), "wrong")).status).toBe(401);
+  for (const bad of [
+    window(rec, { recordingId: 7 }),
+    window(rec, { sessionStartedAt: "now" }),
+    window(rec, { windowEndS: 10 }),
+    window(rec, { ok: "yes" }),
+    window(rec, { events: "none" }),
+    window(rec, { events: [{ kind: "rumour", atS: 1, title: "", text: "", confidence: 1 }] }),
+    window(rec, { events: [{ kind: "step", atS: "soon", title: "", text: "", confidence: 1 }] }),
+    window(rec, { events: [{ kind: "step", atS: 1, title: "x", confidence: 1 }] }),
+    window(rec, { events: Array.from({ length: 101 }, () => ({ kind: "step", atS: 1, title: "x", text: "", confidence: 1 })) }),
+  ]) {
+    expect((await post(t, "/glasses/live-events", bad)).status).toBe(400);
+  }
+  expect((await post(t, "/glasses/live-events", window("nope"))).status).toBe(404);
+  const phone = await recording(t, f, "recording", "phone");
+  expect((await post(t, "/glasses/live-events", window(phone))).status).toBe(404);
+  await setStatus(t, rec, "abandoned");
+  expect((await post(t, "/glasses/live-events", window(rec))).status).toBe(400);
+  expect(await t.run(async (ctx) => ctx.db.query("liveEvents").collect())).toHaveLength(0);
+});
+
+test("live events reach the app live and the worker on the video's clock, with the missed spans", async () => {
+  process.env.WORKER_SECRET = "worker-secret-for-tests";
+  const t = newBackend();
+  const f = await family(t);
+  const rec = await recording(t, f, "recording");
+
+  expect(await (await post(t, "/glasses/live-events", window(rec))).json()).toEqual({ events: 3 });
+  const failed = window(rec, { windowStartS: 55, windowEndS: 85, ok: false, reason: "analysis behind", events: [] });
+  expect((await post(t, "/glasses/live-events", failed)).status).toBe(200);
+
+  // The video starts 20 s into the glasses session (the cook paired the recording late, say).
+  await setStatus(t, rec, "ended");
+  const done = await post(t, "/glasses/finished", {
+    recordingId: rec,
+    uploadPath: `glasses-${rec}/`,
+    videoStartedAt: 1_700_000_020_000,
+    durationS: 100,
+    videoGaps: [{ startS: 70, endS: 75 }],
+  });
+  expect(done.status).toBe(200);
+  const { jobId } = await done.json();
+
+  // The VM learns the job exists, so it doesn't upload its own copy.
+  const active = await (await post(t, "/glasses/active", { recordingId: rec })).json();
+  expect(active).toMatchObject({ status: "ended", jobId });
+
+  const claimed = await (
+    await t.fetch("/worker/claim", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", "x-worker-secret": "worker-secret-for-tests" },
+      body: "{}",
+    })
+  ).json();
+  expect(claimed.jobId).toBe(jobId);
+  expect(claimed.liveLog.map((e: { kind: string; atS: number }) => [e.kind, e.atS])).toEqual([
+    ["marker", 11],
+    ["step", 12.5],
+    ["ingredient", 13],
+  ]);
+  expect(claimed.liveLog[1]).toMatchObject({ endS: 30, title: "Fry the onions", confidence: 0.8 });
+  expect(claimed.liveLog[2]).toMatchObject({ saidAs: "thoda sa" });
+  expect(claimed.liveGaps).toEqual([{ startS: 35, endS: 65 }]);
+  expect(claimed.videoGaps).toEqual([{ startS: 70, endS: 75 }]);
+});
+
+test("/glasses/finished refuses malformed videoGaps", async () => {
+  const t = newBackend();
+  const f = await family(t);
+  const rec = await recording(t, f, "ended");
+  const ok = { recordingId: rec, uploadPath: `glasses-${rec}/`, videoStartedAt: 1_700_000_000_000, durationS: 10 };
+  for (const videoGaps of ["none", [{ startS: 5, endS: 1 }], [{ startS: "a", endS: 1 }]]) {
+    expect((await post(t, "/glasses/finished", { ...ok, videoGaps })).status).toBe(400);
+  }
+});

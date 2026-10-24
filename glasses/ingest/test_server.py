@@ -58,6 +58,7 @@ class FakeConvex:
         self.status: dict[str, str] = {}
         self.stale: set[str] = set()  # over 12 h old: /glasses/active {} no longer reports them
         self.finished: list[dict] = []
+        self.jobs: dict[str, str] = {}  # recordings someone else (the laptop bridge) already finished
         self.down = 0  # answer /glasses/finished with a 500 this many more times
 
     async def __call__(self, path: str, body: dict) -> tuple[int, dict | None]:
@@ -66,7 +67,8 @@ class FakeConvex:
             if rid is not None:
                 if rid not in self.status:
                     return 404, {"error": "no such glasses recording"}
-                return 200, {"recordingId": rid, "status": self.status[rid]}
+                row = {"recordingId": rid, "status": self.status[rid]}
+                return 200, row | ({"jobId": self.jobs[rid]} if rid in self.jobs else {})
             live = [r for r, s in self.status.items() if s in LIVE and r not in self.stale]
             return (200, {"recordingId": live[-1], "status": self.status[live[-1]]}) if live else (204, None)
         if path == "/glasses/finished":
@@ -151,6 +153,41 @@ class TickTest(unittest.IsolatedAsyncioTestCase):
         return int(self.clock.wall * 1000)
 
     # ---- the tests ----
+
+    async def bridged_recording(self) -> server.Ingest:
+        """Glasses streaming through the laptop bridge, filmed for 2 s, then the cook said "I'm done"."""
+        vm = self.vm()
+        glasses = Glasses(vm, self.clock)
+        vm.on_text(json.dumps({"type": "hello", "fw": "edible-glasses-bridge 0.1", "w": 640, "h": 480, "fps": 8}))
+        self.convex.status["A"] = "recording"
+        await self.tick(vm)
+        glasses.film(2)
+        self.convex.status["A"] = "ended"
+        await self.tick(vm)
+        self.assertIsNone(vm.current)
+        self.assertEqual(self.uploads, [])  # the laptop gets its head start
+        return vm
+
+    async def test_bridge_finished_first_so_the_vm_only_cleans_up(self) -> None:
+        vm = await self.bridged_recording()
+        self.convex.jobs["A"] = "job-A"  # the laptop uploaded the full video and made the job
+        self.clock.advance(server.BRIDGE_GRACE_S + 1)
+        await self.tick(vm)
+        self.assertEqual(self.uploads, [])
+        self.assertEqual(self.convex.finished, [])
+        self.assertEqual(self.meta("A")["finished"], {"jobId": "job-A", "by": "bridge"})
+        self.assertEqual(self.files("A"), ["meta.json"])
+        self.assertEqual(vm.todo, set())
+
+    async def test_bridge_never_finished_so_the_vm_uploads_its_copy(self) -> None:
+        vm = await self.bridged_recording()
+        self.clock.advance(server.BRIDGE_GRACE_S - 10)
+        await self.tick(vm)
+        self.assertEqual(self.uploads, [])
+        self.clock.advance(11)
+        await self.tick(vm)
+        self.assertEqual(self.uploads, [("uploads", "glasses-A/01.mp4", b"mp4 of 16 frames")])
+        self.assertEqual([b["recordingId"] for b in self.convex.finished], ["A"])
 
     async def test_ended_makes_the_job_and_deletes_the_media(self) -> None:
         vm = self.vm()

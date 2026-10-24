@@ -14,7 +14,8 @@ job can be queued again; the uploads bucket's 14-day lifecycle rule deletes them
 The app may create the job while the signer upload is still going. A signer upload ("<job_id>/") lists its
 files in jobs/<job_id>.json, the file GCS mode waits on; the worker waits up to UPLOAD_WAIT_S for all of
 them, then hands the job back with /worker/release (Convex queues it again 30 s later) and moves on.
-The claim also carries the job's title, language and homie's questions (homieLog), which go to process.py.
+The claim also carries the job's title, language and homie's questions (homieLog), which go to process.py,
+and for glasses through the laptop bridge the live analysis (liveLog, liveGaps, videoGaps).
 
 GCS mode (--gcs): the phone gets signed URLs from the Cloud Run signer (cloud/signer), uploads videos into the
 private uploads bucket in the background, and polls jobs/<job_id>.json in the public media
@@ -503,7 +504,9 @@ def handle_convex(convex: Convex, job: dict, media: storage.Bucket, uploads: sto
             cook = job.get("cookName") or "Cook"
             # The dish the cook named; without one the writer names it (process.NO_TITLE).
             prep.run(recipe_id, job.get("title") or "", cook, job.get("relation") or cook, inputs)
-            process.run(recipe_id, report=report, language=job.get("language"), homie_log=job.get("homieLog") or [])
+            live = {k: job.get(k) or [] for k in ("liveLog", "liveGaps", "videoGaps")}
+            process.run(recipe_id, report=report, language=job.get("language"), homie_log=job.get("homieLog") or [],
+                        live=live if any(live.values()) else None)
             report("writing", 0.9)
             # Media + recipe.json only. No rebuild_library: Convex lists the family's recipes now, and the
             # GCS library.json is shared by every pre-hackathon copy of the app. The public recipe.json

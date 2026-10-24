@@ -30,6 +30,7 @@ import type * as lib_supabase from "../lib/supabase.js";
 import type * as lib_translate from "../lib/translate.js";
 import type * as lib_yesNo from "../lib/yesNo.js";
 import type * as live from "../live.js";
+import type * as liveEvents from "../liveEvents.js";
 import type * as messages from "../messages.js";
 import type * as moss from "../moss.js";
 import type * as people from "../people.js";
@@ -73,6 +74,7 @@ declare const fullApi: ApiFromModules<{
   "lib/translate": typeof lib_translate;
   "lib/yesNo": typeof lib_yesNo;
   live: typeof live;
+  liveEvents: typeof liveEvents;
   messages: typeof messages;
   moss: typeof moss;
   people: typeof people;

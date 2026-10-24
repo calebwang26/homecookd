@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { liveEvent, liveLog } from "./liveEvents";
 import schema, { memory } from "./schema";
 
 const moment = v.object({ startS: v.number(), endS: v.number() });
@@ -62,6 +63,11 @@ export const claim = internalMutation({
       forKidName: v.optional(v.string()),
       memoriesOptIn: v.optional(v.boolean()),
       homieLog: v.array(homieEntry),
+      // Glasses through the laptop bridge: the live analysis (video seconds) as hints, the spans it missed,
+      // and the spans with no footage at all.
+      liveLog: v.array(liveEvent),
+      liveGaps: v.array(moment),
+      videoGaps: v.array(moment),
     }),
   ),
   handler: async (ctx) => {
@@ -90,6 +96,8 @@ export const claim = internalMutation({
       forKidName: kid ? kid.name : undefined,
       memoriesOptIn: recording ? recording.memoriesOptIn : undefined,
       homieLog: recording ? await homieLog(ctx, recording) : [],
+      ...(recording ? await liveLog(ctx, recording) : { liveLog: [], liveGaps: [] }),
+      videoGaps: job.videoGaps ?? [],
     };
   },
 });
