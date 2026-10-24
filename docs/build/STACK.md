@@ -224,9 +224,14 @@ voice, in `lang` or the person's language). `translate: true` first turns Englis
 
 **Glasses VM → Convex** (HTTP POST, `x-glasses-secret`; `convex/lib/glassesRoutes.ts`; see `glasses/INGEST.md`)
 - `/glasses/active` `{}` → `{ recordingId, status, startedAt? }` for the newest `glasses` recording that isn't
-  `ended`/`abandoned`, or `204`. (One pair of glasses for the hackathon.)
+  `ended`/`abandoned` (and is under 12 h old), or `204`. (One pair of glasses for the hackathon.)
+  `{ recordingId }` → that recording in any status, or `404`, so the VM can tell `ended` (upload) from
+  `abandoned` (don't).
 - `/glasses/finished` `{ recordingId, uploadPath, videoStartedAt, durationS }` → `{ jobId, recipeId }`: sets
-  `recordings.videoStartedAt` and creates the job (`source: "glasses"`) with the recording's dish, language and kid.
+  `recordings.videoStartedAt` and `jobId`, and creates the "processing" card (titled with the dish) and the job
+  (`source: "glasses"`) with the recording's dish, language and kid. Calling it again returns the same job; `400`
+  for an abandoned recording or an `uploadPath` other than `glasses-<recordingId>/`, `404` for one that isn't a
+  glasses recording.
 
 **New keys**: `GLASSES_SECRET` (Convex env, the VM, Cloud Run secret), `GEMINI_API_KEY` (Cloud Run secret, for live
 Marathi transcription), `HOMIE_VOICE` (Cloud Run env: homie's Cartesia voice id), `GLASSES_URL` (Cloud Run env).
