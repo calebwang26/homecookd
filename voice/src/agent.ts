@@ -146,11 +146,11 @@ export class TurnAgent {
     this.playable = session.recipe.steps.map((s) => ({ ...s.moment, stepOrder: s.order }));
   }
 
-  /** Handle one finished utterance from the kid. */
-  async turn(utterance: string): Promise<void> {
+  /** Handle one finished utterance from the kid. `note`: what the service already did with it (a no to an offer). */
+  async turn(utterance: string, note?: string): Promise<void> {
     const steps = this.session.recipe.steps;
     const now = steps.find((s) => s.order === this.actions.currentStep());
-    const context = `[On step ${now?.order ?? "?"} of ${steps.length}: ${now?.title ?? ""}]`;
+    const context = `[On step ${now?.order ?? "?"} of ${steps.length}: ${now?.title ?? ""}]${note ? `\n[${note}]` : ""}`;
     // Search the video up front (in-memory, ~10 ms), so a question needs one model call, not two.
     let foundThisTurn = await this.actions.findMoment(utterance, 2000).catch(() => [] as Hit[]);
     this.playable.push(...foundThisTurn.map((h) => ({ startS: h.startS, endS: h.endS, quote: h.quote, stepOrder: h.stepOrder })));

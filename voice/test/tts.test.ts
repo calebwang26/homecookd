@@ -334,7 +334,7 @@ const settle = async () => {
   for (let i = 0; i < 10; i++) await new Promise((r) => setImmediate(r));
 };
 
-test("Gemini stalls before its first audio: the line fails at 6 s with both reasons, nothing went out", async () => {
+test("Gemini stalls before its first audio: the line fails at 6 s with both reasons, nothing went out", { timeout: 30_000 }, async () => {
   mock.timers.enable({ apis: ["setTimeout"] });
   stub({ sonic: () => new Response("no credits", { status: 402 }), gemini: geminiStalls() });
   let done = false;
@@ -351,7 +351,7 @@ test("Gemini stalls before its first audio: the line fails at 6 s with both reas
   assert.deepEqual(out, []);
 });
 
-test("Gemini's audio starts, then stalls: the whole-line cap ends it, keeping what went out", async () => {
+test("Gemini's audio starts, then stalls: the whole-line cap ends it, keeping what went out", { timeout: 30_000 }, async () => {
   mock.timers.enable({ apis: ["setTimeout"] });
   stub({ sonic: () => new Response("no credits", { status: 402 }), gemini: geminiStalls([geminiPieces[0]]) });
   const text = "Step 2. Heat the ghee until it shimmers, then add the cumin.";

@@ -321,7 +321,15 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   moment opens on the kid's phone, `{ type: "moment", open: false }` when it closes. While one is open the service
   still streams transcripts, but a spoken yes, no, sure or not now is not applied to its read-aloud offer or
   story nudge (and doesn't reach Claude); other speech goes the usual way. It says no offer or nudge until the
-  moment closes. A `{ type: "text" }` answer is the app's own and always counts.
+  moment closes. A `{ type: "text" }` answer is the app's own and always counts. What counts as a yes or a no, for
+  the offers and the moments: `voice/src/yesNo.ts`, which follows the app's `yesNo`. A yes word (yes, yeah, sure,
+  of course) is a yes whatever follows ("Yes, but how much ginger?"). Only okay, ok, alright and please have an
+  exception: with a command or a question after them ("Okay, what's the next step?") they go the usual way. It also
+  takes a no with more after it ("No, not right now"), and a no wins. The no is handled first; then, even with a
+  moment up, anything after it that isn't just more no is still the service's: a plain command or a timer that is
+  the whole ask takes the fast path ("No, next step"), and anything else goes to Claude as the kid's whole sentence,
+  never a cut-down copy, with a note that the offer was declined ("No, I'm out of ginger. Can I skip it?"). "No,
+  maybe later" is only the no.
 - The app sends silence while a `say` or clip plays (half duplex).
 
 **Worker ↔ Convex additions**

@@ -14,6 +14,7 @@ import { SONIC_SAMPLE_RATE, type AudioFormat } from "./sonic.js";
 import { listenInk, speak } from "./speech.js";
 import type { Stt, SttEvents } from "./stt.js";
 import { translateQuote } from "./translate.js";
+import { afterNo, yesNo } from "./yesNo.js";
 
 type SayKind = "step" | "reply" | "hint" | "translation" | "nudge" | "offer" | "greeting" | "timer";
 
@@ -45,8 +46,6 @@ const FAST: [RegExp, "next" | "previous" | "repeat"][] = [
   [/^(go back|back|previous|previous step|last step|step back)$/, "previous"],
   [/^(repeat|repeat that|again|say that again|one more time|what)$/, "repeat"],
 ];
-/** "Yes" to an open offer (read it out loud, hear a story). Anything else goes the usual way. */
-const YES = /^(yes|yeah|yep|yup|sure|ok|okay|please|go ahead|read it|read it out loud|do it|let'?s hear it)( .*)?$/;
 const normalize = (t: string) => t.toLowerCase().replace(/[^a-z' ]/g, " ").replace(/\s+/g, " ").trim();
 /** "Um, wait, go back please" → "go back". */
 const command = (t: string) =>
@@ -60,19 +59,8 @@ function timerAsk(t: string): { seconds: number; label: string } | null {
   const seconds = Math.round(Number(m[1]) * (m[2].startsWith("h") ? 3600 : m[2].startsWith("m") ? 60 : 1));
   return seconds >= 5 && seconds <= 4 * 3600 ? { seconds, label: m[3]?.trim() || "timer" } : null;
 }
-const isYes = (t: string) => {
-  const c = normalize(t);
-  return YES.test(c) && !FAST.some(([re]) => re.test(command(t)));
-};
-/** A whole reply that is only a yes ("yes please", "sure") or only a no ("no thanks", "not now"). */
-const YES_REPLY = /^(yes|yeah|yep|yup|sure|ok|okay|alright|please|of course|go ahead|do it|read it|read it to me|read it out loud|let'?s hear it|play it)( (yes|yeah|yep|sure|ok|okay|please))*$/;
-const NO_REPLY = /^(no|nope|nah|no no|not now|not right now|not yet|later|maybe later|no not now|no maybe later|i'?m good|no i'?m good|skip it)$/;
-function yesOrNo(t: string): "yes" | "no" | null {
-  const c = normalize(t)
-    .replace(/^((um|uh|oh|ah|hmm|mm|well|wait|okay|ok|so|hey|alright|and|now) )+/, "")
-    .replace(/( (please|thanks|thank you))+$/, "");
-  return YES_REPLY.test(c) ? "yes" : NO_REPLY.test(c) ? "no" : null;
-}
+/** After a no, a timer only when it's the whole ask: "No, set a timer for 5 minutes.", never "No, don't set a timer…". */
+const TIMER_FIRST = /^((set|start) (a |the |me a )?)?timer\b/;
 
 /** Mostly non-Latin letters: Ink writes the cook's Marathi (from a clip playing nearby) in Devanagari. */
 const notLatin = (t: string) => {
@@ -286,8 +274,10 @@ export class Cooking {
     this.send({ type: "transcript", text, final: true });
     this.touch();
     // A moment the app has up hears the kid's yes or no itself (from that transcript): it isn't ours to act on.
+    // What the kid says after the no is still ours ("No, next step.", "No, I'm out of ginger. Can I skip it?").
     const inMoment = spoken && this.moment !== null;
-    if (inMoment && yesOrNo(text)) {
+    const answer = inMoment ? yesNo(text) : null;
+    if (answer === "yes" || (answer === "no" && !afterNo(text).more)) {
       console.log(`kid (to the app's ${this.moment} moment): ${text}`);
       return;
     }
@@ -295,27 +285,52 @@ export class Cooking {
     this.turns = this.turns.then(() => this.turn(text, inMoment));
   }
 
-  /** One turn. `inMoment`: said while an app moment was up, so it never answers our own offer. */
+  /** One turn. `inMoment`: said while an app moment was up, so its yes or no is the moment's, never our offer's. */
   private async turn(text: string, inMoment = false) {
     if (this.closed) return;
     this.clipSeq++; // the kid moved on: drop a translation still waiting
     try {
-      if (this.offer && !inMoment) {
-        if (yesOrNo(text) === "no") return this.declineOffer();
-        if (isYes(text)) return await this.acceptOffer();
+      const answer = inMoment || this.offer ? yesNo(text) : null;
+      if (answer === "no") {
+        const to = inMoment ? "what's on their screen" : this.offer && "read" in this.offer ? "having the recipe read out loud" : `hearing ${this.cook}'s story`;
+        if (!inMoment) this.declineOffer();
+        return await this.afterNoTurn(text, to);
       }
-      const fast = FAST.find(([re]) => re.test(command(text)))?.[1];
-      const timer = timerAsk(text);
-      if (timer) await this.actions.setTimer(timer.seconds, timer.label);
-      else if (fast === "next") await this.nextStep();
-      else if (fast === "previous") await this.actions.goToStep(Math.max(1, this.step - 1));
-      else if (fast === "repeat") await this.actions.goToStep(this.step, true);
-      else await this.agent!.turn(text);
+      if (answer === "yes" && !inMoment) return await this.acceptOffer();
+      if (!(await this.plain(text))) await this.agent!.turn(text);
     } catch (err) {
       console.error("turn failed:", (err as Error).message);
       this.send({ type: "error", message: "turn failed" });
       await this.say("Sorry, I missed that. Can you say it again?", "reply").catch(() => {});
     }
+  }
+
+  /**
+   * The rest of a no, once the no itself is handled: a plain command right after it runs ("No, next step." moves the
+   * step, silently), anything more goes to Claude as the whole sentence, told what the no was to ("No, I'm out of
+   * ginger. Can I skip it?"), and more no is nothing. Never the words after the no alone: cutting the no can flip
+   * what's left ("No point in reading it." → "in reading it", and Claude would read the step).
+   */
+  private async afterNoTurn(text: string, to: string) {
+    const { more, fastTail } = afterNo(text);
+    if (!more || (await this.plain(fastTail, true))) return;
+    const note = `They just said no to ${to}, and that's done. Act only on anything else they said, and never read a step aloud unless they asked for it; if there's nothing else, reply with an empty message.`;
+    await this.agent!.turn(text, note);
+  }
+
+  /**
+   * Plain commands (FAST, and timers with digits) without Claude; false when `text` isn't one. `exact` (after a
+   * no): a timer only as the whole ask (TIMER_FIRST).
+   */
+  private async plain(text: string, exact = false): Promise<boolean> {
+    const fast = FAST.find(([re]) => re.test(command(text)))?.[1];
+    const timer = exact && !TIMER_FIRST.test(command(text)) ? null : timerAsk(text);
+    if (timer) await this.actions.setTimer(timer.seconds, timer.label);
+    else if (fast === "next") await this.nextStep();
+    else if (fast === "previous") await this.actions.goToStep(Math.max(1, this.step - 1));
+    else if (fast === "repeat") await this.actions.goToStep(this.step, true);
+    else return false;
+    return true;
   }
 
   private async acceptOffer() {

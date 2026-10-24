@@ -72,7 +72,7 @@ const session: CookSession = {
   stepOrder: 1,
 };
 
-test("Gemini stalls after Sonic failed: each line still ends at 6 s (say_end), then the mic opens again", async () => {
+test("Gemini stalls after Sonic failed: each line still ends at 6 s (say_end), then the mic opens again", { timeout: 30_000 }, async () => {
   mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: Date.parse("2026-10-25T17:00:00Z") });
   stub(stalls);
   let inkFrames = 0;
