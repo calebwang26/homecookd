@@ -1,0 +1,604 @@
+{
+ "v": 3,
+ "createdOnFiles": {
+  "v": 1,
+  "at": "2026-10-15T10:03:47Z"
+ },
+ "title": "homecookd iOS App Concepts",
+ "launch": {
+  "view": "canvas"
+ },
+ "pages": [],
+ "boards": {
+  "Main.dc.html": {
+   "x": 0,
+   "y": 320,
+   "w": 390,
+   "h": 844,
+   "title": "1 · Profiles",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C1-Kid-Home.dc.html": {
+   "x": 590,
+   "y": 320,
+   "w": 390,
+   "h": 844,
+   "title": "1 · Leo · Home",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C1-Kid-Home-Scrolled.dc.html": {
+   "x": 1060,
+   "y": 320,
+   "w": 390,
+   "h": 844,
+   "title": "1 · Leo · Home, scrolled",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C1-Kid-Recipe.dc.html": {
+   "x": 1530,
+   "y": 320,
+   "w": 390,
+   "h": 844,
+   "title": "1 · Leo · Mom's recipe",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C1-Kid-Ingredients.dc.html": {
+   "x": 2000,
+   "y": 320,
+   "w": 390,
+   "h": 844,
+   "title": "1 · Leo · Ingredients",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C1-Kid-Step.dc.html": {
+   "x": 2470,
+   "y": 320,
+   "w": 390,
+   "h": 844,
+   "title": "1 · Leo · Step by step",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C1-Kid-Step-Open.dc.html": {
+   "x": 2940,
+   "y": 320,
+   "w": 390,
+   "h": 844,
+   "title": "1 · Leo · Step, more from Mom open",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C1-Kid-Chat-Step.dc.html": {
+   "x": 3410,
+   "y": 320,
+   "w": 390,
+   "h": 844,
+   "title": "1 · Leo · Asked Mom about a step",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C1-Kid-Browse.dc.html": {
+   "x": 3880,
+   "y": 320,
+   "w": 390,
+   "h": 844,
+   "title": "1 · Leo · All recipes",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C1-Kid-Ask.dc.html": {
+   "x": 4350,
+   "y": 320,
+   "w": 390,
+   "h": 844,
+   "title": "1 · Leo · Ask, simpler version",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C1-Kid-Messages.dc.html": {
+   "x": 4820,
+   "y": 320,
+   "w": 390,
+   "h": 844,
+   "title": "1 · Leo · Ask (messages)",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C1-Kid-Chat.dc.html": {
+   "x": 5290,
+   "y": 320,
+   "w": 390,
+   "h": 844,
+   "title": "1 · Leo · Chat with Mom",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C1-Parent-Home.dc.html": {
+   "x": 5880,
+   "y": 320,
+   "w": 390,
+   "h": 844,
+   "title": "1 · Mom · Home",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C1-Parent-Home-Scrolled.dc.html": {
+   "x": 6350,
+   "y": 320,
+   "w": 390,
+   "h": 844,
+   "title": "1 · Mom · Home, scrolled",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C1-Parent-Record.dc.html": {
+   "x": 6820,
+   "y": 320,
+   "w": 390,
+   "h": 844,
+   "title": "1 · Mom · Record",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C1-Parent-Messages.dc.html": {
+   "x": 7290,
+   "y": 320,
+   "w": 390,
+   "h": 844,
+   "title": "1 · Mom · Messages",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C1-Parent-Chat.dc.html": {
+   "x": 7760,
+   "y": 320,
+   "w": 390,
+   "h": 844,
+   "title": "1 · Mom · Chat with Leo",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C1-Parent-Recipe.dc.html": {
+   "x": 8230,
+   "y": 320,
+   "w": 390,
+   "h": 844,
+   "title": "1 · Mom · Her recipe",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C1-Parent-Send.dc.html": {
+   "x": 8700,
+   "y": 320,
+   "w": 390,
+   "h": 844,
+   "title": "1 · Mom · Send a recipe",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C2-Profiles.dc.html": {
+   "x": 0,
+   "y": 1604,
+   "w": 390,
+   "h": 844,
+   "title": "2 · Profiles",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C2-Kid-Home.dc.html": {
+   "x": 590,
+   "y": 1604,
+   "w": 390,
+   "h": 844,
+   "title": "2 · Leo · Home",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C2-Kid-Home-Scrolled.dc.html": {
+   "x": 1060,
+   "y": 1604,
+   "w": 390,
+   "h": 844,
+   "title": "2 · Leo · Home, scrolled",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C2-Kid-Recipe.dc.html": {
+   "x": 1530,
+   "y": 1604,
+   "w": 390,
+   "h": 844,
+   "title": "2 · Leo · Mom's recipe",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C2-Kid-Browse.dc.html": {
+   "x": 2000,
+   "y": 1604,
+   "w": 390,
+   "h": 844,
+   "title": "2 · Leo · All recipes",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C2-Parent-Home.dc.html": {
+   "x": 2590,
+   "y": 1604,
+   "w": 390,
+   "h": 844,
+   "title": "2 · Mom · Home",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C2-Parent-Home-Scrolled.dc.html": {
+   "x": 3060,
+   "y": 1604,
+   "w": 390,
+   "h": 844,
+   "title": "2 · Mom · Home, scrolled",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C2-Parent-Recipe.dc.html": {
+   "x": 3530,
+   "y": 1604,
+   "w": 390,
+   "h": 844,
+   "title": "2 · Mom · Her recipe",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C2-Parent-Send.dc.html": {
+   "x": 4000,
+   "y": 1604,
+   "w": 390,
+   "h": 844,
+   "title": "2 · Mom · Send a recipe",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C3-Profiles.dc.html": {
+   "x": 0,
+   "y": 2888,
+   "w": 390,
+   "h": 844,
+   "title": "3 · Profiles",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C3-Kid-Home.dc.html": {
+   "x": 590,
+   "y": 2888,
+   "w": 390,
+   "h": 844,
+   "title": "3 · Leo · Home",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C3-Kid-Home-Scrolled.dc.html": {
+   "x": 1060,
+   "y": 2888,
+   "w": 390,
+   "h": 844,
+   "title": "3 · Leo · Home, scrolled",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C3-Kid-Recipe.dc.html": {
+   "x": 1530,
+   "y": 2888,
+   "w": 390,
+   "h": 844,
+   "title": "3 · Leo · Mom's recipe",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C3-Kid-Browse.dc.html": {
+   "x": 2000,
+   "y": 2888,
+   "w": 390,
+   "h": 844,
+   "title": "3 · Leo · All recipes",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C3-Parent-Home.dc.html": {
+   "x": 2590,
+   "y": 2888,
+   "w": 390,
+   "h": 844,
+   "title": "3 · Mom · Home",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C3-Parent-Home-Scrolled.dc.html": {
+   "x": 3060,
+   "y": 2888,
+   "w": 390,
+   "h": 844,
+   "title": "3 · Mom · Home, scrolled",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C3-Parent-Recipe.dc.html": {
+   "x": 3530,
+   "y": 2888,
+   "w": 390,
+   "h": 844,
+   "title": "3 · Mom · Her recipe",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C3-Parent-Send.dc.html": {
+   "x": 4000,
+   "y": 2888,
+   "w": 390,
+   "h": 844,
+   "title": "3 · Mom · Send a recipe",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C4-Profiles.dc.html": {
+   "x": 0,
+   "y": 4172,
+   "w": 390,
+   "h": 844,
+   "title": "4 · Profiles",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C4-Kid-Home.dc.html": {
+   "x": 590,
+   "y": 4172,
+   "w": 390,
+   "h": 844,
+   "title": "4 · Leo · Home",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C4-Kid-Home-Scrolled.dc.html": {
+   "x": 1060,
+   "y": 4172,
+   "w": 390,
+   "h": 844,
+   "title": "4 · Leo · Home, scrolled",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C4-Kid-Recipe.dc.html": {
+   "x": 1530,
+   "y": 4172,
+   "w": 390,
+   "h": 844,
+   "title": "4 · Leo · Mom's recipe",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C4-Kid-Browse.dc.html": {
+   "x": 2000,
+   "y": 4172,
+   "w": 390,
+   "h": 844,
+   "title": "4 · Leo · All recipes",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C4-Parent-Home.dc.html": {
+   "x": 2590,
+   "y": 4172,
+   "w": 390,
+   "h": 844,
+   "title": "4 · Mom · Home",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C4-Parent-Home-Scrolled.dc.html": {
+   "x": 3060,
+   "y": 4172,
+   "w": 390,
+   "h": 844,
+   "title": "4 · Mom · Home, scrolled",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C4-Parent-Recipe.dc.html": {
+   "x": 3530,
+   "y": 4172,
+   "w": 390,
+   "h": 844,
+   "title": "4 · Mom · Her recipe",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C4-Parent-Send.dc.html": {
+   "x": 4000,
+   "y": 4172,
+   "w": 390,
+   "h": 844,
+   "title": "4 · Mom · Send a recipe",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C5-Profiles.dc.html": {
+   "x": 0,
+   "y": 5456,
+   "w": 390,
+   "h": 844,
+   "title": "5 · Profiles",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C5-Kid-Home.dc.html": {
+   "x": 590,
+   "y": 5456,
+   "w": 390,
+   "h": 844,
+   "title": "5 · Leo · Home",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C5-Kid-Home-Scrolled.dc.html": {
+   "x": 1060,
+   "y": 5456,
+   "w": 390,
+   "h": 844,
+   "title": "5 · Leo · Home, scrolled",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C5-Kid-Recipe.dc.html": {
+   "x": 1530,
+   "y": 5456,
+   "w": 390,
+   "h": 844,
+   "title": "5 · Leo · Mom's recipe",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C5-Kid-Browse.dc.html": {
+   "x": 2000,
+   "y": 5456,
+   "w": 390,
+   "h": 844,
+   "title": "5 · Leo · All recipes",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C5-Parent-Home.dc.html": {
+   "x": 2590,
+   "y": 5456,
+   "w": 390,
+   "h": 844,
+   "title": "5 · Mom · Home",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C5-Parent-Home-Scrolled.dc.html": {
+   "x": 3060,
+   "y": 5456,
+   "w": 390,
+   "h": 844,
+   "title": "5 · Mom · Home, scrolled",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C5-Parent-Recipe.dc.html": {
+   "x": 3530,
+   "y": 5456,
+   "w": 390,
+   "h": 844,
+   "title": "5 · Mom · Her recipe",
+   "is_interactive": true,
+   "radius": 40
+  },
+  "C5-Parent-Send.dc.html": {
+   "x": 4000,
+   "y": 5456,
+   "w": 390,
+   "h": 844,
+   "title": "5 · Mom · Send a recipe",
+   "is_interactive": true,
+   "radius": 40
+  }
+ },
+ "order": [
+  "Main.dc.html",
+  "C1-Kid-Home.dc.html",
+  "C1-Kid-Home-Scrolled.dc.html",
+  "C1-Kid-Recipe.dc.html",
+  "C1-Kid-Ingredients.dc.html",
+  "C1-Kid-Step.dc.html",
+  "C1-Kid-Step-Open.dc.html",
+  "C1-Kid-Chat-Step.dc.html",
+  "C1-Kid-Browse.dc.html",
+  "C1-Kid-Ask.dc.html",
+  "C1-Kid-Messages.dc.html",
+  "C1-Kid-Chat.dc.html",
+  "C1-Parent-Home.dc.html",
+  "C1-Parent-Home-Scrolled.dc.html",
+  "C1-Parent-Record.dc.html",
+  "C1-Parent-Messages.dc.html",
+  "C1-Parent-Chat.dc.html",
+  "C1-Parent-Recipe.dc.html",
+  "C1-Parent-Send.dc.html",
+  "C2-Profiles.dc.html",
+  "C2-Kid-Home.dc.html",
+  "C2-Kid-Home-Scrolled.dc.html",
+  "C2-Kid-Recipe.dc.html",
+  "C2-Kid-Browse.dc.html",
+  "C2-Parent-Home.dc.html",
+  "C2-Parent-Home-Scrolled.dc.html",
+  "C2-Parent-Recipe.dc.html",
+  "C2-Parent-Send.dc.html",
+  "C3-Profiles.dc.html",
+  "C3-Kid-Home.dc.html",
+  "C3-Kid-Home-Scrolled.dc.html",
+  "C3-Kid-Recipe.dc.html",
+  "C3-Kid-Browse.dc.html",
+  "C3-Parent-Home.dc.html",
+  "C3-Parent-Home-Scrolled.dc.html",
+  "C3-Parent-Recipe.dc.html",
+  "C3-Parent-Send.dc.html",
+  "C4-Profiles.dc.html",
+  "C4-Kid-Home.dc.html",
+  "C4-Kid-Home-Scrolled.dc.html",
+  "C4-Kid-Recipe.dc.html",
+  "C4-Kid-Browse.dc.html",
+  "C4-Parent-Home.dc.html",
+  "C4-Parent-Home-Scrolled.dc.html",
+  "C4-Parent-Recipe.dc.html",
+  "C4-Parent-Send.dc.html",
+  "C5-Profiles.dc.html",
+  "C5-Kid-Home.dc.html",
+  "C5-Kid-Home-Scrolled.dc.html",
+  "C5-Kid-Recipe.dc.html",
+  "C5-Kid-Browse.dc.html",
+  "C5-Parent-Home.dc.html",
+  "C5-Parent-Home-Scrolled.dc.html",
+  "C5-Parent-Recipe.dc.html",
+  "C5-Parent-Send.dc.html"
+ ],
+ "notes": {
+  "row1": {
+   "x": 0,
+   "y": 50,
+   "text": "1 · Hearth: today’s app, grown up. Calm cream kitchen, comfort.",
+   "kind": "title1",
+   "maxW": 9090
+  },
+  "row2": {
+   "x": 0,
+   "y": 1334,
+   "text": "2 · Sunday Supper: the lander’s bold color blocks. A full Sunday table.",
+   "kind": "title1",
+   "maxW": 4390
+  },
+  "row3": {
+   "x": 0,
+   "y": 2618,
+   "text": "3 · Lamplight: Leo’s kitchen light at night, Mom’s morning light.",
+   "kind": "title1",
+   "maxW": 4390
+  },
+  "row4": {
+   "x": 0,
+   "y": 3902,
+   "text": "4 · Recipe Box: letters, Polaroids and postmarks between home and away.",
+   "kind": "title1",
+   "maxW": 4390
+  },
+  "row5": {
+   "x": 0,
+   "y": 5186,
+   "text": "5 · Big Table: large print, nothing to figure out.",
+   "kind": "title1",
+   "maxW": 4390
+  }
+ },
+ "designSystems": []
+}

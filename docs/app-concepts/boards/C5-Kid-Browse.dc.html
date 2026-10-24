@@ -1,0 +1,116 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Family recipes</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..900,0..100,0..1;1,9..144,300..900,0..100,0..1&amp;family=DM+Sans:ital,opsz,wght@0,9..40,400..800;1,9..40,400..800&amp;family=Caveat:wght@500..700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F7F7F2; font-family: 'DM Sans', system-ui, sans-serif; color: #2D3222">
+
+  <!-- Header band (ref 3) -->
+  <header style="background: #34430C; border-radius: 0 0 28px 28px; padding: 48px 16px 18px 20px; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px">
+    <div style="display: flex; flex-direction: column; gap: 2px">
+      <h1 style="margin: 0; font-family: 'Fraunces', Georgia, serif; font-variation-settings: 'SOFT' 100, 'WONK' 0; font-weight: 700; font-size: 34px; line-height: 1.08; letter-spacing: -0.01em; color: #FFFDF7">Family recipes</h1>
+      <p style="margin: 2px 0 0; font-size: 19px; line-height: 1.4; color: #E6EBCF">9 recipes from 4 cooks.</p>
+    </div>
+    <a href="C5-Profiles.dc.html" aria-label="Leo. Switch who's cooking" style="flex: none; width: 56px; height: 56px; border-radius: 50%; overflow: hidden; position: relative; box-shadow: 0 0 0 3px #FFFDF7; margin-bottom: 4px">
+      <img src="/_blob/4417cbdb3744afb9da843b01fddb1979" alt="" style="width: 100%; height: 100%; object-fit: cover; object-position: 42% 36%; transform: scale(3); transform-origin: 40% 35%">
+    </a>
+  </header>
+
+  <main style="padding: 16px 16px 0; display: flex; flex-direction: column; gap: 12px">
+
+    <!-- Filter pills by cook (one selected, with a check) -->
+    <div role="group" aria-label="Show recipes from" style="display: flex; flex-wrap: wrap; gap: 8px">
+      <button type="button" aria-pressed="true" style="all: unset; box-sizing: border-box; height: 48px; padding: 0 15px 0 8px; border-radius: 999px; background: #F2F6E1; border: 3px solid #4C5A10; display: inline-flex; align-items: center; gap: 6px; font-family: 'DM Sans', system-ui, sans-serif; font-size: 17px; font-weight: 800; color: #1E2410; cursor: pointer"><svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#4C5A10"/><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#FFFDF7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg>Everyone</button>
+      <button type="button" aria-pressed="false" style="all: unset; box-sizing: border-box; height: 48px; padding: 0 15px 0 6px; border-radius: 999px; background: #FFFDF7; border: 1.5px solid rgba(71,67,42,0.24); display: inline-flex; align-items: center; gap: 7px; font-family: 'DM Sans', system-ui, sans-serif; font-size: 17px; font-weight: 600; color: #2D3222; cursor: pointer"><span aria-hidden="true" style="flex: none; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; position: relative; background: #F9E3CF"><img src="/_blob/6fd63122b3a283a11efb5fe02c7d93c5" alt="" style="width: 100%; height: 100%; object-fit: cover; object-position: 43% 35%; transform: scale(1.8); transform-origin: 29% 24%"></span>Mom</button>
+      <button type="button" aria-pressed="false" style="all: unset; box-sizing: border-box; height: 48px; padding: 0 15px 0 6px; border-radius: 999px; background: #FFFDF7; border: 1.5px solid rgba(71,67,42,0.24); display: inline-flex; align-items: center; gap: 7px; font-family: 'DM Sans', system-ui, sans-serif; font-size: 17px; font-weight: 600; color: #2D3222; cursor: pointer"><span aria-hidden="true" style="flex: none; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; position: relative; background: #E6EBCF"><img src="/_blob/dd41c56c78266bad25359c8734bc3081" alt="" style="width: 100%; height: 100%; object-fit: cover; object-position: 37% 30%; transform: scale(2.6); transform-origin: 25% 20%"></span>Dad</button>
+      <button type="button" aria-pressed="false" style="all: unset; box-sizing: border-box; height: 48px; padding: 0 15px 0 6px; border-radius: 999px; background: #FFFDF7; border: 1.5px solid rgba(71,67,42,0.24); display: inline-flex; align-items: center; gap: 7px; font-family: 'DM Sans', system-ui, sans-serif; font-size: 17px; font-weight: 600; color: #2D3222; cursor: pointer"><span aria-hidden="true" style="flex: none; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; position: relative; background: #F6D5CC"><img src="/_blob/5845b3a84b9a62bd4c8e0da61f982bde" alt="" style="width: 100%; height: 100%; object-fit: cover; object-position: 42% 40%; transform: scale(1.3); transform-origin: 42% 40%"></span>Nai Nai</button>
+      <button type="button" aria-pressed="false" style="all: unset; box-sizing: border-box; height: 48px; padding: 0 15px 0 6px; border-radius: 999px; background: #FFFDF7; border: 1.5px solid rgba(71,67,42,0.24); display: inline-flex; align-items: center; gap: 7px; font-family: 'DM Sans', system-ui, sans-serif; font-size: 17px; font-weight: 600; color: #2D3222; cursor: pointer"><span aria-hidden="true" style="flex: none; width: 32px; height: 32px; border-radius: 50%; background: #FFF1C7; color: #8A3F12; display: flex; align-items: center; justify-content: center; font-family: 'Fraunces', Georgia, serif; font-variation-settings: 'SOFT' 100, 'WONK' 0; font-weight: 700; font-size: 16px; line-height: 1">L</span>Auntie Lin</button>
+    </div>
+
+    <!-- Sorted by who made it: Mom first. Bubble panels (ref 8) with hearts -->
+    <section style="background: #FFFDF7; border: 1.5px solid rgba(71,67,42,0.24); border-radius: 24px; padding: 10px 14px 2px">
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 2px">
+        <span aria-hidden="true" style="flex: none; width: 40px; height: 40px; border-radius: 50%; overflow: hidden; position: relative; background: #F9E3CF"><img src="/_blob/6fd63122b3a283a11efb5fe02c7d93c5" alt="" style="width: 100%; height: 100%; object-fit: cover; object-position: 43% 35%; transform: scale(1.8); transform-origin: 29% 24%"></span>
+        <h2 style="margin: 0; flex: 1; min-width: 0; white-space: nowrap; font-family: 'Fraunces', Georgia, serif; font-variation-settings: 'SOFT' 100, 'WONK' 0; font-weight: 700; font-size: 28px; line-height: 1.1; color: #1E2410">Mom's kitchen</h2>
+        <a href="C5-Kid-Browse.dc.html" aria-label="All of Mom's recipes" style="flex: none; width: 48px; height: 48px; border-radius: 50%; background: #F1F2DC; color: #1E2410; display: flex; align-items: center; justify-content: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1.5px solid rgba(71,67,42,0.14)">
+        <a href="C5-Kid-Recipe.dc.html" style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px;">
+          <img src="/_blob/f94abf705c888d1eedff3bce9dde7040" alt="Mom's pork and chive dumplings on a steamer tray" style="flex: none; width: 96px; height: 96px; border-radius: 18px; object-fit: cover; object-position: 50% 45%">
+          <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+            <span style="font-family: 'Fraunces', Georgia, serif; font-variation-settings: 'SOFT' 100, 'WONK' 0; font-weight: 700; font-size: 22px; line-height: 1.15; color: #1E2410">Pork &amp; Chive Dumplings</span>
+            <span style="font-size: 17px; font-weight: 700; line-height: 1.3; color: #4C5A10">New today</span>
+            <span style="font-size: 17px; font-weight: 500; line-height: 1.3; color: #5F6352">1 hr 20 min</span>
+          </span>
+        </a>
+        <button type="button" aria-pressed="true" aria-label="Saved" style="all: unset; flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; font-family: 'DM Sans', system-ui, sans-serif"><span style="width: 52px; height: 52px; border-radius: 50%; background: #FAD6CB; color: #9A4F47; display: flex; align-items: center; justify-content: center"><svg width="26" height="26" viewBox="0 0 24 24" fill="#F2A7A0" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.3a4.3 4.3 0 0 1 7.5 2.5C19.5 15.4 12 20 12 20z"/></svg></span><span style="font-size: 15px; font-weight: 700; color: #9A4F47">Saved</span></button>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1.5px solid rgba(71,67,42,0.14)">
+        <a href="C5-Kid-Recipe.dc.html" style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px;">
+          <img src="/_blob/c75e471923e2f3bfc6e61b1667f145e5" alt="Mom's ramen in a floral bowl" style="flex: none; width: 96px; height: 96px; border-radius: 18px; object-fit: cover; object-position: 50% 60%">
+          <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+            <span style="font-family: 'Fraunces', Georgia, serif; font-variation-settings: 'SOFT' 100, 'WONK' 0; font-weight: 700; font-size: 22px; line-height: 1.15; color: #1E2410">Ramen, Mom's Way</span>
+            <span style="font-size: 17px; font-weight: 700; line-height: 1.3; color: #4C5A10"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" style="vertical-align: -2px; margin-right: 4px"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg>You cooked it</span>
+            <span style="font-size: 17px; font-weight: 500; line-height: 1.3; color: #5F6352">10 min · about $2</span>
+          </span>
+        </a>
+        <button type="button" aria-pressed="true" aria-label="Saved" style="all: unset; flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; font-family: 'DM Sans', system-ui, sans-serif"><span style="width: 52px; height: 52px; border-radius: 50%; background: #FAD6CB; color: #9A4F47; display: flex; align-items: center; justify-content: center"><svg width="26" height="26" viewBox="0 0 24 24" fill="#F2A7A0" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.3a4.3 4.3 0 0 1 7.5 2.5C19.5 15.4 12 20 12 20z"/></svg></span><span style="font-size: 15px; font-weight: 700; color: #9A4F47">Saved</span></button>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px; padding: 10px 0; border-top: 1.5px solid rgba(71,67,42,0.14)">
+        <a href="C5-Kid-Recipe.dc.html" style="flex: 1; min-width: 0; display: flex; align-items: center; gap: 12px;">
+          <img src="/_blob/03f2a3271513c1c23f3ce2df5bb5a0ff" alt="Mom's banana bread, sliced" style="flex: none; width: 96px; height: 96px; border-radius: 18px; object-fit: cover; object-position: 50% 50%">
+          <span style="display: flex; flex-direction: column; gap: 2px; min-width: 0">
+            <span style="font-family: 'Fraunces', Georgia, serif; font-variation-settings: 'SOFT' 100, 'WONK' 0; font-weight: 700; font-size: 22px; line-height: 1.15; color: #1E2410">Banana Bread</span>
+            <span style="font-size: 17px; font-weight: 700; line-height: 1.3; color: #4C5A10">Baked with Maya</span>
+            <span style="font-size: 17px; font-weight: 500; line-height: 1.3; color: #5F6352">1 hr · old bananas</span>
+          </span>
+        </a>
+        <button type="button" aria-pressed="false" aria-label="Save" style="all: unset; flex: none; display: flex; flex-direction: column; align-items: center; gap: 2px; cursor: pointer; font-family: 'DM Sans', system-ui, sans-serif"><span style="width: 52px; height: 52px; border-radius: 50%; background: #FFFDF7; border: 1.5px solid rgba(71,67,42,0.24); box-sizing: border-box; color: #1E2410; display: flex; align-items: center; justify-content: center"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20s-7.5-4.6-7.5-10.2A4.3 4.3 0 0 1 12 7.3a4.3 4.3 0 0 1 7.5 2.5C19.5 15.4 12 20 12 20z"/></svg></span><span style="font-size: 15px; font-weight: 600; color: #5F6352">Save</span></button>
+      </div>
+    </section>
+
+    <!-- Dad's panel peeks under the tab bar -->
+    <section aria-label="Dad's kitchen" style="background: #FFFDF7; border: 1.5px solid rgba(71,67,42,0.24); border-radius: 24px; padding: 10px 14px 2px">
+      <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 2px">
+        <span aria-hidden="true" style="flex: none; width: 40px; height: 40px; border-radius: 50%; overflow: hidden; position: relative; background: #E6EBCF"><img src="/_blob/dd41c56c78266bad25359c8734bc3081" alt="" style="width: 100%; height: 100%; object-fit: cover; object-position: 37% 30%; transform: scale(2.6); transform-origin: 25% 20%"></span>
+        <h2 style="margin: 0; flex: 1; min-width: 0; white-space: nowrap; font-family: 'Fraunces', Georgia, serif; font-variation-settings: 'SOFT' 100, 'WONK' 0; font-weight: 700; font-size: 28px; line-height: 1.1; color: #1E2410">Dad's kitchen</h2>
+        <a href="C5-Kid-Browse.dc.html" aria-label="All of Dad's recipes" style="flex: none; width: 48px; height: 48px; border-radius: 50%; background: #F1F2DC; color: #1E2410; display: flex; align-items: center; justify-content: center"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M5 12h14M13 6l6 6-6 6"/></svg></a>
+      </div>
+    </section>
+  </main>
+
+<nav aria-label="Main" style="position: absolute; left: 0; right: 0; bottom: 0; height: 90px; padding: 8px 8px 21px; box-sizing: border-box; background: #F1F2DC; border-top: 1.5px solid rgba(71,67,42,0.24); display: grid; grid-template-columns: repeat(3, 1fr)">
+  <a href="C5-Kid-Home.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 56px">
+    <span style="width: 72px; height: 40px; border-radius: 999px; color: #5F6352; display: flex; align-items: center; justify-content: center"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/></svg></span>
+    <span style="font-size: 15px; line-height: 18px; font-weight: 600; color: #5F6352">Home</span>
+  </a>
+  <a href="C5-Kid-Browse.dc.html" aria-current="page" style="display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 56px">
+    <span style="width: 72px; height: 40px; border-radius: 999px; background: #1E2410; color: #FFFDF7; display: flex; align-items: center; justify-content: center"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2 5.5C4.5 4 8 4 12 6c4-2 7.5-2 10-.5V19c-2.5-1.5-6-1.5-10 .5-4-2-7.5-2-10-.5z" fill="currentColor" fill-opacity="0.2"/><path d="M12 6v13.5"/></svg></span>
+    <span style="font-size: 15px; line-height: 18px; font-weight: 800; color: #1E2410">Recipes</span>
+  </a>
+  <a href="C5-Kid-Home-Scrolled.dc.html" style="display: flex; flex-direction: column; align-items: center; gap: 3px; min-height: 56px">
+    <span style="width: 72px; height: 40px; border-radius: 999px; color: #5F6352; display: flex; align-items: center; justify-content: center"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 12a8 8 0 0 1-11.6 7.1L4 20l1-4.2A8 8 0 1 1 20 12z"/></svg></span>
+    <span style="font-size: 15px; line-height: 18px; font-weight: 600; color: #5F6352">Ask</span>
+  </a>
+  </nav>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mail the dumplings</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@0,9..144,300..900,0..100,0..1;1,9..144,300..900,0..100,0..1&amp;family=DM+Sans:ital,opsz,wght@0,9..40,400..800;1,9..40,400..800&amp;family=Caveat:wght@500..700&amp;display=swap">
+<style>
+body{margin:0}
+a{color:inherit;text-decoration:none}
+</style>
+</helmet>
+<div style="width: 390px; height: 844px; position: relative; overflow: hidden; background: #F7F7F2; font-family: 'DM Sans', system-ui, sans-serif; color: #2D3222">
+
+  <!-- Postmark (the screen's one decoration; same mark Leo sees on his letter) -->
+  <svg width="100" height="100" viewBox="0 0 100 100" aria-hidden="true" style="position: absolute; right: 18px; top: 50px; color: #C8462A; transform: rotate(-8deg)">
+    <circle cx="50" cy="50" r="48" fill="none" stroke="currentColor" stroke-width="2.5" />
+    <circle cx="50" cy="50" r="35" fill="none" stroke="currentColor" stroke-width="1.5" />
+    <defs><path id="sendPmArc" d="M11.5 50a38.5 38.5 0 0 1 77 0" /></defs>
+    <text font-family="DM Sans, sans-serif" font-weight="800" font-size="11" letter-spacing="1.2" fill="currentColor"><textPath href="#sendPmArc" startOffset="50%" text-anchor="middle">FROM HOME</textPath></text>
+    <text x="50" y="57" text-anchor="middle" font-family="Fraunces, Georgia, serif" font-weight="700" font-size="17" fill="currentColor">OCT 12</text>
+  </svg>
+
+  <!-- Page column -->
+  <div style="display: flex; flex-direction: column; gap: 16px; padding: 56px 16px 0">
+
+    <!-- Back pill -->
+    <a href="C4-Parent-Home.dc.html" style="height: 56px; box-sizing: border-box; padding: 0 22px 0 14px; border-radius: 999px; background: #FFFDF7; box-shadow: 0 2px 8px rgba(0,0,0,0.12); display: inline-flex; align-self: flex-start; align-items: center; gap: 6px; color: #1E2410; font-size: 19px; font-weight: 700">
+      <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 5l-7 7 7 7" /></svg>
+      Back
+    </a>
+
+    <!-- Headline -->
+    <h1 style="margin: -8px 0 0; font-family: 'Fraunces', Georgia, serif; font-variation-settings: 'SOFT' 100, 'WONK' 0; font-weight: 600; font-size: 42px; line-height: 1.08; letter-spacing: -0.015em; white-space: nowrap; color: #1E2410">Mail it to <em style="font-style: italic; color: #C8462A">Leo</em>.</h1>
+
+    <!-- The envelope: today's recipe + the 3 videos she picked (ref 3: date tile + photos) -->
+    <section aria-label="Your videos from today" style="background: #E9DCC4; border-radius: 22px; padding: 12px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; flex-direction: column; gap: 2px; padding: 2px 4px 0">
+        <span style="font-family: 'Fraunces', Georgia, serif; font-variation-settings: 'SOFT' 100, 'WONK' 0; font-weight: 600; font-size: 24px; line-height: 1.2; white-space: nowrap; color: #1E2410">Pork &amp; Chive Dumplings</span>
+        <span style="font-size: 16px; font-weight: 600; line-height: 1.3; color: #5A3A22">3 videos from today, all picked</span>
+      </div>
+
+      <!-- Three straight video Polaroids, each checked -->
+      <div style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px">
+        <div style="display: flex; flex-direction: column; background: #FFFDF7; padding: 6px 6px 0; border-radius: 4px; box-shadow: 0 6px 18px rgba(90,58,34,0.14)">
+          <div style="position: relative; height: 68px; border-radius: 2px; overflow: hidden">
+            <img src="/_blob/f94abf705c888d1eedff3bce9dde7040" alt="Video 1: filling and folding the dumplings" style="width: 100%; height: 100%; object-fit: cover; object-position: 50% 45%; display: block">
+            <svg width="28" height="28" viewBox="0 0 24 24" role="img" aria-label="Picked" style="position: absolute; top: 5px; right: 5px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.25))"><circle cx="12" cy="12" r="11" fill="#C8462A" stroke="#FFFDF7" stroke-width="1.6" /><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#FFFDF7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </div>
+          <div style="display: flex; flex-direction: column; padding: 8px 2px 10px">
+            <span style="font-size: 17px; font-weight: 700; line-height: 1.25; color: #1E2410">2:10 pm</span>
+            <span style="font-size: 16px; font-weight: 500; line-height: 1.3; color: #5F6352">12 min</span>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; background: #FFFDF7; padding: 6px 6px 0; border-radius: 4px; box-shadow: 0 6px 18px rgba(90,58,34,0.14)">
+          <div style="position: relative; height: 68px; border-radius: 2px; overflow: hidden">
+            <img src="/_blob/28e00f0dd1996dba75abee1dd2bfb4bc" alt="Video 2: kneading the dough" style="width: 100%; height: 100%; object-fit: cover; object-position: 60% 55%; display: block">
+            <svg width="28" height="28" viewBox="0 0 24 24" role="img" aria-label="Picked" style="position: absolute; top: 5px; right: 5px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.25))"><circle cx="12" cy="12" r="11" fill="#C8462A" stroke="#FFFDF7" stroke-width="1.6" /><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#FFFDF7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </div>
+          <div style="display: flex; flex-direction: column; padding: 8px 2px 10px">
+            <span style="font-size: 17px; font-weight: 700; line-height: 1.25; color: #1E2410">2:34 pm</span>
+            <span style="font-size: 16px; font-weight: 500; line-height: 1.3; color: #5F6352">14 min</span>
+          </div>
+        </div>
+        <div style="display: flex; flex-direction: column; background: #FFFDF7; padding: 6px 6px 0; border-radius: 4px; box-shadow: 0 6px 18px rgba(90,58,34,0.14)">
+          <div style="position: relative; height: 68px; border-radius: 2px; overflow: hidden">
+            <img src="/_blob/168ef270a7c659ecc7c883fd025a5afb" alt="Video 3: the steaming pot" style="width: 100%; height: 100%; object-fit: cover; object-position: 50% 45%; display: block">
+            <svg width="28" height="28" viewBox="0 0 24 24" role="img" aria-label="Picked" style="position: absolute; top: 5px; right: 5px; filter: drop-shadow(0 1px 2px rgba(0,0,0,0.25))"><circle cx="12" cy="12" r="11" fill="#C8462A" stroke="#FFFDF7" stroke-width="1.6" /><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#FFFDF7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" /></svg>
+          </div>
+          <div style="display: flex; flex-direction: column; padding: 8px 2px 10px">
+            <span style="font-size: 17px; font-weight: 700; line-height: 1.25; color: #1E2410">3:05 pm</span>
+            <span style="font-size: 16px; font-weight: 500; line-height: 1.3; color: #5F6352">9 min</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Who is it for? (ref 2 option boxes: selected lights up) -->
+    <section style="display: flex; flex-direction: column; gap: 10px">
+      <h2 style="margin: 0; font-family: 'Fraunces', Georgia, serif; font-variation-settings: 'SOFT' 100, 'WONK' 0; font-weight: 600; font-size: 30px; line-height: 1.1; color: #1E2410">Who is it for?</h2>
+      <div role="radiogroup" aria-label="Who is it for?" style="display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px">
+        <button type="button" role="radio" aria-checked="true" style="position: relative; min-height: 112px; box-sizing: border-box; padding: 12px 8.5px 10px; border-radius: 12px; background: #FFFDF7; border: 3px solid #C8462A; box-shadow: 0 4px 12px rgba(200,70,42,0.14); font-family: inherit; display: flex; flex-direction: column; align-items: center; gap: 6px">
+          <span style="flex: none; width: 50px; height: 50px; border-radius: 50%; position: relative; overflow: hidden; background: #ECE6F2">
+            <img src="/_blob/4417cbdb3744afb9da843b01fddb1979" alt="" style="width: 100%; height: 100%; object-fit: cover; object-position: 42% 36%; transform: scale(3); transform-origin: 40% 35%; display: block">
+          </span>
+          <span style="display: flex; flex-direction: column; align-items: center; gap: 0">
+            <span style="display: flex; align-items: center; gap: 6px; font-size: 20px; font-weight: 700; line-height: 1.2; color: #1E2410"><svg width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="11" fill="#C8462A" /><path d="M7 12.5l3.2 3.2L17 9" fill="none" stroke="#FFFDF7" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" /></svg>Leo</span>
+            <span style="font-size: 16px; font-weight: 500; line-height: 1.3; color: #5F6352">At college</span>
+          </span>
+        </button>
+        <button type="button" role="radio" aria-checked="false" style="position: relative; min-height: 112px; box-sizing: border-box; padding: 13.5px 10px 11.5px; border-radius: 12px; background: #FFFDF7; border: 1.5px solid rgba(71,67,42,0.24); font-family: inherit; display: flex; flex-direction: column; align-items: center; gap: 6px">
+          <span style="flex: none; width: 50px; height: 50px; border-radius: 50%; background: #EDF2BE; display: flex; align-items: center; justify-content: center; font-family: 'Fraunces', Georgia, serif; font-variation-settings: 'SOFT' 100, 'WONK' 0; font-weight: 600; font-size: 24px; color: #3C4A0B">M</span>
+          <span style="display: flex; flex-direction: column; align-items: center; gap: 0">
+            <span style="font-size: 20px; font-weight: 600; line-height: 1.2; color: #2D3222">Maya</span>
+            <span style="font-size: 16px; font-weight: 500; line-height: 1.3; color: #5F6352">At home</span>
+          </span>
+        </button>
+        <button type="button" role="radio" aria-checked="false" style="position: relative; min-height: 112px; box-sizing: border-box; padding: 13.5px 10px 11.5px; border-radius: 12px; background: #FFFDF7; border: 1.5px solid rgba(71,67,42,0.24); font-family: inherit; display: flex; flex-direction: column; align-items: center; gap: 6px">
+          <span style="flex: none; width: 50px; height: 50px; border-radius: 50%; background: #EFEFE6; display: flex; align-items: center; justify-content: center; color: #2D3222">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="9" cy="8" r="3.5" /><path d="M2.5 20c.8-3.6 3.4-5.5 6.5-5.5s5.7 1.9 6.5 5.5" /><circle cx="17" cy="9" r="2.5" /><path d="M17 14.5c2.3 0 4 1.4 4.6 4" /></svg>
+          </span>
+          <span style="display: flex; flex-direction: column; align-items: center; gap: 0">
+            <span style="font-size: 20px; font-weight: 600; line-height: 1.2; color: #2D3222">Everyone</span>
+            <span style="font-size: 16px; font-weight: 500; line-height: 1.3; color: #5F6352">The family</span>
+          </span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Optional voice note -->
+    <button type="button" style="text-align: left; box-sizing: border-box; min-height: 76px; padding: 10px 14px; border-radius: 12px; background: #FFFDF7; border: 1.5px solid rgba(71,67,42,0.24); font-family: inherit; display: flex; align-items: center; gap: 14px">
+      <span style="flex: none; width: 56px; height: 56px; box-sizing: border-box; border-radius: 50%; border: 2px solid #5A3A22; background: #F9E3CF; display: flex; align-items: center; justify-content: center; color: #5A3A22">
+        <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="3" width="6" height="11" rx="3" /><path d="M5.5 11a6.5 6.5 0 0 0 13 0M12 17.5V21" /></svg>
+      </span>
+      <span style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px">
+        <span style="font-size: 19px; font-weight: 700; line-height: 1.25; color: #1E2410">Add a few words for Leo</span>
+        <span style="font-size: 16px; font-weight: 500; line-height: 1.3; color: #5F6352">If you like. Tap to talk, tap again when done.</span>
+      </span>
+    </button>
+
+  </div>
+
+  <!-- Sticky CTA -->
+  <div style="position: absolute; left: 0; right: 0; bottom: 0; height: 136px; box-sizing: border-box; padding: 12px 16px 26px; background: #F7F7F2; border-top: 1px solid rgba(71,67,42,0.14); display: flex; flex-direction: column; gap: 8px; z-index: 10">
+    <a href="C4-Parent-Home.dc.html" style="height: 68px; flex: none; border-radius: 999px; background: #C8462A; color: #FFFDF7; font-size: 20px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 10px">
+      <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 3 10.5 13.5M21 3l-6.5 18-4-7.5L3 9.5z" /></svg>
+      Send to Leo
+    </a>
+    <p style="margin: 0; text-align: center; font-size: 17px; line-height: 1.3; color: #5F6352">You can close the app. We'll let you know.</p>
+  </div>
+
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":390,"height":844}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>
