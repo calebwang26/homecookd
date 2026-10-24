@@ -431,11 +431,12 @@ export function useVoiceCooking(opts: VoiceOptions) {
       // Hung up (or hung up and opened again) meanwhile, or a socket is already open: this one isn't needed.
       if (!lineMayOpen({ want: want.current, line: line.current, began, open: !!sock.current })) return;
       const real = !!VOICE_URL && !!token && token !== 'stub';
-      // On its own it only calls a service that can cook this dish; nothing to say when it can't (the
-      // phone reads instead).
-      if (auto && (!real || recipeId === libraryId)) {
+      // It only calls a service that can cook this dish (one Convex knows; a sample dish isn't), on
+      // its own or on a tap; nothing to say when it can't (the phone reads instead).
+      if ((auto && !real) || (real && recipeId === libraryId)) {
         want.current = false;
         setUnavailable(true);
+        if (!auto) setStatus('off');
         return;
       }
       setStatus('connecting');

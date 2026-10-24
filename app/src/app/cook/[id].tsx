@@ -283,14 +283,20 @@ export default function CookScreen() {
     onSay: homie.onSay,
     onHeard: homie.onHeard,
   });
+  // No voice line that reads (Expo Go, web, a dish the voice service doesn't have, or it failed): this
+  // phone asks "read it out loud?" and reads the steps.
+  const phoneReading = phoneReads({ voiceHere, live: voice.live, unavailable: voice.unavailable });
   // A tap on the pot turns the mic off or on (only where the mic can work; elsewhere, the help line).
+  // While the phone reads, nobody is listening, so a tap reads this step again instead.
   // "I made it" takes the screen: no pot over the celebration.
-  useHomieScreen({ hidden: !!done, onPress: micStreamingSupported() ? () => homie.potPress(voice) : null });
-  // No voice line that reads (Expo Go, web, or it gave up or failed): this phone asks "read it out
-  // loud?" and reads the steps.
+  const potPress = phoneReading && voiceHere && step
+    ? () => void speak(`Step ${n}. ${step.instruction}`, { profileId: me?.id })
+    : micStreamingSupported()
+      ? () => homie.potPress(voice)
+      : null;
+  useHomieScreen({ hidden: !!done, onPress: potPress });
   const focused = useIsFocused();
   const { offerHere } = homie;
-  const phoneReading = phoneReads({ voiceHere, live: voice.live, unavailable: voice.unavailable });
   const canOffer = phoneReading && !!recipe && !!step && settled && !done && focused;
   useEffect(() => {
     if (canOffer) offerHere();
