@@ -379,7 +379,11 @@ export class Recording {
   private async askAndWait(kind: "end" | "optin", line: Line): Promise<string | null> {
     if (this.closed) return null;
     const promptId = await this.log(kind, line, "spoken");
-    if (this.closed) return null;
+    if (this.closed) {
+      // The socket closed while it was being saved: she never heard it.
+      void this.deps.convex.updatePrompt(this.token, promptId, "ignored").catch(() => {});
+      return null;
+    }
     if (kind === "end") {
       this.mem.endAsked++;
       this.mem.asked.push(line.textEn);
@@ -495,9 +499,9 @@ export class Recording {
     this.pacer.onAsk(this.atS(Date.now()));
     this.mem.asked.push(line.textEn);
     const promptId = await this.log(kind, line, "spoken");
-    if (this.closed) return;
-    if (this.phase !== "recording") {
-      // She said she's done while it was being saved, so it's never said.
+    if (this.closed || this.phase !== "recording") {
+      // The socket closed, or she said she's done, while it was being saved: it's never said.
+      if (this.mem.asked.at(-1) === line.textEn) this.mem.asked.pop();
       void this.deps.convex.updatePrompt(this.token, promptId, "ignored").catch(() => {});
       return;
     }

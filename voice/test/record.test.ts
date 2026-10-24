@@ -380,3 +380,20 @@ test("a newer socket for the same recording replaces the older one", async () =>
   assert.deepEqual(b.ws.phases(), ["intro"]);
   b.drop();
 });
+
+test("closed while a question is being saved: it's marked ignored and never asked", async () => {
+  const w = world();
+  w.decisions.push(ask("How much salt is a pinch?"));
+  const a = w.connect("rec-closed-asking");
+  await helloDone(a);
+  a.send({ type: "start" });
+  await advance(1000);
+  w.says("Now I add a pinch of salt");
+  await waitFor("the question being saved", () => w.named("logPrompt").some((p) => p.args[0] === "amount"));
+  a.drop(); // inside the save's round trip
+  await advance(LATENCY_MS * 3);
+  assert.equal(a.ws.of("ask").length, 0, "the question went out after the socket closed");
+  const saved = w.named("logPrompt").filter((p) => p.args[0] === "amount");
+  assert.equal(saved.length, 1);
+  assert.deepEqual(w.named("updatePrompt").map((u) => u.args[1]), ["ignored"]);
+});
