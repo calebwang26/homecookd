@@ -3,6 +3,7 @@
 import { ConvexError, v } from "convex/values";
 import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
 import { requireCook, requireSession } from "./lib/auth";
+import { familyKids, forKidArgs, forKidFields, forKids } from "./lib/forKids";
 import { languageCode } from "./people";
 import type { Doc } from "./_generated/dataModel";
 import schema from "./schema";
@@ -14,7 +15,7 @@ export const create = mutation({
     source: v.union(v.literal("phone"), v.literal("glasses")),
     title: v.optional(v.string()),
     language: v.optional(v.string()),
-    forKidId: v.optional(v.id("people")),
+    ...forKidArgs,
     recordingId: v.optional(v.id("recordings")), // homie's live session for this video
   },
   returns: v.object({ jobId: v.id("jobs"), recipeId: v.id("recipes") }),
@@ -41,11 +42,9 @@ export const create = mutation({
     } else if (recording) {
       language = recording.language;
     }
-    const forKidId = args.forKidId ?? recording?.forKidId;
-    if (forKidId) {
-      const kid = await ctx.db.get("people", forKidId);
-      if (!kid || kid.familyId !== familyId) throw new ConvexError("That person isn't in your family.");
-    }
+    // The kids picked on Send, else the ones picked before homie's recording.
+    const named = forKids(args).length ? args : recording || {};
+    const kids = await familyKids(ctx, familyId, named, "That person isn't in your family.");
 
     // A "processing" card shows in the library right away; the worker fills it in when it publishes.
     const recipeId = await ctx.db.insert("recipes", {
@@ -66,7 +65,7 @@ export const create = mutation({
       source: args.source,
       title,
       language,
-      forKidId,
+      ...forKidFields(kids),
       recordingId: recording ? recording._id : undefined,
       stage: "queued",
       progress: 0,

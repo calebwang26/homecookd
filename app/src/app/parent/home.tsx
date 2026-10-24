@@ -1,36 +1,38 @@
-// Parent Home (bible: Parent-Home). Today’s date with "Mom ▾" on its right (tap: "Who’s in the
-// kitchen?", with Switch family and Sign out) + "Good morning, Mom", then "This week at the table"
-// (RETENTION-HANDOFF 3.2: the family's faces in big type, a small flame on whoever did their part this
-// week, nothing on the others; tap a face = their chat; no memorial faces; hidden until the table
-// loads and when nobody else is in the family), then three things only:
+// Parent Home (bible: Parent-Home), decluttered on Oct 24 like kid Home (#41). Today’s date with
+// "Mom ▾" on its right (tap: "Who’s in the kitchen?", with Invite family, Switch family and Sign out)
+// + "Good morning, Mom", then only:
 //  1. "Record a new recipe": the big green button, first on screen -> /record
-//  2. A recording still being made (hackathon): its live row, the newest one only (all of them are in
-//     Recipes), and the kids' live questions to answer by voice (LiveQuestions); both gone when empty
-//  3. <UpdatesCard/>: questions to answer, requests, and who made my dishes (gone when empty)
-//  4. "Invite family"
-// From the 1st to the 7th only, "Your November in the kitchen" (3.7: last month's recap, until it's
-// opened; nothing at all for an empty month) comes after all three, the last thing on the page, so
-// its arrival moves nothing: no space is held while its answer is on its way, and an empty month or a
-// failed call leaves the page exactly as on any other day (RecapCard, `last`). TODO(caleb): where the
-// month's card goes on the cook Home (under the big button it needed a held space, which an empty
-// month or a failed call then let go, moving the questions under it up).
-// Sending recipes and recordings still on their way live in the Recipes tab.
+//  2. A recording still being made: the glasses video, its live row (the newest one only; all of them
+//     are in Recipes) and the kids' live questions to answer by voice (LiveQuestions); gone when empty
+//  3. "Leo made your Poha": the newest photo a kid sent of one of her dishes (MadeYourDishCard); gone
+//     when there's none
+// Cut on Oct 24 (Caleb): the family faces row ("This week at the table"), the updates card, the
+// month's recap card and Invite family (now in "Who’s in the kitchen?"). Their components stay for the
+// screens that still use them. Dev aid (web screenshots): `?preview=made` shows the photo card.
 import { router } from 'expo-router';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
-import { InviteButton } from '@/components/invite/InviteButton';
 import { LiveQuestions } from '@/components/parent/LiveQuestions';
+import { MadeYourDishCard } from '@/components/parent/MadeYourDishCard';
 import { PendingList, usePendingRecipes } from '@/components/parent/PendingRecipes';
 import { GlassesVideoCard } from '@/components/record/GlassesVideoCard';
-import { UpdatesCard } from '@/components/parent/UpdatesCard';
 import { ActingAsBar, MoveRequestPrompt, ProfileButton } from '@/components/profiles';
-import { RecapCard, useRecapCard } from '@/components/recap/RecapCard';
-import { HomeTableRow } from '@/components/table/HomeTableRow';
 import { ActionButton, LargeHeader, listEnter, RecordDotIcon, ScreenWash, ScrollHold, StickyHeader, useScrollHold, useScrollY } from '@/components/ui';
+import { WEB_URL } from '@/lib/api';
 import { goodGreeting, longDate } from '@/lib/format';
+import { useMadeMyDish, type MadeMyDish } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
 import { colors, space, tabBar } from '@/theme/tokens';
+
+/**
+ * Dev aid (web screenshots only): `?preview=made` fills the photo card. Read once at startup, like the
+ * session's `?as=`: the first load goes through "/", which drops the query.
+ */
+const PREVIEW_MADE: MadeMyDish | null =
+  __DEV__ && Platform.OS === 'web' && /[?&]preview=made\b/.test(globalThis.location?.search ?? '')
+    ? { messageId: 'preview-made', fromName: 'Leo', recipeTitle: 'Poha', libraryId: 'biryani', photoUrl: `${WEB_URL}/media/stock/dish-dal.jpg`, text: 'Tasted like home.', at: Date.now() - 86_400_000 }
+    : null;
 
 export default function ParentHome() {
   const { me } = useSession();
@@ -44,8 +46,9 @@ export default function ParentHome() {
   // "Mom ▾" on the date line (tap: "Who’s in the kitchen?" with Back) keeps the greeting's full
   // width, like the bible. It also keeps homie's corner free, so the date never runs under the pot.
   const avatar = <ProfileButton homieRoom />;
-  const recap = useRecapCard(me?.id, { last: true });
   const pending = usePendingRecipes();
+  const live = useMadeMyDish();
+  const made = PREVIEW_MADE ?? live;
 
   return (
     <View style={styles.screen}>
@@ -59,7 +62,6 @@ export default function ParentHome() {
           <ScreenWash tone="parent" height={380} />
           <LargeHeader eyebrow={longDate()} eyebrowTone="parent" title={greeting} size={34} eyebrowRight={avatar} scrollY={scrollY} fadeEnd={40} />
           <ActingAsBar />
-          <HomeTableRow large style={styles.table} />
 
           <View style={styles.col}>
             <Animated.View entering={listEnter(0)}>
@@ -79,13 +81,7 @@ export default function ParentHome() {
             <GlassesVideoCard />
             <PendingList pending={pending} jobs={pending.jobs.slice(0, 1)} startIndex={1} />
             <LiveQuestions enterIndex={1} />
-            <UpdatesCard enterIndex={1} />
-
-            <Animated.View entering={listEnter(2)}>
-              <InviteButton />
-            </Animated.View>
-
-            <RecapCard card={recap} onOpen={(month) => router.push({ pathname: '/recap', params: { month } })} />
+            <MadeYourDishCard made={made} cookName={me?.name} enterIndex={2} />
           </View>
         </Animated.ScrollView>
       </ScrollHold>
@@ -97,7 +93,6 @@ export default function ParentHome() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.page },
-  table: { paddingHorizontal: space.gutter, marginTop: space.lg },
   col: { paddingHorizontal: space.gutter, paddingTop: space.xxl, gap: space.xxxl },
   // The Record screen's cream disc with the red dot, small enough for the pill.
   recordDot: {

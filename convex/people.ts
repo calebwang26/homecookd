@@ -1,4 +1,4 @@
-// The signed-in person, and the language they speak: an ISO 639-1 code like Ink's ("mr" for Marathi).
+// The signed-in person and their family, and the language they speak: an ISO 639-1 code like Ink's ("mr" for Marathi).
 // Unset means English. homie, the pipeline and voice-note transcription all read it.
 import { ConvexError, v } from "convex/values";
 import { mutation, query } from "./_generated/server";
@@ -28,6 +28,22 @@ export const me = query({
       language: person.language ?? "en",
       relation: person.relation,
     };
+  },
+});
+
+/** Everyone in my family, so the app can map its (Supabase) profile ids to Convex ids. */
+export const family = query({
+  args: { sessionToken: v.string() },
+  returns: v.array(
+    v.object({ personId: v.id("people"), supabaseProfileId: v.string(), name: v.string(), role: v.union(v.literal("cook"), v.literal("kid")) }),
+  ),
+  handler: async (ctx, { sessionToken }) => {
+    const { family } = await requireSession(ctx, sessionToken);
+    const people = await ctx.db
+      .query("people")
+      .withIndex("by_familyId", (q) => q.eq("familyId", family._id))
+      .take(100);
+    return people.map((p) => ({ personId: p._id, supabaseProfileId: p.supabaseProfileId, name: p.name, role: p.role }));
   },
 });
 

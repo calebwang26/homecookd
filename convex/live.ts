@@ -5,6 +5,7 @@ import { ConvexError, v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server";
 import { findSession, requireCook, requireSession, type Signed } from "./lib/auth";
+import { familyKids, forKidArgs, forKidFields, kidNames } from "./lib/forKids";
 import schema from "./schema";
 
 const IDLE_MS = 2 * 3600 * 1000;
@@ -19,25 +20,22 @@ export const startRecording = mutation({
   args: {
     sessionToken: v.string(),
     dish: v.optional(v.string()),
-    forKidId: v.optional(v.id("people")),
+    ...forKidArgs,
     language: v.optional(v.string()),
     source: v.union(v.literal("phone"), v.literal("glasses")),
   },
   returns: v.object({ recordingId: v.id("recordings") }),
-  handler: async (ctx, { sessionToken, dish, forKidId, language, source }) => {
+  handler: async (ctx, { sessionToken, dish, forKidId, forKidIds, language, source }) => {
     const signed = await requireSession(ctx, sessionToken);
     requireCook(signed);
-    if (forKidId) {
-      const kid = await ctx.db.get("people", forKidId);
-      if (!kid || kid.familyId !== signed.family._id || kid.role !== "kid") throw new ConvexError("That kid isn't in this family.");
-    }
+    const kids = await familyKids(ctx, signed.family._id, { forKidId, forKidIds }, "That kid isn't in this family.");
     const name = dish?.trim().slice(0, 120);
     const lang = (language || signed.person.language || "en").trim().toLowerCase();
     if (!/^[a-z]{2,3}$/.test(lang)) throw new ConvexError("language must be a code like mr or en.");
     const recordingId = await ctx.db.insert("recordings", {
       familyId: signed.family._id,
       cookId: signed.person._id,
-      forKidId,
+      ...forKidFields(kids),
       dish: name || undefined,
       language: lang,
       source,
@@ -142,7 +140,9 @@ export const sessionView = internalQuery({
     v.object({
       recording: schema.doc("recordings"),
       cook: v.object({ name: v.string(), relation: v.optional(v.string()), language: v.string() }),
+      /** Set only when it's for exactly one kid (homie names them); `kids` lists every one. */
       kid: v.optional(v.object({ name: v.string() })),
+      kids: v.array(v.object({ name: v.string() })),
       dish: v.optional(v.string()),
       /** homie has recorded with her before (another of her recordings started filming): no second introduction. */
       metBefore: v.boolean(),
@@ -152,7 +152,7 @@ export const sessionView = internalQuery({
     const found = await own(ctx, sessionToken, recordingId);
     if ("error" in found) return found;
     const { signed, row } = found;
-    const kid = row.forKidId ? await ctx.db.get("people", row.forKidId) : null;
+    const kids = (await kidNames(ctx, row)).map((name) => ({ name }));
     const started = await ctx.db
       .query("recordings")
       .withIndex("by_cookId_and_startedAt", (q) => q.eq("cookId", row.cookId).gt("startedAt", 0))
@@ -160,7 +160,8 @@ export const sessionView = internalQuery({
     return {
       recording: row,
       cook: { name: signed.person.name, relation: signed.person.relation, language: signed.person.language ?? "en" },
-      kid: kid ? { name: kid.name } : undefined,
+      kid: kids.length === 1 ? kids[0] : undefined,
+      kids,
       dish: row.dish,
       metBefore: started.some((r) => r._id !== row._id),
     };

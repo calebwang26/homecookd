@@ -1,5 +1,6 @@
-// Before recording starts (Record's "Start recording"): the dish (typed, optional), who it's for (the
-// kid who asked, else the learners, else Everyone), the language she cooks in (from people.me; a
+// Before recording starts (Record's "Start recording"): the dish (typed, optional), who it's for (each
+// kid a toggle, "Everyone" ticks them all: who.ts; the kid who asked starts ticked, else the first
+// kid, else Everyone), the language she cooks in (from people.me; a
 // change also becomes her account's language), then how she films: From my glasses (homie listens on
 // the phone by the stove), Phone camera (homie says hello first, then the phone's camera), or Videos
 // I took (the camera roll, as before).
@@ -15,13 +16,15 @@ import { useSession } from '@/lib/session';
 import { colors, fonts, shadows, space } from '@/theme/tokens';
 
 import { LanguagePicker, languageLabel, LANGUAGE_QUESTION } from './LanguagePicker';
+import { firstWho, showEveryone, toggleEveryone, toggleKid, whoTo, type Who } from './who';
 
 export type CaptureSource = 'glasses' | 'camera' | 'library';
 /**
  * `language` is null until she picked one or people.me loaded: the server then uses her saved
- * language (an explicit 'en' would beat it). `everyone`: "Everyone" rather than one kid.
+ * language (an explicit 'en' would beat it). `kids`: the ticked kids; `everyone`: every kid ticked
+ * (or "Everyone" with no kids); `label`: "Leo & Zoe", "everyone" or null; `who`: the ticks.
  */
-export type PreRecordChoice = { source: CaptureSource; dish: string; kid: Profile | null; everyone: boolean; language: string | null };
+export type PreRecordChoice = { source: CaptureSource; dish: string; kids: Profile[]; everyone: boolean; label: string | null; who: Who; language: string | null };
 
 const MAX_DISH = 120;
 
@@ -54,15 +57,14 @@ export function PreRecordSheet({
   const { me, profiles, learners } = useSession();
   const convexMe = useMe(visible);
   const [dish, setDish] = useState<string | null>(null);
-  const [who, setWho] = useState<string | null>(null);
+  const [who, setWho] = useState<Who | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [choosingLanguage, setChoosingLanguage] = useState(false);
 
   const others = profiles.filter((p) => p.id !== me?.id);
   const people = learners.filter((p) => p.id !== me?.id);
-  const defaultWho = (requestFrom && others.some((p) => p.id === requestFrom) ? requestFrom : null) ?? people[0]?.id ?? (others.length ? 'everyone' : null);
-  const whoNow = who ?? defaultWho;
-  const kid = whoNow && whoNow !== 'everyone' ? others.find((p) => p.id === whoNow) ?? null : null;
+  const whoNow = who ?? firstWho(people, others, { requestFrom });
+  const to = whoTo(whoNow, people, others);
   const language = picked ?? convexMe?.language ?? null;
   const dishNow = dish ?? initialDish ?? '';
 
@@ -74,7 +76,7 @@ export function PreRecordSheet({
 
   const start = (source: CaptureSource) => {
     if (busy) return;
-    onStart({ source, dish: dishNow.trim().slice(0, MAX_DISH), kid, everyone: whoNow === 'everyone', language });
+    onStart({ source, dish: dishNow.trim().slice(0, MAX_DISH), kids: to.picked, everyone: to.everyone, label: to.label, who: whoNow, language });
   };
 
   const close = () => {
@@ -119,9 +121,26 @@ export function PreRecordSheet({
               </Txt>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.peopleScroll} contentContainerStyle={styles.people}>
                 {people.map((p) => (
-                  <Chip key={p.id} size="lg" selectedTone="ink" label={p.name} selected={whoNow === p.id} onPress={() => setWho(p.id)} leading={<Avatar profile={p} size={40} />} />
+                  <Chip
+                    key={p.id}
+                    size="lg"
+                    selectedTone="ink"
+                    label={p.name}
+                    selected={whoNow.includes(p.id)}
+                    onPress={() => setWho(toggleKid(whoNow, p.id))}
+                    leading={<Avatar profile={p} size={40} />}
+                  />
                 ))}
-                <Chip size="lg" selectedTone="ink" label="Everyone" selected={whoNow === 'everyone'} onPress={() => setWho('everyone')} accessibilityLabel="Everyone in the family" />
+                {showEveryone(people, others) ? (
+                  <Chip
+                    size="lg"
+                    selectedTone="ink"
+                    label="Everyone"
+                    selected={to.everyone}
+                    onPress={() => setWho(toggleEveryone(whoNow, people, others))}
+                    accessibilityLabel="Everyone in the family"
+                  />
+                ) : null}
               </ScrollView>
             </View>
           ) : null}
