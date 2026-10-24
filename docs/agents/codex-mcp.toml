@@ -1,0 +1,17 @@
+# Paste into ~/.codex/config.toml, then sign in to each server once:
+#   codex mcp login supabase
+#   codex mcp login vercel
+# Check with `codex mcp list`. If your Codex version rejects `url =` servers, update Codex
+# (older versions needed `experimental_use_rmcp_client = true` at the top level).
+
+# Supabase: the `edible` project (api edge function, migrations, SQL). Remove read_only only when you deploy.
+[mcp_servers.supabase]
+url = "https://mcp.supabase.com/mcp?project_ref=qeiednrjkiyzbolkepbk&read_only=true"
+
+# Vercel: the `homecookd` project (homecookd.app deploys, env vars, logs).
+[mcp_servers.vercel]
+url = "https://mcp.vercel.com"
+
+# Trust the repo so Codex loads AGENTS.md without asking.
+[projects."/Users/calebwang/Documents/GitHub/homecookd"]
+trust_level = "trusted"
