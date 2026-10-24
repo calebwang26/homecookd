@@ -9,9 +9,9 @@ import WebSocket from "ws";
 import { TurnAgent, type Actions } from "./agent.js";
 import * as convex from "./convex.js";
 import { env } from "./env.js";
-import { InkStream } from "./ink.js";
 import { findMoments, warm } from "./moss.js";
-import { SONIC_SAMPLE_RATE, speak, type AudioFormat } from "./sonic.js";
+import { SONIC_SAMPLE_RATE, type AudioFormat } from "./sonic.js";
+import { listenInk, speak } from "./speech.js";
 import type { Stt, SttEvents } from "./stt.js";
 import { translateQuote } from "./translate.js";
 
@@ -31,7 +31,7 @@ export type CookingDeps = {
 
 const LIVE: CookingDeps = {
   convex,
-  listen: (events, keyterms) => new InkStream(events, keyterms),
+  listen: listenInk,
   speak,
   agent: (session, actions) => new TurnAgent(session, actions),
   findMoments,

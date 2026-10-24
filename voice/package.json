@@ -7,6 +7,7 @@
   },
   "scripts": {
     "dev": "tsx watch src/server.ts",
+    "dev:fake": "VOICE_FAKE_SPEECH=1 tsx watch src/server.ts",
     "start": "node dist/server.js",
     "build": "tsc",
     "typecheck": "tsc --noEmit && tsc -p test",

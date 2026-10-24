@@ -45,20 +45,26 @@ VM), `GEMINI_LIVE_MODEL`.
 cd voice && npm ci
 npm run dev                                   # ws://localhost:8080/cook, live Convex
 VOICE_STUB=1 npm run dev                      # the stub recipe instead
-npm run make-audio                            # test-audio/*.wav, 16 kHz mono, spoken by Sonic
+VOICE_STUB=1 npm run dev:fake                 # fake speech: no Cartesia or Gemini Live, so testing costs nothing
+npm run make-audio                            # test-audio/*.wav, 16 kHz mono, spoken by Sonic (~450 credits for all 14)
 npm run make-audio -- no                      # only the lines named (here test-audio/no.wav)
 npm run test-client -- test-audio/next-step.wav test-audio/question.wav test-audio/unknown-question.wav
 npm run test-client -- test-audio/no.wav test-audio/next-step.wav   # no to reading: steps change silently
 npm run test-client -- moment:answer test-audio/yes.wav moment:off text:no   # an app moment, then the app's no
-SESSION=<kid's Convex sessionToken> RECIPE=<recipes _id> npm run test-client -- test-audio/next-step.wav  # live
-URL=wss://<cloud run host> npm run test-client -- test-audio/next-step.wav   # against the deployed one
-VOICE_STUB=1 HOMIE_DEMO=1 npm run dev         # then, in another terminal:
+SESSION=<kid's Convex sessionToken> RECIPE=<recipes _id> npm run test-client -- test-audio/next-step.wav  # live Convex
+LIVE=1 URL=wss://<cloud run host> npm run test-client -- test-audio/next-step.wav   # the one live smoke test (≤ 60 s)
+VOICE_STUB=1 HOMIE_DEMO=1 npm run dev:fake    # then, in another terminal:
 npm run test-record                           # a whole recording with homie, in Marathi (stub "stub-mr")
 COOK_LANG=en npm run test-record              # the same in English ("stub-en")
 SESSION=<cook's sessionToken> RECORDING=<recordings _id> npm run test-record   # live Convex
 npm run typecheck                             # src/ and test/
 npm test                                      # unit tests on a fake clock; no keys or network needed
 ```
+
+The test clients cost nothing by default: they check the service runs with fake speech (`/health` says
+`x-fake-speech: 1`) and send each recorded line's words as text (`scripts/testLines.ts`). `LIVE=1` streams the real
+audio to a real service; every run stops at `MAX_S` (live: 60 s for test-client, 240 s for test-record, never more
+than 300). At most one live Cartesia smoke test per merge (AGENTS.md).
 
 The stub has no Moss index (the Moss plan allows 3 indexes, so don't make test ones): with `VOICE_STUB=1`,
 questions go to the cook. To test search, use a real family's index, which Convex creates after a pipeline run.
