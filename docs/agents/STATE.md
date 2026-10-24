@@ -302,7 +302,7 @@ Before starting work, compare the last commit here with `git log origin/main` to
     the intro). Neither is in the live `library.json` yet.
   - **Open:** nothing written to the bucket, nothing deployed. The scrub waits on Caleb (see "Waiting on Caleb").
     `play.mp4` and `voice.m4a` are still public at unlisted URLs, with the stories as she spoke them.
-- Oct 24 · #PRNUM · Claude · Ran `pipeline/scrub_family.py --id hackathon-biryani-1 --write` with Caleb's OK. The
+- Oct 24 · #40 · Claude · Ran `pipeline/scrub_family.py --id hackathon-biryani-1 --write` with Caleb's OK. The
   public `recipe.json` of `hackathon-biryani-1` and `hackathon-biryani-2` no longer holds stories, special moments,
   step tips or the intro, and each is marked `"family": true`. Steps and media are unchanged. `library.json` wasn't
   rebuilt: it still lists 10 recipes, neither biryani. A second dry run finds nothing to scrub. The bucket has no
