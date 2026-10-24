@@ -3,7 +3,7 @@
 // one line under it, and homie resting top-right, talking with her over the /record socket
 // (lib/live/homie). Her language big, small English under it. Nothing else.
 //   connecting, intro  homie says hello while the button rests ("homie is saying hello"). Then filming
-//                      starts by itself.
+//                      starts by itself; "Skip, start filming" starts it now (homie stops mid-line).
 //   recording          glasses: rings pulse out of the button; a tap is "I'm done" ("माझं झालं" / "Tap
 //                      when you're done"). With homie's line down, that tap ends the recording through
 //                      Convex (live.endRecording), so the glasses' video still goes. phone: the phone's
@@ -163,6 +163,15 @@ export default function RecordingScreen() {
     begin.current();
   }, [autoStart]);
 
+  // She doesn't want the hello: start filming now. The service cuts homie off ({type:"start"} mid-line).
+  const [skipped, setSkipped] = useState(false);
+  const skipIntro = () => {
+    setSkipped(true);
+    if (started.current) return;
+    started.current = true;
+    begin.current();
+  };
+
   const filmWithoutHomie = async () => {
     started.current = true;
     if (await pick.record({ dish: draft.dish, requestFrom: draft.requestFrom })) setFilmedAlone(true);
@@ -193,6 +202,11 @@ export default function RecordingScreen() {
             <Animated.View key={view.line.text} entering={FadeIn.duration(reduce ? motion.reducedFadeMs : 220)} style={styles.label}>
               <BiLine line={view.line} size={30} weight={700} enSize={15} leading={1.3} />
             </Animated.View>
+            {beforeFilming && !homie.error && !skipped ? (
+              <View style={styles.skip}>
+                <ActionButton label={both(words.line('skipIntro'))} variant="outline" size="sm" onPress={skipIntro} />
+              </View>
+            ) : null}
             {micOff || error ? (
               <View style={styles.problem}>
                 {micOff ? <BiLine line={micOff} size={16} weight={600} color={colors.danger} enColor={colors.danger} /> : null}
@@ -228,4 +242,5 @@ const styles = StyleSheet.create({
   column: { flex: 1, paddingHorizontal: COLUMN.side, alignItems: 'center', justifyContent: 'center' },
   label: { marginTop: COLUMN.toLabel },
   problem: { marginTop: 24, alignItems: 'center', gap: 10 },
+  skip: { marginTop: 20 },
 });

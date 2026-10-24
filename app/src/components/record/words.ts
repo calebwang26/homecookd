@@ -40,6 +40,7 @@ const WORDS = {
   elsewhere: { en: 'This recording is open on another phone.', mr: 'हे रेकॉर्डिंग दुसऱ्या फोनवर उघडलं आहे.' },
   tryAgain: { en: 'Try again', mr: 'पुन्हा प्रयत्न करा' },
   filmWithoutHomie: { en: 'Film without homie', mr: 'homie शिवाय रेकॉर्ड करा' },
+  skipIntro: { en: 'Skip, start filming', mr: 'वगळा, रेकॉर्डिंग सुरू करा' },
   leave: { en: 'Leave', mr: 'बाहेर पडा' },
 } as const satisfies Record<string, Words>;
 
