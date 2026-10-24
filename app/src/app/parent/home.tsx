@@ -1,18 +1,19 @@
 // Parent Home (bible: Parent-Home), decluttered on Oct 24 like kid Home (#41). Today’s date with
-// "Mom ▾" on its right (tap: "Who’s in the kitchen?", with Invite family, Switch family and Sign out)
+// "Mom ▾" on its right (tap: "Who’s in the kitchen?", with Switch family and Sign out)
 // + "Good morning, Mom", then only:
 //  1. "Record a new recipe": the big green button, first on screen -> /record
 //  2. A recording still being made: the glasses video, its live row (the newest one only; all of them
 //     are in Recipes) and the kids' live questions to answer by voice (LiveQuestions); gone when empty
 //  3. "Leo made your Poha": the newest photo a kid sent of one of her dishes (MadeYourDishCard); gone
 //     when there's none
-// Cut on Oct 24 (Caleb): the family faces row ("This week at the table"), the updates card, the
-// month's recap card and Invite family (now in "Who’s in the kitchen?"). Their components stay for the
-// screens that still use them. Dev aid (web screenshots): `?preview=made` shows the photo card.
+//  4. "Invite family :)" (Caleb, Oct 24: back on Home, right under the photo card)
+// Cut on Oct 24 (Caleb): the family faces row ("This week at the table"), the updates card and the
+// month's recap card. Their components stay for the screens that still use them. Dev aid (web screenshots): `?preview=made` shows the photo card.
 import { router } from 'expo-router';
 import { Platform, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
+import { InviteButton } from '@/components/invite/InviteButton';
 import { LiveQuestions } from '@/components/parent/LiveQuestions';
 import { MadeYourDishCard } from '@/components/parent/MadeYourDishCard';
 import { PendingList, usePendingRecipes } from '@/components/parent/PendingRecipes';
@@ -82,6 +83,10 @@ export default function ParentHome() {
             <PendingList pending={pending} jobs={pending.jobs.slice(0, 1)} startIndex={1} />
             <LiveQuestions enterIndex={1} />
             <MadeYourDishCard made={made} cookName={me?.name} enterIndex={2} />
+
+            <Animated.View entering={listEnter(3)}>
+              <InviteButton />
+            </Animated.View>
           </View>
         </Animated.ScrollView>
       </ScrollHold>

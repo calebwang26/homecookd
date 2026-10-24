@@ -23,8 +23,7 @@
 // to cook as them, or add family with + (an invite link, or someone without a phone, like Grandma).
 // A phone that just joined with a family link can't take over a face: tapping one asks "Is this you
 // on a new phone?" (NewPhoneSheet), and the family lets them in.
-// Opened from Home ("Mom ▾", `/?pick=1`), a quiet foot holds a cook's "Invite family :)" (moved off
-// Parent Home on Oct 24, as kid Home's went to the Ask tab) and the phone's own settings: a cook's
+// Opened from Home ("Mom ▾", `/?pick=1`), a quiet foot holds the phone's own settings: a cook's
 // "Your language" (components/profiles/LanguageEntry), "Switch family" (the code screen,
 // /join-code) and "Sign out of this phone", which asks first ("Sign out on this phone?" with Sign
 // out / Keep) and then signs this phone out (session leaveFamily).
@@ -40,7 +39,6 @@ import { ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native'
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { InviteButton } from '@/components/invite/InviteButton';
 import { getLaunchPhase, useLaunchPhase } from '@/components/LaunchSplash';
 import {
   ADD_BAR_HEIGHT,
@@ -284,7 +282,6 @@ export default function Profiles() {
 
           {choosing && !loading && !covered ? (
             <Animated.View entering={listEnter(profiles.length + 2)} style={styles.foot}>
-              {me?.role === 'cook' ? <InviteButton style={styles.invite} /> : null}
               <LanguageEntry />
               <PressableScale
                 onPress={() => router.push('/join-code')}
@@ -466,7 +463,6 @@ const styles = StyleSheet.create({
   brandRow: { minHeight: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   // The phone's own settings, quiet at the very end (only when opened from Home).
   foot: { marginTop: 16, alignItems: 'center', gap: 4 },
-  invite: { alignSelf: 'stretch', marginBottom: 12 },
   footLink: { minHeight: 48, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
   signOut: { alignItems: 'center', gap: 10, paddingTop: 8, paddingBottom: 4, paddingHorizontal: 8 },
   choices: { flexDirection: 'row', gap: 12 },
