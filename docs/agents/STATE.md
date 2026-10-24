@@ -177,3 +177,4 @@ Before starting work, compare the last commit here with `git log origin/main` to
     `lib/http` and `lib/liveRoutes`.
   - **Open:** the TEST family's Biryani still says `mossIndexedAt`, but its index was deleted on purpose; it
     re-indexes on its next publish.
+- Oct 24 · (this PR) · Claude · Memory: demo-family-shreya (the demo is Shreya Pawar's family; her grandma cooks and records in Marathi; Serene isn't in the demo).
