@@ -5,7 +5,7 @@
 Family recipes live in our parents' hands and voices, not on paper. homecookd turns a parent's cooking
 video into a recipe their kid can follow, then guides the kid through it by voice while they cook.
 
-**Demo video:** _(link)_ · **Website:** [homecookd.app](https://homecookd.app)
+**Demo video:** _(link)_ 
 
 ## How it works
 
