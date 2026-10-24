@@ -6,6 +6,7 @@ import { useState, type ReactNode } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { HomiePot } from '@/components/homie';
 import { LaunchSplash } from '@/components/LaunchSplash';
 import {
   ActionButton,
@@ -68,6 +69,8 @@ import {
   WhatsAppIcon,
   type FloatingTabBarProps,
 } from '@/components/ui';
+import { setHomie, showMoment, type HomieState } from '@/lib/homie/store';
+import { speak } from '@/lib/live/speak';
 import { alpha, colors, shadows } from '@/theme';
 
 export default function GalleryScreen() {
@@ -102,6 +105,10 @@ function Gallery() {
           </Txt>
           <Txt variant="lead">Every primitive from the design bible, on one page.</Txt>
         </View>
+
+        <Section title="homie">
+          <HomieStates />
+        </Section>
 
         <Section title="Type">
           <Txt variant="display" size={34}>Good morning, Mom</Txt>
@@ -424,6 +431,55 @@ function Gallery() {
   );
 }
 
+const HOMIE_STATES: HomieState[] = ['off', 'listening', 'thinking', 'lit', 'speaking', 'timer'];
+// TODO(caleb): native check of the Marathi sample.
+const QUESTION = 'कांदे झाले हे कसं ओळखायचं?';
+
+/** Every pot state, plus the moments: Grandma's live question (Marathi) and the corner pot's states. */
+function HomieStates() {
+  const [corner, setCorner] = useState<HomieState>('off');
+  const ask = () => void speak(QUESTION, { lang: 'mr' });
+  const sample = () => {
+    showMoment({
+      id: 'gallery',
+      question: QUESTION,
+      questionEn: 'How do you know the onions are done?',
+      listening: { label: 'बोला, मी ऐकतोय', sublabel: 'Just say it, I’m listening' },
+      options: [
+        { id: 'again', label: 'पुन्हा सांग', sublabel: 'Say it again', keepOpen: true },
+        { id: 'not_now', label: 'आत्ता नको', sublabel: 'Not now' },
+      ],
+      onChoose: (id) => {
+        if (id === 'again') ask();
+      },
+    });
+    ask();
+  };
+  const nextCorner = () => {
+    const next = HOMIE_STATES[(HOMIE_STATES.indexOf(corner) + 1) % HOMIE_STATES.length];
+    setCorner(next);
+    setHomie({ state: next, level: next === 'listening' ? 0.7 : 0, timer: next === 'timer' ? { endsAt: Date.now() + 60_000, totalS: 60 } : undefined });
+  };
+  return (
+    <>
+      <View style={styles.wrapGap}>
+        {HOMIE_STATES.map((st) => (
+          <View key={st} style={styles.homieCell}>
+            <HomiePot state={st} level={0.7} size={64} timerProgress={st === 'timer' ? 0.6 : null} />
+            <Txt variant="caption">{st}</Txt>
+          </View>
+        ))}
+      </View>
+      <View style={styles.homieCell}>
+        <HomiePot state="speaking" size={170} />
+      </View>
+      <ActionButton label="Open a sample moment" variant="ink" onPress={sample} />
+      <ActionButton label={`Corner pot: ${corner} (tap for next)`} variant="outline" onPress={nextCorner} />
+      <ActionButton label="homie says hi" variant="outline" onPress={() => void speak('Hi, I’m homie.')} />
+    </>
+  );
+}
+
 function Section({ title, children }: { title: string; children: ReactNode }) {
   return (
     <View style={styles.section}>
@@ -527,5 +583,6 @@ const styles = StyleSheet.create({
   pressDemo: { height: 72, borderRadius: 24, backgroundColor: colors.card, boxShadow: shadows.card, alignItems: 'center', justifyContent: 'center' },
   tabDemo: { height: 124, marginHorizontal: -24 },
   sheetHead: { alignItems: 'center', gap: 6, paddingTop: 8 },
+  homieCell: { alignItems: 'center', gap: 8, paddingVertical: 8, minWidth: 76 },
   sheetThumb: { width: 120, height: 120, borderRadius: 20, backgroundColor: colors.peach, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
 });

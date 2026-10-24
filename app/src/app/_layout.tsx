@@ -5,7 +5,8 @@
 // any other link opened before anyone was picked opens on top of their home once it shows.
 // PushBridge (RETENTION-HANDOFF 2.3) opens the screen a tapped push points at (the same hold covers a
 // push that launched the app), files this phone's push token under its person, and starts "heard"
-// logging; PushAskHost is the one "Want a note when…?" sheet any screen can ask for.
+// logging; PushAskHost is the one "Want a note when…?" sheet any screen can ask for. HomieOverlay is
+// homie, the pot that rests top-right on every screen (components/homie).
 //
 // Stack motion (docs/design/ANIMATIONS.md 3): detail screens use a quick fade underneath their own
 // Reanimated hero/content entrances; drill-down screens (ingredients -> steps, chat) slide.
@@ -27,6 +28,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 
+import { HomieOverlay } from '@/components/homie';
 import { LaunchSplash } from '@/components/LaunchSplash';
 import { MediaSheetProvider } from '@/components/media';
 import { PushAskHost } from '@/components/push/PushAskSheet';
@@ -98,6 +100,7 @@ export default function RootLayout() {
                 <SessionGate />
                 <PushBridge />
                 <PushAskHost register={registerPush} />
+                <HomieOverlay />
               </ShareSheetProvider>
             </MediaSheetProvider>
           </ToastProvider>
@@ -138,6 +141,9 @@ function AppStack() {
       <Stack.Screen name="chat/[id]" options={{ title: 'Chat', animation: 'slide_from_right' }} />
       <Stack.Screen name="send" options={{ title: 'Send your recipe', animation: 'slide_from_bottom' }} />
       <Stack.Screen name="record" options={{ title: 'Record', animation: 'slide_from_right' }} />
+      {/* Grandma cooking while homie listens; the walkie-talkie answer to a kid's question. */}
+      <Stack.Screen name="recording" options={{ title: 'Recording', animation: 'slide_from_right' }} />
+      <Stack.Screen name="answer/[id]" options={{ title: 'Answer', animation: 'slide_from_bottom' }} />
       {/* Month in the kitchen (RETENTION-HANDOFF 3.7): full screen, so Home doesn't peek behind the story; Close is always on screen. */}
       <Stack.Screen name="recap" options={{ title: 'Your month in the kitchen', presentation: 'fullScreenModal', animation: 'fade' }} />
       <Stack.Screen name="+not-found" options={{ title: 'homecookd', animation: 'fade' }} />

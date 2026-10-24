@@ -197,9 +197,9 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 - **Share asks** ("Put it on the map", `convex/shareRequests.ts`): `shareRequests.ask({ recipeId })` → `"shared"`
   (it already was, or I'm its cook: shared at once by the same path as the switch, `community.shareOn`) or
   `"asked"`: a `questions` row with `kind: "share"` and `shareRecipeId`, addressed to that recipe's cook like any
-  open question (one open ask per recipe). Gemini fills `textForCook` (her language) a moment later, but the ask
-  reaches her in her language only where the parent screens show `textForCook`: LiveQuestions and the
-  walkie-talkie do from #35 on (merge #35 before demoing "Put it on the map"); before that she reads the English.
+  open question (one open ask per recipe). Gemini fills `textForCook` (her language) a moment later; the ask reaches
+  her in her language because the parent screens show `textForCook` (LiveQuestions and the walkie-talkie, #35). A
+  parent screen that showed only `text` would put the English question in front of her.
   Only her answer counts (`questions.answer` refuses a share ask from anyone but the recipe's cook). Once her words
   are in (typed, the voice note's Ink transcript, or a voice note nobody could write out), `shareRequests.decide`
   asks Gemini, strictly, yes / no / unclear (`lib/yesNo.ts`) on the English (`translation`, else `transcript`, else

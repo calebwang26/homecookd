@@ -41,8 +41,8 @@ export default function ParentHome() {
   const greeting = `${goodGreeting()}${name ? `, ${name}` : ''}`;
 
   // "Mom ▾" on the date line (tap: "Who’s in the kitchen?" with Back) keeps the greeting's full
-  // width, like the bible.
-  const avatar = <ProfileButton />;
+  // width, like the bible. It also keeps homie's corner free, so the date never runs under the pot.
+  const avatar = <ProfileButton homieRoom />;
   const recap = useRecapCard(me?.id, { last: true });
   const pending = usePendingRecipes();
 

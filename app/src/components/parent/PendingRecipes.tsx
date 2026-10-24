@@ -5,7 +5,9 @@
 // (who gets it) until the backend has it; drops a job once its recipe is in the library and, when
 // it was for someone, the backend knows who gets it (a late POST delivers right away). So a
 // finished row disappears and the real recipe takes its place. The worker's live stage comes from
-// Convex jobs.forFamily (matched by the upload folder, "<job_id>/").
+// Convex jobs.forFamily (matched by the upload folder, "<job_id>/"). In Convex mode the worker
+// writes no status file, so a job is also done once its live stage is 'done' and its recipe (the
+// job's Convex recipeId, mapped to a library id through recipes.list) is in the library.
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, AppState, Platform, StyleSheet, View } from 'react-native';
@@ -13,7 +15,7 @@ import Animated from 'react-native-reanimated';
 
 import { fadeOutFast, listEnter, useToast } from '@/components/ui';
 import { requestCancel } from '@/lib/deletes';
-import { useLiveJobs } from '@/lib/live/convex';
+import { libraryIdOf as findLibraryId, useLiveJobs, type LiveJob } from '@/lib/live/convex';
 import { refreshLibrary, useLibrary } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
 import {
@@ -28,6 +30,7 @@ import {
   type StoredJob,
 } from '@/lib/uploads';
 
+import { liveJobFinished, recipeIdsToLookUp } from './jobsLogic';
 import { describeJob, ProcessingRow, type ProcessingView } from './ProcessingRow';
 
 const POLL_MS = 60_000;
@@ -93,14 +96,33 @@ export function usePendingRecipes(): PendingState {
     }, [poll]),
   );
 
-  // Published, in the library and (if it was for someone) handed to them: the job is done.
-  // Cancelled (maybe from another phone): stop & drop.
+  // The worker's live job per upload folder ("<job_id>/").
+  const liveByJob = useMemo(() => new Map<string, LiveJob>(liveJobs.map((l) => [l.uploadPath.replace(/\/$/, ''), l])), [liveJobs]);
+
+  // A finished live job's library id, from its Convex recipe id (asked again when the library changes).
   const libraryIds = entries.map((e) => e.id).join('|');
+  const [libraryIdOf, setLibraryIdOf] = useState<Record<string, string>>({});
+  const lookUp = recipeIdsToLookUp(liveJobs, libraryIdOf).join('|');
+  useEffect(() => {
+    if (!lookUp) return;
+    let alive = true;
+    void Promise.all(lookUp.split('|').map(async (id) => [id, await findLibraryId(id).catch(() => null)] as const)).then((pairs) => {
+      const found = pairs.filter((p): p is readonly [string, string] => !!p[1]);
+      if (alive && found.length) setLibraryIdOf((prev) => ({ ...prev, ...Object.fromEntries(found) }));
+    });
+    return () => {
+      alive = false;
+    };
+  }, [lookUp, libraryIds]);
+
+  // Published (or live 'done'), in the library and (if it was for someone) handed to them: the job is
+  // done. Cancelled (maybe from another phone): stop & drop.
   useEffect(() => {
     const ids = new Set(libraryIds.split('|'));
     const done = jobs.filter((j) => {
       const s = statuses[j.job_id];
       if (s?.status === 'cancelled') return true;
+      if (liveJobFinished(liveByJob.get(j.job_id), libraryIdOf, ids, needsPendingSend(j))) return true;
       return s?.status === 'published' && !!s.recipe_id && ids.has(s.recipe_id) && !needsPendingSend(j);
     });
     if (done.length === 0) return;
@@ -108,7 +130,7 @@ export function usePendingRecipes(): PendingState {
       if (statuses[j.job_id]?.status === 'cancelled') cancelJobUploads(j.job_id);
       removeJob(j.job_id); // emits -> the subscription above re-reads the jobs
     }
-  }, [jobs, statuses, libraryIds]);
+  }, [jobs, statuses, libraryIds, liveByJob, libraryIdOf]);
 
   const doCancel = useCallback(
     async (job: StoredJob) => {
@@ -130,11 +152,14 @@ export function usePendingRecipes(): PendingState {
   );
 
   const views = useMemo(
-    () => {
-      const live = new Map(liveJobs.map((l) => [l.uploadPath.replace(/\/$/, ''), l]));
-      return Object.fromEntries(jobs.map((j) => [j.job_id, describeJob(j, statuses[j.job_id], now, live.get(j.job_id))]));
-    },
-    [jobs, statuses, now, liveJobs],
+    () =>
+      Object.fromEntries(
+        jobs.map((j) => {
+          const live = liveByJob.get(j.job_id);
+          return [j.job_id, describeJob(j, statuses[j.job_id], now, live, live?.recipeId ? libraryIdOf[live.recipeId] : undefined)];
+        }),
+      ),
+    [jobs, statuses, now, liveByJob, libraryIdOf],
   );
 
   const act = useCallback(
