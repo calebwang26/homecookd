@@ -6,11 +6,11 @@
 
 A family recipe app that keeps the person in the recipe and keeps the family talking.
 
-Built at Cal Hacks 13.0 · [homecookd.app](https://homecookd.app) · Demo video: _(link)_
+Demo video: _(link)_
 
 </div>
 
-## Why homecookd?
+## What is homecookd?
 
 **1. Recipes that keep the person.**
 Family recipes were never written down. They live in the hands and voices of our older family members.
