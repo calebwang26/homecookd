@@ -6,7 +6,7 @@ Cartesia Ink 2 turns it into text, and Claude picks one tool per turn: move a st
 from general knowledge: a question is answered by the cook's own clip, or it goes to the cook.
 
 ```
-src/server.ts   HTTP /healthz + WebSocket /cook
+src/server.ts   HTTP /health + WebSocket /cook
 src/cook.ts     one cooking session: wires Ink → (fast path | Claude) → actions → Sonic
 src/agent.ts    Claude turn agent: tools, system prompt, the one-tool-per-turn loop
 src/ink.ts      Cartesia Ink 2 streaming STT (/stt/turns/websocket, built-in turn detection)
@@ -14,7 +14,7 @@ src/sonic.ts    Cartesia Sonic TTS (/tts/bytes, streamed)
 src/moss.ts     Moss search over family-<familyId> (@moss-js/moss, in-memory queries)
 src/convex.ts   Convex HTTP actions (/voice/session, /voice/step, /voice/question) + the local stub
 fixtures/       stub session: Grandma's red-braised pork (from data/synthetic)
-scripts/        test client, test-audio maker, Moss test-index seeder
+scripts/        test client, test-audio maker
 ```
 
 ## Run it locally
@@ -30,12 +30,14 @@ cd voice && npm ci
 npm run dev                                   # ws://localhost:8080/cook, live Convex
 VOICE_STUB=1 npm run dev                      # the stub recipe instead
 npm run make-audio                            # test-audio/*.wav, 16 kHz mono, spoken by Sonic
-npm run seed-moss                             # Moss index family-voice-test (the stub family)
 npm run test-client -- test-audio/next-step.wav test-audio/question.wav test-audio/unknown-question.wav
 SESSION=<kid's Convex sessionToken> RECIPE=<recipes _id> npm run test-client -- test-audio/next-step.wav  # live
 URL=wss://<cloud run host> npm run test-client -- test-audio/next-step.wav   # against the deployed one
 npm run typecheck
 ```
+
+The stub has no Moss index (the Moss plan allows 3 indexes, so don't make test ones): with `VOICE_STUB=1`,
+questions go to the cook. To test search, use a real family's index, which Convex creates after a pipeline run.
 
 The test client streams each WAV in 100 ms chunks at real-time speed, keeps sending silence like an open mic,
 prints every event with timings, and saves what the service says to `test-audio/out/`.

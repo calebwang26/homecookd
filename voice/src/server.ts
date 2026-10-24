@@ -1,5 +1,5 @@
 // homecookd live voice service (docs/build/STACK.md, Track B). Runs on Cloud Run with min instances 1.
-//   GET /healthz                                     → ok
+//   GET /health                                      → ok (Cloud Run's front end swallows /healthz)
 //   WS  /cook?session=<sessionToken>&recipe=<recipeId>[&audio=pcm|wav]
 import { createServer } from "node:http";
 import { WebSocketServer } from "ws";
@@ -8,7 +8,7 @@ import { usingStub } from "./convex.js";
 import { env } from "./env.js";
 
 const server = createServer((req, res) => {
-  if (req.url === "/healthz") {
+  if (req.url === "/health" || req.url === "/healthz") {
     res.writeHead(200, { "Content-Type": "text/plain" }).end("ok");
     return;
   }
