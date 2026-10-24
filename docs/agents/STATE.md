@@ -47,10 +47,17 @@ older note in `memory/` disagrees, this file wins.
     CARTESIA, MOSS, MUSE, WORKER_SECRET, VOICE_SECRET. Redeploy with `--preview-name hackathon`, never
     `--preview-create`: that recreated the deployment and deleted `energized-starfish-920`. It has #37's memory
     fields (`step`, `id`, `title`, `why`), so the app can put a family dish's stories back. Last deployed Oct 24
-    from main `ad8fd88ea` by the Merge Agent (Caleb's go; adds `recordings.by_cookId_and_startedAt`). The one
-    before, from `f28173a1f`, added `dinnerInviteOpens.by_dinnerId_and_deviceId`, `dinners.by_inviteToken`,
+    by Salik from `glasses-bridge` `bdb2688` (main `ad8fd88ea` plus the laptop bridge, `glasses/BRIDGE.md`): new
+    tables `liveEvents` and `liveWindows`, `POST /glasses/live-events`, `liveEvents.forRecording`, `jobs.videoGaps`,
+    and `jobId` in `/glasses/active`. Before that, from main `ad8fd88ea` by the Merge Agent (Caleb's go; adds
+    `recordings.by_cookId_and_startedAt`). The one before, from `f28173a1f`, added `dinnerInviteOpens.by_dinnerId_and_deviceId`, `dinners.by_inviteToken`,
     `swapRequests.by_otherFamilyId` and `swapRequests.by_requesterFamilyId`, and `POST /invite/open` with CORS
     for homecookd.app.
+  - **Glasses VM** `glasses-ingest` (GCE us-west1-b, http://34.169.246.204:8090): updated Oct 24 by Salik with
+    `glasses/ingest` from `glasses-bridge` `bdb2688`. It gives a recording streamed through the laptop bridge
+    (`fw: edible-glasses-bridge`) 180 s for the laptop's full upload, and skips its own upload once the job
+    exists. `glasses/vm/setup.sh` stops at `gcloud services enable` without that permission; run its
+    `add-metadata` and `reset` steps by hand, and only when `/glasses/active` answers 204.
   - **Worker** (`pipeline/worker.py`, Convex mode) runs on the laptop from `.claude/worktrees/worker-main` at main
     `4d703d9` (#39, started Oct 24 03:14), so family `recipe.json` files go out without stories or tips.
   - **Moss** works again (billing fixed Oct 24). One index is left: `family-j97ctx…` (the demo family: 4 recipes,
@@ -627,3 +634,4 @@ Before starting work, compare the last commit here with `git log origin/main` to
     Oct 25 demo: if the demo cook's profile has filmed before (rehearsals), she hears the short hello, not the
     full one.
 - Oct 24 · #56 · Claude · STATE: live versions after the Merge Agent's batch (Caleb: "merge everything and then deploy as quickly as possible"): Convex `grand-dragon-649` from main `ad8fd88ea` (adds `recordings.by_cookId_and_startedAt`), voice `homecookd-voice-00005-tvg` from `ad8fd88ea`, EAS Update `406438fe-d271-47d2-8f05-4ca15707e0ca` from `ad8fd88ea`. Docs only.
+- Oct 24 · no PR (merged directly) · Claude · Glasses laptop bridge (`glasses/BRIDGE.md`): edible-glasses' `receiver.py --cloud` pairs with the live glasses recording, relays to the VM, backs the raw stream up to `gs://<uploads>/glasses-backup/`, analyses 30 s windows live into Convex (`liveEvents`, `liveWindows`) and uploads the full video from its own backup on "I'm done"; the worker gets `liveLog`, `liveGaps` and `videoGaps`, and `pipeline/prompts.py live_block` puts them in both prompts; the recording screen shows the last step the live pass saw. Deployed: Convex `grand-dragon-649` and the glasses VM, both from `bdb2688`. Not shipped: the app line needs an EAS Update; the laptop worker needs a restart from main to read the live notes.
