@@ -292,6 +292,32 @@ Before starting work, compare the last commit here with `git log origin/main` to
     in the app). `rebuild_library` lists every `*/recipe.json` in the bucket, so any `publish.py` run puts family
     recipes into the shared `library.json` and the app bundle. The intro isn't kept anywhere now (no screen shows it).
 - Oct 24 · (this PR) · Claude · Root devDependency `@types/node`: `convex deploy` typechecks `convex/`, and a clean `npm ci` had no Node types, so every `process.env` failed (37 errors) and the deploy stopped. Now tsc is 0 and vitest 40/40.
+- Oct 24 · #39 · Claude · Family recipes stay out of the shared library, plus a scrub for the old ones (follow-up
+  to #37). A family recipe's public `recipe.json` now says `"family": true` (`pipeline/schema.py` `Recipe.family`,
+  set by `publish.without_memories`). `rebuild_library` leaves those out of `library.json` and the app's bundle
+  (`publish.is_family`, which also honours `data/out/<id>/.family` for one published before the mark).
+  `publish_recipe` keeps a recipe a family one when its bucket copy is marked, so re-publishing it by hand from
+  another machine can't put the stories back. The app and web types ignore the new field. New
+  `pipeline/scrub_family.py` finds family recipes from the Convex `recipes` rows with a `recipeJsonUrl`
+  (`npx convex data`, team token) and rewrites each `recipe.json` (and its `trash/` copy) with
+  `without_memories`. It never rebuilds the library. It's a dry run by default; `--write` needs Caleb's OK. It
+  also names unmarked bucket recipes that neither `library.json` nor Convex lists, and `--id` adds them.
+  - **Tests:** `pipeline/test_publish.py` 9 pass (5 new: library and bundle, a re-publish elsewhere, the scrub's
+    dry run, `--write`, the Convex rows). Turning off each guard makes a test fail. The other pipeline tests pass.
+  - **Live dry run (read only):** `hackathon-biryani-2` (Convex row: 1 story, 3 special moments, 3 tips, the
+    intro) and `hackathon-biryani-1` (no Convex row, not in `library.json`: 2 stories, 3 special moments, 3 tips,
+    the intro). Neither is in the live `library.json` yet.
+  - **Open:** nothing written to the bucket, nothing deployed. The scrub waits on Caleb (see "Waiting on Caleb").
+    `play.mp4` and `voice.m4a` are still public at unlisted URLs, with the stories as she spoke them.
+- Oct 24 · #40 · Claude · Ran `pipeline/scrub_family.py --id hackathon-biryani-1 --write` with Caleb's OK. The
+  public `recipe.json` of `hackathon-biryani-1` and `hackathon-biryani-2` no longer holds stories, special moments,
+  step tips or the intro, and each is marked `"family": true`. Steps and media are unchanged. `library.json` wasn't
+  rebuilt: it still lists 10 recipes, neither biryani. A second dry run finds nothing to scrub. The bucket has no
+  object versioning, so the old copies return 404; GCS soft delete keeps them for 7 days, readable only by project
+  admins. `hackathon-biryani-2`'s memories stay in Convex. `hackathon-biryani-1` has no Convex row, so its stories
+  now exist only in a local backup outside the repo.
+  - **Open:** `play.mp4` and `voice.m4a` for both dishes are still public at unlisted URLs, with the stories as she
+    spoke them.
 - Oct 24 · #35 · Claude · Track I-parent, the cook's side of homie (contains #32's homie core; #26 is in main now,
   so it builds on its own). Final round: Caleb's v3/v4 screens, the review fixes and the #29 protocol follow-ups.
   - **Record:** "Start recording" opens a pre-record sheet (dish, who it's for or Everyone, her language, then From my
