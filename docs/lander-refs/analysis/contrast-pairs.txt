@@ -1,0 +1,59 @@
+#1E2410 #F7F7F2 4.5 ink / canvas
+#2D3222 #F7F7F2 4.5 text / canvas
+#5F6352 #F7F7F2 4.5 muted / canvas
+#5B6F00 #F7F7F2 4.5 green / canvas (links, small green text)
+#788C15 #F7F7F2 3 leaf / canvas (focus ring, icons, >=24px only)
+#5A3A22 #F7F7F2 4.5 cocoa / canvas (Caveat notes)
+#1E2410 #FFFDF7 4.5 ink / surface
+#2D3222 #FFFDF7 4.5 text / surface
+#5F6352 #FFFDF7 4.5 muted / surface
+#5B6F00 #FFFDF7 4.5 green / surface
+#2D3222 #EFEFE6 4.5 text / sunken
+#5F6352 #EFEFE6 4.5 muted / sunken
+#5B6F00 #EFEFE6 4.5 green / sunken
+#1E2410 #F2F6E1 4.5 ink / pistachio-wash
+#5F6352 #F2F6E1 4.5 muted / pistachio-wash
+#5B6F00 #F2F6E1 4.5 green / pistachio-wash
+#3C4A0B #E6EBCF 4.5 olive-ink / sage
+#4C5A10 #E6EBCF 4.5 green-deep / sage (Hear-the-cook pill)
+#5B6F00 #E6EBCF 4.5 green / sage
+#5F6352 #E6EBCF 4.5 muted / sage
+#1E2410 #FFF1C7 4.5 ink / butter
+#5F6352 #FFF1C7 4.5 muted / butter
+#5A3A22 #FFF1C7 4.5 cocoa / butter
+#1E2410 #FFD24D 4.5 ink / highlighter
+#1E2410 #FEBE29 4.5 ink / sun
+#34430C #FEBE29 4.5 forest / sun
+#5A3A22 #FEBE29 4.5 cocoa / sun
+#1E2410 #D1E043 4.5 ink / chartreuse
+#34430C #D1E043 4.5 forest / chartreuse
+#1E2410 #B2C248 4.5 ink / lime
+#34430C #B2C248 4.5 forest / lime
+#FFFDF7 #5B6F00 4.5 cream / green (primary button)
+#D1E043 #5B6F00 3 chartreuse / green (large only)
+#FFFDF7 #4C5A10 4.5 cream / green-deep
+#D1E043 #4C5A10 4.5 chartreuse / green-deep
+#FFFDF7 #34430C 4.5 cream / forest
+#D1E043 #34430C 4.5 chartreuse / forest
+#FEBE29 #34430C 4.5 sun / forest
+#B2C248 #34430C 4.5 lime / forest
+#C9D0AE #34430C 4.5 muted-inverse / forest
+#1E2410 #E95D3D 4.5 ink / tomato
+#FFFDF7 #E95D3D 3 cream / tomato (>=24px bold only)
+#FFFDF7 #C8462A 4.5 cream / tomato-deep
+#1E2410 #FFB677 4.5 ink / apricot
+#A8361B #FAD6CB 4.5 tomato-ink / blush
+#3C4A0B #EDF2BE 4.5 olive-ink / lime-wash card
+#1E2410 #FFE59A 4.5 ink / lemon card
+#8A3F12 #FFDDBF 4.5 apricot-ink / apricot-soft card
+#6E4A33 #F9E3CF 4.5 cocoa-soft / peach card
+#3F3558 #ECE6F2 4.5 ube-ink / ube card
+#5B6F00 #F1F2DC 4.5 green / footer
+#1E2410 #F1F2DC 4.5 ink / footer
+#5F6352 #F1F2DC 4.5 muted / footer
+#FFFDF7 #FFFFFF 4.5 cream / white video highlight (no scrim, worst case)
+#FFFDF7 #83877C 3 cream / worst-case pixel under 55% ink scrim (headline)
+#FFFDF7 #6D7164 4.5 cream / worst-case pixel under 65% ink scrim (body)
+#FFFDF7 #5F6455 4.5 cream / worst-case pixel under 70% ink scrim (body)
+#F7F7F2 #121410 4.5 canvas / black pill
+#CDD0BC #F7F7F2 1 ghost / canvas (unfilled scrub word, decorative)
