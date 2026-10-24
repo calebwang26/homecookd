@@ -26,7 +26,8 @@ src/moss.ts     Moss search over family-<familyId> (@moss-js/moss, in-memory que
 src/convex.ts   Convex HTTP actions (/voice/*, /live/*) + the local stub
 fixtures/       stub session (Grandma's red-braised pork) and stub recordings (Rajani Aaji, mr and en)
 scripts/        test clients (/cook and /record), test-audio maker
-test/           unit tests (node:test): pacing, and /record's phases with a fake socket, Claude, voice and Convex
+test/           unit tests (node:test) with a fake socket, Claude, voice and Convex: pacing, /record's phases
+                (and a recording ended underneath it), /cook's read-aloud offer and the app's moments
 ```
 
 ## Run it locally
@@ -45,7 +46,10 @@ cd voice && npm ci
 npm run dev                                   # ws://localhost:8080/cook, live Convex
 VOICE_STUB=1 npm run dev                      # the stub recipe instead
 npm run make-audio                            # test-audio/*.wav, 16 kHz mono, spoken by Sonic
+npm run make-audio -- no                      # only the lines named (here test-audio/no.wav)
 npm run test-client -- test-audio/next-step.wav test-audio/question.wav test-audio/unknown-question.wav
+npm run test-client -- test-audio/no.wav test-audio/next-step.wav   # no to reading: steps change silently
+npm run test-client -- moment:answer test-audio/yes.wav moment:off text:no   # an app moment, then the app's no
 SESSION=<kid's Convex sessionToken> RECIPE=<recipes _id> npm run test-client -- test-audio/next-step.wav  # live
 URL=wss://<cloud run host> npm run test-client -- test-audio/next-step.wav   # against the deployed one
 VOICE_STUB=1 HOMIE_DEMO=1 npm run dev         # then, in another terminal:
@@ -60,7 +64,9 @@ The stub has no Moss index (the Moss plan allows 3 indexes, so don't make test o
 questions go to the cook. To test search, use a real family's index, which Convex creates after a pipeline run.
 
 The test client streams each WAV in 100 ms chunks at real-time speed, keeps sending silence like an open mic,
-prints every event with timings, and saves what the service says to `test-audio/out/`.
+prints every event with timings, and saves what the service says to `test-audio/out/`. `text:<words>` sends a
+`{ type: "text" }` message instead, and `moment:<kind>` / `moment:off` opens or closes one of the app's moments.
+The service remembers a kid's answer to the offer for 3 hours, so restart it between runs that answer it.
 
 ## The WebSocket (`/cook?session=<sessionToken>&recipe=<recipeId>[&audio=pcm|wav]`)
 
@@ -68,16 +74,29 @@ App → service
 - Binary frames: 16 kHz mono 16-bit little-endian PCM. ~100 ms per frame (3200 bytes). Keep streaming while the
   screen is up, silence included: Ink waits for audio, it doesn't assume silence.
 - `{ "type": "step", "stepOrder": 3 }` when the kid taps a step (no speech).
-- `{ "type": "text", "text": "how much soy sauce?" }`: typed or push-to-talk input, handled like speech. A tap on
-  the read-aloud offer sends `{ "type": "text", "text": "yes" }`.
+- `{ "type": "text", "text": "how much soy sauce?" }`: typed or push-to-talk input, handled like speech. The app
+  answers the read-aloud offer with `{ "type": "text", "text": "yes" }` or `"no"`. It's the app's own answer, so it
+  counts even while one of its moments is up.
+- `{ "type": "moment", "open": true, "kind": "answer" | "story" | "ask" | "help" }` when one of the app's own homie
+  moments opens on the phone (not our offer or story nudge), and `{ "type": "moment", "open": false }` when it
+  closes. While it's up, transcripts still come, but a spoken yes or no ("yes", "sure", "no thanks", "not now")
+  is the moment's answer: it never answers our offer or nudge and never reaches Claude. Anything else (a question
+  for the "ask" moment, "next") goes the usual way, and still isn't taken as a yes to our offer. homie says no
+  offer or nudge while a moment is up; they wait for it to close. After a reconnect, send it again if one is up.
 - Silence while a `say` or a clip plays (half duplex).
 
 Service → app
 - `{ type: "ready", recipe: { id, title, steps } }`, then `{ type: "go_to_step", stepOrder }` for where to start.
 - Then homie's hello, a `say` of kind `greeting` in the cook's language (`"चला, स्वयंपाक करूया!"`, `textEn: "Let's
-  cook!"`), and one `offer`: "Want me to read Grandma's recipe out loud? Say yes, or tap here." Until the kid says
-  yes (or "repeat"), steps change silently: only `go_to_step`. A kid who said yes in the last 3 hours (same
-  instance) gets neither again after a dropped socket.
+  cook!"`), and one `offer`: "Want me to read Grandma's recipe out loud? Say yes or no." Until the kid says
+  yes (or "repeat"), steps change silently: only `go_to_step`.
+  - Yes (spoken, or `text` "yes"): `{ type: "offer_closed", accepted: true }`, then the current step is read, and
+    every step after it.
+  - No or "not now" (spoken, or `text` "no"): `{ type: "offer_closed", accepted: false }` and nothing is said.
+    Reading stays off for the visit: steps change silently, plain commands, questions and timers still work, and
+    "repeat" reads the step they're on once.
+  - A kid who answered in the last 3 hours (same instance) gets no hello and no offer again after a dropped
+    socket, and keeps their answer.
 - `{ type: "transcript", text, final }`: `final: false` while the kid talks, `true` once the turn ends.
 - `{ type: "go_to_step", stepOrder }`: show that step. Its text is spoken right after.
 - `{ type: "play_clip", startS, endS, quote?, quoteEn? }`: play that span of the cook's video. Nothing is spoken
@@ -98,7 +117,8 @@ Service → app
 - `{ type: "timer", id, seconds, label, endsAt }` when the kid asks for one; the app shows the countdown. At the
   end, `{ type: "timer_done", id, label }` and a `say` of kind `timer` ("The rice timer is done.").
 - Nudges (kind `nudge`, only once reading is on): after a step with one of the cook's stories, "Grandma has a story
-  about this one. Want to hear it?" ("yes" plays it); and once per step after 6 quiet minutes, "Still on step 3?".
+  about this one. Want to hear it?" ("yes" plays it; "no" or "not now" closes it quietly, with no `offer_closed`);
+  and once per step after 6 quiet minutes, "Still on step 3?".
 - `{ type: "error", message }`. Close code 4401 means the session token was refused (sign in again); 4404 means
   the recipe isn't in this family or isn't ready.
 
@@ -111,8 +131,8 @@ cook's clips. As a backstop, the service ignores:
 ## How a turn works
 
 1. Ink's `turn.end` gives the kid's words (the turn ends ~2 s after they stop, or sooner when Ink is sure).
-2. Plain commands ("next", "go back", "say that again", with "um, wait, okay, please" around them), "yes" to an
-   open offer, and "set a timer for 5 minutes" skip Claude.
+2. Plain commands ("next", "go back", "say that again", with "um, wait, okay, please" around them), "yes" or "no"
+   to an open offer, and "set a timer for 5 minutes" skip Claude.
 3. Anything else: Moss searches the recipe's moments first (~10 ms, in memory), and Claude gets the words, the
    current step and those moments. It calls one tool: `next_step`, `previous_step`, `repeat_step`, `go_to_step`,
    `play_clip` (only times that came from Moss or a step), `give_hint` (labelled general knowledge, and the
@@ -171,6 +191,13 @@ socket that closes during the wrap-up stops without writing anything more and le
 next one asks only what's left (no second opt-in once she answered) and says goodbye. Text messages sent before
 the recording has loaded are handled once it has. While the socket is open, the service touches the recording
 every 10 minutes (`/live/status` `{ touch: true }`), so a long cook isn't abandoned as idle after 2 h.
+
+Ended underneath: when the app can't reach this service, its stop button calls Convex `live.endRecording`, so the
+glasses VM still finalizes the video. A socket still open for that recording (the app's side dropped, ours didn't
+notice yet) finds out at its next Convex write: the heartbeat, a status, or homie's next line, which Convex refuses
+(`400 recording already ended`; only the goodbye may land after the end). It then stops at once and quietly: no
+line is said or saved, no warning is logged, the phone gets `phase: ended`, and the socket closes with 4404. A new
+socket that finds the recording ended also closes an older one that's still open.
 
 Half duplex: incoming audio is dropped while homie speaks and 300 ms after the phone should have finished playing.
 

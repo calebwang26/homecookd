@@ -162,6 +162,11 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 **App → Convex (new public functions; every one takes `sessionToken`)**
 - `live.startRecording({ dish?, forKidId?, language, source })` → `{ recordingId }` (cook only; status `intro`).
 - `live.recording({ recordingId })` (live): the row, for the recording screen.
+- `live.endRecording({ recordingId })` → `{ ok }` (cook only, her own recording; another family's or another
+  cook's is refused): the stop button when the `/record` socket isn't connected. A `recording` or `wrapping_up`
+  recording becomes `ended` (sets `endedAt`), so the glasses VM finalizes the video even when the voice service is
+  down. Calling it again returns `{ ok: true }` and changes nothing; `{ ok: false }` means there was nothing to
+  end (still `intro`, or `abandoned`).
 - `jobs.create` gains optional `title`, `language`, `forKidId`, `recordingId`. `recordingId` must be this cook's
   recording; the job then sets `recordings.jobId` and takes the recording's `dish`, `language` and `forKidId` for
   any not given. `language` defaults to the cook's `people.language` (else `en`); `forKidId` must be in the family.
@@ -195,7 +200,9 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   `startedAt` (server clock) once; `ended` sets `endedAt`. `{ sessionToken, recordingId, touch: true }` (no
   status) → `{ ok }` is the service's heartbeat every 10 minutes while the socket is open: it only moves
   `updatedAt`, so the 2 h idle cleanup (`live.abandonIdle`) leaves a long cook alone; 400 once ended or abandoned.
-- `/live/prompt` `{ sessionToken, recordingId, kind, text, textEn, atS, status }` → `{ promptId }`.
+- `/live/prompt` `{ sessionToken, recordingId, kind, text, textEn, atS, status }` → `{ promptId }`. `400` "recording
+  already ended" once the recording is over: only the `closing` line may land after `ended` (it races the status
+  write), nothing after `abandoned`.
 - `/live/prompt-update` `{ sessionToken, promptId, status, answer? }` → `{ ok }`.
 - `/live/optin` `{ sessionToken, recordingId, optIn }` → `{ ok }` (stored on the recording, carried to the job).
 
@@ -217,6 +224,9 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
     (or it already ended), 4409 a newer socket for the same recording took over (don't reconnect that one).
 - A reconnect picks up where the last socket stopped (same pacing, questions and transcript; the wrap-up finishes
   what's left). Details in `voice/README.md`.
+- Ended underneath (the app called `live.endRecording` while it couldn't reach the service): a socket still open
+  for it finds out at its next Convex write (heartbeat, status or homie's next line). It then says and saves
+  nothing more, sends `{ type: "phase", phase: "ended" }` and closes with 4404.
 - The service ignores incoming audio while homie speaks (+300 ms), so it never hears itself; the app also sends
   silence then. Pacing (normal): first question no earlier than 4 min, gaps of 4–5 min, doubled after an ignored
   one, at most 6 live plus 2 end questions, never while the cook talks or tells a story. `HOMIE_DEMO=1`: first
@@ -234,9 +244,21 @@ voice, in `lang` or the person's language). `translate: true` first turns Englis
 - `play_clip` gains `quote?` and `quoteEn?` for the caption.
 - `{ type: "timer", id, seconds, label, endsAt }`, `{ type: "timer_done", id, label }`. The app owns the countdown.
 - After `ready`: one `say` of kind `greeting` (a word in the cook's language + `textEn`), then `offer`
-  ("Want me to read it out loud?"). Saying or sending `{ type: "text", text: "yes" }` reads the current step.
-  Until then, steps change silently.
-- The app sends silence while a `say` or clip plays (half duplex).
+  ("Want me to read Grandma's recipe out loud? Say yes or no."). Until it's answered, steps change silently.
+  - Yes (spoken, or `{ type: "text", text: "yes" }`) → `{ type: "offer_closed", accepted: true }`, then the current
+    step is read (and every step after).
+  - No or "not now" (spoken, or `{ type: "text", text: "no" }`) → `{ type: "offer_closed", accepted: false }`.
+    Reading stays off for that visit: steps change silently, plain commands still work ("repeat" reads the
+    current step once).
+  - Either answer is kept 3 h on the instance, so a reconnect gets no second hello or offer.
+- App → service: `{ type: "moment", open: true, kind: "answer" | "story" | "ask" | "help" }` when an app-only homie
+  moment opens on the kid's phone, `{ type: "moment", open: false }` when it closes. While one is open the service
+  still streams transcripts, but a spoken yes, no, sure or not now is not applied to its read-aloud offer or
+  story nudge (and doesn't reach Claude); other speech goes the usual way. It says no offer or nudge until the
+  moment closes. A `{ type: "text" }` answer is the app's own and always counts.
+- The app sends silence while a `say` or clip plays (half duplex): `lib/live/mic` zeroes every frame (same
+  length; the recorder keeps running) while homie is lit or speaking, anything plays on the shared player, or a
+  step video plays.
 - What the app sends (Track I-kid): the chips under homie send `{ type: "text", text: "back" | "repeat" }` (no
   Next chip; the big "Next step" button sends `{ type: "step" }`). The service's echo of the text (a `transcript`
   with `final: true`) counts as its answer; a chip acts on its own only if nothing (echo, step, clip, line, timer)
@@ -248,22 +270,12 @@ voice, in `lang` or the person's language). `translate: true` first turns Englis
   `say_end` while a newer line is open belongs to the line that newer one cut off. The offer, a story `nudge`
   and "Grandma answered your question" are no-buttons moments: the kid says yes or no, and a tap anywhere
   closes it ("not now" for that visit only; a spoken answer is kept on the phone).
-- Shared contract with the Track E follow-up (the app side is in Track I-kid):
-  - App → `/cook`: `{ type: "moment", open: true, kind: "answer" | "story" | "ask" | "help" }` when an
-    app-only homie moment opens on the kid's phone, `{ type: "moment", open: false }` when it closes (sent
-    again on a new socket while one is up). The app sends `answer` ("Grandma answered your question") and
-    `ask` ("Ask Grandma anything"); the read-aloud offer and the story nudge are the service's own offers, so
-    they never count. While a moment is open the service still streams transcripts but doesn't take
-    "yes" / "no" / "sure" as an answer to its own offer or story nudge.
-  - App → `/cook`: `{ type: "text", text: "no" }` (or a spoken "no" / "not now") while the read-aloud offer is
-    pending declines it: reading stays off for that visit, steps change silently, plain commands still work.
-    The app sends it for a tap anywhere on the offer, or when the phone remembers a spoken no. The service
-    replies `{ type: "offer_closed", accepted: false }`; a "yes" replies `{ type: "offer_closed", accepted:
-    true }` and reads the current step. On `offer_closed` the app closes the offer's moment if it is still up
-    (homie heard the answer itself) and keeps that answer.
-- Half duplex in the app is `lib/live/mic`'s, for every caller: while homie is lit or speaking, anything plays
-  on the shared player, or a step video plays, each mic frame goes out as zeroed PCM of the same length (the
-  recorder keeps running).
+- The app's side of the offer and moments (Track I-kid): it sends `moment` open / close for "Grandma answered
+  your question" (`answer`) and "Ask Grandma anything" (`ask`), again on a new socket while one is up; the
+  read-aloud offer and the story nudge are the service's own, so they never count. It sends `"no"` for a tap
+  anywhere on the read-aloud offer and for a no the phone remembers, and `"yes"` for "Read it to me" and a
+  remembered yes. On `offer_closed` it closes the offer's moment if it's still up (homie heard the answer
+  itself) and keeps that answer.
 
 **Worker ↔ Convex additions**
 - `/worker/claim` adds `title?`, `language` (the job's, else the cook's, else `en`), `relation?` (the cook's),
