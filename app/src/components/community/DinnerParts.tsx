@@ -2,10 +2,12 @@
 //   DinnerPhoto    the dish photo, 326x300 with a warm sun glow and a small "DINNER" tag
 //   HostPill       a cream pill: the host's initial, "Hosted by", the name
 //   WhenWhere      one cream card: "Friday · 7 pm" | the place, and its address once it's yours to see
-//   GoingRow       "You're in" (or "You're hosting") and a few faces, "4 going"
+//   GoingRow       "You're in" (or "You're hosting") and a few faces, "4 going" (rolls up as it grows)
 //   HostRequests   the host's open requests, each with Decline / Accept
-// Every answer is live (dinners.get), so these redraw on both phones as requests come and go.
-import { StyleSheet, View } from 'react-native';
+// Every answer is live (dinners.get), so these redraw on both phones as requests and invite opens come in.
+import { useState } from 'react';
+import { Platform, StyleSheet, View } from 'react-native';
+import Animated, { FadeInDown, useReducedMotion } from 'react-native-reanimated';
 import Svg, { Circle, Path, Rect } from 'react-native-svg';
 
 import { ActionButton, Avatar, CheckIcon, Pill, Txt, useToast } from '@/components/ui';
@@ -14,6 +16,7 @@ import { alpha, colors, radii, shadows } from '@/theme/tokens';
 
 import { DishPhoto } from './DishPhoto';
 import { errorText } from './labels';
+import { fadeIn } from './motion';
 
 // From the mockup: a sun ring at 14%, a soft sun glow, and the usual drop shadow.
 const GLOW = '0 0 0 10px rgba(254,190,41,0.14), 0 0 70px rgba(254,190,41,0.35), 0 18px 44px rgba(30,36,16,0.18)';
@@ -47,7 +50,7 @@ export function HostPill({ name }: { name: string }) {
   );
 }
 
-const CalendarIcon = () => (
+export const CalendarIcon = () => (
   <Svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke={colors.green} strokeWidth={2} strokeLinecap="round">
     <Rect x={3.5} y={5} width={17} height={15} rx={3} />
     <Path d="M3.5 10h17M8 3v4M16 3v4" />
@@ -89,7 +92,7 @@ const FACE_TONES = [
   { bg: colors.limeWash, fg: colors.sageInk },
 ];
 
-export function GoingRow({ pill, faces, label }: { pill: string | null; faces: string[]; label: string }) {
+export function GoingRow({ pill, faces, count, label }: { pill: string | null; faces: string[]; count: number; label: string }) {
   return (
     <View style={styles.going}>
       {pill ? (
@@ -107,13 +110,32 @@ export function GoingRow({ pill, faces, label }: { pill: string | null; faces: s
             </View>
           ))}
         </View>
-        <Txt variant="body" size={15}>
-          {label}
-        </Txt>
+        <RollingCount count={count} label={label} />
       </View>
     </View>
   );
 }
+
+/**
+ * "4 going", live: when someone opens the invite (or the host says yes) the new number rolls up from
+ * below; with Reduce Motion it fades in. The first number just shows.
+ */
+function RollingCount({ count, label }: { count: number; label: string }) {
+  const reduce = useReducedMotion();
+  const [first] = useState(count);
+  const entering = count === first ? undefined : reduce ? fadeIn(220) : rollUp;
+  return (
+    <View style={styles.rolling} accessibilityLiveRegion="polite">
+      <Animated.View key={count} entering={entering}>
+        <Txt variant="body" size={15}>
+          {label}
+        </Txt>
+      </Animated.View>
+    </View>
+  );
+}
+
+const rollUp = Platform.OS === 'web' ? FadeInDown.duration(320) : FadeInDown.springify().damping(14).stiffness(180).withInitialValues({ opacity: 0, transform: [{ translateY: 14 }] });
 
 /** For the host of a dinner still ahead: the open requests (the guests already in count as going). */
 export function HostRequests({ dinner }: { dinner: Dinner }) {
@@ -179,6 +201,7 @@ const styles = StyleSheet.create({
   divider: { borderBottomWidth: 1, borderBottomColor: alpha.hairline },
   flex: { flex: 1, minWidth: 0 },
   going: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
+  rolling: { overflow: 'hidden' },
   faces: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   faceRow: { flexDirection: 'row' },
   face: { width: 32, height: 32, borderRadius: 16, borderWidth: 2, borderColor: colors.page, alignItems: 'center', justifyContent: 'center' },

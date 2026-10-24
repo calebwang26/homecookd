@@ -7,13 +7,17 @@
 //   useFamilyDishes() / await askToShare(id)    shareRequests.familyDishes / .ask: "Put it on the map"
 //                                               (shares her own dish; anyone else's asks its cook first)
 //   useMySwaps() / await requestSwap(id, mine?) community.mySwaps / .requestSwap
-//   await respondSwap(swapId, accept)           community.respondSwap (the family that was asked)
+//   await cookTogether(id)                      community.cookTogether ("Ask <cook> to make it with you")
+//   await respondSwap(swapId, accept)           community.respondSwap (the family that was asked; swaps
+//                                               and "cook together" both)
 //   await createDinner({ recipeId, … })         dinners.create
 //   useDinner(dinnerId) / useMyDinners()        dinners.get / dinners.mine, live
 //   await requestJoin(dinnerId)                 dinners.requestJoin
 //   await respond(requestId, accept)            dinners.respond (host only)
+//   await inviteLink(dinnerId)                  dinners.inviteLink: "Invite friends" (host and guests who are in)
 //
-// While Convex is stubbed (convex.ts) the feed is empty and the writes do nothing.
+// While Convex is stubbed (convex.ts) the feed is empty and the writes do nothing. The invite link
+// can't be made up, so it fails there. Opening an invite (POST /invite/open) is in invite.ts.
 import { useEffect, useState } from 'react';
 
 import { call, token, useLive } from './convex';
@@ -48,12 +52,17 @@ export type CommunityRecipe = {
   steps: { order: number; title: string; text: string }[];
 };
 
-/** One of my family's ready dishes, for "Share your recipe". */
-export type FamilyDish = { recipeId: string; dish: string; cookName: string; mine: boolean; shared: boolean; asked: boolean };
+/**
+ * One of my family's ready dishes, for "Share your recipe". `notNowAt`: when its cook last said not
+ * now (or homie couldn't tell); the family can ask her again a day later (choices.ASK_AGAIN_MS).
+ */
+export type FamilyDish = { recipeId: string; dish: string; cookName: string; mine: boolean; shared: boolean; asked: boolean; notNowAt: number | null };
 
 export type SwapStatus = 'pending' | 'accepted' | 'declined';
+/** A swap, or (kind 'cook') an ask to cook the other family's dish together. */
 export type Swap = {
   swapId: string;
+  kind: 'swap' | 'cook';
   status: SwapStatus;
   incoming: boolean; // the other family asked us
   ourDish: { recipeId: string; dish: string } | null;
@@ -74,6 +83,7 @@ export type Dinner = {
   startsAt: number;
   seats: number;
   seatsLeft: number;
+  inviteOpens: number; // phones and browsers that opened the invite link, once each
   status: 'open' | 'full' | 'cancelled';
   distanceLabel: string;
   isHost: boolean;
@@ -158,6 +168,11 @@ export async function requestSwap(recipeId: string, myRecipeId?: string): Promis
   return call('mutation', 'community:requestSwap', { sessionToken, recipeId, ...(myRecipeId ? { myRecipeId } : {}) }, () => `stub-swap-${Date.now()}`);
 }
 
+export async function cookTogether(recipeId: string): Promise<string> {
+  const sessionToken = await token();
+  return call('mutation', 'community:cookTogether', { sessionToken, recipeId }, () => `stub-cook-${Date.now()}`);
+}
+
 export async function respondSwap(swapId: string, accept: boolean): Promise<void> {
   const sessionToken = await token();
   await call('mutation', 'community:respondSwap', { sessionToken, swapId, accept }, () => null);
@@ -186,4 +201,14 @@ export async function requestJoin(dinnerId: string): Promise<string> {
 export async function respond(requestId: string, accept: boolean): Promise<void> {
   const sessionToken = await token();
   await call('mutation', 'dinners:respond', { sessionToken, requestId, accept }, () => null);
+}
+
+export type InviteLink = { token: string; url: string };
+
+/** The dinner's one invite link ("https://homecookd.app/d?t=…"), the same every time. */
+export async function inviteLink(dinnerId: string): Promise<InviteLink> {
+  const sessionToken = await token();
+  return call<InviteLink>('action', 'dinners:inviteLink', { sessionToken, dinnerId }, () => {
+    throw new Error('Invite links need the homecookd server. Try again once it’s connected.');
+  });
 }

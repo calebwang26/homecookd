@@ -21,6 +21,7 @@ import type * as lib_auth from "../lib/auth.js";
 import type * as lib_geo from "../lib/geo.js";
 import type * as lib_glassesRoutes from "../lib/glassesRoutes.js";
 import type * as lib_http from "../lib/http.js";
+import type * as lib_inviteRoutes from "../lib/inviteRoutes.js";
 import type * as lib_liveRoutes from "../lib/liveRoutes.js";
 import type * as lib_mossDocs from "../lib/mossDocs.js";
 import type * as lib_recipeJson from "../lib/recipeJson.js";
@@ -63,6 +64,7 @@ declare const fullApi: ApiFromModules<{
   "lib/geo": typeof lib_geo;
   "lib/glassesRoutes": typeof lib_glassesRoutes;
   "lib/http": typeof lib_http;
+  "lib/inviteRoutes": typeof lib_inviteRoutes;
   "lib/liveRoutes": typeof lib_liveRoutes;
   "lib/mossDocs": typeof lib_mossDocs;
   "lib/recipeJson": typeof lib_recipeJson;

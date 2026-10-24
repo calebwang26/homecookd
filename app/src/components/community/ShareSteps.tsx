@@ -1,22 +1,36 @@
-// "Share your recipe", one step at a time (Caleb's Community mockup): "Put it on the map" ("homie asks
+// "Share your recipe", one step at a time (Caleb's Community canvas): "Put it on the map" ("homie asks
 // Grandma Rajani first. The video stays private.") and "Host a dinner". With several family dishes,
 // "Put it on the map" asks which one. A dish she cooks goes on at once; anyone else's becomes homie's
-// question to its cook (shareRequests.ask), and the row says "Asked Grandma Rajani" until she answers.
+// question to its cook (shareRequests.ask), and the row says "Asked Grandma Rajani" until she answers,
+// then "Grandma Rajani said not now" for a day if she didn't say yes. Each step crossfades in.
 import { router } from 'expo-router';
 import Animated from 'react-native-reanimated';
 
-import { haptic, listEnter, useToast } from '@/components/ui';
+import { haptic, useToast } from '@/components/ui';
 import { askToShare, type FamilyDish } from '@/lib/live/community';
 
 import { Chooser } from './Chooser';
 import { dishRows, shareChoices } from './choices';
 import { errorText } from './labels';
+import { crossIn, fadeOut } from './motion';
 
 export type ShareStep = 'menu' | 'dishes';
 
-export function ShareSteps({ step, onStep, onClose, dishes }: { step: ShareStep; onStep: (s: ShareStep) => void; onClose: () => void; dishes: FamilyDish[] | null }) {
+export function ShareSteps({
+  step,
+  onStep,
+  onClose,
+  dishes,
+  now,
+}: {
+  step: ShareStep;
+  onStep: (s: ShareStep) => void;
+  onClose: () => void;
+  dishes: FamilyDish[] | null;
+  now: number;
+}) {
   const toast = useToast();
-  const { title, rows } = shareChoices(dishes);
+  const { title, rows } = shareChoices(dishes, now);
 
   const put = async (d: FamilyDish) => {
     try {
@@ -36,11 +50,11 @@ export function ShareSteps({ step, onStep, onClose, dishes }: { step: ShareStep;
   };
 
   return (
-    <Animated.View key={step} entering={listEnter(0)}>
+    <Animated.View key={step} entering={crossIn()} exiting={fadeOut()}>
       {step === 'dishes' && dishes ? (
         <Chooser
           title="Put it on the map"
-          rows={dishRows(dishes)}
+          rows={dishRows(dishes, now)}
           onBack={() => onStep('menu')}
           onPick={(id) => {
             const d = dishes.find((x) => x.recipeId === id);

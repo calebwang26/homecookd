@@ -1,11 +1,12 @@
-// Kid Community tab, "Dishes near you" (Caleb's Community mockup, Oct 24): the title (homie rests at the
-// top right), one square map with a round photo for each dish nearby and "You" in the middle, and one
-// line under it with ONE button, "Share your recipe". Everything else waits for a tap, one step at a
-// time: a dish opens its card ("Connect with Mama Ngozi"), then the chooser (join her dinner, swap
-// recipes, host a dinner); "Share your recipe" opens its own chooser (put a family dish on the map,
-// host a dinner); the floormates' shared circle opens a row of their dishes; "You" opens your dinners
-// and swaps. Tap the map or the same circle to close it. Live: a new dish, dinner, request, swap or
-// yes shows up on both phones without a refresh.
+// Kid Community tab, "Dishes near you" (Caleb's final Community canvas, Oct 24): the title (homie rests
+// at the top right) with one line under it, "Tap a photo to learn about a dish and cook together.", one
+// square map with a round photo for each dish nearby (they pop in) and "You" in the middle, and under it
+// ONE button, "Share your recipe". Everything else waits for a tap, one step at a time: a dish opens its
+// card ("Connect with Mama Ngozi"), then the chooser (join her dinner, swap recipes, cook together);
+// "Share your recipe" opens its own chooser (put a family dish on the map, host a dinner); the
+// floormates' shared circle opens a row of their dishes; "You" opens your dinners, swaps and dishes
+// you're cooking together. Tap the map or the same circle to close it. Live: a new dish, dinner,
+// request, swap or yes shows up on both phones without a refresh.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { useAnimatedRef, useReducedMotion } from 'react-native-reanimated';
@@ -16,14 +17,16 @@ import { DishMap } from '@/components/community/DishMap';
 import { DishSteps, type DishStep } from '@/components/community/DishSteps';
 import { newRequests, pickNextDinner, youLabel } from '@/components/community/labels';
 import { layoutSpots, placeAreas } from '@/components/community/mapLayout';
+import { fadeOut, riseIn } from '@/components/community/motion';
 import { ShareSteps, type ShareStep } from '@/components/community/ShareSteps';
 import { YouCard } from '@/components/community/YouCard';
 import { ActingAsBar } from '@/components/profiles';
-import { ActionButton, LargeHeader, listEnter, ScreenWash, StickyHeader, Txt, useScrollY } from '@/components/ui';
+import { ActionButton, LargeHeader, ScreenWash, StickyHeader, Txt, useScrollY } from '@/components/ui';
 import { useCommunityFeed, useFamilyDishes, useMyDinners, useMySwaps } from '@/lib/live/community';
 import { colors, space, tabBar } from '@/theme/tokens';
 
 const TITLE = 'Dishes near you';
+const HOW = 'Tap a photo to learn about a dish and cook together.';
 /** The cards' side gutter; the map sits a little further in (330 pt on a 390 pt phone). */
 const GUTTER = 16;
 const MAP_GUTTER = 30;
@@ -75,11 +78,8 @@ export default function KidCommunity() {
   const spot = panel?.kind === 'dish' ? (spots.find((s) => s.key === panel.key) ?? null) : null;
   const requests = newRequests(mine, now) + newSwaps(swaps);
 
-  const hint = feed.recipes.length
-    ? 'Tap a dish to see whose it is.'
-    : waited
-      ? 'When a family near you shares a dish, it shows up here.'
-      : '';
+  // Only an empty map gets a line under it (once the feed had time to answer).
+  const empty = !feed.recipes.length && waited;
 
   return (
     <View style={styles.screen}>
@@ -93,7 +93,7 @@ export default function KidCommunity() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}>
         <ScreenWash tone="kid" height={300} />
-        <LargeHeader title={TITLE} scrollY={scrollY} fadeEnd={40} style={styles.header} right={<View style={styles.homie} />} />
+        <LargeHeader title={TITLE} subtitle={HOW} scrollY={scrollY} fadeEnd={40} style={styles.header} right={<View style={styles.homie} />} />
         <ActingAsBar />
         <View style={styles.body} onLayout={onBodyLayout}>
           <DishMap
@@ -111,13 +111,14 @@ export default function KidCommunity() {
           />
           <View style={{ width: cardWidth }}>
             {panel?.kind === 'you' ? (
-              <Animated.View key="you" entering={listEnter(0)}>
+              <Animated.View key="you" entering={riseIn(reduce)} exiting={fadeOut()}>
                 <YouCard next={pickNextDinner(mine, [], now)} swaps={swaps} now={now} />
               </Animated.View>
             ) : panel?.kind === 'share' ? (
-              <ShareSteps step={panel.step} onStep={(step) => setPanel({ kind: 'share', step })} onClose={() => setPanel(null)} dishes={dishes} />
+              <ShareSteps step={panel.step} onStep={(step) => setPanel({ kind: 'share', step })} onClose={() => setPanel(null)} dishes={dishes} now={now} />
             ) : panel?.kind === 'dish' && spot ? (
               <DishSteps
+                key={spot.key}
                 spot={spot}
                 member={panel.member}
                 step={panel.step}
@@ -129,11 +130,13 @@ export default function KidCommunity() {
                 now={now}
                 width={cardWidth}
               />
-            ) : hint ? (
+            ) : feed.recipes.length || empty ? (
               <View style={styles.idle}>
-                <Txt variant="body" size={18} leading={1.4} align="center" style={styles.hint}>
-                  {hint}
-                </Txt>
+                {empty ? (
+                  <Txt variant="body" size={18} leading={1.4} align="center" style={styles.hint}>
+                    When a family near you shares a dish, it shows up here.
+                  </Txt>
+                ) : null}
                 <ActionButton
                   label="Share your recipe"
                   variant="outline"

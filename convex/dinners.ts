@@ -1,13 +1,33 @@
-// Community dinners: someone hosts a dinner around one of their family's shared recipes and neighbors ask to
-// join. The address stays private: only the host and the guests they accepted ever see it.
+// Community dinners: someone hosts a dinner around one of their family's shared recipes (or another
+// family's shared dish that family agreed to cook with them) and neighbors ask to join. The address
+// stays private: only the host and the guests they accepted ever see it.
+// "Invite friends": the host and accepted guests share one link per dinner (inviteLink); whoever opens
+// it (homecookd.app/d or the app's /d screen, through POST /invite/open in lib/inviteRoutes.ts) sees
+// only the dish, the host's first name and when, and counts once per phone or browser in "X going".
 import { ConvexError, v } from "convex/values";
-import type { Doc } from "./_generated/dataModel";
-import { mutation, query, type QueryCtx } from "./_generated/server";
-import { acceptedCount, PUBLIC_COVER } from "./community";
-import { requireSession, type Signed } from "./lib/auth";
+import { internal } from "./_generated/api";
+import type { Doc, Id } from "./_generated/dataModel";
+import { action, internalMutation, mutation, query, type QueryCtx } from "./_generated/server";
+import { acceptedCount, cookingTogether, PUBLIC_COVER } from "./community";
+import { newToken, requireSession, type Signed } from "./lib/auth";
 import { distanceLabel, milesBetween, placeOf, roundToGrid } from "./lib/geo";
 import { familyRecipe } from "./recipes";
 import schema from "./schema";
+
+/** Invite links open the website's /d page (or the app, where it's installed). */
+export const INVITE_ORIGIN = "https://homecookd.app";
+/** A dinner's "going" count stops growing from link opens here. */
+export const MAX_OPENS = 300;
+/** At most this many new phones count per dinner in OPEN_BURST_MS; past it, the page still opens, uncounted. */
+export const OPEN_BURST = 60;
+export const OPEN_BURST_MS = 10 * 60_000;
+
+async function inviteOpens(ctx: QueryCtx, dinnerId: Id<"dinners">) {
+  return await ctx.db
+    .query("dinnerInviteOpens")
+    .withIndex("by_dinnerId_and_deviceId", (q) => q.eq("dinnerId", dinnerId))
+    .take(MAX_OPENS);
+}
 
 const placeKind = schema.tables.dinners.validator.fields.placeKind;
 const requestStatus = schema.tables.dinnerRequests.validator.fields.status;
@@ -24,6 +44,7 @@ const dinnerView = v.object({
   startsAt: v.number(),
   seats: v.number(),
   seatsLeft: v.number(),
+  inviteOpens: v.number(), // phones and browsers that opened the invite link, once each
   status: schema.tables.dinners.validator.fields.status,
   distanceLabel: v.string(),
   isHost: v.boolean(),
@@ -61,6 +82,7 @@ async function view(ctx: QueryCtx, signed: Signed, d: Doc<"dinners">) {
     startsAt: d.startsAt,
     seats: d.seats,
     seatsLeft: Math.max(0, d.seats - all.filter((r) => r.status === "accepted").length),
+    inviteOpens: (await inviteOpens(ctx, d._id)).length,
     status: d.status,
     distanceLabel: distanceLabel(milesBetween(placeOf(signed.person), d.approx)),
     isHost,
@@ -68,6 +90,23 @@ async function view(ctx: QueryCtx, signed: Signed, d: Doc<"dinners">) {
     address: isHost || mine?.status === "accepted" ? d.address : null,
     requests: isHost ? requests : null,
   };
+}
+
+/**
+ * A dish my family may host: one of our own ready recipes, once its cook shared it (the dish name
+ * reaches every neighbor's feed, so only her share switch lets it out), or another family's shared
+ * dish they agreed to cook with us ("Cook together").
+ */
+async function hostable(ctx: QueryCtx, signed: Signed, recipeId: Id<"recipes">): Promise<Doc<"recipes">> {
+  const own = await familyRecipe(ctx, signed, recipeId);
+  if (own) {
+    if (own.status !== "ready") throw new ConvexError("Pick one of your family's recipes.");
+    if (!own.sharedAt) throw new ConvexError("Share this recipe first.");
+    return own;
+  }
+  const theirs = await ctx.db.get("recipes", recipeId);
+  if (theirs?.status === "ready" && theirs.sharedAt && (await cookingTogether(ctx, signed.family._id, recipeId))) return theirs;
+  throw new ConvexError("Pick one of your family's recipes.");
 }
 
 const text = (s: string, what: string) => {
@@ -89,10 +128,7 @@ export const create = mutation({
   returns: v.id("dinners"),
   handler: async (ctx, args) => {
     const signed = await requireSession(ctx, args.sessionToken);
-    const recipe = await familyRecipe(ctx, signed, args.recipeId);
-    if (!recipe || recipe.status !== "ready") throw new ConvexError("Pick one of your family's recipes.");
-    // The dish name reaches every neighbor's feed, so only the cook's own share switch lets it out.
-    if (!recipe.sharedAt) throw new ConvexError("Share this recipe first.");
+    const recipe = await hostable(ctx, signed, args.recipeId);
     if (args.startsAt <= Date.now()) throw new ConvexError("Pick a time that hasn't passed.");
     if (!Number.isInteger(args.seats) || args.seats < 1 || args.seats > 20) throw new ConvexError("Seats go from 1 to 20.");
     return await ctx.db.insert("dinners", {
@@ -189,5 +225,67 @@ export const respond = mutation({
     await ctx.db.patch("dinnerRequests", requestId, { status: "accepted" });
     if (accepted + 1 >= d.seats && d.status === "open") await ctx.db.patch("dinners", d._id, { status: "full" });
     return null;
+  },
+});
+
+// ---- "Invite friends" ----
+
+/** The dinner's one invite link, for the host or a guest they said yes to. The same link every time. */
+export const inviteLink = action({
+  args: { sessionToken: v.string(), dinnerId: v.id("dinners") },
+  returns: v.object({ token: v.string(), url: v.string() }),
+  handler: async (ctx, { sessionToken, dinnerId }): Promise<{ token: string; url: string }> => {
+    // A fresh random token in case the dinner has none yet (an action's randomness is real); the
+    // mutation keeps the first one ever stored.
+    const token: string = await ctx.runMutation(internal.dinners.inviteToken, { sessionToken, dinnerId, fresh: newToken() });
+    return { token, url: `${INVITE_ORIGIN}/d?t=${token}` };
+  },
+});
+
+export const inviteToken = internalMutation({
+  args: { sessionToken: v.string(), dinnerId: v.id("dinners"), fresh: v.string() },
+  returns: v.string(),
+  handler: async (ctx, { sessionToken, dinnerId, fresh }) => {
+    const signed = await requireSession(ctx, sessionToken);
+    const d = await ctx.db.get("dinners", dinnerId);
+    if (!d || d.status === "cancelled") throw new ConvexError("That dinner isn't happening anymore.");
+    if (d.hostId !== signed.person._id) {
+      const requests = await ctx.db
+        .query("dinnerRequests")
+        .withIndex("by_dinnerId", (q) => q.eq("dinnerId", dinnerId))
+        .take(200);
+      if (!requests.some((r) => r.guestId === signed.person._id && r.status === "accepted")) {
+        throw new ConvexError("Only the host and their guests can invite friends.");
+      }
+    }
+    if (d.inviteToken) return d.inviteToken;
+    await ctx.db.patch("dinners", dinnerId, { inviteToken: fresh });
+    return fresh;
+  },
+});
+
+/**
+ * Someone opened an invite link (POST /invite/open). Counts this phone or browser once per dinner, while
+ * the dinner is still ahead, up to MAX_OPENS and OPEN_BURST per OPEN_BURST_MS. The reply is all the
+ * opener ever sees: the dish, the host's first name and when. Never the place, the address or any id.
+ */
+export const openInvite = internalMutation({
+  args: { token: v.string(), deviceId: v.string() },
+  returns: v.union(v.null(), v.object({ dish: v.string(), hostFirstName: v.string(), startsAt: v.number() })),
+  handler: async (ctx, { token, deviceId }) => {
+    const d = await ctx.db
+      .query("dinners")
+      .withIndex("by_inviteToken", (q) => q.eq("inviteToken", token))
+      .unique();
+    if (!d || d.status === "cancelled") return null;
+    const hostName = (await ctx.db.get("people", d.hostId))?.name ?? "";
+    const reply = { dish: d.dish, hostFirstName: hostName.trim().split(/\s+/)[0] ?? "", startsAt: d.startsAt };
+    const now = Date.now();
+    if (d.startsAt <= now) return reply;
+    const opens = await inviteOpens(ctx, d._id);
+    const recent = opens.filter((o) => o._creationTime > now - OPEN_BURST_MS).length;
+    if (opens.length >= MAX_OPENS || recent >= OPEN_BURST || opens.some((o) => o.deviceId === deviceId)) return reply;
+    await ctx.db.insert("dinnerInviteOpens", { dinnerId: d._id, deviceId });
+    return reply;
   },
 });

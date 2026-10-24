@@ -1,8 +1,8 @@
 // Expo config: everything in app.json, plus what two-sided sign-in needs (docs/build/FEEDBACK-OCT16c.md
 // B1) and what depends on the build's environment. Plain settings stay in app.json.
 //   - Sign in with Apple: the capability and its plugin.
-//   - Universal links: https://homecookd.app/i and /r open the app (the AASA file lives in
-//     web/public/.well-known).
+//   - Universal links: https://homecookd.app/i, /r and /d (a dinner invite) open the app (the AASA
+//     file lives in web/public/.well-known).
 //   - Google sign-in: its plugin only registers the iOS URL scheme, and prebuild fails without one,
 //     so it is added only when GOOGLE_IOS_URL_SCHEME is set (or EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
 //     which the scheme is derived from). `extra.googleSignIn` tells lib/auth/google.ts the scheme is

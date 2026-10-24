@@ -1,5 +1,5 @@
 // Community: recipes families chose to share with people nearby, as a story card plus the recipe's
-// text, and recipe swaps between families. Everything returned here is a whitelist: no video, moments,
+// text, and recipe swaps and "cook together" asks between families. Everything returned here is a whitelist: no video, moments,
 // memories, library or GCS links, other families' person ids, or addresses. The only words of the
 // cook's own are the one step quote on the card. Places are the ~1 km grid cell, never finer. Only the
 // cook shares a recipe: her switch, her own tap, or her yes to a kid's ask (shareRequests.ts).
@@ -244,20 +244,25 @@ export const setLocation = mutation({
   },
 });
 
-// ---- Swaps: "Teach each other your family dishes" ----
+// ---- Swaps ("Teach each other your family dishes") and "Cook together" ----
 // Anyone in a family asks for another family's shared recipe, offering one of their own shared ones
-// (or none yet); anyone in the family that was asked says yes or no. Both recipes are shared already,
-// so a swap shows no new recipe text; the other family is named the way the cards name it.
+// (or none yet), or asks that family to cook their dish together (kind "cook"); anyone in the family
+// that was asked says yes or no. Every recipe in one is shared already, so it shows no new recipe
+// text; the other family is named the way the cards name it. Once a "cook together" is agreed, the
+// family that asked may host a dinner of that dish (dinners.create).
 
 const swapDish = v.union(v.null(), v.object({ recipeId: v.id("recipes"), dish: v.string() }));
 const swapView = v.object({
   swapId: v.id("swapRequests"),
+  kind: v.union(v.literal("swap"), v.literal("cook")),
   status: schema.tables.swapRequests.validator.fields.status,
   incoming: v.boolean(), // the other family asked us
-  ourDish: swapDish, // our family's recipe in the swap
+  ourDish: swapDish, // our family's recipe in it
   theirDish: swapDish, // theirs, while it's still shared
   familyName: v.string(), // the other family
 });
+
+const kindOf = (s: Doc<"swapRequests">): "swap" | "cook" => s.kind ?? "swap";
 
 async function viewSwap(ctx: QueryCtx, signed: Signed, s: Doc<"swapRequests">) {
   const incoming = s.otherFamilyId === signed.family._id;
@@ -270,7 +275,15 @@ async function viewSwap(ctx: QueryCtx, signed: Signed, s: Doc<"swapRequests">) {
   const otherFamily = await ctx.db.get("families", incoming ? s.requesterFamilyId : s.otherFamilyId);
   const nameFrom = incoming ? s.requesterId : theirRecipe?.cookId;
   const name = nameFrom ? ((await ctx.db.get("people", nameFrom))?.name ?? "") : "";
-  return { swapId: s._id, status: s.status, incoming, ourDish: shown(ours), theirDish: shown(theirs), familyName: familyLabel(otherFamily, name) };
+  return {
+    swapId: s._id,
+    kind: kindOf(s),
+    status: s.status,
+    incoming,
+    ourDish: shown(ours),
+    theirDish: shown(theirs),
+    familyName: familyLabel(otherFamily, name),
+  };
 }
 
 async function familySwaps(ctx: QueryCtx, familyId: Id<"families">) {
@@ -285,35 +298,58 @@ async function familySwaps(ctx: QueryCtx, familyId: Id<"families">) {
   return { asked, askedOfUs };
 }
 
-/** Ask for another family's shared recipe, offering one of ours (shared too) or none. Asking again returns the same ask. */
+/**
+ * One ask of my family's for another family's shared recipe: a swap (offering `myRecipeId`, one of
+ * ours that's shared too, or none) or "cook together". Asking again returns the same ask.
+ */
+async function askFamily(ctx: MutationCtx, signed: Signed, recipeId: Id<"recipes">, kind: "swap" | "cook", myRecipeId?: Id<"recipes">) {
+  const theirs = await ctx.db.get("recipes", recipeId);
+  if (!theirs || theirs.status !== "ready" || !theirs.sharedAt) throw new ConvexError("That recipe isn't shared anymore.");
+  if (theirs.familyId === signed.family._id) throw new ConvexError("This is your family's recipe.");
+  if (myRecipeId) {
+    const mine = await familyRecipe(ctx, signed, myRecipeId);
+    if (!mine || mine.status !== "ready" || !mine.sharedAt) throw new ConvexError("Share that recipe first.");
+  }
+  const { asked } = await familySwaps(ctx, signed.family._id);
+  const before = asked.find((s) => s.theirRecipeId === recipeId && kindOf(s) === kind);
+  if (before?.status === "declined") throw new ConvexError("They said not this time.");
+  if (before) return before._id;
+  return await ctx.db.insert("swapRequests", {
+    requesterId: signed.person._id,
+    requesterFamilyId: signed.family._id,
+    theirRecipeId: recipeId,
+    myRecipeId,
+    otherFamilyId: theirs.familyId,
+    ...(kind === "cook" ? { kind } : {}),
+    status: "pending",
+  });
+}
+
+/** Ask for another family's shared recipe, offering one of ours (shared too) or none. */
 export const requestSwap = mutation({
   args: { sessionToken: v.string(), recipeId: v.id("recipes"), myRecipeId: v.optional(v.id("recipes")) },
   returns: v.id("swapRequests"),
   handler: async (ctx, { sessionToken, recipeId, myRecipeId }) => {
-    const signed = await requireSession(ctx, sessionToken);
-    const theirs = await ctx.db.get("recipes", recipeId);
-    if (!theirs || theirs.status !== "ready" || !theirs.sharedAt) throw new ConvexError("That recipe isn't shared anymore.");
-    if (theirs.familyId === signed.family._id) throw new ConvexError("This is your family's recipe.");
-    if (myRecipeId) {
-      const mine = await familyRecipe(ctx, signed, myRecipeId);
-      if (!mine || mine.status !== "ready" || !mine.sharedAt) throw new ConvexError("Share that recipe first.");
-    }
-    const { asked } = await familySwaps(ctx, signed.family._id);
-    const before = asked.find((s) => s.theirRecipeId === recipeId);
-    if (before?.status === "declined") throw new ConvexError("They said not this time.");
-    if (before) return before._id;
-    return await ctx.db.insert("swapRequests", {
-      requesterId: signed.person._id,
-      requesterFamilyId: signed.family._id,
-      theirRecipeId: recipeId,
-      myRecipeId,
-      otherFamilyId: theirs.familyId,
-      status: "pending",
-    });
+    return await askFamily(ctx, await requireSession(ctx, sessionToken), recipeId, "swap", myRecipeId);
   },
 });
 
-/** Anyone in the family that was asked says yes or no, once. */
+/** "Cook together": ask the family whose shared dish it is to make it with us. Answered like a swap (respondSwap). */
+export const cookTogether = mutation({
+  args: { sessionToken: v.string(), recipeId: v.id("recipes") },
+  returns: v.id("swapRequests"),
+  handler: async (ctx, { sessionToken, recipeId }) => {
+    return await askFamily(ctx, await requireSession(ctx, sessionToken), recipeId, "cook");
+  },
+});
+
+/** True when the other family said yes to cooking this shared dish of theirs with my family. */
+export async function cookingTogether(ctx: QueryCtx, familyId: Id<"families">, recipeId: Id<"recipes">): Promise<boolean> {
+  const { asked } = await familySwaps(ctx, familyId);
+  return asked.some((s) => s.theirRecipeId === recipeId && s.kind === "cook" && s.status === "accepted");
+}
+
+/** Anyone in the family that was asked says yes or no to a swap or a "cook together", once. */
 export const respondSwap = mutation({
   args: { sessionToken: v.string(), swapId: v.id("swapRequests"), accept: v.boolean() },
   returns: v.null(),
@@ -327,7 +363,7 @@ export const respondSwap = mutation({
   },
 });
 
-/** My family's swaps, both ways, newest first. */
+/** My family's swaps and "cook together" asks, both ways, newest first. */
 export const mySwaps = query({
   args: { sessionToken: v.string() },
   returns: v.array(swapView),

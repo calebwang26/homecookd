@@ -9,7 +9,8 @@
 //   newRequests, youLabel   the sun dot on "You" and "You, 1 new request"
 //   whose           "Rajani’s", "James’"
 //   privacyNote     "Rajani’s video and voice stay in the family. Neighbors see the recipe text and …"
-//   nightTitle, goingFaces, dinnerAction   the dinner page: "Jollof Rice Night", "4 going", its one button
+//   nightTitle, goingCount, goingFaces, dinnerAction   the dinner page: "Jollof Rice Night", "4 going",
+//                   its one button ("2 asked to join" for the host first, then "Invite friends")
 //   pickNextDinner  which dinner the Community tab puts on top
 //   dayOptions, TIMES, startsAt, firstOpenDay   the host form's day and time chips
 // Times are the phone's own clock. Nothing here imports React or the app, so Node runs it as is.
@@ -133,14 +134,15 @@ export function whose(name: string): string {
 }
 
 /**
- * "Rajani’s video and voice stay in the family. Neighbors see the recipe text and one line Rajani
- * said." (the line is the map card's quote).
+ * "Rajani’s video and voice stay in the family. Neighbors see the recipe text, one line Rajani said
+ * and homie’s guess at where it’s from." (the line is the map card's quote; the guess is Muse's
+ * culture label, tagged AI on the card).
  * TODO(caleb): the mockup says "stay with her family"; we don't know a cook's gender (Papa Vikram,
- * Grandpa Joe), so it says "in the family". The words about the quote are new too.
+ * Grandpa Joe), so it says "in the family". The words about the quote and the guess are new too.
  */
 export function privacyNote(cookName: string | null | undefined): string {
   const name = (cookName ?? '').trim();
-  return `${whose(name)} video and voice stay in the family. Neighbors see the recipe text and one line ${name || 'the cook'} said.`;
+  return `${whose(name)} video and voice stay in the family. Neighbors see the recipe text, one line ${name || 'the cook'} said and homie’s guess at where it’s from.`;
 }
 
 export const PLACE_KINDS: { key: PlaceKind; label: string }[] = [
@@ -164,31 +166,52 @@ export function nightTitle(dish: string): string {
 
 const initial = (name: string) => (Array.from(name.trim())[0] ?? '').toUpperCase();
 
+/** How many are going: the host, every guest the host said yes to, and each phone that opened the invite link. */
+export function goingCount(d: Pick<Dinner, 'seats' | 'seatsLeft' | 'inviteOpens'>): number {
+  return 1 + Math.max(0, d.seats - d.seatsLeft) + Math.max(0, d.inviteOpens ?? 0);
+}
+
 /**
- * Who's going: "4 going" counts the host and every guest the host said yes to, and a few faces lead
- * it (initials): the host first, then the guests by name for the host, or "you" for a guest who's
- * in. Only the host knows guests' names, so the rest of the count has no face.
+ * Who's going: "4 going" (goingCount), and a few faces lead it (initials): the host first, then the
+ * guests by name for the host, or "you" for a guest who's in. Only the host knows guests' names, and
+ * nobody knows who opened the link, so the rest of the count has no face.
  */
 export function goingFaces(
-  d: Pick<Dinner, 'hostName' | 'isHost' | 'seats' | 'seatsLeft' | 'myRequest' | 'requests'>,
+  d: Pick<Dinner, 'hostName' | 'isHost' | 'seats' | 'seatsLeft' | 'inviteOpens' | 'myRequest' | 'requests'>,
   myName: string,
   max = 3,
-): { faces: string[]; label: string } {
-  const count = 1 + Math.max(0, d.seats - d.seatsLeft);
+): { faces: string[]; count: number; label: string } {
+  const count = goingCount(d);
   const names = d.isHost
     ? [myName, ...(d.requests ?? []).filter((r) => r.status === 'accepted').map((r) => r.guestName)]
     : [d.hostName, ...(d.myRequest?.status === 'accepted' ? [myName] : [])];
-  return { faces: names.map(initial).filter(Boolean).slice(0, Math.min(max, count)), label: `${count} going` };
+  return { faces: names.map(initial).filter(Boolean).slice(0, Math.min(max, count)), count, label: `${count} going` };
 }
 
-export type DinnerAction = { kind: 'calendar' } | { kind: 'ask' } | { kind: 'waiting'; label: string } | { kind: 'note'; text: string };
+export type DinnerAction =
+  | { kind: 'invite' }
+  | { kind: 'requests'; count: number; label: string }
+  | { kind: 'ask' }
+  | { kind: 'waiting'; label: string }
+  | { kind: 'note'; text: string };
 
-/** The dinner page's one action: add it to the calendar once you're in (or host), ask, wait, or a short note. */
-export function dinnerAction(d: Pick<Dinner, 'hostName' | 'isHost' | 'startsAt' | 'status' | 'seatsLeft' | 'myRequest'>, now: number): DinnerAction {
+/**
+ * The dinner page's one action, one step at a time: the host first answers who asked to join ("2 asked
+ * to join" takes them to the requests), then, like a guest who's in, invites friends; before you're
+ * in: ask, wait, or a short note.
+ */
+export function dinnerAction(
+  d: Pick<Dinner, 'hostName' | 'isHost' | 'startsAt' | 'status' | 'seatsLeft' | 'myRequest' | 'requests'>,
+  now: number,
+): DinnerAction {
   if (d.status === 'cancelled') return { kind: 'note', text: 'This dinner was called off.' };
   if (d.startsAt <= now) return { kind: 'note', text: 'This dinner already happened.' };
   const status = d.myRequest?.status;
-  if (d.isHost || status === 'accepted') return { kind: 'calendar' };
+  if (d.isHost) {
+    const pending = (d.requests ?? []).filter((r) => r.status === 'pending').length;
+    return pending ? { kind: 'requests', count: pending, label: `${pending} asked to join` } : { kind: 'invite' };
+  }
+  if (status === 'accepted') return { kind: 'invite' };
   if (status === 'pending') return { kind: 'waiting', label: 'Asked · waiting' };
   if (status === 'declined') return { kind: 'note', text: `${d.hostName.trim() || 'The host'} can’t fit you this time.` };
   if (d.status !== 'open' || d.seatsLeft <= 0) return { kind: 'note', text: 'Every seat is taken.' };

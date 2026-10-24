@@ -1,7 +1,9 @@
 // What a tap on "You" opens under the map: the dinner you host or are in (the dark card, live, with
-// "1 new request" for the host), the swaps another family asked yours for (Accept / Decline) and the
-// ones you agreed on ("You’re swapping Kanda Poha ↔ Jollof Rice with the Okafor family", a tap opens
-// their recipe), then "Host a dinner". Kept off the map until asked for.
+// "1 new request" for the host), the swaps and "cook together" asks another family sent yours (Accept /
+// Decline), the swaps you agreed on ("You’re swapping Kanda Poha ↔ Jollof Rice with the Okafor family", a
+// tap opens their recipe) and the dishes you're cooking together ("Cooking Jollof Rice together with the
+// Okafor family", with "Host a dinner" as the next step), then "Host a dinner". Kept off the map until
+// asked for.
 import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
@@ -28,6 +30,7 @@ export function YouCard({ next, swaps, now }: { next: DinnerPick | null; swaps: 
       {swapping.map((s) => {
         const theirs = s.theirDish;
         const line = swapLine(s);
+        if (s.kind === 'cook') return <CookingTogether key={s.swapId} swap={s} line={line} />;
         return theirs ? (
           <PressableScale
             key={s.swapId}
@@ -61,9 +64,31 @@ export function YouCard({ next, swaps, now }: { next: DinnerPick | null; swaps: 
   );
 }
 
+/** "Cooking Jollof Rice together with the Okafor family", and the next step: host a dinner of it. */
+function CookingTogether({ swap, line }: { swap: Swap; line: string }) {
+  const dish = swap.theirDish ?? swap.ourDish;
+  return (
+    <View style={styles.card}>
+      <Txt variant="rowTitle" size={17}>
+        {line}
+      </Txt>
+      {dish ? (
+        <ActionButton
+          label="Host a dinner"
+          size="sm"
+          icon={<PlusIcon size={20} color={colors.card} strokeWidth={2.2} />}
+          accessibilityHint={`Pick a time and place for ${dish.dish}`}
+          onPress={() => router.push({ pathname: '/dinner/new', params: { recipeId: dish.recipeId } })}
+        />
+      ) : null}
+    </View>
+  );
+}
+
 /** "The Pawar family would swap their Kanda Poha for your Dumplings." with Decline / Accept. */
 function SwapAsk({ swap }: { swap: Swap }) {
   const toast = useToast();
+  const what = swap.kind === 'cook' ? 'cooking together' : 'the swap';
   const answer = (accept: boolean) => async () => {
     try {
       await respondSwap(swap.swapId, accept);
@@ -78,8 +103,8 @@ function SwapAsk({ swap }: { swap: Swap }) {
         {swapLine(swap)}
       </Txt>
       <View style={styles.answers}>
-        <ActionButton label="Decline" variant="outline" size="xs" padH={16} onPress={answer(false)} accessibilityLabel={`Decline the swap with ${swap.familyName}`} />
-        <ActionButton label="Accept" size="xs" padH={16} flat onPress={answer(true)} accessibilityLabel={`Accept the swap with ${swap.familyName}`} />
+        <ActionButton label="Decline" variant="outline" size="xs" padH={16} onPress={answer(false)} accessibilityLabel={`Decline ${what} with ${swap.familyName}`} />
+        <ActionButton label="Accept" size="xs" padH={16} flat onPress={answer(true)} accessibilityLabel={`Accept ${what} with ${swap.familyName}`} />
       </View>
     </View>
   );

@@ -1,0 +1,280 @@
+/* The /d dinner invite page: the /i invite page's look (pot + homecookd row, one Fraunces headline, the
+   430 px phone column) in the app's dinner lavender (#ECE6F2 -> #F7F7F2), with the dinner photo's warm
+   sun glow around homie, a cream "Hosted by" pill and one cream "Friday · 7 pm" card. */
+
+.page {
+  min-height: 100svh;
+  background: #f7f7f2;
+  color: #2d3222;
+  font-family: var(--ff-text);
+  font-size: 17px;
+  line-height: 1.4;
+  /* the app's Fraunces (the lander's display face is softened) */
+  font-variation-settings: 'SOFT' 0, 'WONK' 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.column {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  min-height: 100svh;
+  margin: 0 auto;
+  padding: 0 24px calc(16px + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, #ece6f2 0%, #f1edf3 300px, #f7f7f2 560px);
+  display: flex;
+  flex-direction: column;
+}
+@media (min-width: 600px) {
+  .column {
+    box-shadow:
+      0 0 0 1px rgba(30, 36, 16, 0.04),
+      0 30px 80px rgba(30, 36, 16, 0.14);
+  }
+}
+
+.brand {
+  height: 72px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #1e2410;
+}
+.word {
+  font-family: var(--ff-display);
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variation-settings: 'SOFT' 100, 'WONK' 0, 'opsz' 144;
+  transform: translateY(-1px);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  animation: rise 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.main[aria-busy] {
+  animation: none;
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+.hero {
+  margin-top: 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  gap: 18px;
+}
+.glow {
+  width: 136px;
+  height: 136px;
+  border-radius: 50%;
+  background: #fffdf7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow:
+    0 0 0 10px rgba(254, 190, 41, 0.14),
+    0 0 70px rgba(254, 190, 41, 0.35),
+    0 18px 44px rgba(30, 36, 16, 0.12);
+  margin-bottom: 8px;
+}
+.face {
+  min-height: 88px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.title {
+  margin: 0;
+  max-width: 340px;
+  text-wrap: balance;
+  font-family: var(--ff-display);
+  font-weight: 500;
+  font-size: 34px;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  color: #1e2410;
+}
+.line {
+  margin: 0;
+  max-width: 320px;
+  text-wrap: balance;
+  font-size: 19px;
+  line-height: 1.4;
+  color: #5f6352;
+}
+
+/* "Hosted by Mom": the app's cream host pill */
+.host {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 6px 18px 6px 6px;
+  border-radius: 999px;
+  background: #fffdf7;
+  box-shadow: 0 4px 14px rgba(30, 36, 16, 0.08);
+  text-align: left;
+}
+.initial {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #fff1c7;
+  color: #5a3a22;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-family: var(--ff-display);
+  font-size: 20px;
+  font-weight: 600;
+}
+.hostText {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.25;
+}
+.hostLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: #5f6352;
+}
+.hostName {
+  font-size: 17px;
+  font-weight: 700;
+  color: #1e2410;
+}
+
+/* "Friday · 7 pm" */
+.when {
+  margin: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 20px;
+  border-radius: 22px;
+  background: #fffdf7;
+  box-shadow: 0 8px 24px rgba(30, 36, 16, 0.06);
+  font-size: 17px;
+  font-weight: 600;
+  color: #1e2410;
+}
+
+.retry {
+  margin-top: 14px;
+  width: 100%;
+  height: 60px;
+  border: none;
+  border-radius: 999px;
+  background: #5b6f00;
+  color: #fffdf7;
+  font: inherit;
+  font-size: 18px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 10px 24px rgba(52, 67, 12, 0.25);
+  transition:
+    transform 420ms cubic-bezier(0.34, 1.4, 0.64, 1),
+    opacity 200ms ease;
+}
+.retry:active {
+  transform: scale(0.96);
+  opacity: 0.9;
+  transition-duration: 90ms;
+}
+.retry:focus-visible {
+  outline: 3px solid #788c15;
+  outline-offset: 3px;
+}
+
+/* "What's homecookd?" sits at the bottom of the screen */
+.about {
+  margin-top: auto;
+  padding-top: 24px;
+  align-self: center;
+  min-height: 48px;
+  padding-inline: 12px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: #5f6352;
+  text-decoration: underline;
+  text-decoration-color: rgba(95, 99, 82, 0.4);
+  text-underline-offset: 3px;
+}
+.about:focus-visible {
+  outline: 3px solid #788c15;
+  outline-offset: 2px;
+  border-radius: 12px;
+}
+
+/* ---------- loading ---------- */
+.skeleton {
+  margin-top: 36px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+.skFace,
+.skLine,
+.skPill {
+  display: block;
+  background: rgba(63, 53, 88, 0.08);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.skFace {
+  width: 136px;
+  height: 136px;
+  margin-bottom: 14px;
+  border-radius: 50%;
+}
+.skLine {
+  border-radius: 10px;
+}
+.skPill {
+  width: 180px;
+  height: 56px;
+  margin-top: 8px;
+  border-radius: 999px;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .main {
+    animation-duration: 1ms;
+  }
+  .skFace,
+  .skLine,
+  .skPill {
+    animation: none;
+  }
+  .retry,
+  .retry:active {
+    transform: none;
+    transition: opacity 120ms ease;
+  }
+}

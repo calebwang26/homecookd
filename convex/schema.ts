@@ -158,6 +158,11 @@ export default defineSchema({
     // recipe) on the Community map; only her clear yes shares it (convex/shareRequests.ts).
     kind: v.optional(v.literal("share")),
     shareRecipeId: v.optional(v.id("recipes")),
+    // How homie read her answer to a share ask (lib/yesNo.ts), and when. After a no or an unclear
+    // answer the family can't ask her again for a day.
+    shareDecision: v.optional(
+      v.object({ said: v.union(v.literal("yes"), v.literal("no"), v.literal("unclear")), at: v.number() }),
+    ),
     status: v.union(v.literal("found_in_video"), v.literal("asked_cook"), v.literal("answered")),
     found: v.optional(v.object({ moment, quote: v.string() })),
     answer: v.optional(
@@ -239,9 +244,20 @@ export default defineSchema({
     approx: v.object({ lat: v.number(), lng: v.number() }), // rounded to ~1 km
     seats: v.number(),
     status: v.union(v.literal("open"), v.literal("full"), v.literal("cancelled")),
+    // "Invite friends": one random token per dinner, made the first time the host or a guest asks
+    // for the link (dinners.inviteLink). It opens homecookd.app/d, which shows only the dish, the
+    // host's first name and when.
+    inviteToken: v.optional(v.string()),
   })
     .index("by_status", ["status"])
-    .index("by_hostId", ["hostId"]),
+    .index("by_hostId", ["hostId"])
+    .index("by_inviteToken", ["inviteToken"]),
+
+  /** One per phone or browser that opened a dinner's invite link (POST /invite/open): "X going" counts them. */
+  dinnerInviteOpens: defineTable({
+    dinnerId: v.id("dinners"),
+    deviceId: v.string(), // made up by the opening phone or browser, kept on it
+  }).index("by_dinnerId_and_deviceId", ["dinnerId", "deviceId"]),
 
   dinnerRequests: defineTable({
     dinnerId: v.id("dinners"),
@@ -253,15 +269,17 @@ export default defineSchema({
     .index("by_guestId", ["guestId"]),
 
   /**
-   * Community: one family asks another to swap recipes. Both recipes are already shared, so a swap
-   * shows no recipe text that neighbors couldn't already see.
+   * Community: one family asks another to swap recipes, or (kind "cook") to cook the other family's
+   * dish together. Every recipe in one is already shared, so it shows no recipe text that neighbors
+   * couldn't already see.
    */
   swapRequests: defineTable({
     requesterId: v.id("people"),
     requesterFamilyId: v.id("families"),
     theirRecipeId: v.id("recipes"), // the other family's shared recipe
-    myRecipeId: v.optional(v.id("recipes")), // one of the requester family's shared recipes, offered back
+    myRecipeId: v.optional(v.id("recipes")), // one of the requester family's shared recipes, offered back (swaps only)
     otherFamilyId: v.id("families"),
+    kind: v.optional(v.literal("cook")), // unset: a swap
     status: v.union(v.literal("pending"), v.literal("accepted"), v.literal("declined")),
   })
     .index("by_requesterFamilyId", ["requesterFamilyId"])

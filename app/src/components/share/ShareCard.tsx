@@ -19,6 +19,8 @@ export type ShareCardData = {
   /** "~50 min" or null. */
   time: string | null;
   poster: string | null;
+  /** In place of "by Dad" ("Hosted by Mom" on a dinner invite); the cook's avatar still leads it. */
+  byline?: string;
 };
 
 export type ShareCardProps = {
@@ -124,7 +126,7 @@ export function ShareCard({ data, swatch, photo, stageHeight, compact = false }:
   // "by Dad · ~50 min" when it fits on one line beside the avatar, else just "by Grandma".
   // Room: the text column (inner - 4) minus the 20 px avatar and its 6 px gap; DM Sans 14 runs
   // about 7.4 px a character.
-  const by = data?.cook ? `by ${data.cook}` : '';
+  const by = data?.byline ?? (data?.cook ? `by ${data.cook}` : '');
   const full = [by || null, data?.time ?? null].filter(Boolean).join(' · ');
   const meta = full.length <= Math.floor((inner - 30) / 7.4) ? full : by || full;
 
@@ -132,7 +134,7 @@ export function ShareCard({ data, swatch, photo, stageHeight, compact = false }:
     <Animated.View
       style={[styles.stage, { width: cardW + 44, height: stageHeight, paddingVertical: compact ? STAGE_PAD.compact : STAGE_PAD.regular }, stageStyle]}
       accessibilityRole="image"
-      accessibilityLabel={data ? `${title}${data.cook ? `, from ${data.cook}` : ''}, on homecookd` : 'Recipe card'}>
+      accessibilityLabel={data ? `${title}${data.byline ? `, ${data.byline}` : data.cook ? `, from ${data.cook}` : ''}, on homecookd` : 'Recipe card'}>
       <View style={[styles.card, { width: cardW, boxShadow: dark ? '0 16px 40px rgba(0,0,0,0.32)' : '0 10px 30px rgba(30,36,16,0.10)' }]}>
         {photo > 0 ? (
           <View style={[styles.photo, { width: inner, height: photo }]}>

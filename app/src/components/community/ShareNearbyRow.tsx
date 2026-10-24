@@ -1,8 +1,9 @@
 // The cook's Community switch, one quiet row at the foot of her own recipe page (my-recipe/[id]),
 // in the shape of ShareCookingRow:
 //   Share with people nearby · Off
-//   Neighbors see the recipe text and one line you said, never your video or voice.
-// (The line is the map card's quote, one of her own step quotes.)
+//   Neighbors see the recipe text, one line you said and homie’s guess at where it’s from, never your
+//   video or voice.
+// (The line is the map card's quote, one of her own step quotes; the guess is Muse's culture label.)
 // A tap flips it (community.setShare; a failure flips it back with a toast). The first time it goes
 // on, Muse writes the dish's story card. Hidden unless this dish has a ready Convex row and the
 // person here is its cook (the server checks that again).
@@ -16,8 +17,9 @@ import { colors } from '@/theme/tokens';
 import { useFamilyRecipes } from './data';
 import { errorText } from './labels';
 
-// TODO(caleb): the words a cook reads before she shares (the map card shows one line she said).
-const WHAT_NEIGHBORS_SEE = 'Neighbors see the recipe text and one line you said, never your video or voice.';
+// TODO(caleb): the words a cook reads before she shares (the map card shows one line she said and
+// Muse's guess at the dish's culture, tagged AI).
+const WHAT_NEIGHBORS_SEE = 'Neighbors see the recipe text, one line you said and homie’s guess at where it’s from, never your video or voice.';
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 

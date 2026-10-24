@@ -1,5 +1,6 @@
-// Host a Community dinner (dinners.create): the dish (one of the family's shared recipes; none yet =
-// ask the cook to share one first), the day and time, the kind of place (campus kitchen first, home
+// Host a Community dinner (dinners.create): the dish (one of the family's shared recipes, or another
+// family's dish they said yes to cooking with us; none yet = ask the cook to share one first), the day
+// and time, the kind of place (campus kitchen first, home
 // last), its public name, the exact address (private: only guests the host says yes to see it) and
 // the seats. Then it opens the new dinner's page. `?recipeId=` picks the dish to start with (a tap on
 // "Host a dinner" from that dish's card on the map).
@@ -15,7 +16,7 @@ import { goBack } from '@/components/community/DetailPage';
 import { dayOptions, errorText, firstOpenDay, PLACE_KINDS, startsAt, TIMES } from '@/components/community/labels';
 import { SignInField } from '@/components/signin';
 import { ActionButton, BackPill, CheckIcon, Chip, IconButton, Pill, PlusIcon, PressableScale, ScreenWash, Skeleton, Txt, useToast } from '@/components/ui';
-import { createDinner, type PlaceKind } from '@/lib/live/community';
+import { createDinner, useMySwaps, type PlaceKind } from '@/lib/live/community';
 import { colors, radii, shadows, space } from '@/theme/tokens';
 
 const DEFAULT_TIME = { hour: 19, minute: 0 };
@@ -35,7 +36,13 @@ export default function NewDinner() {
   const toast = useToast();
   const now = useNow();
   const rows = useFamilyRecipes();
-  const shared = (rows ?? []).filter((r) => r.status === 'ready' && !!r.sharedAt);
+  const swaps = useMySwaps();
+  // Our shared dishes, then the ones another family said yes to cooking with us.
+  const ours = (rows ?? []).filter((r) => r.status === 'ready' && !!r.sharedAt).map((r) => ({ _id: r._id, title: r.title }));
+  const together = swaps.flatMap((s) =>
+    s.kind === 'cook' && s.status === 'accepted' && !s.incoming && s.theirDish ? [{ _id: s.theirDish.recipeId, title: s.theirDish.dish }] : [],
+  );
+  const shared = [...ours, ...together.filter((t) => !ours.some((r) => r._id === t._id))];
 
   const params = useLocalSearchParams<{ recipeId?: string }>();
   const [recipeId, setRecipeId] = useState<string | null>(typeof params.recipeId === 'string' ? params.recipeId : null);

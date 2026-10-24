@@ -1,20 +1,24 @@
-// One Community dinner (dinners.get, live), Caleb's final Hearth Dinner mockup (Oct 24): the kid's
-// lavender wash and a cream back button; centred, the dish photo with a warm glow and a "DINNER" tag,
-// "Jollof Rice Night" and "Hosted by Mom"; one card with when and where (the address only once the host
-// said yes); "You're in" with a few faces, "4 going"; and one button. Before you ask: "Ask to join";
-// waiting: "Asked · waiting"; in (or hosting): "Add to calendar". The host also answers requests here.
+// One Community dinner (dinners.get, live), Caleb's final Dinner canvas (Oct 24): the kid's lavender
+// wash and a cream back button; centred, the dish photo with a warm glow and a "DINNER" tag, "Jollof
+// Rice Night" and "Hosted by Mom"; one card with when and where (the address only once the host said
+// yes); "You're in" with a few faces and "4 going" (live: it rolls up when someone opens the invite);
+// and one button. Before you ask: "Ask to join"; waiting: "Asked · waiting"; in, or hosting: "Invite
+// friends", which opens the share sheet as a dinner invite. One step at a time for the host: while
+// people are waiting on an answer the button says "2 asked to join" and takes them to the requests.
 import { useLocalSearchParams } from 'expo-router';
-import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useRef } from 'react';
+import { AccessibilityInfo, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { addToCalendar } from '@/components/community/calendar';
 import { coverFor, useNow, useWaited } from '@/components/community/data';
 import { goBack } from '@/components/community/DetailPage';
 import { DinnerPhoto, GoingRow, HostPill, HostRequests, WhenWhere } from '@/components/community/DinnerParts';
-import { dinnerAction, dinnerWhen, errorText, goingFaces, nightTitle } from '@/components/community/labels';
+import { dinnerAction, dinnerWhen, errorText, goingFaces, nightTitle, type DinnerAction } from '@/components/community/labels';
 import { ActionButton, BackIcon, EmptyState, IconButton, ScreenWash, Skeleton, Txt, useToast } from '@/components/ui';
 import { requestJoin, useDinner, type Dinner } from '@/lib/live/community';
 import { useSession } from '@/lib/session';
+import { useShare } from '@/lib/share';
 import { colors, radii } from '@/theme/tokens';
 
 /** dinners.get answers null while it loads and for a dinner that's gone: wait this long to say so. */
@@ -32,16 +36,22 @@ export default function DinnerPage() {
   const waited = useWaited(MISSING_MS);
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
+  const reduce = useReducedMotion();
+  const scroller = useRef<ScrollView>(null);
   const top = Math.max(56, insets.top + 9);
   const photoW = Math.min(PHOTO_W, width - 2 * 32);
   const photoH = Math.round((photoW * PHOTO_H) / PHOTO_W);
+  const action = dinner ? dinnerAction(dinner, now) : null;
 
   return (
     <View style={styles.screen}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={[styles.content, { paddingTop: top + 48, paddingBottom: FOOTER + insets.bottom }]}>
+      <ScrollView
+        ref={scroller}
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={[styles.content, { paddingTop: top + 48, paddingBottom: FOOTER + insets.bottom }]}>
         <ScreenWash tone="kid" height={360} />
-        {dinner ? (
-          <Details dinner={dinner} now={now} photo={{ width: photoW, height: photoH }} />
+        {dinner && action ? (
+          <Details dinner={dinner} action={action} now={now} photo={{ width: photoW, height: photoH }} />
         ) : waited || !id ? (
           <EmptyState title="This dinner isn’t here anymore" actionLabel="Back" onAction={() => goBack()} />
         ) : (
@@ -60,16 +70,27 @@ export default function DinnerPage() {
         onPress={() => goBack()}
         style={[styles.back, { top }]}
       />
-      {dinner ? <Footer dinner={dinner} now={now} bottom={Math.max(30, insets.bottom + 8)} /> : null}
+      {dinner && action ? (
+        <Footer
+          dinner={dinner}
+          action={action}
+          bottom={Math.max(30, insets.bottom + 8)}
+          // The requests are the page's last part: scrolled to the end they sit just above this button.
+          showRequests={() => {
+            scroller.current?.scrollToEnd({ animated: !reduce });
+            AccessibilityInfo.announceForAccessibility?.('Asked to join, below');
+          }}
+        />
+      ) : null}
     </View>
   );
 }
 
-function Details({ dinner, now, photo }: { dinner: Dinner; now: number; photo: { width: number; height: number } }) {
+function Details({ dinner, action, now, photo }: { dinner: Dinner; action: DinnerAction; now: number; photo: { width: number; height: number } }) {
   const { me } = useSession();
-  const action = dinnerAction(dinner, now);
   const going = goingFaces(dinner, me?.name ?? '');
-  const pill = action.kind === 'calendar' ? (dinner.isHost ? 'You’re hosting' : 'You’re in') : null;
+  const inIt = action.kind === 'invite' || action.kind === 'requests';
+  const pill = inIt ? (dinner.isHost ? 'You’re hosting' : 'You’re in') : null;
   return (
     <>
       <View style={styles.center}>
@@ -81,17 +102,17 @@ function Details({ dinner, now, photo }: { dinner: Dinner; now: number; photo: {
       </View>
       <View style={styles.side}>
         <WhenWhere when={dinnerWhen(dinner.startsAt, now)} placeName={dinner.placeName} address={dinner.address} />
-        <GoingRow pill={pill} faces={going.faces} label={going.label} />
-        {dinner.isHost && action.kind === 'calendar' ? <HostRequests dinner={dinner} /> : null}
+        <GoingRow pill={pill} faces={going.faces} count={going.count} label={going.label} />
+        {dinner.isHost && inIt ? <HostRequests dinner={dinner} /> : null}
       </View>
     </>
   );
 }
 
 /** The page's one button, pinned at the bottom. */
-function Footer({ dinner, now, bottom }: { dinner: Dinner; now: number; bottom: number }) {
+function Footer({ dinner, action, bottom, showRequests }: { dinner: Dinner; action: DinnerAction; bottom: number; showRequests: () => void }) {
   const toast = useToast();
-  const action = dinnerAction(dinner, now);
+  const share = useShare();
   const host = dinner.hostName.trim() || 'The host';
   let body;
   if (action.kind === 'ask') {
@@ -109,26 +130,18 @@ function Footer({ dinner, now, bottom }: { dinner: Dinner; now: number; bottom: 
         }}
       />
     );
-  } else if (action.kind === 'calendar') {
+  } else if (action.kind === 'requests') {
+    body = <ActionButton label={action.label} accessibilityHint="Shows who asked, to say yes or no" onPress={showRequests} />;
+  } else if (action.kind === 'invite') {
     body = (
       <ActionButton
-        label="Add to calendar"
-        accessibilityHint="Saves this dinner to your calendar"
-        onPress={async () => {
-          try {
-            await addToCalendar({
-              uid: dinner.dinnerId,
-              title: nightTitle(dinner.dish),
-              startsAt: dinner.startsAt,
-              location: dinner.address ? `${dinner.placeName}, ${dinner.address}` : dinner.placeName,
-              description: dinner.isHost ? 'You’re hosting' : `Hosted by ${host}`,
-              now: Date.now(),
-            });
-          } catch (e) {
-            toast.show('Couldn’t open your calendar. Try again.', { tone: 'error' });
-            throw e;
-          }
-        }}
+        label="Invite friends"
+        accessibilityHint="Sends a link to this dinner. Whoever opens it counts as going."
+        onPress={() =>
+          share.open({
+            dinner: { dinnerId: dinner.dinnerId, dish: dinner.dish, hostName: dinner.hostName, photo: dinner.coverUrl ?? coverFor(dinner.recipeId) },
+          })
+        }
       />
     );
   } else {

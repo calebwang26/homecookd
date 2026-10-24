@@ -23,7 +23,7 @@ export async function person(
   const tokenHash = await hashToken(sessionToken);
   const personId = await t.run(async (ctx) => {
     const id = await ctx.db.insert("people", { familyId, supabaseProfileId: `test:${name}`, name, role, approx, language });
-    await ctx.db.insert("sessions", { tokenHash, familyId, personId: id, expiresAt: Date.now() + 86_400_000 });
+    await ctx.db.insert("sessions", { tokenHash, familyId, personId: id, expiresAt: Date.now() + 30 * 86_400_000 });
     return id;
   });
   return { sessionToken, personId, familyId };

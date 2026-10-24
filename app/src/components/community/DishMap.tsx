@@ -1,7 +1,7 @@
 // The Community map (Caleb's mockup, Oct 24): one square, bordered map with a few streets and the real
 // neighborhood names around, "You" in the middle, and a round dish photo per ~1 km cell
-// (mapLayout.ts). It's a drawing with react-native-svg, not map tiles: no native module, so it ships
-// by EAS Update. A tap on the map itself (not a circle) closes the card.
+// (mapLayout.ts), popping in one after another (MapSpot). It's a drawing with react-native-svg, not map
+// tiles: no native module, so it ships by EAS Update. A tap on the map itself (not a circle) closes the card.
 import { Pressable, StyleSheet, View } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
 
@@ -63,11 +63,12 @@ export function DishMap<R extends Dish>({ size, spots, areas, pickedKey, onPick,
         </View>
       </PressableScale>
 
-      {spots.map((s) => (
+      {spots.map((s, i) => (
         <MapSpot
           key={s.key}
           x={s.x}
           y={s.y}
+          index={i}
           photo={s.members.find((m) => m.coverUrl)?.coverUrl ?? null}
           count={s.members.length}
           picked={s.key === pickedKey}
