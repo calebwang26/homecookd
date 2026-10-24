@@ -141,7 +141,7 @@ cd app && npx eas-cli build -p ios --profile production --auto-submit   # TestFl
 cd app && npx eas-cli update --channel production -m "<what changed>"   # JS-only fix to TestFlight phones
 node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
-cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend
+cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages
 
 # web
 cd web && npm run dev -- --port 3000
@@ -164,7 +164,7 @@ voice/deploy.sh                                                    # Cloud Run h
 
 # pipeline (uses .venv)
 .venv/bin/python pipeline/schema.py data/out/*/recipe.json data/synthetic/*.json
-.venv/bin/python pipeline/test_order.py
+.venv/bin/python pipeline/test_order.py && .venv/bin/python pipeline/test_prompts.py
 .venv/bin/python pipeline/test_shorten.py                           # cook mode's short steps: rules + stored data
 .venv/bin/python pipeline/test_coverage.py
 .venv/bin/python pipeline/worker.py [--once]                        # claim Convex jobs (--gcs: the old GCS job files)

@@ -14,10 +14,13 @@ process.ensure_coverage adds when pipeline/coverage.py finds extracted steps tha
 Language: the cook may narrate in Marathi, English or a mix. Extraction translates every text field into
 English (the app, cook mode and the English-only Moss index read them) and keeps the spoken Marathi of each
 quote in quote_original; the merge carries it, and align hears the Marathi but reads the English.
+Oct 24 (Track F): {context} is the job's language line (language_line) plus, when homie (the AI helper that
+talks to the cook while she films) was there, its questions and her answers (homie_block), so homie's voice is
+never taken for the cook's. Steps are grouped more coarsely: about 8 to 12 for a typical home dish.
 
-EXTRACT_PROMPT.format(i=..., n=..., clip_mmss=...)
+EXTRACT_PROMPT.format(i=..., n=..., clip_mmss=..., context=...)
 EXTRACT_RETRY_SUFFIX.format(error=...)
-MERGE_PROMPT.format(n=..., title=<json string>, duration_s=..., sessions=<json>, events=<json>)
+MERGE_PROMPT.format(n=..., title=<json string>, duration_s=..., sessions=<json>, events=<json>, context=...)
 MERGE_RETRY_SUFFIX.format(errors=..., previous=<json>)
 COVERAGE_RETRY_SUFFIX.format(missing=<"- start-end s: action" lines>, previous=<json>)
 ORDER_PROMPT.format(n=..., title=<json string>, dates=<text>, clips=<text>)   (pipeline/order.py; text only, cheap model)
@@ -31,7 +34,7 @@ EXTRACT_PROMPT = """\
 You are watching a first-person video of a home cook making a family dish.
 The cook may narrate in Marathi, in English, or in a mix of the two (switching mid-sentence, or
 Marathi with English words). This clip is file {i} of {n} of the recording.
-
+{context}
 Return every STEP, STORY and SPECIAL moment in this clip as JSON matching the schema.
 
 Steps come first: the family will cook from them, and one missing step can ruin the dish.
@@ -79,6 +82,65 @@ Times: this clip is {clip_mmss} long. Every start and end is an MM:SS timestamp 
 and {clip_mmss}, with start before end; use the clip's own timeline, not any clock shown on screen.
 """
 
+# ISO 639-1 codes the app offers (app/src/lib/languages.ts); any other code is named as itself.
+LANGUAGES = {
+    "en": "English", "mr": "Marathi", "hi": "Hindi", "bn": "Bengali", "gu": "Gujarati", "kn": "Kannada",
+    "ml": "Malayalam", "pa": "Punjabi", "ta": "Tamil", "te": "Telugu", "ur": "Urdu", "zh": "Chinese",
+    "es": "Spanish", "fr": "French", "de": "German", "pt": "Portuguese", "ja": "Japanese", "ko": "Korean",
+    "it": "Italian", "ru": "Russian", "ar": "Arabic", "tr": "Turkish", "vi": "Vietnamese", "tl": "Tagalog",
+    "id": "Indonesian", "th": "Thai", "pl": "Polish", "uk": "Ukrainian", "ms": "Malay", "or": "Odia",
+}
+
+
+def language_line(code: str | None) -> str:
+    """The job's language as one prompt line ("" when the job doesn't say)."""
+    if not code:
+        return ""
+    if code == "en":
+        return "The family says the cook narrates in English.\n"
+    return (f"The family says the cook narrates in {LANGUAGES.get(code, code)}, maybe mixed with English. "
+            "Translate it as the Language rules below say for Marathi.\n")
+
+
+HOMIE_BLOCK = """\
+homie (an AI helper on a phone nearby) asked the cook these questions at these times; its voice is in the
+audio. Never quote homie as the cook, and never take a step, amount, story or tip from what homie said.
+The cook's answer right after a question is her narration for that step. Start a step at the cook's
+answer (or at the action), not at homie's question.
+{lines}
+"""
+
+
+def homie_block(log: list[dict] | None, base_s: float = 0, clip_s: float | None = None) -> str:
+    """homie's questions and the cook's answers for a prompt. Times in `log` are seconds on the video's
+    clock; base_s/clip_s make them MM:SS within one clip (extraction), otherwise whole seconds (merge)."""
+    def at(t: float) -> str:
+        if clip_s is None:
+            return f"{round(t)} s"
+        s = max(0, round(t - base_s))
+        return f"{s // 60:02d}:{s % 60:02d}"
+
+    lines = []
+    for e in log or []:
+        if clip_s is not None and not 0 <= e["atS"] - base_s <= clip_s:
+            continue
+        said = e.get("textEn") or e.get("text") or ""
+        original = e.get("text")
+        line = f'- {at(e["atS"])} homie asked ({e.get("kind", "question")}): "{said}"'
+        if original and original != said:
+            line += f' (spoken as "{original}")'
+        if a := e.get("answer"):
+            words = a.get("transcriptEn") or a.get("transcript") or ""
+            line += f'; the cook answered {at(a["atS"])}-{at(a["endS"])}: "{words}"'
+        lines.append(line)
+    return HOMIE_BLOCK.format(lines="\n".join(lines)) if lines else ""
+
+
+def context(language: str | None, log: list[dict] | None, base_s: float = 0, clip_s: float | None = None) -> str:
+    """{context} for EXTRACT_PROMPT and MERGE_PROMPT: "" for a plain upload, so the prompts stay as before."""
+    return language_line(language) + homie_block(log, base_s, clip_s)
+
+
 EXTRACT_RETRY_SUFFIX = """\
 
 Your previous answer was rejected: {error}
@@ -93,7 +155,7 @@ The family titled this recipe {title}.
 
 The cook may have spoken Marathi, English or a mix; every event's text is already in English, and an
 event's quote_original holds the cook's Marathi words for its quote.
-
+{context}
 Produce one recipe matching the recipe schema:
 - Build the recipe for the dish named in the title. If the events clearly cover other, separate dishes
   (e.g. a compilation video), leave their steps, ingredients, stories and special moments out. Parts of
@@ -120,8 +182,10 @@ Produce one recipe matching the recipe schema:
   technique or finish one small component (e.g. cut, scoop and mash the potatoes; roast, grind and stir
   in the cumin), and keep different techniques apart (mixing the dough and shaping it are two steps).
   Grouping keeps every action: a grouped step's instruction names each one.
-  A step usually covers under ~90 s of video unless it is one continuous action (e.g. frying onions for
-  2 minutes). There is no maximum number of steps: a long or busy video simply has more.
+  Aim for about 8 to 12 steps for a typical home dish: each step one stage the family would name ("make
+  the masala", "fry the onions until golden", "layer and steam the rice"), usually one to three minutes of
+  video. Go beyond 12 only for a long or busy video with clearly separate stages, and never by dropping
+  an action: fold short actions (adding salt, a stir, a taste) into the stage they belong to.
   A grouped step's start_s is the start_s of its first step event and its end_s the end_s of its last
   step event (not stretched over intro talk, stories or b-roll around them); its quote is the cook's
   most useful words from those actions, verbatim; its sensory_cue keeps every cue.

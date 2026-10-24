@@ -3,8 +3,9 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
-import { internalMutation, mutation, query, type QueryCtx } from "./_generated/server";
+import { internalAction, internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server";
 import { requireCook, requireSession } from "./lib/auth";
+import { geminiTranslate } from "./lib/translate";
 import { familyRecipe } from "./recipes";
 import schema from "./schema";
 
@@ -123,6 +124,49 @@ export const ask = internalMutation({
       status,
       found: found && { moment: { startS: found.startS, endS: found.endS }, quote: found.quote.slice(0, MAX_TEXT) },
     });
+    if (status === "asked_cook") {
+      const language = (await ctx.db.get("people", recipe.cookId))?.language;
+      if (language && language !== "en") {
+        await ctx.scheduler.runAfter(0, internal.questions.translateForCook, { questionId, language });
+      }
+    }
     return { questionId, status };
+  },
+});
+
+/** The kid's question in the cook's language (textForCook). On any failure it stays English only. */
+export const translateForCook = internalAction({
+  args: { questionId: v.id("questions"), language: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { questionId, language }) => {
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) {
+      console.warn("GEMINI_API_KEY isn't set; question left in English only");
+      return null;
+    }
+    const text = await ctx.runQuery(internal.questions.textOf, { questionId });
+    if (!text) return null;
+    try {
+      const textForCook = (await geminiTranslate(text, apiKey, language)).slice(0, MAX_TEXT);
+      await ctx.runMutation(internal.questions.saveTextForCook, { questionId, textForCook });
+    } catch (e) {
+      console.error(e);
+    }
+    return null;
+  },
+});
+
+export const textOf = internalQuery({
+  args: { questionId: v.id("questions") },
+  returns: v.union(v.null(), v.string()),
+  handler: async (ctx, { questionId }) => (await ctx.db.get("questions", questionId))?.text ?? null,
+});
+
+export const saveTextForCook = internalMutation({
+  args: { questionId: v.id("questions"), textForCook: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { questionId, textForCook }) => {
+    if (await ctx.db.get("questions", questionId)) await ctx.db.patch("questions", questionId, { textForCook });
+    return null;
   },
 });

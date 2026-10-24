@@ -53,7 +53,7 @@ from pydantic import ValidationError  # noqa: E402
 from pipeline import coverage, order, writer  # noqa: E402
 from pipeline.prep import OUT_ROOT, PrepError, make_poster  # noqa: E402
 from pipeline.prompts import (COVERAGE_RETRY_SUFFIX, EXTRACT_PROMPT, EXTRACT_RETRY_SUFFIX,  # noqa: E402
-                              MERGE_PROMPT, MERGE_RETRY_SUFFIX)
+                              MERGE_PROMPT, MERGE_RETRY_SUFFIX, context)
 from pipeline.schema import ChunkOutput, Recipe, RecipeDraft, TimedChunkOutput  # noqa: E402
 
 # USD per 1M tokens, Standard paid tier, from https://ai.google.dev/gemini-api/docs/pricing
@@ -254,7 +254,7 @@ class Extraction:
     reported as not processed."""
 
     def __init__(self, cfg: dict, i: int, n: int, session: dict, ai: dict, out_dir: Path, media_dur: int,
-                 usage: Usage):
+                 usage: Usage, manifest: dict | None = None):
         self.cfg, self.i, self.session, self.ai, self.media_dur, self.usage = cfg, i, session, ai, media_dur, usage
         self.work = out_dir / "work"
         self.path = out_dir / ai["path"]
@@ -264,7 +264,10 @@ class Extraction:
         self.offset_path = self.work / f"chunk_{i:02d}.offset.json"
         self.tag = f"[extract {i}/{n} {self.path.name}]"
         clip_s = math.floor(self.clip_len)
-        self.base_prompt = EXTRACT_PROMPT.format(i=i, n=n, clip_mmss=f"{clip_s // 60:02d}:{clip_s % 60:02d}")
+        m = manifest or {}
+        self.base_prompt = EXTRACT_PROMPT.format(
+            i=i, n=n, clip_mmss=f"{clip_s // 60:02d}:{clip_s % 60:02d}",
+            context=context(m.get("language"), m.get("homie_log"), self.base_s, self.clip_len))
         self.prompt = self.base_prompt  # gains EXTRACT_RETRY_SUFFIX after a rejected answer
         self.error = "unknown error"
 
@@ -360,9 +363,9 @@ def extract_sync(client: genai.Client, job: Extraction, attempts: tuple[int, ...
 
 
 def extract_one(client: genai.Client, cfg: dict, i: int, n: int, session: dict, ai: dict,
-                out_dir: Path, media_dur: int, usage: Usage, force: bool) -> dict:
+                out_dir: Path, media_dur: int, usage: Usage, force: bool, manifest: dict | None = None) -> dict:
     """Returns {"events": [...], "not_processed": [...]}. Never raises."""
-    job = Extraction(cfg, i, n, session, ai, out_dir, media_dur, usage)
+    job = Extraction(cfg, i, n, session, ai, out_dir, media_dur, usage, manifest)
     result = job.cached(force)
     if result is not None:
         return result
@@ -510,6 +513,7 @@ def build_recipe(draft: RecipeDraft, manifest: dict) -> dict:
         # The title given to prep.py wins over the model's; a Convex upload has none, so the model names it.
         "title": manifest["title"] or d["title"],
         "cook": {"name": manifest["cook"], "relation": manifest["relation"]},
+        "language": manifest.get("language"),
         "intro": d["intro"],
         "servings": d["servings"],
         "total_time": d["total_time"],
@@ -541,7 +545,8 @@ def merge(w: writer.GeminiWriter | writer.MuseWriter, manifest: dict, events: li
         sessions=json.dumps(sessions_for_prompt(manifest["sessions"],
                                                 not (manifest.get("order") or {}).get("reordered")),
                             separators=(",", ":")),
-        events=json.dumps(events, separators=(",", ":"), ensure_ascii=False)) + extra
+        events=json.dumps(events, separators=(",", ":"), ensure_ascii=False),
+        context=context(manifest.get("language"), manifest.get("homie_log"))) + extra
     prompt, errors, saved, model = base_prompt, ["no attempt made"], None, w.model
     tag = f"{tag} {w.name}"
     for attempt in (1, 2):
@@ -702,12 +707,15 @@ Report = Callable[[str, float], None]  # (Convex job stage, progress 0..1 across
 
 
 def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_s: float = BATCH_TIMEOUT_S,
-        shorten: bool = True, rewrite: bool = False, report: Report | None = None) -> Path:
+        shorten: bool = True, rewrite: bool = False, report: Report | None = None,
+        language: str | None = None, homie_log: list[dict] | None = None) -> Path:
     """Extract, merge and validate one recipe. Returns the recipe.json path. Raises ProcessError on failure.
     batch=True runs the extraction as one Batch API job (half price, slower); see extract_batch.
     shorten=False skips pipeline/shorten.py's extra text call after the merge.
     rewrite=True writes recipe.json again from the cached extraction (no new Gemini video calls).
-    report gets the worker's stages: understanding 0.2 -> 0.7 per extracted file, then writing 0.7 -> 0.95."""
+    report gets the worker's stages: understanding 0.2 -> 0.7 per extracted file, then writing 0.7 -> 0.95.
+    language (ISO 639-1) and homie_log (Convex /worker/claim's homieLog, video seconds) come from the worker's
+    job; they are saved in the manifest, so a later --rewrite keeps them."""
     report = report or (lambda stage, progress: None)
     out_dir = OUT_ROOT / recipe_id
     work = out_dir / "work"
@@ -723,6 +731,9 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
     cfg = load_config()
     show_sdk_retries()
     manifest = json.loads(manifest_path.read_text())
+    if language is not None or homie_log is not None:
+        manifest.update({k: v for k, v in (("language", language), ("homie_log", homie_log)) if v is not None})
+        manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
     media_dur = manifest["duration_s"]
     jobs = order.chunk_jobs(manifest)  # recorded-order numbering: chunk caches survive a reorder
     n = len(jobs)
@@ -741,12 +752,12 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
     usage = Usage(work / "usage.json")
     t0 = time.monotonic()
     if batch:
-        results = extract_batch(client, cfg, [Extraction(cfg, i, n, s, ai, out_dir, media_dur, usage)
+        results = extract_batch(client, cfg, [Extraction(cfg, i, n, s, ai, out_dir, media_dur, usage, manifest)
                                               for i, (s, ai) in enumerate(jobs, 1)],
                                 force, batch_timeout_s, f"homecookd-{recipe_id}")
     else:
         with ThreadPoolExecutor(max_workers=min(n, MAX_WORKERS)) as pool:
-            futures = [pool.submit(extract_one, client, cfg, i, n, s, ai, out_dir, media_dur, usage, force)
+            futures = [pool.submit(extract_one, client, cfg, i, n, s, ai, out_dir, media_dur, usage, force, manifest)
                        for i, (s, ai) in enumerate(jobs, 1)]
             for done, _ in enumerate(as_completed(futures), 1):
                 report("understanding", 0.2 + 0.5 * done / n)

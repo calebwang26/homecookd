@@ -105,6 +105,7 @@ HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-o
   { recipeId, title, cookName, cookLanguage?, cookRelation?, steps[{ order, title, text, quote?, quoteOriginal?,
   moment }], memories[{ kind, text, moment, stepOrder? }] }, stepOrder }`. `cookLanguage` is the cook's
   `people.language`, else the recipe's `language`, and is absent when neither is set (not `"en"`).
+  { recipeId, title, cookName, steps[{ order, title, text, quote?, quoteOriginal?, moment }], memories[] }, stepOrder }`.
   It starts or resumes the kid's `cookingSessions` row. A recipe that isn't `ready` is `404`.
 - `/voice/step` `{ sessionToken, recipeId, stepOrder }` → `{ ok, stepOrder }` (updates `cookingSessions`)
 - `/voice/question` `{ sessionToken, recipeId, stepOrder?, text, found?: { startS, endS, quote } }` →
@@ -157,8 +158,15 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 **App → Convex (new public functions; every one takes `sessionToken`)**
 - `live.startRecording({ dish?, forKidId?, language, source })` → `{ recordingId }` (cook only; status `intro`).
 - `live.recording({ recordingId })` (live): the row, for the recording screen.
-- `jobs.create` gains optional `title`, `language`, `forKidId`, `recordingId`.
-- `people.setLanguage({ language })` (self). `people.me` → `{ personId, name, role, language, relation }`.
+- `jobs.create` gains optional `title`, `language`, `forKidId`, `recordingId`. `recordingId` must be this cook's
+  recording; the job then sets `recordings.jobId` and takes the recording's `dish`, `language` and `forKidId` for
+  any not given. `language` defaults to the cook's `people.language` (else `en`); `forKidId` must be in the family.
+  The `title` (or dish) is the processing card's title instead of "New recipe", and the recipe's name.
+- `people.setLanguage({ language })` (self; a two-letter code, lowercased). `people.me` → `{ personId, name, role,
+  language, relation? }` (`language` is `en` when unset).
+- `questions.ask` (the voice service's `asked_cook`): when the recipe's cook doesn't speak English, Gemini fills
+  `questions.textForCook` (the kid's question in her language) a moment later; on failure it stays unset.
+  `questions.forRecipe` / `openForCook` return it.
 - `questions.forRecipe` already exists; the kid's cook mode reads it to hear the cook's answer (`answerAudioUrl`,
   `answer.translation`).
 - Community: `community.feed({ maxMiles?, now })` → `{ recipes, dinners }` (`now` is required: the client's clock,
@@ -227,11 +235,21 @@ voice, in `lang` or the person's language). `translate: true` first turns Englis
 - The app sends silence while a `say` or clip plays (half duplex).
 
 **Worker ↔ Convex additions**
-- `/worker/claim` adds `title?`, `language` (default `en`), `forKidName?`, `memoriesOptIn?` and `homieLog:
-  [{ atS, kind, text, textEn, answer?: { transcript, transcriptEn?, atS, endS } }]`, with times on the **video's**
-  clock (`atS + (startedAt − videoStartedAt) / 1000` for glasses).
-- `/worker/release` `{ jobId }` → `{ ok }`: the upload isn't complete yet; the job goes back to `queued` after 30 s.
-- `/worker/published` accepts `language` and `steps[].quoteOriginal`.
+- `/worker/claim` adds `title?`, `language` (the job's, else the cook's, else `en`), `relation?` (the cook's),
+  `forKidName?`, `memoriesOptIn?` (the recording's) and `homieLog: [{ atS, kind, text, textEn, answer?: { transcript,
+  transcriptEn?, atS, endS } }]`, sorted, with times on the **video's** clock (`atS + (startedAt − videoStartedAt) /
+  1000` when `videoStartedAt` is set, else `atS`; answers shifted the same). Prompts said before the video started
+  (negative video time, e.g. the intro) are left out.
+- `/worker/release` `{ jobId }` → `{ ok }`: the upload isn't complete yet. The job shows stage `uploading` and goes
+  back to `queued` after 30 s. `404` unless the job is `preparing`. The worker waits up to 45 s for every file the
+  signer's `jobs/<job_id>.json` lists before releasing; with no signer file, for anything at `uploadPath`. It fails
+  the job once the signer's links have expired (8 days), or after 20 releases without one.
+- `/worker/published` accepts `language` (a two-letter code; else recipe.json's `language`, else the job's) and
+  `steps[].quote_original` in recipe.json, stored as `recipes.language` and `steps[].quoteOriginal`. The worker sends
+  the claim's `memoriesOptIn` when it has one.
+- The pipeline gets the job's `title` (the dish name; Muse names it only when there's none), `language` and
+  `homieLog` (in its prompts: never quote homie as the cook; start a step at the cook's answer). recipe.json gains
+  an optional `language`.
 
 **Glasses VM → Convex** (HTTP POST, `x-glasses-secret`; `convex/lib/glassesRoutes.ts`; see `glasses/INGEST.md`)
 - `/glasses/active` `{}` → `{ recordingId, status, startedAt? }` for the newest `glasses` recording that isn't
