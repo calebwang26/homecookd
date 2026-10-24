@@ -1,57 +1,83 @@
+<div align="center">
+
 # homecookd
 
-**Mom cooks. homecookd writes the recipe and keeps her voice.**
+**Grandma cooks once. Her grandkid cooks it anywhere, hearing her real voice.**
 
-Family recipes live in our parents' hands and voices, not on paper. homecookd turns a parent's cooking
-video into a recipe their kid can follow, then guides the kid through it by voice while they cook.
+A family recipe app that keeps the person in the recipe and keeps the family talking.
 
-**Demo video:** _(link)_ 
+Built at Cal Hacks 13.0 · [homecookd.app](https://homecookd.app) · Demo video: _(link)_
+
+</div>
+
+## Why homecookd?
+
+**1. Recipes that keep the person.**
+Family recipes were never written down. They live in our parents' and grandparents' hands and voices.
+homecookd turns one cooking video into a step-by-step recipe, and every step plays her own clip.
+
+**2. Connection across distance and language.**
+Grandma can cook in Marathi without typing. Her grandkid follows along in English. When the kid gets
+stuck, the question goes back to Grandma, so the recipe starts a conversation.
+
+**3. Hands-free, voice-first.**
+The kid's hands are covered in flour, so they cook by talking to **homie**, a voice guide that reads
+steps, sets timers and plays Grandma's clip of that moment.
 
 ## How it works
 
-1. **Mom records.** She films herself cooking (phone or smart glasses). Our voice guide, **homie**, asks
-   her a few questions in her own language.
-2. **homecookd writes the recipe.** Each step is linked to the moment in the video where she did it.
-3. **The kid cooks hands-free.** They say "next", "go back" or ask a question. homie answers, or plays
-   Mom's own clip.
-4. **Questions go home.** If homie can't answer, it asks Mom. Her voice-note reply goes back to the kid.
+<p align="center">
+  <img src="docs/how-it-works.gif" alt="homecookd: how a family recipe travels from Grandma to her grandkid" width="100%">
+</p>
 
-## Built with
+1. **Grandma cooks. The recipe writes itself.** Gemini watches and translates her video, Muse Spark
+   writes the recipe in English, Moss indexes every moment, and Convex shows it to the family live.
+2. **The kid asks. Grandma answers.** Cartesia Ink 2 hears the question, Claude decides what to do, and
+   Moss finds the moment she explained it. homie plays her real clip.
+3. **Not in the video? Ask Grandma.** homie never makes up an answer. Convex sends the question to her,
+   Cartesia transcribes her voice reply, and it shows up for the kid live.
 
-| Part | Tools |
+## Overview
+
+| Folder | What's in it |
 | --- | --- |
-| Voice (listening + speaking) | **Cartesia** Ink 2 and Sonic |
-| Cooking agent | **Claude** (Anthropic) |
-| Video understanding, live translation | **Gemini** |
-| Recipe writing | **Muse Spark** (Meta) |
-| Finding the right clip | **Moss** |
-| Backend and live updates | **Convex** (Supabase for sign-in) |
-| Mobile app | Expo, React Native, TypeScript |
-| Smart glasses | ESP32-S3, Google Compute Engine |
-| Hosting and storage | Google Cloud Run, Cloud Storage, Vercel (Next.js site) |
-| Video processing | Python, ffmpeg |
+| [`app/`](app/) | Expo / React Native iPhone app: Grandma records, the kid cooks by voice |
+| [`voice/`](voice/) | Live voice service (homie) on Cloud Run: Cartesia Ink 2 + Sonic, Claude |
+| [`convex/`](convex/) | Backend: families, recipes, questions, voice notes, live sync, Moss search |
+| [`pipeline/`](pipeline/) | Python + ffmpeg video worker: cuts clips, runs Gemini and Muse Spark, publishes |
+| [`glasses/`](glasses/), [`edible-glasses/`](edible-glasses/) | ESP32-S3 smart glasses and the VM that turns their stream into video |
+| [`web/`](web/) | Next.js site on Vercel: landing page, recipe share pages, invites |
+| [`cloud/`](cloud/) | Upload signer and Google Cloud setup scripts |
+
+**Built with:** Cartesia (Ink 2, Sonic) · Claude · Gemini · Muse Spark (Meta) · Moss · Convex · Expo ·
+Google Cloud · Vercel · ESP32-S3
 
 ## Voice with Cartesia
 
-Voice is how both people use homecookd: the kid's hands are busy, and many parents would rather talk
-than type, often not in English.
+Voice is how both people use homecookd: the kid's hands are busy, and many grandparents would rather
+talk than type, often not in English.
 
 - **Ink 2 (live speech-to-text):** hears the kid while cooking, with built-in turn detection.
-- **Ink (batch):** transcribes Mom's voice-note answers.
+- **Ink (batch):** transcribes Grandma's voice-note answers.
 - **Sonic 3.6 (text-to-speech):** homie's voice, streamed to the phone, with mood and speed set per line.
-- **Localized voice:** homie can speak both English and Marathi in one voice.
+- **Localized voice:** homie speaks both English and Marathi in one voice.
 
 First audio from Sonic arrives in about 120–250 ms.
 
-## Run it
+## Quick start
 
-Copy `.env.example` to `.env` and `app/.env.example` to `app/.env`, then add your own keys.
+**1. Add your keys.** Copy `.env.example` to `.env` and `app/.env.example` to `app/.env`, then fill in
+your own keys. No keys are committed to this repo.
+
+**2. Start the voice service (homie).**
 
 ```bash
-# terminal 1: the voice service (homie)
 cd voice && npm ci && npm run dev
+```
 
-# terminal 2: the app (scan the QR code with Expo Go)
+**3. Start the app** in a second terminal, then scan the QR code with Expo Go on your iPhone.
+
+```bash
 cd app && npm ci && npx expo start --clear
 ```
 
@@ -60,7 +86,7 @@ More detail: [voice/README.md](voice/README.md) · [docs/PRD.md](docs/PRD.md) ·
 
 ## Privacy and responsibility
 
-- **Mom's words stay hers.** homie never presents its own words as hers; only her real clips are.
+- **Grandma's words stay hers.** homie never presents its own words as hers; only her real clips are.
 - **Private by default.** Recipes stay in the family until shared, one at a time.
 - **No voice cloning without consent.** The demo uses a stock voice.
 - **Approximate location only,** rounded to about 1 km.
