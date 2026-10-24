@@ -1,0 +1,103 @@
+.phone {
+  --w: 300px;
+  --bezel: calc(var(--w) * 0.034);
+  position: relative;
+  width: var(--w);
+  flex: none;
+  transform: rotate(var(--tilt, 0deg));
+}
+
+/* ---------- CSS phone ---------- */
+.css {
+  padding: var(--bezel);
+  border-radius: 13.5% / 6.2%;
+  background: var(--surface);
+  box-shadow:
+    inset 0 0 0 1px var(--hairline),
+    inset 0 0 0 calc(var(--bezel) * 0.35) rgba(255, 253, 247, 1),
+    inset 0 0 0 calc(var(--bezel) * 0.35 + 1px) rgba(71, 67, 42, 0.07);
+}
+/* hairline side buttons (volume rocker left, side button right), the iPhone silhouette at a glance */
+.css::before,
+.css::after {
+  content: '';
+  position: absolute;
+  width: calc(var(--w) * 0.014);
+  border-radius: 2px;
+  background: var(--sunken);
+  box-shadow: inset 0 0 0 1px var(--hairline);
+  pointer-events: none;
+}
+.css::before {
+  left: calc(var(--w) * -0.011);
+  top: 20%;
+  height: 10%;
+}
+.css::after {
+  right: calc(var(--w) * -0.011);
+  top: 24%;
+  height: 13%;
+}
+.shadow {
+  box-shadow:
+    inset 0 0 0 1px var(--hairline),
+    inset 0 0 0 calc(var(--bezel) * 0.35 + 1px) rgba(71, 67, 42, 0.06),
+    0 0 0 8px var(--halo),
+    0 2px 6px rgba(30, 36, 16, 0.06),
+    0 40px 80px -30px rgba(30, 36, 16, 0.35);
+}
+.screen {
+  position: relative;
+  aspect-ratio: 780 / 1688;
+  container-type: inline-size;
+  border-radius: 11.4% / 5.3%;
+  overflow: hidden;
+  background: var(--canvas);
+  isolation: isolate;
+  /* Safari: keep the rounded clip on composited video */
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+}
+.screen > :global(*) {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.island {
+  position: absolute;
+  top: calc(var(--bezel) + var(--w) * 0.028);
+  left: 50%;
+  width: 30%;
+  height: calc(var(--w) * 0.085);
+  translate: -50% 0;
+  border-radius: var(--r-pill);
+  background: var(--black);
+  pointer-events: none;
+}
+
+/* ---------- hand cutout ---------- */
+.hand {
+  overflow: visible;
+}
+.handScreen {
+  position: absolute;
+  overflow: hidden;
+  container-type: inline-size;
+  background: var(--canvas);
+  isolation: isolate;
+  -webkit-mask-image: -webkit-radial-gradient(white, black);
+}
+.handScreen > :global(*) {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+}
+.handImg {
+  position: absolute;
+  pointer-events: none;
+  z-index: 1;
+}
+.handShadow .handImg {
+  filter: drop-shadow(0 30px 40px rgba(30, 36, 16, 0.22));
+}

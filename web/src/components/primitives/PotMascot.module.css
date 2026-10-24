@@ -1,0 +1,38 @@
+.pot {
+  display: inline-block;
+  overflow: visible;
+  flex: none;
+}
+.curl {
+  fill: none;
+  stroke: #d9cbb8;
+  stroke-width: 4;
+  stroke-linecap: round;
+}
+.steaming .curl {
+  animation: curl 2.4s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+}
+.steaming .curl:nth-child(2) {
+  animation-delay: -0.8s;
+}
+.steaming .curl:nth-child(3) {
+  animation-delay: -1.6s;
+}
+@keyframes curl {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.5;
+  }
+  50% {
+    transform: translateY(-4px);
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .steaming .curl {
+    animation: none;
+  }
+}

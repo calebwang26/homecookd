@@ -1,0 +1,88 @@
+.stub {
+  position: relative;
+  min-height: var(--h-m);
+  padding: var(--section-pad-y) var(--gutter);
+  background: var(--canvas);
+  color: var(--ink);
+}
+@media (min-width: 1024px) {
+  .stub {
+    min-height: var(--h-d);
+  }
+}
+.inner {
+  position: sticky;
+  top: 96px;
+  display: grid;
+  gap: var(--s-4);
+  max-width: var(--content-max);
+  margin-inline: auto;
+}
+.label {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.5em;
+  font-family: var(--ff-display);
+  font-weight: 560;
+  font-size: var(--fs-h3);
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+}
+.owner {
+  font-family: var(--ff-text);
+  font-weight: 600;
+  font-size: var(--fs-ui);
+  letter-spacing: 0.08em;
+  padding: 0.3em 0.7em;
+  border-radius: var(--r-pill);
+  background: var(--sage);
+  color: var(--green-deep);
+}
+.id {
+  font-family: var(--ff-text);
+  font-size: var(--fs-ui);
+  font-weight: 500;
+  opacity: 0.7;
+}
+.notes {
+  max-width: 60ch;
+  font-size: var(--fs-body);
+  opacity: 0.8;
+}
+.canvas {
+  background: var(--canvas);
+}
+.green {
+  background: var(--green);
+  color: var(--cream);
+}
+.sun {
+  background: var(--sun);
+  color: var(--ink);
+}
+.forest {
+  background: var(--forest);
+  color: var(--cream);
+}
+.footer {
+  background: var(--footer-bg);
+}
+.hero {
+  background: var(--hero-dark);
+  color: var(--cream);
+}
+.chartreuseInset {
+  background: var(--canvas);
+}
+.chartreuseInset .inner {
+  min-height: calc(var(--h-m) - 2 * var(--section-pad-y));
+  padding: var(--s-8);
+  border-radius: var(--r-big);
+  background: var(--chartreuse);
+}
+.green .label,
+.forest .label,
+.hero .label {
+  color: var(--cream);
+}

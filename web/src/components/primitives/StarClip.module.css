@@ -1,0 +1,33 @@
+.star {
+  position: relative;
+  width: var(--size);
+  aspect-ratio: 1;
+  transform: rotate(var(--rotate));
+  flex: none;
+}
+.clip {
+  position: absolute;
+  inset: 0;
+  clip-path: var(--clip);
+  overflow: hidden;
+}
+.ring {
+  position: absolute;
+  inset: -3%;
+  background: var(--sun);
+  clip-path: var(--clip);
+}
+.star[data-ring='chartreuse'] .ring {
+  background: var(--chartreuse);
+}
+.popOut {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+}
+:global(html[data-motion='on']) .star:not([data-revealed]) {
+  opacity: 0;
+}

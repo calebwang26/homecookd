@@ -1,0 +1,96 @@
+.sticker {
+  --size: 170px;
+  --disc: var(--surface);
+  --seal: var(--sun);
+  --st-ink: var(--forest);
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: var(--size);
+  height: var(--size);
+  flex: none;
+  transform: rotate(var(--rotate, -8deg));
+  /* The silhouette is the round disc, so a box-shadow on this (still) box matches a drop-shadow
+     exactly without re-rasterizing a filter every frame while the ring spins. */
+  border-radius: 50%;
+  box-shadow:
+    0 1px 2px rgba(30, 36, 16, 0.06),
+    0 10px 18px -4px rgba(30, 36, 16, 0.2);
+  container-type: inline-size;
+}
+.ring {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.spin {
+  animation: spin 24s linear infinite;
+  transform-origin: 50% 50%;
+}
+.disc {
+  fill: var(--disc);
+}
+.seal {
+  fill: var(--seal);
+}
+.inner {
+  fill: none;
+  stroke: var(--st-ink);
+  stroke-opacity: 0.22;
+  stroke-width: 1.4;
+  stroke-dasharray: 2 5;
+}
+.text {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 0.15em;
+  max-width: 62%;
+  font-family: var(--ff-display);
+  font-weight: 800;
+  font-variation-settings: 'SOFT' 100, 'WONK' 0;
+  font-size: max(var(--st-min, 0.875rem), 9.4cqw);
+  line-height: 1;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  text-align: center;
+  color: var(--st-ink);
+}
+.line {
+  display: block;
+}
+
+/* tones */
+.sunOnCream {
+  --disc: var(--surface);
+  --seal: var(--sun);
+  --st-ink: var(--forest);
+}
+.chartreuseOnForest {
+  --disc: var(--forest);
+  --seal: var(--chartreuse);
+  --st-ink: var(--forest);
+}
+.chartreuseOnForest .disc {
+  stroke: var(--chartreuse);
+  stroke-width: 2;
+  stroke-opacity: 0.5;
+}
+.creamOnSun {
+  --disc: var(--sun);
+  --seal: var(--surface);
+  --st-ink: var(--forest);
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .spin {
+    animation: none;
+  }
+}

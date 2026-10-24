@@ -1,0 +1,85 @@
+.pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.45em;
+  min-height: 2.25em;
+  padding: 0.45em 0.95em;
+  border-radius: var(--r-pill);
+  font-family: var(--ff-text);
+  font-weight: 500;
+  font-size: var(--fs-ui);
+  line-height: 1.15;
+  letter-spacing: 0.005em;
+  white-space: nowrap;
+  cursor: default;
+  user-select: none;
+}
+.sm {
+  font-size: 0.875rem;
+  padding: 0.35em 0.8em;
+  min-height: 2em;
+}
+.icon {
+  display: inline-grid;
+  place-items: center;
+  margin-left: -0.15em;
+}
+/* No backdrop-filter on pills: they often sit on playing video, where a backdrop blur re-renders
+   every frame. A slightly denser fill reads the same. */
+.white85 {
+  background: rgba(255, 253, 247, 0.92);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgba(30, 36, 16, 0.1);
+}
+.sage {
+  background: var(--sage);
+  color: var(--olive-ink);
+}
+.lemon {
+  background: var(--lemon);
+  color: var(--ink);
+}
+.lavender {
+  background: var(--lavender);
+  color: var(--ube-ink);
+}
+.chartreuse {
+  background: var(--chartreuse);
+  color: var(--ink);
+}
+.rec {
+  background: rgba(18, 20, 16, 0.78);
+  color: var(--cream);
+  font-variant-numeric: tabular-nums;
+}
+.recDot {
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+  background: var(--tomato);
+  animation: recPulse 1.4s ease-in-out infinite;
+}
+.outlineCream {
+  border: 1.5px solid rgba(255, 253, 247, 0.75);
+  color: var(--cream);
+}
+.outlineInk {
+  border: 1.5px solid var(--hairline);
+  color: var(--ink);
+  background: var(--surface);
+}
+
+@keyframes recPulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .recDot {
+    animation: none;
+  }
+}
