@@ -17,7 +17,7 @@ Family recipes were never written down. They live in the hands and voices of our
 homecookd turns one cooking video into a step-by-step recipe, and every step plays the cook's own clip.
 
 **2. Connection across distance and language.**
-The family cook can record in Marathi without typing, and a younger family member follows along in
+The family cook can record in their ethnic language without typing, and a younger family member follows along in
 English. When they get stuck, the question goes back to the cook, so the recipe starts a conversation.
 
 **3. Hands-free, voice-first.**
@@ -60,7 +60,7 @@ rather talk than type, often not in English.
 - **Ink 2 (live speech-to-text):** hears the kid while cooking, with built-in turn detection.
 - **Ink (batch):** transcribes the family cook's voice-note answers.
 - **Sonic 3.6 (text-to-speech):** homie's voice, streamed to the phone, with mood and speed set per line.
-- **Localized voice:** homie speaks both English and Marathi in one voice.
+- **Localized voice:** homie speaks multiple languages in one voice.
 
 First audio from Sonic arrives in about 120–250 ms.
 
@@ -94,7 +94,7 @@ More detail: [voice/README.md](voice/README.md) · [docs/PRD.md](docs/PRD.md) ·
 
 ## Known limitations
 
-- Live listening with Ink covers 5 languages. Others (like Marathi) use Gemini Live, which is slower.
+- Live listening with Ink covers 5 languages. Others (like Marathi in the demo) use Gemini Live, which is slower.
 - The phone needs echo cancellation on, or homie hears itself.
 - The video worker runs on a laptop for the hackathon.
 - Voice cloning isn't built yet.
