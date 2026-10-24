@@ -9,25 +9,32 @@
       "distribution": "internal",
       "channel": "development",
       "env": {
-        "EXPO_PUBLIC_CONVEX_URL": "https://grand-dragon-649.convex.cloud"
+        "EXPO_PUBLIC_CONVEX_URL": "https://grand-dragon-649.convex.cloud",
+        "EXPO_PUBLIC_VOICE_URL": "wss://homecookd-voice-vyatb2n6oq-uw.a.run.app"
       }
     },
     "preview": {
       "distribution": "internal",
       "channel": "preview",
       "env": {
-        "EXPO_PUBLIC_CONVEX_URL": "https://grand-dragon-649.convex.cloud"
+        "EXPO_PUBLIC_CONVEX_URL": "https://grand-dragon-649.convex.cloud",
+        "EXPO_PUBLIC_VOICE_URL": "wss://homecookd-voice-vyatb2n6oq-uw.a.run.app"
       }
     },
     "production": {
       "autoIncrement": true,
       "channel": "production",
       "env": {
-        "EXPO_PUBLIC_CONVEX_URL": "https://grand-dragon-649.convex.cloud"
+        "EXPO_PUBLIC_CONVEX_URL": "https://grand-dragon-649.convex.cloud",
+        "EXPO_PUBLIC_VOICE_URL": "wss://homecookd-voice-vyatb2n6oq-uw.a.run.app"
       }
     }
   },
   "submit": {
-    "production": {}
+    "production": {
+      "ios": {
+        "ascAppId": "6825621614"
+      }
+    }
   }
 }
