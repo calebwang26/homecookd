@@ -1,8 +1,9 @@
 // Cook mode's voice rules, pure (node scripts/test-voice-ui.mjs): what each `say` from the voice service
 // means for homie (docs/build/STACK.md "kid cooking additions"), which `say_end` and transcript belong
 // to what, when voice starts on its own, when the phone reads aloud itself, app-only moments and the
-// read-aloud offer's end, the kid's spoken yes or no, the kitchen timers the app counts down, what the
-// pot shows, and which of the cook's answers to offer the kid.
+// read-aloud offer's end, the kid's spoken yes or no, when homie is 'thinking', the kitchen timers the
+// app counts down, what the pot shows, which of the cook's answers to offer the kid, and what keeps
+// Cartesia from billing for audio nobody said (which mic frames go out, the app leaving the screen).
 import type { HomieMoment, HomieState } from '@/lib/homie/store';
 
 export type SayKind = 'step' | 'reply' | 'hint' | 'translation' | 'nudge' | 'offer' | 'greeting' | 'timer';
@@ -117,6 +118,15 @@ export function offerClosed(m: { accepted?: unknown }): boolean {
 }
 
 /**
+ * The read-aloud choice to keep after the service's offer_closed, or null when the phone already has
+ * that answer. The service's answer wins when it differs: it heard the kid after the phone moved on.
+ */
+export function readAfterOfferClosed(current: 'yes' | 'no' | null, accepted: boolean): 'yes' | 'no' | null {
+  const c = accepted ? 'yes' : 'no';
+  return current === c ? null : c;
+}
+
+/**
  * The { type: "text" } that declines the service's read-aloud offer for this visit: sent for a tap
  * anywhere on the offer, or a "no" this phone remembers. Steps then change silently.
  */
@@ -143,6 +153,36 @@ export function yesNo(text: string): 'yes' | 'no' | null {
   if (COMMANDS.test(command(text))) return null;
   if (NO.test(reply(text))) return 'no';
   return YES.test(normalize(text)) ? 'yes' : null;
+}
+
+// The service's `yesOrNo`: a whole reply that is only a yes ("yes please", "play it") or only a no.
+const WHOLE_YES = /^(yes|yeah|yep|yup|sure|ok|okay|alright|please|of course|go ahead|do it|read it|read it to me|read it out loud|let'?s hear it|play it)( (yes|yeah|yep|sure|ok|okay|please))*$/;
+
+/** A whole yes or no (voice/src/cook.ts yesOrNo): what the service holds for an app-only moment. */
+export function wholeYesNo(text: string): 'yes' | 'no' | null {
+  const c = reply(text);
+  return WHOLE_YES.test(c) ? 'yes' : NO.test(c) ? 'no' : null;
+}
+
+/**
+ * The kid's finished words: does homie start 'thinking' (an answer is on its way)? Not for the echo
+ * of this phone's own text (a chip's, or the "no" for a tap on the offer), not for a whole yes or no
+ * while an app-only moment is up (the service holds it for the phone), and not for a whole no while
+ * any moment is up (the service closes its offer and says nothing back).
+ */
+export function thinksAfter(v: { echo: boolean; appMoment: boolean; momentUp: boolean; text: string }): boolean {
+  if (v.echo) return false;
+  const yn = wholeYesNo(v.text);
+  if (v.appMoment && yn) return false;
+  return !(v.momentUp && yn === 'no');
+}
+
+/** Messages that are homie doing something (an answer to the kid). */
+export const HOMIE_ACTIONS: ReadonlySet<string> = new Set(['go_to_step', 'play_clip', 'asked_cook', 'timer', 'timer_done']);
+
+/** 'thinking' ends with homie's answer: an action, a line, or the offer closing (a no gets no line). */
+export function endsThinking(type: string): boolean {
+  return HOMIE_ACTIONS.has(type) || type === 'say' || type === 'offer_closed';
 }
 
 export const SAY_YES_NO = 'Say “yes” or “no”';
@@ -252,11 +292,37 @@ export function answersToHear<T extends AnswerRow>(
 }
 
 // ---------------------------------------------------------------------------------------------
-// Half duplex
+// Half duplex and Cartesia credits (Ink 2 bills every second of audio it gets, silence too)
+
+/**
+ * A mic frame goes to /cook only when it is the kid's (Cartesia credit fix A): never one lib/live/mic
+ * zeroed because the app makes sound (`quiet`), nor one while another screen is on top. Nothing is
+ * sent instead; the service's own half duplex (voice/src/cook.ts hearing) is the backup.
+ */
+export function cookSendsFrame(v: { quiet: boolean; focused: boolean }): boolean {
+  return !v.quiet && v.focused;
+}
+
+/** The app is on screen (React Native AppState): not in the background, nor under a system sheet. */
+export function appInForeground(state: string | null | undefined): boolean {
+  return state !== 'background' && state !== 'inactive';
+}
+
+/**
+ * What cook mode's voice line does when the app's state changes (Cartesia credit fix B). In the
+ * background or under a system sheet ('inactive') the line was on (`lineOn`): it closes ('pause'),
+ * so nothing streams. Back on top after a pause: it opens again ('resume'; the mic only if the kid
+ * hadn't turned it off). The mic's own permission prompt (`asking`) makes iOS 'inactive' too: not a pause.
+ */
+export function appStateStep(v: { next: string; lineOn: boolean; paused: boolean; asking: boolean }): 'pause' | 'resume' | null {
+  if (appInForeground(v.next)) return v.next === 'active' && v.paused ? 'resume' : null;
+  if (v.next === 'inactive' && v.asking) return null;
+  return v.lineOn && !v.paused ? 'pause' : null;
+}
 
 const silences = new Map<number, ArrayBuffer>();
 
-/** Zeros the size of a mic chunk: what the socket gets instead of the mic while the app plays sound (lib/live/mic). */
+/** Zeros the size of a mic chunk: what lib/live/mic hands on instead of the mic while the app plays sound. */
 export function silence(bytes: number): ArrayBuffer {
   let s = silences.get(bytes);
   if (!s) {

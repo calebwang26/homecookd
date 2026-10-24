@@ -10,9 +10,11 @@
 // VPIO audio unit), which audio-studio 3.2.1 never turns on. So half duplex is done here, for every
 // caller, on every frame: while the app itself makes sound (lib/homie/logic halfDuplex: homie lit or
 // speaking, anything on the shared player, a step video), `onChunk` gets zeroed PCM of the same
-// length instead of the mic, and `onLevel` gets 0. The recorder never stops for it, so the stream
-// keeps its timing; homie's voice, the cook's clip and her voice note never reach the service as what
-// the person said (the service also ignores audio while it speaks).
+// length instead of the mic, with `quiet` true, and `onLevel` gets 0. The recorder never stops for it;
+// homie's voice, the cook's clip and her voice note never reach the service as what the person said
+// (the service also ignores audio while it speaks). /record sends the zeros, so its stream keeps its
+// timing; cook mode sends nothing for a quiet frame (Ink bills silence too: lib/live/voiceLogic
+// cookSendsFrame).
 // `onLevel` (optional) gets each chunk's loudness, 0..1 (lib/homie/logic pcmLevel), for homie's steam.
 // In Expo Go the native module isn't there: the module is never loaded and start() says 'error'.
 import type * as Studio from '@siteed/audio-studio';
@@ -47,11 +49,15 @@ function appSounding(): boolean {
   return halfDuplex({ homie: getHomie().state, audio: audioNow().phase, video: videoPlaying() });
 }
 
+// The system's microphone prompt is up (iOS calls the app 'inactive' meanwhile: lib/live/voice).
+let asking = 0;
+export const micAsking = (): boolean => asking > 0;
+
 export function micStreamingSupported(): boolean {
   return Platform.OS !== 'web' && !!studio;
 }
 
-export function useMicStream(onChunk: (pcm: ArrayBuffer) => void, onLevel?: (level: number) => void) {
+export function useMicStream(onChunk: (pcm: ArrayBuffer, quiet: boolean) => void, onLevel?: (level: number) => void) {
   const rec = useRecorder();
   const [on, setOn] = useState(false);
   const sink = useRef(onChunk);
@@ -63,7 +69,10 @@ export function useMicStream(onChunk: (pcm: ArrayBuffer) => void, onLevel?: (lev
 
   const start = useCallback(async (): Promise<'ok' | 'denied' | 'error'> => {
     if (!rec || !micStreamingSupported()) return 'error';
-    const perm = await requestRecordingPermissionsAsync().catch(() => null);
+    asking += 1;
+    const perm = await requestRecordingPermissionsAsync()
+      .catch(() => null)
+      .finally(() => void (asking -= 1));
     if (!perm?.granted) return 'denied';
     try {
       await rec.startRecording({
@@ -78,7 +87,7 @@ export function useMicStream(onChunk: (pcm: ArrayBuffer) => void, onLevel?: (lev
           const pcm = typeof e.data === 'string' ? decode(e.data) : e.data instanceof Int16Array ? e.data.slice().buffer : null;
           if (!pcm) return;
           const quiet = appSounding();
-          sink.current(quiet ? silence(pcm.byteLength) : pcm);
+          sink.current(quiet ? silence(pcm.byteLength) : pcm, quiet);
           levelSink.current?.(quiet ? 0 : pcmLevel(pcm));
         },
       });

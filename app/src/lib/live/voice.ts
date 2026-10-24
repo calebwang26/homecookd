@@ -17,7 +17,13 @@
 //                                    service then never takes its yes or no for its own offer)
 //   voice.setHold(on)                the cook's own voice is playing (her clip, her voice note): homie's
 //                                    next line waits until she's done, so it never talks over her
-// Half duplex is lib/live/mic's: while the app makes sound, the socket gets zeroed frames.
+// Half duplex is lib/live/mic's: while the app makes sound, its frames are zeroed, and none of those
+// reach the socket (Cartesia's Ink bills every second it gets, silence too; voiceLogic cookSendsFrame).
+// The app in the background or under a system sheet (AppState) closes the line and stops the mic, and
+// back on top it opens again, with the mic only if the kid hadn't turned it off (voiceLogic
+// appStateStep). There's no idle timeout while the screen is open (Caleb, Oct 24: hands-free, a kid
+// may say nothing for minutes while it simmers); the service closes its own Ink stream after 2 min
+// without audio.
 // The read-aloud offer (onOffer): `accept` sends "yes", `decline` sends "no" (that visit, steps change
 // silently); the service's { type: "offer_closed", accepted } goes to onOfferClosed.
 //
@@ -39,20 +45,25 @@
 // of homie's still arriving); coming back starts it again.
 import { useIsFocused } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
-import { doneSpeaking, LIT_BEAT_MS, setHomie, setHomieLevel } from '@/lib/homie/store';
+import { doneSpeaking, getHomie, LIT_BEAT_MS, setHomie, setHomieLevel } from '@/lib/homie/store';
 import { useSession } from '@/lib/session';
 
 import { convexRecipeId, convexSession } from './convex';
-import { useMicStream } from './mic';
+import { micAsking, useMicStream } from './mic';
 import { playSay, stopSay } from './say';
 import {
+  appInForeground,
+  appStateStep,
   cookPotState,
+  cookSendsFrame,
   DECLINE_TEXT,
   echoAt,
   endSay,
+  endsThinking,
+  HOMIE_ACTIONS,
   momentMessage,
   offerClosed,
   offerOf,
@@ -60,7 +71,7 @@ import {
   sayKind,
   sayLabel,
   sentText,
-  silence,
+  thinksAfter,
   timerKey,
   withoutTimer,
   withTimer,
@@ -100,9 +111,6 @@ type ServerMsg =
   | { type: 'timer_done'; id: string }
   | { type: 'offer_closed'; accepted?: boolean }
   | { type: 'error'; message?: string };
-
-/** Messages that are homie doing something (an answer to the kid). */
-const ACTIONS: ReadonlySet<string> = new Set(['go_to_step', 'play_clip', 'asked_cook', 'timer', 'timer_done']);
 
 type PendingSay = { chunks: ArrayBuffer[]; rate: number; translation: boolean; label?: string; drop: boolean; at: number; gap: ReturnType<typeof setTimeout> | null };
 
@@ -149,6 +157,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
   const [askedAt, setAskedAt] = useState<number | null>(null);
   const [askedIds, setAskedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [error, setError] = useState<{ text: string; at: number } | null>(null);
+  const [foreground, setForeground] = useState(() => appInForeground(AppState.currentState));
 
   const sock = useRef<Socket | null>(null);
   const want = useRef(false);
@@ -161,6 +170,10 @@ export function useVoiceCooking(opts: VoiceOptions) {
   const appMoment = useRef<AppMomentKind | null>(null);
   const focusedRef = useRef(focused);
   const autoTried = useRef(false);
+  // The line closed because the app left the foreground: it opens again when the app is back.
+  const paused = useRef(false);
+  // How the line was last opened (on its own or by the kid), for opening it again the same way.
+  const lineAuto = useRef(false);
   // Bumped by each answer from the service (an echo, a step, a clip, a line, a timer): a chip's fallback checks it.
   const answers = useRef(0);
   const reconnect = useRef<((auto: boolean) => Promise<void>) | null>(null);
@@ -188,13 +201,13 @@ export function useVoiceCooking(opts: VoiceOptions) {
     focusedRef.current = focused;
   });
 
-  // The mic is half duplex on its own (lib/live/mic: zeroed frames while the app makes sound). Another
-  // screen on top gets silence too, until the recorder stops.
+  // Only the kid's own frames go out: none while the app makes sound (lib/live/mic `quiet`), and none
+  // while another screen is on top, until the recorder stops.
   const mic = useMicStream(
-    (pcm) => {
+    (pcm, quiet) => {
       const s = sock.current;
-      if (!s || s.readyState !== 1) return;
-      s.send(focusedRef.current ? pcm : silence(pcm.byteLength));
+      if (!s || s.readyState !== 1 || !cookSendsFrame({ quiet, focused: focusedRef.current })) return;
+      s.send(pcm);
     },
     (level) => setHomieLevel(focusedRef.current ? level : 0),
   );
@@ -284,17 +297,15 @@ export function useVoiceCooking(opts: VoiceOptions) {
       if (m.type !== 'ready') restoring.current = 0;
       // A new say cuts off the one before it; a clip drops it (the service aborted it); homie doing
       // something else ends the reply's audio (the kid's words arriving meanwhile don't).
-      const acts = ACTIONS.has(m.type);
+      const acts = HOMIE_ACTIONS.has(m.type);
       if (m.type === 'say') {
         if (say.current?.gap) clearTimeout(say.current.gap);
         if (beat.current) clearTimeout(beat.current);
         beat.current = null;
       } else if (m.type === 'play_clip') dropSay();
       else if (acts && say.current) flushSay();
-      if (acts || m.type === 'say') {
-        answers.current += 1;
-        think(false);
-      }
+      if (acts || m.type === 'say') answers.current += 1;
+      if (endsThinking(m.type)) think(false);
 
       if (m.type === 'ready') {
         restoring.current = Date.now();
@@ -303,9 +314,12 @@ export function useVoiceCooking(opts: VoiceOptions) {
         // An older service sends only finished turns, without `final`.
         if (m.final === false || !m.text) return;
         answers.current += 1;
-        think(true);
         const echo = echoAt(echoes.current, m.text, Date.now());
+        // homie thinks only when an answer is on its way: never for this phone's own text (a tapped
+        // "no" gets none), nor a yes or no the service holds or answers with silence.
+        if (thinksAfter({ echo: echo >= 0, appMoment: !!appMoment.current, momentUp: !!getHomie().moment, text: m.text })) think(true);
         if (echo >= 0) {
+          // This phone's own text: never the kid's words.
           echoes.current = echoes.current.filter((_, i) => i !== echo);
           return;
         }
@@ -400,6 +414,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
     async (auto: boolean) => {
       const libraryId = cb.current.libraryId;
       if (!libraryId) return;
+      lineAuto.current = auto;
       if (!auto) setStatus('connecting');
       const [token, recipeId] = await Promise.all([convexSession(meId.current), convexRecipeId(libraryId)]).catch(() => [null, libraryId] as const);
       if (!want.current) return;
@@ -532,15 +547,42 @@ export function useVoiceCooking(opts: VoiceOptions) {
     [speakNow],
   );
 
+  /** Opens the line again after a pause, the way it was opened (onopen starts the mic unless muted). */
+  const resume = useCallback(() => {
+    paused.current = false;
+    if (want.current || sock.current) return;
+    want.current = true;
+    retries.current = 0;
+    void connect(lineAuto.current);
+  }, [connect]);
+
+  // The app leaves the foreground (Cartesia credit fix B): the line closes and the mic stops, quietly
+  // (want off: no retries, no error). Back on top, on this screen, it opens again.
+  const lineCtl = useRef({ stop, resume });
+  useEffect(() => {
+    lineCtl.current = { stop, resume };
+  });
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (next) => {
+      setForeground(appInForeground(next));
+      const step = appStateStep({ next, lineOn: want.current || !!sock.current, paused: paused.current, asking: micAsking() });
+      if (step === 'pause') {
+        lineCtl.current.stop();
+        paused.current = true;
+      } else if (step === 'resume' && focusedRef.current) lineCtl.current.resume();
+    });
+    return () => sub.remove();
+  }, []);
+
   // Cook mode turns voice on by itself, once a visit (after that, only the kid turns it back on).
   const { auto, libraryId } = opts;
   useEffect(() => {
-    if (!auto || !libraryId || !focused || autoTried.current) return;
+    if (!auto || !libraryId || !focused || !foreground || autoTried.current) return;
     autoTried.current = true;
     want.current = true;
     retries.current = 0;
     void connect(true);
-  }, [auto, libraryId, focused, connect]);
+  }, [auto, libraryId, focused, foreground, connect]);
 
   // Another screen on top (Ask pushes the chat): the recorder stops, so its own voice notes can record
   // and the mic light goes off; back here it starts again (unless the kid turned it off).
@@ -556,6 +598,8 @@ export function useVoiceCooking(opts: VoiceOptions) {
       setHomieLevel(0);
       return;
     }
+    // Paused while another screen was on top: the line opens again here.
+    if (paused.current && appInForeground(AppState.currentState)) return lineCtl.current.resume();
     if (sock.current?.readyState === 1 && !mutedRef.current && !micOn.current) micCtl.current.start();
   }, [focused]);
 

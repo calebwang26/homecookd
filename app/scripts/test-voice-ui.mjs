@@ -3,13 +3,15 @@
 //                               aloud, a story), the label under the pot, which say_end is whose, the
 //                               service's echo of a text, waiting for the "Let Mom see" answer (none for
 //                               a memorial cook), when the phone reads aloud itself, app-only moments and
-//                               the offer's end (the shared contract's messages), a spoken yes or no, the
-//                               no-buttons yes-or-no moment, what the pot shows, kitchen timers on the
-//                               phone's clock (parse, order, key, countdown, words), which of the cook's
-//                               answers to offer, and the silence sent instead of the mic
+//                               the offer's end (the shared contract's messages; the service's answer
+//                               kept), a spoken yes or no (and a whole one, as the service has it), when
+//                               homie is 'thinking', the no-buttons yes-or-no moment, what the pot shows,
+//                               kitchen timers on the phone's clock (parse, order, key, countdown, words),
+//                               which of the cook's answers to offer, the silence the mic hands on, and
+//                               the Cartesia credit fixes (which frames go to /cook, the app leaving)
 //   node scripts/test-voice-ui.mjs
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -163,6 +165,69 @@ await test('a spoken yes or no is what homie takes for one (voice/src/cook.ts is
   // Commands go the usual way, as on the service ("ok next" is next, not yes).
   for (const t of ['next', 'ok next', 'go back', 'repeat', 'again', 'what', 'um, next please']) assert.equal(V.yesNo(t), null, t);
   for (const t of ['how much salt?', 'I don’t know', '', 'nobody told me']) assert.equal(V.yesNo(t), null, t);
+});
+
+await test('a whole yes or no is the service’s own (voice/src/cook.ts yesOrNo): "yes, play it" isn’t one', () => {
+  for (const t of ['yes', 'Yes please', 'play it', 'sure', 'ok', 'of course', 'read it to me', 'yes yes', 'um, yeah']) assert.equal(V.wholeYesNo(t), 'yes', t);
+  for (const t of ['no', 'No thanks', 'not now', 'ok, no', 'nah', "I'm good"]) assert.equal(V.wholeYesNo(t), 'no', t);
+  for (const t of ['yes, play it', 'yes read it', 'no I want to read it myself', 'next', 'how much salt?', '']) assert.equal(V.wholeYesNo(t), null, t);
+  // The same answers as the service's own regexes, read from its source (so the two can't drift).
+  const src = readFileSync(join(root, '..', 'voice', 'src', 'cook.ts'), 'utf8');
+  const re = (name) => new RegExp(src.match(new RegExp(`const ${name} = /(.+)/;`))[1]);
+  const [yes, no] = [re('YES_REPLY'), re('NO_REPLY')];
+  const reply = (t) =>
+    t.toLowerCase().replace(/[^a-z' ]/g, ' ').replace(/\s+/g, ' ').trim()
+      .replace(/^((um|uh|oh|ah|hmm|mm|well|wait|okay|ok|so|hey|alright|and|now) )+/, '')
+      .replace(/( (please|thanks|thank you))+$/, '');
+  const service = (t) => (yes.test(reply(t)) ? 'yes' : no.test(reply(t)) ? 'no' : null);
+  for (const t of ['yes', 'yes please', 'play it', 'alright', 'yes, play it', 'no', 'no no', 'maybe later', 'ok, no', 'skip it', 'next', 'go ahead', 'let’s hear it', "let's hear it"]) {
+    assert.equal(V.wholeYesNo(t), service(t), t);
+  }
+});
+
+await test('thinking: never for the echo of the phone’s own text (a tapped "no" gets no answer)', () => {
+  const base = { echo: false, appMoment: false, momentUp: false };
+  assert.equal(V.thinksAfter({ ...base, echo: true, text: 'no' }), false);
+  assert.equal(V.thinksAfter({ ...base, echo: true, text: 'back' }), false);
+  assert.equal(V.thinksAfter({ ...base, echo: true, momentUp: true, text: 'no' }), false);
+  // The kid's own words get an answer.
+  assert.equal(V.thinksAfter({ ...base, text: 'how much salt?' }), true);
+  assert.equal(V.thinksAfter({ ...base, text: 'next' }), true);
+  // A "no" with nothing up goes to homie's AI, which answers.
+  assert.equal(V.thinksAfter({ ...base, text: 'no' }), true);
+});
+
+await test('thinking: not for a whole yes or no while an app-only moment is up (the service holds it)', () => {
+  const up = { echo: false, appMoment: true, momentUp: true };
+  for (const t of ['yes', 'yes please', 'play it', 'no', 'not now', 'ok, no']) assert.equal(V.thinksAfter({ ...up, text: t }), false, t);
+  // More than a yes, or a question, still reaches homie's AI.
+  for (const t of ['yes, play it', 'how long do I fry it?', 'next']) assert.equal(V.thinksAfter({ ...up, text: t }), true, t);
+});
+
+await test('thinking: not for a whole no to the service’s own offer (it closes it and says nothing)', () => {
+  const offer = { echo: false, appMoment: false, momentUp: true };
+  for (const t of ['no', 'nope', 'not now', 'no thanks']) assert.equal(V.thinksAfter({ ...offer, text: t }), false, t);
+  // A yes to the offer gets an answer (it reads, or her clip plays).
+  for (const t of ['yes', 'sure, read it', 'yes please']) assert.equal(V.thinksAfter({ ...offer, text: t }), true, t);
+});
+
+await test('thinking ends with homie’s answer: an action, a line, or the offer closing', () => {
+  for (const t of ['go_to_step', 'play_clip', 'asked_cook', 'timer', 'timer_done', 'say', 'offer_closed']) assert.equal(V.endsThinking(t), true, t);
+  for (const t of ['transcript', 'ready', 'say_end', 'error', 'nonsense']) assert.equal(V.endsThinking(t), false, t);
+  // offer_closed isn't an action: it never cuts off the line still arriving.
+  assert.equal(V.HOMIE_ACTIONS.has('offer_closed'), false);
+  assert.equal(V.HOMIE_ACTIONS.has('say'), false);
+});
+
+await test('offer_closed: the service’s answer is kept whenever the phone’s differs', () => {
+  // The phone had no answer (homie heard it first), or a stale one: the service's wins and is kept.
+  assert.equal(V.readAfterOfferClosed(null, true), 'yes');
+  assert.equal(V.readAfterOfferClosed(null, false), 'no');
+  assert.equal(V.readAfterOfferClosed('no', true), 'yes');
+  assert.equal(V.readAfterOfferClosed('yes', false), 'no');
+  // The same answer: nothing to change (a tap's "not now" stays unsaved).
+  assert.equal(V.readAfterOfferClosed('no', false), null);
+  assert.equal(V.readAfterOfferClosed('yes', true), null);
 });
 
 await test('a yes-or-no moment: no buttons and the listening bars when the kid can answer out loud', () => {
@@ -323,6 +388,38 @@ await test('silence is zeros the size of the mic chunk, and the same buffer each
   assert.ok(new Uint8Array(s).every((b) => b === 0));
   assert.equal(V.silence(3200), s);
   assert.equal(V.silence(320).byteLength, 320);
+});
+
+await test('credit fix A: /cook gets only the kid’s frames, nothing while the app makes sound or another screen is up', () => {
+  assert.equal(V.cookSendsFrame({ quiet: false, focused: true }), true);
+  assert.equal(V.cookSendsFrame({ quiet: true, focused: true }), false);
+  assert.equal(V.cookSendsFrame({ quiet: false, focused: false }), false);
+  assert.equal(V.cookSendsFrame({ quiet: true, focused: false }), false);
+});
+
+await test('credit fix B: the app in the background or under a system sheet closes the line', () => {
+  const on = { lineOn: true, paused: false, asking: false };
+  assert.equal(V.appStateStep({ ...on, next: 'background' }), 'pause');
+  assert.equal(V.appStateStep({ ...on, next: 'inactive' }), 'pause');
+  // No line on (voice never started, it gave up, or the kid hung up): nothing to close or reopen.
+  assert.equal(V.appStateStep({ ...on, lineOn: false, next: 'background' }), null);
+  assert.equal(V.appStateStep({ ...on, lineOn: false, next: 'active' }), null);
+  // Already paused ('inactive' then 'background'): once.
+  assert.equal(V.appStateStep({ ...on, paused: true, next: 'background' }), null);
+  // The mic's permission prompt makes iOS 'inactive': not a pause; going home meanwhile is.
+  assert.equal(V.appStateStep({ ...on, asking: true, next: 'inactive' }), null);
+  assert.equal(V.appStateStep({ ...on, asking: true, next: 'background' }), 'pause');
+});
+
+await test('credit fix B: back on top after a pause the line opens again; otherwise nothing changes', () => {
+  assert.equal(V.appStateStep({ lineOn: false, paused: true, asking: false, next: 'active' }), 'resume');
+  assert.equal(V.appStateStep({ lineOn: true, paused: false, asking: false, next: 'active' }), null);
+  // Android and iOS extension states that aren't on top or away.
+  for (const next of ['unknown', 'extension']) assert.equal(V.appStateStep({ lineOn: true, paused: true, asking: false, next }), null, next);
+  assert.equal(V.appInForeground('active'), true);
+  assert.equal(V.appInForeground(null), true);
+  assert.equal(V.appInForeground('background'), false);
+  assert.equal(V.appInForeground('inactive'), false);
 });
 
 console.log(`\n${passed} passed`);

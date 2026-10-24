@@ -15,7 +15,7 @@
 // The kid's words close the moment up (homie heard them); yes / no answer it. Leaving the screen closes them.
 // The service's read-aloud offer (shared contract, lib/live/voice): the phone says "no" for a tap
 // anywhere or a remembered no (that visit, steps change silently), "yes" for the button or a
-// remembered yes, and its offer_closed closes the moment when homie heard the answer itself.
+// remembered yes, and its offer_closed closes the moment and keeps homie's answer when it differs.
 import { useIsFocused } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet } from 'react-native';
@@ -27,7 +27,7 @@ import { ANSWER_KEY, useHeardAnswers, useRecipeAnswers } from '@/lib/live/answer
 import { stopSay } from '@/lib/live/say';
 import { speak, stopSpeaking } from '@/lib/live/speak';
 import type { VoiceCooking, VoiceOffer } from '@/lib/live/voice';
-import { answersToHear, TAP_TO_CLOSE, yesNo, yesNoMoment, type SayKind } from '@/lib/live/voiceLogic';
+import { answersToHear, readAfterOfferClosed, TAP_TO_CLOSE, yesNo, yesNoMoment, type SayKind } from '@/lib/live/voiceLogic';
 import { playClip, useNowPlaying } from '@/lib/media';
 import { useSession } from '@/lib/session';
 import { kvGet, kvSet } from '@/lib/storage';
@@ -202,18 +202,21 @@ export function useCookMoments({ cookName, onWrite }: Args) {
   );
 
   /**
-   * The service closed its read-aloud offer. When this phone didn't already know the answer (homie
-   * heard a yes or no out loud that the phone missed), the moment closes and the answer is kept.
+   * The service closed its read-aloud offer: its moment closes, if still up. The service's answer is
+   * kept whenever the phone's differs (homie heard a yes or no out loud after the phone moved on), so
+   * the phone and homie agree on reading aloud.
    */
   const onOfferClosed = useCallback(
     (accepted: boolean) => {
       const o = offer.current;
-      if (!o) return;
-      offer.current = null;
-      closeMoment(o.id);
-      setRead(accepted ? 'yes' : 'no', true);
+      if (o) {
+        offer.current = null;
+        closeMoment(o.id);
+      }
+      const c = readAfterOfferClosed(readRef.current, accepted);
+      if (c) setRead(c, true);
     },
-    [setRead],
+    [readRef, setRead],
   );
 
   /**
