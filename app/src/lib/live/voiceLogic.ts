@@ -320,6 +320,16 @@ export function appStateStep(v: { next: string; lineOn: boolean; paused: boolean
   return v.lineOn && !v.paused ? 'pause' : null;
 }
 
+/**
+ * One /cook socket at a time. Each hang-up (a pause, the kid, leaving the screen) starts a new line
+ * (`line` + 1). A retry a dropped socket scheduled, or a connect still waiting for its Convex session,
+ * belongs to the line it began on (`began`): it opens a socket only while that line is still the one
+ * wanted and has none yet. So a pause and a resume inside a retry's wait never leave two sockets open.
+ */
+export function lineMayOpen(v: { want: boolean; line: number; began: number; open: boolean }): boolean {
+  return v.want && v.line === v.began && !v.open;
+}
+
 const silences = new Map<number, ArrayBuffer>();
 
 /** Zeros the size of a mic chunk: what lib/live/mic hands on instead of the mic while the app plays sound. */

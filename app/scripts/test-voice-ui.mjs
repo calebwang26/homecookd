@@ -7,8 +7,9 @@
 //                               kept), a spoken yes or no (and a whole one, as the service has it), when
 //                               homie is 'thinking', the no-buttons yes-or-no moment, what the pot shows,
 //                               kitchen timers on the phone's clock (parse, order, key, countdown, words),
-//                               which of the cook's answers to offer, the silence the mic hands on, and
-//                               the Cartesia credit fixes (which frames go to /cook, the app leaving)
+//                               which of the cook's answers to offer, the silence the mic hands on, the
+//                               Cartesia credit fixes (which frames go to /cook, the app leaving), and one
+//                               socket at a time (a retry or a connect from before a pause)
 //   node scripts/test-voice-ui.mjs
 import assert from 'node:assert/strict';
 import { existsSync, readFileSync } from 'node:fs';
@@ -420,6 +421,86 @@ await test('credit fix B: back on top after a pause the line opens again; otherw
   assert.equal(V.appInForeground(null), true);
   assert.equal(V.appInForeground('background'), false);
   assert.equal(V.appInForeground('inactive'), false);
+});
+
+await test('one socket at a time: a retry or a connect opens only on its own line, and only with none open', () => {
+  assert.equal(V.lineMayOpen({ want: true, line: 0, began: 0, open: false }), true);
+  assert.equal(V.lineMayOpen({ want: false, line: 0, began: 0, open: false }), false);
+  assert.equal(V.lineMayOpen({ want: true, line: 1, began: 0, open: false }), false);
+  assert.equal(V.lineMayOpen({ want: true, line: 0, began: 0, open: true }), false);
+});
+
+// The hook's line, step for step (lib/live/voice.ts): stop() bumps `line`; connect() notes the line,
+// waits for its Convex session, then opens if lineMayOpen; a dropped socket's retry notes the line too.
+function cookLine() {
+  const h = { want: false, line: 0, sock: null, opened: [] };
+  const may = (began) => V.lineMayOpen({ want: h.want, line: h.line, began, open: !!h.sock });
+  /** connect(): returns its session resolving. */
+  const connect = () => {
+    const began = h.line;
+    return () => {
+      if (!may(began)) return;
+      h.sock = `#${h.opened.length + 1}`;
+      h.opened.push(h.sock);
+    };
+  };
+  return {
+    h,
+    connect,
+    start: () => {
+      h.want = true;
+      return connect();
+    },
+    /** The service drops the socket (1011): returns the retry firing 1.5 s later. */
+    drop: () => {
+      h.sock = null;
+      const on = h.line;
+      return () => may(on) && connect()();
+    },
+    stop: () => {
+      h.want = false;
+      h.line += 1;
+      h.sock = null;
+    },
+    resume: () => {
+      if (h.want || h.sock) return () => {};
+      h.want = true;
+      return connect();
+    },
+  };
+}
+
+await test('one socket at a time: a drop, then a pause and a resume before the retry fires', () => {
+  const l = cookLine();
+  l.start()();
+  const retry = l.drop();
+  l.stop(); // the app goes to the background
+  l.resume()(); // back on top: a new socket
+  retry(); // the old retry fires: nothing
+  assert.deepEqual(l.h.opened, ['#1', '#2']);
+  assert.equal(l.h.sock, '#2');
+  // A drop with no pause still retries.
+  const again = l.drop();
+  again();
+  assert.deepEqual(l.h.opened, ['#1', '#2', '#3']);
+});
+
+await test('one socket at a time: a pause and a resume while the first connect waits for its session', () => {
+  for (const order of ['first-resolves-first', 'second-resolves-first']) {
+    const l = cookLine();
+    const first = l.start();
+    l.stop();
+    const second = l.resume();
+    if (order === 'first-resolves-first') (first(), second());
+    else (second(), first());
+    assert.deepEqual(l.h.opened, ['#1'], order);
+  }
+  // Hung up for good meanwhile (the kid, or leaving the screen): no socket at all.
+  const l = cookLine();
+  const first = l.start();
+  l.stop();
+  first();
+  assert.deepEqual(l.h.opened, []);
 });
 
 console.log(`\n${passed} passed`);

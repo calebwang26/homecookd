@@ -21,7 +21,8 @@
 // reach the socket (Cartesia's Ink bills every second it gets, silence too; voiceLogic cookSendsFrame).
 // The app in the background or under a system sheet (AppState) closes the line and stops the mic, and
 // back on top it opens again, with the mic only if the kid hadn't turned it off (voiceLogic
-// appStateStep). There's no idle timeout while the screen is open (Caleb, Oct 24: hands-free, a kid
+// appStateStep). One socket at a time: a retry or a connect from before a hang-up never opens one
+// after it (voiceLogic lineMayOpen), and only the current socket is heard. There's no idle timeout while the screen is open (Caleb, Oct 24: hands-free, a kid
 // may say nothing for minutes while it simmers); the service closes its own Ink stream after 2 min
 // without audio.
 // The read-aloud offer (onOffer): `accept` sends "yes", `decline` sends "no" (that visit, steps change
@@ -64,6 +65,7 @@ import {
   endSay,
   endsThinking,
   HOMIE_ACTIONS,
+  lineMayOpen,
   momentMessage,
   offerClosed,
   offerOf,
@@ -161,6 +163,8 @@ export function useVoiceCooking(opts: VoiceOptions) {
 
   const sock = useRef<Socket | null>(null);
   const want = useRef(false);
+  // Bumped by each hang-up (stop): a retry or a connect from before it never opens a socket (lineMayOpen).
+  const line = useRef(0);
   const retries = useRef(0);
   const micOn = useRef(false);
   const mutedRef = useRef(false);
@@ -414,10 +418,12 @@ export function useVoiceCooking(opts: VoiceOptions) {
     async (auto: boolean) => {
       const libraryId = cb.current.libraryId;
       if (!libraryId) return;
+      const began = line.current;
       lineAuto.current = auto;
       if (!auto) setStatus('connecting');
       const [token, recipeId] = await Promise.all([convexSession(meId.current), convexRecipeId(libraryId)]).catch(() => [null, libraryId] as const);
-      if (!want.current) return;
+      // Hung up (or hung up and opened again) meanwhile, or a socket is already open: this one isn't needed.
+      if (!lineMayOpen({ want: want.current, line: line.current, began, open: !!sock.current })) return;
       const real = !!VOICE_URL && !!token && token !== 'stub';
       // On its own it only calls a service that can cook this dish; nothing to say when it can't (the
       // phone reads instead).
@@ -432,8 +438,12 @@ export function useVoiceCooking(opts: VoiceOptions) {
         : stubSocket(recipeId, () => cb.current.step);
       if ('binaryType' in s) (s as unknown as WebSocket).binaryType = 'arraybuffer';
       sock.current = s;
-      s.onmessage = (e) => onMessage(e.data);
+      // Only the current socket is heard: an older one's messages or open change nothing.
+      s.onmessage = (e) => {
+        if (sock.current === s) onMessage(e.data);
+      };
       s.onopen = () => {
+        if (sock.current !== s) return;
         retries.current = 0;
         openSays.current = 0;
         restoring.current = 0;
@@ -461,7 +471,8 @@ export function useVoiceCooking(opts: VoiceOptions) {
         if (want.current && retries.current < RETRIES) {
           retries.current += 1;
           setStatus('connecting');
-          later(() => want.current && void reconnect.current?.(auto), 1500 * retries.current);
+          const on = line.current;
+          later(() => lineMayOpen({ want: want.current, line: line.current, began: on, open: !!sock.current }) && void reconnect.current?.(auto), 1500 * retries.current);
           return;
         }
         if (want.current) {
@@ -480,6 +491,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
 
   const stop = useCallback(() => {
     want.current = false;
+    line.current += 1;
     const s = sock.current;
     sock.current = null;
     s?.close();
