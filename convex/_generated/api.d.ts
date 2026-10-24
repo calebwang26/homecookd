@@ -8,13 +8,16 @@
  * @module
  */
 
+import type * as community from "../community.js";
 import type * as cooking from "../cooking.js";
 import type * as crons from "../crons.js";
+import type * as dinners from "../dinners.js";
 import type * as files from "../files.js";
 import type * as http from "../http.js";
 import type * as ids from "../ids.js";
 import type * as jobs from "../jobs.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_geo from "../lib/geo.js";
 import type * as lib_mossDocs from "../lib/mossDocs.js";
 import type * as lib_recipeJson from "../lib/recipeJson.js";
 import type * as lib_supabase from "../lib/supabase.js";
@@ -24,6 +27,7 @@ import type * as moss from "../moss.js";
 import type * as questions from "../questions.js";
 import type * as recipes from "../recipes.js";
 import type * as seed from "../seed.js";
+import type * as seedCommunity from "../seedCommunity.js";
 import type * as sessions from "../sessions.js";
 import type * as transcribe from "../transcribe.js";
 import type * as voice from "../voice.js";
@@ -36,13 +40,16 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  community: typeof community;
   cooking: typeof cooking;
   crons: typeof crons;
+  dinners: typeof dinners;
   files: typeof files;
   http: typeof http;
   ids: typeof ids;
   jobs: typeof jobs;
   "lib/auth": typeof lib_auth;
+  "lib/geo": typeof lib_geo;
   "lib/mossDocs": typeof lib_mossDocs;
   "lib/recipeJson": typeof lib_recipeJson;
   "lib/supabase": typeof lib_supabase;
@@ -52,6 +59,7 @@ declare const fullApi: ApiFromModules<{
   questions: typeof questions;
   recipes: typeof recipes;
   seed: typeof seed;
+  seedCommunity: typeof seedCommunity;
   sessions: typeof sessions;
   transcribe: typeof transcribe;
   voice: typeof voice;
