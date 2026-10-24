@@ -14,6 +14,8 @@
 //   await endRecording(recordingId)                      live.endRecording: the stop button with no voice line
 //   useLiveLog(recordingId)                              liveEvents.forRecording, live (what the glasses' live pass saw)
 //   useLiveFrame(recordingId)                            liveEvents.frame, live (the glasses' newest picture)
+//   await cancelLiveJob(jobId)                           jobs.cancel: stops a job (queued or mid-way) for good
+//   useGlassesVideos()                                   glasses.videos, live (the laptop's saved full videos)
 //   useMe()  /  await setLanguage('mr')                  people.me (live) / people.setLanguage
 //   await convexPersonIdByName('Shreya')                 a family member's Convex id, from rows that name them
 //   await libraryIdOf(recipeId)                          a Convex recipe's library id (recipes.list)
@@ -43,7 +45,7 @@ const client = URL ? new ConvexClient(URL) : null;
 
 export type JobSource = 'phone' | 'glasses';
 export type JobStage = 'uploading' | 'queued' | 'preparing' | 'understanding' | 'writing' | 'indexing' | 'done' | 'failed';
-export type LiveJob = { _id: string; uploadPath: string; source: JobSource; stage: JobStage; progress: number; error?: string; recipeId?: string };
+export type LiveJob = { _id: string; _creationTime?: number; uploadPath: string; source: JobSource; stage: JobStage; progress: number; error?: string; recipeId?: string; title?: string };
 export type CookQuestion = {
   _id: string;
   _creationTime: number;
@@ -328,6 +330,24 @@ export function useLiveFrame(recordingId: string | null | undefined): LiveFrame 
 
 const noLiveFrame = (onData: (v: LiveFrame | null) => void) => {
   onData(null);
+  return () => {};
+};
+
+/** Stops one of her family's jobs on Convex (the worker's later reports are ignored). True once stopped. */
+export async function cancelLiveJob(jobId: string): Promise<boolean> {
+  const sessionToken = await token();
+  return call<boolean>('mutation', 'jobs:cancel', { sessionToken, jobId }, () => true, { soft: true });
+}
+
+/** A glasses recording's full video, saved by the laptop for her to put in Photos and send herself. */
+export type GlassesVideo = { recordingId: string; videoUrl: string; dish?: string; at: number };
+
+export function useGlassesVideos(enabled = true): GlassesVideo[] {
+  return useLive<GlassesVideo[]>('glasses:videos', [], noGlassesVideos, enabled, {}, true);
+}
+
+const noGlassesVideos = (onData: (v: GlassesVideo[]) => void) => {
+  onData([]);
   return () => {};
 };
 

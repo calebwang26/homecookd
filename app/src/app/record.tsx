@@ -9,7 +9,8 @@
 //   Videos I took    the camera roll, then Send (as before).
 // If homie can't start (no connection within 10 s, or live.* isn't on the server), glasses say so and
 // the phone camera opens without homie, then Send.
-// "Start recording" is the only way in: the sheet holds every way to film. On the web, the camera and
+// "Start recording" is the only way in: the sheet holds every way to film. Above the guide, the newest glasses
+// video the laptop saved (components/record/GlassesVideoCard): "Save to Photos", then send it from Videos I took. On the web, the camera and
 // camera roll explain that they work in the app on a phone.
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
@@ -20,6 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { dishName, requestDish, useKitchen, type KitchenItem } from '@/components/parent/kitchen';
 import { setDraftMeta, useDraft } from '@/components/record/draft';
+import { GlassesVideoCard } from '@/components/record/GlassesVideoCard';
 import { phoneOnly } from '@/components/record/pick';
 import { PreRecordSheet, type CaptureSource, type PreRecordChoice } from '@/components/record/PreRecordSheet';
 import { PhoneOnlySheet } from '@/components/record/sheets';
@@ -141,6 +143,8 @@ export default function RecordScreen() {
             </Txt>
           </Animated.View>
         ) : null}
+
+        <GlassesVideoCard />
 
         <Animated.View entering={listEnter(1)} style={styles.how} accessible accessibilityLabel={`How it works. ${STEPS.join('. ')}.`}>
           <Image source={tripod} style={styles.photo} contentFit="cover" accessibilityLabel="A phone propped up on a kitchen counter" />

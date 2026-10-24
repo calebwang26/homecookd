@@ -31,6 +31,12 @@ The laptop and the VM both try to upload. The laptop usually wins.
 
 Only the video goes under `glasses-<rid>/`, because the worker treats every object there as a clip. Backups and gap lists go under `glasses-backup/<rid>/`. Both live in the uploads bucket, so the 14-day lifecycle applies.
 
+## Demo path: the cook saves the video herself (no automatic job)
+
+By default the laptop does not create a job on "I'm done". It builds the full video from its backup (15 fps), uploads it to the public media bucket as `glasses-<rid>/full.mp4`, and reports it with `POST /glasses/video`. The VM sees `videoSaved` in `/glasses/active` and stands down. On Record, `components/record/GlassesVideoCard` (from `glasses.videos`) says "on its way" while the laptop builds, then shows **Save to Photos**: it downloads the video and opens the share sheet, where "Save Video" puts it in Photos. She sends it with Start recording → Videos I took, which makes the one job. `--auto-job` brings back the automatic job. On the laptop, `tools/run_receiver.sh` runs it all and restarts it if it stops.
+
+Every job still in the pipeline gets a progress row on Home and Recipes, including jobs this phone didn't send. Its × calls `jobs.cancel`, and a cancelled job ignores the worker. `npx convex run jobs:cancelUnfinished` clears the whole queue.
+
 ## Live picture → the cook's phone
 
 About seven times a second (the receiver's `--frame-every 0.15`, up to 3 uploads in flight), the laptop sends the newest JPEG to `POST /glasses/frame?recordingId=<id>&session=<glasses session>&t=<ms>` (`x-glasses-secret`, raw `image/jpeg`, at most 512 KB). Convex drops a frame older than the one it keeps, from the same glasses session. Convex keeps one frame per recording in `liveFrames`, plus its file in storage, and deletes the previous file each time. Frames for a recording that has ended are refused. `liveEvents.frame` gives the recording screen the frame's URL and time. `components/record/GlassesView` shows the picture with "Glasses live", or "Waiting for your glasses…" once the frame is over 5 s old. `--frame-every` sets how often it sends (0 turns it off). The video uploaded on "I'm done" is built at 15 fps (`--cloud-fps`), so the recipe's video plays smoothly. The AI still samples it at 1 fps.

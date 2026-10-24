@@ -377,7 +377,10 @@ test("/glasses/video saves the laptop's full video for the family; the VM sees i
   expect(await (await post(t, "/glasses/active", { recordingId: rec })).json()).toMatchObject({ status: "ended", videoSaved: true });
 
   const token = await sessionFor(t, f.familyId, f.cookId);
+  const building = await recording(t, f, "ended"); // just ended: the laptop is still building its video
   const vids = await t.query(api.glasses.videos, { sessionToken: token });
-  expect(vids).toHaveLength(1);
-  expect(vids[0]).toMatchObject({ recordingId: rec, videoUrl: url, dish: "Varan bhaat" });
+  expect(vids.find((x) => x.recordingId === building)).toMatchObject({ recordingId: building });
+  expect(vids.find((x) => x.recordingId === building)?.videoUrl).toBeUndefined();
+  expect(vids.filter((x) => x.videoUrl)).toHaveLength(1);
+  expect(vids.find((x) => x.videoUrl)).toMatchObject({ recordingId: rec, videoUrl: url, dish: "Varan bhaat" });
 });

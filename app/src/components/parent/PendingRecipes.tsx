@@ -15,7 +15,7 @@ import Animated from 'react-native-reanimated';
 
 import { fadeOutFast, listEnter, useToast } from '@/components/ui';
 import { requestCancel } from '@/lib/deletes';
-import { libraryIdOf as findLibraryId, useLiveJobs, type LiveJob } from '@/lib/live/convex';
+import { cancelLiveJob, libraryIdOf as findLibraryId, useLiveJobs, type LiveJob } from '@/lib/live/convex';
 import { refreshLibrary, useLibrary } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
 import {
@@ -34,6 +34,25 @@ import { liveJobFinished, recipeIdsToLookUp } from './jobsLogic';
 import { describeJob, ProcessingRow, type ProcessingView } from './ProcessingRow';
 
 const POLL_MS = 60_000;
+/** Stages a Convex job is still in. */
+const RUNNING = new Set(['uploading', 'queued', 'preparing', 'understanding', 'writing', 'indexing']);
+
+/**
+ * A Convex job this phone didn't send (the laptop's glasses jobs, another phone's) as a row: no upload
+ * here, so it reads straight from the worker's live stage. Its id is the Convex job id.
+ */
+function liveOnlyJob(l: LiveJob): StoredJob {
+  return {
+    job_id: l._id,
+    status_url: '',
+    title: l.title || (l.source === 'glasses' ? 'glasses recording' : 'recording'),
+    cook_name: '',
+    relation: '',
+    created_at: new Date(l._creationTime ?? Date.now()).toISOString(),
+    file_count: 1,
+    local_state: 'uploaded',
+  };
+}
 
 export type PendingState = {
   /** This cook's jobs still on screen, newest first. */
@@ -98,6 +117,11 @@ export function usePendingRecipes(): PendingState {
 
   // The worker's live job per upload folder ("<job_id>/").
   const liveByJob = useMemo(() => new Map<string, LiveJob>(liveJobs.map((l) => [l.uploadPath.replace(/\/$/, ''), l])), [liveJobs]);
+  // Jobs still running that no local row covers (the laptop's glasses jobs, another phone's uploads).
+  const liveOnly = useMemo(() => {
+    const mine = new Set(jobs.map((j) => j.job_id));
+    return liveJobs.filter((l) => RUNNING.has(l.stage) && !mine.has(l.uploadPath.replace(/\/$/, '')));
+  }, [liveJobs, jobs]);
 
   // A finished live job's library id, from its Convex recipe id (asked again when the library changes).
   const libraryIds = entries.map((e) => e.id).join('|');
@@ -136,6 +160,13 @@ export function usePendingRecipes(): PendingState {
     async (job: StoredJob) => {
       setCancellingId(job.job_id);
       try {
+        // The Convex job is what a worker takes: stop it there, so nothing is left clogging the queue.
+        const live = liveByJob.get(job.job_id) ?? liveOnly.find((l) => l._id === job.job_id);
+        if (live) await cancelLiveJob(live._id);
+        if (liveOnly.some((l) => l._id === job.job_id)) {
+          toast.show(`Stopped your ${job.title}`);
+          return;
+        }
         await requestCancel(job.job_id);
         cancelJobUploads(job.job_id);
         removeJob(job.job_id);
@@ -148,18 +179,20 @@ export function usePendingRecipes(): PendingState {
         setCancellingId(null);
       }
     },
-    [toast],
+    [toast, liveByJob, liveOnly],
   );
 
   const views = useMemo(
-    () =>
-      Object.fromEntries(
+    () => ({
+      ...Object.fromEntries(
         jobs.map((j) => {
           const live = liveByJob.get(j.job_id);
           return [j.job_id, describeJob(j, statuses[j.job_id], now, live, live?.recipeId ? libraryIdOf[live.recipeId] : undefined)];
         }),
       ),
-    [jobs, statuses, now, liveByJob, libraryIdOf],
+      ...Object.fromEntries(liveOnly.map((l) => [l._id, describeJob(liveOnlyJob(l), undefined, now, l)])),
+    }),
+    [jobs, statuses, now, liveByJob, libraryIdOf, liveOnly],
   );
 
   const act = useCallback(
@@ -189,10 +222,14 @@ export function usePendingRecipes(): PendingState {
     [views, statuses, cancellingId, doCancel],
   );
 
-  // Only this cook's recordings (another profile on this phone has their own list).
+  // Only this cook's recordings (another profile on this phone has their own list), then every other job of
+  // the family still in the pipeline, so nothing is ever processing out of sight.
   const visible = useMemo(
-    () => jobs.filter((j) => statuses[j.job_id]?.status !== 'cancelled' && (!me || !j.sender_id || j.sender_id === me.id)),
-    [jobs, statuses, me],
+    () => [
+      ...jobs.filter((j) => statuses[j.job_id]?.status !== 'cancelled' && (!me || !j.sender_id || j.sender_id === me.id)),
+      ...liveOnly.map(liveOnlyJob),
+    ],
+    [jobs, statuses, me, liveOnly],
   );
 
   return { jobs: visible, views, cancellingId, act, poll };

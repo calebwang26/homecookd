@@ -128,10 +128,18 @@ export const saveVideo = internalMutation({
   },
 });
 
-/** Her family's glasses videos the laptop saved, newest first, for "Save to Photos" (own family only). */
+/** How long after "I'm done" a glasses recording shows as "the laptop is preparing it" before it's dropped. */
+const PREPARING_MS = 2 * 60 * 60 * 1000;
+
+/**
+ * Her family's glasses videos, newest first, for "Save to Photos" (own family only): the ones the laptop
+ * saved (videoUrl), and ones that ended in the last 2 h that it is still building (no videoUrl yet).
+ */
 export const videos = query({
   args: { sessionToken: v.string() },
-  returns: v.array(v.object({ recordingId: v.id("recordings"), videoUrl: v.string(), dish: v.optional(v.string()), at: v.number() })),
+  returns: v.array(
+    v.object({ recordingId: v.id("recordings"), videoUrl: v.optional(v.string()), dish: v.optional(v.string()), at: v.number() }),
+  ),
   handler: async (ctx, { sessionToken }) => {
     const signed = await requireSession(ctx, sessionToken);
     const rows = await ctx.db
@@ -139,9 +147,10 @@ export const videos = query({
       .withIndex("by_familyId", (q) => q.eq("familyId", signed.family._id))
       .order("desc")
       .take(50);
+    const now = Date.now();
     return rows
-      .filter((r) => r.source === "glasses" && r.videoUrl)
+      .filter((r) => r.source === "glasses" && (r.videoUrl || (r.status === "ended" && !r.jobId && now - r.updatedAt < PREPARING_MS)))
       .slice(0, 10)
-      .map((r) => ({ recordingId: r._id, videoUrl: r.videoUrl!, dish: r.dish, at: r.endedAt ?? r.updatedAt }));
+      .map((r) => ({ recordingId: r._id, videoUrl: r.videoUrl, dish: r.dish, at: r.endedAt ?? r.updatedAt }));
   },
 });
