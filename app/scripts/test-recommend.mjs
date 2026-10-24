@@ -266,7 +266,7 @@ test('mixed library: each meal gets its own fitting dish', () => {
 });
 
 // The founder's example: Dad's Sunday Chili, Dad's Grilled Fish, Grandma's Noodle Soup, Grandma's
-// Red-Braised Pork Belly, Miles' Weed Steak (the real bundled recipes; Miles is not a profile).
+// Red-Braised Pork Belly, Miles' Swordfish Steak (the real bundled recipes; Miles is not a profile).
 const five = cands.filter((c) =>
   ['dad-sunday-chili', 'dad-ginger-scallion-fish', 'grandma-hand-pulled-noodle-soup', 'grandma-red-braised-pork', 'weed-steak'].includes(c.entry.id),
 );
