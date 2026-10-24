@@ -245,6 +245,9 @@ class Recipe(BaseModel):
     servings: Optional[str] = None
     total_time: Optional[str] = None
     sample: bool = False
+    # A family's own recipe (worker.py, Convex mode), set by publish.without_memories: Convex keeps her stories
+    # and tips, and it never goes into the shared library.json or the app's bundle (publish.rebuild_library).
+    family: bool = False
     source: Optional[str] = None  # credit for a YouTube creator
     tags: list[str] = []
     media: Media

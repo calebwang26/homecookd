@@ -77,6 +77,10 @@ From `docs/build/LAUNCH-LINKS.md` and `API.md`:
 - Security: remove `host.exp.Exponent` from `APPLE_AUDIENCES` and the `EXPO_GO_BUNDLE_ID` default once TestFlight works.
 - `MADE_BY` on the website is empty (hidden) until Caleb provides it.
 - About 20 smaller `TODO(caleb)` product decisions: `grep -rn "TODO(caleb)" docs app supabase web`.
+- Privacy: two family `recipe.json` files in the public bucket still have the cook's stories and tips
+  (`hackathon-biryani-2`, and `hackathon-biryani-1`, whose Convex row is gone). Check with
+  `.venv/bin/python pipeline/scrub_family.py --id hackathon-biryani-1` (a dry run), then add `--write`. Until
+  then, any `publish.py` run would list `hackathon-biryani-1` in the shared `library.json`.
 
 ## Current and next work
 
@@ -285,3 +289,20 @@ Before starting work, compare the last commit here with `git log origin/main` to
     in the app). `rebuild_library` lists every `*/recipe.json` in the bucket, so any `publish.py` run puts family
     recipes into the shared `library.json` and the app bundle. The intro isn't kept anywhere now (no screen shows it).
 - Oct 24 · (this PR) · Claude · Root devDependency `@types/node`: `convex deploy` typechecks `convex/`, and a clean `npm ci` had no Node types, so every `process.env` failed (37 errors) and the deploy stopped. Now tsc is 0 and vitest 40/40.
+- Oct 24 · #39 · Claude · Family recipes stay out of the shared library, plus a scrub for the old ones (follow-up
+  to #37). A family recipe's public `recipe.json` now says `"family": true` (`pipeline/schema.py` `Recipe.family`,
+  set by `publish.without_memories`). `rebuild_library` leaves those out of `library.json` and the app's bundle
+  (`publish.is_family`, which also honours `data/out/<id>/.family` for one published before the mark).
+  `publish_recipe` keeps a recipe a family one when its bucket copy is marked, so re-publishing it by hand from
+  another machine can't put the stories back. The app and web types ignore the new field. New
+  `pipeline/scrub_family.py` finds family recipes from the Convex `recipes` rows with a `recipeJsonUrl`
+  (`npx convex data`, team token) and rewrites each `recipe.json` (and its `trash/` copy) with
+  `without_memories`. It never rebuilds the library. It's a dry run by default; `--write` needs Caleb's OK. It
+  also names unmarked bucket recipes that neither `library.json` nor Convex lists, and `--id` adds them.
+  - **Tests:** `pipeline/test_publish.py` 9 pass (5 new: library and bundle, a re-publish elsewhere, the scrub's
+    dry run, `--write`, the Convex rows). Turning off each guard makes a test fail. The other pipeline tests pass.
+  - **Live dry run (read only):** `hackathon-biryani-2` (Convex row: 1 story, 3 special moments, 3 tips, the
+    intro) and `hackathon-biryani-1` (no Convex row, not in `library.json`: 2 stories, 3 special moments, 3 tips,
+    the intro). Neither is in the live `library.json` yet.
+  - **Open:** nothing written to the bucket, nothing deployed. The scrub waits on Caleb (see "Waiting on Caleb").
+    `play.mp4` and `voice.m4a` are still public at unlisted URLs, with the stories as she spoke them.
