@@ -6,7 +6,7 @@ Cartesia Ink 2 turns it into text, and Claude picks one tool per turn: move a st
 from general knowledge: a question is answered by the cook's own clip, or it goes to the cook.
 
 ```
-src/server.ts   HTTP /healthz + WebSocket /cook
+src/server.ts   HTTP /health + WebSocket /cook
 src/cook.ts     one cooking session: wires Ink → (fast path | Claude) → actions → Sonic
 src/agent.ts    Claude turn agent: tools, system prompt, the one-tool-per-turn loop
 src/ink.ts      Cartesia Ink 2 streaming STT (/stt/turns/websocket, built-in turn detection)
