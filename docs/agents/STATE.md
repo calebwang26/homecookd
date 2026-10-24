@@ -395,6 +395,8 @@ Before starting work, compare the last commit here with `git log origin/main` to
     web stub (the stub socket never drops). GlowHomie's disc is cream, not the canvas's butter (HomiePot draws its
     own disc; a disc color prop in components/homie would fix it). No public query maps a kid to a Convex person id
     (found by name).
+- Oct 24 · (this PR) · Claude · `docs/agents/MERGE-PLAYBOOK.md` (from Caleb via the UI/UX session): how the Merge Agent takes in, orders, reviews, resolves and merges PRs. AGENTS.md's merge rule points to it. The demo freeze in it is marked as proposed until Caleb confirms.
+- Oct 24 · (this PR) · Claude · MERGE-PLAYBOOK: Caleb decided there's no demo freeze; features keep merging if they pass the checks.
 - Oct 24 · #33 · Claude · Track G screens: Caleb's simplified Community map, his v2 "one step at a time" connect
   flow, share asks, swaps, and (round 3, his final canvas) "Cook together", "Invite friends" and the motion (built on
   #24's backend):
@@ -432,12 +434,20 @@ Before starting work, compare the last commit here with `git log origin/main` to
     <Dish> Night with <host>: <url>"). `dinners.inviteLink` → one stable random token per dinner, host and accepted
     guests only. Public `POST /invite/open` (`convex/lib/inviteRoutes.ts`; CORS for homecookd.app and localhost)
     counts each phone or browser once (`dinnerInviteOpens`), at most 60 new per 10 minutes and 300 in all, and
-    answers only `{ dish, hostFirstName, startsAt }`. The web's static `/d` page (`NEXT_PUBLIC_CONVEX_SITE_URL`,
+    answers only `{ dish, hostName, startsAt }` (the host's display name, the same one the invite text and the
+    dinner page's pill show, so `/d` says "Hosted by Grandma Rajani", not "Grandma"; `TODO(caleb)` on whether a
+    forwardable link should show less). The web's static `/d` page (`NEXT_PUBLIC_CONVEX_SITE_URL`,
     default the hackathon deployment's `.convex.site`) and the app's `/d` screen (works signed out) call it. The
     AASA file lists `/d`.
   - **Also:** the kid tab bar's selected bubble now grows to fit a long label ("Community" at 390 pt;
     `components/ui/FloatingTabBar.tsx`). Muse's story card code is in `convex/storyCards.ts`. `/dinner/new` takes
     `?recipeId=` and lists the dishes another family said yes to cooking with you.
+  - **Polish (after the verifier):** the one green row in a chooser is the first one you can press, and none when
+    every row only says how things stand (a "Put it on the map · Asked Grandma Rajani" row, "One moment…", or a
+    pending "Swap recipes" no longer takes the green over a working row; `Chooser` draws those rows plain). The new
+    reads (`shareRequests.familyDishes`, `community.mySwaps`) and `dinners.inviteLink` are soft, and the new asks
+    (`shareRequests.ask`, `requestSwap`, `cookTogether`, `respondSwap`) are strict, so an app build that reaches
+    phones before this Convex deploy doesn't move every Convex call to the stub.
   - **Tests:** vitest 63 (new `dinnerInvites.test.ts` 4; `shareRequests.test.ts` 8 with the fixed question, the
     JSON answer and the day-long "not now"; `swaps.test.ts` 3 with cook together); breaking each key guard on
     purpose fails a test. `test-community-ui.mjs` 23 (cook together, "said not now", the dinner's button and count,
