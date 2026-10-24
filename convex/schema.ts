@@ -74,7 +74,8 @@ export default defineSchema({
     // Community (cook-only switch, off by default). Set = shared with people nearby as a story card
     // plus the recipe's text; the video and voice never leave the family.
     sharedAt: v.optional(v.number()),
-    storyCard: v.optional(v.object({ text: v.string(), writtenAt: v.number() })), // Muse Spark, labelled AI
+    // Muse Spark, labelled AI. usedStories: her stories went into it (only shown while she still says yes).
+    storyCard: v.optional(v.object({ text: v.string(), writtenAt: v.number(), usedStories: v.optional(v.boolean()) })),
   })
     .index("by_familyId", ["familyId"])
     .index("by_sharedAt", ["sharedAt"]),

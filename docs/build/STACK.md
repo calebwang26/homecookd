@@ -138,7 +138,7 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 |---|---|---|
 | E · homie live | Parent live pass (`/record`), `/speak`, kid-side timers, nudges, read-aloud offer, labelled hints | `voice/`, `convex/live.ts`, `convex/lib/liveRoutes.ts` |
 | F · Translation + pipeline | Cook's language end to end, original + English quotes, homie log in the full pass, upload race, 8–12 steps | `pipeline/`, `convex/worker.ts`, `convex/lib/recipeJson.ts`, `convex/moss.ts`, `convex/people.ts`, `app/src/lib/languages.ts` |
-| G · Community | Feed, share switch + Muse story card, one dinner flow | `convex/community.ts`, `convex/dinners.ts`, `convex/lib/geo.ts`, `seed:community`, `app/src/app/community/*`, `app/src/app/dinner/*`, `app/src/app/kid/community.tsx`, `app/src/lib/live/community.ts` |
+| G · Community | Feed, share switch + Muse story card, one dinner flow | `convex/community.ts`, `convex/dinners.ts`, `convex/lib/geo.ts`, `convex/seedCommunity.ts`, `app/src/app/community/*`, `app/src/app/dinner/*`, `app/src/app/kid/community.tsx`, `app/src/lib/live/community.ts` |
 | H · Glasses VM | ESP32 → free GCP e2-micro → MP4 → GCS → job | `glasses/`, `convex/glasses.ts`, `convex/lib/glassesRoutes.ts` |
 | I · App UI | homie pot everywhere, cook-screen chips + captions + timers, recording screen, walkie-talkie, language picker | `app/` (everything else) |
 
@@ -159,12 +159,19 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 - `people.setLanguage({ language })` (self). `people.me` → `{ personId, name, role, language, relation }`.
 - `questions.forRecipe` already exists; the kid's cook mode reads it to hear the cook's answer (`answerAudioUrl`,
   `answer.translation`).
-- Community: `community.feed({ maxMiles? })`, `community.recipe({ recipeId })` (text only),
-  `community.setShare({ recipeId, on })` (the recipe's cook only), `dinners.create({ recipeId, startsAt, placeKind,
-  placeName, address, seats })`, `dinners.get({ dinnerId })`, `dinners.mine`, `dinners.requestJoin({ dinnerId })`,
+- Community: `community.feed({ maxMiles?, now })` → `{ recipes, dinners }` (`now` is required: the client's clock,
+  rounded, to hide past dinners; queries can't read it), `community.recipe({ recipeId })` (text only),
+  `community.setLocation({ lat, lng, campus? })` (snapped to the ~1 km grid before it's stored),
+  `community.setShare({ recipeId, on })` (the recipe's cook only; a story card written from her stories shows as a
+  plain line once she says no to them, and her next share rewrites it), `dinners.create({ recipeId, startsAt,
+  placeKind, placeName, address, seats })` (the recipe must be shared first), `dinners.get({ dinnerId })`,
+  `dinners.mine`, `dinners.requestJoin({ dinnerId })`,
   `dinners.respond({ requestId, accept })` (host only). Community responses never include `libraryId`,
   `recipeJsonUrl`, `coverUrl` of a private recipe, moments, quotes, person ids of other families, or an address
-  (except to the host and accepted guests). Distance is a label from `lib/geo.ts`.
+  (except to the host and accepted guests). Distance is a label from `lib/geo.ts`. `families.publicName` is the
+  surname ("Pawar"); cards say "The Pawar family", or "Rajani's family" without one. Demo data:
+  `seedCommunity:neighbors` (8 neighbor families), `seedCommunity:place({ personId })` (puts a real account at
+  `DEMO_LOCATION`), `seedCommunity:publicName({ familyId, publicName })`.
 
 **Voice service → Convex for homie** (HTTP POST, `x-voice-secret`; `convex/lib/liveRoutes.ts`)
 - `/live/person` `{ sessionToken }` → `{ personId, familyId, name, role, language, relation }` (401 if signed out).
@@ -219,9 +226,14 @@ voice, in `lang` or the person's language). `translate: true` first turns Englis
 
 **Glasses VM → Convex** (HTTP POST, `x-glasses-secret`; `convex/lib/glassesRoutes.ts`; see `glasses/INGEST.md`)
 - `/glasses/active` `{}` → `{ recordingId, status, startedAt? }` for the newest `glasses` recording that isn't
-  `ended`/`abandoned`, or `204`. (One pair of glasses for the hackathon.)
+  `ended`/`abandoned` (and is under 12 h old), or `204`. (One pair of glasses for the hackathon.)
+  `{ recordingId }` → that recording in any status, or `404`, so the VM can tell `ended` (upload) from
+  `abandoned` (don't).
 - `/glasses/finished` `{ recordingId, uploadPath, videoStartedAt, durationS }` → `{ jobId, recipeId }`: sets
-  `recordings.videoStartedAt` and creates the job (`source: "glasses"`) with the recording's dish, language and kid.
+  `recordings.videoStartedAt` and `jobId`, and creates the "processing" card (titled with the dish) and the job
+  (`source: "glasses"`) with the recording's dish, language and kid. Calling it again returns the same job; `400`
+  for an abandoned recording or an `uploadPath` other than `glasses-<recordingId>/`, `404` for one that isn't a
+  glasses recording.
 
 **New keys**: `GLASSES_SECRET` (Convex env, the VM, Cloud Run secret), `GEMINI_API_KEY` (Cloud Run secret, for live
 Marathi transcription), `HOMIE_VOICE` (Cloud Run env: homie's Cartesia voice id), `GLASSES_URL` (Cloud Run env).
