@@ -21,6 +21,8 @@ export default defineSchema({
     role: v.union(v.literal("cook"), v.literal("kid")),
     // Opt-in only (PLAN principles): a cloned voice exists only after this person said yes.
     voiceClone: v.optional(v.object({ consentedAt: v.number(), cartesiaVoiceId: v.optional(v.string()) })),
+    // The language this person speaks, as an Ink code ("mr" for Marathi). Unset means English.
+    language: v.optional(v.string()),
   })
     .index("by_familyId", ["familyId"])
     .index("by_supabaseProfileId", ["supabaseProfileId"]),
@@ -109,7 +111,8 @@ export default defineSchema({
         by: v.id("people"),
         text: v.optional(v.string()),
         audioId: v.optional(v.id("_storage")),
-        transcript: v.optional(v.string()), // Cartesia Ink
+        transcript: v.optional(v.string()), // Cartesia Ink, in the cook's own language and script
+        translation: v.optional(v.string()), // Gemini's English, when the cook doesn't speak English; label it translated
       }),
     ),
   })

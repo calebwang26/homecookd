@@ -122,3 +122,14 @@ export const removeRecipe = internalMutation({
     return null;
   },
 });
+
+/** Sets the language a person speaks (an Ink code), so their voice-note answers are written in it
+ * and translated for the kid: npx convex run seed:language '{"personId": "<id>", "language": "mr"}' */
+export const language = internalMutation({
+  args: { personId: v.id("people"), language: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { personId, language }) => {
+    await ctx.db.patch("people", personId, { language: language === "en" ? undefined : language });
+    return null;
+  },
+});
