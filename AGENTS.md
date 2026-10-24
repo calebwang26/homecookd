@@ -55,7 +55,7 @@ and homesick college kids. It's a family product, not a tool.
 - **Ship via PR, never straight to main.** Branch from `origin/main`, commit, `git fetch && git merge origin/main`,
   push, `gh pr create`, then check that `gh pr view --json mergeStateStatus` is `CLEAN`. Stage files by name, never
   `git add -A`: the tree holds untracked demo PNGs and Finder " 2" duplicates.
-- **Deploying the `api` edge function** (Supabase project ref `aaxyabymvwxlxrxwxgwv`, verify_jwt false):
+- **Deploying the `api` edge function** (Supabase project ref `bsudybxsqvtwftsdmwmz`, verify_jwt false):
   deploy only from merged main, apply that release's migrations first, and send **every** file in
   `supabase/functions/api/`, or the routes from the missing files go down. Check the live version first. Salik also
   deploys, so check with Caleb that Salik's work is merged and no deploy is in flight, and log the new version in
