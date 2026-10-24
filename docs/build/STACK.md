@@ -223,7 +223,8 @@ voice, in `lang` or the person's language). `translate: true` first turns Englis
 - `/glasses/finished` `{ recordingId, uploadPath, videoStartedAt, durationS }` → `{ jobId, recipeId }`: sets
   `recordings.videoStartedAt` and `jobId`, and creates the "processing" card (titled with the dish) and the job
   (`source: "glasses"`) with the recording's dish, language and kid. Calling it again returns the same job; `400`
-  for an abandoned recording, `404` for one that isn't a glasses recording.
+  for an abandoned recording or an `uploadPath` other than `glasses-<recordingId>/`, `404` for one that isn't a
+  glasses recording.
 
 **New keys**: `GLASSES_SECRET` (Convex env, the VM, Cloud Run secret), `GEMINI_API_KEY` (Cloud Run secret, for live
 Marathi transcription), `HOMIE_VOICE` (Cloud Run env: homie's Cartesia voice id), `GLASSES_URL` (Cloud Run env).

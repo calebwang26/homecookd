@@ -2,11 +2,13 @@
 
     WS  /ingest?device=<GLASSES_DEVICE_KEY>   the glasses stream JPEG frames + PCM here
     GET /frame/latest?recording=<id>          newest JPEG for homie (x-glasses-secret)
-    GET /health
+    GET /health                               {ok, glasses}; with x-glasses-secret also what it's recording
 
 Every 2 s it asks Convex which glasses recording is live. While that one is "recording" or "wrapping_up" it
 saves what the glasses send (store.py); once it's "ended" (or 60 s go by with no data while wrapping up) it
 makes the MP4 (mux.py), uploads it to gs://<GCS_UPLOAD_BUCKET>/glasses-<id>/01.mp4 and calls /glasses/finished.
+A recording that never ended loses the glasses to a newer one (or after 12 h). Once the job exists, or the cook
+abandons the recording, or it fails, the frames, audio and MP4 are deleted; only meta.json stays.
 
     GLASSES_SECRET=… GLASSES_DEVICE_KEY=… CONVEX_SITE_URL=… GCS_UPLOAD_BUCKET=… python server.py [--dry-upload]
 """
@@ -31,7 +33,7 @@ from websockets.http11 import Request, Response
 
 import cloud
 import mux
-from store import Recording
+from store import Recording, drop_media
 
 log = logging.getLogger("glasses")
 CAPTURING = {"recording", "wrapping_up"}
@@ -67,10 +69,14 @@ class Ingest:
         self.orphans: set[str] = set()  # half-recorded when the service last stopped
         self.busy: set[str] = set()
         self.retry_at: dict[str, float] = {}
+        self.tasks: set[asyncio.Task] = set()  # finish() runs, held so they can't be garbage-collected midway
         cfg.root.mkdir(parents=True, exist_ok=True)
         for d in cfg.root.iterdir():
             meta = _meta(d)
-            if meta is None or "finished" in meta or "abandoned" in meta or "failed" in meta:
+            if meta is None:
+                continue
+            if "finished" in meta or "abandoned" in meta or "failed" in meta:
+                self.clean(d)  # in case the service stopped between the mark and the delete
                 continue
             (self.todo if "stopped" in meta else self.orphans).add(d.name)
 
@@ -109,6 +115,11 @@ class Ingest:
                 await self.stop(upload=True, why=status if status == "ended" else "no data for 60 s")
             elif status == "abandoned":
                 await self.stop(upload=False, why="abandoned")
+            elif not a or a["recordingId"] != rid:
+                # This one never ended (her phone died, say), and Convex now reports a newer recording as live, or
+                # none because this one is over 12 h old. Finish it with what it has; a newer one gets the glasses
+                # below, once it's recording.
+                await self.stop(upload=True, why=f"superseded by {a['recordingId']}" if a else "over 12 h old")
 
         if not self.current and a and a["status"] in CAPTURING and not _stopped(self.cfg.root / a["recordingId"]):
             await self.start(a["recordingId"])
@@ -122,6 +133,7 @@ class Ingest:
             rec.close()
             if status == "abandoned":
                 rec.mark("abandoned")
+                self.clean(rec.dir)
             else:
                 rec.mark("stopped")
                 self.todo.add(rid)
@@ -130,7 +142,9 @@ class Ingest:
         for rid in list(self.todo - self.busy):
             if time.monotonic() >= self.retry_at.get(rid, 0):
                 self.busy.add(rid)
-                asyncio.create_task(self.finish(rid))
+                task = asyncio.create_task(self.finish(rid))
+                self.tasks.add(task)
+                task.add_done_callback(self.tasks.discard)
 
     # ---- one recording ----
 
@@ -138,6 +152,7 @@ class Ingest:
         self.current = Recording(self.cfg.root, rid)
         self.orphans.discard(rid)
         self.last_data = time.monotonic()
+        self.offset_ms = None  # map device time to the wall clock afresh, so days of clock drift don't add up
         resumed = f" (resuming at frame {self.current.frames})" if self.current.frames else ""
         log.info("%s: recording%s", rid, resumed)
         await self.tell({"type": "recording", "recordingId": rid})
@@ -149,6 +164,8 @@ class Ingest:
         rec.mark("stopped" if upload else "abandoned")
         log.info("%s: stopped (%s) after %d frames, %.1f s of audio", rec.id, why, rec.frames,
                  rec.audio_bytes / 32_000)
+        if not upload:
+            self.clean(rec.dir)  # she threw it away, so the VM does too
         await self.tell({"type": "stopped"})
         if upload:
             self.todo.add(rec.id)
@@ -158,6 +175,14 @@ class Ingest:
         rec = Recording(self.cfg.root, rid)
         rec.close()
         try:
+            if not rec.marked("muxed") and rec.frames == 0:
+                # The glasses were off or flat the whole time. There's no video to make a recipe from, and
+                # trying again won't change that.
+                rec.mark("failed", error="no frames")
+                self.todo.discard(rid)
+                self.clean(rec.dir)
+                log.warning("%s: the glasses sent no frames, so there's no video and no job", rid)
+                return
             if not rec.marked("muxed"):
                 t0 = time.monotonic()
                 mp4, started, duration = await mux.mux(rec.dir, rec.meta)
@@ -179,10 +204,12 @@ class Ingest:
             if code == 200 and res:
                 rec.mark("finished", **res)
                 self.todo.discard(rid)
+                self.clean(rec.dir)
                 log.info("%s: job %s queued", rid, res["jobId"])
             elif code in (400, 404):
                 rec.mark("failed", error=str((res or {}).get("error")))
                 self.todo.discard(rid)
+                self.clean(rec.dir)
                 log.error("%s: Convex refused the job (%d): %s", rid, code, (res or {}).get("error"))
             else:
                 raise RuntimeError(f"/glasses/finished answered {code}")
@@ -191,6 +218,10 @@ class Ingest:
             log.error("%s: finishing failed, retrying in %d s: %s", rid, RETRY_S, e)
         finally:
             self.busy.discard(rid)
+
+    def clean(self, folder: Path) -> None:
+        """Delete a done recording's media. --dry-upload keeps out.mp4, since it never reached GCS."""
+        drop_media(folder, keep=("out.mp4",) if self.cfg.dry_upload else ())
 
     # ---- the glasses ----
 
@@ -229,8 +260,8 @@ class Ingest:
             log.info("hello: fw %s, %sx%s at %s fps", hello.get("fw"), hello.get("w"), hello.get("h"), hello.get("fps"))
 
     def wall_ms(self, dev_us: int) -> int:
-        """Device time to wall clock, fixed from the first message, so reconnects keep the same mapping.
-        Device time going backwards means the glasses rebooted: map again."""
+        """Device time to wall clock, fixed from the first message of each recording (start() resets it), so
+        reconnects keep the same mapping. Device time going backwards means the glasses rebooted: map again."""
         if self.offset_ms is None or dev_us < self.last_dev_us - 1_000_000:
             self.offset_ms = time.time() * 1000 - dev_us / 1000
             self.last_dev_us = dev_us
@@ -268,15 +299,17 @@ class Ingest:
                 return connection.respond(HTTPStatus.UNAUTHORIZED, "wrong device key\n")
             return None
         if url.path == "/health":
-            cur = self.current
-            return _json({
-                "ok": True,
-                "glasses": len(self.glasses),
-                "recording": cur.id if cur else None,
-                "frames": cur.frames if cur else 0,
-                "lastFrameAgeS": round(time.monotonic() - self.latest[0], 1) if self.latest else None,
-                "waiting": sorted(self.todo),
-            })
+            body: dict = {"ok": True, "glasses": len(self.glasses)}
+            # Anyone can reach this port, so whether a cook is filming, and the recording ids, need the secret.
+            if _same(request.headers.get("x-glasses-secret", ""), self.cfg.secret):
+                cur = self.current
+                body |= {
+                    "recording": cur.id if cur else None,
+                    "frames": cur.frames if cur else 0,
+                    "lastFrameAgeS": round(time.monotonic() - self.latest[0], 1) if self.latest else None,
+                    "waiting": sorted(self.todo),
+                }
+            return _json(body)
         if url.path == "/frame/latest":
             if not _same(request.headers.get("x-glasses-secret", ""), self.cfg.secret):
                 return connection.respond(HTTPStatus.UNAUTHORIZED, "wrong secret\n")

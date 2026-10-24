@@ -129,16 +129,25 @@ test("/glasses/finished refuses bad bodies, other recordings and abandoned ones"
     { ...ok, uploadPath: "../other-family/" },
     { ...ok, uploadPath: "/abs" },
     { ...ok, uploadPath: "  " },
+    { ...ok, uploadPath: undefined },
+    // Only the VM's own folder for this recording: never another family's signer folder or another recording's.
+    { ...ok, uploadPath: "pawars-a1b2c3/" },
+    { ...ok, uploadPath: "glasses-other/" },
+    { ...ok, uploadPath: `glasses-${rec}` },
+    { ...ok, uploadPath: ` glasses-${rec}/` },
+    { ...ok, uploadPath: `glasses-${rec}/../pawars-a1b2c3/` },
     { ...ok, videoStartedAt: "soon" },
     { ...ok, durationS: 0 },
     { ...ok, recordingId: 42 },
   ]) {
     expect((await post(t, "/glasses/finished", bad)).status).toBe(400);
   }
-  expect((await post(t, "/glasses/finished", { ...ok, recordingId: "nope" })).status).toBe(404);
+  const nope = { ...ok, recordingId: "nope", uploadPath: "glasses-nope/" };
+  expect((await post(t, "/glasses/finished", nope)).status).toBe(404);
 
   const phone = await recording(t, f, "ended", "phone");
-  expect((await post(t, "/glasses/finished", { ...ok, recordingId: phone })).status).toBe(404);
+  const phoneBody = { ...ok, recordingId: phone, uploadPath: `glasses-${phone}/` };
+  expect((await post(t, "/glasses/finished", phoneBody)).status).toBe(404);
 
   await setStatus(t, rec, "abandoned");
   expect((await post(t, "/glasses/finished", ok)).status).toBe(400);

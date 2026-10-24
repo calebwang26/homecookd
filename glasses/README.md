@@ -12,6 +12,7 @@ ingest/cloud.py         Convex /glasses/* and the GCS upload
 ingest/fake_glasses.py  replay any video as the glasses would send it
 ingest/convex_stub.py   a stand-in for Convex's /glasses/* routes
 ingest/e2e_test.py      the local end-to-end test (no cloud)
+ingest/test_server.py   unit tests for the state machine (ended, quiet, abandoned, restart, superseded, no frames)
 vm/setup.sh             create or update the VM; vm/startup.sh runs on its every boot
 ```
 
@@ -23,11 +24,13 @@ The Convex side is `convex/glasses.ts` and `convex/lib/glassesRoutes.ts` (`/glas
 Needs ffmpeg and the repo's `.venv` (it has `websockets`).
 
 ```bash
+.venv/bin/python glasses/ingest/test_server.py   # no ffmpeg, no network: a fake Convex and a fake clock
 .venv/bin/python glasses/ingest/e2e_test.py
 ```
 
-It makes a 6 s test video, streams it with one dropped connection, ends the recording in the stub, and checks the
-MP4 has H.264 video and AAC audio of 6 s and that `/glasses/finished` got the right body. Nothing is uploaded.
+The e2e test makes a 6 s test video, streams it with one dropped connection, ends the recording in the stub, and
+checks the MP4 has H.264 video and AAC audio of 6 s, that `/glasses/finished` got the right body and that the frames
+and audio are gone afterwards. Nothing is uploaded.
 
 By hand, against the real Convex (it reads which recording is live, and creates the job at the end):
 
@@ -50,7 +53,8 @@ VM's metadata, writes `/etc/glasses.env` and starts the `glasses` systemd unit. 
 (it restarts the VM, so not during a recording).
 
 ```bash
-curl http://<VM_IP>:8090/health
+curl http://<VM_IP>:8090/health                                         # {ok, glasses}: is it up, are the glasses on
+curl -H "x-glasses-secret: $GLASSES_SECRET" http://<VM_IP>:8090/health  # also the recording, frames, upload queue
 gcloud compute ssh glasses-ingest --zone us-west1-b --command 'journalctl -u glasses -f'
 ```
 

@@ -115,6 +115,7 @@ app/        Expo app (expo-router, TypeScript). EAS dev build while coding, Test
 web/        Next.js site: the lander, homecookd.app/r (recipe share page) and /i (invites). Vercel project "homecookd".
 convex/     The hackathon backend: schema.ts, functions, http.ts (worker + voice service endpoints)
 voice/      Live voice service (Cloud Run): WebSocket cooking loop with Cartesia, Claude and Moss
+glasses/    ESP32 glasses → GCP VM (Python): WS ingest, MP4 mux, GCS upload, Convex job (glasses/README.md)
 supabase/   Frozen: functions/api (today's sign-in, invites, older screens), migrations/, tests/
 pipeline/   Python: prep.py → process.py (Gemini) → Muse Spark → publish.py, and worker.py (claims jobs from Convex)
 cloud/      GCS upload signer (Cloud Run) + IAM scripts
@@ -163,6 +164,10 @@ voice/deploy.sh                                                    # Cloud Run h
 .venv/bin/python pipeline/test_coverage.py
 .venv/bin/python pipeline/worker.py [--once]                        # claim Convex jobs (--gcs: the old GCS job files)
 .venv/bin/python pipeline/process.py --id <id> --rewrite            # re-write recipe.json from the cached extraction
+
+# glasses VM (glasses/README.md; uses .venv + ffmpeg)
+.venv/bin/python glasses/ingest/test_server.py                      # unit tests: the VM's state machine
+.venv/bin/python glasses/ingest/e2e_test.py                         # stub Convex + fake glasses → MP4, no cloud
 ```
 
 Use `npx expo install <pkg>`, never `npm install`, for app dependencies.

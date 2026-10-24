@@ -3,7 +3,8 @@
     python glasses/ingest/e2e_test.py
 
 Streams a 6 s test video (with one dropped connection), ends the recording in the stub and checks that the
-MP4 has H.264 video and AAC audio of the right length and that /glasses/finished got the right body.
+MP4 has H.264 video and AAC audio of the right length, that /glasses/finished got the right body, and that the
+frames and audio are deleted afterwards (--dry-upload keeps out.mp4).
 """
 from __future__ import annotations
 
@@ -67,7 +68,10 @@ def main() -> None:
     ]
     try:
         base = f"http://127.0.0.1:{VM}"
-        wait("the VM to pick up the recording", lambda: json.loads(get(f"{base}/health")[1])["recording"] == REC)
+        health = f"{base}/health"
+        wait("the VM to pick up the recording",
+             lambda: json.loads(get(health, {"x-glasses-secret": SECRET})[1])["recording"] == REC)
+        assert json.loads(get(health)[1]) == {"ok": True, "glasses": 0}, "/health without the secret says more"
         assert get(f"{base}/ingest?device=wrong")[0] == 401, "wrong device key should be refused"
         assert get(f"{base}/frame/latest?recording={REC}")[0] == 401, "/frame/latest needs the secret"
 
@@ -81,8 +85,12 @@ def main() -> None:
                                                       data=json.dumps({"status": "ended"}).encode()), timeout=5)
         wait("/glasses/finished", lambda: json.loads(get(f"http://127.0.0.1:{STUB}/_finished")[1]), timeout=90)
         body = json.loads(get(f"http://127.0.0.1:{STUB}/_finished")[1])[0]
+        folder = tmp / "glasses" / REC
+        wait("the VM to mark it finished", lambda: "finished" in json.loads((folder / "meta.json").read_text()))
+        left = sorted(p.name for p in folder.iterdir())
+        assert left == ["meta.json", "out.mp4"], f"the media should be gone, but the folder has {left}"
 
-        mp4 = tmp / "glasses" / REC / "out.mp4"
+        mp4 = folder / "out.mp4"
         probe = json.loads(subprocess.run(["ffprobe", "-v", "error", "-show_entries",
                                            "stream=codec_type,codec_name,duration,r_frame_rate", "-of", "json",
                                            str(mp4)], check=True, capture_output=True, text=True).stdout)
@@ -94,7 +102,7 @@ def main() -> None:
             assert abs(float(streams[kind]["duration"]) - 6) < 0.3, f"{kind} lasts {streams[kind]['duration']} s"
         assert body["uploadPath"] == f"glasses-{REC}/" and abs(body["durationS"] - 6) < 0.3
         assert abs(body["videoStartedAt"] - time.time() * 1000) < 120_000
-        meta = json.loads((tmp / "glasses" / REC / "meta.json").read_text())
+        meta = json.loads((folder / "meta.json").read_text())
         assert meta["finished"] == {"jobId": "stubjob1", "recipeId": "stubrecipe1"}
         print(f"PASS ({tmp})")
     finally:

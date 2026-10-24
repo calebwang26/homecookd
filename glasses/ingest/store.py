@@ -4,6 +4,7 @@ arrives, so a restart of the service picks up where it left off."""
 from __future__ import annotations
 
 import json
+import shutil
 from pathlib import Path
 
 RATE = 16_000
@@ -77,3 +78,17 @@ class Recording:
 
     def marked(self, name: str):
         return self.meta.get(name)
+
+
+def drop_media(folder: Path, keep: tuple[str, ...] = ()) -> None:
+    """Delete everything in a recording folder but meta.json (and `keep`). Runs once the MP4 is in GCS, or the
+    cook discarded the recording, or it failed: no copy of a kitchen video stays on the VM."""
+    if not folder.is_dir():
+        return
+    for p in folder.iterdir():
+        if p.name == "meta.json" or p.name in keep:
+            continue
+        if p.is_dir():
+            shutil.rmtree(p, ignore_errors=True)
+        else:
+            p.unlink(missing_ok=True)

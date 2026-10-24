@@ -22,10 +22,9 @@ export function registerGlassesRoutes(http: HttpRouter): void {
     handler: glasses(async (ctx, body) => {
       const { recordingId, videoStartedAt, durationS } = body;
       if (!isStr(recordingId, 100)) return fail(400, "recordingId must be a string");
-      const path = typeof body.uploadPath === "string" ? body.uploadPath.trim() : "";
-      if (!path || path.length > 500 || path.includes("..") || path.startsWith("/")) {
-        return fail(400, "uploadPath must be a path in the uploads bucket");
-      }
+      // The VM only ever uploads to this folder. Any other path could point the job at another family's video.
+      const path = `glasses-${recordingId}/`;
+      if (body.uploadPath !== path) return fail(400, "uploadPath must be glasses-<recordingId>/");
       if (!isNum(videoStartedAt) || videoStartedAt <= 0) return fail(400, "videoStartedAt must be epoch ms");
       if (!isNum(durationS) || durationS <= 0) return fail(400, "durationS must be a positive number");
       const r = await ctx.runMutation(internal.glasses.finished, { recordingId, uploadPath: path, videoStartedAt });

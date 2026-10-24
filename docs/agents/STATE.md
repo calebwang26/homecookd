@@ -178,3 +178,18 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - **Open:** the TEST family's Biryani still says `mossIndexedAt`, but its index was deleted on purpose; it
     re-indexes on its next publish.
 - Oct 24 · #25 · Claude · Track H: glasses VM → Convex job. `convex/glasses.ts` + `lib/glassesRoutes.ts`: `/glasses/active` (newest live glasses recording, or one by id in any status, so the VM can tell ended from abandoned) and `/glasses/finished` (sets `videoStartedAt`, creates the "processing" card and queued job with the recording's dish/language/kid; idempotent; refuses abandoned); 4 convex-tests. `glasses/ingest/`: `server.py` (WS ingest per INGEST.md, `/frame/latest`, `/health`, polls Convex every 2 s, survives reconnects and restarts), `mux.py` (frames at real times → 15 fps H.264 + AAC), GCS JSON-API upload, `fake_glasses.py`, `convex_stub.py`, `e2e_test.py` (passes locally, no cloud). `glasses/vm/setup.sh` (dry-run only; not run). Open: create the VM, set `GLASSES_SECRET`/`GLASSES_DEVICE_KEY` (Convex env, VM, Cloud Run), voice/deploy.sh must carry `GLASSES_SECRET` + `GLASSES_URL` (Track E), deploy Convex; not tried with the real firmware or on the e2-micro.
+- Oct 24 · #25 (review fixes) · Claude · Track H review fixes (`glasses/ingest/`, `/glasses/finished`):
+  - **Stuck recordings:** one that never ended (phone died) now loses the glasses to a newer recording, or after
+    12 h, and is finished with what it has. Before, it kept every frame and the new one got no video.
+  - **No frames** (glasses off): the recording fails at once, no job, instead of retrying every 30 s forever.
+  - **Media:** the VM deletes frames, audio and MP4 once the job exists, or the recording is abandoned or fails;
+    only `meta.json` stays (also swept at startup). `--dry-upload` keeps `out.mp4`.
+  - **Security:** `/glasses/finished` takes only `uploadPath` = `glasses-<recordingId>/` (400 otherwise; STACK.md
+    updated), so a leaked secret can't point a job at another family's upload. Public `/health` says only
+    `{ok, glasses}`; the recording id, frames and queue need `x-glasses-secret`.
+  - **Clock:** device time is mapped to the wall clock afresh at each recording's start (no drift over days).
+    `finish()` tasks are now held, so they can't be garbage-collected midway.
+  - **Tests:** new `glasses/ingest/test_server.py` (13 unit tests: fake Convex, fake clock, temp dir), e2e passes,
+    convex 4/4 glasses tests. AGENTS.md lists `glasses/` and its two test commands.
+  - **Open:** as above (VM not created, real firmware not tried). `npx convex codegen` after merge, so the
+    hand-edited `api.d.ts` matches the generator; tell Track 0 about the STACK.md `/glasses/*` changes.
