@@ -1,6 +1,7 @@
 // Streams WAV files to the voice service like the app's mic would, prints every event, and saves
-// what the service says to test-audio/out/. One file = one turn; we wait for the reply before the next.
-//   npm run test-client -- test-audio/next-step.wav test-audio/question.wav
+// what the service says to test-audio/out/. One file = one turn; we wait for the reply (and for homie to
+// go quiet) before the next. It waits out the greeting and the read-aloud offer first.
+//   npm run test-client -- test-audio/yes.wav test-audio/next-step.wav test-audio/question.wav
 //   URL=wss://<cloud run host> npm run test-client -- test-audio/next-step.wav
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import WebSocket from "ws";
@@ -44,13 +45,23 @@ let rate = 24000;
 let said = 0;
 let replied: () => void = () => {};
 let lastEnd = 0;
+let lastEventAt = Date.now();
+let speaking = false;
+let sayAt = 0;
+let playingUntil = 0; // when a phone would finish playing the last line
+let offered: () => void = () => {};
+let lastKind = "";
 
 ws.on("message", (data, isBinary) => {
   if (isBinary) return void audio.push(data as Buffer);
   const ev = JSON.parse(data.toString());
   if (ev.type === "transcript" && !ev.final) return; // partials are noisy; the final one is printed
-  if (ev.type === "say") { audio = []; rate = ev.audio.sampleRate; }
+  lastEventAt = Date.now();
+  if (ev.type === "say") { audio = []; rate = ev.audio.sampleRate; speaking = true; lastKind = ev.kind; sayAt = Date.now(); }
   if (ev.type === "say_end") {
+    speaking = false;
+    playingUntil = sayAt + (Buffer.concat(audio).length / 2 / rate) * 1000;
+    if (lastKind === "offer") offered();
     const file = new URL(`say-${++said}.wav`, outDir);
     writeFileSync(file, wavOf(Buffer.concat(audio), rate));
     console.log(`${stamp()}  say_end → ${file.pathname} (${(Buffer.concat(audio).length / 2 / rate).toFixed(1)}s of audio)`);
@@ -64,6 +75,9 @@ ws.on("message", (data, isBinary) => {
 });
 ws.on("close", (code) => { console.log(`${stamp()}  closed ${code}`); process.exit(code === 1000 ? 0 : 1); });
 await new Promise((r) => ws.once("open", r));
+// The hello and "Want me to read it out loud?" come first (a returning kid gets neither).
+await Promise.race([new Promise<void>((r) => (offered = r)), sleep(10_000)]);
+while (Date.now() < playingUntil + 500) { ws.send(Buffer.alloc(3200)); await sleep(100); }
 
 const silence = Buffer.alloc(3200); // 100 ms
 for (const file of files) {
@@ -77,6 +91,8 @@ for (const file of files) {
   await Promise.race([done, sleep(20_000)]);
   clearInterval(pump);
   if (waited >= 20_000) console.log(`${stamp()}  (no reply in 20 s)`);
-  await sleep(500);
+  // Like a kid listening: wait until a phone would have played it all, and homie has gone quiet (a reply can be
+  // two lines: a hint, then "I'll ask Grandma too"; a step can be followed by a story offer).
+  while (speaking || Date.now() < playingUntil + 1500 || Date.now() - lastEventAt < 1500) { ws.send(silence); await sleep(100); }
 }
 ws.close(1000);

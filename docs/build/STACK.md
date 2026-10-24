@@ -183,10 +183,12 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   - `{ type: "phase", phase: "intro" | "recording" | "wrapping_up" | "ended" }`
   - `{ type: "state", state: "listening" | "thinking" | "speaking" | "quiet" }` (the pot's steam)
   - `{ type: "say", text, textEn, kind, ai: true, audio }` + binary audio + `{ type: "say_end", interrupted }`.
-    `kind` is a `homiePrompts.kind`. The app lights the pot just before audio starts.
+    `kind` is a `homiePrompts.kind`. The app lights the pot just before audio starts. If the cook taps start while
+    the hello is still playing, an extra `{ type: "say_end", interrupted: true }` tells the app to stop it.
   - `{ type: "ask", promptId, text, textEn, kind }`: show the caption card. `{ type: "drop", promptId }`: fade it
     (no answer in ~10 s, or "not now"). `{ type: "answered", promptId }`.
-  - `{ type: "transcript", text, final }`, `{ type: "error", message }`. Close 4401 signed out, 4404 no such recording.
+  - `{ type: "transcript", text, final }`, `{ type: "error", message }`. Close 4401 signed out, 4404 no such recording
+    (or it already ended).
 - The service ignores incoming audio while homie speaks (+300 ms), so it never hears itself; the app also sends
   silence then. Pacing (normal): first question no earlier than 4 min, gaps of 4–5 min, doubled after an ignored
   one, at most 6 live plus 2 end questions, never while the cook talks or tells a story. `HOMIE_DEMO=1`: first
@@ -222,7 +224,8 @@ voice, in `lang` or the person's language). `translate: true` first turns Englis
   `recordings.videoStartedAt` and creates the job (`source: "glasses"`) with the recording's dish, language and kid.
 
 **New keys**: `GLASSES_SECRET` (Convex env, the VM, Cloud Run secret), `GEMINI_API_KEY` (Cloud Run secret, for live
-Marathi transcription), `HOMIE_VOICE` (Cloud Run env: homie's Cartesia voice id), `GLASSES_URL` (Cloud Run env).
+Marathi transcription), `HOMIE_VOICE` (Cloud Run env: homie's Cartesia voice id; default "Sindhu" `07bc462a-c644-49f1-baf7-82d5599131be`,
+which Sonic speaks in Marathi and English), `GLASSES_URL` (Cloud Run env).
 
 ## Keys (all server-side, never in `app/` or `web/`)
 

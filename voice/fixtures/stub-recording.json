@@ -1,0 +1,38 @@
+{
+  "mr": {
+    "recording": {
+      "_id": "stub-mr",
+      "language": "mr",
+      "status": "intro",
+      "source": "phone",
+      "dish": "Varan Bhaat"
+    },
+    "cook": {
+      "name": "Rajani",
+      "relation": "Aaji",
+      "language": "mr"
+    },
+    "kid": {
+      "name": "Shreya"
+    },
+    "dish": "Varan Bhaat"
+  },
+  "en": {
+    "recording": {
+      "_id": "stub-en",
+      "language": "en",
+      "status": "intro",
+      "source": "phone",
+      "dish": "Dal Tadka"
+    },
+    "cook": {
+      "name": "Rajani",
+      "relation": "Aaji",
+      "language": "en"
+    },
+    "kid": {
+      "name": "Shreya"
+    },
+    "dish": "Dal Tadka"
+  }
+}

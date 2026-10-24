@@ -177,3 +177,14 @@ Before starting work, compare the last commit here with `git log origin/main` to
     `lib/http` and `lib/liveRoutes`.
   - **Open:** the TEST family's Biryani still says `mossIndexedAt`, but its index was deleted on purpose; it
     re-indexes on its next publish.
+- Oct 24 · #TBD · Claude · Track E: homie, the live companion. Convex `live.ts` (`startRecording`, `recording`) and
+  `/live/person|session|status|prompt|prompt-update|optin` (`lib/liveRoutes.ts`), idle recordings abandoned after
+  2 h (cron); `/voice/session` adds the cook's language, relation, `quoteOriginal` and each story's step. Voice
+  service: `/record` (hello → questions while she cooks → last questions, stories opt-in, goodbye; Gemini Live
+  `gemini-3.5-transcribe-live` hears Marathi, Ink 2 the rest; pacing in code, `HOMIE_DEMO=1` for the demo),
+  `POST /speak`, and kid-side `/cook` additions (say `kind`/`textEn`, greeting + read-aloud offer, timers, labelled
+  hints that always ask the cook too, story and quiet nudges, clip captions). homie's voice: Sindhu
+  `07bc462a-c644-49f1-baf7-82d5599131be`.
+  - **Checked:** convex-tests and both typechecks; `test-record` end to end on the stub in Marathi and English.
+  - **Open:** not deployed (Convex or Cloud Run); never run against live Convex or a phone; the glasses frame pull
+    is untested (no VM yet); `GEMINI_API_KEY` and `HOMIE_VOICE` aren't Cloud Run secrets/env yet (deploy.sh adds them).

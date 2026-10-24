@@ -1,28 +1,39 @@
-// Convex HTTP actions for the voice service (docs/build/STACK.md, "Voice service → Convex"), with the
-// x-voice-secret header. VOICE_STUB=1 (or no CONVEX_SITE_URL) uses a stub instead: it serves
-// fixtures/stub-session.json (Grandma's red-braised pork) and accepts any session token.
+// Convex HTTP actions for the voice service (docs/build/STACK.md, "Voice service → Convex" and "Voice
+// service → Convex for homie"), with the x-voice-secret header. VOICE_STUB=1 (or no CONVEX_SITE_URL)
+// uses a stub instead: fixtures/stub-session.json (Grandma's red-braised pork) for /cook and
+// fixtures/stub-recording.json (Rajani Aaji, recording "stub-mr" or "stub-en") for /record. The stub
+// accepts any session token.
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { env } from "./env.js";
 
 export type Moment = { startS: number; endS: number };
-export type Step = { order: number; title: string; text: string; moment: Moment };
+export type Step = { order: number; title: string; text: string; quote?: string; quoteOriginal?: string; moment: Moment };
+export type Memory = { kind: "story" | "tip"; text: string; moment: Moment; stepOrder?: number };
 export type CookSession = {
   familyId: string;
   mossIndex: string;
   kid: { id: string; name: string };
-  cook?: { name: string };
-  recipe: { id: string; title: string; steps: Step[] };
+  cook?: { name: string; language: string; relation?: string };
+  recipe: { id: string; title: string; steps: Step[]; memories: Memory[] };
   stepOrder?: number;
 };
 export type QuestionResult = { status: "found_in_video" | "asked_cook"; questionId: string };
 
 /** What /voice/session returns (convex/voice.ts sessionView, plus the resumed step). */
-type LiveSession = {
+type LiveCookSession = {
   kid: { personId: string; name: string; role: string };
   familyId: string;
   mossIndex: string;
-  recipe: { recipeId: string; title: string; cookName: string; steps: Step[] };
+  recipe: {
+    recipeId: string;
+    title: string;
+    cookName: string;
+    cookLanguage?: string;
+    cookRelation?: string;
+    steps: Step[];
+    memories?: Memory[];
+  };
   stepOrder?: number;
 };
 
@@ -44,18 +55,18 @@ async function post<T>(path: string, body: object): Promise<T> {
   return (text ? JSON.parse(text) : {}) as T;
 }
 
-const stubSession = (): CookSession =>
-  JSON.parse(readFileSync(new URL("../fixtures/stub-session.json", import.meta.url), "utf8"));
+const fixture = <T>(name: string): T => JSON.parse(readFileSync(new URL(`../fixtures/${name}`, import.meta.url), "utf8"));
 
 export async function startSession(sessionToken: string, recipeId: string): Promise<CookSession> {
-  if (usingStub) return stubSession();
-  const live = await post<LiveSession>("/voice/session", { sessionToken, recipeId });
+  if (usingStub) return fixture<CookSession>("stub-session.json");
+  const live = await post<LiveCookSession>("/voice/session", { sessionToken, recipeId });
+  const r = live.recipe;
   return {
     familyId: live.familyId,
     mossIndex: live.mossIndex,
     kid: { id: live.kid.personId, name: live.kid.name },
-    cook: live.recipe.cookName ? { name: live.recipe.cookName } : undefined,
-    recipe: { id: live.recipe.recipeId, title: live.recipe.title, steps: live.recipe.steps },
+    cook: r.cookName ? { name: r.cookName, language: r.cookLanguage ?? "en", relation: r.cookRelation } : undefined,
+    recipe: { id: r.recipeId, title: r.title, steps: r.steps, memories: r.memories ?? [] },
     stepOrder: live.stepOrder,
   };
 }
@@ -77,4 +88,71 @@ export function logQuestion(
     return Promise.resolve({ status: found ? "found_in_video" : "asked_cook", questionId: `stub-${randomUUID()}` });
   }
   return post("/voice/question", { sessionToken, recipeId, stepOrder, text, found });
+}
+
+// ---- homie while a cook records ----
+
+export type Person = { personId: string; familyId: string; name: string; role: "cook" | "kid"; language: string; relation?: string };
+export type RecordingStatus = "intro" | "recording" | "wrapping_up" | "ended" | "abandoned";
+export type RecordingSession = {
+  recording: { _id: string; language: string; status: RecordingStatus; startedAt?: number; dish?: string };
+  cook: { name: string; relation?: string; language: string };
+  kid?: { name: string };
+  dish?: string;
+};
+export type PromptKind = "intro" | "amount" | "cue" | "substitution" | "story" | "reaction" | "end" | "closing" | "optin";
+export type PromptStatus = "spoken" | "answered" | "ignored" | "not_now";
+export type Answer = { transcript: string; transcriptEn?: string; atS: number; endS: number };
+
+const stubRecordings = () => fixture<Record<"mr" | "en", RecordingSession>>("stub-recording.json");
+
+export async function person(sessionToken: string): Promise<Person> {
+  if (usingStub) {
+    const { cook } = stubRecordings().mr;
+    return { personId: "stub-cook", familyId: "voice-test", name: cook.name, role: "cook", language: cook.language, relation: cook.relation };
+  }
+  return post("/live/person", { sessionToken });
+}
+
+export async function recordingSession(sessionToken: string, recordingId: string): Promise<RecordingSession> {
+  if (usingStub) return stubRecordings()[recordingId === "stub-en" ? "en" : "mr"];
+  return post("/live/session", { sessionToken, recordingId });
+}
+
+export async function setRecordingStatus(
+  sessionToken: string,
+  recordingId: string,
+  status: "recording" | "wrapping_up" | "ended",
+): Promise<{ ok: true; startedAt?: number }> {
+  if (usingStub) {
+    console.log(`[stub] recording ${status}`);
+    if (status === "recording") stubStarted.set(recordingId, Date.now());
+    const startedAt = stubStarted.get(recordingId);
+    if (status === "ended") stubStarted.delete(recordingId);
+    return { ok: true, startedAt };
+  }
+  return post("/live/status", { sessionToken, recordingId, status });
+}
+const stubStarted = new Map<string, number>();
+
+export async function logPrompt(
+  sessionToken: string,
+  recordingId: string,
+  prompt: { kind: PromptKind; text: string; textEn: string; atS: number; status: PromptStatus },
+): Promise<{ promptId: string }> {
+  if (usingStub) {
+    console.log(`[stub] prompt ${prompt.kind} at ${prompt.atS.toFixed(1)}s: ${prompt.textEn}`);
+    return { promptId: `stub-${randomUUID()}` };
+  }
+  return post("/live/prompt", { sessionToken, recordingId, ...prompt });
+}
+
+export async function updatePrompt(sessionToken: string, promptId: string, status: PromptStatus, answer?: Answer): Promise<void> {
+  if (usingStub) return void console.log(`[stub] prompt ${status}${answer ? `: ${answer.transcriptEn ?? answer.transcript}` : ""}`);
+  await post("/live/prompt-update", { sessionToken, promptId, status, answer });
+}
+
+export async function setOptIn(sessionToken: string, recordingId: string, optIn: boolean): Promise<void> {
+  if (usingStub) return void console.log(`[stub] optin ${optIn}`);
+  await post("/live/optin", { sessionToken, recordingId, optIn });
 }
