@@ -19,7 +19,7 @@ import { makeFunctionReference, type FunctionType } from 'convex/server';
 import { File, UploadType } from 'expo-file-system';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 
-import { getSession } from '@/lib/session';
+import { getSession, useSession } from '@/lib/session';
 import { secretGet } from '@/lib/storage';
 
 const URL = (process.env.EXPO_PUBLIC_CONVEX_URL ?? '').trim();
@@ -88,9 +88,12 @@ export async function call<T>(type: 'mutation' | 'action' | 'query', name: strin
 type ConvexSession = { sessionToken: string; familyId: string; personId: string; role: 'cook' | 'kid' };
 let session: { key: string; run: Promise<ConvexSession | null> } | null = null;
 
-/** This phone's Convex session for the current person, or null before sign-in. */
-export async function convexSession(): Promise<string | null> {
-  const profileId = getSession()?.me?.id;
+/**
+ * This phone's Convex session for the current person, or null before sign-in. Hooks pass `profileId`
+ * from useSession(): the module snapshot (getSession) is published in SessionProvider's effect, which
+ * runs after its children's effects, so a screen's first effect would still see nobody signed in.
+ */
+export async function convexSession(profileId = getSession()?.me?.id): Promise<string | null> {
   const deviceKey = await secretGet('deviceKey');
   if (!profileId || !deviceKey) return stubbed ? 'stub' : null;
   const key = `${deviceKey}:${profileId}`;
@@ -105,6 +108,9 @@ export async function convexSession(): Promise<string | null> {
   return (await session.run)?.sessionToken ?? null;
 }
 
+const LIVE_RETRIES = 3;
+const LIVE_RETRY_MS = 10_000;
+
 /** A live query with the session token (plus `args`); `fallback` is the stub's live value. */
 export function useLive<T>(
   name: string,
@@ -115,24 +121,35 @@ export function useLive<T>(
 ): T {
   const [value, setValue] = useState<T>(initial);
   const isStub = useConvexStubbed();
-  const meId = getSession()?.me?.id;
+  // A new person or a new device key (a sign-in) starts a new session and subscription.
+  const { me, credentialVersion } = useSession();
+  const meId = me?.id;
   const argsKey = JSON.stringify(args);
   useEffect(() => {
     if (!enabled) return;
     if (isStub || !client) return fallback(setValue);
     let off: (() => void) | null = null;
     let alive = true;
-    void convexSession().then((sessionToken) => {
-      if (!alive || !sessionToken) return;
-      off = client.onUpdate(ref<'query'>(name), { ...args, sessionToken }, (v) => setValue(v as T), (e) => (isMissing(e) ? goStub(e) : console.warn(`[convex] ${name}`, String(e))));
-    });
+    let retry: ReturnType<typeof setTimeout> | null = null;
+    // No session yet (a failed sessions.start, a dropped connection): try again a few times.
+    const subscribe = (tries: number) =>
+      void convexSession(meId).then((sessionToken) => {
+        if (!alive) return;
+        if (!sessionToken) {
+          if (tries < LIVE_RETRIES) retry = setTimeout(() => subscribe(tries + 1), LIVE_RETRY_MS);
+          return;
+        }
+        off = client.onUpdate(ref<'query'>(name), { ...args, sessionToken }, (v) => setValue(v as T), (e) => (isMissing(e) ? goStub(e) : console.warn(`[convex] ${name}`, String(e))));
+      });
+    subscribe(0);
     return () => {
       alive = false;
+      if (retry) clearTimeout(retry);
       off?.();
     };
     // `fallback` is a stable module function per call site.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, isStub, meId, enabled, argsKey]);
+  }, [name, isStub, meId, credentialVersion, enabled, argsKey]);
   return value;
 }
 
