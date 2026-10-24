@@ -3,23 +3,31 @@ import { api, internal } from "./_generated/api";
 import chili from "../data/synthetic/dad-sunday-chili.json";
 import { addRecipe, type Backend, newBackend, signIn, stubFetch } from "./test.helpers";
 
-const moss = vi.hoisted(() => ({ calls: [] as { op: string; name: string; arg: unknown }[], exists: false, raceLost: false }));
+type Doc = { id: string; text: string; metadata: Record<string, string> };
+// A stand-in for Moss that keeps each index's docs, so a test can check what ended up searchable.
+const moss = vi.hoisted(() => ({
+  calls: [] as { op: string; name: string; arg: unknown }[],
+  indexes: new Map<string, Map<string, unknown>>(),
+}));
 vi.mock("@moss-js/moss", () => ({
   MossClient: class {
-    async getIndex(name: string) {
-      if (!moss.exists) throw new Error("not found");
-      return { name };
+    async getDocs(name: string) {
+      const index = moss.indexes.get(name);
+      if (!index) throw new Error("not found");
+      return [...index.values()];
     }
-    async createIndex(name: string, docs: unknown) {
-      if (moss.raceLost) throw new Error("index already exists");
+    async createIndex(name: string, docs: Doc[]) {
+      if (moss.indexes.has(name)) throw new Error("index already exists");
       moss.calls.push({ op: "createIndex", name, arg: docs });
-      moss.exists = true;
+      moss.indexes.set(name, new Map(docs.map((d) => [d.id, d])));
     }
-    async addDocs(name: string, docs: unknown) {
+    async addDocs(name: string, docs: Doc[]) {
       moss.calls.push({ op: "addDocs", name, arg: docs });
+      for (const d of docs) moss.indexes.get(name)!.set(d.id, d);
     }
-    async deleteDocs(name: string, ids: unknown) {
+    async deleteDocs(name: string, ids: string[]) {
       moss.calls.push({ op: "deleteDocs", name, arg: ids });
+      for (const id of ids) moss.indexes.get(name)!.delete(id);
     }
   },
 }));
@@ -27,8 +35,7 @@ vi.mock("@moss-js/moss", () => ({
 beforeEach(() => {
   vi.useFakeTimers();
   moss.calls = [];
-  moss.exists = false;
-  moss.raceLost = false;
+  moss.indexes.clear();
   process.env.WORKER_SECRET = "worker-secret-for-tests";
   process.env.VOICE_SECRET = "voice-secret-for-tests";
   process.env.MOSS_PROJECT_ID = "proj";
@@ -298,15 +305,38 @@ test("messages: privacy, and the photo note Muse Spark drafts", async () => {
   ).rejects.toThrow("isn't set up");
 });
 
-test("Moss: a recipe that loses the race to create the index adds to it; reindexMissing retries", async () => {
+test("Moss: one sync per family at a time; a change during a sync runs one more pass", async () => {
   stubFetch();
   const t = newBackend();
   const dad = await signIn(t, "p-dad");
-  const recipeId = await addRecipe(t, dad.familyId, dad.personId);
-  moss.raceLost = true; // getIndex says none, createIndex says it exists
+  const chiliId = await addRecipe(t, dad.familyId, dad.personId);
+  const porkId = await addRecipe(t, dad.familyId, dad.personId);
+
+  expect(await t.mutation(internal.worker.reindexMissing, {})).toBe(1);
+  // Asked again while the first sync hasn't run: no second sync starts beside it.
+  await t.mutation(internal.worker.reindexMissing, {});
+  const pending = await t.run((ctx) => ctx.db.system.query("_scheduled_functions").collect());
+  expect(pending.filter((f) => f.name.includes("syncFamily") && f.state.kind === "pending")).toHaveLength(1);
+  expect((await t.run((ctx) => ctx.db.get("families", dad.familyId)))?.mossSync).toMatchObject({ again: true });
+
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  // Two passes, one after the other: create, then the "again" pass.
+  expect(moss.calls.map((c) => c.op)).toEqual(["createIndex", "addDocs"]);
+  const index = moss.indexes.get(`family-${dad.familyId}`)!;
+  expect(index.has(`${chiliId}:step:1`) && index.has(`${porkId}:step:1`)).toBe(true);
+  expect(index.size).toBe(6); // 2 steps + 1 story, for each recipe
+  expect((await t.run((ctx) => ctx.db.get("families", dad.familyId)))?.mossSync).toBeUndefined();
+  expect((await t.run((ctx) => ctx.db.get("recipes", porkId)))?.mossIndexedAt).toBeTypeOf("number");
+  expect(await t.mutation(internal.worker.reindexMissing, {})).toBe(0);
+});
+
+test("Moss: a sync that never reported back stops blocking after 10 minutes", async () => {
+  stubFetch();
+  const t = newBackend();
+  const dad = await signIn(t, "p-dad");
+  await addRecipe(t, dad.familyId, dad.personId);
+  await t.run((ctx) => ctx.db.patch("families", dad.familyId, { mossSync: { startedAt: Date.now() - 11 * 60_000, again: false } }));
   expect(await t.mutation(internal.worker.reindexMissing, {})).toBe(1);
   await t.finishAllScheduledFunctions(vi.runAllTimers);
-  expect(moss.calls.map((c) => c.op)).toEqual(["addDocs"]);
-  expect((await t.run((ctx) => ctx.db.get("recipes", recipeId)))?.mossIndexedAt).toBeTypeOf("number");
-  expect(await t.mutation(internal.worker.reindexMissing, {})).toBe(0);
+  expect(moss.calls.map((c) => c.op)).toEqual(["createIndex"]);
 });
