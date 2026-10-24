@@ -59,6 +59,7 @@ class FakeConvex:
         self.stale: set[str] = set()  # over 12 h old: /glasses/active {} no longer reports them
         self.finished: list[dict] = []
         self.jobs: dict[str, str] = {}  # recordings someone else (the laptop bridge) already finished
+        self.saved: set[str] = set()  # recordings whose full video the laptop bridge saved (no job)
         self.down = 0  # answer /glasses/finished with a 500 this many more times
 
     async def __call__(self, path: str, body: dict) -> tuple[int, dict | None]:
@@ -68,7 +69,8 @@ class FakeConvex:
                 if rid not in self.status:
                     return 404, {"error": "no such glasses recording"}
                 row = {"recordingId": rid, "status": self.status[rid]}
-                return 200, row | ({"jobId": self.jobs[rid]} if rid in self.jobs else {})
+                row |= {"jobId": self.jobs[rid]} if rid in self.jobs else {}
+                return 200, row | ({"videoSaved": True} if rid in self.saved else {})
             live = [r for r, s in self.status.items() if s in LIVE and r not in self.stale]
             return (200, {"recordingId": live[-1], "status": self.status[live[-1]]}) if live else (204, None)
         if path == "/glasses/finished":
@@ -178,6 +180,15 @@ class TickTest(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(self.meta("A")["finished"], {"jobId": "job-A", "by": "bridge"})
         self.assertEqual(self.files("A"), ["meta.json"])
         self.assertEqual(vm.todo, set())
+
+    async def test_bridge_saved_the_video_so_the_vm_makes_no_job(self) -> None:
+        vm = await self.bridged_recording()
+        self.convex.saved.add("A")  # the laptop saved the full video for the cook to send herself
+        self.clock.advance(server.BRIDGE_GRACE_S + 1)
+        await self.tick(vm)
+        self.assertEqual(self.uploads, [])
+        self.assertEqual(self.convex.finished, [])
+        self.assertEqual(self.meta("A")["finished"], {"jobId": None, "by": "bridge"})
 
     async def test_bridge_never_finished_so_the_vm_uploads_its_copy(self) -> None:
         vm = await self.bridged_recording()

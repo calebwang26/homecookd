@@ -41,6 +41,21 @@ export function registerGlassesRoutes(http: HttpRouter): void {
     }),
   });
 
+  // The laptop bridge saved the full video (glasses/BRIDGE.md): where the cook's phone can download it.
+  http.route({
+    path: "/glasses/video",
+    method: "POST",
+    handler: glasses(async (ctx, body) => {
+      const { recordingId, videoUrl } = body;
+      if (!isStr(recordingId, 100)) return fail(400, "recordingId must be a string");
+      // Only our own public media bucket, in this recording's folder: the phone downloads whatever this says.
+      if (!isStr(videoUrl, 500) || !VIDEO_URL.test(videoUrl) || !videoUrl.includes(`/glasses-${recordingId}/`))
+        return fail(400, "videoUrl must be https://storage.googleapis.com/edible-media-…/glasses-<recordingId>/…");
+      const r = await ctx.runMutation(internal.glasses.saveVideo, { recordingId, videoUrl });
+      return "ok" in r ? json(r) : fail(r.status, r.error);
+    }),
+  });
+
   // The newest glasses frame, several a second from the laptop bridge, for the cook's recording screen.
   // Raw JPEG body (not JSON), so it can't use glasses(); same secret. Optional `session` and `t` (ms on the
   // glasses' clock) let Convex drop a frame that lands after a newer one.
@@ -101,6 +116,7 @@ export function registerGlassesRoutes(http: HttpRouter): void {
 }
 
 const MAX_FRAME_BYTES = 512 * 1024;
+const VIDEO_URL = /^https:\/\/storage\.googleapis\.com\/edible-media-[0-9]+\/glasses-[a-z0-9]+\/[A-Za-z0-9._-]+\.mp4$/;
 const KINDS = ["step", "ingredient", "cue", "quote", "story", "marker"] as const;
 const optStr = (x: unknown) => x === undefined || typeof x === "string";
 

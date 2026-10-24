@@ -1,9 +1,10 @@
 // A cook's upload going through the pipeline. The app creates the job after the video is in GCS;
 // the worker (worker.ts, over HTTP) claims it and reports each stage, and the cook's phone watches.
 import { ConvexError, v } from "convex/values";
-import { mutation, query } from "./_generated/server";
+import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
 import { requireCook, requireSession } from "./lib/auth";
 import { languageCode } from "./people";
+import type { Doc } from "./_generated/dataModel";
 import schema from "./schema";
 
 export const create = mutation({
@@ -85,5 +86,44 @@ export const forFamily = query({
       .withIndex("by_familyId", (q) => q.eq("familyId", signed.family._id))
       .order("desc")
       .take(20);
+  },
+});
+
+/** What a cancelled job says; worker.progress leaves a job with it alone, so a worker mid-way can't revive it. */
+export const CANCELLED = "Cancelled.";
+const FINISHED = new Set(["done", "failed"]);
+
+async function cancelJob(ctx: MutationCtx, job: Doc<"jobs">): Promise<boolean> {
+  if (FINISHED.has(job.stage)) return false;
+  await ctx.db.patch(job._id, { stage: "failed", progress: 0, error: CANCELLED, claimedAt: undefined });
+  if (job.recipeId) await ctx.db.patch(job.recipeId, { status: "failed" });
+  return true;
+}
+
+/** The cook stops one of her family's jobs (the progress row's cancel). Queued: no worker takes it. Running: the worker's reports are ignored. */
+export const cancel = mutation({
+  args: { sessionToken: v.string(), jobId: v.id("jobs") },
+  returns: v.boolean(),
+  handler: async (ctx, { sessionToken, jobId }) => {
+    const signed = await requireSession(ctx, sessionToken);
+    requireCook(signed);
+    const job = await ctx.db.get(jobId);
+    if (!job || job.familyId !== signed.family._id) return false;
+    return await cancelJob(ctx, job);
+  },
+});
+
+/** Clears the whole pipeline (every family): `npx convex run jobs:cancelUnfinished`. Returns how many it cancelled. */
+export const cancelUnfinished = internalMutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    let n = 0;
+    for (const stage of ["uploading", "queued", "preparing", "understanding", "writing", "indexing"] as const) {
+      for (const job of await ctx.db.query("jobs").withIndex("by_stage", (q) => q.eq("stage", stage)).take(500)) {
+        if (await cancelJob(ctx, job)) n++;
+      }
+    }
+    return n;
   },
 });

@@ -250,3 +250,15 @@ export const abandonIdle = internalMutation({
     return null;
   },
 });
+
+/** One stuck recording, by hand (`npx convex run live:abandon '{"recordingId":"…"}'`): no job, the VM drops its copy. */
+export const abandon = internalMutation({
+  args: { recordingId: v.id("recordings") },
+  returns: v.boolean(),
+  handler: async (ctx, { recordingId }) => {
+    const row = await ctx.db.get("recordings", recordingId);
+    if (!row || row.status === "ended" || row.status === "abandoned") return false;
+    await ctx.db.patch("recordings", recordingId, { status: "abandoned", updatedAt: Date.now() });
+    return true;
+  },
+});

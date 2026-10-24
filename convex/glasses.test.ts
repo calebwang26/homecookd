@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from "vitest";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { hashToken } from "./lib/auth";
 import { type Backend, newBackend } from "./test.helpers";
@@ -324,4 +324,60 @@ test("/glasses/frame keeps the newest frame when uploads land out of order", asy
   expect((await send("session=s2&t=100")).status).toBe(200); // the glasses rebooted: a new session's clock
   expect((await t.run(async (ctx) => ctx.db.query("liveFrames").unique()))?.t).toBe(100);
   expect((await send("session=s2&t=soon")).status).toBe(400);
+});
+
+// ---- cancelling jobs, and the laptop's saved video ----
+
+test("a cook cancels a job; a worker mid-way can't revive or publish it; cancelUnfinished clears the queue", async () => {
+  process.env.WORKER_SECRET = "worker-secret-for-tests";
+  const t = newBackend();
+  const f = await family(t);
+  const token = await sessionFor(t, f.familyId, f.cookId);
+  const mk = (stage: "queued" | "understanding" | "done") =>
+    t.run(async (ctx) => {
+      const recipeId = await ctx.db.insert("recipes", { familyId: f.familyId, cookId: f.cookId, title: "Dal", status: "processing", steps: [], memories: [], memoriesOptIn: false });
+      const jobId = await ctx.db.insert("jobs", { familyId: f.familyId, cookId: f.cookId, recipeId, uploadPath: "x/", source: "glasses", stage, progress: 0.3 });
+      return { jobId, recipeId };
+    });
+  const running = await mk("understanding");
+  expect(await t.mutation(api.jobs.cancel, { sessionToken: token, jobId: running.jobId })).toBe(true);
+  const worker = (path: string, body: object) =>
+    t.fetch(path, { method: "POST", headers: { "Content-Type": "application/json", "x-worker-secret": "worker-secret-for-tests" }, body: JSON.stringify(body) });
+  await worker("/worker/progress", { jobId: running.jobId, stage: "writing", progress: 0.8 });
+  const after = await t.run(async (ctx) => ({ job: await ctx.db.get(running.jobId), recipe: await ctx.db.get(running.recipeId) }));
+  expect(after.job).toMatchObject({ stage: "failed", error: "Cancelled." });
+  expect(after.recipe?.status).toBe("failed");
+
+  const done = await mk("done");
+  expect(await t.mutation(api.jobs.cancel, { sessionToken: token, jobId: done.jobId })).toBe(false);
+
+  const other = await t.run(async (ctx) => {
+    const familyId = await ctx.db.insert("families", { name: "Others", supabaseFamilyId: "fam-x" });
+    const personId = await ctx.db.insert("people", { familyId, supabaseProfileId: "p-x", name: "X", role: "cook" });
+    return { familyId, personId };
+  });
+  const queued = await mk("queued");
+  const stranger = await sessionFor(t, other.familyId, other.personId);
+  expect(await t.mutation(api.jobs.cancel, { sessionToken: stranger, jobId: queued.jobId })).toBe(false);
+
+  await mk("queued");
+  expect(await t.mutation(internal.jobs.cancelUnfinished, {})).toBe(2);
+  expect((await worker("/worker/claim", {})).status).toBe(204); // nothing left for a worker
+});
+
+test("/glasses/video saves the laptop's full video for the family; the VM sees it and stays out", async () => {
+  const t = newBackend();
+  const f = await family(t);
+  const rec = await recording(t, f, "ended");
+  const url = `https://storage.googleapis.com/edible-media-379797517579/glasses-${rec}/full.mp4`;
+  for (const videoUrl of ["https://evil.example/x.mp4", `https://storage.googleapis.com/edible-media-1/glasses-other/full.mp4`, url + "?x"]) {
+    expect((await post(t, "/glasses/video", { recordingId: rec, videoUrl })).status).toBe(400);
+  }
+  expect((await post(t, "/glasses/video", { recordingId: rec, videoUrl: url })).status).toBe(200);
+  expect(await (await post(t, "/glasses/active", { recordingId: rec })).json()).toMatchObject({ status: "ended", videoSaved: true });
+
+  const token = await sessionFor(t, f.familyId, f.cookId);
+  const vids = await t.query(api.glasses.videos, { sessionToken: token });
+  expect(vids).toHaveLength(1);
+  expect(vids[0]).toMatchObject({ recordingId: rec, videoUrl: url, dish: "Varan bhaat" });
 });

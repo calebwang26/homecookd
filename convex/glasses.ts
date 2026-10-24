@@ -3,7 +3,8 @@
 // glasses recording.
 import { v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
-import { internalMutation, internalQuery } from "./_generated/server";
+import { internalMutation, internalQuery, query } from "./_generated/server";
+import { requireSession } from "./lib/auth";
 
 const status = v.union(
   v.literal("intro"),
@@ -17,12 +18,19 @@ const live = v.object({
   status,
   startedAt: v.optional(v.number()),
   jobId: v.optional(v.id("jobs")), // set once someone (the laptop bridge or the VM) has finished it
+  videoSaved: v.optional(v.boolean()), // the laptop bridge saved the full video for the cook (no job wanted)
 });
 
 // A forgotten recording (the phone died mid-intro) shouldn't keep the glasses filming the next day.
 const STALE_MS = 12 * 60 * 60 * 1000;
 
-const report = (r: Doc<"recordings">) => ({ recordingId: r._id, status: r.status, startedAt: r.startedAt, jobId: r.jobId });
+const report = (r: Doc<"recordings">) => ({
+  recordingId: r._id,
+  status: r.status,
+  startedAt: r.startedAt,
+  jobId: r.jobId,
+  videoSaved: r.videoUrl ? true : undefined,
+});
 
 /**
  * The newest glasses recording that isn't over, or null. With `recordingId`, that recording in any
@@ -101,5 +109,39 @@ export const finished = internalMutation({
     });
     await ctx.db.patch(rec._id, { videoStartedAt, jobId, updatedAt: Date.now() });
     return { jobId, recipeId };
+  },
+});
+
+/**
+ * The laptop bridge built the full video from its backup and put it at `videoUrl` (the public media
+ * bucket, glasses-<recordingId>/full.mp4). No job: the cook saves it to Photos and sends it herself.
+ */
+export const saveVideo = internalMutation({
+  args: { recordingId: v.string(), videoUrl: v.string() },
+  returns: v.union(v.object({ ok: v.boolean() }), v.object({ error: v.string(), status: v.literal(404) })),
+  handler: async (ctx, { recordingId, videoUrl }) => {
+    const id = ctx.db.normalizeId("recordings", recordingId);
+    const rec = id && (await ctx.db.get(id));
+    if (!rec || rec.source !== "glasses") return { error: "no such glasses recording", status: 404 as const };
+    await ctx.db.patch(rec._id, { videoUrl, updatedAt: Date.now() });
+    return { ok: true };
+  },
+});
+
+/** Her family's glasses videos the laptop saved, newest first, for "Save to Photos" (own family only). */
+export const videos = query({
+  args: { sessionToken: v.string() },
+  returns: v.array(v.object({ recordingId: v.id("recordings"), videoUrl: v.string(), dish: v.optional(v.string()), at: v.number() })),
+  handler: async (ctx, { sessionToken }) => {
+    const signed = await requireSession(ctx, sessionToken);
+    const rows = await ctx.db
+      .query("recordings")
+      .withIndex("by_familyId", (q) => q.eq("familyId", signed.family._id))
+      .order("desc")
+      .take(50);
+    return rows
+      .filter((r) => r.source === "glasses" && r.videoUrl)
+      .slice(0, 10)
+      .map((r) => ({ recordingId: r._id, videoUrl: r.videoUrl!, dish: r.dish, at: r.endedAt ?? r.updatedAt }));
   },
 });

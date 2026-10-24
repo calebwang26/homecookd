@@ -3,6 +3,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from "./_generated/server";
+import { CANCELLED } from "./jobs";
 import { liveEvent, liveLog } from "./liveEvents";
 import schema, { memory } from "./schema";
 
@@ -143,6 +144,7 @@ export const progress = internalMutation({
   handler: async (ctx, { jobId, stage, progress, error }) => {
     const job = await ctx.db.get("jobs", jobId);
     if (!job) return false;
+    if (job.error === CANCELLED) return false; // the cook cancelled it: a worker mid-way can't bring it back
     await ctx.db.patch("jobs", jobId, {
       stage,
       progress: Math.min(1, Math.max(0, progress)),
@@ -180,7 +182,7 @@ export const published = internalMutation({
   returns: v.union(v.null(), v.id("recipes")),
   handler: async (ctx, { jobId, recipe, memoriesOptIn }) => {
     const job = await ctx.db.get("jobs", jobId);
-    if (!job) return null;
+    if (!job || job.error === CANCELLED) return null;
     let recipeId = job.recipeId;
     const fields = { ...recipe, language: recipe.language ?? job.language };
     if (recipeId && (await ctx.db.get("recipes", recipeId))) {

@@ -184,12 +184,14 @@ class Ingest:
         rec.close()
         try:
             code, row = await self.convex("/glasses/active", {"recordingId": rid})
-            if code == 200 and row and row.get("jobId"):
-                # The laptop bridge already uploaded the full video and made the job: nothing left to do here.
-                rec.mark("finished", jobId=row["jobId"], by="bridge")
+            if code == 200 and row and (row.get("jobId") or row.get("videoSaved")):
+                # The laptop bridge already has it: it made the job, or saved the full video for the cook to
+                # send herself (no job wanted). Nothing left to do here.
+                rec.mark("finished", jobId=row.get("jobId"), by="bridge")
                 self.todo.discard(rid)
                 self.clean(rec.dir)
-                log.info("%s: the laptop bridge already made job %s; dropped the live copy", rid, row["jobId"])
+                log.info("%s: the laptop bridge already has it (%s); dropped the live copy", rid,
+                         f"job {row['jobId']}" if row.get("jobId") else "video saved for the cook")
                 return
             if not rec.marked("muxed") and rec.frames == 0:
                 # The glasses were off or flat the whole time. There's no video to make a recipe from, and

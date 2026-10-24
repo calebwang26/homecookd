@@ -205,6 +205,9 @@ export default defineSchema({
     videoStartedAt: v.optional(v.number()),
     memoriesOptIn: v.optional(v.boolean()), // her answer to "Can <kid> hear your stories too?"
     jobId: v.optional(v.id("jobs")),
+    // Glasses through the laptop bridge: the full video it built from its backup, for the cook to save to
+    // Photos and send through the app herself (glasses/BRIDGE.md). Public, unguessable URL.
+    videoUrl: v.optional(v.string()),
     updatedAt: v.number(),
   })
     .index("by_familyId", ["familyId"])
