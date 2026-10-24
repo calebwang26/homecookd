@@ -8,11 +8,13 @@
 //                   seconds after a question went to her, "Connecting…", "Mic off". While homie speaks,
 //                   the overlay's own label says "AI voice" (or "Translated from Grandma").
 //   <ClipCaption/>  under the step video while it plays the moment homie found: her words, and the English
-//   <VoiceQuiet/>   no picture: half duplex. Homie, a clip or any sound the app plays never reaches the
-//                   voice service as the kid's voice (its own component, so playback ticks re-render only
-//                   it). While the cook's own voice plays the pot shrinks a little, and while her clip or
-//                   her voice note plays, homie's next line waits for her.
-// The cook's own clips are never labelled: only the AI's voice is.
+//   <VoiceHold/>    no picture (its own component, so playback ticks re-render only it): while the cook's
+//                   own voice plays the pot shrinks a little, and while her clip or her voice note plays,
+//                   homie's next line waits for her. Half duplex (none of the app's own sound reaches the
+//                   voice service as the kid's voice) is lib/live/mic's, on every frame.
+// The cook's own clips are never labelled: only the AI's voice is. Motion: the chips spring on press
+// (PressableScale), the pill counts down each half second while the pot's ring empties (HomiePot), and
+// the pill and the line fade in and out (a fade is all Reduce Motion needs here).
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
@@ -141,20 +143,18 @@ export function ClipCaption({ quote, quoteEn }: { quote: string; quoteEn?: strin
 }
 
 /**
- * Half duplex: tells the voice hook when the app itself is making sound. `herClip`: the moment homie
- * asked for is on screen (play_clip), so the step video playing is her answer.
+ * The cook's own voice is playing: the resting pot steps back (shrinks), and while her clip or her
+ * voice note answers the kid, homie's next line waits for her. `herClip`: the moment homie asked for is
+ * on screen (play_clip), so the step video playing is her answer. (Half duplex is lib/live/mic's.)
  */
-export function VoiceQuiet({ voice, videoUrl, herClip }: { voice: Pick<VoiceCooking, 'setQuiet' | 'setHold'>; videoUrl?: string | null; herClip: boolean }) {
-  const ai = useAiSpeaking();
+export function VoiceHold({ voice, videoUrl, herClip }: { voice: Pick<VoiceCooking, 'setHold'>; videoUrl?: string | null; herClip: boolean }) {
   const now = useNowPlaying();
   const video = usePlayhead(() => playheadAt(videoUrl) != null);
   const sound = now.phase === 'playing' || now.phase === 'loading';
-  const quiet = ai || video || sound;
   // Her own voice: a step video, or anything on the player that isn't homie (a story, her voice note).
   const hers = video || (sound && sayPhase(now.key, now.phase) === 'none');
   const answering = (herClip && video) || (sound && !!now.key?.startsWith(ANSWER_KEY));
-  const { setQuiet, setHold } = voice;
-  useEffect(() => setQuiet(quiet), [quiet, setQuiet]);
+  const { setHold } = voice;
   useEffect(() => setHold(answering), [answering, setHold]);
   useEffect(() => setHomie({ shrunk: hers }), [hers]);
   useEffect(() => () => setHomie({ shrunk: false }), []);

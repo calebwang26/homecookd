@@ -22,7 +22,9 @@
 //
 // FOLLOWING ALONG: `usePlayhead(select)` reads where a step video is right now (one plays at a
 // time), so a list can light up the line being said (Substeps). `playFrom(at)` jumps the clip to a
-// line's start and plays (tapping a substep).
+// line's start and plays (tapping a substep). `videoPlaying()` / `useVideoPlaying()` say whether any
+// step video plays, and `audioNow()` is the shared player's state outside React: half duplex reads
+// both on every mic frame (lib/live/mic).
 //
 // Ported from the old PlayerSheet: after a seek, time updates are ignored for a moment so a stale
 // position never pauses playback early. The end of the range still counts inside that moment when the
@@ -351,6 +353,9 @@ export function useNowPlaying(): EngineState {
   return useSyncExternalStore(subscribe, getState, getState);
 }
 
+/** The same, read outside React (half duplex checks it on every mic frame: lib/live/mic). */
+export const audioNow = getState;
+
 export type ClipAudio = {
   /** This clip's phase ('idle' when another clip, or nothing, is current). */
   phase: Phase;
@@ -506,6 +511,16 @@ export function playheadAt(video: string | null | undefined): number | null {
 /** Re-renders only when `select()` (reading playheadAt) gives a new value, e.g. a line's index. */
 export function usePlayhead<T>(select: () => T): T {
   return useSyncExternalStore(subscribeHead, select, select);
+}
+
+/** A step video (any clip, the full-screen player too) is playing now: the cook's voice is in the room. */
+export function videoPlaying(): boolean {
+  return videoHead != null;
+}
+
+/** videoPlaying() in a component: re-renders only when a video starts or stops. */
+export function useVideoPlaying(): boolean {
+  return useSyncExternalStore(subscribeHead, videoPlaying, videoPlaying);
 }
 
 /**

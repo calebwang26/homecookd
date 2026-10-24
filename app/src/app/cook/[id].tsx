@@ -50,10 +50,12 @@
 // step's own player (moving to the step that holds it, her words under it), homie's replies are only
 // spoken (the pot lights and its lid lifts, labelled "AI voice"), a timer counts down beside the step
 // title, and a question the video can't answer shows "I asked Grandma" under the pot. The chips say
-// the same words to homie, or act here when voice is off. A tap on the pot turns the mic off or on.
-// When the cook answers one of my questions by voice note, homie offers to play it (CookAnswers).
-// Without that voice line (Expo Go, web), this phone asks "read it out loud?" itself, with one "Read it
-// to me" button, and reads each step in homie's voice (useReadSteps). "I made it" hangs up.
+// the same words to homie, or act here when voice is off. A tap on the pot turns the mic off or on
+// (no moment). When the cook answers one of my questions by voice note, homie offers to play it
+// (CookAnswers). While that moment or "Ask Grandma anything" is up, the service is told (an app-only
+// moment: its own offer never takes that yes or no). Without a voice line that reads (Expo Go, web,
+// or the line gave up or failed), this phone asks "read it out loud?" itself, with one "Read it to
+// me" button, and reads each step in homie's voice (useReadSteps). "I made it" hangs up.
 import { router, useFocusEffect, useIsFocused, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -64,7 +66,7 @@ import Animated, { FadeIn, FadeInLeft, FadeInRight } from 'react-native-reanimat
 
 import { ConsentSheet } from '@/components/cooking/ConsentSheet';
 import { CookAnswers, useCookMoments, useReadSteps } from '@/components/cooking/CookMoments';
-import { CHIP_H, ClipCaption, CookChips, TimerPill, VoiceLine, VoiceQuiet, type CookChip } from '@/components/cooking/VoiceCooking';
+import { CHIP_H, ClipCaption, CookChips, TimerPill, VoiceHold, VoiceLine, type CookChip } from '@/components/cooking/VoiceCooking';
 import { HeartBurst } from '@/components/cooking/HeartBurst';
 import { ClipVideo, type ClipVideoHandle } from '@/components/media';
 import { askForPushSoon } from '@/components/push/PushAskSheet';
@@ -97,12 +99,12 @@ import {
 } from '@/components/ui';
 import { errorMessage, type RecipeQuestion } from '@/lib/api';
 import { daysAgo, mmss } from '@/lib/format';
-import { HOMIE_LABEL_SPACE, useHomieRoute, useHomieScreen } from '@/lib/homie';
+import { HOMIE_LABEL_SPACE, useHomieRoute, useHomieScreen, useHomieSelect } from '@/lib/homie';
 import { madeItMilestone, madeItTitle } from '@/lib/kitchenCounts';
 import { micStreamingSupported } from '@/lib/live/mic';
 import { speak } from '@/lib/live/speak';
 import { useVoiceCooking, VOICE_CONFIGURED, type VoiceClip } from '@/lib/live/voice';
-import { consentSettled } from '@/lib/live/voiceLogic';
+import { appMomentKind, consentSettled, cookingSessionOn, phoneReads } from '@/lib/live/voiceLogic';
 import { stopAllMedia } from '@/lib/media';
 import { cooked, openChatWith, openCircle, useRecipeQuestions, type CookedRef } from '@/lib/messaging';
 import { madeItWords } from '@/lib/postcardLogic';
@@ -255,9 +257,11 @@ export default function CookScreen() {
     }
   };
 
-  const homie = useCookMoments({ cookName, onWrite: askTarget ? () => void askInChat() : null, writeTo: askTarget?.kind === 'cook' ? cookName : 'the family' });
-  // One thing asks at a time: voice (and homie's questions) wait for the "Let Mom see" sheet's answer.
-  const settled = consentSettled({ askConsent: live.askConsent, liveOn, consent: live.consent, startFailed: live.startFailed });
+  const homie = useCookMoments({ cookName, onWrite: askTarget ? () => void askInChat() : null });
+  // One thing asks at a time: voice (and homie's questions) wait for the "Let Mom see" sheet's answer,
+  // when there is one to wait for (not for a memorial cook: the session is off then).
+  const sessionOn = cookingSessionOn({ enabled: liveOn, cookId: liveCook?.id, memorial: liveCook?.memorial, recipeId: recipe?.id, total });
+  const settled = consentSettled({ askConsent: live.askConsent, liveOn: sessionOn, consent: live.consent, startFailed: live.startFailed });
   // Voice can start on its own here (a dev build with the mic module and the voice service).
   const voiceHere = micStreamingSupported() && VOICE_CONFIGURED;
   const voice = useVoiceCooking({
@@ -275,20 +279,27 @@ export default function CookScreen() {
       return at >= 0 ? at + 1 : n;
     },
     onOffer: homie.onOffer,
+    onOfferClosed: homie.onOfferClosed,
     onSay: homie.onSay,
     onHeard: homie.onHeard,
   });
   // A tap on the pot turns the mic off or on (only where the mic can work; elsewhere, the help line).
   // "I made it" takes the screen: no pot over the celebration.
   useHomieScreen({ hidden: !!done, onPress: micStreamingSupported() ? () => homie.potPress(voice) : null });
-  // No voice line to ask it (Expo Go, web): this phone asks "read it out loud?" and reads the steps.
+  // No voice line that reads (Expo Go, web, or it gave up or failed): this phone asks "read it out
+  // loud?" and reads the steps.
   const focused = useIsFocused();
   const { offerHere } = homie;
-  const canOffer = !voiceHere && !!recipe && !!step && settled && !done && focused;
+  const phoneReading = phoneReads({ voiceHere, live: voice.live, unavailable: voice.unavailable });
+  const canOffer = phoneReading && !!recipe && !!step && settled && !done && focused;
   useEffect(() => {
     if (canOffer) offerHere();
   }, [canOffer, offerHere]);
-  useReadSteps({ on: !voiceHere && homie.readAloud && !done, step: n, text: step?.instruction ?? '' });
+  useReadSteps({ on: phoneReading && homie.readAloud && !done, step: n, text: step?.instruction ?? '' });
+  // An app-only moment (her answer, "Ask Grandma anything") up on the phone: the service is told.
+  const momentId = useHomieSelect((h) => h.moment?.id ?? null);
+  const tellMoment = voice.setMoment;
+  useEffect(() => tellMoment(appMomentKind(momentId)), [momentId, tellMoment]);
   const voiceError = voice.error;
   const showToast = toast.show;
   useEffect(() => {
@@ -471,7 +482,7 @@ export default function CookScreen() {
         </ScrollView>
       </ScrollHold>
 
-      <VoiceQuiet voice={voice} videoUrl={recipe.media.video_url} herClip={!!moment} />
+      <VoiceHold voice={voice} videoUrl={recipe.media.video_url} herClip={!!moment} />
       <VoiceLine voice={voice} cookName={cookName} slot={slot} />
       {done ? null : (
         <CookAnswers libraryId={recipe.id} cookName={cookName} asked={voice.askedIds} top={chipsTop + CHIP_H + 10} hearing={hearing} listenFor={homie.listenFor} />

@@ -1,16 +1,18 @@
-// The kid's microphone while voice cooking: 16 kHz mono 16-bit PCM in ~100 ms chunks, handed to
-// `onChunk` as ArrayBuffers for the voice service's WebSocket (docs/build/STACK.md "App ↔ voice
-// service"). Native only (@siteed/audio-studio needs a dev build, not Expo Go); nothing is saved.
+// The microphone for homie: 16 kHz mono 16-bit PCM in ~100 ms chunks, handed to `onChunk` as
+// ArrayBuffers for the voice service's WebSocket (docs/build/STACK.md "App ↔ voice service"). Native
+// only (@siteed/audio-studio needs a dev build, not Expo Go); nothing is saved.
 //
 //   const mic = useMicStream((pcm) => socket.send(pcm), (level) => setHomieLevel(level));
-//   await mic.start();  mic.stop();  mic.on
+//   await mic.start();  await mic.stop();  mic.on
 //
 // The iOS session is PlayAndRecord in VoiceChat mode, and DefaultToSpeaker keeps playback off the
 // earpiece. VoiceChat alone does NOT cancel echo: Apple only does that with voice processing (the
-// VPIO audio unit), which audio-studio 3.2.1 never turns on. What keeps the cook's clip and homie's
-// voice out of what the kid "said" is half duplex: the caller sends the voice service no mic frames
-// while a say or clip plays (lib/homie/hooks useAiSpeaking), and the service ignores audio while it
-// speaks. Never stop the recorder for it; just don't send.
+// VPIO audio unit), which audio-studio 3.2.1 never turns on. So half duplex is done here, for every
+// caller, on every frame: while the app itself makes sound (lib/homie/logic halfDuplex: homie lit or
+// speaking, anything on the shared player, a step video), `onChunk` gets zeroed PCM of the same
+// length instead of the mic, and `onLevel` gets 0. The recorder never stops for it, so the stream
+// keeps its timing; homie's voice, the cook's clip and her voice note never reach the service as what
+// the person said (the service also ignores audio while it speaks).
 // `onLevel` (optional) gets each chunk's loudness, 0..1 (lib/homie/logic pcmLevel), for homie's steam.
 // In Expo Go the native module isn't there: the module is never loaded and start() says 'error'.
 import type * as Studio from '@siteed/audio-studio';
@@ -19,7 +21,11 @@ import { requestRecordingPermissionsAsync } from 'expo-audio';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
-import { pcmLevel } from '@/lib/homie/logic';
+import { halfDuplex, pcmLevel } from '@/lib/homie/logic';
+import { getHomie } from '@/lib/homie/store';
+import { audioNow, videoPlaying } from '@/lib/media';
+
+import { silence } from './voiceLogic';
 
 export const MIC_SAMPLE_RATE = 16000;
 
@@ -34,6 +40,11 @@ function decode(b64: string): ArrayBuffer {
   const out = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
   return out.buffer;
+}
+
+/** The app is making sound right now: the next frame goes out as silence. */
+function appSounding(): boolean {
+  return halfDuplex({ homie: getHomie().state, audio: audioNow().phase, video: videoPlaying() });
 }
 
 export function micStreamingSupported(): boolean {
@@ -66,8 +77,9 @@ export function useMicStream(onChunk: (pcm: ArrayBuffer) => void, onLevel?: (lev
         onAudioStream: async (e) => {
           const pcm = typeof e.data === 'string' ? decode(e.data) : e.data instanceof Int16Array ? e.data.slice().buffer : null;
           if (!pcm) return;
-          sink.current(pcm);
-          levelSink.current?.(pcmLevel(pcm));
+          const quiet = appSounding();
+          sink.current(quiet ? silence(pcm.byteLength) : pcm);
+          levelSink.current?.(quiet ? 0 : pcmLevel(pcm));
         },
       });
       setOn(true);
@@ -78,9 +90,10 @@ export function useMicStream(onChunk: (pcm: ArrayBuffer) => void, onLevel?: (lev
     }
   }, [rec]);
 
-  const stop = useCallback(() => {
+  /** Resolves once the recorder has let go of the audio session (await it before the camera opens). */
+  const stop = useCallback(async (): Promise<void> => {
     setOn(false);
-    void rec?.stopRecording().catch(() => {});
+    await rec?.stopRecording().catch(() => {});
   }, [rec]);
 
   // Leaving the screen never leaves the microphone on.

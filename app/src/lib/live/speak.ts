@@ -7,8 +7,9 @@
 //
 // POST <voice https base>/speak -> audio/wav, played on the app's one shared player under a 'say:'
 // key, so useNowPlaying sees it: the pot lights, then speaks with its "AI voice" label, and the mic
-// sends nothing meanwhile (half duplex). Without the service (no URL, no Convex session, an error or
-// a timeout), the phone's own voice (expo-speech) says the words; the screen shows them either way.
+// sends silence meanwhile (half duplex, lib/live/mic). Without the service (no URL, no Convex session,
+// an error, or no audio within 8 s, session included), the phone's own voice (expo-speech) says the
+// words.
 // Resolves once the voice starts (or didn't); never throws. A call from an effect right after sign-in passes `profileId` from useSession(): the
 // module snapshot convexSession() falls back to isn't published yet then.
 import { fetch } from 'expo/fetch';
@@ -81,12 +82,20 @@ export function stopSpeaking() {
   end();
 }
 
+/**
+ * homie's voice from the service, or null. One deadline (TIMEOUT_MS) covers all of it: the Convex
+ * session (it waits while the phone is offline), the request and the body, so the pot is never left
+ * lit and the phone's own voice still gets its turn.
+ */
 async function fetchSpeech(text: string, opts: SpeakOptions): Promise<{ bytes: Uint8Array; spoken: string } | null> {
   if (!BASE) return null;
-  const sessionToken = await convexSession(opts.profileId).catch(() => null);
+  const deadline = Date.now() + TIMEOUT_MS;
+  const sessionToken = await within(convexSession(opts.profileId).catch(() => null), TIMEOUT_MS);
   if (!sessionToken || sessionToken === 'stub') return null;
+  const left = deadline - Date.now();
+  if (left <= 0) return null;
   const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), TIMEOUT_MS);
+  const timer = setTimeout(() => abort.abort(), left);
   try {
     const res = await fetch(`${BASE}/speak`, {
       method: 'POST',
@@ -147,3 +156,20 @@ function sayOnPhone(words: string, lang: string | undefined, mine: number, label
 }
 
 const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, Math.max(0, ms)));
+
+/** `p`, or null once `ms` pass first. */
+function within<T>(p: Promise<T>, ms: number): Promise<T | null> {
+  return new Promise((resolve) => {
+    const t = setTimeout(() => resolve(null), ms);
+    p.then(
+      (v) => {
+        clearTimeout(t);
+        resolve(v);
+      },
+      () => {
+        clearTimeout(t);
+        resolve(null);
+      },
+    );
+  });
+}

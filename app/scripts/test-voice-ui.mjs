@@ -1,10 +1,12 @@
 // Unit tests for cook mode's voice rules (TS run by Node's type stripping):
 //   src/lib/live/voiceLogic.ts  a say's kind (an older service sends none), which says are offers (read
 //                               aloud, a story), the label under the pot, which say_end is whose, the
-//                               service's echo of a text, waiting for the "Let Mom see" answer, a spoken
-//                               yes or no, the no-buttons yes-or-no moment, what the pot shows, kitchen
-//                               timers on the phone's clock (parse, order, key, countdown, words), which
-//                               of the cook's answers to offer, and the silence sent instead of the mic
+//                               service's echo of a text, waiting for the "Let Mom see" answer (none for
+//                               a memorial cook), when the phone reads aloud itself, app-only moments and
+//                               the offer's end (the shared contract's messages), a spoken yes or no, the
+//                               no-buttons yes-or-no moment, what the pot shows, kitchen timers on the
+//                               phone's clock (parse, order, key, countdown, words), which of the cook's
+//                               answers to offer, and the silence sent instead of the mic
 //   node scripts/test-voice-ui.mjs
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
@@ -105,6 +107,50 @@ await test('voice and homie’s questions wait for the "Let Mom see" answer; no 
   assert.equal(V.consentSettled({ ...base, startFailed: true }), true);
   // Not another family cook's dish: nothing to ask.
   assert.equal(V.consentSettled({ ...base, liveOn: false }), true);
+});
+
+await test('a memorial cook (or the dev aid, or no dish yet) has no "Let Mom see" session, so nothing waits', () => {
+  const on = { enabled: true, cookId: 'p-grandma', memorial: false, recipeId: 'biryani', total: 6 };
+  assert.equal(V.cookingSessionOn(on), true);
+  assert.equal(V.cookingSessionOn({ ...on, memorial: null }), true);
+  assert.equal(V.cookingSessionOn({ ...on, memorial: true }), false);
+  assert.equal(V.cookingSessionOn({ ...on, enabled: false }), false);
+  assert.equal(V.cookingSessionOn({ ...on, cookId: null }), false);
+  assert.equal(V.cookingSessionOn({ ...on, recipeId: undefined }), false);
+  assert.equal(V.cookingSessionOn({ ...on, total: 0 }), false);
+  // The memorial cook's visit: the hook is off, so consent stays 'unknown' and nothing asks; settled at once.
+  const liveOn = V.cookingSessionOn({ ...on, memorial: true });
+  assert.equal(V.consentSettled({ askConsent: false, liveOn, consent: 'unknown', startFailed: false }), true);
+});
+
+await test('the phone reads aloud itself when no voice line will: no service here, or the line gave up or failed', () => {
+  // Expo Go or web: no line at all.
+  assert.equal(V.phoneReads({ voiceHere: false, live: false, unavailable: false }), true);
+  // A dev build, still connecting (or not tried yet): wait for the line.
+  assert.equal(V.phoneReads({ voiceHere: true, live: false, unavailable: false }), false);
+  // A dish Convex doesn't know, a 4404, a line lost for good, or the local stub.
+  assert.equal(V.phoneReads({ voiceHere: true, live: false, unavailable: true }), true);
+  // homie reads on the line.
+  assert.equal(V.phoneReads({ voiceHere: true, live: true, unavailable: false }), false);
+});
+
+await test('app-only moments: her answer and "Ask Grandma anything"; the service’s own offers never are', () => {
+  assert.equal(V.appMomentKind('answer:q123'), 'answer');
+  assert.equal(V.appMomentKind('ask:1729800000000'), 'ask');
+  for (const id of ['read:1', 'story:2', 'help:3', 'mic:4', '', null, undefined]) assert.equal(V.appMomentKind(id), null, String(id));
+});
+
+await test('the shared contract: { type: "moment" } open with its kind, closed without; "no" declines; offer_closed', () => {
+  assert.deepEqual(V.momentMessage('answer'), { type: 'moment', open: true, kind: 'answer' });
+  assert.deepEqual(V.momentMessage('ask'), { type: 'moment', open: true, kind: 'ask' });
+  assert.equal(JSON.stringify(V.momentMessage('story')), '{"type":"moment","open":true,"kind":"story"}');
+  assert.equal(JSON.stringify(V.momentMessage(null)), '{"type":"moment","open":false}');
+  assert.equal(V.DECLINE_TEXT, 'no');
+  assert.equal(V.offerClosed({ type: 'offer_closed', accepted: true }), true);
+  assert.equal(V.offerClosed({ type: 'offer_closed', accepted: false }), false);
+  // Anything but a real true is not reading.
+  assert.equal(V.offerClosed({ type: 'offer_closed' }), false);
+  assert.equal(V.offerClosed({ type: 'offer_closed', accepted: 'yes' }), false);
 });
 
 await test('a spoken yes is what homie takes for yes; no, not now and later are no; commands are neither', () => {

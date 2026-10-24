@@ -1,20 +1,25 @@
 // Tracks B + E boundary: voice cooking over the live voice service's WebSocket (docs/build/STACK.md
 // "App ↔ voice service" and "kid cooking additions"): wss://<voice>/cook?session=<sessionToken>&recipe=<recipeId>.
 //
-//   const voice = useVoiceCooking({ libraryId, step, cookName, auto, readAloud, onGoTo, onClip, onOffer, onHeard });
+//   const voice = useVoiceCooking({ libraryId, step, cookName, auto, readAloud, onGoTo, onClip, onOffer, onOfferClosed, onHeard });
 //   voice.status          'off' | 'connecting' | 'listening' (the line is open) | 'error'
 //   voice.live            the real service is on the line: chips go to it (else they act on their own)
+//   voice.unavailable     no line will read for the kid: auto start gave up (no service, a dish Convex
+//                         doesn't know, 4404), or the line failed for good (the phone reads instead)
 //   voice.muted           the kid turned the mic off: the recorder stops, the line stays open
 //   voice.timers          kitchen timers the service set, soonest first; this phone counts them down
 //   voice.askedAt         when a question last went to the cook ("I asked Grandma"); askedIds: which ones
 //   voice.listen() / stop() / setMuted(on)
 //   voice.command('back', fallback)  says it to homie as text; `fallback` runs when nobody is on the line,
 //                                    or nothing comes back within 1.5 s (an older service)
-//   voice.sendText('yes')            the tap on homie's offer
-//   voice.setQuiet(on)               half duplex (components/cooking VoiceQuiet): while homie, a clip or
-//                                    any app sound plays, silence goes out instead of the mic
+//   voice.sendText('yes')            words for homie, as if the kid said them
+//   voice.setMoment('answer' | null) an app-only moment is up on the phone ({ type: "moment" }; the
+//                                    service then never takes its yes or no for its own offer)
 //   voice.setHold(on)                the cook's own voice is playing (her clip, her voice note): homie's
 //                                    next line waits until she's done, so it never talks over her
+// Half duplex is lib/live/mic's: while the app makes sound, the socket gets zeroed frames.
+// The read-aloud offer (onOffer): `accept` sends "yes", `decline` sends "no" (that visit, steps change
+// silently); the service's { type: "offer_closed", accepted } goes to onOfferClosed.
 //
 // The screen follows the server: go_to_step moves the step, play_clip plays that moment of the cook's
 // video (with her words, `quote` / `quoteEn`, for a caption), and a step the kid taps goes back as
@@ -45,8 +50,11 @@ import { useMicStream } from './mic';
 import { playSay, stopSay } from './say';
 import {
   cookPotState,
+  DECLINE_TEXT,
   echoAt,
   endSay,
+  momentMessage,
+  offerClosed,
   offerOf,
   parseTimer,
   sayKind,
@@ -56,6 +64,7 @@ import {
   timerKey,
   withoutTimer,
   withTimer,
+  type AppMomentKind,
   type CookTimer,
   type OfferKind,
   type SayKind,
@@ -89,6 +98,7 @@ type ServerMsg =
   | { type: 'asked_cook'; questionId: string }
   | { type: 'timer'; id: string; seconds: number; label?: string }
   | { type: 'timer_done'; id: string }
+  | { type: 'offer_closed'; accepted?: boolean }
   | { type: 'error'; message?: string };
 
 /** Messages that are homie doing something (an answer to the kid). */
@@ -98,8 +108,11 @@ type PendingSay = { chunks: ArrayBuffer[]; rate: number; translation: boolean; l
 
 export type VoiceStatus = 'off' | 'connecting' | 'listening' | 'error';
 export type VoiceClip = { startS: number; endS: number; quote?: string; quoteEn?: string };
-/** homie's offer, and how to say yes to it. `hearing`: the kid can answer it out loud right now. */
-export type VoiceOffer = { kind: OfferKind; text: string; hearing: boolean; accept: () => void };
+/**
+ * homie's offer, and how to answer it for the kid: `accept` says yes; `decline` says no to the
+ * read-aloud offer. `hearing`: the kid can answer it out loud right now.
+ */
+export type VoiceOffer = { kind: OfferKind; text: string; hearing: boolean; accept: () => void; decline: () => void };
 
 export type VoiceOptions = {
   libraryId: string | null;
@@ -114,6 +127,8 @@ export type VoiceOptions = {
   onClip: (clip: VoiceClip) => number | void;
   /** 'skip' drops the offer's audio (the phone already knows the answer). */
   onOffer?: (offer: VoiceOffer) => 'play' | 'skip';
+  /** The service closed its read-aloud offer: true, it reads now; false, it was declined. */
+  onOfferClosed?: (accepted: boolean) => void;
   /** Every line homie says, by kind (after onOffer). */
   onSay?: (kind: SayKind) => void;
   /** What the kid finished saying (answers or closes a moment). Never the phone's own texts. */
@@ -125,6 +140,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
   const focused = useIsFocused();
   const [status, setStatus] = useState<VoiceStatus>('off');
   const [live, setLive] = useState(false);
+  const [unavailable, setUnavailable] = useState(false);
   const [muted, setMutedState] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [timers, setTimers] = useState<CookTimer[]>([]);
@@ -140,8 +156,9 @@ export function useVoiceCooking(opts: VoiceOptions) {
   const micOn = useRef(false);
   const mutedRef = useRef(false);
   const liveRef = useRef(false);
-  const quiet = useRef(false);
   const hold = useRef(false);
+  // The app-only moment up on the phone (the service hears about it, and again on a new socket).
+  const appMoment = useRef<AppMomentKind | null>(null);
   const focusedRef = useRef(focused);
   const autoTried = useRef(false);
   // Bumped by each answer from the service (an echo, a step, a clip, a line, a timer): a chip's fallback checks it.
@@ -171,14 +188,15 @@ export function useVoiceCooking(opts: VoiceOptions) {
     focusedRef.current = focused;
   });
 
+  // The mic is half duplex on its own (lib/live/mic: zeroed frames while the app makes sound). Another
+  // screen on top gets silence too, until the recorder stops.
   const mic = useMicStream(
     (pcm) => {
       const s = sock.current;
       if (!s || s.readyState !== 1) return;
-      // Half duplex: never the app's own sound (homie, the cook's clip) as if the kid said it.
-      s.send(quiet.current || !focusedRef.current ? silence(pcm.byteLength) : pcm);
+      s.send(focusedRef.current ? pcm : silence(pcm.byteLength));
     },
-    (level) => setHomieLevel(quiet.current || !focusedRef.current ? 0 : level),
+    (level) => setHomieLevel(focusedRef.current ? level : 0),
   );
 
   const later = useCallback((fn: () => void, ms: number) => {
@@ -309,7 +327,8 @@ export function useVoiceCooking(opts: VoiceOptions) {
         const text = typeof m.text === 'string' ? m.text : '';
         const offer = offerOf(kind, text);
         const hearing = liveRef.current && micOn.current && !mutedRef.current;
-        const drop = !!offer && cb.current.onOffer?.({ kind: offer, text, hearing, accept: () => void sendText('yes') }) === 'skip';
+        const answer = { accept: () => void sendText('yes'), decline: () => void sendText(DECLINE_TEXT) };
+        const drop = !!offer && cb.current.onOffer?.({ kind: offer, text, hearing, ...answer }) === 'skip';
         const label = sayLabel(kind, cb.current.cookName);
         say.current = { chunks: [], rate: m.audio?.sampleRate ?? m.sampleRate ?? 24000, translation: kind === 'translation', label, drop, at: Date.now(), gap: null };
         if (!drop && !hold.current) setHomie({ state: 'lit', label });
@@ -333,6 +352,8 @@ export function useVoiceCooking(opts: VoiceOptions) {
         if (t) setTimers((list) => withTimer(list, t));
       } else if (m.type === 'timer_done') {
         setTimers((list) => withoutTimer(list, m.id));
+      } else if (m.type === 'offer_closed') {
+        cb.current.onOfferClosed?.(offerClosed(m));
       } else if (m.type === 'error') {
         console.warn('[voice]', m.message);
       }
@@ -383,9 +404,11 @@ export function useVoiceCooking(opts: VoiceOptions) {
       const [token, recipeId] = await Promise.all([convexSession(meId.current), convexRecipeId(libraryId)]).catch(() => [null, libraryId] as const);
       if (!want.current) return;
       const real = !!VOICE_URL && !!token && token !== 'stub';
-      // On its own it only calls a service that can cook this dish; nothing to say when it can't.
+      // On its own it only calls a service that can cook this dish; nothing to say when it can't (the
+      // phone reads instead).
       if (auto && (!real || recipeId === libraryId)) {
         want.current = false;
+        setUnavailable(true);
         return;
       }
       setStatus('connecting');
@@ -403,7 +426,10 @@ export function useVoiceCooking(opts: VoiceOptions) {
         fromClip.current = null;
         liveRef.current = real;
         setLive(real);
+        // The stub reads nothing: the phone still reads for the kid then.
+        setUnavailable(!real);
         s.send(JSON.stringify({ type: 'step', stepOrder: cb.current.step }));
+        if (appMoment.current) s.send(JSON.stringify(momentMessage(appMoment.current)));
         startMic();
       };
       s.onclose = (e) => {
@@ -413,6 +439,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
         // 4401: the session token was refused. 4404: this recipe isn't ready for voice. Neither gets better on retry.
         if (e?.code === 4401 || e?.code === 4404) {
           want.current = false;
+          setUnavailable(true);
           if (auto && e.code === 4404) return setStatus('off');
           return fail(e.code === 4401 ? 'Signed out. Open homecookd again to sign in.' : 'homie can’t cook this dish by voice yet.');
         }
@@ -422,8 +449,10 @@ export function useVoiceCooking(opts: VoiceOptions) {
           later(() => want.current && void reconnect.current?.(auto), 1500 * retries.current);
           return;
         }
-        if (want.current) fail('homie lost the connection. Tap homie to try again.');
-        else setStatus('off');
+        if (want.current) {
+          setUnavailable(true);
+          fail('homie lost the connection. Tap homie to try again.');
+        } else setStatus('off');
         want.current = false;
       };
     },
@@ -477,8 +506,16 @@ export function useVoiceCooking(opts: VoiceOptions) {
     [sendText, later],
   );
 
-  const setQuiet = useCallback((on: boolean) => {
-    quiet.current = on;
+  /** An app-only moment opened (its kind) or closed (null): the service is told, once per change. */
+  const setMoment = useCallback((kind: AppMomentKind | null) => {
+    const was = appMoment.current;
+    if (was === kind) return;
+    appMoment.current = kind;
+    const s = sock.current;
+    if (s?.readyState !== 1) return;
+    // One moment straight after another: the first one closes, then the next opens.
+    if (was && kind) s.send(JSON.stringify(momentMessage(null)));
+    s.send(JSON.stringify(momentMessage(kind)));
   }, []);
 
   const setHold = useCallback(
@@ -575,7 +612,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
     };
   }, []);
 
-  return { status, live, muted, timers, askedAt, askedIds, error, listen, stop, setMuted, command, sendText, setQuiet, setHold };
+  return { status, live, unavailable, muted, timers, askedAt, askedIds, error, listen, stop, setMuted, command, sendText, setMoment, setHold };
 }
 
 export type VoiceCooking = ReturnType<typeof useVoiceCooking>;

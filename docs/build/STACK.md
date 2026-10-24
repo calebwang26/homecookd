@@ -246,9 +246,24 @@ voice, in `lang` or the person's language). `translate: true` first turns Englis
   also gets `"repeat"`, so it is read; not when her clip moved the step. On `ready` the app sends its own
   `{ type: "step" }` and doesn't follow the service's go_to_step right after it (the screen's step wins). A
   `say_end` while a newer line is open belongs to the line that newer one cut off. The offer, a story `nudge`
-  and "Grandma answered your question" are no-buttons moments: the kid says yes or no (a tap anywhere is no).
-  Open for Track E: a spoken yes meant for an app moment (her voice-note answer) still reaches the service, and
-  with the read offer still pending it turns reading on; there is no way to decline an offer.
+  and "Grandma answered your question" are no-buttons moments: the kid says yes or no, and a tap anywhere
+  closes it ("not now" for that visit only; a spoken answer is kept on the phone).
+- Shared contract with the Track E follow-up (the app side is in Track I-kid):
+  - App → `/cook`: `{ type: "moment", open: true, kind: "answer" | "story" | "ask" | "help" }` when an
+    app-only homie moment opens on the kid's phone, `{ type: "moment", open: false }` when it closes (sent
+    again on a new socket while one is up). The app sends `answer` ("Grandma answered your question") and
+    `ask` ("Ask Grandma anything"); the read-aloud offer and the story nudge are the service's own offers, so
+    they never count. While a moment is open the service still streams transcripts but doesn't take
+    "yes" / "no" / "sure" as an answer to its own offer or story nudge.
+  - App → `/cook`: `{ type: "text", text: "no" }` (or a spoken "no" / "not now") while the read-aloud offer is
+    pending declines it: reading stays off for that visit, steps change silently, plain commands still work.
+    The app sends it for a tap anywhere on the offer, or when the phone remembers a spoken no. The service
+    replies `{ type: "offer_closed", accepted: false }`; a "yes" replies `{ type: "offer_closed", accepted:
+    true }` and reads the current step. On `offer_closed` the app closes the offer's moment if it is still up
+    (homie heard the answer itself) and keeps that answer.
+- Half duplex in the app is `lib/live/mic`'s, for every caller: while homie is lit or speaking, anything plays
+  on the shared player, or a step video plays, each mic frame goes out as zeroed PCM of the same length (the
+  recorder keeps running).
 
 **Worker ↔ Convex additions**
 - `/worker/claim` adds `title?`, `language` (the job's, else the cook's, else `en`), `relation?` (the cook's),

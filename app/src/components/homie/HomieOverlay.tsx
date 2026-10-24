@@ -2,10 +2,12 @@
 // (just left of the profile face or Share where a screen has one; a screen can dock it elsewhere with
 // useHomieScreen), not on sign-in, the launch gateway or link screens, and not before someone is in.
 // Native Modals (sheets, the full-screen step player) cover it on their own. When homie needs you
-// (store.moment), HomieMoment takes the pot to the centre.
-// A tap on the resting pot says this screen's help line and shows it as a moment with one "OK",
-// unless the screen gave the pot its own onPress. While the cook's own voice plays (store `shrunk`)
-// the resting pot shrinks a little about its centre.
+// (store.moment), HomieMoment takes the pot to the centre, and VoiceOver keeps to the moment (the
+// overlay is modal then: the screen behind it is out of reach).
+// A tap on the resting pot says this screen's help line, unless the screen gave the pot its own
+// onPress. Talking only (Caleb): no words on screen, the pot lights, its lid lifts and "AI voice"
+// shows under it. While the cook's own voice plays (store `shrunk`) the resting pot shrinks a little
+// about its centre.
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -13,7 +15,7 @@ import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, w
 import { PressableScale, Txt } from '@/components/ui';
 import { useHomieRoute } from '@/lib/homie/hooks';
 import { HOMIE_REST_SIZE, potState, sayPhase, SHRUNK_SCALE, speakingLabel, timerProgress } from '@/lib/homie/logic';
-import { closeMoment, doneSpeaking, getHomie, showMoment, useHomie, type Homie } from '@/lib/homie/store';
+import { doneSpeaking, getHomie, useHomie, type Homie } from '@/lib/homie/store';
 import { speak } from '@/lib/live/speak';
 import { useNowPlaying } from '@/lib/media';
 import { useSession } from '@/lib/session';
@@ -22,7 +24,6 @@ import { colors, motion } from '@/theme/tokens';
 import { HomieMoment } from './HomieMoment';
 import { HomiePot } from './HomiePot';
 
-const HELP_SHOWN_MS = 6000;
 const MOVE_MS = 240;
 
 export function HomieOverlay() {
@@ -47,21 +48,13 @@ export function HomieOverlay() {
 
   const onPress = () => {
     if (h.onPress) return h.onPress();
-    const line = route.help;
-    const id = `help:${Date.now()}`;
-    const moment = { id, question: line, options: [{ id: 'ok', label: 'OK', kind: 'primary' as const }], onChoose: () => {} };
-    showMoment(moment);
-    void speak(line, { translate: true, profileId: me?.id }).then((spoken) => {
-      // Said in the person's language: show that, with the English under it.
-      if (spoken.text && spoken.text !== line && getHomie().moment?.id === id) showMoment({ ...moment, question: spoken.text, questionEn: line });
-    });
-    setTimeout(() => closeMoment(id), HELP_SHOWN_MS);
+    void speak(route.help, { translate: true, profileId: me?.id });
   };
 
   const resting = !!me && !route.hidden && !h.hidden && !inMoment;
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      {me ? <RestingPot frame={frame} shown={resting} h={h} state={state} label={label} progress={progress} onPress={onPress} /> : null}
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none" accessibilityViewIsModal={inMoment}>
+      {me ? <RestingPot frame={frame} shown={resting} inMoment={inMoment} h={h} state={state} label={label} progress={progress} onPress={onPress} /> : null}
       <HomieMoment from={frame} state={state} level={h.level} label={label} onActive={setInMoment} />
     </View>
   );
@@ -70,6 +63,7 @@ export function HomieOverlay() {
 function RestingPot({
   frame,
   shown,
+  inMoment,
   h,
   state,
   label,
@@ -78,6 +72,8 @@ function RestingPot({
 }: {
   frame: { x: number; y: number; size: number };
   shown: boolean;
+  /** A moment has the pot (it lands back here when the moment closes). */
+  inMoment: boolean;
   h: Homie;
   state: Homie['state'];
   label: string | null;
@@ -102,10 +98,14 @@ function RestingPot({
     y.set(reduce ? frame.y : withTiming(frame.y, move));
   }, [frame.x, frame.y, reduce, x, y]);
 
-  // Back from a moment it lands exactly here, so it shows at once; anything else fades.
+  // Back from a moment it lands exactly here, so it shows at once (no blink); a screen that hides or
+  // shows the pot fades it.
+  const wasInMoment = useRef(inMoment);
   useEffect(() => {
-    opacity.set(withTiming(shown ? 1 : 0, { duration: motion.reducedFadeMs }));
-  }, [shown, opacity]);
+    if (shown && wasInMoment.current) opacity.set(1);
+    else opacity.set(withTiming(shown ? 1 : 0, { duration: motion.reducedFadeMs }));
+    wasInMoment.current = inMoment;
+  }, [shown, inMoment, opacity]);
 
   const style = useAnimatedStyle(() => {
     // Scaled about its centre (the box scales from its top left).

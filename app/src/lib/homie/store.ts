@@ -14,6 +14,7 @@
 //   closeMoment(id?)                     reverses it; a stale id leaves a newer moment alone
 //   setHomie({ shrunk: true })           the cook's own voice is playing: the resting pot steps back
 //   useHomie()                           the current value, in a component
+//   useHomieSelect((h) => h.state)       one part of it (no re-render on each mic level)
 //
 // 'lit' and 'speaking' sit on top of the screen's state: a screen that sets 'listening' while homie
 // speaks gets it back once homie is done. Any AI say playing (lib/live/say keys) also shows as
@@ -78,6 +79,11 @@ type Timers = { setTimeout: (fn: () => void, ms: number) => unknown; clearTimeou
 export const LIT_BEAT_MS = 350;
 /** 'speaking' ends on its own after this, in case no say ever played (the overlay ends it sooner). */
 export const MAX_SPEAKING_MS = 20_000;
+/**
+ * A 'lit' set by setHomie (a line on its way) ends on its own after this, in case its audio never
+ * comes: lit is half duplex too (lib/homie/logic halfDuplex), so it must never hold the mic for good.
+ */
+export const MAX_LIT_MS = 12_000;
 const LEVEL_STEP = 0.04;
 
 const INITIAL: Homie = { state: 'off', level: 0, moment: null, hidden: false };
@@ -135,6 +141,11 @@ export function createHomieStore(timers: Timers = globalThis as unknown as Timer
       if (!isVoice(value.state)) under = value.state;
       stop(beat);
       beat = null;
+      stop(watchdog);
+      watchdog = timers.setTimeout(() => {
+        watchdog = null;
+        if (value.state === 'lit') doneSpeaking();
+      }, MAX_LIT_MS);
       return set({ ...rest, state });
     }
     under = state;
@@ -226,4 +237,13 @@ export const {
 
 export function useHomie(): Homie {
   return useSyncExternalStore(store.subscribe, store.get, store.get);
+}
+
+/**
+ * One part of homie, in a component that shouldn't re-render with every mic level (about 10 a
+ * second while someone talks). `select` returns a primitive or one of the store's own objects.
+ */
+export function useHomieSelect<T>(select: (h: Homie) => T): T {
+  const read = () => select(store.get());
+  return useSyncExternalStore(store.subscribe, read, read);
 }

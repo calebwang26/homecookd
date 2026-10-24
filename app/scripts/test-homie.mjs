@@ -1,12 +1,13 @@
 // Unit tests for homie, the pot on every screen (TS run by Node's type stripping):
 //   src/lib/homie/store.ts  the screen's state under a lit / speaking beat, the lit beat and its
-//                           watchdog, the mic level's re-render threshold, moments (choose closes
-//                           first, keepOpen, a stale close, a tap anywhere dismisses), the shrunk pot,
-//                           a screen's dock / hidden / onPress claims
-//   src/lib/homie/logic.ts  what the pot shows while a say loads or plays, its label, where it rests
-//                           on each screen, the help lines, the centred moment (which ones, its frame,
-//                           the listening bars), the timer ring, PCM loudness, the voice service's
-//                           https base, the phone voice's language
+//                           watchdogs (speaking, and a lit line whose audio never comes), the mic
+//                           level's re-render threshold, moments (choose closes first, keepOpen, a
+//                           stale close, a tap anywhere dismisses), the shrunk pot, a screen's dock /
+//                           hidden / onPress claims
+//   src/lib/homie/logic.ts  what the pot shows while a say loads or plays, its label, half duplex,
+//                           where it rests on each screen, the help lines, the centred moment (which
+//                           ones, its frame, the listening bars), the timer ring, PCM loudness, the
+//                           voice service's https base, the phone voice's language
 //   node scripts/test-homie.mjs
 // 'react' is a stub (the store only needs useSyncExternalStore to exist); the store gets a fake clock.
 import assert from 'node:assert/strict';
@@ -142,6 +143,31 @@ await test('speaking ends on its own after MAX_SPEAKING_MS if no say ever ended 
   assert.equal(store.get().state, 'speaking');
   clock.advance(1);
   assert.equal(store.get().state, 'timer');
+  assert.equal(clock.pending(), 0);
+});
+
+await test('a lit line whose audio never comes ends on its own after MAX_LIT_MS (lit holds the mic)', () => {
+  const { store, clock } = fresh();
+  store.setHomie({ state: 'listening' });
+  store.setHomie({ state: 'lit', label: 'AI hint' });
+  clock.advance(S.MAX_LIT_MS - 1);
+  assert.equal(store.get().state, 'lit');
+  clock.advance(1);
+  assert.equal(store.get().state, 'listening');
+  assert.equal(store.get().label, undefined);
+  assert.equal(clock.pending(), 0);
+});
+
+await test('a lit line that starts speaking keeps the speaking watchdog, not the lit one', () => {
+  const { store, clock } = fresh();
+  store.setHomie({ state: 'listening' });
+  store.setHomie({ state: 'lit' });
+  clock.advance(1000);
+  store.setHomie({ state: 'speaking' });
+  clock.advance(S.MAX_LIT_MS);
+  assert.equal(store.get().state, 'speaking');
+  clock.advance(S.MAX_SPEAKING_MS - S.MAX_LIT_MS);
+  assert.equal(store.get().state, 'listening');
   assert.equal(clock.pending(), 0);
 });
 
@@ -330,8 +356,18 @@ await test('an AI say lights the pot while it loads and speaks while it plays; t
 
 await test('the label under the pot always says it is the AI', () => {
   assert.equal(L.speakingLabel({}, 'say:3'), 'AI voice');
-  assert.equal(L.speakingLabel({}, 'say:translation:3'), 'Translated · AI voice');
+  assert.equal(L.speakingLabel({}, 'say:translation:3'), 'Translated from the cook');
   assert.equal(L.speakingLabel({ label: 'Translated from Grandma' }, 'say:translation:3'), 'Translated from Grandma');
+});
+
+await test('half duplex: homie lit or speaking, anything on the shared player, or a step video', () => {
+  const quiet = { homie: 'listening', audio: 'idle', video: false };
+  assert.equal(L.halfDuplex(quiet), false);
+  for (const homie of ['lit', 'speaking']) assert.equal(L.halfDuplex({ ...quiet, homie }), true, homie);
+  for (const homie of ['off', 'listening', 'thinking', 'timer']) assert.equal(L.halfDuplex({ ...quiet, homie }), false, homie);
+  for (const audio of ['loading', 'playing']) assert.equal(L.halfDuplex({ ...quiet, audio }), true, audio);
+  for (const audio of ['idle', 'paused', 'ended', 'error']) assert.equal(L.halfDuplex({ ...quiet, audio }), false, audio);
+  assert.equal(L.halfDuplex({ ...quiet, video: true }), true);
 });
 
 await test('homie stays off sign-in, the gateway, links, the month story and chat', () => {

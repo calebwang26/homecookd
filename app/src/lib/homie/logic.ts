@@ -1,6 +1,6 @@
 // homie's pure rules (node scripts/test-homie.mjs): what the pot shows, where it rests on each
 // screen, what a tap on it says, the centred moment's layout and listening bars, the timer ring, the
-// mic level, and the voice service's https base.
+// mic level, half duplex, and the voice service's https base.
 import type { Homie, HomieFrame, HomieMoment, HomieState } from './store';
 
 export const HOMIE_REST_SIZE = 56;
@@ -29,10 +29,23 @@ export function potState(h: Pick<Homie, 'state'>, say: SayPhase): HomieState {
   return h.state;
 }
 
-/** The label under the pot while it speaks. Never the cook's name alone: it is always the AI. */
+/**
+ * The label under the pot while it speaks. Never the cook's name alone: it is always the AI. A screen
+ * that knows the cook sets the label itself ("Translated from Grandma", lib/live/voice).
+ */
 export function speakingLabel(h: Pick<Homie, 'label'>, key: string | null | undefined): string {
   if (h.label) return h.label;
-  return key?.startsWith(TRANSLATION_PREFIX) ? 'Translated · AI voice' : 'AI voice';
+  return key?.startsWith(TRANSLATION_PREFIX) ? 'Translated from the cook' : 'AI voice';
+}
+
+/**
+ * Half duplex (docs/build/STACK.md): while this is true the app itself is making sound, so every mic
+ * frame goes to the voice service as zeroed PCM of the same length (the recorder keeps running).
+ * True while homie is lit or speaking, while the shared player plays or loads anything (homie's say,
+ * the cook's story or voice note), and while a step video plays (the cook's voice).
+ */
+export function halfDuplex(v: { homie: HomieState; audio: string; video: boolean }): boolean {
+  return v.homie === 'lit' || v.homie === 'speaking' || v.audio === 'playing' || v.audio === 'loading' || v.video;
 }
 
 export const HELP = {

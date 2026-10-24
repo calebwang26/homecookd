@@ -1,7 +1,8 @@
 // Cook mode's voice rules, pure (node scripts/test-voice-ui.mjs): what each `say` from the voice service
 // means for homie (docs/build/STACK.md "kid cooking additions"), which `say_end` and transcript belong
-// to what, when voice starts on its own, the kid's spoken yes or no, the kitchen timers the app counts
-// down, what the pot shows, and which of the cook's answers to offer the kid.
+// to what, when voice starts on its own, when the phone reads aloud itself, app-only moments and the
+// read-aloud offer's end, the kid's spoken yes or no, the kitchen timers the app counts down, what the
+// pot shows, and which of the cook's answers to offer the kid.
 import type { HomieMoment, HomieState } from '@/lib/homie/store';
 
 export type SayKind = 'step' | 'reply' | 'hint' | 'translation' | 'nudge' | 'offer' | 'greeting' | 'timer';
@@ -67,6 +68,60 @@ export function consentSettled(v: { askConsent: boolean; liveOn: boolean; consen
   return !v.askConsent && (!v.liveOn || v.consent !== 'unknown' || v.startFailed);
 }
 
+/**
+ * "Leo is cooking" (lib/useCookingSession) is on for this visit: the same test as that hook's own
+ * `on`. Off (a memorial cook, the web dev aid, no dish yet) there is no "Let Mom see" answer to wait
+ * for, so it is consentSettled's `liveOn`.
+ */
+export function cookingSessionOn(v: { enabled: boolean; cookId?: string | null; memorial?: boolean | null; recipeId?: string | null; total: number }): boolean {
+  return v.enabled && !!v.cookId && !v.memorial && !!v.recipeId && v.total >= 1;
+}
+
+/**
+ * No voice line reads for the kid (Expo Go, web, no voice service, or the line gave up or failed):
+ * the phone itself offers "read it out loud?" and reads each step in homie's voice.
+ */
+export function phoneReads(v: { voiceHere: boolean; live: boolean; unavailable: boolean }): boolean {
+  return !v.live && (!v.voiceHere || v.unavailable);
+}
+
+// ---------------------------------------------------------------------------------------------
+// App-only moments and the service's read-aloud offer (the shared contract with the voice service)
+
+/** A moment the app opened on its own (not the service's offer or story nudge). */
+export type AppMomentKind = 'answer' | 'story' | 'ask' | 'help';
+
+/**
+ * Which app-only moment this is, from the id cook mode gave it (components/cooking/CookMoments):
+ * "<cook> answered your question" and "Ask <cook> anything". The read-aloud offer and the story
+ * nudge are the service's own offers (its yes plays them), so they never count.
+ */
+export function appMomentKind(id: string | null | undefined): AppMomentKind | null {
+  if (!id) return null;
+  if (id.startsWith('answer:')) return 'answer';
+  if (id.startsWith('ask:')) return 'ask';
+  return null;
+}
+
+/**
+ * What /cook gets when an app-only moment opens or closes: while one is open, the service still
+ * streams transcripts, but a "yes" / "no" / "sure" is the moment's, not an answer to its own offer.
+ */
+export function momentMessage(kind: AppMomentKind | null): { type: 'moment'; open: true; kind: AppMomentKind } | { type: 'moment'; open: false } {
+  return kind ? { type: 'moment', open: true, kind } : { type: 'moment', open: false };
+}
+
+/** The service's { type: "offer_closed", accepted }: the read-aloud offer is over (true: it reads). */
+export function offerClosed(m: { accepted?: unknown }): boolean {
+  return m.accepted === true;
+}
+
+/**
+ * The { type: "text" } that declines the service's read-aloud offer for this visit: sent for a tap
+ * anywhere on the offer, or a "no" this phone remembers. Steps then change silently.
+ */
+export const DECLINE_TEXT = 'no';
+
 // What homie takes for yes (voice/src/cook.ts isYes, so the phone and homie agree) and for no.
 const YES = /^(yes|yeah|yep|yup|sure|ok|okay|please|go ahead|read it|read it out loud|do it|let'?s hear it)( .*)?$/;
 const NO = /^(no|nope|nah|not now|no thanks|no thank you|later|maybe later|not yet|skip|skip it|don'?t)( .*)?$/;
@@ -91,8 +146,9 @@ export const TAP_TO_CLOSE = 'Tap anywhere to close';
 
 /**
  * homie's yes-or-no question as a moment (Caleb, Oct 24): no buttons, the listening bars and "Say
- * “yes” or “no”"; a tap anywhere is no. A phone that can't hear the answer (no mic, mic off) gets
- * one button for yes instead. onChoose gets 'yes' (the button) or 'not_now' (a tap anywhere).
+ * “yes” or “no”"; a tap anywhere closes it ("not now", only for this visit). A phone that can't hear
+ * the answer (no mic, mic off) gets one button for yes instead. onChoose gets 'yes' (the button) or
+ * 'not_now' (a tap anywhere).
  */
 export function yesNoMoment(m: { id: string; question: string; questionEn?: string; hearing: boolean; button: string; onChoose: (choice: string) => void }): HomieMoment {
   const base = { id: m.id, question: m.question, questionEn: m.questionEn, tapToClose: TAP_TO_CLOSE, onChoose: m.onChoose };
@@ -196,7 +252,7 @@ export function answersToHear<T extends AnswerRow>(
 
 const silences = new Map<number, ArrayBuffer>();
 
-/** Zeros the size of a mic chunk: what the socket gets instead of the mic while the app plays sound. */
+/** Zeros the size of a mic chunk: what the socket gets instead of the mic while the app plays sound (lib/live/mic). */
 export function silence(bytes: number): ArrayBuffer {
   let s = silences.get(bytes);
   if (!s) {
