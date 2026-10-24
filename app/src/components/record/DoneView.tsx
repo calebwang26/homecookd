@@ -2,7 +2,7 @@
 // last questions and goodbye, homie waves (its lid lifts, happy steam) over "झालं! Shreya ला पाठवतोय" /
 // "Done! Sending it to Shreya", and after ~4 s she is back on her home, with no button to tap.
 // Glasses: the glasses' computer uploads the video. A phone recording sends itself from here
-// (sendDraft, with the pre-record sheet's dish and kid): no Send screen to tap through. If that send
+// (sendDraft, with the pre-record sheet's dish and kids): no Send screen to tap through. If that send
 // fails, Send opens with everything filled in, so she can try again there.
 import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
@@ -18,6 +18,7 @@ import { clearDraft, getDraft, useDraft } from './draft';
 import { WavingHomie } from './GlowHomie';
 import { COLUMN, WarmGlow } from './RecordWash';
 import { sendDraft } from './sendDraft';
+import { firstWho, whoTo } from './who';
 import { doneLine, recordWords } from './words';
 
 export const DONE_HOLD_MS = 4000;
@@ -31,26 +32,26 @@ function goHome() {
 
 export function DoneView({ source, lang, kidName, preview = false }: { source: 'phone' | 'glasses'; lang: string; kidName: string | null; preview?: boolean }) {
   const reduce = useReducedMotion();
-  const { me, profiles } = useSession();
+  const { me, profiles, learners } = useSession();
   const draft = useDraft();
   const toast = useToast();
 
   const others = profiles.filter((p) => p.id !== me?.id);
-  const kid = draft.everyone ? null : (others.find((p) => p.id === draft.requestFrom) ?? null);
-  const recipients = draft.everyone ? others : kid ? [kid] : [];
-  const line = doneLine(recordWords(lang), { kid: kid?.name ?? kidName, everyone: draft.everyone, nobody: others.length === 0 });
+  const people = learners.filter((p) => p.id !== me?.id);
+  const to = whoTo(firstWho(people, others, { picked: draft.forKids ?? (draft.requestFrom ? [draft.requestFrom] : []), everyone: draft.everyone }), people, others);
+  const line = doneLine(recordWords(lang), { kid: to.everyone ? null : (to.label ?? kidName), everyone: to.everyone, nobody: others.length === 0 });
 
   // The mount effect below runs once; it reads who it's for from here.
-  const latest = useRef({ me, kid, recipients, toast });
+  const latest = useRef({ me, to, toast });
   useEffect(() => {
-    latest.current = { me, kid, recipients, toast };
+    latest.current = { me, to, toast };
   });
 
   useEffect(() => {
     if (preview) return;
     let alive = true;
     const send = async (): Promise<boolean> => {
-      const { me: who, kid: to, recipients: all, toast: t } = latest.current;
+      const { me: who, to, toast: t } = latest.current;
       const d = getDraft();
       const clips = d.clips.filter((c) => c.selected);
       if (source !== 'phone' || !clips.length) {
@@ -60,7 +61,7 @@ export function DoneView({ source, lang, kidName, preview = false }: { source: '
       }
       if (!who) return false;
       try {
-        await sendDraft({ me: who, draft: d, clips, kid: to, recipients: all, toLabel: d.everyone ? 'everyone' : (to?.name ?? null), dish: (d.dish ?? '').trim() });
+        await sendDraft({ me: who, draft: d, clips, kids: to.picked, recipients: to.recipients, toLabel: to.label, dish: (d.dish ?? '').trim() });
         clearDraft();
         return true;
       } catch (e) {

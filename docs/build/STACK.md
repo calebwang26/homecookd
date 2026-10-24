@@ -171,19 +171,27 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   `jobs.language`, `recipes.language`. Unset means `en`.
 
 **App → Convex (new public functions; every one takes `sessionToken`)**
-- `live.startRecording({ dish?, forKidId?, language, source })` → `{ recordingId }` (cook only; status `intro`).
+- `live.startRecording({ dish?, forKidIds?, forKidId?, language, source })` → `{ recordingId }` (cook only; status
+  `intro`). "Who is it for?" can tick several kids (Oct 24): `forKidIds`, each a kid in her family, else the call is
+  refused. Rows store `forKidIds` (and `forKidId` only when there's exactly one kid); readers take `forKidIds`, else
+  the older `forKidId` (`convex/lib/forKids.ts`). `/live/session` returns `kids: [{ name }]`, and `kid` only for
+  exactly one kid (homie names one kid, else says "your family").
 - `live.recording({ recordingId })` (live): the row, for the recording screen.
 - `live.endRecording({ recordingId })` → `{ ok }` (cook only, her own recording; another family's or another
   cook's is refused): the stop button when the `/record` socket isn't connected. A `recording` or `wrapping_up`
   recording becomes `ended` (sets `endedAt`), so the glasses VM finalizes the video even when the voice service is
   down. Calling it again returns `{ ok: true }` and changes nothing; `{ ok: false }` means there was nothing to
   end (still `intro`, or `abandoned`).
-- `jobs.create` gains optional `title`, `language`, `forKidId`, `recordingId`. `recordingId` must be this cook's
-  recording; the job then sets `recordings.jobId` and takes the recording's `dish`, `language` and `forKidId` for
-  any not given. `language` defaults to the cook's `people.language` (else `en`); `forKidId` must be in the family.
+- `jobs.create` gains optional `title`, `language`, `forKidIds` (or the older `forKidId`), `recordingId`.
+  `recordingId` must be this cook's recording; the job then sets `recordings.jobId` and takes the recording's
+  `dish`, `language` and kids for any not given. `language` defaults to the cook's `people.language` (else `en`);
+  every kid must be a kid in the family.
   The `title` (or dish) is the processing card's title instead of "New recipe", and the recipe's name.
 - `people.setLanguage({ language })` (self; a two-letter code, lowercased). `people.me` → `{ personId, name, role,
-  language, relation? }` (`language` is `en` when unset).
+  language, relation? }` (`language` is `en` when unset). `people.family` → `[{ personId, supabaseProfileId, name,
+  role }]` (my family only), so the app maps profile ids to Convex ids (Oct 24).
+- `messages.madeMyDish` → the newest photo someone else sent of one of my dishes in the last 14 days (`{ messageId,
+  fromName, recipeTitle, libraryId?, photoUrl, text?, at }`), or null: the cook's Home card "Leo made your Poha".
 - `questions.ask` (the voice service's `asked_cook`): when the recipe's cook doesn't speak English, Gemini fills
   `questions.textForCook` (the kid's question in her language) a moment later; on failure it stays unset.
   `questions.forRecipe` / `openForCook` return it.
@@ -386,7 +394,7 @@ x-voice-secret) and Claude says that one fact warmly (`voice/src/tapLine.ts`; th
 
 **Worker ↔ Convex additions**
 - `/worker/claim` adds `title?`, `language` (the job's, else the cook's, else `en`), `relation?` (the cook's),
-  `forKidName?`, `memoriesOptIn?` (the recording's) and `homieLog: [{ atS, kind, text, textEn, answer?: { transcript,
+  `forKidName?` (only for exactly one kid), `forKidNames` (every kid, Oct 24), `memoriesOptIn?` (the recording's) and `homieLog: [{ atS, kind, text, textEn, answer?: { transcript,
   transcriptEn?, atS, endS } }]`, sorted, with times on the **video's** clock (`atS + (startedAt − videoStartedAt) /
   1000` when `videoStartedAt` is set, else `atS`; answers shifted the same). Prompts said before the video started
   (negative video time, e.g. the intro) are left out.

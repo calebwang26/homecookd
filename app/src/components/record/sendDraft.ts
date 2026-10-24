@@ -1,11 +1,11 @@
 // Sends a recording: the background upload (lib/uploads.ts), the live progress card (Convex
-// jobs.create with the dish, her language, the kid and homie's recording), and who gets the recipe
+// jobs.create with the dish, her language, the kids and homie's recording), and who gets the recipe
 // once it's written (POST /pending-sends). Send's big button uses it, and so does Grandma's done
 // screen, which sends a phone recording by itself (components/record/DoneView).
 //
-//   const job = await sendDraft({ me, draft, clips, kid, recipients, toLabel, dish, hello })
+//   const job = await sendDraft({ me, draft, clips, kids, recipients, toLabel, dish, hello })
 import type { Profile } from '@/lib/api';
-import { convexPersonIdByName, createJob } from '@/lib/live/convex';
+import { convexKidIds, createJob } from '@/lib/live/convex';
 import { ensurePendingSend, startUpload, type StoredJob } from '@/lib/uploads';
 
 import type { Draft, DraftClip } from './draft';
@@ -19,10 +19,10 @@ export type SendInput = {
   draft: Pick<Draft, 'glasses' | 'language' | 'recordingId'>;
   /** The videos to send (the selected ones). */
   clips: DraftClip[];
-  /** The one kid it's for (Convex jobs.create forKidId), or null for everyone / nobody. */
-  kid: Profile | null;
+  /** The kids it's for (Convex jobs.create forKidIds): every kid for everyone, none for nobody. */
+  kids: Profile[];
   recipients: Profile[];
-  /** "Leo", "everyone", or null. */
+  /** "Leo", "Leo & Zoe", "everyone", or null. */
   toLabel: string | null;
   /** The dish's name, trimmed ('' = none). */
   dish: string;
@@ -30,7 +30,7 @@ export type SendInput = {
 };
 
 /** Starts the upload and returns once the job exists (the videos keep uploading in the background). */
-export async function sendDraft({ me, draft, clips, kid, recipients, toLabel, dish, hello = null }: SendInput): Promise<StoredJob> {
+export async function sendDraft({ me, draft, clips, kids, recipients, toLabel, dish, hello = null }: SendInput): Promise<StoredJob> {
   const title = dish.slice(0, MAX_TITLE);
   const totalS = clips.reduce((a, c) => a + (c.asset.duration ?? 0) / 1000, 0);
   const job = await startUpload({
@@ -53,11 +53,11 @@ export async function sendDraft({ me, draft, clips, kid, recipients, toLabel, di
   // here never stops the send; the row falls back to the status file.
   const { glasses, language, recordingId } = draft;
   void (async () => {
-    const forKidId = (await convexPersonIdByName(kid?.name)) ?? undefined;
+    const forKidIds = await convexKidIds(kids);
     await createJob(`${job.job_id}/`, glasses ? 'glasses' : 'phone', {
       title: title || undefined,
       language: language ?? undefined,
-      forKidId,
+      forKidIds,
       recordingId: recordingId ?? undefined,
     });
   })().catch((e) => console.warn('[send] jobs.create failed', String(e)));

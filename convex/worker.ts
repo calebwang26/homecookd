@@ -4,6 +4,7 @@ import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { CANCELLED } from "./jobs";
+import { kidNames } from "./lib/forKids";
 import { liveEvent, liveLog } from "./liveEvents";
 import schema, { memory } from "./schema";
 
@@ -61,7 +62,8 @@ export const claim = internalMutation({
       source: v.union(v.literal("phone"), v.literal("glasses")),
       title: v.optional(v.string()),
       language: v.string(),
-      forKidName: v.optional(v.string()),
+      forKidName: v.optional(v.string()), // only when it's for exactly one kid
+      forKidNames: v.array(v.string()),
       memoriesOptIn: v.optional(v.boolean()),
       homieLog: v.array(homieEntry),
       // Glasses through the laptop bridge: the live analysis (video seconds) as hints, the spans it missed,
@@ -80,7 +82,7 @@ export const claim = internalMutation({
     await ctx.db.patch("jobs", job._id, { stage: "preparing", claimedAt: Date.now() });
     const family = await ctx.db.get("families", job.familyId);
     const cook = await ctx.db.get("people", job.cookId);
-    const kid = job.forKidId && (await ctx.db.get("people", job.forKidId));
+    const kids = await kidNames(ctx, job);
     const recording = job.recordingId && (await ctx.db.get("recordings", job.recordingId));
     return {
       jobId: job._id,
@@ -94,7 +96,8 @@ export const claim = internalMutation({
       source: job.source,
       title: job.title,
       language: job.language ?? cook?.language ?? "en",
-      forKidName: kid ? kid.name : undefined,
+      forKidName: kids.length === 1 ? kids[0] : undefined,
+      forKidNames: kids,
       memoriesOptIn: recording ? recording.memoriesOptIn : undefined,
       homieLog: recording ? await homieLog(ctx, recording) : [],
       ...(recording ? await liveLog(ctx, recording) : { liveLog: [], liveGaps: [] }),
