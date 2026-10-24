@@ -1,0 +1,45 @@
+/* "The one who cooks? Here's your page." A quiet second action: cream text, chartreuse link. */
+.root {
+  width: 100%;
+  margin-top: 22px;
+}
+.line {
+  max-width: 36ch;
+  margin-inline: auto;
+  font-family: var(--ff-text);
+  font-weight: 400;
+  font-size: var(--fs-body);
+  line-height: 1.5;
+  color: var(--cream);
+  text-wrap: balance;
+}
+.nowrap {
+  white-space: nowrap;
+}
+.link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  /* 48px tall hit area without moving the words: the padding is given back by the margin */
+  padding: 0 4px;
+  margin: -6px -4px;
+  vertical-align: middle;
+  border: 0;
+  border-radius: var(--r-pill);
+  background: none;
+  color: var(--chartreuse);
+  font: inherit;
+  font-weight: 600;
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.22em;
+  cursor: pointer;
+  transition: background-color 200ms var(--ease-soft);
+}
+.link:hover {
+  background: rgba(255, 253, 247, 0.08);
+}
+.link:focus-visible {
+  outline: 3px solid var(--chartreuse);
+  outline-offset: 2px;
+}

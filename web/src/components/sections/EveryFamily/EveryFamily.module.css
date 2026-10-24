@@ -1,0 +1,322 @@
+/* Every family (brief 8.7). Desktop ≥1024 · tablet 768–1023 · phone <768.
+   Geometry lives in custom properties so the JS loop only ever writes two transforms. */
+
+.section {
+  /* a7 thumbnails are 6.5–7.5vw; the vh caps keep the rows clear of the heading on short laptops
+     (1440×780 is a 13" MacBook Air with browser chrome). */
+  --tile: min(7vw, 11.5svh, 136px); /* px cap: keeps RecipeCard in its photo + tag tier (≤139px) */
+  --pitch: 9vw; /* slot width: 12 slots = 108vw, so one row always covers the viewport */
+  --pitch-n: 9; /* the same, unitless, read by the drift loop */
+  --amp: min(2.6vw, 4.2svh); /* wave amplitude */
+  --row-top: 38%; /* top row center inside the top half = 19% of the section */
+  --row-bottom: 62%; /* bottom row center inside the bottom half = 81% */
+
+  position: relative;
+  isolation: isolate;
+  display: grid;
+  grid-template-rows: minmax(30svh, 1fr) auto minmax(30svh, 1fr);
+  min-height: 100svh;
+  background: var(--canvas);
+  overflow: clip;
+}
+
+/* ---------- center ---------- */
+.center {
+  grid-row: 2;
+  position: relative;
+  z-index: 2;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-inline: var(--gutter);
+  text-align: center;
+}
+.mascot {
+  margin-bottom: var(--s-3);
+}
+.h2 {
+  color: var(--ink);
+}
+.center .h2 {
+  font-size: min(var(--fs-statement), 10.4svh);
+}
+.h2Line {
+  display: block;
+}
+.w {
+  display: inline-block;
+  white-space: nowrap;
+}
+.cycle {
+  color: var(--green);
+}
+.cycle em {
+  display: inline-block;
+}
+.body {
+  margin-top: var(--s-5);
+  max-width: 64ch; /* one sentence per line from 768 up (EveryFamily.tsx splits them) */
+}
+:global(html[data-motion='on']) .h2:not([data-revealed]) .w {
+  opacity: 0;
+}
+
+/* ---------- the cloud ---------- */
+.cloud {
+  /* no z-index: the row wraps stack against .center directly, so an open tile can rise above it */
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+.wrap {
+  position: absolute;
+  left: 0;
+  width: 100%;
+  height: 50%;
+  z-index: 1;
+}
+.wrapTop {
+  top: 0;
+  --row-y: var(--row-top);
+}
+.wrapBottom {
+  top: 50%;
+  --row-y: var(--row-bottom);
+}
+.wrap[data-open] {
+  z-index: 3;
+}
+.track {
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 100%;
+  width: calc(24 * var(--pitch));
+}
+:global(html[data-motion='on']) .track {
+  will-change: transform;
+}
+
+.slot {
+  position: absolute;
+  top: var(--row-y);
+  left: calc(var(--k) * var(--pitch) + (var(--pitch) - var(--tile)) / 2);
+  width: var(--tile);
+  aspect-ratio: 1;
+  translate: 0 calc(-50% + var(--wave) * var(--amp));
+  pointer-events: auto;
+  scroll-snap-align: center;
+  -webkit-tap-highlight-color: transparent;
+}
+.enter {
+  width: 100%;
+  height: 100%;
+}
+.lift {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  transform: rotate(var(--tilt)) scale(var(--depth));
+  transition: transform 560ms var(--ease-soft);
+}
+.lift[data-far] {
+  filter: saturate(0.92);
+}
+/* the lifted shadow fades in on a pseudo layer (cheaper than animating box-shadow) */
+.lift::before {
+  content: '';
+  position: absolute;
+  inset: 2%;
+  border-radius: 22%;
+  box-shadow: var(--shadow-float);
+  opacity: 0;
+  transition: opacity 420ms var(--ease-soft);
+}
+.slot[data-open] .lift {
+  transform: translateY(-1vw) rotate(0deg) scale(1.2);
+}
+.slot[data-open] .lift::before {
+  opacity: 1;
+}
+
+/* RecipeCard at tile size (photo + cook tag tier), as a7's borderless thumbnails: the photo fills the
+   rounded square (the panel clips it, so no tint rim or corner fringe) and the card's soft shadow
+   stays. The color comes from the photos. */
+.card {
+  --card-inset: 0px;
+  --card-radius: 22cqw;
+  --card-photo-radius: 0px;
+}
+/* a calm neutral square while a photo loads (the card's tint would read as a flat colored tile) */
+.card [data-card-photo] {
+  background: var(--sunken);
+}
+.card [data-garnish='tag'] {
+  /* in from the corner so the pill clears the 22cqw curve */
+  left: 6cqw;
+  bottom: 6cqw;
+  max-width: calc(100% - 12cqw);
+  padding-inline: 0.5em;
+  letter-spacing: -0.01em;
+}
+
+/* one-shot enter: hidden only while motion is on and before the rows have entered */
+:global(html[data-motion='on']) .cloud:not([data-entered]) .enter {
+  opacity: 0;
+}
+
+/* ---------- static (SSR without motion, reduced motion, no JS): still rows that scroll ---------- */
+:global(html:not([data-motion='on'])) .wrap {
+  overflow-x: auto;
+  overflow-y: hidden;
+  overscroll-behavior-x: contain;
+  scroll-snap-type: x proximity;
+  scrollbar-width: none;
+  pointer-events: auto;
+}
+.wrap::-webkit-scrollbar {
+  display: none;
+}
+:global(html:not([data-motion='on'])) .track {
+  width: calc(12 * var(--pitch));
+}
+:global(html:not([data-motion='on'])) .dup {
+  display: none;
+}
+:global(html:not([data-motion='on'])) .pause {
+  display: none;
+}
+
+/* ---------- the bubble on an open tile ---------- */
+.bubbleWrap {
+  --shift: 0px;
+  position: absolute;
+  left: 50%;
+  z-index: 2;
+  display: block;
+  width: max-content;
+  max-width: min(19.5rem, calc(100vw - 32px));
+  transform: translateX(calc(-50% + var(--shift)));
+  pointer-events: none;
+}
+.above {
+  bottom: calc(100% + 10% + 1vw + 14px);
+}
+.below {
+  top: calc(100% + 10% - 1vw + 16px);
+}
+.bubblePop {
+  display: block;
+  transform-origin: calc(50% - var(--shift)) calc(100% + 11px);
+}
+.below .bubblePop {
+  transform-origin: calc(50% - var(--shift)) -11px;
+}
+.bubble {
+  position: relative;
+  display: grid;
+  gap: 4px;
+  padding: 14px 18px 15px;
+  border-radius: 20px;
+  background: var(--surface);
+  color: var(--ink);
+  text-align: left;
+  box-shadow:
+    0 0 0 1px var(--hairline),
+    0 2px 4px rgba(30, 36, 16, 0.05),
+    0 18px 36px -14px rgba(30, 36, 16, 0.34);
+}
+.bTitle {
+  font-family: var(--ff-text);
+  font-weight: 600;
+  font-size: 1rem;
+  line-height: 1.25;
+  color: var(--ink);
+}
+.bQuote {
+  font-family: var(--ff-display);
+  font-style: italic;
+  font-weight: 450;
+  font-variation-settings: 'SOFT' 100, 'WONK' 1;
+  font-size: 1.25rem;
+  line-height: 1.25;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.bEnglish,
+.bEstimate {
+  font-family: var(--ff-text);
+  font-weight: 500;
+  font-size: 1rem;
+  line-height: 1.3;
+}
+.bEnglish {
+  color: var(--text);
+}
+.bEstimate {
+  color: var(--muted);
+}
+.bTail {
+  position: absolute;
+  left: calc(50% - var(--shift) - 10px);
+  width: 20px;
+  height: 12px;
+  fill: var(--surface);
+}
+.above .bTail {
+  top: calc(100% - 1px);
+}
+.below .bTail {
+  bottom: calc(100% - 1px);
+  transform: scaleY(-1);
+}
+
+/* ---------- pause ---------- */
+.pause {
+  position: absolute;
+  right: var(--gutter-hero);
+  /* clear of the next section's rounded sheet, which overlaps this one by --r-sheet (globals.css) */
+  bottom: calc(var(--r-sheet) + max(12px, 2svh));
+  z-index: 4;
+}
+
+/* ---------- tablet ---------- */
+@media (max-width: 1023px) {
+  .section {
+    --tile: min(11vw, 10svh);
+    --pitch: 13.5vw;
+    --pitch-n: 13.5;
+    --amp: 3.4vw;
+    --row-top: 48%; /* 24%: tall tablets would otherwise leave a gulf around the heading */
+    --row-bottom: 52%; /* 76% */
+  }
+}
+
+/* ---------- phone ---------- */
+@media (max-width: 767px) {
+  .section {
+    --tile: min(19vw, max(9.5svh, 18vw));
+    --pitch: 19vw;
+    --pitch-n: 19;
+    --amp: 3.6vw;
+    --row-top: 40%; /* 20% of the section: band 6–32% */
+    --row-bottom: 60%; /* 80%: band 68–94% */
+    min-height: 90svh;
+    grid-template-rows: minmax(27svh, 1fr) auto minmax(27svh, 1fr);
+  }
+  .center .h2 {
+    font-size: 9.5vw;
+  }
+  .body {
+    margin-top: var(--s-4);
+    max-width: 22em;
+    text-wrap: balance;
+  }
+  /* phones: the sentences flow as one balanced paragraph again */
+  .body :global(.line) {
+    display: inline;
+  }
+  .body :global(.line + .line)::before {
+    content: ' ';
+  }
+}

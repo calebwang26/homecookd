@@ -1,0 +1,626 @@
+/* Far apart (brief 8.9). Default CSS = the finished scene (SSR, reduced motion, no JS).
+   Mobile/tablet (< 1024): side-by-side portrait photos, captions on canvas beneath.
+   Phones (< 768): the chips leave the photos and become a chat thread under the captions.
+   Desktop (≥ 1024): two 41vw photo cards with captions over a bottom scrim.
+   Film mode (desktop ≥ 600 tall + motion): the stage is a 100svh sticky frame (StickyStage). */
+
+.section {
+  position: relative;
+  background: var(--canvas);
+  --pad-x: 4vw;
+  --gap: 4vw;
+}
+
+.inner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding-block: clamp(48px, 9vh, 112px) clamp(24px, 5vh, 72px);
+}
+
+/* ---------- heading ---------- */
+.head {
+  width: calc(100% - 2 * var(--pad-x));
+  display: grid;
+  justify-items: center;
+  gap: var(--stack-h2-body);
+  text-align: center;
+}
+.h2 {
+  color: var(--ink);
+  font-size: clamp(2.5rem, 0.6rem + 7.4vw, 3.5rem);
+  text-wrap: balance;
+}
+.body {
+  max-width: 34ch;
+  color: var(--text);
+  text-wrap: balance;
+}
+
+/* ---------- the two cards ---------- */
+.row {
+  position: relative;
+  width: calc(100% - 2 * var(--pad-x));
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-rows: auto auto;
+  column-gap: var(--gap);
+  /* room for the reply bubble that straddles the photos' top edge */
+  margin-top: clamp(92px, 24vw, 150px);
+}
+.card {
+  display: contents;
+}
+.media {
+  grid-area: 1 / 1;
+  position: relative;
+  aspect-ratio: 44 / 62;
+}
+.mediaRight {
+  grid-area: 1 / 2;
+}
+.photo {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-photo);
+  overflow: hidden;
+  background: var(--sunken);
+  box-shadow: var(--shadow-card);
+  isolation: isolate;
+}
+.img {
+  object-fit: cover;
+}
+.imgRight {
+  object-position: 35% 30%;
+}
+.scrim {
+  display: none;
+}
+
+/* the pot peeks over the cook's card on desktop; on phones the reply bubble owns that edge */
+.mascot {
+  display: none;
+  position: absolute;
+  right: 8%;
+  top: 0;
+  z-index: 2;
+  width: 88px;
+  translate: 0 -56%;
+  filter: drop-shadow(0 8px 14px rgba(30, 36, 16, 0.18));
+}
+.mascotSvg {
+  width: 100%;
+  height: auto;
+}
+
+.caption {
+  grid-row: 2;
+  grid-column: 1;
+  display: grid;
+  justify-items: start;
+  align-content: start;
+  gap: 10px;
+  padding: 16px 2px 0;
+  color: var(--ink);
+}
+.captionRight {
+  grid-column: 2;
+}
+.h3 {
+  color: var(--ink);
+  margin: 0;
+}
+.caption .clock {
+  color: var(--cocoa);
+}
+.caption .capPill {
+  border-color: rgba(71, 67, 42, 0.28);
+  color: var(--ink);
+  white-space: normal;
+  border-radius: 1.2em;
+}
+
+/* ---------- the overlay: travelers + chips (positions are % of the photo row) ---------- */
+.overlay {
+  grid-area: 1 / 1 / 2 / 3;
+  position: relative;
+  z-index: 3;
+  pointer-events: none;
+  --arc-w: 23vw;
+}
+.arcFrom,
+.replyFrom {
+  position: absolute;
+  width: 0;
+  height: 0;
+}
+/* start points: the recipe leaves from the cook's phone; the photo leaves from the kid */
+.arcFrom {
+  left: 81%;
+  top: 80%;
+}
+.replyFrom {
+  left: 20%;
+  top: 64%;
+}
+
+/* lands on his counter */
+.arc {
+  position: absolute;
+  width: var(--arc-w);
+  left: calc(33% - var(--arc-w) / 2);
+  top: calc(71% - var(--arc-w) * 0.625);
+}
+.arcInner {
+  position: relative;
+  transform: rotate(5deg);
+  transform-origin: 50% 55%;
+}
+.arcInner::before {
+  /* the lift shadow (a7 --shadow-float), deeper while it flies */
+  content: '';
+  position: absolute;
+  inset: 6% 4% 0;
+  border-radius: 24px;
+  box-shadow: 0 20px 40px -18px rgba(30, 36, 16, 0.45);
+  opacity: 0.8;
+  transition: opacity 300ms var(--ease-soft);
+}
+.arc[data-flying] .arcInner::before {
+  opacity: 1;
+  box-shadow: 0 34px 60px -22px rgba(30, 36, 16, 0.5);
+}
+.arcCard {
+  position: relative;
+}
+.section[data-active] .arcInner,
+.section[data-active] .reply {
+  will-change: transform;
+}
+/* the card's own cook tag would repeat the caption pill */
+.arcCard :global([data-garnish='tag']) {
+  display: none !important;
+}
+.arcCaption {
+  position: absolute;
+  left: 50%;
+  bottom: -14px;
+  z-index: 2;
+  translate: -50% 0;
+  rotate: -4deg;
+}
+
+/* phones: the photo's reply straddles the cook's card top edge, her answer sits on her hands */
+.delivered {
+  position: absolute;
+  left: 24%;
+  top: 34%;
+}
+.reply {
+  position: absolute;
+  right: 0;
+  top: -31%;
+}
+.deliveredTo {
+  position: absolute;
+  right: -1%;
+  top: calc(100% + 8px);
+  white-space: nowrap;
+}
+.answer {
+  position: absolute;
+  right: 0;
+  top: 71%;
+}
+
+
+/* reply bubble: thumbnail + two lines */
+.reply .replyChip {
+  white-space: normal;
+}
+.replyChip > span > span > span {
+  /* the bubble: a touch more room on the left for the photo */
+  padding: 0.5em 0.9em 0.5em 0.5em;
+  align-items: center;
+  gap: 0.7em;
+}
+.thumb {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  overflow: hidden;
+  background: var(--sunken);
+}
+.cam {
+  position: absolute;
+  right: 3px;
+  bottom: 3px;
+  display: grid;
+  place-items: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 253, 247, 0.94);
+  color: var(--ink);
+}
+.replyText {
+  display: grid;
+  gap: 2px;
+  max-width: 8.6em;
+  font-weight: 500;
+  line-height: 1.25;
+  text-wrap: balance;
+}
+.replyTime {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* the cook's answer: her words, on the lemon of the recipe card's feel pill */
+.answerChip.answerChip {
+  --bg: var(--lemon);
+  --fg: var(--ink);
+  white-space: normal;
+}
+.answerText {
+  display: block;
+  max-width: 9.5em;
+  font-size: clamp(1.125rem, 1rem + 0.5vw, 1.5rem);
+  line-height: 1.2;
+  text-wrap: balance;
+}
+.heart {
+  color: var(--tomato-deep);
+  font-style: normal;
+}
+
+/* ---------- phones: clean photos + a chat thread under the captions ---------- */
+@media (max-width: 767px) {
+  /* the thread's last bubble needs a clear break before the next band (as much room as the top) */
+  .inner {
+    padding-bottom: clamp(48px, 9vh, 112px);
+  }
+  .row {
+    grid-template-rows: auto auto auto auto auto;
+    /* nothing straddles the photos' top edge any more */
+    margin-top: var(--stack-head-visual);
+  }
+  /* the overlay's children join the row grid: the travelers stay on the photo row, the chips
+     flow into rows 3-5 (an absolutely positioned grid child uses its grid area as containing block) */
+  .overlay {
+    display: contents;
+  }
+  .arcFrom,
+  .replyFrom,
+  .arc {
+    grid-area: 1 / 1 / 2 / 3;
+  }
+  .arc {
+    z-index: 3;
+  }
+  .delivered,
+  .reply,
+  .answer {
+    position: relative;
+    inset: auto;
+    grid-column: 1 / -1;
+    z-index: 3;
+  }
+  /* hers on the right (she sent the recipe), his on the left, under each one's photo */
+  .delivered {
+    grid-row: 3;
+    justify-self: end;
+    margin-top: 28px;
+  }
+  .reply {
+    grid-row: 4;
+    justify-self: start;
+    max-width: 88%;
+    margin-top: 14px;
+  }
+  .answer {
+    grid-row: 5;
+    justify-self: end;
+    max-width: 88%;
+    margin-top: 14px;
+  }
+  /* the answer already says it arrived */
+  .deliveredTo {
+    display: none;
+  }
+  .thumb {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+  }
+  .replyText {
+    max-width: 12em;
+  }
+  .answerText {
+    max-width: 14em;
+  }
+}
+
+/* ---------- small phones ---------- */
+@media (max-width: 479px) {
+  /* decorative tag on a 90px card (the story is in the sr-only line) */
+  .arcCaption > span {
+    font-size: 0.875rem;
+  }
+}
+
+/* ---------- tablet: same choreography, more room ---------- */
+@media (min-width: 768px) {
+  .h2 {
+    font-size: var(--fs-statement);
+  }
+  .body {
+    max-width: none;
+  }
+  .bodyLine {
+    display: block;
+  }
+  .overlay {
+    --arc-w: 20vw;
+  }
+  /* the card shows its title from here up: the "from" tag moves to its top corner */
+  .arcCaption {
+    left: -10%;
+    bottom: auto;
+    top: -16px;
+    translate: 0 0;
+    rotate: -5deg;
+  }
+  .row {
+    margin-top: 112px;
+  }
+  .reply {
+    top: -13%;
+  }
+  .thumb {
+    width: 56px;
+    height: 56px;
+    border-radius: 12px;
+  }
+  .replyText {
+    max-width: 12em;
+  }
+}
+
+/* ---------- desktop ---------- */
+@media (min-width: 1024px) {
+  .section {
+    --pad-x: 7.2vw;
+    --gap: 3.6vw;
+  }
+  .h2 {
+    /* one line, so the photos keep their height in the stage */
+    font-size: min(var(--fs-statement), 5.9vw);
+    white-space: nowrap;
+  }
+  .row {
+    grid-template-rows: minmax(0, 1fr);
+    height: max(58vh, 440px);
+    margin-top: var(--stack-head-visual);
+  }
+  .media {
+    aspect-ratio: auto;
+  }
+  .photo {
+    border-radius: var(--r-media);
+  }
+  .imgRight {
+    object-position: 45% 40%;
+  }
+  .scrim {
+    display: block;
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(
+      0deg,
+      rgb(20 22 12 / 0.84) 0%,
+      rgb(20 22 12 / 0.7) 22%,
+      rgb(20 22 12 / 0.4) 40%,
+      rgb(20 22 12 / 0.12) 52%,
+      rgb(20 22 12 / 0) 62%
+    );
+  }
+  .mascot {
+    display: block;
+    right: 7%;
+    translate: 0 -72%;
+  }
+  .caption,
+  .captionRight {
+    grid-row: 1;
+    align-self: end;
+    justify-self: start;
+    position: relative;
+    z-index: 1;
+    gap: 12px;
+    padding: clamp(24px, 2.4vw, 40px);
+    color: var(--cream);
+  }
+  /* mirrored, so the two captions frame the space between the cards */
+  .captionRight {
+    grid-column: 2;
+    justify-self: end;
+    justify-items: end;
+    text-align: right;
+  }
+  .h3 {
+    color: var(--cream);
+    text-shadow: 0 1px 24px rgb(20 22 12 / 0.45);
+  }
+  .caption .clock {
+    color: var(--cream);
+    text-shadow: 0 1px 14px rgb(20 22 12 / 0.6);
+  }
+  .caption .capPill {
+    border-color: rgba(255, 253, 247, 0.75);
+    color: var(--cream);
+    white-space: nowrap;
+    border-radius: var(--r-pill);
+  }
+
+  .overlay {
+    --arc-w: 14vw;
+    /* the chips below adapt to the photos' real height (film stages on laptops are short) */
+    container: fa-photos / size;
+  }
+  /* the recipe leaves from her phone; the photo leaves from his pan */
+  .arcFrom {
+    left: 87.5%;
+    /* (B7) the waiting card sits above the "A quieter kitchen." caption (~150px tall) instead of
+       on top of it; on short screens it may rise to the photo's top edge, never past it */
+    top: max(calc(var(--arc-w) * 0.5), calc(100% - 162px - var(--arc-w) * 0.6));
+  }
+  /* below and right of his face, over the pan and his hands */
+  .replyFrom {
+    left: 20%;
+    top: 50%;
+  }
+  /* lands on his counter, overhanging the card edge a little (a7 overlap) */
+  .overlay {
+    --arc-x: 42.5%;
+    --arc-y: 46%;
+  }
+  .arc {
+    left: calc(var(--arc-x) - var(--arc-w) / 2);
+    top: calc(var(--arc-y) - var(--arc-w) * 0.625);
+  }
+  /* the handoff: once the card lands, "Delivered ✓" takes the "from" tag's corner (the card's own
+     title already says "by {cook}"), so the two never stack, even on short screens. The tail sits
+     on the card's top-left corner, right of his face. */
+  .delivered {
+    left: auto;
+    top: auto;
+    right: calc(100% - var(--arc-x) + var(--arc-w) / 2 - 48px);
+    bottom: calc(100% - var(--arc-y) + var(--arc-w) * 0.625 - 6px);
+  }
+  /* default = the finished scene (tag handed off); under motion it travels with the card until it lands */
+  .arcCaption {
+    opacity: 0;
+    transition: opacity 250ms var(--ease-soft);
+  }
+  :global(html[data-motion='on']) .section[data-beat='0'] .arcCaption {
+    opacity: 1;
+  }
+  .reply {
+    right: 3.5%;
+    top: 7%;
+  }
+  .thumb {
+    width: 64px;
+    height: 64px;
+    border-radius: 14px;
+  }
+  .replyText {
+    max-width: 12em;
+  }
+
+  /* her answer sits just above her caption, near her hands and phone */
+  .answer {
+    right: 3%;
+    top: auto;
+    bottom: calc(var(--fs-h3) * 1.05 + 116px);
+  }
+
+  .head {
+    margin-bottom: clamp(28px, 4.5vh, 48px);
+  }
+  .row {
+    margin-top: 0;
+  }
+}
+
+/* small desktops: a slimmer recipe card, landing a touch further right, clear of the caption */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .overlay {
+    --arc-w: 13vw;
+    --arc-x: 44%;
+  }
+}
+
+/* short photo row (most laptops in film mode): her chips stack as a chat under the photo reply.
+   "Delivered · {cook}" goes (her answer already says it arrived), so nothing overlaps her caption. */
+@container fa-photos (max-height: 420px) {
+  .deliveredTo {
+    display: none;
+  }
+  .answer {
+    top: calc(7% + 94px);
+    bottom: auto;
+  }
+}
+/* very short rows: a compact photo reply (smaller thumbnail, no timestamp) */
+@container fa-photos (max-height: 345px) {
+  .reply {
+    top: 4%;
+  }
+  .thumb {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+  }
+  .replyTime {
+    display: none;
+  }
+  .answer {
+    top: calc(4% + 72px);
+  }
+}
+/* shortest rows: her answer tucks under the reply's bottom edge (a chat stack), one size smaller */
+@container fa-photos (max-height: 318px) {
+  .answer {
+    top: calc(4% + 58px);
+  }
+  .answerText {
+    font-size: 1.125rem;
+  }
+}
+
+/* ---------- film mode: the stage is one sticky viewport ---------- */
+@media (min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
+  :global(html:not([data-motion='off'])) .inner {
+    height: 100vh;
+    height: 100svh;
+    padding-top: max(10.5vh, calc(var(--nav-h) + 24px));
+    padding-bottom: 2.4vh;
+  }
+  :global(html:not([data-motion='off'])) .row {
+    height: auto;
+    flex: 0 1 58vh;
+    min-height: 0;
+    margin-block: auto;
+  }
+  /* (B7) short screens: a slimmer traveling card so it waits above her caption, not on it
+     (80cqh - 136px: the card's ~1.25 height fits over the ~160px caption; cqh resolves on the
+     overlay's children, the overlay being the size container) */
+  :global(html:not([data-motion='off'])) .overlay {
+    --arc-w: max(120px, min(14vw, 23vh, 80cqh - 136px));
+  }
+}
+/* short film stages (e.g. 1366×650): a tighter heading so the photos keep enough height for the chips */
+@media (min-width: 1024px) and (min-height: 600px) and (max-height: 700px) and (prefers-reduced-motion: no-preference) {
+  :global(html:not([data-motion='off'])) .inner {
+    padding-top: calc(var(--nav-h) + 16px);
+  }
+  :global(html:not([data-motion='off'])) .head {
+    gap: 12px;
+    margin-bottom: 20px;
+  }
+  :global(html:not([data-motion='off'])) .h2 {
+    font-size: min(var(--fs-statement), 5.9vw, 10vh);
+  }
+}
+@media (min-width: 1024px) and (max-width: 1279px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
+  :global(html:not([data-motion='off'])) .overlay {
+    --arc-w: max(120px, min(13vw, 23vh, 80cqh - 136px));
+  }
+}

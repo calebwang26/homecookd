@@ -1,0 +1,1005 @@
+/* DeckFilm (brief 8.1–8.2). Static blocks first (SSR / reduced motion / no JS), then `.film`, which
+   turns the same DOM into the layers of one pinned stage (z: bg 0 · sheet 10 · deck 20s · video rig 30 ·
+   text 40 · chips 50 · pause 80). */
+
+.root {
+  position: relative;
+  --cw: 16vw;
+}
+.stage {
+  position: relative;
+}
+.stageBg {
+  display: none;
+}
+
+/* =================================================================== HERO (static) */
+/* Static: the hero is one screen (--hero-h) plus the 40px the pass-down sheet overlaps (a4), and
+   every hero layer lives in the top screen, so text and video sit exactly where the film puts them
+   (no shift when film mode takes over). */
+.hero {
+  --hero-h: max(100svh, 560px);
+  position: relative;
+  height: calc(var(--hero-h) + 40px);
+  overflow: clip;
+  background: var(--hero-dark);
+  color: var(--cream);
+}
+.rig,
+.overlay,
+.alt {
+  height: var(--hero-h);
+}
+.rig {
+  position: absolute;
+  inset: 0 0 auto 0;
+}
+.clip,
+.inner,
+.settle {
+  position: absolute;
+  inset: 0;
+}
+.clip {
+  overflow: hidden;
+}
+.settle {
+  transform-origin: 52% 45%;
+}
+.video {
+  position: absolute;
+  inset: 0;
+}
+/* HeroVideo's ▶ "Play video" (reduced motion / Save-Data): top-left under the nav, clear of the faces */
+.video :global(button) {
+  left: var(--gutter-hero);
+  top: calc(var(--nav-h) + 4svh);
+  translate: none;
+}
+.alt {
+  position: absolute;
+  inset: 0 0 auto 0;
+  pointer-events: none;
+}
+
+/* Olive-black scrim (secondary spec 1.2), raised for the brightest frames (media.ts: YAVG 134):
+   nav top · the bottom band under the headline · left side. The pool behind the right column rides
+   the column itself (`.side::before`), so it follows the copy at every viewport height.
+   z-index 1: HeroVideo's poster is z-index 1 too; with no transform above it (reduced motion, no JS,
+   first paint) nothing else would hold it, and the scrim (later in the DOM) must paint over it. */
+.scrim {
+  position: absolute;
+  z-index: 1;
+  inset: 0;
+  pointer-events: none;
+  background:
+    linear-gradient(180deg, rgb(20 22 12 / 0.4) 0%, rgb(20 22 12 / 0) 17%),
+    linear-gradient(0deg, rgb(20 22 12 / 0.72) 0%, rgb(20 22 12 / 0.46) 30%, rgb(20 22 12 / 0.12) 52%, rgb(20 22 12 / 0) 64%),
+    linear-gradient(90deg, rgb(20 22 12 / 0.42) 0%, rgb(20 22 12 / 0) 58%);
+}
+
+/* the front card's photo garnish only exists in film mode */
+.garnish {
+  display: none;
+}
+
+/* ------------------------------------------------------------------- overlay */
+.overlay {
+  --side-w: clamp(300px, 27vw, 430px);
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 40;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) var(--side-w);
+  column-gap: 3vw;
+  align-items: end;
+  padding: 0 var(--gutter-hero) 7svh;
+  pointer-events: none;
+}
+.overlay :is(a, button) {
+  pointer-events: auto;
+}
+
+.h1 {
+  --h1-fs: clamp(3.5rem, min(9.8vw, 17.5vh), 11rem);
+  font-size: var(--h1-fs);
+  line-height: 0.9;
+  color: var(--cream);
+  text-wrap: initial;
+  margin-bottom: -0.06em;
+  text-shadow: 0 2px 30px rgb(20 22 12 / 0.25);
+}
+.h1Line {
+  display: block;
+  white-space: nowrap;
+}
+.does {
+  display: inline-block;
+}
+/* the parent's fixed three-line H1 ("Record it once. / They'll cook it / forever."): each line
+   shrinks to fit its column (the widest line is ~5.9em), so nothing clips at 320px or 1024x600 */
+.h1Fixed {
+  container-type: inline-size;
+}
+.h1Fixed .h1Line {
+  font-size: min(var(--h1-fs), 100cqi / 6.1);
+}
+
+/* the rotating relation word on its highlighter (FLIPs between words) */
+.rot {
+  position: relative;
+  display: inline-block;
+  isolation: isolate;
+  color: var(--ink);
+  text-shadow: none;
+}
+.rotBg {
+  position: absolute;
+  z-index: -1;
+  left: -0.07em;
+  right: -0.03em;
+  top: 0.16em;
+  bottom: -0.02em;
+  border-radius: 0.07em;
+  background: var(--highlighter);
+  transform-origin: 0 50%;
+  box-shadow: 0 0.04em 0.18em rgb(20 22 12 / 0.18);
+}
+/* Load (VERO 4.3), CSS only: the H1 and the lead paint on the first frame without waiting for
+   hydration (the H1/lead is the LCP element; a full-viewport poster never counts). Each line rises
+   from the baseline; the highlighter draws in after it; the side items fade up (80ms stagger). */
+.rise {
+  display: inline-block;
+  transform-origin: 0% 100%;
+}
+:global(html[data-motion='on']) .rise {
+  animation:
+    heroFade 260ms linear var(--rise-d, 0ms) backwards,
+    heroGrow 900ms var(--ease-out-expo) var(--rise-d, 0ms) backwards;
+}
+:global(html[data-motion='on']) .rotBg {
+  animation: hlDraw 500ms var(--ease-out-quart) 420ms backwards;
+}
+:global(html[data-motion='on']) .side > [data-hero-item] {
+  animation: heroUp 600ms var(--ease-soft) var(--hi-d, 100ms) backwards;
+}
+.side > :nth-child(2) {
+  --hi-d: 180ms;
+}
+.side > :nth-child(3) {
+  --hi-d: 260ms;
+}
+.side > :nth-child(4) {
+  --hi-d: 340ms;
+}
+.side > :nth-child(5) {
+  --hi-d: 420ms;
+}
+@keyframes heroFade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes heroGrow {
+  from {
+    transform: translateY(0.06em) scale(0.93);
+  }
+}
+@keyframes hlDraw {
+  from {
+    transform: scaleX(0);
+  }
+}
+@keyframes heroUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+}
+.rotWord {
+  display: inline-block;
+  padding-right: 0.1em;
+}
+.rotPrev {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  white-space: nowrap;
+  animation: rotOut 600ms var(--ease-soft) forwards;
+  pointer-events: none;
+}
+@keyframes rotOut {
+  to {
+    opacity: 0;
+    transform: translateY(-0.12em);
+  }
+}
+
+.side {
+  position: relative;
+  display: grid;
+  justify-items: start;
+  align-content: end;
+  gap: 18px;
+  padding-bottom: 0.2vw;
+}
+/* the dark pool behind the right column: attached to the column, so it covers the copy wherever the
+   column lands over the video (short laptops put it over the bright window and steamer). A soft
+   rectangle (a blurred box-shadow) keeps the lead's corners as covered as its middle. */
+.side::before {
+  content: '';
+  position: absolute;
+  inset: 2% 4% 8% 2%;
+  z-index: -1;
+  pointer-events: none;
+  border-radius: 64px;
+  background: rgb(20 22 12 / 0.52);
+  box-shadow: 0 0 64px 44px rgb(20 22 12 / 0.52);
+}
+.sub {
+  color: var(--cream);
+  font-size: clamp(1.25rem, 0.95rem + 0.55vw, 1.4rem);
+  line-height: 1.42;
+  max-width: 34ch;
+  text-shadow:
+    0 1px 2px rgb(20 22 12 / 0.5),
+    0 1px 16px rgb(20 22 12 / 0.45);
+}
+/* three numbered pills; they wrap (two rows, or stacked in narrow columns) and the numerals keep the
+   order readable, so no connector is ever left dangling at a row start */
+.beats {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  margin: 2px 0 6px;
+}
+.beats li {
+  display: flex;
+}
+@media (min-width: 1024px) and (max-width: 1365px) {
+  .overlay {
+    --side-w: clamp(314px, 27vw, 430px);
+    column-gap: 2.4vw;
+  }
+}
+.beatNum {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 24px;
+  height: 24px;
+  margin-right: 0.5em;
+  border-radius: 50%;
+  background: rgb(255 253 247 / 0.92);
+  color: var(--ink);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.beat {
+  display: inline-flex;
+  align-items: center;
+  min-height: 34px;
+  padding: 0 0.85em 0 3px;
+  border: 1.5px solid rgb(255 253 247 / 0.62);
+  border-radius: var(--r-pill);
+  background: rgb(20 22 12 / 0.2);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  font-family: var(--ff-text);
+  font-weight: 500;
+  font-size: var(--fs-ui);
+  line-height: 1;
+  color: var(--cream);
+  white-space: nowrap;
+}
+/* the CTA, then the switch to the other version: a real button, second to the CTA and the same
+   width. A solid dark tint (no blur) keeps the cream label AA over the brightest frames. */
+.ctaWrap,
+.switchWrap {
+  width: min(100%, 320px);
+}
+.heroCta,
+.side .switchBtn {
+  width: 100%;
+  min-width: 0;
+}
+.side .switchBtn {
+  --bg: rgb(20 22 12 / 0.6);
+  --border: rgb(255 253 247 / 0.85);
+  font-size: 1.0625rem;
+}
+.side .switchBtn:hover {
+  --bg: rgb(20 22 12 / 0.75);
+  --border: var(--cream);
+}
+/* short laptops: the kid column (sub, beats, CTA, switch, link) must stay clear of the nav */
+@media (min-width: 1024px) and (max-height: 700px) {
+  .side {
+    gap: 12px;
+  }
+  .side .switchBtn {
+    --h: 52px;
+  }
+}
+.seeLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 12px;
+  min-height: 48px;
+  margin-top: -4px;
+  color: var(--cream);
+  font-family: var(--ff-text);
+  font-weight: 600;
+  font-size: var(--fs-ui-lg);
+  text-decoration: none;
+  text-shadow: 0 1px 12px rgb(20 22 12 / 0.5);
+}
+.seeLink:hover .seeLabel,
+.ctaLink .seeLabel {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+  text-underline-offset: 0.22em;
+}
+
+.pauseWrap {
+  position: absolute;
+  z-index: 80;
+  right: var(--gutter-hero);
+  bottom: calc(7svh + 40px);
+  transition:
+    opacity 200ms var(--ease-soft),
+    visibility 0s;
+}
+/* only while the video plays (see PauseSlot); hidden also leaves the tab order */
+.pauseWrap[data-off] {
+  opacity: 0;
+  visibility: hidden;
+  transition:
+    opacity 200ms var(--ease-soft),
+    visibility 0s 200ms;
+}
+
+/* =================================================================== PASS-DOWN (static) */
+.passDown {
+  position: relative;
+  z-index: 3;
+  /* static: chip wrappers and the outer fan cards never widen the page on phones */
+  overflow-x: clip;
+  margin-top: -40px;
+  padding: clamp(96px, 14vh, 150px) var(--gutter) clamp(80px, 12vh, 140px);
+  text-align: center;
+  color: var(--ink);
+}
+.sheet {
+  position: absolute;
+  inset: 0;
+  border-radius: var(--r-sheet) var(--r-sheet) 0 0;
+  background: var(--canvas);
+  box-shadow: var(--shadow-sheet);
+}
+.brand {
+  position: relative;
+  max-width: 76vw;
+  margin-inline: auto;
+  color: var(--ink);
+  text-wrap: initial;
+}
+.w {
+  display: inline-block;
+  white-space: nowrap;
+}
+.w[data-accent] {
+  color: var(--green);
+}
+.brk {
+  display: inline;
+}
+
+.deck {
+  position: relative;
+  height: calc(16vw * 1.25 * 1.12 + 6vw);
+  margin-block: clamp(40px, 5vw, 72px) clamp(24px, 3vw, 48px);
+}
+.floor {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 11.5vw);
+  width: 62vw;
+  height: 4vw;
+  translate: -50% 0;
+  border-radius: 50%;
+  background: rgb(30 36 16 / 0.12);
+  filter: blur(30px);
+  pointer-events: none;
+}
+
+/* The fan is image-led (a7): the back cards show only the photo and a cook tag (RecipeCard's <140px
+   tier, forced at any size); only the front (video) card keeps its title, meta and pills. Overlapping
+   photos read as depth; overlapping titles read as broken. */
+.deck .card:not([data-front]) article > div {
+  grid-template-rows: minmax(0, 1fr);
+  padding: var(--inset);
+}
+.deck .card:not([data-front]) [data-card-photo] ~ *,
+.deck .card:not([data-front]) [data-garnish='feel'] {
+  display: none;
+}
+/* cook tags top-left: the next card (on top, turned further) covers its neighbour's lower-left first */
+.deck [data-garnish='tag'] {
+  top: 4cqw;
+  left: 4cqw;
+  bottom: auto;
+}
+.deck .card:not([data-front]) [data-garnish='tag'] {
+  display: inline-block;
+  max-width: calc(100% - 8cqw);
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* a deck card: CSS pose from static.tsx, taken over by GSAP transforms in film mode */
+.card {
+  position: absolute;
+  left: calc(50% + var(--x, 0px));
+  top: calc(50% + var(--y, 0px));
+  width: var(--w, 16vw);
+  translate: -50% -50%;
+  rotate: var(--r, 0deg);
+  scale: var(--s, 1);
+  z-index: var(--z, 1);
+}
+
+.passChip {
+  position: absolute;
+  z-index: 30;
+}
+.passChipA {
+  left: 15vw;
+  top: calc(50% - 9vw);
+}
+.passChipB {
+  left: 76vw;
+  top: calc(50% - 10.5vw);
+}
+.gate {
+  display: inline-block;
+  transition: opacity 200ms var(--ease-soft);
+}
+.gate:not([data-on]) {
+  opacity: 0;
+}
+/* chip anchors: the GSAP-moved wrapper sits on the anchor point, the inner span shifts the chip */
+.anchorBL,
+.anchorBR {
+  display: block;
+}
+.anchorBL {
+  translate: 0 -100%;
+}
+.anchorBR {
+  translate: -100% -100%;
+}
+
+.passFoot {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: var(--stack-body-cta);
+}
+.passSub {
+  max-width: 34ch;
+  color: var(--text);
+}
+.ctaRow {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 12px 28px;
+}
+.textLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  color: var(--green-deep);
+  font-family: var(--ff-text);
+  font-weight: 600;
+  font-size: var(--fs-ui-lg);
+  text-decoration: none;
+}
+.textLink:hover {
+  text-decoration: underline;
+  text-decoration-thickness: 1.5px;
+}
+
+/* =================================================================== STATIC: tablets and phones */
+@media (max-width: 1023px) {
+  .overlay {
+    grid-template-columns: minmax(0, 1fr);
+    align-content: end;
+    row-gap: 18px;
+    padding: 0 var(--gutter-hero) max(24px, 4svh);
+  }
+  .h1 {
+    --h1-fs: clamp(3.5rem, min(13vw, 12svh), 8rem);
+  }
+  .side {
+    max-width: 560px;
+  }
+  .seeLink {
+    margin-top: -8px;
+  }
+  .pauseWrap {
+    bottom: calc(max(24px, 4svh) + 40px);
+  }
+  .brand {
+    max-width: none;
+  }
+}
+
+@media (max-width: 767px) {
+  .hero {
+    --hero-h: max(100svh, 600px);
+  }
+  .scrim {
+    background:
+      linear-gradient(180deg, rgb(20 22 12 / 0.42) 0%, rgb(20 22 12 / 0) 15%),
+      linear-gradient(0deg, rgb(20 22 12 / 0.9) 0%, rgb(20 22 12 / 0.82) 38%, rgb(20 22 12 / 0.62) 50%, rgb(20 22 12 / 0.2) 59%, rgb(20 22 12 / 0) 66%);
+  }
+  .overlay {
+    row-gap: 12px;
+    padding: 0 16px 16px;
+  }
+  .h1 {
+    --h1-fs: clamp(3.25rem, 15vw, 6.5rem);
+    line-height: 0.95;
+  }
+  .does {
+    display: block;
+  }
+  .side {
+    gap: 12px;
+    justify-items: stretch;
+  }
+  /* phones: the scrim's deep bottom band already sits behind the whole column */
+  .side::before {
+    display: none;
+  }
+  .sub {
+    font-size: 1.125rem;
+    line-height: 1.45;
+    max-width: none;
+    /* the lead can cross the cook's white apron on bright frames: a tight halo keeps it AA */
+    text-shadow:
+      0 1px 2px rgb(20 22 12 / 0.55),
+      0 1px 14px rgb(20 22 12 / 0.5);
+  }
+  .beats {
+    margin: 0;
+  }
+  .ctaWrap,
+  .switchWrap {
+    width: auto;
+  }
+  /* 320px phones: the label wraps to two lines inside the button instead of overflowing */
+  .side .switchBtn {
+    white-space: normal;
+    text-wrap: balance;
+    text-align: center;
+    line-height: 1.2;
+  }
+  .seeLink {
+    justify-self: start;
+    margin-top: -2px;
+  }
+  .pauseWrap {
+    right: 16px;
+    bottom: 56px;
+  }
+}
+/* short phones: a slimmer switch and tighter column keep the H1 clear of the nav, and the scrim
+   reaches higher, since the kid H1's top line sits up over the faces there */
+@media (max-width: 767px) and (max-height: 760px) {
+  .scrim {
+    background:
+      linear-gradient(180deg, rgb(20 22 12 / 0.42) 0%, rgb(20 22 12 / 0) 15%),
+      linear-gradient(0deg, rgb(20 22 12 / 0.9) 0%, rgb(20 22 12 / 0.82) 38%, rgb(20 22 12 / 0.62) 52%, rgb(20 22 12 / 0.36) 66%, rgb(20 22 12 / 0) 84%);
+  }
+  .side {
+    gap: 10px;
+  }
+  .side .switchBtn {
+    --h: 52px;
+  }
+}
+@media (max-width: 767px) {
+  .passDown {
+    padding-inline: 16px;
+  }
+  .brk {
+    display: none;
+  }
+  .deck {
+    height: calc(34vw * 1.25 * 1.15 + 14vw);
+  }
+  .floor {
+    top: calc(50% + 23vw);
+    width: 92vw;
+    height: 8vw;
+  }
+  .card {
+    left: calc(50% + var(--mx, 0px));
+    top: calc(50% + var(--my, 0px));
+    width: var(--mw, 34vw);
+    rotate: var(--mr, 0deg);
+    scale: var(--ms, 1);
+    z-index: var(--mz, 1);
+  }
+  .deck .card:not([data-mobile]) {
+    display: none;
+  }
+  .passChipA {
+    left: 4vw;
+    top: calc(50% - 22vw);
+  }
+  /* right-anchored chips use `right`, so their (untranslated) wrapper box never pokes past the
+     viewport (that widened the whole page to 646px under reduced motion) */
+  .passChipB {
+    left: auto;
+    right: 4vw;
+    top: calc(50% - 22vw);
+  }
+  .root:not(.film) .anchorBR {
+    translate: 0 -100%;
+  }
+
+}
+@media (min-width: 768px) {
+  .deck .card:not([data-desktop]) {
+    display: none;
+  }
+}
+
+/* =================================================================== FILM (pinned stage) */
+.film .stage {
+  height: 100vh;
+  height: 100svh;
+  overflow: clip;
+  background: var(--hero-dark);
+}
+.film .stageBg {
+  display: block;
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  background: var(--hero-dark);
+}
+.film .hero,
+.film .passDown {
+  position: absolute;
+  z-index: auto;
+  inset: 0;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  overflow: visible;
+  background: none;
+  pointer-events: none;
+}
+.film :is(a, button) {
+  pointer-events: auto;
+}
+.film [data-off] :is(a, button) {
+  pointer-events: none;
+}
+.film .rig {
+  z-index: 30;
+  will-change: transform;
+}
+.film .rig,
+.film .overlay,
+.film .alt {
+  inset: 0;
+  height: auto;
+}
+.film .pauseWrap {
+  bottom: 7svh;
+}
+.film .inner {
+  will-change: transform;
+}
+.film .clip {
+  overflow: visible;
+}
+.film .garnish {
+  display: block;
+  position: absolute;
+  container-type: inline-size;
+  --inset: min(8px, 3.5cqw);
+}
+.film .sheet {
+  inset: auto;
+  left: 0;
+  top: 0;
+  width: 100%;
+  height: calc(100% + var(--r-sheet));
+  z-index: 10;
+  will-change: transform;
+}
+
+/* deck cards become stage layers moved by transforms */
+.film .deck {
+  position: absolute;
+  inset: 0;
+  height: auto;
+  margin: 0;
+}
+.film .floor {
+  z-index: 15;
+  width: 62vw;
+  height: 4vw;
+  translate: -50% -50%;
+}
+.filmMobile .floor {
+  width: 92vw;
+  height: 8vw;
+}
+.film .card {
+  left: 0;
+  top: 0;
+  width: var(--cw);
+  translate: none;
+  rotate: none;
+  scale: none;
+  z-index: calc(20 + var(--i, 0));
+  will-change: transform;
+}
+.film [data-front] [data-card-photo] > * {
+  visibility: hidden;
+}
+.filmMobile .deck .card:not([data-mobile]) {
+  display: none;
+}
+.film:not(.filmMobile) .deck .card:not([data-desktop]) {
+  display: none;
+}
+
+/* pass-down text layers */
+.film .brandPos {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  top: calc(var(--nav-h) + 3.6vh);
+}
+.film .brand {
+  max-width: 80vw;
+  will-change: transform, opacity;
+}
+.film .passChip {
+  left: 0;
+  right: auto;
+  top: 0;
+  z-index: 50;
+}
+.film .footPos {
+  position: absolute;
+  z-index: 40;
+  left: 0;
+  right: 0;
+  top: 87%;
+  translate: 0 -50%;
+}
+.film .passFoot {
+  gap: 20px;
+}
+.film .passSub {
+  max-width: 36ch;
+}
+
+/* garnish on the video window (mirrors RecipeCard's photo garnish, sized in card cqw) */
+.gTopLeft {
+  position: absolute;
+  top: calc(var(--inset) + 4.5cqw);
+  left: calc(var(--inset) + 4.5cqw);
+  display: grid;
+}
+.gTopLeft > * {
+  grid-area: 1 / 1;
+}
+.gPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4em;
+  padding: 0.4em 0.8em;
+  border-radius: var(--r-pill);
+  font-family: var(--ff-text);
+  font-weight: 600;
+  font-size: clamp(0.6875rem, 6cqw, 0.9375rem);
+  line-height: 1;
+  white-space: nowrap;
+}
+.gRec {
+  background: rgb(18 20 16 / 0.72);
+  color: var(--cream);
+  font-variant-numeric: tabular-nums;
+}
+.gRecDot {
+  width: 0.6em;
+  height: 0.6em;
+  border-radius: 50%;
+  background: var(--tomato);
+  animation: recBlink 1.6s ease-in-out infinite;
+}
+@keyframes recBlink {
+  50% {
+    opacity: 0.35;
+  }
+}
+.gWatch {
+  justify-self: start;
+  background: rgb(255 253 247 / 0.9);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgb(30 36 16 / 0.1);
+}
+.gFeel {
+  position: absolute;
+  left: calc(var(--inset) + 4cqw);
+  bottom: calc(42.5cqw + 4cqw);
+  max-width: calc(100cqw - 2 * var(--inset) - 8cqw);
+  padding: 0.45em 0.75em 0.5em;
+  border-radius: 0.9em;
+  background: var(--lemon);
+  color: var(--ink);
+  box-shadow: 0 6px 16px -8px rgb(30 36 16 / 0.45);
+  font-family: var(--ff-display);
+  font-style: italic;
+  font-weight: 450;
+  font-variation-settings: 'SOFT' 100, 'WONK' 1;
+  font-size: clamp(0.75rem, 6.8cqw, 1.25rem);
+  line-height: 1.2;
+  text-wrap: balance;
+}
+.gTag {
+  position: absolute;
+  /* <140px the photo (and the video window) fill the card: the tag sits top-left like the deck's */
+  left: calc(var(--inset) + 4cqw);
+  top: calc(var(--inset) + 4cqw);
+  display: none;
+  padding: 0.3em 0.65em;
+  border-radius: var(--r-pill);
+  background: var(--surface);
+  color: var(--ink);
+  font-family: var(--ff-text);
+  font-weight: 600;
+  font-size: clamp(0.6875rem, 12cqw, 1rem);
+  line-height: 1;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgb(30 36 16 / 0.16);
+}
+@container (max-width: 219px) {
+  .gFeel {
+    display: none;
+  }
+}
+@container (max-width: 139px) {
+  .gTopLeft {
+    display: none;
+  }
+  .gTag {
+    display: inline-block;
+  }
+}
+
+/* ------------------------------------------------------------------- film: phones & tablets */
+@media (max-width: 1023px) {
+  /* the heading is the app's "what it does" sentence now (4–5 lines on a phone): it hangs from just
+     under the nav instead of centering on 16%, which pushed its first line under the nav */
+  .film .brandPos {
+    top: calc(var(--nav-h) + 14px);
+  }
+  .film .brand {
+    max-width: calc(100vw - 32px);
+    font-size: clamp(1.75rem, min(7.6vw, 4.3svh), 3.25rem);
+  }
+  .film .footPos {
+    top: auto;
+    bottom: max(18px, 3svh);
+    translate: none;
+  }
+  .film .passFoot {
+    gap: 14px;
+    padding-inline: 16px;
+  }
+  .film .passSub {
+    font-size: 1.125rem;
+    max-width: 30ch;
+  }
+  .film .ctaRow {
+    gap: 4px 20px;
+  }
+}
+
+@media (max-width: 1023px) {
+  .film .pauseWrap {
+    bottom: max(24px, 4svh);
+  }
+}
+@media (max-width: 767px) {
+  .film .pauseWrap {
+    bottom: 16px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gRecDot {
+    animation: none;
+  }
+}
+
+/* Hero sub and beat 1 follow the H1's rotating relation word (HeroOverlay SubText / BeatText): the
+   name that changes rises in slowly. Motion-gated like .rise. */
+:global(html[data-motion='on']) .swap {
+  display: inline-block;
+  animation: personSwap 900ms var(--ease-soft) both;
+}
+@keyframes personSwap {
+  from {
+    opacity: 0;
+    transform: translateY(0.2em);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  :global(html[data-motion='on']) .swap {
+    animation: none;
+  }
+}
+
+/* The sub's name slot: as wide as the widest label (every label is stacked in one grid cell, only
+   the current one visible), so the paragraph wraps identically for Mom, Dad, Grandma or Grandpa.
+   It is drawn as a small pill like the beats below, so the fixed width reads as a token the name
+   fills, not a gap. */
+.nameSlot {
+  display: inline-grid;
+  justify-items: center;
+  margin: 0 0.06em;
+  padding: 0.02em 0.5em 0.06em;
+  line-height: 1.2;
+  border: 1.5px solid rgb(255 253 247 / 0.5);
+  border-radius: var(--r-pill);
+  background: rgb(20 22 12 / 0.22);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  font-weight: 500;
+}
+.nameSlot > *,
+.beatStack > * {
+  grid-area: 1 / 1;
+}
+.slotSizer {
+  visibility: hidden;
+}
+/* beat 1's pill: as wide as its longest variant ("Grandma hits record"), text left-aligned */
+.beatStack {
+  display: inline-grid;
+  justify-items: start;
+}
+
+/* Phones: no backdrop blur over the playing hero video. WebKit re-blurs it on every video and
+   scroll frame, which janked iPhones; a slightly darker solid tint reads the same. */
+@media (max-width: 1023px) {
+  .beat,
+  .nameSlot {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: rgb(20 22 12 / 0.4);
+  }
+}

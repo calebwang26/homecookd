@@ -1,0 +1,157 @@
+/* 8.12 Final CTA: the forest block (VERO "Hungry? We're Ready."). */
+
+.section {
+  --star: 36vw;
+  position: relative;
+  isolation: isolate;
+  min-height: 100svh;
+  display: grid;
+  place-items: center;
+  padding: calc(var(--nav-h, 72px) + 36vw + 16px) var(--gutter) 64px;
+  background: var(--forest) var(--swirl) center / cover no-repeat;
+  color: var(--cream);
+  overflow: clip;
+}
+
+/* ---------- stars ---------- */
+.starSlot {
+  position: absolute;
+  z-index: 1;
+}
+/* mobile: the stars' points clear the floating nav when the block reaches the top */
+.starLeft {
+  top: calc(var(--nav-h, 72px) + 16px);
+  left: -9vw;
+}
+.starRight {
+  top: calc(var(--nav-h, 72px) + 32px);
+  right: -9vw;
+}
+
+.reply {
+  position: absolute;
+  z-index: 2;
+  right: 62%;
+  top: 4%;
+}
+
+/* ---------- column ---------- */
+.col {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  max-width: 760px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.clock {
+  justify-content: center;
+}
+.h2 {
+  margin-top: 14px;
+  color: var(--cream);
+  font-size: clamp(3rem, 0.9rem + 6.6vw, 6.25rem);
+  text-wrap: initial;
+}
+.body {
+  max-width: 30ch;
+  margin-top: var(--stack-h2-body);
+  color: var(--cream);
+}
+.formWrap {
+  width: 100%;
+  margin-top: var(--stack-body-cta);
+}
+.pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 32px;
+  padding: 0;
+  list-style: none;
+}
+.pills :global(svg) {
+  color: var(--chartreuse);
+}
+.parentWrap {
+  width: 100%;
+}
+
+@media (max-width: 767px) {
+  /* room for the FREE / EARLY ACCESS seal between the body and the form (it never touches either) */
+  .formWrap {
+    margin-top: 84px;
+  }
+  /* the parent version has no seal (or body): the form follows the H2 */
+  .lean .formWrap {
+    margin-top: 36px;
+  }
+  /* two pills on the first row, one on the second */
+  .pills {
+    gap: 8px 6px;
+    margin-top: 28px;
+  }
+  .pills li > span {
+    padding-inline: 0.7em;
+  }
+}
+@media (max-width: 420px) {
+  /* narrow phones: drop the decorative checks so two pills share the first row */
+  .pills li > span > [aria-hidden='true'] {
+    display: none;
+  }
+}
+
+/* ---------- tablet ---------- */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .section {
+    --star: 30vw;
+    padding-top: calc(var(--nav-h, 72px) + 22vw);
+  }
+  .starLeft {
+    left: -6vw;
+  }
+  .starRight {
+    right: -6vw;
+  }
+}
+
+/* ---------- desktop: stars bleed off both edges, vertically centered ---------- */
+@media (min-width: 1024px) {
+  .section {
+    --star: 25vw;
+    padding: calc(var(--nav-h, 72px) + 40px) 0 72px;
+  }
+  .starSlot {
+    top: 50%;
+    translate: 0 -50%;
+  }
+  .starLeft {
+    left: -2vw;
+  }
+  .starRight {
+    right: -2vw;
+  }
+  .reply {
+    right: 64%;
+    top: -4%;
+  }
+  .col {
+    /* the space between the stars */
+    max-width: min(760px, 100vw - 2 * (var(--star) - 2vw) - 40px);
+  }
+  /* the loud blocks carry the page's biggest statement type (VERO) */
+  .h2 {
+    font-size: var(--fs-block);
+  }
+}
+
+/* small desktops: smaller stars so the column keeps room for the form row */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .section {
+    --star: 21vw;
+  }
+}
