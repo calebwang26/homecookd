@@ -546,3 +546,21 @@ Before starting work, compare the last commit here with `git log origin/main` to
     socket 2 leaves with its `timer_done` and the eggs stay.
   - **Open:** nothing on an iPhone yet (real AppState and 'inactive' sheets). An older socket's timer only buzzes on
     the phone: homie doesn't say the rice timer is done for it. Each reopen is still a new service session.
+- Oct 24 · #36 · Claude · Track I-kid round 6: verifier fixes (main already merged: nothing new on it).
+  - **Each timer buzzes once (verifier):** the due-timer effect picked "any timer but the last one due", so two
+    timers held at zero together (old-socket timers after a pause, which get no `timer_done`) bounced A, B, A, B
+    with `setTimeout(0)`, buzzing and queueing a removal on every pass (4,262 buzzes in 10 s). `lib/live/voice`
+    now keeps a Set of the ids that already buzzed; `voiceLogic` `timerBuzz` picks the soonest timer still to buzz,
+    says whether one that buzzed is still on screen (the pot's timer state), and drops ids whose timer left.
+  - **`appStateStep` drops `asking`:** 'inactive' never pauses, so the field and `lib/live/mic`'s `micAsking`
+    (used nowhere else) are gone.
+  - **Tests:** `test-voice-ui.mjs` 42 pass (new: two timers at zero together buzz twice in all; a `timer_done` for
+    one leaves the other buzzed and on screen; a new timer after both left buzzes once). tsc, lint, every app test
+    script and `test-profile-navigation` (6 ok, this worktree's Expo web) pass. Live on Expo web against a local
+    voice service from main (`VOICE_STUB=1`, real Ink 2 and Sonic) with a temporary e2e hook and buzz counter (not
+    committed), 21 checks pass: the verifier's dal 9 s and beans 10 s on socket 2, then a reopen, buzz once each
+    (2 in all, was 4,262), the pot stays "timer" and the beans stay "Done" after the dal leaves; two 8 s timers
+    0.6 s apart, once each; a new timer after both left, once; six timers in the run, one buzz each.
+  - **Open:** a timer on the open socket can leave without a buzz: its `timer_done` lands at the same moment as
+    the phone's own zero (both 5 s after the `timer` message) and takes it first (2 of 3 live runs; homie still
+    says it's done). Not changed here (it was so before); nothing on an iPhone yet.
