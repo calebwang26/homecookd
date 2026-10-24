@@ -178,3 +178,4 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - **Open:** the TEST family's Biryani still says `mossIndexedAt`, but its index was deleted on purpose; it
     re-indexes on its next publish.
 - Oct 24 · (this PR) · Claude · Memory: demo-family-shreya (the demo is Shreya Pawar's family; her grandma cooks and records in Marathi; Serene isn't in the demo).
+- Oct 24 · #PR · Claude · Rule: every PR goes to the "Merge Agent" session for approval, and it decides how conflicting PRs merge (`AGENTS.md` hard rules, `memory/merge-agent-approval.md`). Docs only. Open: nothing.
