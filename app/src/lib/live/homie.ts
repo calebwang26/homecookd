@@ -3,7 +3,8 @@
 //
 //   const homie = useHomieRecording(recordingId, { language, kidName, dish });
 //   homie.phase          'connecting' | 'intro' | 'recording' | 'wrapping_up' | 'ended'
-//   homie.introDone      homie finished its hello (the screen then starts filming by itself)
+//   homie.introDone      homie finished its hello (the screen then starts filming by itself); once it
+//                        plays, the pot's own "Hi, I’m homie." never comes for her (lib/homie/intro)
 //   homie.ask            homie's question while it waits for her spoken answer (null when none)
 //   homie.start()        filming starts (glasses)
 //   homie.done()         "I'm done" (the stop button): over the socket when it's open; with no socket,
@@ -31,6 +32,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { micQuiet, notNowMessage, potFor, silence, type Ask, type RecordPhase, type ServerState } from '@/components/record/recordingLogic';
+import { markIntroduced } from '@/lib/homie/intro';
 import { doneSpeaking, getHomie, pulseLit, setHomie, setHomieLevel } from '@/lib/homie/store';
 import { stopAudio, useNowPlaying } from '@/lib/media';
 import { useSession } from '@/lib/session';
@@ -200,7 +202,10 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
     if (s.timer) clearTimeout(s.timer);
     if (s.drop) return;
     if (!s.chunks.length) return doneSpeaking();
-    if (s.kind === 'intro') introHeard.current = true;
+    if (s.kind === 'intro') {
+      introHeard.current = true;
+      markIntroduced(meId.current);
+    }
     playSay(s.chunks, s.rate);
   }, []);
 
@@ -249,7 +254,10 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
           const drop = paused.current || (m.kind === 'intro' && introHeard.current);
           if (m.stubVoice) {
             if (!drop) {
-              if (m.kind === 'intro') introHeard.current = true;
+              if (m.kind === 'intro') {
+                introHeard.current = true;
+                markIntroduced(meId.current);
+              }
               void speak(m.text, { lang: stubRef.current.language });
             }
             return;

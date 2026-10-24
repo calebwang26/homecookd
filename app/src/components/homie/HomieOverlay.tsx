@@ -4,16 +4,17 @@
 // Native Modals (sheets, the full-screen step player) cover it on their own. When homie needs you
 // (store.moment), HomieMoment takes the pot to the centre, and VoiceOver keeps to the moment (the
 // overlay is modal then: the screen behind it is out of reach).
-// A tap on the resting pot says this screen's help line, unless the screen gave the pot its own
-// onPress. Talking only (Caleb): no words on screen, the pot lights, its lid lifts and "AI voice"
-// shows under it. While the cook's own voice plays (store `shrunk`) the resting pot shrinks a little
-// about its centre.
+// A tap on the resting pot says this screen's help line (where there's none, "Hi, I’m homie." only
+// the first time: lib/homie/intro), unless the screen gave the pot its own onPress. Talking only
+// (Caleb): no words on screen, the pot lights, its lid lifts and "AI voice" shows under it. While the
+// cook's own voice plays (store `shrunk`) the resting pot shrinks a little about its centre.
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { PressableScale, Txt } from '@/components/ui';
 import { useHomieRoute } from '@/lib/homie/hooks';
+import { takeTapLine } from '@/lib/homie/intro';
 import { HOMIE_REST_SIZE, potState, sayPhase, SHRUNK_SCALE, speakingLabel, timerProgress } from '@/lib/homie/logic';
 import { doneSpeaking, getHomie, useHomie, type Homie } from '@/lib/homie/store';
 import { speak } from '@/lib/live/speak';
@@ -48,7 +49,7 @@ export function HomieOverlay() {
 
   const onPress = () => {
     if (h.onPress) return h.onPress();
-    void speak(route.help, { translate: true, profileId: me?.id });
+    void takeTapLine(route, me?.id).then((line) => speak(line, { translate: true, profileId: me?.id }));
   };
 
   const resting = !!me && !route.hidden && !h.hidden && !inMoment;

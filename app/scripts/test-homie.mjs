@@ -8,8 +8,11 @@
 //                           where it rests on each screen, the help lines, the centred moment (which
 //                           ones, its frame, the listening bars), the timer ring, PCM loudness, the
 //                           voice service's https base, the phone voice's language
+//   src/lib/homie/intro.ts  the hello once per person on this phone (after a restart too), two quick
+//                           taps, the recording hello counting, screens with a line of their own
 //   node scripts/test-homie.mjs
 // 'react' is a stub (the store only needs useSyncExternalStore to exist); the store gets a fake clock.
+// '@/lib/storage' is a map that outlives resetIntroForTests (the phone's storage across a restart).
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { registerHooks } from 'node:module';
@@ -18,7 +21,13 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const stub = (src) => 'data:text/javascript,' + encodeURIComponent(src);
-const STUBS = { react: stub('export function useSyncExternalStore() {}') };
+const kv = (globalThis.__homieKv = new Map());
+const STUBS = {
+  react: stub('export function useSyncExternalStore() {}'),
+  '@/lib/storage': stub(
+    'const m = globalThis.__homieKv; export async function kvGet(k) { return m.get(k) ?? null; } export async function kvSet(k, v) { if (v == null) m.delete(k); else m.set(k, v); }',
+  ),
+};
 
 registerHooks({
   resolve(spec, ctx, next) {
@@ -31,6 +40,7 @@ registerHooks({
 
 const S = await import(pathToFileURL(join(root, 'src/lib/homie/store.ts')).href);
 const L = await import(pathToFileURL(join(root, 'src/lib/homie/logic.ts')).href);
+const I = await import(pathToFileURL(join(root, 'src/lib/homie/intro.ts')).href);
 
 let passed = 0;
 const test = async (name, fn) => {
@@ -380,8 +390,73 @@ await test('each screen group has its help line', () => {
   assert.equal(L.homieRoute('/kid/recipes').help, 'Pick a dish and say start.');
   assert.equal(L.homieRoute('/parent/recipes').help, 'Pick a dish and say start.');
   assert.equal(L.homieRoute('/parent/home', 'Mom').help, 'Tap Record to cook with me.');
+  assert.equal(L.homieRoute('/parent/messages').help, 'These are your messages. Tap one to talk to family.');
+  assert.equal(L.homieRoute('/parent/messages/').help, L.HELP.messages);
   assert.equal(L.homieRoute('/kid/home').help, 'Hi, I’m homie.');
   assert.equal(L.homieRoute('/record').help, 'Hi, I’m homie.');
+  assert.equal(L.homieRoute('/kid/ask').help, 'Hi, I’m homie.');
+});
+
+await test('every line is short enough to say in one breath (10 words at most)', () => {
+  for (const [k, line] of Object.entries(L.HELP)) assert.ok(line.split(/\s+/).length <= 10, `${k}: ${line}`);
+});
+
+const hello = 'Hi, I’m homie.';
+const again = 'I’m right here.';
+const freshIntro = () => {
+  kv.clear();
+  I.resetIntroForTests();
+};
+
+await test('homie says hello once per person on this phone, and not again after a restart', async () => {
+  freshIntro();
+  const home = L.homieRoute('/kid/home');
+  assert.equal(await I.takeTapLine(home, 'kid1'), hello);
+  assert.equal(await I.takeTapLine(home, 'kid1'), again);
+  assert.equal(await I.takeTapLine(L.homieRoute('/record'), 'kid1'), again);
+  assert.ok(kv.has(I.introducedKey('kid1')));
+  assert.equal(I.introducedKey('kid1'), 'homie.introduced.kid1');
+  // Someone else on the same phone gets their own hello.
+  assert.equal(await I.takeTapLine(home, 'mom1'), hello);
+  // A restart: the in-memory guard is gone, the phone's storage remembers.
+  I.resetIntroForTests();
+  assert.equal(await I.takeTapLine(home, 'kid1'), again);
+  assert.equal(await I.takeTapLine(home, 'mom1'), again);
+});
+
+await test('two quick taps before storage answers get one hello', async () => {
+  freshIntro();
+  const home = L.homieRoute('/kid/home');
+  assert.deepEqual(await Promise.all([I.takeTapLine(home, 'kid1'), I.takeTapLine(home, 'kid1')]), [hello, again]);
+});
+
+await test('a screen with its own line says it, and never uses up the hello', async () => {
+  freshIntro();
+  assert.equal(await I.takeTapLine(L.homieRoute('/parent/messages'), 'mom1'), L.HELP.messages);
+  assert.equal(await I.takeTapLine(L.homieRoute('/cook/biryani'), 'mom1'), L.HELP.cook);
+  assert.equal(kv.size, 0);
+  assert.equal(await I.takeTapLine(L.homieRoute('/parent/messages'), 'mom1'), L.HELP.messages);
+  assert.equal(await I.takeTapLine(L.homieRoute('/record'), 'mom1'), hello);
+  // Said hello already: the Messages tab still says its line.
+  assert.equal(await I.takeTapLine(L.homieRoute('/parent/messages'), 'mom1'), L.HELP.messages);
+});
+
+await test('the recording hello counts as homie’s hello (after a restart too)', async () => {
+  freshIntro();
+  I.markIntroduced('mom1');
+  assert.equal(await I.takeTapLine(L.homieRoute('/record'), 'mom1'), again);
+  I.resetIntroForTests();
+  assert.equal(await I.takeTapLine(L.homieRoute('/record'), 'mom1'), again);
+  I.markIntroduced(undefined);
+  I.markIntroduced(null);
+  assert.equal(kv.size, 1);
+});
+
+await test('nobody signed in: the line as it is, nothing stored', async () => {
+  freshIntro();
+  assert.equal(await I.takeTapLine(L.homieRoute('/kid/home'), null), hello);
+  assert.equal(await I.takeTapLine(L.homieRoute('/kid/home'), undefined), hello);
+  assert.equal(kv.size, 0);
 });
 
 await test('homie rests top-right, left of the profile face or Share where a screen has one', () => {

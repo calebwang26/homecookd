@@ -591,3 +591,16 @@ Before starting work, compare the last commit here with `git log origin/main` to
     "timer", and each left 10 s later.
   - **Open:** nothing on an iPhone yet. On Expo web a real line's audio throws in `lib/live/say` (expo-file-system's
     `File` isn't there on web); web never opens a real line without a hook, so it only matters for live web tests.
+- Oct 24 · #PR · Claude · homie says hello once, and a line for the Messages tab (Caleb's two asks).
+  - **Hello once:** a tap on the pot on a screen without its own line said "Hi, I’m homie." every time. Now it says
+    it the first time for each person on this phone, then "I’m right here." (`lib/homie/intro.ts` `takeTapLine`,
+    kv `homie.introduced.<profileId>`, so it lasts across restarts). The recording hello counts as the
+    introduction too (`lib/live/homie` `markIntroduced`). Memory: `docs/agents/memory/homie-hello-once.md`.
+  - **Messages tab:** a tap on the pot on parent Messages says "These are your messages. Tap one to talk to family."
+    (`HELP.messages`, `homieRoute('/parent/messages')`).
+  - **Tests:** `test-homie.mjs` 40 pass (new: the hello once per person and after a restart, two quick taps, the
+    recording hello, screens with their own line, every line at most 10 words). tsc, lint, `test-recording-ui`,
+    `test-cooking`, `test-voice-ui` pass. Expo web (`?as=`): Messages said its line and stored nothing; Leo on
+    kid Home heard the hello, then "I’m right here.", and "I’m right here." again after a full reload.
+  - **Open:** the voice service's recording hello still says "I'm homie" on every recording (a voice change and
+    deploy). Kid "Ask" keeps the default lines. Not on an iPhone yet (JS only: an EAS Update covers it).
