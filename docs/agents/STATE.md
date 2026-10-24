@@ -292,6 +292,32 @@ Before starting work, compare the last commit here with `git log origin/main` to
     in the app). `rebuild_library` lists every `*/recipe.json` in the bucket, so any `publish.py` run puts family
     recipes into the shared `library.json` and the app bundle. The intro isn't kept anywhere now (no screen shows it).
 - Oct 24 · (this PR) · Claude · Root devDependency `@types/node`: `convex deploy` typechecks `convex/`, and a clean `npm ci` had no Node types, so every `process.env` failed (37 errors) and the deploy stopped. Now tsc is 0 and vitest 40/40.
+- Oct 24 · #39 · Claude · Family recipes stay out of the shared library, plus a scrub for the old ones (follow-up
+  to #37). A family recipe's public `recipe.json` now says `"family": true` (`pipeline/schema.py` `Recipe.family`,
+  set by `publish.without_memories`). `rebuild_library` leaves those out of `library.json` and the app's bundle
+  (`publish.is_family`, which also honours `data/out/<id>/.family` for one published before the mark).
+  `publish_recipe` keeps a recipe a family one when its bucket copy is marked, so re-publishing it by hand from
+  another machine can't put the stories back. The app and web types ignore the new field. New
+  `pipeline/scrub_family.py` finds family recipes from the Convex `recipes` rows with a `recipeJsonUrl`
+  (`npx convex data`, team token) and rewrites each `recipe.json` (and its `trash/` copy) with
+  `without_memories`. It never rebuilds the library. It's a dry run by default; `--write` needs Caleb's OK. It
+  also names unmarked bucket recipes that neither `library.json` nor Convex lists, and `--id` adds them.
+  - **Tests:** `pipeline/test_publish.py` 9 pass (5 new: library and bundle, a re-publish elsewhere, the scrub's
+    dry run, `--write`, the Convex rows). Turning off each guard makes a test fail. The other pipeline tests pass.
+  - **Live dry run (read only):** `hackathon-biryani-2` (Convex row: 1 story, 3 special moments, 3 tips, the
+    intro) and `hackathon-biryani-1` (no Convex row, not in `library.json`: 2 stories, 3 special moments, 3 tips,
+    the intro). Neither is in the live `library.json` yet.
+  - **Open:** nothing written to the bucket, nothing deployed. The scrub waits on Caleb (see "Waiting on Caleb").
+    `play.mp4` and `voice.m4a` are still public at unlisted URLs, with the stories as she spoke them.
+- Oct 24 · #40 · Claude · Ran `pipeline/scrub_family.py --id hackathon-biryani-1 --write` with Caleb's OK. The
+  public `recipe.json` of `hackathon-biryani-1` and `hackathon-biryani-2` no longer holds stories, special moments,
+  step tips or the intro, and each is marked `"family": true`. Steps and media are unchanged. `library.json` wasn't
+  rebuilt: it still lists 10 recipes, neither biryani. A second dry run finds nothing to scrub. The bucket has no
+  object versioning, so the old copies return 404; GCS soft delete keeps them for 7 days, readable only by project
+  admins. `hackathon-biryani-2`'s memories stay in Convex. `hackathon-biryani-1` has no Convex row, so its stories
+  now exist only in a local backup outside the repo.
+  - **Open:** `play.mp4` and `voice.m4a` for both dishes are still public at unlisted URLs, with the stories as she
+    spoke them.
 - Oct 24 · #36 · Claude · Track I-kid, homie in cook mode (built on #32). The header stays put with homie at its top right; small chips under the pot (Back · Repeat · Ask <cook>; no Next chip, the big "Next step" button does that) talk to homie, or act on their own when voice is off or homie doesn't answer in 1.5 s. A dark "Timer 7:41" pill beside the step title (the phone's own clock, a buzz at zero, the pot's ring). Chips and pill match the canvas's Cook frame. The body's Ask pill is now the chip; the "waiting" line stays.
   - **Voice:** no mic button. In a dev build with the voice service, on a Convex dish, voice starts by itself once the "Let Mom see" sheet has its answer (`consentSettled`); a tap on the pot turns the mic off or on. `lib/live/voice.ts` handles say `kind`/`textEn`, clip `quote`/`quoteEn`, `timer`/`timer_done`, and sets the pot. Half duplex sends silence while homie, a clip, a voice note or a step video plays. The pot shrinks while the cook's own voice plays (store `shrunk`), and homie's next line waits until her clip or voice note ends (`setHold`). Stub in `lib/live/voiceStub.ts`.
   - **Moments** (`components/cooking/CookMoments.tsx`): no buttons (Caleb, Oct 24). The read-aloud offer, a story nudge and "<cook> answered your question" show the glowing pot, the question, five listening bars, "Say “yes” or “no”" and "Tap anywhere to close"; a spoken yes does it, a spoken no or a tap closes it. A phone that can't hear the answer gets one button ("Read it to me", "Hear it", "Play it"). In Expo Go and on web the phone offers read-aloud itself and reads each step in homie's voice (`useReadSteps`). "Ask <cook> anything" has the bars and one "Write to <cook>" button. Choice kept in kv `homie.readAloud`; played answers in kv `homie.heardAnswers`.

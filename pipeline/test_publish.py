@@ -1,4 +1,6 @@
-"""Tests for a family recipe's public recipe.json (publish.without_memories, publish_recipe(family=True)).
+"""Tests for a family recipe's public recipe.json (publish.without_memories, publish_recipe(family=True)),
+for keeping family recipes out of library.json and the app's bundle (rebuild_library), and for
+scrub_family.py, which strips the ones published before.
 
     .venv/bin/python pipeline/test_publish.py        # plain runner (pytest is not in the venv)
 
@@ -19,6 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT / "pipeline"))
 
 import publish  # noqa: E402
+import scrub_family  # noqa: E402
 import worker  # noqa: E402
 from schema import Recipe  # noqa: E402
 
@@ -42,23 +45,41 @@ class FakeBlob:
         self.bucket, self.name, self.generation, self.md5_hash = bucket, name, 1, None
 
     def exists(self) -> bool:
-        return False
+        return self.name in self.bucket.files
+
+    def download_as_text(self) -> str:
+        return self.bucket.files[self.name]
 
     def upload_from_filename(self, *_args, **_kw) -> None:
         pass
 
     def upload_from_string(self, data: str, content_type: str) -> None:
-        self.bucket.uploaded[self.name] = data
+        self.bucket.files[self.name] = self.bucket.uploaded[self.name] = data
 
 
 class FakeBucket:
+    """files: what is in the bucket (JSON only; media uploads are dropped). uploaded: what was written."""
     name = "fake-media"
 
-    def __init__(self):
-        self.uploaded: dict[str, str] = {}
+    def __init__(self, files: dict[str, str] | None = None):
+        self.files, self.uploaded = dict(files or {}), {}
+        self.client = self
 
     def blob(self, name: str) -> FakeBlob:
         return FakeBlob(self, name)
+
+    def list_blobs(self, _bucket: "FakeBucket", match_glob: str) -> list[FakeBlob]:
+        assert match_glob == "*/recipe.json"
+        return [FakeBlob(self, n) for n in self.files if n.count("/") == 1 and n.endswith("/recipe.json")]  # * stops at /
+
+
+def recipe_json(recipe_id: str) -> str:
+    """The sample recipe (stories, specials, tips) under another id."""
+    return json.dumps({**json.loads(SAMPLE.read_text()), "id": recipe_id})
+
+
+def url(recipe_id: str) -> str:
+    return f"https://storage.googleapis.com/{FakeBucket.name}/{recipe_id}/recipe.json"
 
 
 def memories_in(r: dict) -> list[str]:
@@ -76,7 +97,7 @@ def out_folder(recipe_id: str):
     with tempfile.TemporaryDirectory() as tmp:
         folder = Path(tmp) / recipe_id
         folder.mkdir()
-        (folder / "recipe.json").write_text(SAMPLE.read_text())
+        (folder / "recipe.json").write_text(recipe_json(recipe_id))
         for local in publish.MEDIA_FILES:
             (folder / local).write_bytes(b"media")
         with patched(publish, OUT=Path(tmp), _video_size=lambda _p: (720, 1280),
@@ -89,6 +110,7 @@ def test_without_memories_keeps_the_recipe():
     assert memories_in(full.model_dump()), "the sample must have stories and tips to take out"
     bare = publish.without_memories(full)
     assert memories_in(bare.model_dump()) == []
+    assert bare.family and not full.family
     Recipe.model_validate(bare.model_dump())  # still a valid recipe
     keep = ("title", "cook", "ingredients", "media", "tags", "follow_up_questions")
     assert all(getattr(bare, k) == getattr(full, k) for k in keep)
@@ -102,7 +124,7 @@ def test_family_recipe_json_has_no_memories():
         bucket = FakeBucket()
         recipe = publish.publish_recipe("chili-abc123", bucket=bucket, family=True)
         public = json.loads(bucket.uploaded["chili-abc123/recipe.json"])
-        assert memories_in(public) == []
+        assert memories_in(public) == [] and public["family"] is True
         assert public["media"]["video_url"] == "https://storage.googleapis.com/fake-media/chili-abc123/play.mp4?v=1"
         assert len(recipe.stories) == 2 and len(recipe.special) == 2, "Convex still gets them all"
         assert (folder / publish.FAMILY_MARK).exists()
@@ -115,8 +137,112 @@ def test_other_recipes_keep_their_stories():
     with out_folder("weed-chili") as folder:
         bucket = FakeBucket()
         publish.publish_recipe("weed-chili", bucket=bucket)
-        assert memories_in(json.loads(bucket.uploaded["weed-chili/recipe.json"]))
+        public = json.loads(bucket.uploaded["weed-chili/recipe.json"])
+        assert memories_in(public) and public["family"] is False
         assert not (folder / publish.FAMILY_MARK).exists()
+
+
+def test_republished_elsewhere_it_stays_a_family_recipe():
+    """Another machine has the recipe's folder but no FAMILY_MARK: the bucket copy's mark still holds."""
+    scrubbed = publish.without_memories(Recipe.model_validate_json(recipe_json("chili-abc123")))
+    bucket = FakeBucket({"chili-abc123/recipe.json": scrubbed.model_dump_json()})
+    with out_folder("chili-abc123") as folder:
+        publish.publish_recipe("chili-abc123", bucket=bucket)
+        public = json.loads(bucket.uploaded["chili-abc123/recipe.json"])
+        assert memories_in(public) == [] and public["family"] is True
+        assert (folder / publish.FAMILY_MARK).exists()
+
+
+def test_family_recipes_stay_out_of_library_and_bundle():
+    bucket = FakeBucket({"weed-steak/recipe.json": recipe_json("weed-steak"),
+                         "soup-123456/recipe.json": recipe_json("soup-123456"),  # the worker's, before the mark
+                         "trash/weed-cake/recipe.json": recipe_json("weed-cake")})
+    with out_folder("chili-abc123"), tempfile.TemporaryDirectory() as app:
+        publish.publish_recipe("chili-abc123", bucket=bucket, family=True)
+        (publish.OUT / "soup-123456").mkdir()
+        (publish.OUT / "soup-123456" / publish.FAMILY_MARK).touch()  # only on the machine that ran the worker
+        data = Path(app) / "data"
+        (data / "recipes").mkdir(parents=True)
+        (data / "recipes" / "chili-abc123.json").write_text(recipe_json("chili-abc123"))  # bundled before
+        with patched(publish, APP_DATA=data, BUNDLED_TS=Path(app) / "bundled.ts"):
+            entries = publish.rebuild_library(bucket)
+        assert [e.id for e in entries] == ["weed-steak"]
+        assert [e["id"] for e in json.loads(bucket.uploaded["library.json"])] == ["weed-steak"]
+        assert [e["id"] for e in json.loads((data / "library.json").read_text())] == ["weed-steak"]
+        assert [p.stem for p in (data / "recipes").glob("*.json")] == ["weed-steak"]
+        bundled = (Path(app) / "bundled.ts").read_text()
+        assert "'weed-steak'" in bundled and "chili" not in bundled and "soup" not in bundled
+
+
+def scrub_bucket() -> FakeBucket:
+    """Family recipes as the Convex worker left them, and one shared library recipe."""
+    clean = publish.without_memories(Recipe.model_validate_json(recipe_json("rice-abcdef")))
+    return FakeBucket({"soup-123456/recipe.json": recipe_json("soup-123456"),  # published before #37
+                       "trash/pie-654321/recipe.json": recipe_json("pie-654321"),  # deleted, still public
+                       "rice-abcdef/recipe.json": clean.model_dump_json(),  # published after #37
+                       "stew-222222/recipe.json": recipe_json("stew-222222"),  # its Convex row was removed
+                       "weed-steak/recipe.json": recipe_json("weed-steak"),  # the shared library: no Convex row
+                       "library.json": json.dumps([{"id": "weed-steak"}])})
+
+
+SCRUB_URLS = [url("soup-123456"), url("pie-654321"), url("rice-abcdef"), url("gone-000000"),
+              "https://storage.googleapis.com/other-bucket/x-111111/recipe.json"]
+
+
+def run_scrub(bucket: FakeBucket, *argv: str) -> str:
+    def no_library(*_a):
+        raise AssertionError("the scrub must not rebuild library.json")
+
+    out = io.StringIO()
+    with patched(publish, _bucket=lambda: bucket, rebuild_library=no_library), \
+            patched(scrub_family, family_recipe_urls=lambda _deployment: SCRUB_URLS), contextlib.redirect_stdout(out):
+        scrub_family.main(list(argv))
+    return out.getvalue()
+
+
+def test_scrub_dry_run_lists_the_files_and_writes_nothing():
+    bucket = scrub_bucket()
+    out = run_scrub(bucket)
+    listed = [line.split()[1] for line in out.splitlines() if line.startswith("scrub ")]
+    assert listed == ["soup-123456/recipe.json", "trash/pie-654321/recipe.json"], out
+    assert "2 stories, 2 special moments, 2 step tips, the intro, no family mark" in out, out
+    assert "clean rice-abcdef/recipe.json" in out and "skip https://storage.googleapis.com/other-bucket/" in out
+    assert "check stew-222222/recipe.json" in out and "--id stew-222222" in out, out
+    assert "weed-steak" not in out and "gone-000000" not in out
+    assert "dry run: 2 file(s)" in out
+    assert bucket.uploaded == {}, "a dry run writes nothing"
+
+
+def test_scrub_write_strips_and_marks_only_those():
+    bucket = scrub_bucket()
+    before = dict(bucket.files)
+    run_scrub(bucket, "--write", "--id", "stew-222222", "--id", "soup-123456")
+    assert sorted(bucket.uploaded) == ["soup-123456/recipe.json", "stew-222222/recipe.json",
+                                       "trash/pie-654321/recipe.json"]
+    for path, data in bucket.uploaded.items():
+        public = json.loads(data)
+        assert memories_in(public) == [] and public["family"] is True, path
+        steps = lambda r: [(s["instruction"], s["quote"]) for s in r["steps"]]  # noqa: E731
+        assert steps(public) == steps(json.loads(before[path])), "the steps stay"
+    assert bucket.files["weed-steak/recipe.json"] == before["weed-steak/recipe.json"]
+    again = run_scrub(bucket)
+    assert "dry run: 0 file(s)" in again and "check " not in again, "a second run has nothing left to do"
+
+
+def test_scrub_finds_family_recipes_in_convex():
+    calls = []
+    rows = [{"_id": "r1", "libraryId": "soup-123456", "recipeJsonUrl": url("soup-123456")},
+            {"_id": "r2", "libraryId": "dad-sunday-chili"},  # seeded demo row: no recipeJsonUrl
+            {"_id": "r3", "recipeJsonUrl": url("soup-123456")}]
+
+    def run(cmd, **kw):
+        calls.append(cmd)
+        return SimpleNamespace(stdout="\n".join(["npx: installed 1 package"] + [json.dumps(r) for r in rows]))
+
+    with patched(scrub_family, subprocess=SimpleNamespace(run=run)):
+        assert scrub_family.family_recipe_urls() == [url("soup-123456")]
+    assert calls[0][:5] == ["npx", "--yes", "convex", "data", "recipes"]
+    assert calls[0][calls[0].index("--deployment") + 1] == "grand-dragon-649"
 
 
 def test_worker_publishes_a_family_recipe():

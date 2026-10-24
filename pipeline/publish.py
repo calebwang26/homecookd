@@ -8,7 +8,8 @@ Rebuilding the app's bundled copies keeps cook mode's short steps (substeps, use
 and the step titles tidied with them) that a bundled copy has and its bucket copy lacks, when every step
 is the same step (_keep_short_steps).
 A family's own recipe (worker.py, Convex mode) is published without the cook's stories and tips
-(without_memories): the bucket is public, and Convex shows them only after her yes.
+(without_memories): the bucket is public, and Convex shows them only after her yes. library.json and the
+bundle leave it out (Recipe.family).
 Storage is GCS instead of the Supabase bucket in docs/HACKATHON-SPEC.md: Supabase's free plan caps files
 at 50 MB, and GCS's free tier holds full-length videos.
 """
@@ -117,21 +118,31 @@ def _upload_json(bucket: storage.Bucket, path: str, data: str) -> None:
 def without_memories(recipe: Recipe) -> Recipe:
     """The recipe without what Convex keeps as its memories (convex/lib/recipeJson.ts): the stories, special
     moments and step tips, the steps' links to them, and the intro, which the merge writes from the stories.
-    Steps, quotes, ingredients and media stay."""
+    Steps, quotes, ingredients and media stay. It is marked a family recipe (Recipe.family), so
+    rebuild_library leaves it out of the shared library."""
     steps = [s.model_copy(update={"story_ids": [], "special_ids": [], "tip": None}) for s in recipe.steps]
-    return recipe.model_copy(update={"intro": "", "stories": [], "special": [], "steps": steps})
+    return recipe.model_copy(update={"intro": "", "stories": [], "special": [], "steps": steps, "family": True})
+
+
+def _published_as_family(bucket: storage.Bucket, recipe_id: str) -> bool:
+    blob = bucket.blob(f"{recipe_id}/recipe.json")
+    try:
+        return blob.exists() and json.loads(blob.download_as_text()).get("family") is True
+    except ValueError:
+        return False
 
 
 def publish_recipe(recipe_id: str, force: bool = False, bucket: storage.Bucket | None = None,
                    family: bool = False) -> Recipe:
     """Upload one processed recipe's media + recipe.json. Returns the published Recipe, memories and all.
     family: a family's own recipe (worker.py, Convex mode). Its recipe.json is uploaded without_memories,
-    and it stays a family recipe (FAMILY_MARK), so publishing it again by hand leaves them out too."""
+    and it stays a family recipe (FAMILY_MARK here, Recipe.family in the bucket), so publishing it again by
+    hand, from any machine, leaves them out too."""
     bucket = bucket or _bucket()
     folder = OUT / recipe_id
+    family = family or (folder / FAMILY_MARK).exists() or _published_as_family(bucket, recipe_id)
     if family:
         (folder / FAMILY_MARK).touch()
-    family = (folder / FAMILY_MARK).exists()
     raw = json.loads((folder / "recipe.json").read_text())
     for local, (ctype, field) in MEDIA_FILES.items():
         path = folder / local
@@ -180,16 +191,31 @@ def publish_synthetic(path: Path, bucket: storage.Bucket) -> Recipe:
     return recipe
 
 
+def is_family(recipe: Recipe) -> bool:
+    """A family's own recipe: marked in its recipe.json, or, for one the worker published before the mark,
+    FAMILY_MARK on the machine that ran it (scrub_family.py adds the mark to those)."""
+    return recipe.family or (OUT / recipe.id / FAMILY_MARK).exists()
+
+
 def rebuild_library(bucket: storage.Bucket | None = None) -> list[LibraryEntry]:
-    """library.json = every */recipe.json in the bucket. Also refreshes the app's bundled fallback."""
+    """library.json = every */recipe.json in the bucket but a family's own (Convex lists those, and only to
+    that family). Also refreshes the app's bundled fallback."""
     bucket = bucket or _bucket()
     recipes: list[Recipe] = []
+    family = 0
     for blob in bucket.client.list_blobs(bucket, match_glob="*/recipe.json"):
         try:
-            recipes.append(Recipe.model_validate_json(blob.download_as_text()))
+            recipe = Recipe.model_validate_json(blob.download_as_text())
         except ValueError as e:  # pydantic ValidationError is a ValueError
             # One bad file must not block every new recipe from reaching the library.
             print(f"warning: leaving {blob.name} out of library.json: {str(e)[:300]}")
+            continue
+        if is_family(recipe):
+            family += 1
+        else:
+            recipes.append(recipe)
+    if family:
+        print(f"left {family} family recipe(s) out of library.json and the app's bundle")
     # Real recipes first, then grouped by cook, then title.
     recipes.sort(key=lambda r: (r.sample, r.cook.name.lower(), r.title.lower()))
     entries = [
