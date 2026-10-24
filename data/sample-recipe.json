@@ -1,0 +1,116 @@
+{
+  "id": "weed-pancakes",
+  "title": "Sunday Pancakes",
+  "cook": { "name": "Mom", "relation": "Mom" },
+  "intro": "Mom learned these from her own mother, who made them every Sunday before church. She still never measures anything; she just watches the batter.",
+  "servings": "4",
+  "total_time": "~30 min",
+  "sample": false,
+  "source": null,
+  "tags": ["breakfast"],
+  "media": {
+    "video_url": "https://storage.googleapis.com/HOMECOOKD_BUCKET/weed-pancakes/play.mp4",
+    "audio_url": "https://storage.googleapis.com/HOMECOOKD_BUCKET/weed-pancakes/voice.m4a",
+    "poster_url": "https://storage.googleapis.com/HOMECOOKD_BUCKET/weed-pancakes/poster.jpg",
+    "duration_s": 1080
+  },
+  "sessions": [
+    { "index": 1, "recorded_at": "2026-10-11T10:02:00-07:00", "offset_s": 0, "duration_s": 1080 }
+  ],
+  "ingredients": [
+    { "name": "flour", "feel": "about two big scoops", "estimate": "~1.5 cups", "confidence": "medium", "first_seen_s": 42 },
+    { "name": "sugar", "feel": "a little, not too much", "estimate": "~2 tbsp", "confidence": "low", "first_seen_s": 70 },
+    { "name": "baking powder", "feel": "one heaping spoon", "estimate": "~1 tbsp", "confidence": "medium", "first_seen_s": 88 },
+    { "name": "salt", "feel": "a pinch", "estimate": "~1/4 tsp", "confidence": "low", "first_seen_s": 101 },
+    { "name": "cannabutter", "feel": "this much, about half the stick", "estimate": "~4 tbsp", "confidence": "high", "first_seen_s": 135 },
+    { "name": "milk", "feel": "until it looks like this, a little more than a cup", "estimate": "~1.25 cups", "confidence": "medium", "first_seen_s": 280 },
+    { "name": "egg", "feel": "one egg", "estimate": "~1 large egg", "confidence": "high", "first_seen_s": 300 },
+    { "name": "vanilla", "feel": "a splash", "estimate": "~1 tsp", "confidence": "low", "first_seen_s": 330 }
+  ],
+  "steps": [
+    {
+      "order": 1,
+      "title": "Mix the dry ingredients",
+      "instruction": "In a large bowl, whisk the flour, sugar, baking powder and salt together.",
+      "sensory_cue": "no lumps of baking powder left",
+      "start_s": 42, "end_s": 118,
+      "quote": "I never measure the flour, just two big scoops.",
+      "wait_after": null,
+      "story_ids": ["s1"], "special_ids": []
+    },
+    {
+      "order": 2,
+      "title": "Melt the cannabutter low & slow",
+      "instruction": "Melt the cannabutter in a small pan on the lowest heat, then take it off the heat to cool slightly.",
+      "sensory_cue": "fully liquid but never bubbling or browning",
+      "start_s": 130, "end_s": 260,
+      "quote": "Lowest flame. If it bubbles, you went too fast.",
+      "wait_after": null,
+      "story_ids": [], "special_ids": ["x1"]
+    },
+    {
+      "order": 3,
+      "title": "Whisk the wet ingredients",
+      "instruction": "In another bowl, whisk the milk, egg and vanilla, then whisk in the melted butter.",
+      "sensory_cue": "one even pale yellow color",
+      "start_s": 270, "end_s": 380,
+      "quote": "Pour the butter in slow while you whisk so it doesn't clump.",
+      "wait_after": null,
+      "story_ids": [], "special_ids": []
+    },
+    {
+      "order": 4,
+      "title": "Combine & let the batter rest",
+      "instruction": "Pour the wet ingredients into the dry ones and fold just until combined, then leave the batter alone for about 10 minutes.",
+      "sensory_cue": "a few small lumps are fine; it should fall off the spoon in a thick ribbon",
+      "start_s": 390, "end_s": 560,
+      "quote": "Don't overmix. Lumps are okay. Now we let it sit.",
+      "wait_after": null,
+      "story_ids": [], "special_ids": ["x2"]
+    },
+    {
+      "order": 5,
+      "title": "Cook a test pancake",
+      "instruction": "Heat a lightly buttered pan over medium-low. Pour in a small ladle of batter and cook until bubbles cover the top, then flip once.",
+      "sensory_cue": "bubbles pop and the holes stay open; edges look dry",
+      "start_s": 570, "end_s": 760,
+      "quote": "The first one is always for the cook. It tells you if the pan is ready.",
+      "wait_after": null,
+      "story_ids": [], "special_ids": []
+    },
+    {
+      "order": 6,
+      "title": "Cook the rest & stack",
+      "instruction": "Cook the remaining batter the same way, wiping a little butter in the pan between batches, and stack the pancakes on a warm plate.",
+      "sensory_cue": "golden brown on both sides, springs back when pressed",
+      "start_s": 770, "end_s": 1020,
+      "quote": "Stack them so they stay soft. Cover with a towel.",
+      "wait_after": null,
+      "story_ids": [], "special_ids": []
+    }
+  ],
+  "stories": [
+    {
+      "id": "s1", "step": 1, "start_s": 60, "end_s": 110,
+      "title": "Sunday mornings",
+      "text": "My mom made these every Sunday before church. Six kids, one pan. You had to be fast or your brother got yours."
+    }
+  ],
+  "special": [
+    {
+      "id": "x1", "step": 2, "start_s": 150, "end_s": 175,
+      "text": "Melts the butter on the very lowest flame",
+      "why": "Most recipes melt butter quickly; she keeps it from ever bubbling or browning."
+    },
+    {
+      "id": "x2", "step": 4, "start_s": 520, "end_s": 545,
+      "text": "Rests the batter 10 minutes",
+      "why": "Most recipes cook the batter right away."
+    }
+  ],
+  "follow_up_questions": [
+    { "id": "q1", "about_step": 5, "question": "How hot was the pan when the first pancake went in?" },
+    { "id": "q2", "about_step": 2, "question": "About how long does the butter take to melt on the lowest flame?" },
+    { "id": "q3", "about_step": 1, "question": "When you say \"a little\" sugar, is that closer to one spoon or two?" }
+  ]
+}
