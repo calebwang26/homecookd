@@ -1,7 +1,7 @@
 // Makes the recorded test lines with Sonic, as 16 kHz mono 16-bit WAVs (what the app streams):
 //   npm run make-audio        → test-audio/next-step.wav, question.wav, …, cook-mr-*.wav, cook-en-*.wav
 //   npm run make-audio -- no  → only the lines named (test-audio/no.wav)
-// It spends Sonic credits (1 per character, about 450 for all 14), and the WAVs are committed: re-record only
+// It spends Sonic credits (1 per character, about 590 for all 23), and the WAVs are committed: re-record only
 // the lines you change.
 import { writeFileSync } from "node:fs";
 import { env } from "../src/env.js";
