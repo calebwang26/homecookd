@@ -40,6 +40,7 @@ import type * as seed from "../seed.js";
 import type * as seedCommunity from "../seedCommunity.js";
 import type * as sessions from "../sessions.js";
 import type * as shareRequests from "../shareRequests.js";
+import type * as signer from "../signer.js";
 import type * as storyCards from "../storyCards.js";
 import type * as transcribe from "../transcribe.js";
 import type * as voice from "../voice.js";
@@ -84,6 +85,7 @@ declare const fullApi: ApiFromModules<{
   seedCommunity: typeof seedCommunity;
   sessions: typeof sessions;
   shareRequests: typeof shareRequests;
+  signer: typeof signer;
   storyCards: typeof storyCards;
   transcribe: typeof transcribe;
   voice: typeof voice;

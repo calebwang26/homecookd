@@ -38,20 +38,34 @@ class Request:
         return self.body
 
 
-def convex_answers(body=None, status=200, error=None):
+ME = {"status": "success", "value": {"personId": "p1", "name": "Aai"}}
+
+
+def convex_answers(body=None, status=200, error=None, owns=None):
+    """Fakes Convex: people:me answers `body` (or `status` / `error`); signer:owns answers `owns`."""
+    calls = []
+
     def urlopen(req, timeout):
         assert timeout <= 5
-        sent = json.loads(req.data)
         assert req.full_url == "https://grand-dragon-649.convex.cloud/api/query"
-        assert sent == {"path": "people:me", "args": {"sessionToken": TOKEN}, "format": "json"}
-        if error:
-            raise error
-        if status >= 400:
-            raise urllib.error.HTTPError(req.full_url, status, "err", {}, io.BytesIO(b"{}"))
+        sent = json.loads(req.data)
+        calls.append(sent)
+        assert sent["args"]["sessionToken"] == TOKEN and sent["format"] == "json"
+        answer = body
+        if sent["path"] == "signer:owns":
+            answer = {"status": "success", "value": owns}
+        else:
+            assert sent == {"path": "people:me", "args": {"sessionToken": TOKEN}, "format": "json"}
+            if error:
+                raise error
+            if status >= 400:
+                raise urllib.error.HTTPError(req.full_url, status, "err", {}, io.BytesIO(b"{}"))
         res = mock.MagicMock()
-        res.__enter__.return_value = io.BytesIO(json.dumps(body).encode())
+        res.__enter__.return_value = io.BytesIO(json.dumps(answer).encode())
         return res
-    return mock.patch.object(main.urllib.request, "urlopen", side_effect=urlopen)
+    patch = mock.patch.object(main.urllib.request, "urlopen", side_effect=urlopen)
+    patch.calls = calls
+    return patch
 
 
 class AuthTest(unittest.TestCase):
@@ -63,10 +77,33 @@ class AuthTest(unittest.TestCase):
     def status(self, headers, body=None):
         return main.create_upload(Request(headers, body))[1]
 
-    def test_live_session_is_let_in(self):
-        with convex_answers({"status": "success", "value": {"personId": "p1", "name": "Aai"}}):
+    def test_own_recipe_and_job_can_be_changed(self):
+        fake = convex_answers(ME, owns=True)
+        with fake:
             self.assertEqual(self.status({"Authorization": f"Bearer {TOKEN}"}), 200)
+            self.assertEqual(self.status({"Authorization": f"Bearer {TOKEN}"}, {"action": "cancel", "job_id": "j1"}), 200)
+        owns = [c["args"] for c in fake.calls if c["path"] == "signer:owns"]
+        self.assertEqual(owns, [{"sessionToken": TOKEN, "kind": "recipe", "id": "dal-1"},
+                                {"sessionToken": TOKEN, "kind": "job", "id": "j1"}])
         self.delete.assert_called_once()
+        self.cancel.assert_called_once()
+
+    def test_someone_elses_recipe_or_job_is_403(self):
+        for owns in (False, None):
+            with convex_answers(ME, owns=owns):
+                self.assertEqual(self.status({"Authorization": f"Bearer {TOKEN}"}), 403)
+                self.assertEqual(self.status({"Authorization": f"Bearer {TOKEN}"},
+                                             {"action": "cancel", "job_id": "j1"}), 403)
+        self.delete.assert_not_called()
+        self.cancel.assert_not_called()
+
+    def test_a_signed_in_phone_can_create_an_upload(self):
+        body = {"title": "Dal", "cook_name": "Aai", "relation": "grandma",
+                "files": [{"content_type": "video/quicktime", "size": 10, "duration_s": 5}]}
+        with convex_answers(ME), mock.patch.object(sys.modules["google.auth"], "default", create=True,
+                                                   side_effect=RuntimeError("no gcp here")):
+            # Past the sign-in check, so it fails at signing (502), not at auth.
+            self.assertEqual(self.status({"Authorization": f"Bearer {TOKEN}"}, body), 502)
 
     def test_signed_out_session_is_401(self):
         with convex_answers({"status": "error", "errorData": "This phone was signed out."}):

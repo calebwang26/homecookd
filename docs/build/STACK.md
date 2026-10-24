@@ -365,7 +365,9 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 **Upload signer ↔ Convex**
 - The upload signer (`cloud/signer`, Cloud Run `edible-upload`) lets a phone in with `Authorization: Bearer
   <sessionToken>`: it calls the public `people:me` query on `CONVEX_URL` (`POST /api/query`, 5 s timeout) and
-  answers `401` when Convex refuses the token, `502` when Convex can't be reached. No family id from the phone is
+  answers `401` when Convex refuses the token, `502` when Convex can't be reached. A cancel or delete from a
+  signed-in phone also needs `signer:owns { sessionToken, kind: "job" | "recipe", id }` to say yes (a cook, and
+  the job's `uploadPath` or the recipe's `libraryId` is in the session's family), else `403`. No family id from the phone is
   trusted; the job's family comes from `jobs.create`, which takes the same session. The shared `X-Edible-Family`
   code (`FAMILY_CODE`) still works for older builds; an empty `FAMILY_CODE` turns that path off.
 

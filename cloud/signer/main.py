@@ -64,14 +64,15 @@ class ConvexDown(Exception):
     pass
 
 
-def _session_person(token: str) -> str | None:
-    """The person id behind a Convex session token (people.me), or None if Convex refuses it.
-    Raises ConvexDown when Convex can't be reached, so a blip isn't reported as "signed out"."""
-    if not 20 <= len(token) <= 200:
-        return None
+TROUBLE = "The service is having trouble. Please try again in a minute."
+
+
+def _convex_query(path: str, args: dict):
+    """A public Convex query's value, or None if Convex refuses (e.g. a signed-out session). Raises
+    ConvexDown when Convex can't be reached, so a blip isn't reported as "signed out"."""
     req = urllib.request.Request(
         f"{CONVEX_URL}/api/query", method="POST", headers={"Content-Type": "application/json"},
-        data=json.dumps({"path": "people:me", "args": {"sessionToken": token}, "format": "json"}).encode())
+        data=json.dumps({"path": path, "args": args, "format": "json"}).encode())
     try:
         with urllib.request.urlopen(req, timeout=5) as res:
             body = json.load(res)
@@ -81,29 +82,43 @@ def _session_person(token: str) -> str | None:
         raise ConvexDown(f"HTTP {e.code}") from None
     except (OSError, ValueError) as e:
         raise ConvexDown(type(e).__name__) from None
-    value = body.get("value") if isinstance(body, dict) and body.get("status") == "success" else None
-    person = value.get("personId") if isinstance(value, dict) else None
-    return person if isinstance(person, str) else None
+    return body.get("value") if isinstance(body, dict) and body.get("status") == "success" else None
 
 
-def _auth_error(request):
-    """None when the caller may use the signer, else the JSON error to answer with."""
+def _caller(request):
+    """(error, token): error is the JSON answer when the caller may not use the signer. token is the
+    Convex session for a signed-in phone, None for a family-code caller."""
     code = request.headers.get("X-Edible-Family", "")
     if FAMILY_CODE and code and hmac.compare_digest(code.encode(), FAMILY_CODE.encode()):
-        return None
+        return None, None
     auth = request.headers.get("Authorization", "")
     token = auth[7:].strip() if auth[:7].lower() == "bearer " else ""
     if not token:
-        return _json({"error": "unknown family"}, 403)
+        return _json({"error": "unknown family"}, 403), None
+    if not 20 <= len(token) <= 200:
+        return _json({"error": "Please sign in again."}, 401), None
     try:
-        person = _session_person(token)
+        me = _convex_query("people:me", {"sessionToken": token})
     except ConvexDown as e:
         print(f"session check failed: {e}")  # never the token
-        return _json({"error": "The service is having trouble. Please try again in a minute."}, 502)
-    if not person:
-        return _json({"error": "Please sign in again."}, 401)
-    print(f"signed in as {person}")
-    return None
+        return _json({"error": TROUBLE}, 502), None
+    if not isinstance(me, dict) or not isinstance(me.get("personId"), str):
+        return _json({"error": "Please sign in again."}, 401), None
+    print(f"signed in as {me['personId']}")
+    return None, token
+
+
+def _not_theirs(token: str, kind: str, item_id) -> tuple | None:
+    """For a signed-in phone: refuse a cancel or delete unless the job or recipe is its family's
+    (signer:owns; only a cook may)."""
+    if not isinstance(item_id, str):
+        return None  # the action itself answers 400
+    try:
+        owns = _convex_query("signer:owns", {"sessionToken": token, "kind": kind, "id": item_id})
+    except ConvexDown as e:
+        print(f"ownership check failed: {e}")
+        return _json({"error": TROUBLE}, 502)
+    return None if owns is True else _json({"error": f"That {kind} isn't yours to change."}, 403)
 
 
 RECIPE_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,99}")
@@ -125,7 +140,7 @@ def _request_cancel(body: dict):
         pass  # already requested
     except Exception as e:  # noqa: BLE001
         print(f"cancel request for {job_id} failed: {e}")
-        return _json({"error": "The service is having trouble. Please try again in a minute."}, 502)
+        return _json({"error": TROUBLE}, 502)
     return _json({"ok": True, "job_id": job_id})
 
 
@@ -145,7 +160,7 @@ def _request_delete(body: dict):
         pass  # already requested; the worker hasn't picked it up yet
     except Exception as e:  # noqa: BLE001
         print(f"delete request for {recipe_id} failed: {e}")
-        return _json({"error": "The service is having trouble. Please try again in a minute."}, 502)
+        return _json({"error": TROUBLE}, 502)
     return _json({"ok": True, "recipe_id": recipe_id})
 
 
@@ -153,16 +168,16 @@ def _request_delete(body: dict):
 def create_upload(request):
     if request.method != "POST":
         return _json({"error": "POST only"}, 405)
-    denied = _auth_error(request)
+    denied, token = _caller(request)
     if denied:
         return denied
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
         return _json({"error": "send a JSON object"}, 400)
     if body.get("action") == "delete":
-        return _request_delete(body)
+        return (token and _not_theirs(token, "recipe", body.get("recipe_id"))) or _request_delete(body)
     if body.get("action") == "cancel":
-        return _request_cancel(body)
+        return (token and _not_theirs(token, "job", body.get("job_id"))) or _request_cancel(body)
     try:
         title = _text(body, "title", 120)
         cook_name = _text(body, "cook_name", 60)
