@@ -1,0 +1,82 @@
+.fan {
+  position: relative;
+  width: 100%;
+  /* room for the tallest card + the smile + rotation */
+  height: calc(16vw * 1.25 * 1.12 + 4vw);
+}
+.stack {
+  height: calc(19vw * 1.25 + 4vw);
+}
+.stairs {
+  height: calc(48vh + 24vw);
+}
+.slot {
+  position: absolute;
+  left: calc(50% + var(--x, 0px));
+  top: calc(50% + var(--y, 0px));
+  width: var(--w, 16vw);
+  z-index: var(--z, 1);
+  translate: -50% -50%;
+  rotate: var(--r, 0deg);
+  scale: var(--s, 1);
+}
+.stairs .slot {
+  aspect-ratio: auto;
+}
+.stairs .slot > :global(*) {
+  height: var(--h, auto);
+}
+.floor {
+  position: absolute;
+  left: 50%;
+  top: calc(50% + 11vw);
+  width: 60vw;
+  height: 4vw;
+  translate: -50% 0;
+  border-radius: 50%;
+  background: rgba(30, 36, 16, 0.12);
+  filter: blur(30px);
+  pointer-events: none;
+}
+
+/* mobile geometry */
+@media (max-width: 767px) {
+  .fan {
+    height: calc(34vw * 1.25 * 1.15 + 10vw);
+  }
+  .stack {
+    height: calc(46vw * 1.25 + 8vw);
+  }
+  .slot {
+    left: calc(50% + var(--mx, 0px));
+    top: calc(50% + var(--my, 0px));
+    width: var(--mw, 34vw);
+    z-index: var(--mz, 1);
+    rotate: var(--mr, 0deg);
+    scale: var(--ms, 1);
+  }
+  .slot:not([data-mobile]) {
+    display: none;
+  }
+  .floor {
+    top: calc(50% + 22vw);
+    width: 90vw;
+    height: 8vw;
+  }
+}
+.forceMobile .slot {
+  left: calc(50% + var(--mx, 0px));
+  top: calc(50% + var(--my, 0px));
+  width: var(--mw, 34vw);
+  z-index: var(--mz, 1);
+  rotate: var(--mr, 0deg);
+  scale: var(--ms, 1);
+}
+.forceMobile .slot:not([data-mobile]) {
+  display: none;
+}
+@media (min-width: 768px) {
+  .slot:not([data-desktop]) {
+    display: none;
+  }
+}

@@ -1,0 +1,79 @@
+/* Static (default): normal flow. Film: tall track + sticky 100svh stage. */
+.track {
+  position: relative;
+}
+.stage {
+  position: relative;
+}
+/* static split: text first, then the stage */
+.split {
+  display: flex;
+  flex-direction: column;
+}
+.split > .flow {
+  order: -1;
+}
+
+@media (min-width: 1024px) and (min-height: 600px) and (prefers-reduced-motion: no-preference) {
+  :global(html:not([data-motion='off'])) .track {
+    display: grid;
+    min-height: var(--track-d);
+  }
+  :global(html:not([data-motion='off'])) .stage {
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    height: 100svh;
+    overflow: clip;
+    align-self: start;
+  }
+  /* overlay: stage and flow share one cell; flow paints above */
+  :global(html:not([data-motion='off'])) .overlay {
+    grid-template-areas: 'stack';
+  }
+  :global(html:not([data-motion='off'])) .overlay > .stage,
+  :global(html:not([data-motion='off'])) .overlay > .flow {
+    grid-area: stack;
+  }
+  :global(html:not([data-motion='off'])) .overlay > .flow {
+    position: relative;
+    z-index: 1;
+  }
+  /* split: flow column + stage column */
+  :global(html:not([data-motion='off'])) .split {
+    grid-template-columns: var(--split, minmax(0, 40vw) minmax(0, 1fr));
+    grid-template-areas: 'flow stage';
+  }
+  :global(html:not([data-motion='off'])) .split.stageLeft {
+    grid-template-areas: 'stage flow';
+  }
+  :global(html:not([data-motion='off'])) .split > .stage {
+    grid-area: stage;
+  }
+  :global(html:not([data-motion='off'])) .split > .flow {
+    grid-area: flow;
+  }
+}
+
+/* stickyOnMobile: same film layout below 1024 (overlay only; split collapses to overlay) */
+@media (max-width: 1023px) and (prefers-reduced-motion: no-preference) {
+  :global(html:not([data-motion='off'])) .stickyMobile {
+    display: grid;
+    grid-template-areas: 'stack';
+    min-height: var(--track-m);
+  }
+  :global(html:not([data-motion='off'])) .stickyMobile > .stage {
+    grid-area: stack;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    height: 100svh;
+    overflow: clip;
+    align-self: start;
+  }
+  :global(html:not([data-motion='off'])) .stickyMobile > .flow {
+    grid-area: stack;
+    position: relative;
+    z-index: 1;
+  }
+}

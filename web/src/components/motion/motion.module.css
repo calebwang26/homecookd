@@ -1,0 +1,42 @@
+/* Shared gating for the motion primitives. Hidden "before" states exist ONLY under
+   html[data-motion="on"] and only until the element gets [data-revealed] (brief 4.1). */
+
+/* WordReveal */
+.wordReveal {
+  /* final colors (also the SSR / reduced-motion state) */
+  color: var(--wr-color);
+}
+.ink {
+  --wr-color: var(--ink);
+}
+.cream {
+  --wr-color: var(--cream);
+}
+:global(html[data-motion='on']) .wordReveal:not([data-revealed]) :global(.w) {
+  opacity: 0;
+}
+
+/* LetterArc */
+.letterArc :global(.c) {
+  display: inline-block;
+}
+.letterArc :global(.w) {
+  display: inline-block;
+  white-space: nowrap;
+}
+:global(html[data-motion='on']) .letterArc:not([data-revealed]) :global(.c) {
+  opacity: 0;
+}
+
+/* Reveal */
+:global(html[data-motion='on']) .reveal:not([data-revealed]):not([data-reveal-stagger]) {
+  opacity: 0;
+  transform: translate3d(0, var(--reveal-y, 24px), 0);
+}
+:global(html[data-motion='on']) .reveal[data-reveal-stagger]:not([data-revealed]) :global([data-reveal-item]) {
+  opacity: 0;
+  transform: translate3d(0, var(--reveal-y, 24px), 0);
+}
+.letterArc :global(.w[data-accent]) {
+  color: var(--accent, var(--green));
+}
