@@ -112,6 +112,8 @@ const duration = (s: number) => {
 };
 
 const QUIET_NUDGE_MS = 6 * 60_000;
+/** A turn Ink started but never ended (a dropped event) stops holding the mic open after this. */
+const TURN_MAX_MS = 30_000;
 /** Each kid's answer to the read-aloud offer, so a dropped socket doesn't greet and ask again (per instance). */
 const answered = new Map<string, { at: number; reading: boolean }>();
 const ANSWER_TTL_MS = 3 * 3600_000;
@@ -130,6 +132,8 @@ export class Cooking {
   private lastSpoken = { text: "", until: 0 };
   /** When the phone finishes playing our last line. */
   private playingUntil = 0;
+  /** When Ink last said the kid started talking (0 = no turn open). See `hearing`. */
+  private turnOpenSince = 0;
   /** While the cook's clip plays, the mic hears her too: only plain commands count until then. */
   private clipUntil = 0;
   /** Bumped by every new clip or step, so a translation still waiting for its clip to end is dropped. */
@@ -184,9 +188,12 @@ export class Cooking {
     this.agent = this.deps.agent(this.session, this.actions);
     this.ink = this.deps.listen(
       {
-        onTurnStart: () => {},
+        onTurnStart: () => void (this.turnOpenSince = Date.now()),
         onPartial: (text) => this.send({ type: "transcript", text, final: false }),
-        onTurnEnd: (text) => this.heard(text),
+        onTurnEnd: (text) => {
+          this.turnOpenSince = 0;
+          this.heard(text);
+        },
         onError: (message) => console.warn(`ink: ${message}`),
       },
       [recipe.title, ...(cook ? [cook.name] : [])],
@@ -216,9 +223,23 @@ export class Cooking {
     await this.say(`Want me to read ${this.cook}'s recipe out loud? Say yes or no.`, "offer");
   }
 
+  /**
+   * Half duplex, the server's half: while our own line plays on the phone, its mic only hears us (an echo), and
+   * Ink would bill for every second of it. Never mid-turn, though: Ink needs the audio after the kid stops to end
+   * the turn (a turn whose end never came stops counting after 30 s). The phone stops sending then too; this is
+   * the backup. The cook's clips stay the phone's to mute: we don't know when one really ends.
+   */
+  private hearing(): boolean {
+    if (this.turnOpenSince && Date.now() - this.turnOpenSince < TURN_MAX_MS) return true;
+    return !this.speaking && Date.now() >= this.playingUntil;
+  }
+
   /** From the app: binary = mic audio, text = a JSON message. */
   onMessage(data: WebSocket.RawData, isBinary: boolean) {
-    if (isBinary) return this.ink?.send(data as Buffer);
+    if (isBinary) {
+      if (this.hearing()) this.ink?.send(data as Buffer);
+      return;
+    }
     let msg: { type?: string; stepOrder?: number; text?: string; open?: unknown; kind?: unknown };
     try {
       msg = JSON.parse(data.toString());
