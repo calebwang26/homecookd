@@ -58,6 +58,10 @@ and homesick college kids. It's a family product, not a tool.
 - **Ship via PR, never straight to main.** Branch from `origin/main`, commit, `git fetch && git merge origin/main`,
   push, `gh pr create`, then check that `gh pr view --json mergeStateStatus` is `CLEAN`. Stage files by name, never
   `git add -A`: the tree holds untracked demo PNGs and Finder " 2" duplicates.
+- **The Merge Agent approves every PR.** After `gh pr create`, send the PR (number, link, branch, files touched,
+  one-line summary) to the Claude Desktop session titled **Merge Agent** (Claude Code: `ListAgents`, then
+  `SendMessage`; Codex or Salik: ask Caleb to pass it on). Don't merge until it approves. When PRs conflict, the
+  Merge Agent decides how they merge, and its call is final.
 - **Supabase is frozen for the hackathon.** It keeps today's sign-in, invites and older screens running; build new
   features in Convex (`docs/build/STACK.md`).
 - **Deploying the `api` edge function** (Supabase project ref `bsudybxsqvtwftsdmwmz`, verify_jwt false):

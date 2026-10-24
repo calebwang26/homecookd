@@ -1,5 +1,9 @@
 // Recipes: the family library & each recipe.json from the public bucket, falling back to the JSON
 // bundled in assets/data/ on ANY error (no env var, offline, bad JSON, 404...).
+// The library also lists the signed-in family's own finished dishes from Convex (recipes.list, live;
+// familyLibrary.ts): the pipeline publishes those to Convex, never to the public library.json. Their
+// recipe.json is the row's recipeJsonUrl in the media bucket, loaded and cached like the others.
+// With Convex stubbed (Expo Go, no EXPO_PUBLIC_CONVEX_URL) the library is library.json's alone.
 //
 //   const { entries, loading } = useLibrary();
 //   const { recipe, loading } = useRecipe(id);
@@ -14,7 +18,10 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from 'react';
 import type { Profile } from './api';
 import { bundledLibrary, bundledRecipes } from './bundled';
 import { loadHiddenIds } from './deletes';
+import { familyEntries, mergeLibrary, type FamilyRecipe } from './familyLibrary';
 import { cacheBuster, fetchJson } from './http';
+import { invalidateConvexRecipes, useLive } from './live/convex';
+import { useSession } from './session';
 import type { Ingredient, LibraryEntry, Recipe, Step } from './types';
 
 export { cacheBuster, fetchJson } from './http';
@@ -29,7 +36,8 @@ export type Source = 'remote' | 'bundled';
 // In-memory caches so screens can find an entry/recipe by id without refetching.
 const entryCache = new Map<string, LibraryEntry>();
 const recipeCache = new Map<string, Recipe>();
-for (const e of bundledLibrary) entryCache.set(e.id, normalizeEntry(e));
+const bundledEntries = new Map(bundledLibrary.filter(isEntry).map((e) => [e.id, normalizeEntry(e)]));
+for (const [id, e] of bundledEntries) entryCache.set(id, e);
 
 function isEntry(x: unknown): x is LibraryEntry {
   const e = x as LibraryEntry;
@@ -186,8 +194,13 @@ async function fetchRecipeUncached(entryOrId: LibraryEntry | string): Promise<{ 
 
 type LibraryState = { entries: LibraryEntry[]; source: Source; loading: boolean; loaded: boolean };
 
+/** library.json's entries (or the bundled copy's). */
+let base: LibraryEntry[] = bundledLibrary.filter(isEntry).map(normalizeEntry);
+/** The signed-in family's own dishes (`key`: its Supabase family id), and what they were built from. */
+let family: { key: string | null; sig: string; entries: LibraryEntry[] } = { key: null, sig: '', entries: [] };
+
 let libState: LibraryState = {
-  entries: visible(bundledLibrary.filter(isEntry).map(normalizeEntry)),
+  entries: visible(base),
   source: 'bundled',
   loading: false,
   loaded: false,
@@ -210,12 +223,22 @@ function setLib(next: Partial<LibraryState>) {
   for (const l of libListeners) l();
 }
 
+/** library.json's dishes and the family's new ones, minus the hidden. The family's are findable by id. */
+function listed(): LibraryEntry[] {
+  const have = new Set(base.map((e) => e.id));
+  for (const e of family.entries) if (!have.has(e.id)) entryCache.set(e.id, e);
+  return visible(mergeLibrary(base, family.entries));
+}
+
 /** Loads (or reloads) the library into the shared store. Safe to call often. */
 export function refreshLibrary(): Promise<void> {
   if (libPromise) return libPromise;
   setLib({ loading: true });
   libPromise = fetchLibrary()
-    .then(({ entries, source }) => setLib({ entries: visible(entries), source, loading: false, loaded: true }))
+    .then(({ entries, source }) => {
+      base = entries;
+      setLib({ entries: listed(), source, loading: false, loaded: true });
+    })
     .catch(() => setLib({ loading: false, loaded: true }))
     .finally(() => {
       libPromise = null;
@@ -225,7 +248,52 @@ export function refreshLibrary(): Promise<void> {
 
 /** Re-reads the hidden ids (after a delete) without a network round trip. */
 export function reapplyHidden() {
-  setLib({ entries: visible(libState.entries) });
+  setLib({ entries: listed() });
+}
+
+/**
+ * The family's Convex recipes into the library (useFamilyLibrary). `key` is the signed-in family
+ * (null: nobody). `rows` null means nothing new for `key`: its dishes stay, unless they were
+ * another family's, which clears them. Exported for scripts/test-library.mjs.
+ */
+export function showFamilyRecipes(key: string | null, rows: readonly FamilyRecipe[] | null, people: readonly Pick<Profile, 'name' | 'relation'>[] = []) {
+  if (!rows && family.key === key) return;
+  const mine = key && rows ? rows : [];
+  const entries = familyEntries(mine, people);
+  // The recipe ids too: convex.ts maps a library id to its Convex recipe (the voice socket needs it).
+  const sig = JSON.stringify([entries, mine.map((r) => [r._id, r.libraryId ?? null, r.cookId])]);
+  if (family.key === key && family.sig === sig) return;
+  const have = new Set(base.map((e) => e.id));
+  const next = new Set(entries.map((e) => e.id));
+  for (const e of family.entries) {
+    if (next.has(e.id) || have.has(e.id)) continue;
+    // No longer the family's (or signed out): forget it here too.
+    recipeCache.delete(e.id);
+    const bundled = bundledEntries.get(e.id);
+    if (bundled) entryCache.set(e.id, bundled);
+    else entryCache.delete(e.id);
+  }
+  family = { key, sig, entries };
+  invalidateConvexRecipes();
+  setLib({ entries: listed() });
+}
+
+// The stub has no family recipes: the library stays library.json's.
+const noFamilyRecipes = () => () => {};
+
+/** Keeps the library's family dishes in step with Convex recipes.list (live) for whoever is signed in. */
+function useFamilyLibrary() {
+  const { me, family: signedIn, profiles } = useSession();
+  const key = me && signedIn ? signedIn.id : null;
+  const rows = useLive<FamilyRecipe[] | null>('recipes:list', null, noFamilyRecipes, !!key);
+  // useLive keeps its last value through a sign-out or a change of family: only rows that arrive
+  // after `key` last changed are this family's.
+  const [since, setSince] = useState({ key, rows });
+  if (since.key !== key) setSince({ key, rows });
+  const fresh = since.key === key && rows !== since.rows ? rows : null;
+  useEffect(() => {
+    showFamilyRecipes(key, fresh, profiles);
+  }, [key, fresh, profiles]);
 }
 
 function subscribeLib(l: () => void) {
@@ -235,9 +303,11 @@ function subscribeLib(l: () => void) {
 
 /**
  * The family library. Starts with the bundled copy (never empty offline), then swaps in the bucket
- * copy once it arrives. `loaded` turns true after the first remote attempt.
+ * copy once it arrives, with the signed-in family's own dishes from Convex in front. `loaded` turns
+ * true after the first remote attempt.
  */
 export function useLibrary(): LibraryState & { refresh: () => Promise<void> } {
+  useFamilyLibrary();
   const state = useSyncExternalStore(subscribeLib, () => libState, () => libState);
   useEffect(() => {
     if (!libState.loaded && !libPromise) void refreshLibrary();
