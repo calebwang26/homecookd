@@ -150,7 +150,10 @@ The app needs only public values: `EXPO_PUBLIC_CONVEX_URL` and the voice service
 - Timing: one full-length video goes through the pipeline. Note the minutes. **Done Oct 23:** a 17-minute
   video (55 MB, 1 file) went from queued to published in **10.0 min** on a laptop: download 0.5, prep 1.7,
   Gemini extraction 2.0, Muse writing 2.3, cook mode's short steps 1.4, publish 2.0. About $0.78 in model
-  calls. The worker reports each stage to Convex as it goes.
+  calls. The worker reports each stage to Convex as it goes. Against the live Convex (`grand-dragon-649`, TEST
+  family, a real `jobs.create`), the same video took **13.6 min** from queued to done: understanding at 1.9,
+  writing at 4.2, published at 13.6. That run was slower because cook mode's short steps needed a second
+  attempt (3.5 min). Muse named the dish "Chicken Biryani".
 
 | Track | Day 1 | Day 2 |
 |---|---|---|
