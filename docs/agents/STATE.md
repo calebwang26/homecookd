@@ -49,7 +49,8 @@ older note in `memory/` disagrees, this file wins.
   - **Moss** works again (billing fixed Oct 24). One index is left: `family-j97ctx…` (the demo family: 4 recipes,
     50 docs). `homecookd-app` (a crawl of the lander that nothing used) and the TEST family's Biryani index were
     deleted with Caleb's OK. The free plan caps Moss at 3 indexes, one per family. Writes to each family's index
-    now wait their turn (`families.mossSync`); before that, two at once could silently drop a recipe.
+    now wait their turn (`families.mossSync`, live since the Oct 24 deploy of main `4f075ffac`); before that, two
+    at once could silently drop a recipe.
   - **Supabase** `bsudybxsqvtwftsdmwmz` ("calhacks-touse") is this repo's own copy: tables, buckets and the demo and
     TEST families are seeded. The `api` is live at **v1** (deployed Oct 23, 21:21 PT, before `APP_BUNDLE_ID` was
     set in code), so the secret `APPLE_AUDIENCES=host.exp.Exponent,com.salik.homecookd` is what lets TestFlight's
@@ -165,4 +166,14 @@ Before starting work, compare the last commit here with `git log origin/main` to
     `indexRecipe` is replaced by `syncFamily`.
   - **Tests:** 14 pass.
   - **Moss cleanup:** deleted `homecookd-app` and the TEST Biryani index (Caleb's OK). Only the demo family index is left.
-  - **Open:** not deployed yet (needs Caleb's OK).
+  - **Open:** none. Deployed in the next line.
+- Oct 24 · (this PR) · Claude · Deployed main `4f075ffac` (#22) to the Convex preview `grand-dragon-649`
+  (`--preview-name hackathon`, Caleb's OK).
+  - **Also went live:** the schema and indexes from earlier merged PRs that were never deployed (dinners, homie
+    prompts, recordings, `recipes.by_sharedAt`).
+  - **Moss check:** ran one `moss:syncFamily` on the demo family. The index still holds all 4 recipes (50 docs),
+    every `mossIndexedAt` was refreshed, and `mossSync` cleared. `reindexMissing` found nothing missing.
+  - **Fix:** committed the regenerated `convex/_generated/api.d.ts`, which was missing `lib/glassesRoutes`,
+    `lib/http` and `lib/liveRoutes`.
+  - **Open:** the TEST family's Biryani still says `mossIndexedAt`, but its index was deleted on purpose; it
+    re-indexes on its next publish.
