@@ -2,13 +2,14 @@
 // what the service says to test-audio/out/. One file = one turn; we wait for the reply (and for homie to
 // go quiet) before the next. It waits out the greeting and the read-aloud offer first. `text:<words>`
 // sends { type: "text" } instead (the app's own answer), and `moment:<kind>` / `moment:off` opens or closes
-// one of the app's homie moments. By default it needs a service with fake speech and sends each WAV's words as
-// text, so it costs no Cartesia credits; LIVE=1 streams the audio for real (scripts/guard.ts).
-//   VOICE_STUB=1 npm run dev:fake                                   (in another terminal)
+// one of the app's homie moments. It streams the audio for real (Ink 2 and Sonic); FAKE=1 against `npm run dev:fake`
+// sends each WAV's words as text instead, for a quick offline check (scripts/guard.ts).
+//   VOICE_STUB=1 npm run dev                                        (in another terminal)
 //   npm run test-client -- test-audio/yes.wav test-audio/next-step.wav test-audio/question.wav
 //   npm run test-client -- test-audio/no.wav test-audio/next-step.wav      # no to reading: silent steps
 //   npm run test-client -- text:no test-audio/next-step.wav
-//   LIVE=1 URL=wss://<cloud run host> npm run test-client -- test-audio/next-step.wav   # the one live smoke test
+//   URL=wss://<cloud run host> npm run test-client -- test-audio/next-step.wav   # against the deployed one
+//   FAKE=1 npm run test-client -- test-audio/next-step.wav                       # offline, against dev:fake
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import WebSocket from "ws";
 import { guard, live, wordsOf } from "./guard.js";
@@ -16,7 +17,7 @@ import { guard, live, wordsOf } from "./guard.js";
 const base = process.env.URL ?? "ws://localhost:8080";
 const files = process.argv.slice(2);
 if (!files.length) throw new Error("pass one or more 16 kHz mono 16-bit WAV files (or text:<words>, moment:<kind>)");
-await guard(base, { fake: 180, live: 60 });
+await guard(base);
 const token = process.env.SESSION ?? "test-session";
 const recipe = process.env.RECIPE ?? "grandma-red-braised-pork";
 const outDir = new URL("../test-audio/out/", import.meta.url);
@@ -100,7 +101,7 @@ for (const file of files) {
   }
   const done = new Promise<void>((r) => (replied = r));
   if (file.startsWith("text:") || !live) {
-    // Without LIVE the service hears nothing, so a recorded line goes as its words (same path as a spoken turn).
+    // FAKE=1: the service hears nothing, so a recorded line goes as its words (same path as a spoken turn).
     const text = file.startsWith("text:") ? file.slice("text:".length) : wordsOf(file);
     console.log(`${stamp()}  ▶ sending text "${text}"${file.startsWith("text:") ? "" : ` (for ${file})`}`);
     ws.send(JSON.stringify({ type: "text", text }));
