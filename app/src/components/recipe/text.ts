@@ -49,7 +49,7 @@ const same = (a: string, b: string) => a === b || `${a}s` === b || `${b}s` === a
  * Amount + name, the overview's ingredient row (kid QA round 2, notes 2 and 3: "just the measurement
  * and the ingredient", never the cook's words). The estimate's own words win when they name the thing
  * ("~6 scallions", "~1 apple", "~2 lb whole branzino"); describing words stay in front ("~2 tbsp
- * minced ginger"); an unknown amount leaves the name alone ("Weed oil").
+ * minced ginger"); an unknown amount leaves the name alone ("Onions").
  */
 export function ingredientLine(ing: Ingredient): Omit<IngredientLine, 'note'> {
   const name = bareName(ing.name) || 'Something';

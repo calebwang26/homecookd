@@ -57,7 +57,7 @@ One family = one account (Netflix model). Each phone signs in once and keeps its
 - learners (kid side): Leo (avatar `leo.jpg`), Maya (initial tile "M", lime-wash `#EDF2BE`).
 A profile's recipes = library entries whose `cook_name` equals the profile name (case-insensitive).
 Real recipes today: Dad (Sunday Chili, Grilled Fish), Grandma (Noodle Soup, Red-Braised Pork),
-Auntie Lin (Scallion Pancakes), Miles (Weed Steak, real video), Gordon & Auntie Bumbi (YouTube).
+Auntie Lin (Scallion Pancakes), Miles (Swordfish Steak, real video), Gordon & Auntie Bumbi (YouTube).
 Non-profile cooks still appear in Recipes under their own names ("Auntie Lin's kitchen").
 Mom has no recipes yet; her screens must look great empty (bible tone: warm, one clear action).
 
