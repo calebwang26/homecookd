@@ -361,3 +361,25 @@ test("okay or please with more words says yes to the offer, and a no with a comm
   assert.deepEqual(w.turns, []);
   c.close();
 });
+
+test("a no with a question or statement after it declines the offer, and the rest still reaches Claude", async () => {
+  const w = world();
+  const c = w.connect();
+  await offered(c);
+  const since = c.mark();
+  w.says("No, I'm out of ginger. Can I skip it?");
+  await settle();
+  assert.deepEqual(since(), [
+    { type: "transcript", text: "No, I'm out of ginger. Can I skip it?", final: true },
+    { type: "offer_closed", accepted: false },
+  ]);
+  assert.deepEqual(w.turns, ["i'm out of ginger can i skip it"]);
+
+  // With a moment up it isn't held for the app either.
+  c.send({ type: "moment", open: true, kind: "answer" });
+  w.says("No, it's burning, what do I do?");
+  w.says("No, maybe later.");
+  await settle();
+  assert.deepEqual(w.turns, ["i'm out of ginger can i skip it", "it's burning what do i do"]);
+  c.close();
+});

@@ -8,8 +8,10 @@
 //   unless a command or a question follows: "Okay, what's the next step?", "Okay, set a timer for 5 minutes" and
 //   "Please go back" go the usual way.
 // - A no counts, whatever follows ("No, not right now.", "Nah, I'm good.", "Don't.", and "No, it's fine.", decided),
-//   and wins after a yes or an okay: "Okay, no." and "Yeah, no, I'm good." are a no. A command or a question right
-//   after the no ("No, next step.") is still what the kid wants: afterNo gives it.
+//   and wins after a yes or an okay: "Okay, no." and "Yeah, no, I'm good." are a no. What the kid says after the no
+//   is still theirs (afterNo): a question ("No, the oil's too hot?"), a command ("No, go to step 3.", "No, play the
+//   video.") or 3+ words ("No, I'm out of ginger. Can I skip it?"), unless it's just more no ("No, maybe later.",
+//   "Nah, I'm good for now.", "No, don't read it.").
 // - "Not yet", "not really", "later", "maybe later", "skip it" and "I'm good" count only as the whole reply, and
 //   "don't" alone or before read, play, do, bother, want or need: "Not really sure how much salt", "I'm good at
 //   this" and "Don't forget the timer" are not a no.
@@ -29,6 +31,21 @@ const WHOLE_NO = /^(not yet|not really|later|maybe later|maybe not|skip it|i'?m 
 const NO_TAIL = /^((no|nah|nope|not now|not right now|thanks|thank you|but|just|um|uh|so|well|then|ok|okay)( |$))+/;
 /** A command or a question (what cook.ts's FAST commands, timers and Claude are for). */
 const COMMAND = /^(next|done|go on|go back|back|previous|last step|step back|repeat|again|say that|one more time|what|how|when|where|why|who|which|can|could|should|would|will|is|are|am i|do i|do you|do we|does|did|set|start|stop|pause|wait|hold on|hang on|help)\b|\btimer\b/;
+/** More commands, only after a no (after an okay they'd be a yes: "Okay, read it."). */
+const ACTION = /^(go to|skip|play|tell|show|read)\b/;
+/** What a no can trail and still be only the no: "No, I'm good for now.", "Nah, that's okay.", "No, skip it." */
+const NO_FILLER = new RegExp(
+  "^(" +
+    [
+      "i'?m (all )?(good|fine|okay|ok|alright|set)",
+      "(that'?s|it'?s) (fine|okay|ok|alright|all right)",
+      "all good|no need|never ?mind|i'?d rather not|skip( it| that)?",
+      "(maybe )?(not|later|next time|another time)|not (yet|really|today|this time)",
+      "don'?t( (bother|worry|read|play|do|want|need)( it| that| about it| to)?( out loud)?)?",
+      "i don'?t (want|need) (it|that|this|one|any|to|to hear it)",
+    ].join("|") +
+    ")( (for now|right now|today|though|anyway|really|thanks|thank you))*$",
+);
 
 function parse(text: string) {
   const all = text
@@ -56,8 +73,11 @@ export function yesNo(text: string): "yes" | "no" | null {
   return rest && (COMMAND.test(rest) || /\?\s*$/.test(text)) ? null : "yes";
 }
 
-/** The command or question right after a spoken no ("No, next step." → "next step"), or "". */
+/** What a spoken no goes on to say ("No, next step." → "next step"), or "" when it's only the no. */
 export function afterNo(text: string): string {
   const { isNo, tail } = parse(text);
-  return isNo && COMMAND.test(tail) ? tail : "";
+  if (!isNo || !tail || NO_FILLER.test(tail)) return "";
+  // A command, a question word, or a "?" after the no's own words ("No, too hot?", but not "No? Fine.").
+  const asks = COMMAND.test(tail) || ACTION.test(tail) || /\w[^\w?]+\w[^?]*\?/.test(text);
+  return asks || tail.split(" ").length >= 3 ? tail : "";
 }

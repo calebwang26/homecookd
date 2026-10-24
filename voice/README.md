@@ -47,7 +47,7 @@ cd voice && npm ci
 npm run dev                                   # ws://localhost:8080/cook, live Convex
 VOICE_STUB=1 npm run dev                      # the stub recipe instead
 VOICE_STUB=1 npm run dev:fake                 # fake speech, no Cartesia or Gemini Live: for FAKE=1 offline checks
-npm run make-audio                            # test-audio/*.wav, 16 kHz mono, spoken by Sonic (~550 credits for all 22)
+npm run make-audio                            # test-audio/*.wav, 16 kHz mono, spoken by Sonic (~590 credits for all 23)
 npm run make-audio -- no                      # only the lines named (here test-audio/no.wav)
 npm run test-client -- test-audio/next-step.wav test-audio/question.wav test-audio/unknown-question.wav
 npm run test-client -- test-audio/no.wav test-audio/next-step.wav   # no to reading: steps change silently

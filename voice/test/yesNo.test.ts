@@ -84,3 +84,31 @@ test("afterNo: the command or question right after a no, so it still runs", () =
   for (const [reply, then] of cases) assert.equal(afterNo(reply), then, JSON.stringify(reply));
   check("no", ["No, next step.", "No, go back.", "Not now, set a timer for 5 minutes."]);
 });
+
+test("afterNo: a question, a command or a statement after a no still gets through", () => {
+  const cases: [string, string][] = [
+    ["No, I'm out of ginger. Can I skip it?", "i'm out of ginger can i skip it"],
+    ["No, it's burning, what do I do?", "it's burning what do i do"],
+    ["No, the oil's too hot?", "the oil's too hot"],
+    ["No, too hot?", "too hot"],
+    ["No, go to step 3.", "go to step 3"],
+    ["No, play the video.", "play the video"],
+    ["No, tell me the story.", "tell me the story"],
+    ["Nah, show me the video.", "show me the video"],
+    ["No, skip this step.", "skip this step"],
+    ["No, why?", "why"],
+  ];
+  for (const [reply, then] of cases) assert.equal(afterNo(reply), then, JSON.stringify(reply));
+  check("no", cases.map(([reply]) => reply)); // still a no: the offer is declined first
+});
+
+test("afterNo: more no after a no is only the no", () => {
+  for (const reply of [
+    "No, thanks.", "No, not now.", "Nah, I'm good.", "No, maybe later.", "No, I'm good for now.", "Nah, that's okay.",
+    "No, it's fine.", "No, don't read it.", "No, skip it.", "No, not today, thanks.", "No, I'm all good.", "No, no need.",
+    "No, I don't want to hear it.", "No? Fine.", "No, too salty.",
+  ]) {
+    assert.equal(afterNo(reply), "", JSON.stringify(reply));
+    assert.equal(yesNo(reply), "no", JSON.stringify(reply));
+  }
+});

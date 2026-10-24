@@ -256,9 +256,12 @@ voice, in `lang` or the person's language). `translate: true` first turns Englis
   still streams transcripts, but a spoken yes, no, sure or not now is not applied to its read-aloud offer or
   story nudge (and doesn't reach Claude); other speech goes the usual way. It says no offer or nudge until the
   moment closes. A `{ type: "text" }` answer is the app's own and always counts. What counts as a yes or a no, for
-  the offers and the moments: `voice/src/yesNo.ts`, which follows the app's `yesNo` (a yes, okay or please with
-  more after it, unless a command or question follows) and also takes a no with more after it ("No, not right
-  now"). A command right after a no ("No, next step") is still the service's, even with a moment up.
+  the offers and the moments: `voice/src/yesNo.ts`, which follows the app's `yesNo`. A yes word (yes, yeah, sure,
+  of course) is a yes whatever follows ("Yes, but how much ginger?"). Only okay, ok, alright and please have an
+  exception: with a command or a question after them ("Okay, what's the next step?") they go the usual way. It also
+  takes a no with more after it ("No, not right now"), and a no wins. What follows a no is still the service's, even
+  with a moment up, when it's a question, a command or 3+ words that aren't just more no ("No, next step", "No,
+  I'm out of ginger. Can I skip it?"; but "No, maybe later" is only the no).
 - The app sends silence while a `say` or clip plays (half duplex).
 
 **Worker ↔ Convex additions**

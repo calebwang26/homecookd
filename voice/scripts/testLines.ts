@@ -26,6 +26,7 @@ export const LINES: Record<string, Line> = {
   "please-do": { text: "Please do." },
   "oh-no-thanks": { text: "Oh, no thanks." },
   "no-next-step": { text: "No, next step." },
+  "no-ginger": { text: "No, I'm out of ginger. Can I skip it?" },
   timer: { text: "Set a timer for five minutes." },
   // The cook while homie listens (/record): a vague amount, then her answer, then yes to the opt-in.
   "cook-mr-cooking": { text: "हो, आधी तांदूळ तीन वेळा धुवून घे. मग थोडं मीठ टाक, अंदाजाने.", voice: COOK_VOICE, lang: "mr" },

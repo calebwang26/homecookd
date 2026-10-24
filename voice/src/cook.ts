@@ -272,7 +272,7 @@ export class Cooking {
     this.send({ type: "transcript", text, final: true });
     this.touch();
     // A moment the app has up hears the kid's yes or no itself (from that transcript): it isn't ours to act on.
-    // A command or question after the no is still ours ("No, next step.").
+    // What the kid says after the no is still ours ("No, next step.", "No, I'm out of ginger. Can I skip it?").
     const inMoment = spoken && this.moment !== null;
     const answer = inMoment ? yesNo(text) : null;
     const then = answer === "no" ? afterNo(text) : "";
