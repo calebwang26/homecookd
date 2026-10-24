@@ -72,8 +72,9 @@ and homesick college kids. It's a family product, not a tool.
 - **Moss (search):** `MOSS_PROJECT_ID` and `MOSS_PROJECT_KEY` stay server-side. Moss search runs only inside its
   native SDKs, so the app asks through the `POST /moss/ask` proxy, which searches only the `family-<id>` index
   (https://docs.moss.dev/llms.txt). Live check: `node supabase/tests/moss_live.mjs`.
-- **Convex:** set up at the repo root (`convex/`, `npm run dev` = `convex dev`), dev deployment `upbeat-lobster-139`
-  in the "homecookd" project. Read `convex/_generated/ai/guidelines.md` before writing Convex code; the skills are
+- **Convex:** set up at the repo root (`convex/`). Deploy with `npx convex deploy --preview-create hackathon -y`
+  (uses the preview `CONVEX_DEPLOY_KEY` in `.env`) to the preview deployment `sensible-finch-139`
+  (https://sensible-finch-139.convex.cloud) in the "homecookd" project. Read `convex/_generated/ai/guidelines.md` before writing Convex code; the skills are
   in `.agents/skills` (Codex) and `.claude/skills` (Claude Code). The team token (`CONVEX_OVERRIDE_ACCESS_TOKEN`)
   and any deploy key live only in `.env`.
 - **No TestFlight build yet.** Invite and recipe links can't install or open the app. Treat that as a known gap,
