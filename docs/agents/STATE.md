@@ -77,10 +77,6 @@ From `docs/build/LAUNCH-LINKS.md` and `API.md`:
 - Security: remove `host.exp.Exponent` from `APPLE_AUDIENCES` and the `EXPO_GO_BUNDLE_ID` default once TestFlight works.
 - `MADE_BY` on the website is empty (hidden) until Caleb provides it.
 - About 20 smaller `TODO(caleb)` product decisions: `grep -rn "TODO(caleb)" docs app supabase web`.
-- Privacy: two family `recipe.json` files in the public bucket still have the cook's stories and tips
-  (`hackathon-biryani-2`, and `hackathon-biryani-1`, whose Convex row is gone). Check with
-  `.venv/bin/python pipeline/scrub_family.py --id hackathon-biryani-1` (a dry run), then add `--write`. Until
-  then, any `publish.py` run would list `hackathon-biryani-1` in the shared `library.json`.
 
 ## Current and next work
 
@@ -306,3 +302,12 @@ Before starting work, compare the last commit here with `git log origin/main` to
     the intro). Neither is in the live `library.json` yet.
   - **Open:** nothing written to the bucket, nothing deployed. The scrub waits on Caleb (see "Waiting on Caleb").
     `play.mp4` and `voice.m4a` are still public at unlisted URLs, with the stories as she spoke them.
+- Oct 24 · #40 · Claude · Ran `pipeline/scrub_family.py --id hackathon-biryani-1 --write` with Caleb's OK. The
+  public `recipe.json` of `hackathon-biryani-1` and `hackathon-biryani-2` no longer holds stories, special moments,
+  step tips or the intro, and each is marked `"family": true`. Steps and media are unchanged. `library.json` wasn't
+  rebuilt: it still lists 10 recipes, neither biryani. A second dry run finds nothing to scrub. The bucket has no
+  object versioning, so the old copies return 404; GCS soft delete keeps them for 7 days, readable only by project
+  admins. `hackathon-biryani-2`'s memories stay in Convex. `hackathon-biryani-1` has no Convex row, so its stories
+  now exist only in a local backup outside the repo.
+  - **Open:** `play.mp4` and `voice.m4a` for both dishes are still public at unlisted URLs, with the stories as she
+    spoke them.
