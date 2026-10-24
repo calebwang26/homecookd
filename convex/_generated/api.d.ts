@@ -18,6 +18,7 @@ import type * as lib_auth from "../lib/auth.js";
 import type * as lib_mossDocs from "../lib/mossDocs.js";
 import type * as lib_recipeJson from "../lib/recipeJson.js";
 import type * as lib_supabase from "../lib/supabase.js";
+import type * as lib_translate from "../lib/translate.js";
 import type * as messages from "../messages.js";
 import type * as moss from "../moss.js";
 import type * as questions from "../questions.js";
@@ -45,6 +46,7 @@ declare const fullApi: ApiFromModules<{
   "lib/mossDocs": typeof lib_mossDocs;
   "lib/recipeJson": typeof lib_recipeJson;
   "lib/supabase": typeof lib_supabase;
+  "lib/translate": typeof lib_translate;
   messages: typeof messages;
   moss: typeof moss;
   questions: typeof questions;
