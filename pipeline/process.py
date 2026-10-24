@@ -18,8 +18,11 @@ the run and saved, with long suspicious gaps between steps, in work/coverage.jso
 The merge (and its coverage retry) is the writing step: Muse Spark writes it by default, Gemini when
 RECIPE_WRITER=gemini or when Muse fails twice (pipeline/writer.py). Extraction always stays on Gemini.
 
+The cover (poster.jpg) is the sharpest real frame of the finished dish where Gemini says it looks best
+(pipeline/cover.py), else the middle of the last step.
+
 Last, one more text call (pipeline/shorten.py) writes cook mode's short substeps, step ingredients and tips
-into recipe.json; --no-shorten skips it.
+into recipe.json, and pipeline/align.py times each substep on the recording; --no-shorten skips both.
 
 Env (.env; already-set variables win): GEMINI_API_KEY, GEMINI_MODEL (merge),
 GEMINI_EXTRACT_MODEL (blank = GEMINI_MODEL), GEMINI_MEDIA_RESOLUTION (default MEDIA_RESOLUTION_LOW),
@@ -703,6 +706,24 @@ def write_recipe(w: writer.GeminiWriter | writer.MuseWriter, fallback: writer.Ge
     return ensure_coverage(w, manifest, events, n, out_dir, usage, recipe, gap_s)
 
 
+def make_cover(client: genai.Client, model: str, recipe: Recipe, out_dir: Path, usage: Usage) -> str:
+    """poster.jpg = the finished dish where it looks best (pipeline/cover.py). When Gemini sees no finished dish
+    or the pick fails, the middle of the last step, which is usually plating or serving (the hackathon spec's
+    step 2 is usually raw prep). Returns where the poster came from, for the log."""
+    from pipeline import cover  # here: cover.py imports this module
+    try:
+        at = cover.make_cover(client, model, recipe.model_dump(mode="json"), out_dir / "play.mp4",
+                              out_dir / "poster.jpg", usage)
+        if at is not None:
+            return f"the finished dish at {at:.1f} s"
+    except Exception as e:  # noqa: BLE001 - any failure: the old cover
+        log(f"[cover] WARNING: could not pick the finished dish ({type(e).__name__}: {str(e)[:300]}); "
+            f"using the last step")
+    last = recipe.steps[-1]
+    make_poster(out_dir / "play.mp4", (last.start_s + last.end_s) / 2, out_dir / "poster.jpg")
+    return f"step {last.order}"
+
+
 Report = Callable[[str, float], None]  # (Convex job stage, progress 0..1 across the whole job)
 
 
@@ -711,7 +732,7 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
         language: str | None = None, homie_log: list[dict] | None = None, live: dict | None = None) -> Path:
     """Extract, merge and validate one recipe. Returns the recipe.json path. Raises ProcessError on failure.
     batch=True runs the extraction as one Batch API job (half price, slower); see extract_batch.
-    shorten=False skips pipeline/shorten.py's extra text call after the merge.
+    shorten=False skips the short substeps (pipeline/shorten.py) and their times (pipeline/align.py).
     rewrite=True writes recipe.json again from the cached extraction (no new Gemini video calls).
     report gets the worker's stages: understanding 0.2 -> 0.7 per extracted file, then writing 0.7 -> 0.95.
     language (ISO 639-1) and homie_log (Convex /worker/claim's homieLog, video seconds) come from the worker's
@@ -787,24 +808,30 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
     log(f"[process {recipe_id}] writing took {time.monotonic() - t_write:.1f} s")
     report("writing", 0.85)
 
-    # Cover = the finished dish. the hackathon spec said step 2, but on real footage step 2 is usually raw prep
-    # (an empty bowl for the biryani); the last step is plating or serving.
-    poster_step = recipe.steps[-1]
-    make_poster(out_dir / "play.mp4", (poster_step.start_s + poster_step.end_s) / 2, out_dir / "poster.jpg")
+    poster_from = make_cover(client, cfg["extract_model"], recipe, out_dir, usage)
     recipe_path.write_text(json.dumps(recipe.model_dump(mode="json"), indent=2, ensure_ascii=False) + "\n")
     (out_dir / "recipe.invalid.json").unlink(missing_ok=True)
     order.cleanup(out_dir)  # the recipe matches the (possibly reordered) play.mp4; drop the old copies
-    log(f"[process {recipe_id}] wrote {recipe_path} in {time.monotonic() - t0:.1f} s "
-        f"(poster from step {poster_step.order})")
+    log(f"[process {recipe_id}] wrote {recipe_path} in {time.monotonic() - t0:.1f} s (poster from {poster_from})")
     if shorten:
-        # Cook mode's short substeps, step ingredients & tips. A failure only warns: the app splits the
-        # instruction itself, and `shorten.py --id` can add them later.
-        from pipeline.shorten import shorten_file  # here: shorten.py imports this module
+        # Cook mode's short substeps, step ingredients & tips, then when each substep starts in the video (so
+        # tapping one jumps there). A failure only warns: the app splits the instruction itself and shows
+        # untimed substeps, and `shorten.py --id` / `align.py --id` can add them later.
+        from pipeline.align import align_file  # here: both import this module
+        from pipeline.shorten import shorten_file
         try:
             shorten_file(recipe_path, client, cfg["merge_model"], usage)
         except Exception as e:  # noqa: BLE001
             log(f"[process {recipe_id}] WARNING: no short substeps ({type(e).__name__}: {e}); "
                 f"recipe.json is fine without them. Retry: python pipeline/shorten.py --id {recipe_id} --force")
+        else:
+            try:
+                how = align_file(recipe_path, client, cfg["order_model"], usage)
+                log(f"[process {recipe_id}] substep times: "
+                    + ", ".join(f"step {o} {h}" for o, h in sorted(how.items())))
+            except Exception as e:  # noqa: BLE001
+                log(f"[process {recipe_id}] WARNING: no substep times ({type(e).__name__}: {e}); recipe.json is "
+                    f"fine without them. Retry: python pipeline/align.py --id {recipe_id} --force")
     summarize(recipe, not_processed, usage, cover)
     return recipe_path
 
@@ -819,7 +846,7 @@ def main() -> None:
                     help="cancel the batch job and fall back to synchronous calls after this many minutes "
                          "(default %(default).0f)")
     ap.add_argument("--no-shorten", action="store_true",
-                    help="skip cook mode's short substeps after the merge (add them later with shorten.py)")
+                    help="skip cook mode's short substeps and their times (add them later with shorten.py, align.py)")
     ap.add_argument("--rewrite", action="store_true",
                     help="write recipe.json again from the cached extraction (no new video calls)")
     ap.add_argument("--writer", choices=["muse", "gemini"], help="override RECIPE_WRITER for this run")
