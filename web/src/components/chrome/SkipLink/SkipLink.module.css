@@ -1,0 +1,23 @@
+.skip {
+  position: fixed;
+  left: 16px;
+  top: 12px;
+  z-index: var(--z-skip);
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 20px;
+  border-radius: var(--r-pill);
+  background: var(--ink);
+  color: var(--cream);
+  font-weight: 600;
+  text-decoration: none;
+  transform: translateY(-160%);
+  transition: transform 200ms var(--ease-soft);
+}
+.skip:focus,
+.skip:focus-visible {
+  transform: translateY(0);
+  outline: 3px solid var(--chartreuse);
+  outline-offset: 3px;
+}

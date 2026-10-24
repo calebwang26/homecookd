@@ -1,0 +1,124 @@
+/* RelationPicker (brief 8.0). Owner: B7. Tone comes from the parent via custom properties. */
+.picker {
+  position: relative;
+  display: inline-flex;
+  flex: 0 1 auto;
+  min-width: 0;
+  height: 48px;
+  border-radius: var(--r-pill);
+  color: var(--picker-fg, var(--ink));
+  background: var(--picker-bg, var(--sage));
+  box-shadow: inset 0 0 0 1.5px var(--picker-border, transparent);
+  transition:
+    background-color 300ms var(--ease-soft),
+    box-shadow 300ms var(--ease-soft),
+    color 300ms var(--ease-soft);
+}
+.face {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 16px 0 18px;
+  font-family: var(--ff-text);
+  font-size: var(--fs-ui);
+  line-height: 1;
+  letter-spacing: 0.005em;
+  min-width: 0;
+  white-space: nowrap;
+  pointer-events: none;
+}
+.long,
+.short {
+  font-weight: 500;
+  color: var(--picker-label, var(--olive-ink));
+  transition: color 300ms var(--ease-soft);
+}
+.short {
+  display: none;
+}
+.value {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis; /* last-resort guard on the narrowest phones; never overflows the nav */
+  font-weight: 600;
+}
+.chev {
+  margin-left: 2px;
+  flex: none;
+  transition: transform 300ms var(--ease-soft);
+}
+/* The native control: invisible, covering the whole pill, 16px text so iOS never zooms. */
+.select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: inherit;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 16px;
+  appearance: none;
+  -webkit-appearance: none;
+  color: var(--ink);
+  background: var(--surface);
+}
+.picker:has(.select:focus-visible) {
+  outline: 3px solid var(--picker-focus, var(--focus-ring));
+  outline-offset: 3px;
+}
+@supports not selector(:has(*)) {
+  .picker:focus-within {
+    outline: 3px solid var(--picker-focus, var(--focus-ring));
+    outline-offset: 3px;
+  }
+}
+@media (hover: hover) {
+  .picker:hover {
+    background: var(--picker-bg-hover, var(--lime-wash));
+  }
+  .picker:hover .chev {
+    transform: translateY(1px);
+  }
+}
+
+@media (max-width: 767px) {
+  .long {
+    display: none;
+  }
+  .short {
+    display: inline;
+  }
+  .face {
+    gap: 5px;
+    padding: 0 12px 0 14px;
+  }
+}
+/* Phones: still "with Grandma ▾" (QA B22: the label says it's a menu), set a little tighter. */
+@media (max-width: 479px) {
+  .face {
+    gap: 3px;
+    padding: 0 8px 0 11px;
+    font-size: 0.9375rem;
+  }
+  .chev {
+    margin-left: 0;
+  }
+}
+@media (max-width: 359px) {
+  .face {
+    padding: 0 5px 0 8px;
+    font-size: 0.875rem;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .picker,
+  .long,
+  .short,
+  .chev {
+    transition: none;
+  }
+}

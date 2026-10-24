@@ -1,0 +1,366 @@
+/* Nav (brief 8.0, tone contract 4.5). Owner: B7.
+   Content never moves between tones: only colors change and the pill background fades in/out. */
+.nav {
+  --nav-x: max(20px, 3.5vw); /* content inset = the hero's anchor gutter */
+  --pill-l: 16px; /* pill padding before the logo */
+  --pill-r: 5px; /* pill padding after the CTA (concentric with the 48px button) */
+  --pill-h: 58px;
+  /* float tone (default; also the server render) */
+  --nav-fg: var(--ink);
+  --nav-hover: rgba(30, 36, 16, 0.06);
+  --picker-fg: var(--ink);
+  --picker-label: var(--olive-ink);
+  --picker-bg: var(--sage);
+  --picker-bg-hover: var(--lime-wash);
+  --picker-border: transparent;
+  --picker-focus: var(--focus-ring);
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: var(--z-nav);
+  display: flex;
+  align-items: center;
+  height: var(--nav-h, 72px);
+  padding-inline: calc(var(--nav-x) - var(--pill-l)) calc(var(--nav-x) - var(--pill-l));
+  pointer-events: none;
+}
+.nav[data-tone='hero'] {
+  --nav-fg: var(--cream);
+  --nav-hover: rgba(255, 253, 247, 0.14);
+  --picker-fg: var(--cream);
+  --picker-label: rgba(255, 253, 247, 0.86);
+  --picker-bg: rgba(20, 22, 12, 0.18);
+  --picker-bg-hover: rgba(255, 253, 247, 0.14);
+  --picker-border: rgba(255, 253, 247, 0.62);
+  --picker-focus: var(--chartreuse);
+}
+/* A soft olive veil behind the hero-tone nav keeps cream text AA on the brightest video frames. */
+.nav::before {
+  content: '';
+  position: absolute;
+  inset: 0 0 -48px;
+  background: linear-gradient(180deg, rgba(20, 22, 12, 0.44) 0%, rgba(20, 22, 12, 0.3) 45%, rgba(20, 22, 12, 0) 100%);
+  opacity: 0;
+  transition: opacity 360ms var(--ease-soft);
+  pointer-events: none;
+}
+.nav[data-tone='hero']::before {
+  opacity: 1;
+}
+
+/* Desktop: the bar is a transparent flex row holding two pills (brand · links + actions); the page shows
+   through the gap. Mobile: the bar itself is the one pill (.barBg) and the per-pill backgrounds hide. */
+.bar {
+  position: relative;
+  isolation: isolate;
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-width: 0;
+  max-width: 100%;
+  height: var(--pill-h);
+  border-radius: var(--r-pill);
+}
+.pill {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 100%;
+  border-radius: var(--r-pill);
+  pointer-events: auto;
+}
+.brand {
+  flex: none;
+  padding: 0 12px 0 var(--pill-l);
+}
+.group {
+  margin-left: auto;
+  padding: 0 var(--pill-r) 0 5px;
+}
+.item {
+  display: inline-flex;
+}
+.bg {
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: rgba(247, 247, 242, 0.8);
+  background: color-mix(in srgb, var(--canvas) 80%, transparent);
+  -webkit-backdrop-filter: blur(12px) saturate(1.15);
+  backdrop-filter: blur(12px) saturate(1.15);
+  box-shadow:
+    0 0 0 1px var(--hairline),
+    0 14px 34px -22px rgba(30, 36, 16, 0.3);
+  pointer-events: none;
+  transition:
+    opacity 360ms var(--ease-soft),
+    transform 360ms var(--ease-soft);
+}
+.barBg {
+  display: none;
+}
+@supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
+  .bg {
+    background: var(--canvas);
+  }
+}
+.nav[data-tone='hero'] .bg {
+  opacity: 0;
+  transform: scale(0.985);
+}
+
+/* ---------- logo ---------- */
+.logo {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 48px;
+  padding-right: 6px;
+  color: var(--nav-fg);
+  text-decoration: none;
+  border-radius: var(--r-sm);
+  transition: color 300ms var(--ease-soft);
+}
+.mascot {
+  flex: none;
+  margin-top: -3px; /* optical: the steam curls make the pot look low */
+}
+.word {
+  font-family: var(--ff-display);
+  font-weight: 700;
+  font-size: 28px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variation-settings: 'SOFT' 100, 'WONK' 0, 'opsz' 144;
+  transform: translateY(-1px);
+}
+
+/* ---------- links ---------- */
+.links ul {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.link {
+  display: inline-flex;
+  align-items: center;
+  min-height: 48px;
+  padding: 0 14px;
+  border-radius: var(--r-pill);
+  font-family: var(--ff-text);
+  font-weight: 500;
+  font-size: var(--fs-ui);
+  line-height: 1;
+  letter-spacing: 0.005em;
+  color: var(--nav-fg);
+  text-decoration: none;
+  white-space: nowrap;
+  transition:
+    color 300ms var(--ease-soft),
+    background-color 200ms var(--ease-soft);
+}
+.nav[data-tone='hero'] .link,
+.nav[data-tone='hero'] .logo {
+  text-shadow: 0 1px 14px rgba(20, 22, 12, 0.35);
+}
+@media (hover: hover) {
+  .link:hover {
+    background: var(--nav-hover);
+  }
+}
+
+/* ---------- picker + CTA ---------- */
+.actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  margin-left: 18px;
+}
+.pickerSlot,
+.ctaSlot {
+  display: flex;
+}
+.pickerSlot {
+  min-width: 0;
+}
+.ctaSlot {
+  flex: none;
+}
+.actions .ctaNarrow {
+  display: none;
+}
+
+/* Focus: chartreuse on the dark hero, leaf on the canvas pill (3px, 3px offset). */
+.nav[data-tone='hero'] .bar :focus-visible {
+  outline-color: var(--chartreuse);
+}
+
+/* ---------- intro (a7 M1): items blur in left → right, once ---------- */
+.bar [data-nav-item] {
+  transition:
+    opacity 600ms var(--ease-out-quart) calc(var(--i, 0) * 50ms + 60ms),
+    filter 600ms var(--ease-out-quart) calc(var(--i, 0) * 50ms + 60ms),
+    transform 600ms var(--ease-out-quart) calc(var(--i, 0) * 50ms + 60ms);
+}
+:global(html[data-motion='on']) .nav:not([data-revealed]) [data-nav-item] {
+  opacity: 0;
+  filter: blur(6px);
+  transform: translateY(-6px);
+}
+:global(html[data-motion='on']) .nav:not([data-revealed]) .bg {
+  opacity: 0;
+}
+
+/* ---------- responsive ---------- */
+/* Links need ~1140px beside the full "Cooking with:" picker and CTA plus a visible gap between the
+   two pills, so they hide below 1200px (the footer repeats them). */
+@media (max-width: 1199px) {
+  .links {
+    display: none;
+  }
+  .actions {
+    margin-left: 0;
+  }
+}
+@media (max-width: 767px) {
+  .nav {
+    --pill-l: 12px;
+    --pill-r: 5px;
+    --pill-h: 58px;
+    padding-inline: 10px;
+  }
+  .bar {
+    gap: 8px;
+    padding: 0 var(--pill-r) 0 var(--pill-l);
+    pointer-events: auto;
+  }
+  .barBg {
+    display: block;
+  }
+  .pillBg {
+    display: none;
+  }
+  .brand,
+  .group {
+    padding: 0;
+  }
+  .actions {
+    gap: 8px;
+  }
+  .actions .ctaWide {
+    display: none;
+  }
+  .actions .ctaNarrow {
+    display: inline-flex;
+    padding: 0 18px;
+  }
+  .word {
+    font-size: 26px;
+  }
+}
+/* "homecookd" is wide, so the mascot steps aside where "with Grandma ▾" would otherwise be cut (the
+   picker keeps its "with" / "as" at every width, QA B22). Widths are measured with "Grandma", the
+   longest default, with a few px to spare: 520+: mascot + word; 480–519: word alone; 428–479: mascot
+   + a smaller word; 375–427: the word alone, smaller still, beside a tighter "Early access";
+   <375: the mascot alone in a 48px round target. */
+@media (min-width: 480px) and (max-width: 519px) {
+  .mascot {
+    display: none;
+  }
+}
+@media (max-width: 479px) {
+  .nav {
+    padding-inline: 8px;
+  }
+  .logo {
+    gap: 6px;
+    padding-right: 2px;
+  }
+  .mascot {
+    width: 28px;
+    height: auto;
+  }
+  .word {
+    font-size: 20px;
+  }
+  .actions {
+    gap: 6px;
+  }
+  .actions .ctaNarrow {
+    padding: 0 15px;
+  }
+}
+@media (max-width: 427px) {
+  .bar {
+    gap: 6px;
+  }
+  .mascot {
+    display: none;
+  }
+  .word {
+    font-size: 17px;
+  }
+  .actions {
+    gap: 4px;
+  }
+  .actions .ctaNarrow {
+    padding: 0 10px;
+    font-size: 0.9375rem;
+  }
+}
+@media (max-width: 388px) {
+  .word {
+    font-size: 16px;
+  }
+}
+@media (max-width: 374px) {
+  .nav {
+    --pill-l: 5px;
+    padding-inline: 6px;
+  }
+  .bar {
+    gap: 6px;
+  }
+  .mascot {
+    display: block;
+    width: 32px;
+  }
+  .word {
+    display: none;
+  }
+  .logo {
+    justify-content: center;
+    min-width: 48px;
+    padding: 0;
+    border-radius: var(--r-pill);
+  }
+  .actions .ctaNarrow {
+    padding: 0 10px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nav::before,
+  .bg,
+  .logo,
+  .link,
+  .bar [data-nav-item] {
+    transition: none;
+  }
+}
+
+/* Phones: no backdrop blur on the fixed bar; it re-blurs everything scrolling under it (and the
+   hero video) every frame, which janked iPhones. A near-solid canvas reads the same. */
+@media (max-width: 1023px) {
+  .bg {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: color-mix(in srgb, var(--canvas) 94%, transparent);
+  }
+}
