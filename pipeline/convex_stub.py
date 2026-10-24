@@ -23,12 +23,13 @@ SAVED = ROOT / "data" / "out" / "convex-stub"
 STAGES = {"preparing", "understanding", "writing", "indexing", "done", "failed"}
 
 
-def serve(uploads: list[str], cook: str, port: int) -> None:
+def serve(uploads: list[str], cook: str, port: int, language: str = "en") -> None:
     load_dotenv(ROOT / ".env")
     secret = os.environ.get("WORKER_SECRET") or ""
     jobs = [{"jobId": f"stubjob{i}", "recipeId": f"stubrecipe{i}", "familyId": "stubfamily",
              "supabaseFamilyId": "", "cookId": "stubcook", "cookName": cook, "uploadPath": path,
-             "source": "phone", "stage": "queued", "claimedAt": None} for i, path in enumerate(uploads, 1)]
+             "source": "phone", "language": language, "homieLog": [], "stage": "queued", "claimedAt": None}
+            for i, path in enumerate(uploads, 1)]
     by_id = {j["jobId"]: j for j in jobs}
 
     class Handler(BaseHTTPRequestHandler):
@@ -63,6 +64,10 @@ def serve(uploads: list[str], cook: str, port: int) -> None:
                 print(f"[stub] {since}  {job['jobId']} {body['stage']:<13} {body['progress']:.0%}"
                       + (f"  error: {body['error']}" if body.get("error") else ""), flush=True)
                 return self.send(200, {"ok": True})
+            if self.path == "/worker/release":  # Convex waits 30 s; the stub queues it again at once
+                job.update(stage="queued", claimedAt=None)
+                print(f"[stub] {since}  {job['jobId']} released: upload not complete", flush=True)
+                return self.send(200, {"ok": True})
             if self.path == "/worker/published":
                 recipe = body.get("recipe") or {}
                 if not recipe.get("title") or not recipe.get("steps"):
@@ -88,8 +93,9 @@ def main() -> None:
     ap.add_argument("--upload", action="append", default=[], help="uploadPath to queue (repeatable)")
     ap.add_argument("--cook", default="Mom")
     ap.add_argument("--port", type=int, default=8787)
+    ap.add_argument("--language", default="en", help="the jobs' language (ISO 639-1, e.g. mr)")
     args = ap.parse_args()
-    serve(args.upload, args.cook, args.port)
+    serve(args.upload, args.cook, args.port, args.language)
 
 
 if __name__ == "__main__":

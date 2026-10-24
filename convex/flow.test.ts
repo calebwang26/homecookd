@@ -224,7 +224,8 @@ test("a Marathi voice-note answer keeps the cook's words and adds English", asyn
 
   const form = fetch.mock.calls.find(([u]) => u === "https://api.cartesia.ai/stt")![1]?.body as FormData;
   expect(form.get("language")).toBe("mr");
-  const geminiCall = fetch.mock.calls.find(([u]) => u === gemini)!;
+  // The first Gemini call put the question into Marathi for her (questions.textForCook); the last is her answer.
+  const geminiCall = fetch.mock.calls.findLast(([u]) => u === gemini)!;
   expect((geminiCall[1]?.headers as Record<string, string>)["x-goog-api-key"]).toBe("gem-test");
   expect(JSON.parse(geminiCall[1]?.body as string).contents[0].parts[0].text).toBe(marathi);
 

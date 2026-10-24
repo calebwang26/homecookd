@@ -29,6 +29,7 @@ import type * as lib_translate from "../lib/translate.js";
 import type * as live from "../live.js";
 import type * as messages from "../messages.js";
 import type * as moss from "../moss.js";
+import type * as people from "../people.js";
 import type * as questions from "../questions.js";
 import type * as recipes from "../recipes.js";
 import type * as seed from "../seed.js";
@@ -66,6 +67,7 @@ declare const fullApi: ApiFromModules<{
   live: typeof live;
   messages: typeof messages;
   moss: typeof moss;
+  people: typeof people;
   questions: typeof questions;
   recipes: typeof recipes;
   seed: typeof seed;

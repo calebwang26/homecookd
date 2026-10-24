@@ -240,6 +240,7 @@ class Recipe(BaseModel):
     id: str
     title: str
     cook: Cook
+    language: Optional[str] = None  # what the cook spoke (ISO 639-1, from the Convex job); None = not recorded
     intro: str
     servings: Optional[str] = None
     total_time: Optional[str] = None
