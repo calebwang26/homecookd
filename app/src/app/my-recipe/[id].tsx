@@ -4,6 +4,7 @@
 //         (who in the family hearted it, from GET /dish-stats; hidden at 0; RETENTION-HANDOFF 3.5),
 //         "Who cooked it" (learners: cooked with their note, or "Not yet" + "Send to Maya" via /send-recipe)
 //  docked: "Leo asked you" for an open question about this recipe -> the chat
+//  foot: "Share with people nearby · Off" (Community, the cook only; hidden without a Convex row)
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
@@ -11,6 +12,7 @@ import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { ShareNearbyRow } from '@/components/community/ShareNearbyRow';
 import { DishStatsLine, useDishStats } from '@/components/hearts';
 import { useMediaSheet } from '@/components/media';
 import { HearQuestion, isSpoken } from '@/components/messages/HearQuestion';
@@ -225,6 +227,8 @@ export default function MyRecipe() {
               <ChevronRightIcon size={20} strokeWidth={2.2} color={colors.muted} />
             </PressableScale>
           ) : null}
+
+          {recipe ? <ShareNearbyRow libraryId={id} me={me} /> : null}
         </Animated.View>
       </Animated.ScrollView>
 

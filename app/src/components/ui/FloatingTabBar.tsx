@@ -2,7 +2,8 @@
 // gap 4) with 0 10px 30px rgba(30,36,16,0.14) + a 1px 0.04 ring. Tabs are equal columns: 24 px stroke
 // icon over a 13 px label; the active tab is a dark ink #1E2410 bubble with cream icon + 700 label,
 // inactive tabs are #2D3222 with a 600 label. Frosted (blur + 0.88 cream) so content passes under it
-// (motion spec 2). The ink bubble slides between tabs on a spring. Numeric badge per tab from the
+// (motion spec 2). The ink bubble slides between tabs on a spring, and grows past its column when the
+// label needs it ("Community" on a 390 pt phone), so a label never runs off its round ends. Numeric badge per tab from the
 // screen option `tabBarBadge` or the `badges` prop ({ routeName: count }). A short cream fade rises
 // behind the bar (28 px above it), so a row half under it reads as "scroll for more" (QA: taps on a
 // half-covered last row did nothing); it never takes a touch.
@@ -39,21 +40,30 @@ export function FloatingTabBar({ state, descriptors, navigation, badges }: Float
 
   const [innerW, setInnerW] = useState(0);
   const n = Math.max(routes.length, 1);
-  const colW = innerW > 0 ? (innerW - tabBar.padding * 2 - tabBar.gap * (n - 1)) / n : 0;
+  const contentW = innerW > 0 ? innerW - tabBar.padding * 2 : 0;
+  const colW = contentW > 0 ? (contentW - tabBar.gap * (n - 1)) / n : 0;
+  // Each label's width, so the bubble can grow past its column for a long one ("Community" at 390 pt).
+  const [labelW, setLabelW] = useState<Record<string, number>>({});
+  const activeLabel = labelW[routes[activeIdx]?.key ?? ''] ?? 0;
+  const bubbleW = colW ? Math.min(contentW, Math.max(colW, activeLabel + 2 * LABEL_AIR)) : 0;
 
   const x = useSharedValue(0);
+  const w = useSharedValue(0);
   const placed = useRef(false);
   useEffect(() => {
     if (!colW) return;
-    const target = activeIdx * (colW + tabBar.gap);
+    // Centred on its tab, kept inside the bar.
+    const target = Math.min(Math.max(0, activeIdx * (colW + tabBar.gap) - (bubbleW - colW) / 2), contentW - bubbleW);
     if (!placed.current || reduce) {
       placed.current = true;
       x.value = reduce ? withTiming(target, { duration: motion.reducedFadeMs }) : target;
+      w.value = reduce ? withTiming(bubbleW, { duration: motion.reducedFadeMs }) : bubbleW;
     } else {
       x.value = withSpring(target, motion.tab);
+      w.value = withSpring(bubbleW, motion.tab);
     }
-  }, [activeIdx, colW, reduce, x]);
-  const bubble = useAnimatedStyle(() => ({ width: colW, transform: [{ translateX: x.value }] }), [colW]);
+  }, [activeIdx, colW, bubbleW, contentW, reduce, x, w]);
+  const bubble = useAnimatedStyle(() => ({ width: w.value, transform: [{ translateX: x.value }] }));
 
   return (
     <View pointerEvents="box-none" style={styles.anchor}>
@@ -100,7 +110,15 @@ export function FloatingTabBar({ state, descriptors, navigation, badges }: Float
                     </View>
                   ) : null}
                 </View>
-                <Txt variant="caption" weight={focused ? 700 : 600} color={color} numberOfLines={1}>
+                <Txt
+                  variant="caption"
+                  weight={focused ? 700 : 600}
+                  color={color}
+                  numberOfLines={1}
+                  onLayout={(e: LayoutChangeEvent) => {
+                    const lw = Math.ceil(e.nativeEvent.layout.width);
+                    setLabelW((m) => (m[route.key] === lw ? m : { ...m, [route.key]: lw }));
+                  }}>
                   {label}
                 </Txt>
               </PressableScale>
@@ -111,6 +129,9 @@ export function FloatingTabBar({ state, descriptors, navigation, badges }: Float
     </View>
   );
 }
+
+/** Room each side of a label inside the bubble, past the round ends' curve (60 pt tall, so 30 pt radius). */
+const LABEL_AIR = 12;
 
 /** The page tone (#F7F7F2), clear above the bar to nearly solid behind it. */
 const PAGE_FADE = ['rgba(247,247,242,0)', 'rgba(247,247,242,0.92)'] as const;

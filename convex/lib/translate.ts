@@ -2,7 +2,7 @@
 // English (shown labelled as a translation; her own words stay in the transcript), and the kid's question
 // into the cook's language (questions.textForCook).
 const MODEL = "gemini-3.8-flash";
-const URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
+export const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
 const INSTRUCTIONS =
   "You translate a home cook's spoken answer, transcribed by speech-to-text, into plain English for their " +
@@ -25,7 +25,7 @@ const forCook = (code: string) =>
 
 /** English for the kid by default; `to` translates English into that language for the cook. */
 export async function geminiTranslate(text: string, apiKey: string, to?: string): Promise<string> {
-  const res = await fetch(URL, {
+  const res = await fetch(GEMINI_URL, {
     method: "POST",
     headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },
     body: JSON.stringify({
