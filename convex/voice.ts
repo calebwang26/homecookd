@@ -72,7 +72,9 @@ export const sessionView = internalQuery({
         cookLanguage: cook?.language ?? recipe.language,
         cookRelation: cook?.relation,
         steps: recipe.steps,
-        memories: recipe.memoriesOptIn ? recipe.memories.map((m) => ({ ...m, stepOrder: stepOf(recipe.steps, m.moment) })) : [],
+        memories: recipe.memoriesOptIn
+          ? recipe.memories.map(({ kind, text, moment }) => ({ kind, text, moment, stepOrder: stepOf(recipe.steps, moment) }))
+          : [],
       },
     };
   },

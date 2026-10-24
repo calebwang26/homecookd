@@ -8,6 +8,20 @@
 //    the family's dishes are listed and findable by id, their recipe.json loads from recipeJsonUrl
 //    and is cached, Convex's recipe id cache is cleared when the list changes (only then), a
 //    sign-out or another family clears them, and with no rows (the stub) the library is unchanged.
+// 4. Stories and tips (convex/recipes.ts forViewer sends them only to the cook until she says yes;
+//    recipe.json has them all): storiesShared, withheldIds and withoutStories, and in the store a
+//    dish the cook kept to herself loads without them, her yes brings them back, the cook sees her
+//    own, the next person on a shared phone waits for their own rows, a recipe loaded before the
+//    list arrived loses them, and so does the bundled copy (offline, and the tips it lends).
+// 5. Fail closed (storiesWithheld): while the signed-in person's rows haven't come (Convex slow,
+//    unreachable or stubbed), a dish that isn't public loads without its stories and tips; when the
+//    rows come, the copy kept that way is dropped, so a shared dish loads again with them; the next
+//    person is stripped again until their rows come; a public library dish is never stripped.
+// 6. Stories and tips from Convex (a family recipe.json is published without them,
+//    pipeline/publish.py): withMemories puts recipes.list's memories back where they were, an older
+//    row's go to the step they were told in, sharedMemories keeps unchanged ones, and in the store a
+//    kid gets them only after the cook's yes, the cook gets hers, a recipe loaded before the list
+//    arrived gets them once it does, and changed memories load the dish again.
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { registerHooks } from 'node:module';
@@ -29,16 +43,18 @@ const entry = (id, extra = {}) => ({
 });
 const BUNDLED = [entry('bundled-chili'), entry('bundled-fish', { cook_name: 'Dad', relation: 'Dad' })];
 globalThis.__bundledLibrary = BUNDLED;
+globalThis.__bundledRecipes = {};
 globalThis.__hidden = [];
 globalThis.__invalidations = 0;
+globalThis.__session = null; // who useSession()/getSession() say is signed in
 
 const stub = (code) => 'data:text/javascript,' + encodeURIComponent(code);
 const stubs = {
-  react: stub('export const useCallback = (f) => f; export const useEffect = () => {}; export const useState = (v) => [v, () => {}]; export const useSyncExternalStore = (_s, get) => get();'),
-  './bundled': stub('export const bundledLibrary = globalThis.__bundledLibrary; export const bundledRecipes = {};'),
+  react: stub('export const useCallback = (f) => f; export const useEffect = () => {}; export const useState = (v) => [typeof v === \'function\' ? v() : v, () => {}]; export const useSyncExternalStore = (_s, get) => get();'),
+  './bundled': stub('export const bundledLibrary = globalThis.__bundledLibrary; export const bundledRecipes = globalThis.__bundledRecipes;'),
   './deletes': stub('export const loadHiddenIds = () => globalThis.__hidden;'),
   './live/convex': stub('export const useLive = (_n, initial) => initial; export const invalidateConvexRecipes = () => { globalThis.__invalidations += 1; };'),
-  './session': stub('export const useSession = () => ({ me: null, family: null, profiles: [] });'),
+  './session': stub('export const getSession = () => globalThis.__session; export const useSession = () => globalThis.__session ?? { me: null, family: null, profiles: [] };'),
 };
 // Stubs for React & the modules that need Expo; the app's other siblings ('./http') resolve to .ts.
 registerHooks({
@@ -266,6 +282,429 @@ await test('store: signing out clears the family’s dishes', () => {
   // Rows for nobody are ignored.
   R.showFamilyRecipes(null, [row('ghost')]);
   assert.deepEqual(ids(lib()), ['public-pancakes', 'in-progress']);
+});
+
+// ---------------------------------------------------------------------------------------------
+// 4. Stories and tips
+
+const story = { kind: 'story', text: 'Aaji learned this dal from her mother.', moment: { startS: 2, endS: 8 } };
+/** A pipeline recipe.json with a story, a special moment, a step tip and the intro written from them. */
+const fullRecipe = (id) => ({
+  id,
+  title: 'Aaji’s dal',
+  cook: { name: 'Grandma', relation: 'Grandma (Aaji)' },
+  intro: 'Aaji learned this dal from her mother in Pune.',
+  servings: '4',
+  total_time: '40 min',
+  sample: false,
+  source: null,
+  tags: [],
+  media: { video_url: null, audio_url: `https://storage.googleapis.com/edible-media/${id}/voice.m4a`, poster_url: null, duration_s: 60 },
+  sessions: [],
+  ingredients: [{ name: 'toor dal', feel: 'two handfuls', estimate: '~1 cup', confidence: 'medium', first_seen_s: 1 }],
+  steps: [
+    {
+      order: 1,
+      title: 'Rinse',
+      instruction: 'Rinse the dal.',
+      sensory_cue: 'the water runs clear',
+      start_s: 0,
+      end_s: 10,
+      quote: 'Wash it until the water is clear.',
+      wait_after: null,
+      story_ids: ['s1'],
+      special_ids: ['x1'],
+      substeps: [{ text: 'Rinse it **3 times**' }],
+      uses: [{ name: 'toor dal', amount: '~1 cup' }],
+      tip: 'Warm water is faster.',
+    },
+    { order: 2, title: 'Boil', instruction: 'Boil it soft.', sensory_cue: null, start_s: 10, end_s: 40, quote: null, wait_after: null, story_ids: [], special_ids: [] },
+  ],
+  stories: [{ id: 's1', step: 1, start_s: 2, end_s: 8, title: 'Her mother’s kitchen', text: 'Aaji learned this dal from her mother.' }],
+  special: [{ id: 'x1', step: 1, start_s: 5, end_s: 9, text: 'She rinses it by feel.', why: 'No measuring cup.' }],
+  follow_up_questions: [{ id: 'q1', about_step: 2, question: 'How long does it boil?' }],
+});
+
+/** None of the cook's stories or tips are left, and everything else is. */
+const assertWithheld = (r) => {
+  assert.deepEqual(r.stories, []);
+  assert.deepEqual(r.special, []);
+  assert.equal(r.intro, '');
+  for (const s of r.steps) {
+    assert.equal(s.tip ?? null, null);
+    assert.deepEqual(s.story_ids, []);
+    assert.deepEqual(s.special_ids, []);
+  }
+  assert.equal(r.title, 'Aaji’s dal');
+  assert.deepEqual(r.steps.map((s) => s.instruction), ['Rinse the dal.', 'Boil it soft.']);
+  assert.equal(r.steps[0].quote, 'Wash it until the water is clear.');
+  assert.equal(r.steps[0].sensory_cue, 'the water runs clear');
+  assert.deepEqual(r.steps[0].substeps, [{ text: 'Rinse it **3 times**' }]);
+  assert.deepEqual(r.steps[0].uses, [{ name: 'toor dal', amount: '~1 cup' }]);
+  assert.equal(r.ingredients.length, 1);
+  assert.equal(r.follow_up_questions.length, 1);
+  assert.ok(r.media.audio_url);
+};
+/** The cook's stories and tips are all there. */
+const assertShared = (r) => {
+  assert.equal(r.stories.length, 1);
+  assert.equal(r.special.length, 1);
+  assert.equal(r.intro, 'Aaji learned this dal from her mother in Pune.');
+  assert.equal(r.steps[0].tip, 'Warm water is faster.');
+  assert.deepEqual(r.steps[0].story_ids, ['s1']);
+  assert.deepEqual(r.steps[0].special_ids, ['x1']);
+};
+/** Runs `fn(asked)` with every fetch answered by `answer(url)` (it may throw: offline). */
+const withBucket = async (answer, fn) => {
+  const realFetch = globalThis.fetch;
+  const asked = [];
+  globalThis.fetch = async (url) => {
+    asked.push(String(url));
+    const body = answer(String(url));
+    return { ok: true, status: 200, json: async () => body };
+  };
+  try {
+    return await fn(asked);
+  } finally {
+    globalThis.fetch = realFetch;
+  }
+};
+const dal = (id) => () => fullRecipe(id);
+
+await test('storiesShared: the cook’s yes, or memories sent anyway (recipes.list sends those only to her)', () => {
+  assert.equal(F.storiesShared({ memoriesOptIn: true, memories: [] }), true);
+  assert.equal(F.storiesShared({ memoriesOptIn: true }), true);
+  assert.equal(F.storiesShared({ memoriesOptIn: false, memories: [story] }), true); // the cook's own view
+  assert.equal(F.storiesShared({ memoriesOptIn: false, memories: [] }), false); // anyone else's
+  assert.equal(F.storiesShared({}), false);
+  assert.equal(F.storiesShared({ memoriesOptIn: 'yes', memories: 'a story' }), false);
+});
+
+await test('withheldIds: the listed dishes whose stories this viewer may not see, one per id', () => {
+  const rows = [
+    row('kept'), // memoriesOptIn false, memories [] (a kid's view)
+    row('said-yes', { memoriesOptIn: true }),
+    row('cooks-own', { memories: [story] }),
+    row('kept', { _id: 'older', memoriesOptIn: true }), // the newest row of an id decides, as for its entry
+    row(' padded '),
+    row('processing', { status: 'processing' }),
+    row('no-url', { recipeJsonUrl: undefined }),
+  ];
+  assert.deepEqual([...F.withheldIds(rows)], ['kept', 'padded']);
+  assert.deepEqual([...F.withheldIds([])], []);
+});
+
+await test('withoutStories: takes out stories, specials, tips, their ids and the intro; keeps the rest', () => {
+  const full = R.normalizeRecipe(fullRecipe('dal'));
+  assertShared(full);
+  const bare = F.withoutStories(full);
+  assertWithheld(bare);
+  assertShared(full); // a copy: the recipe it was given is untouched
+  assert.equal(F.withoutStories(bare), bare); // nothing left to take out: the same object
+});
+
+await test('stories: a family dish the cook kept to herself loads without its stories and tips', async () => {
+  R.showFamilyRecipes('family-C:leo', [row('aaji-dal'), row('public-pancakes')], PEOPLE);
+  assert.deepEqual(ids(lib()), ['aaji-dal', 'public-pancakes', 'in-progress']);
+  await withBucket(dal('aaji-dal'), async (asked) => {
+    const res = await R.fetchRecipe('aaji-dal');
+    assert.ok(asked[0].startsWith('https://storage.googleapis.com/edible-media/aaji-dal/recipe.json?t='), asked[0]);
+    assertWithheld(res.recipe);
+    assertWithheld(R.getCachedRecipe('aaji-dal')); // cached without them
+    // A dish library.json has too loads library.json's copy, without them as well.
+    const pancakes = await R.fetchRecipe('public-pancakes');
+    assert.ok(asked[1].startsWith('https://storage.googleapis.com/bucket/public-pancakes/recipe.json?t='), asked[1]);
+    assertWithheld(pancakes.recipe);
+  });
+});
+
+await test('stories: the cook’s yes reloads the dish with them, and a no takes them away again', async () => {
+  const before = globalThis.__invalidations;
+  R.showFamilyRecipes('family-C:leo', [row('aaji-dal', { memoriesOptIn: true, memories: [story] }), row('public-pancakes')], PEOPLE);
+  assert.equal(globalThis.__invalidations, before + 1); // a change like any other
+  assert.equal(R.getCachedRecipe('aaji-dal'), undefined); // the copy without them is gone
+  assertWithheld(R.getCachedRecipe('public-pancakes')); // still withheld: still cached
+  await withBucket(dal('aaji-dal'), async () => {
+    assertShared((await R.fetchRecipe('aaji-dal')).recipe);
+    assertShared(R.getCachedRecipe('aaji-dal'));
+  });
+  R.showFamilyRecipes('family-C:leo', [row('aaji-dal'), row('public-pancakes')], PEOPLE);
+  assert.equal(R.getCachedRecipe('aaji-dal'), undefined);
+  await withBucket(dal('aaji-dal'), async () => assertWithheld((await R.fetchRecipe('aaji-dal')).recipe));
+});
+
+await test('stories: the cook sees her own; the next person on the phone waits for their own rows', async () => {
+  // Grandma signed in: recipes.list sends her the memories she hasn't shared.
+  R.showFamilyRecipes('family-C:grandma', [row('aaji-dal', { memories: [story] })], PEOPLE);
+  assert.deepEqual(ids(lib()), ['aaji-dal', 'public-pancakes', 'in-progress']);
+  assert.equal(R.getCachedRecipe('aaji-dal'), undefined);
+  await withBucket(dal('aaji-dal'), async () => assertShared((await R.fetchRecipe('aaji-dal')).recipe));
+  assertShared(R.getCachedRecipe('aaji-dal'));
+  // She hands the phone to Leo: her dishes, and her copy of them, go until his rows come.
+  R.showFamilyRecipes('family-C:leo', null, PEOPLE);
+  assert.deepEqual(ids(lib()), ['public-pancakes', 'in-progress']);
+  assert.equal(R.getCachedRecipe('aaji-dal'), undefined);
+  R.showFamilyRecipes('family-C:leo', [row('aaji-dal')], PEOPLE);
+  await withBucket(dal('aaji-dal'), async () => assertWithheld((await R.fetchRecipe('aaji-dal')).recipe));
+});
+
+await test('stories: a recipe loaded before the family’s list arrived loses them once it does', async () => {
+  R.showFamilyRecipes(null, null);
+  // A deep link while nobody's list is in: nothing says to withhold them yet.
+  await withBucket(dal('early-dal'), async () => assertShared((await R.fetchRecipe('early-dal')).recipe));
+  assertShared(R.getCachedRecipe('early-dal'));
+  R.showFamilyRecipes('family-C:leo', [row('early-dal')], PEOPLE);
+  assert.equal(R.getCachedRecipe('early-dal'), undefined);
+  await withBucket(dal('early-dal'), async () => assertWithheld((await R.fetchRecipe('early-dal')).recipe));
+});
+
+await test('stories: the bundled copy is withheld too, offline and when it lends its tips', async () => {
+  globalThis.__bundledRecipes['bundled-dal'] = fullRecipe('bundled-dal');
+  try {
+    R.showFamilyRecipes('family-C:leo', [row('bundled-dal')], PEOPLE);
+    assertWithheld(R.getCachedRecipe('bundled-dal')); // before anything loads
+    const offline = () => {
+      throw new Error('offline');
+    };
+    await withBucket(offline, async () => {
+      const res = await R.fetchRecipe('bundled-dal');
+      assert.equal(res.source, 'bundled');
+      assertWithheld(res.recipe);
+    });
+    // The bucket's copy predates the short steps: it borrows substeps, uses and tips from the bundled one.
+    const { substeps, uses, tip, ...first } = fullRecipe('bundled-dal').steps[0];
+    assert.ok(substeps && uses && tip);
+    const older = () => ({ ...fullRecipe('bundled-dal'), steps: [first, fullRecipe('bundled-dal').steps[1]] });
+    await withBucket(older, async () => assertWithheld((await R.fetchRecipe('bundled-dal')).recipe));
+    // With her yes the lent tip shows.
+    R.showFamilyRecipes('family-C:leo', [row('bundled-dal', { memoriesOptIn: true })], PEOPLE);
+    await withBucket(older, async () => assertShared((await R.fetchRecipe('bundled-dal')).recipe));
+  } finally {
+    delete globalThis.__bundledRecipes['bundled-dal'];
+    R.showFamilyRecipes(null, null);
+  }
+});
+
+// ---------------------------------------------------------------------------------------------
+// 5. Fail closed
+
+/** The session says `person` of `familyId` is signed in; returns their library key. */
+const signIn = (familyId, person) => {
+  globalThis.__session = { me: { id: person }, family: { id: familyId }, profiles: [] };
+  return `${familyId}:${person}`;
+};
+let leo;
+
+await test('fail closed: signed in, rows not come yet: a family dish loads without its stories', async () => {
+  leo = signIn('family-D', 'leo');
+  R.showFamilyRecipes(leo, null, PEOPLE); // recipes.list hasn't answered (slow, unreachable, the stub)
+  assert.equal(R.storiesWithheld('secret-dal'), true);
+  assert.equal(R.useStoriesWithheld('secret-dal'), true); // what the Share button reads
+  await withBucket(dal('secret-dal'), async (asked) => {
+    const res = await R.fetchRecipe('secret-dal'); // a deep link: only the conventional bucket path
+    assert.ok(asked[0].startsWith(`${R.BUCKET_URL}/secret-dal/recipe.json?t=`), asked[0]);
+    assertWithheld(res.recipe);
+  });
+  assertWithheld(R.getCachedRecipe('secret-dal')); // cached without them
+  assertWithheld(R.useRecipe('secret-dal').recipe);
+});
+
+await test('fail closed: the rows come with her yes: the copy without them goes and they load again', async () => {
+  R.showFamilyRecipes(leo, [row('secret-dal', { memoriesOptIn: true })], PEOPLE);
+  assert.equal(R.storiesWithheld('secret-dal'), false);
+  assert.equal(R.useStoriesWithheld('secret-dal'), false);
+  assert.equal(R.getCachedRecipe('secret-dal'), undefined);
+  await withBucket(dal('secret-dal'), async () => assertShared((await R.fetchRecipe('secret-dal')).recipe));
+  assertShared(R.getCachedRecipe('secret-dal'));
+});
+
+await test('fail closed: the next person on the phone is stripped again until their rows come', async () => {
+  const mia = signIn('family-D', 'mia');
+  // The session is a step ahead of the library: Leo's rows don't count for Mia.
+  assert.equal(R.storiesWithheld('secret-dal'), true);
+  R.showFamilyRecipes(mia, null, PEOPLE);
+  assert.equal(R.storiesWithheld('secret-dal'), true);
+  assert.equal(R.getCachedRecipe('secret-dal'), undefined); // Leo's copy is gone
+  await withBucket(dal('secret-dal'), async () => assertWithheld((await R.fetchRecipe('secret-dal')).recipe));
+  assertWithheld(R.getCachedRecipe('secret-dal'));
+  R.showFamilyRecipes(mia, [row('secret-dal', { memoriesOptIn: true })], PEOPLE);
+  assert.equal(R.getCachedRecipe('secret-dal'), undefined);
+  await withBucket(dal('secret-dal'), async () => assertShared((await R.fetchRecipe('secret-dal')).recipe));
+  // Mia's own rows without the yes keep them.
+  R.showFamilyRecipes(mia, [row('secret-dal')], PEOPLE);
+  await withBucket(dal('secret-dal'), async () => assertWithheld((await R.fetchRecipe('secret-dal')).recipe));
+});
+
+await test('fail closed: signed in before any library screen passed the key: still stripped', async () => {
+  R.showFamilyRecipes(null, null); // the library's state is nobody's (no useLibrary screen yet)
+  signIn('family-D', 'leo');
+  assert.equal(R.storiesWithheld('cold-dal'), true);
+  await withBucket(dal('cold-dal'), async () => assertWithheld((await R.fetchRecipe('cold-dal')).recipe));
+  assertWithheld(R.getCachedRecipe('cold-dal'));
+});
+
+await test('fail closed: the library a step ahead of the session (its own key waiting): still stripped', async () => {
+  globalThis.__session = null; // the module's session lags a render behind
+  R.showFamilyRecipes('family-G:zoe', null, PEOPLE);
+  assert.equal(R.storiesWithheld('cold-dal'), true);
+  await withBucket(dal('cold-dal'), async () => assertWithheld((await R.fetchRecipe('cold-dal')).recipe));
+  assert.equal(R.storiesWithheld('public-pancakes'), false);
+});
+
+await test('fail closed: an empty list is an answer too (it ends the wait)', async () => {
+  const k = signIn('family-E', 'kai');
+  R.showFamilyRecipes(k, null, PEOPLE);
+  await withBucket(dal('cold-dal'), async () => assertWithheld((await R.fetchRecipe('cold-dal')).recipe));
+  R.showFamilyRecipes(k, [], PEOPLE); // the same (empty) list as while waiting: it still counts
+  assert.equal(R.storiesWithheld('cold-dal'), false);
+  assert.equal(R.getCachedRecipe('cold-dal'), undefined);
+});
+
+await test('fail closed: a public library dish is never stripped (waiting, the stub, signed out)', async () => {
+  globalThis.__bundledRecipes['bundled-chili'] = fullRecipe('bundled-chili');
+  try {
+    const check = async () => {
+      for (const id of ['public-pancakes', 'bundled-chili']) {
+        assert.equal(R.storiesWithheld(id), false, id);
+        assert.equal(R.useStoriesWithheld(id), false, id);
+        await withBucket(dal(id), async () => assertShared((await R.fetchRecipe(id)).recipe));
+        assertShared(R.getCachedRecipe(id));
+      }
+      assertShared(R.getCachedRecipe('bundled-chili')); // the bundled copy too
+    };
+    // Signed in, waiting for rows (or the stub, whose rows never come).
+    R.showFamilyRecipes(signIn('family-F', 'ana'), null, PEOPLE);
+    await check();
+    // Signed out.
+    globalThis.__session = null;
+    R.showFamilyRecipes(null, null);
+    await check();
+  } finally {
+    delete globalThis.__bundledRecipes['bundled-chili'];
+    globalThis.__session = null;
+    R.showFamilyRecipes(null, null);
+  }
+});
+
+// ---------------------------------------------------------------------------------------------
+// 6. Stories and tips from Convex
+
+/** fullRecipe's stories and tips as Convex keeps them (convex/lib/recipeJson.ts). */
+const MEMORIES = [
+  { kind: 'story', text: 'Aaji learned this dal from her mother.', moment: { startS: 2, endS: 8 }, step: 1, id: 's1', title: 'Her mother’s kitchen' },
+  { kind: 'tip', text: 'She rinses it by feel.', moment: { startS: 5, endS: 9 }, step: 1, id: 'x1', why: 'No measuring cup.' },
+  { kind: 'tip', text: 'Warm water is faster.', moment: { startS: 0, endS: 10 }, step: 1 },
+];
+/** The recipe.json the pipeline publishes for a family dish: fullRecipe without_memories. */
+const publicRecipe = (id) => F.withoutStories(R.normalizeRecipe(fullRecipe(id)));
+
+await test('withMemories: Convex’s memories go back where the published file left them out', () => {
+  const full = R.normalizeRecipe(fullRecipe('dal'));
+  const bare = publicRecipe('dal');
+  assertWithheld(bare);
+  const back = F.withMemories(bare, MEMORIES);
+  assert.deepEqual(back.stories, full.stories);
+  assert.deepEqual(back.special, full.special);
+  assert.deepEqual(
+    back.steps.map((s) => [s.tip, s.story_ids, s.special_ids]),
+    full.steps.map((s) => [s.tip ?? null, s.story_ids, s.special_ids]),
+  );
+  assert.deepEqual({ ...back, stories: [], special: [], steps: [] }, { ...full, intro: '', stories: [], special: [], steps: [] });
+  assertWithheld(bare); // a copy: the recipe it was given is untouched
+  assert.equal(F.withMemories(back, MEMORIES), back); // it has them now: the same object
+  assert.equal(F.withMemories(full, MEMORIES), full); // a file that has its own keeps them
+  assert.equal(F.withMemories(bare, []), bare);
+});
+
+await test('withMemories: an older row’s memories (no step or id) go to the step they were told in', () => {
+  const old = [
+    { kind: 'story', text: 'A story while it boils.', moment: { startS: 20, endS: 30 } },
+    { kind: 'tip', text: 'Warm water is faster.', moment: { startS: 0, endS: 10 } },
+    { kind: 'tip', text: 'She rinses it by feel.', moment: { startS: 5, endS: 9 } }, // step 1 has its tip already
+    { kind: 'story', text: 'Before the first step.', moment: { startS: -3, endS: 0 } },
+  ];
+  const back = F.withMemories(publicRecipe('dal'), old);
+  assert.deepEqual(
+    back.stories.map((x) => [x.id, x.step, x.title, x.text]),
+    [
+      ['story-1', 2, '', 'A story while it boils.'],
+      ['story-4', 1, '', 'Before the first step.'],
+    ],
+  );
+  assert.deepEqual(back.steps.map((s) => s.tip), ['Warm water is faster.', null]);
+  assert.deepEqual(back.special.map((x) => [x.id, x.step, x.why]), [['special-3', 1, '']]);
+  assert.deepEqual(back.steps.map((s) => s.story_ids), [['story-4'], ['story-1']]);
+  assert.deepEqual(back.steps[0].special_ids, ['special-3']);
+});
+
+await test('sharedMemories: by library id; unchanged ones keep their array, and nothing new keeps the map', () => {
+  const rows = [row('a', { memories: MEMORIES }), row('b'), row('c', { memories: [story] }), row('p', { status: 'processing', memories: [story] })];
+  const first = F.sharedMemories(rows);
+  assert.deepEqual([...first.keys()], ['a', 'c']);
+  const again = [row('a', { memories: MEMORIES.map((m) => ({ ...m })) }), row('b'), row('c', { memories: [{ ...story }] })];
+  assert.equal(F.sharedMemories(again, first), first);
+  const edited = F.sharedMemories([row('a', { memories: MEMORIES }), row('c', { memories: [{ ...story, text: 'New.' }] })], first);
+  assert.notEqual(edited, first);
+  assert.equal(edited.get('a'), first.get('a'));
+  assert.notEqual(edited.get('c'), first.get('c'));
+  assert.equal(F.sharedMemories([], new Map()).size, 0);
+});
+
+await test('store: a dish published without its stories gets Convex’s after the cook’s yes, not before', async () => {
+  R.showFamilyRecipes('family-D:leo', [row('new-dal')], PEOPLE);
+  await withBucket(() => publicRecipe('new-dal'), async () => assertWithheld((await R.fetchRecipe('new-dal')).recipe));
+  R.showFamilyRecipes('family-D:leo', [row('new-dal', { memoriesOptIn: true, memories: MEMORIES })], PEOPLE);
+  assert.equal(R.getCachedRecipe('new-dal'), undefined);
+  await withBucket(() => publicRecipe('new-dal'), async () => {
+    const shown = (await R.fetchRecipe('new-dal')).recipe;
+    assert.equal(shown.stories[0].title, 'Her mother’s kitchen');
+    assert.equal(shown.steps[0].tip, 'Warm water is faster.');
+    assert.deepEqual(shown.steps[0].story_ids, ['s1']);
+    assert.equal(R.getCachedRecipe('new-dal').special[0].why, 'No measuring cup.');
+  });
+  // She takes them back: they go, from the cached copy too.
+  R.showFamilyRecipes('family-D:leo', [row('new-dal')], PEOPLE);
+  assert.equal(R.getCachedRecipe('new-dal'), undefined);
+  await withBucket(() => publicRecipe('new-dal'), async () => assertWithheld((await R.fetchRecipe('new-dal')).recipe));
+});
+
+await test('store: the cook gets her own back; a recipe loaded before the list gets them once it arrives', async () => {
+  R.showFamilyRecipes(null, null);
+  await withBucket(() => publicRecipe('early-new'), async () => assertWithheld((await R.fetchRecipe('early-new')).recipe));
+  R.showFamilyRecipes('family-D:grandma', [row('early-new', { memories: MEMORIES })], PEOPLE);
+  assert.equal(R.getCachedRecipe('early-new'), undefined); // the copy without them is gone
+  await withBucket(() => publicRecipe('early-new'), async () => {
+    assert.equal((await R.fetchRecipe('early-new')).recipe.stories.length, 1);
+  });
+  // A re-published dish (new memories) loads again; the same rows again change nothing.
+  const cached = R.getCachedRecipe('early-new');
+  R.showFamilyRecipes('family-D:grandma', [row('early-new', { memories: MEMORIES.map((m) => ({ ...m })) })], PEOPLE);
+  assert.equal(R.getCachedRecipe('early-new'), cached);
+  R.showFamilyRecipes('family-D:grandma', [row('early-new', { memories: [MEMORIES[0]] })], PEOPLE);
+  assert.equal(R.getCachedRecipe('early-new'), undefined);
+  await withBucket(() => publicRecipe('early-new'), async () => {
+    const shown = (await R.fetchRecipe('early-new')).recipe;
+    assert.equal(shown.stories.length, 1);
+    assert.deepEqual(shown.special, []);
+    assert.equal(shown.steps[0].tip, null);
+  });
+  R.showFamilyRecipes(null, null);
+});
+
+await test('store: while the rows are on their way the dish has none; they come with its stories', async () => {
+  const grandma = signIn('family-E', 'grandma');
+  try {
+    R.showFamilyRecipes(grandma, null, PEOPLE); // signed in, recipes.list hasn't answered
+    await withBucket(() => publicRecipe('waiting-dal'), async () => assertWithheld((await R.fetchRecipe('waiting-dal')).recipe));
+    R.showFamilyRecipes(grandma, [row('waiting-dal', { memories: MEMORIES })], PEOPLE);
+    assert.equal(R.getCachedRecipe('waiting-dal'), undefined);
+    await withBucket(() => publicRecipe('waiting-dal'), async () => {
+      assert.equal((await R.fetchRecipe('waiting-dal')).recipe.stories[0].title, 'Her mother’s kitchen');
+    });
+  } finally {
+    globalThis.__session = null;
+    R.showFamilyRecipes(null, null);
+  }
 });
 
 console.log(`\n${passed} passed`);

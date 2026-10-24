@@ -250,6 +250,48 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - **Open:** same as above (not deployed). The post-clip translation path needs a Moss hit, so it isn't exercised
     on the stub.
 - Oct 24 · #26 · Claude · Track F, the cook's language end to end + pipeline gaps. New `convex/people.ts` (`people.me`, `people.setLanguage`). `jobs.create` takes `title`, `language`, `forKidId`, `recordingId` (copies homie's recording's dish/language/kid, sets `recordings.jobId`; the title replaces "New recipe"). `/worker/claim` adds `title`, `language`, `relation`, `forKidName`, `memoriesOptIn` and `homieLog` on the video clock; new `/worker/release` (only from `preparing`; stage `uploading`, back to `queued` in 30 s); `/worker/published` stores `recipes.language` and `steps[].quoteOriginal`, which `/voice/session` now returns too. A kid's `asked_cook` question for a non-English cook gets `questions.textForCook` from Gemini (in Track F's brief). Pipeline: the worker waits up to 45 s for every file in the signer's `jobs/<id>.json`, else releases the job (fixes the upload/claim race; only uploads without a signer file give up after 20 releases, signer uploads when their links expire); passes title, language and homie's log to `process.py`; prompts get a language line and a homie block (never quote homie as the cook; start steps at her answer); merge aims for 8–12 steps; recipe.json gains `language`. Convex mode still doesn't rebuild the GCS `library.json` (that file is shared by every family; the kid app should read the family's recipes from Convex `recipes.list`). New `app/src/lib/languages.ts` (30 Sonic languages, `matchLanguages`, `languageName`). Tests: 5 new convex-tests (19 pass; they cover another family's kid and recording, release only from `preparing`, and `/voice/session` + `/voice/step` on a Marathi-quoted recipe), `pipeline/test_prompts.py` (8 pass), `app/scripts/test-languages.mjs`. Not deployed. Open: Convex deploy; the 8–12 step merge prompt not yet run on a real video; Track I: the app's `JobStage` (`app/src/lib/live/convex.ts`) and `STAGE_HINT` need `uploading` (e.g. "Still sending the video").
+- Oct 24 · #34 · Claude · Follow-up to #31: the kid's library no longer shows a family dish's stories and tips to
+  people the cook hasn't shared them with. The library loads the full `recipe.json` from `recipeJsonUrl`, and Convex
+  holds back `memories` only in its own `recipes.list`.
+  - **How:** `familyLibrary.ts` reads `memoriesOptIn` and `memories`. A dish is shared when she opted in, or when
+    the row came with memories, which Convex sends only to the cook. For any other listed dish, `lib/recipes.ts`
+    strips the stories, specials, step tips, `story_ids`/`special_ids` and the intro before caching, whichever copy
+    loads (bundled tips and the offline fallback too). The flag is in the change signature and a flip drops the
+    cached copy, so her later yes reloads the stories. `useRecipe`/`useRecipes` drop them from an open screen at
+    once. The library key is now family + person, so on a shared or lent phone the next person waits for their own
+    rows.
+  - **Fails closed (review fix):** while the signed-in person's `recipes.list` rows haven't come (Convex slow,
+    unreachable or stubbed, a new person on the phone, or no library screen mounted yet), `storiesWithheld` strips
+    every dish that isn't public (not in library.json and not bundled). When the rows come, the copies cached that
+    way are dropped, so a shared dish loads again with its stories. Public dishes, and signed-out viewers of them,
+    are unchanged. A family dish opened in Expo Go's stub stays stripped. The recipe page hides Share on a dish whose
+    stories are kept from this person, because the `/r` page shows them all.
+  - **Tests:** `test-library.mjs` 31 pass (15 new), `test-shorten.mjs` (its `./session` stub gained `getSession`)
+    and the other app scripts, tsc and lint pass. Turning off each part of the fail-closed gate makes a new test
+    fail. On Expo web with Convex stubbed, a fixture family dish opened with no stories, tip or Share, and a bundled
+    dish kept Share and its story row. `test-profile-navigation` passes.
+  - **Open:** not checked against live Convex on a phone (needs a real kid session). Share still shows on
+    `MadeIt.tsx` and `PostcardStep.tsx`. Root cause, not fixed here: `recipe.json` with the stories sits in the
+    public media bucket, so the `/r` web page and anyone with the URL can read them. The real fix is to publish
+    `recipe.json` without the memories and read them from Convex.
+- Oct 24 · #37 · Claude · The cook's stories and tips leave the public media bucket (built on #34; the root cause #34
+  names). In Convex mode the
+  worker's `recipe.json` has no `stories`, `special`, `steps[].tip`, `story_ids`/`special_ids` or `intro`
+  (`publish.without_memories`, `publish_recipe(family=True)`); `data/out/<id>/.family` keeps a hand re-publish
+  (`publish.py --id`) stripped too. Convex still gets the whole recipe, and each memory now keeps `step`, `id`,
+  `title`, `why` (optional fields, `convex/schema.ts` `memory`); `/voice/session` returns only its own memory
+  fields. The app puts `recipes.list` memories back into a file that has none (`withMemories`, `sharedMemories` in
+  `familyLibrary.ts`; `forViewer`, `useRecipe`, `useRecipes` in `recipes.ts`), so a kid sees them only after the
+  cook's yes and the cook always sees hers. #34's fail-closed gate still applies first (`forViewer` takes the hook's
+  session key). The web share page reads the same file, so it shows none.
+  - **Tests:** new `pipeline/test_publish.py` (4), other pipeline tests pass; vitest 40 (new `convex/memories.test.ts`,
+    2); `test-library.mjs` 37 with #34's final head merged (6 new); every other app test script, tsc and lint pass.
+  - **Open:** not deployed. Deploy Convex first, then restart the worker from main (a stripped file with old Convex
+    rows still shows the stories, placed by time, but without titles). Not checked on a phone or against live
+    Convex. Family recipes the worker published before this still have their stories in the bucket (#34 hides them
+    in the app). `rebuild_library` lists every `*/recipe.json` in the bucket, so any `publish.py` run puts family
+    recipes into the shared `library.json` and the app bundle. The intro isn't kept anywhere now (no screen shows it).
+- Oct 24 · (this PR) · Claude · Root devDependency `@types/node`: `convex deploy` typechecks `convex/`, and a clean `npm ci` had no Node types, so every `process.env` failed (37 errors) and the deploy stopped. Now tsc is 0 and vitest 40/40.
 - Oct 24 · #36 · Claude · Track I-kid, homie in cook mode (built on #32). The header stays put with homie at its top right; small chips under the pot (Next · Back · Repeat · Ask <cook>) talk to homie, or act on their own when voice is off or homie doesn't answer in 1.5 s. Timer pill beside the step title (the phone's own clock, a buzz at zero, the pot's ring). The body's Ask pill is now the chip; the "waiting" line stays.
   - **Voice:** no mic button. In a dev build with the voice service, on a Convex dish, voice starts by itself (after the mic permission and the "Let Mom see" sheet); a tap on the pot turns the mic off or on. `lib/live/voice.ts` handles say `kind`/`textEn`, clip `quote`/`quoteEn`, `timer`/`timer_done`, and sets the pot (listening with the mic level, thinking, lit then speaking, timer). Half duplex sends silence while homie, a clip, a voice note or a step video plays. Stub moved to `lib/live/voiceStub.ts`.
   - **Moments** (`components/cooking/CookMoments.tsx`): read-aloud offer (remembered per phone in kv `homie.readAloud`), story offer, "Ask <cook> anything" listening moment, and "<cook> answered your question" (her voice note; the English shows labelled "Translated from <cook>"). Played answers are kept in kv `homie.heardAnswers`. New `lib/live/answers.ts` (`questions.forRecipe`, live).

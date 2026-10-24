@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from "./_generated/server";
-import schema from "./schema";
+import schema, { memory } from "./schema";
 
 const moment = v.object({ startS: v.number(), endS: v.number() });
 const RELEASE_DELAY_MS = 30_000;
@@ -164,7 +164,7 @@ export const published = internalMutation({
           moment,
         }),
       ),
-      memories: v.array(v.object({ kind: v.union(v.literal("story"), v.literal("tip")), text: v.string(), moment })),
+      memories: v.array(memory),
       language: v.optional(v.string()),
     }),
     memoriesOptIn: v.optional(v.boolean()),
