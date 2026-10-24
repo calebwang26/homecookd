@@ -42,11 +42,17 @@ The firmware can ignore them. They're there for an LED, if there is one.
 - Checks `device` against `GLASSES_DEVICE_KEY`.
 - Every 2 s, asks Convex `/glasses/active` which recording is live. It writes frames and PCM to
   `/var/glasses/<recordingId>/` with the device timestamps, and maps device time to wall clock from the first
-  message (`videoStartedAt` = wall-clock ms of the first kept frame).
+  message after each recording starts (`videoStartedAt` = wall-clock ms of the first kept frame).
 - On `ended` (or 60 s with no data while `wrapping_up`), it muxes with ffmpeg: frames at their real timestamps
   (variable frame rate → constant 15 fps H.264) plus the PCM as AAC. Then it uploads the MP4 with the VM's service
   account and calls `/glasses/finished`.
-- Serves `GET /frame/latest?recording=<id>` (`x-glasses-secret`) with the newest JPEG, for homie.
+- A recording that never ended (the phone died) stops getting the glasses once a newer one is live, or once it's
+  over 12 h old. It's finished with what it has, and the frames go to the newer one.
+- A recording with no frames (the glasses were off) fails right away; there's no video, so there's no job.
+- Once the job exists, or the recording is abandoned or fails, it deletes the frames, audio and MP4. Only
+  `meta.json` stays.
+- Serves `GET /frame/latest?recording=<id>` (`x-glasses-secret`) with the newest JPEG, for homie, and `GET /health`
+  (`{ok, glasses}`; the recording, frame count and upload queue only with `x-glasses-secret`).
 - Runs on an e2-micro (us-central1 or us-west1, Free Tier) under systemd. `glasses/vm/setup.sh` creates it.
 - `glasses/ingest/fake_glasses.py <video.mp4>` replays any video as frames + PCM in this format, so the path can be
   tested before the hardware is ready.
