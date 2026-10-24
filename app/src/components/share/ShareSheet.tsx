@@ -19,9 +19,13 @@
 // comes within ACTIVITY_WAIT_MS of opening and before the first tap; after that the faces never
 // move, so a finger never lands on someone who slid into its place.
 //
+// A dinner invite ("Invite friends") uses the same sheet with its own body (DinnerInviteBody): the card
+// and the app row, no swatches and no faces.
+//
 // Contract:
 //   visible   true while the sheet should show (animates out when it turns false)
-//   recipeId  the bucket recipe id being shared (null while closed)
+//   recipeId  the bucket recipe id being shared (null while closed, or for a dinner)
+//   dinner    the dinner being shared instead (null for a recipe)
 //   onClose   dismiss (backdrop tap, close button, drag down)
 //   onShown   the native Modal finished presenting (the provider's watchdog)
 import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
@@ -29,6 +33,7 @@ import { AccessibilityInfo, ScrollView, StyleSheet, View, useWindowDimensions } 
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
+import { nightTitle } from '@/components/community/labels';
 import { BottomSheet, CheckIcon, CloseIcon, PotMark, Txt, haptic, useToast } from '@/components/ui';
 import { api, errorMessage, type Profile } from '@/lib/api';
 import { totalTimeLabel } from '@/lib/format';
@@ -36,6 +41,7 @@ import { useRecipe } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
 import { alpha, colors } from '@/theme/tokens';
 
+import { DinnerInviteBody, type DinnerInvite } from './DinnerInviteBody';
 import { ExternalRow } from './ExternalRow';
 import { FamilyRow, kidsFirst, type SendState } from './FamilyRow';
 import { useRowMetrics } from './RoundTarget';
@@ -49,6 +55,7 @@ import { trail } from './trail';
 export type ShareSheetProps = {
   visible: boolean;
   recipeId: string | null;
+  dinner?: DinnerInvite | null;
   onClose: () => void;
   onShown?: () => void;
 };
@@ -63,7 +70,7 @@ const ACTIVITY_WAIT_MS = 1200;
 /** How long "Sent to Leo" stays above the rows. */
 const SENT_TOAST_MS = 2600;
 
-export function ShareSheet({ visible, recipeId, onClose, onShown }: ShareSheetProps) {
+export function ShareSheet({ visible, recipeId, dinner = null, onClose, onShown }: ShareSheetProps) {
   // A fresh body (send states, link) for every open; derived during render, no effect.
   const [seq, setSeq] = useState(0);
   const [wasVisible, setWasVisible] = useState(visible);
@@ -75,6 +82,22 @@ export function ShareSheet({ visible, recipeId, onClose, onShown }: ShareSheetPr
   const { recipe, entry, missing } = useRecipe(recipeId);
   const title = recipe?.title ?? entry?.title ?? '';
   const gone: ShareCardData | null = missing && !title ? { title: 'We couldn’t find this recipe', cook: null, time: null, poster: null } : null;
+
+  if (dinner) {
+    return (
+      <BottomSheet
+        visible={visible}
+        onClose={onClose}
+        accessibilityLabel={`Invite friends to ${nightTitle(dinner.dish)}`}
+        contentStyle={styles.sheetContent}
+        onTrace={traceSheet}
+        onShown={onShown}>
+        <BodyGuard key={seq}>
+          <DinnerInviteBody dinner={dinner} />
+        </BodyGuard>
+      </BottomSheet>
+    );
+  }
 
   return (
     <BottomSheet
