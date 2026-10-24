@@ -397,5 +397,70 @@ Before starting work, compare the last commit here with `git log origin/main` to
     (found by name).
 - Oct 24 · (this PR) · Claude · `docs/agents/MERGE-PLAYBOOK.md` (from Caleb via the UI/UX session): how the Merge Agent takes in, orders, reviews, resolves and merges PRs. AGENTS.md's merge rule points to it. The demo freeze in it is marked as proposed until Caleb confirms.
 - Oct 24 · (this PR) · Claude · MERGE-PLAYBOOK: Caleb decided there's no demo freeze; features keep merging if they pass the checks.
+- Oct 24 · #33 · Claude · Track G screens: Caleb's simplified Community map, his v2 "one step at a time" connect
+  flow, share asks, swaps, and (round 3, his final canvas) "Cook together", "Invite friends" and the motion (built on
+  #24's backend):
+  - **Kid tab "Dishes near you"** (`kid/community.tsx`): the title (room left for homie at the top right) with one
+    line under it, "Tap a photo to learn about a dish and cook together.", then one square map (330 pt on a 390 pt
+    phone; react-native-svg, no new native module: made-up streets, real Cambridge neighborhood names at their real
+    spots, You in the middle) with a round dish photo per ~1 km grid cell (`components/community/mapLayout.ts`), and
+    ONE button, "Share your recipe". The circles pop in one after another; a tapped one springs to 70 pt with its sun
+    ring; the card rises in; each chooser step crossfades (`components/community/motion.ts`). Reduce Motion: fades.
+  - **One step at a time** (`DishSteps`, `ShareSteps`, `Chooser`, words in `choices.ts`): a dish's card (photo, dish,
+    "cook · culture" with a small "AI" tag on Muse's culture guess, distance, her quote, "Translated" when she said it
+    in another language) has one button, "Connect with <cook>". Its chooser: "Join <host>'s dinner" (only with an
+    open dinner ahead), "Swap recipes", "Cook together" ("Ask <cook> to make it with you"). "Share your recipe" →
+    "Put it on the map" and "Host a dinner". Your own family's shared dishes are on the map too (their card's button
+    is "Host a dinner"). "You" opens your next dinner, the swaps and "cook together" asks sent to you (Accept /
+    Decline), the agreed ones, or one line saying they show up there (its "Host a dinner" button is gone).
+  - **Share asks** (`convex/shareRequests.ts`): "Put it on the map" by someone who doesn't cook the dish adds a
+    `questions` row (`kind: "share"`) for that recipe's cook. It reaches her in her language only through the parent
+    UI showing `textForCook` (LiveQuestions and the walkie-talkie, merged in #35). Only she can
+    answer. Gemini reads her answer against a fixed question (never the stored text, which has the asker's name and
+    the dish), her words passed as one JSON string; only "yes" shares (by `community.shareOn`). Every answer is
+    settled once (`questions.shareDecision`): after a no, an unclear answer, a failure or a voice note nobody could
+    write out, the kid's row says "<cook> said not now" and nobody can ask again for a day. The question, the cook's
+    switch and the privacy note now name the culture guess (`TODO(caleb)` on the words).
+  - **Swaps and Cook together** (`swapRequests`, `kind: "cook"` for cook together): `requestSwap`, `cookTogether`,
+    `respondSwap`, `mySwaps` (with `kind`). An accepted "cook together" reads "Cooking Pork Adobo together with the
+    Reyes family" with "Host a dinner" next, and `dinners.create` lets the asking family host that dish.
+  - **Dinner page** (`/dinner/[id]`, Caleb's final Hearth version): lavender wash, the dish photo (326x300, sun glow,
+    "DINNER" tag), "<Dish> Night", a "Hosted by" pill, when and where (the address only after the host says yes),
+    "You're in" and a few faces, "X going" (host + accepted guests + invite opens; it rolls up live), and one button:
+    "Ask to join", "Asked · waiting", or for the host and guests who are in, "Invite friends". The host first gets
+    "N asked to join", which scrolls to the requests. "Add to calendar" and its .ics code are gone.
+  - **Invite friends**: the share sheet as a dinner variant (`components/share/DinnerInviteBody.tsx`: the dish
+    photo, "<Dish> Night", "Hosted by <host>", no faces; Copy link, Messages, WhatsApp when available, More; "Come to
+    <Dish> Night with <host>: <url>"). `dinners.inviteLink` → one stable random token per dinner, host and accepted
+    guests only. Public `POST /invite/open` (`convex/lib/inviteRoutes.ts`; CORS for homecookd.app and localhost)
+    counts each phone or browser once (`dinnerInviteOpens`), at most 60 new per 10 minutes and 300 in all, and
+    answers only `{ dish, hostName, startsAt }` (the host's display name, the same one the invite text and the
+    dinner page's pill show, so `/d` says "Hosted by Grandma Rajani", not "Grandma"; `TODO(caleb)` on whether a
+    forwardable link should show less). The web's static `/d` page (`NEXT_PUBLIC_CONVEX_SITE_URL`,
+    default the hackathon deployment's `.convex.site`) and the app's `/d` screen (works signed out) call it. The
+    AASA file lists `/d`.
+  - **Also:** the kid tab bar's selected bubble now grows to fit a long label ("Community" at 390 pt;
+    `components/ui/FloatingTabBar.tsx`). Muse's story card code is in `convex/storyCards.ts`. `/dinner/new` takes
+    `?recipeId=` and lists the dishes another family said yes to cooking with you.
+  - **Polish (after the verifier):** the one green row in a chooser is the first one you can press, and none when
+    every row only says how things stand (a "Put it on the map · Asked Grandma Rajani" row, "One moment…", or a
+    pending "Swap recipes" no longer takes the green over a working row; `Chooser` draws those rows plain). The new
+    reads (`shareRequests.familyDishes`, `community.mySwaps`) and `dinners.inviteLink` are soft, and the new asks
+    (`shareRequests.ask`, `requestSwap`, `cookTogether`, `respondSwap`) are strict, so an app build that reaches
+    phones before this Convex deploy doesn't move every Convex call to the stub. `POST /invite/open` answers
+    `hostName` (was `hostFirstName`) on Convex, the web `/d` and the app `/d`. On the merged head: vitest 64,
+    `test-community-ui.mjs` 23, every other app script (`test-profile-navigation` against this checkout's Expo web),
+    tsc, lint and the web build pass; Expo web shows "Host a dinner" green under a plain "Put it on the map".
+  - **Tests:** vitest 63 (new `dinnerInvites.test.ts` 4; `shareRequests.test.ts` 8 with the fixed question, the
+    JSON answer and the day-long "not now"; `swaps.test.ts` 3 with cook together); breaking each key guard on
+    purpose fails a test. `test-community-ui.mjs` 23 (cook together, "said not now", the dinner's button and count,
+    the invite words and helpers). Expo web and the web's static `/d` at 390x844 with local fixtures (not committed).
+  - **Open:** not deployed (schema: `questions.shareDecision`, `dinners.inviteToken` + index, `dinnerInviteOpens`,
+    `swapRequests.kind`, all optional or new). After the deploy: `seedCommunity:neighbors`, then `floormateDish` and
+    `place '{"familyId": …}'` for Serene's, Caleb's and Salik's families; Vercel needs no new env (the site URL has
+    a public default). `DEMO_LOCATION` is still the MIT placeholder (`TODO(caleb)`). No `setLocation` caller. Not tried
+    on a phone: the share sheet's dinner variant, the deep link, VoiceOver. "Host a dinner" still shows on your own
+    dish's card. A floormate dish has no in-app off switch. With #35 in main, homie's corner pot sits over the dinner
+    photo's glow (the canvas has none there; `/d` hides it like `/i` and `/r`).
 - Oct 24 · #47 · Claude · Fixes to #42 (from the verifier, three rounds): the kid's everyday yes and no. New `voice/src/yesNo.ts` is the one rule for the moment hold and the read-aloud offer, and follows the app's `yesNo` (#36): a yes word (yes, yeah, sure, of course) is a yes whatever follows ("Sure, read it.", "Yes, but how much ginger?"). "Okay", "ok", "alright" and "please" with more after them are a yes too ("Please do.", "Okay, let's do it."), and only they have the exception: with a command or a question after them it goes the usual way ("Okay, what's the next step?", "Okay, set a timer", "Please go back"). It adds the spoken no's with more after them ("No, not right now.", "Nah, I'm good.", "Don't.", "Oh, no thanks.", "Yeah, no."), and a no wins. "Not yet", "not really", "later", "skip it" and "I'm good" count only alone, so "Not really sure how much salt." and "I'm good at this." go the usual way, as do "No clue how much ginger.", "Don't forget the timer." and "Oh no, I burned it!". A command right after a no still runs (`afterNo`): "No, next step." declines the offer and moves the step silently, also with a moment up. Third round: so does any question, command or 3+ word statement after the no ("No, I'm out of ginger. Can I skip it?", "No, the oil's too hot?", "No, go to step 3.", "No, play the video.", "No, tell me the story."): the offer is declined (offer_closed false) and the rest goes the fast path or to Claude, also with a moment up. More no isn't passed on ("No, thanks.", "No, not now.", "Nah, I'm good.", "No, maybe later."). Voice tests 48 (2 new yesNo tests, 1 new cook test). Live on a fresh stub server (real Ink 2, Sonic and Claude) with a new recorded line `no-ginger` during the read offer: offer_closed false 3 ms after the transcript, then Claude's hint about skipping the ginger and "I'll ask Grandma too." Decided: "Yes, but how much ginger?" is a yes and "No, it's fine." a no. Every spoken no sends `offer_closed` (accepted false). Tests: voice 45 (8 yesNo tests, 3 new cook tests), typecheck passes. Live on fresh stub servers (real Ink 2, Sonic and Claude), with eight recorded lines (`sure-read-it`, `yeah-go-ahead`, `no-not-now`, `nah`, `dont`, and new `please-do`, `oh-no-thanks`, `no-next-step`): "Please do." accepted the offer and read step 1; "Oh, no thanks." sent offer_closed false 9 ms after the transcript, and a later "Yes." didn't turn reading on; "No, next step." sent offer_closed false, then go_to_step 2, silent and without Claude. With a moment up, "Please do." and "Oh, no thanks." were held, "No, next step." moved the step without Claude, and once the moment closed "Yes." accepted and read the step.
   - **Open:** where the app's `yesNo` (#36) still differs. It takes a no only as the whole reply, so "No, not right now.", "Nah, I'm good." and "Don't." don't answer its moments (the service holds them, so nothing happens). It takes "okay" plus a question as a yes ("Okay, what's the next step?": the app's yes and the service's Claude turn both act), and "Yeah, no." as a yes. Changing that is #36's call; no app changes here. The kid app (#36, `app/src/lib/live/voiceLogic.ts` `wholeYesNo` / `thinksAfter`) still copies the old `yesOrNo`, so replies the service now holds during an app moment ("Sure, read it.", "No, not right now.", "Don't.") can leave the pot 'thinking' for up to 10 s (`THINKING_MAX_MS`) until #36 adopts these rules. Not deployed (`voice/deploy.sh`).

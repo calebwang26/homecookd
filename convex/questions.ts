@@ -1,5 +1,6 @@
 // A kid's question while cooking. The voice service records it (/voice/question): the video answered
-// it (Moss found the moment) or it goes to the cook, who answers by text or voice note.
+// it (Moss found the moment) or it goes to the cook, who answers by text or voice note. A "share" ask
+// (shareRequests.ts) reaches her the same way.
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
@@ -41,7 +42,9 @@ export const forRecipe = query({
       .withIndex("by_recipeId", (q) => q.eq("recipeId", recipeId))
       .order("desc")
       .take(100);
-    return await Promise.all(questions.map((q) => view(ctx, q, recipe.title)));
+    // A share ask isn't about cooking: cook mode never plays its answer.
+    const cooking = questions.filter((q) => q.kind !== "share");
+    return await Promise.all(cooking.map((q) => view(ctx, q, recipe.title)));
   },
 });
 
@@ -80,6 +83,10 @@ export const answer = mutation({
     const question = await ctx.db.get("questions", questionId);
     if (!question || question.familyId !== signed.family._id) throw new ConvexError("That question isn't here anymore.");
     if (question.status !== "asked_cook") throw new ConvexError("That question already has an answer.");
+    // Sharing a recipe is its cook's yes alone, not any cook's in the family.
+    if (question.kind === "share" && (await ctx.db.get("recipes", question.recipeId))?.cookId !== signed.person._id) {
+      throw new ConvexError("Only the recipe's cook can answer this.");
+    }
     const words = text?.trim() || undefined;
     if (!words && !audioId) throw new ConvexError("Say or type an answer first.");
     if (words && words.length > MAX_TEXT) throw new ConvexError("That answer is too long.");
@@ -93,6 +100,8 @@ export const answer = mutation({
       answer: { by: signed.person._id, text: words, audioId },
     });
     if (audioId) await ctx.scheduler.runAfter(0, internal.transcribe.questionAnswer, { questionId });
+    // A typed yes is read now; a voice note once its transcript is in (transcribe.saveTranscript).
+    else if (question.kind === "share") await ctx.scheduler.runAfter(0, internal.shareRequests.decide, { questionId });
     return null;
   },
 });
