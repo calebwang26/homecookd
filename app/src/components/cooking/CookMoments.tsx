@@ -1,32 +1,36 @@
-// homie's moments in cook mode (lib/homie showMoment: the pot to the centre, the screen blurred, big
-// buttons under it). Plain replies and hints are only spoken; a moment is for when homie needs a tap:
-//   useCookMoments()  "Want me to read each step out loud?" (Yes, read it / Not now; the choice is kept
-//                     on this phone, and the next visit answers it for the kid), a story offer (Hear it /
-//                     Later), "Ask Grandma anything" (a listening moment: the kid's next words are the
-//                     question), and a tap on the pot (the help line, and the mic on or off)
-//   <CookAnswers/>    "Grandma answered your question" (Play it / Later): her voice note plays on the
-//                     shared player, and the English translation shows small under the chips, labelled
-//                     "Translated from Grandma" (her real voice is what plays)
-// Words the kid says closes an offer or the ask (they answered by voice). Leaving the screen closes them.
+// homie's moments in cook mode (lib/homie showMoment: the pot to the centre, the screen blurred). When
+// homie needs a yes or no, there are no buttons (Caleb, Oct 24): the question, the listening bars, "Say
+// “yes” or “no”" and "Tap anywhere to close" (lib/live/voiceLogic yesNoMoment). A spoken yes does it,
+// a spoken no or a tap anywhere closes it, and the mic keeps listening for commands. Only a phone that
+// can't hear the answer (Expo Go, web, the mic off) gets one button for yes.
+//   useCookMoments()  "Want me to read each step out loud?" (the choice is kept on this phone, and the
+//                     next visit answers it for the kid; without a voice line, this phone offers it
+//                     itself and reads the steps: useReadSteps), "<cook> has a story about this step",
+//                     "Ask Grandma anything" (the kid's next words are the question; one button to
+//                     write instead), and a tap on the pot (the help line, and the mic on or off)
+//   <CookAnswers/>    "Grandma answered your question": yes plays her voice note on the shared player,
+//                     and the English translation shows small under the chips, labelled "Translated
+//                     from Grandma" (her real voice is what plays)
+// The kid's words close the moment up (homie heard them); yes / no answer it. Leaving the screen closes them.
 import { useIsFocused } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { StyleSheet } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { Txt } from '@/components/ui';
-import { closeMoment, getHomie, HELP, showMoment, useAiSpeaking, useHomie, type HomieMoment, type HomieOption } from '@/lib/homie';
-import { useHeardAnswers, useRecipeAnswers } from '@/lib/live/answers';
+import { closeMoment, getHomie, HELP, showMoment, useAiSpeaking, useHomie, type HomieMoment } from '@/lib/homie';
+import { ANSWER_KEY, useHeardAnswers, useRecipeAnswers } from '@/lib/live/answers';
 import { stopSay } from '@/lib/live/say';
-import { speak } from '@/lib/live/speak';
+import { speak, stopSpeaking } from '@/lib/live/speak';
 import type { VoiceCooking, VoiceOffer } from '@/lib/live/voice';
-import { answersToHear, type SayKind } from '@/lib/live/voiceLogic';
+import { answersToHear, TAP_TO_CLOSE, yesNo, yesNoMoment, type SayKind } from '@/lib/live/voiceLogic';
 import { playClip, useNowPlaying } from '@/lib/media';
 import { useSession } from '@/lib/session';
 import { kvGet, kvSet } from '@/lib/storage';
 import { colors, radii, shadows } from '@/theme/tokens';
 
 const READ_KEY = 'homie.readAloud';
-const ANSWER_KEY = 'cook-answer:';
+const READ_QUESTION = 'Want me to read each step out loud?';
 const ASK_OPEN_MS = 25_000;
 const HELP_SHOWN_MS = 8000;
 /** Answers to questions older than this don't pop up any more. */
@@ -37,13 +41,17 @@ type ReadChoice = 'yes' | 'no';
 /** The kid's answer to "read it out loud?", kept on this phone. */
 function useReadAloud() {
   const [choice, setChoice] = useState<ReadChoice | null>(null);
+  const [loaded, setLoaded] = useState(false);
   const ref = useRef<ReadChoice | null>(null);
   useEffect(() => {
     let alive = true;
     void kvGet(READ_KEY).then((v) => {
-      if (!alive || (v !== 'yes' && v !== 'no')) return;
-      ref.current = v;
-      setChoice(v);
+      if (!alive) return;
+      if (v === 'yes' || v === 'no') {
+        ref.current = v;
+        setChoice(v);
+      }
+      setLoaded(true);
     });
     return () => {
       alive = false;
@@ -54,7 +62,7 @@ function useReadAloud() {
     setChoice(c);
     void kvSet(READ_KEY, c);
   }, []);
-  return { choice, ref, set };
+  return { choice, loaded, ref, set };
 }
 
 /** Moments this screen opened, closed when it goes. */
@@ -69,6 +77,11 @@ function useOwnMoments() {
     showMoment(m);
   }, []);
 }
+
+/** What the kid's words do to the moment up now: yes, no, or anything else (each closes it). */
+export type SpokenAnswer = { yes?: () => void; no?: () => void; other?: () => void };
+/** Opens a moment the kid can answer out loud. */
+export type ListenFor = (m: HomieMoment, on?: SpokenAnswer) => void;
 
 type Args = {
   cookName: string;
@@ -86,15 +99,58 @@ export function useCookMoments({ cookName, onWrite, writeTo }: Args) {
   const { me } = useSession();
   const read = useReadAloud();
   const open = useOwnMoments();
-  // The offer, story or ask up now: the kid's words close it.
-  const spoken = useRef<string | null>(null);
-  // The read-aloud offer, until the kid's choice is known (a tap, or homie starting to read).
+  // The moment up now that the kid's words answer or close.
+  const spoken = useRef<(SpokenAnswer & { id: string }) | null>(null);
+  // The read-aloud offer, until the kid's choice is known (an answer, or homie starting to read).
   const offer = useRef<{ id: string; heard: boolean } | null>(null);
+  const offeredHere = useRef(false);
   const args = useRef({ cookName, onWrite, writeTo, meId: me?.id });
   useEffect(() => {
     args.current = { cookName, onWrite, writeTo, meId: me?.id };
   });
-  const { ref: readRef, set: setRead } = read;
+  const { ref: readRef, set: setRead, loaded: readLoaded } = read;
+
+  const listenFor = useCallback<ListenFor>(
+    (m, on = {}) => {
+      spoken.current = { id: m.id, ...on };
+      open(m);
+    },
+    [open],
+  );
+
+  /** "Want me to read each step out loud?" `accept` says yes to the voice line (when there is one). */
+  const offerRead = useCallback(
+    (hearing: boolean, accept: () => void) => {
+      const id = `read:${Date.now()}`;
+      offer.current = { id, heard: false };
+      const choose = (c: ReadChoice) => {
+        offer.current = null;
+        setRead(c);
+      };
+      listenFor(
+        yesNoMoment({
+          id,
+          question: READ_QUESTION,
+          hearing,
+          button: 'Read it to me',
+          onChoose: (choice) => {
+            stopSay();
+            choose(choice === 'yes' ? 'yes' : 'no');
+            if (choice === 'yes') accept();
+          },
+        }),
+        // Out loud, homie heard the yes itself (and reads); anything else may still be a yes it understood.
+        {
+          yes: () => choose('yes'),
+          no: () => choose('no'),
+          other: () => {
+            if (offer.current) offer.current.heard = true;
+          },
+        },
+      );
+    },
+    [listenFor, setRead],
+  );
 
   const onOffer = useCallback(
     (o: VoiceOffer): 'play' | 'skip' => {
@@ -104,50 +160,47 @@ export function useCookMoments({ cookName, onWrite, writeTo }: Args) {
           return 'skip';
         }
         if (readRef.current === 'no') return 'skip';
-        const id = `read:${Date.now()}`;
-        offer.current = { id, heard: false };
-        spoken.current = id;
-        open({
-          id,
-          question: 'Want me to read each step out loud?',
-          options: [
-            { id: 'yes', label: 'Yes, read it', kind: 'primary' },
-            { id: 'not_now', label: 'Not now' },
-          ],
-          onChoose: (choice) => {
-            stopSay();
-            offer.current = null;
-            setRead(choice === 'yes' ? 'yes' : 'no');
-            if (choice === 'yes') o.accept();
-          },
-        });
+        offerRead(o.hearing, o.accept);
         return 'play';
       }
       // A story: only when nothing else is asking (homie still says it; "yes" by voice still works).
       if (getHomie().moment) return 'play';
-      const id = `story:${Date.now()}`;
-      spoken.current = id;
-      open({
-        id,
-        question: `${args.current.cookName} has a story about this step`,
-        options: [
-          { id: 'yes', label: 'Hear it', kind: 'primary' },
-          { id: 'not_now', label: 'Later' },
-        ],
-        onChoose: (choice) => {
-          stopSay();
-          if (choice === 'yes') o.accept();
-        },
-      });
+      listenFor(
+        yesNoMoment({
+          id: `story:${Date.now()}`,
+          question: `${args.current.cookName} has a story about this step`,
+          hearing: o.hearing,
+          button: 'Hear it',
+          onChoose: (choice) => {
+            stopSay();
+            if (choice === 'yes') o.accept();
+          },
+        }),
+      );
       return 'play';
     },
-    [open, readRef, setRead],
+    [listenFor, offerRead, readRef],
   );
 
-  const onHeard = useCallback(() => {
-    if (spoken.current) closeMoment(spoken.current);
+  /**
+   * No voice line to offer it (Expo Go, web, no voice service): this phone asks itself, once a visit,
+   * until the kid has answered once. Yes reads the steps here (useReadSteps).
+   */
+  const offerHere = useCallback(() => {
+    if (offeredHere.current || !readLoaded || readRef.current) return;
+    offeredHere.current = true;
+    offerRead(false, () => {});
+    void speak(READ_QUESTION, { profileId: args.current.meId });
+  }, [offerRead, readLoaded, readRef]);
+
+  /** What the kid said (or '' when homie moved on by itself): closes the moment up, and answers it. */
+  const onHeard = useCallback((text = '') => {
+    const s = spoken.current;
     spoken.current = null;
-    if (offer.current) offer.current.heard = true;
+    if (!s || getHomie().moment?.id !== s.id) return;
+    closeMoment(s.id);
+    const yn = yesNo(text);
+    (yn === 'yes' ? s.yes : yn === 'no' ? s.no : s.other)?.();
   }, []);
 
   // homie reading a step after the offer = the kid said yes out loud; any other line = they didn't.
@@ -165,24 +218,27 @@ export function useCookMoments({ cookName, onWrite, writeTo }: Args) {
   );
 
   /** The Ask chip: by voice when homie is listening, else the chat with the cook. */
-  const ask = useCallback((v: VoiceNow) => {
-    const { cookName: name, onWrite: write, writeTo, meId } = args.current;
-    if (!v.live || v.muted) return write?.();
-    const id = `ask:${Date.now()}`;
-    spoken.current = id;
-    const options: HomieOption[] = [...(write ? [{ id: 'write', label: `Write to ${writeTo}` }] : []), { id: 'not_now', label: 'Not now' }];
-    open({
-      id,
-      question: `Ask ${name} anything`,
-      listening: { label: 'I’m listening', sublabel: 'Just say your question' },
-      options,
-      onChoose: (choice) => {
-        if (choice === 'write') args.current.onWrite?.();
-      },
-    });
-    void speak(`Ask ${name} anything.`, { profileId: meId });
-    setTimeout(() => closeMoment(id), ASK_OPEN_MS);
-  }, [open]);
+  const ask = useCallback(
+    (v: VoiceNow) => {
+      const { cookName: name, onWrite: write, writeTo: to, meId } = args.current;
+      if (!v.live || v.muted) return write?.();
+      const id = `ask:${Date.now()}`;
+      listenFor({
+        id,
+        question: `Ask ${name} anything`,
+        bars: true,
+        prompt: { label: 'Just say your question' },
+        tapToClose: TAP_TO_CLOSE,
+        options: write ? [{ id: 'write', label: `Write to ${to}` }] : [],
+        onChoose: (choice) => {
+          if (choice === 'write') args.current.onWrite?.();
+        },
+      });
+      void speak(`Ask ${name} anything.`, { profileId: meId });
+      setTimeout(() => closeMoment(id), ASK_OPEN_MS);
+    },
+    [listenFor],
+  );
 
   /** A tap on the resting pot: what you can say, and the mic on or off. */
   const potPress = useCallback((v: VoiceNow) => {
@@ -215,26 +271,61 @@ export function useCookMoments({ cookName, onWrite, writeTo }: Args) {
     void speak('Cook with your voice?', { translate: true, profileId: meId });
   }, [open]);
 
-  return { onOffer, onHeard, onSay, ask, potPress, readAloud: read.choice === 'yes' };
+  return { onOffer, onHeard, onSay, ask, potPress, offerHere, listenFor, readAloud: read.choice === 'yes' };
 }
 
 /**
- * "Grandma answered your question": one at a time, when nothing else is asking or speaking. Play it
- * plays her voice note (heard: never offered again on this phone); Later waits for the next visit.
- * `top` (window pt): where the translation shows while it plays.
+ * Without a voice line (Expo Go, web): a kid who said "Read it to me" hears each step here, in homie's
+ * voice (lib/live/speak), while this screen is on top.
  */
-export function CookAnswers({ libraryId, cookName, asked, top }: { libraryId: string | null; cookName: string; asked: ReadonlySet<string>; top: number }) {
+export function useReadSteps({ on, step, text }: { on: boolean; step: number; text: string }) {
+  const { me } = useSession();
+  const focused = useIsFocused();
+  const meId = me?.id;
+  useEffect(() => {
+    if (!on || !focused || !text) return;
+    void speak(`Step ${step}. ${text}`, { profileId: meId });
+    return () => stopSpeaking();
+  }, [on, focused, step, text, meId]);
+}
+
+/**
+ * "Grandma answered your question": one at a time, when nothing else is asking or speaking. Yes plays
+ * her voice note (heard: never offered again on this phone); no, or a tap, waits for the next visit.
+ * `hearing`: the kid can answer out loud (else one "Play it" button). `top` (window pt): where the
+ * translation shows while it plays.
+ */
+export function CookAnswers({
+  libraryId,
+  cookName,
+  asked,
+  top,
+  hearing,
+  listenFor,
+}: {
+  libraryId: string | null;
+  cookName: string;
+  asked: ReadonlySet<string>;
+  top: number;
+  hearing: boolean;
+  listenFor: ListenFor;
+}) {
   const rows = useRecipeAnswers(libraryId);
   const heard = useHeardAnswers();
   const { me } = useSession();
   const focused = useIsFocused();
-  const open = useOwnMoments();
   const [since] = useState(() => Date.now() - ANSWER_MAX_AGE_MS);
   const [skipped, setSkipped] = useState<ReadonlySet<string>>(() => new Set());
   const { moment } = useHomie();
   const speaking = useAiSpeaking();
   const now = useNowPlaying();
   const sounding = now.phase === 'playing' || now.phase === 'loading';
+  // The moments this opened, closed when it goes ("I made it" takes the screen).
+  const mine = useRef(new Set<string>());
+  useEffect(() => {
+    const own = mine.current;
+    return () => own.forEach((id) => closeMoment(id));
+  }, []);
 
   const next = heard.loaded ? answersToHear(rows, { myName: me?.name, mine: asked, heard: heard.ids, skipped, since })[0] : undefined;
   const free = focused && !moment && !speaking && !sounding;
@@ -244,22 +335,26 @@ export function CookAnswers({ libraryId, cookName, asked, top }: { libraryId: st
     if (!next || !free || !next.answerAudioUrl) return;
     const url = next.answerAudioUrl;
     const questionId = next._id;
-    open({
-      id: `answer:${questionId}`,
-      question: `${cookName} answered your question`,
-      questionEn: `“${next.text}”`,
-      options: [
-        { id: 'play', label: 'Play it', kind: 'primary' },
-        { id: 'not_now', label: 'Later' },
-      ],
-      onChoose: (choice) => {
-        if (choice !== 'play') return setSkipped((s) => new Set(s).add(questionId));
-        add(questionId);
-        playClip({ url, key: `${ANSWER_KEY}${questionId}` });
-      },
-    });
+    const play = () => {
+      add(questionId);
+      playClip({ url, key: `${ANSWER_KEY}${questionId}` });
+    };
+    const later = () => setSkipped((s) => new Set(s).add(questionId));
+    const id = `answer:${questionId}`;
+    mine.current.add(id);
+    listenFor(
+      yesNoMoment({
+        id,
+        question: `${cookName} answered your question`,
+        questionEn: `“${next.text}”`,
+        hearing,
+        button: 'Play it',
+        onChoose: (choice) => (choice === 'yes' ? play() : later()),
+      }),
+      { yes: play, no: later, other: later },
+    );
     void speak(`${cookName} answered your question.`, { translate: true, profileId: meId });
-  }, [next, free, open, add, cookName, meId]);
+  }, [next, free, hearing, listenFor, add, cookName, meId]);
 
   const playingId = sounding && now.key?.startsWith(ANSWER_KEY) ? now.key.slice(ANSWER_KEY.length) : null;
   const english = playingId ? rows.find((r) => r._id === playingId)?.answer?.translation : null;

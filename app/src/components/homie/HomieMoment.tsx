@@ -5,19 +5,37 @@
 // or "Not now" plays it backwards, and the pot lands back on its corner. Reduce Motion: the dim, pot
 // and words fade in place (150 ms).
 // The option with id 'not_now' (else 'ok') is also VoiceOver's escape gesture.
+// When homie asks out loud (a moment with bars, a prompt or tapToClose; lib/homie isCentredMoment):
+// no buttons, one centred column like Grandma's screens. The glowing pot (176, its glow breathing),
+// 56 pt, the question (Fraunces 32), the five listening bars and "Say “yes” or “no”", then the small
+// "Tap anywhere to close". A tap anywhere is "not now" (dismissMoment). At most one button, for a
+// phone that can't hear the answer.
 import { BlurView } from 'expo-blur';
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
-import Animated, { Easing, useAnimatedProps, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withSpring, withTiming } from 'react-native-reanimated';
+import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import Animated, {
+  cancelAnimation,
+  Easing,
+  useAnimatedProps,
+  useAnimatedStyle,
+  useReducedMotion,
+  useSharedValue,
+  withDelay,
+  withRepeat,
+  withSequence,
+  withSpring,
+  withTiming,
+} from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { haptic, MicIcon, PressableScale, Txt } from '@/components/ui';
-import { momentFrame } from '@/lib/homie/logic';
-import { chooseMoment, useHomie, type HomieFrame, type HomieMoment as Moment, type HomieOption, type HomieState } from '@/lib/homie/store';
+import { ASK_SIDE, askFrame, isCentredMoment, momentFrame } from '@/lib/homie/logic';
+import { chooseMoment, dismissMoment, useHomie, type HomieFrame, type HomieMoment as Moment, type HomieOption, type HomieState } from '@/lib/homie/store';
 import { stopSpeaking } from '@/lib/live/speak';
 import { alpha, colors, motion } from '@/theme/tokens';
 
 import { HomiePot } from './HomiePot';
+import { ListeningBars } from './ListeningBars';
 
 // The blur's strength animates, not its opacity: iOS draws a fading blur view broken until it is opaque.
 const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
@@ -35,6 +53,9 @@ const WHITE = colors.card;
 const WHITE_SOFT = 'rgba(255,253,247,0.78)';
 const out = Easing.out(Easing.cubic);
 const inOut = Easing.inOut(Easing.cubic);
+/** The centred column's words before they are measured (a two-line question, the bars, the prompt). */
+const WORDS_GUESS = 240;
+const BREATH_MS = 1400;
 
 type Props = {
   /** The resting pot's frame: where the glide starts and ends. */
@@ -52,17 +73,22 @@ export function HomieMoment({ from, state, level, label, onActive }: Props) {
   const reduce = useReducedMotion();
   const insets = useSafeAreaInsets();
   const { width, height } = useWindowDimensions();
-  const to = momentFrame({ width, height, insetsTop: insets.top });
 
   // The moment on screen: the store's, or the last one while it closes.
   const [shown, setShown] = useState<Moment | null>(moment);
   const closing = !moment && !!shown;
   if (moment && moment !== shown) setShown(moment);
 
+  const centred = !!shown && isCentredMoment(shown);
+  const [wordsH, setWordsH] = useState(0);
+  const ask = askFrame({ width, height, insetsTop: insets.top, insetsBottom: insets.bottom }, wordsH || WORDS_GUESS);
+  const to = centred ? ask.pot : momentFrame({ width, height, insetsTop: insets.top });
+
   const glide = useSharedValue(0);
   const grow = useSharedValue(0);
   const rise = useSharedValue(0);
   const dim = useSharedValue(0);
+  const breath = useSharedValue(1);
 
   const active = !!shown;
   const activeRef = useRef(onActive);
@@ -106,6 +132,17 @@ export function HomieMoment({ from, state, level, label, onActive }: Props) {
     return () => clearTimeout(t);
   }, [closing, reduce, glide, grow, rise, dim]);
 
+  // The centred pot's glow breathes while it waits for an answer (still under Reduce Motion).
+  const breathing = centred && !closing && !reduce;
+  useEffect(() => {
+    if (!breathing) {
+      cancelAnimation(breath);
+      breath.set(1);
+      return;
+    }
+    breath.set(withRepeat(withSequence(withTiming(0.5, { duration: BREATH_MS, easing: inOut }), withTiming(1, { duration: BREATH_MS, easing: inOut })), -1, false));
+  }, [breathing, breath]);
+
   // Screen readers hear the question once it is up.
   const question = moment?.question;
   const questionEn = moment?.questionEn;
@@ -129,6 +166,7 @@ export function HomieMoment({ from, state, level, label, onActive }: Props) {
     opacity: rise.value,
     transform: [{ translateY: reduce ? 0 : 16 * (1 - rise.value) }],
   }));
+  const glowStyle = useAnimatedStyle(() => ({ opacity: grow.value * breath.value }));
 
   if (!shown) return null;
 
@@ -137,8 +175,85 @@ export function HomieMoment({ from, state, level, label, onActive }: Props) {
     if (!o.keepOpen) stopSpeaking();
     chooseMoment(o.id);
   };
+  const dismiss = () => {
+    if (closing) return;
+    stopSpeaking();
+    dismissMoment(shown.id);
+  };
   const escape = shown.options.find((o) => o.id === 'not_now') ?? shown.options.find((o) => o.id === 'ok');
   const speaking = state === 'speaking';
+
+  if (centred) {
+    const listens = !!(shown.bars || shown.prompt);
+    // The whole screen is the close button (its children stay separate for VoiceOver).
+    return (
+      <Pressable
+        style={StyleSheet.absoluteFill}
+        pointerEvents={closing ? 'none' : 'auto'}
+        accessible={false}
+        accessibilityViewIsModal
+        disabled={!shown.tapToClose}
+        onPress={dismiss}
+        onAccessibilityEscape={escape ? () => choose(escape) : shown.tapToClose ? dismiss : undefined}>
+        <AnimatedBlurView tint="dark" style={StyleSheet.absoluteFill} animatedProps={blurProps} />
+        <Animated.View style={[StyleSheet.absoluteFill, styles.tint, dimStyle]} />
+
+        <Animated.View style={[styles.pot, { left: to.x, top: to.y, width: to.size, height: to.size }, potStyle]}>
+          <Animated.View style={[styles.glow, { width: to.size, height: to.size, borderRadius: to.size / 2 }, glowStyle]} />
+          <HomiePot state={speaking ? 'speaking' : 'lit'} level={level} size={to.size} shadow={false} />
+          {speaking && label ? (
+            <View style={styles.labelWrap}>
+              <Txt variant="label" size={13} weight={700} color={colors.butterInk} style={styles.label}>
+                {label}
+              </Txt>
+            </View>
+          ) : null}
+        </Animated.View>
+
+        <Animated.View style={[styles.content, { top: ask.wordsTop, bottom: Math.max(16, insets.bottom + 8) }, riseStyle]}>
+          <ScrollView contentContainerStyle={styles.askScroll} bounces={false} showsVerticalScrollIndicator={false} onContentSizeChange={(_, h) => setWordsH(Math.round(h))}>
+            <Txt variant="display" size={32} leading={1.2} color={WHITE} align="center" accessibilityRole="header">
+              {shown.question}
+            </Txt>
+            {shown.questionEn ? (
+              <Txt variant="body" size={17} leading={1.35} color={WHITE_SOFT} align="center" style={styles.askEn}>
+                {shown.questionEn}
+              </Txt>
+            ) : null}
+            {listens ? (
+              <View style={styles.askListen}>
+                {shown.bars ? <ListeningBars level={level} /> : null}
+                {shown.prompt ? (
+                  <View style={styles.askPrompt}>
+                    <Txt variant="label" size={22} weight={700} leading={1.25} color={WHITE} align="center">
+                      {shown.prompt.label}
+                    </Txt>
+                    {shown.prompt.sublabel ? (
+                      <Txt variant="meta" size={15} color={WHITE_SOFT} align="center">
+                        {shown.prompt.sublabel}
+                      </Txt>
+                    ) : null}
+                  </View>
+                ) : null}
+              </View>
+            ) : null}
+            {shown.options.length ? (
+              <View style={[styles.askOptions, { marginTop: listens ? 28 : 48 }]}>
+                {shown.options.map((o) => (
+                  <MomentButton key={o.id} option={o} onPress={() => choose(o)} />
+                ))}
+              </View>
+            ) : null}
+            {shown.tapToClose ? (
+              <Txt variant="meta" size={15} color={WHITE_SOFT} align="center" style={styles.askClose} onPress={dismiss} accessibilityRole="button" accessibilityLabel="Close">
+                {shown.tapToClose}
+              </Txt>
+            ) : null}
+          </ScrollView>
+        </Animated.View>
+      </Pressable>
+    );
+  }
 
   return (
     <View
@@ -244,4 +359,12 @@ const styles = StyleSheet.create({
   button: { minHeight: 64, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 999, alignItems: 'center', justifyContent: 'center', gap: 2 },
   primary: { backgroundColor: colors.green },
   secondary: { backgroundColor: alpha.glassOnDark },
+  // The centred column (the mockup's ring and glow around the pot: sun 28 %, then 55 % blurred).
+  glow: { position: 'absolute', left: 0, top: 0, backgroundColor: colors.butter, boxShadow: '0 0 0 18px rgba(254,190,41,0.28), 0 0 70px rgba(254,190,41,0.55)' },
+  askScroll: { paddingHorizontal: ASK_SIDE },
+  askEn: { marginTop: 8 },
+  askListen: { marginTop: 48, alignItems: 'center', gap: 16 },
+  askPrompt: { alignItems: 'center', gap: 4 },
+  askOptions: { gap: 12, width: '100%', maxWidth: 340, alignSelf: 'center' },
+  askClose: { marginTop: 20, alignSelf: 'center', paddingVertical: 4 },
 });

@@ -1,10 +1,12 @@
 // Unit tests for homie, the pot on every screen (TS run by Node's type stripping):
 //   src/lib/homie/store.ts  the screen's state under a lit / speaking beat, the lit beat and its
 //                           watchdog, the mic level's re-render threshold, moments (choose closes
-//                           first, keepOpen, a stale close), a screen's dock / hidden / onPress claims
+//                           first, keepOpen, a stale close, a tap anywhere dismisses), the shrunk pot,
+//                           a screen's dock / hidden / onPress claims
 //   src/lib/homie/logic.ts  what the pot shows while a say loads or plays, its label, where it rests
-//                           on each screen, the help lines, the timer ring, PCM loudness, the voice
-//                           service's https base, the phone voice's language
+//                           on each screen, the help lines, the centred moment (which ones, its frame,
+//                           the listening bars), the timer ring, PCM loudness, the voice service's
+//                           https base, the phone voice's language
 //   node scripts/test-homie.mjs
 // 'react' is a stub (the store only needs useSyncExternalStore to exist); the store gets a fake clock.
 import assert from 'node:assert/strict';
@@ -250,6 +252,48 @@ await test('closeMoment with a stale id leaves a newer moment alone', () => {
   store.closeMoment();
 });
 
+await test('dismissMoment closes it first, then says not now; a stale id or no moment does nothing', () => {
+  const { store } = fresh();
+  const calls = [];
+  let seenOpen;
+  // A no-buttons moment: no options at all.
+  store.showMoment({ id: 'read:1', question: 'Read it out loud?', options: [], bars: true, tapToClose: 'Tap anywhere to close', onChoose: (o) => { seenOpen = store.get().moment; calls.push(o); } });
+  store.dismissMoment('help:0');
+  assert.equal(store.get().moment.id, 'read:1');
+  // chooseMoment can't close it: there's no option to choose.
+  store.chooseMoment('not_now');
+  assert.equal(store.get().moment.id, 'read:1');
+  store.dismissMoment('read:1');
+  assert.equal(seenOpen, null);
+  assert.deepEqual(calls, [S.MOMENT_DISMISS]);
+  assert.equal(S.MOMENT_DISMISS, 'not_now');
+  store.dismissMoment();
+  assert.deepEqual(calls, ['not_now']);
+});
+
+await test('dismissMoment without an id closes whatever is up; a throwing onChoose never breaks it', () => {
+  const { store } = fresh();
+  const warn = console.warn;
+  console.warn = () => {};
+  try {
+    store.showMoment({ id: 'a', question: 'q', options: [], onChoose: () => { throw new Error('boom'); } });
+    store.dismissMoment();
+    assert.equal(store.get().moment, null);
+  } finally {
+    console.warn = warn;
+  }
+});
+
+await test('the cook’s voice playing shrinks the resting pot, and only that changes', () => {
+  const { store } = fresh();
+  store.setHomie({ state: 'listening' });
+  store.setHomie({ shrunk: true });
+  assert.equal(store.get().shrunk, true);
+  assert.equal(store.get().state, 'listening');
+  store.setHomie({ shrunk: false });
+  assert.equal(store.get().shrunk, false);
+});
+
 await test('a screen claim is cleared only by its own release', () => {
   const { store } = fresh();
   const a = {};
@@ -334,6 +378,50 @@ await test('the moment pot is centred, at most 170, smaller on a short phone', (
   assert.ok(big.y >= 59 + 24);
   const se = L.momentFrame({ width: 375, height: 667, insetsTop: 20 });
   assert.equal(se.size, Math.round(667 * 0.21));
+});
+
+await test('a moment with bars, a spoken prompt or a tap to close uses the centred column; buttons alone don’t', () => {
+  assert.equal(L.isCentredMoment({ bars: true }), true);
+  assert.equal(L.isCentredMoment({ prompt: { label: 'Say “yes” or “no”' } }), true);
+  assert.equal(L.isCentredMoment({ tapToClose: 'Tap anywhere to close' }), true);
+  assert.equal(L.isCentredMoment({}), false);
+  assert.equal(L.isCentredMoment({ bars: false, tapToClose: '' }), false);
+});
+
+await test('the centred column: a 176 pot, 56 pt, the words, the whole group centred', () => {
+  const screen = { width: 390, height: 844, insetsTop: 47, insetsBottom: 34 };
+  const { pot, wordsTop } = L.askFrame(screen, 240);
+  assert.equal(pot.size, 176);
+  assert.equal(pot.x, (390 - 176) / 2);
+  assert.equal(wordsTop, pot.y + 176 + L.ASK_POT_GAP);
+  // As much room above the pot as below the words (within a point of rounding).
+  const top = 47 + 16;
+  const bottom = 844 - (34 + 8);
+  assert.ok(Math.abs(pot.y - top - (bottom - (wordsTop + 240))) <= 1);
+  // Taller words lift the pot.
+  assert.ok(L.askFrame(screen, 400).pot.y < pot.y);
+});
+
+await test('the centred column on a short phone: a smaller pot, and too many words start at the top', () => {
+  const se = { width: 375, height: 667, insetsTop: 20, insetsBottom: 0 };
+  assert.equal(L.askFrame(se, 200).pot.size, Math.round(667 * 0.22));
+  assert.equal(L.askFrame(se, 2000).pot.y, 20 + 16);
+  // Before the words are measured (0), the pot still sits on the screen.
+  assert.ok(L.askFrame(se, 0).pot.y >= 36);
+});
+
+await test('the listening bars rest low, grow with the mic level, and never pass their top', () => {
+  const rest = L.barHeights(0);
+  const loud = L.barHeights(1);
+  assert.equal(rest.length, 5);
+  assert.deepEqual(rest, [...rest].reverse());
+  for (let i = 0; i < 5; i++) assert.ok(loud[i] > rest[i]);
+  assert.equal(Math.max(...loud), L.BAR_MAX);
+  assert.deepEqual(L.barHeights(3), loud);
+  assert.deepEqual(L.barHeights(-1), rest);
+  assert.deepEqual(L.barHeights(Number.NaN), rest);
+  const half = L.barHeights(0.5);
+  for (let i = 0; i < 5; i++) assert.ok(half[i] > rest[i] && half[i] < loud[i]);
 });
 
 await test('the timer ring empties from 1 to 0', () => {

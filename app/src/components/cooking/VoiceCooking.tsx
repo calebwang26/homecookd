@@ -1,29 +1,36 @@
 // Voice cooking on the cook screen (docs/build/STACK.md "kid cooking additions"), around homie, who
 // rests top-right (components/homie draws the pot; the screen leaves it room):
-//   <CookChips/>    directly under homie: Next · Back · Repeat · Ask Grandma. Small (44 pt, 14 pt text);
-//                   each says it to homie, or does it here when voice isn't on (Expo Go, web, no service)
-//   <TimerPill/>    beside the step title while homie's timer runs: "4:32", then "Done"
+//   <CookChips/>    directly under homie: Back · Repeat · Ask Grandma (the big "Next step" button does
+//                   next). Small (40 pt, 14 pt text; the canvas's Cook frame); each says it to homie, or
+//                   does it here when voice isn't on (Expo Go, web, no service)
+//   <TimerPill/>    beside the step title while homie's timer runs: "Timer 4:32", then "Done"
 //   <VoiceLine/>    one tiny label under the pot when it isn't speaking: "I asked Grandma" for a few
 //                   seconds after a question went to her, "Connecting…", "Mic off". While homie speaks,
 //                   the overlay's own label says "AI voice" (or "Translated from Grandma").
 //   <ClipCaption/>  under the step video while it plays the moment homie found: her words, and the English
 //   <VoiceQuiet/>   no picture: half duplex. Homie, a clip or any sound the app plays never reaches the
-//                   voice service as the kid's voice (its own component, so playback ticks re-render only it)
+//                   voice service as the kid's voice (its own component, so playback ticks re-render only
+//                   it). While the cook's own voice plays the pot shrinks a little, and while her clip or
+//                   her voice note plays, homie's next line waits for her.
 // The cook's own clips are never labelled: only the AI's voice is.
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
-import { ClockIcon, PressableScale, Txt } from '@/components/ui';
+import { PressableScale, Txt } from '@/components/ui';
 import { useAiSpeaking } from '@/lib/homie/hooks';
-import type { HomieFrame } from '@/lib/homie/store';
+import { sayPhase } from '@/lib/homie/logic';
+import { setHomie, type HomieFrame } from '@/lib/homie/store';
+import { ANSWER_KEY } from '@/lib/live/answers';
 import type { VoiceCooking } from '@/lib/live/voice';
 import { clockText, secondsLeft, timerA11y, type CookTimer } from '@/lib/live/voiceLogic';
 import { playheadAt, useNowPlaying, usePlayhead } from '@/lib/media';
-import { alpha, colors, radii, shadows } from '@/theme/tokens';
+import { colors, radii, shadows } from '@/theme/tokens';
 
-export const CHIP_H = 44;
+export const CHIP_H = 40;
 const ASKED_SHOWN_MS = 8000;
+/** The 40 pt chips still take a 44 pt tap. */
+const CHIP_SLOP = { top: 2, bottom: 2, left: 0, right: 0 };
 
 export type CookChip = { id: string; label: string; onPress: () => void; accessibilityLabel?: string; tone?: 'ask' };
 
@@ -37,10 +44,11 @@ export function CookChips({ chips, top }: { chips: CookChip[]; top: number }) {
           onPress={c.onPress}
           haptic
           scaleTo={0.96}
+          hitSlop={CHIP_SLOP}
           accessibilityRole="button"
           accessibilityLabel={c.accessibilityLabel ?? c.label}
           style={[styles.chip, c.tone === 'ask' && styles.chipAsk]}>
-          <Txt variant="label" size={14} weight={600} color={c.tone === 'ask' ? colors.lavenderInk : colors.ink} numberOfLines={1}>
+          <Txt variant="label" size={14} weight={600} color={c.tone === 'ask' ? colors.sageInk : colors.ink} numberOfLines={1}>
             {c.label}
           </Txt>
         </PressableScale>
@@ -73,9 +81,8 @@ export function TimerPill({ timers }: { timers: readonly CookTimer[] }) {
       accessible
       accessibilityRole="timer"
       accessibilityLabel={timerA11y(t, now)}>
-      <ClockIcon size={16} color={left ? colors.ink : colors.butterInk} />
-      <Txt variant="label" size={15} weight={700} color={left ? colors.ink : colors.butterInk} style={styles.digits}>
-        {left ? clockText(left) : 'Done'}
+      <Txt variant="label" size={14} weight={700} color={left ? colors.card : colors.butterInk} style={styles.digits}>
+        {left ? `Timer ${clockText(left)}` : 'Done'}
       </Txt>
     </Animated.View>
   );
@@ -133,41 +140,50 @@ export function ClipCaption({ quote, quoteEn }: { quote: string; quoteEn?: strin
   );
 }
 
-/** Half duplex: tells the voice hook when the app itself is making sound. */
-export function VoiceQuiet({ voice, videoUrl }: { voice: Pick<VoiceCooking, 'setQuiet'>; videoUrl?: string | null }) {
+/**
+ * Half duplex: tells the voice hook when the app itself is making sound. `herClip`: the moment homie
+ * asked for is on screen (play_clip), so the step video playing is her answer.
+ */
+export function VoiceQuiet({ voice, videoUrl, herClip }: { voice: Pick<VoiceCooking, 'setQuiet' | 'setHold'>; videoUrl?: string | null; herClip: boolean }) {
   const ai = useAiSpeaking();
   const now = useNowPlaying();
   const video = usePlayhead(() => playheadAt(videoUrl) != null);
-  const quiet = ai || video || now.phase === 'playing' || now.phase === 'loading';
-  const { setQuiet } = voice;
+  const sound = now.phase === 'playing' || now.phase === 'loading';
+  const quiet = ai || video || sound;
+  // Her own voice: a step video, or anything on the player that isn't homie (a story, her voice note).
+  const hers = video || (sound && sayPhase(now.key, now.phase) === 'none');
+  const answering = (herClip && video) || (sound && !!now.key?.startsWith(ANSWER_KEY));
+  const { setQuiet, setHold } = voice;
   useEffect(() => setQuiet(quiet), [quiet, setQuiet]);
+  useEffect(() => setHold(answering), [answering, setHold]);
+  useEffect(() => setHomie({ shrunk: hers }), [hers]);
+  useEffect(() => () => setHomie({ shrunk: false }), []);
   return null;
 }
 
 const styles = StyleSheet.create({
-  chips: { position: 'absolute', left: 0, right: 0, height: CHIP_H, zIndex: 2, flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 24, gap: 8 },
+  // The canvas's Cook frame: cream chips with a soft shadow, the Ask chip on sage, 6 pt apart.
+  chips: { position: 'absolute', left: 0, right: 0, height: CHIP_H, zIndex: 2, flexDirection: 'row', justifyContent: 'flex-end', paddingHorizontal: 24, gap: 6 },
   chip: {
     flexShrink: 0,
     height: CHIP_H,
-    paddingHorizontal: 15,
-    borderRadius: radii.pill,
-    borderWidth: 1.5,
-    borderColor: alpha.border,
-    backgroundColor: colors.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  chipAsk: { flexShrink: 1, backgroundColor: colors.lavender, borderColor: colors.lavender },
-  timer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    height: 36,
     paddingHorizontal: 12,
-    marginTop: 4,
     borderRadius: radii.pill,
     backgroundColor: colors.card,
     boxShadow: shadows.chip,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  chipAsk: { flexShrink: 1, backgroundColor: colors.sage, boxShadow: 'none' },
+  // The canvas's dark "Timer 7:41" pill beside the title.
+  timer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    height: 30,
+    paddingHorizontal: 12,
+    marginTop: 4,
+    borderRadius: radii.pill,
+    backgroundColor: colors.ink,
     flexShrink: 0,
   },
   timerDone: { backgroundColor: colors.butter },

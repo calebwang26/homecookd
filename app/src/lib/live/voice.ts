@@ -8,24 +8,30 @@
 //   voice.timers          kitchen timers the service set, soonest first; this phone counts them down
 //   voice.askedAt         when a question last went to the cook ("I asked Grandma"); askedIds: which ones
 //   voice.listen() / stop() / setMuted(on)
-//   voice.command('next', fallback)  says it to homie as text; `fallback` runs when nobody is on the line,
+//   voice.command('back', fallback)  says it to homie as text; `fallback` runs when nobody is on the line,
 //                                    or nothing comes back within 1.5 s (an older service)
 //   voice.sendText('yes')            the tap on homie's offer
 //   voice.setQuiet(on)               half duplex (components/cooking VoiceQuiet): while homie, a clip or
 //                                    any app sound plays, silence goes out instead of the mic
+//   voice.setHold(on)                the cook's own voice is playing (her clip, her voice note): homie's
+//                                    next line waits until she's done, so it never talks over her
 //
 // The screen follows the server: go_to_step moves the step, play_clip plays that moment of the cook's
 // video (with her words, `quote` / `quoteEn`, for a caption), and a step the kid taps goes back as
-// { type: "step" } (then "repeat" when the kid asked for the steps read aloud, so it reads that one too).
+// { type: "step" } (then "repeat" when the kid asked for the steps read aloud, so it reads that one too;
+// not when her clip moved the step). On `ready` the screen's step goes back too, and the service's own
+// go_to_step right after it (the step it saved last) is not followed: the step on screen is the truth.
 // homie shows the rest (lib/homie): listening while the mic is on (the steam follows the kid's voice),
 // thinking from what the kid said to homie's answer, lit while homie's line arrives (at least a beat)
 // and speaking while it plays, labelled "AI voice" ("Translated from Grandma", "AI hint"), and the ring
 // while a timer runs. Neither what the kid said nor homie's words are shown: homie only talks. Its
 // offers (read the steps aloud, hear a story) go to `onOffer`, which shows a moment or answers from a
-// choice this phone remembers ('skip' drops that line's audio).
+// choice this phone remembers ('skip' drops that line's audio). The service echoes every text it gets
+// as a finished transcript: that echo is the chip's answer, and it never reaches onHeard as the kid's.
 // `auto` starts it on its own, quietly: only with the voice service set and a dish Convex knows. Without
 // EXPO_PUBLIC_VOICE_URL, a mic turned on by hand talks to a local stub (lib/live/voiceStub); for a real
-// socket on the laptop: app/scripts/pcm-echo-server.mjs.
+// socket on the laptop: app/scripts/pcm-echo-server.mjs. Leaving the screen stops the mic (and any line
+// of homie's still arriving); coming back starts it again.
 import { useIsFocused } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
@@ -36,8 +42,25 @@ import { useSession } from '@/lib/session';
 
 import { convexRecipeId, convexSession } from './convex';
 import { useMicStream } from './mic';
-import { playSay } from './say';
-import { cookPotState, offerOf, parseTimer, sayKind, sayLabel, silence, withoutTimer, withTimer, type CookTimer, type OfferKind, type SayKind } from './voiceLogic';
+import { playSay, stopSay } from './say';
+import {
+  cookPotState,
+  echoAt,
+  endSay,
+  offerOf,
+  parseTimer,
+  sayKind,
+  sayLabel,
+  sentText,
+  silence,
+  timerKey,
+  withoutTimer,
+  withTimer,
+  type CookTimer,
+  type OfferKind,
+  type SayKind,
+  type SentText,
+} from './voiceLogic';
 import { stubSocket, type Socket } from './voiceStub';
 
 const VOICE_URL = (process.env.EXPO_PUBLIC_VOICE_URL ?? '').trim().replace(/\/$/, '');
@@ -46,12 +69,15 @@ export const VOICE_CONFIGURED = !!VOICE_URL;
 /** No say_end within this long after the last audio frame = the reply is complete. */
 const SAY_GAP_MS = 400;
 const RETRIES = 3;
-/** A chip's words get an answer (a step, a clip, a line) within this, or the chip acts on its own. */
+/** A chip's words get an answer (an echo, a step, a clip, a line) within this, or the chip acts on its own. */
 const COMMAND_WAIT_MS = 1500;
 /** 'thinking' ends on its own if homie never answers what the kid said. */
 const THINKING_MAX_MS = 10_000;
 /** A timer at zero stays on screen ("Done") this long if the service never says timer_done. */
 const TIMER_DUE_HOLD_MS = 10_000;
+/** The service's go_to_step to its saved step comes right after `ready`. */
+const RESTORE_MS = 3000;
+const ECHOES_KEPT = 8;
 
 type ServerMsg =
   | { type: 'ready' }
@@ -72,8 +98,8 @@ type PendingSay = { chunks: ArrayBuffer[]; rate: number; translation: boolean; l
 
 export type VoiceStatus = 'off' | 'connecting' | 'listening' | 'error';
 export type VoiceClip = { startS: number; endS: number; quote?: string; quoteEn?: string };
-/** homie's offer, and how to say yes to it. */
-export type VoiceOffer = { kind: OfferKind; text: string; accept: () => void };
+/** homie's offer, and how to say yes to it. `hearing`: the kid can answer it out loud right now. */
+export type VoiceOffer = { kind: OfferKind; text: string; hearing: boolean; accept: () => void };
 
 export type VoiceOptions = {
   libraryId: string | null;
@@ -84,12 +110,13 @@ export type VoiceOptions = {
   /** The kid said yes to "read it out loud?" on this phone: a tapped step is read too. */
   readAloud?: boolean;
   onGoTo: (n: number) => void;
-  onClip: (clip: VoiceClip) => void;
+  /** Plays her clip; returns the step it shows (a step the clip moved to isn't read aloud). */
+  onClip: (clip: VoiceClip) => number | void;
   /** 'skip' drops the offer's audio (the phone already knows the answer). */
   onOffer?: (offer: VoiceOffer) => 'play' | 'skip';
   /** Every line homie says, by kind (after onOffer). */
   onSay?: (kind: SayKind) => void;
-  /** What the kid finished saying (closes a listening moment). */
+  /** What the kid finished saying (answers or closes a moment). Never the phone's own texts. */
   onHeard?: (text: string) => void;
 };
 
@@ -101,6 +128,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
   const [muted, setMutedState] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [timers, setTimers] = useState<CookTimer[]>([]);
+  // The timer at zero, by timerKey (the service starts its ids again on each socket).
   const [due, setDue] = useState<string | null>(null);
   const [askedAt, setAskedAt] = useState<number | null>(null);
   const [askedIds, setAskedIds] = useState<ReadonlySet<string>>(() => new Set());
@@ -113,15 +141,26 @@ export function useVoiceCooking(opts: VoiceOptions) {
   const mutedRef = useRef(false);
   const liveRef = useRef(false);
   const quiet = useRef(false);
+  const hold = useRef(false);
   const focusedRef = useRef(focused);
   const autoTried = useRef(false);
-  // Bumped by each answer from the service (a step, a clip, a line, a timer): a chip's fallback checks it.
+  // Bumped by each answer from the service (an echo, a step, a clip, a line, a timer): a chip's fallback checks it.
   const answers = useRef(0);
   const reconnect = useRef<((auto: boolean) => Promise<void>) | null>(null);
   const pending = useRef(new Set<ReturnType<typeof setTimeout>>());
   // The step the server just moved us to: not echoed back as a kid's tap.
   const lastServerStep = useRef<number | null>(null);
+  // The step her clip just moved the screen to: sent, but not read aloud.
+  const fromClip = useRef<number | null>(null);
+  // When `ready` came (0: not restoring): the service's go_to_step right after it isn't followed.
+  const restoring = useRef(0);
+  // Texts this phone sent that the service hasn't echoed yet.
+  const echoes = useRef<SentText[]>([]);
+  // Lines the service started (say) and hasn't ended (say_end) yet.
+  const openSays = useRef(0);
   const say = useRef<PendingSay | null>(null);
+  // A whole line that arrived while the cook's own voice played: it plays once she's done.
+  const waiting = useRef<PendingSay | null>(null);
   const beat = useRef<ReturnType<typeof setTimeout> | null>(null);
   const thinkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cb = useRef(opts);
@@ -156,6 +195,18 @@ export function useVoiceCooking(opts: VoiceOptions) {
     setThinking(on);
   }, []);
 
+  /** The lit beat before homie's voice (even when the line arrived at once), then the line. */
+  const speakNow = useCallback((s: PendingSay) => {
+    const play = () => {
+      beat.current = null;
+      setHomie({ state: 'speaking', label: s.label });
+      if (!playSay(s.chunks, s.rate, s.translation)) doneSpeaking();
+    };
+    const wait = LIT_BEAT_MS - (Date.now() - s.at);
+    if (wait > 0) beat.current = setTimeout(play, wait);
+    else play();
+  }, []);
+
   const flushSay = useCallback(() => {
     const s = say.current;
     say.current = null;
@@ -163,22 +214,35 @@ export function useVoiceCooking(opts: VoiceOptions) {
     if (s.gap) clearTimeout(s.gap);
     if (s.drop) return;
     if (!s.chunks.length) return doneSpeaking();
-    const play = () => {
-      beat.current = null;
-      setHomie({ state: 'speaking', label: s.label });
-      if (!playSay(s.chunks, s.rate, s.translation)) doneSpeaking();
-    };
-    // The lit beat before homie's voice, even when the line arrived at once.
-    const wait = LIT_BEAT_MS - (Date.now() - s.at);
-    if (wait > 0) beat.current = setTimeout(play, wait);
-    else play();
+    if (!hold.current) return speakNow(s);
+    // Her voice is playing: this line waits for her (the newest one only).
+    waiting.current = s;
+    doneSpeaking();
+  }, [speakNow]);
+
+  /** Cuts off homie's line: still arriving, in its lit beat, waiting for her, or playing. */
+  const dropSay = useCallback(() => {
+    const s = say.current;
+    say.current = null;
+    if (s?.gap) clearTimeout(s.gap);
+    if (beat.current) clearTimeout(beat.current);
+    beat.current = null;
+    waiting.current = null;
+    stopSay();
+    doneSpeaking();
   }, []);
 
   const sendText = useCallback((text: string): boolean => {
     const s = sock.current;
     if (!s || s.readyState !== 1) return false;
     s.send(JSON.stringify({ type: 'text', text }));
+    echoes.current = [...echoes.current, sentText(text, Date.now())].slice(-ECHOES_KEPT);
     return true;
+  }, []);
+
+  const sendStep = useCallback((stepOrder: number) => {
+    const s = sock.current;
+    if (s?.readyState === 1) s.send(JSON.stringify({ type: 'step', stepOrder }));
   }, []);
 
   const onMessage = useCallback(
@@ -198,41 +262,65 @@ export function useVoiceCooking(opts: VoiceOptions) {
         return;
       }
       if (!m || typeof m.type !== 'string') return;
-      // A new say cuts off the one before it (Track B); homie doing something else ends the reply's
-      // audio (the kid's words arriving meanwhile don't).
+      const restore = m.type === 'go_to_step' && restoring.current > 0 && Date.now() - restoring.current < RESTORE_MS;
+      if (m.type !== 'ready') restoring.current = 0;
+      // A new say cuts off the one before it; a clip drops it (the service aborted it); homie doing
+      // something else ends the reply's audio (the kid's words arriving meanwhile don't).
       const acts = ACTIONS.has(m.type);
       if (m.type === 'say') {
         if (say.current?.gap) clearTimeout(say.current.gap);
         if (beat.current) clearTimeout(beat.current);
         beat.current = null;
-      } else if (acts && say.current) flushSay();
+      } else if (m.type === 'play_clip') dropSay();
+      else if (acts && say.current) flushSay();
       if (acts || m.type === 'say') {
         answers.current += 1;
         think(false);
       }
 
-      if (m.type === 'transcript') {
+      if (m.type === 'ready') {
+        restoring.current = Date.now();
+        sendStep(cb.current.step);
+      } else if (m.type === 'transcript') {
         // An older service sends only finished turns, without `final`.
         if (m.final === false || !m.text) return;
+        answers.current += 1;
         think(true);
+        const echo = echoAt(echoes.current, m.text, Date.now());
+        if (echo >= 0) {
+          echoes.current = echoes.current.filter((_, i) => i !== echo);
+          return;
+        }
         cb.current.onHeard?.(m.text);
       } else if (m.type === 'go_to_step') {
+        if (restore) {
+          // The service starts at the step it saved last; the screen's step (sent on ready) wins.
+          if (m.stepOrder !== cb.current.step) sendStep(cb.current.step);
+          return;
+        }
         lastServerStep.current = m.stepOrder;
         cb.current.onGoTo(m.stepOrder);
       } else if (m.type === 'play_clip') {
-        cb.current.onClip({ startS: m.startS, endS: m.endS, quote: m.quote || undefined, quoteEn: m.quoteEn || undefined });
+        const shows = cb.current.onClip({ startS: m.startS, endS: m.endS, quote: m.quote || undefined, quoteEn: m.quoteEn || undefined });
+        if (typeof shows === 'number' && shows !== cb.current.step) fromClip.current = shows;
       } else if (m.type === 'say') {
+        openSays.current += 1;
         const kind = sayKind(m);
         const text = typeof m.text === 'string' ? m.text : '';
         const offer = offerOf(kind, text);
-        const drop = !!offer && cb.current.onOffer?.({ kind: offer, text, accept: () => void sendText('yes') }) === 'skip';
+        const hearing = liveRef.current && micOn.current && !mutedRef.current;
+        const drop = !!offer && cb.current.onOffer?.({ kind: offer, text, hearing, accept: () => void sendText('yes') }) === 'skip';
         const label = sayLabel(kind, cb.current.cookName);
         say.current = { chunks: [], rate: m.audio?.sampleRate ?? m.sampleRate ?? 24000, translation: kind === 'translation', label, drop, at: Date.now(), gap: null };
-        if (!drop) setHomie({ state: 'lit', label });
+        if (!drop && !hold.current) setHomie({ state: 'lit', label });
         cb.current.onSay?.(kind);
       } else if (m.type === 'say_end') {
+        const end = endSay(openSays.current);
+        openSays.current = end.open;
+        // The end of a line a newer one already replaced: the newer one keeps playing.
+        if (end.stale) return;
         if (!m.interrupted) return flushSay();
-        // The kid spoke over it: never play the rest.
+        // The service cut it off (a newer line or a clip took its place): never play the rest.
         const s = say.current;
         say.current = null;
         if (s?.gap) clearTimeout(s.gap);
@@ -249,7 +337,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
         console.warn('[voice]', m.message);
       }
     },
-    [flushSay, sendText, think],
+    [flushSay, dropSay, sendText, sendStep, think],
   );
 
   const fail = useCallback((text: string) => {
@@ -261,12 +349,18 @@ export function useVoiceCooking(opts: VoiceOptions) {
     if (micOn.current || mutedRef.current) return setStatus('listening');
     micOn.current = true;
     void mic.start().then((r) => {
+      if (r === 'ok' && !micOn.current) {
+        // Turned off (left the screen, muted, hung up) while it was starting: stop what just started.
+        mic.stop();
+        if (sock.current?.readyState === 1) setStatus('listening');
+        return;
+      }
       if (r === 'ok') return setStatus('listening');
       micOn.current = false;
       // No mic, but the line stays open: the chips still go to homie, and it can still read.
       mutedRef.current = true;
       setMutedState(true);
-      setStatus('listening');
+      if (sock.current?.readyState === 1) setStatus('listening');
       if (r === 'denied') setError({ text: 'To talk to homie, turn on the microphone for homecookd in Settings.', at: Date.now() });
     });
   }, [mic]);
@@ -278,7 +372,8 @@ export function useVoiceCooking(opts: VoiceOptions) {
     setLive(false);
     think(false);
     setHomieLevel(0);
-  }, [mic, think]);
+    dropSay();
+  }, [mic, think, dropSay]);
 
   const connect = useCallback(
     async (auto: boolean) => {
@@ -302,6 +397,10 @@ export function useVoiceCooking(opts: VoiceOptions) {
       s.onmessage = (e) => onMessage(e.data);
       s.onopen = () => {
         retries.current = 0;
+        openSays.current = 0;
+        restoring.current = 0;
+        echoes.current = [];
+        fromClip.current = null;
         liveRef.current = real;
         setLive(real);
         s.send(JSON.stringify({ type: 'step', stepOrder: cb.current.step }));
@@ -382,6 +481,20 @@ export function useVoiceCooking(opts: VoiceOptions) {
     quiet.current = on;
   }, []);
 
+  const setHold = useCallback(
+    (on: boolean) => {
+      hold.current = on;
+      const s = waiting.current;
+      if (on || !s) return;
+      // She's done: now homie's line, after its lit beat.
+      waiting.current = null;
+      s.at = Date.now();
+      setHomie({ state: 'lit', label: s.label });
+      speakNow(s);
+    },
+    [speakNow],
+  );
+
   // Cook mode turns voice on by itself, once a visit (after that, only the kid turns it back on).
   const { auto, libraryId } = opts;
   useEffect(() => {
@@ -392,32 +505,53 @@ export function useVoiceCooking(opts: VoiceOptions) {
     void connect(true);
   }, [auto, libraryId, focused, connect]);
 
+  // Another screen on top (Ask pushes the chat): the recorder stops, so its own voice notes can record
+  // and the mic light goes off; back here it starts again (unless the kid turned it off).
+  const micCtl = useRef({ stop: mic.stop, start: startMic });
+  useEffect(() => {
+    micCtl.current = { stop: mic.stop, start: startMic };
+  });
+  useEffect(() => {
+    if (!focused) {
+      if (!micOn.current) return;
+      micCtl.current.stop();
+      micOn.current = false;
+      setHomieLevel(0);
+      return;
+    }
+    if (sock.current?.readyState === 1 && !mutedRef.current && !micOn.current) micCtl.current.start();
+  }, [focused]);
+
   // A step the kid tapped (not one the server just sent) goes to the server.
   useEffect(() => {
-    const s = sock.current;
+    const clip = fromClip.current === opts.step;
+    fromClip.current = null;
     if (lastServerStep.current === opts.step) return;
     lastServerStep.current = null;
+    const s = sock.current;
     if (!s || s.readyState !== 1) return;
     s.send(JSON.stringify({ type: 'step', stepOrder: opts.step }));
-    if (cb.current.readAloud && liveRef.current) s.send(JSON.stringify({ type: 'text', text: 'repeat' }));
-  }, [opts.step]);
+    // Her clip moved the step: it's playing, so homie doesn't read over it.
+    if (!clip && cb.current.readAloud && liveRef.current) sendText('repeat');
+  }, [opts.step, sendText]);
 
   // The soonest timer reaching zero on this phone's clock: a buzz and the pot's timer state; it leaves
   // with the service's timer_done, or on its own a little later.
   useEffect(() => {
-    const next = timers.find((t) => t.id !== due);
+    const next = timers.find((t) => timerKey(t) !== due);
     if (!next) return;
+    const key = timerKey(next);
     const t = setTimeout(() => {
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-      setDue(next.id);
-      later(() => setTimers((list) => withoutTimer(list, next.id)), TIMER_DUE_HOLD_MS);
+      setDue(key);
+      later(() => setTimers((list) => list.filter((x) => timerKey(x) !== key)), TIMER_DUE_HOLD_MS);
     }, Math.max(0, next.endsAt - Date.now()));
     return () => clearTimeout(t);
   }, [timers, due, later]);
 
   // What the pot shows, while this screen is the one on top.
   const ring = timers[0];
-  const timerDue = !!due && timers.some((t) => t.id === due);
+  const timerDue = !!due && timers.some((t) => timerKey(t) === due);
   useEffect(() => {
     if (!focused) return;
     setHomie({ state: cookPotState({ status, muted, thinking, timers: timers.length, timerDue }), timer: ring });
@@ -427,7 +561,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
     return () => setHomie({ state: 'off', timer: undefined, level: 0 });
   }, [focused]);
 
-  // Leaving the screen hangs up.
+  // Leaving the screen hangs up (and drops any line of homie's still on its way).
   const stopRef = useRef(stop);
   useEffect(() => {
     stopRef.current = stop;
@@ -437,12 +571,11 @@ export function useVoiceCooking(opts: VoiceOptions) {
     return () => {
       stopRef.current();
       for (const t of timeouts) clearTimeout(t);
-      if (beat.current) clearTimeout(beat.current);
       if (thinkTimer.current) clearTimeout(thinkTimer.current);
     };
   }, []);
 
-  return { status, live, muted, timers, askedAt, askedIds, error, listen, stop, setMuted, command, sendText, setQuiet };
+  return { status, live, muted, timers, askedAt, askedIds, error, listen, stop, setMuted, command, sendText, setQuiet, setHold };
 }
 
 export type VoiceCooking = ReturnType<typeof useVoiceCooking>;

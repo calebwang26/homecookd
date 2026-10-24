@@ -4,14 +4,15 @@
 // Native Modals (sheets, the full-screen step player) cover it on their own. When homie needs you
 // (store.moment), HomieMoment takes the pot to the centre.
 // A tap on the resting pot says this screen's help line and shows it as a moment with one "OK",
-// unless the screen gave the pot its own onPress.
+// unless the screen gave the pot its own onPress. While the cook's own voice plays (store `shrunk`)
+// the resting pot shrinks a little about its centre.
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { PressableScale, Txt } from '@/components/ui';
 import { useHomieRoute } from '@/lib/homie/hooks';
-import { HOMIE_REST_SIZE, potState, sayPhase, speakingLabel, timerProgress } from '@/lib/homie/logic';
+import { HOMIE_REST_SIZE, potState, sayPhase, SHRUNK_SCALE, speakingLabel, timerProgress } from '@/lib/homie/logic';
 import { closeMoment, doneSpeaking, getHomie, showMoment, useHomie, type Homie } from '@/lib/homie/store';
 import { speak } from '@/lib/live/speak';
 import { useNowPlaying } from '@/lib/media';
@@ -87,6 +88,12 @@ function RestingPot({
   const x = useSharedValue(frame.x);
   const y = useSharedValue(frame.y);
   const opacity = useSharedValue(shown ? 1 : 0);
+  // The cook's own voice is playing: homie steps back (smaller; under Reduce Motion, fainter).
+  const small = useSharedValue(h.shrunk ? 1 : 0);
+  const shrunk = !!h.shrunk;
+  useEffect(() => {
+    small.set(withTiming(shrunk ? 1 : 0, reduce ? { duration: motion.reducedFadeMs } : { duration: 260, easing: Easing.out(Easing.cubic) }));
+  }, [shrunk, reduce, small]);
 
   // A new screen's corner: a short glide (a fade under Reduce Motion).
   useEffect(() => {
@@ -100,10 +107,15 @@ function RestingPot({
     opacity.set(withTiming(shown ? 1 : 0, { duration: motion.reducedFadeMs }));
   }, [shown, opacity]);
 
-  const style = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ translateX: x.value }, { translateY: y.value }, { scale: frame.size / HOMIE_REST_SIZE }],
-  }));
+  const style = useAnimatedStyle(() => {
+    // Scaled about its centre (the box scales from its top left).
+    const s = reduce ? 1 : 1 - (1 - SHRUNK_SCALE) * small.value;
+    const inset = ((1 - s) * frame.size) / 2;
+    return {
+      opacity: opacity.value * (reduce ? 1 - 0.35 * small.value : 1),
+      transform: [{ translateX: x.value + inset }, { translateY: y.value + inset }, { scale: (frame.size / HOMIE_REST_SIZE) * s }],
+    };
+  });
 
   const a11y = state === 'speaking' ? 'homie, speaking' : state === 'listening' ? 'homie, listening' : 'homie';
   return (
@@ -147,6 +159,7 @@ function useTimerProgress(timer: Homie['timer']): number | null {
 const styles = StyleSheet.create({
   rest: { position: 'absolute', left: 0, top: 0, width: HOMIE_REST_SIZE, height: HOMIE_REST_SIZE, alignItems: 'center', transformOrigin: 'top left' },
   press: { width: HOMIE_REST_SIZE, height: HOMIE_REST_SIZE, borderRadius: HOMIE_REST_SIZE / 2 },
-  labelWrap: { position: 'absolute', top: HOMIE_REST_SIZE - 6, alignItems: 'center', width: 120 },
+  // Its right edge a little past the pot's, so "Translated from Grandma" grows left and stays on screen.
+  labelWrap: { position: 'absolute', top: HOMIE_REST_SIZE - 6, right: -8, alignItems: 'flex-end', width: 220 },
   label: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: colors.lavender, overflow: 'hidden' },
 });

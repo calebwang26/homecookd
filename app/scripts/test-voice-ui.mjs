@@ -1,8 +1,10 @@
 // Unit tests for cook mode's voice rules (TS run by Node's type stripping):
 //   src/lib/live/voiceLogic.ts  a say's kind (an older service sends none), which says are offers (read
-//                               aloud, a story), the label under the pot, what the pot shows, kitchen
-//                               timers on the phone's clock (parse, order, countdown, words), which of the
-//                               cook's answers to offer, and the silence sent instead of the mic
+//                               aloud, a story), the label under the pot, which say_end is whose, the
+//                               service's echo of a text, waiting for the "Let Mom see" answer, a spoken
+//                               yes or no, the no-buttons yes-or-no moment, what the pot shows, kitchen
+//                               timers on the phone's clock (parse, order, key, countdown, words), which
+//                               of the cook's answers to offer, and the silence sent instead of the mic
 //   node scripts/test-voice-ui.mjs
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
@@ -66,6 +68,73 @@ await test('the label under the pot: the cook named for a translation, AI for a 
 });
 
 // ---------------------------------------------------------------------------------------------
+// The line to the service
+
+await test('a say_end while a newer line is open is the old line’s; the last one ends the current line', () => {
+  // say A, say B (the service cut A off), A's say_end, B's say_end.
+  let open = 2;
+  let end = V.endSay(open);
+  assert.deepEqual(end, { open: 1, stale: true });
+  end = V.endSay(end.open);
+  assert.deepEqual(end, { open: 0, stale: false });
+  // One line, one end.
+  assert.deepEqual(V.endSay(1), { open: 0, stale: false });
+  // An end with nothing open (a reconnect reset the count) is never stale and never negative.
+  assert.deepEqual(V.endSay(0), { open: 0, stale: false });
+});
+
+await test('the service’s echo of a text this phone sent is found (any case), a late one or a new phrase isn’t', () => {
+  const sent = [V.sentText('back', 1_000), V.sentText(' Yes ', 1_200)];
+  assert.equal(V.echoAt(sent, 'back', 1_100), 0);
+  assert.equal(V.echoAt(sent, 'yes', 1_300), 1);
+  assert.equal(V.echoAt(sent, 'YES', 1_300), 1);
+  assert.equal(V.echoAt(sent, 'go back', 1_300), -1);
+  // Five seconds on, the service dropped that text: the kid saying it is the kid.
+  assert.equal(V.echoAt(sent, 'back', 7_000), -1);
+  assert.equal(V.echoAt([], 'next', 0), -1);
+});
+
+await test('voice and homie’s questions wait for the "Let Mom see" answer; no live session, no wait', () => {
+  const base = { askConsent: false, liveOn: true, consent: 'unknown', startFailed: false };
+  // The session's start hasn't answered: the sheet may still come.
+  assert.equal(V.consentSettled(base), false);
+  assert.equal(V.consentSettled({ ...base, askConsent: true, consent: 'unasked' }), false);
+  assert.equal(V.consentSettled({ ...base, consent: 'yes' }), true);
+  assert.equal(V.consentSettled({ ...base, consent: 'no' }), true);
+  // The start failed: nothing will ask.
+  assert.equal(V.consentSettled({ ...base, startFailed: true }), true);
+  // Not another family cook's dish: nothing to ask.
+  assert.equal(V.consentSettled({ ...base, liveOn: false }), true);
+});
+
+await test('a spoken yes is what homie takes for yes; no, not now and later are no; commands are neither', () => {
+  for (const t of ['yes', 'Yes!', 'yeah', 'sure, read it', 'okay', 'ok', 'please', 'yes please', 'Let\'s hear it', 'go ahead']) assert.equal(V.yesNo(t), 'yes', t);
+  for (const t of ['no', 'No.', 'nope', 'nah', 'not now', 'no thanks', 'later', 'maybe later', 'um, no', 'skip it', 'don\'t']) assert.equal(V.yesNo(t), 'no', t);
+  // Commands go the usual way, as on the service ("ok next" is next, not yes).
+  for (const t of ['next', 'ok next', 'go back', 'repeat', 'again', 'what', 'um, next please']) assert.equal(V.yesNo(t), null, t);
+  for (const t of ['how much salt?', 'I don’t know', '', 'nobody told me']) assert.equal(V.yesNo(t), null, t);
+});
+
+await test('a yes-or-no moment: no buttons and the listening bars when the kid can answer out loud', () => {
+  const onChoose = () => {};
+  const m = V.yesNoMoment({ id: 'read:1', question: 'Want me to read each step out loud?', hearing: true, button: 'Read it to me', onChoose });
+  assert.deepEqual(m.options, []);
+  assert.equal(m.bars, true);
+  assert.deepEqual(m.prompt, { label: 'Say “yes” or “no”' });
+  assert.equal(m.tapToClose, 'Tap anywhere to close');
+  assert.equal(m.onChoose, onChoose);
+});
+
+await test('a yes-or-no moment on a phone that can’t hear: one yes button, a tap anywhere still closes', () => {
+  const m = V.yesNoMoment({ id: 'answer:q1', question: 'Grandma answered your question', questionEn: '“How much salt?”', hearing: false, button: 'Play it', onChoose: () => {} });
+  assert.deepEqual(m.options, [{ id: 'yes', label: 'Play it', kind: 'primary' }]);
+  assert.equal(m.bars, undefined);
+  assert.equal(m.prompt, undefined);
+  assert.equal(m.tapToClose, 'Tap anywhere to close');
+  assert.equal(m.questionEn, '“How much salt?”');
+});
+
+// ---------------------------------------------------------------------------------------------
 // The pot
 
 await test('the pot: listening with the mic on, thinking after the kid spoke, off when muted or off', () => {
@@ -119,6 +188,14 @@ await test('timers stay soonest first; the same id replaces the old one; done on
   assert.deepEqual(list.map((t) => t.id), ['a', 'b']);
   assert.deepEqual(V.withoutTimer(list, 'a').map((t) => t.id), ['b']);
   assert.deepEqual(V.withoutTimer(list, 'nope').map((t) => t.id), ['a', 'b']);
+});
+
+await test('a timer is known by its id and its end, so a new socket’s "timer-1" is a new timer', () => {
+  const first = V.parseTimer({ id: 'timer-1', seconds: 60 }, 0);
+  const again = V.parseTimer({ id: 'timer-1', seconds: 60 }, 90_000);
+  assert.equal(V.timerKey(first), 'timer-1:60000');
+  assert.notEqual(V.timerKey(first), V.timerKey(again));
+  assert.equal(V.timerKey(first), V.timerKey({ ...first }));
 });
 
 await test('seconds left round up, so 0 only once it is done', () => {

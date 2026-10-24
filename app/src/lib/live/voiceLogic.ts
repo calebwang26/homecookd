@@ -1,7 +1,8 @@
 // Cook mode's voice rules, pure (node scripts/test-voice-ui.mjs): what each `say` from the voice service
-// means for homie (docs/build/STACK.md "kid cooking additions"), the kitchen timers the app counts down,
-// what the pot shows, and which of the cook's answers to offer the kid.
-import type { HomieState } from '@/lib/homie/store';
+// means for homie (docs/build/STACK.md "kid cooking additions"), which `say_end` and transcript belong
+// to what, when voice starts on its own, the kid's spoken yes or no, the kitchen timers the app counts
+// down, what the pot shows, and which of the cook's answers to offer the kid.
+import type { HomieMoment, HomieState } from '@/lib/homie/store';
 
 export type SayKind = 'step' | 'reply' | 'hint' | 'translation' | 'nudge' | 'offer' | 'greeting' | 'timer';
 const KINDS: ReadonlySet<string> = new Set<SayKind>(['step', 'reply', 'hint', 'translation', 'nudge', 'offer', 'greeting', 'timer']);
@@ -26,6 +27,76 @@ export function sayLabel(kind: SayKind, cookName: string): string | undefined {
   if (kind === 'translation') return `Translated from ${cookName}`;
   if (kind === 'hint') return 'AI hint';
   return undefined;
+}
+
+// ---------------------------------------------------------------------------------------------
+// The line to the service
+
+/**
+ * A `say_end` arrived; `open` lines had started without one. The service cuts a line off when it
+ * starts the next one (or a clip), and that line's end arrives after the next one's `say`: an end
+ * while a newer line is still open is the old line's (`stale`), never the current one's.
+ */
+export function endSay(open: number): { open: number; stale: boolean } {
+  const left = Math.max(0, open - 1);
+  return { open: left, stale: left > 0 };
+}
+
+/** A text the phone sent ({ type: "text" }), waiting for the service's echo. */
+export type SentText = { key: string; at: number };
+/** An echo comes back at once; one this late isn't (the service dropped that text). */
+const ECHO_MAX_MS = 5000;
+
+export const sentText = (text: string, at: number): SentText => ({ key: text.trim().toLowerCase(), at });
+
+/**
+ * The service repeats every { type: "text" } at once as a finished transcript. Where that echo is in
+ * what this phone sent (-1: the kid really said it).
+ */
+export function echoAt(sent: readonly SentText[], text: string, now: number): number {
+  const key = text.trim().toLowerCase();
+  return sent.findIndex((s) => s.key === key && now - s.at <= ECHO_MAX_MS);
+}
+
+/**
+ * The "Let Mom see" sheet is out of the way: it isn't up, and it won't come (its question needs the
+ * server's answer first: `consent` stays 'unknown' until then). Voice starts, and homie asks, only
+ * then (one thing asks at a time).
+ */
+export function consentSettled(v: { askConsent: boolean; liveOn: boolean; consent: string; startFailed: boolean }): boolean {
+  return !v.askConsent && (!v.liveOn || v.consent !== 'unknown' || v.startFailed);
+}
+
+// What homie takes for yes (voice/src/cook.ts isYes, so the phone and homie agree) and for no.
+const YES = /^(yes|yeah|yep|yup|sure|ok|okay|please|go ahead|read it|read it out loud|do it|let'?s hear it)( .*)?$/;
+const NO = /^(no|nope|nah|not now|no thanks|no thank you|later|maybe later|not yet|skip|skip it|don'?t)( .*)?$/;
+const COMMANDS = /^(next|next step|next one|what'?s next|done|go on|go back|back|previous|previous step|last step|step back|repeat|repeat that|again|say that again|one more time|what)$/;
+const normalize = (t: string) => t.toLowerCase().replace(/[^a-z' ]/g, ' ').replace(/\s+/g, ' ').trim();
+const command = (t: string) =>
+  normalize(t)
+    .replace(/^((um|uh|wait|okay|ok|so|hey|alright|and|now) )+/, '')
+    .replace(/( (please|thanks|thank you))+$/, '');
+
+/** The kid's answer to homie's yes-or-no question, out loud; null for anything else ("next", a question). */
+export function yesNo(text: string): 'yes' | 'no' | null {
+  if (COMMANDS.test(command(text))) return null;
+  const c = normalize(text);
+  if (YES.test(c)) return 'yes';
+  const plain = c.replace(/^((um|uh|oh|well|hmm) )+/, '');
+  return NO.test(plain) ? 'no' : null;
+}
+
+export const SAY_YES_NO = 'Say “yes” or “no”';
+export const TAP_TO_CLOSE = 'Tap anywhere to close';
+
+/**
+ * homie's yes-or-no question as a moment (Caleb, Oct 24): no buttons, the listening bars and "Say
+ * “yes” or “no”"; a tap anywhere is no. A phone that can't hear the answer (no mic, mic off) gets
+ * one button for yes instead. onChoose gets 'yes' (the button) or 'not_now' (a tap anywhere).
+ */
+export function yesNoMoment(m: { id: string; question: string; questionEn?: string; hearing: boolean; button: string; onChoose: (choice: string) => void }): HomieMoment {
+  const base = { id: m.id, question: m.question, questionEn: m.questionEn, tapToClose: TAP_TO_CLOSE, onChoose: m.onChoose };
+  return m.hearing ? { ...base, options: [], bars: true, prompt: { label: SAY_YES_NO } } : { ...base, options: [{ id: 'yes', label: m.button, kind: 'primary' }] };
 }
 
 /** What the pot shows on the cook screen, under homie's own lit / speaking beat. */
@@ -60,6 +131,11 @@ export function withTimer(list: readonly CookTimer[], t: CookTimer): CookTimer[]
 
 export function withoutTimer(list: readonly CookTimer[], id: string): CookTimer[] {
   return list.filter((x) => x.id !== id);
+}
+
+/** One timer, not just its id: the service starts its ids again at "timer-1" on each socket. */
+export function timerKey(t: Pick<CookTimer, 'id' | 'endsAt'>): string {
+  return `${t.id}:${t.endsAt}`;
 }
 
 /** Whole seconds left, rounded up: 0 only once it is done. */

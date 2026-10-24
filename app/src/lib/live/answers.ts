@@ -3,6 +3,7 @@
 //
 //   const rows = useRecipeAnswers(libraryId)   every question about the dish, newest first
 //   const heard = useHeardAnswers()            the answers this phone already played (heard.ids, heard.add(id))
+//   playClip({ url, key: `${ANSWER_KEY}${id}` })  her voice note on the shared player
 //
 // Takes the library id and finds the dish's Convex id itself. A dish Convex doesn't know (a library
 // dish), or Convex stubbed: nothing, and nothing asked.
@@ -20,6 +21,9 @@ export type RecipeAnswer = AnswerRow & {
   status: 'found_in_video' | 'asked_cook' | 'answered';
   answer?: { text?: string; transcript?: string; translation?: string };
 };
+
+/** The shared player's key prefix for the cook's voice-note answer (homie never talks over it). */
+export const ANSWER_KEY = 'cook-answer:';
 
 const HEARD_KEY = 'homie.heardAnswers';
 const HEARD_MAX = 100;

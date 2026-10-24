@@ -237,11 +237,18 @@ voice, in `lang` or the person's language). `translate: true` first turns Englis
   ("Want me to read it out loud?"). Saying or sending `{ type: "text", text: "yes" }` reads the current step.
   Until then, steps change silently.
 - The app sends silence while a `say` or clip plays (half duplex).
-- What the app sends (Track I-kid): the chips under homie send `{ type: "text", text: "next" | "back" | "repeat" }`
-  and act on their own if no step, clip, line or timer comes back within 1.5 s. A tap on the offer (or a story
-  `nudge`) sends `"yes"`; a kid who said yes once has it sent for them on that phone, and its audio is dropped.
-  After a step the kid tapped (`{ type: "step" }`), a kid who chose read-aloud also gets `"repeat"`, so it is read.
-  A `nudge` whose text mentions a story is shown as a "Hear it / Later" moment.
+- What the app sends (Track I-kid): the chips under homie send `{ type: "text", text: "back" | "repeat" }` (no
+  Next chip; the big "Next step" button sends `{ type: "step" }`). The service's echo of the text (a `transcript`
+  with `final: true`) counts as its answer; a chip acts on its own only if nothing (echo, step, clip, line, timer)
+  comes back within 1.5 s. "repeat" goes only for a kid who chose read-aloud (the service's repeat turns reading
+  on); for anyone else Repeat replays the step's video on the phone. A kid who said yes once has `"yes"` sent for
+  them on that phone, and the offer's audio is dropped. After a step the kid tapped, a kid who chose read-aloud
+  also gets `"repeat"`, so it is read; not when her clip moved the step. On `ready` the app sends its own
+  `{ type: "step" }` and doesn't follow the service's go_to_step right after it (the screen's step wins). A
+  `say_end` while a newer line is open belongs to the line that newer one cut off. The offer, a story `nudge`
+  and "Grandma answered your question" are no-buttons moments: the kid says yes or no (a tap anywhere is no).
+  Open for Track E: a spoken yes meant for an app moment (her voice-note answer) still reaches the service, and
+  with the read offer still pending it turns reading on; there is no way to decline an offer.
 
 **Worker ↔ Convex additions**
 - `/worker/claim` adds `title?`, `language` (the job's, else the cook's, else `en`), `relation?` (the cook's),
