@@ -8,6 +8,22 @@ import { v } from "convex/values";
 /** A span of the cook's video, in seconds. Every step, memory and found answer points at one. */
 const moment = v.object({ startS: v.number(), endS: v.number() });
 
+/**
+ * A story or tip from the video. Where it sits in recipe.json, so the app can put it back (the public
+ * recipe.json leaves these out): `step` is its step's order; a story and a special moment have their `id`,
+ * a story its `title`, a special moment its `why`. A tip with no id is its step's own tip. Older
+ * recipes have only kind, text and moment.
+ */
+export const memory = v.object({
+  kind: v.union(v.literal("story"), v.literal("tip")),
+  text: v.string(),
+  moment,
+  step: v.optional(v.number()),
+  id: v.optional(v.string()),
+  title: v.optional(v.string()),
+  why: v.optional(v.string()),
+});
+
 export default defineSchema({
   families: defineTable({
     name: v.string(),
@@ -47,7 +63,7 @@ export default defineSchema({
     .index("by_tokenHash", ["tokenHash"])
     .index("by_expiresAt", ["expiresAt"]),
 
-  /** A dish being processed or ready to cook. The full recipe.json stays in GCS (recipeJsonUrl). */
+  /** A dish being processed or ready to cook. Its recipe.json is in GCS (recipeJsonUrl), without the memories (older files still have them). */
   recipes: defineTable({
     familyId: v.id("families"),
     cookId: v.id("people"),
@@ -66,8 +82,8 @@ export default defineSchema({
         moment,
       }),
     ),
-    // Stories and tips Muse Spark kept from the video; shown only if the cook opted in.
-    memories: v.array(v.object({ kind: v.union(v.literal("story"), v.literal("tip")), text: v.string(), moment })),
+    // Stories and tips Muse Spark kept from the video; shown only to the cook until she opts in.
+    memories: v.array(memory),
     memoriesOptIn: v.boolean(),
     mossIndexedAt: v.optional(v.number()),
     language: v.optional(v.string()), // what the cook spoke in the video (Ink code); unset means English

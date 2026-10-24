@@ -167,6 +167,7 @@ voice/deploy.sh                                                    # Cloud Run h
 .venv/bin/python pipeline/test_order.py && .venv/bin/python pipeline/test_prompts.py
 .venv/bin/python pipeline/test_shorten.py                           # cook mode's short steps: rules + stored data
 .venv/bin/python pipeline/test_coverage.py
+.venv/bin/python pipeline/test_publish.py                           # a family recipe.json has no stories or tips
 .venv/bin/python pipeline/worker.py [--once]                        # claim Convex jobs (--gcs: the old GCS job files)
 .venv/bin/python pipeline/process.py --id <id> --rewrite            # re-write recipe.json from the cached extraction
 
