@@ -124,6 +124,102 @@ HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-o
 `say(text)`. The system prompt says: never state anything the cook didn't say. Answer with the cook's clip or
 ask the cook.
 
+## Oct 24 additions: homie, translation, glasses VM, Community (PLAN.pdf v2)
+
+Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add five build tracks on top of A–D. These contracts let them run in parallel; `convex/schema.ts` holds the data model.
+
+| Track | What | Owns |
+|---|---|---|
+| E · homie live | Parent live pass (`/record`), `/speak`, kid-side timers, nudges, read-aloud offer, labelled hints | `voice/`, `convex/live.ts`, `convex/lib/liveRoutes.ts` |
+| F · Translation + pipeline | Cook's language end to end, original + English quotes, homie log in the full pass, upload race, 8–12 steps | `pipeline/`, `convex/worker.ts`, `convex/lib/recipeJson.ts`, `convex/moss.ts`, `convex/people.ts`, `app/src/lib/languages.ts` |
+| G · Community | Feed, share switch + Muse story card, one dinner flow | `convex/community.ts`, `convex/dinners.ts`, `convex/lib/geo.ts`, `seed:community`, `app/src/app/community/*`, `app/src/app/dinner/*`, `app/src/app/kid/community.tsx`, `app/src/lib/live/community.ts` |
+| H · Glasses VM | ESP32 → free GCP e2-micro → MP4 → GCS → job | `glasses/`, `convex/glasses.ts`, `convex/lib/glassesRoutes.ts` |
+| I · App UI | homie pot everywhere, cook-screen chips + captions + timers, recording screen, walkie-talkie, language picker | `app/` (everything else) |
+
+**Decisions that change earlier rules** (Caleb, Oct 24):
+- Change 5 is replaced: the ESP32 glasses stream to a VM, not the camera roll. "From my glasses" stays as a fallback.
+- Change 6 is relaxed: when no clip answers, homie may give a **labelled AI hint** ("Grandma didn't say. Most recipes
+  use about a teaspoon.") and **always** asks the cook too. The hint is never presented as the cook.
+- Change 7 is partly replaced: while recording, the parent never taps; homie listens. Answering a kid's question
+  stays push to talk (now the half-screen walkie-talkie). Full voice navigation of parent mode is still a stretch.
+- Live Marathi speech-to-text is Gemini (Ink 2 only knows en/fr/hi/ja/es). Sonic 3.6 speaks Marathi (`locale`).
+- Languages are Ink-style ISO 639-1 codes (`mr`, `en`) everywhere: `people.language`, `recordings.language`,
+  `jobs.language`, `recipes.language`. Unset means `en`.
+
+**App → Convex (new public functions; every one takes `sessionToken`)**
+- `live.startRecording({ dish?, forKidId?, language, source })` → `{ recordingId }` (cook only; status `intro`).
+- `live.recording({ recordingId })` (live): the row, for the recording screen.
+- `jobs.create` gains optional `title`, `language`, `forKidId`, `recordingId`.
+- `people.setLanguage({ language })` (self). `people.me` → `{ personId, name, role, language, relation }`.
+- `questions.forRecipe` already exists; the kid's cook mode reads it to hear the cook's answer (`answerAudioUrl`,
+  `answer.translation`).
+- Community: `community.feed({ maxMiles? })`, `community.recipe({ recipeId })` (text only),
+  `community.setShare({ recipeId, on })` (the recipe's cook only), `dinners.create({ recipeId, startsAt, placeKind,
+  placeName, address, seats })`, `dinners.get({ dinnerId })`, `dinners.mine`, `dinners.requestJoin({ dinnerId })`,
+  `dinners.respond({ requestId, accept })` (host only). Community responses never include `libraryId`,
+  `recipeJsonUrl`, `coverUrl` of a private recipe, moments, quotes, person ids of other families, or an address
+  (except to the host and accepted guests). Distance is a label from `lib/geo.ts`.
+
+**Voice service → Convex for homie** (HTTP POST, `x-voice-secret`; `convex/lib/liveRoutes.ts`)
+- `/live/person` `{ sessionToken }` → `{ personId, familyId, name, role, language, relation }` (401 if signed out).
+- `/live/session` `{ sessionToken, recordingId }` → `{ recording, cook: { name, relation, language }, kid?: { name },
+  dish? }` (404 if it isn't this cook's).
+- `/live/status` `{ sessionToken, recordingId, status }` → `{ ok, startedAt? }`. Moving to `recording` sets
+  `startedAt` (server clock) once; `ended` sets `endedAt`.
+- `/live/prompt` `{ sessionToken, recordingId, kind, text, textEn, atS, status }` → `{ promptId }`.
+- `/live/prompt-update` `{ sessionToken, promptId, status, answer? }` → `{ ok }`.
+- `/live/optin` `{ sessionToken, recordingId, optIn }` → `{ ok }` (stored on the recording, carried to the job).
+
+**App ↔ voice service: homie while recording** (`wss://<voice>/record?session=<sessionToken>&recording=<recordingId>`)
+- App → service: binary 16 kHz mono s16le PCM (the phone by the stove), always streaming;
+  `{ type: "start" }` when the cook starts cooking after the intro; `{ type: "done" }` on "I'm done";
+  `{ type: "text", text }` (typed answer, tests); `{ type: "not_now" }` (tap on the caption card).
+- Service → app:
+  - `{ type: "ready", recording: { id, language, cookName, kidName?, dish? } }`
+  - `{ type: "phase", phase: "intro" | "recording" | "wrapping_up" | "ended" }`
+  - `{ type: "state", state: "listening" | "thinking" | "speaking" | "quiet" }` (the pot's steam)
+  - `{ type: "say", text, textEn, kind, ai: true, audio }` + binary audio + `{ type: "say_end", interrupted }`.
+    `kind` is a `homiePrompts.kind`. The app lights the pot just before audio starts.
+  - `{ type: "ask", promptId, text, textEn, kind }`: show the caption card. `{ type: "drop", promptId }`: fade it
+    (no answer in ~10 s, or "not now"). `{ type: "answered", promptId }`.
+  - `{ type: "transcript", text, final }`, `{ type: "error", message }`. Close 4401 signed out, 4404 no such recording.
+- The service ignores incoming audio while homie speaks (+300 ms), so it never hears itself; the app also sends
+  silence then. Pacing (normal): first question no earlier than 4 min, gaps of 4–5 min, doubled after an ignored
+  one, at most 6 live plus 2 end questions, never while the cook talks or tells a story. `HOMIE_DEMO=1`: first
+  question at ~40 s, then 90 s gaps, at most 2 live.
+- Glasses frames: when `GLASSES_URL` is set, the service pulls `GET <GLASSES_URL>/frame/latest?recording=<id>`
+  (`x-glasses-secret`) every ~5 s and gives the newest JPEG to homie's decision.
+
+**Voice service HTTP** `POST /speak` `{ sessionToken, text, lang?, translate?: boolean }` → `audio/wav` (Sonic, homie's
+voice, in `lang` or the person's language). `translate: true` first turns English `text` into `lang`. Header
+`x-spoken-text` (URI-encoded) is what was actually said. Used by walkie-talkie and the pot's tap hints.
+
+**App ↔ voice service: kid cooking additions** (`/cook`, backward compatible)
+- `say` gains `kind`: `step | reply | hint | translation | nudge | offer | greeting | timer`, and `textEn` when the
+  spoken text isn't English. A `hint` is AI general knowledge: always labelled, always followed by `asked_cook`.
+- `play_clip` gains `quote?` and `quoteEn?` for the caption.
+- `{ type: "timer", id, seconds, label, endsAt }`, `{ type: "timer_done", id, label }`. The app owns the countdown.
+- After `ready`: one `say` of kind `greeting` (a word in the cook's language + `textEn`), then `offer`
+  ("Want me to read it out loud?"). Saying or sending `{ type: "text", text: "yes" }` reads the current step.
+  Until then, steps change silently.
+- The app sends silence while a `say` or clip plays (half duplex).
+
+**Worker ↔ Convex additions**
+- `/worker/claim` adds `title?`, `language` (default `en`), `forKidName?`, `memoriesOptIn?` and `homieLog:
+  [{ atS, kind, text, textEn, answer?: { transcript, transcriptEn?, atS, endS } }]`, with times on the **video's**
+  clock (`atS + (startedAt − videoStartedAt) / 1000` for glasses).
+- `/worker/release` `{ jobId }` → `{ ok }`: the upload isn't complete yet; the job goes back to `queued` after 30 s.
+- `/worker/published` accepts `language` and `steps[].quoteOriginal`.
+
+**Glasses VM → Convex** (HTTP POST, `x-glasses-secret`; `convex/lib/glassesRoutes.ts`; see `glasses/INGEST.md`)
+- `/glasses/active` `{}` → `{ recordingId, status, startedAt? }` for the newest `glasses` recording that isn't
+  `ended`/`abandoned`, or `204`. (One pair of glasses for the hackathon.)
+- `/glasses/finished` `{ recordingId, uploadPath, videoStartedAt, durationS }` → `{ jobId, recipeId }`: sets
+  `recordings.videoStartedAt` and creates the job (`source: "glasses"`) with the recording's dish, language and kid.
+
+**New keys**: `GLASSES_SECRET` (Convex env, the VM, Cloud Run secret), `GEMINI_API_KEY` (Cloud Run secret, for live
+Marathi transcription), `HOMIE_VOICE` (Cloud Run env: homie's Cartesia voice id), `GLASSES_URL` (Cloud Run env).
+
 ## Keys (all server-side, never in `app/` or `web/`)
 
 | Key | Lives in |

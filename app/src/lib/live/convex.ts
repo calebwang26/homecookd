@@ -68,7 +68,7 @@ export function useConvexStubbed(): boolean {
 const ref = <T extends FunctionType>(name: string) => makeFunctionReference<T>(name);
 
 /** Runs `name` on Convex, or `fallback` while stubbed (or once Convex says the function isn't there). */
-async function call<T>(type: 'mutation' | 'action' | 'query', name: string, args: Record<string, unknown>, fallback: () => T | Promise<T>): Promise<T> {
+export async function call<T>(type: 'mutation' | 'action' | 'query', name: string, args: Record<string, unknown>, fallback: () => T | Promise<T>): Promise<T> {
   if (stubbed || !client) return fallback();
   try {
     if (type === 'mutation') return await client.mutation(ref<'mutation'>(name), args);
@@ -105,11 +105,18 @@ export async function convexSession(): Promise<string | null> {
   return (await session.run)?.sessionToken ?? null;
 }
 
-/** A live query with the session token; `fallback` is the stub's live value. */
-function useLive<T>(name: string, initial: T, fallback: (onData: (v: T) => void) => () => void, enabled = true): T {
+/** A live query with the session token (plus `args`); `fallback` is the stub's live value. */
+export function useLive<T>(
+  name: string,
+  initial: T,
+  fallback: (onData: (v: T) => void) => () => void,
+  enabled = true,
+  args: Record<string, unknown> = {},
+): T {
   const [value, setValue] = useState<T>(initial);
   const isStub = useConvexStubbed();
   const meId = getSession()?.me?.id;
+  const argsKey = JSON.stringify(args);
   useEffect(() => {
     if (!enabled) return;
     if (isStub || !client) return fallback(setValue);
@@ -117,7 +124,7 @@ function useLive<T>(name: string, initial: T, fallback: (onData: (v: T) => void)
     let alive = true;
     void convexSession().then((sessionToken) => {
       if (!alive || !sessionToken) return;
-      off = client.onUpdate(ref<'query'>(name), { sessionToken }, (v) => setValue(v as T), (e) => (isMissing(e) ? goStub(e) : console.warn(`[convex] ${name}`, String(e))));
+      off = client.onUpdate(ref<'query'>(name), { ...args, sessionToken }, (v) => setValue(v as T), (e) => (isMissing(e) ? goStub(e) : console.warn(`[convex] ${name}`, String(e))));
     });
     return () => {
       alive = false;
@@ -125,7 +132,7 @@ function useLive<T>(name: string, initial: T, fallback: (onData: (v: T) => void)
     };
     // `fallback` is a stable module function per call site.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [name, isStub, meId, enabled]);
+  }, [name, isStub, meId, enabled, argsKey]);
   return value;
 }
 
@@ -140,7 +147,7 @@ export function useCookQuestions(enabled = true): CookQuestion[] {
   return useLive<CookQuestion[]>('questions:openForCook', [], stub.watchQuestions, enabled);
 }
 
-async function token(): Promise<string> {
+export async function token(): Promise<string> {
   const t = await convexSession();
   if (!t) throw new Error('Sign in first.');
   return t;
