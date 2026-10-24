@@ -4,6 +4,7 @@
 # printed. Run from anywhere:  voice/deploy.sh
 #
 # CONVEX_SITE_URL and VOICE_SECRET are optional: without them the service runs on its stub recipe.
+# GEMINI_API_KEY lets homie hear Marathi; GLASSES_URL + GLASSES_SECRET let it see the glasses' frames.
 set -euo pipefail
 export PATH="/opt/homebrew/bin:$PATH"
 cd "$(dirname "$0")"
@@ -20,7 +21,7 @@ gcloud services enable secretmanager.googleapis.com --project "$P"
 
 # One Secret Manager secret per key, named like the env var. Adds a new version only when it changed.
 SECRETS=()
-for NAME in CARTESIA_API_KEY ANTHROPIC_API_KEY MOSS_PROJECT_ID MOSS_PROJECT_KEY VOICE_SECRET; do
+for NAME in CARTESIA_API_KEY ANTHROPIC_API_KEY MOSS_PROJECT_ID MOSS_PROJECT_KEY VOICE_SECRET GEMINI_API_KEY GLASSES_SECRET; do
   VALUE=$(fromenv $NAME)
   [ -n "$VALUE" ] || { echo "skip $NAME (not in .env)"; continue; }
   if ! gcloud secrets describe $NAME --project "$P" >/dev/null 2>&1; then
@@ -38,6 +39,11 @@ done
 ENV_VARS="CLAUDE_FAST=1"
 CONVEX_SITE_URL=$(fromenv CONVEX_SITE_URL)
 [ -n "$CONVEX_SITE_URL" ] && ENV_VARS="$ENV_VARS,CONVEX_SITE_URL=$CONVEX_SITE_URL"
+# homie: its voice and the glasses VM, when set (HOMIE_DEMO=1 only for a rehearsal).
+for NAME in HOMIE_VOICE GLASSES_URL HOMIE_DEMO; do
+  VALUE=$(fromenv $NAME)
+  [ -n "$VALUE" ] && ENV_VARS="$ENV_VARS,$NAME=$VALUE"
+done
 
 gcloud run deploy $SERVICE --project "$P" --region $REGION --source . \
   --allow-unauthenticated \
@@ -48,5 +54,5 @@ gcloud run deploy $SERVICE --project "$P" --region $REGION --source . \
   --set-secrets "$(IFS=,; echo "${SECRETS[*]}")"
 
 URL=$(gcloud run services describe $SERVICE --project "$P" --region $REGION --format='value(status.url)')
-echo "$URL  (app: ${URL/https:/wss:}/cook?session=…&recipe=…)"
+echo "$URL  (app: ${URL/https:/wss:}/cook?session=…&recipe=…, ${URL/https:/wss:}/record?session=…&recording=…, POST $URL/speak)"
 curl -sf "$URL/health" && echo "  health ok"

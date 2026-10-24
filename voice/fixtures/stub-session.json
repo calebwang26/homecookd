@@ -6,7 +6,9 @@
     "name": "Leo"
   },
   "cook": {
-    "name": "Grandma"
+    "name": "Grandma",
+    "language": "mr",
+    "relation": "Aaji"
   },
   "recipe": {
     "id": "grandma-red-braised-pork",
@@ -28,7 +30,8 @@
         "moment": {
           "startS": 440,
           "endS": 700
-        }
+        },
+        "quote": "Watch the color. Tea color, honey color, stop. If it goes dark it is bitter and you start again."
       },
       {
         "order": 3,
@@ -65,6 +68,26 @@
           "startS": 2180,
           "endS": 2370
         }
+      }
+    ],
+    "memories": [
+      {
+        "kind": "story",
+        "text": "The first time she made this, she burned the sugar three times, and Grandpa ate it anyway.",
+        "moment": {
+          "startS": 500,
+          "endS": 600
+        },
+        "stepOrder": 2
+      },
+      {
+        "kind": "story",
+        "text": "She makes this dish when somebody is coming home.",
+        "moment": {
+          "startS": 2220,
+          "endS": 2320
+        },
+        "stepOrder": 6
       }
     ]
   },

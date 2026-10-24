@@ -118,7 +118,7 @@ app/        Expo app (expo-router, TypeScript). EAS dev build while coding, Test
             src/lib/live/ = the Convex client, the voice socket and the mic (Expo Go hides the mic).
 web/        Next.js site: the lander, homecookd.app/r (recipe share page) and /i (invites). Vercel project "homecookd".
 convex/     The hackathon backend: schema.ts, functions, http.ts (worker + voice service endpoints)
-voice/      Live voice service (Cloud Run): WebSocket cooking loop with Cartesia, Claude and Moss
+voice/      Live voice service (Cloud Run): the kid's cooking loop (/cook) and homie while a cook records (/record)
 glasses/    ESP32 glasses → GCP VM (Python): WS ingest, MP4 mux, GCS upload, Convex job (glasses/README.md)
 supabase/   Frozen: functions/api (today's sign-in, invites, older screens), migrations/, tests/
 pipeline/   Python: prep.py → process.py (Gemini) → Muse Spark → publish.py, and worker.py (claims jobs from Convex)
@@ -159,6 +159,7 @@ npx --yes deno@2 check --node-modules-dir=none supabase/functions/api/*.ts      
 # voice service (voice/README.md)
 cd voice && npm ci && npm run dev                                  # ws://localhost:8080/cook (VOICE_STUB=1: stub recipe, any token)
 cd voice && npm run test-client -- test-audio/next-step.wav test-audio/question.wav   # after npm run make-audio
+cd voice && npm run typecheck && npm test                          # src + tests; unit tests (pacing, /record phases; fakes only)
 voice/deploy.sh                                                    # Cloud Run homecookd-voice, us-west1
 
 # pipeline (uses .venv)
