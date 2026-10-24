@@ -1,13 +1,15 @@
 // HTTP routes for our own services (docs/build/STACK.md, "Contracts"). The pipeline worker sends
 // `x-worker-secret`, the live voice service `x-voice-secret`, the glasses VM `x-glasses-secret`; each is
 // a shared secret in Convex env. Errors are JSON `{ error }` with 400 (bad body), 401 (wrong secret or
-// signed-out session) or 404. homie's routes are in lib/liveRoutes.ts, the glasses' in lib/glassesRoutes.ts.
+// signed-out session) or 404. homie's routes are in lib/liveRoutes.ts, the glasses' in lib/glassesRoutes.ts,
+// and the one public route (a dinner's invite link opened: POST /invite/open) in lib/inviteRoutes.ts.
 import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import type { ActionCtx } from "./_generated/server";
 import { registerGlassesRoutes } from "./lib/glassesRoutes";
 import { fail, isNum, isStr, json, voice, worker } from "./lib/http";
+import { registerInviteRoutes } from "./lib/inviteRoutes";
 import { registerLiveRoutes } from "./lib/liveRoutes";
 import { parseRecipeJson } from "./lib/recipeJson";
 
@@ -160,5 +162,6 @@ http.route({
 
 registerLiveRoutes(http);
 registerGlassesRoutes(http);
+registerInviteRoutes(http);
 
 export default http;

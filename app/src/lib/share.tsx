@@ -1,6 +1,7 @@
-// Share a recipe from anywhere:
+// Share a recipe, or invite friends to a dinner, from anywhere:
 //   <ShareSheetProvider> ... </ShareSheetProvider>      (root layout)
 //   const share = useShare(); share.open({ recipeId: recipe.id });
+//   share.open({ dinner: { dinnerId, dish, hostName, photo } });   (the dinner page's "Invite friends")
 // The provider renders the one ShareSheet (components/share/ShareSheet.tsx) above everything.
 // Web dev aid (like `?as=`): `?share=<recipe id>` opens the sheet on load, for headless screenshots.
 //
@@ -12,14 +13,18 @@
 import { Component, createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Platform } from 'react-native';
 
+import type { DinnerInvite } from '@/components/share/DinnerInviteBody';
 import { ShareSheet } from '@/components/share/ShareSheet';
 import { useToast } from '@/components/ui';
 import { trail, trailStart } from '@/components/share/trail';
 
+export type { DinnerInvite };
+type ShareInput = { recipeId: string } | { dinner: DinnerInvite };
+
 type ShareCtx = {
-  open: (input: { recipeId: string }) => void;
+  open: (input: ShareInput) => void;
   close: () => void;
-  /** The recipe being shared while the sheet is open. */
+  /** The recipe being shared while the sheet is open (null for a dinner invite). */
   recipeId: string | null;
   visible: boolean;
 };
@@ -52,6 +57,7 @@ function afterFrames(fn: () => void): () => void {
 
 export function ShareSheetProvider({ children }: { children: ReactNode }) {
   const [recipeId, setRecipeId] = useState<string | null>(null);
+  const [dinner, setDinner] = useState<DinnerInvite | null>(null);
   const [visible, setVisible] = useState(false);
   // Bumped after a caught crash so the next open mounts a brand-new sheet.
   const [generation, setGeneration] = useState(0);
@@ -75,18 +81,20 @@ export function ShareSheetProvider({ children }: { children: ReactNode }) {
     [clearWatchdog],
   );
 
-  const open = useCallback((input: { recipeId: string }) => {
-    const id = input?.recipeId?.trim();
-    if (!id) return;
+  const open = useCallback((input: ShareInput) => {
+    const invite = input && 'dinner' in input && input.dinner?.dinnerId?.trim() ? input.dinner : null;
+    const id = input && 'recipeId' in input ? input.recipeId?.trim() : '';
+    if (!id && !invite) return;
     if (visibleRef.current || pending.current) {
       trail('open ignored: sheet already opening or open');
       return;
     }
-    trailStart(`open requested for ${id}`);
+    trailStart(invite ? `open requested for dinner ${invite.dinnerId}` : `open requested for ${id}`);
     pending.current = afterFrames(() => {
       pending.current = null;
       trail('presenting');
-      setRecipeId(id);
+      setRecipeId(invite ? null : id);
+      setDinner(invite);
       setVisible(true);
       clearWatchdog();
       watchdog.current = setTimeout(() => {
@@ -100,7 +108,7 @@ export function ShareSheetProvider({ children }: { children: ReactNode }) {
     if (watchdog.current) trail('presented');
     clearWatchdog();
   }, [clearWatchdog]);
-  // Keep recipeId while the sheet animates out; it is replaced on the next open.
+  // Keep recipeId (or the dinner) while the sheet animates out; it is replaced on the next open.
   const close = useCallback(() => {
     pending.current?.();
     pending.current = null;
@@ -134,7 +142,7 @@ export function ShareSheetProvider({ children }: { children: ReactNode }) {
     <Ctx value={value}>
       {children}
       <SheetGuard key={generation} onCrash={crashed}>
-        <ShareSheet visible={visible} recipeId={recipeId} onClose={close} onShown={shown} />
+        <ShareSheet visible={visible} recipeId={recipeId} dinner={dinner} onClose={close} onShown={shown} />
       </SheetGuard>
     </Ctx>
   );

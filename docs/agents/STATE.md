@@ -397,4 +397,69 @@ Before starting work, compare the last commit here with `git log origin/main` to
     (found by name).
 - Oct 24 · (this PR) · Claude · `docs/agents/MERGE-PLAYBOOK.md` (from Caleb via the UI/UX session): how the Merge Agent takes in, orders, reviews, resolves and merges PRs. AGENTS.md's merge rule points to it. The demo freeze in it is marked as proposed until Caleb confirms.
 - Oct 24 · (this PR) · Claude · MERGE-PLAYBOOK: Caleb decided there's no demo freeze; features keep merging if they pass the checks.
+- Oct 24 · #33 · Claude · Track G screens: Caleb's simplified Community map, his v2 "one step at a time" connect
+  flow, share asks, swaps, and (round 3, his final canvas) "Cook together", "Invite friends" and the motion (built on
+  #24's backend):
+  - **Kid tab "Dishes near you"** (`kid/community.tsx`): the title (room left for homie at the top right) with one
+    line under it, "Tap a photo to learn about a dish and cook together.", then one square map (330 pt on a 390 pt
+    phone; react-native-svg, no new native module: made-up streets, real Cambridge neighborhood names at their real
+    spots, You in the middle) with a round dish photo per ~1 km grid cell (`components/community/mapLayout.ts`), and
+    ONE button, "Share your recipe". The circles pop in one after another; a tapped one springs to 70 pt with its sun
+    ring; the card rises in; each chooser step crossfades (`components/community/motion.ts`). Reduce Motion: fades.
+  - **One step at a time** (`DishSteps`, `ShareSteps`, `Chooser`, words in `choices.ts`): a dish's card (photo, dish,
+    "cook · culture" with a small "AI" tag on Muse's culture guess, distance, her quote, "Translated" when she said it
+    in another language) has one button, "Connect with <cook>". Its chooser: "Join <host>'s dinner" (only with an
+    open dinner ahead), "Swap recipes", "Cook together" ("Ask <cook> to make it with you"). "Share your recipe" →
+    "Put it on the map" and "Host a dinner". Your own family's shared dishes are on the map too (their card's button
+    is "Host a dinner"). "You" opens your next dinner, the swaps and "cook together" asks sent to you (Accept /
+    Decline), the agreed ones, or one line saying they show up there (its "Host a dinner" button is gone).
+  - **Share asks** (`convex/shareRequests.ts`): "Put it on the map" by someone who doesn't cook the dish adds a
+    `questions` row (`kind: "share"`) for that recipe's cook. It reaches her in her language only through the parent
+    UI showing `textForCook` (LiveQuestions and the walkie-talkie, merged in #35). Only she can
+    answer. Gemini reads her answer against a fixed question (never the stored text, which has the asker's name and
+    the dish), her words passed as one JSON string; only "yes" shares (by `community.shareOn`). Every answer is
+    settled once (`questions.shareDecision`): after a no, an unclear answer, a failure or a voice note nobody could
+    write out, the kid's row says "<cook> said not now" and nobody can ask again for a day. The question, the cook's
+    switch and the privacy note now name the culture guess (`TODO(caleb)` on the words).
+  - **Swaps and Cook together** (`swapRequests`, `kind: "cook"` for cook together): `requestSwap`, `cookTogether`,
+    `respondSwap`, `mySwaps` (with `kind`). An accepted "cook together" reads "Cooking Pork Adobo together with the
+    Reyes family" with "Host a dinner" next, and `dinners.create` lets the asking family host that dish.
+  - **Dinner page** (`/dinner/[id]`, Caleb's final Hearth version): lavender wash, the dish photo (326x300, sun glow,
+    "DINNER" tag), "<Dish> Night", a "Hosted by" pill, when and where (the address only after the host says yes),
+    "You're in" and a few faces, "X going" (host + accepted guests + invite opens; it rolls up live), and one button:
+    "Ask to join", "Asked · waiting", or for the host and guests who are in, "Invite friends". The host first gets
+    "N asked to join", which scrolls to the requests. "Add to calendar" and its .ics code are gone.
+  - **Invite friends**: the share sheet as a dinner variant (`components/share/DinnerInviteBody.tsx`: the dish
+    photo, "<Dish> Night", "Hosted by <host>", no faces; Copy link, Messages, WhatsApp when available, More; "Come to
+    <Dish> Night with <host>: <url>"). `dinners.inviteLink` → one stable random token per dinner, host and accepted
+    guests only. Public `POST /invite/open` (`convex/lib/inviteRoutes.ts`; CORS for homecookd.app and localhost)
+    counts each phone or browser once (`dinnerInviteOpens`), at most 60 new per 10 minutes and 300 in all, and
+    answers only `{ dish, hostName, startsAt }` (the host's display name, the same one the invite text and the
+    dinner page's pill show, so `/d` says "Hosted by Grandma Rajani", not "Grandma"; `TODO(caleb)` on whether a
+    forwardable link should show less). The web's static `/d` page (`NEXT_PUBLIC_CONVEX_SITE_URL`,
+    default the hackathon deployment's `.convex.site`) and the app's `/d` screen (works signed out) call it. The
+    AASA file lists `/d`.
+  - **Also:** the kid tab bar's selected bubble now grows to fit a long label ("Community" at 390 pt;
+    `components/ui/FloatingTabBar.tsx`). Muse's story card code is in `convex/storyCards.ts`. `/dinner/new` takes
+    `?recipeId=` and lists the dishes another family said yes to cooking with you.
+  - **Polish (after the verifier):** the one green row in a chooser is the first one you can press, and none when
+    every row only says how things stand (a "Put it on the map · Asked Grandma Rajani" row, "One moment…", or a
+    pending "Swap recipes" no longer takes the green over a working row; `Chooser` draws those rows plain). The new
+    reads (`shareRequests.familyDishes`, `community.mySwaps`) and `dinners.inviteLink` are soft, and the new asks
+    (`shareRequests.ask`, `requestSwap`, `cookTogether`, `respondSwap`) are strict, so an app build that reaches
+    phones before this Convex deploy doesn't move every Convex call to the stub. `POST /invite/open` answers
+    `hostName` (was `hostFirstName`) on Convex, the web `/d` and the app `/d`. On the merged head: vitest 64,
+    `test-community-ui.mjs` 23, every other app script (`test-profile-navigation` against this checkout's Expo web),
+    tsc, lint and the web build pass; Expo web shows "Host a dinner" green under a plain "Put it on the map".
+  - **Tests:** vitest 63 (new `dinnerInvites.test.ts` 4; `shareRequests.test.ts` 8 with the fixed question, the
+    JSON answer and the day-long "not now"; `swaps.test.ts` 3 with cook together); breaking each key guard on
+    purpose fails a test. `test-community-ui.mjs` 23 (cook together, "said not now", the dinner's button and count,
+    the invite words and helpers). Expo web and the web's static `/d` at 390x844 with local fixtures (not committed).
+  - **Open:** not deployed (schema: `questions.shareDecision`, `dinners.inviteToken` + index, `dinnerInviteOpens`,
+    `swapRequests.kind`, all optional or new). After the deploy: `seedCommunity:neighbors`, then `floormateDish` and
+    `place '{"familyId": …}'` for Serene's, Caleb's and Salik's families; Vercel needs no new env (the site URL has
+    a public default). `DEMO_LOCATION` is still the MIT placeholder (`TODO(caleb)`). No `setLocation` caller. Not tried
+    on a phone: the share sheet's dinner variant, the deep link, VoiceOver. "Host a dinner" still shows on your own
+    dish's card. A floormate dish has no in-app off switch. With #35 in main, homie's corner pot sits over the dinner
+    photo's glow (the canvas has none there; `/d` hides it like `/i` and `/r`).
 - Oct 24 · #49 · Claude · homie's voice, Caleb's pick ("i like riya as well"): "Riya bilingual" `930eda72-c1af-4637-8d07-87d881d615fe` on both sides and `/speak`, asked for exactly as auditioned (`voice/src/sonic.ts`: `sonic-3.6`, Marathi `locale: mr-IN`, English `locale: en-IN` with a mood per line kind, one speed 0.85 via `HOMIE_SPEED`, 24 kHz; the per-call speeds are gone). `/speak` takes an optional `kind`. Cousin wording for the fixed English lines and a tone rule in the Claude prompts (homie is feminine in Marathi and Hindi; end questions get no second lead-in); the Marathi fixed lines changed only punctuation and sentence breaks. New `voice/src/geminiTts.ts`: when Sonic fails before any audio (HTTP error, network, nothing in 4 s), Gemini TTS (`gemini-3.8-flash-tts`, voice `en-in-assistant-3`, 24 kHz l16, `store: false`) says the line; after audio started, no splice. App check: #36's `offerOf` keys on `kind` plus "story" in a nudge, so the story nudge is unchanged; nothing on main keys on homie's wording. Memory: `homie-voice.md`, `cartesia-credits-for-tests.md`; MERGE-PLAYBOOK's voice check is now a live run. Tests: 50 unit (new `test/tts.test.ts`, 11/11 mutants caught); live with real Cartesia on the stub: kid client 5/5 turns, `test-record` Marathi ×3 and English ×2 PASS, 41 Sonic requests all Riya + 0.85 (mr-IN without emotion, en-IN with), forced fallback (invalid key → 401) spoke 7 lines with Gemini in Marathi and English; listening samples in Claude's scratchpad `voice-final/`. Open: TODO(caleb) native Marathi check of `lines.ts` (and "श्रेया साठी" is written apart); not deployed, needs `voice/deploy.sh` after merge.

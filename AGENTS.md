@@ -125,7 +125,7 @@ and homesick college kids. It's a family product, not a tool.
 ```
 app/        Expo app (expo-router, TypeScript). EAS dev build while coding, TestFlight for the team and the demo.
             src/lib/live/ = the Convex client, the voice socket and the mic (Expo Go hides the mic).
-web/        Next.js site: the lander, homecookd.app/r (recipe share page) and /i (invites). Vercel project "homecookd".
+web/        Next.js site: the lander, homecookd.app/r (recipe share page), /i (invites) and /d (dinner invites). Vercel project "homecookd".
 convex/     The hackathon backend: schema.ts, functions, http.ts (worker + voice service endpoints)
 voice/      Live voice service (Cloud Run): the kid's cooking loop (/cook) and homie while a cook records (/record);
             homie speaks with Sonic, and Gemini TTS when Sonic fails
@@ -151,7 +151,7 @@ cd app && npx eas-cli build -p ios --profile production --auto-submit   # TestFl
 cd app && npx eas-cli update --channel production -m "<what changed>"   # JS-only fix to TestFlight phones
 node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
-cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/recording-ui/parent-jobs
+cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/recording-ui/parent-jobs/community-ui
 
 # web
 cd web && npm run dev -- --port 3000

@@ -1,7 +1,7 @@
 // Root: Hearth fonts (Fraunces + DM Sans, never blocking more than 2.5 s), the app-wide providers
 // (session, toasts, Watch/Hear sheet, share sheet), the Stack, and the launch bloom once per cold start.
 // SessionGate sends a phone with no family to the first screen (join) and a family with nobody
-// picked to "Who's in the kitchen?". Invite (/i) and recipe (/r) links pass through either way;
+// picked to "Who's in the kitchen?". Invite (/i), recipe (/r) and dinner-invite (/d) links pass through either way;
 // any other link opened before anyone was picked opens on top of their home once it shows.
 // PushBridge (RETENTION-HANDOFF 2.3) opens the screen a tapped push points at (the same hold covers a
 // push that launched the app), files this phone's push token under its person, and starts "heard"
@@ -129,6 +129,7 @@ function AppStack() {
       <Stack.Screen name="join-code" options={{ title: 'Family code', animation: 'slide_from_right' }} />
       <Stack.Screen name="i" options={{ title: 'Invite', animation: 'fade' }} />
       <Stack.Screen name="r" options={{ title: 'homecookd', animation: 'none' }} />
+      <Stack.Screen name="d" options={{ title: 'Dinner invite', animation: 'fade' }} />
       <Stack.Screen name="kid" options={{ title: 'homecookd', animation: 'fade' }} />
       <Stack.Screen name="parent" options={{ title: 'homecookd', animation: 'fade' }} />
       <Stack.Screen name="recipe/[id]/index" options={{ title: 'Recipe', animation: 'fade' }} />
@@ -150,8 +151,8 @@ function AppStack() {
   );
 }
 
-/** Screens that work without a signed-in phone: the first screen, the code backup, invite and recipe links. */
-const SIGNED_OUT_ROUTES = new Set(['/join', '/join-code', '/i', '/r']);
+/** Screens that work without a signed-in phone: the first screen, the code backup, invite, recipe and dinner-invite links. */
+const SIGNED_OUT_ROUTES = new Set(['/join', '/join-code', '/i', '/r', '/d']);
 /** Screens that work without a chosen profile. */
 const OPEN_ROUTES = new Set(['/', ...SIGNED_OUT_ROUTES]);
 /** A held link waits this long after home appears, so it opens on top of home (Back lands there). */

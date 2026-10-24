@@ -19,6 +19,11 @@ export type ShareCardData = {
   /** "~50 min" or null. */
   time: string | null;
   poster: string | null;
+  /**
+   * In place of "by Dad" ("Hosted by Mama Ngozi" on a dinner invite); the cook's avatar still leads it.
+   * It may take two lines (BYLINE_EXTRA more), so a long name is never cut.
+   */
+  byline?: string;
 };
 
 export type ShareCardProps = {
@@ -36,6 +41,8 @@ export type ShareCardProps = {
 // Card height without the photo, with a full two-line title at 24 (12 top + 12 gap + 2 x 26.9
 // title + 6 + 20 meta + 12 gap + 23 brand + 14 bottom). The sheet plans the stage with this.
 const CARD_CHROME = 153;
+/** A byline's second line (14 pt meta). */
+export const BYLINE_EXTRA = 20;
 export const STAGE_PAD = { regular: 22, compact: 14 } as const;
 /** Stage height for a photo edge: card chrome plus the stage's top and bottom padding. */
 export function stageFor(photo: number, compact: boolean) {
@@ -124,7 +131,7 @@ export function ShareCard({ data, swatch, photo, stageHeight, compact = false }:
   // "by Dad · ~50 min" when it fits on one line beside the avatar, else just "by Grandma".
   // Room: the text column (inner - 4) minus the 20 px avatar and its 6 px gap; DM Sans 14 runs
   // about 7.4 px a character.
-  const by = data?.cook ? `by ${data.cook}` : '';
+  const by = data?.byline ?? (data?.cook ? `by ${data.cook}` : '');
   const full = [by || null, data?.time ?? null].filter(Boolean).join(' · ');
   const meta = full.length <= Math.floor((inner - 30) / 7.4) ? full : by || full;
 
@@ -132,7 +139,7 @@ export function ShareCard({ data, swatch, photo, stageHeight, compact = false }:
     <Animated.View
       style={[styles.stage, { width: cardW + 44, height: stageHeight, paddingVertical: compact ? STAGE_PAD.compact : STAGE_PAD.regular }, stageStyle]}
       accessibilityRole="image"
-      accessibilityLabel={data ? `${title}${data.cook ? `, from ${data.cook}` : ''}, on homecookd` : 'Recipe card'}>
+      accessibilityLabel={data ? `${title}${data.byline ? `, ${data.byline}` : data.cook ? `, from ${data.cook}` : ''}, on homecookd` : 'Recipe card'}>
       <View style={[styles.card, { width: cardW, boxShadow: dark ? '0 16px 40px rgba(0,0,0,0.32)' : '0 10px 30px rgba(30,36,16,0.10)' }]}>
         {photo > 0 ? (
           <View style={[styles.photo, { width: inner, height: photo }]}>
@@ -172,7 +179,7 @@ export function ShareCard({ data, swatch, photo, stageHeight, compact = false }:
           {meta ? (
             <View style={styles.meta}>
               {data?.cook ? <Avatar name={data.cook} size={20} /> : null}
-              <Txt variant="meta" size={14} numberOfLines={1} style={styles.metaText}>
+              <Txt variant="meta" size={14} numberOfLines={data?.byline ? 2 : 1} style={styles.metaText}>
                 {meta}
               </Txt>
             </View>

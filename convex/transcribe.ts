@@ -4,7 +4,8 @@
 // translation next to it.
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
+import { type ActionCtx, internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { geminiTranslate } from "./lib/translate";
 
 const STT_URL = "https://api.cartesia.ai/stt";
@@ -26,12 +27,13 @@ const EXT: Record<string, string> = {
 
 export const audioFor = internalQuery({
   args: { questionId: v.id("questions") },
-  returns: v.union(v.null(), v.object({ audioId: v.id("_storage"), language: v.string() })),
+  returns: v.union(v.null(), v.object({ audioId: v.id("_storage"), language: v.string(), share: v.boolean() })),
   handler: async (ctx, { questionId }) => {
-    const answer = (await ctx.db.get("questions", questionId))?.answer;
-    if (!answer?.audioId) return null;
+    const q = await ctx.db.get("questions", questionId);
+    const answer = q?.answer;
+    if (!q || !answer?.audioId) return null;
     const cook = await ctx.db.get("people", answer.by);
-    return { audioId: answer.audioId, language: cook?.language ?? "en" };
+    return { audioId: answer.audioId, language: cook?.language ?? "en", share: q.kind === "share" };
   },
 });
 
@@ -48,6 +50,7 @@ export const saveTranscript = internalMutation({
     // Only if the answer is still that voice note.
     if (q?.answer?.audioId === audioId) {
       await ctx.db.patch("questions", questionId, { answer: { ...q.answer, transcript, translation } });
+      if (q.kind === "share") await ctx.scheduler.runAfter(0, internal.shareRequests.decide, { questionId });
     }
     return null;
   },
@@ -74,23 +77,34 @@ export const questionAnswer = internalAction({
   args: { questionId: v.id("questions") },
   returns: v.null(),
   handler: async (ctx, { questionId }) => {
-    const apiKey = process.env.CARTESIA_API_KEY;
-    if (!apiKey) {
-      console.warn("CARTESIA_API_KEY isn't set; voice note left without a transcript");
-      return null;
-    }
     const found = await ctx.runQuery(internal.transcribe.audioFor, { questionId });
     if (!found) return null;
-    const { audioId, language } = found;
-    const audio = await ctx.storage.get(audioId);
-    if (!audio) return null;
-    const transcript = await inkTranscribe(audio, apiKey, language);
-    if (!transcript) return null;
-    const translation = language === "en" ? undefined : await toEnglish(transcript);
-    await ctx.runMutation(internal.transcribe.saveTranscript, { questionId, audioId, transcript, translation });
+    let saved = false;
+    try {
+      saved = await writeOut(ctx, questionId, found.audioId, found.language);
+    } finally {
+      // A share ask is still read when her voice note can't be written out: no words is not a yes.
+      if (!saved && found.share) await ctx.scheduler.runAfter(0, internal.shareRequests.decide, { questionId });
+    }
     return null;
   },
 });
+
+/** Ink's transcript (and the English) saved on the answer; false when there are no words to save. */
+async function writeOut(ctx: ActionCtx, questionId: Id<"questions">, audioId: Id<"_storage">, language: string): Promise<boolean> {
+  const apiKey = process.env.CARTESIA_API_KEY;
+  if (!apiKey) {
+    console.warn("CARTESIA_API_KEY isn't set; voice note left without a transcript");
+    return false;
+  }
+  const audio = await ctx.storage.get(audioId);
+  if (!audio) return false;
+  const transcript = await inkTranscribe(audio, apiKey, language);
+  if (!transcript) return false;
+  const translation = language === "en" ? undefined : await toEnglish(transcript);
+  await ctx.runMutation(internal.transcribe.saveTranscript, { questionId, audioId, transcript, translation });
+  return true;
+}
 
 /** The kid's English. A failed translation still keeps the cook's own words. */
 async function toEnglish(transcript: string): Promise<string | undefined> {

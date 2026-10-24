@@ -1,7 +1,8 @@
 // The app row: the ways out of homecookd, as Spotify's share sheet draws them (big round buttons
 // with a label underneath). All five fit across the sheet with no scrolling (RoundTarget's grid,
-// QA B09), so none sits half past the edge. The one row both share sheets use, the recipe
-// ShareSheet and the invite sheet (components/profiles/AddFamilySheet), so the order never drifts:
+// QA B09), so none sits half past the edge. The one row every share sheet uses, the recipe
+// ShareSheet (and its dinner invite, which leaves Instagram off) and the family invite sheet
+// (components/profiles/AddFamilySheet), so the order never drifts:
 //
 //   Copy link   the clipboard; the button says "Copied" with a check for a moment
 //   Messages    the Messages composer with the text, no recipient (else the link is copied)
@@ -38,6 +39,8 @@ export type ExternalRowProps = {
   sentLabel?: string;
   /** Breadcrumbs (the share trail). */
   onTrace?: (what: string) => void;
+  /** Ways out this sheet leaves off (the dinner invite has no Instagram). */
+  omit?: ExternalAction[];
 };
 
 type Item = { id: ExternalAction; label: string; a11y: string; hint?: string; fill: string; icon: () => ReactNode };
@@ -67,7 +70,7 @@ const INSTAGRAM_BEAT_MS = 800;
 
 const errorToast = { tone: 'error' as const, icon: <CloseIcon size={14} color={colors.card} /> };
 
-export function ExternalRow({ getUrl, text, title, sentLabel = 'Sent', onTrace }: ExternalRowProps) {
+export function ExternalRow({ getUrl, text, title, sentLabel = 'Sent', onTrace, omit }: ExternalRowProps) {
   const toast = useToast();
   const [whatsApp, setWhatsApp] = useState(knownWhatsApp() ?? false);
   // The button waiting for the link (it spins), and "Copied" on Copy link.
@@ -153,7 +156,7 @@ export function ExternalRow({ getUrl, text, title, sentLabel = 'Sent', onTrace }
 
   return (
     <TargetRow accessibilityLabel="Send outside homecookd">
-      {ITEMS.filter((it) => it.id !== 'whatsapp' || whatsApp).map((it) => (
+      {ITEMS.filter((it) => (it.id !== 'whatsapp' || whatsApp) && !omit?.includes(it.id)).map((it) => (
         <RoundTarget
           key={it.id}
           label={it.label}
