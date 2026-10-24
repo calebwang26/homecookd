@@ -8,12 +8,11 @@ metadata:
 On 2026-10-24 Caleb said: "After homie introduces itself once, it doesn't have to introduce itself again."
 
 **The decision (shipped in `app/`):**
-- A tap on the resting pot on a screen without its own line says "Hi, I’m homie." the first time only. After
-  that, those screens say "I’m right here." (`lib/homie/logic` `HELP.hello` / `HELP.again`).
+- The first tap on the resting pot says "Hi, I’m homie." before its line, the first time only (`lib/homie/logic`
+  `HELP.hello`). Since Oct 24 every tap has a real line after that: news, or the tab's own
+  ([[homie-tap-always-answers]]); "I’m right here." on its own is gone.
 - Remembered per person on this phone with kv (`homie.introduced.<profileId>`, `lib/homie/intro`), so it lasts
   across app restarts. The recording hello ("Hi, Mom. I'm homie. ...") counts as the introduction too.
-- Screens with a line of their own (cook mode, Recipes, parent Home, Messages) always say it; they never use up
-  the hello.
 
 **Why:** homie is family, not a product tour. A cousin doesn't say their name every time you look up.
 

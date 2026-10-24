@@ -4,7 +4,10 @@
 // the cook's language and offers to read the recipe out loud, and until the kid says yes, steps change
 // silently (a no keeps them silent for the visit); timers; labelled hints; and two nudges (a step with a
 // story, a long quiet on one step). While the app has one of its own homie moments up, the kid's yes or no
-// is that moment's answer, never ours.
+// is that moment's answer, never ours. While any video plays on the phone (the app's { type: "video" }, or a
+// clip we played), homie says nothing on its own: the greeting, an offer, a nudge or a timer waits for the
+// next pause (Caleb, Oct 24). Only an answer to what the kid just said is spoken meanwhile. The read-aloud
+// offer is off by default (VOICE_READ_OFFER=1 brings it back): steps are read once the kid asks.
 import WebSocket from "ws";
 import { TurnAgent, type Actions } from "./agent.js";
 import * as convex from "./convex.js";
@@ -17,6 +20,8 @@ import { translateQuote } from "./translate.js";
 import { afterNo, yesNo } from "./yesNo.js";
 
 type SayKind = "step" | "reply" | "hint" | "translation" | "nudge" | "offer" | "greeting" | "timer";
+/** Lines homie says on its own, not in answer to the kid: these wait while a video plays. */
+const UNPROMPTED: ReadonlySet<SayKind> = new Set(["greeting", "offer", "nudge", "timer"]);
 
 /** What a cooking session talks to. Tests pass fakes. */
 export type CookingDeps = {
@@ -126,6 +131,10 @@ export class Cooking {
   private turnOpenSince = 0;
   /** While the cook's clip plays, the mic hears her too: only plain commands count until then. */
   private clipUntil = 0;
+  /** The phone says a video is playing (the kid's own tap on a step video, or ours). */
+  private videoOn = false;
+  /** Unprompted lines waiting for the video to stop, one after another. */
+  private waitingLines: Promise<void> = Promise.resolve();
   /** Bumped by every new clip or step, so a translation still waiting for its clip to end is dropped. */
   private clipSeq = 0;
   private turns: Promise<void> = Promise.resolve();
@@ -210,7 +219,7 @@ export class Cooking {
     if (hello) await this.say(hello[0], "greeting", { textEn: hello[1], language });
     else await this.say("Ready? Let's cook!", "greeting");
     await this.played(true);
-    if (this.closed || this.reading || this.declined) return;
+    if (this.closed || this.reading || this.declined || !env.readOffer) return;
     this.offer = { read: true };
     await this.say(`Want me to read ${this.cook}'s recipe out loud? Just say yes or no.`, "offer");
   }
@@ -232,7 +241,7 @@ export class Cooking {
       if (this.hearing()) this.ink?.send(data as Buffer);
       return;
     }
-    let msg: { type?: string; stepOrder?: number; text?: unknown; open?: unknown; kind?: unknown };
+    let msg: { type?: string; stepOrder?: number; text?: unknown; open?: unknown; kind?: unknown; playing?: unknown };
     try {
       // `?? {}`: "null" is valid JSON, and reading .type off it used to end the whole process.
       msg = JSON.parse(data.toString()) ?? {};
@@ -250,6 +259,10 @@ export class Cooking {
     } else if (msg.type === "moment" && typeof msg.open === "boolean") {
       // One of the app's own homie moments opened or closed on the phone.
       this.moment = msg.open ? (typeof msg.kind === "string" && msg.kind ? msg.kind.slice(0, 20) : "moment") : null;
+    } else if (msg.type === "video" && typeof msg.playing === "boolean") {
+      // A video started or stopped on the phone. Watching counts as activity (no quiet nudge after it).
+      this.videoOn = msg.playing;
+      this.touch();
     }
   }
 
@@ -407,15 +420,16 @@ export class Cooking {
     const story = this.session.recipe.memories.find((m) => m.kind === "story" && m.stepOrder === order && !this.storiesOffered.has(m));
     if (!story || this.closed) return;
     await this.played(true);
+    await this.untilPaused();
     if (seq !== this.clipSeq || this.step !== order || this.closed) return;
     this.storiesOffered.add(story);
     this.offer = { story };
     await this.say(`${this.cook} has a story about this one. Want to hear it?`, "nudge");
   }
 
-  /** Quiet on one step for a long time: one gentle check per step (not while a clip, a timer or an app moment is up). */
+  /** Quiet on one step for a long time: one gentle check per step (not while a video, a timer or an app moment is up). */
   private async nudgeIfQuiet() {
-    if (!this.reading || this.closed || this.timers.size || this.speaking || this.moment || Date.now() < this.clipUntil) return;
+    if (!this.reading || this.closed || this.timers.size || this.speaking || this.moment || this.videoPlaying()) return;
     if (Date.now() - this.lastActivity < QUIET_NUDGE_MS || this.quietNudged.has(this.step)) return;
     this.quietNudged.add(this.step);
     this.touch();
@@ -527,12 +541,32 @@ export class Cooking {
     }
   }
 
+  /** A video plays on the phone: the kid's (the app says so) or the clip we asked it to play. */
+  private videoPlaying(): boolean {
+    return this.videoOn || Date.now() < this.clipUntil;
+  }
+
+  /** Waits until no video plays and our last line has finished (a video can start again meanwhile). */
+  private async untilPaused() {
+    do {
+      while (!this.closed && this.videoPlaying()) await new Promise((r) => setTimeout(r, 250));
+      await this.played();
+    } while (!this.closed && this.videoPlaying());
+  }
+
   /**
    * Speaks in homie's voice: a `say` message, the audio as binary frames, then `say_end`. Cuts off any line
-   * still playing. `textEn` and `language` are for a line that isn't English (the greeting).
+   * still playing. `textEn` and `language` are for a line that isn't English (the greeting). A line homie
+   * says on its own (UNPROMPTED) while a video plays waits for the next pause, in turn with any other.
    */
   private async say(text: string, kind: SayKind, extra: { textEn?: string; language?: string; translation?: true } = {}) {
     if (this.closed) return; // the phone hung up mid-turn: nobody to say it to, so no Sonic call
+    if (UNPROMPTED.has(kind) && this.videoPlaying()) {
+      const turn = this.waitingLines.then(() => this.untilPaused());
+      this.waitingLines = turn;
+      await turn;
+      if (this.closed) return;
+    }
     this.speaking?.abort();
     const ctrl = new AbortController();
     this.speaking = ctrl;

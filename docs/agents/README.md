@@ -32,6 +32,8 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [declutter-first](memory/declutter-first.md) | Oct 22, non-negotiable: cut words and features before adding UI; video and voice above text |
 | [homie-talks-no-bubble](memory/homie-talks-no-bubble.md) | Oct 24: homie talking = no text (pot lights, lid lifts, "AI voice"); asking = centred, no buttons, answer out loud |
 | [homie-hello-once](memory/homie-hello-once.md) | Oct 24: homie introduces itself once: the pot per person on a phone, the recording hello per cook (`metBefore`) |
+| [homie-silent-during-video](memory/homie-silent-during-video.md) | Oct 24: while any video plays homie says nothing on its own (held for the next pause); only answers to the kid; reading steps aloud off by default |
+| [homie-tap-always-answers](memory/homie-tap-always-answers.md) | Oct 24: a tap on homie always gets a spoken answer: news first (Claude), else the tab's "Explore X by doing X" line, never twice in a row |
 | [lander-design-references](memory/lander-design-references.md) | Lander taste: video hero, giant type, footer wordmark animation |
 | [lander-copy-feedback](memory/lander-copy-feedback.md) | Copy rules: sell emotion, 3-second demo steps, instantly intuitive |
 | [lander-icp-problems](memory/lander-icp-problems.md) | Kid and parent problem lists and the big vision |

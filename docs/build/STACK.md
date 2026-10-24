@@ -309,19 +309,32 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 `kind` (optional, a `say` kind such as `step` or `hint`) picks the mood of an English line; none = `content`. Header
 `x-spoken-text` (URI-encoded) is what was actually said. Used by walkie-talkie and the pot's tap hints.
 
+**A tap on homie** (Oct 24: a tap always gets a spoken answer). Convex `homie:news({ sessionToken, now })` (live in the
+app; `now` rounded to 10 min) gives at most 3 facts `{ id, kind: answer | asked | cooking | recipe | quiet, line, at }`,
+newest first, a quiet week only when nothing else is new. The app asks `POST /homie/line { sessionToken, factId, tab? }`
+→ `{ text, written }` ahead of the tap: the voice service reads the facts itself (`POST /homie/news` on Convex,
+x-voice-secret) and Claude says that one fact warmly (`voice/src/tapLine.ts`; the plain `line` when Claude fails,
+`written: false`). A tap says the newest untold fact once, else the screen's "Explore X by doing X" line
+(`app/src/lib/homie/tap.ts`), then `/speak` with `translate: true`.
+
 **App ↔ voice service: kid cooking additions** (`/cook`, backward compatible)
 - `say` gains `kind`: `step | reply | hint | translation | nudge | offer | greeting | timer`, and `textEn` when the
   spoken text isn't English. A `hint` is AI general knowledge: always labelled, always followed by `asked_cook`.
 - `play_clip` gains `quote?` and `quoteEn?` for the caption.
 - `{ type: "timer", id, seconds, label, endsAt }`, `{ type: "timer_done", id, label }`. The app owns the countdown.
-- After `ready`: one `say` of kind `greeting` (a word in the cook's language + `textEn`), then `offer`
-  ("Want me to read Grandma's recipe out loud? Say yes or no."). Until it's answered, steps change silently.
+- After `ready`: one `say` of kind `greeting` (a word in the cook's language + `textEn`). Steps change silently
+  until the kid asks for them to be read ("repeat", "read it to me"). With `VOICE_READ_OFFER=1` (off by default since
+  Oct 24) the greeting is followed by an `offer` ("Want me to read Grandma's recipe out loud? Say yes or no.").
   - Yes (spoken, or `{ type: "text", text: "yes" }`) → `{ type: "offer_closed", accepted: true }`, then the current
     step is read (and every step after).
   - No or "not now" (spoken, or `{ type: "text", text: "no" }`) → `{ type: "offer_closed", accepted: false }`.
     Reading stays off for that visit: steps change silently, plain commands still work ("repeat" reads the
     current step once).
   - Either answer is kept 3 h on the instance, so a reconnect gets no second hello or offer.
+- App → service: `{ type: "video", playing: boolean }` when any video (or the cook's own voice note) starts or stops
+  on the kid's phone. While one plays (or a clip the service asked for), homie says nothing on its own: a
+  `greeting`, `offer`, `nudge` or `timer` line waits for the next pause, one after another (`timer_done` is still
+  sent at once). Answers to what the kid just said are spoken meanwhile; the app pauses the video for them.
 - App → service: `{ type: "moment", open: true, kind: "answer" | "story" | "ask" | "help" }` when an app-only homie
   moment opens on the kid's phone, `{ type: "moment", open: false }` when it closes. While one is open the service
   still streams transcripts, but a spoken yes, no, sure or not now is not applied to its read-aloud offer or

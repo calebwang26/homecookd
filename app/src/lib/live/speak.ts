@@ -10,6 +10,9 @@
 // sends silence meanwhile (half duplex, lib/live/mic). Without the service (no URL, no Convex session,
 // an error, or no audio within 8 s, session included), the phone's own voice (expo-speech) says the
 // words.
+// homie never talks over a video (Caleb, Oct 24): while one plays, a line waits for it to stop, and a
+// newer line replaces it. Only `answer` (a reply to the kid's own tap) speaks at once, and the video
+// pauses for it (homie's voice pauses it on the shared player; the phone's voice pauses it first).
 // Resolves once the voice starts (or didn't); never throws. A call from an effect right after sign-in passes `profileId` from useSession(): the
 // module snapshot convexSession() falls back to isn't published yet then.
 import { fetch } from 'expo/fetch';
@@ -18,7 +21,7 @@ import * as Speech from 'expo-speech';
 
 import { deviceVoiceLanguage, voiceHttpBase } from '@/lib/homie/logic';
 import { doneSpeaking, LIT_BEAT_MS, setHomie } from '@/lib/homie/store';
-import { playClip, stopAudio } from '@/lib/media';
+import { onVideoChange, pauseAllVideos, playClip, stopAudio, videoPlaying, videoStopped } from '@/lib/media';
 
 import { convexSession } from './convex';
 import { SAY_KEY_PREFIX } from './say';
@@ -38,6 +41,8 @@ export type SpeakOptions = {
   /** Under the pot while it speaks (default "AI voice"). */
   label?: string;
   profileId?: string;
+  /** A reply to the kid's own tap (on homie, on Ask): said now, pausing any video. Else it waits for the video. */
+  answer?: boolean;
 };
 
 /** What was said ('' if nothing), and by whom: homie's voice, the phone's voice, or nobody. */
@@ -54,6 +59,12 @@ export async function speak(text: string, opts: SpeakOptions = {}): Promise<Spok
   stopSpeaking();
   const mine = ++turn;
   const label = opts.label ?? 'AI voice';
+  // Not over a video: the line waits for it (a newer line, or stopSpeaking, drops this one).
+  const quiet = async () => {
+    if (!opts.answer && videoPlaying()) await videoStopped();
+    return mine === turn;
+  };
+  if (!(await quiet())) return { text: '', via: 'none' };
   const started = Date.now();
   ownsBeat = true;
   setHomie({ state: 'lit', label });
@@ -61,8 +72,10 @@ export async function speak(text: string, opts: SpeakOptions = {}): Promise<Spok
     const wav = await fetchSpeech(words, opts);
     // The lit beat before any voice.
     await wait(LIT_BEAT_MS - (Date.now() - started));
-    if (mine !== turn) return { text: '', via: 'none' };
+    // A video the kid started while the line was on its way: it still waits.
+    if (!(await quiet())) return { text: '', via: 'none' };
     if (wav && play(wav.bytes, mine)) return { text: wav.spoken || words, via: 'homie' };
+    if (opts.answer) pauseAllVideos();
     return sayOnPhone(words, opts.translate ? undefined : opts.lang, mine, label);
   } catch (e) {
     console.warn('[speak]', String(e).slice(0, 160));
@@ -146,9 +159,16 @@ function play(bytes: Uint8Array, mine: number): boolean {
   return true;
 }
 
-/** The phone's own voice. Only for words we have in that language: a translation needs the service. */
+/**
+ * The phone's own voice. Only for words we have in that language: a translation needs the service.
+ * A video starting stops it (the shared player's lines stop on their own: lib/media).
+ */
 function sayOnPhone(words: string, lang: string | undefined, mine: number, label: string): Spoken {
+  const off = onVideoChange(() => {
+    if (videoPlaying()) Speech.stop().catch(() => {});
+  });
   const finish = () => {
+    off();
     if (mine === turn) end();
   };
   try {

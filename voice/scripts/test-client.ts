@@ -1,13 +1,15 @@
 // Streams WAV files to the voice service like the app's mic would, prints every event, and saves
 // what the service says to test-audio/out/. One file = one turn; we wait for the reply (and for homie to
-// go quiet) before the next. It waits out the greeting and the read-aloud offer first. `text:<words>`
-// sends { type: "text" } instead (the app's own answer), and `moment:<kind>` / `moment:off` opens or closes
-// one of the app's homie moments. It streams the audio for real (Ink 2 and Sonic); FAKE=1 against `npm run dev:fake`
+// go quiet) before the next. It waits out the greeting and the read-aloud offer first (with
+// VOICE_READ_OFFER=1; else it waits 10 s for it). `text:<words>` sends { type: "text" } instead (the app's own
+// answer), `moment:<kind>` / `moment:off` opens or closes one of the app's homie moments, `video:on` /
+// `video:off` says a video started or stopped on the phone, and `wait:<seconds>` keeps the mic open that long. It streams the audio for real (Ink 2 and Sonic); FAKE=1 against `npm run dev:fake`
 // sends each WAV's words as text instead, for a quick offline check (scripts/guard.ts).
 //   VOICE_STUB=1 npm run dev                                        (in another terminal)
 //   npm run test-client -- test-audio/yes.wav test-audio/next-step.wav test-audio/question.wav
 //   npm run test-client -- test-audio/no.wav test-audio/next-step.wav      # no to reading: silent steps
 //   npm run test-client -- text:no test-audio/next-step.wav
+//   npm run test-client -- video:on "text:Set a timer for 10 seconds." wait:15 video:off wait:8   # held line
 //   URL=wss://<cloud run host> npm run test-client -- test-audio/next-step.wav   # against the deployed one
 //   FAKE=1 npm run test-client -- test-audio/next-step.wav                       # offline, against dev:fake
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -97,6 +99,17 @@ for (const file of files) {
     const msg = kind === "off" ? { type: "moment", open: false } : { type: "moment", open: true, kind };
     console.log(`${stamp()}  ▶ ${JSON.stringify(msg)}`);
     ws.send(JSON.stringify(msg));
+    continue;
+  }
+  if (file === "video:on" || file === "video:off") {
+    const msg = { type: "video", playing: file === "video:on" };
+    console.log(`${stamp()}  ▶ ${JSON.stringify(msg)}`);
+    ws.send(JSON.stringify(msg));
+    continue;
+  }
+  if (file.startsWith("wait:")) {
+    console.log(`${stamp()}  ▶ waiting ${file.slice(5)} s`);
+    for (const end = Date.now() + Number(file.slice(5)) * 1000; Date.now() < end; ) { ws.send(Buffer.alloc(3200)); await sleep(100); }
     continue;
   }
   const done = new Promise<void>((r) => (replied = r));
