@@ -2,7 +2,7 @@
 //   GET  /health                                          → ok (Cloud Run's front end swallows /healthz)
 //   WS   /cook?session=<sessionToken>&recipe=<recipeId>[&audio=pcm|wav]       the kid cooking
 //   WS   /record?session=<sessionToken>&recording=<recordingId>[&audio=pcm|wav]  homie while a cook records
-//   POST /speak { sessionToken, text, lang?, translate? }  → audio/wav in homie's voice
+//   POST /speak { sessionToken, text, lang?, translate?, kind? }  → audio/wav in homie's voice
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import WebSocket, { WebSocketServer } from "ws";
 import { Cooking } from "./cook.js";
@@ -38,7 +38,7 @@ const fail = (res: ServerResponse, status: number, error: string) =>
 /** Walkie-talkie and the pot's tap hints: a line in homie's voice, in `lang` or the person's language. */
 async function speakRoute(req: IncomingMessage, res: ServerResponse) {
   const body = await readJson(req);
-  const { sessionToken, text, lang, translate: shouldTranslate } = body ?? {};
+  const { sessionToken, text, lang, translate: shouldTranslate, kind } = body ?? {};
   if (typeof sessionToken !== "string" || typeof text !== "string" || !text.trim() || text.length > MAX_SPEAK_CHARS) {
     return fail(res, 400, `sessionToken and text (1–${MAX_SPEAK_CHARS} characters) are required`);
   }
@@ -55,7 +55,8 @@ async function speakRoute(req: IncomingMessage, res: ServerResponse) {
   try {
     const t0 = Date.now();
     const spoken = shouldTranslate === true && language !== "en" ? (await translate(text, language)) || text : text;
-    const wav = await speakWav(spoken, { language, voice: env.homieVoice, speed: 0.9 });
+    // `kind` (optional, a `say` kind like "step" or "hint") picks the mood of an English line; none = content.
+    const wav = await speakWav(spoken, { language, voice: env.homieVoice, kind: typeof kind === "string" ? kind.slice(0, 24) : undefined });
     console.log(`speak ${language} ${Date.now() - t0}ms`);
     res.writeHead(200, { "Content-Type": "audio/wav", "Content-Length": wav.length, "x-spoken-text": encodeURIComponent(spoken) }).end(wav);
   } catch (err) {
@@ -64,7 +65,8 @@ async function speakRoute(req: IncomingMessage, res: ServerResponse) {
   }
 }
 
-const server = createServer((req, res) => {
+/** Exported for the tests (PORT=0 picks a free port). */
+export const server = createServer((req, res) => {
   const path = (req.url ?? "/").split("?")[0];
   if (path === "/health" || path === "/healthz") {
     // x-fake-speech tells the test clients this service spends no Cartesia credits.
