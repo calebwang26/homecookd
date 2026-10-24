@@ -1,10 +1,18 @@
 """Process recipes uploaded from the phone.
 
-    python pipeline/worker.py              # poll forever (every 10 min; --interval 60 for a demo)
-    python pipeline/worker.py --once       # one pass, then exit
-    python pipeline/worker.py --retry <job_id>
+    python pipeline/worker.py              # claim jobs from Convex forever (every 15 s)
+    python pipeline/worker.py --once       # at most one Convex job, then exit
+    python pipeline/worker.py --gcs [--once | --retry <job_id>]   # the pre-hackathon GCS job files (below)
 
-The phone gets signed URLs from the Cloud Run signer (cloud/signer), uploads videos into the
+Convex (docs/build/STACK.md, "Worker -> Convex"): the app uploads to the GCS uploads bucket and calls
+jobs.create. This worker POSTs /worker/claim (204 = nothing queued), runs prep -> process (Gemini watches,
+Muse writes) -> publish, reports each stage to /worker/progress (preparing, understanding, writing, or failed
+with a message the cook can read) and sends the published recipe.json to /worker/published, which saves it
+and has Convex index it into Moss. Every call carries x-worker-secret. Env: CONVEX_SITE_URL (the deployment's
+.convex.site URL; pipeline/convex_stub.py for local tests), WORKER_SECRET. Raw uploads are kept, so a failed
+job can be queued again; the uploads bucket's 14-day lifecycle rule deletes them.
+
+GCS mode (--gcs): the phone gets signed URLs from the Cloud Run signer (cloud/signer), uploads videos into the
 private uploads bucket in the background, and polls jobs/<job_id>.json in the public media
 bucket. This worker finds jobs whose files have all arrived, runs prep -> process -> publish,
 updates the job status, and deletes the raw uploads once the recipe is published.
@@ -308,6 +316,149 @@ def _handle(job: dict, media: storage.Bucket, uploads: storage.Bucket) -> None:
 RECIPE_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,99}")
 
 
+# ---------- Convex jobs ----------
+
+MSG_NO_UPLOAD = "We couldn't find the video for this recipe. Please try adding it again."
+CONVEX_INTERVAL_S = 15
+
+
+class Convex:
+    """The three /worker/* routes. progress() never raises: a missed update must not fail the job."""
+
+    def __init__(self, site_url: str, secret: str):
+        self.base = site_url.rstrip("/")
+        self.session = requests.Session()
+        self.session.headers["x-worker-secret"] = secret
+
+    def _post(self, path: str, body: dict) -> requests.Response:
+        res = self.session.post(f"{self.base}{path}", json=body, timeout=30)
+        if res.status_code >= 400:
+            raise RuntimeError(f"Convex {path}: HTTP {res.status_code} {res.text[:300]}")
+        return res
+
+    def claim(self) -> dict | None:
+        res = self._post("/worker/claim", {})
+        return None if res.status_code == 204 else res.json()
+
+    def progress(self, job_id: str, stage: str, progress: float, error: str | None = None) -> None:
+        body = {"jobId": job_id, "stage": stage, "progress": round(min(max(progress, 0.0), 1.0), 3)}
+        if error:
+            body["error"] = error
+        try:
+            self._post("/worker/progress", body)
+            print(f"  [{job_id}] {stage} {body['progress']:.0%}", flush=True)
+        except Exception as e:  # noqa: BLE001
+            print(f"  warning: progress {stage} not sent: {e}")
+
+    def published(self, job_id: str, recipe: dict, recipe_json_url: str) -> str:
+        res = self._post("/worker/published", {"jobId": job_id, "recipe": recipe, "recipeJsonUrl": recipe_json_url})
+        return res.json().get("recipeId", "")
+
+
+def _convex_recipe_id(job: dict) -> str:
+    """The GCS folder name for the recipe: the signer's upload folder (e.g. "oatmeal-5372a0") when the
+    upload sits in one, else one made from the Convex job id."""
+    folder = job["uploadPath"].strip("/").split("/")[0]
+    if "/" in job["uploadPath"].strip("/") and RECIPE_ID.fullmatch(folder):
+        return folder
+    return "recipe-" + re.sub(r"[^a-z0-9]", "", job["jobId"].lower())[-12:]
+
+
+def _upload_blobs(uploads: storage.Bucket, path: str) -> list[storage.Blob]:
+    """uploadPath names one object, or a folder of clips (camera-roll uploads can be several files)."""
+    one = uploads.get_blob(path)
+    if one is not None:
+        return [one]
+    prefix = path.rstrip("/") + "/"
+    return sorted((b for b in uploads.client.list_blobs(uploads, prefix=prefix) if not b.name.endswith("/")),
+                  key=lambda b: b.name)
+
+
+def handle_convex(convex: Convex, job: dict, media: storage.Bucket, uploads: storage.Bucket) -> None:
+    job_id = job["jobId"]
+    recipe_id = _convex_recipe_id(job)
+    folder = INPUT / recipe_id
+    print(f"claimed {job_id}: {job['uploadPath']} -> {recipe_id}", flush=True)
+    t0 = time.monotonic()
+    timings: dict[str, float] = {}
+
+    def report(stage: str, progress: float) -> None:
+        timings.setdefault(stage, time.monotonic() - t0)
+        convex.progress(job_id, stage, progress)
+
+    def fail(message: str, error: str) -> None:
+        print(f"failed {job_id}: {error}")
+        convex.progress(job_id, "failed", 0, message)
+
+    with job_lock(recipe_id) as mine:
+        if not mine:
+            print(f"{recipe_id}: another worker process is on it; skipping")
+            return
+        try:
+            report("preparing", 0.02)
+            blobs = _upload_blobs(uploads, job["uploadPath"])
+            if not blobs:
+                return fail(MSG_NO_UPLOAD, f"nothing at gs://{uploads.name}/{job['uploadPath']}")
+            if any(b.size == 0 for b in blobs):
+                return fail(MSG_EMPTY, "a 0-byte upload")
+            folder.mkdir(parents=True, exist_ok=True)
+            inputs = []
+            for b in blobs:
+                dest = folder / Path(b.name).name
+                _download(b, dest)
+                inputs.append(dest)
+            report("preparing", 0.1)
+            actual_s = sum(prep.probe_duration(p) for p in inputs)
+            if actual_s > MAX_HOURS * 3600:
+                return fail(MSG_TOO_LONG, f"{actual_s / 3600:.1f} h of video")
+            cap, spent = spend_cap(), spent_usd()
+            if spent + actual_s / 3600 * COST_PER_HOUR_USD >= cap:
+                return fail(MSG_PAUSED, f"spend cap: ~${spent:.2f} spent, MAX_SPEND_USD ${cap:.2f}")
+            cook = job.get("cookName") or "Mom"
+            # Convex jobs carry no title: the writer names the dish (process.NO_TITLE).
+            prep.run(recipe_id, job.get("title") or "", cook, job.get("relation") or cook, inputs)
+            process.run(recipe_id, report=report)
+            report("writing", 0.9)
+            # Media + recipe.json only. No rebuild_library: Convex lists the family's recipes now, and the
+            # GCS library.json is shared by every pre-hackathon copy of the app.
+            recipe = publish.publish_recipe(recipe_id, bucket=media)
+            recipe_url = publish.public_url(media, f"{recipe_id}/recipe.json")
+            convex_recipe = convex.published(job_id, recipe.model_dump(mode="json"), recipe_url)
+        except (Exception, SystemExit) as e:  # noqa: BLE001 - any failure fails this job; the loop keeps running
+            traceback.print_exc()
+            return fail(MSG_FAILED, f"{type(e).__name__}: {e}")
+    shutil.rmtree(folder, ignore_errors=True)
+    stages = ", ".join(f"{k} at {v / 60:.1f}" for k, v in timings.items())
+    print(f"published {job_id} as Convex recipe {convex_recipe} ({recipe_url}) in "
+          f"{(time.monotonic() - t0) / 60:.1f} min ({stages} min)", flush=True)
+
+
+def run_convex(once: bool, interval: int) -> None:
+    site, secret = os.environ.get("CONVEX_SITE_URL"), os.environ.get("WORKER_SECRET")
+    if not site or not secret:
+        sys.exit("worker: set CONVEX_SITE_URL and WORKER_SECRET in .env (or run with --gcs)")
+    convex = Convex(site, secret)
+    client = storage.Client(project=os.environ.get("GCP_PROJECT"))
+    media = client.bucket(os.environ["GCS_MEDIA_BUCKET"])
+    uploads = client.bucket(os.environ["GCS_UPLOAD_BUCKET"])
+    print(f"worker: polling {convex.base} every {interval} s", flush=True)
+    while True:
+        try:
+            job = convex.claim()
+        except Exception as e:  # noqa: BLE001 - e.g. Wi-Fi drop; try again next poll
+            print(f"claim failed: {e}")
+            job = None
+        if job:
+            handle_convex(convex, job, media, uploads)
+            if once:
+                return
+            continue  # there may be more queued
+        if once:
+            print("nothing queued")
+            return
+        time.sleep(interval)
+
+
 MSG_CANCELLED = "Cancelled. No recipe will be made from this upload."
 
 
@@ -394,10 +545,17 @@ def main() -> None:
     load_dotenv(ROOT / ".env")
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--once", action="store_true")
-    ap.add_argument("--interval", type=int, default=600,
-                    help="seconds between polls; 600 keeps list calls inside the GCS free tier (use 60 during a demo)")
-    ap.add_argument("--retry", metavar="JOB_ID", help="restart a failed (or stuck) job now")
+    ap.add_argument("--interval", type=int,
+                    help=f"seconds between polls (Convex: {CONVEX_INTERVAL_S}; --gcs: 600, which keeps list calls "
+                         "inside the GCS free tier)")
+    ap.add_argument("--gcs", action="store_true", help="process the pre-hackathon GCS job files instead of Convex")
+    ap.add_argument("--retry", metavar="JOB_ID", help="--gcs only: restart a failed (or stuck) job now")
     args = ap.parse_args()
+    if not args.gcs:
+        if args.retry:
+            sys.exit("worker: --retry is for --gcs jobs; queue a Convex job again from Convex instead")
+        run_convex(args.once, args.interval or CONVEX_INTERVAL_S)
+        return
 
     client = storage.Client(project=os.environ.get("GCP_PROJECT"))
     media = client.bucket(os.environ["GCS_MEDIA_BUCKET"])
@@ -413,7 +571,7 @@ def main() -> None:
             traceback.print_exc()
         if args.once:
             return
-        time.sleep(args.interval)
+        time.sleep(args.interval or 600)
 
 
 if __name__ == "__main__":
