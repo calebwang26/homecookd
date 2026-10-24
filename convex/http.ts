@@ -1,0 +1,177 @@
+// HTTP routes for our own services (docs/build/STACK.md, "Contracts"). The pipeline worker sends
+// `x-worker-secret`, the live voice service `x-voice-secret`; each is a shared secret in Convex env.
+// Errors are JSON `{ error }` with 400 (bad body), 401 (wrong secret or signed-out session) or 404.
+import { httpRouter } from "convex/server";
+import { internal } from "./_generated/api";
+import type { Id } from "./_generated/dataModel";
+import { httpAction, type ActionCtx } from "./_generated/server";
+import { parseRecipeJson } from "./lib/recipeJson";
+
+const http = httpRouter();
+
+const json = (body: unknown, status = 200) =>
+  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
+const fail = (status: number, error: string) => json({ error }, status);
+
+function sameSecret(given: string | null, expected: string | undefined): boolean {
+  if (!given || !expected || given.length !== expected.length) return false;
+  let diff = 0;
+  for (let i = 0; i < given.length; i++) diff |= given.charCodeAt(i) ^ expected.charCodeAt(i);
+  return diff === 0;
+}
+
+type Body = Record<string, unknown>;
+type Handler = (ctx: ActionCtx, body: Body) => Promise<Response>;
+
+/** A POST route behind one shared secret, with a JSON object body. */
+function secured(header: "x-worker-secret" | "x-voice-secret", envName: string, handler: Handler) {
+  return httpAction(async (ctx, req) => {
+    if (!sameSecret(req.headers.get(header), process.env[envName])) return fail(401, "wrong secret");
+    const text = await req.text();
+    if (text.length > 1_000_000) return fail(400, "body too large");
+    let body: unknown = {};
+    if (text.trim()) {
+      try {
+        body = JSON.parse(text);
+      } catch {
+        return fail(400, "body must be JSON");
+      }
+    }
+    if (!body || typeof body !== "object" || Array.isArray(body)) return fail(400, "body must be a JSON object");
+    return await handler(ctx, body as Body);
+  });
+}
+
+const isStr = (x: unknown, max = 2000): x is string => typeof x === "string" && x.length > 0 && x.length <= max;
+const isNum = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
+const worker = (handler: Handler) => secured("x-worker-secret", "WORKER_SECRET", handler);
+const voice = (handler: Handler) => secured("x-voice-secret", "VOICE_SECRET", handler);
+
+async function jobId(ctx: ActionCtx, raw: unknown): Promise<Id<"jobs"> | null> {
+  if (!isStr(raw, 100)) return null;
+  return await ctx.runQuery(internal.ids.job, { id: raw });
+}
+
+// ---- Worker → Convex ----
+
+http.route({
+  path: "/worker/claim",
+  method: "POST",
+  handler: worker(async (ctx) => {
+    const job = await ctx.runMutation(internal.worker.claim, {});
+    return job ? json(job) : new Response(null, { status: 204 });
+  }),
+});
+
+const STAGES = ["preparing", "understanding", "writing", "indexing", "done", "failed"] as const;
+type Stage = (typeof STAGES)[number];
+
+http.route({
+  path: "/worker/progress",
+  method: "POST",
+  handler: worker(async (ctx, body) => {
+    const id = await jobId(ctx, body.jobId);
+    if (!id) return fail(404, "no such job");
+    if (!STAGES.includes(body.stage as Stage)) return fail(400, `stage must be one of ${STAGES.join(", ")}`);
+    if (!isNum(body.progress) || body.progress < 0 || body.progress > 1) return fail(400, "progress must be 0..1");
+    if (body.error !== undefined && typeof body.error !== "string") return fail(400, "error must be a string");
+    const ok = await ctx.runMutation(internal.worker.progress, {
+      jobId: id,
+      stage: body.stage as Stage,
+      progress: body.progress,
+      error: body.error as string | undefined,
+    });
+    return ok ? json({ ok: true }) : fail(404, "no such job");
+  }),
+});
+
+http.route({
+  path: "/worker/published",
+  method: "POST",
+  handler: worker(async (ctx, body) => {
+    const id = await jobId(ctx, body.jobId);
+    if (!id) return fail(404, "no such job");
+    const parsed = parseRecipeJson(body.recipe);
+    if (typeof parsed === "string") return fail(400, parsed);
+    const recipeJsonUrl = isStr(body.recipeJsonUrl) && body.recipeJsonUrl.startsWith("https://") ? body.recipeJsonUrl : undefined;
+    if (body.memoriesOptIn !== undefined && typeof body.memoriesOptIn !== "boolean") {
+      return fail(400, "memoriesOptIn must be a boolean");
+    }
+    const recipeId = await ctx.runMutation(internal.worker.published, {
+      jobId: id,
+      recipe: { ...parsed, recipeJsonUrl },
+      memoriesOptIn: body.memoriesOptIn as boolean | undefined,
+    });
+    return recipeId ? json({ recipeId }) : fail(404, "no such job");
+  }),
+});
+
+// ---- Voice service → Convex ----
+
+http.route({
+  path: "/voice/session",
+  method: "POST",
+  handler: voice(async (ctx, body) => {
+    if (!isStr(body.sessionToken, 200) || !isStr(body.recipeId, 100)) return fail(400, "sessionToken and recipeId are required");
+    const view = await ctx.runQuery(internal.voice.sessionView, { sessionToken: body.sessionToken, recipeId: body.recipeId });
+    if ("error" in view) return view.error === "signed_out" ? fail(401, "signed out") : fail(404, "no such recipe");
+    const stepOrder = await ctx.runMutation(internal.cooking.setStep, {
+      familyId: view.familyId,
+      kidId: view.kid.personId,
+      recipeId: view.recipe.recipeId,
+    });
+    return json({ ...view, stepOrder });
+  }),
+});
+
+http.route({
+  path: "/voice/step",
+  method: "POST",
+  handler: voice(async (ctx, body) => {
+    if (!isStr(body.sessionToken, 200) || !isStr(body.recipeId, 100)) return fail(400, "sessionToken and recipeId are required");
+    if (!isNum(body.stepOrder) || !Number.isInteger(body.stepOrder) || body.stepOrder < 1) return fail(400, "stepOrder must be a whole number from 1");
+    const view = await ctx.runQuery(internal.voice.sessionView, { sessionToken: body.sessionToken, recipeId: body.recipeId });
+    if ("error" in view) return view.error === "signed_out" ? fail(401, "signed out") : fail(404, "no such recipe");
+    if (body.stepOrder > view.recipe.steps.length) return fail(400, "no such step");
+    const stepOrder = await ctx.runMutation(internal.cooking.setStep, {
+      familyId: view.familyId,
+      kidId: view.kid.personId,
+      recipeId: view.recipe.recipeId,
+      stepOrder: body.stepOrder,
+    });
+    return json({ ok: true, stepOrder });
+  }),
+});
+
+http.route({
+  path: "/voice/question",
+  method: "POST",
+  handler: voice(async (ctx, body) => {
+    if (!isStr(body.sessionToken, 200) || !isStr(body.recipeId, 100)) return fail(400, "sessionToken and recipeId are required");
+    if (!isStr(body.text, 2000)) return fail(400, "text is required");
+    if (body.stepOrder !== undefined && !isNum(body.stepOrder)) return fail(400, "stepOrder must be a number");
+    let found: { startS: number; endS: number; quote: string } | undefined;
+    if (body.found !== undefined && body.found !== null) {
+      const f = body.found as Record<string, unknown>;
+      if (!f || typeof f !== "object" || !isNum(f.startS) || !isNum(f.endS) || typeof f.quote !== "string") {
+        return fail(400, "found must be { startS, endS, quote }");
+      }
+      found = { startS: f.startS, endS: f.endS, quote: f.quote };
+    }
+    const resolved = await ctx.runQuery(internal.sessions.resolve, { sessionToken: body.sessionToken });
+    if (!resolved) return fail(401, "signed out");
+    const recipeId = await ctx.runQuery(internal.ids.recipe, { id: body.recipeId });
+    if (!recipeId) return fail(404, "no such recipe");
+    const asked = await ctx.runMutation(internal.questions.ask, {
+      familyId: resolved.familyId,
+      personId: resolved.personId,
+      recipeId,
+      stepOrder: body.stepOrder as number | undefined,
+      text: body.text,
+      found,
+    });
+    return asked ? json(asked) : fail(404, "no such recipe");
+  }),
+});
+
+export default http;
