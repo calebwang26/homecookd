@@ -1,0 +1,263 @@
+/* The /i invite page in the app's "Main" look (bible renders/Main.png): a peach wash, the pot +
+   homecookd row, one Fraunces headline. Same 430 px phone column as the /r recipe page (full-bleed
+   on phones, centred with a soft shadow on a computer). */
+
+.page {
+  min-height: 100svh;
+  background: #f7f7f2;
+  color: #2d3222;
+  font-family: var(--ff-text);
+  font-size: 17px;
+  line-height: 1.4;
+  /* the app's Fraunces (the lander's display face is softened) */
+  font-variation-settings: 'SOFT' 0, 'WONK' 0;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.column {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  min-height: 100svh;
+  margin: 0 auto;
+  padding: 0 24px calc(16px + env(safe-area-inset-bottom));
+  background: linear-gradient(180deg, #f9e3cf 0%, #f7efe6 300px, #f7f7f2 520px);
+  display: flex;
+  flex-direction: column;
+}
+@media (min-width: 600px) {
+  .column {
+    box-shadow:
+      0 0 0 1px rgba(30, 36, 16, 0.04),
+      0 30px 80px rgba(30, 36, 16, 0.14);
+  }
+}
+
+.brand {
+  height: 72px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #1e2410;
+}
+.word {
+  font-family: var(--ff-display);
+  font-weight: 700;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  font-variation-settings: 'SOFT' 100, 'WONK' 0, 'opsz' 144;
+  transform: translateY(-1px);
+}
+
+.main {
+  display: flex;
+  flex-direction: column;
+  /* The lander's page-wide guard clips main sideways, which cut the buttons' soft shadows off at
+     the column padding. Nothing here is wider than the column, and body still clips the page. */
+  overflow-x: visible;
+  animation: rise 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+.main[aria-busy] {
+  animation: none;
+}
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+/* ---------- who sent it, and who you're joining as ---------- */
+.hero {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.face {
+  margin-bottom: 22px;
+  min-height: 88px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.ring {
+  display: block;
+  padding: 5px;
+  border-radius: 50%;
+  background: #fffdf7;
+  box-shadow: 0 12px 32px rgba(110, 90, 76, 0.18);
+}
+.title {
+  margin: 0;
+  max-width: 340px;
+  text-wrap: balance;
+  font-family: var(--ff-display);
+  font-weight: 500;
+  font-size: 34px;
+  line-height: 1.08;
+  letter-spacing: -0.02em;
+  color: #1e2410;
+}
+.line {
+  margin: 12px 0 0;
+  max-width: 320px;
+  text-wrap: balance;
+  font-size: 19px;
+  line-height: 1.4;
+  color: #5f6352;
+}
+.line b {
+  font-weight: 700;
+  color: #1e2410;
+}
+
+.actions {
+  margin-top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+/* "Or type this code in the app": a quiet dashed card, like the app's "Add family" tile */
+.code {
+  margin: 12px 0 0;
+  padding: 14px 16px 16px;
+  border-radius: 22px;
+  border: 1.5px dashed rgba(30, 36, 16, 0.2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  text-align: center;
+}
+.codeLabel {
+  font-size: 17px;
+  color: #5f6352;
+}
+.codeValue {
+  font-size: 30px;
+  font-weight: 700;
+  line-height: 1.2;
+  letter-spacing: 0.18em;
+  margin-right: -0.18em; /* keep the letters centred despite the trailing spacing */
+  color: #1e2410;
+  font-variant-numeric: tabular-nums;
+  -webkit-user-select: all;
+  user-select: all;
+}
+
+.press {
+  transition:
+    transform 420ms cubic-bezier(0.34, 1.4, 0.64, 1),
+    opacity 200ms ease;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.press:active {
+  transform: scale(0.96);
+  opacity: 0.9;
+  transition-duration: 90ms;
+}
+.press:focus-visible {
+  outline: 3px solid #788c15;
+  outline-offset: 3px;
+}
+.retry {
+  width: 100%;
+  height: 60px;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #5b6f00;
+  color: #fffdf7;
+  font-size: 18px;
+  font-weight: 700;
+  text-decoration: none;
+  box-shadow: 0 10px 24px rgba(52, 67, 12, 0.25);
+}
+
+/* "What's homecookd?" sits at the bottom of the screen */
+.about {
+  margin-top: auto;
+  padding-top: 24px;
+  align-self: center;
+  min-height: 48px;
+  padding-inline: 12px;
+  display: inline-flex;
+  align-items: center;
+  font-size: 16px;
+  font-weight: 600;
+  color: #5f6352;
+  text-decoration: underline;
+  text-decoration-color: rgba(95, 99, 82, 0.4);
+  text-underline-offset: 3px;
+}
+.about:focus-visible {
+  outline: 3px solid #788c15;
+  outline-offset: 2px;
+  border-radius: 12px;
+}
+
+/* ---------- loading ---------- */
+.skeleton {
+  margin-top: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+}
+.skFace,
+.skLine,
+.skPill {
+  display: block;
+  background: rgba(110, 90, 76, 0.1);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+.skFace {
+  width: 114px;
+  height: 114px;
+  margin-bottom: 12px;
+  border-radius: 50%;
+}
+.skLine {
+  border-radius: 10px;
+}
+.skPill {
+  width: 100%;
+  height: 60px;
+  border-radius: 999px;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+.srOnly {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .main {
+    animation-duration: 1ms;
+  }
+  .skFace,
+  .skLine,
+  .skPill {
+    animation: none;
+  }
+  .press,
+  .press:active {
+    transform: none;
+    transition: opacity 120ms ease;
+  }
+}

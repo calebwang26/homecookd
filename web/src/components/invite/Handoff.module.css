@@ -1,0 +1,98 @@
+/* Get the app / Open homecookd: the recipe page's CTA values (bible: 60 px green pill, cream
+   secondary), full width, one obvious action on top. */
+
+.wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.primary,
+.secondary {
+  width: 100%;
+  border-radius: 999px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  text-decoration: none;
+}
+.primary {
+  height: 60px;
+  background: #5b6f00;
+  color: #fffdf7;
+  font-size: 18px;
+  box-shadow: 0 10px 24px rgba(52, 67, 12, 0.25);
+}
+.secondary {
+  height: 56px;
+  background: #fffdf7;
+  color: #1e2410;
+  font-size: 17px;
+  box-shadow:
+    0 4px 14px rgba(30, 36, 16, 0.08),
+    0 0 0 1px rgba(30, 36, 16, 0.06);
+}
+
+/* press feedback, motion spec 5 (same as recipe-web's .press) */
+.press {
+  transition:
+    transform 420ms cubic-bezier(0.34, 1.4, 0.64, 1),
+    opacity 200ms ease;
+  -webkit-user-select: none;
+  user-select: none;
+}
+.press:active {
+  transform: scale(0.96);
+  opacity: 0.9;
+  transition-duration: 90ms;
+}
+.press:focus-visible {
+  outline: 3px solid #788c15;
+  outline-offset: 3px;
+}
+
+.note {
+  min-height: 26px;
+  margin: 2px 4px 0;
+  scroll-margin-bottom: calc(24px + env(safe-area-inset-bottom));
+  text-align: center;
+  text-wrap: balance;
+  font-size: 17px;
+  line-height: 1.45;
+  color: #5f6352;
+}
+.note[data-strong] {
+  font-size: 18px;
+  color: #3c4a0b;
+  font-weight: 600;
+}
+
+/* on a computer */
+.desk {
+  margin: 0;
+  min-height: 64px;
+  padding: 14px 20px;
+  border-radius: 22px;
+  background: #fffdf7;
+  box-shadow: 0 4px 14px rgba(30, 36, 16, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  font-size: 18px;
+  font-weight: 700;
+  color: #1e2410;
+}
+.desk svg {
+  flex: none;
+  color: #5b6f00;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .press,
+  .press:active {
+    transform: none;
+    transition: opacity 120ms ease;
+  }
+}
