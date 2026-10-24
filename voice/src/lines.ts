@@ -24,11 +24,12 @@ const FIXED = {
 
 export type FixedLine = keyof typeof FIXED;
 
-/** A fixed line in the cook's language, with its English. */
-export async function fixedLine(name: FixedLine, w: Who): Promise<Line> {
-  const { en, mr } = FIXED[name](w);
+/** A fixed line in the cook's language, with its English. `latin` has the names as written in English. */
+export async function fixedLine(name: FixedLine, w: Who, latin: Who = w): Promise<Line> {
+  const { mr } = FIXED[name](w);
+  const { en } = FIXED[name](latin);
   if (w.language === "en") return { text: en, textEn: en };
   if (w.language === "mr") return { text: mr, textEn: en };
-  const text = await translate(en, w.language).catch(() => "");
+  const text = await translate(FIXED[name](w).en, w.language).catch(() => "");
   return { text: text || en, textEn: en };
 }

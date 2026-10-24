@@ -32,6 +32,8 @@ const words = (t: string) => t.split(/\s+/).filter(Boolean).length;
 export class Recording {
   private s!: convex.RecordingSession;
   private who!: Who;
+  /** The same, with the names as written in English (for textEn). */
+  private whoLatin!: Who;
   private homie!: HomieAgent;
   private stt?: Stt;
   private pacer = new Pacer(env.homieDemo ? DEMO : NORMAL);
@@ -88,7 +90,7 @@ export class Recording {
     if (this.closed) return;
     const call = cook.relation && !cook.name.includes(cook.relation) ? `${cook.name} ${cook.relation}` : cook.name;
     const dish = this.s.dish ?? recording.dish;
-    this.who = { language: recording.language, call, kid: kid?.name.split(" ")[0], dish };
+    this.who = this.whoLatin = { language: recording.language, call, kid: kid?.name.split(" ")[0], dish };
     this.homie = new HomieAgent(this.who);
     this.names = this.who.language === "en" ? Promise.resolve() : this.nativeNames();
     this.stt = createStt(recording.language, {
@@ -152,7 +154,7 @@ export class Recording {
     if (!line) {
       // Claude writes the names in her script itself; the hand-written fallback waits for them.
       const written = this.homie.intro().catch((err) => (console.warn("intro", err.message), null));
-      line = (await Promise.race([written, sleep(INTRO_WAIT_MS).then(() => null)])) ?? (await this.names, await fixedLine("intro", this.who));
+      line = (await Promise.race([written, sleep(INTRO_WAIT_MS).then(() => null)])) ?? (await this.names, await fixedLine("intro", this.who, this.whoLatin));
       intros.set(this.recordingId, line);
     }
     this.introLine = line;
@@ -222,18 +224,18 @@ export class Recording {
     for (const [i, q] of questions.entries()) {
       let line = q.line;
       if (i === 0) {
-        const pre = await fixedLine(questions.length > 1 ? "beforeYouGo2" : "beforeYouGo1", this.who);
+        const pre = await fixedLine(questions.length > 1 ? "beforeYouGo2" : "beforeYouGo1", this.who, this.whoLatin);
         line = { text: `${pre.text} ${line.text}`, textEn: `${pre.textEn} ${line.textEn}` };
       }
       await this.askAndWait("end", line);
     }
 
-    const optIn = await fixedLine("optIn", this.who);
+    const optIn = await fixedLine("optIn", this.who, this.whoLatin);
     const reply = await this.askAndWait("optin", optIn);
     const yes = reply ? await this.homie.yesNo(reply).catch(() => null) : null;
     if (yes !== null) await convex.setOptIn(this.token, this.recordingId, yes).catch((err) => console.warn("live/optin", err.message));
 
-    const closing = await fixedLine("closing", this.who);
+    const closing = await fixedLine("closing", this.who, this.whoLatin);
     await this.say(closing, "closing");
     void this.log("closing", closing, "spoken");
     this.setPhase("ended");
