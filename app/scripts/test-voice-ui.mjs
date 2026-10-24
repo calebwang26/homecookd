@@ -7,7 +7,8 @@
 //                               kept), a spoken yes or no and what follows a no (the service's own rules,
 //                               checked against voice/src/yesNo.ts), when homie is 'thinking', the
 //                               no-buttons yes-or-no moment, what the pot shows, kitchen timers on the
-//                               phone's clock (parse, order, ids per socket, countdown, words),
+//                               phone's clock (parse, order, ids per socket, each buzzing once, countdown,
+//                               words),
 //                               which of the cook's answers to offer, the silence the mic hands on, the
 //                               Cartesia credit fixes (which frames go to /cook, the app leaving), and one
 //                               socket at a time (a retry or a connect from before a pause)
@@ -402,6 +403,75 @@ await test('timer ids are per socket: a pause and resume keeps the old "timer-1"
   assert.equal(V.socketTimerId(2, 'timer-1'), '2/timer-1');
 });
 
+// The hook's due-timer effect, run until it waits (lib/live/voice.ts): each pass picks the soonest
+// timer still to buzz; one at zero by `now` buzzes (its setTimeout(0) fires) and the effect runs again.
+function cookBuzzer(c) {
+  const b = { buzzed: new Set(), buzzes: [], due: false };
+  b.run = (now) => {
+    for (let pass = 0; pass < 20; pass++) {
+      const { next, kept, due } = V.timerBuzz(c.h.list, b.buzzed);
+      b.buzzed = kept;
+      b.due = due;
+      if (!next || next.endsAt > now) return;
+      b.buzzed.add(next.id);
+      b.buzzes.push(next.id);
+    }
+    throw new Error('the due timers never settle');
+  };
+  // A timer leaving on its own (the hook's TIMER_DUE_HOLD_MS after its buzz).
+  b.leave = (id) => void (c.h.list = c.h.list.filter((t) => t.id !== id));
+  return b;
+}
+
+await test('two timers at zero together buzz once each (old-socket timers after a pause get no timer_done)', () => {
+  const c = cookTimers();
+  const b = cookBuzzer(c);
+  c.open();
+  c.timer({ id: 'timer-1', seconds: 60, label: 'rice' }, 0);
+  c.timer({ id: 'timer-2', seconds: 90, label: 'dal' }, 0);
+  b.run(30_000);
+  assert.deepEqual(b.buzzes, []);
+  assert.equal(b.due, false);
+  // Away past both, then back on a new socket: both old timers are at zero at once.
+  c.open();
+  b.run(200_000);
+  assert.deepEqual(b.buzzes, ['1/timer-1', '1/timer-2']);
+  assert.equal(b.due, true);
+  // Again and again (every re-render) while they're held on screen: still two.
+  for (const now of [200_000, 201_000, 205_000]) b.run(now);
+  assert.equal(b.buzzes.length, 2);
+  b.leave('1/timer-1');
+  b.run(210_000);
+  assert.equal(b.due, true);
+  b.leave('1/timer-2');
+  b.run(210_000);
+  assert.deepEqual([b.buzzes.length, b.due, b.buzzed.size], [2, false, 0]);
+});
+
+await test('a timer_done for one timer at zero leaves the other one alone; a new timer after both buzzes once', () => {
+  const c = cookTimers();
+  const b = cookBuzzer(c);
+  c.open();
+  c.timer({ id: 'timer-1', seconds: 60, label: 'rice' }, 0);
+  c.timer({ id: 'timer-2', seconds: 60, label: 'eggs' }, 0);
+  b.run(60_000);
+  assert.deepEqual(b.buzzes, ['1/timer-1', '1/timer-2']);
+  c.done('timer-1');
+  b.run(61_000);
+  // The eggs already buzzed: no second buzz, and the pot still shows it done.
+  assert.deepEqual([b.buzzes.length, b.due, [...b.buzzed]], [2, true, ['1/timer-2']]);
+  c.done('timer-2');
+  b.run(62_000);
+  assert.deepEqual([b.due, b.buzzed.size], [false, 0]);
+  c.timer({ id: 'timer-3', seconds: 30, label: 'tea' }, 62_000);
+  b.run(80_000);
+  assert.equal(b.buzzes.length, 2);
+  b.run(92_000);
+  b.run(93_000);
+  assert.deepEqual(b.buzzes, ['1/timer-1', '1/timer-2', '1/timer-3']);
+  assert.equal(b.due, true);
+});
+
 await test('seconds left round up, so 0 only once it is done', () => {
   const t = { endsAt: 10_000 };
   assert.equal(V.secondsLeft(t, 0), 10);
@@ -487,30 +557,27 @@ await test('credit fix A: /cook gets only the kid’s frames, nothing while the 
 });
 
 await test('credit fix B: the app in the background closes the line; iOS \'inactive\' (still on screen) never does', () => {
-  const on = { lineOn: true, paused: false, asking: false };
+  const on = { lineOn: true, paused: false };
   assert.equal(V.appStateStep({ ...on, next: 'background' }), 'pause');
-  // Control Center, the notification shade, a call banner: the app is still on screen.
+  // Control Center, the notification shade, a call banner, the mic's permission prompt: the app is still on screen.
   assert.equal(V.appStateStep({ ...on, next: 'inactive' }), null);
   // No line on (voice never started, it gave up, or the kid hung up): nothing to close or reopen.
   assert.equal(V.appStateStep({ ...on, lineOn: false, next: 'background' }), null);
   assert.equal(V.appStateStep({ ...on, lineOn: false, next: 'active' }), null);
   // Already paused: once.
   assert.equal(V.appStateStep({ ...on, paused: true, next: 'background' }), null);
-  // The mic's permission prompt makes iOS 'inactive': not a pause; going home meanwhile is.
-  assert.equal(V.appStateStep({ ...on, asking: true, next: 'inactive' }), null);
-  assert.equal(V.appStateStep({ ...on, asking: true, next: 'background' }), 'pause');
 });
 
 await test('credit fix B: back on top after a pause the line opens again; otherwise nothing changes', () => {
-  assert.equal(V.appStateStep({ lineOn: false, paused: true, asking: false, next: 'active' }), 'resume');
-  assert.equal(V.appStateStep({ lineOn: true, paused: false, asking: false, next: 'active' }), null);
+  assert.equal(V.appStateStep({ lineOn: false, paused: true, next: 'active' }), 'resume');
+  assert.equal(V.appStateStep({ lineOn: true, paused: false, next: 'active' }), null);
   // Only 'active' resumes: not 'inactive' on the way back, nor Android and iOS extension states.
-  for (const next of ['inactive', 'unknown', 'extension']) assert.equal(V.appStateStep({ lineOn: false, paused: true, asking: false, next }), null, next);
+  for (const next of ['inactive', 'unknown', 'extension']) assert.equal(V.appStateStep({ lineOn: false, paused: true, next }), null, next);
   // background, inactive, active: one pause and one resume.
   const steps = [];
   let paused = false;
   for (const next of ['inactive', 'background', 'inactive', 'active']) {
-    const step = V.appStateStep({ lineOn: !paused, paused, asking: false, next });
+    const step = V.appStateStep({ lineOn: !paused, paused, next });
     if (step) steps.push(step);
     if (step === 'pause') paused = true;
     if (step === 'resume') paused = false;

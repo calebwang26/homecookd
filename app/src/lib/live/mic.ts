@@ -49,10 +49,6 @@ function appSounding(): boolean {
   return halfDuplex({ homie: getHomie().state, audio: audioNow().phase, video: videoPlaying() });
 }
 
-// The system's microphone prompt is up (iOS calls the app 'inactive' meanwhile: lib/live/voice).
-let asking = 0;
-export const micAsking = (): boolean => asking > 0;
-
 export function micStreamingSupported(): boolean {
   return Platform.OS !== 'web' && !!studio;
 }
@@ -69,10 +65,7 @@ export function useMicStream(onChunk: (pcm: ArrayBuffer, quiet: boolean) => void
 
   const start = useCallback(async (): Promise<'ok' | 'denied' | 'error'> => {
     if (!rec || !micStreamingSupported()) return 'error';
-    asking += 1;
-    const perm = await requestRecordingPermissionsAsync()
-      .catch(() => null)
-      .finally(() => void (asking -= 1));
+    const perm = await requestRecordingPermissionsAsync().catch(() => null);
     if (!perm?.granted) return 'denied';
     try {
       await rec.startRecording({

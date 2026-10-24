@@ -295,6 +295,16 @@ export function withoutTimer(list: readonly CookTimer[], socket: number, id: unk
   return list.filter((x) => x.id !== gone);
 }
 
+/**
+ * Timers reaching zero on this phone, each buzzing once. `buzzed`: the ids that already buzzed here; the
+ * ones whose timer left the list drop out (`kept`). `next`: the soonest timer still to buzz (null: none).
+ * `due`: a timer that buzzed is still on screen ("Done": the pot's timer state).
+ */
+export function timerBuzz(list: readonly CookTimer[], buzzed: ReadonlySet<string>): { next: CookTimer | null; kept: Set<string>; due: boolean } {
+  const kept = new Set(list.filter((t) => buzzed.has(t.id)).map((t) => t.id));
+  return { next: list.find((t) => !kept.has(t.id)) ?? null, kept, due: kept.size > 0 };
+}
+
 /** Whole seconds left, rounded up: 0 only once it is done. */
 export function secondsLeft(t: Pick<CookTimer, 'endsAt'>, now: number): number {
   return Math.max(0, Math.ceil((t.endsAt - now) / 1000));
@@ -373,10 +383,10 @@ export function appInForeground(state: string | null | undefined): boolean {
  * background, a line that was on (`lineOn`) closes ('pause'), so nothing streams. Back on top
  * ('active') after a pause: it opens again ('resume'; the mic only if the kid hadn't turned it off).
  * iOS 'inactive' is never a pause: the app is still on screen, and closing the line there would only
- * churn sockets. So the mic's own permission prompt (`asking`, also 'inactive') never pauses it either;
- * going home meanwhile does.
+ * churn sockets. So the mic's own permission prompt (also 'inactive') never pauses it either; going
+ * home meanwhile does.
  */
-export function appStateStep(v: { next: string; lineOn: boolean; paused: boolean; asking: boolean }): 'pause' | 'resume' | null {
+export function appStateStep(v: { next: string; lineOn: boolean; paused: boolean }): 'pause' | 'resume' | null {
   if (v.next === 'active') return v.paused ? 'resume' : null;
   if (v.next !== 'background') return null;
   return v.lineOn && !v.paused ? 'pause' : null;

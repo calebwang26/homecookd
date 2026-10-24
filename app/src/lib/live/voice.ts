@@ -54,7 +54,7 @@ import { doneSpeaking, getHomie, LIT_BEAT_MS, setHomie, setHomieLevel } from '@/
 import { useSession } from '@/lib/session';
 
 import { convexRecipeId, convexSession } from './convex';
-import { micAsking, useMicStream } from './mic';
+import { useMicStream } from './mic';
 import { playSay, stopSay } from './say';
 import {
   appInForeground,
@@ -75,6 +75,7 @@ import {
   sayLabel,
   sentText,
   thinksAfter,
+  timerBuzz,
   withoutTimer,
   withTimer,
   type AppMomentKind,
@@ -154,8 +155,8 @@ export function useVoiceCooking(opts: VoiceOptions) {
   const [muted, setMutedState] = useState(false);
   const [thinking, setThinking] = useState(false);
   const [timers, setTimers] = useState<CookTimer[]>([]);
-  // The timer at zero, by id.
-  const [due, setDue] = useState<string | null>(null);
+  // Counted up on each timer's buzz: the pot and the wait for the next timer follow it.
+  const [buzzes, setBuzzes] = useState(0);
   const [askedAt, setAskedAt] = useState<number | null>(null);
   const [askedIds, setAskedIds] = useState<ReadonlySet<string>>(() => new Set());
   const [error, setError] = useState<{ text: string; at: number } | null>(null);
@@ -184,6 +185,8 @@ export function useVoiceCooking(opts: VoiceOptions) {
   const answers = useRef(0);
   const reconnect = useRef<((auto: boolean) => Promise<void>) | null>(null);
   const pending = useRef(new Set<ReturnType<typeof setTimeout>>());
+  // The timers that reached zero here, by id: each buzzes once (voiceLogic timerBuzz).
+  const buzzed = useRef<Set<string>>(new Set());
   // The step the server just moved us to: not echoed back as a kid's tap.
   const lastServerStep = useRef<number | null>(null);
   // The step her clip just moved the screen to: sent, but not read aloud.
@@ -581,7 +584,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (next) => {
       setForeground(appInForeground(next));
-      const step = appStateStep({ next, lineOn: want.current || !!sock.current, paused: paused.current, asking: micAsking() });
+      const step = appStateStep({ next, lineOn: want.current || !!sock.current, paused: paused.current });
       if (step === 'pause') {
         lineCtl.current.stop();
         paused.current = true;
@@ -632,27 +635,29 @@ export function useVoiceCooking(opts: VoiceOptions) {
     if (!clip && cb.current.readAloud && liveRef.current) sendText('repeat');
   }, [opts.step, sendText]);
 
-  // The soonest timer reaching zero on this phone's clock: a buzz and the pot's timer state; it leaves
-  // with the service's timer_done, or on its own a little later.
+  // The soonest timer still to buzz, reaching zero on this phone's clock: one buzz and the pot's timer
+  // state; it leaves with the service's timer_done, or on its own a little later. Two at zero together
+  // (old-socket timers after a pause, with no timer_done to come) buzz once each.
   useEffect(() => {
-    const next = timers.find((t) => t.id !== due);
+    const { next, kept } = timerBuzz(timers, buzzed.current);
+    buzzed.current = kept;
     if (!next) return;
     const { id } = next;
     const t = setTimeout(() => {
+      buzzed.current.add(id);
       if (Platform.OS !== 'web') Haptics.notificationAsync(Haptics.NotificationFeedbackType.Warning).catch(() => {});
-      setDue(id);
+      setBuzzes((n) => n + 1);
       later(() => setTimers((list) => list.filter((x) => x.id !== id)), TIMER_DUE_HOLD_MS);
     }, Math.max(0, next.endsAt - Date.now()));
     return () => clearTimeout(t);
-  }, [timers, due, later]);
+  }, [timers, buzzes, later]);
 
   // What the pot shows, while this screen is the one on top.
-  const ring = timers[0];
-  const timerDue = !!due && timers.some((t) => t.id === due);
   useEffect(() => {
     if (!focused) return;
-    setHomie({ state: cookPotState({ status, muted, thinking, timers: timers.length, timerDue }), timer: ring });
-  }, [focused, status, muted, thinking, timers.length, timerDue, ring]);
+    const timerDue = timerBuzz(timers, buzzed.current).due;
+    setHomie({ state: cookPotState({ status, muted, thinking, timers: timers.length, timerDue }), timer: timers[0] });
+  }, [focused, status, muted, thinking, timers, buzzes]);
   useEffect(() => {
     if (!focused) return;
     return () => setHomie({ state: 'off', timer: undefined, level: 0 });
