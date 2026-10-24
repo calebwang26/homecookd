@@ -1,51 +1,17 @@
 // HTTP routes for our own services (docs/build/STACK.md, "Contracts"). The pipeline worker sends
-// `x-worker-secret`, the live voice service `x-voice-secret`; each is a shared secret in Convex env.
-// Errors are JSON `{ error }` with 400 (bad body), 401 (wrong secret or signed-out session) or 404.
+// `x-worker-secret`, the live voice service `x-voice-secret`, the glasses VM `x-glasses-secret`; each is
+// a shared secret in Convex env. Errors are JSON `{ error }` with 400 (bad body), 401 (wrong secret or
+// signed-out session) or 404. homie's routes are in lib/liveRoutes.ts, the glasses' in lib/glassesRoutes.ts.
 import { httpRouter } from "convex/server";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { httpAction, type ActionCtx } from "./_generated/server";
+import type { ActionCtx } from "./_generated/server";
+import { registerGlassesRoutes } from "./lib/glassesRoutes";
+import { fail, isNum, isStr, json, voice, worker } from "./lib/http";
+import { registerLiveRoutes } from "./lib/liveRoutes";
 import { parseRecipeJson } from "./lib/recipeJson";
 
 const http = httpRouter();
-
-const json = (body: unknown, status = 200) =>
-  new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
-const fail = (status: number, error: string) => json({ error }, status);
-
-function sameSecret(given: string | null, expected: string | undefined): boolean {
-  if (!given || !expected || given.length !== expected.length) return false;
-  let diff = 0;
-  for (let i = 0; i < given.length; i++) diff |= given.charCodeAt(i) ^ expected.charCodeAt(i);
-  return diff === 0;
-}
-
-type Body = Record<string, unknown>;
-type Handler = (ctx: ActionCtx, body: Body) => Promise<Response>;
-
-/** A POST route behind one shared secret, with a JSON object body. */
-function secured(header: "x-worker-secret" | "x-voice-secret", envName: string, handler: Handler) {
-  return httpAction(async (ctx, req) => {
-    if (!sameSecret(req.headers.get(header), process.env[envName])) return fail(401, "wrong secret");
-    const text = await req.text();
-    if (text.length > 1_000_000) return fail(400, "body too large");
-    let body: unknown = {};
-    if (text.trim()) {
-      try {
-        body = JSON.parse(text);
-      } catch {
-        return fail(400, "body must be JSON");
-      }
-    }
-    if (!body || typeof body !== "object" || Array.isArray(body)) return fail(400, "body must be a JSON object");
-    return await handler(ctx, body as Body);
-  });
-}
-
-const isStr = (x: unknown, max = 2000): x is string => typeof x === "string" && x.length > 0 && x.length <= max;
-const isNum = (x: unknown): x is number => typeof x === "number" && Number.isFinite(x);
-const worker = (handler: Handler) => secured("x-worker-secret", "WORKER_SECRET", handler);
-const voice = (handler: Handler) => secured("x-voice-secret", "VOICE_SECRET", handler);
 
 async function jobId(ctx: ActionCtx, raw: unknown): Promise<Id<"jobs"> | null> {
   if (!isStr(raw, 100)) return null;
@@ -173,5 +139,8 @@ http.route({
     return asked ? json(asked) : fail(404, "no such recipe");
   }),
 });
+
+registerLiveRoutes(http);
+registerGlassesRoutes(http);
 
 export default http;

@@ -12,6 +12,8 @@ export default defineSchema({
   families: defineTable({
     name: v.string(),
     supabaseFamilyId: v.string(),
+    // Community cards say "the Pawar family"; unset means the family isn't shown by name.
+    publicName: v.optional(v.string()),
   }).index("by_supabaseFamilyId", ["supabaseFamilyId"]),
 
   people: defineTable({
@@ -23,6 +25,11 @@ export default defineSchema({
     voiceClone: v.optional(v.object({ consentedAt: v.number(), cartesiaVoiceId: v.optional(v.string()) })),
     // The language this person speaks, as an Ink code ("mr" for Marathi). Unset means English.
     language: v.optional(v.string()),
+    // What the family calls them ("Grandma", "Aaji"), when it differs from their name. homie uses it.
+    relation: v.optional(v.string()),
+    // Community: where they are, rounded to about 1 km before it's stored (lib/geo.ts). Never shown.
+    approx: v.optional(v.object({ lat: v.number(), lng: v.number() })),
+    campus: v.optional(v.string()),
   })
     .index("by_familyId", ["familyId"])
     .index("by_supabaseProfileId", ["supabaseProfileId"]),
@@ -51,7 +58,8 @@ export default defineSchema({
         order: v.number(),
         title: v.string(),
         text: v.string(),
-        quote: v.optional(v.string()), // the cook's own words for this step, from the video
+        quote: v.optional(v.string()), // the cook's own words for this step, from the video (English)
+        quoteOriginal: v.optional(v.string()), // the same words as she said them, when that wasn't English
         moment,
       }),
     ),
@@ -59,7 +67,14 @@ export default defineSchema({
     memories: v.array(v.object({ kind: v.union(v.literal("story"), v.literal("tip")), text: v.string(), moment })),
     memoriesOptIn: v.boolean(),
     mossIndexedAt: v.optional(v.number()),
-  }).index("by_familyId", ["familyId"]),
+    language: v.optional(v.string()), // what the cook spoke in the video (Ink code); unset means English
+    // Community (cook-only switch, off by default). Set = shared with people nearby as a story card
+    // plus the recipe's text; the video and voice never leave the family.
+    sharedAt: v.optional(v.number()),
+    storyCard: v.optional(v.object({ text: v.string(), writtenAt: v.number() })), // Muse Spark, labelled AI
+  })
+    .index("by_familyId", ["familyId"])
+    .index("by_sharedAt", ["sharedAt"]),
 
   /** One upload going through the pipeline. The worker claims it and reports each stage. */
   jobs: defineTable({
@@ -68,7 +83,12 @@ export default defineSchema({
     recipeId: v.optional(v.id("recipes")),
     uploadPath: v.string(), // the raw video in the GCS uploads bucket
     source: v.union(v.literal("phone"), v.literal("glasses")),
+    title: v.optional(v.string()), // the dish the cook named before or after recording
+    language: v.optional(v.string()), // what the cook speaks in the video (Ink code)
+    forKidId: v.optional(v.id("people")),
+    recordingId: v.optional(v.id("recordings")), // homie's live session, when there was one
     stage: v.union(
+      v.literal("uploading"), // the worker found the upload incomplete and handed it back
       v.literal("queued"),
       v.literal("preparing"),
       v.literal("understanding"), // Gemini
@@ -104,6 +124,7 @@ export default defineSchema({
     stepOrder: v.optional(v.number()),
     askedBy: v.id("people"),
     text: v.string(),
+    textForCook: v.optional(v.string()), // the question in the cook's language, when it isn't English
     status: v.union(v.literal("found_in_video"), v.literal("asked_cook"), v.literal("answered")),
     found: v.optional(v.object({ moment, quote: v.string() })),
     answer: v.optional(
@@ -118,6 +139,85 @@ export default defineSchema({
   })
     .index("by_recipeId", ["recipeId"])
     .index("by_familyId_and_status", ["familyId", "status"]),
+
+  /**
+   * homie's live session while a cook records (voice service /record). `startedAt` is t0 for every
+   * homiePrompts.atS; the glasses VM sets `videoStartedAt` (its first frame), so the worker can put
+   * homie's questions on the video's own clock.
+   */
+  recordings: defineTable({
+    familyId: v.id("families"),
+    cookId: v.id("people"),
+    forKidId: v.optional(v.id("people")),
+    dish: v.optional(v.string()),
+    language: v.string(), // Ink code; "en" by default
+    source: v.union(v.literal("phone"), v.literal("glasses")),
+    status: v.union(
+      v.literal("intro"), // homie is saying hello; nothing is being filmed yet
+      v.literal("recording"),
+      v.literal("wrapping_up"), // "I'm done": the last questions and the goodbye
+      v.literal("ended"),
+      v.literal("abandoned"),
+    ),
+    startedAt: v.optional(v.number()),
+    endedAt: v.optional(v.number()),
+    videoStartedAt: v.optional(v.number()),
+    memoriesOptIn: v.optional(v.boolean()), // her answer to "Can <kid> hear your stories too?"
+    jobId: v.optional(v.id("jobs")),
+    updatedAt: v.number(),
+  })
+    .index("by_familyId", ["familyId"])
+    .index("by_status", ["status"]),
+
+  /** Everything homie said during a recording, and what the cook answered. */
+  homiePrompts: defineTable({
+    recordingId: v.id("recordings"),
+    familyId: v.id("families"),
+    kind: v.union(
+      v.literal("intro"),
+      v.literal("amount"),
+      v.literal("cue"),
+      v.literal("substitution"),
+      v.literal("story"),
+      v.literal("reaction"),
+      v.literal("end"),
+      v.literal("closing"),
+      v.literal("optin"),
+    ),
+    text: v.string(), // what homie said, in the cook's language
+    textEn: v.string(),
+    atS: v.number(), // seconds after recordings.startedAt (negative: before filming started)
+    status: v.union(v.literal("spoken"), v.literal("answered"), v.literal("ignored"), v.literal("not_now")),
+    answer: v.optional(
+      v.object({ transcript: v.string(), transcriptEn: v.optional(v.string()), atS: v.number(), endS: v.number() }),
+    ),
+  }).index("by_recordingId", ["recordingId"]),
+
+  /** Community: a dinner hosted around one shared recipe. The address is private until the host accepts. */
+  dinners: defineTable({
+    hostId: v.id("people"),
+    hostFamilyId: v.id("families"),
+    recipeId: v.id("recipes"),
+    dish: v.string(),
+    startsAt: v.number(),
+    placeKind: v.union(v.literal("campus_kitchen"), v.literal("community_center"), v.literal("cafe"), v.literal("home")),
+    placeName: v.string(), // public ("Baker House kitchen")
+    address: v.string(), // shown only to the host and accepted guests
+    approx: v.object({ lat: v.number(), lng: v.number() }), // rounded to ~1 km
+    seats: v.number(),
+    status: v.union(v.literal("open"), v.literal("full"), v.literal("cancelled")),
+  })
+    .index("by_status", ["status"])
+    .index("by_hostId", ["hostId"]),
+
+  dinnerRequests: defineTable({
+    dinnerId: v.id("dinners"),
+    guestId: v.id("people"),
+    guestFamilyId: v.id("families"),
+    status: v.union(v.literal("pending"), v.literal("accepted"), v.literal("declined")),
+  })
+    .index("by_dinnerId", ["dinnerId"])
+    .index("by_guestId", ["guestId"]),
 
   /** Family messages, including the finished-dish photo and the note Muse drafted for it. */
   messages: defineTable({
