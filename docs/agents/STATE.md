@@ -318,3 +318,25 @@ Before starting work, compare the last commit here with `git log origin/main` to
   03:14) runs from `.claude/worktrees/worker-main` at main `4d703d9` (#39), which has #37 and #39.
   - **Open:** no recipe published since then has been opened on a phone, before and after the cook's yes.
     `play.mp4` and `voice.m4a` are still public at unlisted URLs.
+- Oct 24 · #42 · Claude · Track E follow-ups, the server side of the contract #35 and #36 build on (STACK.md):
+  - **Kid `/cook`:**
+    - `{type:"moment", open, kind}`: while one of the app's own homie moments is up, a spoken yes/no/sure/not
+      now is its answer. Transcripts still stream; homie's offer and story nudge ignore it; Claude never gets it.
+      No offer or nudge is said over a moment, and `{type:"text"}` answers always count.
+    - A no or "not now" (spoken or text) to the read-aloud offer sends `{type:"offer_closed", accepted:false}`.
+      Steps stay silent for the visit; commands work, and "repeat" reads one. A yes sends
+      `offer_closed` with `accepted:true`, then the step.
+    - The offer line is now "…Say yes or no.", and either answer is kept 3 h per instance.
+  - **Parent:**
+    - New Convex `live.endRecording` (cook only, her own recording): `recording`/`wrapping_up` become `ended`
+      with `endedAt`. It's idempotent, and returns `{ok:false}` for `intro`/`abandoned`.
+    - `/live/prompt` refuses new lines once a recording is over; only the goodbye may land after `ended`.
+    - A voice socket still open on a recording ended that way stops quietly at its next Convex write (phase
+      `ended`, close 4404, nothing more said or saved).
+  - **Tests:** voice 27 (new `test/cook.test.ts`, 4 new record tests, shared `test/helpers.ts`), vitest 41, both
+    typechecks pass. 20 deliberate breaks each failed a test. The kid test client on fresh stub servers: a spoken
+    no declines, then silent steps; a spoken yes reads; with a moment up a yes is held, then a text no declines.
+  - **Open:**
+    - Not deployed (`voice/deploy.sh`, Convex).
+    - The app side in #35/#36: send `moment`, send the text no on a tap-to-close, read `offer_closed`, call
+      `endRecording` when the socket is down.
