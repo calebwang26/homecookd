@@ -2,17 +2,20 @@
 // (just left of the profile face or Share where a screen has one; a screen can dock it elsewhere with
 // useHomieScreen), not on sign-in, the launch gateway or link screens, and not before someone is in.
 // Native Modals (sheets, the full-screen step player) cover it on their own. When homie needs you
-// (store.moment), HomieMoment takes the pot to the centre.
-// A tap on the resting pot says this screen's help line and shows it as a moment with one "OK",
-// unless the screen gave the pot its own onPress.
+// (store.moment), HomieMoment takes the pot to the centre, and VoiceOver keeps to the moment (the
+// overlay is modal then: the screen behind it is out of reach).
+// A tap on the resting pot says this screen's help line, unless the screen gave the pot its own
+// onPress. Talking only (Caleb): no words on screen, the pot lights, its lid lifts and "AI voice"
+// shows under it. While the cook's own voice plays (store `shrunk`) the resting pot shrinks a little
+// about its centre.
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { PressableScale, Txt } from '@/components/ui';
 import { useHomieRoute } from '@/lib/homie/hooks';
-import { HOMIE_REST_SIZE, potState, sayPhase, speakingLabel, timerProgress } from '@/lib/homie/logic';
-import { closeMoment, doneSpeaking, getHomie, showMoment, useHomie, type Homie } from '@/lib/homie/store';
+import { HOMIE_REST_SIZE, potState, sayPhase, SHRUNK_SCALE, speakingLabel, timerProgress } from '@/lib/homie/logic';
+import { doneSpeaking, getHomie, useHomie, type Homie } from '@/lib/homie/store';
 import { speak } from '@/lib/live/speak';
 import { useNowPlaying } from '@/lib/media';
 import { useSession } from '@/lib/session';
@@ -21,7 +24,6 @@ import { colors, motion } from '@/theme/tokens';
 import { HomieMoment } from './HomieMoment';
 import { HomiePot } from './HomiePot';
 
-const HELP_SHOWN_MS = 6000;
 const MOVE_MS = 240;
 
 export function HomieOverlay() {
@@ -46,21 +48,15 @@ export function HomieOverlay() {
 
   const onPress = () => {
     if (h.onPress) return h.onPress();
-    const line = route.help;
-    const id = `help:${Date.now()}`;
-    const moment = { id, question: line, options: [{ id: 'ok', label: 'OK', kind: 'primary' as const }], onChoose: () => {} };
-    showMoment(moment);
-    void speak(line, { translate: true, profileId: me?.id }).then((spoken) => {
-      // Said in the person's language: show that, with the English under it.
-      if (spoken.text && spoken.text !== line && getHomie().moment?.id === id) showMoment({ ...moment, question: spoken.text, questionEn: line });
-    });
-    setTimeout(() => closeMoment(id), HELP_SHOWN_MS);
+    void speak(route.help, { translate: true, profileId: me?.id });
   };
 
   const resting = !!me && !route.hidden && !h.hidden && !inMoment;
+  // While a moment is up the overlay is modal: VoiceOver ignores its siblings, the app's screens
+  // (iOS reads accessibilityViewIsModal; the web build reads aria-modal).
   return (
-    <View style={StyleSheet.absoluteFill} pointerEvents="box-none">
-      {me ? <RestingPot frame={frame} shown={resting} h={h} state={state} label={label} progress={progress} onPress={onPress} /> : null}
+    <View style={StyleSheet.absoluteFill} pointerEvents="box-none" accessibilityViewIsModal={inMoment} aria-modal={inMoment}>
+      {me ? <RestingPot frame={frame} shown={resting} inMoment={inMoment} h={h} state={state} label={label} progress={progress} onPress={onPress} /> : null}
       <HomieMoment from={frame} state={state} level={h.level} label={label} onActive={setInMoment} />
     </View>
   );
@@ -69,6 +65,7 @@ export function HomieOverlay() {
 function RestingPot({
   frame,
   shown,
+  inMoment,
   h,
   state,
   label,
@@ -77,6 +74,8 @@ function RestingPot({
 }: {
   frame: { x: number; y: number; size: number };
   shown: boolean;
+  /** A moment has the pot (it lands back here when the moment closes). */
+  inMoment: boolean;
   h: Homie;
   state: Homie['state'];
   label: string | null;
@@ -87,6 +86,12 @@ function RestingPot({
   const x = useSharedValue(frame.x);
   const y = useSharedValue(frame.y);
   const opacity = useSharedValue(shown ? 1 : 0);
+  // The cook's own voice is playing: homie steps back (smaller; under Reduce Motion, fainter).
+  const small = useSharedValue(h.shrunk ? 1 : 0);
+  const shrunk = !!h.shrunk;
+  useEffect(() => {
+    small.set(withTiming(shrunk ? 1 : 0, reduce ? { duration: motion.reducedFadeMs } : { duration: 260, easing: Easing.out(Easing.cubic) }));
+  }, [shrunk, reduce, small]);
 
   // A new screen's corner: a short glide (a fade under Reduce Motion).
   useEffect(() => {
@@ -95,15 +100,24 @@ function RestingPot({
     y.set(reduce ? frame.y : withTiming(frame.y, move));
   }, [frame.x, frame.y, reduce, x, y]);
 
-  // Back from a moment it lands exactly here, so it shows at once; anything else fades.
+  // Back from a moment it lands exactly here, so it shows at once (no blink); a screen that hides or
+  // shows the pot fades it.
+  const wasInMoment = useRef(inMoment);
   useEffect(() => {
-    opacity.set(withTiming(shown ? 1 : 0, { duration: motion.reducedFadeMs }));
-  }, [shown, opacity]);
+    if (shown && wasInMoment.current) opacity.set(1);
+    else opacity.set(withTiming(shown ? 1 : 0, { duration: motion.reducedFadeMs }));
+    wasInMoment.current = inMoment;
+  }, [shown, inMoment, opacity]);
 
-  const style = useAnimatedStyle(() => ({
-    opacity: opacity.value,
-    transform: [{ translateX: x.value }, { translateY: y.value }, { scale: frame.size / HOMIE_REST_SIZE }],
-  }));
+  const style = useAnimatedStyle(() => {
+    // Scaled about its centre (the box scales from its top left).
+    const s = reduce ? 1 : 1 - (1 - SHRUNK_SCALE) * small.value;
+    const inset = ((1 - s) * frame.size) / 2;
+    return {
+      opacity: opacity.value * (reduce ? 1 - 0.35 * small.value : 1),
+      transform: [{ translateX: x.value + inset }, { translateY: y.value + inset }, { scale: (frame.size / HOMIE_REST_SIZE) * s }],
+    };
+  });
 
   const a11y = state === 'speaking' ? 'homie, speaking' : state === 'listening' ? 'homie, listening' : 'homie';
   return (
@@ -147,6 +161,7 @@ function useTimerProgress(timer: Homie['timer']): number | null {
 const styles = StyleSheet.create({
   rest: { position: 'absolute', left: 0, top: 0, width: HOMIE_REST_SIZE, height: HOMIE_REST_SIZE, alignItems: 'center', transformOrigin: 'top left' },
   press: { width: HOMIE_REST_SIZE, height: HOMIE_REST_SIZE, borderRadius: HOMIE_REST_SIZE / 2 },
-  labelWrap: { position: 'absolute', top: HOMIE_REST_SIZE - 6, alignItems: 'center', width: 120 },
+  // Its right edge a little past the pot's, so "Translated from Grandma" grows left and stays on screen.
+  labelWrap: { position: 'absolute', top: HOMIE_REST_SIZE - 6, right: -8, alignItems: 'flex-end', width: 220 },
   label: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: colors.lavender, overflow: 'hidden' },
 });

@@ -1,10 +1,11 @@
 // The voice service's spoken replies ({ type: "say" } + binary audio): written to a small WAV in the
 // cache and played on the app's one shared player (lib/media), so it stops the step video and a
-// story's voice, like any other voice. The cook screen labels it "AI voice" while its key plays, or
-// "Translated from Grandma" for a translation of the clip that just played (its key: TRANSLATION_KEY_PREFIX).
+// story's voice, like any other voice. homie's overlay labels it "AI voice" under the pot while its key
+// plays (lib/homie logic speakingLabel), or what lib/live/voice set ("Translated from Grandma").
+// stopSay() cuts off the reply playing now (a tap on homie's offer answers it).
 import { File, Paths } from 'expo-file-system';
 
-import { playClip } from '@/lib/media';
+import { playClip, stopAudio } from '@/lib/media';
 
 export const SAY_KEY_PREFIX = 'say:';
 export const TRANSLATION_KEY_PREFIX = 'say:translation:';
@@ -40,10 +41,11 @@ function concat(parts: Uint8Array[]): Uint8Array {
 }
 
 let seq = 0;
+let playing: string | null = null;
 
-/** Plays one reply. A WAV from the server plays as is; raw PCM is s16le at `sampleRate`. */
-export function playSay(chunks: ArrayBuffer[], sampleRate = 24000, translation = false): void {
-  if (!chunks.length) return;
+/** Plays one reply (false if it couldn't). A WAV from the server plays as is; raw PCM is s16le at `sampleRate`. */
+export function playSay(chunks: ArrayBuffer[], sampleRate = 24000, translation = false): boolean {
+  if (!chunks.length) return false;
   const body = concat(chunks.map((c) => new Uint8Array(c)));
   const isWav = body.length > 4 && String.fromCharCode(...body.slice(0, 4)) === 'RIFF';
   const bytes = isWav ? body : concat([wavHeader(body.length, sampleRate), body]);
@@ -55,7 +57,15 @@ export function playSay(chunks: ArrayBuffer[], sampleRate = 24000, translation =
     file.write(bytes);
   } catch (e) {
     console.warn('[say] could not write the reply', String(e));
-    return;
+    return false;
   }
-  playClip({ url: file.uri, key: `${translation ? TRANSLATION_KEY_PREFIX : SAY_KEY_PREFIX}${seq}` });
+  playing = `${translation ? TRANSLATION_KEY_PREFIX : SAY_KEY_PREFIX}${seq}`;
+  playClip({ url: file.uri, key: playing });
+  return true;
+}
+
+/** Stops the reply playing now, if one is (never the cook's clips or homie's other voice). */
+export function stopSay(): void {
+  if (playing) stopAudio(playing);
+  playing = null;
 }

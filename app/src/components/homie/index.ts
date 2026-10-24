@@ -3,3 +3,4 @@
 export * from './HomieMoment';
 export * from './HomieOverlay';
 export * from './HomiePot';
+export * from './ListeningBars';
