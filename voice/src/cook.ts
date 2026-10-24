@@ -228,9 +228,10 @@ export class Cooking {
       if (this.hearing()) this.ink?.send(data as Buffer);
       return;
     }
-    let msg: { type?: string; stepOrder?: number; text?: string; open?: unknown; kind?: unknown };
+    let msg: { type?: string; stepOrder?: number; text?: unknown; open?: unknown; kind?: unknown };
     try {
-      msg = JSON.parse(data.toString());
+      // `?? {}`: "null" is valid JSON, and reading .type off it used to end the whole process.
+      msg = JSON.parse(data.toString()) ?? {};
     } catch {
       return;
     }
@@ -238,10 +239,10 @@ export class Cooking {
       this.step = msg.stepOrder!;
       this.touch();
       this.persistStep();
-    } else if (msg.type === "text" && msg.text) {
+    } else if (msg.type === "text" && typeof msg.text === "string" && msg.text) {
       // Typed or push-to-talk input, or the app answering the offer ("yes", "no"): the same path as a spoken
       // turn. It's the app's own answer, so an open moment doesn't hold it.
-      this.heard(msg.text, false);
+      this.heard(msg.text.slice(0, 1000), false);
     } else if (msg.type === "moment" && typeof msg.open === "boolean") {
       // One of the app's own homie moments opened or closed on the phone.
       this.moment = msg.open ? (typeof msg.kind === "string" && msg.kind ? msg.kind.slice(0, 20) : "moment") : null;
@@ -282,7 +283,8 @@ export class Cooking {
       return;
     }
     console.log(`kid: ${text}`);
-    this.turns = this.turns.then(() => this.turn(text, inMoment));
+    // A turn that throws anyway must not break the chain: every later turn would be skipped.
+    this.turns = this.turns.then(() => this.turn(text, inMoment)).catch((err) => console.error("turn:", err));
   }
 
   /** One turn. `inMoment`: said while an app moment was up, so its yes or no is the moment's, never our offer's. */
@@ -467,8 +469,12 @@ export class Cooking {
         .catch((err) => console.warn("voice/question", err.message));
     },
     askCook: (question) => this.askCookWith(question, `Good question. I'll ask ${this.cook}.`),
+    // One step, with no second Claude call: the question goes to Convex while the hint is spoken, then asked_cook,
+    // and "I'll ask Grandma too." once the hint has played.
     giveHint: async (hint, question) => {
       const logged = this.deps.convex.logQuestion(this.token, this.recipeId, this.step, question);
+      // Handled now, thrown below (like ask_cook's): a write that fails while the hint plays used to go unhandled.
+      logged.catch(() => {});
       const text = /didn['’]?t say/i.test(hint) ? hint : `${this.cook} didn't say. ${hint}`;
       await this.say(text, "hint");
       const { questionId } = await logged;
@@ -498,6 +504,7 @@ export class Cooking {
    * still playing. `textEn` and `language` are for a line that isn't English (the greeting).
    */
   private async say(text: string, kind: SayKind, extra: { textEn?: string; language?: string; translation?: true } = {}) {
+    if (this.closed) return; // the phone hung up mid-turn: nobody to say it to, so no Sonic call
     this.speaking?.abort();
     const ctrl = new AbortController();
     this.speaking = ctrl;

@@ -1,7 +1,8 @@
 // Claude as the cooking agent: each time the kid finishes talking, it picks one tool (STACK.md,
-// "Claude's tools" and "kid cooking additions"). find_moment is the only tool that hands control back for
-// a second pick, so a question becomes find_moment → play_clip, or → give_hint / ask_cook. A hint is
-// general cooking knowledge, labelled as the AI's, and the question still goes to the cook (Caleb, Oct 24).
+// "Claude's tools" and "kid cooking additions"). The cook's video is searched before Claude is asked, so a
+// question takes one call: play_clip, give_hint or ask_cook. A hint is general cooking knowledge, labelled as
+// the AI's, and the same tool sends the question to the cook (Caleb, Oct 24), with no second call.
+// find_moment (search again with other words) is the only tool that hands control back for another pick.
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "./env.js";
 import type { CookSession } from "./convex.js";
@@ -65,11 +66,11 @@ const TOOLS: Beta.BetaTool[] = [
   {
     name: "give_hint",
     description:
-      "When no moment answers a question about general cooking (an amount, a time, the heat, a common swap) and you're sure of the common answer: one short hedged line the kid hears labelled as yours, not the cook's. The question also goes to the cook.",
+      "When no moment answers a question about general cooking (an amount, a time, the heat, a common swap) and you're sure of the common answer: one short hedged line the kid hears labelled as yours, not the cook's. This also sends the question to the cook, so never call ask_cook after it.",
     input_schema: obj(
       {
-        hint: { type: "string", description: "One short line of common knowledge, e.g. \"Most recipes use about a teaspoon.\" Never what the cook did." },
-        question: { type: "string", description: "The kid's question in their own words, for the cook." },
+        hint: { type: "string", description: "One short sentence of common knowledge, under 15 words, e.g. \"Most recipes use about a teaspoon.\" Never what the cook did." },
+        question: { type: "string", description: "The kid's question for the cook, in their own words and short." },
       },
       ["hint", "question"],
     ),
@@ -112,7 +113,7 @@ function systemPrompt(s: CookSession): string {
 
 Each turn, call exactly one tool:
 - "next", "done", "what's next", "ok go on" → next_step. "back", "last step" → previous_step. "again", "what?", "say that again" → repeat_step. "step 4", "go to the sauce part" → go_to_step.
-- A question about the dish (how much, how long, what should it look like, why, can I swap something): the message lists moments from ${cook}'s video that may match. If one clearly answers it, play_clip with its start_s and end_s. Use find_moment when no moments are listed, or when the kid's words were vague and other words would clearly find it. If no moment answers it: give_hint when it's general cooking knowledge you're sure of (it's labelled as yours, and the question still goes to ${cook}); otherwise ask_cook.
+- A question about the dish (how much, how long, what should it look like, why, can I swap something): the message lists the moments from ${cook}'s video that may match, or says the search found nothing. If one clearly answers it, play_clip with its start_s and end_s. Use find_moment only when moments are listed but the kid's words were vague and other words would clearly find a better one; when the search found nothing, don't search again. If no moment answers it: give_hint when it's general cooking knowledge you're sure of (it's labelled as yours, and the same call sends the question to ${cook}); otherwise ask_cook.
 - "show me how you did this step" → play_clip with the step's own video times.
 - "set a timer for five minutes", "time the rice for 20" → set_timer.
 - Small talk or thanks → say, briefly and warmly.
@@ -126,7 +127,6 @@ ${steps}`;
 }
 
 export class TurnAgent {
-  private client = new Anthropic({ apiKey: env.anthropicKey });
   private system: string;
   private cook: string;
   private messages: Beta.BetaMessageParam[] = [];
@@ -138,6 +138,8 @@ export class TurnAgent {
   constructor(
     private session: CookSession,
     private actions: Actions,
+    /** Tests pass a fake with only `beta.messages.create`. */
+    private client: Anthropic = new Anthropic({ apiKey: env.anthropicKey }),
   ) {
     this.system = systemPrompt(session);
     this.cook = session.cook?.name ?? "the cook";
@@ -149,10 +151,13 @@ export class TurnAgent {
     const steps = this.session.recipe.steps;
     const now = steps.find((s) => s.order === this.actions.currentStep());
     const context = `[On step ${now?.order ?? "?"} of ${steps.length}: ${now?.title ?? ""}]${note ? `\n[${note}]` : ""}`;
-    // Search the video up front (in-memory, ~10 ms), so a question needs one model call, not two.
+    // Search the video up front (in-memory, ~10 ms), so a question needs one model call, not two. Saying when
+    // nothing matched matters as much: otherwise Claude searches again first (a whole extra call, ~3 s).
     let foundThisTurn = await this.actions.findMoment(utterance, 2000).catch(() => [] as Hit[]);
     this.playable.push(...foundThisTurn.map((h) => ({ startS: h.startS, endS: h.endS, quote: h.quote, stepOrder: h.stepOrder })));
-    const moments = foundThisTurn.length ? `\nMoments from ${this.cook}'s video that may match: ${momentsJson(foundThisTurn)}` : "";
+    const moments = foundThisTurn.length
+      ? `\nMoments from ${this.cook}'s video that may match: ${momentsJson(foundThisTurn)}`
+      : `\nSearching ${this.cook}'s video found nothing for this.`;
     this.pushUser([...this.pending, { type: "text", text: `${context}\n${this.session.kid.name}: "${utterance}"${moments}` }]);
     this.pending = [];
 
@@ -171,12 +176,22 @@ export class TurnAgent {
         content,
         is_error,
       });
+      // The last tool's result opens the next turn, also when its action fails: a tool_use without its tool_result
+      // makes Claude refuse every later call of this session. The failure itself still reaches the session.
+      const finish = async (act: () => Promise<string>) => {
+        try {
+          this.pending = [result(await act())];
+        } catch (err) {
+          this.pending = [result(`That failed: ${(err as Error)?.message ?? err}`, true)];
+          throw err;
+        }
+      };
 
       if (tool.name === "find_moment") {
         const hits = await this.actions.findMoment(String(input.query), 15000).catch(() => [] as Hit[]);
         foundThisTurn = [...foundThisTurn, ...hits];
         this.playable.push(...hits.map((h) => ({ startS: h.startS, endS: h.endS, quote: h.quote, stepOrder: h.stepOrder })));
-        const body = hits.length ? momentsJson(hits) : "No moment in the video matches. Use ask_cook.";
+        const body = hits.length ? momentsJson(hits) : "No moment in the video matches: give_hint or ask_cook.";
         this.pushUser([result(body)]);
         continue;
       }
@@ -190,13 +205,13 @@ export class TurnAgent {
           continue;
         }
         const question = known.quote ? { text: utterance, quote: known.quote } : undefined;
-        await this.actions.playClip(known.startS, known.endS, { question, stepOrder: known.stepOrder });
-        this.pending = [result("Playing.")];
-        return;
+        return finish(async () => {
+          await this.actions.playClip(known.startS, known.endS, { question, stepOrder: known.stepOrder });
+          return "Playing.";
+        });
       }
 
-      this.pending = [result(await this.run(tool.name, input))];
-      return;
+      return finish(() => this.run(tool.name, input));
     }
     // Ran out of calls without an action (for example, kept searching): send it to the cook.
     await this.actions.askCook(utterance);

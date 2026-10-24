@@ -11,6 +11,7 @@ Two live loops from `docs/build/STACK.md`, plus one HTTP route:
 
 ```
 src/server.ts   HTTP /health + POST /speak + WebSockets /cook and /record
+src/safety.ts   the process's safety net: one session's error is logged with its id and never ends the others'
 src/cook.ts     one cooking session: wires Ink → (fast path | Claude) → actions → Sonic
 src/yesNo.ts    the kid's spoken yes or no, to homie's offers and the app's moments (follows the app's yesNo)
 src/agent.ts    Claude turn agent: tools, system prompt, the one-tool-per-turn loop
@@ -67,8 +68,16 @@ The test clients use real Ink 2 and Sonic, and live tests are encouraged (AGENTS
 check: it needs `npm run dev:fake` (checked on `/health`, `x-fake-speech: 1`) and sends each recorded line's words
 as text (`scripts/testLines.ts`). Every run stops at `MAX_S` (default 15 min) so a stuck one can't stream for hours.
 
-The stub has no Moss index (the Moss plan allows 3 indexes, so don't make test ones): with `VOICE_STUB=1`,
-questions go to the cook. To test search, use a real family's index, which Convex creates after a pipeline run.
+The stub has no Moss index (its `mossIndex` is empty, so the service never calls Moss; the Moss plan allows 3
+indexes, so don't make test ones): with `VOICE_STUB=1`, a question gets a labelled hint plus the question to the
+cook, or goes to the cook. To test search, use a real family's index, which Convex creates after a pipeline run.
+A family index Moss says doesn't exist isn't asked for again for a minute, and a search never holds a turn longer
+than its wait (2 s before Claude's first call).
+
+The process stays up whatever one socket does: a bad frame, `"null"`, a `/speak` caller that hangs up mid-body, or
+a failed write while homie talks. `src/safety.ts` logs an unhandled rejection with its session id (`cook-3`,
+`record-4`) and keeps serving; an uncaught exception is logged with its id and the process exits, so Cloud Run starts
+a clean one. `test/server.test.ts` sends each of those to a real service in a child process.
 
 The test client streams each WAV in 100 ms chunks at real-time speed, keeps sending silence like an open mic,
 prints every event with timings, and saves what the service says to `test-audio/out/`. `text:<words>` sends a

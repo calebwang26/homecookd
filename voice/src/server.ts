@@ -4,15 +4,19 @@
 //   WS   /record?session=<sessionToken>&recording=<recordingId>[&audio=pcm|wav]  homie while a cook records
 //   POST /speak { sessionToken, text, lang?, translate? }  → audio/wav in homie's voice
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
-import { WebSocketServer } from "ws";
+import WebSocket, { WebSocketServer } from "ws";
 import { Cooking } from "./cook.js";
 import * as convex from "./convex.js";
 import { env } from "./env.js";
 import { translate } from "./homie.js";
 import { Recording } from "./record.js";
+import { guarded, inSession, installSafetyNet } from "./safety.js";
 import { fakeSpeech, speakWav } from "./speech.js";
 
+installSafetyNet();
+
 const MAX_SPEAK_CHARS = 600;
+let sessionCount = 0;
 
 async function readJson(req: IncomingMessage): Promise<Record<string, unknown> | null> {
   let body = "";
@@ -67,13 +71,23 @@ const server = createServer((req, res) => {
     res.writeHead(200, { "Content-Type": "text/plain", ...(fakeSpeech ? { "x-fake-speech": "1" } : {}) }).end("ok");
     return;
   }
-  if (path === "/speak" && req.method === "POST") return void speakRoute(req, res);
+  if (path === "/speak" && req.method === "POST") {
+    // A caller that hangs up mid-body makes reading it throw ("aborted").
+    return void speakRoute(req, res).catch((err) => {
+      console.warn("speak:", (err as Error).message);
+      if (!res.headersSent) fail(res, 400, "couldn't read the request");
+      else res.destroy();
+    });
+  }
   res.writeHead(404).end();
 });
 
 const wss = new WebSocketServer({ noServer: true, maxPayload: 1 << 20 });
 
 server.on("upgrade", (req, socket, head) => {
+  // Node hands the raw socket over with no 'error' listener: a client that resets it (say, after our 400) would
+  // otherwise end the process. The WebSocket adds its own once it takes over.
+  socket.on("error", (err) => console.warn("upgrade socket:", err.message));
   const url = new URL(req.url ?? "/", "http://x");
   const token = url.searchParams.get("session");
   const recipe = url.searchParams.get("recipe");
@@ -84,15 +98,25 @@ server.on("upgrade", (req, socket, head) => {
     return;
   }
   const audio = url.searchParams.get("audio") === "wav" ? "wav" : "pcm";
-  wss.handleUpgrade(req, socket, head, (ws) => {
-    const session = url.pathname === "/cook" ? new Cooking(ws, token, recipe!, audio) : new Recording(ws, token, recording!, audio);
-    ws.on("message", (data, isBinary) => session.onMessage(data, isBinary));
-    ws.on("close", () => session.close());
-    // Keep the socket alive through Cloud Run's front end while nobody talks.
-    const ping = setInterval(() => ws.ping(), 25_000);
-    ws.on("close", () => clearInterval(ping));
-    void session.start();
-  });
+  // "cook-12": in every log line the safety net writes for this socket's errors.
+  const id = `${url.pathname.slice(1)}-${++sessionCount}`;
+  wss.handleUpgrade(req, socket, head, (ws) =>
+    inSession(id, () => {
+      const session = url.pathname === "/cook" ? new Cooking(ws, token, recipe!, audio) : new Recording(ws, token, recording!, audio);
+      ws.on("message", guarded(id, "message", (data: WebSocket.RawData, isBinary: boolean) => session.onMessage(data, isBinary)));
+      ws.on("close", guarded(id, "close", () => session.close()));
+      // A bad frame (over maxPayload, text that isn't UTF-8) is an 'error' here, and ws then closes the socket.
+      // With no listener it would end the process.
+      ws.on("error", (err) => console.warn(`[${id}] socket: ${err.message}`));
+      // Keep the socket alive through Cloud Run's front end while nobody talks.
+      const ping = setInterval(() => ws.ping(), 25_000);
+      ws.on("close", () => clearInterval(ping));
+      session.start().catch((err) => {
+        console.error(`[${id}] start failed:`, err);
+        ws.close(1011);
+      });
+    }),
+  );
 });
 
 server.listen(env.port, () => {

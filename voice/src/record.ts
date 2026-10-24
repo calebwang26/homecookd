@@ -222,7 +222,7 @@ export class Recording {
   private control(raw: string) {
     let msg: { type?: string; text?: unknown };
     try {
-      msg = JSON.parse(raw);
+      msg = JSON.parse(raw) ?? {}; // "null" parses, and reading .type off it used to end the whole process
     } catch {
       return;
     }
