@@ -20,6 +20,12 @@ const command = (t: string) =>
     .replace(/^((um|uh|wait|okay|ok|so|hey|alright|and|now) )+/, "")
     .replace(/( (please|thanks|thank you))+$/, "");
 
+/** Mostly non-Latin letters: Ink writes the cook's Marathi (from a clip playing nearby) in Devanagari. */
+const notLatin = (t: string) => {
+  const letters = t.match(/\p{L}/gu) ?? [];
+  return letters.length > 0 && letters.filter((c) => !/\p{Script=Latin}/u.test(c)).length / letters.length > 0.5;
+};
+
 /** True when `heard` is mostly words we just said: our own voice coming back through the mic. */
 function isEcho(heard: string, spoken: string): boolean {
   const said = new Set(normalize(spoken).split(" "));
@@ -35,6 +41,8 @@ export class Cooking {
   private agent?: TurnAgent;
   private speaking: AbortController | null = null;
   private lastSpoken = { text: "", until: 0 };
+  /** While the cook's clip plays, the mic hears her too: only plain commands count until then. */
+  private clipUntil = 0;
   private turns: Promise<void> = Promise.resolve();
   private closed = false;
 
@@ -90,7 +98,7 @@ export class Cooking {
       this.persistStep();
     } else if (msg.type === "text" && msg.text) {
       // Typed or push-to-talk input: the same path as a spoken turn.
-      this.heard(msg.text);
+      this.heard(msg.text, false);
     }
   }
 
@@ -100,10 +108,19 @@ export class Cooking {
     this.speaking?.abort();
   }
 
-  private heard(text: string) {
+  private heard(text: string, spoken = true) {
     if (!text || !this.agent) return;
-    if (Date.now() < this.lastSpoken.until && isEcho(text, this.lastSpoken.text)) {
-      console.log(`ignored echo: ${text}`);
+    const ignore = !spoken
+      ? ""
+      : notLatin(text)
+        ? "not English"
+        : Date.now() < this.lastSpoken.until && isEcho(text, this.lastSpoken.text)
+          ? "echo"
+          : Date.now() < this.clipUntil && !FAST.some(([re]) => re.test(command(text)))
+            ? "during clip"
+            : "";
+    if (ignore) {
+      console.log(`ignored (${ignore}): ${text}`);
       return;
     }
     this.send({ type: "transcript", text, final: true });
@@ -141,6 +158,7 @@ export class Cooking {
       const step = this.session.recipe.steps.find((s) => s.order === order);
       if (!step) return;
       this.step = order;
+      this.clipUntil = 0;
       this.send({ type: "go_to_step", stepOrder: order });
       this.persistStep();
       await this.say(`Step ${order}. ${step.text}`);
@@ -148,6 +166,7 @@ export class Cooking {
     findMoment: (query, waitMs) => findMoments(this.session.mossIndex, this.session.recipe.id, query, waitMs),
     playClip: async (startS, endS, question) => {
       this.speaking?.abort();
+      this.clipUntil = Date.now() + (endS - startS + 1) * 1000;
       this.send({ type: "play_clip", startS, endS });
       if (question) {
         await convex

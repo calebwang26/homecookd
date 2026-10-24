@@ -62,8 +62,11 @@ Service → app
 - `{ type: "error", message }`. Close code 4401 means the session token was refused (sign in again); 4404 means
   the recipe isn't in this family or isn't ready.
 
-The phone must play audio with echo cancellation on (iOS voice processing). Otherwise Ink hears Sonic. The
-service also ignores a turn that mostly repeats what it just said, as a backstop.
+The phone must play audio with echo cancellation on (iOS voice processing). Otherwise Ink hears Sonic and the
+cook's clips. As a backstop, the service ignores:
+- a turn that mostly repeats what it just said;
+- a turn written mostly in a non-Latin script (Ink writes the cook's Marathi in Devanagari; the kid speaks English);
+- anything but a plain command ("next", "go back") while a clip is playing.
 
 ## How a turn works
 
