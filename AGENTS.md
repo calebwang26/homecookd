@@ -62,8 +62,20 @@ and homesick college kids. It's a family product, not a tool.
   STATE.md. After a deploy, run:
   `node supabase/tests/two_sided_live.mjs`, `node app/scripts/api-smoke.mjs` and `node supabase/tests/retention_live.mjs`.
   They need `docs/build/.test-family-code` (gitignored). Use only the TEST family.
-- **Secrets:** never put a Gemini key, Supabase service key or GCP credential in `app/` or `web/`. `EXPO_PUBLIC_*` and
-  `NEXT_PUBLIC_*` values ship to users. Never print `.env` values.
+- **Secrets:** never put a Gemini key, Supabase service key, GCP credential or Cartesia key in `app/` or `web/`, or in
+  any tracked file. `EXPO_PUBLIC_*` and `NEXT_PUBLIC_*` values ship to users. Never print `.env` values. Keys live
+  only in the gitignored root `.env` and in Supabase edge-function secrets.
+- **Cartesia (voice):** the `CARTESIA_API_KEY` stays server-side. Clients get a 5-minute token from
+  `POST /voice/token` and call `https://api.cartesia.ai` with it (`docs/build/API.md`). Send
+  `Cartesia-Version: 2026-08-14` on every call, and read the docs (https://docs.cartesia.ai/llms.txt) before
+  guessing fields or voice ids. Live check: `node supabase/tests/cartesia_live.mjs`.
+- **Moss (search):** `MOSS_PROJECT_ID` and `MOSS_PROJECT_KEY` stay server-side. Moss search runs only inside its
+  native SDKs, so the app asks through the `POST /moss/ask` proxy, which searches only the `family-<id>` index
+  (https://docs.moss.dev/llms.txt). Live check: `node supabase/tests/moss_live.mjs`.
+- **Convex:** set up at the repo root (`convex/`, `npm run dev` = `convex dev`), dev deployment `upbeat-lobster-139`
+  in the "homecookd" project. Read `convex/_generated/ai/guidelines.md` before writing Convex code; the skills are
+  in `.agents/skills` (Codex) and `.claude/skills` (Claude Code). The team token (`CONVEX_OVERRIDE_ACCESS_TOKEN`)
+  and any deploy key live only in `.env`.
 - **No TestFlight build yet.** Invite and recipe links can't install or open the app. Treat that as a known gap,
   not a bug. Test invites in two halves (see `docs/agents/memory/no-testflight-yet.md`).
 - **`TODO(caleb)`** marks a decision only Caleb can make. Use the documented default and leave the marker.

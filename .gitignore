@@ -7,3 +7,5 @@ input/
 logs/
 docs/build/.test-family-code
 supabase/.temp/
+node_modules/
+.env.local

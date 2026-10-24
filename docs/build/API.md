@@ -704,6 +704,23 @@ Then `PUT` the raw file bytes to `upload_url` with exactly those `headers` (no A
 `FileSystem.uploadAsync(upload_url, fileUri, { httpMethod: 'PUT', headers, uploadType: BINARY_CONTENT })`
 or `fetch(upload_url, { method: 'PUT', headers, body: blob })`. Bucket cap 10 MB.
 
+### `POST /voice/token` (me)
+Cartesia voice: Sonic text-to-speech and Ink speech-to-text. `{}` (TTS only) or `{ "stt": true }`
+(TTS + STT) ->
+```json
+{ "token": "<short-lived Cartesia access token>", "expires_in_s": 300,
+  "base_url": "https://api.cartesia.ai", "cartesia_version": "2026-08-14",
+  "grants": { "tts": true, "stt": false } }
+```
+The app or web then calls Cartesia directly with `Authorization: Bearer <token>` and
+`Cartesia-Version: <cartesia_version>` (on WebSockets, `?access_token=…&cartesia_version=…`). For
+example, `POST {base_url}/tts/bytes` with `{ model_id: "sonic-3.6", transcript, voice: "<voice id>",
+output_format: { container: "wav", encoding: "pcm_s16le", sample_rate: 44100 }, language: "en",
+generation_config: { speed: 0.9 } }` returns a wav to play. Fetch a new token when it expires. The
+`CARTESIA_API_KEY` secret never leaves the function. Errors: `503 "Voice isn't set up yet."` (the
+secret is missing), `502` (Cartesia refused), `429` (more than 120 a family per hour). Live check:
+`node supabase/tests/cartesia_live.mjs`.
+
 ### `POST /photo-upload` (me)
 `{ "content_type": "image/jpeg" }` (default `image/jpeg`; also `image/png`, `image/heic`,
 `image/webp`) ->
@@ -719,6 +736,21 @@ then `POST /messages/:id/postcard` with `photo_path: path` on the `cooked` messa
 works). The `photos` bucket is **private**, like `voice`: messages carry a fresh 1-hour signed
 `photo_url`, so re-fetch rather than caching it. `photo_path` on any other kind is a `400`. Bucket
 cap 10 MB.
+
+### `POST /moss/ask` (me)
+Moss semantic search over the family's own recipes. `{ "question": "How much salt goes in the chili?" }`
+(1-500 characters) ->
+```json
+{ "answer": "Three big shakes, about a palmful.", "request_id": "<X-Moss-Request-Id, or null>" }
+```
+The function calls Moss Inference (`POST https://inference.moss.dev/v1/chat/completions`, model
+`moss`) with `X-Moss-Indexes: family-<family_id>`, so a family only ever searches its own index; the
+caller can't name another one. Moss's own query API runs in-process in its native SDKs, which don't
+load in an edge function or Expo Go, so there is no client token: the app asks through this route
+and the `MOSS_PROJECT_ID` / `MOSS_PROJECT_KEY` secrets never leave the function. Nothing fills the
+family indexes yet. Errors: `503 "Search isn't set up yet."` (secrets missing), `404 "There's nothing
+to search yet."` (no index for this family), `502` (Moss refused), `429` (more than 60 a family per
+hour). Live check: `node supabase/tests/moss_live.mjs`.
 
 ### `POST /send-recipe` (me)
 `{ "recipe_id": "dad-sunday-chili", "to": ["<profile id>", …] | "everyone", "note": "Try it Sunday" }` ->
