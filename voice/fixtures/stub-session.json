@@ -1,0 +1,72 @@
+{
+  "familyId": "voice-test",
+  "kid": {
+    "id": "kid-test",
+    "name": "Leo"
+  },
+  "cook": {
+    "id": "cook-test",
+    "name": "Grandma"
+  },
+  "recipe": {
+    "id": "grandma-red-braised-pork",
+    "title": "Grandma's Red-Braised Pork Belly",
+    "steps": [
+      {
+        "order": 1,
+        "title": "Cut and blanch the pork",
+        "text": "Cut the pork belly into chunky cubes about the size of a mahjong tile. Cover them with cold water and the ginger slices, bring to a boil and skim the foam, then drain and rinse the pork.",
+        "moment": {
+          "startS": 45,
+          "endS": 420
+        }
+      },
+      {
+        "order": 2,
+        "title": "Melt the sugar to amber",
+        "text": "Put the rock sugar in a dry wok over low heat and stir until it melts into a deep amber caramel. Add the pork and turn it until every piece is coated.",
+        "moment": {
+          "startS": 440,
+          "endS": 700
+        }
+      },
+      {
+        "order": 3,
+        "title": "Wine, soy and the sweet spices",
+        "text": "Splash in the Shaoxing wine, then the light and dark soy sauce. Tuck in the knotted scallion and star anise and stir until the pork is shiny and red.",
+        "moment": {
+          "startS": 720,
+          "endS": 1050
+        }
+      },
+      {
+        "order": 4,
+        "title": "Braise low and slow",
+        "text": "Pour in hot water until it just covers the pork and bring to a boil. Turn the heat to low, cover and braise about an hour, then let the pot cool and keep it covered overnight.",
+        "moment": {
+          "startS": 1060,
+          "endS": 1730
+        }
+      },
+      {
+        "order": 5,
+        "title": "Reheat and reduce the sauce",
+        "text": "The next morning, warm the pork gently, then take off the lid and turn up the heat. Spoon the sauce over the pork until it thickens into a glossy glaze.",
+        "moment": {
+          "startS": 1760,
+          "endS": 2160
+        }
+      },
+      {
+        "order": 6,
+        "title": "Plate and serve hot",
+        "text": "Spoon the pork and all the glaze onto a deep plate, scatter fresh scallion greens over the top and bring it to the table while it is still steaming.",
+        "moment": {
+          "startS": 2180,
+          "endS": 2370
+        }
+      }
+    ]
+  },
+  "stepOrder": 1
+}
