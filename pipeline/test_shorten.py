@@ -7,14 +7,18 @@ again), amounts are measurements or nothing (a split ingredient is not shown its
 loose amount loses its bold where the card measures it, and a tip may not repeat the "Ready when" cue.
 Also checks every bundled and synthetic recipe still passes check() as stored, and align.py's substep start_s
 rules: recipes with audio have start_s on every substep (first = step.start_s, strictly increasing, inside the
-step), recipes without media have none, and schema.py rejects a broken one.
+step), recipes without media have none, and schema.py rejects a broken one. align_file (process.py's call
+right after shorten) times a new recipe.json in place with a fake Gemini, and hears the cook's Marathi.
 """
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
+import tempfile
 import traceback
 from pathlib import Path
+from types import SimpleNamespace
 
 ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
@@ -23,6 +27,7 @@ if str(ROOT) not in sys.path:
 from pipeline import align as A  # noqa: E402
 from pipeline import shorten as S  # noqa: E402
 from pipeline.schema import Recipe  # noqa: E402
+from pipeline.shorten import MemoryUsage  # noqa: E402
 
 
 def recipe(steps: list[dict], ingredients: list[tuple[str, str]]) -> dict:
@@ -130,6 +135,50 @@ def test_schema_rejects_bad_start_s() -> None:
             assert "substeps start_s" in str(e), e
         else:
             raise AssertionError("schema accepted a broken substep start_s")
+
+
+class FakeAlign:
+    """Stands in for genai.Client: answers every step with evenly spread substep times, keeps the prompts."""
+
+    def __init__(self) -> None:
+        self.prompts: list[str] = []
+        self.models = SimpleNamespace(generate_content=self._generate)
+
+    def _generate(self, model, contents, config):
+        assert config.response_schema is A.AlignAnswer, config.response_schema
+        text = "\n".join(c for c in contents if isinstance(c, str))
+        self.prompts.append(text)
+        steps = []
+        for block in text.split("Step ")[1:]:
+            order = int(block.split(":")[0])
+            n = block.split("Substeps:")[1].split("What the cook says")[0].strip().count("\n") + 1
+            length = A.parse_timestamp(block.split("Clip length ")[1].split(".")[0])
+            steps.append({"order": order, "starts": [A.mmss(length * i // n) for i in range(n)]})
+        meta = SimpleNamespace(prompt_token_count=100, candidates_token_count=20, thoughts_token_count=0)
+        return SimpleNamespace(text=json.dumps({"steps": steps}), usage_metadata=meta, candidates=[],
+                               prompt_feedback=None)
+
+
+def test_align_file_times_a_new_recipe() -> None:
+    r = json.loads((S.BUNDLED / "weed-steak.json").read_text())
+    for s in r["steps"]:
+        for x in s["substeps"]:
+            x.pop("start_s", None)
+    marathi = "आता कांदा कापायचा आहे."
+    r["steps"][1]["quote_original"] = marathi
+    r["media"]["audio_url"] = "voice.m4a"  # process.py's relative name; the file sits next to recipe.json
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "recipe.json"
+        path.write_text(json.dumps(r, ensure_ascii=False))
+        subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "anullsrc=r=8000:cl=mono",
+                        "-t", str(r["media"]["duration_s"]), "-c:a", "aac", str(Path(tmp) / "voice.m4a")], check=True)
+        fake = FakeAlign()
+        how = A.align_file(path, fake, "fake-flash", MemoryUsage())
+        after = json.loads(path.read_text())
+    assert not A.check(after), A.check(after)
+    assert set(how) == {s["order"] for s in r["steps"]} and all(h.startswith("gemini") for h in how.values()), how
+    assert len(fake.prompts) == 1 and f'(as spoken: "{marathi}")' in fake.prompts[0], fake.prompts[0][:2000]
+    assert after["steps"][1]["quote_original"] == marathi  # written back as Marathi, not \u escapes
 
 
 if __name__ == "__main__":

@@ -16,7 +16,8 @@ clamped; a time up to SLIP_S before the one above it is nudged after it). Steps 
 
 Copies with audio: data/out/ID/recipe.json and app/assets/data/recipes/ID.json (synthetic recipes have no media
 and are skipped). Recipes that already have start_s are skipped unless --force. Rerunning shorten.py replaces
-the substeps and drops their start_s: run this again after it.
+the substeps and drops their start_s: run this again after it. process.py does both for every new recipe
+(align_file, right after shorten); this CLI is for older recipes and hand fixes.
 """
 from __future__ import annotations
 
@@ -125,10 +126,11 @@ def check(recipe: dict) -> list[str]:
 
 # ---------- audio ----------
 
-def voice_file(recipe: dict, audio_dir: Path) -> Path:
-    local = OUT / recipe["id"] / "voice.m4a"
-    if local.exists():
-        return local
+def voice_file(recipe: dict, audio_dir: Path, near: Path | None = None) -> Path:
+    """near: the recipe.json's folder, whose voice.m4a wins (process.py's own data/out/ID)."""
+    for local in ([near / "voice.m4a"] if near else []) + [OUT / recipe["id"] / "voice.m4a"]:
+        if local.exists():
+            return local
     url = (recipe.get("media") or {}).get("audio_url")
     if not url:
         raise AlignError(f"{recipe['id']}: no media.audio_url")
@@ -270,10 +272,22 @@ def apply(recipe: dict, found: dict[int, list[int]]) -> dict:
 
 def align_id(recipe_id: str, client: genai.Client | None, model: str, usage: Usage, audio_dir: Path,
              force: bool = False, dry_run: bool = False) -> list[tuple[Path, dict, dict[int, str]]]:
-    tag = f"align {recipe_id}"
+    return align_paths(copies(recipe_id), client, model, usage, audio_dir, force, dry_run, f"align {recipe_id}")
+
+
+def align_file(path: Path, client: genai.Client, model: str, usage: Usage) -> dict[int, str]:
+    """process.py, right after shorten: time one new recipe.json's substeps in place. Returns how each step was
+    found (every step falls back to text length when Gemini's answers are rejected twice)."""
+    with tempfile.TemporaryDirectory() as tmp:
+        done = align_paths([path], client, model, usage, Path(tmp), force=True, tag=f"align {path.parent.name}")
+    return done[0][2] if done else {}
+
+
+def align_paths(paths: list[Path], client: genai.Client | None, model: str, usage: Usage, audio_dir: Path,
+                force: bool = False, dry_run: bool = False, tag: str = "align") -> list[tuple[Path, dict, dict[int, str]]]:
     answers: dict[str, tuple[dict[int, list[int]], dict[int, str]]] = {}
     results = []
-    for p in copies(recipe_id):
+    for p in paths:
         r = json.loads(p.read_text())
         if not (r.get("media") or {}).get("audio_url"):
             log(f"[{tag}] {rel(p)}: no audio, skipped")
@@ -287,7 +301,7 @@ def align_id(recipe_id: str, client: genai.Client | None, model: str, usage: Usa
         if sig not in answers:
             if client is None:
                 raise AlignError(f"{tag}: no Gemini client")
-            voice = voice_file(r, audio_dir)
+            voice = voice_file(r, audio_dir, p.parent)
             with tempfile.TemporaryDirectory() as tmp:
                 clips = {s["order"]: cut_clip(voice, s["start_s"], s["end_s"], Path(tmp) / f"step_{s['order']:02d}.mp3")
                          for s in r["steps"]}

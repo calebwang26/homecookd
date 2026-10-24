@@ -182,6 +182,9 @@ voice/deploy.sh                                                    # Cloud Run h
 .venv/bin/python pipeline/test_order.py && .venv/bin/python pipeline/test_prompts.py
 .venv/bin/python pipeline/test_shorten.py                           # cook mode's short steps: rules + stored data
 .venv/bin/python pipeline/test_coverage.py
+.venv/bin/python pipeline/test_cover.py                             # the cover: Gemini's pick + the sharpest frame (fakes)
+.venv/bin/python pipeline/cover.py --id <id> [--out PATH]          # pick a recipe's cover again (real Gemini)
+.venv/bin/python pipeline/align.py --id <id> --force               # substep times again (process.py does it after shorten)
 .venv/bin/python pipeline/test_publish.py                           # a family recipe.json: no stories or tips, not in library.json
 .venv/bin/python pipeline/scrub_family.py                          # dry run: old family recipe.json files to strip (--write: Caleb's OK)
 .venv/bin/python pipeline/worker.py [--once]                        # claim Convex jobs (--gcs: the old GCS job files)

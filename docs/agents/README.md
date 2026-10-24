@@ -22,6 +22,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [hackathon-stack-oct23](memory/hackathon-stack-oct23.md) | Oct 23: PLAN.pdf is the guideline; Convex + voice service stack, the 2-day cuts (docs/build/STACK.md) |
 | [testflight-live](memory/testflight-live.md) | Oct 23: Apple account + TestFlight work; dev build while coding, TestFlight for the demo |
 | [demo-family-shreya](memory/demo-family-shreya.md) | Oct 24: the demo is Shreya Pawar's family; her grandma cooks and records in Marathi |
+| [demo-test-dishes](memory/demo-test-dishes.md) | Oct 24: demos, examples and tests use Swordfish steak and Poha (real dishes, real footage) |
 | [homie-voice](memory/homie-voice.md) | Oct 24: homie is Riya bilingual, asked for as auditioned (locale, speed 0.85, moods), cousin tone; Gemini TTS backup |
 | [cartesia-credits-for-tests](memory/cartesia-credits-for-tests.md) | Oct 24: use the Cartesia credits; real Cartesia is the test default, fake speech opt-in |
 | [community-map](memory/community-map.md) | Oct 24: Community is one simple dish map; information appears on tap, one step and one button at a time |
