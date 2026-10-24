@@ -38,7 +38,7 @@ export async function fixedLine(name: FixedLine, w: Who, latin: Who = w): Promis
   const { en } = FIXED[name](latin);
   if (w.language === "en") return { text: en, textEn: en };
   if (w.language === "mr") return { text: mr, textEn: en };
-  const text = await translate(FIXED[name](w).en, w.language).catch(() => "");
+  const text = await translate(FIXED[name](w).en, w.language, "homie").catch(() => "");
   return { text: text || en, textEn: en };
 }
 
@@ -64,6 +64,6 @@ export async function scriptedQuestion(n: number, w: Who, latin: Who = w): Promi
   const { en } = q.line(latin);
   if (w.language === "en") return { kind: q.kind, line: { text: en, textEn: en } };
   if (w.language === "mr") return { kind: q.kind, line: { text: mr, textEn: en } };
-  const text = await translate(q.line(w).en, w.language).catch(() => "");
+  const text = await translate(q.line(w).en, w.language, "homie").catch(() => "");
   return { kind: q.kind, line: { text: text || en, textEn: en } };
 }

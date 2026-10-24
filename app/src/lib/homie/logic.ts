@@ -174,8 +174,14 @@ export function voiceHttpBase(url: string): string | null {
   return `${secure ? 'https' : 'http'}://${m[2]}`;
 }
 
+// The phone's own voices are picked by locale, so each language a cook can pick gets its usual one (Oct 24).
+const DEVICE_LOCALES: Record<string, string> = {
+  en: 'en-US', mr: 'mr-IN', hi: 'hi-IN', gu: 'gu-IN', ta: 'ta-IN', te: 'te-IN', pa: 'pa-IN', ur: 'ur-PK', zh: 'zh-CN',
+  ko: 'ko-KR', tl: 'fil-PH', es: 'es-MX', pt: 'pt-BR', ar: 'ar-SA',
+};
+
 /** expo-speech's language for an Ink-style code (unset = English). */
 export function deviceVoiceLanguage(lang?: string | null): string {
   const l = (lang ?? 'en').toLowerCase();
-  return ({ en: 'en-US', mr: 'mr-IN', hi: 'hi-IN' } as Record<string, string>)[l] ?? l;
+  return DEVICE_LOCALES[l] ?? l;
 }

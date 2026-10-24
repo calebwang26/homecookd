@@ -77,6 +77,34 @@ test('the done screen says who it goes to', () => {
   assert.equal(W.doneLine(ren, { kid: null, everyone: false, nobody: true }).text, 'Done! Saving it to your recipes');
 });
 
+// The 12 languages added Oct 24 (wordsByLanguage.ts), each with the script it's written in.
+const SCRIPTS = {
+  hi: /\p{Script=Devanagari}/u, gu: /\p{Script=Gujarati}/u, ta: /\p{Script=Tamil}/u, te: /\p{Script=Telugu}/u,
+  pa: /\p{Script=Gurmukhi}/u, ur: /\p{Script=Arabic}/u, zh: /\p{Script=Han}/u, ko: /\p{Script=Hangul}/u,
+  ar: /\p{Script=Arabic}/u, tl: /[a-z]/, es: /[a-z]/, pt: /[a-z]/,
+};
+
+test('every line in each of the 12 other languages, in its script, with {kid} where the kid goes', () => {
+  const keys = Object.keys(W.recordWordTable());
+  for (const [code, script] of Object.entries(SCRIPTS)) {
+    const w = W.recordWords(code);
+    for (const key of keys) {
+      const line = w.line(key, { kid: 'Shreya' });
+      assert.match(line.text, script, `${code} ${key}`);
+      assert.doesNotMatch(line.text, /\{|\}/, `${code} ${key}: every hole filled`);
+      const en = W.recordWords('en').line(key, { kid: 'Shreya' }).text;
+      assert.notEqual(line.text, en, `${code} ${key} is translated`);
+      if (en.includes('Shreya')) assert.ok(line.text.includes('Shreya'), `${code} ${key} names the kid`);
+      for (const brand of ['homie', 'homecookd']) if (en.includes(brand)) assert.ok(line.text.includes(brand), `${code} ${key} keeps ${brand}`);
+    }
+    assert.equal(w.line('stop').en, 'Tap when you’re done', `${code}: the hint stays English`);
+    assert.equal(w.line('sentTo', { kid: 'Shreya' }).en, 'Sent to Shreya', `${code}: the English under it`);
+    assert.ok(!w.text('sentTo').includes('your family'), `${code}: no kid named → her word for family`);
+  }
+  assert.equal(W.recordWords('gu').text('sentTo', { kid: 'Shreya' }), 'Shreya ને મોકલ્યું', 'a space after a Latin name, as in Marathi');
+  assert.deepEqual(W.recordWords('vi').line('stop'), { text: 'I’m done', en: 'Tap when you’re done' }, 'no words yet: English');
+});
+
 test('errors are in her language too, with the English under them', () => {
   for (const key of ['lostConnection', 'signedOut', 'ended', 'elsewhere', 'micOff', 'noMicHere', 'couldntSend']) {
     const l = rmr.line(key);

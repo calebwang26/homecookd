@@ -8,7 +8,8 @@ const client = new Anthropic({ apiKey: env.anthropicKey });
 const SYSTEM = `You translate what a home cook said in a clip of her cooking video into short, natural English for her grandchild.
 Rules:
 - Use only her words below. Add nothing: no advice, no explanation, no amounts or times she didn't say.
-- She may speak Marathi, Hindi, English or a mix. If it's already English, keep her words and only drop filler.
+- She may speak her own language (Marathi, Tamil, Mandarin, Spanish, any), English or a mix. If it's already English,
+  keep her words and only drop filler.
 - At most 30 words. Keep her voice ("you", "I").
 - Reply with the translation only, no quotes or labels. If there's nothing to translate, reply with nothing.`;
 

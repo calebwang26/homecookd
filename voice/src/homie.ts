@@ -15,11 +15,17 @@ export type Decision =
   | { action: "react"; line: Line }
   | { action: "quiet"; storyInProgress: boolean };
 
-const NAMES: Record<string, string> = {
-  en: "English", mr: "Marathi", hi: "Hindi", gu: "Gujarati", bn: "Bengali", ta: "Tamil", te: "Telugu", kn: "Kannada",
-  ml: "Malayalam", pa: "Punjabi", ur: "Urdu", es: "Spanish", fr: "French", ja: "Japanese", zh: "Chinese", ko: "Korean",
-};
-export const languageName = (code: string) => NAMES[code] ?? code;
+// The language's name in Claude's prompts. Intl names most codes; these say which variety homie speaks.
+const NAMES: Record<string, string> = { zh: "Mandarin Chinese", tl: "Tagalog", pt: "Brazilian Portuguese", es: "Latin American Spanish" };
+const DISPLAY = new Intl.DisplayNames(["en"], { type: "language", fallback: "none" });
+export const languageName = (code: string) => NAMES[code] ?? ((/^[a-z]{2,3}$/.test(code) && DISPLAY.of(code)) || code);
+
+/**
+ * homie's voice is a young woman's, and the cook is an elder: for the lines Claude writes and homie's fixed lines
+ * (translate(…, "homie")).
+ * Oct 24: Claude's Punjabi, Urdu and Portuguese spoke of homie as a man without it.
+ */
+const SPEAKS_AS = `homie's voice is a young woman's: in a language that marks gender (in verbs, adjectives or articles, like Marathi, Hindi, Gujarati, Punjabi, Urdu, Arabic, Spanish or Portuguese), homie speaks of herself in the feminine. Speak to her the way a respectful younger relative speaks to an elder in her language (its polite forms, like आप, usted, você or 요 endings). Chinese is written in simplified characters.`;
 
 const client = new Anthropic({ apiKey: env.anthropicKey });
 
@@ -59,7 +65,7 @@ function about(w: Who): string {
   const kid = w.kid ?? "her family";
   // How homie sounds (Caleb, Oct 24: "like your cousin translated between the kid and the mom").
   return `You are homie, the warm helper in homecookd, a family app. ${w.call} is cooking${w.dish ? ` ${w.dish}` : ""} while her phone films her, so ${kid} (a homesick college student far from home) can cook it later from her video. She speaks ${lang}. Everything you say is spoken aloud to her by a voice, in ${lang}; address her as "${w.call}" (her family's word for her), warmly and respectfully, never like a customer.
-How homie sounds: warm, comfortable and a little playful, like a caring older cousin who passes words between the family. Short sentences, said the way people talk, with end punctuation. A comma after her name. At most one soft lead-in before a question (like "Quick one..."). Never robotic, never assistant-speak ("I'm your assistant", "How can I help"). homie's voice is a young woman's: in a language whose verbs show gender (Marathi, Hindi), homie speaks of herself in the feminine.`;
+How homie sounds: warm, comfortable and a little playful, like a caring older cousin who passes words between the family. Short sentences, said the way people talk, with end punctuation. A comma after her name. At most one soft lead-in before a question (like "Quick one..."). Never robotic, never assistant-speak ("I'm your assistant", "How can I help"). ${SPEAKS_AS}`;
 }
 
 const LINE_RULES = `"text" is the line in her language, written the way it should be spoken (her script, no emoji, no brand names other than homie in lowercase). "text_en" is the same line in English, with people's names in Latin letters (Rajani Aaji, Shreya), never in her script.`;
@@ -182,12 +188,13 @@ Each question is at most 18 words, gentle, one thing only, with no lead-in of it
 const cache = new Map<string, string>();
 
 /** Strict translation: only `text`, into `to` (an Ink code). Empty when there's nothing to say. */
-export async function translate(text: string, to: string): Promise<string> {
-  const key = `${to}\n${text}`;
+/** `as: "homie"` for homie's own lines (her gender and manners); the default for anyone's words, like a kid's question. */
+export async function translate(text: string, to: string, as: "homie" | "anyone" = "anyone"): Promise<string> {
+  const key = `${to}\n${as}\n${text}`;
   const hit = cache.get(key);
   if (hit !== undefined) return hit;
   const out = await json<{ translation: string }>(
-    `Translate the user's text into natural spoken ${languageName(to)}, as it will be read aloud by a voice to a family member. Translate only: add nothing, drop nothing, no explanations. Keep names as they are, written in ${languageName(to)}'s usual script. Keep "homie" as is, lowercase.`,
+    `Translate the user's text into natural spoken ${languageName(to)}, as it will be read aloud by a voice to a family member. Translate only: add nothing, drop nothing, no explanations. Keep names as they are, written in ${languageName(to)}'s usual script. Keep "homie" as is, lowercase.${as === "homie" && to !== "en" ? ` ${SPEAKS_AS}` : ""}`,
     text,
     obj({ translation: str }),
   );
@@ -196,11 +203,21 @@ export async function translate(text: string, to: string): Promise<string> {
   return result;
 }
 
-const tokens = (t: string) => t.toLowerCase().split(/[\s,.!?।"'“”]+/u).filter(Boolean);
-const YES = new Set(["yes", "yeah", "yep", "sure", "ok", "okay", "course", "हो", "होय", "हां", "हा", "चालेल", "नक्की", "हाँ"]);
-const NO = new Set(["no", "nope", "don't", "dont", "नाही", "नको", "नहीं"]);
+const tokens = (t: string) => t.toLowerCase().split(/[\s,.!?।"'“”。，！？،؟]+/u).filter(Boolean);
+// English and Marathi/Hindi, then (Oct 24) a few plain words in each language a cook can pick; anything else, or a
+// sentence without spaces (Chinese), goes to Claude.
+const YES = new Set([
+  "yes", "yeah", "yep", "sure", "ok", "okay", "course", "हो", "होय", "हां", "हा", "चालेल", "नक्की", "हाँ",
+  "હા", "હાં", "ஆமா", "ஆமாம்", "சரி", "అవును", "సరే", "ਹਾਂ", "ਹਾਂਜੀ", "ہاں", "好", "好的", "可以", "行", "네", "응", "좋아요",
+  "sí", "si", "claro", "sim", "pode", "oo", "opo", "sige", "نعم", "أيوه", "ايوه", "أكيد",
+]);
+const NO = new Set([
+  "no", "nope", "don't", "dont", "नाही", "नको", "नहीं",
+  "ના", "નહીં", "இல்ல", "இல்லை", "வேண்டாம்", "లేదు", "వద్దు", "ਨਹੀਂ", "نہیں", "不", "不要", "不用", "不行", "아니", "아니요", "아뇨",
+  "não", "hindi", "ayaw", "لا", "لأ",
+]);
 
-/** A quick yes/no from the words alone, in English or Marathi; null when it isn't clear. */
+/** A quick yes/no from the words alone; null when it isn't clear (Claude decides then). */
 export function yesNoWords(text: string): boolean | null {
   const words = tokens(text);
   const yes = words.some((w) => YES.has(w));
@@ -208,9 +225,15 @@ export function yesNoWords(text: string): boolean | null {
   return yes === no ? null : yes;
 }
 
-const NOT_NOW = [/\bnot now\b/, /\blater\b/, /\bnot right now\b/, /\bstop asking\b/, /\bi'?m busy\b/, /आत्ता नाही/, /आता नाही/, /आत्ता नको/, /आता नको/, /नंतर/, /थांब/];
+const NOT_NOW = [
+  /\bnot now\b/, /\blater\b/, /\bnot right now\b/, /\bstop asking\b/, /\bi'?m busy\b/,
+  /आत्ता नाही/, /आता नाही/, /आत्ता नको/, /आता नको/, /नंतर/, /थांब/, // Marathi
+  /अभी नहीं/, /बाद में/, /હમણાં નહીં/, /પછી/, /அப்புறம்/, /இப்ப(ோ)? வேண்டாம்/, /తర్వాత/, /ఇప్పుడు వద్దు/, /ਹੁਣ ਨਹੀਂ/, /ਬਾਅਦ ਵਿੱਚ/,
+  /ابھی نہیں/, /بعد میں/, /等一下/, /以后再说/, /现在不/, /待会/, /나중에/, /지금은 안/, /\bahora no\b/, /\bmás tarde\b/, /\bdespués\b/,
+  /\bagora não/, /\bmais tarde\b/, /\bdepois\b/, /\bmamaya\b/, /\bhindi muna\b/, /ليس الآن/, /مش دلوقتي/, /بعدين/, /لاحقا/,
+];
 
-/** "Not now" in English or Marathi. Only a short turn counts, so "नंतर" inside a sentence doesn't. */
+/** "Not now" in English or her language. Only a short turn counts, so "नंतर" inside a sentence doesn't. */
 export function isNotNow(text: string): boolean {
   const t = text.toLowerCase();
   return tokens(t).length <= 5 && NOT_NOW.some((re) => re.test(t));

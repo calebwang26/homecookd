@@ -614,6 +614,9 @@ await test('the phone voice speaks Marathi as mr-IN, English as en-US', () => {
   assert.equal(L.deviceVoiceLanguage('mr'), 'mr-IN');
   assert.equal(L.deviceVoiceLanguage('hi'), 'hi-IN');
   assert.equal(L.deviceVoiceLanguage('fr'), 'fr');
+  assert.equal(L.deviceVoiceLanguage('ta'), 'ta-IN');
+  assert.equal(L.deviceVoiceLanguage('tl'), 'fil-PH');
+  assert.equal(L.deviceVoiceLanguage('ZH'), 'zh-CN');
 });
 
 console.log(`\n${passed} passed`);
