@@ -253,20 +253,32 @@ Before starting work, compare the last commit here with `git log origin/main` to
     cached copy, so her later yes reloads the stories. `useRecipe`/`useRecipes` drop them from an open screen at
     once. The library key is now family + person, so on a shared or lent phone the next person waits for their own
     rows.
-  - **Tests:** `test-library.mjs` 24 pass (8 new), `test-shorten.mjs`, tsc and lint pass. On Expo web, a withheld
-    row took the tip and stories off an open cook screen and the yes brought them back. `test-profile-navigation`
-    passes.
-  - **Open:** not checked against live Convex on a phone (needs a real kid session).
-- Oct 24 · #37 · Claude · The cook's stories and tips leave the public media bucket (built on #34). In Convex mode the
+  - **Fails closed (review fix):** while the signed-in person's `recipes.list` rows haven't come (Convex slow,
+    unreachable or stubbed, a new person on the phone, or no library screen mounted yet), `storiesWithheld` strips
+    every dish that isn't public (not in library.json and not bundled). When the rows come, the copies cached that
+    way are dropped, so a shared dish loads again with its stories. Public dishes, and signed-out viewers of them,
+    are unchanged. A family dish opened in Expo Go's stub stays stripped. The recipe page hides Share on a dish whose
+    stories are kept from this person, because the `/r` page shows them all.
+  - **Tests:** `test-library.mjs` 31 pass (15 new), `test-shorten.mjs` (its `./session` stub gained `getSession`)
+    and the other app scripts, tsc and lint pass. Turning off each part of the fail-closed gate makes a new test
+    fail. On Expo web with Convex stubbed, a fixture family dish opened with no stories, tip or Share, and a bundled
+    dish kept Share and its story row. `test-profile-navigation` passes.
+  - **Open:** not checked against live Convex on a phone (needs a real kid session). Share still shows on
+    `MadeIt.tsx` and `PostcardStep.tsx`. Root cause, not fixed here: `recipe.json` with the stories sits in the
+    public media bucket, so the `/r` web page and anyone with the URL can read them. The real fix is to publish
+    `recipe.json` without the memories and read them from Convex.
+- Oct 24 · #37 · Claude · The cook's stories and tips leave the public media bucket (built on #34; the root cause #34
+  names). In Convex mode the
   worker's `recipe.json` has no `stories`, `special`, `steps[].tip`, `story_ids`/`special_ids` or `intro`
   (`publish.without_memories`, `publish_recipe(family=True)`); `data/out/<id>/.family` keeps a hand re-publish
   (`publish.py --id`) stripped too. Convex still gets the whole recipe, and each memory now keeps `step`, `id`,
   `title`, `why` (optional fields, `convex/schema.ts` `memory`); `/voice/session` returns only its own memory
   fields. The app puts `recipes.list` memories back into a file that has none (`withMemories`, `sharedMemories` in
   `familyLibrary.ts`; `forViewer`, `useRecipe`, `useRecipes` in `recipes.ts`), so a kid sees them only after the
-  cook's yes and the cook always sees hers. The web share page reads the same file, so it shows none.
+  cook's yes and the cook always sees hers. #34's fail-closed gate still applies first (`forViewer` takes the hook's
+  session key). The web share page reads the same file, so it shows none.
   - **Tests:** new `pipeline/test_publish.py` (4), other pipeline tests pass; vitest 40 (new `convex/memories.test.ts`,
-    2); `test-library.mjs` 29 (5 new); every other app test script, tsc and lint pass.
+    2); `test-library.mjs` 37 with #34's final head merged (6 new); every other app test script, tsc and lint pass.
   - **Open:** not deployed. Deploy Convex first, then restart the worker from main (a stripped file with old Convex
     rows still shows the stories, placed by time, but without titles). Not checked on a phone or against live
     Convex. Family recipes the worker published before this still have their stories in the bucket (#34 hides them
