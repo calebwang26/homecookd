@@ -3,6 +3,9 @@
 // question takes one call: play_clip, give_hint or ask_cook. A hint is general cooking knowledge, labelled as
 // the AI's, and the same tool sends the question to the cook (Caleb, Oct 24), with no second call.
 // find_moment (search again with other words) is the only tool that hands control back for another pick.
+// Claude also judges whether the kid was talking to homie at all (Caleb, Oct 24: the mic hears the whole
+// kitchen, and there's no wake word). Saying "homie" (however Ink spells it) is a strong yes; anything not meant
+// for homie gets no tool and no words, so nothing is said.
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "./env.js";
 import type { CookSession } from "./convex.js";
@@ -32,6 +35,10 @@ export type Actions = {
   setTimer: (seconds: number, label: string) => Promise<void>;
   say: (text: string) => Promise<void>;
 };
+
+/** "homie" as Ink may write it: homie, homey, homy, homi, hommie, holmie, holmy, homies… */
+const HOMIE = /\bh(?:o|ou|oa)l?m+(?:ie|ey|y|i|ee)s?\b/i;
+export const saysHomie = (text: string) => HOMIE.test(text);
 
 const MAX_CALLS_PER_TURN = 3;
 /** The search before Claude's first call waits this long (find_moment itself waits up to 15 s). */
@@ -115,14 +122,19 @@ function systemPrompt(s: CookSession): string {
 
 How you sound, in every line you say: warm and a little playful, like an older cousin cooking alongside them. Short sentences, said the way people talk. Never robotic, never assistant-speak ("I'm your assistant", "How can I help").
 
-Each turn, call exactly one tool:
+First, decide whether ${s.kid.name} was talking to you. The mic hears the whole kitchen: roommates, a phone call, music, the kid thinking out loud.
+- Your name (homie; the transcript may spell it homey, holmy, homi) means it's for you.
+- Without your name, it's for you only when it plainly is: a cooking command, or a question about this dish or this step asked the way you'd ask a helper.
+- Talking to someone else (another person's name, "can you pass me…", plans, gossip, a phone call), singing, reading something out, or half a sentence: not for you.
+- Not for you: call no tool and reply with an empty message. Never say "I'm here if you need me". When in doubt, stay quiet.
+
+When it's for you, call exactly one tool:
 - "next", "done", "what's next", "ok go on" → next_step. "back", "last step" → previous_step. "again", "what?", "say that again" → repeat_step. "step 4", "go to the sauce part" → go_to_step.
 - A question about the dish (how much, how long, what should it look like, why, can I swap something): the message lists the moments from ${cook}'s video that may match, or says the search found nothing. If one clearly answers it, play_clip with its start_s and end_s. Use find_moment only when moments are listed but the kid's words were vague and other words would clearly find a better one; when the search found nothing, don't search again (but when it says the search didn't finish in time, use find_moment first). If no moment answers it: give_hint when it's general cooking knowledge you're sure of (it's labelled as yours, and the same call sends the question to ${cook}); otherwise ask_cook.
 - "show me how you did this step" → play_clip with the step's own video times.
 - "set a timer for five minutes", "time the rice for 20" → set_timer.
 - Small talk or thanks → say, briefly and warmly.
 - Unclear speech → say, asking them to repeat.
-- Speech not meant for you (talking to someone else, background noise, half a word) → call no tool and reply with an empty message. Silence is better than interrupting.
 
 The one rule that matters most: never present anything as ${cook}'s that ${cook} didn't say. Her own clip comes first. General cooking knowledge goes only in give_hint: short, hedged ("most recipes…", "usually…"), never about what ${cook} did or her secret, and never instead of a clip that answers. Don't sum up a clip. If something is on fire or someone is hurt, say "Turn off the heat, and get help if anyone's hurt."
 
@@ -154,7 +166,8 @@ export class TurnAgent {
   async turn(utterance: string, note?: string): Promise<void> {
     const steps = this.session.recipe.steps;
     const now = steps.find((s) => s.order === this.actions.currentStep());
-    const context = `[On step ${now?.order ?? "?"} of ${steps.length}: ${now?.title ?? ""}]${note ? `\n[${note}]` : ""}`;
+    const named = saysHomie(utterance) ? "They said your name: this is for you." : "They didn't say your name: answer only if it's plainly for you.";
+    const context = `[On step ${now?.order ?? "?"} of ${steps.length}: ${now?.title ?? ""}]\n[${named}]${note ? `\n[${note}]` : ""}`;
     // Search the video up front (in-memory, ~10 ms), so a question needs one model call, not two. Saying when
     // nothing matched matters as much: otherwise Claude searches again first (a whole extra call, ~3 s).
     // But an empty answer that took the whole wait is a search still loading (the first question on a fresh

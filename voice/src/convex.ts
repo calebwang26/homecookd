@@ -132,6 +132,19 @@ export async function person(sessionToken: string): Promise<Person> {
   return post("/live/person", { sessionToken });
 }
 
+// ---- a tap on homie ----
+
+/** One thing that's new for the person tapping homie (convex/homie.ts), with a line that says it plainly. */
+export type NewsFact = { id: string; kind: "answer" | "asked" | "cooking" | "recipe" | "quiet"; line: string; at: number };
+export type News = { name: string; role: "cook" | "kid"; facts: NewsFact[] };
+
+export async function news(sessionToken: string): Promise<News> {
+  if (usingStub) {
+    return { name: "Shreya", role: "kid", facts: [{ id: "answer:stub", kind: "answer", line: "Aaji answered your question about the Varan Bhaat.", at: 0 }] };
+  }
+  return post("/homie/news", { sessionToken });
+}
+
 export async function recordingSession(sessionToken: string, recordingId: string): Promise<RecordingSession> {
   // "stub-mr-again" / "stub-en-again": a cook homie has recorded with before (the short hello).
   if (usingStub) return { ...stubRecordings()[recordingId.startsWith("stub-en") ? "en" : "mr"], metBefore: recordingId.endsWith("-again") };

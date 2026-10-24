@@ -9,7 +9,7 @@
 //   await sendPhoto(shared, text)                        messages.send: the photo + the kid's note, to the cook
 //   await convexRecipeId(libraryId)                      the recipe's Convex _id (the voice socket needs it)
 //   invalidateConvexRecipes()                            after the family's recipe list changes (lib/recipes.ts)
-//   const { recordingId } = await startRecording({ dish, forKidId, language?, source })   live.startRecording
+//   const { recordingId } = await startRecording({ dish, forKidIds, language?, source })  live.startRecording
 //   useRecording(recordingId)                            live.recording, live (the recording screen)
 //   await endRecording(recordingId)                      live.endRecording: the stop button with no voice line
 //   await startFilming(recordingId)                      live.startFilming: glasses, her Start button
@@ -20,6 +20,7 @@
 //   useGlassesVideos()                                   glasses.videos, live (the laptop's saved full videos)
 //   useMe()  /  await setLanguage('mr')                  people.me (live) / people.setLanguage
 //   await convexPersonIdByName('Shreya')                 a family member's Convex id, from rows that name them
+//   await convexKidIds([leo, zoe])                       their Convex ids (people.family), for forKidIds
 //   await libraryIdOf(recipeId)                          a Convex recipe's library id (recipes.list)
 //
 // The reads added for the Oct 24 tracks (live.recording, people.me) are "soft": until those functions
@@ -79,6 +80,7 @@ export type LiveRecording = {
   language: string;
   dish?: string;
   forKidId?: string;
+  forKidIds?: string[];
   startedAt?: number;
   endedAt?: number;
   jobId?: string;
@@ -250,10 +252,19 @@ export async function token(): Promise<string> {
   return t;
 }
 
-export type JobExtras = { title?: string; language?: string; forKidId?: string; recordingId?: string };
+export type JobExtras = { title?: string; language?: string; forKidIds?: string[]; recordingId?: string };
 
 /** Drops unset and empty fields (Convex validators refuse `undefined`-only noise and empty ids). */
-const present = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+const present = (o: Record<string, unknown>) =>
+  Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== '' && !(Array.isArray(v) && !v.length)));
+
+const refusedField = (e: unknown) => /extra field|validator/i.test(String(e));
+
+/** For a deployment from before `forKidIds` (Oct 24): the older single `forKidId`, when there's one kid. */
+function oneKid({ forKidIds, ...rest }: Record<string, unknown>): Record<string, unknown> {
+  const ids = forKidIds as string[] | undefined;
+  return ids?.length === 1 ? { ...rest, forKidId: ids[0] } : rest;
+}
 
 /**
  * jobs.create for a signer upload: `uploadPath` is "<job_id>/", the folder in the uploads bucket.
@@ -267,7 +278,14 @@ export async function createJob(uploadPath: string, source: JobSource, extras: J
   try {
     await run(extra);
   } catch (e) {
-    if (!Object.keys(extra).length || !/extra field|validator/i.test(String(e))) throw e;
+    if (!Object.keys(extra).length || !refusedField(e)) throw e;
+    if ('forKidIds' in extra) {
+      try {
+        return await run(oneKid(extra));
+      } catch (again) {
+        if (!refusedField(again)) throw again;
+      }
+    }
     console.warn('[convex] jobs.create without the new fields:', String(e).slice(0, 160));
     await run({});
   }
@@ -277,9 +295,16 @@ export async function createJob(uploadPath: string, source: JobSource, extras: J
  * homie's live session while a cook records (Track E). It starts in `intro`. Without `language` the
  * server uses her people.language (send one only when she picked it or it loaded).
  */
-export async function startRecording(input: { dish?: string; forKidId?: string; language?: string; source: RecordingSource }): Promise<{ recordingId: string }> {
+export async function startRecording(input: { dish?: string; forKidIds?: string[]; language?: string; source: RecordingSource }): Promise<{ recordingId: string }> {
   const sessionToken = await token();
-  return call('mutation', 'live:startRecording', { sessionToken, ...present(input) }, () => stub.startRecording(input), { strict: true });
+  const args = { sessionToken, ...present(input) };
+  const run = (a: Record<string, unknown>) => call<{ recordingId: string }>('mutation', 'live:startRecording', a, () => stub.startRecording(input), { strict: true });
+  try {
+    return await run(args);
+  } catch (e) {
+    if (!('forKidIds' in args) || !refusedField(e)) throw e;
+    return await run(oneKid(args));
+  }
 }
 
 /**
@@ -371,6 +396,19 @@ export async function cancelLiveJob(jobId: string): Promise<boolean> {
   return call<boolean>('mutation', 'jobs:cancel', { sessionToken, jobId }, () => true, { soft: true });
 }
 
+/** The cook's Home card "Leo made your Poha" (messages.madeMyDish): the newest photo of one of her dishes. */
+export type MadeMyDish = { messageId: string; fromName: string; recipeTitle: string; libraryId?: string; photoUrl: string; text?: string; at: number };
+
+/** Null until it loads, while Convex isn't reachable, and when nobody sent one in the last two weeks. */
+export function useMadeMyDish(enabled = true): MadeMyDish | null {
+  return useLive<MadeMyDish | null>('messages:madeMyDish', null, noMadeMyDish, enabled, {}, true);
+}
+
+const noMadeMyDish = (onData: (v: MadeMyDish | null) => void) => {
+  onData(null);
+  return () => {};
+};
+
 /** A glasses recording's full video, saved by the laptop for her to put in Photos and send herself. */
 export type GlassesVideo = { recordingId: string; videoUrl: string; dish?: string; at: number };
 
@@ -431,6 +469,22 @@ export async function convexPersonIdByName(name: string | null | undefined): Pro
     ...messages.map((m) => ({ id: m.from, name: m.fromName })),
   ];
   return named.find((p) => p.id && p.name?.trim().toLowerCase() === want)?.id ?? null;
+}
+
+/**
+ * These kids' Convex ids, in order, matched by their profile id (people.family); a deployment without
+ * people.family falls back to the name lookup above. Kids Convex doesn't know are left out.
+ */
+export async function convexKidIds(kids: { id: string; name: string }[]): Promise<string[]> {
+  if (!kids.length || stubbed) return [];
+  const sessionToken = await convexSession().catch(() => null);
+  if (!sessionToken) return [];
+  type Person = { personId: string; supabaseProfileId: string };
+  const family = await call<Person[]>('query', 'people:family', { sessionToken }, () => [], { soft: true }).catch(() => [] as Person[]);
+  const ids = await Promise.all(
+    kids.map(async (k) => family.find((p) => p.supabaseProfileId === k.id)?.personId ?? (family.length ? null : await convexPersonIdByName(k.name))),
+  );
+  return ids.filter((id): id is string => !!id);
 }
 
 /** Uploads a local file to Convex storage; returns its storage id. */
@@ -570,9 +624,9 @@ const stub = (() => {
       emitQs();
     },
     draft: () => ({ draft: 'I made it! It tasted like home. Thank you for teaching me.' }),
-    startRecording(input: { dish?: string; forKidId?: string; language?: string; source: RecordingSource }) {
+    startRecording(input: { dish?: string; forKidIds?: string[]; language?: string; source: RecordingSource }) {
       const _id = `stub-rec-${Date.now()}`;
-      recordings.set(_id, { _id, source: input.source, status: 'intro', language: input.language ?? language, dish: input.dish, forKidId: input.forKidId });
+      recordings.set(_id, { _id, source: input.source, status: 'intro', language: input.language ?? language, dish: input.dish, forKidIds: input.forKidIds });
       return { recordingId: _id };
     },
     watchRecording(id: string, onData: (v: LiveRecording | null) => void) {

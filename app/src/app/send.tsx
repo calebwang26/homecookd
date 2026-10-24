@@ -1,7 +1,7 @@
 // Send (bible: Parent-Send). After Record: "Send your <dish>" (a name field when we don't know the
 // dish yet), the videos (tap to leave one out, "Add more" for another part), "Who is it for?"
-// (learners + Everyone), an optional hello voice note, and the big "Send to Leo". The dish and the kid
-// come filled in from Record's pre-record sheet (the draft), and so do her language and homie's
+// (each learner a toggle, "Everyone" ticks them all: components/record/who.ts), an optional hello
+// voice note, and the big "Send to Leo" ("Send to Leo & Zoe"). The dish and the kids come filled in from Record's pre-record sheet (the draft), and so do her language and homie's
 // recording, which go to jobs.create. (A phone recording made with homie skips this screen: its done
 // screen sends it by itself. It lands here only when that send fails.)
 //
@@ -30,6 +30,7 @@ import { AddMoreLink, VideoGrid } from '@/components/record/VideoGrid';
 import { HelloCard } from '@/components/record/HelloCard';
 import { LidPot } from '@/components/record/LidPot';
 import { MAX_TITLE, sendDraft } from '@/components/record/sendDraft';
+import { firstWho, showEveryone, toggleEveryone, toggleKid, whoTo, type Who } from '@/components/record/who';
 import { ActionButton, Avatar, BackPill, Chip, PressableScale, ScreenWash, SendIcon, SuccessBurst, Txt, type ActionState } from '@/components/ui';
 import { WEB_URL, errorMessage, type Profile } from '@/lib/api';
 import { daysAgo } from '@/lib/format';
@@ -37,8 +38,6 @@ import { useSession } from '@/lib/session';
 import { MAX_RECORDING_HOURS, uploadsConfigured } from '@/lib/uploads';
 import { uploadVoice, type VoiceRecording } from '@/lib/voice';
 import { colors, motion, shadows, space } from '@/theme/tokens';
-
-type Who = string | 'everyone';
 
 /** After sending: the Recipes tab, where the recording shows as a greyed row until it's written. */
 function goToRecipes() {
@@ -80,18 +79,14 @@ export default function SendScreen() {
   const draft = useDraft();
   const pick = usePickVideos();
 
-  // People to send to: the learners, then "Everyone" (every other person in the family).
+  // People to send to: the learners (toggles), then "Everyone" (ticks every learner; it goes to every
+  // other person in the family).
   const others = useMemo(() => profiles.filter((p) => p.id !== me?.id), [profiles, me?.id]);
   const people = useMemo(() => learners.filter((p) => p.id !== me?.id), [learners, me?.id]);
   const [who, setWho] = useState<Who | null>(null);
-  const defaultWho: Who | null =
-    (draft.everyone && others.length > 0 ? 'everyone' : null) ??
-    (draft.requestFrom && others.some((p) => p.id === draft.requestFrom) ? draft.requestFrom : null) ??
-    people[0]?.id ??
-    (others.length > 0 ? 'everyone' : null);
-  const picked: Who | null = who ?? defaultWho;
-  const pickedProfile = picked && picked !== 'everyone' ? others.find((p) => p.id === picked) ?? null : null;
-  const recipients: Profile[] = picked === 'everyone' ? others : pickedProfile ? [pickedProfile] : [];
+  const picked: Who = who ?? firstWho(people, others, { picked: draft.forKids, everyone: draft.everyone, requestFrom: draft.requestFrom });
+  const to = whoTo(picked, people, others);
+  const recipients: Profile[] = to.recipients;
 
   // The dish: known from a request (the heading; tap it to change), else typed here.
   const [typed, setTyped] = useState<string | null>(null);
@@ -118,9 +113,8 @@ export default function SendScreen() {
   const tooLong = totalS > MAX_RECORDING_HOURS * 3600;
   const allToday = clips.length > 0 && clips.every((c) => c.recordedAt && daysAgo(c.recordedAt) === 0);
 
-  const sendLabel =
-    picked === 'everyone' ? 'Send to everyone' : pickedProfile ? `Send to ${pickedProfile.name}` : 'Send to your recipes';
-  const toLabel = picked === 'everyone' ? 'everyone' : pickedProfile?.name ?? null;
+  const toLabel = to.label;
+  const sendLabel = toLabel ? `Send to ${toLabel}` : 'Send to your recipes';
 
   let helper = '';
   let blocked = false;
@@ -182,7 +176,7 @@ export default function SendScreen() {
           throw new Error(`Your hello didn’t upload. ${errorMessage(e, '')} Try again, or remove it.`.replace(/\s+/g, ' '));
         }
       }
-      await sendDraft({ me, draft, clips: selected, kid: pickedProfile, recipients, toLabel, dish, hello: helloUp });
+      await sendDraft({ me, draft, clips: selected, kids: to.picked, recipients, toLabel, dish, hello: helloUp });
       // The videos are a job now (the home card tracks it): the draft must not outlive this screen,
       // or Record would offer them for sending again. (Cleared on unmount; kept on screen until then.)
       sentJob.current = true;
@@ -304,19 +298,21 @@ export default function SendScreen() {
                       size="lg"
                       selectedTone="ink"
                       label={p.name}
-                      selected={picked === p.id}
-                      onPress={() => !sending && setWho(p.id)}
+                      selected={picked.includes(p.id)}
+                      onPress={() => !sending && setWho(toggleKid(picked, p.id))}
                       leading={<Avatar profile={p} size={40} />}
                     />
                   ))}
-                  <Chip
-                    size="lg"
-                    selectedTone="ink"
-                    label="Everyone"
-                    selected={picked === 'everyone'}
-                    onPress={() => !sending && setWho('everyone')}
-                    accessibilityLabel="Everyone in the family"
-                  />
+                  {showEveryone(people, others) ? (
+                    <Chip
+                      size="lg"
+                      selectedTone="ink"
+                      label="Everyone"
+                      selected={to.everyone}
+                      onPress={() => !sending && setWho(toggleEveryone(picked, people, others))}
+                      accessibilityLabel="Everyone in the family"
+                    />
+                  ) : null}
                 </ScrollView>
               </View>
             ) : null}

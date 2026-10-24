@@ -4,7 +4,7 @@
 //
 //   const draft = useDraft();
 //   addClips(clips, { dish, requestFrom, glasses });   toggleClip(key);   clearDraft();
-//   setDraftMeta({ dish, requestFrom, everyone, language, recordingId })   the pre-record sheet's answers
+//   setDraftMeta({ dish, requestFrom, forKids, everyone, language, recordingId })   the pre-record sheet's answers
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { useSyncExternalStore } from 'react';
 
@@ -23,9 +23,11 @@ export type Draft = {
   clips: DraftClip[];
   /** The dish, when we know it (a learner's request). null = ask on the Send screen. */
   dish: string | null;
-  /** The profile who asked for it (pre-selected in "Who is it for?"). */
+  /** The profile who asked for it (pre-selected in "Who is it for?"), or the first kid ticked. */
   requestFrom: string | null;
-  /** The pre-record sheet's "Everyone" (instead of one kid). */
+  /** The kids ticked on the pre-record sheet (components/record/who.ts); null = the sheet didn't ask. */
+  forKids: string[] | null;
+  /** Every kid ticked on the pre-record sheet: it goes to everyone. */
   everyone: boolean;
   /** Filmed on smart glasses, imported from the camera roll (Convex jobs.create `source`). */
   glasses: boolean;
@@ -35,7 +37,7 @@ export type Draft = {
   recordingId: string | null;
 };
 
-const EMPTY: Draft = { clips: [], dish: null, requestFrom: null, everyone: false, glasses: false, language: null, recordingId: null };
+const EMPTY: Draft = { clips: [], dish: null, requestFrom: null, forKids: null, everyone: false, glasses: false, language: null, recordingId: null };
 
 let draft: Draft = EMPTY;
 const listeners = new Set<() => void>();
@@ -83,7 +85,7 @@ export function addClips(clips: DraftClip[], ctx: { dish?: string | null; reques
 }
 
 /** What the pre-record sheet settled, before any video is in. It replaces what was there. */
-export function setDraftMeta(meta: Partial<Pick<Draft, 'dish' | 'requestFrom' | 'everyone' | 'language' | 'recordingId'>>) {
+export function setDraftMeta(meta: Partial<Pick<Draft, 'dish' | 'requestFrom' | 'forKids' | 'everyone' | 'language' | 'recordingId'>>) {
   set({ ...draft, ...meta });
 }
 

@@ -9,9 +9,10 @@
 //                   the overlay's own label says "AI voice" (or "Translated from Grandma").
 //   <ClipCaption/>  under the step video while it plays the moment homie found: her words, and the English
 //   <VoiceHold/>    no picture (its own component, so playback ticks re-render only it): while the cook's
-//                   own voice plays the pot shrinks a little, and while her clip or her voice note plays,
-//                   homie's next line waits for her. Half duplex (none of the app's own sound reaches the
-//                   voice service as the kid's voice) is lib/live/mic's, on every frame.
+//                   own voice plays (any video, her voice note) the pot shrinks a little and homie says
+//                   nothing on its own (the service is told); while her clip or her voice note answers
+//                   the kid, homie's next line waits for her too. Half duplex (none of the app's own
+//                   sound reaches the voice service as the kid's voice) is lib/live/mic's, on every frame.
 // The cook's own clips are never labelled: only the AI's voice is. Motion: the chips spring on press
 // (PressableScale), the pill counts down each half second while the pot's ring empties (HomiePot), and
 // the pill and the line fade in and out (a fade is all Reduce Motion needs here).
@@ -26,7 +27,7 @@ import { setHomie, type HomieFrame } from '@/lib/homie/store';
 import { ANSWER_KEY } from '@/lib/live/answers';
 import type { VoiceCooking } from '@/lib/live/voice';
 import { clockText, secondsLeft, timerA11y, type CookTimer } from '@/lib/live/voiceLogic';
-import { playheadAt, useNowPlaying, usePlayhead } from '@/lib/media';
+import { playheadAt, useNowPlaying, usePlayhead, useVideoPlaying } from '@/lib/media';
 import { colors, radii, shadows } from '@/theme/tokens';
 
 export const CHIP_H = 40;
@@ -143,19 +144,25 @@ export function ClipCaption({ quote, quoteEn }: { quote: string; quoteEn?: strin
 }
 
 /**
- * The cook's own voice is playing: the resting pot steps back (shrinks), and while her clip or her
- * voice note answers the kid, homie's next line waits for her. `herClip`: the moment homie asked for is
- * on screen (play_clip), so the step video playing is her answer. (Half duplex is lib/live/mic's.)
+ * The cook's own voice is playing: the resting pot steps back (shrinks) and homie says nothing on its
+ * own until it stops (setVideo); while her clip or her voice note answers the kid, homie's next line
+ * waits for her too. `herClip`: the moment homie asked for is on screen (play_clip), so the step video
+ * playing is her answer. (Half duplex is lib/live/mic's.)
  */
-export function VoiceHold({ voice, videoUrl, herClip }: { voice: Pick<VoiceCooking, 'setHold'>; videoUrl?: string | null; herClip: boolean }) {
+export function VoiceHold({ voice, videoUrl, herClip }: { voice: Pick<VoiceCooking, 'setHold' | 'setVideo'>; videoUrl?: string | null; herClip: boolean }) {
   const now = useNowPlaying();
   const video = usePlayhead(() => playheadAt(videoUrl) != null);
+  const anyVideo = useVideoPlaying();
   const sound = now.phase === 'playing' || now.phase === 'loading';
-  // Her own voice: a step video, or anything on the player that isn't homie (a story, her voice note).
-  const hers = video || (sound && sayPhase(now.key, now.phase) === 'none');
+  // Her own voice: any video (the full-screen player too), or anything on the player that isn't homie
+  // (a story, her voice note).
+  const hers = anyVideo || (sound && sayPhase(now.key, now.phase) === 'none');
   const answering = (herClip && video) || (sound && !!now.key?.startsWith(ANSWER_KEY));
-  const { setHold } = voice;
+  // homie's own line playing (an answer that paused the video): a line that waited goes once it ends.
+  const talking = sayPhase(now.key, now.phase) !== 'none';
+  const { setHold, setVideo } = voice;
   useEffect(() => setHold(answering), [answering, setHold]);
+  useEffect(() => setVideo(hers), [hers, talking, setVideo]);
   useEffect(() => setHomie({ shrunk: hers }), [hers]);
   useEffect(() => () => setHomie({ shrunk: false }), []);
   return null;

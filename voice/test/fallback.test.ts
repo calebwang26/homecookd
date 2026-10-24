@@ -14,6 +14,7 @@ process.env.CARTESIA_API_KEY = "test";
 process.env.ANTHROPIC_API_KEY = "test";
 process.env.GEMINI_API_KEY = "test-gemini";
 process.env.VOICE_STUB = "1";
+process.env.VOICE_READ_OFFER = "1"; // these tests walk through the read-aloud offer (off by default)
 process.env.PORT = "0";
 const { Cooking } = await import("../src/cook.js");
 const { speak } = await import("../src/sonic.js");

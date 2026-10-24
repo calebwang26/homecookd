@@ -24,7 +24,8 @@
 // time), so a list can light up the line being said (Substeps). `playFrom(at)` jumps the clip to a
 // line's start and plays (tapping a substep). `videoPlaying()` / `useVideoPlaying()` say whether any
 // step video plays, and `audioNow()` is the shared player's state outside React: half duplex reads
-// both on every mic frame (lib/live/mic).
+// both on every mic frame (lib/live/mic). `videoStopped()` resolves once no video plays (homie's
+// lines wait for it: lib/live/speak).
 //
 // Ported from the old PlayerSheet: after a seek, time updates are ignored for a moment so a stale
 // position never pauses playback early. The end of the range still counts inside that moment when the
@@ -523,6 +524,21 @@ export function useVideoPlaying(): boolean {
   return useSyncExternalStore(subscribeHead, videoPlaying, videoPlaying);
 }
 
+/** Calls `l` whenever a video starts, moves or stops; returns the unsubscribe. */
+export const onVideoChange = subscribeHead;
+
+/** Resolves once no video is playing (at once when none is): homie's next line waits for it. */
+export function videoStopped(): Promise<void> {
+  if (!videoHead) return Promise.resolve();
+  return new Promise((resolve) => {
+    const off = subscribeHead(() => {
+      if (videoHead) return;
+      off();
+      resolve();
+    });
+  });
+}
+
 /**
  * Chapter gaps for a range's bar, like YouTube's: where each later substep starts, as 0..1 of
  * [start, end]. None when fewer than two substeps have a start, or for starts outside the range.
@@ -551,6 +567,11 @@ const videoPausers = new Map<VideoPlayer, () => void>();
 /** Pauses every playing video but `except` (audio starting, or another video starting). */
 function pauseVideos(except?: VideoPlayer) {
   for (const [p, pause] of videoPausers) if (p !== except) pause();
+}
+
+/** Pauses every playing video (the phone's own voice answering the kid: it doesn't go through the player). */
+export function pauseAllVideos() {
+  pauseVideos();
 }
 
 /** Silence: stops the voice and pauses every video (a screen losing focus to a pushed one). */

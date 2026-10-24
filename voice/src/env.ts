@@ -40,6 +40,9 @@ export const env = {
   /** Convex HTTP actions live on the deployment's .convex.site URL. Empty = use the local stub. */
   convexSiteUrl: get("CONVEX_SITE_URL").replace(/\/$/, ""),
   voiceSecret: get("VOICE_SECRET"),
+  /** homie offers to read the kid's recipe out loud after its hello. Off by default (Caleb, Oct 24): the
+   *  steps are read only once the kid asks ("read it to me", "repeat"). */
+  readOffer: get("VOICE_READ_OFFER") === "1",
   /** Use the stub recipe even when CONVEX_SITE_URL is set (local tests without a session token). */
   voiceStub: get("VOICE_STUB") === "1",
   /** Overridable without a code change if latency needs a smaller model. */

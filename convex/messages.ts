@@ -44,6 +44,56 @@ export const list = query({
   },
 });
 
+const MADE_DAYS = 14;
+
+/**
+ * The cook's Home card "Leo made your Poha": the newest photo someone else in the family sent of one of
+ * my dishes (PostcardStep → messages.send), from the last two weeks. Null when there's none.
+ */
+export const madeMyDish = query({
+  args: { sessionToken: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      messageId: v.id("messages"),
+      fromName: v.string(),
+      recipeTitle: v.string(),
+      libraryId: v.optional(v.string()),
+      photoUrl: v.string(),
+      text: v.optional(v.string()),
+      at: v.number(),
+    }),
+  ),
+  handler: async (ctx, { sessionToken }) => {
+    const signed = await requireSession(ctx, sessionToken);
+    const me = signed.person._id;
+    const since = Date.now() - MADE_DAYS * 24 * 3600 * 1000;
+    const recent = await ctx.db
+      .query("messages")
+      .withIndex("by_familyId", (q) => q.eq("familyId", signed.family._id).gt("_creationTime", since))
+      .order("desc")
+      .take(200);
+    for (const m of recent) {
+      if (m.kind !== "photo" || m.from === me || !m.recipeId || !m.fileId) continue;
+      if (m.to && m.to !== me) continue;
+      const recipe = await ctx.db.get("recipes", m.recipeId);
+      if (!recipe || recipe.cookId !== me) continue;
+      const photoUrl = await ctx.storage.getUrl(m.fileId);
+      if (!photoUrl) continue;
+      return {
+        messageId: m._id,
+        fromName: (await ctx.db.get("people", m.from))?.name ?? "",
+        recipeTitle: recipe.title,
+        libraryId: recipe.libraryId,
+        photoUrl,
+        text: m.text,
+        at: m._creationTime,
+      };
+    }
+    return null;
+  },
+});
+
 export const send = mutation({
   args: {
     sessionToken: v.string(),

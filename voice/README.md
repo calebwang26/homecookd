@@ -8,9 +8,10 @@ Two live loops from `docs/build/STACK.md`, plus one HTTP route:
   (Gemini Live for Marathi), says hello, asks a few short questions at the right moments, then the last
   questions, the stories opt-in and goodbye. Everything it says goes to Convex (`/live/*`).
 - `POST /speak`: a line in homie's voice, for the walkie-talkie and the pot's tap hints.
+- `POST /homie/line`: homie's words, written by Claude, for one thing that's new for the person tapping homie.
 
 ```
-src/server.ts   HTTP /health + POST /speak + WebSockets /cook and /record
+src/server.ts   HTTP /health + POST /speak + POST /homie/line + WebSockets /cook and /record
 src/safety.ts   the process's safety net: one session's error is logged with its id and never ends the others'
 src/cook.ts     one cooking session: wires Ink → (fast path | Claude) → actions → Sonic
 src/yesNo.ts    the kid's spoken yes or no, to homie's offers and the app's moments (follows the app's yesNo)
@@ -104,13 +105,18 @@ App → service
   is the moment's answer: it never answers our offer or nudge and never reaches Claude. Anything else (a question
   for the "ask" moment, "next") goes the usual way, and still isn't taken as a yes to our offer. homie says no
   offer or nudge while a moment is up; they wait for it to close. After a reconnect, send it again if one is up.
+- `{ "type": "video", "playing": true | false }` when any video (or the cook's voice note) starts or stops on the
+  phone. While one plays, homie says nothing on its own (Caleb, Oct 24): a `greeting`, `offer`, `nudge` or `timer`
+  line waits for the next pause, one after another (`timer_done` still comes at once). An answer to what the kid just
+  said is spoken meanwhile. A clip homie asked for counts as a video too. After a reconnect, send it again if one plays.
 - Silence while a `say` or a clip plays (half duplex).
 
 Service → app
 - `{ type: "ready", recipe: { id, title, steps } }`, then `{ type: "go_to_step", stepOrder }` for where to start.
 - Then homie's hello, a `say` of kind `greeting` in the cook's language (`"चला, स्वयंपाक करूया!"`, `textEn: "Let's
-  cook!"`), and one `offer`: "Want me to read Grandma's recipe out loud? Just say yes or no." Until the kid says
-  yes (or "repeat"), steps change silently: only `go_to_step`.
+  cook!"`). Reading aloud is off by default (Oct 24): steps change silently (only `go_to_step`) until the kid asks
+  ("repeat", "read it to me"), and from then on each step is read. With `VOICE_READ_OFFER=1` the hello is followed
+  by one `offer`: "Want me to read Grandma's recipe out loud? Just say yes or no.":
   - Yes (spoken, or `text` "yes"): `{ type: "offer_closed", accepted: true }`, then the current step is read, and
     every step after it.
   - No or "not now" (spoken, or `text` "no"): `{ type: "offer_closed", accepted: false }` and nothing is said.
@@ -144,6 +150,9 @@ Service → app
 - Nudges (kind `nudge`, only once reading is on): after a step with one of the cook's stories, "Grandma has a story
   about this one. Want to hear it?" ("yes" plays it; "no" or "not now" closes it quietly, with no `offer_closed`);
   and once per step after 6 quiet minutes, "Still on step 3?".
+- `{ type: "quiet" }`: the kid's words reached Claude, and homie did and said nothing: they weren't meant for homie
+  (Claude judges; "homie", however Ink spells it, is a strong yes; no wake word), or a no with nothing after it.
+  The app stops showing homie thinking.
 - `{ type: "error", message }`. Close code 4401 means the session token was refused (sign in again); 4404 means
   the recipe isn't in this family or isn't ready.
 
@@ -248,6 +257,15 @@ or the person's own language (`/live/person`). `translate: true` first turns Eng
 (Claude, translate only). `kind` (a `say` kind like `step`, `hint`, `reply`) picks the mood of an English line;
 without it, `content`. Gemini says it when Sonic can't. The header `x-spoken-text` (URI-encoded) is what was said. 400 bad body, 401 signed out,
 502 when neither voice could say it (the app then uses the phone's own voice).
+
+## POST /homie/line
+
+`{ sessionToken, factId, tab? }` → `{ text, written }`. The service reads the person's news from Convex
+(`POST /homie/news`: at most 3 facts, `convex/homie.ts`), finds `factId`, and Claude says it in one or two warm
+sentences (at most 22 words, nothing added; `src/tapLine.ts`, cached per person and fact). English: the app then
+says it with `/speak` and `translate: true`. Claude failing or saying too much gives the fact's own plain line,
+`written: false`. 400 bad body, 401 signed out, 404 no such fact, 502 Convex unreachable. The stub (`VOICE_STUB=1`)
+has one fact, `answer:stub`.
 
 ## Deploy (Cloud Run, us-west1)
 

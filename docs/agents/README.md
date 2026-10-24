@@ -22,6 +22,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [hackathon-stack-oct23](memory/hackathon-stack-oct23.md) | Oct 23: PLAN.pdf is the guideline; Convex + voice service stack, the 2-day cuts (docs/build/STACK.md) |
 | [testflight-live](memory/testflight-live.md) | Oct 23: Apple account + TestFlight work; dev build while coding, TestFlight for the demo |
 | [demo-family-shreya](memory/demo-family-shreya.md) | Oct 24: the demo is Shreya Pawar's family; her grandma cooks and records in Marathi |
+| [demo-test-dishes](memory/demo-test-dishes.md) | Oct 24: demos, examples and tests use Swordfish steak and Poha (real dishes, real footage) |
 | [homie-voice](memory/homie-voice.md) | Oct 24: homie is Riya bilingual, asked for as auditioned (locale, speed 0.85, moods), cousin tone; Gemini TTS backup |
 | [cartesia-credits-for-tests](memory/cartesia-credits-for-tests.md) | Oct 24: use the Cartesia credits; real Cartesia is the test default, fake speech opt-in |
 | [community-map](memory/community-map.md) | Oct 24: Community is one simple dish map; information appears on tap, one step and one button at a time |
@@ -34,6 +35,10 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [homie-hello-once](memory/homie-hello-once.md) | Oct 24: homie introduces itself once: the pot per person on a phone, the recording hello per cook (`metBefore`) |
 | [homie-guidance-only](memory/homie-guidance-only.md) | Oct 24: while a cook films, homie gives guidance (how much, show it to the camera, the plate), never cooking advice |
 | [in-app-recording](memory/in-app-recording.md) | Oct 24: phone recording films inside the app at 1080p (VisionCamera 4) so homie stays live; the audio-session rules |
+| [homie-silent-during-video](memory/homie-silent-during-video.md) | Oct 24: while any video plays homie says nothing on its own (held for the next pause); only answers to the kid; reading steps aloud off by default |
+| [homie-tap-always-answers](memory/homie-tap-always-answers.md) | Oct 24: a tap on homie always gets a spoken answer: news first (Claude), else the tab's "Explore X by doing X" line, never twice in a row |
+| [homie-judges-who-was-talking](memory/homie-judges-who-was-talking.md) | Oct 24: in cook mode Claude judges whether the kid was talking to homie (silent if not); "homie" spelled loosely is a strong yes; no wake word |
+| [unanswered-part-is-approved](memory/unanswered-part-is-approved.md) | Oct 24, Caleb: a part of a proposal he doesn't reply to is approved as proposed |
 | [lander-design-references](memory/lander-design-references.md) | Lander taste: video hero, giant type, footer wordmark animation |
 | [lander-copy-feedback](memory/lander-copy-feedback.md) | Copy rules: sell emotion, 3-second demo steps, instantly intuitive |
 | [lander-icp-problems](memory/lander-icp-problems.md) | Kid and parent problem lists and the big vision |

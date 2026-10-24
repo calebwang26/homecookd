@@ -1,7 +1,8 @@
 // homie's pure rules (node scripts/test-homie.mjs): what the pot shows, where it rests on each
-// screen, what a tap on it says (the hello only once: lib/homie/intro), the centred moment's layout
+// screen, which screen's tap lines it says (lib/homie/tap; the hello only once: lib/homie/intro), the centred moment's layout
 // and listening bars, the timer ring, the mic level, half duplex, and the voice service's https base.
 import type { Homie, HomieFrame, HomieMoment, HomieState } from './store';
+import { TAP_LINES, tapScreen, type TapScreen } from './tap';
 
 export const HOMIE_REST_SIZE = 56;
 export const HOMIE_MOMENT_SIZE = 170;
@@ -49,14 +50,10 @@ export function halfDuplex(v: { homie: HomieState; audio: string; video: boolean
 }
 
 export const HELP = {
-  cook: 'Say next, back, repeat, or ask me anything.',
-  recipes: 'Pick a dish and say start.',
-  parentHome: 'Tap Record to cook with me.',
-  messages: 'These are your messages. Tap one to talk to family.',
-  /** A screen without a line of its own: the hello, the first time only (lib/homie/intro). */
+  /** Cook mode: what the kid can say (the pot's tap there turns the mic on with it). */
+  cook: TAP_LINES.cook[0],
+  /** Before the first tap line homie ever says to this person (lib/homie/intro). */
   hello: 'Hi, I’m homie.',
-  /** The same screens once homie has said hello to this person. */
-  again: 'I’m right here.',
 } as const;
 
 export type HomieRoute = {
@@ -65,7 +62,8 @@ export type HomieRoute = {
   header: 'tab' | 'detail';
   /** Points from the right edge already taken by the screen's own controls (0 = none). */
   reserve: number;
-  help: string;
+  /** Whose tap lines a tap here says (lib/homie/tap). */
+  screen: TapScreen;
 };
 
 // Sign-in, the launch gateway, invite and share links, the month story (its Close is top-right), and
@@ -85,13 +83,10 @@ export function namePillWidth(name: string): number {
 export function homieRoute(pathname: string, profileName = ''): HomieRoute {
   const p = pathname.replace(/\/+$/, '') || '/';
   const tab = /^\/(kid|parent)(\/|$)/.test(p);
-  const base: HomieRoute = { hidden: false, header: tab ? 'tab' : 'detail', reserve: 0, help: HELP.hello };
+  const base: HomieRoute = { hidden: false, header: tab ? 'tab' : 'detail', reserve: 0, screen: tapScreen(p) };
   if (HIDDEN.has(p) || p.startsWith('/chat/')) return { ...base, hidden: true };
-  if (p.startsWith('/cook/')) return { ...base, help: HELP.cook };
-  if (p === '/kid/recipes' || p === '/parent/recipes') return { ...base, help: HELP.recipes };
-  if (p === '/parent/messages') return { ...base, help: HELP.messages };
   if (p === '/kid/home' || p === '/kid') return { ...base, reserve: GUTTER + KID_FACE_PILL };
-  if (p === '/parent/home' || p === '/parent') return { ...base, reserve: GUTTER + namePillWidth(profileName), help: HELP.parentHome };
+  if (p === '/parent/home' || p === '/parent') return { ...base, reserve: GUTTER + namePillWidth(profileName) };
   // A dish: Share and the heart sit at the top right of the photo.
   if (/^\/(recipe|kid\/recipes)\/[^/]+$/.test(p)) return { ...base, header: 'detail', reserve: GUTTER + BUTTON + 12 + BUTTON };
   if (p.startsWith('/my-recipe/')) return { ...base, reserve: GUTTER + BUTTON };
