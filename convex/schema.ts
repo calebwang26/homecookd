@@ -31,7 +31,9 @@ export default defineSchema({
     familyId: v.id("families"),
     personId: v.id("people"),
     expiresAt: v.number(),
-  }).index("by_tokenHash", ["tokenHash"]),
+  })
+    .index("by_tokenHash", ["tokenHash"])
+    .index("by_expiresAt", ["expiresAt"]),
 
   /** A dish being processed or ready to cook. The full recipe.json stays in GCS (recipeJsonUrl). */
   recipes: defineTable({
@@ -42,7 +44,15 @@ export default defineSchema({
     libraryId: v.optional(v.string()),
     recipeJsonUrl: v.optional(v.string()),
     coverUrl: v.optional(v.string()),
-    steps: v.array(v.object({ order: v.number(), title: v.string(), text: v.string(), moment })),
+    steps: v.array(
+      v.object({
+        order: v.number(),
+        title: v.string(),
+        text: v.string(),
+        quote: v.optional(v.string()), // the cook's own words for this step, from the video
+        moment,
+      }),
+    ),
     // Stories and tips Muse Spark kept from the video; shown only if the cook opted in.
     memories: v.array(v.object({ kind: v.union(v.literal("story"), v.literal("tip")), text: v.string(), moment })),
     memoriesOptIn: v.boolean(),
@@ -78,6 +88,7 @@ export default defineSchema({
     recipeId: v.id("recipes"),
     kidId: v.id("people"),
     stepOrder: v.number(),
+    updatedAt: v.number(), // so a forgotten session stops showing after a while
     endedAt: v.optional(v.number()),
   }).index("by_familyId", ["familyId"]),
 
