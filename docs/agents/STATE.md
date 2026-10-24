@@ -56,7 +56,7 @@ older note in `memory/` disagrees, this file wins.
     for homecookd.app.
   - **Glasses VM** `glasses-ingest` (GCE us-west1-b, http://34.169.246.204:8090): updated Oct 24 by Salik with
     `glasses/ingest` from `glasses-bridge` `bdb2688`. It gives a recording streamed through the laptop bridge
-    (`fw: edible-glasses-bridge`) 180 s for the laptop's full upload, and skips its own upload once the job
+    (`fw: edible-glasses-bridge`) 30 min for the laptop's full upload, and skips its own upload once the job
     exists. `glasses/vm/setup.sh` stops at `gcloud services enable` without that permission; run its
     `add-metadata` and `reset` steps by hand, and only when `/glasses/active` answers 204.
   - **Worker** (`pipeline/worker.py`, Convex mode) runs on the laptop from `.claude/worktrees/worker-main` at main

@@ -23,7 +23,7 @@ The laptop polls `/glasses/active` every 2 s, as the VM does, with `x-glasses-se
 The laptop and the VM both try to upload. The laptop usually wins.
 
 - **The laptop's video:** built from everything it saved. Any `--sd` copy from the glasses fills more gaps. Lost Wi-Fi to the cloud never shows in the recipe.
-- **The VM's head start rule:** when the hello says `fw: "edible-glasses-bridge …"`, the VM waits `BRIDGE_GRACE_S` (180 s) after "ended" before it muxes its own copy.
+- **The VM's head start rule:** when the hello says `fw: "edible-glasses-bridge …"`, the VM waits `BRIDGE_GRACE_S` (30 min) after "ended" before it muxes its own copy.
 - **When the VM's turn comes:** it asks `/glasses/active {recordingId}`.
   - If the reply has a `jobId`, the laptop already finished. The VM drops its copy and stops.
   - If there is no `jobId`, it uploads as before. The VM stays the fallback.

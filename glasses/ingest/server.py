@@ -43,8 +43,9 @@ QUIET_S = 60  # wrapping up with no data this long: the glasses died or walked o
 RETRY_S = 30
 FRESH_S = 30  # /frame/latest serves nothing older than this
 # The laptop bridge (BRIDGE.md) uploads the full video from its own backup when the cook says "I'm done".
-# Give it this long before the VM muxes its live copy; whoever finishes first makes the job.
-BRIDGE_GRACE_S = 180
+# Give it this long before the VM muxes its live copy; whoever finishes first makes the job. A 30-minute
+# cook is ~300 MB at 15 fps over a phone hotspot, so minutes, not seconds; the VM is only the fallback.
+BRIDGE_GRACE_S = 30 * 60
 BRIDGE_FW = "edible-glasses-bridge"
 
 
