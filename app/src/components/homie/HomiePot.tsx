@@ -42,12 +42,10 @@ export type HomiePotProps = {
   timerProgress?: number | null;
   /** The cream disc's soft shadow (off on a dark backdrop). */
   shadow?: boolean;
-  /** false: no base disc, for a caller that draws its own behind the pot (components/record/GlowHomie). */
-  disc?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
-export function HomiePot({ state, level = 0, size = 56, timerProgress = null, shadow = true, disc: withDisc = true, style }: HomiePotProps) {
+export function HomiePot({ state, level = 0, size = 56, timerProgress = null, shadow = true, style }: HomiePotProps) {
   const reduce = useReducedMotion();
   const warm = state === 'lit' || state === 'speaking';
   const steam = useSharedValue(STEAM[state]);
@@ -145,7 +143,7 @@ export function HomiePot({ state, level = 0, size = 56, timerProgress = null, sh
           <Circle cx={50} cy={50} r={50} fill="url(#homieHalo)" />
         </Svg>
       </Animated.View>
-      {withDisc ? <View style={[StyleSheet.absoluteFill, disc, styles.disc, shadow && styles.shadow]} /> : null}
+      <View style={[StyleSheet.absoluteFill, disc, styles.disc, shadow && styles.shadow]} />
       <Animated.View style={[StyleSheet.absoluteFill, disc, styles.butter, glowStyle]} />
 
       <Animated.View style={[StyleSheet.absoluteFill, steamStyle]}>

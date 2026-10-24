@@ -13,13 +13,15 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { ActionButton, PressableScale, Txt } from '@/components/ui';
 import { colors, motion } from '@/theme/tokens';
 
-import { ASK_BLUR, ASK_TINT } from './AskMoment';
 import { plateFrame } from './CameraCard';
 import { askLine, type Ask } from './recordingLogic';
 import { COLUMN } from './RecordWash';
 import type { RecordWords } from './words';
 
 const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
+// The same dim and blur as homie's questions (AskMoment).
+const BLUR = 70;
+const TINT = 'rgba(30,36,16,0.5)';
 const SHUTTER = 84;
 const WHITE_SOFT = 'rgba(255,253,247,0.8)';
 
@@ -34,7 +36,7 @@ function useShown(on: boolean) {
 
 export function PlateDim({ on }: { on: boolean }) {
   const v = useShown(on);
-  const blurProps = useAnimatedProps(() => ({ intensity: ASK_BLUR * v.value }));
+  const blurProps = useAnimatedProps(() => ({ intensity: BLUR * v.value }));
   const style = useAnimatedStyle(() => ({ opacity: v.value }));
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="none">
@@ -81,7 +83,7 @@ export function PlateControls({ ask, words, taken, busy, onShoot, onSkip }: { as
 }
 
 const styles = StyleSheet.create({
-  tint: { backgroundColor: ASK_TINT },
+  tint: { backgroundColor: TINT },
   words: { position: 'absolute', left: COLUMN.side, right: COLUMN.side, justifyContent: 'flex-end', alignItems: 'center', gap: 6 },
   below: { position: 'absolute', left: 0, right: 0, alignItems: 'center', gap: 10 },
   shutter: { width: SHUTTER, height: SHUTTER, borderRadius: SHUTTER / 2, borderWidth: 5, borderColor: colors.card, alignItems: 'center', justifyContent: 'center' },

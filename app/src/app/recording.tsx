@@ -34,8 +34,7 @@
 // without homie; one already filmed goes straight to the done view and sends). The screen stays
 // awake, and can't be swiped away once filming started.
 // Dev aids (web screenshots only): ?preview=done shows the done view without sending; ?preview=ask
-// shows a made-up question from homie as a phone with a microphone would (the listening bars;
-// the question comes and goes every 4 s, to watch homie leave its corner and come back);
+// shows a made-up question from homie as a phone with a microphone would (the listening bars);
 // ?preview=camera filming in the app, ?preview=paused after she came back, ?preview=plate the plate
 // photo (a kitchen picture stands in for the camera).
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
@@ -148,18 +147,6 @@ export default function RecordingScreen() {
   const aiSpeaking = useAiSpeaking();
   const [finished, setFinished] = useState(false);
   if (!finished && (preview || filmedAlone || (phoneFilmed && !!homie.error) || (ended && !aiSpeaking))) setFinished(true);
-
-  // ?preview=ask: the question comes and goes, so the glide can be watched.
-  const [previewAskOn, setPreviewAskOn] = useState(false);
-  useEffect(() => {
-    if (devPreview !== 'ask') return;
-    const t = setInterval(() => setPreviewAskOn((on) => !on), 4000);
-    const first = setTimeout(() => setPreviewAskOn(true), 1500);
-    return () => {
-      clearInterval(t);
-      clearTimeout(first);
-    };
-  }, [devPreview]);
 
   // Filming in the app: the camera runs from the hello to the plate photo. The mic never starts or
   // stops while a file is being written (useInAppCamera); these callbacks say when it may.
@@ -407,7 +394,7 @@ export default function RecordingScreen() {
           ) : null}
           {showCamera ? <PlateControls ask={plateAsk} words={words} taken={!!photo} busy={shooting} onShoot={() => void shootPlate()} onSkip={skipPlate} /> : null}
           <AskMoment
-            ask={devPreview === 'ask' ? (previewAskOn ? PREVIEW_ASK : null) : homie.ask?.kind === 'plate' ? null : homie.ask}
+            ask={devPreview === 'ask' ? PREVIEW_ASK : homie.ask?.kind === 'plate' ? null : homie.ask}
             words={words}
             micOn={devPreview === 'ask' || homie.micOn}
             onNotNow={homie.notNow}

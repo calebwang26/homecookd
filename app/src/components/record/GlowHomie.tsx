@@ -6,10 +6,11 @@
 //   <WavingHomie size={200} />                   the done screen: PotMark's waving pose, the arm waving
 //                                                a few times, the lid lifting twice and happy steam.
 // Reduce Motion: no loops and no waving: still pictures (the glow stays full).
-// The disc is butter (#FFF1C7, the canvas), drawn here under HomiePot (`disc={false}`).
+// The shared HomiePot draws its own cream disc with no glow; if it gains one (components/homie), these
+// screens can use that instead.
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
-import Animated, { cancelAnimation, Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withTiming, type SharedValue } from 'react-native-reanimated';
+import Animated, { cancelAnimation, Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
 import Svg, { Circle, Ellipse, Path } from 'react-native-svg';
 
 import { HomiePot } from '@/components/homie';
@@ -28,12 +29,8 @@ function glow(size: number) {
   return { width: size, height: size, borderRadius: size / 2, boxShadow: `0 0 0 ${ring}px rgba(254,190,41,0.28), 0 0 ${Math.round(size * 0.4)}px rgba(254,190,41,0.55)` };
 }
 
-/**
- * The disc and its sun ring behind the pot. The disc is butter, as on Caleb's canvas; `lit` (0..1, a shared
- * value) fades it in from the resting pot's cream disc with no ring, for homie coming out of its corner.
- * `breathe` lets the ring fade softly in and out.
- */
-function Glow({ size, breathe, lit }: { size: number; breathe: boolean; lit?: SharedValue<number> }) {
+/** The sun ring and glow behind the disc; `breathe` lets it fade softly in and out. */
+function Glow({ size, butter = false, breathe }: { size: number; butter?: boolean; breathe: boolean }) {
   const reduce = useReducedMotion();
   const breath = useSharedValue(1);
   const on = breathe && !reduce;
@@ -47,38 +44,15 @@ function Glow({ size, breathe, lit }: { size: number; breathe: boolean; lit?: Sh
     breath.set(withRepeat(withSequence(withTiming(BREATH_LOW, half), withTiming(1, half)), -1, false));
     return () => cancelAnimation(breath);
   }, [on, breath]);
-  const creamStyle = useAnimatedStyle(() => ({ opacity: lit ? 1 - lit.value : 0 }));
-  const butterStyle = useAnimatedStyle(() => ({ opacity: lit ? lit.value : 1 }));
-  const ringStyle = useAnimatedStyle(() => ({ opacity: (lit ? lit.value : 1) * breath.value }));
-  const round = { borderRadius: size / 2 };
-  return (
-    <>
-      {lit ? <Animated.View style={[StyleSheet.absoluteFill, round, styles.disc, creamStyle]} /> : null}
-      <Animated.View style={[StyleSheet.absoluteFill, round, styles.butter, butterStyle]} />
-      <Animated.View style={[StyleSheet.absoluteFill, styles.butter, glow(size), ringStyle]} />
-    </>
-  );
+  const style = useAnimatedStyle(() => ({ opacity: breath.value }));
+  return <Animated.View style={[StyleSheet.absoluteFill, styles.disc, butter && styles.butter, glow(size), style]} />;
 }
 
-export function GlowHomie({
-  size,
-  state,
-  level = 0,
-  label = null,
-  breathe = true,
-  lit,
-}: {
-  size: number;
-  state: HomieState;
-  level?: number;
-  label?: string | null;
-  breathe?: boolean;
-  lit?: SharedValue<number>;
-}) {
+export function GlowHomie({ size, state, level = 0, label = null, breathe = true }: { size: number; state: HomieState; level?: number; label?: string | null; breathe?: boolean }) {
   return (
     <View style={{ width: size, height: size }}>
-      <Glow size={size} breathe={breathe} lit={lit} />
-      <HomiePot state={state} level={level} size={size} shadow={false} disc={false} />
+      <Glow size={size} breathe={breathe} />
+      <HomiePot state={state} level={level} size={size} shadow={false} />
       {label ? (
         <View style={styles.labelWrap} pointerEvents="none">
           <Txt variant="label" size={13} weight={700} color={colors.butterInk} style={styles.label}>
@@ -121,7 +95,7 @@ export function WavingHomie({ size }: { size: number }) {
 
   return (
     <View style={{ width: size, height: size }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Glow size={size} breathe={false} />
+      <Glow size={size} butter breathe={false} />
       <Animated.View style={[StyleSheet.absoluteFill, steamStyle]}>
         <Svg width={size} height={size} viewBox="0 0 100 100">
           {CURLS.map((x, i) => (
