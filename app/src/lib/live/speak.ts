@@ -25,7 +25,10 @@ import { SAY_KEY_PREFIX } from './say';
 
 const BASE = voiceHttpBase(process.env.EXPO_PUBLIC_VOICE_URL ?? '');
 const TIMEOUT_MS = 8000;
-const SLOTS = 3; // WAV files in the cache, reused in turn (never the one the player has open)
+// WAV files kept in the cache. Each line gets a new file name: the shared player (lib/media) reuses
+// a player whose URL hasn't changed, so writing a new line over an old name would replay the old one.
+const SLOTS = 3;
+let written = 0;
 
 export type SpeakOptions = {
   /** Ink-style code ('mr', 'en'). Unset: the person's language (the service knows it). */
@@ -125,8 +128,11 @@ async function fetchSpeech(text: string, opts: SpeakOptions): Promise<{ bytes: U
 }
 
 function play(bytes: Uint8Array, mine: number): boolean {
-  const file = new File(Paths.cache, `homie-say-${mine % SLOTS}.wav`);
+  const n = ++written;
+  const file = new File(Paths.cache, `homie-say-${n}.wav`);
   try {
+    const old = new File(Paths.cache, `homie-say-${n - SLOTS}.wav`);
+    if (n > SLOTS && old.exists) old.delete();
     if (file.exists) file.delete();
     file.create();
     file.write(bytes);
