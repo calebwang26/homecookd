@@ -122,6 +122,7 @@ type ServerMsg =
   | { type: 'timer'; id: string; seconds: number; label?: string }
   | { type: 'timer_done'; id: string }
   | { type: 'offer_closed'; accepted?: boolean }
+  | { type: 'quiet' }
   | { type: 'error'; message?: string };
 
 type PendingSay = {

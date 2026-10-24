@@ -242,9 +242,12 @@ export function thinksAfter(v: { echo: boolean; appMoment: boolean; momentUp: bo
 /** Messages that are homie doing something (an answer to the kid). */
 export const HOMIE_ACTIONS: ReadonlySet<string> = new Set(['go_to_step', 'play_clip', 'asked_cook', 'timer', 'timer_done']);
 
-/** 'thinking' ends with homie's answer: an action, a line, or the offer closing (a no gets no line). */
+/**
+ * 'thinking' ends with homie's answer: an action, a line, the offer closing (a no gets no line), or the
+ * service's `quiet` (the words weren't for homie, so it says nothing).
+ */
 export function endsThinking(type: string): boolean {
-  return HOMIE_ACTIONS.has(type) || type === 'say' || type === 'offer_closed';
+  return HOMIE_ACTIONS.has(type) || type === 'say' || type === 'offer_closed' || type === 'quiet';
 }
 
 export const SAY_YES_NO = 'Say “yes” or “no”';

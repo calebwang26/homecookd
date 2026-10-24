@@ -293,7 +293,7 @@ await test('thinking: not for a no with nothing more to the service’s own offe
 });
 
 await test('thinking ends with homie’s answer: an action, a line, or the offer closing', () => {
-  for (const t of ['go_to_step', 'play_clip', 'asked_cook', 'timer', 'timer_done', 'say', 'offer_closed']) assert.equal(V.endsThinking(t), true, t);
+  for (const t of ['go_to_step', 'play_clip', 'asked_cook', 'timer', 'timer_done', 'say', 'offer_closed', 'quiet']) assert.equal(V.endsThinking(t), true, t);
   for (const t of ['transcript', 'ready', 'say_end', 'error', 'nonsense']) assert.equal(V.endsThinking(t), false, t);
   // offer_closed isn't an action: it never cuts off the line still arriving.
   assert.equal(V.HOMIE_ACTIONS.has('offer_closed'), false);

@@ -35,6 +35,8 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [homie-hello-once](memory/homie-hello-once.md) | Oct 24: homie introduces itself once: the pot per person on a phone, the recording hello per cook (`metBefore`) |
 | [homie-silent-during-video](memory/homie-silent-during-video.md) | Oct 24: while any video plays homie says nothing on its own (held for the next pause); only answers to the kid; reading steps aloud off by default |
 | [homie-tap-always-answers](memory/homie-tap-always-answers.md) | Oct 24: a tap on homie always gets a spoken answer: news first (Claude), else the tab's "Explore X by doing X" line, never twice in a row |
+| [homie-judges-who-was-talking](memory/homie-judges-who-was-talking.md) | Oct 24: in cook mode Claude judges whether the kid was talking to homie (silent if not); "homie" spelled loosely is a strong yes; no wake word |
+| [unanswered-part-is-approved](memory/unanswered-part-is-approved.md) | Oct 24, Caleb: a part of a proposal he doesn't reply to is approved as proposed |
 | [lander-design-references](memory/lander-design-references.md) | Lander taste: video hero, giant type, footer wordmark animation |
 | [lander-copy-feedback](memory/lander-copy-feedback.md) | Copy rules: sell emotion, 3-second demo steps, instantly intuitive |
 | [lander-icp-problems](memory/lander-icp-problems.md) | Kid and parent problem lists and the big vision |

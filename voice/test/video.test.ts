@@ -153,6 +153,24 @@ test("the story nudge after a read step waits for the kid's video", async () => 
   p.close();
 });
 
+test("a turn Claude leaves alone (not for homie) sends quiet, so the phone stops thinking; a turn that answers doesn't", async () => {
+  let answer = false;
+  const p = phone(async (a) => {
+    if (answer) await a.say("Two more minutes.");
+  });
+  await waitFor("the greeting's end", () => p.ws.of("say_end").length === 1);
+  await advance(AUDIO_S * 1000 + 500);
+  p.says("Maya, can you grab me a plate from the cupboard?");
+  await waitFor("quiet", () => p.ws.of("quiet").length === 1);
+  assert.deepEqual(p.kinds(), ["greeting"], "nothing said");
+  answer = true;
+  p.says("Homie, how long does it simmer?");
+  await waitFor("the answer", () => p.kinds().includes("reply"));
+  await advance(1000);
+  assert.equal(p.ws.of("quiet").length, 1);
+  p.close();
+});
+
 test("no quiet nudge while a video plays", async () => {
   const p = phone();
   await waitFor("the greeting's end", () => p.ws.of("say_end").length === 1);

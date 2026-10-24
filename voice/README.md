@@ -150,6 +150,9 @@ Service → app
 - Nudges (kind `nudge`, only once reading is on): after a step with one of the cook's stories, "Grandma has a story
   about this one. Want to hear it?" ("yes" plays it; "no" or "not now" closes it quietly, with no `offer_closed`);
   and once per step after 6 quiet minutes, "Still on step 3?".
+- `{ type: "quiet" }`: the kid's words reached Claude, and homie did and said nothing: they weren't meant for homie
+  (Claude judges; "homie", however Ink spells it, is a strong yes; no wake word), or a no with nothing after it.
+  The app stops showing homie thinking.
 - `{ type: "error", message }`. Close code 4401 means the session token was refused (sign in again); 4404 means
   the recipe isn't in this family or isn't ready.
 

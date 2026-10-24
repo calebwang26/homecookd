@@ -82,9 +82,9 @@ ws.on("message", (data, isBinary) => {
   if (ev.type === "transcript") lastEnd = Date.now();
   const lag = ev.type !== "transcript" && lastEnd ? `  (+${Date.now() - lastEnd}ms after transcript)` : "";
   console.log(`${stamp()}  ${JSON.stringify(ev)}${lag}`);
-  // A clip answers with the cook's voice, and a declined offer or a silent step needs no say. (A step that is
-  // read sends its say right after go_to_step, and the wait below covers it.)
-  if (ev.type === "play_clip" || ev.type === "offer_closed" || ev.type === "go_to_step") replied();
+  // A clip answers with the cook's voice, and a declined offer, a silent step or words not meant for homie
+  // (`quiet`) need no say. (A step that is read sends its say right after go_to_step, and the wait below covers it.)
+  if (ev.type === "play_clip" || ev.type === "offer_closed" || ev.type === "go_to_step" || ev.type === "quiet") replied();
 });
 ws.on("close", (code) => { console.log(`${stamp()}  closed ${code}`); process.exit(code === 1000 ? 0 : 1); });
 await new Promise((r) => ws.once("open", r));

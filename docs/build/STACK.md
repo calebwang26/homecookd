@@ -339,6 +339,10 @@ x-voice-secret) and Claude says that one fact warmly (`voice/src/tapLine.ts`; th
     Reading stays off for that visit: steps change silently, plain commands still work ("repeat" reads the
     current step once).
   - Either answer is kept 3 h on the instance, so a reconnect gets no second hello or offer.
+- Was it for homie? Claude decides on every turn that reaches it (no wake word): "homie" in the transcript, however
+  Ink spells it (homey, holmy, homi), is a strong yes; plain commands (next, back, repeat, timers) skip Claude and
+  always work. Words not meant for homie get no tool and no speech, and the service sends `{ type: "quiet" }` so
+  the app stops showing homie thinking.
 - App → service: `{ type: "video", playing: boolean }` when any video (or the cook's own voice note) starts or stops
   on the kid's phone. While one plays (or a clip the service asked for), homie says nothing on its own: a
   `greeting`, `offer`, `nudge` or `timer` line waits for the next pause, one after another (`timer_done` is still

@@ -7,7 +7,9 @@
 // is that moment's answer, never ours. While any video plays on the phone (the app's { type: "video" }, or a
 // clip we played), homie says nothing on its own: the greeting, an offer, a nudge or a timer waits for the
 // next pause (Caleb, Oct 24). Only an answer to what the kid just said is spoken meanwhile. The read-aloud
-// offer is off by default (VOICE_READ_OFFER=1 brings it back): steps are read once the kid asks.
+// offer is off by default (VOICE_READ_OFFER=1 brings it back): steps are read once the kid asks. Claude decides
+// whether the kid was talking to homie at all (agent.ts); a turn that ends with nothing done or said sends
+// { type: "quiet" }, so the phone stops showing homie thinking.
 import WebSocket from "ws";
 import { TurnAgent, type Actions } from "./agent.js";
 import * as convex from "./convex.js";
@@ -138,6 +140,8 @@ export class Cooking {
   /** Bumped by every new clip or step, so a translation still waiting for its clip to end is dropped. */
   private clipSeq = 0;
   private turns: Promise<void> = Promise.resolve();
+  /** Counts what we've sent the phone besides transcripts: a turn that moves it on isn't a quiet one. */
+  private answers = 0;
   /** A spoken piece that ended mid-sentence, waiting for the rest (heard). */
   private held: { text: string; timer: ReturnType<typeof setTimeout> } | null = null;
   private closed = false;
@@ -332,6 +336,7 @@ export class Cooking {
   private async turn(text: string, inMoment = false) {
     if (this.closed) return;
     this.clipSeq++; // the kid moved on: drop a translation still waiting
+    const before = this.answers;
     try {
       const answer = inMoment || this.offer ? yesNo(text) : null;
       if (answer === "no") {
@@ -345,6 +350,9 @@ export class Cooking {
       console.error("turn failed:", (err as Error).message);
       this.send({ type: "error", message: "turn failed" });
       await this.say("Sorry, I missed that. Can you say it again?", "reply").catch(() => {});
+    } finally {
+      // Nothing done or said (not for homie, or a no with nothing after it): the phone stops "thinking".
+      if (!this.closed && this.answers === before) this.send({ type: "quiet" });
     }
   }
 
@@ -600,7 +608,8 @@ export class Cooking {
     if (this.speaking === ctrl) this.speaking = null;
   }
 
-  private send(msg: object) {
+  private send(msg: { type: string; [field: string]: unknown }) {
+    if (msg.type !== "transcript") this.answers++;
     if (this.ws.readyState === WebSocket.OPEN) this.ws.send(JSON.stringify(msg));
   }
 }
