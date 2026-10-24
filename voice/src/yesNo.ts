@@ -9,10 +9,11 @@
 //   "Please go back" go the usual way.
 // - A no counts, whatever follows ("No, not right now.", "Nah, I'm good.", "Don't.", and "No, it's fine.", decided),
 //   and wins after a yes or an okay: "Okay, no." and "Yeah, no, I'm good." are a no. What the kid says after the no
-//   is still theirs (afterNo): a question ("No, the oil's too hot?"), a command ("No, go to step 3.", "No, play the
-//   video.") or 3+ words ("No, I'm out of ginger. Can I skip it?"), unless it's just more no ("No, maybe later.",
-//   "Nah, I'm good for now.", "No, don't read it.", "No, no need to read it.", "No, I got it."). A mixed signal
-//   goes on as said: "No, just read it." declines the offer and passes "read it" on (to Claude).
+//   is still theirs (afterNo): cook.ts handles the no first, then a plain command right after it still runs ("No,
+//   next step."), anything more goes to Claude as the kid's whole sentence ("No, I'm out of ginger. Can I skip
+//   it?"), and more no is nothing ("No, maybe later.", "Nah, I'm good for now.", "No, no need to read it.", "No, I
+//   got it."). Never the words after the no alone: cutting the no can flip what's left ("No point in reading it."
+//   is not "in reading it").
 // - "Not yet", "not really", "later", "maybe later", "skip it" and "I'm good" count only as the whole reply, and
 //   "don't" alone or before read, play, do, bother, want or need: "Not really sure how much salt", "I'm good at
 //   this" and "Don't forget the timer" are not a no.
@@ -29,12 +30,10 @@ const YES = /^(go ahead|do it|play it|read it|let'?s hear it|can do|will do)\b/;
 /** A no keeps the "no" of "no need", "no point" and "no reason", so NO_FILLER sees "no need to read it". */
 const NO = /^(?=no (need|point|reason)\b)|^(no( no(?! (need|point|reason)\b))*(?! (problem|worries|idea|clue|one|doubt|matter|wonder)\b)|nah|nope|not now|not right now|of course not|don'?t(?= (bother|worry|read|play|do|want|need)\b|$))( |$)/;
 const WHOLE_NO = /^(not yet|not really|later|maybe later|maybe not|skip it|i'?m good)$/;
-/** What a no can trail before a command: "no thanks, next step", "nah, no need, next step". */
-const NO_TAIL = /^((no (need|point|reason)(?! (to|for)\b)|no(?! (need|point|reason)\b)|nah|nope|not now|not right now|thanks|thank you|but|just|um|uh|so|well|then|ok|okay)( |$))+/;
+/** One of the no's own words, before a command or a filler: "no thanks, next step", "nah, no need, next step". */
+const NO_WORD = /^(no (need|point|reason)|no|nah|nope|not now|not right now|thanks|thank you|but|just|um|uh|so|well|then|ok|okay)( |$)/;
 /** A command or a question (what cook.ts's FAST commands, timers and Claude are for). */
 const COMMAND = /^(next|done|go on|go back|back|previous|last step|step back|repeat|again|say that|one more time|what|how|when|where|why|who|which|can|could|should|would|will|is|are|am i|do i|do you|do we|does|did|set|start|stop|pause|wait|hold on|hang on|help)\b|\btimer\b/;
-/** More commands, only after a no (after an okay they'd be a yes: "Okay, read it."). */
-const ACTION = /^(go to|skip|play|tell|show|read)\b/;
 /** What a no can trail and still be only the no: "No, I'm good for now.", "Nah, no need for that.", "No, I got it." */
 const NO_FILLER = new RegExp(
   "^(" +
@@ -66,7 +65,7 @@ function parse(text: string) {
   const tail = no ? rest.slice(no[0].length) : "";
   // "Oh no" is a no only when a no follows it, or nothing does.
   const isNo = no ? !OH_NO.test(all) || !tail || NO.test(tail) || WHOLE_NO.test(tail) : WHOLE_NO.test(rest);
-  return { lead, rest, isNo, tail: tail.replace(NO_TAIL, "") };
+  return { lead, rest, isNo, tail };
 }
 
 export function yesNo(text: string): "yes" | "no" | null {
@@ -77,11 +76,17 @@ export function yesNo(text: string): "yes" | "no" | null {
   return rest && (COMMAND.test(rest) || /\?\s*$/.test(text)) ? null : "yes";
 }
 
-/** What a spoken no goes on to say ("No, next step." → "next step"), or "" when it's only the no. */
-export function afterNo(text: string): string {
+/**
+ * What's left after a spoken no. `more`: the kid said more than the no ("No, I'm out of ginger.", but not "No
+ * thanks, I'm good for now."); cook.ts then gives Claude the whole sentence. `fastTail`: the rest without the no's
+ * own words ("No thanks, next step." → "next step"), only for spotting a plain command.
+ */
+export function afterNo(text: string): { more: boolean; fastTail: string } {
   const { isNo, tail } = parse(text);
-  if (!isNo || !tail || NO_FILLER.test(tail)) return "";
-  // A command, a question word, or a "?" after the no's own words ("No, too hot?", but not "No? Fine.").
-  const asks = COMMAND.test(tail) || ACTION.test(tail) || /\w[^\w?]+\w[^?]*\?/.test(text);
-  return asks || tail.split(" ").length >= 3 ? tail : "";
+  // Peel off the no's own words ("thanks", "no need", "but") until what's left is nothing, a filler, or the rest.
+  let rest = isNo ? tail : "";
+  let word: RegExpExecArray | null;
+  while (rest && !NO_FILLER.test(rest) && (word = NO_WORD.exec(rest))) rest = rest.slice(word[0].length);
+  const more = !!rest && !NO_FILLER.test(rest);
+  return { more, fastTail: more ? rest : "" };
 }

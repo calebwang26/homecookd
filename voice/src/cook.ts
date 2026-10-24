@@ -59,6 +59,8 @@ function timerAsk(t: string): { seconds: number; label: string } | null {
   const seconds = Math.round(Number(m[1]) * (m[2].startsWith("h") ? 3600 : m[2].startsWith("m") ? 60 : 1));
   return seconds >= 5 && seconds <= 4 * 3600 ? { seconds, label: m[3]?.trim() || "timer" } : null;
 }
+/** After a no, a timer only when it's the whole ask: "No, set a timer for 5 minutes.", never "No, don't set a timer…". */
+const TIMER_FIRST = /^((set|start) (a |the |me a )?)?timer\b/;
 
 /** Mostly non-Latin letters: Ink writes the cook's Marathi (from a clip playing nearby) in Devanagari. */
 const notLatin = (t: string) => {
@@ -275,41 +277,60 @@ export class Cooking {
     // What the kid says after the no is still ours ("No, next step.", "No, I'm out of ginger. Can I skip it?").
     const inMoment = spoken && this.moment !== null;
     const answer = inMoment ? yesNo(text) : null;
-    const then = answer === "no" ? afterNo(text) : "";
-    if (answer && !then) {
+    if (answer === "yes" || (answer === "no" && !afterNo(text).more)) {
       console.log(`kid (to the app's ${this.moment} moment): ${text}`);
       return;
     }
     console.log(`kid: ${text}`);
-    this.turns = this.turns.then(() => this.turn(then || text, inMoment));
+    this.turns = this.turns.then(() => this.turn(text, inMoment));
   }
 
-  /** One turn. `inMoment`: said while an app moment was up, so it never answers our own offer. */
+  /** One turn. `inMoment`: said while an app moment was up, so its yes or no is the moment's, never our offer's. */
   private async turn(text: string, inMoment = false) {
     if (this.closed) return;
     this.clipSeq++; // the kid moved on: drop a translation still waiting
     try {
-      if (this.offer && !inMoment) {
-        const answer = yesNo(text);
-        if (answer === "yes") return await this.acceptOffer();
-        if (answer === "no") {
-          this.declineOffer();
-          text = afterNo(text); // "No, next step.": the step still moves (silently)
-          if (!text) return;
-        }
+      const answer = inMoment || this.offer ? yesNo(text) : null;
+      if (answer === "no") {
+        const to = inMoment ? "what's on their screen" : this.offer && "read" in this.offer ? "having the recipe read out loud" : `hearing ${this.cook}'s story`;
+        if (!inMoment) this.declineOffer();
+        return await this.afterNoTurn(text, to);
       }
-      const fast = FAST.find(([re]) => re.test(command(text)))?.[1];
-      const timer = timerAsk(text);
-      if (timer) await this.actions.setTimer(timer.seconds, timer.label);
-      else if (fast === "next") await this.nextStep();
-      else if (fast === "previous") await this.actions.goToStep(Math.max(1, this.step - 1));
-      else if (fast === "repeat") await this.actions.goToStep(this.step, true);
-      else await this.agent!.turn(text);
+      if (answer === "yes" && !inMoment) return await this.acceptOffer();
+      if (!(await this.plain(text))) await this.agent!.turn(text);
     } catch (err) {
       console.error("turn failed:", (err as Error).message);
       this.send({ type: "error", message: "turn failed" });
       await this.say("Sorry, can you say that again?", "reply").catch(() => {});
     }
+  }
+
+  /**
+   * The rest of a no, once the no itself is handled: a plain command right after it runs ("No, next step." moves the
+   * step, silently), anything more goes to Claude as the whole sentence, told what the no was to ("No, I'm out of
+   * ginger. Can I skip it?"), and more no is nothing. Never the words after the no alone: cutting the no can flip
+   * what's left ("No point in reading it." → "in reading it", and Claude would read the step).
+   */
+  private async afterNoTurn(text: string, to: string) {
+    const { more, fastTail } = afterNo(text);
+    if (!more || (await this.plain(fastTail, true))) return;
+    const note = `They just said no to ${to}, and that's done. Act only on anything else they said, and never read a step aloud unless they asked for it; if there's nothing else, reply with an empty message.`;
+    await this.agent!.turn(text, note);
+  }
+
+  /**
+   * Plain commands (FAST, and timers with digits) without Claude; false when `text` isn't one. `exact` (after a
+   * no): a timer only as the whole ask (TIMER_FIRST).
+   */
+  private async plain(text: string, exact = false): Promise<boolean> {
+    const fast = FAST.find(([re]) => re.test(command(text)))?.[1];
+    const timer = exact && !TIMER_FIRST.test(command(text)) ? null : timerAsk(text);
+    if (timer) await this.actions.setTimer(timer.seconds, timer.label);
+    else if (fast === "next") await this.nextStep();
+    else if (fast === "previous") await this.actions.goToStep(Math.max(1, this.step - 1));
+    else if (fast === "repeat") await this.actions.goToStep(this.step, true);
+    else return false;
+    return true;
   }
 
   private async acceptOffer() {
