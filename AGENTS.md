@@ -107,6 +107,7 @@ and homesick college kids. It's a family product, not a tool.
 
 ```
 app/        Expo app (expo-router, TypeScript). EAS dev build while coding, TestFlight for the team and the demo.
+            src/lib/live/ = the Convex client, the voice socket and the mic (Expo Go hides the mic).
 web/        Next.js site: the lander, homecookd.app/r (recipe share page) and /i (invites). Vercel project "homecookd".
 convex/     The hackathon backend: schema.ts, functions, http.ts (worker + voice service endpoints)
 voice/      Live voice service (Cloud Run): WebSocket cooking loop with Cartesia, Claude and Moss
@@ -125,6 +126,11 @@ docs/       specs, design bible, QA, learning notes; docs/agents/ = shared agent
 cd app && npx expo start --clear                                   # Expo Go on the same Wi-Fi
 cd app && CI=1 npx expo start --go --tunnel --port 8082            # Expo Go over a tunnel
 cd app && npx expo start --web --port 8081 --clear                 # web build of the app
+cd app && npx expo start --dev-client                               # the EAS dev build on an iPhone (voice cooking needs it)
+cd app && npx eas-cli build -p ios --profile development           # dev build (EAS signed in as salikm1234)
+cd app && npx eas-cli build -p ios --profile production --auto-submit   # TestFlight
+cd app && npx eas-cli update --channel production -m "<what changed>"   # JS-only fix to TestFlight phones
+node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
 cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend
 
