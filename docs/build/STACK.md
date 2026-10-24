@@ -156,6 +156,13 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 - Change 7 is partly replaced: while recording, the parent never taps; homie listens. Answering a kid's question
   stays push to talk (now the half-screen walkie-talkie). Full voice navigation of parent mode is still a stretch.
 - Live Marathi speech-to-text is Gemini (Ink 2 only knows en/fr/hi/ja/es). Sonic 3.6 speaks Marathi (`locale`).
+- homie's voice everywhere (Caleb, Oct 24, `docs/agents/memory/homie-voice.md`): "Riya bilingual"
+  `930eda72-c1af-4637-8d07-87d881d615fe`, `sonic-3.6`, 24 kHz, speed 0.85 on every line. Marathi as `locale: "mr-IN"`,
+  English as `locale: "en-IN"` plus a mood per kind of line (`generation_config.emotion`, English only); other
+  languages as `language`. If Sonic fails before any audio (HTTP error, network, nothing in 4 s), Gemini TTS
+  (`gemini-3.8-flash-tts`) says the line in the same 24 kHz s16le format; after audio started, the line just ends.
+  Gemini has its own guard (first audio within 6 s, the whole line within 10 s + 100 ms a character); a stall, an
+  empty stream or a failed interaction ends the line (`say_end`), and `/speak` answers 502.
 - Languages are Ink-style ISO 639-1 codes (`mr`, `en`) everywhere: `people.language`, `recordings.language`,
   `jobs.language`, `recipes.language`. Unset means `en`.
 
@@ -292,8 +299,9 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 - Glasses frames: when `GLASSES_URL` is set, the service pulls `GET <GLASSES_URL>/frame/latest?recording=<id>`
   (`x-glasses-secret`) every ~5 s and gives the newest JPEG to homie's decision.
 
-**Voice service HTTP** `POST /speak` `{ sessionToken, text, lang?, translate?: boolean }` → `audio/wav` (Sonic, homie's
-voice, in `lang` or the person's language). `translate: true` first turns English `text` into `lang`. Header
+**Voice service HTTP** `POST /speak` `{ sessionToken, text, lang?, translate?: boolean, kind?: string }` → `audio/wav`
+(24 kHz, homie's voice, in `lang` or the person's language). `translate: true` first turns English `text` into `lang`.
+`kind` (optional, a `say` kind such as `step` or `hint`) picks the mood of an English line; none = `content`. Header
 `x-spoken-text` (URI-encoded) is what was actually said. Used by walkie-talkie and the pot's tap hints.
 
 **App ↔ voice service: kid cooking additions** (`/cook`, backward compatible)
@@ -378,8 +386,10 @@ voice, in `lang` or the person's language). `translate: true` first turns Englis
   glasses recording.
 
 **New keys**: `GLASSES_SECRET` (Convex env, the VM, Cloud Run secret), `GEMINI_API_KEY` (Cloud Run secret, for live
-Marathi transcription), `HOMIE_VOICE` (Cloud Run env: homie's Cartesia voice id; default "Sindhu" `07bc462a-c644-49f1-baf7-82d5599131be`,
-which Sonic speaks in Marathi and English), `GLASSES_URL` (Cloud Run env).
+Marathi transcription), `HOMIE_VOICE` (Cloud Run env, optional: homie's Cartesia voice id; the code default is "Riya bilingual"
+`930eda72-c1af-4637-8d07-87d881d615fe`, which Sonic speaks in Marathi and Indian English), `HOMIE_SPEED` (optional,
+default 0.85), `GEMINI_TTS_MODEL` / `GEMINI_TTS_VOICE` (optional; the backup voice, also on `GEMINI_API_KEY`),
+`GLASSES_URL` (Cloud Run env).
 
 ## Keys (all server-side, never in `app/` or `web/`)
 

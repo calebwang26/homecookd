@@ -22,13 +22,16 @@ src/lines.ts    homie's fixed lines in English and hand-written Marathi
 src/stt.ts      picks live speech-to-text by language: Ink 2 (en/fr/hi/ja/es) or Gemini Live
 src/geminiLive.ts  Gemini Live transcription (gemini-3.5-transcribe-live) with session rotation
 src/ink.ts      Cartesia Ink 2 streaming STT (/stt/turns/websocket, built-in turn detection)
-src/sonic.ts    Cartesia Sonic TTS (/tts/bytes, streamed), any language and voice
+src/sonic.ts    Cartesia Sonic TTS (/tts/bytes, streamed): homie's voice, locale, speed and mood per line
+src/geminiTts.ts  Gemini TTS, the backup voice when Sonic fails before a line starts
 src/moss.ts     Moss search over family-<familyId> (@moss-js/moss, in-memory queries)
 src/convex.ts   Convex HTTP actions (/voice/*, /live/*) + the local stub
 fixtures/       stub session (Grandma's red-braised pork) and stub recordings (Rajani Aaji, mr and en)
 scripts/        test clients (/cook and /record), test-audio maker
 test/           unit tests (node:test) with a fake socket, Claude, voice and Convex: pacing, /record's phases
-                (and a recording ended underneath it), /cook's read-aloud offer and the app's moments
+                (and a recording ended underneath it), /cook's read-aloud offer and the app's moments, and
+                homie's voice (tts.test.ts: the exact Sonic requests, the moods, the Gemini fallback; fallback.test.ts: a stalled
+                Gemini still ends the line, /speak's 502; fetch stubbed)
 ```
 
 ## Run it locally
@@ -36,11 +39,13 @@ test/           unit tests (node:test) with a fake socket, Claude, voice and Con
 Keys come from the repo's root `.env` (found by walking up, so a worktree works too) or the process env:
 `CARTESIA_API_KEY`, `ANTHROPIC_API_KEY`, `MOSS_PROJECT_ID`, `MOSS_PROJECT_KEY`, `CONVEX_SITE_URL`
 (https://grand-dragon-649.convex.site) and `VOICE_SECRET`. Optional: `VOICE_STUB=1` (serve the stub recipe and
-accept any session token, for tests without a real sign-in), `CLAUDE_FAST=1` (Opus fast mode), `CLAUDE_MODEL`,
-`CARTESIA_VOICE`. For homie: `GEMINI_API_KEY` (hears Marathi; without it a Marathi recording gets no transcript),
-`HOMIE_VOICE` (default Sindhu, `07bc462a-c644-49f1-baf7-82d5599131be`: a warm Indian voice Sonic speaks in Marathi
-and English), `HOMIE_DEMO=1` (first question at ~40 s), `GLASSES_URL` + `GLASSES_SECRET` (frames from the glasses
-VM), `GEMINI_LIVE_MODEL`.
+accept any session token, for tests without a real sign-in), `CLAUDE_FAST=1` (Opus fast mode), `CLAUDE_MODEL`.
+For homie: `GEMINI_API_KEY` (hears Marathi, and is the backup voice; without it a Marathi recording gets no
+transcript and a failed Sonic line stays silent), `HOMIE_VOICE` (default "Riya bilingual",
+`930eda72-c1af-4637-8d07-87d881d615fe`, Caleb's pick: native Marathi and Indian English), `HOMIE_SPEED` (default
+0.85), `GEMINI_TTS_MODEL` (default `gemini-3.8-flash-tts`), `GEMINI_TTS_VOICE` (default `en-in-assistant-3`),
+`TTS_LOG=1` (log each Sonic request's voice, locale, speed and mood), `HOMIE_DEMO=1` (first question at ~40 s),
+`GLASSES_URL` + `GLASSES_SECRET` (frames from the glasses VM), `GEMINI_LIVE_MODEL`.
 
 ```bash
 cd voice && npm ci
@@ -95,7 +100,7 @@ App → service
 Service → app
 - `{ type: "ready", recipe: { id, title, steps } }`, then `{ type: "go_to_step", stepOrder }` for where to start.
 - Then homie's hello, a `say` of kind `greeting` in the cook's language (`"चला, स्वयंपाक करूया!"`, `textEn: "Let's
-  cook!"`), and one `offer`: "Want me to read Grandma's recipe out loud? Say yes or no." Until the kid says
+  cook!"`), and one `offer`: "Want me to read Grandma's recipe out loud? Just say yes or no." Until the kid says
   yes (or "repeat"), steps change silently: only `go_to_step`.
   - Yes (spoken, or `text` "yes"): `{ type: "offer_closed", accepted: true }`, then the current step is read, and
     every step after it.
@@ -117,12 +122,16 @@ Service → app
   then the audio as binary frames, then `{ type: "say_end", interrupted }`. `kind` is one of `step`, `reply`,
   `hint`, `translation`, `nudge`, `offer`, `greeting`, `timer`; `textEn` comes when the line isn't English.
   `audio=pcm` (default) streams raw PCM to play as it arrives. With `audio=wav`, the frames joined together are
-  one WAV file. A new `say` cuts off the one before it.
+  one WAV file. A new `say` cuts off the one before it. Every line is homie's one voice (Riya bilingual, 0.85 speed);
+  an English line's `kind` sets its mood (step and hint `calm`, offer `curious`, translation `affectionate`, the rest
+  `content`). If Sonic fails before any audio, Gemini says the line in the same format (24 kHz s16le). If Gemini
+  fails too (an error, no audio at all, nothing within 6 s, or the line not done within 10 s + 100 ms a character),
+  the line ends with no voice and `say_end` still comes.
 - A `hint` is general cooking knowledge, never the cook's: "Grandma didn't say. Usually just enough water to cover
   it." It comes only when no clip answers, and `asked_cook` plus "I'll ask Grandma too" always follow. Label it as
   AI.
 - `{ type: "timer", id, seconds, label, endsAt }` when the kid asks for one; the app shows the countdown. At the
-  end, `{ type: "timer_done", id, label }` and a `say` of kind `timer` ("The rice timer is done.").
+  end, `{ type: "timer_done", id, label }` and a `say` of kind `timer` ("Hey, the rice timer is done.").
 - Nudges (kind `nudge`, only once reading is on): after a step with one of the cook's stories, "Grandma has a story
   about this one. Want to hear it?" ("yes" plays it; "no" or "not now" closes it quietly, with no `offer_closed`);
   and once per step after 6 quiet minutes, "Still on step 3?".
@@ -219,11 +228,17 @@ Sonic first audio 130–255 ms; the hello 4.8 s from connect (Claude writing it;
 translation ~3.1 s. Both runs asked about the vague amount first ("अंदाजाने मीठ म्हणजे साधारण किती?", "how much
 turmeric is a little?").
 
+homie's voice, measured live on the stub (Oct 24, Riya bilingual): Sonic first audio 117–1005 ms, 27 of 30
+recording lines under 350 ms. With Sonic refused (an invalid key, so 401), Gemini said every line: `/speak` returned
+a whole WAV in 1.6 s (Marathi) and 2.0 s (English), and `/cook` streamed the greeting, offer, steps and nudge.
+
 ## POST /speak
 
-`{ sessionToken, text, lang?, translate?: boolean }` → `audio/wav` (24 kHz) in homie's voice, in `lang` or the
-person's own language (`/live/person`). `translate: true` first turns English `text` into that language (Claude,
-translate only). The header `x-spoken-text` (URI-encoded) is what was said. 400 bad body, 401 signed out.
+`{ sessionToken, text, lang?, translate?: boolean, kind?: string }` → `audio/wav` (24 kHz) in homie's voice, in `lang`
+or the person's own language (`/live/person`). `translate: true` first turns English `text` into that language
+(Claude, translate only). `kind` (a `say` kind like `step`, `hint`, `reply`) picks the mood of an English line;
+without it, `content`. Gemini says it when Sonic can't. The header `x-spoken-text` (URI-encoded) is what was said. 400 bad body, 401 signed out,
+502 when neither voice could say it (the app then uses the phone's own voice).
 
 ## Deploy (Cloud Run, us-west1)
 

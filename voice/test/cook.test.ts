@@ -7,6 +7,7 @@ import WebSocket from "ws";
 import type { Actions } from "../src/agent.js";
 import type { CookSession } from "../src/convex.js";
 import type { CookingDeps } from "../src/cook.js";
+import type { Voice } from "../src/sonic.js";
 import type { SttEvents } from "../src/stt.js";
 import { advance, AUDIO_S, FakeSocket, fakeSpeak, settle, waitFor, type Ev } from "./helpers.js";
 
@@ -15,11 +16,12 @@ process.env.CARTESIA_API_KEY = "test";
 process.env.ANTHROPIC_API_KEY = "test";
 process.env.VOICE_STUB = "1";
 const { Cooking } = await import("../src/cook.js");
+const { env } = await import("../src/env.js");
 
 beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: Date.parse("2026-10-25T17:00:00Z") }));
 afterEach(() => mock.timers.reset());
 
-const OFFER = "Want me to read Grandma's recipe out loud? Say yes or no.";
+const OFFER = "Want me to read Grandma's recipe out loud? Just say yes or no.";
 let kids = 0;
 
 /** Grandma's three-step recipe, with a story on step 2, for one kid. */
@@ -48,6 +50,7 @@ const session = (kidId: string): CookSession => ({
 function world(claude?: (actions: Actions) => Promise<void>) {
   const kidId = `kid-${++kids}`;
   const spoken: string[] = [];
+  const voices: Voice[] = []; // how each line went to Sonic
   const turns: string[] = []; // what reached Claude
   const notes: (string | undefined)[] = []; // and the service's note with each
   let stt: SttEvents | undefined;
@@ -61,7 +64,7 @@ function world(claude?: (actions: Actions) => Promise<void>) {
       stt = events;
       return { send: () => {}, close: () => {} };
     },
-    speak: fakeSpeak(spoken),
+    speak: fakeSpeak(spoken, voices),
     agent: (_session, actions) => ({
       turn: async (text, note) => {
         turns.push(text);
@@ -91,7 +94,7 @@ function world(claude?: (actions: Actions) => Promise<void>) {
   }
   /** The kid says something (Ink's turn ends with it). */
   const says = (text: string) => stt!.onTurnEnd(text);
-  return { spoken, turns, notes, connect, says };
+  return { spoken, voices, turns, notes, connect, says };
 }
 
 type Phone = ReturnType<ReturnType<typeof world>["connect"]>;
@@ -182,6 +185,14 @@ test("yes: offer_closed, then the step they're on is read; a no to a story close
   w.says("Next.");
   await waitFor("the story nudge", () => c.ws.of("say").some((s) => s.kind === "nudge"));
   assert.equal(c.ws.of("say").at(-1)?.text, "Grandma has a story about this one. Want to hear it?");
+  // Every line goes to Sonic in homie's voice with its kind (the mood), the greeting in the cook's language.
+  assert.deepEqual(w.voices, [
+    { voice: env.homieVoice, language: "mr", kind: "greeting" },
+    { voice: env.homieVoice, language: undefined, kind: "offer" },
+    { voice: env.homieVoice, language: undefined, kind: "step" },
+    { voice: env.homieVoice, language: undefined, kind: "step" },
+    { voice: env.homieVoice, language: undefined, kind: "nudge" },
+  ]);
   await advance(AUDIO_S * 1000 + 500);
   const says = c.ws.of("say").length;
   w.says("Not now.");
@@ -282,7 +293,7 @@ test("the long-quiet nudge waits while an app moment is up", async () => {
   assert.deepEqual(c.ws.of("say").map((s) => s.kind), ["greeting", "offer", "step"]);
   c.send({ type: "moment", open: false });
   await waitFor("the quiet nudge", () => c.ws.of("say").length === 4);
-  assert.equal(c.ws.of("say").at(-1)?.text, 'Still on step 1? Say "next" when you\'re ready.');
+  assert.equal(c.ws.of("say").at(-1)?.text, 'Still on step 1? No rush. Say "next" when you\'re ready.');
   c.close();
 });
 

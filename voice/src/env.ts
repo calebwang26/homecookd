@@ -46,13 +46,20 @@ export const env = {
   claudeModel: get("CLAUDE_MODEL") || "claude-opus-5-5",
   /** Opus fast mode (beta, premium price): up to 2.5x faster output. */
   claudeFast: get("CLAUDE_FAST") === "1",
-  /** Cartesia voice for Sonic. Default "Katie", same as scripts/check-cartesia.mjs. */
-  cartesiaVoice: get("CARTESIA_VOICE") || "6ccbfb76-1fc6-48f7-b71d-91ac6298247b",
-  /** homie's own voice while a cook records and for /speak. Default "Sindhu": a warm Indian voice
-   *  that Sonic 3.6 speaks in Marathi (mr-IN) and English. */
-  homieVoice: get("HOMIE_VOICE") || "07bc462a-c644-49f1-baf7-82d5599131be",
-  /** Gemini Live hears the languages Ink 2 doesn't (Marathi). Empty = those recordings get no transcript. */
+  /** homie's voice everywhere it talks: the kid cooking, a cook recording, and /speak. Default "Riya bilingual"
+   *  (Caleb's pick, Oct 24): our private localized copy of Cartesia's "Riya, College Roommate", which speaks
+   *  native Marathi and Indian English. The way it's asked for (locale, speed, mood) is in sonic.ts. */
+  homieVoice: get("HOMIE_VOICE") || "930eda72-c1af-4637-8d07-87d881d615fe",
+  /** homie's pace, 0.6–1.5. Empty = sonic.ts's default (0.85, what Caleb heard). */
+  homieSpeed: get("HOMIE_SPEED"),
+  /** Log each Sonic request's voice, locale, speed and mood (for live tests). */
+  ttsLog: get("TTS_LOG") === "1",
+  /** Gemini Live hears the languages Ink 2 doesn't (Marathi), and Gemini TTS speaks when Sonic can't
+   *  (geminiTts.ts). Empty = those recordings get no transcript, and no backup voice. */
   geminiKey: get("GEMINI_API_KEY"),
+  geminiTtsModel: get("GEMINI_TTS_MODEL") || "gemini-3.8-flash-tts",
+  /** A prebuilt Gemini voice: warm, Indian English, "Companion & Peer" (GET /v1beta/voices). */
+  geminiTtsVoice: get("GEMINI_TTS_VOICE") || "en-in-assistant-3",
   geminiLiveModel: get("GEMINI_LIVE_MODEL") || "gemini-3.5-transcribe-live",
   /** The glasses VM, for homie's look at the stove. Both empty = no frames. */
   glassesUrl: get("GLASSES_URL").replace(/\/$/, ""),
