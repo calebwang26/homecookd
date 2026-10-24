@@ -1,0 +1,968 @@
+{
+  "id": "weed-steak",
+  "title": "Weed Steak",
+  "cook": {
+    "name": "Miles",
+    "relation": "Uncle"
+  },
+  "intro": "This spontaneous, intuition-driven swordfish recipe was inspired by a quick trip to Trader Joe's. It features a unique soju deglaze and an experimental miso-apple garnish, proving that culinary improvisation can yield surprisingly elegant results. Midway through, Venture's secret ingredient goes in: weed oil, stirred into the glaze.",
+  "servings": "1",
+  "total_time": "30 minutes",
+  "sample": false,
+  "source": null,
+  "tags": [
+    "swordfish",
+    "seafood",
+    "miso glaze",
+    "apple garnish",
+    "pan seared",
+    "improvisation"
+  ],
+  "media": {
+    "video_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/play.mp4?v=1791755994381263",
+    "audio_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/voice.m4a?v=1791756008569705",
+    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/poster.jpg?v=1791756008852104",
+    "duration_s": 3103,
+    "width": 406,
+    "height": 720
+  },
+  "sessions": [
+    {
+      "index": 1,
+      "recorded_at": "2026-10-11T12:57:12-07:00",
+      "offset_s": 0,
+      "duration_s": 1440
+    },
+    {
+      "index": 2,
+      "recorded_at": "2026-10-11T13:21:12-07:00",
+      "offset_s": 1440,
+      "duration_s": 26
+    },
+    {
+      "index": 3,
+      "recorded_at": "2026-10-11T13:21:40-07:00",
+      "offset_s": 1467,
+      "duration_s": 1637
+    }
+  ],
+  "ingredients": [
+    {
+      "name": "miso paste",
+      "feel": "about this much",
+      "estimate": "~1 tbsp",
+      "confidence": "low",
+      "first_seen_s": 63
+    },
+    {
+      "name": "soy sauce",
+      "feel": "this much",
+      "estimate": "~1 tbsp",
+      "confidence": "low",
+      "first_seen_s": 63
+    },
+    {
+      "name": "mirin",
+      "feel": "about this much",
+      "estimate": "~1 tbsp",
+      "confidence": "low",
+      "first_seen_s": 63
+    },
+    {
+      "name": "water (for the glaze)",
+      "feel": "",
+      "estimate": "~2 tbsp",
+      "confidence": "medium",
+      "first_seen_s": 155
+    },
+    {
+      "name": "salt",
+      "feel": "a little bit",
+      "estimate": "~1 pinch",
+      "confidence": "medium",
+      "first_seen_s": 183
+    },
+    {
+      "name": "black pepper",
+      "feel": "",
+      "estimate": "~1/4 tsp",
+      "confidence": "low",
+      "first_seen_s": 183
+    },
+    {
+      "name": "honey",
+      "feel": "",
+      "estimate": "~1 tbsp",
+      "confidence": "low",
+      "first_seen_s": 222
+    },
+    {
+      "name": "garlic clove",
+      "feel": "a big clove",
+      "estimate": "~1 clove",
+      "confidence": "high",
+      "first_seen_s": 310
+    },
+    {
+      "name": "green onions",
+      "feel": "one",
+      "estimate": "~2 stalks",
+      "confidence": "medium",
+      "first_seen_s": 435
+    },
+    {
+      "name": "vegetable oil",
+      "feel": "",
+      "estimate": "~2 tbsp",
+      "confidence": "medium",
+      "first_seen_s": 665
+    },
+    {
+      "name": "swordfish steak",
+      "feel": "",
+      "estimate": "~1 steak",
+      "confidence": "high",
+      "first_seen_s": 692
+    },
+    {
+      "name": "soju (for deglazing)",
+      "feel": "a little bit",
+      "estimate": "~2 tbsp",
+      "confidence": "low",
+      "first_seen_s": 834
+    },
+    {
+      "name": "unsalted butter",
+      "feel": "half of that",
+      "estimate": "~4 tbsp",
+      "confidence": "medium",
+      "first_seen_s": 1385
+    },
+    {
+      "name": "rosemary",
+      "feel": "this much",
+      "estimate": "~1 sprig",
+      "confidence": "high",
+      "first_seen_s": 1418
+    },
+    {
+      "name": "thyme",
+      "feel": "a good size sprig",
+      "estimate": "~1 sprig",
+      "confidence": "high",
+      "first_seen_s": 1418
+    },
+    {
+      "name": "olive oil",
+      "feel": "kind of a lot",
+      "estimate": "~2 tbsp",
+      "confidence": "medium",
+      "first_seen_s": 1912
+    },
+    {
+      "name": "apples",
+      "feel": "all these like apples",
+      "estimate": "~1 apple",
+      "confidence": "medium",
+      "first_seen_s": 1922
+    },
+    {
+      "name": "soju (for the apples)",
+      "feel": "",
+      "estimate": "~1/4 cup",
+      "confidence": "medium",
+      "first_seen_s": 1992
+    },
+    {
+      "name": "water (for the sauce)",
+      "feel": "tiny bit",
+      "estimate": "~1 tbsp",
+      "confidence": "low",
+      "first_seen_s": 2494
+    },
+    {
+      "name": "weed oil (CBD oil)",
+      "feel": "",
+      "estimate": "unknown",
+      "confidence": "low",
+      "first_seen_s": 1442
+    }
+  ],
+  "steps": [
+    {
+      "order": 1,
+      "title": "Preheat the pan",
+      "instruction": "Heat up a pan significantly until it is very hot. To test the heat, drop a little water onto the surface; it is sufficiently heated when the water creates the Leidenfrost effect (dancing rapidly on the surface).",
+      "sensory_cue": "when I pour water on it and it does the Leidenfrost effect then it'll be sufficiently heated",
+      "start_s": 33,
+      "end_s": 63,
+      "quote": "I'm going to heat up the pan, like a lot... we're going to just have this like preheating. And then when uh when I pour water on it and it does the Leidenfrost effect then it'll be sufficiently heated.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/steps/01.jpg?v=1791756009296930",
+      "substeps": [
+        {
+          "text": "Heat up a pan until it is very hot.",
+          "detail": null,
+          "start_s": 33
+        },
+        {
+          "text": "Drop a little water onto the surface.",
+          "detail": null,
+          "start_s": 54
+        },
+        {
+          "text": "Ready when **a drop of water dances** on the pan.",
+          "detail": null,
+          "start_s": 57
+        }
+      ],
+      "uses": [],
+      "tip": null
+    },
+    {
+      "order": 2,
+      "title": "Mix the miso glaze",
+      "instruction": "In a bowl, mix the miso paste, soy sauce, and mirin until the paste becomes liquid and easy to pour. Add a splash of water to help it combine, then season with a pinch of salt and some black pepper. Stir in the honey, making sure to scrape the edges of the bowl as the honey tends to stick to the bottom. Add more miso if the mixture is too salty or tart.",
+      "sensory_cue": "That's pretty good. It's a bit watery. / It's a little salty / I can also hear the pan sizzling behind me, which is a good indication that it's getting to the good heat that we need it to be.",
+      "start_s": 63,
+      "end_s": 253,
+      "quote": "I'm going to start by making my miso glaze... we're going to like mix this first so it becomes liquid and like easy to pour... Might be a bit too much water but it's okay... Okay, it's a little salty, so honestly I'm going to add this much more miso... I always put too much honey. Um and then it sticks to the bottom so really like scrape the edges of the bowl when you like do this.",
+      "wait_after": null,
+      "story_ids": [
+        "s1"
+      ],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/steps/02.jpg?v=1791756009571449",
+      "substeps": [
+        {
+          "text": "Mix miso paste, soy sauce, and mirin.",
+          "detail": "Mix the miso paste, soy sauce, and mirin until the paste becomes liquid and easy to pour.",
+          "start_s": 63
+        },
+        {
+          "text": "Add a splash of water.",
+          "detail": null,
+          "start_s": 154
+        },
+        {
+          "text": "Season with a pinch of salt and pepper.",
+          "detail": null,
+          "start_s": 183
+        },
+        {
+          "text": "Add more miso if it is too salty.",
+          "detail": null,
+          "start_s": 206
+        },
+        {
+          "text": "Stir in the honey.",
+          "detail": null,
+          "start_s": 220
+        }
+      ],
+      "uses": [
+        {
+          "name": "miso paste",
+          "amount": "~1 tbsp"
+        },
+        {
+          "name": "soy sauce",
+          "amount": "~1 tbsp"
+        },
+        {
+          "name": "mirin",
+          "amount": "~1 tbsp"
+        },
+        {
+          "name": "water (for the glaze)",
+          "amount": "~2 tbsp"
+        },
+        {
+          "name": "salt",
+          "amount": "~1 pinch"
+        },
+        {
+          "name": "black pepper",
+          "amount": "~1/4 tsp"
+        },
+        {
+          "name": "honey",
+          "amount": "~1 tbsp"
+        }
+      ],
+      "tip": "Scrape the edges of the bowl when you do this because honey sticks to the bottom."
+    },
+    {
+      "order": 3,
+      "title": "Prepare the garlic and green onion garnish",
+      "instruction": "Crush a garlic clove by pressing the flat side of a knife over it, then give it a rough chop. Next, trim off the overly bendy part of a green onion stalk so only the firm, light green section remains. Cut this section in half to get long strips, then slice them lengthwise very thinly. Place these thin strips into a bowl of ice-cold water to blanch them, which will cause them to curl up elegantly for the garnish. Check your preheated pan with a few drops of water again to ensure it's hot enough.",
+      "sensory_cue": "Ideally, this should make them curl up and then look nice / you can see like the water like doing the thing. I think it's sizzling and not dancing, which is not great",
+      "start_s": 310,
+      "end_s": 632,
+      "quote": "I should mince my garlic. Um so basically I start by by just doing this, by putting the knife flat over it... we're going to cut off like the overly bendy part uh so that the light green stays... cut them lengthwise pretty thinly like this... we're going to put this in like ice water and then let it sit for a while. Ideally, this should make them curl up and then look nice",
+      "wait_after": null,
+      "story_ids": [
+        "s2"
+      ],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/steps/03.jpg?v=1791756009797070",
+      "substeps": [
+        {
+          "text": "Crush and roughly chop a garlic clove.",
+          "detail": "Crush a garlic clove by pressing the flat side of a knife over it, then give it a rough chop.",
+          "start_s": 310
+        },
+        {
+          "text": "Trim the overly bendy part off green onions.",
+          "detail": "Trim off the overly bendy part of a green onion stalk so only the firm, light green section remains.",
+          "start_s": 471
+        },
+        {
+          "text": "Slice the firm section lengthwise very thinly.",
+          "detail": "Cut this section in half to get long strips, then slice them lengthwise very thinly.",
+          "start_s": 504
+        },
+        {
+          "text": "Place the strips into ice-cold water.",
+          "detail": "Place these thin strips into a bowl of ice-cold water to blanch them, which will cause them to curl up elegantly for the garnish.",
+          "start_s": 597
+        },
+        {
+          "text": "Check the pan with **a few drops** of water.",
+          "detail": "Check your preheated pan with a few drops of water again to ensure it's hot enough.",
+          "start_s": 615
+        }
+      ],
+      "uses": [
+        {
+          "name": "garlic clove",
+          "amount": "~1 clove"
+        },
+        {
+          "name": "green onions",
+          "amount": "~2 stalks"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 4,
+      "title": "Start searing the swordfish",
+      "instruction": "Add vegetable oil to the hot pan. Place the swordfish steak in the pan and press it down firmly to ensure it develops a good sear. Turn the heat down slightly so it doesn't char too aggressively. After a couple of minutes, flip the steak over, turn the heat down further, and aggressively deglaze the pan with a little bit of soju.",
+      "sensory_cue": "That looks pretty good. It's a lot of steam. / The meat is a lot softer than I thought it would be actually. / That was pretty aggressive.",
+      "start_s": 665,
+      "end_s": 865,
+      "quote": "Yeah, that looks pretty good. It's a lot of steam. Um we'll start with vegetable oil. I'm not using olive oil because uh olive oil has a like a higher smoke point... We're going to press this down so it develops the sear... So now it's on the other side and then we're going to yeah we're going to deglaze with like a little bit of soju.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [
+        "x1"
+      ],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/steps/04.jpg?v=1791756010038068",
+      "substeps": [
+        {
+          "text": "Add vegetable oil to the hot pan.",
+          "detail": null,
+          "start_s": 665
+        },
+        {
+          "text": "Press the swordfish steak down firmly in the pan.",
+          "detail": "Place the swordfish steak in the pan and press it down firmly to ensure it develops a good sear.",
+          "start_s": 693
+        },
+        {
+          "text": "Turn the heat down **slightly**.",
+          "detail": "Turn the heat down slightly so it doesn't char too aggressively.",
+          "start_s": 701
+        },
+        {
+          "text": "Flip the steak over after **a couple of minutes**.",
+          "detail": null,
+          "start_s": 832
+        },
+        {
+          "text": "Deglaze the pan with a little bit of soju.",
+          "detail": "Turn the heat down further, and aggressively deglaze the pan with a little bit of soju.",
+          "start_s": 840
+        }
+      ],
+      "uses": [
+        {
+          "name": "vegetable oil",
+          "amount": "~2 tbsp"
+        },
+        {
+          "name": "swordfish steak",
+          "amount": "~1 steak"
+        },
+        {
+          "name": "soju (for deglazing)",
+          "amount": "~2 tbsp"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 5,
+      "title": "Sear all sides and cool the pan",
+      "instruction": "Turn the heat back up a little bit and press the fish down again. You will know a good sear has formed when the fish can move easily in the pan. Carefully flip the steak to sear all the remaining edges so none of the outside is left unseared. Once it has developed a bit of char, remove the fish from the heat and turn the stove down completely to let the hot pan cool, which prevents the butter from burning in the next step.",
+      "sensory_cue": "when it is like able to move",
+      "start_s": 920,
+      "end_s": 1208,
+      "quote": "I'm gonna turn the heat back up a little bit. And again I'm gonna press it down like I did before to get like a good sear... And so, we'll know that this is done kind of when it is like able to move. Uh, yeah, that means like a sear has developed... Yeah, so we're just searing every side... We're gonna actually turn the heat all the way down and kind of just let that chill out.",
+      "wait_after": null,
+      "story_ids": [
+        "s3",
+        "s4",
+        "s5"
+      ],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/steps/05.jpg?v=1791756010248291",
+      "substeps": [
+        {
+          "text": "Turn the heat back up **a little bit**.",
+          "detail": null,
+          "start_s": 920
+        },
+        {
+          "text": "Press the fish down again.",
+          "detail": null,
+          "start_s": 932
+        },
+        {
+          "text": "Wait until **it is able to move**.",
+          "detail": "You will know a good sear has formed when it is like able to move.",
+          "start_s": 1063
+        },
+        {
+          "text": "Flip the steak to sear all remaining edges.",
+          "detail": "Carefully flip the steak to sear all the remaining edges so none of the outside is left unseared.",
+          "start_s": 1083
+        },
+        {
+          "text": "Remove fish and turn the stove down **completely**.",
+          "detail": "Once it has developed a bit of char, remove the fish from the heat and turn the stove down completely to let the hot pan cool.",
+          "start_s": 1189
+        }
+      ],
+      "uses": [
+        {
+          "name": "swordfish steak",
+          "amount": null
+        }
+      ],
+      "tip": "Let the hot pan cool so the butter does not burn in the next step."
+    },
+    {
+      "order": 6,
+      "title": "Check the garnish and blanch more green onions",
+      "instruction": "Check the green onion strips soaking in the cold water; they should have curled up and become firm. Finely chop another section of green onion and toss these newly chopped pieces into the cold water to blanch as well.",
+      "sensory_cue": "curled up",
+      "start_s": 1208,
+      "end_s": 1372,
+      "quote": "Oh, okay, so these guys have curled up, which is good. Um, we're gonna let them curl up a little bit more, they all are also pretty firm... And then also we can probably um we can cut this for for more garnish as well. Uh just like really finely. ... Let's just blanch these for fun because like why not",
+      "wait_after": null,
+      "story_ids": [
+        "s6"
+      ],
+      "special_ids": [
+        "x2"
+      ],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/steps/06.jpg?v=1791756010474376",
+      "substeps": [
+        {
+          "text": "Check the green onion strips in the cold water.",
+          "detail": "Check the green onion strips in the cold water. They should have curled up and become firm.",
+          "start_s": 1208
+        },
+        {
+          "text": "Finely chop another section of green onion.",
+          "detail": null,
+          "start_s": 1231
+        },
+        {
+          "text": "Toss the chopped pieces into the cold water.",
+          "detail": "Toss these newly chopped pieces into the cold water to blanch as well.",
+          "start_s": 1356
+        },
+        {
+          "text": "Ready when **curled up**.",
+          "detail": "The green onion strips should have curled up and become firm.",
+          "start_s": 1364
+        }
+      ],
+      "uses": [
+        {
+          "name": "green onions",
+          "amount": null
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 7,
+      "title": "Baste the swordfish with butter and herbs",
+      "instruction": "Cut a piece of cold unsalted butter and grab sprigs of fresh rosemary and thyme. Place the butter, the chopped garlic and the herbs into the slightly cooled pan, and turn the heat up just enough to melt the butter.",
+      "sensory_cue": "smells really good",
+      "start_s": 1385,
+      "end_s": 1440,
+      "quote": "Now we're gonna get a little bit of unsalted butter, which I've kept cold... Let's get rosemary... Oh, it smells really good. And then thyme as well...",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/steps/07.jpg?v=1791756010734013",
+      "substeps": [
+        {
+          "text": "Cut a piece of cold unsalted butter.",
+          "detail": null,
+          "start_s": 1385
+        },
+        {
+          "text": "Place butter, chopped garlic and herbs into the pan.",
+          "detail": null,
+          "start_s": 1420
+        },
+        {
+          "text": "Turn the heat up just enough to melt butter.",
+          "detail": null,
+          "start_s": 1433
+        }
+      ],
+      "uses": [
+        {
+          "name": "unsalted butter",
+          "amount": "~4 tbsp"
+        },
+        {
+          "name": "rosemary",
+          "amount": "~1 sprig"
+        },
+        {
+          "name": "thyme",
+          "amount": "~1 sprig"
+        },
+        {
+          "name": "garlic clove",
+          "amount": null
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 8,
+      "title": "Add the weed oil",
+      "instruction": "Add the weed oil (the cook calls it CBD oil) to the melted butter and herbs so it goes into the glaze that coats the swordfish. The cook uses it in the apples later, too.",
+      "sensory_cue": null,
+      "start_s": 1440,
+      "end_s": 1467,
+      "quote": "Yeah, we also have um, we have CBD oil here. Uh, again, like Venture's like secret ingredient that we put into every recipe. Um, so we're gonna incorporate this into uh the the glaze. It's gonna be like a weed glaze.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [
+        "x3"
+      ],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/steps/08.jpg?v=1791756010957058",
+      "substeps": [
+        {
+          "text": "Add the weed oil to the melted butter.",
+          "detail": "Add the weed oil to the melted butter and herbs so it goes into the glaze that coats the swordfish.",
+          "start_s": 1440
+        },
+        {
+          "text": "Mix it in to create a weed glaze.",
+          "detail": null,
+          "start_s": 1449
+        }
+      ],
+      "uses": [
+        {
+          "name": "weed oil (CBD oil)",
+          "amount": null
+        },
+        {
+          "name": "unsalted butter",
+          "amount": null
+        },
+        {
+          "name": "rosemary",
+          "amount": null
+        },
+        {
+          "name": "thyme",
+          "amount": null
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 9,
+      "title": "Finish basting the swordfish",
+      "instruction": "Return the swordfish to the pan. Tilt the pan so the melting butter pools over the heat and spoon the frothy, herb-infused butter over the fish. Flip it to baste the other side, then let it rest and pour some of the remaining garlic butter over it.",
+      "sensory_cue": null,
+      "start_s": 1467,
+      "end_s": 1735,
+      "quote": "Okay yeah, and then now we're gonna put our our our John back in there... and then we're just gonna like spoon this like over the thing right... and then pour this over a little.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/steps/09.jpg?v=1791756011225569",
+      "substeps": [
+        {
+          "text": "Return the swordfish to the pan.",
+          "detail": null,
+          "start_s": 1467
+        },
+        {
+          "text": "Tilt the pan so the melting butter pools.",
+          "detail": null,
+          "start_s": 1548
+        },
+        {
+          "text": "Spoon the frothy butter over the fish.",
+          "detail": null,
+          "start_s": 1552
+        },
+        {
+          "text": "Flip it to baste the other side.",
+          "detail": null,
+          "start_s": 1637
+        },
+        {
+          "text": "Let it rest and pour remaining butter over it.",
+          "detail": null,
+          "start_s": 1714
+        }
+      ],
+      "uses": [
+        {
+          "name": "swordfish steak",
+          "amount": null
+        },
+        {
+          "name": "unsalted butter",
+          "amount": null
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 10,
+      "title": "Clean the pan and heat olive oil",
+      "instruction": "Quickly wash the pan to remove the burnt butter and dry it completely with a paper towel so it doesn't crackle. Place the pan back on the stove, heat it up, and add a generous amount of olive oil to prepare for the apples.",
+      "sensory_cue": null,
+      "start_s": 1735,
+      "end_s": 1922,
+      "quote": "Uh in the meantime, we're gonna wash this pan a bit... And then we're gonna dry this so that the water doesn't like crackle and everything... Okay so now we're gonna put our apples in here. Well first we're gonna do olive oil. Like lowkey kind of a lot.",
+      "wait_after": null,
+      "story_ids": [
+        "s7"
+      ],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/steps/10.jpg?v=1791756011468058",
+      "substeps": [
+        {
+          "text": "Quickly wash the pan to remove the burnt butter.",
+          "detail": null,
+          "start_s": 1735
+        },
+        {
+          "text": "Dry it completely with a paper towel.",
+          "detail": null,
+          "start_s": 1754
+        },
+        {
+          "text": "Place the pan back on the stove and heat.",
+          "detail": null,
+          "start_s": 1771
+        },
+        {
+          "text": "Add a generous amount of olive oil.",
+          "detail": null,
+          "start_s": 1911
+        }
+      ],
+      "uses": [
+        {
+          "name": "olive oil",
+          "amount": "~2 tbsp"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 11,
+      "title": "Cook the apples in soju and miso glaze",
+      "instruction": "Add the pre-sliced apples to the pan, separating the pieces nicely so they cook evenly. Pour soju over the apples and let it cook down until the smell of alcohol disappears. Pour in the prepared miso glaze and let it reduce while the apples soften in the pan. Taste an apple slice and remove any pieces that have become too mushy. Once cooked, remove all the apple slices from the pan and turn the heat up to thicken the remaining glaze.",
+      "sensory_cue": "you know that the soju is cooked down sufficiently when you don't smell alcohol anymore",
+      "start_s": 1922,
+      "end_s": 2227,
+      "quote": "Okay so now this is like my master prod- okay we have all these like apples... make sure that they separate nicely... And basically you know that the soju is cooked down sufficiently when you don't smell alcohol anymore. Um and I already don't, which is good... Uh I think now is a good time for our miso... Okay new plan. We're gonna take the apples out so that I can reduce the glaze... we can turn up the heat. Um because we want this to be a little bit thicker.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/steps/11.jpg?v=1791756011707697",
+      "substeps": [
+        {
+          "text": "Add apples to the pan and pour soju over them.",
+          "detail": "Add the pre-sliced apples to the pan, separating the pieces nicely so they cook evenly, and pour soju over the apples.",
+          "start_s": 1922
+        },
+        {
+          "text": "Cook until **you don't smell alcohol anymore**.",
+          "detail": "You know that the soju is cooked down sufficiently when you don't smell alcohol anymore.",
+          "start_s": 2015
+        },
+        {
+          "text": "Pour in the miso glaze and let it reduce.",
+          "detail": "Pour in the prepared miso glaze and let it reduce while the apples soften in the pan.",
+          "start_s": 2068
+        },
+        {
+          "text": "Remove any apple pieces that are too mushy.",
+          "detail": "Taste an apple slice and remove any pieces that have become too mushy.",
+          "start_s": 2107
+        },
+        {
+          "text": "Remove all apples and turn the heat up.",
+          "detail": "Once cooked, remove all the apple slices from the pan and turn the heat up to thicken the remaining glaze.",
+          "start_s": 2155
+        }
+      ],
+      "uses": [
+        {
+          "name": "apples",
+          "amount": "~1 apple"
+        },
+        {
+          "name": "soju (for the apples)",
+          "amount": "~1/4 cup"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 12,
+      "title": "Shape the apple roses and adjust the sauce",
+      "instruction": "Arrange the intact, cooked apple slices into a long, overlapping strip and carefully roll them up to create beautiful rose shapes for presentation. Meanwhile, keep an eye on the glaze reducing on the stove. If it becomes too thick, add a tiny splash of water and stir to incorporate. Tilt the pan so the liquid boils briefly to reach the desired consistency, then pour the finished, thickened sauce into a small bowl.",
+      "sensory_cue": "It's a bit too tart / smells so good / thicker than it was before",
+      "start_s": 2227,
+      "end_s": 2729,
+      "quote": "taking out all the overly like mushy ones because they won't they like they just won't hold. And then we're just gonna arrange the rest uh in this like fan layout and then we're gonna roll them up uh and then create like this like nice presentation... this is maybe a little bit too thick. Ooh that smells so good... tiny bit of water... We're just gonna tilt the pan like this and let only this part over the heat so that it boils the water... How do you know it's ready? It's just like thicker than it was before which is good.",
+      "wait_after": null,
+      "story_ids": [
+        "s8"
+      ],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/steps/12.jpg?v=1791756011930953",
+      "substeps": [
+        {
+          "text": "Arrange the cooked apple slices into an overlapping strip.",
+          "detail": null,
+          "start_s": 2227
+        },
+        {
+          "text": "Roll them up to create beautiful rose shapes.",
+          "detail": null,
+          "start_s": 2309
+        },
+        {
+          "text": "Add a tiny splash of water if the glaze is too thick.",
+          "detail": null,
+          "start_s": 2498
+        },
+        {
+          "text": "Tilt the pan so the liquid boils briefly.",
+          "detail": null,
+          "start_s": 2540
+        },
+        {
+          "text": "Ready when **thicker than it was before**.",
+          "detail": null,
+          "start_s": 2610
+        }
+      ],
+      "uses": [
+        {
+          "name": "apples",
+          "amount": null
+        },
+        {
+          "name": "water (for the sauce)",
+          "amount": "~1 tbsp"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 13,
+      "title": "Plate the dish",
+      "instruction": "Using a small spoon, place the reduced miso sauce onto the center of a plate and spread it into a neat circle. Remove the large pieces of garlic and thyme from the rested swordfish steak, and set the fish down on top of the sauce. Carefully place the rolled apple roses next to the fish. Take the curled green onion strips out of the ice water, pat them dry with a paper towel, and arrange them elegantly on top of the swordfish. Finally, wipe the edges of the plate clean with a paper towel.",
+      "sensory_cue": null,
+      "start_s": 2795,
+      "end_s": 3085,
+      "quote": "So I'm thinking we just put the sauce on the bottom... I just want to put it in like a circle in the center... I'm gonna take all of this off including the garlic actually... I'm gonna put this right here. And I'm gonna put this right here... And then we're gonna get our blanched guys um just for like visual whatever... I'm gonna get another paper towel to pat the top.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/steps/13.jpg?v=1791756012396222",
+      "substeps": [
+        {
+          "text": "Spread the reduced miso sauce onto a plate.",
+          "detail": "Using a small spoon, place the reduced miso sauce onto the center of a plate and spread it into a neat circle.",
+          "start_s": 2795
+        },
+        {
+          "text": "Remove the garlic and thyme, then plate the fish.",
+          "detail": "Remove the large pieces of garlic and thyme from the rested swordfish steak, and set the fish down on top of the sauce.",
+          "start_s": 2871
+        },
+        {
+          "text": "Place the rolled apple roses next to the fish.",
+          "detail": null,
+          "start_s": 2897
+        },
+        {
+          "text": "Dry the green onions and arrange on top.",
+          "detail": "Take the curled green onion strips out of the ice water, pat them dry with a paper towel, and arrange them elegantly on top of the swordfish.",
+          "start_s": 2921
+        },
+        {
+          "text": "Wipe the edges of the plate clean.",
+          "detail": null,
+          "start_s": 3071
+        }
+      ],
+      "uses": [
+        {
+          "name": "swordfish steak",
+          "amount": null
+        },
+        {
+          "name": "apples",
+          "amount": null
+        },
+        {
+          "name": "green onions",
+          "amount": null
+        }
+      ],
+      "tip": null
+    }
+  ],
+  "stories": [
+    {
+      "id": "s1",
+      "step": 2,
+      "start_s": 263,
+      "end_s": 295,
+      "title": "Trader Joe's Inspiration",
+      "text": "I kind of just went to Trader Joe's today to see what they had. Uh and they had a swordfish steak, which was pretty interesting. I like to go to Trader Joe's and just find anything that's interesting to me. And today what stood out were some green apples and uh a swordfish steak. So I thought I'd plan everything around that."
+    },
+    {
+      "id": "s2",
+      "step": 3,
+      "start_s": 632,
+      "end_s": 665,
+      "title": "Cooking Without a Recipe",
+      "text": "I started cooking like two months ago when I moved into this place uh just because like I thought it'd be fun. Um and like I actually didn't expect to like it as much as I do. But every day or like every every couple weeks I just kind of go to Trader Joe's and just get whatever and then I just like make some bullshit. Um so that's kind of my philosophy. I think like I like to do things without a recipe as well. Like I did not really look up swordfish recipes for this. I have no idea what swordfish should be cooked like."
+    },
+    {
+      "id": "s3",
+      "step": 5,
+      "start_s": 956,
+      "end_s": 998,
+      "title": "The Chicago River Swordfish Fantasy",
+      "text": "And for the sake of the video I'll just say that this is like a really old family recipe that my family has been cultivating for centuries. You know, yeah, we catch our swordfish live in Chicago. You think swordfish run in like the Chicago River? Like the river that comes through the city? Yeah, definitely not, but it's kind of a personal fantasy of mine right now. Like as of right now I've developed this fantasy that there are swordfish in the river."
+    },
+    {
+      "id": "s4",
+      "step": 5,
+      "start_s": 1019,
+      "end_s": 1063,
+      "title": "Cooking Isn't Intimidating",
+      "text": "I think people kind of find cooking really intimidating, but honestly, anything that you put in a pan is probably going to be valid. Um, I think it's actually harder to like really, really mess something up rather than just like kind of do whatever. Um, for instance, like the ingredients that you use will all still be like yummy, you know."
+    },
+    {
+      "id": "s5",
+      "step": 5,
+      "start_s": 1105,
+      "end_s": 1131,
+      "title": "Salmonella Propaganda",
+      "text": "I have no idea how cooked the inside is and honestly, that's fine. Um, I'm okay with eating raw meat. I think it should make my immune system stronger. I don't think salmonella is real. It's got to be like propaganda at this point. Yeah, yeah, I agree. They just don't want you eating like cookie batter and stuff. Yeah, yeah, yeah. It's like yeah. They don't want you to be happy."
+    },
+    {
+      "id": "s6",
+      "step": 6,
+      "start_s": 1252,
+      "end_s": 1355,
+      "title": "Finding the Flow State",
+      "text": "Caleb has some disagreements. He thinks I'm pretty autistic. Um, I can see the reasoning behind it... Yeah, like I just like fully messed that up, but you know, whatever. Yeah, I got fully messed that up, but like whatever. ... Okay, I'm in flow state."
+    },
+    {
+      "id": "s7",
+      "step": 10,
+      "start_s": 1842,
+      "end_s": 1877,
+      "title": "Culinary LARP",
+      "text": "The cook looks at the blanched onions and reflects on culinary terminology, saying that blanching is just putting things in cold water so they curl up, and that a lot of cooking involves giving weird names to simple processes, like calling fruit in a pan a \"compote.\" He concludes that a lot of it is just \"larp.\""
+    },
+    {
+      "id": "s8",
+      "step": 12,
+      "start_s": 2422,
+      "end_s": 2427,
+      "title": "Optimal Cooking Music",
+      "text": "I'm a big fan of R&B when I'm cooking. Like I think it's like optimal cooking music."
+    }
+  ],
+  "special": [
+    {
+      "id": "x1",
+      "step": 4,
+      "start_s": 834,
+      "end_s": 865,
+      "text": "The cook deglazes the pan with soju instead of wine or broth.",
+      "why": "Soju is a Korean distilled beverage, not typically used for deglazing a pan-seared fish steak in Western cooking, though it might be used in some Asian cuisines to remove fishy odors."
+    },
+    {
+      "id": "x2",
+      "step": 6,
+      "start_s": 1355,
+      "end_s": 1372,
+      "text": "The cook decides to blanch the finely chopped green onions 'for fun' without knowing what it will do to them.",
+      "why": "Green onions used as garnish are typically served raw for their crisp texture and sharp flavor; blanching them after chopping is highly unusual and defeats the purpose of a fresh garnish."
+    },
+    {
+      "id": "x3",
+      "step": 8,
+      "start_s": 1442,
+      "end_s": 1462,
+      "text": "Venture's secret ingredient: weed oil in the glaze",
+      "why": "Cannabis (CBD) oil goes into the glaze, the swordfish and the apples. In the cook's words: \"Weed everything. It's part of our culture, it's part of our history and our heritage.\""
+    }
+  ],
+  "follow_up_questions": [
+    {
+      "id": "q1",
+      "about_step": 11,
+      "question": "You added sliced apples to the pan, but we never saw them being cut. About how many apples did you slice, and how thinly should they be cut to properly form the roses?"
+    },
+    {
+      "id": "q2",
+      "about_step": 9,
+      "question": "You joked about adding CBD oil as a secret ingredient for the 'weed steak', but we never clearly saw it being measured or added. Was it actually incorporated into the recipe, and if so, how much did you use?"
+    },
+    {
+      "id": "q3",
+      "about_step": 10,
+      "question": "The microgreens were thrown out because they were soggy, but if they had been fresh, at what stage of plating would you have added them?"
+    },
+    {
+      "id": "q4",
+      "about_step": 1,
+      "question": "When checking the pan's heat with water, you mentioned it was sizzling and not dancing. Did you wait for the pan to get hotter before adding the oil and swordfish in later steps?"
+    }
+  ]
+}

@@ -1,0 +1,583 @@
+{
+  "id": "gordon-stir-fry",
+  "title": "Chicken Stir-Fry with Rice Noodles",
+  "cook": {
+    "name": "Gordon",
+    "relation": "YouTube"
+  },
+  "intro": "Inspired by the delicious street food and bustling markets of Asia, this quick and easy dinner centers around a classic Asian staple: noodles.",
+  "servings": "2-3",
+  "total_time": "~20 mins",
+  "sample": true,
+  "source": "Gordon Ramsay (YouTube)",
+  "tags": [
+    "stir-fry",
+    "chicken",
+    "rice noodles",
+    "Asian-inspired",
+    "quick dinner"
+  ],
+  "media": {
+    "video_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/play.mp4?v=1791746798127473",
+    "audio_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/voice.m4a?v=1791746798473506",
+    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/poster.jpg?v=1791746852557420",
+    "duration_s": 305,
+    "width": 1280,
+    "height": 720
+  },
+  "sessions": [
+    {
+      "index": 1,
+      "recorded_at": "2026-10-11T12:16:06-07:00",
+      "offset_s": 0,
+      "duration_s": 305
+    }
+  ],
+  "ingredients": [
+    {
+      "name": "rice noodles",
+      "feel": "",
+      "estimate": "~200g",
+      "confidence": "high",
+      "first_seen_s": 18
+    },
+    {
+      "name": "hot water",
+      "feel": "",
+      "estimate": "~1 liter",
+      "confidence": "high",
+      "first_seen_s": 18
+    },
+    {
+      "name": "chicken breast",
+      "feel": "",
+      "estimate": "~1 whole breast",
+      "confidence": "high",
+      "first_seen_s": 43
+    },
+    {
+      "name": "garlic",
+      "feel": "",
+      "estimate": "~2 cloves",
+      "confidence": "high",
+      "first_seen_s": 98
+    },
+    {
+      "name": "tender broccoli",
+      "feel": "",
+      "estimate": "~1 small bunch",
+      "confidence": "high",
+      "first_seen_s": 105
+    },
+    {
+      "name": "olive oil (for searing)",
+      "feel": "touch",
+      "estimate": "~1 tbsp",
+      "confidence": "medium",
+      "first_seen_s": 131
+    },
+    {
+      "name": "salt",
+      "feel": "touch",
+      "estimate": "~1 pinch",
+      "confidence": "low",
+      "first_seen_s": 139
+    },
+    {
+      "name": "pepper",
+      "feel": "",
+      "estimate": "~1 pinch",
+      "confidence": "low",
+      "first_seen_s": 139
+    },
+    {
+      "name": "soy sauce",
+      "feel": "",
+      "estimate": "~2 tbsp",
+      "confidence": "medium",
+      "first_seen_s": 194
+    },
+    {
+      "name": "olive oil (for eggs)",
+      "feel": "little teaspoon",
+      "estimate": "~1 tsp",
+      "confidence": "high",
+      "first_seen_s": 214
+    },
+    {
+      "name": "eggs",
+      "feel": "",
+      "estimate": "~2",
+      "confidence": "high",
+      "first_seen_s": 230
+    },
+    {
+      "name": "fresh lime",
+      "feel": "",
+      "estimate": "~1/2 lime",
+      "confidence": "high",
+      "first_seen_s": 291
+    }
+  ],
+  "steps": [
+    {
+      "order": 1,
+      "title": "Soak the Noodles",
+      "instruction": "Place the rice noodles into a bowl and pour hot water over them. Leave to soak and rehydrate for 12 to 15 minutes until soft.",
+      "sensory_cue": "soften up",
+      "start_s": 18,
+      "end_s": 34,
+      "quote": "First off, we're gonna soak our noodles. Now these are rice noodles. Into a bowl, and just pour the hot water over the rice noodles. Soak and rehydrate. 12 to 15 minutes to soften up.",
+      "wait_after": null,
+      "story_ids": [
+        "s1"
+      ],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/steps/01.jpg?v=1791749457233248",
+      "substeps": [
+        {
+          "text": "Put the rice noodles into a bowl.",
+          "detail": null,
+          "start_s": 18
+        },
+        {
+          "text": "Pour the hot water over them.",
+          "detail": null,
+          "start_s": 24
+        },
+        {
+          "text": "Leave to soak and rehydrate for **12 to 15 minutes**.",
+          "detail": null,
+          "start_s": 28
+        },
+        {
+          "text": "Ready when **soft**.",
+          "detail": "Ready when soft. 12 to 15 minutes to soften up.",
+          "start_s": 31
+        }
+      ],
+      "uses": [
+        {
+          "name": "rice noodles",
+          "amount": "~200g"
+        },
+        {
+          "name": "hot water",
+          "amount": "~1 liter"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 2,
+      "title": "Heat the Pan",
+      "instruction": "Place a wok or a large frying pan with sloping sides on the stove and heat it.",
+      "sensory_cue": "really nice and hot",
+      "start_s": 34,
+      "end_s": 43,
+      "quote": "If you've got a wok, perfect. If not, just a normal size frying pan with big sloping sides. Pan on. Get it really nice and hot.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/steps/02.jpg?v=1791749457475020",
+      "substeps": [
+        {
+          "text": "Place a wok or large frying pan on the stove.",
+          "detail": "Place a wok or large frying pan on the stove. If you've got a wok, perfect. If not, just a normal size frying pan with big sloping sides.",
+          "start_s": 34
+        },
+        {
+          "text": "Heat it.",
+          "detail": null,
+          "start_s": 40
+        },
+        {
+          "text": "Ready when **really nice and hot**.",
+          "detail": null,
+          "start_s": 41
+        }
+      ],
+      "uses": [],
+      "tip": null
+    },
+    {
+      "order": 3,
+      "title": "Prep the Chicken",
+      "instruction": "Slice the fillet off the chicken breast. Butterfly the breast by slicing it in half horizontally while keeping the knife flat on the board. Slice the flattened chicken into very thin strips.",
+      "sensory_cue": null,
+      "start_s": 43,
+      "end_s": 97,
+      "quote": "Chicken breast... slice that off. Now, the secret to getting it really nice and thin... keep it nice and flat on the board and sort of slice it in half. Start slicing these nice thin slices.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [
+        "x1"
+      ],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/steps/03.jpg?v=1791749457670844",
+      "substeps": [
+        {
+          "text": "Slice the fillet off the chicken breast.",
+          "detail": null,
+          "start_s": 43
+        },
+        {
+          "text": "Slice the breast in half horizontally.",
+          "detail": "Butterfly the breast by slicing it in half horizontally while keeping the knife flat on the board.",
+          "start_s": 56
+        },
+        {
+          "text": "Slice the flattened chicken into very thin strips.",
+          "detail": null,
+          "start_s": 88
+        }
+      ],
+      "uses": [
+        {
+          "name": "chicken breast",
+          "amount": "~1 whole breast"
+        }
+      ],
+      "tip": "Take a rolling pin and roll over the chicken to flatten it and slice it even thinner."
+    },
+    {
+      "order": 4,
+      "title": "Prep the Vegetables",
+      "instruction": "Thinly slice the garlic cloves and the tender broccoli.",
+      "sensory_cue": "bite to the broccoli",
+      "start_s": 98,
+      "end_s": 124,
+      "quote": "Next, wash your knife and finally slice garlic. The thinner the garlic, the crispier. This is a young, tender broccoli. Just slice them down. I want a bite to the broccoli.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/steps/04.jpg?v=1791749457883664",
+      "substeps": [
+        {
+          "text": "Thinly slice the garlic cloves.",
+          "detail": null,
+          "start_s": 98
+        },
+        {
+          "text": "Thinly slice the tender broccoli.",
+          "detail": null,
+          "start_s": 106
+        }
+      ],
+      "uses": [
+        {
+          "name": "garlic",
+          "amount": "~2 cloves"
+        },
+        {
+          "name": "tender broccoli",
+          "amount": "~1 small bunch"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 5,
+      "title": "Sear the Chicken and Garlic",
+      "instruction": "Add olive oil to the hot pan. Drop in the chicken strips, season with salt and pepper, and separate the strands. Once the chicken starts searing, add the sliced garlic. Push the chicken and garlic up the sides of the pan to crisp and cook.",
+      "sensory_cue": "just starting to smoke, really nice and crispy",
+      "start_s": 131,
+      "end_s": 181,
+      "quote": "Touch of olive oil... Just starting to smoke. Drop the chicken in first. Touch of salt, pepper... Once you've started to sear off the chicken... get the garlic in. Now, let that get really nice and crispy. And the way to do it is to sort of spread all the chicken, the garlic up the side of the pan.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/steps/05.jpg?v=1791749458133510",
+      "substeps": [
+        {
+          "text": "Add the olive oil to the hot pan.",
+          "detail": null,
+          "start_s": 131
+        },
+        {
+          "text": "Drop in the chicken strips and season.",
+          "detail": "Drop in the chicken strips, season with salt and pepper, and separate the strands.",
+          "start_s": 139
+        },
+        {
+          "text": "Add the sliced garlic.",
+          "detail": "Once the chicken starts searing, add the sliced garlic.",
+          "start_s": 156
+        },
+        {
+          "text": "Push the chicken and garlic up the sides.",
+          "detail": null,
+          "start_s": 163
+        },
+        {
+          "text": "Ready when **really nice and crispy**.",
+          "detail": null,
+          "start_s": 178
+        }
+      ],
+      "uses": [
+        {
+          "name": "olive oil (for searing)",
+          "amount": "~1 tbsp"
+        },
+        {
+          "name": "chicken breast",
+          "amount": null
+        },
+        {
+          "name": "salt",
+          "amount": "~1 pinch"
+        },
+        {
+          "name": "pepper",
+          "amount": "~1 pinch"
+        },
+        {
+          "name": "garlic",
+          "amount": null
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 6,
+      "title": "Add Broccoli and Soy Sauce",
+      "instruction": "Toss the raw sliced broccoli into the pan. Pour in the soy sauce to season and stain the ingredients, toss well, and then remove everything from the pan and set aside.",
+      "sensory_cue": null,
+      "start_s": 182,
+      "end_s": 214,
+      "quote": "Broccoli in... Now, soy sauce. That helps to season it, but also stains beautifully. Soy sauce in. Lovely. Exactly what I want. Now take that out.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [
+        "x2"
+      ],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/steps/06.jpg?v=1791749458365609",
+      "substeps": [
+        {
+          "text": "Toss the raw sliced broccoli into the pan.",
+          "detail": null,
+          "start_s": 182
+        },
+        {
+          "text": "Pour in the soy sauce.",
+          "detail": null,
+          "start_s": 194
+        },
+        {
+          "text": "Toss well.",
+          "detail": null,
+          "start_s": 202
+        },
+        {
+          "text": "Remove everything from the pan and set aside.",
+          "detail": null,
+          "start_s": 211
+        }
+      ],
+      "uses": [
+        {
+          "name": "tender broccoli",
+          "amount": null
+        },
+        {
+          "name": "soy sauce",
+          "amount": "~2 tbsp"
+        }
+      ],
+      "tip": "Put the raw broccoli straight in without blanching it first because you want that crunch."
+    },
+    {
+      "order": 7,
+      "title": "Drain Noodles and Scramble Eggs",
+      "instruction": "Wipe out the pan and add a little more olive oil. Drain the soaked rice noodles. Crack the eggs into the pan, lightly season, and give them a good whisk, spreading them up the sides to scramble.",
+      "sensory_cue": null,
+      "start_s": 214,
+      "end_s": 254,
+      "quote": "Give your pan a little wipe out. A little teaspoon of olive oil... Drain your noodles. Two eggs. In. Whisk up the eggs... Lightly season the eggs.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/steps/07.jpg?v=1791749458632434",
+      "substeps": [
+        {
+          "text": "Wipe out the pan.",
+          "detail": null,
+          "start_s": 214
+        },
+        {
+          "text": "Add a little more olive oil.",
+          "detail": null,
+          "start_s": 218
+        },
+        {
+          "text": "Drain the soaked rice noodles.",
+          "detail": null,
+          "start_s": 224
+        },
+        {
+          "text": "Crack the eggs into the pan and season.",
+          "detail": null,
+          "start_s": 234
+        },
+        {
+          "text": "Whisk and spread them up the sides.",
+          "detail": null,
+          "start_s": 239
+        }
+      ],
+      "uses": [
+        {
+          "name": "olive oil (for eggs)",
+          "amount": "1 teaspoon"
+        },
+        {
+          "name": "rice noodles",
+          "amount": null
+        },
+        {
+          "name": "eggs",
+          "amount": "~2"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 8,
+      "title": "Combine and Toss",
+      "instruction": "Return the drained noodles and the cooked chicken and broccoli mixture to the pan with the scrambled eggs. Mix everything together really well so the egg helps bring the dish together.",
+      "sensory_cue": null,
+      "start_s": 255,
+      "end_s": 277,
+      "quote": "Noodles in. Chicken and broccoli in. And give that a really nice mix. I want the egg to sort of almost bring the dish together.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/steps/08.jpg?v=1791749458877828",
+      "substeps": [
+        {
+          "text": "Return the drained noodles to the pan.",
+          "detail": null,
+          "start_s": 255
+        },
+        {
+          "text": "Return the cooked chicken and broccoli mixture.",
+          "detail": null,
+          "start_s": 258
+        },
+        {
+          "text": "Mix everything together really well.",
+          "detail": "Mix everything together really well so the egg helps bring the dish together.",
+          "start_s": 262
+        }
+      ],
+      "uses": [
+        {
+          "name": "rice noodles",
+          "amount": null
+        },
+        {
+          "name": "chicken breast",
+          "amount": null
+        },
+        {
+          "name": "tender broccoli",
+          "amount": null
+        },
+        {
+          "name": "eggs",
+          "amount": null
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 9,
+      "title": "Plate and Finish",
+      "instruction": "Ensure an even distribution of chicken, broccoli, and garlic as you plate the stir-fry. Squeeze fresh lime juice over the top to finish.",
+      "sensory_cue": null,
+      "start_s": 278,
+      "end_s": 305,
+      "quote": "Make sure you've got that nice even distribution of chicken, broccoli, garlic... And then just finish that with fresh lime.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-stir-fry/steps/09.jpg?v=1791749459133493",
+      "substeps": [
+        {
+          "text": "Plate the stir-fry.",
+          "detail": "Ensure an even distribution of chicken, broccoli, and garlic as you plate the stir-fry.",
+          "start_s": 278
+        },
+        {
+          "text": "Squeeze the fresh lime juice over the top.",
+          "detail": null,
+          "start_s": 291
+        }
+      ],
+      "uses": [
+        {
+          "name": "chicken breast",
+          "amount": null
+        },
+        {
+          "name": "tender broccoli",
+          "amount": null
+        },
+        {
+          "name": "garlic",
+          "amount": null
+        },
+        {
+          "name": "fresh lime",
+          "amount": "~1/2 lime"
+        }
+      ],
+      "tip": null
+    }
+  ],
+  "stories": [
+    {
+      "id": "s1",
+      "step": 1,
+      "start_s": 0,
+      "end_s": 18,
+      "title": "Asian Street Food Inspiration",
+      "text": "Some of the best street food I've ever eaten was in Asia. Every one of those little markets was filled with smells of delicious food that all centered around an Asian staple, noodles. Learn to cook those properly and you'd be surprised how quick and easy it is to knock up a delicious dinner."
+    }
+  ],
+  "special": [
+    {
+      "id": "x1",
+      "step": 3,
+      "start_s": 68,
+      "end_s": 84,
+      "text": "Take a rolling pin and press it gently, roll over the chicken. What it does, it sort of flattens it and allows you to slice it even thinner. And the thinner the slices of chicken, the sort of crispier it gets, the quicker it cooks.",
+      "why": "Using a rolling pin to flatten chicken breast before slicing it for a stir-fry is an unusual technique to ensure very thin, quick-cooking slices."
+    },
+    {
+      "id": "x2",
+      "step": 6,
+      "start_s": 182,
+      "end_s": 194,
+      "text": "Broccoli in. Feels strange putting raw broccoli in like that. Normally you'd blanch it in boiling water, dry it out, but you want that crunch.",
+      "why": "Adding raw broccoli directly to a quick stir-fry instead of blanching it first is noted as unusual by the chef, done specifically to retain crunch."
+    }
+  ],
+  "follow_up_questions": [
+    {
+      "id": "q1",
+      "about_step": 1,
+      "question": "How hot should the water be for soaking the rice noodles—boiling or just warm?"
+    },
+    {
+      "id": "q2",
+      "about_step": 4,
+      "question": "What size roughly should the broccoli pieces be sliced into?"
+    },
+    {
+      "id": "q3",
+      "about_step": 7,
+      "question": "Should the eggs be fully scrambled and set before adding the other ingredients back into the pan?"
+    }
+  ]
+}

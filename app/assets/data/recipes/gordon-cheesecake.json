@@ -1,0 +1,353 @@
+{
+  "id": "gordon-cheesecake",
+  "title": "Raspberry Lemon Cheesecake",
+  "cook": {
+    "name": "Gordon",
+    "relation": "YouTube"
+  },
+  "intro": "A simple yet incredibly impressive dessert inspired by rich New York-style cheesecakes. This straightforward recipe focuses on fresh flavors and omits the traditional biscuit base, proving that the most delicious treats don't always need wild decorations.",
+  "servings": null,
+  "total_time": "~50 minutes",
+  "sample": true,
+  "source": "Gordon Ramsay (YouTube)",
+  "tags": [
+    "Dessert",
+    "Cheesecake",
+    "Baking",
+    "Fruit",
+    "New York Style"
+  ],
+  "media": {
+    "video_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-cheesecake/play.mp4?v=1791746792905761",
+    "audio_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-cheesecake/voice.m4a?v=1791746793267483",
+    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-cheesecake/poster.jpg?v=1791746851544028",
+    "duration_s": 192,
+    "width": 1280,
+    "height": 720
+  },
+  "sessions": [
+    {
+      "index": 1,
+      "recorded_at": "2026-10-11T12:14:05-07:00",
+      "offset_s": 0,
+      "duration_s": 192
+    }
+  ],
+  "ingredients": [
+    {
+      "name": "cream cheese",
+      "feel": "",
+      "estimate": "~500g",
+      "confidence": "high",
+      "first_seen_s": 19
+    },
+    {
+      "name": "sugar",
+      "feel": "",
+      "estimate": "~150g",
+      "confidence": "high",
+      "first_seen_s": 26
+    },
+    {
+      "name": "eggs",
+      "feel": "",
+      "estimate": "~3",
+      "confidence": "high",
+      "first_seen_s": 57
+    },
+    {
+      "name": "flour",
+      "feel": "a couple of tablespoons",
+      "estimate": "~30g",
+      "confidence": "high",
+      "first_seen_s": 90
+    },
+    {
+      "name": "lemon",
+      "feel": "",
+      "estimate": "~1",
+      "confidence": "high",
+      "first_seen_s": 98
+    },
+    {
+      "name": "fresh raspberries (for folding)",
+      "feel": "some",
+      "estimate": "~150g",
+      "confidence": "high",
+      "first_seen_s": 107
+    },
+    {
+      "name": "butter",
+      "feel": "",
+      "estimate": "~10g",
+      "confidence": "high",
+      "first_seen_s": 115
+    },
+    {
+      "name": "fresh raspberries (for decoration)",
+      "feel": "",
+      "estimate": "~100g",
+      "confidence": "high",
+      "first_seen_s": 167
+    }
+  ],
+  "steps": [
+    {
+      "order": 1,
+      "title": "Cream the cheese and sugar",
+      "instruction": "Leave the cream cheese out of the fridge for a few minutes until nice and soft. Add the sugar to the cream cheese and whisk them together thoroughly until the mixture is nice and creamy.",
+      "sensory_cue": "nice and soft, nice and creamy",
+      "start_s": 19,
+      "end_s": 56,
+      "quote": "Now, cream cheese, leave it out of the fridge for five or ten minutes till it's nice and soft. Trust me, your arms will be thanking you. Sugar in... Start creaming the cheese and the sugar. Work the bowl. Lift the bowl to your advantage. Really whisk. Whisk, whisk, whisk. Lovely. Nice and creamy.",
+      "wait_after": null,
+      "story_ids": [
+        "s1",
+        "s2"
+      ],
+      "special_ids": [
+        "x1"
+      ],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-cheesecake/steps/01.jpg?v=1791749453100225",
+      "substeps": [
+        {
+          "text": "Leave the cream cheese out for **5 or 10 minutes**.",
+          "detail": "Leave the cream cheese out of the fridge for a few minutes until nice and soft.",
+          "start_s": 19
+        },
+        {
+          "text": "Add the sugar to the cream cheese.",
+          "detail": null,
+          "start_s": 27
+        },
+        {
+          "text": "Whisk them together thoroughly.",
+          "detail": null,
+          "start_s": 32
+        },
+        {
+          "text": "Ready when **nice and creamy**.",
+          "detail": "Whisk them together thoroughly until the mixture is nice and creamy.",
+          "start_s": 53
+        }
+      ],
+      "uses": [
+        {
+          "name": "cream cheese",
+          "amount": "~500g"
+        },
+        {
+          "name": "sugar",
+          "amount": "~150g"
+        }
+      ],
+      "tip": "Leave the cream cheese out until soft; your arms will be thanking you."
+    },
+    {
+      "order": 2,
+      "title": "Incorporate the eggs",
+      "instruction": "Beat the eggs in a separate bowl. Whisk the beaten eggs into the cream cheese mixture bit by bit to incorporate air and prevent the mixture from separating.",
+      "sensory_cue": null,
+      "start_s": 57,
+      "end_s": 89,
+      "quote": "Now, get your eggs. Add the egg to the mixture bit by bit. Doing it this way, it's more efficient. A, you're incorporating a lot of air. B, the mixture doesn't separate.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-cheesecake/steps/02.jpg?v=1791749453357436",
+      "substeps": [
+        {
+          "text": "Beat the eggs in a separate bowl.",
+          "detail": null,
+          "start_s": 57
+        },
+        {
+          "text": "Whisk the beaten eggs into the mixture **bit by bit**.",
+          "detail": "Whisk the beaten eggs into the cream cheese mixture bit by bit to incorporate air and prevent the mixture from separating.",
+          "start_s": 64
+        }
+      ],
+      "uses": [
+        {
+          "name": "eggs",
+          "amount": "~3"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 3,
+      "title": "Add flour, lemon, and raspberries",
+      "instruction": "Whisk the flour into the batter to stop it from going lumpy. Zest the lemon directly into the bowl for freshness, then gently fold in some of the fresh raspberries, taking care not to crush them.",
+      "sensory_cue": "stops it from going lumpy, freshness",
+      "start_s": 90,
+      "end_s": 114,
+      "quote": "Now, a couple of tablespoons of flour. Give it a whisk. Stops it from going lumpy. Now, I want to scent that cheesecake. I've got the freshness, the zest of the lemon in there... Fold in some fresh raspberries. Sort of just mix them through. Be careful not to crush them.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-cheesecake/steps/03.jpg?v=1791749453635087",
+      "substeps": [
+        {
+          "text": "Whisk a couple of tablespoons of flour into the batter.",
+          "detail": "Whisk the flour into the batter to stop it from going lumpy.",
+          "start_s": 90
+        },
+        {
+          "text": "Zest the lemon directly into the bowl.",
+          "detail": null,
+          "start_s": 98
+        },
+        {
+          "text": "Gently fold in some of the fresh raspberries.",
+          "detail": "Gently fold in some of the fresh raspberries, taking care not to crush them.",
+          "start_s": 108
+        }
+      ],
+      "uses": [
+        {
+          "name": "flour",
+          "amount": "~30g"
+        },
+        {
+          "name": "lemon",
+          "amount": "~1"
+        },
+        {
+          "name": "fresh raspberries (for folding)",
+          "amount": "~150g"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 4,
+      "title": "Prepare the tin and batter",
+      "instruction": "Grease a cake tin with butter to help the cheesecake slide out easily later. Pour the mixture into the cake tin, then tap the tin on the counter to help the raspberries rise and to release trapped air pockets.",
+      "sensory_cue": "raspberries rise",
+      "start_s": 115,
+      "end_s": 144,
+      "quote": "Then grease a cake tin with butter. This will ensure your cheesecake slides out beautifully. Take your mix and let that fall in. Now take your cake tin and just tap it. The mixture hits the bottom of the cake tin, the raspberries rise and you've got raspberries at the top, the middle and the bottom. And it also stops all those little pockets of air trapping underneath.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-cheesecake/steps/04.jpg?v=1791749453949305",
+      "substeps": [
+        {
+          "text": "Grease a cake tin with butter.",
+          "detail": "Grease a cake tin with butter to help the cheesecake slide out easily later.",
+          "start_s": 115
+        },
+        {
+          "text": "Pour the mixture into the cake tin.",
+          "detail": null,
+          "start_s": 120
+        },
+        {
+          "text": "Tap the tin on the counter.",
+          "detail": "Tap the tin on the counter to help the raspberries rise and to release trapped air pockets.",
+          "start_s": 126
+        },
+        {
+          "text": "Ready when **raspberries rise**.",
+          "detail": "The mixture hits the bottom of the cake tin, the raspberries rise and you've got raspberries at the top, the middle and the bottom.",
+          "start_s": 130
+        }
+      ],
+      "uses": [
+        {
+          "name": "butter",
+          "amount": "~10g"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 5,
+      "title": "Bake and decorate",
+      "instruction": "Bake the cheesecake in the oven at 180 degrees for 35 to 40 minutes. Remove it once slightly souffled up with good color on top. Take off the tin and decorate with the remaining fresh raspberries.",
+      "sensory_cue": "slightly souffled up",
+      "start_s": 144,
+      "end_s": 176,
+      "quote": "Now into the oven, 180 degrees for 35 to 40 minutes. Mmm. Slightly souffled up. Pull off. That's the color I wanted on top. And look at it. It's one of the simplest, yet the most stylish cheesecakes anywhere.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-cheesecake/steps/05.jpg?v=1791749454239611",
+      "substeps": [
+        {
+          "text": "Bake at **180 degrees** for **35 to 40 minutes**.",
+          "detail": null,
+          "start_s": 144
+        },
+        {
+          "text": "Ready when **slightly souffled up**.",
+          "detail": "Remove it once slightly souffled up with good color on top.",
+          "start_s": 156
+        },
+        {
+          "text": "Take off the tin.",
+          "detail": null,
+          "start_s": 159
+        },
+        {
+          "text": "Decorate with the remaining fresh raspberries.",
+          "detail": null,
+          "start_s": 167
+        }
+      ],
+      "uses": [
+        {
+          "name": "fresh raspberries (for decoration)",
+          "amount": "~100g"
+        }
+      ],
+      "tip": null
+    }
+  ],
+  "stories": [
+    {
+      "id": "s1",
+      "step": 1,
+      "start_s": 0,
+      "end_s": 18,
+      "title": "Simplicity is impressive",
+      "text": "Food always has to be impressive. But when it comes to desserts, often you see sponge sugar or wild decorations. Remember, simple is always the most impressive. This cheesecake is so straightforward, yet so delicious."
+    },
+    {
+      "id": "s2",
+      "step": 1,
+      "start_s": 35,
+      "end_s": 43,
+      "title": "American inspiration",
+      "text": "Spending the amount of time I do in the States, if there's one thing they know how to do out there, is the most amazing, impressive cheesecake. Rich, delicious, but so simple."
+    }
+  ],
+  "special": [
+    {
+      "id": "x1",
+      "step": 1,
+      "start_s": 28,
+      "end_s": 32,
+      "text": "This cheesecake is a New York cheesecake because it's baked, so there's no base.",
+      "why": "Most cheesecakes have a graham cracker or biscuit base, but this recipe omits it entirely."
+    }
+  ],
+  "follow_up_questions": [
+    {
+      "id": "q1",
+      "about_step": 4,
+      "question": "What size cake tin works best for this amount of batter?"
+    },
+    {
+      "id": "q2",
+      "about_step": 5,
+      "question": "Should the cheesecake be allowed to cool down completely before removing the tin, or is it better to take it off while warm?"
+    },
+    {
+      "id": "q3",
+      "about_step": 5,
+      "question": "Is the 180-degree oven temperature for a fan or conventional oven?"
+    }
+  ]
+}

@@ -1,0 +1,427 @@
+{
+  "id": "grandma-red-braised-pork",
+  "title": "Grandma's Red-Braised Pork Belly",
+  "cook": {
+    "name": "Grandma",
+    "relation": "Grandma"
+  },
+  "intro": "This is the dish Grandma makes when someone is coming home, and she always cooks it the night before so it is ready when the car pulls in. She burned the sugar three times the first time she tried it, and Grandpa ate every bite anyway.",
+  "servings": "4 to 6",
+  "total_time": "~2 hrs, plus overnight",
+  "sample": true,
+  "source": null,
+  "tags": [
+    "pork",
+    "braise",
+    "special occasion"
+  ],
+  "media": {
+    "video_url": null,
+    "audio_url": null,
+    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/grandma-red-braised-pork/poster.jpg?v=1791752792527788",
+    "duration_s": 2400,
+    "width": null,
+    "height": null
+  },
+  "sessions": [
+    {
+      "index": 1,
+      "recorded_at": "2026-09-20T14:05:00-07:00",
+      "offset_s": 0,
+      "duration_s": 1740
+    },
+    {
+      "index": 2,
+      "recorded_at": "2026-09-21T06:50:00-07:00",
+      "offset_s": 1740,
+      "duration_s": 660
+    }
+  ],
+  "ingredients": [
+    {
+      "name": "pork belly",
+      "feel": "one long strip, as thick as my palm",
+      "estimate": "~1.5 lb",
+      "confidence": "medium",
+      "first_seen_s": 50
+    },
+    {
+      "name": "ginger",
+      "feel": "a few coins, no need to peel",
+      "estimate": "~4 thin slices",
+      "confidence": "medium",
+      "first_seen_s": 160
+    },
+    {
+      "name": "rock sugar",
+      "feel": "a handful of the big yellow chunks",
+      "estimate": "~3 tbsp",
+      "confidence": "low",
+      "first_seen_s": 450
+    },
+    {
+      "name": "Shaoxing wine",
+      "feel": "two good splashes around the edge of the wok",
+      "estimate": "~1/4 cup",
+      "confidence": "medium",
+      "first_seen_s": 730
+    },
+    {
+      "name": "light soy sauce",
+      "feel": "two soup spoons, for the salty taste",
+      "estimate": "~2 tbsp",
+      "confidence": "medium",
+      "first_seen_s": 790
+    },
+    {
+      "name": "dark soy sauce",
+      "feel": "one small spoon, only for the color",
+      "estimate": "~2 tsp",
+      "confidence": "low",
+      "first_seen_s": 840
+    },
+    {
+      "name": "scallion",
+      "feel": "three stalks tied in a knot",
+      "estimate": "~3 scallions",
+      "confidence": "high",
+      "first_seen_s": 880
+    },
+    {
+      "name": "star anise",
+      "feel": "two stars, no more",
+      "estimate": "~2 whole pods",
+      "confidence": "high",
+      "first_seen_s": 900
+    },
+    {
+      "name": "hot water",
+      "feel": "until it just touches the top of the pork, like a bath up to the chin",
+      "estimate": "~3 cups",
+      "confidence": "low",
+      "first_seen_s": 1070
+    }
+  ],
+  "steps": [
+    {
+      "order": 1,
+      "title": "Cut and blanch the pork",
+      "instruction": "Cut the pork belly into chunky cubes about the size of a mahjong tile. Cover them with cold water and the ginger slices, bring to a boil and skim the foam, then drain and rinse the pork.",
+      "sensory_cue": "grey foam rises and you skim it away; the pork turns pale and clean",
+      "start_s": 45,
+      "end_s": 420,
+      "quote": "Cold water first, always. Then the dirty foam comes up and you take it away. Clean pork, clean taste.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": null,
+      "substeps": [
+        {
+          "text": "Cut the pork belly into chunky cubes.",
+          "detail": null
+        },
+        {
+          "text": "Cover with cold water and the ginger slices.",
+          "detail": null
+        },
+        {
+          "text": "Bring to a boil and skim the foam.",
+          "detail": null
+        },
+        {
+          "text": "Drain and rinse the pork.",
+          "detail": null
+        },
+        {
+          "text": "Ready when **pale and clean**.",
+          "detail": "Grey foam rises and you skim it away; the pork turns pale and clean."
+        }
+      ],
+      "uses": [
+        {
+          "name": "pork belly",
+          "amount": "~1.5 lb"
+        },
+        {
+          "name": "ginger",
+          "amount": "~4 thin slices"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 2,
+      "title": "Melt the sugar to amber",
+      "instruction": "Put the rock sugar in a dry wok over low heat and stir until it melts into a deep amber caramel. Add the pork and turn it until every piece is coated.",
+      "sensory_cue": "the bubbles go from big to small and the color is tea or honey, never dark",
+      "start_s": 440,
+      "end_s": 700,
+      "quote": "Watch the color. Tea color, honey color, stop. If it goes dark it is bitter and you start again.",
+      "wait_after": null,
+      "story_ids": [
+        "s1"
+      ],
+      "special_ids": [],
+      "image_url": null,
+      "substeps": [
+        {
+          "text": "Put the rock sugar in a dry wok.",
+          "detail": null
+        },
+        {
+          "text": "Stir on **low** until it melts.",
+          "detail": "Stir until it melts into a deep amber caramel."
+        },
+        {
+          "text": "Add the pork and turn to coat.",
+          "detail": null
+        },
+        {
+          "text": "Ready when **tea or honey color**.",
+          "detail": "The bubbles go from big to small and the color is tea or honey, never dark."
+        }
+      ],
+      "uses": [
+        {
+          "name": "rock sugar",
+          "amount": "~3 tbsp"
+        },
+        {
+          "name": "pork belly",
+          "amount": null
+        }
+      ],
+      "tip": "Watch the color. If it goes dark it is bitter and you start again."
+    },
+    {
+      "order": 3,
+      "title": "Wine, soy and the sweet spices",
+      "instruction": "Splash in the Shaoxing wine, then the light and dark soy sauce. Tuck in the knotted scallion and star anise and stir until the pork is shiny and red.",
+      "sensory_cue": "the pork turns glossy and deep red, and the wok smells sweet and salty together",
+      "start_s": 720,
+      "end_s": 1050,
+      "quote": "Dark soy is for color, light soy is for taste. Red is the color of a happy table.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": null,
+      "substeps": [
+        {
+          "text": "Splash in the Shaoxing wine.",
+          "detail": null
+        },
+        {
+          "text": "Add the light and dark soy sauce.",
+          "detail": null
+        },
+        {
+          "text": "Tuck in the knotted scallion and star anise.",
+          "detail": null
+        },
+        {
+          "text": "Stir until the pork is shiny and red.",
+          "detail": null
+        },
+        {
+          "text": "Ready when **glossy and deep red**.",
+          "detail": "The pork turns glossy and deep red, and the wok smells sweet and salty together."
+        }
+      ],
+      "uses": [
+        {
+          "name": "Shaoxing wine",
+          "amount": "~1/4 cup"
+        },
+        {
+          "name": "light soy sauce",
+          "amount": "~2 tbsp"
+        },
+        {
+          "name": "dark soy sauce",
+          "amount": "~2 tsp"
+        },
+        {
+          "name": "scallion",
+          "amount": "~3 scallions"
+        },
+        {
+          "name": "star anise",
+          "amount": "~2 whole pods"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 4,
+      "title": "Braise low and slow",
+      "instruction": "Pour in hot water until it just covers the pork and bring to a boil. Turn the heat to low, cover and braise about an hour, then let the pot cool and keep it covered overnight.",
+      "sensory_cue": "a chopstick slides through the fat like butter and the sauce is dark and loose",
+      "start_s": 1060,
+      "end_s": 1730,
+      "quote": "Hot water from the kettle, never cold. Then you leave it alone and let the pot do its job.",
+      "wait_after": "overnight, ~16 hrs",
+      "story_ids": [],
+      "special_ids": [
+        "x1"
+      ],
+      "image_url": null,
+      "substeps": [
+        {
+          "text": "Pour in hot water to cover the pork.",
+          "detail": null
+        },
+        {
+          "text": "Bring to a boil.",
+          "detail": null
+        },
+        {
+          "text": "Cover and braise on **low** for **about an hour**.",
+          "detail": null
+        },
+        {
+          "text": "Let the pot cool and keep covered **overnight**.",
+          "detail": null
+        },
+        {
+          "text": "Ready when **a chopstick slides through**.",
+          "detail": "A chopstick slides through the fat like butter and the sauce is dark and loose."
+        }
+      ],
+      "uses": [
+        {
+          "name": "hot water",
+          "amount": "~3 cups"
+        }
+      ],
+      "tip": "Hot water from the kettle, never cold. Cold water can make the meat tighten up."
+    },
+    {
+      "order": 5,
+      "title": "Reheat and reduce the sauce",
+      "instruction": "The next morning, warm the pork gently, then take off the lid and turn up the heat. Spoon the sauce over the pork until it thickens into a glossy glaze.",
+      "sensory_cue": "the sauce coats the back of a spoon and the bubbles turn slow and big",
+      "start_s": 1760,
+      "end_s": 2160,
+      "quote": "Now we take the lid off. Stay close. This is where the sauce becomes sauce.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [
+        "x2"
+      ],
+      "image_url": null,
+      "substeps": [
+        {
+          "text": "Warm the pork gently.",
+          "detail": null
+        },
+        {
+          "text": "Take off the lid and turn up the heat.",
+          "detail": null
+        },
+        {
+          "text": "Spoon the sauce over the pork.",
+          "detail": "Spoon the sauce over the pork until it thickens into a glossy glaze."
+        },
+        {
+          "text": "Ready when **bubbles turn slow and big**.",
+          "detail": "The sauce coats the back of a spoon and the bubbles turn slow and big."
+        }
+      ],
+      "uses": [],
+      "tip": null
+    },
+    {
+      "order": 6,
+      "title": "Plate and serve hot",
+      "instruction": "Spoon the pork and all the glaze onto a deep plate, scatter fresh scallion greens over the top and bring it to the table while it is still steaming.",
+      "sensory_cue": "glaze that shines and just barely moves when you tilt the plate",
+      "start_s": 2180,
+      "end_s": 2370,
+      "quote": "Eat it over rice. The sauce is the best part, so do not leave any on the plate.",
+      "wait_after": null,
+      "story_ids": [
+        "s2"
+      ],
+      "special_ids": [],
+      "image_url": null,
+      "substeps": [
+        {
+          "text": "Spoon the pork and glaze onto a deep plate.",
+          "detail": null
+        },
+        {
+          "text": "Scatter fresh scallion greens over the top.",
+          "detail": null
+        },
+        {
+          "text": "Bring it to the table while steaming.",
+          "detail": null
+        },
+        {
+          "text": "Ready when **glaze just barely moves**.",
+          "detail": "Glaze that shines and just barely moves when you tilt the plate."
+        }
+      ],
+      "uses": [
+        {
+          "name": "scallion",
+          "amount": null
+        }
+      ],
+      "tip": null
+    }
+  ],
+  "stories": [
+    {
+      "id": "s1",
+      "step": 2,
+      "start_s": 500,
+      "end_s": 600,
+      "title": "Three burned pots of sugar",
+      "text": "The first time I made this, I burned the sugar three times. Three! Your grandfather ate it anyway and said it tasted like a campfire. He never complained, that man. After that I learned to listen: when the bubbles go from big to small, you take it off the fire."
+    },
+    {
+      "id": "s2",
+      "step": 6,
+      "start_s": 2220,
+      "end_s": 2320,
+      "title": "For when somebody comes home",
+      "text": "This dish is for when somebody is coming home. When your father came back from college, I made it the night before so it would be ready when his car pulled in. He would stand in the kitchen with a spoon, eating the sauce straight from the pot, and I would pretend to scold him."
+    }
+  ],
+  "special": [
+    {
+      "id": "x1",
+      "step": 4,
+      "start_s": 1100,
+      "end_s": 1140,
+      "text": "Adds hot water from the kettle, never cold",
+      "why": "Cold water can make the meat tighten up; hot water keeps the pork tender and the sauce from turning dull."
+    },
+    {
+      "id": "x2",
+      "step": 5,
+      "start_s": 1800,
+      "end_s": 1850,
+      "text": "Lets the pork sit overnight before the final reduction",
+      "why": "Most recipes serve straight from the first braise; she says a night in the pot lets the flavor sink all the way into the fat."
+    }
+  ],
+  "follow_up_questions": [
+    {
+      "id": "q1",
+      "about_step": 2,
+      "question": "Grandma, how long does the sugar take to turn the color of tea on your stove?"
+    },
+    {
+      "id": "q2",
+      "about_step": 4,
+      "question": "About how many minutes does the braise take before the chopstick test works?"
+    },
+    {
+      "id": "q3",
+      "about_step": 3,
+      "question": "Which brand of dark soy sauce do you buy, and where do you find it?"
+    }
+  ]
+}

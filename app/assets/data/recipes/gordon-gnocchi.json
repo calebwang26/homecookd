@@ -1,0 +1,536 @@
+{
+  "id": "gordon-gnocchi",
+  "title": "Potato Gnocchi with Peas",
+  "cook": {
+    "name": "Gordon",
+    "relation": "YouTube"
+  },
+  "intro": "This recipe elevates classic potato gnocchi by pan-frying the boiled dumplings to give them a delicious crispy exterior. Paired with fresh garden peas, thyme, and a bright touch of lemon zest, it creates a perfectly balanced and flavorful dish.",
+  "servings": "2 servings",
+  "total_time": "~45 minutes",
+  "sample": true,
+  "source": "Gordon Ramsay (YouTube)",
+  "tags": [
+    "Gnocchi",
+    "Italian",
+    "Vegetarian",
+    "Pasta",
+    "Main Course"
+  ],
+  "media": {
+    "video_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/play.mp4?v=1791746795363729",
+    "audio_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/voice.m4a?v=1791746795749616",
+    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/poster.jpg?v=1791746852045121",
+    "duration_s": 291,
+    "width": 1280,
+    "height": 720
+  },
+  "sessions": [
+    {
+      "index": 1,
+      "recorded_at": "2026-10-11T12:16:01-07:00",
+      "offset_s": 0,
+      "duration_s": 291
+    }
+  ],
+  "ingredients": [
+    {
+      "name": "baked potatoes",
+      "feel": "",
+      "estimate": "~2 medium",
+      "confidence": "high",
+      "first_seen_s": 14
+    },
+    {
+      "name": "ricotta",
+      "feel": "a nice spoon",
+      "estimate": "~2 tbsp",
+      "confidence": "high",
+      "first_seen_s": 60
+    },
+    {
+      "name": "salt",
+      "feel": "a little touch",
+      "estimate": "~1/4 tsp",
+      "confidence": "medium",
+      "first_seen_s": 60
+    },
+    {
+      "name": "pepper (for dough)",
+      "feel": "a little touch",
+      "estimate": "~1/4 tsp",
+      "confidence": "medium",
+      "first_seen_s": 60
+    },
+    {
+      "name": "flour (for dough)",
+      "feel": "",
+      "estimate": "~1/2 cup",
+      "confidence": "high",
+      "first_seen_s": 69
+    },
+    {
+      "name": "egg",
+      "feel": "One",
+      "estimate": "~1 large",
+      "confidence": "high",
+      "first_seen_s": 74
+    },
+    {
+      "name": "thyme flowers",
+      "feel": "some",
+      "estimate": "~1 tbsp",
+      "confidence": "medium",
+      "first_seen_s": 91
+    },
+    {
+      "name": "flour (for kneading and dusting)",
+      "feel": "a little touch",
+      "estimate": "~1 tbsp",
+      "confidence": "low",
+      "first_seen_s": 104
+    },
+    {
+      "name": "water",
+      "feel": "",
+      "estimate": "~2 liters",
+      "confidence": "medium",
+      "first_seen_s": 166
+    },
+    {
+      "name": "olive oil (for boiling)",
+      "feel": "A little touch",
+      "estimate": "~1 tbsp",
+      "confidence": "low",
+      "first_seen_s": 166
+    },
+    {
+      "name": "olive oil (for sautéing)",
+      "feel": "",
+      "estimate": "~2 tbsp",
+      "confidence": "high",
+      "first_seen_s": 199
+    },
+    {
+      "name": "pepper (for sautéing)",
+      "feel": "",
+      "estimate": "~1/2 tsp",
+      "confidence": "medium",
+      "first_seen_s": 216
+    },
+    {
+      "name": "fresh garden peas",
+      "feel": "",
+      "estimate": "~1/2 cup",
+      "confidence": "high",
+      "first_seen_s": 249
+    },
+    {
+      "name": "butter",
+      "feel": "",
+      "estimate": "~2 tbsp",
+      "confidence": "high",
+      "first_seen_s": 249
+    },
+    {
+      "name": "fresh thyme",
+      "feel": "a little bit",
+      "estimate": "~1 tsp",
+      "confidence": "medium",
+      "first_seen_s": 249
+    },
+    {
+      "name": "fresh lemon",
+      "feel": "",
+      "estimate": "~1/2 lemon",
+      "confidence": "high",
+      "first_seen_s": 263
+    },
+    {
+      "name": "grated parmesan cheese",
+      "feel": "a touch",
+      "estimate": "~2 tbsp",
+      "confidence": "high",
+      "first_seen_s": 276
+    }
+  ],
+  "steps": [
+    {
+      "order": 1,
+      "title": "Prepare the Potatoes",
+      "instruction": "Cut the baked potatoes in half and scoop out the insides with a spoon. Pass the scooped potato through a ricer into a bowl by gently squeezing it.",
+      "sensory_cue": "nice and light... almost like fluffy little strands of potato",
+      "start_s": 14,
+      "end_s": 59,
+      "quote": "Cut them in half. Take a spoon and scoop the inside of those potatoes. Just squeeze gently. You can see how nice and light it is, almost like fluffy little strands of potato.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/steps/01.jpg?v=1791749455119567",
+      "substeps": [
+        {
+          "text": "Cut the potatoes in half.",
+          "detail": null,
+          "start_s": 14
+        },
+        {
+          "text": "Scoop out the insides with a spoon.",
+          "detail": null,
+          "start_s": 21
+        },
+        {
+          "text": "Pass the potato through a ricer into a bowl.",
+          "detail": null,
+          "start_s": 38
+        },
+        {
+          "text": "Ready when **almost like fluffy little strands**.",
+          "detail": "You can see how nice and light it is, almost like fluffy little strands of potato.",
+          "start_s": 45
+        }
+      ],
+      "uses": [
+        {
+          "name": "baked potatoes",
+          "amount": "~2 medium"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 2,
+      "title": "Mix the Dough Ingredients",
+      "instruction": "Add ricotta, salt, and pepper to the riced potatoes. Sift flour over the top to avoid lumps. Whisk an egg and pour it into a well in the center. Pick the tips of thyme flowers into the bowl and give everything a good mix.",
+      "sensory_cue": "no lumps, nice soft pliable ball of dough, light, fragrant",
+      "start_s": 60,
+      "end_s": 104,
+      "quote": "Now, a nice spoon of ricotta in. A little touch of salt and pepper. Flour over the ricotta, sieved so there's no lumps. One delicious egg, give that a little whisk. Now, make a little well in the center. You want a nice soft pliable ball of dough. Give that a really good mix. Get some thyme flowers in there... Just pick the little tips of the thyme flowers.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/steps/02.jpg?v=1791749455339230",
+      "substeps": [
+        {
+          "text": "Add ricotta, salt, and pepper to the potatoes.",
+          "detail": null,
+          "start_s": 60
+        },
+        {
+          "text": "Sift flour over the top.",
+          "detail": "Sift flour over the top. Sieve the flour so there are no lumps.",
+          "start_s": 69
+        },
+        {
+          "text": "Whisk the egg and pour into a center well.",
+          "detail": null,
+          "start_s": 74
+        },
+        {
+          "text": "Pick the tips of thyme flowers into the bowl.",
+          "detail": null,
+          "start_s": 91
+        },
+        {
+          "text": "Ready when **a nice soft pliable ball**.",
+          "detail": "Give that a really good mix until you have a nice soft pliable ball of dough.",
+          "start_s": 102
+        }
+      ],
+      "uses": [
+        {
+          "name": "ricotta",
+          "amount": "~2 tbsp"
+        },
+        {
+          "name": "salt",
+          "amount": "~1/4 tsp"
+        },
+        {
+          "name": "pepper (for dough)",
+          "amount": "~1/4 tsp"
+        },
+        {
+          "name": "flour (for dough)",
+          "amount": "~1/2 cup"
+        },
+        {
+          "name": "egg",
+          "amount": "~1 large"
+        },
+        {
+          "name": "thyme flowers",
+          "amount": "~1 tbsp"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 3,
+      "title": "Knead and Roll the Dough",
+      "instruction": "Generously flour your hands and gently knead the mixture into a soft dough, adding a little extra flour if it feels too wet. Cut the dough ball in half and gently roll each half out into a long, uniform cigar shape.",
+      "sensory_cue": "nice and smooth",
+      "start_s": 104,
+      "end_s": 146,
+      "quote": "Next, flour your hands generously and knead the mixture into a dough. Cut the ball in half. Lightly flour the hands and just roll it gently. And just think of a big long cigar.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/steps/03.jpg?v=1791749455544007",
+      "substeps": [
+        {
+          "text": "Generously flour your hands.",
+          "detail": null,
+          "start_s": 104
+        },
+        {
+          "text": "Gently knead the mixture into a soft dough.",
+          "detail": "Gently knead the mixture into a soft dough. Add a little extra flour if it feels too wet.",
+          "start_s": 107
+        },
+        {
+          "text": "Cut the dough ball in half.",
+          "detail": null,
+          "start_s": 132
+        },
+        {
+          "text": "Gently roll each half out.",
+          "detail": "Gently roll each half out. Just think of a big long cigar.",
+          "start_s": 134
+        }
+      ],
+      "uses": [
+        {
+          "name": "flour (for kneading and dusting)",
+          "amount": "~1 tbsp"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 4,
+      "title": "Cut and Shape the Gnocchi",
+      "instruction": "Lightly flour a knife to prevent sticking, and cut the dough logs into bite-size pieces. Dip a finger in flour and gently press down into the center of each gnocchi piece to create a small indentation.",
+      "sensory_cue": "look like a pillow",
+      "start_s": 146,
+      "end_s": 166,
+      "quote": "Now, lightly flour the knife so when you slice the gnocchi it doesn't stick. Cut the dough into bite-size pieces. Just take your finger, dip it in the flour, and push down.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/steps/04.jpg?v=1791749455765711",
+      "substeps": [
+        {
+          "text": "Lightly flour a knife.",
+          "detail": "Lightly flour the knife so when you slice the gnocchi it doesn't stick.",
+          "start_s": 146
+        },
+        {
+          "text": "Cut the dough logs into bite-size pieces.",
+          "detail": null,
+          "start_s": 152
+        },
+        {
+          "text": "Dip a finger in flour.",
+          "detail": null,
+          "start_s": 155
+        },
+        {
+          "text": "Gently press down into the center of each piece.",
+          "detail": "Gently press down into the center of each piece. Push down to create a small indentation.",
+          "start_s": 157
+        }
+      ],
+      "uses": [
+        {
+          "name": "flour (for kneading and dusting)",
+          "amount": null
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 5,
+      "title": "Boil the Gnocchi",
+      "instruction": "Bring a large pot of water to a rolling boil and add a touch of olive oil. With lightly floured hands, drop the gnocchi into the water and cook until they float to the surface.",
+      "sensory_cue": "when they start floating",
+      "start_s": 166,
+      "end_s": 189,
+      "quote": "Lightly flour your hand, lift up the gnocchi, in to the rolling boiling water... And they start to sort of tell you they're cooked when they start floating.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/steps/05.jpg?v=1791749455953777",
+      "substeps": [
+        {
+          "text": "Bring a large pot of water to a **rolling boil**.",
+          "detail": null,
+          "start_s": 166
+        },
+        {
+          "text": "Add a touch of olive oil.",
+          "detail": null,
+          "start_s": 171
+        },
+        {
+          "text": "Drop the gnocchi into the water.",
+          "detail": "Drop the gnocchi into the water. Lift up the gnocchi with lightly floured hands and drop them in.",
+          "start_s": 173
+        },
+        {
+          "text": "Ready when **they start floating**.",
+          "detail": "They start to sort of tell you they're cooked when they start floating to the surface.",
+          "start_s": 185
+        }
+      ],
+      "uses": [
+        {
+          "name": "water",
+          "amount": "~2 liters"
+        },
+        {
+          "name": "olive oil (for boiling)",
+          "amount": "~1 tbsp"
+        },
+        {
+          "name": "flour (for kneading and dusting)",
+          "amount": null
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 6,
+      "title": "Sauté the Gnocchi",
+      "instruction": "Preheat a frying pan with olive oil until hot. Scoop the floating gnocchi from the boiling water, drain any excess liquid, and transfer them directly into the hot pan. Add pepper and sauté until they expand and develop a crispy, browned exterior.",
+      "sensory_cue": "nice and hot, doubled in size, really nice little sort of brown color",
+      "start_s": 189,
+      "end_s": 249,
+      "quote": "Get a pan on. Get that nice and hot. To sauté the gnocchi, heat olive oil in a frying pan... Drain it, get rid of the excess water, and straight in to the hot pan. This is where they start to take on a completely different texture. Nice crisp sautéed texture on the outside.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [
+        "x1"
+      ],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/steps/06.jpg?v=1791749456168456",
+      "substeps": [
+        {
+          "text": "Preheat a frying pan with olive oil until **hot**.",
+          "detail": null,
+          "start_s": 189
+        },
+        {
+          "text": "Scoop the floating gnocchi from the water.",
+          "detail": null,
+          "start_s": 203
+        },
+        {
+          "text": "Drain any excess liquid.",
+          "detail": null,
+          "start_s": 207
+        },
+        {
+          "text": "Transfer them directly into the hot pan.",
+          "detail": null,
+          "start_s": 210
+        },
+        {
+          "text": "Add pepper and sauté.",
+          "detail": "Add pepper and sauté. Sauté until they expand and develop a nice crisp sautéed texture on the outside.",
+          "start_s": 223
+        }
+      ],
+      "uses": [
+        {
+          "name": "olive oil (for sautéing)",
+          "amount": "~2 tbsp"
+        },
+        {
+          "name": "pepper (for sautéing)",
+          "amount": "~1/2 tsp"
+        }
+      ],
+      "tip": "Frying the gnocchi after boiling them adds a crispy texture to the outside."
+    },
+    {
+      "order": 7,
+      "title": "Add Peas and Finishing Touches",
+      "instruction": "Add fresh garden peas, butter, and fresh thyme to the pan, allowing the butter to brown and flavor the dish. Finish by zesting fresh lemon over the top and serving with a touch of grated parmesan cheese.",
+      "sensory_cue": "beurre noisette flavor, Smells incredible.",
+      "start_s": 249,
+      "end_s": 291,
+      "quote": "Fresh garden peas in. And the butter gives it that really nice sort of beurre noisette flavor on the end. And then finally, I want to lift it up. Fresh lemon. Zest the lemon over. And then finally, seal the deal with a touch of grated parmesan cheese.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/gordon-gnocchi/steps/07.jpg?v=1791749456392324",
+      "substeps": [
+        {
+          "text": "Add fresh garden peas, butter, and fresh thyme.",
+          "detail": "Add fresh garden peas, butter, and fresh thyme. Allow the butter to brown and flavor the dish.",
+          "start_s": 249
+        },
+        {
+          "text": "Zest fresh lemon over the top.",
+          "detail": null,
+          "start_s": 263
+        },
+        {
+          "text": "Serve with a touch of grated parmesan cheese.",
+          "detail": null,
+          "start_s": 275
+        }
+      ],
+      "uses": [
+        {
+          "name": "fresh garden peas",
+          "amount": "~1/2 cup"
+        },
+        {
+          "name": "butter",
+          "amount": "~2 tbsp"
+        },
+        {
+          "name": "fresh thyme",
+          "amount": "~1 tsp"
+        },
+        {
+          "name": "fresh lemon",
+          "amount": "~1/2 lemon"
+        },
+        {
+          "name": "grated parmesan cheese",
+          "amount": "~2 tbsp"
+        }
+      ],
+      "tip": null
+    }
+  ],
+  "stories": [],
+  "special": [
+    {
+      "id": "x1",
+      "step": 6,
+      "start_s": 196,
+      "end_s": 199,
+      "text": "Frying the gnocchi after boiling them.",
+      "why": "Gnocchi is typically just boiled and served with a sauce, but frying them adds a crispy texture to the outside."
+    }
+  ],
+  "follow_up_questions": [
+    {
+      "id": "q1",
+      "about_step": 1,
+      "question": "How long and at what temperature were the potatoes baked before making the dough?"
+    },
+    {
+      "id": "q2",
+      "about_step": 3,
+      "question": "About how long should we knead the dough to ensure it stays light and doesn't become tough?"
+    },
+    {
+      "id": "q3",
+      "about_step": 6,
+      "question": "What heat level should the frying pan be on to achieve a crisp brown crust without burning the oil or the butter later?"
+    }
+  ]
+}

@@ -1,0 +1,393 @@
+{
+  "id": "dad-ginger-scallion-fish",
+  "title": "Dad's Grilled Fish with Ginger-Scallion Sauce",
+  "cook": {
+    "name": "Dad",
+    "relation": "Dad"
+  },
+  "intro": "Dad grew up with a Friday fish wrapped in newspaper, and now he grills one whole on summer evenings with the head still on. The best part is the sizzle of hot oil over ginger and scallion, and the cheek always goes to the oldest person at the table.",
+  "servings": "4",
+  "total_time": "~45 min",
+  "sample": true,
+  "source": null,
+  "tags": [
+    "fish",
+    "grill",
+    "summer"
+  ],
+  "media": {
+    "video_url": null,
+    "audio_url": null,
+    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/dad-ginger-scallion-fish/poster.jpg?v=1791750647094774",
+    "duration_s": 1800,
+    "width": null,
+    "height": null
+  },
+  "sessions": [
+    {
+      "index": 1,
+      "recorded_at": "2026-09-27T17:40:00-07:00",
+      "offset_s": 0,
+      "duration_s": 1800
+    }
+  ],
+  "ingredients": [
+    {
+      "name": "whole fish",
+      "feel": "one good one, about as long as my forearm, head on",
+      "estimate": "~2 lb whole branzino",
+      "confidence": "medium",
+      "first_seen_s": 55
+    },
+    {
+      "name": "kosher salt",
+      "feel": "a good rub all over, then a pinch for the sauce later",
+      "estimate": "~1 tbsp",
+      "confidence": "low",
+      "first_seen_s": 120
+    },
+    {
+      "name": "ginger",
+      "feel": "a piece as big as my thumb",
+      "estimate": "~2 tbsp minced",
+      "confidence": "medium",
+      "first_seen_s": 360
+    },
+    {
+      "name": "scallion",
+      "feel": "a big bunch, I don't count",
+      "estimate": "~6 scallions",
+      "confidence": "medium",
+      "first_seen_s": 460
+    },
+    {
+      "name": "neutral oil",
+      "feel": "a wipe for the grate, then a small pot's worth for the sauce",
+      "estimate": "~1/2 cup",
+      "confidence": "low",
+      "first_seen_s": 700
+    },
+    {
+      "name": "rice vinegar",
+      "feel": "a splash, just enough to wake it up",
+      "estimate": "~2 tsp",
+      "confidence": "low",
+      "first_seen_s": 1470
+    }
+  ],
+  "steps": [
+    {
+      "order": 1,
+      "title": "Dry, score and salt the fish",
+      "instruction": "Rinse the fish and pat it very dry inside and out. Cut three deep slashes on each side down to the bone, then rub salt over the skin and inside the belly.",
+      "sensory_cue": "the slashes open to the bone and the skin feels dry to the touch",
+      "start_s": 50,
+      "end_s": 330,
+      "quote": "Dry skin, that's the whole secret. If it's wet it steams and sticks to the grill.",
+      "wait_after": null,
+      "story_ids": [
+        "s1"
+      ],
+      "special_ids": [],
+      "image_url": null,
+      "substeps": [
+        {
+          "text": "Rinse the fish and pat it very dry.",
+          "detail": null
+        },
+        {
+          "text": "Cut **three** deep slashes on each side.",
+          "detail": null
+        },
+        {
+          "text": "Rub salt over the skin and inside the belly.",
+          "detail": null
+        }
+      ],
+      "uses": [
+        {
+          "name": "whole fish",
+          "amount": "~2 lb whole branzino"
+        },
+        {
+          "name": "kosher salt",
+          "amount": "~1 tbsp"
+        }
+      ],
+      "tip": "Dry skin is the secret. If it's wet it steams and sticks to the grill."
+    },
+    {
+      "order": 2,
+      "title": "Chop the ginger and scallion",
+      "instruction": "Mince the ginger very fine and slice the scallions into thin rings. Put both in a heatproof bowl and set it near the stove.",
+      "sensory_cue": "ginger as fine as grains of rice, and scallions in thin even rings",
+      "start_s": 340,
+      "end_s": 640,
+      "quote": "The finer the ginger, the less it bites back. Take your time with the knife.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": null,
+      "substeps": [
+        {
+          "text": "Mince the ginger very fine.",
+          "detail": null
+        },
+        {
+          "text": "Slice the scallions into thin rings.",
+          "detail": null
+        },
+        {
+          "text": "Put both in a heatproof bowl.",
+          "detail": null
+        },
+        {
+          "text": "Ready when **fine as grains of rice**.",
+          "detail": "Ginger as fine as grains of rice, and scallions in thin even rings."
+        }
+      ],
+      "uses": [
+        {
+          "name": "ginger",
+          "amount": "~2 tbsp minced"
+        },
+        {
+          "name": "scallion",
+          "amount": "~6 scallions"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 3,
+      "title": "Heat and oil the grill",
+      "instruction": "Heat the grill to medium-high, scrape the grate clean, and wipe it with a folded paper towel dipped in oil and held in tongs.",
+      "sensory_cue": "the grate is too hot to hold your hand over for more than three seconds, and it shines with oil",
+      "start_s": 650,
+      "end_s": 900,
+      "quote": "Count with me. One, two, three, hand off. That's hot enough.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": null,
+      "substeps": [
+        {
+          "text": "Heat the grill to **medium-high**.",
+          "detail": null
+        },
+        {
+          "text": "Scrape the grate clean.",
+          "detail": null
+        },
+        {
+          "text": "Wipe with a paper towel dipped in oil.",
+          "detail": null
+        },
+        {
+          "text": "Ready when **it shines with oil**.",
+          "detail": "The grate is too hot to hold your hand over for more than three seconds, and it shines with oil."
+        }
+      ],
+      "uses": [
+        {
+          "name": "neutral oil",
+          "amount": null
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 4,
+      "title": "Grill the fish, flip once",
+      "instruction": "Lay the fish on the grate and leave it alone for about 6 minutes a side, then flip once with two spatulas when the skin lets go on its own. Cook until the flesh near the bone is opaque.",
+      "sensory_cue": "the skin lifts off the grate by itself and turns blistered and golden in spots",
+      "start_s": 910,
+      "end_s": 1350,
+      "quote": "If it sticks, it's not ready yet. The fish tells you when to flip.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [
+        "x1"
+      ],
+      "image_url": null,
+      "substeps": [
+        {
+          "text": "Lay the fish on the grate.",
+          "detail": null
+        },
+        {
+          "text": "Leave it alone for **about 6 minutes** a side.",
+          "detail": null
+        },
+        {
+          "text": "Flip once with two spatulas.",
+          "detail": null
+        },
+        {
+          "text": "Cook until the flesh near the bone is opaque.",
+          "detail": null
+        },
+        {
+          "text": "Ready when **the skin lifts off**.",
+          "detail": "The skin lifts off the grate by itself and turns blistered and golden in spots."
+        }
+      ],
+      "uses": [
+        {
+          "name": "whole fish",
+          "amount": null
+        }
+      ],
+      "tip": "If it sticks, it's not ready yet. The fish tells you when to flip."
+    },
+    {
+      "order": 5,
+      "title": "Sizzle the sauce",
+      "instruction": "Heat the oil in a small pot until it shimmers and pour it over the ginger, scallion and a pinch of salt so it sizzles loudly. When it settles, stir in a splash of rice vinegar.",
+      "sensory_cue": "the oil shimmers, a scallion ring dropped in sizzles right away, and the kitchen smells of ginger",
+      "start_s": 1360,
+      "end_s": 1580,
+      "quote": "Listen. If it doesn't sizzle, the oil's not hot enough. That sound is the whole sauce waking up.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [
+        "x2"
+      ],
+      "image_url": null,
+      "substeps": [
+        {
+          "text": "Heat the oil until it shimmers.",
+          "detail": null
+        },
+        {
+          "text": "Pour over the ginger, scallion and **a pinch** of salt.",
+          "detail": null
+        },
+        {
+          "text": "Stir in a splash of rice vinegar.",
+          "detail": null
+        },
+        {
+          "text": "Ready when **it sizzles right away**.",
+          "detail": "The oil shimmers, a scallion ring dropped in sizzles right away, and the kitchen smells of ginger."
+        }
+      ],
+      "uses": [
+        {
+          "name": "neutral oil",
+          "amount": "~1/2 cup"
+        },
+        {
+          "name": "ginger",
+          "amount": null
+        },
+        {
+          "name": "scallion",
+          "amount": null
+        },
+        {
+          "name": "kosher salt",
+          "amount": null
+        },
+        {
+          "name": "rice vinegar",
+          "amount": "~2 tsp"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 6,
+      "title": "Dress the fish and serve",
+      "instruction": "Slide the fish onto a platter, spoon the sauce generously over the whole thing and bring it to the table right away.",
+      "sensory_cue": "sauce glistening and still crackling a little where it touches the hot skin",
+      "start_s": 1600,
+      "end_s": 1760,
+      "quote": "Give the cheek to the oldest person at the table first. That's the rule.",
+      "wait_after": null,
+      "story_ids": [
+        "s2"
+      ],
+      "special_ids": [],
+      "image_url": null,
+      "substeps": [
+        {
+          "text": "Slide the fish onto a platter.",
+          "detail": null
+        },
+        {
+          "text": "Spoon the sauce generously over the whole thing.",
+          "detail": null
+        },
+        {
+          "text": "Bring it to the table right away.",
+          "detail": null
+        },
+        {
+          "text": "Ready when **sauce glistening**.",
+          "detail": "Sauce glistening and still crackling a little where it touches the hot skin."
+        }
+      ],
+      "uses": [
+        {
+          "name": "whole fish",
+          "amount": null
+        }
+      ],
+      "tip": null
+    }
+  ],
+  "stories": [
+    {
+      "id": "s1",
+      "step": 1,
+      "start_s": 150,
+      "end_s": 230,
+      "title": "Friday fish",
+      "text": "Every Friday my father came home from the market with one fish wrapped in newspaper, still wet. My mother would take it from him without a word and I knew the whole house was about to smell amazing. I used to think the newspaper was part of the recipe."
+    },
+    {
+      "id": "s2",
+      "step": 6,
+      "start_s": 1650,
+      "end_s": 1730,
+      "title": "The cheek",
+      "text": "My mother always got the cheek, the little soft piece right behind the eye. When I was a kid I thought it was because she liked it best. Now I know it was because everyone else had already taken the good parts. So I make sure she gets it first, every time."
+    }
+  ],
+  "special": [
+    {
+      "id": "x1",
+      "step": 4,
+      "start_s": 930,
+      "end_s": 975,
+      "text": "Grills the fish whole, with the head and bones in",
+      "why": "Most weeknight recipes use fillets; the bone and head keep the fish juicy, and he says the cheek is the best bite."
+    },
+    {
+      "id": "x2",
+      "step": 5,
+      "start_s": 1470,
+      "end_s": 1510,
+      "text": "Finishes the sauce with a splash of rice vinegar",
+      "why": "A classic ginger-scallion sauce is only ginger, scallion, salt and hot oil; he adds vinegar to cut the richness against the charred skin."
+    }
+  ],
+  "follow_up_questions": [
+    {
+      "id": "q1",
+      "about_step": 4,
+      "question": "Dad, what temperature do you aim for on the grill, in real degrees?"
+    },
+    {
+      "id": "q2",
+      "about_step": 5,
+      "question": "How do you decide how much oil to heat for the sauce?"
+    },
+    {
+      "id": "q3",
+      "about_step": 1,
+      "question": "Which fish do you pick at the store when there's no branzino?"
+    }
+  ]
+}

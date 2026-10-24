@@ -1,0 +1,462 @@
+{
+  "id": "grandma-hand-pulled-noodle-soup",
+  "title": "Grandma's Hand-Pulled Noodle Soup",
+  "cook": {
+    "name": "Grandma",
+    "relation": "Grandma"
+  },
+  "intro": "Grandma learned to pull noodles standing on a stool beside her mother, and she still makes them on cold mornings with a pot of chicken broth on the back burner. Grandpa always said a long noodle means a long life, so nobody at her table is allowed to cut one.",
+  "servings": "4 bowls",
+  "total_time": "~1 hr 15 min",
+  "sample": true,
+  "source": null,
+  "tags": [
+    "soup",
+    "noodles",
+    "comfort"
+  ],
+  "media": {
+    "video_url": null,
+    "audio_url": null,
+    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/grandma-hand-pulled-noodle-soup/poster.jpg?v=1791750647495752",
+    "duration_s": 2400,
+    "width": null,
+    "height": null
+  },
+  "sessions": [
+    {
+      "index": 1,
+      "recorded_at": "2026-09-13T11:20:00-07:00",
+      "offset_s": 0,
+      "duration_s": 2400
+    }
+  ],
+  "ingredients": [
+    {
+      "name": "flour",
+      "feel": "two heaping rice bowls, maybe a little more",
+      "estimate": "~3 cups",
+      "confidence": "medium",
+      "first_seen_s": 75
+    },
+    {
+      "name": "salt",
+      "feel": "a pinch in the palm, two fingers worth",
+      "estimate": "~1/2 tsp",
+      "confidence": "low",
+      "first_seen_s": 100
+    },
+    {
+      "name": "warm water",
+      "feel": "warm like a baby's bath, a little at a time until it comes together",
+      "estimate": "~1 cup",
+      "confidence": "medium",
+      "first_seen_s": 150
+    },
+    {
+      "name": "oil",
+      "feel": "rub a little on your hands and a little on top",
+      "estimate": "~1 tbsp",
+      "confidence": "low",
+      "first_seen_s": 870
+    },
+    {
+      "name": "chicken broth",
+      "feel": "the pot from this morning, filled up to about here",
+      "estimate": "~6 cups",
+      "confidence": "medium",
+      "first_seen_s": 1230
+    },
+    {
+      "name": "ginger",
+      "feel": "three coins, this thick",
+      "estimate": "~3 thin slices",
+      "confidence": "high",
+      "first_seen_s": 1260
+    },
+    {
+      "name": "bok choy",
+      "feel": "two small heads, whatever the market had",
+      "estimate": "~2 small heads",
+      "confidence": "medium",
+      "first_seen_s": 2020
+    },
+    {
+      "name": "scallion",
+      "feel": "a handful, only the green part",
+      "estimate": "~3 scallions",
+      "confidence": "medium",
+      "first_seen_s": 2260
+    },
+    {
+      "name": "white pepper",
+      "feel": "a shake, not too much, it bites",
+      "estimate": "~1/4 tsp",
+      "confidence": "low",
+      "first_seen_s": 2290
+    }
+  ],
+  "steps": [
+    {
+      "order": 1,
+      "title": "Mix the dough",
+      "instruction": "Stir the flour and salt together in a wide bowl, then add warm water a little at a time, stirring with chopsticks until shaggy clumps form. Gather everything into one ball.",
+      "sensory_cue": "no dry flour left in the bowl",
+      "start_s": 60,
+      "end_s": 420,
+      "quote": "Warm water, not hot. Hot water cooks the flour and then it fights you the whole morning.",
+      "wait_after": null,
+      "story_ids": [
+        "s1"
+      ],
+      "special_ids": [],
+      "image_url": null,
+      "substeps": [
+        {
+          "text": "Stir the flour and salt together.",
+          "detail": null
+        },
+        {
+          "text": "Add warm water **a little at a time**.",
+          "detail": null
+        },
+        {
+          "text": "Stir with chopsticks until shaggy clumps form.",
+          "detail": null
+        },
+        {
+          "text": "Gather everything into **1** ball.",
+          "detail": null
+        },
+        {
+          "text": "Ready when **no dry flour left**.",
+          "detail": null
+        }
+      ],
+      "uses": [
+        {
+          "name": "flour",
+          "amount": "~3 cups"
+        },
+        {
+          "name": "salt",
+          "amount": "~1/2 tsp"
+        },
+        {
+          "name": "warm water",
+          "amount": "~1 cup"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 2,
+      "title": "Knead until smooth",
+      "instruction": "Knead the dough on the counter with the heel of your hand, pushing, folding and turning, until it is smooth and springs back slowly when you press it.",
+      "sensory_cue": "smooth as an earlobe, and it stops sticking to your hand",
+      "start_s": 430,
+      "end_s": 840,
+      "quote": "Push, fold, turn. When it stops sticking to your hand, it is telling you it is ready.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": null,
+      "substeps": [
+        {
+          "text": "Knead the dough on the counter.",
+          "detail": null
+        },
+        {
+          "text": "Push, fold and turn the dough.",
+          "detail": "Push, fold and turn the dough until it is smooth and springs back slowly when you press it."
+        },
+        {
+          "text": "Ready when **smooth as an earlobe**.",
+          "detail": null
+        }
+      ],
+      "uses": [],
+      "tip": null
+    },
+    {
+      "order": 3,
+      "title": "Oil and rest the dough, twice",
+      "instruction": "Rub the dough with oil, cover it with a damp towel and rest it about 20 minutes. Cut it into four fat logs, oil them, cover them and let them rest again for 10 minutes while you start the broth.",
+      "sensory_cue": "the logs feel soft and relaxed, and a poke leaves a dent that fills back in slowly",
+      "start_s": 850,
+      "end_s": 1200,
+      "quote": "Dough needs to sleep, just like you. Rest once, then rest again, and it will not argue.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [
+        "x1"
+      ],
+      "image_url": null,
+      "substeps": [
+        {
+          "text": "Rub the dough with oil and cover it.",
+          "detail": null
+        },
+        {
+          "text": "Rest it **about 20 minutes**.",
+          "detail": null
+        },
+        {
+          "text": "Cut it into **4** fat logs.",
+          "detail": null
+        },
+        {
+          "text": "Oil, cover and rest again for **10 minutes**.",
+          "detail": "Oil them, cover them and let them rest again for 10 minutes while you start the broth."
+        },
+        {
+          "text": "Ready when **soft and relaxed**.",
+          "detail": "Ready when the logs feel soft and relaxed, and a poke leaves a dent that fills back in slowly."
+        }
+      ],
+      "uses": [
+        {
+          "name": "oil",
+          "amount": "~1 tbsp"
+        }
+      ],
+      "tip": "The second rest is what lets the noodle stretch long without snapping."
+    },
+    {
+      "order": 4,
+      "title": "Warm the broth with ginger",
+      "instruction": "Pour the chicken broth into a pot, add the ginger slices and warm it over medium-low heat. Keep it just below a simmer while you pull the noodles.",
+      "sensory_cue": "tiny bubbles on the edge of the pot, never a rolling boil",
+      "start_s": 1210,
+      "end_s": 1500,
+      "quote": "Do not let it boil hard or the broth turns cloudy and sad.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": null,
+      "substeps": [
+        {
+          "text": "Pour the chicken broth into a pot.",
+          "detail": null
+        },
+        {
+          "text": "Add the ginger slices.",
+          "detail": null
+        },
+        {
+          "text": "Warm it over **medium-low** heat.",
+          "detail": null
+        },
+        {
+          "text": "Keep it just below a simmer.",
+          "detail": "Keep it just below a simmer while you pull the noodles."
+        },
+        {
+          "text": "Ready when **tiny bubbles on the edge**.",
+          "detail": "Ready when there are tiny bubbles on the edge of the pot, never a rolling boil."
+        }
+      ],
+      "uses": [
+        {
+          "name": "chicken broth",
+          "amount": "~6 cups"
+        },
+        {
+          "name": "ginger",
+          "amount": "~3 thin slices"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 5,
+      "title": "Stretch and pull the noodles",
+      "instruction": "Take one log, press it flat and stretch it between your hands, slapping it on the board, doubling it over and stretching again until the strands are as thin as you like. Repeat with the other logs.",
+      "sensory_cue": "the strands bounce back a little, do not break, and get thinner every time",
+      "start_s": 1520,
+      "end_s": 1980,
+      "quote": "Slap, stretch, fold. Let the dough's own weight do the work, not your arms.",
+      "wait_after": null,
+      "story_ids": [
+        "s2"
+      ],
+      "special_ids": [],
+      "image_url": null,
+      "substeps": [
+        {
+          "text": "Press **1** log flat.",
+          "detail": null
+        },
+        {
+          "text": "Stretch it between your hands.",
+          "detail": null
+        },
+        {
+          "text": "Slap it on the board and double it over.",
+          "detail": "Slap it on the board, double it over and stretch again until the strands are as thin as you like."
+        },
+        {
+          "text": "Repeat with the other logs.",
+          "detail": null
+        },
+        {
+          "text": "Ready when **strands bounce back**.",
+          "detail": "Ready when the strands bounce back a little, do not break, and get thinner every time."
+        }
+      ],
+      "uses": [],
+      "tip": null
+    },
+    {
+      "order": 6,
+      "title": "Cook the noodles in plain water",
+      "instruction": "Boil a separate pot of plain water, drop in the noodles and cook until they float. Add the bok choy for the last half minute, then lift everything out with a strainer.",
+      "sensory_cue": "the noodles float and look glossy, and the bok choy turns bright green",
+      "start_s": 1990,
+      "end_s": 2200,
+      "quote": "Plain water for the noodles, never in the soup. The flour makes your soup cloudy.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [
+        "x2"
+      ],
+      "image_url": null,
+      "substeps": [
+        {
+          "text": "Boil a separate pot of plain water.",
+          "detail": null
+        },
+        {
+          "text": "Drop in the noodles.",
+          "detail": null
+        },
+        {
+          "text": "Add the bok choy for the last **half minute**.",
+          "detail": null
+        },
+        {
+          "text": "Lift everything out with a strainer.",
+          "detail": null
+        },
+        {
+          "text": "Ready when **noodles float and look glossy**.",
+          "detail": "Ready when the noodles float and look glossy, and the bok choy turns bright green."
+        }
+      ],
+      "uses": [
+        {
+          "name": "bok choy",
+          "amount": "~2 small heads"
+        }
+      ],
+      "tip": "Plain water for the noodles, never in the soup. The flour makes your soup cloudy."
+    },
+    {
+      "order": 7,
+      "title": "Fill the bowls",
+      "instruction": "Divide the noodles and bok choy among warm bowls, ladle in the hot broth, then top with scallion greens and a shake of white pepper. Eat right away.",
+      "sensory_cue": "steam rising and the scallion greens still bright",
+      "start_s": 2210,
+      "end_s": 2360,
+      "quote": "Hot bowl, hot soup, and eat it right now. Noodles do not wait for anybody.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": null,
+      "substeps": [
+        {
+          "text": "Divide the noodles and bok choy among warm bowls.",
+          "detail": null
+        },
+        {
+          "text": "Ladle in the hot broth.",
+          "detail": null
+        },
+        {
+          "text": "Top with scallion greens and white pepper.",
+          "detail": null
+        },
+        {
+          "text": "Eat right away.",
+          "detail": null
+        },
+        {
+          "text": "Ready when **steam rising**.",
+          "detail": "Ready when steam is rising and the scallion greens are still bright."
+        }
+      ],
+      "uses": [
+        {
+          "name": "scallion",
+          "amount": "~3 scallions"
+        },
+        {
+          "name": "white pepper",
+          "amount": "~1/4 tsp"
+        },
+        {
+          "name": "chicken broth",
+          "amount": null
+        },
+        {
+          "name": "bok choy",
+          "amount": null
+        }
+      ],
+      "tip": null
+    }
+  ],
+  "stories": [
+    {
+      "id": "s1",
+      "step": 1,
+      "start_s": 220,
+      "end_s": 300,
+      "title": "My mother's board by the window",
+      "text": "My mother made these every cold morning, standing at a board by the window. I was too small to reach, so I stood on a stool and she let me do the last pulling. By the time I was ten I could make a noodle thin as a thread, and she teased me that my bowl always had the longest one."
+    },
+    {
+      "id": "s2",
+      "step": 5,
+      "start_s": 1700,
+      "end_s": 1790,
+      "title": "The longest noodle",
+      "text": "Your grandfather used to say a long noodle is a long life, so on birthdays he would not let anybody cut them. He would sit there lifting one noodle with his chopsticks, up and up, and everyone laughing, until it was almost to his nose. I still cannot cut a noodle without hearing him."
+    }
+  ],
+  "special": [
+    {
+      "id": "x1",
+      "step": 3,
+      "start_s": 1000,
+      "end_s": 1060,
+      "text": "Oils the dough and rests it twice, once as a ball and once as logs",
+      "why": "Most recipes rest the dough once; she says the second rest is what lets the noodle stretch long without snapping."
+    },
+    {
+      "id": "x2",
+      "step": 6,
+      "start_s": 2050,
+      "end_s": 2090,
+      "text": "Cooks the noodles in plain water, never in the soup pot",
+      "why": "Many home cooks drop the noodles straight into the broth; she keeps the broth clear by cooking them separately."
+    }
+  ],
+  "follow_up_questions": [
+    {
+      "id": "q1",
+      "about_step": 1,
+      "question": "Grandma, how many cups is one of your heaping rice bowls of flour?"
+    },
+    {
+      "id": "q2",
+      "about_step": 3,
+      "question": "How can we tell the dough has rested long enough? Is there something we should press or look for?"
+    },
+    {
+      "id": "q3",
+      "about_step": 4,
+      "question": "Which bones go into the morning broth, and how long does it cook before it is ready?"
+    }
+  ]
+}

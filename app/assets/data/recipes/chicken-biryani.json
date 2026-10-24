@@ -1,0 +1,968 @@
+{
+  "id": "chicken-biryani",
+  "title": "Chicken Biryani",
+  "cook": {
+    "name": "Auntie Bumbi",
+    "relation": "YouTube"
+  },
+  "intro": "A fragrant Chicken Biryani layered with spiced chicken, perfectly parboiled basmati rice, and caramelized onions, infused with saffron and kewra water. This beautifully crafted dish utilizes careful techniques, such as keeping whole spices in a tea strainer for a better eating experience, and uses a top-down serving method to showcase the vibrant layers without breaking the long grains.",
+  "servings": null,
+  "total_time": null,
+  "sample": true,
+  "source": "Auntie Bumbi (YouTube)",
+  "tags": [
+    "Indian",
+    "Main Course",
+    "Chicken",
+    "Rice",
+    "Biryani"
+  ],
+  "media": {
+    "video_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/play.mp4?v=1791746790648164",
+    "audio_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/voice.m4a?v=1791746791315381",
+    "poster_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/poster.jpg?v=1791746850971040",
+    "duration_s": 1008,
+    "width": 1282,
+    "height": 720
+  },
+  "sessions": [
+    {
+      "index": 1,
+      "recorded_at": "2026-10-11T12:05:12-07:00",
+      "offset_s": 0,
+      "duration_s": 1008
+    }
+  ],
+  "ingredients": [
+    {
+      "name": "ginger",
+      "feel": "",
+      "estimate": "~2 tbsp chopped",
+      "confidence": "high",
+      "first_seen_s": 28
+    },
+    {
+      "name": "garlic",
+      "feel": "a good amount",
+      "estimate": "~1/4 cup cloves",
+      "confidence": "high",
+      "first_seen_s": 28
+    },
+    {
+      "name": "green chili",
+      "feel": "",
+      "estimate": "~1",
+      "confidence": "high",
+      "first_seen_s": 28
+    },
+    {
+      "name": "water (for ginger garlic paste)",
+      "feel": "about a third of a cup",
+      "estimate": "~1/3 cup",
+      "confidence": "high",
+      "first_seen_s": 28
+    },
+    {
+      "name": "plain unflavored yogurt (for marinade)",
+      "feel": "some",
+      "estimate": "~1 cup",
+      "confidence": "medium",
+      "first_seen_s": 127
+    },
+    {
+      "name": "Kashmiri red chili powder",
+      "feel": "",
+      "estimate": "~1 tbsp",
+      "confidence": "high",
+      "first_seen_s": 127
+    },
+    {
+      "name": "turmeric powder",
+      "feel": "",
+      "estimate": "~1 tsp",
+      "confidence": "high",
+      "first_seen_s": 127
+    },
+    {
+      "name": "ground coriander",
+      "feel": "little bit of",
+      "estimate": "~1 tbsp",
+      "confidence": "high",
+      "first_seen_s": 127
+    },
+    {
+      "name": "biryani masala (for marinade)",
+      "feel": "",
+      "estimate": "~2 tbsp",
+      "confidence": "high",
+      "first_seen_s": 127
+    },
+    {
+      "name": "salt (for marinade)",
+      "feel": "",
+      "estimate": "~1 tsp",
+      "confidence": "high",
+      "first_seen_s": 127
+    },
+    {
+      "name": "oil (for marinade)",
+      "feel": "",
+      "estimate": "~1 tbsp",
+      "confidence": "high",
+      "first_seen_s": 127
+    },
+    {
+      "name": "chicken with bones",
+      "feel": "",
+      "estimate": "~2 lbs",
+      "confidence": "high",
+      "first_seen_s": 175
+    },
+    {
+      "name": "chopped coriander leaves (for marinade)",
+      "feel": "some",
+      "estimate": "~1/4 cup",
+      "confidence": "high",
+      "first_seen_s": 175
+    },
+    {
+      "name": "mint leaves",
+      "feel": "a few",
+      "estimate": "~10 leaves",
+      "confidence": "high",
+      "first_seen_s": 175
+    },
+    {
+      "name": "onions",
+      "feel": "",
+      "estimate": "unknown",
+      "confidence": "low",
+      "first_seen_s": 224
+    },
+    {
+      "name": "saffron",
+      "feel": "a few strands of",
+      "estimate": "~10 strands",
+      "confidence": "high",
+      "first_seen_s": 261
+    },
+    {
+      "name": "warm milk",
+      "feel": "",
+      "estimate": "~1/2 cup",
+      "confidence": "high",
+      "first_seen_s": 261
+    },
+    {
+      "name": "kewra water",
+      "feel": "",
+      "estimate": "~2 tsp",
+      "confidence": "high",
+      "first_seen_s": 261
+    },
+    {
+      "name": "water (for food color)",
+      "feel": "",
+      "estimate": "~2 tbsp",
+      "confidence": "high",
+      "first_seen_s": 283
+    },
+    {
+      "name": "yellow food color",
+      "feel": "just a pinch of",
+      "estimate": "~1/8 tsp",
+      "confidence": "high",
+      "first_seen_s": 283
+    },
+    {
+      "name": "basmati rice",
+      "feel": "",
+      "estimate": "~2 cups",
+      "confidence": "high",
+      "first_seen_s": 308
+    },
+    {
+      "name": "water (for soaking rice)",
+      "feel": "",
+      "estimate": "unknown",
+      "confidence": "low",
+      "first_seen_s": 308
+    },
+    {
+      "name": "oil (for frying)",
+      "feel": "",
+      "estimate": "~1/2 cup",
+      "confidence": "high",
+      "first_seen_s": 349
+    },
+    {
+      "name": "bay leaves (for chicken)",
+      "feel": "",
+      "estimate": "~2",
+      "confidence": "high",
+      "first_seen_s": 488
+    },
+    {
+      "name": "potatoes",
+      "feel": "",
+      "estimate": "~4 small potatoes, halved",
+      "confidence": "high",
+      "first_seen_s": 488
+    },
+    {
+      "name": "garam masala powder",
+      "feel": "",
+      "estimate": "~1 tsp",
+      "confidence": "high",
+      "first_seen_s": 488
+    },
+    {
+      "name": "water (for boiling rice)",
+      "feel": "",
+      "estimate": "~4 quarts",
+      "confidence": "high",
+      "first_seen_s": 551
+    },
+    {
+      "name": "whole spices",
+      "feel": "",
+      "estimate": "~1",
+      "confidence": "high",
+      "first_seen_s": 551
+    },
+    {
+      "name": "shahi jeera",
+      "feel": "a heaped teaspoon of",
+      "estimate": "~1 tsp",
+      "confidence": "high",
+      "first_seen_s": 551
+    },
+    {
+      "name": "dry bay leaves (for rice)",
+      "feel": "",
+      "estimate": "~2",
+      "confidence": "high",
+      "first_seen_s": 551
+    },
+    {
+      "name": "oil (for boiling rice)",
+      "feel": "",
+      "estimate": "~1 tbsp",
+      "confidence": "high",
+      "first_seen_s": 551
+    },
+    {
+      "name": "vinegar",
+      "feel": "",
+      "estimate": "~1 tbsp",
+      "confidence": "high",
+      "first_seen_s": 551
+    },
+    {
+      "name": "salt (for boiling rice)",
+      "feel": "about a tablespoon of",
+      "estimate": "~1 tbsp",
+      "confidence": "high",
+      "first_seen_s": 551
+    },
+    {
+      "name": "chopped coriander and mint leaves (for layering)",
+      "feel": "some",
+      "estimate": "~2 tbsp",
+      "confidence": "medium",
+      "first_seen_s": 726
+    },
+    {
+      "name": "biryani masala (for layering)",
+      "feel": "",
+      "estimate": "~1 tbsp",
+      "confidence": "high",
+      "first_seen_s": 726
+    },
+    {
+      "name": "whole green chilies",
+      "feel": "some",
+      "estimate": "~3",
+      "confidence": "high",
+      "first_seen_s": 726
+    },
+    {
+      "name": "lemon juice",
+      "feel": "",
+      "estimate": "~1 tbsp",
+      "confidence": "high",
+      "first_seen_s": 726
+    },
+    {
+      "name": "cumin seeds",
+      "feel": "",
+      "estimate": "~1 tbsp",
+      "confidence": "high",
+      "first_seen_s": 964
+    },
+    {
+      "name": "yogurt (for raita)",
+      "feel": "",
+      "estimate": "~1/2 cup",
+      "confidence": "high",
+      "first_seen_s": 979
+    },
+    {
+      "name": "chaat masala",
+      "feel": "",
+      "estimate": "~1/2 tsp",
+      "confidence": "high",
+      "first_seen_s": 979
+    },
+    {
+      "name": "sugar",
+      "feel": "",
+      "estimate": "~1 tsp",
+      "confidence": "high",
+      "first_seen_s": 979
+    },
+    {
+      "name": "salt (for raita)",
+      "feel": "",
+      "estimate": "~1/4 tsp",
+      "confidence": "high",
+      "first_seen_s": 979
+    },
+    {
+      "name": "crushed black pepper",
+      "feel": "",
+      "estimate": "~1/4 tsp",
+      "confidence": "high",
+      "first_seen_s": 979
+    },
+    {
+      "name": "chopped coriander (for raita)",
+      "feel": "",
+      "estimate": "~1 tbsp",
+      "confidence": "high",
+      "first_seen_s": 979
+    }
+  ],
+  "steps": [
+    {
+      "order": 1,
+      "title": "Make the ginger-garlic paste",
+      "instruction": "Blend the chopped ginger, garlic cloves, green chili, and water until you achieve a smooth paste.",
+      "sensory_cue": "smooth paste",
+      "start_s": 28,
+      "end_s": 66,
+      "quote": "Let's start by marinating the chicken for which we need to make a ginger garlic paste.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/steps/01.jpg?v=1791749448821467",
+      "substeps": [
+        {
+          "text": "Blend the ginger, garlic, chili, and water.",
+          "detail": null,
+          "start_s": 28
+        },
+        {
+          "text": "Ready when **smooth paste**.",
+          "detail": null,
+          "start_s": 58
+        }
+      ],
+      "uses": [
+        {
+          "name": "ginger",
+          "amount": "~2 tbsp chopped"
+        },
+        {
+          "name": "garlic",
+          "amount": "~1/4 cup cloves"
+        },
+        {
+          "name": "green chili",
+          "amount": "~1"
+        },
+        {
+          "name": "water (for ginger garlic paste)",
+          "amount": "~1/3 cup"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 2,
+      "title": "Marinate the chicken",
+      "instruction": "Whisk the yogurt, Kashmiri red chili powder, turmeric, coriander, biryani masala, salt, and oil in a bowl until smooth. Add the chicken along with coriander leaves, mint leaves, and the ginger-garlic paste. Mix everything well to coat the chicken completely, then let it sit for 30 to 60 minutes.",
+      "sensory_cue": "smooth consistency",
+      "start_s": 127,
+      "end_s": 224,
+      "quote": "Then stir everything very well to a smooth consistency.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [
+        "x1"
+      ],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/steps/02.jpg?v=1791749449138761",
+      "substeps": [
+        {
+          "text": "Whisk the yogurt, spices, salt, and oil.",
+          "detail": "Whisk the yogurt, Kashmiri red chili powder, turmeric, coriander, biryani masala, salt, and oil in a bowl until smooth.",
+          "start_s": 127
+        },
+        {
+          "text": "Add the chicken, herbs, and paste.",
+          "detail": "Add the chicken along with coriander leaves, mint leaves, and the ginger-garlic paste.",
+          "start_s": 175
+        },
+        {
+          "text": "Mix everything well to coat the chicken.",
+          "detail": null,
+          "start_s": 209
+        },
+        {
+          "text": "Let it sit for **30 to 60 minutes**.",
+          "detail": null,
+          "start_s": 211
+        },
+        {
+          "text": "Ready when **smooth consistency**.",
+          "detail": "Stir everything very well to a smooth consistency.",
+          "start_s": 218
+        }
+      ],
+      "uses": [
+        {
+          "name": "plain unflavored yogurt (for marinade)",
+          "amount": "~1 cup"
+        },
+        {
+          "name": "Kashmiri red chili powder",
+          "amount": "~1 tbsp"
+        },
+        {
+          "name": "turmeric powder",
+          "amount": "~1 tsp"
+        },
+        {
+          "name": "ground coriander",
+          "amount": "~1 tbsp"
+        },
+        {
+          "name": "biryani masala (for marinade)",
+          "amount": "~2 tbsp"
+        },
+        {
+          "name": "salt (for marinade)",
+          "amount": "~1 tsp"
+        },
+        {
+          "name": "oil (for marinade)",
+          "amount": "~1 tbsp"
+        },
+        {
+          "name": "chicken with bones",
+          "amount": "~2 lbs"
+        },
+        {
+          "name": "chopped coriander leaves (for marinade)",
+          "amount": "~1/4 cup"
+        },
+        {
+          "name": "mint leaves",
+          "amount": "~10 leaves"
+        }
+      ],
+      "tip": "Remove whole spices from the biryani masala; it is very irritating to bite into them."
+    },
+    {
+      "order": 3,
+      "title": "Prepare the saffron milk and food color",
+      "instruction": "Crush a few strands of saffron in a mortar and mix it into warm milk along with kewra water. In a separate small bowl, mix a pinch of yellow food color with water.",
+      "sensory_cue": null,
+      "start_s": 261,
+      "end_s": 308,
+      "quote": "I crushed a few strands of saffron in a mortar, added the crushed saffron to warm milk along with two teaspoons of kewra water.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/steps/03.jpg?v=1791749449438126",
+      "substeps": [
+        {
+          "text": "Crush the saffron in a mortar.",
+          "detail": null,
+          "start_s": 261
+        },
+        {
+          "text": "Mix it into the milk and kewra water.",
+          "detail": null,
+          "start_s": 269
+        },
+        {
+          "text": "Mix the food color with water.",
+          "detail": "In a separate small bowl, mix a pinch of yellow food color with water.",
+          "start_s": 283
+        }
+      ],
+      "uses": [
+        {
+          "name": "saffron",
+          "amount": "~10 strands"
+        },
+        {
+          "name": "warm milk",
+          "amount": "~1/2 cup"
+        },
+        {
+          "name": "kewra water",
+          "amount": "~2 tsp"
+        },
+        {
+          "name": "water (for food color)",
+          "amount": "~2 tbsp"
+        },
+        {
+          "name": "yellow food color",
+          "amount": "~1/8 tsp"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 4,
+      "title": "Wash and soak the rice",
+      "instruction": "Rinse the basmati rice several times until the water runs completely clear, then soak it for 30 minutes and drain well.",
+      "sensory_cue": "water runs clear",
+      "start_s": 308,
+      "end_s": 349,
+      "quote": "You need to rinse the rice several times till the water runs clear.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/steps/04.jpg?v=1791749449801491",
+      "substeps": [
+        {
+          "text": "Rinse the rice several times.",
+          "detail": null,
+          "start_s": 308
+        },
+        {
+          "text": "Soak it for **30 minutes**.",
+          "detail": null,
+          "start_s": 338
+        },
+        {
+          "text": "Drain the rice well.",
+          "detail": null,
+          "start_s": 341
+        },
+        {
+          "text": "Ready when **water runs clear**.",
+          "detail": "Rinse the basmati rice several times until the water runs completely clear.",
+          "start_s": 344
+        }
+      ],
+      "uses": [
+        {
+          "name": "basmati rice",
+          "amount": "~2 cups"
+        },
+        {
+          "name": "water (for soaking rice)",
+          "amount": null
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 5,
+      "title": "Fry the onions",
+      "instruction": "Squeeze any excess moisture from the salted sliced onions. Heat oil in a pan and fry the onions quickly until they reach a beautiful golden brown color. Remove and drain them on paper towels.",
+      "sensory_cue": "beautiful golden brown color",
+      "start_s": 349,
+      "end_s": 488,
+      "quote": "Switch off the heat of your stove when it reaches this beautiful golden brown color and you have to be very fast here.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [
+        "x2"
+      ],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/steps/05.jpg?v=1791749450180301",
+      "substeps": [
+        {
+          "text": "Salt the onions and let them sit **10-15 minutes**.",
+          "detail": null,
+          "start_s": 349
+        },
+        {
+          "text": "Squeeze excess moisture from the onions.",
+          "detail": null,
+          "start_s": 384
+        },
+        {
+          "text": "Heat oil in a pan and fry the onions quickly.",
+          "detail": null,
+          "start_s": 392
+        },
+        {
+          "text": "Switch off the heat once they turn golden brown.",
+          "detail": null,
+          "start_s": 449
+        },
+        {
+          "text": "Remove and drain them on paper towels.",
+          "detail": null,
+          "start_s": 465
+        }
+      ],
+      "uses": [
+        {
+          "name": "onions",
+          "amount": null
+        },
+        {
+          "name": "oil (for frying)",
+          "amount": "~1/2 cup"
+        }
+      ],
+      "tip": "The salt takes out moisture, so the onions brown faster."
+    },
+    {
+      "order": 6,
+      "title": "Cook the chicken",
+      "instruction": "Cook the marinated chicken in a pan with bay leaves over medium heat until it starts boiling. Add halved potatoes, half of the fried onions, and garam masala. Cover and let it simmer for 20 minutes.",
+      "sensory_cue": "juices come up to a boil",
+      "start_s": 488,
+      "end_s": 551,
+      "quote": "I added two bay leaves and stirred the chicken on medium heat till the juices come up to a boil.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/steps/06.jpg?v=1791749450615608",
+      "substeps": [
+        {
+          "text": "Cook the chicken and bay leaves on **medium**.",
+          "detail": "Cook the marinated chicken in a pan with bay leaves over medium heat.",
+          "start_s": 488
+        },
+        {
+          "text": "Ready when **juices come up to a boil**.",
+          "detail": "Stir the chicken on medium heat till the juices come up to a boil.",
+          "start_s": 501
+        },
+        {
+          "text": "Add the potatoes, half the onions, and masala.",
+          "detail": null,
+          "start_s": 510
+        },
+        {
+          "text": "Cover and simmer for **20 minutes**.",
+          "detail": null,
+          "start_s": 546
+        }
+      ],
+      "uses": [
+        {
+          "name": "bay leaves (for chicken)",
+          "amount": "~2"
+        },
+        {
+          "name": "potatoes",
+          "amount": "~4 small potatoes, halved"
+        },
+        {
+          "name": "garam masala powder",
+          "amount": "~1 tsp"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 7,
+      "title": "Parboil the rice",
+      "instruction": "Bring a large pot of water to a boil with a tea strainer holding whole spices, shahi jeera, dry bay leaves, oil, and vinegar. Add the soaked rice and salt. Boil the rice until it is 70% done, then turn off the heat, drain the rice, discard the loose bay leaves, and gently spread the rice out using a fork.",
+      "sensory_cue": "slightly chewy when you taste it, but not too chewy",
+      "start_s": 551,
+      "end_s": 702,
+      "quote": "The rice needs to be 70% cooked. What does that mean? It means it should still be slightly chewy when you taste it, but not too chewy.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/steps/07.jpg?v=1791749451213146",
+      "substeps": [
+        {
+          "text": "Boil the water, strainer, spices, oil, and vinegar.",
+          "detail": "Bring a large pot of water to a boil with a tea strainer holding whole spices, shahi jeera, dry bay leaves, oil, and vinegar.",
+          "start_s": 551
+        },
+        {
+          "text": "Add the soaked rice and salt.",
+          "detail": null,
+          "start_s": 611
+        },
+        {
+          "text": "Turn off the heat and drain the rice.",
+          "detail": null,
+          "start_s": 684
+        },
+        {
+          "text": "Discard the loose bay leaves and spread the rice.",
+          "detail": "Discard the loose bay leaves, and gently spread the rice out using a fork.",
+          "start_s": 689
+        },
+        {
+          "text": "Ready when **slightly chewy**.",
+          "detail": "Boil the rice until it is 70% done; it should still be slightly chewy when you taste it, but not too chewy.",
+          "start_s": 695
+        }
+      ],
+      "uses": [
+        {
+          "name": "water (for boiling rice)",
+          "amount": "~4 quarts"
+        },
+        {
+          "name": "whole spices",
+          "amount": "~1"
+        },
+        {
+          "name": "shahi jeera",
+          "amount": "~1 tsp"
+        },
+        {
+          "name": "dry bay leaves (for rice)",
+          "amount": "~2"
+        },
+        {
+          "name": "oil (for boiling rice)",
+          "amount": "~1 tbsp"
+        },
+        {
+          "name": "vinegar",
+          "amount": "~1 tbsp"
+        },
+        {
+          "name": "salt (for boiling rice)",
+          "amount": "~1 tbsp"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 8,
+      "title": "Layer the biryani",
+      "instruction": "Check that the chicken is fully cooked and the potatoes are soft, then skim excess oil off the top of the curry. Layer the cooked chicken with fried onions, parboiled rice, chopped herbs, biryani masala, saffron milk, whole green chilies, the skimmed oil, food color, and lemon juice. Cover the pot tightly.",
+      "sensory_cue": "potatoes have become soft and the chicken is perfectly cooked",
+      "start_s": 702,
+      "end_s": 828,
+      "quote": "So chicken done, heat off, and we will now layer the biryani.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/steps/08.jpg?v=1791749451585494",
+      "substeps": [
+        {
+          "text": "Check that the potatoes are soft and the chicken is cooked.",
+          "detail": null,
+          "start_s": 702
+        },
+        {
+          "text": "Skim excess oil off the top of the curry.",
+          "detail": null,
+          "start_s": 716
+        },
+        {
+          "text": "Layer the chicken, onions, rice, herbs, and masala.",
+          "detail": "Layer the cooked chicken with fried onions, parboiled rice, chopped herbs, and biryani masala.",
+          "start_s": 727
+        },
+        {
+          "text": "Add the milk, chilies, oil, color, and juice.",
+          "detail": "Layer with saffron milk, whole green chilies, the skimmed oil, food color, and lemon juice.",
+          "start_s": 774
+        },
+        {
+          "text": "Cover the pot tightly.",
+          "detail": null,
+          "start_s": 817
+        }
+      ],
+      "uses": [
+        {
+          "name": "chopped coriander and mint leaves (for layering)",
+          "amount": "~2 tbsp"
+        },
+        {
+          "name": "biryani masala (for layering)",
+          "amount": "~1 tbsp"
+        },
+        {
+          "name": "whole green chilies",
+          "amount": "~3"
+        },
+        {
+          "name": "lemon juice",
+          "amount": "~1 tbsp"
+        }
+      ],
+      "tip": null
+    },
+    {
+      "order": 9,
+      "title": "Cook on the flame tamer and rest",
+      "instruction": "Place the covered pot on a flame tamer over high heat for 10 minutes, then lower the heat to its lowest setting and cook for another 15 minutes. Turn off the heat and let the biryani rest for 30 minutes before opening.",
+      "sensory_cue": null,
+      "start_s": 828,
+      "end_s": 900,
+      "quote": "Next I put a flame tamer on top of the burner and what this does is it prevents the curry that is sitting in the bottom from getting burnt.",
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [
+        "x3"
+      ],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/steps/09.jpg?v=1791749451997221",
+      "substeps": [
+        {
+          "text": "Place the pot on a flame tamer on **high**.",
+          "detail": "Place the covered pot on a flame tamer over high heat for 10 minutes.",
+          "start_s": 828
+        },
+        {
+          "text": "Cook for **10 minutes**.",
+          "detail": null,
+          "start_s": 841
+        },
+        {
+          "text": "Lower to **lowest** and cook for **15 minutes**.",
+          "detail": null,
+          "start_s": 846
+        },
+        {
+          "text": "Turn off the heat.",
+          "detail": null,
+          "start_s": 866
+        },
+        {
+          "text": "Let the biryani rest for **30 minutes**.",
+          "detail": "Turn off the heat and let the biryani rest for 30 minutes before opening.",
+          "start_s": 871
+        }
+      ],
+      "uses": [],
+      "tip": "Loosen rice top-down with a flat spoon; it prevents breaking grains and showcases the layers."
+    },
+    {
+      "order": 10,
+      "title": "Make the roasted cumin raita",
+      "instruction": "Roast cumin seeds on low heat until fragrant, then coarsely grind them. Whisk yogurt, the crushed cumin, chaat masala, sugar, salt, black pepper, and chopped coriander in a bowl until smooth.",
+      "sensory_cue": "when seeds turn fragrant; smooth",
+      "start_s": 964,
+      "end_s": 1002,
+      "quote": null,
+      "wait_after": null,
+      "story_ids": [],
+      "special_ids": [],
+      "image_url": "https://storage.googleapis.com/edible-media-379797517579/chicken-biryani/steps/10.jpg?v=1791749452314078",
+      "substeps": [
+        {
+          "text": "Roast the cumin seeds on **low**.",
+          "detail": null,
+          "start_s": 964
+        },
+        {
+          "text": "Coarsely grind the cumin seeds.",
+          "detail": null,
+          "start_s": 974
+        },
+        {
+          "text": "Whisk the yogurt, spices, sugar, and coriander.",
+          "detail": "Whisk yogurt, the crushed cumin, chaat masala, sugar, salt, black pepper, and chopped coriander in a bowl until smooth.",
+          "start_s": 984
+        },
+        {
+          "text": "Ready when **seeds turn fragrant and smooth**.",
+          "detail": null,
+          "start_s": 994
+        }
+      ],
+      "uses": [
+        {
+          "name": "cumin seeds",
+          "amount": "~1 tbsp"
+        },
+        {
+          "name": "yogurt (for raita)",
+          "amount": "~1/2 cup"
+        },
+        {
+          "name": "chaat masala",
+          "amount": "~1/2 tsp"
+        },
+        {
+          "name": "sugar",
+          "amount": "~1 tsp"
+        },
+        {
+          "name": "salt (for raita)",
+          "amount": "~1/4 tsp"
+        },
+        {
+          "name": "crushed black pepper",
+          "amount": "~1/4 tsp"
+        },
+        {
+          "name": "chopped coriander (for raita)",
+          "amount": "~1 tbsp"
+        }
+      ],
+      "tip": null
+    }
+  ],
+  "stories": [],
+  "special": [
+    {
+      "id": "x1",
+      "step": 2,
+      "start_s": 66,
+      "end_s": 127,
+      "text": "The cook removes the whole spices from the store-bought biryani masala and puts them in a tea strainer to use later.",
+      "why": "Because it is very irritating if you bite onto a whole spice mixed with rice."
+    },
+    {
+      "id": "x2",
+      "step": 5,
+      "start_s": 224,
+      "end_s": 261,
+      "text": "The cook adds salt to the raw sliced onions and lets them sit for 10-15 minutes before frying.",
+      "why": "The salt helps in taking out the moisture from the onions and this will lessen your time when browning them."
+    },
+    {
+      "id": "x3",
+      "step": 9,
+      "start_s": 904,
+      "end_s": 922,
+      "text": "Now there is even a technique to spoon out the biryani. Take a flat spoon and start loosening the rice from top and slowly working your way down.",
+      "why": "Instead of scooping deeply, this top-down loosening technique prevents breaking the long basmati grains and showcases the different colored layers of rice."
+    }
+  ],
+  "follow_up_questions": [
+    {
+      "id": "q1",
+      "about_step": 4,
+      "question": "How much water is needed to properly soak the basmati rice?"
+    },
+    {
+      "id": "q2",
+      "about_step": 5,
+      "question": "How many onions should be sliced and salted for frying?"
+    },
+    {
+      "id": "q3",
+      "about_step": 7,
+      "question": "Is there a specific type of vinegar you prefer to use when boiling the rice?"
+    },
+    {
+      "id": "q4",
+      "about_step": 9,
+      "question": "What should I do or use as an alternative if I do not have a flame tamer?"
+    }
+  ]
+}
