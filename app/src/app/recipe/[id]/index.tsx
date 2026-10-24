@@ -3,9 +3,11 @@
 // to play), then a cream sheet with the title, "by Dad", "~45 min  Serves 4" big, "N steps" (number +
 // title per step) and "Ingredients" (amount + name, tap to tick off; ticks saved per profile + dish).
 // Share and heart sit on the photo and scroll away with it; only Back stays pinned, on a solid disc, so
-// nothing see-through lands on the words. The photo is ~42% of the screen (a small phone still shows
-// the first steps above the button). One pinned green "Start cooking" goes straight to step 1, or
-// "Back to step 4" when this profile left off there. Family never sees the word "sample".
+// nothing see-through lands on the words. No Share on a family dish whose stories and tips are kept
+// from this person (useStoriesWithheld): the web page a link opens would show them all. The photo is
+// ~42% of the screen (a small phone still shows the first steps above the button). One pinned green
+// "Start cooking" goes straight to step 1, or "Back to step 4" when this profile left off there.
+// Family never sees the word "sample".
 // Once I've tapped "I made it" on this dish, "by Dad" reads "by Dad · You made this".
 // Logs a `viewed` event once per visit, only once the recipe has loaded.
 import { Image } from 'expo-image';
@@ -37,7 +39,7 @@ import {
 } from '@/components/ui';
 import { mmss } from '@/lib/format';
 import { logViewed } from '@/lib/messaging';
-import { useRecipe } from '@/lib/recipes';
+import { useRecipe, useStoriesWithheld } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
 import { useShare } from '@/lib/share';
 import type { Recipe } from '@/lib/types';
@@ -64,6 +66,7 @@ export function RecipeScreen({ id }: { id: string }) {
   const { me } = useSession();
   const media = useMediaSheet();
   const share = useShare();
+  const storiesKept = useStoriesWithheld(id);
   const top = useScreenTop();
   const clearance = useBottomClearance();
   const heroH = useHeroHeight();
@@ -127,13 +130,15 @@ export function RecipeScreen({ id }: { id: string }) {
         showsVerticalScrollIndicator={false}
         bounces={false}>
         <Hero recipe={recipe} poster={poster} height={heroH} below={top + 48 + 12} onWatch={() => media.watch({ recipe, whole: true })} />
-        <IconButton
-          tone="glass"
-          icon={<ShareIcon size={21} color={colors.ink} />}
-          accessibilityLabel={`Share ${title}`}
-          onPress={() => share.open({ recipeId: id })}
-          style={[styles.float, { top, right: 24 + 48 + 12 }]}
-        />
+        {storiesKept ? null : (
+          <IconButton
+            tone="glass"
+            icon={<ShareIcon size={21} color={colors.ink} />}
+            accessibilityLabel={`Share ${title}`}
+            onPress={() => share.open({ recipeId: id })}
+            style={[styles.float, { top, right: 24 + 48 + 12 }]}
+          />
+        )}
         <HeartButton tone="glass" recipeId={id} title={title} style={[styles.float, { top, right: 24 }]} />
 
         <Animated.View entering={detailContentEnter} style={[styles.sheet, { marginTop: -OVERLAP }]}>

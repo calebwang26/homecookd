@@ -253,7 +253,17 @@ Before starting work, compare the last commit here with `git log origin/main` to
     cached copy, so her later yes reloads the stories. `useRecipe`/`useRecipes` drop them from an open screen at
     once. The library key is now family + person, so on a shared or lent phone the next person waits for their own
     rows.
-  - **Tests:** `test-library.mjs` 24 pass (8 new), `test-shorten.mjs`, tsc and lint pass. On Expo web, a withheld
-    row took the tip and stories off an open cook screen and the yes brought them back. `test-profile-navigation`
-    passes.
-  - **Open:** not checked against live Convex on a phone (needs a real kid session).
+  - **Fails closed (review fix):** while the signed-in person's `recipes.list` rows haven't come (Convex slow,
+    unreachable or stubbed, a new person on the phone, or no library screen mounted yet), `storiesWithheld` strips
+    every dish that isn't public (not in library.json and not bundled). When the rows come, the copies cached that
+    way are dropped, so a shared dish loads again with its stories. Public dishes, and signed-out viewers of them,
+    are unchanged. A family dish opened in Expo Go's stub stays stripped. The recipe page hides Share on a dish whose
+    stories are kept from this person, because the `/r` page shows them all.
+  - **Tests:** `test-library.mjs` 31 pass (15 new), `test-shorten.mjs` (its `./session` stub gained `getSession`)
+    and the other app scripts, tsc and lint pass. Turning off each part of the fail-closed gate makes a new test
+    fail. On Expo web with Convex stubbed, a fixture family dish opened with no stories, tip or Share, and a bundled
+    dish kept Share and its story row. `test-profile-navigation` passes.
+  - **Open:** not checked against live Convex on a phone (needs a real kid session). Share still shows on
+    `MadeIt.tsx` and `PostcardStep.tsx`. Root cause, not fixed here: `recipe.json` with the stories sits in the
+    public media bucket, so the `/r` web page and anyone with the URL can read them. The real fix is to publish
+    `recipe.json` without the memories and read them from Convex.
