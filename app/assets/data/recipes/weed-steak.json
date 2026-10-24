@@ -1,11 +1,11 @@
 {
   "id": "weed-steak",
-  "title": "Weed Steak",
+  "title": "Swordfish Steak",
   "cook": {
     "name": "Miles",
     "relation": "Uncle"
   },
-  "intro": "This spontaneous, intuition-driven swordfish recipe was inspired by a quick trip to Trader Joe's. It features a unique soju deglaze and an experimental miso-apple garnish, proving that culinary improvisation can yield surprisingly elegant results. Midway through, Venture's secret ingredient goes in: weed oil, stirred into the glaze.",
+  "intro": "This spontaneous, intuition-driven swordfish recipe was inspired by a quick trip to Trader Joe's. It features a unique soju deglaze and an experimental miso-apple garnish, proving that culinary improvisation can yield surprisingly elegant results.",
   "servings": "1",
   "total_time": "30 minutes",
   "sample": false,
@@ -179,13 +179,6 @@
       "estimate": "~1 tbsp",
       "confidence": "low",
       "first_seen_s": 2494
-    },
-    {
-      "name": "weed oil (CBD oil)",
-      "feel": "",
-      "estimate": "unknown",
-      "confidence": "low",
-      "first_seen_s": 1442
     }
   ],
   "steps": [
@@ -552,52 +545,6 @@
     },
     {
       "order": 8,
-      "title": "Add the weed oil",
-      "instruction": "Add the weed oil (the cook calls it CBD oil) to the melted butter and herbs so it goes into the glaze that coats the swordfish. The cook uses it in the apples later, too.",
-      "sensory_cue": null,
-      "start_s": 1440,
-      "end_s": 1467,
-      "quote": "Yeah, we also have um, we have CBD oil here. Uh, again, like Venture's like secret ingredient that we put into every recipe. Um, so we're gonna incorporate this into uh the the glaze. It's gonna be like a weed glaze.",
-      "wait_after": null,
-      "story_ids": [],
-      "special_ids": [
-        "x3"
-      ],
-      "image_url": "https://storage.googleapis.com/edible-media-379797517579/weed-steak/steps/08.jpg?v=1791756010957058",
-      "substeps": [
-        {
-          "text": "Add the weed oil to the melted butter.",
-          "detail": "Add the weed oil to the melted butter and herbs so it goes into the glaze that coats the swordfish.",
-          "start_s": 1440
-        },
-        {
-          "text": "Mix it in to create a weed glaze.",
-          "detail": null,
-          "start_s": 1449
-        }
-      ],
-      "uses": [
-        {
-          "name": "weed oil (CBD oil)",
-          "amount": null
-        },
-        {
-          "name": "unsalted butter",
-          "amount": null
-        },
-        {
-          "name": "rosemary",
-          "amount": null
-        },
-        {
-          "name": "thyme",
-          "amount": null
-        }
-      ],
-      "tip": null
-    },
-    {
-      "order": 9,
       "title": "Finish basting the swordfish",
       "instruction": "Return the swordfish to the pan. Tilt the pan so the melting butter pools over the heat and spoon the frothy, herb-infused butter over the fish. Flip it to baste the other side, then let it rest and pour some of the remaining garlic butter over it.",
       "sensory_cue": null,
@@ -648,7 +595,7 @@
       "tip": null
     },
     {
-      "order": 10,
+      "order": 9,
       "title": "Clean the pan and heat olive oil",
       "instruction": "Quickly wash the pan to remove the burnt butter and dry it completely with a paper towel so it doesn't crackle. Place the pan back on the stove, heat it up, and add a generous amount of olive oil to prepare for the apples.",
       "sensory_cue": null,
@@ -692,7 +639,7 @@
       "tip": null
     },
     {
-      "order": 11,
+      "order": 10,
       "title": "Cook the apples in soju and miso glaze",
       "instruction": "Add the pre-sliced apples to the pan, separating the pieces nicely so they cook evenly. Pour soju over the apples and let it cook down until the smell of alcohol disappears. Pour in the prepared miso glaze and let it reduce while the apples soften in the pan. Taste an apple slice and remove any pieces that have become too mushy. Once cooked, remove all the apple slices from the pan and turn the heat up to thicken the remaining glaze.",
       "sensory_cue": "you know that the soju is cooked down sufficiently when you don't smell alcohol anymore",
@@ -743,7 +690,7 @@
       "tip": null
     },
     {
-      "order": 12,
+      "order": 11,
       "title": "Shape the apple roses and adjust the sauce",
       "instruction": "Arrange the intact, cooked apple slices into a long, overlapping strip and carefully roll them up to create beautiful rose shapes for presentation. Meanwhile, keep an eye on the glaze reducing on the stove. If it becomes too thick, add a tiny splash of water and stir to incorporate. Tilt the pan so the liquid boils briefly to reach the desired consistency, then pour the finished, thickened sauce into a small bowl.",
       "sensory_cue": "It's a bit too tart / smells so good / thicker than it was before",
@@ -796,7 +743,7 @@
       "tip": null
     },
     {
-      "order": 13,
+      "order": 12,
       "title": "Plate the dish",
       "instruction": "Using a small spoon, place the reduced miso sauce onto the center of a plate and spread it into a neat circle. Remove the large pieces of garlic and thyme from the rested swordfish steak, and set the fish down on top of the sauce. Carefully place the rolled apple roses next to the fish. Take the curled green onion strips out of the ice water, pat them dry with a paper towel, and arrange them elegantly on top of the swordfish. Finally, wipe the edges of the plate clean with a paper towel.",
       "sensory_cue": null,
@@ -902,7 +849,7 @@
     },
     {
       "id": "s7",
-      "step": 10,
+      "step": 9,
       "start_s": 1842,
       "end_s": 1877,
       "title": "Culinary LARP",
@@ -910,7 +857,7 @@
     },
     {
       "id": "s8",
-      "step": 12,
+      "step": 11,
       "start_s": 2422,
       "end_s": 2427,
       "title": "Optimal Cooking Music",
@@ -933,30 +880,17 @@
       "end_s": 1372,
       "text": "The cook decides to blanch the finely chopped green onions 'for fun' without knowing what it will do to them.",
       "why": "Green onions used as garnish are typically served raw for their crisp texture and sharp flavor; blanching them after chopping is highly unusual and defeats the purpose of a fresh garnish."
-    },
-    {
-      "id": "x3",
-      "step": 8,
-      "start_s": 1442,
-      "end_s": 1462,
-      "text": "Venture's secret ingredient: weed oil in the glaze",
-      "why": "Cannabis (CBD) oil goes into the glaze, the swordfish and the apples. In the cook's words: \"Weed everything. It's part of our culture, it's part of our history and our heritage.\""
     }
   ],
   "follow_up_questions": [
     {
       "id": "q1",
-      "about_step": 11,
+      "about_step": 10,
       "question": "You added sliced apples to the pan, but we never saw them being cut. About how many apples did you slice, and how thinly should they be cut to properly form the roses?"
     },
     {
-      "id": "q2",
-      "about_step": 9,
-      "question": "You joked about adding CBD oil as a secret ingredient for the 'weed steak', but we never clearly saw it being measured or added. Was it actually incorporated into the recipe, and if so, how much did you use?"
-    },
-    {
       "id": "q3",
-      "about_step": 10,
+      "about_step": 9,
       "question": "The microgreens were thrown out because they were soggy, but if they had been fresh, at what stage of plating would you have added them?"
     },
     {
