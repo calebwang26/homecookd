@@ -19,6 +19,7 @@ import type * as http from "../http.js";
 import type * as ids from "../ids.js";
 import type * as jobs from "../jobs.js";
 import type * as lib_auth from "../lib/auth.js";
+import type * as lib_forKids from "../lib/forKids.js";
 import type * as lib_geo from "../lib/geo.js";
 import type * as lib_glassesRoutes from "../lib/glassesRoutes.js";
 import type * as lib_http from "../lib/http.js";
@@ -65,6 +66,7 @@ declare const fullApi: ApiFromModules<{
   ids: typeof ids;
   jobs: typeof jobs;
   "lib/auth": typeof lib_auth;
+  "lib/forKids": typeof lib_forKids;
   "lib/geo": typeof lib_geo;
   "lib/glassesRoutes": typeof lib_glassesRoutes;
   "lib/http": typeof lib_http;
