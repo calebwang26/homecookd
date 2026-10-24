@@ -1,0 +1,6 @@
+numpy>=1.26
+pillow>=10
+pydantic>=2.6
+google-genai>=2.31   # needs the Interactions API (client.interactions.create)
+websockets>=15       # --cloud: the live relay to homecookd's glasses VM
+# ffmpeg must also be installed:  macOS: brew install ffmpeg   Windows: winget install ffmpeg

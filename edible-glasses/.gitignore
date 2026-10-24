@@ -1,0 +1,6 @@
+.env
+.venv/
+sessions/
+fake_sd/
+__pycache__/
+.pytest_cache/

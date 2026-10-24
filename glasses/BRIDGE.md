@@ -1,5 +1,7 @@
 # Glasses through the laptop bridge
 
+The laptop side now lives in this repo at [`edible-glasses/`](../edible-glasses/): the receiver, the firmware and the tools. See `edible-glasses/MVP.md` for the cooking-day steps.
+
 The edible-glasses firmware streams to a laptop over UDP, not to the VM. The laptop's receiver, run with `--cloud` (`receiver/cloud_bridge.py` in edible-glasses), connects that stream to everything here. It also adds the two things the direct path doesn't have: a full backup and live analysis.
 
 ```
