@@ -340,3 +340,4 @@ Before starting work, compare the last commit here with `git log origin/main` to
     - Not deployed (`voice/deploy.sh`, Convex).
     - The app side in #35/#36: send `moment`, send the text no on a tap-to-close, read `offer_closed`, call
       `endRecording` when the socket is down.
+- Oct 24 · (this PR) · Claude · Cartesia credit fix C (Caleb): fake speech for voice tests. `VOICE_FAKE_SPEECH=1` (`npm run dev:fake`) swaps Ink, Gemini Live and Sonic for fakes (`voice/src/speech.ts`), so local runs cost nothing; `/health` adds `x-fake-speech: 1`. `test-client` and `test-record` refuse a service without it unless `LIVE=1`, send each recorded line's words as text (`voice/scripts/testLines.ts`, shared with `make-audio`), and stop at `MAX_S` (live at most 300 s). AGENTS.md rule: at most one live Cartesia smoke test per merge. Fixes A (server-side half duplex) and B (idle close) follow in a second PR; the phone side of A and B goes in #36.
