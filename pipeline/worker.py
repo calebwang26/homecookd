@@ -7,8 +7,8 @@
 Convex (docs/build/STACK.md, "Worker -> Convex"): the app uploads to the GCS uploads bucket and calls
 jobs.create. This worker POSTs /worker/claim (204 = nothing queued), runs prep -> process (Gemini watches,
 Muse writes) -> publish, reports each stage to /worker/progress (preparing, understanding, writing, or failed
-with a message the cook can read) and sends the published recipe.json to /worker/published, which saves it
-and has Convex index it into Moss. Every call carries x-worker-secret. Env: CONVEX_SITE_URL (the deployment's
+with a message the cook can read) and sends the whole recipe to /worker/published, which saves it and has
+Convex index it into Moss. The recipe.json in the public media bucket has no stories or tips (publish.py). Every call carries x-worker-secret. Env: CONVEX_SITE_URL (the deployment's
 .convex.site URL; pipeline/convex_stub.py for local tests), WORKER_SECRET. Raw uploads are kept, so a failed
 job can be queued again; the uploads bucket's 14-day lifecycle rule deletes them.
 The app may create the job while the signer upload is still going. A signer upload ("<job_id>/") lists its
@@ -506,8 +506,9 @@ def handle_convex(convex: Convex, job: dict, media: storage.Bucket, uploads: sto
             process.run(recipe_id, report=report, language=job.get("language"), homie_log=job.get("homieLog") or [])
             report("writing", 0.9)
             # Media + recipe.json only. No rebuild_library: Convex lists the family's recipes now, and the
-            # GCS library.json is shared by every pre-hackathon copy of the app.
-            recipe = publish.publish_recipe(recipe_id, bucket=media)
+            # GCS library.json is shared by every pre-hackathon copy of the app. The public recipe.json
+            # leaves out her stories and tips; Convex gets them all and shows them only after her yes.
+            recipe = publish.publish_recipe(recipe_id, bucket=media, family=True)
             recipe_url = publish.public_url(media, f"{recipe_id}/recipe.json")
             convex_recipe = convex.published(job_id, recipe.model_dump(mode="json"), recipe_url,
                                              job.get("language"), job.get("memoriesOptIn"))
