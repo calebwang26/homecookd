@@ -17,6 +17,12 @@ export const LINES: Record<string, Line> = {
   "oil-question": { text: "How hot should the oil be?" },
   yes: { text: "Yes." },
   no: { text: "No, thanks." },
+  // Everyday yes and no (src/yesNo.ts): a yes or a no with more after it.
+  "sure-read-it": { text: "Sure, read it." },
+  "yeah-go-ahead": { text: "Yeah, go ahead." },
+  "no-not-now": { text: "No, not right now." },
+  nah: { text: "Nah, I'm good." },
+  dont: { text: "Don't." },
   timer: { text: "Set a timer for five minutes." },
   // The cook while homie listens (/record): a vague amount, then her answer, then yes to the opt-in.
   "cook-mr-cooking": { text: "हो, आधी तांदूळ तीन वेळा धुवून घे. मग थोडं मीठ टाक, अंदाजाने.", voice: COOK_VOICE, lang: "mr" },

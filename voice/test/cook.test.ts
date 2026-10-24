@@ -274,3 +274,51 @@ test("the long-quiet nudge waits while an app moment is up", async () => {
   assert.equal(c.ws.of("say").at(-1)?.text, 'Still on step 1? Say "next" when you\'re ready.');
   c.close();
 });
+
+test("every everyday no declines the offer with offer_closed, and a later okay doesn't turn reading on", async () => {
+  for (const no of ["No, not right now.", "Nah, I'm good.", "No, I don't want that.", "Don't.", "Not now, thanks."]) {
+    const w = world();
+    const c = w.connect();
+    await offered(c);
+    const since = c.mark();
+    w.says(no);
+    await settle();
+    assert.deepEqual(since(), [
+      { type: "transcript", text: no, final: true },
+      { type: "offer_closed", accepted: false },
+    ], no);
+    assert.deepEqual(w.turns, [], no);
+
+    w.says("Okay.");
+    w.says("Next step.");
+    await advance(AUDIO_S * 1000 + 2000);
+    assert.deepEqual(c.ws.of("offer_closed"), [{ type: "offer_closed", accepted: false }], no);
+    assert.equal(c.ws.of("say").filter((s) => s.kind === "step").length, 0, `${no}: steps stay silent`);
+    c.close();
+  }
+});
+
+test("with a moment up, everyday yes and no answers are the moment's, and never reach Claude", async () => {
+  const w = world();
+  const c = w.connect();
+  await offered(c);
+  c.send({ type: "moment", open: true, kind: "answer" });
+  const replies = ["Sure, read it.", "Yeah, go ahead.", "Yes, play it.", "Yes, I want to hear it.", "Don't.", "No, not right now.", "Nah, I'm good."];
+  const since = c.mark();
+  for (const reply of replies) w.says(reply);
+  await advance(5000);
+  assert.deepEqual(since(), replies.map((text) => ({ type: "transcript", text, final: true })));
+  assert.deepEqual(w.turns, []);
+
+  // A command isn't an answer: it still goes the usual way with the moment up.
+  w.says("Okay, what's the next step?");
+  await advance(1000);
+  assert.deepEqual(w.turns, ["Okay, what's the next step?"]);
+
+  // Once it closes, a no is ours again: the offer is declined.
+  c.send({ type: "moment", open: false });
+  w.says("Nah, I'm good.");
+  await settle();
+  assert.deepEqual(c.ws.of("offer_closed"), [{ type: "offer_closed", accepted: false }]);
+  c.close();
+});

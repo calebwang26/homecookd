@@ -255,7 +255,9 @@ voice, in `lang` or the person's language). `translate: true` first turns Englis
   moment opens on the kid's phone, `{ type: "moment", open: false }` when it closes. While one is open the service
   still streams transcripts, but a spoken yes, no, sure or not now is not applied to its read-aloud offer or
   story nudge (and doesn't reach Claude); other speech goes the usual way. It says no offer or nudge until the
-  moment closes. A `{ type: "text" }` answer is the app's own and always counts.
+  moment closes. A `{ type: "text" }` answer is the app's own and always counts. What counts as a yes or a no, for
+  the offers and the moments: `voice/src/yesNo.ts` (a reply that starts with one, like "No, not right now"). The
+  app's `yesNo` must use the same rules (copy the file's regexes), so both sides act on the same words.
 - The app sends silence while a `say` or clip plays (half duplex).
 
 **Worker ↔ Convex additions**

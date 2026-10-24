@@ -14,6 +14,7 @@ import { SONIC_SAMPLE_RATE, type AudioFormat } from "./sonic.js";
 import { listenInk, speak } from "./speech.js";
 import type { Stt, SttEvents } from "./stt.js";
 import { translateQuote } from "./translate.js";
+import { yesNo } from "./yesNo.js";
 
 type SayKind = "step" | "reply" | "hint" | "translation" | "nudge" | "offer" | "greeting" | "timer";
 
@@ -45,8 +46,6 @@ const FAST: [RegExp, "next" | "previous" | "repeat"][] = [
   [/^(go back|back|previous|previous step|last step|step back)$/, "previous"],
   [/^(repeat|repeat that|again|say that again|one more time|what)$/, "repeat"],
 ];
-/** "Yes" to an open offer (read it out loud, hear a story). Anything else goes the usual way. */
-const YES = /^(yes|yeah|yep|yup|sure|ok|okay|please|go ahead|read it|read it out loud|do it|let'?s hear it)( .*)?$/;
 const normalize = (t: string) => t.toLowerCase().replace(/[^a-z' ]/g, " ").replace(/\s+/g, " ").trim();
 /** "Um, wait, go back please" → "go back". */
 const command = (t: string) =>
@@ -59,19 +58,6 @@ function timerAsk(t: string): { seconds: number; label: string } | null {
   if (!m) return null;
   const seconds = Math.round(Number(m[1]) * (m[2].startsWith("h") ? 3600 : m[2].startsWith("m") ? 60 : 1));
   return seconds >= 5 && seconds <= 4 * 3600 ? { seconds, label: m[3]?.trim() || "timer" } : null;
-}
-const isYes = (t: string) => {
-  const c = normalize(t);
-  return YES.test(c) && !FAST.some(([re]) => re.test(command(t)));
-};
-/** A whole reply that is only a yes ("yes please", "sure") or only a no ("no thanks", "not now"). */
-const YES_REPLY = /^(yes|yeah|yep|yup|sure|ok|okay|alright|please|of course|go ahead|do it|read it|read it to me|read it out loud|let'?s hear it|play it)( (yes|yeah|yep|sure|ok|okay|please))*$/;
-const NO_REPLY = /^(no|nope|nah|no no|not now|not right now|not yet|later|maybe later|no not now|no maybe later|i'?m good|no i'?m good|skip it)$/;
-function yesOrNo(t: string): "yes" | "no" | null {
-  const c = normalize(t)
-    .replace(/^((um|uh|oh|ah|hmm|mm|well|wait|okay|ok|so|hey|alright|and|now) )+/, "")
-    .replace(/( (please|thanks|thank you))+$/, "");
-  return YES_REPLY.test(c) ? "yes" : NO_REPLY.test(c) ? "no" : null;
 }
 
 /** Mostly non-Latin letters: Ink writes the cook's Marathi (from a clip playing nearby) in Devanagari. */
@@ -287,7 +273,7 @@ export class Cooking {
     this.touch();
     // A moment the app has up hears the kid's yes or no itself (from that transcript): it isn't ours to act on.
     const inMoment = spoken && this.moment !== null;
-    if (inMoment && yesOrNo(text)) {
+    if (inMoment && yesNo(text)) {
       console.log(`kid (to the app's ${this.moment} moment): ${text}`);
       return;
     }
@@ -301,8 +287,9 @@ export class Cooking {
     this.clipSeq++; // the kid moved on: drop a translation still waiting
     try {
       if (this.offer && !inMoment) {
-        if (yesOrNo(text) === "no") return this.declineOffer();
-        if (isYes(text)) return await this.acceptOffer();
+        const answer = yesNo(text);
+        if (answer === "no") return this.declineOffer();
+        if (answer === "yes") return await this.acceptOffer();
       }
       const fast = FAST.find(([re]) => re.test(command(text)))?.[1];
       const timer = timerAsk(text);
