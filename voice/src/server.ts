@@ -3,7 +3,9 @@
 //   WS   /cook?session=<sessionToken>&recipe=<recipeId>[&audio=pcm|wav]       the kid cooking
 //   WS   /record?session=<sessionToken>&recording=<recordingId>[&audio=pcm|wav]  homie while a cook records
 //   POST /speak { sessionToken, text, lang?, translate?, kind? }  → audio/wav in homie's voice
+import { realpathSync } from "node:fs";
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { fileURLToPath } from "node:url";
 import WebSocket, { WebSocketServer } from "ws";
 import { Cooking } from "./cook.js";
 import * as convex from "./convex.js";
@@ -13,7 +15,16 @@ import { Recording } from "./record.js";
 import { guarded, inSession, installSafetyNet } from "./safety.js";
 import { fakeSpeech, speakWav } from "./speech.js";
 
-installSafetyNet();
+/** This file is the program (Cloud Run, `npm run dev`), not a module a test imported. */
+function isMain(): boolean {
+  try {
+    return realpathSync(process.argv[1] ?? "") === fileURLToPath(import.meta.url);
+  } catch {
+    return false;
+  }
+}
+// Only for the program: a test that imports the server keeps its runner's own error handling.
+if (isMain()) installSafetyNet();
 
 const MAX_SPEAK_CHARS = 600;
 let sessionCount = 0;
