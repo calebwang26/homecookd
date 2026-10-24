@@ -5,18 +5,23 @@
 //   useHomieScreen({ dock: { x, y, size } })     rest somewhere else while this screen is focused
 //   useHomieScreen({ hidden: true })             no pot on this screen
 //   useHomieScreen({ onPress: toggleMic })       a tap does this instead of the screen's help line
-//   useAiSpeaking()                              true while homie or any AI say is speaking (half duplex:
-//                                                send the voice service no mic frames meanwhile)
+//   useAiSpeaking()                              true while homie or any AI say is speaking (what the
+//                                                screen shows: "AI voice" under the pot, nothing over it)
+//   useHalfDuplex()                              true while the app itself makes sound: homie lit or
+//                                                speaking, anything on the shared player, a step video.
+//                                                Meanwhile each mic frame goes out as zeroed PCM of the
+//                                                same length (STACK.md); lib/live/mic does that for
+//                                                every caller, on each frame (logic halfDuplex)
 import { useFocusEffect, usePathname } from 'expo-router';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWindowDimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useNowPlaying } from '@/lib/media';
+import { useNowPlaying, useVideoPlaying } from '@/lib/media';
 import { useSession } from '@/lib/session';
 
-import { homieRoute, restFrame, sayPhase, type HomieRoute } from './logic';
-import { claimScreen, releaseScreen, useHomie, type HomieFrame } from './store';
+import { halfDuplex, homieRoute, restFrame, sayPhase, type HomieRoute } from './logic';
+import { claimScreen, releaseScreen, useHomieSelect, type HomieFrame } from './store';
 
 /** This screen's homie rules (hidden, help line) and the resting frame, before any dock. */
 export function useHomieRoute(): { route: HomieRoute; frame: HomieFrame } {
@@ -31,7 +36,7 @@ export function useHomieRoute(): { route: HomieRoute; frame: HomieFrame } {
 /** Where the pot rests on this screen (a dock if one is set). */
 export function useHomieSlot(): HomieFrame {
   const { frame } = useHomieRoute();
-  return useHomie().dock ?? frame;
+  return useHomieSelect((h) => h.dock) ?? frame;
 }
 
 export function useHomieScreen({ dock, hidden = false, onPress }: { dock?: HomieFrame | null; hidden?: boolean; onPress?: (() => void) | null }) {
@@ -55,6 +60,13 @@ export function useHomieScreen({ dock, hidden = false, onPress }: { dock?: Homie
 
 export function useAiSpeaking(): boolean {
   const now = useNowPlaying();
-  const { state } = useHomie();
-  return sayPhase(now.key, now.phase) !== 'none' || state === 'speaking';
+  const speaking = useHomieSelect((h) => h.state === 'speaking');
+  return sayPhase(now.key, now.phase) !== 'none' || speaking;
+}
+
+export function useHalfDuplex(): boolean {
+  const now = useNowPlaying();
+  const homie = useHomieSelect((h) => h.state);
+  const video = useVideoPlaying();
+  return halfDuplex({ homie, audio: now.phase, video });
 }

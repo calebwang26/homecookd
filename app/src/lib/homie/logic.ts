@@ -1,6 +1,7 @@
 // homie's pure rules (node scripts/test-homie.mjs): what the pot shows, where it rests on each
-// screen, what a tap on it says, the timer ring, the mic level, and the voice service's https base.
-import type { Homie, HomieFrame, HomieState } from './store';
+// screen, what a tap on it says, the centred moment's layout and listening bars, the timer ring, the
+// mic level, half duplex, and the voice service's https base.
+import type { Homie, HomieFrame, HomieMoment, HomieState } from './store';
 
 export const HOMIE_REST_SIZE = 56;
 export const HOMIE_MOMENT_SIZE = 170;
@@ -28,10 +29,23 @@ export function potState(h: Pick<Homie, 'state'>, say: SayPhase): HomieState {
   return h.state;
 }
 
-/** The label under the pot while it speaks. Never the cook's name alone: it is always the AI. */
+/**
+ * The label under the pot while it speaks. Never the cook's name alone: it is always the AI. A screen
+ * that knows the cook sets the label itself ("Translated from Grandma", lib/live/voice).
+ */
 export function speakingLabel(h: Pick<Homie, 'label'>, key: string | null | undefined): string {
   if (h.label) return h.label;
-  return key?.startsWith(TRANSLATION_PREFIX) ? 'Translated · AI voice' : 'AI voice';
+  return key?.startsWith(TRANSLATION_PREFIX) ? 'Translated from the cook' : 'AI voice';
+}
+
+/**
+ * Half duplex (docs/build/STACK.md): while this is true the app itself is making sound, so every mic
+ * frame goes to the voice service as zeroed PCM of the same length (the recorder keeps running).
+ * True while homie is lit or speaking, while the shared player plays or loads anything (homie's say,
+ * the cook's story or voice note), and while a step video plays (the cook's voice).
+ */
+export function halfDuplex(v: { homie: HomieState; audio: string; video: boolean }): boolean {
+  return v.homie === 'lit' || v.homie === 'speaking' || v.audio === 'playing' || v.audio === 'loading' || v.video;
 }
 
 export const HELP = {
@@ -91,6 +105,48 @@ export function restFrame(route: Pick<HomieRoute, 'header' | 'reserve'>, screen:
 export function momentFrame(screen: { width: number; height: number; insetsTop: number }): HomieFrame {
   const size = Math.round(Math.min(HOMIE_MOMENT_SIZE, screen.height * 0.21));
   return { x: (screen.width - size) / 2, y: Math.max(screen.insetsTop + 24, Math.round(screen.height * 0.14)), size };
+}
+
+// ---------------------------------------------------------------------------------------------
+// The centred column (homie asks out loud, no buttons; Caleb Oct 24): the same rhythm as Grandma's
+// centred screens. The pot (176), 56 pt, the words; the whole group centred between the safe insets.
+
+export const HOMIE_ASK_SIZE = 176;
+/** Between the pot and the question (room for the "AI voice" label under the pot). */
+export const ASK_POT_GAP = 56;
+/** Side padding of the words. */
+export const ASK_SIDE = 32;
+/** The resting pot's size while the cook's own voice plays (store `shrunk`). */
+export const SHRUNK_SCALE = 0.82;
+
+/** A moment homie asks out loud (bars, a spoken prompt, or a tap anywhere to close) uses the centred column. */
+export function isCentredMoment(m: Pick<HomieMoment, 'bars' | 'prompt' | 'tapToClose'>): boolean {
+  return !!(m.bars || m.prompt || m.tapToClose);
+}
+
+/**
+ * The centred column's pot frame and where the words start, from the words' measured height. The
+ * pot shrinks on a short phone; a group taller than the screen starts at the top (the words scroll).
+ */
+export function askFrame(
+  screen: { width: number; height: number; insetsTop: number; insetsBottom: number },
+  wordsH: number,
+): { pot: HomieFrame; wordsTop: number } {
+  const size = Math.round(Math.min(HOMIE_ASK_SIZE, screen.height * 0.22));
+  const top = screen.insetsTop + 16;
+  const bottom = screen.height - Math.max(16, screen.insetsBottom + 8);
+  const group = size + ASK_POT_GAP + Math.max(0, wordsH);
+  const y = Math.max(top, Math.round(top + (bottom - top - group) / 2));
+  return { pot: { x: (screen.width - size) / 2, y, size }, wordsTop: y + size + ASK_POT_GAP };
+}
+
+/** The five listening bars' heights (pt) at a mic level 0..1: a low rest shape that grows with the voice. */
+const BAR_REST = [10, 16, 22, 16, 10];
+const BAR_GROW = [16, 24, 30, 24, 16];
+export const BAR_MAX = BAR_REST[2] + BAR_GROW[2];
+export function barHeights(level: number): number[] {
+  const l = Math.max(0, Math.min(1, Number.isFinite(level) ? level : 0));
+  return BAR_REST.map((h, i) => Math.round(h + BAR_GROW[i] * l));
 }
 
 /** 1 -> 0 as a timer runs out. */

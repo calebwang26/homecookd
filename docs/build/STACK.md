@@ -329,8 +329,33 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   moment up, anything after it that isn't just more no is still the service's: a plain command or a timer that is
   the whole ask takes the fast path ("No, next step"), and anything else goes to Claude as the kid's whole sentence,
   never a cut-down copy, with a note that the offer was declined ("No, I'm out of ginger. Can I skip it?"). "No,
-  maybe later" is only the no.
-- The app sends silence while a `say` or clip plays (half duplex).
+  maybe later" is only the no. The app's `yesNo` and `afterNo` (`app/src/lib/live/voiceLogic.ts`) are a copy of
+  it, so the phone's own moments and the service agree.
+- Half duplex: while the app makes sound (homie lit or speaking, anything on the shared player, a step video
+  playing), `lib/live/mic` zeroes every frame (same length; the recorder keeps running). `/record` still gets those
+  zeroed frames; `/cook` gets no frames at all while the app makes sound or another screen is on top (Ink bills
+  every second it gets, silence too). The cook line closes when the app goes to the background (not for iOS
+  'inactive': Control Center, the notification shade, a call banner) and reopens on return. Each reopen is a new
+  socket, where the service starts its timer ids again at `timer-1`, so timer ids are per socket on the phone: a
+  timer from an older socket keeps counting down and buzzing there, and leaves on its own (its `timer_done` can't
+  come).
+- What the app sends (Track I-kid): the chips under homie send `{ type: "text", text: "back" | "repeat" }` (no
+  Next chip; the big "Next step" button sends `{ type: "step" }`). The service's echo of the text (a `transcript`
+  with `final: true`) counts as its answer; a chip acts on its own only if nothing (echo, step, clip, line, timer)
+  comes back within 1.5 s. "repeat" goes only for a kid who chose read-aloud (the service's repeat turns reading
+  on); for anyone else Repeat replays the step's video on the phone. A kid who said yes once has `"yes"` sent for
+  them on that phone, and the offer's audio is dropped. After a step the kid tapped, a kid who chose read-aloud
+  also gets `"repeat"`, so it is read; not when her clip moved the step. On `ready` the app sends its own
+  `{ type: "step" }` and doesn't follow the service's go_to_step right after it (the screen's step wins). A
+  `say_end` while a newer line is open belongs to the line that newer one cut off. The offer, a story `nudge`
+  and "Grandma answered your question" are no-buttons moments: the kid says yes or no, and a tap anywhere
+  closes it ("not now" for that visit only; a spoken answer is kept on the phone).
+- The app's side of the offer and moments (Track I-kid): it sends `moment` open / close for "Grandma answered
+  your question" (`answer`) and "Ask Grandma anything" (`ask`), again on a new socket while one is up; the
+  read-aloud offer and the story nudge are the service's own, so they never count. It sends `"no"` for a tap
+  anywhere on the read-aloud offer and for a no the phone remembers, and `"yes"` for "Read it to me" and a
+  remembered yes. On `offer_closed` it closes the offer's moment if it's still up (homie heard the answer
+  itself) and keeps that answer.
 
 **Worker ↔ Convex additions**
 - `/worker/claim` adds `title?`, `language` (the job's, else the cook's, else `en`), `relation?` (the cook's),
