@@ -2,6 +2,7 @@
 
 python pipeline/process.py --id weed-pancakes [--force] [--no-shorten]     # reads data/out/<id>/work/manifest.json
 python pipeline/process.py --id weed-pancakes --batch [--batch-timeout-min 1440]
+python pipeline/process.py --id weed-pancakes --rewrite [--writer gemini]   # re-merge from the cached extraction
 
 --batch sends the extraction calls as one Gemini Batch API job (half price; results within 24 h, usually
 much sooner) instead of parallel synchronous calls. The merge is always a normal synchronous call.
@@ -14,12 +15,16 @@ After the merge, pipeline/coverage.py checks that every extracted step made it i
 not, the merge is retried once with them listed; anything still missing is warned about loudly at the end of
 the run and saved, with long suspicious gaps between steps, in work/coverage.json (see ensure_coverage).
 
+The merge (and its coverage retry) is the writing step: Muse Spark writes it by default, Gemini when
+RECIPE_WRITER=gemini or when Muse fails twice (pipeline/writer.py). Extraction always stays on Gemini.
+
 Last, one more text call (pipeline/shorten.py) writes cook mode's short substeps, step ingredients and tips
 into recipe.json; --no-shorten skips it.
 
 Env (.env; already-set variables win): GEMINI_API_KEY, GEMINI_MODEL (merge),
 GEMINI_EXTRACT_MODEL (blank = GEMINI_MODEL), GEMINI_MEDIA_RESOLUTION (default MEDIA_RESOLUTION_LOW),
-COVERAGE_GAP_S (default 120: report longer gaps between steps while the cook was still working).
+COVERAGE_GAP_S (default 120: report longer gaps between steps while the cook was still working),
+RECIPE_WRITER and MUSE_* (pipeline/writer.py).
 """
 from __future__ import annotations
 
@@ -31,7 +36,8 @@ import os
 import sys
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
@@ -44,7 +50,7 @@ from google import genai  # noqa: E402
 from google.genai import types  # noqa: E402
 from pydantic import ValidationError  # noqa: E402
 
-from pipeline import coverage, order  # noqa: E402
+from pipeline import coverage, order, writer  # noqa: E402
 from pipeline.prep import OUT_ROOT, PrepError, make_poster  # noqa: E402
 from pipeline.prompts import (COVERAGE_RETRY_SUFFIX, EXTRACT_PROMPT, EXTRACT_RETRY_SUFFIX,  # noqa: E402
                               MERGE_PROMPT, MERGE_RETRY_SUFFIX)
@@ -61,6 +67,9 @@ PRICES: dict[str, dict[str, tuple[float, float]]] = {
                                "batch_input": (1.00, 2.00), "batch_output": (6.00, 9.00)},
     "gemini-3.8-flash": {"input": (0.75, 0.75), "output": (3.75, 3.75),
                          "batch_input": (0.375, 0.375), "batch_output": (1.875, 1.875)},
+    # https://dev.meta.ai/docs/pricing-rate-limits (fetched 2026-10-23); no batch tier, so batch = standard.
+    "muse-spark-1.3": {"input": (1.25, 1.25), "output": (4.25, 4.25),
+                       "batch_input": (1.25, 1.25), "batch_output": (4.25, 4.25)},
 }
 FALLBACK_PRICE_MODEL = "gemini-3.1-pro-preview"  # unknown models are costed at the most expensive known rate
 ORDER_MODEL = "gemini-3.8-flash"  # the clip-order call; GEMINI_EXTRACT_MODEL instead when that is a Flash model
@@ -498,7 +507,8 @@ def build_recipe(draft: RecipeDraft, manifest: dict) -> dict:
         steps.append(s)
     return {
         "id": manifest["id"],
-        "title": manifest["title"],  # the title given to prep.py wins over the model's suggestion
+        # The title given to prep.py wins over the model's; a Convex upload has none, so the model names it.
+        "title": manifest["title"] or d["title"],
         "cook": {"name": manifest["cook"], "relation": manifest["relation"]},
         "intro": d["intro"],
         "servings": d["servings"],
@@ -519,22 +529,25 @@ def build_recipe(draft: RecipeDraft, manifest: dict) -> dict:
     }
 
 
-def merge(client: genai.Client, model: str, manifest: dict, events: list[dict], n_files: int,
+NO_TITLE = "(no title yet: name the main dish shown, in a few plain words, as the recipe's title)"
+
+
+def merge(w: writer.GeminiWriter | writer.MuseWriter, manifest: dict, events: list[dict], n_files: int,
           out_dir: Path, usage: Usage, extra: str = "", tag: str = "merge") -> Recipe:
     """extra is appended to the merge prompt (ensure_coverage's retry); tag labels the log lines."""
     base_prompt = MERGE_PROMPT.format(
-        n=n_files, title=json.dumps(manifest["title"], ensure_ascii=False), duration_s=manifest["duration_s"],
+        n=n_files, title=json.dumps(manifest["title"], ensure_ascii=False) if manifest["title"] else NO_TITLE,
+        duration_s=manifest["duration_s"],
         sessions=json.dumps(sessions_for_prompt(manifest["sessions"],
                                                 not (manifest.get("order") or {}).get("reordered")),
                             separators=(",", ":")),
         events=json.dumps(events, separators=(",", ":"), ensure_ascii=False)) + extra
-    prompt, errors, saved = base_prompt, ["no attempt made"], None
+    prompt, errors, saved, model = base_prompt, ["no attempt made"], None, w.model
+    tag = f"{tag} {w.name}"
     for attempt in (1, 2):
         resp, text, candidate, t0 = None, None, None, time.monotonic()
         try:
-            resp = client.models.generate_content(
-                model=model, contents=prompt,
-                config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=RecipeDraft))
+            resp = w.generate(prompt, RecipeDraft)
             seconds = time.monotonic() - t0
             text = response_text(resp)
             draft = RecipeDraft.model_validate_json(text)
@@ -571,7 +584,7 @@ def merge(client: genai.Client, model: str, manifest: dict, events: list[dict], 
     raise ProcessError(f"merge failed twice ({hint}):\n" + "\n".join(f"  - {x}" for x in errors))
 
 
-def ensure_coverage(client: genai.Client, model: str, manifest: dict, events: list[dict], n_files: int,
+def ensure_coverage(w: writer.GeminiWriter | writer.MuseWriter, manifest: dict, events: list[dict], n_files: int,
                     out_dir: Path, usage: Usage, recipe: Recipe, gap_s: int = coverage.GAP_S) -> tuple[Recipe, dict]:
     """No step the extraction found may vanish in the merge. If the recipe leaves some out, merge once more
     with them listed and keep the answer only if it misses fewer. Never drops silently: what is still
@@ -585,7 +598,7 @@ def ensure_coverage(client: genai.Client, model: str, manifest: dict, events: li
         previous = RecipeDraft.model_validate(recipe.model_dump(mode="json")).model_dump_json()
         extra = COVERAGE_RETRY_SUFFIX.format(missing=coverage.retry_lines(first_missing), previous=previous)
         try:
-            retried = merge(client, model, manifest, events, n_files, out_dir, usage, extra, tag="merge coverage retry")
+            retried = merge(w, manifest, events, n_files, out_dir, usage, extra, tag="merge coverage retry")
         except ProcessError:  # merge() already logged why each attempt was rejected
             log("[coverage] the retry failed; keeping the first recipe")
         else:
@@ -662,18 +675,40 @@ def summarize(recipe: Recipe, not_processed: list[dict], usage: Usage, cover: di
     tokens = sum(c["prompt_token_count"] + c["candidates_token_count"] + c["thoughts_token_count"] for c in run_calls)
     run_cost = sum(c["cost_usd"] for c in run_calls)
     total_cost = sum(c["cost_usd"] for c in usage.calls)
-    log(f"Gemini this run: {len(run_calls)} calls, {tokens} tokens, ~${run_cost:.4f}"
+    log(f"Models this run: {len(run_calls)} calls, {tokens} tokens, ~${run_cost:.4f}"
         f" (all runs for this recipe: ~${total_cost:.4f}; details in work/usage.json)")
     if cover:  # last, so a dropped step is hard to miss
         for line in coverage.warnings(cover):
             log(line)
 
 
+def write_recipe(w: writer.GeminiWriter | writer.MuseWriter, fallback: writer.GeminiWriter, manifest: dict,
+                 events: list[dict], n: int, out_dir: Path, usage: Usage, gap_s: int) -> tuple[Recipe, dict]:
+    """The writing step: merge + coverage retry with `w`; the whole step again with Gemini if Muse fails."""
+    try:
+        recipe = merge(w, manifest, events, n, out_dir, usage)
+    except (ProcessError, writer.WriterError) as e:
+        if w.name == "gemini":
+            raise
+        log(f"[merge] WARNING: Muse could not write the recipe ({str(e)[:300]}); falling back to Gemini")
+        w = fallback
+        recipe = merge(w, manifest, events, n, out_dir, usage)
+    if not recipe.steps:
+        raise ProcessError("the merged recipe has no steps; see work/chunk_*.offset.json")
+    return ensure_coverage(w, manifest, events, n, out_dir, usage, recipe, gap_s)
+
+
+Report = Callable[[str, float], None]  # (Convex job stage, progress 0..1 across the whole job)
+
+
 def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_s: float = BATCH_TIMEOUT_S,
-        shorten: bool = True) -> Path:
+        shorten: bool = True, rewrite: bool = False, report: Report | None = None) -> Path:
     """Extract, merge and validate one recipe. Returns the recipe.json path. Raises ProcessError on failure.
     batch=True runs the extraction as one Batch API job (half price, slower); see extract_batch.
-    shorten=False skips pipeline/shorten.py's extra text call after the merge."""
+    shorten=False skips pipeline/shorten.py's extra text call after the merge.
+    rewrite=True writes recipe.json again from the cached extraction (no new Gemini video calls).
+    report gets the worker's stages: understanding 0.2 -> 0.7 per extracted file, then writing 0.7 -> 0.95."""
+    report = report or (lambda stage, progress: None)
     out_dir = OUT_ROOT / recipe_id
     work = out_dir / "work"
     manifest_path = work / "manifest.json"
@@ -681,8 +716,8 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
     if not manifest_path.exists():
         raise ProcessError(f"{manifest_path} not found; run prep.py --id {recipe_id} first")
     order.restore_interrupted(out_dir, log)  # a clip reorder that stopped part-way: finish or undo it first
-    if recipe_path.exists() and not force:
-        log(f"[process {recipe_id}] {recipe_path} exists; use --force to rebuild")
+    if recipe_path.exists() and not force and not rewrite:
+        log(f"[process {recipe_id}] {recipe_path} exists; use --force to rebuild or --rewrite to re-merge")
         return recipe_path
 
     cfg = load_config()
@@ -693,11 +728,16 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
     n = len(jobs)
     if n == 0:
         raise ProcessError(f"{manifest_path} lists no AI files")
-    log(f"[process {recipe_id}] {n} AI file(s); extract with {cfg['extract_model']} "
-        f"({cfg['media_resolution'].value}{', Batch API' if batch else ''}), merge with {cfg['merge_model']}")
-
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
                           http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS, retry_options=HTTP_RETRY))
+    gemini_writer = writer.GeminiWriter(client, cfg["merge_model"])
+    try:
+        w = writer.choose(client, cfg["merge_model"])
+    except writer.WriterError as e:
+        raise ProcessError(str(e))
+    log(f"[process {recipe_id}] {n} AI file(s); extract with {cfg['extract_model']} "
+        f"({cfg['media_resolution'].value}{', Batch API' if batch else ''}), write with {w.name} {w.model}")
+    report("understanding", 0.2)
     usage = Usage(work / "usage.json")
     t0 = time.monotonic()
     if batch:
@@ -708,6 +748,8 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
         with ThreadPoolExecutor(max_workers=min(n, MAX_WORKERS)) as pool:
             futures = [pool.submit(extract_one, client, cfg, i, n, s, ai, out_dir, media_dur, usage, force)
                        for i, (s, ai) in enumerate(jobs, 1)]
+            for done, _ in enumerate(as_completed(futures), 1):
+                report("understanding", 0.2 + 0.5 * done / n)
             results = [f.result() for f in futures]
     log(f"[process {recipe_id}] extraction done in {time.monotonic() - t0:.1f} s")
 
@@ -726,11 +768,11 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
     events.sort(key=lambda e: (e["start_s"], e["end_s"]))
     (work / "not_processed.json").write_text(json.dumps(not_processed, indent=2) + "\n")
 
-    recipe = merge(client, cfg["merge_model"], manifest, events, n, out_dir, usage)
-    if not recipe.steps:
-        raise ProcessError("the merged recipe has no steps; see work/chunk_*.offset.json")
-    recipe, cover = ensure_coverage(client, cfg["merge_model"], manifest, events, n, out_dir, usage, recipe,
-                                    cfg["coverage_gap_s"])
+    report("writing", 0.7)
+    t_write = time.monotonic()
+    recipe, cover = write_recipe(w, gemini_writer, manifest, events, n, out_dir, usage, cfg["coverage_gap_s"])
+    log(f"[process {recipe_id}] writing took {time.monotonic() - t_write:.1f} s")
+    report("writing", 0.85)
 
     # Cover = the finished dish. the hackathon spec said step 2, but on real footage step 2 is usually raw prep
     # (an empty bowl for the biryani); the last step is plating or serving.
@@ -755,7 +797,7 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Extract & merge a recipe with Gemini.")
+    ap = argparse.ArgumentParser(description="Extract with Gemini, then write the recipe with Muse (or Gemini).")
     ap.add_argument("--id", required=True, help="recipe id (data/out/<id>/work/manifest.json must exist)")
     ap.add_argument("--force", action="store_true", help="re-extract and re-merge even if outputs exist")
     ap.add_argument("--batch", action="store_true",
@@ -765,10 +807,15 @@ def main() -> None:
                          "(default %(default).0f)")
     ap.add_argument("--no-shorten", action="store_true",
                     help="skip cook mode's short substeps after the merge (add them later with shorten.py)")
+    ap.add_argument("--rewrite", action="store_true",
+                    help="write recipe.json again from the cached extraction (no new video calls)")
+    ap.add_argument("--writer", choices=["muse", "gemini"], help="override RECIPE_WRITER for this run")
     args = ap.parse_args()
+    if args.writer:
+        os.environ["RECIPE_WRITER"] = args.writer
     try:
         run(args.id, force=args.force, batch=args.batch, batch_timeout_s=args.batch_timeout_min * 60,
-            shorten=not args.no_shorten)
+            shorten=not args.no_shorten, rewrite=args.rewrite)
     except (ProcessError, PrepError) as e:
         sys.exit(f"process: error: {e}")
 
