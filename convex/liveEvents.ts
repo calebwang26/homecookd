@@ -58,13 +58,19 @@ export const ingest = internalMutation({
 });
 
 /**
- * The laptop bridge's newest glasses frame (already in storage). Keeps one per recording: the previous
- * file is deleted. A frame for a recording that isn't a live glasses one is refused and its file deleted.
+ * The laptop bridge's newest glasses frame (already in storage), several a second. Keeps one per recording: the
+ * previous file is deleted, and a frame older than the kept one (`t`, same glasses session) is dropped. A frame for a recording that isn't a live glasses one is refused and its file deleted.
  */
 export const setFrame = internalMutation({
-  args: { recordingId: v.string(), storageId: v.id("_storage"), at: v.number() },
+  args: {
+    recordingId: v.string(),
+    storageId: v.id("_storage"),
+    at: v.number(),
+    sessionId: v.optional(v.string()),
+    t: v.optional(v.number()),
+  },
   returns: v.union(v.object({ ok: v.boolean() }), v.object({ error: v.string(), status: v.union(v.literal(400), v.literal(404)) })),
-  handler: async (ctx, { recordingId, storageId, at }) => {
+  handler: async (ctx, { recordingId, storageId, at, sessionId, t }) => {
     const id = ctx.db.normalizeId("recordings", recordingId);
     const rec = id && (await ctx.db.get(id));
     if (!rec || rec.source !== "glasses") {
@@ -79,11 +85,16 @@ export const setFrame = internalMutation({
       .query("liveFrames")
       .withIndex("by_recordingId", (q) => q.eq("recordingId", rec._id))
       .unique();
+    // An older frame from the same glasses session that arrived late: keep the newer one.
+    if (old && t !== undefined && old.t !== undefined && old.sessionId === sessionId && t <= old.t) {
+      await ctx.storage.delete(storageId);
+      return { ok: true };
+    }
     if (old) {
       await ctx.storage.delete(old.storageId);
-      await ctx.db.patch(old._id, { storageId, at });
+      await ctx.db.patch(old._id, { storageId, at, sessionId, t });
     } else {
-      await ctx.db.insert("liveFrames", { recordingId: rec._id, storageId, at });
+      await ctx.db.insert("liveFrames", { recordingId: rec._id, storageId, at, sessionId, t });
     }
     return { ok: true };
   },

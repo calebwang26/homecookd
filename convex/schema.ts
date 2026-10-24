@@ -269,6 +269,10 @@ export default defineSchema({
     recordingId: v.id("recordings"),
     storageId: v.id("_storage"),
     at: v.number(), // when Convex got it (epoch ms)
+    // When the glasses took it (ms on the glasses session's clock): several uploads are in flight at once,
+    // so an older frame that lands late must not replace a newer one.
+    sessionId: v.optional(v.string()),
+    t: v.optional(v.number()),
   }).index("by_recordingId", ["recordingId"]),
 
   /** Each window the live analysis tried, so a hole in liveEvents reads as "not analysed", not "nothing happened". */

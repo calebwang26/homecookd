@@ -33,7 +33,7 @@ Only the video goes under `glasses-<rid>/`, because the worker treats every obje
 
 ## Live picture → the cook's phone
 
-About once a second, the laptop sends the newest JPEG to `POST /glasses/frame?recordingId=<id>` (`x-glasses-secret`, raw `image/jpeg`, at most 512 KB). Convex keeps one frame per recording in `liveFrames`, plus its file in storage, and deletes the previous file each time. Frames for a recording that has ended are refused. `liveEvents.frame` gives the recording screen the frame's URL and time. `components/record/GlassesView` shows the picture with "Glasses live", or "Waiting for your glasses…" once the frame is over 5 s old. The receiver's `--frame-every` sets how often it sends (0 turns it off).
+About seven times a second (the receiver's `--frame-every 0.15`, up to 3 uploads in flight), the laptop sends the newest JPEG to `POST /glasses/frame?recordingId=<id>&session=<glasses session>&t=<ms>` (`x-glasses-secret`, raw `image/jpeg`, at most 512 KB). Convex drops a frame older than the one it keeps, from the same glasses session. Convex keeps one frame per recording in `liveFrames`, plus its file in storage, and deletes the previous file each time. Frames for a recording that has ended are refused. `liveEvents.frame` gives the recording screen the frame's URL and time. `components/record/GlassesView` shows the picture with "Glasses live", or "Waiting for your glasses…" once the frame is over 5 s old. `--frame-every` sets how often it sends (0 turns it off). The video uploaded on "I'm done" is built at 15 fps (`--cloud-fps`), so the recipe's video plays smoothly. The AI still samples it at 1 fps.
 
 ## Live analysis → Convex
 

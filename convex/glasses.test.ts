@@ -304,3 +304,24 @@ test("/glasses/frame keeps the newest frame of a live glasses recording, for its
   const phone = await recording(t, f, "recording", "phone");
   expect((await postFrame(t, phone)).status).toBe(404);
 });
+
+test("/glasses/frame keeps the newest frame when uploads land out of order", async () => {
+  const t = newBackend();
+  const f = await family(t);
+  const rec = await recording(t, f, "recording");
+  const send = (query: string) =>
+    t.fetch(`/glasses/frame?recordingId=${rec}&${query}`, {
+      method: "POST",
+      headers: { "x-glasses-secret": "glasses-secret-for-tests", "Content-Type": "image/jpeg" },
+      body: JPEG,
+    });
+  expect((await send("session=s1&t=2000")).status).toBe(200);
+  const newest = await t.run(async (ctx) => ctx.db.query("liveFrames").unique());
+  expect((await send("session=s1&t=1500")).status).toBe(200); // older, arrived late
+  const kept = await t.run(async (ctx) => ctx.db.query("liveFrames").unique());
+  expect(kept?.storageId).toBe(newest?.storageId);
+  expect(kept?.t).toBe(2000);
+  expect((await send("session=s2&t=100")).status).toBe(200); // the glasses rebooted: a new session's clock
+  expect((await t.run(async (ctx) => ctx.db.query("liveFrames").unique()))?.t).toBe(100);
+  expect((await send("session=s2&t=soon")).status).toBe(400);
+});

@@ -1,5 +1,5 @@
 // What the glasses see while she records from them (the laptop bridge, glasses/BRIDGE.md): the newest
-// frame (about one a second, from liveEvents.frame), whether the glasses are live, and what the live
+// frame (about seven a second, from liveEvents.frame), whether the glasses are live, and what the live
 // pass has seen so far (liveEvents.forRecording). A picture that stops updating says so after 5 s, so a
 // stopped laptop receiver or a dropped hotspot is visible instead of silent.
 import { Image } from 'expo-image';
@@ -54,7 +54,8 @@ export function GlassesView({ frame, filming, lastStep, steps }: { frame: LiveFr
           <Image
             source={{ uri: shown.url }}
             placeholder={shown.before ? { uri: shown.before } : undefined}
-            transition={150}
+            transition={0}
+            cachePolicy="memory"
             contentFit="cover"
             style={StyleSheet.absoluteFill}
             accessibilityLabel="What your glasses see"

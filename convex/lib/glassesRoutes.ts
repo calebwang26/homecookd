@@ -41,20 +41,26 @@ export function registerGlassesRoutes(http: HttpRouter): void {
     }),
   });
 
-  // The newest glasses frame, about once a second from the laptop bridge, for the cook's recording screen.
-  // Raw JPEG body (not JSON), so it can't use glasses(); same secret.
+  // The newest glasses frame, several a second from the laptop bridge, for the cook's recording screen.
+  // Raw JPEG body (not JSON), so it can't use glasses(); same secret. Optional `session` and `t` (ms on the
+  // glasses' clock) let Convex drop a frame that lands after a newer one.
   http.route({
     path: "/glasses/frame",
     method: "POST",
     handler: httpAction(async (ctx, req) => {
       if (!sameSecret(req.headers.get("x-glasses-secret"), process.env.GLASSES_SECRET)) return fail(401, "wrong secret");
-      const recordingId = new URL(req.url).searchParams.get("recordingId");
+      const q = new URL(req.url).searchParams;
+      const recordingId = q.get("recordingId");
       if (!isStr(recordingId, 100)) return fail(400, "recordingId must be in the query string");
+      const session = q.get("session") ?? undefined;
+      const t = q.get("t") === null ? undefined : Number(q.get("t"));
+      if (session !== undefined && !isStr(session, 100)) return fail(400, "session must be a string");
+      if (t !== undefined && !isNum(t)) return fail(400, "t must be a number");
       const bytes = new Uint8Array(await req.arrayBuffer());
       if (bytes.length > MAX_FRAME_BYTES) return fail(400, "frame too large");
       if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return fail(400, "body must be a JPEG");
       const storageId = await ctx.storage.store(new Blob([bytes], { type: "image/jpeg" }));
-      const r = await ctx.runMutation(internal.liveEvents.setFrame, { recordingId, storageId, at: Date.now() });
+      const r = await ctx.runMutation(internal.liveEvents.setFrame, { recordingId, storageId, at: Date.now(), sessionId: session, t });
       return "ok" in r ? json(r) : fail(r.status, r.error);
     }),
   });
