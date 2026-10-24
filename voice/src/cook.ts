@@ -6,6 +6,7 @@ import * as convex from "./convex.js";
 import { InkStream } from "./ink.js";
 import { findMoments, warm } from "./moss.js";
 import { SONIC_SAMPLE_RATE, speak, type AudioFormat } from "./sonic.js";
+import { translateQuote } from "./translate.js";
 
 // Plain commands skip Claude: they're most of what a kid says, and this saves a model call.
 const FAST: [RegExp, "next" | "previous" | "repeat"][] = [
@@ -19,6 +20,12 @@ const command = (t: string) =>
   normalize(t)
     .replace(/^((um|uh|wait|okay|ok|so|hey|alright|and|now) )+/, "")
     .replace(/( (please|thanks|thank you))+$/, "");
+
+/** Mostly non-Latin letters: Ink writes the cook's Marathi (from a clip playing nearby) in Devanagari. */
+const notLatin = (t: string) => {
+  const letters = t.match(/\p{L}/gu) ?? [];
+  return letters.length > 0 && letters.filter((c) => !/\p{Script=Latin}/u.test(c)).length / letters.length > 0.5;
+};
 
 /** True when `heard` is mostly words we just said: our own voice coming back through the mic. */
 function isEcho(heard: string, spoken: string): boolean {
@@ -35,6 +42,10 @@ export class Cooking {
   private agent?: TurnAgent;
   private speaking: AbortController | null = null;
   private lastSpoken = { text: "", until: 0 };
+  /** While the cook's clip plays, the mic hears her too: only plain commands count until then. */
+  private clipUntil = 0;
+  /** Bumped by every new clip or step, so a translation still waiting for its clip to end is dropped. */
+  private clipSeq = 0;
   private turns: Promise<void> = Promise.resolve();
   private closed = false;
 
@@ -90,7 +101,7 @@ export class Cooking {
       this.persistStep();
     } else if (msg.type === "text" && msg.text) {
       // Typed or push-to-talk input: the same path as a spoken turn.
-      this.heard(msg.text);
+      this.heard(msg.text, false);
     }
   }
 
@@ -100,10 +111,19 @@ export class Cooking {
     this.speaking?.abort();
   }
 
-  private heard(text: string) {
+  private heard(text: string, spoken = true) {
     if (!text || !this.agent) return;
-    if (Date.now() < this.lastSpoken.until && isEcho(text, this.lastSpoken.text)) {
-      console.log(`ignored echo: ${text}`);
+    const ignore = !spoken
+      ? ""
+      : notLatin(text)
+        ? "not English"
+        : Date.now() < this.lastSpoken.until && isEcho(text, this.lastSpoken.text)
+          ? "echo"
+          : Date.now() < this.clipUntil && !FAST.some(([re]) => re.test(command(text)))
+            ? "during clip"
+            : "";
+    if (ignore) {
+      console.log(`ignored (${ignore}): ${text}`);
       return;
     }
     this.send({ type: "transcript", text, final: true });
@@ -113,6 +133,7 @@ export class Cooking {
 
   private async turn(text: string) {
     if (this.closed) return;
+    this.clipSeq++; // the kid moved on: drop a translation still waiting
     try {
       const fast = FAST.find(([re]) => re.test(command(text)))?.[1];
       if (fast === "next") await this.nextStep();
@@ -141,6 +162,8 @@ export class Cooking {
       const step = this.session.recipe.steps.find((s) => s.order === order);
       if (!step) return;
       this.step = order;
+      this.clipUntil = 0;
+      this.clipSeq++;
       this.send({ type: "go_to_step", stepOrder: order });
       this.persistStep();
       await this.say(`Step ${order}. ${step.text}`);
@@ -148,12 +171,23 @@ export class Cooking {
     findMoment: (query, waitMs) => findMoments(this.session.mossIndex, this.session.recipe.id, query, waitMs),
     playClip: async (startS, endS, question) => {
       this.speaking?.abort();
+      const seq = ++this.clipSeq;
+      const clipEnds = Date.now() + (endS - startS) * 1000;
+      this.clipUntil = clipEnds + 1000;
       this.send({ type: "play_clip", startS, endS });
-      if (question) {
-        await convex
-          .logQuestion(this.token, this.recipeId, this.step, question.text, { startS, endS, quote: question.quote })
-          .catch((err) => console.warn("voice/question", err.message));
-      }
+      if (!question) return;
+      // Her words in English, spoken once the clip has finished (she isn't talked over).
+      void translateQuote(question.quote)
+        .then(async (english) => {
+          await new Promise((r) => setTimeout(r, Math.max(0, clipEnds + 500 - Date.now())));
+          if (english && seq === this.clipSeq && !this.closed) {
+            await this.say(`${this.session.cook?.name ?? "The cook"} says: ${english}`, { translation: true });
+          }
+        })
+        .catch((err) => console.warn("translate", err.message));
+      await convex
+        .logQuestion(this.token, this.recipeId, this.step, question.text, { startS, endS, quote: question.quote })
+        .catch((err) => console.warn("voice/question", err.message));
     },
     askCook: async (question) => {
       const { questionId } = await convex.logQuestion(this.token, this.recipeId, this.step, question);
@@ -164,12 +198,12 @@ export class Cooking {
   };
 
   /** Speaks with Sonic: a `say` message, the audio as binary frames, then `say_end`. Cuts off any line still playing. */
-  private async say(text: string) {
+  private async say(text: string, extra: { translation?: true } = {}) {
     this.speaking?.abort();
     const ctrl = new AbortController();
     this.speaking = ctrl;
     this.lastSpoken = { text, until: Date.now() + 60_000 }; // narrowed below once we know the audio's length
-    this.send({ type: "say", text, ai: true, audio: { format: this.audio, encoding: "pcm_s16le", sampleRate: SONIC_SAMPLE_RATE } });
+    this.send({ type: "say", text, ai: true, ...extra, audio: { format: this.audio, encoding: "pcm_s16le", sampleRate: SONIC_SAMPLE_RATE } });
     let bytes = 0;
     try {
       await speak(text, this.audio, ctrl.signal, (chunk) => {
