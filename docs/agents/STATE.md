@@ -395,3 +395,4 @@ Before starting work, compare the last commit here with `git log origin/main` to
     web stub (the stub socket never drops). GlowHomie's disc is cream, not the canvas's butter (HomiePot draws its
     own disc; a disc color prop in components/homie would fix it). No public query maps a kid to a Convex person id
     (found by name).
+- Oct 24 · (this PR) · Claude · `docs/agents/MERGE-PLAYBOOK.md` (from Caleb via the UI/UX session): how the Merge Agent takes in, orders, reviews, resolves and merges PRs. AGENTS.md's merge rule points to it. The demo freeze in it is marked as proposed until Caleb confirms.
