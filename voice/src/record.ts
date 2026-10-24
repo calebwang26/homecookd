@@ -188,7 +188,7 @@ export class Recording {
       onError: (message) => console.warn(`stt: ${message}`),
     }, [dish, cook.name, kid?.name].filter((x): x is string => !!x));
     this.send({ type: "ready", recording: { id: recording._id, language: recording.language, cookName: call, kidName: this.who.kid, dish } });
-    console.log(`record start: ${call}, ${recording.language}, ${recording.status}, stub=${convex.usingStub}, demo=${env.homieDemo}`);
+    console.log(`record start: ${call}, ${recording.language}, ${recording.status}, met before=${this.s.metBefore === true}, stub=${convex.usingStub}, demo=${env.homieDemo}`);
     this.heartbeat = setInterval(() => void this.touch(), HEARTBEAT_MS);
 
     if (recording.status === "intro") {
@@ -286,9 +286,11 @@ export class Recording {
     this.state("thinking");
     let line = this.mem.intro;
     if (!line) {
-      // Claude writes the names in her script itself; the hand-written fallback waits for them.
-      const written = this.homie.intro().catch((err) => (console.warn("intro", err.message), null));
-      line = (await Promise.race([written, sleep(INTRO_WAIT_MS).then(() => null)])) ?? (await this.names, await fixedLine("intro", this.who, this.whoLatin));
+      // Claude writes the names in her script itself; the hand-written fallback waits for them. A cook
+      // homie has recorded with before gets a welcome back, not the introduction again.
+      const again = this.s.metBefore === true;
+      const written = this.homie.intro(again).catch((err) => (console.warn("intro", err.message), null));
+      line = (await Promise.race([written, sleep(INTRO_WAIT_MS).then(() => null)])) ?? (await this.names, await fixedLine(again ? "introAgain" : "intro", this.who, this.whoLatin));
       this.mem.intro = line;
     }
     // She may have tapped start or done while it was being written: then there's no hello.

@@ -205,7 +205,8 @@ export default defineSchema({
     updatedAt: v.number(),
   })
     .index("by_familyId", ["familyId"])
-    .index("by_status", ["status"]),
+    .index("by_status", ["status"])
+    .index("by_cookId_and_startedAt", ["cookId", "startedAt"]),
 
   /** Everything homie said during a recording, and what the cook answered. */
   homiePrompts: defineTable({

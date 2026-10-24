@@ -75,10 +75,24 @@ export class HomieAgent {
     this.who = who;
   }
 
-  /** The hello before filming starts. Null when the model fails (the caller has a written one). */
-  async intro(): Promise<Line | null> {
+  /**
+   * The hello before filming starts. `metBefore`: homie has recorded with her before, so a short welcome
+   * back that never introduces homie again (Caleb, Oct 24). Null when the model fails (the caller has a
+   * written one).
+   */
+  async intro(metBefore = false): Promise<Line | null> {
     const w = this.who;
-    const system = `${about(w)}
+    const system = metBefore
+      ? `${about(w)}
+
+Write homie's hello, said before she starts cooking. homie has cooked with her before, so this is a short welcome back, not an introduction. Rules:
+- Short: at most 20 words, 2 or 3 short sentences. Warm, family first.
+- Greet her by "${w.call}", glad to be with her again. Mention ${w.kid ?? "her family"}${w.dish ? ` and the ${w.dish}` : ""} so she knows who this is for.
+- Never introduce homie or say homie's name. Don't explain the questions or the phone again.
+- End by telling her to start whenever she's ready.
+- No instructions about cooking, no praise of her technique.
+${LINE_RULES}`
+      : `${about(w)}
 
 Write homie's hello, said once before she starts cooking. Rules:
 - Short: at most 40 words, 3 or 4 short sentences. Warm, unhurried, family first.
