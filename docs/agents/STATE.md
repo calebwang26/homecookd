@@ -46,7 +46,10 @@ older note in `memory/` disagrees, this file wins.
     `seed:demo` (`npx convex run seed:claim '{"supabaseFamilyId":"…"}'` points it at the real one). Env:
     CARTESIA, MOSS, MUSE, WORKER_SECRET, VOICE_SECRET. Redeploy with `--preview-name hackathon`, never
     `--preview-create`: that recreated the deployment and deleted `energized-starfish-920`. It has #37's memory
-    fields (`step`, `id`, `title`, `why`), so the app can put a family dish's stories back.
+    fields (`step`, `id`, `title`, `why`), so the app can put a family dish's stories back. Last deployed Oct 24
+    from main `f28173a1f` (Caleb's go): new indexes `dinnerInviteOpens.by_dinnerId_and_deviceId`,
+    `dinners.by_inviteToken`, `swapRequests.by_otherFamilyId` and `swapRequests.by_requesterFamilyId`, and
+    `POST /invite/open` live with CORS for homecookd.app.
   - **Worker** (`pipeline/worker.py`, Convex mode) runs on the laptop from `.claude/worktrees/worker-main` at main
     `4d703d9` (#39, started Oct 24 03:14), so family `recipe.json` files go out without stories or tips.
   - **Moss** works again (billing fixed Oct 24). One index is left: `family-j97ctx…` (the demo family: 4 recipes,
@@ -68,7 +71,9 @@ older note in `memory/` disagrees, this file wins.
     and the voice service through `app/src/lib/live/` (one file each, with a stub until they're deployed). Needs an
     EAS dev build or TestFlight: Expo Go hides the mic. Public URLs: `EXPO_PUBLIC_CONVEX_URL` (in `eas.json`),
     `EXPO_PUBLIC_VOICE_URL` = wss://homecookd-voice-vyatb2n6oq-uw.a.run.app (Track B, Cloud Run; both in `eas.json`).
-- **Voice service** (Cloud Run `homecookd-voice`, us-west1, project `project-11b9fc8a-1108-4ea8-a3b`): `wss://homecookd-voice-vyatb2n6oq-uw.a.run.app/cook`, revision `homecookd-voice-00001-p96`, min instances 1, timeout 3600 s, keys from Secret Manager, Convex `grand-dragon-649`. Deploy: `voice/deploy.sh` (Caleb runs it; agents are blocked from Secret Manager writes). homie's voice on main is "Riya bilingual" with a Gemini TTS backup (#49); the deployed revision still speaks Sindhu until the next deploy.
+- **Voice service** (Cloud Run `homecookd-voice`, us-west1, project `project-11b9fc8a-1108-4ea8-a3b`): `wss://homecookd-voice-vyatb2n6oq-uw.a.run.app/cook`, revision `homecookd-voice-00004-nv4` (deployed Oct 24 from main `f28173a1f`, Caleb's go: homie speaks as "Riya bilingual" with a Gemini TTS backup (#49), the kid's yes and no (#47), the Cartesia credit fixes (#44); `/health` ok, a bogus session is refused with 4401/401), min instances 1, timeout 3600 s, keys from Secret Manager, Convex `grand-dragon-649`. Deploy: `voice/deploy.sh` from merged main (an agent ran it for 00004 with Caleb's go).
+- **App on TestFlight phones** (build 3, runtime 1.0.0): EAS Updates on channel `production`, built with `EXPO_NO_DOTENV=1` plus `EXPO_PUBLIC_CONVEX_URL` and `EXPO_PUBLIC_VOICE_URL` set by hand (`eas update` doesn't read eas.json's build env; `FAMILY_CODE` must never ship): group `2f1b5298-3421-47c9-8913-35b95e216fd9` from main `f176b1d9b` (#33, #35, #36, #49), then `0b0e0b64-4ab1-414d-86b0-d11d08df58ea` from main `951aeb11c` (#51: read-aloud plays each step, no live line for a sample dish).
+- **homecookd.app** (Vercel project `homecookd`, deploys from the ORIGINAL repo `calebwang26/homecookd` main, not this one): production from `37439d9` (homecookd#46): `web/` there now matches this repo's `web/` (the /d dinner invite page, API_URL on `bsudybxsqvtwftsdmwmz`, the real app ID `73UV499FKN.com.salik.homecookd` in the AASA). A web change here must be copied there to go live.
 
 ## Waiting on Caleb (launch blockers)
 
@@ -564,5 +569,28 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - **Open:** a timer on the open socket can leave without a buzz: its `timer_done` lands at the same moment as
     the phone's own zero (both 5 s after the `timer` message) and takes it first (2 of 3 live runs; homie still
     says it's done). Not changed here (it was so before); nothing on an iPhone yet.
+- Oct 24 · #51 · Claude · iPhone test fixes (Caleb on TestFlight, sample dish Auntie Lin's scallion pancakes): (1) the phone's read-aloud repeated step 1 on every step: speak.ts reused file names (homie-say-<turn % 3>.wav, and a step change moves turn by 3, so always the same name) and lib/media reuses a player whose URL is unchanged, so the old audio played. Each line now gets a new file name (the last 3 are kept). (2) On a dish the voice service doesn't have (any sample library dish), a tap on homie no longer opens the live line and says "homie can't cook this dish by voice yet": the line isn't tried, and while the phone reads, a tap reads the current step again. Checks: app tsc, lint, every app test script.
+- Oct 24 · #52 · Claude · Cook mode timers: a `timer_done` before the phone's own zero buzzes (closes #36 round 6's
+  open item), and the Oct 24 live deploys recorded.
+  - **The fix:** on the socket that's still open, the service's `timer_done` usually arrives before the phone's
+    own zero (both are 5 s after the `timer` message), and it took the timer away before it buzzed: no haptic, no
+    pot "timer" or "Done", though homie still said "Hey, the rice timer is done." `voiceLogic` `timerDone` now
+    buzzes a timer that hasn't buzzed yet (it stays, at zero, "Done", and leaves `TIMER_DUE_HOLD_MS` later like any
+    buzzed timer); one that already buzzed leaves at once, as before. `lib/live/voice` has one `buzzTimer` for both
+    (it skips an id that already buzzed, so the phone's own zero right after can't buzz it again) and keeps the
+    timer list in a ref, so `timer_done` reads the current one.
+  - **Deploys (Caleb: "Yes: deploy Convex, the voice service and homecookd.app now; only the EAS Update waits for
+    #36"):** Convex `grand-dragon-649` and the voice service revision `homecookd-voice-00004-nv4`, both from main
+    `f28173a1f` (see Live infrastructure). The EAS Update with #36 is still to come.
+  - **Tests:** `test-voice-ui.mjs` 45 pass (new: a `timer_done` before the zero buzzes once and shows "Done"; one
+    after the phone's buzz never buzzes again; two timers, one done early, buzz once each). tsc, lint, every app
+    test script and `test-profile-navigation` (6 ok, this worktree's Expo web) pass. Live on Expo web against a
+    local voice service from main (`VOICE_STUB=1`, real Ink 2 and Sonic) with a temporary e2e hook and buzz
+    counter (not committed): three 5 s timers ("set a timer for 5 seconds" as text); each `timer_done` came first
+    (4.98 to 5.0 s after the `timer`) and buzzed it, one buzz each, the pill said "Done" and the pot showed
+    "timer", and each left 10 s later.
+  - **Open:** nothing on an iPhone yet. On Expo web a real line's audio throws in `lib/live/say` (expo-file-system's
+    `File` isn't there on web); web never opens a real line without a hook, so it only matters for live web tests.
 - Oct 24 · #50 · Claude · Voice hint latency and crash paths (from the Merge Agent's live test). Latency: main already did a hint and its ask to the cook in one tool (`give_hint` carries the question; the `[stub] question asked_cook` log line is the Convex write, not an `ask_cook` call). The slow part was a `find_moment` round trip whenever the search before Claude found nothing (always in the stub, whose index was deleted), plus 25-30-word hints. Now the message says the search found nothing and Claude doesn't search again, so a question is one call; the hint is under 15 words; the stub's `mossIndex` is `""` (no Moss); a missing family index isn't asked for again for 60 s; a search never holds a turn past its wait. Live, `CLAUDE_FAST=1`, merged with #49: hint first audio 1.7–2.4 s after the transcript (main 2.9–4.2 s), "I'll ask Grandma too." 8.0–9.7 s (main 11.6–14.1 s), 0.24–0.32 s after the hint ends; a plain ask 1.3–1.4 s (main 2.9–6.8 s). Standard speed and before/after tables in the PR. Crashes: each of these ended the whole process on main, and now doesn't: a text frame `null` on `/cook` or `/record`, a frame over 1 MiB, a text frame that isn't UTF-8 (no `'error'` listener on the socket), a `/speak` caller hanging up mid-body, a reset after a refused upgrade, and a question write failing while the hint plays (unhandled rejection). A failed action also left a `tool_use` with no `tool_result`, so Claude refused every later turn (400). New `voice/src/safety.ts`: each socket's errors are logged with its id (`cook-3`); an unhandled rejection never exits, an uncaught exception logs and exits for a clean Cloud Run restart (installed only when `server.ts` is the program). The Merge Agent's silent death wasn't reproduced (Moss stressed with 200 searches on missing indexes; no stack in its log, which fits the `pkill -f 'tsx src/server.ts'` another agent ran). Tests: voice 87 (new `agent.test.ts`, `hint.test.ts`, `server.test.ts`, which spawns the service and sends each crash input), typecheck passes; on main's code the new server and agent tests fail. Live with real Ink 2, Sonic and Claude.
   - **Open:** the ask line still waits for the whole hint to play (6–7 s); saying "I'll ask Grandma" first or inside the hint's line would land it at ~2 s but changes the hint/`asked_cook` contract (Caleb's call). Some unanswerable questions now get a hint plus the ask where main's `find_moment` result steered them to a plain ask. Not deployed (`voice/deploy.sh`).
+- Oct 24 · #50 (verifier fix) · Claude · The up-front search waits 2 s; on a fresh server the family index can take longer to load, and an empty result told Claude the video had nothing, so it gave an AI hint restating the cook's own tip (seen live on the Pawar index). An empty result that took the whole wait now says the search didn't finish, and Claude uses find_moment (15 s) first. Test: voice 88/88.
