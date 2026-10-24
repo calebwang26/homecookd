@@ -63,25 +63,54 @@ pieces in.
 ## Contracts (so the tracks can run in parallel)
 
 Data model: `convex/schema.ts`. Live voice service and worker calls are Convex HTTP actions (`convex/http.ts`),
-each with its own shared secret in Convex env (`WORKER_SECRET`, `VOICE_SECRET`).
+each with its own shared secret in Convex env (`WORKER_SECRET`, `VOICE_SECRET`; copies in the root `.env`).
+Deployment: https://grand-dragon-649.convex.cloud (app client); HTTP routes on https://grand-dragon-649.convex.site.
+HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-out session, `404` no such job/recipe.
 
 **App → Convex** (public functions; every one takes the `sessionToken`)
-- `sessions.start({ deviceKey, profileId })` → `{ sessionToken, familyId, personId, role }`
-- `recipes.list`, `recipes.get({ recipeId })`
-- `jobs.create({ uploadPath, source })`, `jobs.forFamily` (live progress)
-- `questions.forRecipe({ recipeId })`, `questions.openForCook`, `questions.answer({ questionId, text?, audioId? })`
-- `messages.list`, `messages.send`, `messages.sharePhoto({ recipeId, fileId })` (→ Muse draft), `files.uploadUrl`
-- `cooking.current` (what the kid is cooking now, for the cook's phone)
+- `sessions.start({ deviceKey, profileId })` → `{ sessionToken, familyId, personId, role }` (`role`: `cook` | `kid`).
+  Checks the key once with Supabase `GET /family` and mirrors the family. Errors are meant to be shown as they are;
+  `"This phone was signed out."` means clear the token and sign in again. `sessions.end` signs out.
+- `recipes.list`, `recipes.get({ recipeId })` (each with `cookName`; stories and tips are empty until the cook opts
+  in), `recipes.setMemoriesOptIn({ recipeId, optIn })` (the recipe's cook only; re-indexes Moss)
+- `jobs.create({ uploadPath, source })` → `{ jobId, recipeId }` (cook only; adds a `processing` recipe card),
+  `jobs.forFamily` (live progress)
+- `questions.forRecipe({ recipeId })`, `questions.openForCook` (questions about this cook's recipes),
+  `questions.answer({ questionId, text?, audioId? })` (cook only; a voice note gets an Ink transcript)
+- `messages.list` (to everyone, or to or from me), `messages.send({ kind, text?, fileId?, to?, recipeId?, aiDrafted? })`
+- `messages.sharePhoto({ recipeId, fileId })` → `{ draft, aiDrafted: true }`: Muse Spark (`muse-spark-1.3`) drafts
+  the note and **sends nothing**. The app lets the kid edit it, then calls `messages.send` with `kind: "photo"`,
+  `to: <cookId>` and `aiDrafted: true`, which keeps the label after edits.
+- `files.uploadUrl` (POST the bytes there, get `{ storageId }`; for voice notes and photos, 20 MB max)
+- `cooking.current` (what each kid is cooking now, for the cook's phone; idle 2 h ends it), `cooking.finish`
 
-**Worker → Convex** (HTTP, `x-worker-secret`)
-- `POST /worker/claim` → the next queued job or `204`
-- `POST /worker/progress` `{ jobId, stage, progress, error? }`
-- `POST /worker/published` `{ jobId, recipe }` → saves the recipe and schedules the Moss indexing
+**Worker → Convex** (HTTP POST with JSON, `x-worker-secret`)
+- `/worker/claim` `{}` → `204`, or `{ jobId, recipeId, familyId, supabaseFamilyId, cookId, cookName, uploadPath,
+  source }`. The job is now `preparing`.
+- `/worker/progress` `{ jobId, stage, progress, error? }`. `stage` is one of
+  `preparing | understanding | writing | indexing | done | failed`, and `progress` runs 0..1.
+  `failed` also marks the recipe failed.
+- `/worker/published` `{ jobId, recipe, recipeJsonUrl?, memoriesOptIn? }` → `{ recipeId }`.
+  - `recipe` is the pipeline's `recipe.json` as is.
+  - Convex keeps `title`, `id` (as `libraryId`), `media.poster_url` (https only), each step's
+    `order/title/instruction/quote/start_s/end_s`, and `stories`, `special` and `steps[].tip` as memories.
+  - It then indexes Moss itself (`convex/moss.ts`); the job goes `indexing` → `done`.
+  - `memoriesOptIn` defaults to `false`.
 
-**Voice service → Convex** (HTTP, `x-voice-secret`)
-- `POST /voice/session` `{ sessionToken, recipeId }` → the kid, the recipe and its steps (or `401`)
-- `POST /voice/step` `{ sessionToken, recipeId, stepOrder }` (updates `cookingSessions`)
-- `POST /voice/question` `{ sessionToken, recipeId, stepOrder, text, found? }` → `found_in_video` or `asked_cook`
+**Voice service → Convex** (HTTP POST with JSON, `x-voice-secret`)
+- `/voice/session` `{ sessionToken, recipeId }` → `{ kid: { personId, name, role }, familyId, mossIndex, recipe:
+  { recipeId, title, cookName, steps[{ order, title, text, quote?, moment }], memories[] }, stepOrder }`.
+  It starts or resumes the kid's `cookingSessions` row. A recipe that isn't `ready` is `404`.
+- `/voice/step` `{ sessionToken, recipeId, stepOrder }` → `{ ok, stepOrder }` (updates `cookingSessions`)
+- `/voice/question` `{ sessionToken, recipeId, stepOrder?, text, found?: { startS, endS, quote } }` →
+  `{ questionId, status: "found_in_video" | "asked_cook" }`
+
+**Moss index** `family-<familyId>` (model `moss-minilm`; filled by `convex/moss.ts`)
+- **Steps:** `<recipeId>:step:<n>`; the text is the step plus the cook's quote.
+- **Stories and tips:** `<recipeId>:story:<i>` / `:tip:<i>`; only while the cook has opted in.
+- **Metadata (all strings):** `recipeId`, `recipeTitle`, `kind` (`step` | `story` | `tip`), `stepOrder` (steps only),
+  `startS`, `endS`, `quote`.
+- After a Moss outage, `npx convex run worker:reindexMissing` re-sends what's missing.
 
 **App ↔ voice service** (WebSocket `wss://<voice>/cook?session=<sessionToken>&recipe=<recipeId>`)
 - App → server: binary frames of 16 kHz mono 16-bit PCM; `{ "type": "step", "stepOrder" }` when the kid taps.
@@ -138,7 +167,9 @@ The app needs only public values: `EXPO_PUBLIC_CONVEX_URL` and the voice service
 ```bash
 node scripts/check-cartesia.mjs     # Cartesia key: token + Sonic speech
 node scripts/check-moss.mjs         # Moss keys: list indexes
-npx convex deploy --preview-create hackathon -y   # push convex/ (preview deploy key in .env)
+npx vitest run                      # Convex tests (convex/*.test.ts)
+npx convex deploy --preview-name hackathon -y     # push convex/ (preview deploy key in .env); never --preview-create
+npx convex run seed:demo            # demo family + 4 recipes (team token + --deployment grand-dragon-649)
 .venv/bin/python pipeline/writer.py # Muse key: one tiny structured call
 .venv/bin/python pipeline/worker.py # the pipeline worker: claims Convex jobs (CONVEX_SITE_URL, WORKER_SECRET)
 .venv/bin/python pipeline/convex_stub.py --upload <uploadPath> --port 8797   # fake /worker/* routes for a local run

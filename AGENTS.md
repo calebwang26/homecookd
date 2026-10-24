@@ -83,9 +83,13 @@ and homesick college kids. It's a family product, not a tool.
   (`family-<familyId>`). Moss only finds moments: never use Moss Inference to write answers
   (https://docs.moss.dev/llms.txt). Key check: `node scripts/check-moss.mjs`.
 - **Convex:** at the repo root (`convex/`, data model in `convex/schema.ts`). Deploy with
-  `npx convex deploy --preview-create hackathon -y` (preview `CONVEX_DEPLOY_KEY` in `.env`); the last deploy went
-  to https://energized-starfish-920.convex.cloud. Read `convex/_generated/ai/guidelines.md` before writing Convex
-  code; the skills are in `.agents/skills` (Codex) and `.claude/skills` (Claude Code).
+  `npx convex deploy --preview-name hackathon -y` (preview `CONVEX_DEPLOY_KEY` in `.env`) to
+  https://grand-dragon-649.convex.cloud (HTTP routes on `.convex.site`). **Never `--preview-create`**: it deletes
+  and recreates the deployment, so the URL changes and its data and env are lost. Convex env is set with the team
+  token, not the preview key: `CONVEX_OVERRIDE_ACCESS_TOKEN=… npx convex env set --deployment grand-dragon-649 …`.
+  Every public function takes the `sessionToken` from `sessions.start` and checks it with `requireSession`
+  (`convex/lib/auth.ts`). Read `convex/_generated/ai/guidelines.md` before writing Convex code; the skills are in
+  `.agents/skills` (Codex) and `.claude/skills` (Claude Code).
 - **TestFlight is live.** Teammates, judges and the demo use TestFlight builds; use an EAS dev build while coding
   and EAS Update for JS-only fixes. Expo Go can't load the native mic-streaming module.
 - **`TODO(caleb)`** marks a decision only Caleb can make. Use the documented default and leave the marker.
@@ -107,6 +111,7 @@ and homesick college kids. It's a family product, not a tool.
 
 ```
 app/        Expo app (expo-router, TypeScript). EAS dev build while coding, TestFlight for the team and the demo.
+            src/lib/live/ = the Convex client, the voice socket and the mic (Expo Go hides the mic).
 web/        Next.js site: the lander, homecookd.app/r (recipe share page) and /i (invites). Vercel project "homecookd".
 convex/     The hackathon backend: schema.ts, functions, http.ts (worker + voice service endpoints)
 voice/      Live voice service (Cloud Run): WebSocket cooking loop with Cartesia, Claude and Moss
@@ -125,6 +130,11 @@ docs/       specs, design bible, QA, learning notes; docs/agents/ = shared agent
 cd app && npx expo start --clear                                   # Expo Go on the same Wi-Fi
 cd app && CI=1 npx expo start --go --tunnel --port 8082            # Expo Go over a tunnel
 cd app && npx expo start --web --port 8081 --clear                 # web build of the app
+cd app && npx expo start --dev-client                               # the EAS dev build on an iPhone (voice cooking needs it)
+cd app && npx eas-cli build -p ios --profile development           # dev build (EAS signed in as salikm1234)
+cd app && npx eas-cli build -p ios --profile production --auto-submit   # TestFlight
+cd app && npx eas-cli update --channel production -m "<what changed>"   # JS-only fix to TestFlight phones
+node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
 cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend
 
@@ -132,7 +142,12 @@ cd app && node scripts/test-retention.mjs                          # also test-t
 cd web && npm run dev -- --port 3000
 cd web && npm ci && npm run build                                  # confirm a PR's web/ builds
 
-# backend
+# convex (repo root)
+npx vitest run                                                     # convex-test suites (convex/*.test.ts)
+npx tsc -p convex --noEmit                                         # typecheck
+npx convex deploy --preview-name hackathon -y                      # deploy (CONVEX_DEPLOY_KEY from .env)
+
+# backend (Supabase, frozen)
 npx --yes deno@2 test --node-modules-dir=none --allow-env --allow-read supabase/tests/   # unit tests
 npx --yes deno@2 check --node-modules-dir=none supabase/functions/api/*.ts              # typecheck
 

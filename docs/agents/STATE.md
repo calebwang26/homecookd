@@ -40,15 +40,27 @@ older note in `memory/` disagrees, this file wins.
   `web`. A red Vercel check on a PR has usually meant that setting, not the code.
 - **GCS** buckets `edible-media-*` (public, no listing) and `edible-uploads-*` (private), plus the Cloud Run upload signer. See `README.md`.
 - **Hackathon (Oct 23–25), `docs/build/STACK.md`:**
-  - **Convex** project "homecookd": the schema is deployed to the preview deployment
-    https://energized-starfish-920.convex.cloud. No functions yet.
+  - **Convex** project "homecookd", preview deployment `hackathon` → https://grand-dragon-649.convex.cloud
+    (HTTP routes on `.convex.site`). Track A is deployed: sign-in bridge, app functions, worker and voice routes,
+    Muse photo note, Ink transcripts, Moss indexing. The demo family is seeded under the placeholder id
+    `seed:demo` (`npx convex run seed:claim '{"supabaseFamilyId":"…"}'` points it at the real one). Env:
+    CARTESIA, MOSS, MUSE, WORKER_SECRET, VOICE_SECRET. Redeploy with `--preview-name hackathon`, never
+    `--preview-create`: that recreated the deployment and deleted `energized-starfish-920`.
+  - **Moss** refuses writes: "usage limit has been reached; billing must be updated" (Oct 23). Indexing then
+    fails softly and questions go to the cook. Once billing is fixed: `npx convex run worker:reindexMissing`.
   - **Supabase** `bsudybxsqvtwftsdmwmz` ("calhacks-touse") is this repo's own copy: tables, buckets and the demo and
     TEST families are seeded. The `api` isn't deployed yet and its secrets aren't set (needs a Supabase access
     token). Frozen otherwise.
   - **Keys** for Cartesia, Moss and Convex are in the root `.env` (gitignored); checks: `node scripts/check-cartesia.mjs`,
     `node scripts/check-moss.mjs`. Still needed: `ANTHROPIC_API_KEY` (in `.env`), a Muse Spark key, and the
     Cloud Run and Convex env copies.
-  - **TestFlight** works (Apple developer account in place).
+  - **TestFlight** works (Apple developer account in place). EAS project `ef88fb83-09cf-4c73-9684-de9a95a1f1ef`
+    belongs to Salik's Expo account `salikm1234` (`owner` in `app/app.json`); bundle id `com.salik.homecookd`, Apple
+    Team `73UV499FKN`. EAS commands must run signed in as `salikm1234` (or as a member of that project).
+  - **App (Track D):** voice cooking, live job progress, live questions, photo note and glasses import call Convex
+    and the voice service through `app/src/lib/live/` (one file each, with a stub until they're deployed). Needs an
+    EAS dev build or TestFlight: Expo Go hides the mic. Public URLs: `EXPO_PUBLIC_CONVEX_URL` (in `eas.json`),
+    `EXPO_PUBLIC_VOICE_URL` (empty until Track B deploys; the local stub stands in).
 
 ## Waiting on Caleb (launch blockers)
 
@@ -105,4 +117,24 @@ Before starting work, compare the last commit here with `git log origin/main` to
 - Oct 22 · #44 · Claude · iPhone test round 3 (cook step + Home): pots show the current step (furthest stays in All steps and Continue at step N); All steps shows done steps as dark green with a light green check and not-done steps as light green with a dark green number; Hear removed from the cook step (the video carries the voice; stories still use it); tapping a substep plays the step video from that substep (and expands it); step order is title, video, substeps, ingredients, tip, story, Ask; Home label reads '1/10 recipes'. Open: iPhone check of the seek-on-tap.
 - Oct 23 · #1 (hackathon-homecookd) · Claude · Hackathon stack from Caleb's PLAN.pdf: `docs/build/STACK.md` (stack, 2-day cuts, contracts, build order), `convex/schema.ts` (deployed to the preview), Cartesia/Moss/Convex keys in `.env` with checks in `scripts/`. Removed the Supabase `/voice/token` and `/moss/ask` routes (they no longer fit the plan). Repo pointed at its own Supabase project (fork session). Memory: hackathon-stack-oct23, testflight-live (replaces no-testflight-yet). Open: the four build tracks, Supabase api deploy + secrets, Muse and Anthropic keys.
 - Oct 23 · #1 (hackathon-homecookd) · Claude · Hackathon Supabase project `bsudybxsqvtwftsdmwmz` is live: migrations, seed (demo + TEST family, fresh test code), api deployed, secrets and hourly cron set; two_sided 129, retention 61 and api-smoke 23 pass. Cartesia + Moss keys set in Convex env on `energized-starfish-920`. All keys now in one main-checkout `.env`; worktree copies are symlinks to it (AGENTS.md rule).
+- Oct 23 · #4 (hackathon-homecookd) · Claude · Track A, Convex core (`convex/`):
+  - **Sign-in bridge:** `sessions.start` checks the device key with Supabase `GET /family`, mirrors the family and
+    returns a session token (only its hash is stored, 30 days). One `requireSession` check guards every public
+    function.
+  - **Functions and routes:** recipes, jobs, questions, messages, files and cooking from STACK.md; `http.ts`
+    worker and voice routes.
+  - **AI actions:** Muse Spark photo-note draft (`muse-spark-1.3`, nothing sent until the kid sends it); Cartesia
+    Ink batch transcripts of voice-note answers; Moss indexing per family (JS SDK, external package).
+  - **Seed and tests:** demo seed; 10 convex-test tests.
+  - **Schema:** `cookingSessions.updatedAt`, `sessions.by_expiresAt`, `steps[].quote`.
+  - **Deploy:** to `grand-dragon-649`, which replaced `energized-starfish-920` (`--preview-create` recreated
+    it). Generated `WORKER_SECRET` and `VOICE_SECRET` into `.env` and set Convex env.
+  - **Live checks:** a curl against every HTTP route; the worker flow from `queued` to `done`; Ink transcribed a
+    spoken answer; Muse drafted a note.
+  - **Open:**
+    - Moss billing limit; nothing is indexed yet.
+    - The bridge's success path was tested only in convex-test: `docs/build/.test-family-code` isn't recognised by
+      the new Supabase project, so no live TEST-family device key.
+    - The real demo family's Supabase id still needs `seed:claim`.
+- Oct 24 · #5 · Claude · Track D, the app (STACK.md): cook screen streams the mic as 16 kHz PCM (`@siteed/audio-studio`) to the voice service and follows `go_to_step`, `play_clip` (in the step's own player) and `say` ("AI voice" label, "I asked Mom"); parent Home shows the newest recording's live stage from `jobs.forFamily` and the kids' open questions with Hold to talk (`questions.answer`); the kid's postcard sends the photo to Convex and shows Muse's draft to edit (pots cut); Record has "From my glasses" (`source: "glasses"`). Convex and voice calls live in `app/src/lib/live/convex.ts` and `voice.ts`, each with a stub. `app/scripts/pcm-echo-server.mjs` is the first-hour mic test socket. EAS: `expo-dev-client`, `expo-updates`, a `development` profile, channels, Salik's project id; `scripts/set-apple-ids.mjs` run with `com.salik.homecookd` / `73UV499FKN` (AASA, api `APP_BUNDLE_ID`). Open: the dev build and the TestFlight build need EAS signed in as `salikm1234`; mic streaming not yet checked on a real iPhone; `EXPO_PUBLIC_VOICE_URL` once Track B deploys; the old TEST family code doesn't work on the hackathon Supabase, so the live sign-in smoke didn't run.
 - Oct 23 · #3 · Claude · Track C (pipeline). Gemini still watches the video; Muse Spark (`muse-spark-1.3`, Standard mode, new `pipeline/writer.py`) now writes the recipe, stories and tips. Gemini is the fallback (`RECIPE_WRITER=gemini`, or automatic when Muse fails twice). `pipeline/worker.py` claims Convex jobs (`/worker/claim`, `/progress`, `/published` with `x-worker-secret`); the old GCS job files moved to `--gcs`. Convex jobs have no title, so Muse names the dish. New `pipeline/convex_stub.py` (local fake Convex) and `pipeline/Dockerfile` (Cloud Run job; built and import-checked, not deployed). A real 17-min upload took 10.0 min from queued to published through the stub. Open: run against Track A's deployed routes (needs `CONVEX_SITE_URL` in `.env`); Muse splits steps finer than Gemini did (27 vs 10 on the biryani), so the merge prompt may need tuning; cook mode's short steps (`shorten.py`) still use Gemini; deploying the Cloud Run job. Locally, `test_shorten.py` fails on the main checkout's old `data/out/chicken-biryani` (no substeps). It passes without local data.

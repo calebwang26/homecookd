@@ -55,8 +55,24 @@
       ],
       "expo-asset",
       "expo-sharing",
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "@siteed/audio-studio",
+        {
+          "enablePhoneStateHandling": false,
+          "enableNotifications": false,
+          "enableBackgroundAudio": false,
+          "enableDeviceDetection": false,
+          "iosConfig": {
+            "microphoneUsageDescription": "homecookd uses the microphone so you can cook hands-free by voice, and answer your family in your own voice."
+          }
+        }
+      ]
     ],
+    "owner": "salikm1234",
+    "runtimeVersion": { "policy": "appVersion" },
+    "updates": { "url": "https://u.expo.dev/ef88fb83-09cf-4c73-9684-de9a95a1f1ef" },
+    "extra": { "eas": { "projectId": "ef88fb83-09cf-4c73-9684-de9a95a1f1ef" } },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true

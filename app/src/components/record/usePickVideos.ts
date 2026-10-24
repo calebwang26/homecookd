@@ -9,7 +9,7 @@ import { useToast } from '@/components/ui';
 import { addClips } from './draft';
 import { openSettings, phoneOnly, pickFromLibrary, recordWithCamera, type PickResult } from './pick';
 
-export type PickContext = { dish?: string | null; requestFrom?: string | null };
+export type PickContext = { dish?: string | null; requestFrom?: string | null; glasses?: boolean };
 
 // Once the camera or picker is up it covers the app, so a tap that reaches us this long after the
 // last open means it never presented (iOS can refuse while another modal is still going away, and

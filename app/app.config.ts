@@ -26,7 +26,7 @@
 import type { ConfigContext, ExpoConfig } from 'expo/config';
 
 /** The App ID's bundle identifier (e.g. "app.homecookd"). Filled by scripts/set-apple-ids.mjs. */
-const IOS_BUNDLE_ID = '';
+const IOS_BUNDLE_ID = 'com.salik.homecookd';
 
 const GOOGLE_SCHEME_PREFIX = 'com.googleusercontent.apps.';
 const GOOGLE_CLIENT_SUFFIX = '.apps.googleusercontent.com';
@@ -78,6 +78,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       infoPlist: {
         ...config.ios?.infoPlist,
         LSApplicationQueriesSchemes: ['whatsapp', 'instagram', 'instagram-stories'],
+        // Only HTTPS/WSS (exempt encryption): TestFlight doesn't stop to ask about export compliance.
+        ITSAppUsesNonExemptEncryption: false,
       },
     },
     plugins,
