@@ -20,8 +20,15 @@ import { useSession } from '@/lib/session';
 import { colors, radii, shadows } from '@/theme/tokens';
 
 const DEV_WEB = __DEV__ && Platform.OS === 'web';
+/** Next Friday, 7 pm (the fixture's dinner). */
+const nextFriday = () => {
+  const d = new Date();
+  d.setDate(d.getDate() + ((5 - d.getDay() + 7) % 7 || 7));
+  d.setHours(19, 0, 0, 0);
+  return d.getTime();
+};
 const FIXTURES: Record<string, Opened> = {
-  going: { ok: true, dinner: { dish: 'Jollof Rice', hostFirstName: 'Mom', startsAt: Date.now() + 3 * 86_400_000 } },
+  going: { ok: true, dinner: { dish: 'Jollof Rice', hostFirstName: 'Mom', startsAt: nextFriday() } },
   past: { ok: true, dinner: { dish: 'Jollof Rice', hostFirstName: 'Mom', startsAt: Date.now() - 86_400_000 } },
   gone: { ok: false, why: 'gone' },
   offline: { ok: false, why: 'offline' },

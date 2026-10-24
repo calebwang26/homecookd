@@ -53,6 +53,9 @@
 .main {
   display: flex;
   flex-direction: column;
+  /* The lander's page-wide guard clips main sideways, which would cut the button's soft shadow off
+     at the column padding (as on /i). Nothing here is wider than the column. */
+  overflow-x: visible;
   animation: rise 360ms cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 .main[aria-busy] {

@@ -19,7 +19,10 @@ export type ShareCardData = {
   /** "~50 min" or null. */
   time: string | null;
   poster: string | null;
-  /** In place of "by Dad" ("Hosted by Mom" on a dinner invite); the cook's avatar still leads it. */
+  /**
+   * In place of "by Dad" ("Hosted by Mama Ngozi" on a dinner invite); the cook's avatar still leads it.
+   * It may take two lines (BYLINE_EXTRA more), so a long name is never cut.
+   */
   byline?: string;
 };
 
@@ -38,6 +41,8 @@ export type ShareCardProps = {
 // Card height without the photo, with a full two-line title at 24 (12 top + 12 gap + 2 x 26.9
 // title + 6 + 20 meta + 12 gap + 23 brand + 14 bottom). The sheet plans the stage with this.
 const CARD_CHROME = 153;
+/** A byline's second line (14 pt meta). */
+export const BYLINE_EXTRA = 20;
 export const STAGE_PAD = { regular: 22, compact: 14 } as const;
 /** Stage height for a photo edge: card chrome plus the stage's top and bottom padding. */
 export function stageFor(photo: number, compact: boolean) {
@@ -174,7 +179,7 @@ export function ShareCard({ data, swatch, photo, stageHeight, compact = false }:
           {meta ? (
             <View style={styles.meta}>
               {data?.cook ? <Avatar name={data.cook} size={20} /> : null}
-              <Txt variant="meta" size={14} numberOfLines={1} style={styles.metaText}>
+              <Txt variant="meta" size={14} numberOfLines={data?.byline ? 2 : 1} style={styles.metaText}>
                 {meta}
               </Txt>
             </View>

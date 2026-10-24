@@ -49,7 +49,7 @@ export function DishMap<R extends Dish>({ size, spots, areas, pickedKey, onPick,
         haptic
         accessibilityRole="button"
         accessibilityLabel={you.label}
-        accessibilityHint="Shows your dinners and Host a dinner"
+        accessibilityHint="Shows your dinners and the dishes you swap or cook together"
         accessibilityState={{ selected: you.picked }}
         style={[styles.you, { left: size / 2 - YOU_HALO / 2, top: size / 2 - YOU_HALO / 2 }]}>
         <View style={[styles.halo, you.picked ? styles.haloOn : null]}>

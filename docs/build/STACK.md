@@ -145,7 +145,7 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 |---|---|---|
 | E · homie live | Parent live pass (`/record`), `/speak`, kid-side timers, nudges, read-aloud offer, labelled hints | `voice/`, `convex/live.ts`, `convex/lib/liveRoutes.ts` |
 | F · Translation + pipeline | Cook's language end to end, original + English quotes, homie log in the full pass, upload race, 8–12 steps | `pipeline/`, `convex/worker.ts`, `convex/lib/recipeJson.ts`, `convex/moss.ts`, `convex/people.ts`, `app/src/lib/languages.ts` |
-| G · Community | Feed, share switch + Muse story card, share asks, swaps, one dinner flow | `convex/community.ts`, `convex/dinners.ts`, `convex/shareRequests.ts`, `convex/storyCards.ts`, `convex/lib/geo.ts`, `convex/seedCommunity.ts`, `app/src/app/community/*`, `app/src/app/dinner/*`, `app/src/app/kid/community.tsx`, `app/src/lib/live/community.ts` |
+| G · Community | Feed, share switch + Muse story card, share asks, swaps, cook together, one dinner flow, dinner invite links | `convex/community.ts`, `convex/dinners.ts`, `convex/shareRequests.ts`, `convex/storyCards.ts`, `convex/lib/geo.ts`, `convex/lib/inviteRoutes.ts`, `convex/seedCommunity.ts`, `app/src/app/community/*`, `app/src/app/dinner/*`, `app/src/app/d.tsx`, `app/src/app/kid/community.tsx`, `app/src/lib/live/community.ts`, `app/src/lib/live/invite.ts`, `web/src/app/d/` |
 | H · Glasses VM | ESP32 → free GCP e2-micro → MP4 → GCS → job | `glasses/`, `convex/glasses.ts`, `convex/lib/glassesRoutes.ts` |
 | I · App UI | homie pot everywhere, cook-screen chips + captions + timers, recording screen, walkie-talkie, language picker | `app/` (everything else) |
 
@@ -192,21 +192,47 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 - **Share asks** ("Put it on the map", `convex/shareRequests.ts`): `shareRequests.ask({ recipeId })` → `"shared"`
   (it already was, or I'm its cook: shared at once by the same path as the switch, `community.shareOn`) or
   `"asked"`: a `questions` row with `kind: "share"` and `shareRecipeId`, addressed to that recipe's cook like any
-  open question (`textForCook` in her language; one open ask per recipe). Only her answer counts
-  (`questions.answer` refuses a share ask from anyone but the recipe's cook). Once her words are in (typed, or the
-  voice note's Ink transcript), `shareRequests.decide` asks Gemini, strictly, yes / no / unclear on the English
-  (`translation`, else `transcript`, else `text`; `lib/yesNo.ts`). Only "yes" shares; no, unclear, a failure, no
-  Gemini key or no transcript shares nothing. `shareRequests.familyDishes` → my family's ready dishes
-  `{ recipeId, dish, cookName, mine, shared, asked }` for the "Share your recipe" chooser.
-- **Swaps** (`swapRequests` table): `community.requestSwap({ recipeId, myRecipeId? })` (their recipe and the one I
-  offer must both be shared; asking again returns the same ask; after a no it says "They said not this time"),
-  `community.respondSwap({ swapId, accept })` (anyone in the family that was asked, once), `community.mySwaps` →
-  `{ swapId, status, incoming, ourDish, theirDish, familyName }` (a dish only while it's ours or still shared; no
-  person ids). A swap shows no recipe text neighbors couldn't already see.
-  `dinners.create({ recipeId, startsAt, placeKind, placeName, address, seats })` (the recipe must be shared first),
-  `dinners.get({ dinnerId })` (with `coverUrl`, our stock photo, when the recipe opens), `dinners.mine`,
+  open question (one open ask per recipe). Gemini fills `textForCook` (her language) a moment later, but the ask
+  reaches her in her language only where the parent screens show `textForCook`: LiveQuestions and the
+  walkie-talkie do from #35 on (merge #35 before demoing "Put it on the map"); before that she reads the English.
+  Only her answer counts (`questions.answer` refuses a share ask from anyone but the recipe's cook). Once her words
+  are in (typed, the voice note's Ink transcript, or a voice note nobody could write out), `shareRequests.decide`
+  asks Gemini, strictly, yes / no / unclear (`lib/yesNo.ts`) on the English (`translation`, else `transcript`, else
+  `text`). It gets a fixed question (`YES_NO_QUESTION`, "May homie put your recipe on the neighborhood map?"), never
+  the stored one (that has the asker's name and the dish), and her answer as one JSON string it's told to read as
+  data. `shareRequests.settle` writes `questions.shareDecision` `{ said, at }` once. Only "yes" shares; no, unclear,
+  a failure, no Gemini key, no words: nothing is shared, and nobody in the family can ask her again for a day
+  (`ASK_AGAIN_MS`; `ask` says "Rajani said not now. Ask again tomorrow."). Her own tap still shares at once.
+  `shareRequests.familyDishes` → my family's ready dishes `{ recipeId, dish, cookName, mine, shared, asked,
+  notNowAt }` for the "Share your recipe" chooser (`asked` stays true until homie has read her answer; `notNowAt`:
+  when she last said not now, so the row reads "Grandma Rajani said not now" for a day). What neighbors see (the
+  question, the cook's switch, the privacy note) names the culture label as "homie's guess at where the dish is
+  from" (`TODO(caleb)` on the words); the map card tags it "AI".
+- **Swaps and "Cook together"** (`swapRequests` table, `kind` unset = swap, `"cook"` = cook together):
+  `community.requestSwap({ recipeId, myRecipeId? })` (their recipe and the one I offer must both be shared; asking
+  again returns the same ask; after a no it says "They said not this time"), `community.cookTogether({ recipeId })`
+  (the same rules, no offer), `community.respondSwap({ swapId, accept })` (anyone in the family that was asked,
+  once, for either kind), `community.mySwaps` → `{ swapId, kind, status, incoming, ourDish, theirDish, familyName }`
+  (a dish only while it's ours or still shared; no person ids). Neither shows recipe text neighbors couldn't
+  already see. Once a "cook together" is accepted, the asking family may host a dinner of that dish.
+  `dinners.create({ recipeId, startsAt, placeKind, placeName, address, seats })` (one of my family's recipes, shared
+  first; or another family's shared dish they said yes to cooking with us), `dinners.get({ dinnerId })` (with
+  `coverUrl`, our stock photo, when the recipe opens, and `inviteOpens`), `dinners.mine`,
   `dinners.requestJoin({ dinnerId })`,
-  `dinners.respond({ requestId, accept })` (host only). Community responses never include `libraryId`,
+  `dinners.respond({ requestId, accept })` (host only).
+- **Dinner invites** ("Invite friends"): `dinners.inviteLink({ sessionToken, dinnerId })` (an action) →
+  `{ token, url: "https://homecookd.app/d?t=<token>" }`, for the host or an accepted guest only. One random
+  43-character token per dinner (`dinners.inviteToken`, made the first time anyone asks, then the same every time).
+  `POST /invite/open` on the `.convex.site` host (`convex/lib/inviteRoutes.ts`), public: `{ token, deviceId }`
+  (token 20–64 and deviceId 16–64 of `[A-Za-z0-9_-]`) → 200 `{ dish, hostFirstName, startsAt }` and nothing else
+  (never the place, the address or an id), 404 for a link that doesn't work (or a called-off dinner), 400 for a
+  bad body, 403 from a site that isn't homecookd.app or localhost (CORS, with an OPTIONS preflight; the app's fetch
+  sends no Origin). Each `deviceId` counts once per dinner (`dinnerInviteOpens`) while the dinner is ahead, at most
+  `OPEN_BURST` (60) new ones per 10 minutes and `MAX_OPENS` (300) in all; past those the page still opens,
+  uncounted. "X going" on the dinner page = the host + accepted guests + `inviteOpens`. The web's static `/d` page
+  (`web/src/app/d`, `NEXT_PUBLIC_CONVEX_SITE_URL`, default `https://grand-dragon-649.convex.site`) and the app's
+  `/d` screen (`homecookd://d?t=…`, signed in or not) call it with a random id the browser or install keeps.
+  Community responses never include `libraryId`,
   `recipeJsonUrl`, `coverUrl` of a private recipe, moments, memories, quotes other than the card's one, original-
   language quotes, person ids of other families, or an address (except to the host and accepted guests). Distance
   is a label from `lib/geo.ts`. `families.publicName` is the surname ("Pawar"); cards say "The Pawar family", or

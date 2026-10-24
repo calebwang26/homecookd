@@ -14,7 +14,7 @@ import { alpha } from '@/theme/tokens';
 
 import { ExternalRow } from './ExternalRow';
 import { useRowMetrics } from './RoundTarget';
-import { ShareCard, stageFor } from './ShareCard';
+import { BYLINE_EXTRA, ShareCard, stageFor } from './ShareCard';
 import { trail } from './trail';
 
 export type DinnerInvite = { dinnerId: string; dish: string; hostName: string; photo: string | null };
@@ -50,11 +50,12 @@ export function DinnerInviteBody({ dinner }: { dinner: DinnerInvite }) {
   }, [dinnerId]);
   const text = useCallback((url: string) => inviteText(dish, host, url), [dish, host]);
 
-  // The share sheet's budget (ShareSheet.tsx), with no swatches or faces: the card takes the rest.
+  // The share sheet's budget (ShareSheet.tsx), with no swatches or faces: the card takes the rest,
+  // with room for "Hosted by …" on two lines.
   const bodyMax = winH * 0.92 - 28 - (Math.max(insets.bottom, 16) + 8);
   const budget = bodyMax - (1 + 12 + rowHeight(circle)) - 12;
   const compact = budget < 300;
-  const room = budget - stageFor(0, compact);
+  const room = budget - stageFor(0, compact) - BYLINE_EXTRA;
   const photo = room < PHOTO_MIN ? 0 : Math.round(Math.min(168, room));
 
   return (
@@ -64,7 +65,7 @@ export function DinnerInviteBody({ dinner }: { dinner: DinnerInvite }) {
           data={{ title, cook: host || null, time: null, poster, byline: host ? `Hosted by ${host}` : undefined }}
           swatch="peach"
           photo={photo}
-          stageHeight={stageFor(photo, compact)}
+          stageHeight={stageFor(photo, compact) + BYLINE_EXTRA}
           compact={compact}
         />
       </View>

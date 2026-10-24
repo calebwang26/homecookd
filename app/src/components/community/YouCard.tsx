@@ -2,8 +2,8 @@
 // "1 new request" for the host), the swaps and "cook together" asks another family sent yours (Accept /
 // Decline), the swaps you agreed on ("You’re swapping Kanda Poha ↔ Jollof Rice with the Okafor family", a
 // tap opens their recipe) and the dishes you're cooking together ("Cooking Jollof Rice together with the
-// Okafor family", with "Host a dinner" as the next step), then "Host a dinner". Kept off the map until
-// asked for.
+// Okafor family", with "Host a dinner" as the next step), or one line saying they show up here. Hosting
+// your own dinner lives only under "Share your recipe". Kept off the map until asked for.
 import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
@@ -53,13 +53,13 @@ export function YouCard({ next, swaps, now }: { next: DinnerPick | null; swaps: 
           </View>
         );
       })}
-      <ActionButton
-        label="Host a dinner"
-        variant="outline"
-        size="sm"
-        icon={<PlusIcon size={20} color={colors.ink} strokeWidth={2.2} />}
-        onPress={() => router.push('/dinner/new')}
-      />
+      {!(next && id) && !asked.length && !swapping.length ? (
+        <View style={styles.card}>
+          <Txt variant="body" size={17} leading={1.4} align="center">
+            Your dinners and the dishes you swap or cook together show up here.
+          </Txt>
+        </View>
+      ) : null}
     </View>
   );
 }

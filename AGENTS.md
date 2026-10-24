@@ -116,7 +116,7 @@ and homesick college kids. It's a family product, not a tool.
 ```
 app/        Expo app (expo-router, TypeScript). EAS dev build while coding, TestFlight for the team and the demo.
             src/lib/live/ = the Convex client, the voice socket and the mic (Expo Go hides the mic).
-web/        Next.js site: the lander, homecookd.app/r (recipe share page) and /i (invites). Vercel project "homecookd".
+web/        Next.js site: the lander, homecookd.app/r (recipe share page), /i (invites) and /d (dinner invites). Vercel project "homecookd".
 convex/     The hackathon backend: schema.ts, functions, http.ts (worker + voice service endpoints)
 voice/      Live voice service (Cloud Run): the kid's cooking loop (/cook) and homie while a cook records (/record)
 glasses/    ESP32 glasses → GCP VM (Python): WS ingest, MP4 mux, GCS upload, Convex job (glasses/README.md)

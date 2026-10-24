@@ -318,52 +318,56 @@ Before starting work, compare the last commit here with `git log origin/main` to
   03:14) runs from `.claude/worktrees/worker-main` at main `4d703d9` (#39), which has #37 and #39.
   - **Open:** no recipe published since then has been opened on a phone, before and after the cook's yes.
     `play.mp4` and `voice.m4a` are still public at unlisted URLs.
-- Oct 24 · #33 · Claude · Track G screens: Caleb's simplified Community map, then his v2 "one step at a time"
-  connect flow, share asks, swaps and the final Dinner page (built on #24's backend):
-  - **Kid tab "Dishes near you"** (`kid/community.tsx`): the title (room left for homie at the top right), one
-    square map (330 pt on a 390 pt phone; react-native-svg, no new native module: made-up streets, real Cambridge
-    neighborhood names at their real spots, You in the middle) with a round dish photo per ~1 km grid cell
-    (`components/community/mapLayout.ts`: square-root distance scale, circles nudged apart, families in one cell
-    share a circle with a count). Under it: "Tap a dish to see whose it is." and ONE button, "Share your recipe".
+- Oct 24 · #33 · Claude · Track G screens: Caleb's simplified Community map, his v2 "one step at a time" connect
+  flow, share asks, swaps, and (round 3, his final canvas) "Cook together", "Invite friends" and the motion (built on
+  #24's backend):
+  - **Kid tab "Dishes near you"** (`kid/community.tsx`): the title (room left for homie at the top right) with one
+    line under it, "Tap a photo to learn about a dish and cook together.", then one square map (330 pt on a 390 pt
+    phone; react-native-svg, no new native module: made-up streets, real Cambridge neighborhood names at their real
+    spots, You in the middle) with a round dish photo per ~1 km grid cell (`components/community/mapLayout.ts`), and
+    ONE button, "Share your recipe". The circles pop in one after another; a tapped one springs to 70 pt with its sun
+    ring; the card rises in; each chooser step crossfades (`components/community/motion.ts`). Reduce Motion: fades.
   - **One step at a time** (`DishSteps`, `ShareSteps`, `Chooser`, words in `choices.ts`): a dish's card (photo, dish,
-    "cook · culture", distance, her quote, "Translated" when she said it in another language) has one button,
-    "Connect with <cook>". It swaps to a chooser (back ‹, "<cook>'s <dish>"): "Join <host>'s dinner" (only with an
-    open dinner ahead; "Friday · 7 pm · 2 seats left", plus the dinner's own distance when it differs; green, opens
-    the dinner page), "Swap recipes", "Host a dinner". "Share your recipe" → "Put it on the map" and "Host a
-    dinner"; with several family dishes it asks which. Your own family's shared dishes are on the map too (`ours`;
-    their card's button is "Host a dinner"). The floormates' circle still opens their row of dishes. "You" opens
-    your next dinner, the swaps asked of you (Accept / Decline) and the ones agreed, and "Host a dinner"; its sun
-    dot counts dinner requests and swap asks. Tapping the map or the same circle closes it. Reduce Motion: no grow.
+    "cook · culture" with a small "AI" tag on Muse's culture guess, distance, her quote, "Translated" when she said it
+    in another language) has one button, "Connect with <cook>". Its chooser: "Join <host>'s dinner" (only with an
+    open dinner ahead), "Swap recipes", "Cook together" ("Ask <cook> to make it with you"). "Share your recipe" →
+    "Put it on the map" and "Host a dinner". Your own family's shared dishes are on the map too (their card's button
+    is "Host a dinner"). "You" opens your next dinner, the swaps and "cook together" asks sent to you (Accept /
+    Decline), the agreed ones, or one line saying they show up there (its "Host a dinner" button is gone).
   - **Share asks** (`convex/shareRequests.ts`): "Put it on the map" by someone who doesn't cook the dish adds a
-    `questions` row (`kind: "share"`, `shareRecipeId`) for that recipe's cook, translated for her like any question,
-    so it shows in her open questions with no parent UI change. Only she can answer it. Once her words are in (typed,
-    or the voice note's Ink transcript), a strict Gemini call (`lib/yesNo.ts`) reads the English: only "yes" shares
-    it, by the switch's own path (`community.shareOn`, which schedules the story card); no, unclear, a failure or no
-    transcript share nothing. Her own tap on her own dish shares at once. `questions.forRecipe` leaves share asks out
-    (cook mode never plays them).
-  - **Swaps** (`swapRequests`): `community.requestSwap` (their shared recipe, optionally one of ours that's shared),
-    `respondSwap` (anyone in the family that was asked, once), `mySwaps` (dishes only while ours or still shared, no
-    person ids). "Swap recipes" → pick one of your shared dishes or "Just ask"; an agreed swap reads "You're swapping
-    Kanda Poha ↔ Jollof Rice with the Okafor family" and opens their recipe's text.
-  - **Dinner page** (`/dinner/[id]`, Caleb's final Hearth version): lavender wash, cream back button, the dish photo
-    (326x300, sun glow, "DINNER" tag; `dinners.get` now has `coverUrl`, our stock photo only), "<Dish> Night", a
-    "Hosted by" pill, one card with when and where (the address only after the host says yes), "You're in" and a few
-    faces, "4 going", and one button: "Ask to join", "Asked · waiting" or "Add to calendar" (an .ics written with
-    expo-file-system and opened with expo-sharing; `ics.ts`). The host answers requests there. The quote, "Who's
-    coming", "See the recipe" and the privacy note are gone from it.
-  - **Review fixes:** the share switch's caption and hint and the privacy note now say neighbors see "one line you
-    said" (`TODO(caleb)` on the words); the feed's `now` moves on (rounded down to the quarter hour, checked each
-    minute); a dish's dinner carries its own `distanceLabel` and `hostName`. Muse's culture label stays untagged.
-  - **Also:** Muse's story card code moved to `convex/storyCards.ts`; `plainStory`, `storiesFor` and
-    `quoteTranslated` are in `lib/storyCard.ts`; Community test setup in `convex/community.helpers.ts`. `/dinner/new`
-    takes `?recipeId=`. Round 1's fixes stay (DinnerCard uses the live view only for its own dinner; `community/[id]`
-    waits for sign-in).
-  - **Tests:** vitest 56 with main merged (new `shareRequests.test.ts` 6, `swaps.test.ts` 2, 2 more in
-    `community.test.ts`); `test-community-ui.mjs` 22 (choosers, swap words, the dinner page's words, the .ics text).
-    Expo web screenshots at 390x844 with local fixtures (not committed).
-  - **Open:** not deployed. After the deploy: `seedCommunity:neighbors`, then `floormateDish` and
-    `place '{"familyId": …}'` for Serene's, Caleb's and Salik's families. `DEMO_LOCATION` is still the MIT placeholder
-    (`TODO(caleb)`); the neighborhood names drop off the map anywhere else. No `setLocation` caller, so a dish sits
-    where its cook is, not where the kid who shared it is. "Add to calendar" isn't tried on a phone. Next round per
-    Caleb: "Host a dinner" on someone else's dish becomes "Cook together". A floormate dish has no in-app off switch.
-    "Community" fills its tab bubble.
+    `questions` row (`kind: "share"`) for that recipe's cook. It reaches her in her language only through the parent
+    UI showing `textForCook` (LiveQuestions and the walkie-talkie in #35; merge #35 before demoing it). Only she can
+    answer. Gemini reads her answer against a fixed question (never the stored text, which has the asker's name and
+    the dish), her words passed as one JSON string; only "yes" shares (by `community.shareOn`). Every answer is
+    settled once (`questions.shareDecision`): after a no, an unclear answer, a failure or a voice note nobody could
+    write out, the kid's row says "<cook> said not now" and nobody can ask again for a day. The question, the cook's
+    switch and the privacy note now name the culture guess (`TODO(caleb)` on the words).
+  - **Swaps and Cook together** (`swapRequests`, `kind: "cook"` for cook together): `requestSwap`, `cookTogether`,
+    `respondSwap`, `mySwaps` (with `kind`). An accepted "cook together" reads "Cooking Pork Adobo together with the
+    Reyes family" with "Host a dinner" next, and `dinners.create` lets the asking family host that dish.
+  - **Dinner page** (`/dinner/[id]`, Caleb's final Hearth version): lavender wash, the dish photo (326x300, sun glow,
+    "DINNER" tag), "<Dish> Night", a "Hosted by" pill, when and where (the address only after the host says yes),
+    "You're in" and a few faces, "X going" (host + accepted guests + invite opens; it rolls up live), and one button:
+    "Ask to join", "Asked · waiting", or for the host and guests who are in, "Invite friends". The host first gets
+    "N asked to join", which scrolls to the requests. "Add to calendar" and its .ics code are gone.
+  - **Invite friends**: the share sheet as a dinner variant (`components/share/DinnerInviteBody.tsx`: the dish
+    photo, "<Dish> Night", "Hosted by <host>", no faces; Copy link, Messages, WhatsApp when available, More; "Come to
+    <Dish> Night with <host>: <url>"). `dinners.inviteLink` → one stable random token per dinner, host and accepted
+    guests only. Public `POST /invite/open` (`convex/lib/inviteRoutes.ts`; CORS for homecookd.app and localhost)
+    counts each phone or browser once (`dinnerInviteOpens`), at most 60 new per 10 minutes and 300 in all, and
+    answers only `{ dish, hostFirstName, startsAt }`. The web's static `/d` page (`NEXT_PUBLIC_CONVEX_SITE_URL`,
+    default the hackathon deployment's `.convex.site`) and the app's `/d` screen (works signed out) call it. The
+    AASA file lists `/d`.
+  - **Also:** the kid tab bar's selected bubble now grows to fit a long label ("Community" at 390 pt;
+    `components/ui/FloatingTabBar.tsx`). Muse's story card code is in `convex/storyCards.ts`. `/dinner/new` takes
+    `?recipeId=` and lists the dishes another family said yes to cooking with you.
+  - **Tests:** vitest 63 (new `dinnerInvites.test.ts` 4; `shareRequests.test.ts` 8 with the fixed question, the
+    JSON answer and the day-long "not now"; `swaps.test.ts` 3 with cook together); breaking each key guard on
+    purpose fails a test. `test-community-ui.mjs` 23 (cook together, "said not now", the dinner's button and count,
+    the invite words and helpers). Expo web and the web's static `/d` at 390x844 with local fixtures (not committed).
+  - **Open:** not deployed (schema: `questions.shareDecision`, `dinners.inviteToken` + index, `dinnerInviteOpens`,
+    `swapRequests.kind`, all optional or new). After the deploy: `seedCommunity:neighbors`, then `floormateDish` and
+    `place '{"familyId": …}'` for Serene's, Caleb's and Salik's families; Vercel needs no new env (the site URL has
+    a public default). `DEMO_LOCATION` is still the MIT placeholder (`TODO(caleb)`). No `setLocation` caller. Not tried
+    on a phone: the share sheet's dinner variant, the deep link, VoiceOver. "Host a dinner" still shows on your own
+    dish's card. A floormate dish has no in-app off switch.
