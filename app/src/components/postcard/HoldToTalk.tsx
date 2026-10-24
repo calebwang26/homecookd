@@ -28,7 +28,11 @@
 // VoiceOver / TalkBack: a double-tap is a tap, not a hold. While a note waits it is Undo; otherwise it
 // hears how to record (double-tap and hold passes a real hold through) with a light haptic, so that
 // tap never meets silence. It never starts the microphone.
-import { useCallback, useEffect, useRef, useState } from 'react';
+//
+// `body` / `bodyStyle` draw the button's inside and look instead of the pill (the walkie-talkie's big
+// pot, app/answer/[id]); the hold, the Undo time and the sending work the same. `onSent` runs once a
+// note has gone.
+import { useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import { AccessibilityInfo, ActivityIndicator, Platform, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withSequence, withSpring, withTiming } from 'react-native-reanimated';
 
@@ -54,6 +58,8 @@ import { useVoiceRecorder, type VoiceRecording } from '@/lib/voice';
 import { alpha, colors, motion, shadows } from '@/theme/tokens';
 
 type State = 'idle' | 'waiting' | 'sending' | 'sent' | 'short' | 'cut' | 'undone' | 'error';
+/** What a custom `body` draws from: the hold's moment ('recording' while the finger is down). */
+export type HoldView = { phase: State | 'recording'; level: number; elapsed: number };
 const PRESS_SCALE = 0.97;
 const FLASH_MS = 2400;
 
@@ -79,12 +85,21 @@ export function HoldToTalk({
   toName,
   onSend,
   style,
+  body,
+  bodyStyle,
+  onSent,
 }: {
   /** Who hears it ("Leo"), for VoiceOver. */
   toName: string;
   /** Uploads and sends the note; reject = "Try again". */
   onSend: (rec: VoiceRecording) => Promise<unknown>;
   style?: StyleProp<ViewStyle>;
+  /** The button's inside, in place of the pill's icon and words. */
+  body?: (view: HoldView) => ReactNode;
+  /** The button's look with a `body` (its size, shape and colour), in place of the pill's. */
+  bodyStyle?: StyleProp<ViewStyle>;
+  /** The note was sent. */
+  onSent?: () => void;
 }) {
   // The recorder's limit (lib/voice MAX_VOICE_S) stops it with the finger still down: wait to send what's there.
   const rec = useVoiceRecorder({ onAutoStop: (note) => void (note ? wait(note) : undefined) });
@@ -101,9 +116,9 @@ export function HoldToTalk({
   const waiting = useRef<VoiceRecording | null>(null);
   const waitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // For the unmount flush, which outlives this render.
-  const latest = useRef({ onSend, toast, toName });
+  const latest = useRef({ onSend, toast, toName, onSent });
   useEffect(() => {
-    latest.current = { onSend, toast, toName };
+    latest.current = { onSend, toast, toName, onSent };
   });
   useEffect(
     () => () => {
@@ -241,6 +256,7 @@ export function HoldToTalk({
       haptic('success');
       AccessibilityInfo.announceForAccessibility?.('Sent');
       flash('sent');
+      latest.current.onSent?.();
     } catch (e) {
       haptic('error');
       toast.show(errorMessage(e, `Couldn’t send it to ${toName}. Try again.`), { tone: 'error' });
@@ -319,9 +335,10 @@ export function HoldToTalk({
           }
           void up('cut');
         }}
-        style={[styles.pill, recording ? styles.pillRec : waitingNow ? styles.pillWait : null, pressStyle]}>
-        {waitingNow && !reduce ? <Animated.View pointerEvents="none" style={[styles.left, leftStyle]} /> : null}
-        {sending ? (
+        style={body ? [bodyStyle, pressStyle] : [styles.pill, recording ? styles.pillRec : waitingNow ? styles.pillWait : null, pressStyle]}>
+        {body ? body({ phase: recording ? 'recording' : state, level: rec.level, elapsed: rec.elapsed }) : null}
+        {!body && waitingNow && !reduce ? <Animated.View pointerEvents="none" style={[styles.left, leftStyle]} /> : null}
+        {body ? null : sending ? (
           <ActivityIndicator size="small" color={colors.sageInk} />
         ) : state === 'sent' ? (
           <CheckIcon size={16} color={ink} />
@@ -330,7 +347,7 @@ export function HoldToTalk({
         ) : waitingNow ? null : (
           <MicIcon size={18} color={ink} />
         )}
-        {waitingNow ? (
+        {body ? null : waitingNow ? (
           <Txt variant="label" size={15} weight={500} color={ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={styles.words}>
             {HOLD_WAIT}{' '}
             <Txt variant="label" size={15} weight={700} color={ink} style={styles.undo}>

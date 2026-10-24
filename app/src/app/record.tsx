@@ -1,22 +1,36 @@
 // Record (bible: Parent-Record), a screen pushed from parent Home: Back, "What will you teach
 // today?", a gentle suggestion when a learner asked for a dish ("Leo asked for Sunday eggs"), the
-// 3-step guide with the tripod photo, then the two ways in: "Start recording" (camera) and the
-// full-width "Use videos I already took" (camera roll), and a quiet "From my glasses" (the camera roll
-// too: smart glasses save there; the job is tagged `source: "glasses"`). All continue to Send. On the
-// web, they explain that recording happens in the app on a phone.
+// 3-step guide with the tripod photo, then "Start recording": the pre-record sheet (the dish, who it's
+// for, her language, and how she films):
+//   From my glasses  live.startRecording (source glasses) -> /recording: homie listens on the phone by
+//                    the stove; the glasses' video reaches the job from the VM.
+//   Phone camera     live.startRecording (source phone) -> /recording: homie's hello, then the phone's
+//                    camera, then homie's last questions there, then Send.
+//   Videos I took    the camera roll, then Send (as before).
+// A quiet "Videos from my glasses" stays as the fallback for glasses that saved to the camera roll (the
+// job is tagged `source: "glasses"`). On the web, the camera and camera roll explain that they work in
+// the app on a phone.
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
-import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
+import { useState } from 'react';
+import { ScrollView, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { dishName, requestDish, useKitchen, type KitchenItem } from '@/components/parent/kitchen';
-import { useDraft } from '@/components/record/draft';
+import { setDraftMeta, useDraft } from '@/components/record/draft';
+import { phoneOnly } from '@/components/record/pick';
+import { PreRecordSheet, type CaptureSource, type PreRecordChoice } from '@/components/record/PreRecordSheet';
 import { PhoneOnlySheet } from '@/components/record/sheets';
 import { usePickVideos, type PickContext } from '@/components/record/usePickVideos';
-import { ActionButton, ArrowRightIcon, Avatar, BackPill, listEnter, PressableScale, ScreenWash, Txt, VideoIcon } from '@/components/ui';
+import { ArrowRightIcon, Avatar, BackPill, listEnter, PressableScale, ScreenWash, Txt, useToast } from '@/components/ui';
+import { convexPersonIdByName, startRecording } from '@/lib/live/convex';
 import { getCachedEntry } from '@/lib/recipes';
 import { colors, radii, shadows, space } from '@/theme/tokens';
+
+/** The sheet's native Modal has to be gone before the next screen, camera or picker presents (iOS). */
+const SHEET_GONE_MS = 600;
+const after = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
 const tripod = require('@/components/record/tripod.jpg');
 
@@ -41,14 +55,49 @@ export default function RecordScreen() {
   const k = useKitchen();
   const draft = useDraft();
   const pick = usePickVideos();
+  const toast = useToast();
+  const [sheet, setSheet] = useState(false);
+  const [busy, setBusy] = useState<CaptureSource | null>(null);
 
   const request = k.requests[0] ?? null;
   const dish = askedDish(request);
   const ctx: PickContext = request ? { dish, requestFrom: request.other.id } : {};
 
-  const go = async (kind: 'camera' | 'library' | 'glasses') => {
-    const ok = kind === 'camera' ? await pick.record(ctx) : await pick.library({ ...ctx, glasses: kind === 'glasses' });
-    if (ok) router.push('/send');
+  /** The camera-roll fallback for glasses videos. */
+  const glassesRoll = async () => {
+    if (await pick.library({ ...ctx, glasses: true })) router.push('/send');
+  };
+
+  const start = async ({ source, dish: typed, kid, language }: PreRecordChoice) => {
+    setDraftMeta({ dish: typed || null, requestFrom: kid?.id ?? null, language, recordingId: null });
+    const picked: PickContext = { dish: typed || null, requestFrom: kid?.id ?? null };
+    if (source === 'library' || (source === 'camera' && phoneOnly)) {
+      setSheet(false);
+      await after(SHEET_GONE_MS);
+      if (await (source === 'library' ? pick.library(picked) : pick.record(picked))) router.push('/send');
+      return;
+    }
+    setBusy(source);
+    try {
+      const forKidId = (await convexPersonIdByName(kid?.name)) ?? undefined;
+      const { recordingId } = await startRecording({ dish: typed || undefined, forKidId, language, source: source === 'glasses' ? 'glasses' : 'phone' });
+      if (source === 'camera') setDraftMeta({ recordingId });
+      setSheet(false);
+      await after(SHEET_GONE_MS);
+      router.push({ pathname: '/recording', params: { id: recordingId, source: source === 'glasses' ? 'glasses' : 'phone', kid: kid?.name ?? '', lang: language } });
+    } catch (e) {
+      console.warn('[record] startRecording', String(e).slice(0, 160));
+      if (source === 'glasses') {
+        toast.show('homie couldn’t start. Check the connection and try again.', { tone: 'error', durationMs: 3200 });
+      } else {
+        // No homie today: the phone's camera still works, straight to Send.
+        setSheet(false);
+        await after(SHEET_GONE_MS);
+        if (await pick.record(picked)) router.push('/send');
+      }
+    } finally {
+      setBusy(null);
+    }
   };
 
   const waiting = draft.clips.length;
@@ -101,42 +150,29 @@ export default function RecordScreen() {
 
         <Animated.View entering={listEnter(2)} style={styles.ctaCol}>
           <PressableScale
-            onPress={() => go('camera')}
+            onPress={() => setSheet(true)}
             haptic
             disabled={!!pick.busy}
             accessibilityLabel="Start recording"
-            accessibilityHint="Opens the camera. Record yourself cooking, then send it to the family."
+            accessibilityHint="Asks the dish, who it's for and how you film, then starts."
             style={styles.start}>
             <View style={styles.startDot}>
-              {pick.busy === 'camera' ? <ActivityIndicator color={colors.danger} /> : <View style={styles.redDot} />}
+              <View style={styles.redDot} />
             </View>
             <Txt variant="button" size={20} weight={700} color={colors.card} style={styles.flex} numberOfLines={1}>
               Start recording
             </Txt>
           </PressableScale>
 
-          <ActionButton
-            label="Use videos I already took"
-            variant="outline"
-            size="lg"
-            labelWeight={700}
-            icon={<VideoIcon size={22} color={colors.ink} />}
-            state={pick.busy === 'library' ? 'loading' : 'idle'}
-            disabled={pick.busy === 'camera'}
-            haptics
-            onPress={() => void go('library')}
-            accessibilityHint="Opens your videos. Pick them in the order you filmed them."
-          />
-
           <PressableScale
-            onPress={() => void go('glasses')}
+            onPress={() => void glassesRoll()}
             disabled={!!pick.busy}
             accessibilityRole="button"
-            accessibilityLabel="From my glasses"
-            accessibilityHint="Opens your videos. Pick the ones your smart glasses filmed."
+            accessibilityLabel="Videos from my glasses"
+            accessibilityHint="Opens your videos. Pick the ones your smart glasses saved to this phone."
             style={styles.glasses}>
             <Txt variant="label" size={16} weight={700} color={colors.greenDeep}>
-              From my glasses
+              Videos from my glasses
             </Txt>
           </PressableScale>
 
@@ -151,6 +187,14 @@ export default function RecordScreen() {
         </Animated.View>
       </ScrollView>
 
+      <PreRecordSheet
+        visible={sheet}
+        onClose={() => !busy && setSheet(false)}
+        initialDish={dish}
+        requestFrom={request?.other.id ?? null}
+        busy={busy ?? (pick.busy === 'library' ? 'library' : pick.busy === 'camera' ? 'camera' : null)}
+        onStart={(c) => void start(c)}
+      />
       <PhoneOnlySheet visible={pick.phoneSheet} onClose={pick.closePhoneSheet} />
     </View>
   );

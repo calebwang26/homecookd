@@ -9,6 +9,14 @@
 //   await sendPhoto(shared, text)                        messages.send: the photo + the kid's note, to the cook
 //   await convexRecipeId(libraryId)                      the recipe's Convex _id (the voice socket needs it)
 //   invalidateConvexRecipes()                            after the family's recipe list changes (lib/recipes.ts)
+//   const { recordingId } = await startRecording({ dish, forKidId, language, source })   live.startRecording
+//   useRecording(recordingId)                            live.recording, live (the recording screen)
+//   useMe()  /  await setLanguage('mr')                  people.me (live) / people.setLanguage
+//   await convexPersonIdByName('Shreya')                 a family member's Convex id, from rows that name them
+//
+// The calls added for the Oct 24 tracks (live.*, people.*) are "soft": until those functions are
+// deployed, Convex's "Could not find public function" gives their stub value without moving every
+// other call to the stub.
 //
 // Functions are called by name, so the app builds before Track A's convex/ code exists. Until it is
 // deployed (no EXPO_PUBLIC_CONVEX_URL, or Convex says "Could not find public function"), every call
@@ -37,7 +45,27 @@ export type CookQuestion = {
   text: string;
   askedByName?: string;
   recipeTitle?: string;
+  /** The kid's Convex person id. */
+  askedBy?: string;
+  /** The question in the cook's language, when it isn't English (Track F translates it). */
+  textForCook?: string;
+  answer?: { translation?: string };
 };
+
+export type RecordingSource = 'phone' | 'glasses';
+export type RecordingStatus = 'intro' | 'recording' | 'wrapping_up' | 'ended' | 'abandoned';
+export type LiveRecording = {
+  _id: string;
+  source: RecordingSource;
+  status: RecordingStatus;
+  language: string;
+  dish?: string;
+  forKidId?: string;
+  startedAt?: number;
+  endedAt?: number;
+  jobId?: string;
+};
+export type Me = { personId: string; name: string; role: 'cook' | 'kid'; language: string; relation?: string };
 
 // ---------------------------------------------------------------------------
 // Live or stub
@@ -68,8 +96,17 @@ export function useConvexStubbed(): boolean {
 
 const ref = <T extends FunctionType>(name: string) => makeFunctionReference<T>(name);
 
-/** Runs `name` on Convex, or `fallback` while stubbed (or once Convex says the function isn't there). */
-export async function call<T>(type: 'mutation' | 'action' | 'query', name: string, args: Record<string, unknown>, fallback: () => T | Promise<T>): Promise<T> {
+/**
+ * Runs `name` on Convex, or `fallback` while stubbed (or once Convex says the function isn't there).
+ * `soft`: a missing function gives `fallback` for this call only (a function not deployed yet).
+ */
+export async function call<T>(
+  type: 'mutation' | 'action' | 'query',
+  name: string,
+  args: Record<string, unknown>,
+  fallback: () => T | Promise<T>,
+  opts: { soft?: boolean } = {},
+): Promise<T> {
   if (stubbed || !client) return fallback();
   try {
     if (type === 'mutation') return await client.mutation(ref<'mutation'>(name), args);
@@ -78,6 +115,10 @@ export async function call<T>(type: 'mutation' | 'action' | 'query', name: strin
   } catch (e) {
     if (signedOut(e)) session = null;
     if (!isMissing(e)) throw e;
+    if (opts.soft) {
+      console.warn(`[convex] ${name} isn't deployed yet; using its stub`);
+      return fallback();
+    }
     goStub(e);
     return fallback();
   }
@@ -119,6 +160,8 @@ export function useLive<T>(
   fallback: (onData: (v: T) => void) => () => void,
   enabled = true,
   args: Record<string, unknown> = {},
+  /** A missing function falls back for this hook only (see `call`'s `soft`). */
+  soft = false,
 ): T {
   const [value, setValue] = useState<T>(initial);
   const isStub = useConvexStubbed();
@@ -130,6 +173,7 @@ export function useLive<T>(
     if (!enabled) return;
     if (isStub || !client) return fallback(setValue);
     let off: (() => void) | null = null;
+    let offStub: (() => void) | null = null;
     let alive = true;
     let retry: ReturnType<typeof setTimeout> | null = null;
     // No session yet (a failed sessions.start, a dropped connection): try again a few times.
@@ -140,13 +184,18 @@ export function useLive<T>(
           if (tries < LIVE_RETRIES) retry = setTimeout(() => subscribe(tries + 1), LIVE_RETRY_MS);
           return;
         }
-        off = client.onUpdate(ref<'query'>(name), { ...args, sessionToken }, (v) => setValue(v as T), (e) => (isMissing(e) ? goStub(e) : console.warn(`[convex] ${name}`, String(e))));
+        off = client.onUpdate(ref<'query'>(name), { ...args, sessionToken }, (v) => setValue(v as T), (e) => {
+          if (!isMissing(e)) return console.warn(`[convex] ${name}`, String(e));
+          if (!soft) return goStub(e);
+          if (alive && !offStub) offStub = fallback(setValue);
+        });
       });
     subscribe(0);
     return () => {
       alive = false;
       if (retry) clearTimeout(retry);
       off?.();
+      offStub?.();
     };
     // `fallback` is a stable module function per call site.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -171,10 +220,86 @@ export async function token(): Promise<string> {
   return t;
 }
 
-/** jobs.create for a signer upload: `uploadPath` is "<job_id>/", the folder in the uploads bucket. */
-export async function createJob(uploadPath: string, source: JobSource): Promise<void> {
+export type JobExtras = { title?: string; language?: string; forKidId?: string; recordingId?: string };
+
+/** Drops unset and empty fields (Convex validators refuse `undefined`-only noise and empty ids). */
+const present = (o: Record<string, unknown>) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+
+/**
+ * jobs.create for a signer upload: `uploadPath` is "<job_id>/", the folder in the uploads bucket.
+ * `extras` (the dish, the cook's language, the kid, homie's recording) need Track F's jobs.create; an
+ * older deployment refuses fields it doesn't know, so the job is then made without them.
+ */
+export async function createJob(uploadPath: string, source: JobSource, extras: JobExtras = {}): Promise<void> {
   const sessionToken = await token();
-  await call('mutation', 'jobs:create', { sessionToken, uploadPath, source }, () => stub.createJob(uploadPath, source));
+  const extra = present(extras);
+  const run = (more: Record<string, unknown>) => call('mutation', 'jobs:create', { sessionToken, uploadPath, source, ...more }, () => stub.createJob(uploadPath, source));
+  try {
+    await run(extra);
+  } catch (e) {
+    if (!Object.keys(extra).length || !/extra field|validator/i.test(String(e))) throw e;
+    console.warn('[convex] jobs.create without the new fields:', String(e).slice(0, 160));
+    await run({});
+  }
+}
+
+/** homie's live session while a cook records (Track E). It starts in `intro`. */
+export async function startRecording(input: { dish?: string; forKidId?: string; language: string; source: RecordingSource }): Promise<{ recordingId: string }> {
+  const sessionToken = await token();
+  return call('mutation', 'live:startRecording', { sessionToken, ...present(input) }, () => stub.startRecording(input), { soft: true });
+}
+
+/** The recording, live: null while it loads, or when it isn't this family's. */
+export function useRecording(recordingId: string | null | undefined): LiveRecording | null {
+  const id = recordingId ?? '';
+  return useLive<LiveRecording | null>('live:recording', null, stubRecordingWatcher(id), !!id, { recordingId: id }, true);
+}
+
+// One stub watcher per id, so useLive's effect isn't redone on every render.
+const stubRecordingWatchers = new Map<string, (onData: (v: LiveRecording | null) => void) => () => void>();
+function stubRecordingWatcher(id: string) {
+  let w = stubRecordingWatchers.get(id);
+  if (!w) {
+    w = (onData) => stub.watchRecording(id, onData);
+    stubRecordingWatchers.set(id, w);
+  }
+  return w;
+}
+
+/** Who this is on Convex, with their language ('en' when unset). Null until it loads. */
+export function useMe(enabled = true): Me | null {
+  return useLive<Me | null>('people:me', null, stub.watchMe, enabled, {}, true);
+}
+
+/** Sets the person's language (an ISO 639-1 code). Pass `profileId` right after sign-in (see convexSession). */
+export async function setLanguage(language: string, profileId?: string): Promise<void> {
+  const sessionToken = await convexSession(profileId);
+  if (!sessionToken) throw new Error('Sign in first.');
+  await call('mutation', 'people:setLanguage', { sessionToken, language }, () => stub.setLanguage(language), { soft: true });
+}
+
+/**
+ * A family member's Convex id, found by name in the rows that carry one: a kid's open questions, who
+ * is cooking now, the family's messages (names are unique in a family). Null when no row names them.
+ * (No public query lists the family's people yet.)
+ */
+export async function convexPersonIdByName(name: string | null | undefined): Promise<string | null> {
+  const want = name?.trim().toLowerCase();
+  if (!want || stubbed) return null;
+  const sessionToken = await convexSession().catch(() => null);
+  if (!sessionToken) return null;
+  const read = <T,>(fn: string) => call<T[]>('query', fn, { sessionToken }, () => [], { soft: true }).catch(() => [] as T[]);
+  const [questions, cooking, messages] = await Promise.all([
+    read<{ askedBy?: string; askedByName?: string }>('questions:openForCook'),
+    read<{ kidId: string; kidName: string }>('cooking:current'),
+    read<{ from: string; fromName: string }>('messages:list'),
+  ]);
+  const named: { id?: string; name?: string }[] = [
+    ...questions.map((q) => ({ id: q.askedBy, name: q.askedByName })),
+    ...cooking.map((c) => ({ id: c.kidId, name: c.kidName })),
+    ...messages.map((m) => ({ id: m.from, name: m.fromName })),
+  ];
+  return named.find((p) => p.id && p.name?.trim().toLowerCase() === want)?.id ?? null;
 }
 
 /** Uploads a local file to Convex storage; returns its storage id. */
@@ -247,6 +372,14 @@ export function invalidateConvexRecipes(): void {
 const stub = (() => {
   let jobs: LiveJob[] = [];
   let questions: CookQuestion[] = [];
+  let language = 'en';
+  const recordings = new Map<string, LiveRecording>();
+  const recL = new Map<string, Set<(v: LiveRecording | null) => void>>();
+  const meL = new Set<(v: Me | null) => void>();
+  const stubMe = (): Me | null => {
+    const me = getSession()?.me;
+    return me ? { personId: me.id, name: me.name, role: me.role === 'cook' ? 'cook' : 'kid', language, relation: me.relation ?? undefined } : null;
+  };
   const jobL = new Set<(v: LiveJob[]) => void>();
   const qL = new Set<(v: CookQuestion[]) => void>();
   const watch = <T>(set: Set<(v: T) => void>, get: () => T) => (onData: (v: T) => void) => {
@@ -285,8 +418,39 @@ const stub = (() => {
       emitQs();
     },
     draft: () => ({ draft: 'I made it! It tasted like home. Thank you for teaching me.' }),
+    startRecording(input: { dish?: string; forKidId?: string; language: string; source: RecordingSource }) {
+      const _id = `stub-rec-${Date.now()}`;
+      recordings.set(_id, { _id, source: input.source, status: 'intro', language: input.language, dish: input.dish, forKidId: input.forKidId });
+      return { recordingId: _id };
+    },
+    watchRecording(id: string, onData: (v: LiveRecording | null) => void) {
+      const set = recL.get(id) ?? new Set<(v: LiveRecording | null) => void>();
+      recL.set(id, set);
+      set.add(onData);
+      onData(recordings.get(id) ?? null);
+      return () => void set.delete(onData);
+    },
+    setRecordingStatus(id: string, status: RecordingStatus) {
+      const r = recordings.get(id);
+      if (!r) return;
+      const now = Date.now();
+      const next: LiveRecording = { ...r, status, startedAt: r.startedAt ?? (status === 'recording' ? now : undefined), endedAt: status === 'ended' ? now : r.endedAt };
+      recordings.set(id, next);
+      recL.get(id)?.forEach((l) => l(next));
+    },
+    watchMe: (onData: (v: Me | null) => void) => {
+      meL.add(onData);
+      onData(stubMe());
+      return () => void meL.delete(onData);
+    },
+    setLanguage(code: string) {
+      language = code;
+      meL.forEach((l) => l(stubMe()));
+    },
   };
 })();
 
 /** The voice stub's ask_cook lands here, so the cook's side can be tried on one phone. */
 export const stubAskCook = stub.ask;
+/** The /record stub (lib/live/homie.ts) moves its recording along, as the voice service would. */
+export const stubRecordingStatus = stub.setRecordingStatus;

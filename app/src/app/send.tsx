@@ -1,6 +1,8 @@
 // Send (bible: Parent-Send). After Record: "Send your <dish>" (a name field when we don't know the
 // dish yet), the videos (tap to leave one out, "Add more" for another part), "Who is it for?"
-// (learners + Everyone), an optional hello voice note, and the big "Send to Leo".
+// (learners + Everyone), an optional hello voice note, and the big "Send to Leo". The dish and the kid
+// come filled in from Record's pre-record sheet (the draft), and so do her language and homie's
+// recording, which go to jobs.create.
 //
 // Send = upload the hello (if any) -> start the background video upload (lib/uploads.ts) -> POST
 // /pending-sends so the recipe reaches them once it's written -> SuccessBurst "On its way to Leo"
@@ -29,7 +31,7 @@ import { LidPot } from '@/components/record/LidPot';
 import { ActionButton, Avatar, BackPill, Chip, PressableScale, ScreenWash, SendIcon, SuccessBurst, Txt, type ActionState } from '@/components/ui';
 import { WEB_URL, errorMessage, type Profile } from '@/lib/api';
 import { daysAgo } from '@/lib/format';
-import { createJob } from '@/lib/live/convex';
+import { convexPersonIdByName, createJob } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
 import { ensurePendingSend, MAX_RECORDING_HOURS, startUpload, uploadsConfigured } from '@/lib/uploads';
 import { uploadVoice, type VoiceRecording } from '@/lib/voice';
@@ -199,9 +201,14 @@ export default function SendScreen() {
       // The videos are a job now (the home card tracks it): the draft must not outlive this screen,
       // or Record would offer them for sending again. (Cleared on unmount; kept on screen until then.)
       sentJob.current = true;
-      // The live progress (Convex jobs, hackathon): the worker finds the videos in "<job_id>/". A
+      // The live progress (Convex jobs, hackathon): the worker finds the videos in "<job_id>/", with
+      // the dish, her language, the kid and homie's recording (the pre-record sheet's answers). A
       // failure here never stops the send; the row falls back to the status file.
-      void createJob(`${job.job_id}/`, draft.glasses ? 'glasses' : 'phone').catch((e) => console.warn('[send] jobs.create failed', String(e)));
+      const { language, recordingId } = draft;
+      void (async () => {
+        const forKidId = (await convexPersonIdByName(pickedProfile?.name)) ?? undefined;
+        await createJob(`${job.job_id}/`, draft.glasses ? 'glasses' : 'phone', { title: dish.slice(0, MAX_TITLE), language: language ?? undefined, forKidId, recordingId: recordingId ?? undefined });
+      })().catch((e) => console.warn('[send] jobs.create failed', String(e)));
       // Who gets it once it's written. If this fails, the home card keeps retrying.
       if (recipients.length > 0) await ensurePendingSend(job);
       const wait = motion.loadingMinMs - (Date.now() - started);
