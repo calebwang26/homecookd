@@ -177,6 +177,7 @@ Before starting work, compare the last commit here with `git log origin/main` to
     `lib/http` and `lib/liveRoutes`.
   - **Open:** the TEST family's Biryani still says `mossIndexedAt`, but its index was deleted on purpose; it
     re-indexes on its next publish.
+- Oct 24 · #25 · Claude · Track H: glasses VM → Convex job. `convex/glasses.ts` + `lib/glassesRoutes.ts`: `/glasses/active` (newest live glasses recording, or one by id in any status, so the VM can tell ended from abandoned) and `/glasses/finished` (sets `videoStartedAt`, creates the "processing" card and queued job with the recording's dish/language/kid; idempotent; refuses abandoned); 4 convex-tests. `glasses/ingest/`: `server.py` (WS ingest per INGEST.md, `/frame/latest`, `/health`, polls Convex every 2 s, survives reconnects and restarts), `mux.py` (frames at real times → 15 fps H.264 + AAC), GCS JSON-API upload, `fake_glasses.py`, `convex_stub.py`, `e2e_test.py` (passes locally, no cloud). `glasses/vm/setup.sh` (dry-run only; not run). Open: create the VM, set `GLASSES_SECRET`/`GLASSES_DEVICE_KEY` (Convex env, VM, Cloud Run), voice/deploy.sh must carry `GLASSES_SECRET` + `GLASSES_URL` (Track E), deploy Convex; not tried with the real firmware or on the e2-micro.
 - Oct 24 · (this PR) · Claude · Memory: demo-family-shreya (the demo is Shreya Pawar's family; her grandma cooks and records in Marathi; Serene isn't in the demo).
 - Oct 24 · #28 · Claude · Rule: every PR goes to the "Merge Agent" session for approval, and it decides how conflicting PRs merge (`AGENTS.md` hard rules, `memory/merge-agent-approval.md`). Docs only. Open: nothing.
 - Oct 24 · (this PR) · Claude · pr-merge-organizer now names the organizer chat "Merge Agent" (its title), matching merge-agent-approval (#28).
@@ -192,3 +193,60 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - **mic.ts:** the echo comment is fixed (half duplex, not VoiceChat), plus an optional `onLevel`. Placeholder routes `/recording` and `/answer/[id]`.
   - **Tests:** `app/scripts/test-homie.mjs` (24 pass). Web screenshots checked.
   - **Open:** nothing tested on an iPhone yet. `/speak` isn't in the voice service yet (Track E). Parent Home's date runs under homie (the parent UI track should leave room). The cook screen's "All steps" sits under homie until the kid UI track lays out its header with `useHomieSlot()`.
+- Oct 24 · #24 · Claude · Track G: Community backend + app helper (no screens yet). `community.feed` (shared recipes from other families, nearest first, plus open dinners; whitelisted fields only, `coverUrl` only for our own stock/cover photos), `community.recipe` (text only), `community.setShare` (the recipe's cook only; Muse Spark writes a ≤25-word story card once, stories only if `memoriesOptIn`, a plain template without `MUSE_API_KEY`), `community.setLocation` (rounded to ~1 km), `dinners.create/get/mine/requestJoin/respond` (the address only for the host and accepted guests; full once every seat is accepted). `convex/lib/geo.ts`, `convex/seedCommunity.ts` (8 neighbor families 0.5–3 mi out, `place`, `publicName`), `app/src/lib/live/community.ts`. 7 new convex-tests (21 pass). Open: `DEMO_LOCATION` is a Cambridge MA placeholder (`TODO(caleb)`: the venue's coordinates); not deployed; run `seedCommunity:neighbors`, then `place` for the floormates and `publicName` for the Pawars after the deploy; screens wait for Caleb's mockups.
+- Oct 24 · #24 · Claude · Track G review fixes:
+  - **Her stories:** the story card now records `usedStories` (one optional field on `recipes.storyCard` in
+    `convex/schema.ts`). Once the cook says no to her stories, `community.feed` and `community.recipe` show the plain
+    line instead of a card written from them, and her next `setShare(on)` has Muse rewrite it without them.
+  - **Dinners:** `dinners.create` needs a shared recipe ("Share this recipe first."), because the dish name reaches
+    every neighbor's feed.
+  - **Contract (STACK.md):** `community.feed`'s `now` is now required. The app helper already sends it.
+  - **Tests:** 3 new (stories taken back with Muse mocked, past and full dinners, cover photos); the address test
+    shares first. 24 pass.
+  - **Open:** `convex/_generated/api.d.ts` is still the hand-edited one from this PR; regenerate it on the next
+    deploy. Not deployed.
+- Oct 24 · #25 (review fixes) · Claude · Track H review fixes (`glasses/ingest/`, `/glasses/finished`):
+  - **Stuck recordings:** one that never ended (phone died) now loses the glasses to a newer recording, or after
+    12 h, and is finished with what it has. Before, it kept every frame and the new one got no video.
+  - **No frames** (glasses off): the recording fails at once, no job, instead of retrying every 30 s forever.
+  - **Media:** the VM deletes frames, audio and MP4 once the job exists, or the recording is abandoned or fails;
+    only `meta.json` stays (also swept at startup). `--dry-upload` keeps `out.mp4`.
+  - **Security:** `/glasses/finished` takes only `uploadPath` = `glasses-<recordingId>/` (400 otherwise; STACK.md
+    updated), so a leaked secret can't point a job at another family's upload. Public `/health` says only
+    `{ok, glasses}`; the recording id, frames and queue need `x-glasses-secret`.
+  - **Clock:** device time is mapped to the wall clock afresh at each recording's start (no drift over days).
+    `finish()` tasks are now held, so they can't be garbage-collected midway.
+  - **Tests:** new `glasses/ingest/test_server.py` (13 unit tests: fake Convex, fake clock, temp dir), e2e passes,
+    convex 4/4 glasses tests. AGENTS.md lists `glasses/` and its two test commands.
+  - **Open:** as above (VM not created, real firmware not tried). `npx convex codegen` after merge, so the
+    hand-edited `api.d.ts` matches the generator; tell Track 0 about the STACK.md `/glasses/*` changes.
+- Oct 24 · #29 · Claude · Track E: homie, the live companion. Convex `live.ts` (`startRecording`, `recording`) and
+  `/live/person|session|status|prompt|prompt-update|optin` (`lib/liveRoutes.ts`), idle recordings abandoned after
+  2 h (cron); `/voice/session` adds the cook's language, relation, `quoteOriginal` and each story's step. Voice
+  service: `/record` (hello → questions while she cooks → last questions, stories opt-in, goodbye; Gemini Live
+  `gemini-3.5-transcribe-live` hears Marathi, Ink 2 the rest; pacing in code, `HOMIE_DEMO=1` for the demo),
+  `POST /speak`, and kid-side `/cook` additions (say `kind`/`textEn`, greeting + read-aloud offer, timers, labelled
+  hints that always ask the cook too, story and quiet nudges, clip captions). homie's voice: Sindhu
+  `07bc462a-c644-49f1-baf7-82d5599131be`.
+  - **Checked:** convex-tests and both typechecks; `test-record` end to end on the stub in Marathi and English.
+  - **Open:** not deployed (Convex or Cloud Run); never run against live Convex or a phone; the glasses frame pull
+    is untested (no VM yet); `GEMINI_API_KEY` and `HOMIE_VOICE` aren't Cloud Run secrets/env yet (deploy.sh adds them).
+- Oct 24 · #29 (review fixes) · Claude · Track E after review:
+  - **Kid side (#13 kept):** `/voice/session` `cookLanguage` is now optional, absent when neither the cook nor the
+    recipe has a language. The English line after a clip is skipped only for a cook marked `en`, so older recipes
+    and the unseeded demo cook still get "Grandma says: …". The `/cook` guards from #13 are unchanged.
+  - **`/record`:** what homie knows (pacing counters, questions asked, transcript, hello) is kept per recording
+    across reconnects (cleared at `ended`, 3 h TTL). A reconnect into `recording` listens 15 s before deciding.
+    `start`/`done` are guarded synchronously, so there's no double start and no live question after `done`.
+    Status writes go out in order. `done` stops homie (an extra `say_end`) and drops an open question first. A
+    story in progress blocks questions in code. A socket closed mid-wrap-up writes nothing more and leaves
+    `wrapping_up`, and the reconnect finishes only what's left. A newer socket replaces an older one (close 4409).
+    Messages that arrive before loading are kept.
+  - **Heartbeat:** `/live/status` `{ touch: true }` every 10 min while the socket is open (`live.touch`), so a long
+    cook isn't abandoned.
+  - **Tests:** new `voice/test/` (node:test + tsx, no new deps; `npm test`), 14 pass. Convex 33 pass with main
+    merged (two live.test.ts tests extended: the heartbeat, `cookLanguage` absent). On the stub (`HOMIE_DEMO=1`):
+    `test-record` passes in Marathi and English, and the kid `test-client` runs greeting → offer → step → hint → timer.
+  - **Open:** same as above (not deployed). The post-clip translation path needs a Moss hit, so it isn't exercised
+    on the stub.
+- Oct 24 · #26 · Claude · Track F, the cook's language end to end + pipeline gaps. New `convex/people.ts` (`people.me`, `people.setLanguage`). `jobs.create` takes `title`, `language`, `forKidId`, `recordingId` (copies homie's recording's dish/language/kid, sets `recordings.jobId`; the title replaces "New recipe"). `/worker/claim` adds `title`, `language`, `relation`, `forKidName`, `memoriesOptIn` and `homieLog` on the video clock; new `/worker/release` (only from `preparing`; stage `uploading`, back to `queued` in 30 s); `/worker/published` stores `recipes.language` and `steps[].quoteOriginal`, which `/voice/session` now returns too. A kid's `asked_cook` question for a non-English cook gets `questions.textForCook` from Gemini (in Track F's brief). Pipeline: the worker waits up to 45 s for every file in the signer's `jobs/<id>.json`, else releases the job (fixes the upload/claim race; only uploads without a signer file give up after 20 releases, signer uploads when their links expire); passes title, language and homie's log to `process.py`; prompts get a language line and a homie block (never quote homie as the cook; start steps at her answer); merge aims for 8–12 steps; recipe.json gains `language`. Convex mode still doesn't rebuild the GCS `library.json` (that file is shared by every family; the kid app should read the family's recipes from Convex `recipes.list`). New `app/src/lib/languages.ts` (30 Sonic languages, `matchLanguages`, `languageName`). Tests: 5 new convex-tests (19 pass; they cover another family's kid and recording, release only from `preparing`, and `/voice/session` + `/voice/step` on a Marathi-quoted recipe), `pipeline/test_prompts.py` (8 pass), `app/scripts/test-languages.mjs`. Not deployed. Open: Convex deploy; the 8–12 step merge prompt not yet run on a real video; Track I: the app's `JobStage` (`app/src/lib/live/convex.ts`) and `STAGE_HINT` need `uploading` (e.g. "Still sending the video").
