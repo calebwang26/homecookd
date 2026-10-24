@@ -1,0 +1,207 @@
+/* 8.8 In their words: the sun block (VERO saffron "Eat more" composition). */
+
+.section {
+  --star-size: 38vw;
+  --h2-fs: clamp(3rem, 12.6vw, 4.25rem);
+  position: relative;
+  isolation: isolate;
+  min-height: 100svh;
+  display: grid;
+  align-items: center;
+  padding: calc(var(--nav-h, 72px) + 24px) var(--gutter) 44px;
+  background: var(--sun) var(--swirl) center / cover no-repeat;
+  color: var(--ink);
+  overflow: clip;
+}
+
+.inner {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 30px;
+  width: 100%;
+}
+
+/* ---------- copy ---------- */
+.copy {
+  position: relative;
+}
+.eyebrow {
+  --eyebrow-accent: var(--forest);
+  color: var(--forest);
+  margin-bottom: var(--stack-eyebrow-h2);
+}
+.h2 {
+  color: var(--ink);
+  /* sun-block statement: big and bold. Mobile: "In their / words. / In yours." with the star
+     tucked beside the short lines */
+  font-size: var(--h2-fs);
+  max-width: 6.2em;
+  text-wrap: initial;
+}
+.body {
+  max-width: 26ch;
+  margin-top: 32px;
+  color: var(--ink);
+}
+
+/* ---------- card ---------- */
+.cardCol {
+  position: relative;
+  width: 100%;
+  max-width: 560px;
+}
+.cardWrap {
+  position: relative;
+  display: block;
+}
+.seal {
+  position: absolute;
+  z-index: 2;
+  top: -48px;
+  right: -14px;
+  pointer-events: none;
+}
+.sticker {
+  --size: 110px !important;
+}
+/* the honesty note is a reading sentence: body size (18 mobile, 20 desktop), not UI size */
+.note {
+  margin-top: 16px;
+  max-width: 40ch;
+  font-size: var(--fs-body);
+  line-height: 1.45;
+  color: var(--ink);
+}
+
+/* ---------- star photo ---------- */
+/* The slot (not StarClip's own root) carries the position: StarClip.module.css sets
+   position: relative on its root and can load after this file. It lives inside .copy, under the
+   text (z −1 in .inner's stacking context), so it never covers a word. */
+.starSlot {
+  position: absolute;
+  z-index: -1;
+  /* mobile: level with the H2's second line (eyebrow + one H2 line), bleeding off the right; its
+     bottom point stays clear of the body's first line */
+  top: calc(20px + var(--h2-fs) * 0.92);
+  right: calc(-1 * var(--gutter) - 6vw);
+}
+/* The photo is cut square around both faces and the dumpling in their hands, so it needs no
+   extra crop here: the star's inner circle holds the faces and hands, its points the counter. */
+
+/* phones: the seal rises 48px above the card; keep it off the body's last line (a long one on 360px) */
+@media (max-width: 767px) {
+  .cardCol {
+    margin-top: 22px;
+  }
+  /* the two-line H2 ("Their words. / Translated.") runs the width of the screen, so the star can't
+     sit beside it without covering words; it sits in flow under the copy, on the left (the card's
+     seal is on the right) */
+  .starSlot {
+    position: relative;
+    z-index: 0;
+    top: auto;
+    right: auto;
+    width: 34vw;
+    margin: 18px 0 -6px;
+  }
+}
+
+/* ---------- tablet ---------- */
+@media (min-width: 768px) and (max-width: 1023px) {
+  .section {
+    --star-size: 30vw;
+    padding-top: calc(var(--nav-h, 72px) + 64px);
+    padding-bottom: 120px;
+  }
+  .section {
+    --h2-fs: clamp(4rem, 8.6vw, 5.5rem);
+  }
+  .h2 {
+    max-width: none;
+  }
+  .body {
+    margin-top: var(--stack-h2-body);
+  }
+  .starSlot {
+    top: -16px;
+    right: calc(-1 * var(--gutter) - 3vw);
+  }
+  .sticker {
+    --size: 140px !important;
+  }
+  .seal {
+    top: -64px;
+    right: -40px;
+  }
+}
+
+/* ---------- desktop ---------- */
+@media (min-width: 1024px) {
+  .section {
+    /* 18vw (brief: 22vw): the whole star shows under the body and the band stays ~one screen tall */
+    --star-size: clamp(220px, 18vw, 320px);
+    padding: calc(var(--nav-h, 72px) + 72px) var(--gutter) 72px;
+  }
+  .inner {
+    grid-template-columns: minmax(0, 1fr) minmax(0, clamp(470px, 39vw, 560px));
+    column-gap: clamp(40px, 5vw, 96px);
+    align-items: center;
+    /* card centered near 70vw at 1440 */
+    padding-right: clamp(0px, 5vw - 24px, 56px);
+  }
+  .copy {
+    align-self: start;
+    max-width: none;
+    /* the eyebrow lines up with the card's top edge */
+    padding-top: 0;
+  }
+  .section {
+    /* the loud blocks carry the page's biggest statement type (VERO): "In their / words. / In yours." */
+    --h2-fs: var(--fs-block);
+  }
+  .h2 {
+    max-width: none;
+  }
+  .body {
+    max-width: 24ch;
+    margin-top: var(--stack-h2-body);
+  }
+  /* The card keeps its top edge level with the eyebrow when the copy column is the taller one. */
+  .cardCol {
+    align-self: start;
+  }
+  /* Under the body, in flow, so the band always makes room for the whole star (it used to hang
+     off the band's left and bottom edges and read as a crop). The negative margin lets it sit in
+     the band's bottom padding: every point stays >= 24px inside the yellow (ring = 3% overhang). */
+  .starSlot {
+    position: relative;
+    z-index: 0;
+    top: auto;
+    right: auto;
+    width: var(--star-size);
+    margin-top: 28px;
+    margin-bottom: -40px;
+  }
+  .seal {
+    top: -54px;
+    right: -60px;
+  }
+  .sticker {
+    --size: 150px !important;
+  }
+}
+
+/* ---------- the parent version (.lean): no eyebrow or body, so the card follows the H2 directly.
+   Tablets: the star moves up beside the H2 and the card drops a little, so the seal on the card's
+   corner stays clear of the star. Phones: the star sits under the H2 (see the phone rule above). ---------- */
+@media (max-width: 767px) {
+  .lean .cardCol {
+    margin-top: 28px;
+  }
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  .lean .cardCol {
+    margin-top: 104px;
+  }
+}

@@ -1,0 +1,7 @@
+.pop {
+  display: inline-block;
+  transform-origin: 50% 50%;
+}
+:global(html[data-motion='on']) .pop:not([data-revealed]) {
+  opacity: 0;
+}

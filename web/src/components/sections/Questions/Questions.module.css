@@ -1,0 +1,266 @@
+/* 8.11 Questions. Canvas breather between the chartreuse panel and the forest CTA. */
+.section {
+  --q-phone-w: 200px;
+  position: relative;
+  min-height: 85svh;
+  padding: clamp(72px, 10vh, 128px) var(--gutter);
+  background: var(--canvas);
+  color: var(--text);
+  interpolate-size: allow-keywords;
+}
+.grid {
+  display: grid;
+  grid-template-columns: minmax(0, 5fr) minmax(0, 7fr);
+  gap: clamp(48px, 6vw, 112px);
+  align-items: start;
+  max-width: var(--content-max);
+  margin-inline: auto;
+}
+
+/* ---------- left: heading, note, the real recording ---------- */
+.aside {
+  display: grid;
+  grid-template-columns: var(--q-phone-w) minmax(0, 1fr);
+  grid-template-areas:
+    'head head'
+    'phone note'
+    'phone caption';
+  grid-template-rows: auto 1fr auto;
+  column-gap: 28px;
+}
+.head {
+  grid-area: head;
+}
+.h2 {
+  max-width: 9ch;
+}
+.note {
+  grid-area: note;
+  align-self: start;
+  margin-top: 40px;
+  max-width: 19ch;
+}
+.phoneFig {
+  grid-area: phone;
+  margin: 32px 0 0;
+}
+.phone {
+  position: relative;
+  width: max-content;
+  transform: rotate(-3deg);
+}
+/* reduced motion: the poster's ▶ (OuterPlay, 52px) seated on the phone's lower-left corner,
+   3px over the rim's corner arc and clear of the screen (see SeeItWork's .posterPlay) */
+.posterPlay {
+  position: absolute;
+  z-index: 3;
+  left: calc(var(--q-phone-w) * 0.0469 - 42px);
+  bottom: calc(var(--q-phone-w) * 0.0469 - 42px);
+}
+/* no-JS only: the poster over the (unplayable) video (Handset makes the box around it absolute) */
+.noJsPoster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: 50% 0%;
+}
+.caption {
+  grid-area: caption;
+  align-self: end;
+  color: var(--muted);
+  max-width: 14ch;
+  padding-bottom: 6px;
+  text-wrap: balance;
+}
+
+/* small desktops: the column beside the phone is too narrow for the note */
+@media (min-width: 1024px) and (max-width: 1279px) {
+  .section {
+    --q-phone-w: 180px;
+  }
+  .aside {
+    grid-template-areas:
+      'head head'
+      'note note'
+      'phone caption';
+    grid-template-rows: auto auto auto;
+  }
+  .note {
+    margin-top: 18px;
+  }
+  .phoneFig {
+    margin-top: 24px;
+  }
+}
+
+/* ---------- right: the accordion ---------- */
+.faq {
+  border-top: 1px solid var(--hairline);
+}
+.item {
+  border-bottom: 1px solid var(--hairline);
+}
+.q {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  min-height: 64px;
+  padding: 16px 4px;
+  list-style: none;
+  cursor: pointer;
+  color: var(--ink);
+  font-family: var(--ff-text);
+  font-weight: 600;
+  font-size: clamp(1.125rem, 1rem + 0.4vw, 1.25rem);
+  line-height: 1.3;
+  border-radius: 6px;
+}
+.q::-webkit-details-marker {
+  display: none;
+}
+.q::marker {
+  content: '';
+}
+.qText {
+  text-wrap: pretty;
+  transition: color 200ms var(--ease-soft);
+}
+.chev {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--sage);
+  color: var(--green-deep);
+  transition:
+    transform 420ms var(--ease-soft),
+    background-color 250ms var(--ease-soft),
+    color 250ms var(--ease-soft);
+}
+@media (hover: hover) {
+  .q:hover .qText {
+    color: var(--green);
+  }
+  .q:hover .chev {
+    background: var(--lime-wash);
+  }
+}
+.item[open] .chev {
+  transform: rotate(180deg);
+  background: var(--green);
+  color: var(--cream);
+}
+.a {
+  padding: 0 64px 28px 4px;
+}
+.aText {
+  max-width: 50ch;
+  color: var(--text);
+}
+
+/* Height animation where the browser can interpolate to `auto`; native snap elsewhere. */
+@supports (interpolate-size: allow-keywords) {
+  .item::details-content {
+    block-size: 0;
+    overflow-y: clip;
+    transition:
+      block-size 420ms var(--ease-soft),
+      content-visibility 420ms allow-discrete;
+  }
+  .item[open]::details-content {
+    block-size: auto;
+  }
+  .a {
+    opacity: 0;
+    translate: 0 -6px;
+    transition:
+      opacity 320ms var(--ease-soft),
+      translate 420ms var(--ease-soft);
+  }
+  .item[open] .a {
+    opacity: 1;
+    translate: 0 0;
+  }
+}
+
+/* ---------- mobile / tablet ---------- */
+@media (max-width: 1023px) {
+  .section {
+    --q-phone-w: min(33vw, 200px);
+    min-height: 0;
+  }
+  .grid {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 40px;
+  }
+  .aside {
+    grid-template-columns: minmax(0, 1fr) var(--q-phone-w);
+    grid-template-areas:
+      'head phone'
+      'note phone'
+      'caption phone';
+    grid-template-rows: auto auto 1fr;
+    column-gap: 16px;
+  }
+  .phoneFig {
+    margin-top: 4px;
+  }
+  .phone {
+    /* lean away from the heading */
+    transform: rotate(3deg);
+  }
+  .note {
+    margin-top: 16px;
+  }
+  .note svg {
+    /* the arrow points across to the list on desktop; here the list is below */
+    display: none;
+  }
+  .caption {
+    align-self: end;
+  }
+  .a {
+    padding-right: 8px;
+  }
+}
+@media (min-width: 640px) and (max-width: 1023px) {
+  .aside {
+    max-width: 40rem;
+  }
+  .caption {
+    align-self: start;
+    margin-top: 28px;
+  }
+}
+
+/* phones: H2, note, accordion; no phone (brief 8.11, scroll budget ≈ 0.9 viewport) */
+@media (max-width: 767px) {
+  .section {
+    padding-block: 60px 68px;
+  }
+  .grid {
+    gap: 28px;
+  }
+  .note {
+    margin-top: 10px;
+  }
+  .q {
+    gap: 16px;
+  }
+  .aside {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'head'
+      'note';
+    grid-template-rows: auto auto;
+  }
+  .phoneFig,
+  .caption {
+    display: none;
+  }
+}

@@ -1,0 +1,411 @@
+/* Translator card (brief 8.8): cream page UI on the sun block. No phone, no status bar. */
+
+.card {
+  position: relative;
+  container-type: inline-size;
+  display: grid;
+  gap: 16px;
+  padding: 32px;
+  border-radius: 28px;
+  background: var(--surface);
+  color: var(--ink);
+  /* VERO "stack" ring: a translucent cream halo around the card, then the float shadow */
+  box-shadow:
+    0 0 0 8px rgba(255, 253, 247, 0.38),
+    var(--shadow-float);
+}
+
+/* ---------- 1. language picker ---------- */
+.groupLabel {
+  font-family: var(--ff-text);
+  font-weight: 500;
+  font-size: var(--fs-ui);
+  line-height: 1.3;
+  color: var(--muted);
+  margin-bottom: -6px;
+}
+.chips {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+}
+.chip {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 50px;
+  padding: 8px 10px;
+  border-radius: 16px;
+  background: var(--sunken);
+  color: var(--ink);
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition:
+    background-color 260ms var(--ease-soft),
+    color 260ms var(--ease-soft),
+    transform 260ms var(--ease-soft);
+}
+.chip:active {
+  transform: scale(0.98);
+}
+@media (hover: hover) {
+  .chip:not([data-checked]):hover {
+    background: var(--sage);
+  }
+}
+.chip[data-checked] {
+  background: var(--ink);
+  color: var(--cream);
+}
+.chip:has(.radio:focus-visible) {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
+.radio {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: pointer;
+  appearance: none;
+}
+.chipText {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: center;
+  column-gap: 0.4em;
+  row-gap: 0;
+  pointer-events: none;
+  text-align: center;
+  line-height: 1.2;
+}
+.native {
+  font-family: var(--ff-text);
+  font-weight: 600;
+  font-size: var(--fs-ui-lg);
+  white-space: nowrap;
+}
+.chipEn {
+  font-family: var(--ff-text);
+  font-weight: 400;
+  font-size: var(--fs-ui);
+  color: var(--muted);
+  white-space: nowrap;
+  transition: color 260ms var(--ease-soft);
+}
+.chip[data-checked] .chipEn {
+  color: var(--muted-inverse);
+}
+
+/* the auto-advance timer, drawn as a7's progress line on the active chip */
+.bar {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: 6px;
+  height: 3px;
+  border-radius: 3px;
+  background: rgba(255, 253, 247, 0.18);
+  overflow: hidden;
+  pointer-events: none;
+}
+.barFill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: var(--sun);
+  transform-origin: 0 50%;
+  transform: scaleX(0);
+  animation-name: fill;
+  animation-timing-function: linear;
+  animation-fill-mode: forwards;
+}
+@keyframes fill {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+
+/* ---------- 2. who said it ---------- */
+.meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 14px;
+  margin-top: 6px;
+}
+.said {
+  /* the speech tail points down at the original line */
+  margin-bottom: 4px;
+}
+.dish {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-family: var(--ff-text);
+  font-weight: 500;
+  font-size: var(--fs-ui);
+  line-height: 1.25;
+  color: var(--muted);
+  animation: dishIn 520ms var(--ease-soft) both;
+}
+.thumb {
+  position: relative;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  overflow: hidden;
+  background: var(--sunken);
+  box-shadow: 0 0 0 2px var(--surface), 0 0 0 3px var(--hairline);
+}
+.dishWord {
+  white-space: nowrap;
+}
+@keyframes dishIn {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* ---------- 3. the original ---------- */
+.originalRow {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: 16px;
+}
+.origStack {
+  display: grid;
+  perspective: 600px;
+}
+.original {
+  grid-area: 1 / 1;
+  font-family: var(--ff-display);
+  font-style: italic;
+  font-weight: 500;
+  font-variation-settings: 'SOFT' 100, 'WONK' 1;
+  font-size: clamp(1.75rem, 1.15rem + 1.3vw, 2.5rem);
+  line-height: 1.18;
+  letter-spacing: -0.015em;
+  color: var(--ink);
+  text-wrap: balance;
+  transform-origin: 50% 55%;
+  backface-visibility: hidden;
+}
+.original[data-state='off'] {
+  visibility: hidden;
+}
+.original[data-script] {
+  font-style: normal;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  line-height: 1.3;
+  font-size: clamp(1.625rem, 1.1rem + 1.15vw, 2.25rem);
+}
+.original[data-script='sc'] {
+  font-family: var(--ff-cjk-sc, 'Noto Serif SC', 'Songti SC', 'STSong', serif);
+}
+.original[data-script='kr'] {
+  font-family: var(--ff-cjk-kr, 'Noto Serif KR', 'AppleMyungjo', serif);
+}
+.original[data-script='deva'] {
+  font-family: var(--ff-deva, 'Noto Serif Devanagari', 'Kohinoor Devanagari', serif);
+  line-height: 1.45;
+}
+
+/* decorative 5-bar waveform: "speaks" once each time a new line arrives */
+.wave {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 1.6rem;
+  margin-top: 0.55rem;
+  color: var(--green);
+}
+.wave i {
+  display: block;
+  width: 4px;
+  height: 100%;
+  border-radius: 4px;
+  background: currentColor;
+  transform-origin: 50% 50%;
+  transform: scaleY(var(--rest));
+}
+.wave i:nth-child(1) {
+  --rest: 0.35;
+  --d: 0ms;
+}
+.wave i:nth-child(2) {
+  --rest: 0.7;
+  --d: 90ms;
+}
+.wave i:nth-child(3) {
+  --rest: 1;
+  --d: 40ms;
+}
+.wave i:nth-child(4) {
+  --rest: 0.6;
+  --d: 140ms;
+}
+.wave i:nth-child(5) {
+  --rest: 0.3;
+  --d: 60ms;
+}
+:global(html[data-motion='on']) .card[data-seen] .wave i {
+  animation: speak 1.5s var(--ease-in-out) var(--d) 1 both;
+}
+@keyframes speak {
+  0% {
+    transform: scaleY(var(--rest));
+  }
+  18% {
+    transform: scaleY(1);
+  }
+  34% {
+    transform: scaleY(0.3);
+  }
+  52% {
+    transform: scaleY(0.9);
+  }
+  70% {
+    transform: scaleY(0.45);
+  }
+  100% {
+    transform: scaleY(var(--rest));
+  }
+}
+
+/* ---------- 4. you read ---------- */
+.readRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+.readLabel {
+  flex: none;
+  font-family: var(--ff-text);
+  font-weight: 600;
+  font-size: var(--fs-ui);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.readRule {
+  flex: 1;
+  height: 1px;
+  background: var(--hairline);
+  transform-origin: 0 50%;
+}
+
+/* ---------- 5. English ---------- */
+.enStack {
+  display: grid;
+}
+.enStack > * {
+  grid-area: 1 / 1;
+}
+.english {
+  font-family: var(--ff-text);
+  font-weight: 500;
+  font-size: clamp(1.25rem, 1rem + 0.6vw, 1.625rem);
+  line-height: 1.32;
+  letter-spacing: -0.005em;
+  color: var(--ink);
+  text-wrap: pretty;
+}
+.sizer {
+  visibility: hidden;
+}
+
+/* ---------- 6. footer ---------- */
+.footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-top: 16px;
+  border-top: 1px solid var(--hairline);
+}
+.rule {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--green);
+  font-weight: 600;
+  /* two even lines on phones, never "top." alone */
+  text-wrap: balance;
+}
+.ruleIcon {
+  flex: none;
+  width: 18px;
+  height: 18px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+/* narrow cards: every chip stacks its native name over the English one, so the grid stays even */
+@container (max-width: 450px) {
+  .chip {
+    min-height: 56px;
+    padding: 8px 6px;
+  }
+  .chipText {
+    flex-direction: column;
+    align-items: center;
+  }
+}
+
+/* ---------- mobile ---------- */
+@media (max-width: 767px) {
+  .card {
+    padding: 22px 18px;
+    gap: 14px;
+    border-radius: 24px;
+  }
+  /* who said it + the dish on one row: the dish name wraps beside the chip */
+  .meta {
+    flex-wrap: nowrap;
+    gap: 10px;
+  }
+  .said {
+    flex: none;
+  }
+  .dish {
+    min-width: 0;
+    gap: 8px;
+  }
+  .thumb {
+    width: 32px;
+    height: 32px;
+  }
+  .wave {
+    display: none;
+  }
+  .originalRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+/* 360px phones: a little more room beside the chip, so "Red-Braised" fits whole */
+@container (max-width: 290px) {
+  .meta {
+    gap: 8px;
+  }
+  .dish {
+    gap: 6px;
+  }
+}

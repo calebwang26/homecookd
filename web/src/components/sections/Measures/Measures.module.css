@@ -1,0 +1,277 @@
+/* Measures (brief 8.10). Desktop ≥1024 · tablet 768–1023 · phone <768. */
+
+.section {
+  position: relative;
+  display: grid;
+  place-items: center;
+  min-height: 90vh;
+  padding-block: 6vh;
+  background: var(--canvas);
+}
+
+.panel {
+  /* sticker diameter, floor inset, side inset, mascot width */
+  --d: 5vw;
+  --floor: 1.5vw;
+  --pad-x: 1.1vw;
+  --mascot: calc(var(--d) * 1.72);
+  --panel-pad: 4.6vw;
+  /* the mascot's landing spot, in D from the right / the floor (pileData.ts) */
+  --mx: 1.675;
+  --mb: 0.709;
+
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+  width: 85.5vw;
+  min-height: max(78vh, 560px);
+  border-radius: var(--r-big);
+  background: var(--chartreuse) url('/patterns/swirl-chartreuse.svg') center / cover no-repeat;
+  overflow: hidden;
+  color: var(--ink);
+}
+
+/* focus rings: leaf is too faint on chartreuse */
+.panel :focus-visible {
+  outline-color: var(--forest);
+}
+.marquee:focus-visible {
+  outline-offset: -4px;
+  border-radius: var(--r-sm);
+}
+
+/* ---------- marquee (visually first; DOM after the heading) ---------- */
+.marqueeWrap {
+  order: -1;
+  padding-top: clamp(24px, 4.6vh, 48px);
+}
+.marquee {
+  /* the primitive's 6% edge fade, a touch softer inside the panel */
+  -webkit-mask-image: linear-gradient(90deg, transparent 0, #000 4%, #000 96%, transparent 100%);
+  mask-image: linear-gradient(90deg, transparent 0, #000 4%, #000 96%, transparent 100%);
+}
+.item {
+  display: inline-flex;
+  align-items: flex-start;
+}
+.phrase {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
+}
+/* lighter and smaller than the H2 (Caleb, Oct 17): the scrolling phrases set the scene, they don't
+   compete with the heading */
+.say {
+  font-family: var(--ff-display);
+  font-weight: 350;
+  font-variation-settings: 'SOFT' 100, 'WONK' 0;
+  font-size: calc(var(--fs-marquee) * 0.6);
+  line-height: 1;
+  letter-spacing: -0.03em;
+  color: var(--ink);
+  white-space: nowrap;
+  padding-bottom: 0.04em;
+}
+.say[lang='zh-Hans'] {
+  font-family: var(--ff-display), 'Songti SC', 'Noto Serif SC', 'PingFang SC', serif;
+  letter-spacing: 0;
+}
+.caption {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 0.15em;
+  padding: 5px 12px 6px;
+  border-radius: var(--r-pill);
+  background: rgba(255, 253, 247, 0.62);
+  font-family: var(--ff-text);
+  font-weight: 500;
+  font-size: 1rem;
+  line-height: 1.1;
+  color: var(--forest);
+  white-space: nowrap;
+}
+.flower {
+  flex: none;
+  width: 0.6em;
+  height: 0.6em;
+  margin: 0.22em 0.42em 0;
+  font-size: var(--fs-marquee);
+}
+
+/* ---------- heading + body ---------- */
+.content {
+  position: relative;
+  /* above the pile: falling stickers pass behind the heading and body, never over them */
+  z-index: 3;
+  padding: clamp(20px, 4.4vh, 44px) var(--panel-pad) 0;
+  /* keep the floor clear for the pile, even when the text grows (200% zoom) */
+  margin-bottom: calc(var(--floor) + var(--d) * 3.5);
+}
+.h2 {
+  max-width: 44rem;
+  color: var(--ink);
+}
+.bodyRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--s-5);
+  margin-top: var(--stack-h2-body);
+}
+.body {
+  max-width: 26em;
+  color: var(--ink);
+  text-wrap: balance;
+}
+.pause {
+  flex: none;
+}
+/* without JS the button can't do anything (hover and focus still pause the marquee) */
+:global(html:not([data-motion])) .pause {
+  display: none;
+}
+
+/* ---------- the pile ---------- */
+.pile {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  pointer-events: none;
+}
+.sentinel {
+  /* the floor: the drop waits until most of it is on screen, so the landing is seen */
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 25%;
+}
+.sticker {
+  position: absolute;
+  bottom: calc(var(--floor) + (var(--y) - 0.5) * var(--d));
+  width: var(--d);
+  aspect-ratio: 1;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: var(--surface);
+  box-shadow:
+    0 0 0 1px rgba(71, 67, 42, 0.07),
+    0 1px 2px rgba(30, 36, 16, 0.08),
+    0 10px 20px -10px rgba(30, 36, 16, 0.38);
+  transform: rotate(var(--r));
+}
+.sticker[data-anchor='l'] {
+  left: calc(var(--pad-x) + (var(--x) - 0.5) * var(--d));
+}
+.sticker[data-anchor='r'] {
+  right: calc(var(--pad-x) + (var(--x) - 0.5) * var(--d));
+}
+.art {
+  width: 76%;
+  height: 76%;
+  overflow: visible;
+}
+.mob {
+  display: none;
+}
+
+.mascot {
+  position: absolute;
+  right: calc(var(--pad-x) + var(--mx) * var(--d) - var(--mascot) / 2);
+  bottom: calc(var(--floor) + var(--mb) * var(--d));
+  width: var(--mascot);
+}
+.squash {
+  transform-origin: 50% 92%;
+}
+.mascotSvg {
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 8px 10px rgba(30, 36, 16, 0.18));
+}
+.mascotChip {
+  position: absolute;
+  right: calc(var(--pad-x) + var(--mx) * var(--d) + var(--mascot) * 0.16);
+  bottom: calc(var(--floor) + var(--mb) * var(--d) + var(--mascot) * 0.86);
+}
+
+/* hidden start only while motion is on and the drop hasn't played */
+:global(html[data-motion='on']) .pile:not([data-revealed]) .sticker,
+:global(html[data-motion='on']) .pile:not([data-revealed]) .mascot {
+  opacity: 0;
+}
+
+/* ---------- reduced motion: the marquee stands still and scrolls sideways (primitive), so
+   drop the edge fade, give the first phrase the panel's inset, and hide the now-idle pause ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .marquee {
+    -webkit-mask-image: none;
+    mask-image: none;
+    padding-inline: var(--panel-pad);
+    scroll-padding-inline: var(--panel-pad);
+  }
+  .pause {
+    display: none;
+  }
+}
+
+/* ---------- tablet ---------- */
+@media (max-width: 1023px) {
+  .section {
+    min-height: 0;
+    padding-block: 2.5svh;
+  }
+  .panel {
+    --d: 9vw;
+    --floor: 2.4vw;
+    --pad-x: 2vw;
+    --mascot: calc(var(--d) * 1.6);
+    --panel-pad: 6vw;
+    --mx: 2.95;
+    --mb: 1.56;
+    width: calc(100vw - 48px);
+    /* 70svh on phones; capped so tall tablets don't get an empty green field */
+    min-height: max(min(70svh, 640px), 520px);
+  }
+  .say {
+    font-size: 4.6vw;
+  }
+  .flower {
+    font-size: 7vw;
+  }
+  .desk {
+    display: none;
+  }
+  .mob {
+    display: grid;
+  }
+}
+
+/* ---------- phone ---------- */
+@media (max-width: 767px) {
+  .panel {
+    --d: 14vw;
+    --floor: 3.4vw;
+    --pad-x: 2.6vw;
+    --panel-pad: 22px;
+    width: calc(100vw - 32px);
+    border-radius: var(--r-card);
+    min-height: max(70svh, 540px);
+  }
+  .say {
+    font-size: 11vw;
+  }
+  .flower {
+    font-size: 11vw;
+  }
+  .phrase {
+    gap: 8px;
+  }
+  .bodyRow {
+    margin-top: var(--s-4);
+    gap: var(--s-4);
+  }
+}
