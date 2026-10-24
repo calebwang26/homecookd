@@ -15,6 +15,7 @@ import { advance, AUDIO_S, FakeSocket, fakeSpeak, settle, waitFor, type Ev } fro
 process.env.CARTESIA_API_KEY = "test";
 process.env.ANTHROPIC_API_KEY = "test";
 process.env.VOICE_STUB = "1";
+process.env.VOICE_READ_OFFER = "1"; // these tests walk through the read-aloud offer (off by default)
 const { Cooking } = await import("../src/cook.js");
 const { env } = await import("../src/env.js");
 

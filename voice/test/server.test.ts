@@ -116,6 +116,28 @@ test("POST /speak that hangs up halfway through its body", async () => {
   await survives("an aborted /speak");
 });
 
+/** A JSON POST to the service: its status and parsed body. */
+function postJson(path: string, body: unknown) {
+  return new Promise<{ status: number; body: Record<string, unknown> }>((resolve, reject) => {
+    const req = request({ host: "127.0.0.1", port, path, method: "POST", headers: { "Content-Type": "application/json" } }, (res) => {
+      let text = "";
+      res.on("data", (d) => (text += d));
+      res.on("end", () => resolve({ status: res.statusCode ?? 0, body: text ? JSON.parse(text) : {} }));
+    });
+    req.on("error", reject);
+    req.end(JSON.stringify(body));
+  });
+}
+
+test("POST /homie/line: one of the person's news facts; Claude unreachable gives its plain line; an unknown fact is 404", async () => {
+  // The stub's news (convex.ts): one answer from Aaji. Claude can't be reached here, so its own line comes back.
+  const ok = await postJson("/homie/line", { sessionToken: "t", factId: "answer:stub", tab: "home" });
+  assert.deepEqual(ok, { status: 200, body: { text: "Aaji answered your question about the Varan Bhaat.", written: false } });
+  assert.equal((await postJson("/homie/line", { sessionToken: "t", factId: "answer:nope" })).status, 404);
+  assert.equal((await postJson("/homie/line", { sessionToken: "t" })).status, 400);
+  await survives("/homie/line");
+});
+
 test("an upgrade we refuse (no recipe), reset by the client", async () => {
   const s = await raw();
   s.write("GET /cook?session=t HTTP/1.1\r\nHost: x\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Key: dGhlIHNhbXBsZSBub25jZQ==\r\nSec-WebSocket-Version: 13\r\n\r\n");

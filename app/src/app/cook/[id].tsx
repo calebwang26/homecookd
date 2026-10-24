@@ -54,9 +54,10 @@
 // (no moment). When the cook answers one of my questions by voice note, homie offers to play it
 // (CookAnswers). While that moment or "Ask Grandma anything" is up, the service is told (an app-only
 // moment: its own offer never takes that yes or no). Without a voice line that reads (Expo Go, web,
-// or the line gave up or failed), this phone asks "read it out loud?" itself, with one "Read it to
-// me" button, and reads each step in homie's voice (useReadSteps). "I made it" hangs up.
-import { router, useFocusEffect, useIsFocused, useLocalSearchParams } from 'expo-router';
+// or the line gave up or failed), a kid who said yes to reading before hears each step in homie's
+// voice (useReadSteps); reading aloud is off by default (Caleb, Oct 24), and a tap on the pot reads
+// the step. homie never talks over a video (VoiceHold, lib/live/speak). "I made it" hangs up.
+import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
@@ -290,17 +291,11 @@ export default function CookScreen() {
   // While the phone reads, nobody is listening, so a tap reads this step again instead.
   // "I made it" takes the screen: no pot over the celebration.
   const potPress = phoneReading && voiceHere && step
-    ? () => void speak(`Step ${n}. ${step.instruction}`, { profileId: me?.id })
+    ? () => void speak(`Step ${n}. ${step.instruction}`, { profileId: me?.id, answer: true })
     : micStreamingSupported()
       ? () => homie.potPress(voice)
       : null;
   useHomieScreen({ hidden: !!done, onPress: potPress });
-  const focused = useIsFocused();
-  const { offerHere } = homie;
-  const canOffer = phoneReading && !!recipe && !!step && settled && !done && focused;
-  useEffect(() => {
-    if (canOffer) offerHere();
-  }, [canOffer, offerHere]);
   useReadSteps({ on: phoneReading && homie.readAloud && !done, step: n, text: step?.instruction ?? '' });
   // An app-only moment (her answer, "Ask Grandma anything") up on the phone: the service is told.
   const momentId = useHomieSelect((h) => h.moment?.id ?? null);

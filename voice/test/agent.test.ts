@@ -140,3 +140,25 @@ test("a search still loading isn't 'nothing found': Claude may search, so the co
   assert.doesNotMatch(lastUserText(claude.requests[0]), /found nothing/);
   assert.ok(calls.some(([name]) => name === "playClip"), "her clip plays");
 });
+
+test('"homie" however Ink spells it counts as the kid talking to homie; look-alike words don\'t', async () => {
+  const { saysHomie } = await import("../src/agent.js");
+  for (const t of ["Homie, next step.", "hey homey how long?", "Holmy, set a timer", "ok homi", "Hommie what now", "Holmie?", "homie's right"]) {
+    assert.equal(saysHomie(t), true, t);
+  }
+  for (const t of ["I'm going home.", "Did you do the homework?", "Sherlock Holmes", "Can you pass me the plate?", "hum"]) {
+    assert.equal(saysHomie(t), false, t);
+  }
+});
+
+test("every turn tells Claude whether the kid said homie's name; speech not for homie gets no tool and no words", async () => {
+  const claude = fakeClaude([null, { name: "next_step", input: {} }]);
+  const { calls, actions } = fakeActions([]);
+  const agent = new TurnAgent(session, actions, claude.client);
+  await agent.turn("Maya, can you grab me a plate from the cupboard?");
+  assert.match(lastUserText(claude.requests[0]), /\[They didn't say your name: answer only if it's plainly for you\.\]/);
+  assert.deepEqual(calls.filter(([name]) => name !== "findMoment"), [], "nothing said or done");
+  await agent.turn("Homey, what's next?");
+  assert.match(lastUserText(claude.requests[1]), /\[They said your name: this is for you\.\]/);
+  assert.deepEqual(calls.at(-1), ["goToStep", 2]);
+});

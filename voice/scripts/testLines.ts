@@ -29,6 +29,9 @@ export const LINES: Record<string, Line> = {
   "no-ginger": { text: "No, I'm out of ginger. Can I skip it?" },
   "no-need": { text: "No, no need to read it." },
   timer: { text: "Set a timer for five minutes." },
+  // Not for homie (the kid talking to a roommate), and the same kind of question with homie's name (agent.ts).
+  "to-roommate": { text: "Maya, can you grab me a plate from the cupboard?" },
+  "homie-question": { text: "Homie, how long should this simmer?" },
   // The cook while homie listens (/record): a vague amount, then her answer, then yes to the opt-in.
   "cook-mr-cooking": { text: "हो, आधी तांदूळ तीन वेळा धुवून घे. मग थोडं मीठ टाक, अंदाजाने.", voice: COOK_VOICE, lang: "mr" },
   "cook-mr-answer": { text: "साधारण एक छोटा चमचा मीठ. जास्त नको.", voice: COOK_VOICE, lang: "mr" },
