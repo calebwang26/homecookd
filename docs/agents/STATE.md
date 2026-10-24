@@ -177,6 +177,9 @@ Before starting work, compare the last commit here with `git log origin/main` to
     `lib/http` and `lib/liveRoutes`.
   - **Open:** the TEST family's Biryani still says `mossIndexedAt`, but its index was deleted on purpose; it
     re-indexes on its next publish.
+- Oct 24 · (this PR) · Claude · Memory: demo-family-shreya (the demo is Shreya Pawar's family; her grandma cooks and records in Marathi; Serene isn't in the demo).
+- Oct 24 · #28 · Claude · Rule: every PR goes to the "Merge Agent" session for approval, and it decides how conflicting PRs merge (`AGENTS.md` hard rules, `memory/merge-agent-approval.md`). Docs only. Open: nothing.
+- Oct 24 · (this PR) · Claude · pr-merge-organizer now names the organizer chat "Merge Agent" (its title), matching merge-agent-approval (#28).
 - Oct 24 · (this PR) · Claude · Track I, the kid's library: it now also lists the signed-in family's own finished dishes from Convex `recipes.list` (live), so a dish the worker publishes through Convex shows up for the family without going into the public `library.json`.
   - **How:** new `app/src/lib/familyLibrary.ts` (pure): `ready` rows with a `libraryId` and an https `recipeJsonUrl` become library entries (relation from the cook's profile), placed in front of library.json/bundled. A dish already in library.json keeps that copy. `lib/recipes.ts` puts them in the shared store and loads and caches each recipe.json from `recipeJsonUrl`, like the bucket recipes. A sign-out or another family clears them. With Convex stubbed (Expo Go, no URL) the library is unchanged.
   - **Convex ids:** `lib/live/convex.ts` gains `invalidateConvexRecipes()`, called whenever the family's list changes, so a new dish's Convex id is found (the voice socket needs it). `JobStage` gains `uploading`, and ProcessingRow says "Still sending the video".
