@@ -27,8 +27,8 @@ type ServerMsg =
   | { type: 'transcript'; text: string }
   | { type: 'go_to_step'; stepOrder: number }
   | { type: 'play_clip'; startS: number; endS: number }
-  | { type: 'say'; text: string; ai: true; sampleRate?: number }
-  | { type: 'say_end' }
+  | { type: 'say'; text: string; ai: true; audio?: { sampleRate?: number }; sampleRate?: number }
+  | { type: 'say_end'; interrupted?: boolean }
   | { type: 'asked_cook'; questionId: string };
 
 /** The part of a WebSocket the hook uses, so the stub can stand in. */
@@ -36,7 +36,7 @@ type Socket = {
   send: (data: ArrayBuffer | string) => void;
   close: () => void;
   onopen: (() => void) | null;
-  onclose: (() => void) | null;
+  onclose: ((e?: { code?: number }) => void) | null;
   onmessage: ((e: { data: unknown }) => void) | null;
   readyState: number;
 };
@@ -90,14 +90,19 @@ export function useVoiceCooking(opts: { libraryId: string | null; step: number; 
       } catch {
         return;
       }
-      if (m.type !== 'say_end' && say.current) flushSay(); // a new message ends the reply's audio
+      // A new say cuts off the one before it (Track B); any other message ends the reply's audio.
+      if (m.type === 'say' && say.current?.timer) clearTimeout(say.current.timer);
+      else if (m.type !== 'say_end' && say.current) flushSay();
       if (m.type === 'transcript') setHeard(m.text);
       else if (m.type === 'go_to_step') {
         lastServerStep.current = m.stepOrder;
         cb.current.onGoTo(m.stepOrder);
       } else if (m.type === 'play_clip') cb.current.onClip(m.startS, m.endS);
-      else if (m.type === 'say') say.current = { chunks: [], rate: m.sampleRate ?? 24000, timer: null };
-      else if (m.type === 'say_end') flushSay();
+      else if (m.type === 'say') say.current = { chunks: [], rate: m.audio?.sampleRate ?? m.sampleRate ?? 24000, timer: null };
+      else if (m.type === 'say_end') {
+        if (m.interrupted) say.current = null; // the kid spoke over it: never play the rest
+        else flushSay();
+      }
       else if (m.type === 'asked_cook') setAskedAt(Date.now());
     },
     [flushSay],
@@ -132,9 +137,18 @@ export function useVoiceCooking(opts: { libraryId: string | null; step: number; 
         });
       } else setStatus('listening');
     };
-    s.onclose = () => {
+    s.onclose = (e) => {
       if (sock.current !== s) return;
       sock.current = null;
+      if (e?.code === 4401) {
+        // The service refused the session token: no retry, sign in again.
+        mic.stop();
+        micOn.current = false;
+        want.current = false;
+        setError('Signed out. Open homecookd again to sign in.');
+        setStatus('error');
+        return;
+      }
       if (want.current && retries.current < RETRIES) {
         retries.current += 1;
         setStatus('connecting');
