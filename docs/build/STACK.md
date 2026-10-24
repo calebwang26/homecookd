@@ -207,6 +207,11 @@ voice, in `lang` or the person's language). `translate: true` first turns Englis
   ("Want me to read it out loud?"). Saying or sending `{ type: "text", text: "yes" }` reads the current step.
   Until then, steps change silently.
 - The app sends silence while a `say` or clip plays (half duplex).
+- What the app sends (Track I-kid): the chips under homie send `{ type: "text", text: "next" | "back" | "repeat" }`
+  and act on their own if no step, clip, line or timer comes back within 1.5 s. A tap on the offer (or a story
+  `nudge`) sends `"yes"`; a kid who said yes once has it sent for them on that phone, and its audio is dropped.
+  After a step the kid tapped (`{ type: "step" }`), a kid who chose read-aloud also gets `"repeat"`, so it is read.
+  A `nudge` whose text mentions a story is shown as a "Hear it / Later" moment.
 
 **Worker ↔ Convex additions**
 - `/worker/claim` adds `title?`, `language` (default `en`), `forKidName?`, `memoriesOptIn?` and `homieLog:
