@@ -122,23 +122,27 @@ export function offerClosed(m: { accepted?: unknown }): boolean {
  */
 export const DECLINE_TEXT = 'no';
 
-// What homie takes for yes (voice/src/cook.ts isYes, so the phone and homie agree) and for no.
+// What homie takes for yes and for no (voice/src/cook.ts), so the phone and homie agree: yes is its
+// `isYes` (a yes and anything after it, never a command), no is its `NO_REPLY` (a whole no, after
+// fillers and "thanks"), and a no wins, as it does there ("ok, no" declines).
 const YES = /^(yes|yeah|yep|yup|sure|ok|okay|please|go ahead|read it|read it out loud|do it|let'?s hear it)( .*)?$/;
-const NO = /^(no|nope|nah|not now|no thanks|no thank you|later|maybe later|not yet|skip|skip it|don'?t)( .*)?$/;
+const NO = /^(no|nope|nah|no no|not now|not right now|not yet|later|maybe later|no not now|no maybe later|i'?m good|no i'?m good|skip it)$/;
 const COMMANDS = /^(next|next step|next one|what'?s next|done|go on|go back|back|previous|previous step|last step|step back|repeat|repeat that|again|say that again|one more time|what)$/;
 const normalize = (t: string) => t.toLowerCase().replace(/[^a-z' ]/g, ' ').replace(/\s+/g, ' ').trim();
 const command = (t: string) =>
   normalize(t)
     .replace(/^((um|uh|wait|okay|ok|so|hey|alright|and|now) )+/, '')
     .replace(/( (please|thanks|thank you))+$/, '');
+const reply = (t: string) =>
+  normalize(t)
+    .replace(/^((um|uh|oh|ah|hmm|mm|well|wait|okay|ok|so|hey|alright|and|now) )+/, '')
+    .replace(/( (please|thanks|thank you))+$/, '');
 
 /** The kid's answer to homie's yes-or-no question, out loud; null for anything else ("next", a question). */
 export function yesNo(text: string): 'yes' | 'no' | null {
   if (COMMANDS.test(command(text))) return null;
-  const c = normalize(text);
-  if (YES.test(c)) return 'yes';
-  const plain = c.replace(/^((um|uh|oh|well|hmm) )+/, '');
-  return NO.test(plain) ? 'no' : null;
+  if (NO.test(reply(text))) return 'no';
+  return YES.test(normalize(text)) ? 'yes' : null;
 }
 
 export const SAY_YES_NO = 'Say “yes” or “no”';

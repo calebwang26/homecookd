@@ -153,9 +153,13 @@ await test('the shared contract: { type: "moment" } open with its kind, closed w
   assert.equal(V.offerClosed({ type: 'offer_closed', accepted: 'yes' }), false);
 });
 
-await test('a spoken yes is what homie takes for yes; no, not now and later are no; commands are neither', () => {
-  for (const t of ['yes', 'Yes!', 'yeah', 'sure, read it', 'okay', 'ok', 'please', 'yes please', 'Let\'s hear it', 'go ahead']) assert.equal(V.yesNo(t), 'yes', t);
-  for (const t of ['no', 'No.', 'nope', 'nah', 'not now', 'no thanks', 'later', 'maybe later', 'um, no', 'skip it', 'don\'t']) assert.equal(V.yesNo(t), 'no', t);
+await test('a spoken yes or no is what homie takes for one (voice/src/cook.ts isYes and NO_REPLY); commands are neither', () => {
+  for (const t of ['yes', 'Yes!', 'yeah', 'sure, read it', 'okay', 'ok', 'please', 'yes please', 'Let\'s hear it', 'go ahead', 'yes, play it']) assert.equal(V.yesNo(t), 'yes', t);
+  for (const t of ['no', 'No.', 'nope', 'nah', 'not now', 'no thanks', 'no thank you', 'later', 'maybe later', 'um, no', 'skip it', 'not right now', 'I\'m good', 'no, not now', 'well, nah']) assert.equal(V.yesNo(t), 'no', t);
+  // A no wins, as on the service: "ok, no" declines.
+  assert.equal(V.yesNo('ok, no'), 'no');
+  // Only a whole no is a no there; a no with more after it goes the usual way, so it isn't one here either.
+  for (const t of ['no I want to read it myself', 'don\'t', 'skip']) assert.equal(V.yesNo(t), null, t);
   // Commands go the usual way, as on the service ("ok next" is next, not yes).
   for (const t of ['next', 'ok next', 'go back', 'repeat', 'again', 'what', 'um, next please']) assert.equal(V.yesNo(t), null, t);
   for (const t of ['how much salt?', 'I don’t know', '', 'nobody told me']) assert.equal(V.yesNo(t), null, t);
