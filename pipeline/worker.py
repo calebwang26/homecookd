@@ -7,10 +7,14 @@
 Convex (docs/build/STACK.md, "Worker -> Convex"): the app uploads to the GCS uploads bucket and calls
 jobs.create. This worker POSTs /worker/claim (204 = nothing queued), runs prep -> process (Gemini watches,
 Muse writes) -> publish, reports each stage to /worker/progress (preparing, understanding, writing, or failed
-with a message the cook can read) and sends the published recipe.json to /worker/published, which saves it
-and has Convex index it into Moss. Every call carries x-worker-secret. Env: CONVEX_SITE_URL (the deployment's
+with a message the cook can read) and sends the whole recipe to /worker/published, which saves it and has
+Convex index it into Moss. The recipe.json in the public media bucket has no stories or tips (publish.py). Every call carries x-worker-secret. Env: CONVEX_SITE_URL (the deployment's
 .convex.site URL; pipeline/convex_stub.py for local tests), WORKER_SECRET. Raw uploads are kept, so a failed
 job can be queued again; the uploads bucket's 14-day lifecycle rule deletes them.
+The app may create the job while the signer upload is still going. A signer upload ("<job_id>/") lists its
+files in jobs/<job_id>.json, the file GCS mode waits on; the worker waits up to UPLOAD_WAIT_S for all of
+them, then hands the job back with /worker/release (Convex queues it again 30 s later) and moves on.
+The claim also carries the job's title, language and homie's questions (homieLog), which go to process.py.
 
 GCS mode (--gcs): the phone gets signed URLs from the Cloud Run signer (cloud/signer), uploads videos into the
 private uploads bucket in the background, and polls jobs/<job_id>.json in the public media
@@ -45,6 +49,7 @@ from pathlib import Path
 
 import requests  # comes with google-cloud-storage; uses certifi, unlike this Python's urllib
 from dotenv import dotenv_values, load_dotenv
+from google.api_core.exceptions import NotFound
 from google.cloud import storage
 from google.cloud.storage.retry import DEFAULT_RETRY
 
@@ -320,6 +325,24 @@ RECIPE_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,99}")
 
 MSG_NO_UPLOAD = "We couldn't find the video for this recipe. Please try adding it again."
 CONVEX_INTERVAL_S = 15
+UPLOAD_WAIT_S = 45  # a claimed job waits this long for the rest of its upload, then is released
+UPLOAD_POLL_S = 5
+# Without a signer file nothing says when to give up, so count releases (each ~1.5 min): about half an hour.
+MAX_RELEASES = 20
+_releases: dict[str, int] = {}
+
+
+class UploadPending(Exception):
+    """Some of the upload's files haven't arrived yet; release the job and try again later. has_signer: the
+    signer's jobs/<job_id>.json lists the files, so its links' expiry (UPLOAD_GIVE_UP) says when to give up."""
+
+    def __init__(self, missing: str, has_signer: bool):
+        super().__init__(missing)
+        self.has_signer = has_signer
+
+
+class UploadMissing(Exception):
+    """The files can never arrive now; fail the job."""
 
 
 class Convex:
@@ -350,8 +373,17 @@ class Convex:
         except Exception as e:  # noqa: BLE001
             print(f"  warning: progress {stage} not sent: {e}")
 
-    def published(self, job_id: str, recipe: dict, recipe_json_url: str) -> str:
-        res = self._post("/worker/published", {"jobId": job_id, "recipe": recipe, "recipeJsonUrl": recipe_json_url})
+    def release(self, job_id: str) -> None:
+        self._post("/worker/release", {"jobId": job_id})
+
+    def published(self, job_id: str, recipe: dict, recipe_json_url: str, language: str | None = None,
+                  memories_opt_in: bool | None = None) -> str:
+        body = {"jobId": job_id, "recipe": recipe, "recipeJsonUrl": recipe_json_url}
+        if language:
+            body["language"] = language
+        if memories_opt_in is not None:  # the cook's answer to homie's "Can <kid> hear your stories too?"
+            body["memoriesOptIn"] = memories_opt_in
+        res = self._post("/worker/published", body)
         return res.json().get("recipeId", "")
 
 
@@ -372,6 +404,47 @@ def _upload_blobs(uploads: storage.Bucket, path: str) -> list[storage.Blob]:
     prefix = path.rstrip("/") + "/"
     return sorted((b for b in uploads.client.list_blobs(uploads, prefix=prefix) if not b.name.endswith("/")),
                   key=lambda b: b.name)
+
+
+def _signer_job(media: storage.Bucket, path: str) -> dict | None:
+    """The signer's jobs/<job_id>.json when uploadPath is a signer upload folder ("<job_id>/"), else None."""
+    folder = path.strip("/")
+    if not RECIPE_ID.fullmatch(folder):
+        return None
+    try:
+        job = _read_job(media, folder)
+    except NotFound:
+        return None
+    return job if isinstance(job.get("files"), list) and job["files"] else None
+
+
+def _complete_upload(media: storage.Bucket, uploads: storage.Bucket, path: str,
+                     wait_s: float = UPLOAD_WAIT_S) -> list[storage.Blob]:
+    """The upload's files once every one is in the bucket (a GCS object appears only once its PUT is
+    complete). With a signer file, that's every object it lists, in the phone's order, as in GCS mode;
+    without one, whatever is at uploadPath. Raises UploadPending after wait_s, UploadMissing when the files
+    can no longer arrive."""
+    signer = _signer_job(media, path)
+    deadline = time.monotonic() + wait_s
+    while True:
+        blobs = _upload_blobs(uploads, path)
+        if signer is None:
+            if blobs:
+                return blobs
+            missing = "nothing uploaded yet"
+        else:
+            found = {b.name: b for b in blobs}
+            files = signer["files"]
+            absent = [f["object"] for f in files if f["object"] not in found]
+            if not absent:
+                return [found[f["object"]] for f in files]
+            if _age(signer) > UPLOAD_GIVE_UP:
+                raise UploadMissing(f"only {len(files) - len(absent)} of {len(files)} files arrived before "
+                                    "the upload links expired")
+            missing = f"waiting for {', '.join(absent)}"
+        if time.monotonic() >= deadline:
+            raise UploadPending(missing, has_signer=signer is not None)
+        time.sleep(UPLOAD_POLL_S)
 
 
 def handle_convex(convex: Convex, job: dict, media: storage.Bucket, uploads: storage.Bucket) -> None:
@@ -396,9 +469,22 @@ def handle_convex(convex: Convex, job: dict, media: storage.Bucket, uploads: sto
             return
         try:
             report("preparing", 0.02)
-            blobs = _upload_blobs(uploads, job["uploadPath"])
-            if not blobs:
-                return fail(MSG_NO_UPLOAD, f"nothing at gs://{uploads.name}/{job['uploadPath']}")
+            try:
+                blobs = _complete_upload(media, uploads, job["uploadPath"])
+            except UploadMissing as e:
+                return fail(MSG_MISSING, str(e))
+            except UploadPending as e:
+                if e.has_signer:  # _complete_upload fails it once the signer's links have expired
+                    print(f"  {job_id}: upload not complete ({e}); released")
+                else:
+                    _releases[job_id] = _releases.get(job_id, 0) + 1
+                    if _releases[job_id] > MAX_RELEASES:
+                        _releases.pop(job_id)
+                        return fail(MSG_NO_UPLOAD, f"gs://{uploads.name}/{job['uploadPath']}: {e}")
+                    print(f"  {job_id}: upload not complete ({e}); released ({_releases[job_id]}/{MAX_RELEASES})")
+                convex.release(job_id)
+                return
+            _releases.pop(job_id, None)
             if any(b.size == 0 for b in blobs):
                 return fail(MSG_EMPTY, "a 0-byte upload")
             folder.mkdir(parents=True, exist_ok=True)
@@ -414,16 +500,18 @@ def handle_convex(convex: Convex, job: dict, media: storage.Bucket, uploads: sto
             cap, spent = spend_cap(), spent_usd()
             if spent + actual_s / 3600 * COST_PER_HOUR_USD >= cap:
                 return fail(MSG_PAUSED, f"spend cap: ~${spent:.2f} spent, MAX_SPEND_USD ${cap:.2f}")
-            cook = job.get("cookName") or "Mom"
-            # Convex jobs carry no title: the writer names the dish (process.NO_TITLE).
+            cook = job.get("cookName") or "Cook"
+            # The dish the cook named; without one the writer names it (process.NO_TITLE).
             prep.run(recipe_id, job.get("title") or "", cook, job.get("relation") or cook, inputs)
-            process.run(recipe_id, report=report)
+            process.run(recipe_id, report=report, language=job.get("language"), homie_log=job.get("homieLog") or [])
             report("writing", 0.9)
             # Media + recipe.json only. No rebuild_library: Convex lists the family's recipes now, and the
-            # GCS library.json is shared by every pre-hackathon copy of the app.
-            recipe = publish.publish_recipe(recipe_id, bucket=media)
+            # GCS library.json is shared by every pre-hackathon copy of the app. The public recipe.json
+            # leaves out her stories and tips; Convex gets them all and shows them only after her yes.
+            recipe = publish.publish_recipe(recipe_id, bucket=media, family=True)
             recipe_url = publish.public_url(media, f"{recipe_id}/recipe.json")
-            convex_recipe = convex.published(job_id, recipe.model_dump(mode="json"), recipe_url)
+            convex_recipe = convex.published(job_id, recipe.model_dump(mode="json"), recipe_url,
+                                             job.get("language"), job.get("memoriesOptIn"))
         except (Exception, SystemExit) as e:  # noqa: BLE001 - any failure fails this job; the loop keeps running
             traceback.print_exc()
             return fail(MSG_FAILED, f"{type(e).__name__}: {e}")

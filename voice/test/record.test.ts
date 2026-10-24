@@ -1,0 +1,399 @@
+// Recording's phases (record.ts) with a fake socket, speech-to-text, voice, Claude and Convex, on a fake
+// clock: start/done ordering, double start, done during a question, reconnects, a socket closed mid-wrap-up.
+import assert from "node:assert/strict";
+import { afterEach, beforeEach, mock, test } from "node:test";
+import WebSocket from "ws";
+import type { RecordingStatus } from "../src/convex.js";
+import type { Decision, HomieAgent, Line } from "../src/homie.js";
+import type { RecordingDeps } from "../src/record.js";
+import type { SttEvents } from "../src/stt.js";
+
+// env.ts wants these at import. Nothing here calls a real service.
+process.env.CARTESIA_API_KEY = "test";
+process.env.ANTHROPIC_API_KEY = "test";
+process.env.VOICE_STUB = "1";
+const { Recording } = await import("../src/record.js");
+
+const RULES = { firstS: 10, gapS: 30, maxLive: 2, maxEnd: 2 };
+const LATENCY_MS = 100; // every Convex call
+const THINK_MS = 1000; // every Claude call
+const AUDIO_S = 5; // every line homie says
+
+beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: Date.parse("2026-10-25T17:00:00Z") }));
+afterEach(() => mock.timers.reset());
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const settle = async () => {
+  for (let i = 0; i < 3; i++) await new Promise((r) => setImmediate(r));
+};
+/** Moves the fake clock forward in small steps, letting promises settle in between. */
+async function advance(ms: number, step = 50) {
+  for (let done = 0; done < ms; done += step) {
+    mock.timers.tick(Math.min(step, ms - done));
+    await settle();
+  }
+}
+async function waitFor(what: string, check: () => boolean, maxMs = 60_000) {
+  for (let waited = 0; !check(); waited += 50) {
+    if (waited > maxMs) assert.fail(`no ${what} within ${maxMs / 1000} s`);
+    await advance(50);
+  }
+}
+
+const line = (textEn: string): Line => ({ text: textEn, textEn });
+const ask = (textEn: string): Decision => ({ action: "ask", kind: "amount", line: line(textEn) });
+const quiet = (storyInProgress = false): Decision => ({ action: "quiet", storyInProgress });
+
+type Ev = { type: string; [k: string]: unknown };
+type Call = { fn: string; args: unknown[]; at: number };
+
+class FakeSocket {
+  readyState: number = WebSocket.OPEN;
+  events: Ev[] = [];
+  closeCode?: number;
+  send(data: string | Buffer) {
+    if (typeof data === "string") this.events.push(JSON.parse(data));
+  }
+  close(code?: number) {
+    this.closeCode = code;
+    this.readyState = WebSocket.CLOSED;
+  }
+  of(type: string) {
+    return this.events.filter((e) => e.type === type);
+  }
+  phases() {
+    return this.of("phase").map((e) => e.phase);
+  }
+}
+
+/** One recording's backend: a Convex row, Claude's answers, the voice and the mic. */
+function world(status: RecordingStatus = "intro") {
+  const row: { status: RecordingStatus; startedAt?: number } = { status };
+  const calls: Call[] = [];
+  const decisions: Decision[] = [];
+  const decided: { nowS: number; mayAsk: boolean; asked: string[]; heard: string[] }[] = [];
+  const endQuestions: { kind: "cue"; line: Line }[] = [{ kind: "cue", line: line("How do you know the dal is done?") }];
+  const endCalls: { asked: string[]; max: number }[] = [];
+  const spoken: string[] = [];
+  let stt: SttEvents | undefined;
+  let ids = 0;
+
+  async function convexCall<T>(fn: string, args: unknown[], result: () => T): Promise<T> {
+    calls.push({ fn, args, at: Date.now() });
+    await sleep(LATENCY_MS);
+    return result();
+  }
+
+  const agent: ReturnType<RecordingDeps["agent"]> = {
+    intro: async () => (await sleep(THINK_MS), line("Hello Rajani Aaji!")),
+    decide: async (input: Parameters<HomieAgent["decide"]>[0]) => {
+      decided.push({ nowS: input.nowS, mayAsk: input.mayAsk, asked: [...input.asked], heard: input.heard.map((h) => h.text) });
+      await sleep(THINK_MS);
+      // Like the real one: an ask only comes back when it's allowed.
+      if (decisions[0]?.action === "ask" && !input.mayAsk) return quiet();
+      return decisions.shift() ?? quiet();
+    },
+    endQuestions: async (_heard, asked, max) => {
+      endCalls.push({ asked: [...asked], max });
+      await sleep(THINK_MS);
+      // Like the real one: nothing already asked.
+      return endQuestions.filter((q) => !asked.some((a) => a.includes(q.line.textEn))).slice(0, max);
+    },
+    yesNo: async (answer) => (/\byes\b/i.test(answer) ? true : /\bno\b/i.test(answer) ? false : null),
+    setWho: () => {},
+  };
+
+  const deps: RecordingDeps = {
+    rules: RULES,
+    agent: () => agent,
+    translate: async (text) => text,
+    createStt: (_language, events) => {
+      stt = events;
+      return { send: () => {}, close: () => {} };
+    },
+    speak: (text, _format, signal, onChunk) =>
+      new Promise<void>((resolve) => {
+        spoken.push(text);
+        const timer = setTimeout(() => (onChunk(Buffer.alloc(AUDIO_S * 48_000)), resolve()), 100);
+        signal.addEventListener("abort", () => (clearTimeout(timer), resolve()), { once: true });
+      }),
+    convex: {
+      recordingSession: (_token, recordingId) =>
+        convexCall("recordingSession", [recordingId], () => ({
+          recording: { _id: recordingId, language: "en", status: row.status, startedAt: row.startedAt, dish: "Dal Tadka" },
+          cook: { name: "Rajani", relation: "Aaji", language: "en" },
+          kid: { name: "Shreya" },
+          dish: "Dal Tadka",
+        })),
+      setRecordingStatus: (_token, _id, s) =>
+        convexCall("status", [s], () => {
+          if (s === "recording") row.startedAt ??= Date.now();
+          row.status = s;
+          return { ok: true as const, startedAt: row.startedAt };
+        }),
+      touchRecording: (_token, _id) => convexCall("touch", [], () => undefined),
+      logPrompt: (_token, _id, prompt) => convexCall("logPrompt", [prompt.kind, prompt.textEn], () => ({ promptId: `p${++ids}` })),
+      updatePrompt: (_token, promptId, s) => convexCall("updatePrompt", [promptId, s], () => undefined),
+      setOptIn: (_token, _id, optIn) => convexCall("setOptIn", [optIn], () => undefined),
+    },
+  };
+
+  /** Opens a socket for `recordingId`, as the phone would. `drop()` is the socket closing. */
+  function connect(recordingId: string) {
+    const ws = new FakeSocket();
+    const rec = new Recording(ws as unknown as WebSocket, "token", recordingId, "pcm", deps);
+    void rec.start();
+    return {
+      ws,
+      send: (msg: object) => rec.onMessage(Buffer.from(JSON.stringify(msg)), false),
+      drop: () => {
+        ws.close(1001);
+        rec.close();
+      },
+    };
+  }
+
+  /** She says something: the turn starts, then ends with `text`. */
+  function says(text: string) {
+    stt!.onTurnStart();
+    stt!.onTurnEnd(text);
+  }
+
+  const named = (fn: string) => calls.filter((c) => c.fn === fn);
+  return { row, calls, named, decisions, decided, endQuestions, endCalls, spoken, connect, says, deps };
+}
+
+type Phone = ReturnType<ReturnType<typeof world>["connect"]>;
+
+/** Waits for homie's next line to be sent, then for the phone to finish playing it. */
+async function heardOut(c: Phone, what: string) {
+  const ends = c.ws.of("say_end").length;
+  await waitFor(what, () => c.ws.of("say_end").length > ends);
+  await advance(AUDIO_S * 1000 + 500);
+}
+
+/** Loads the recording and waits out the hello (written, then ~5 s of audio). */
+const helloDone = (c: Phone) => heardOut(c, "hello");
+
+test("done while start is still saving: straight to the end, recording never comes back", async () => {
+  const w = world();
+  const c = w.connect("rec-start-done");
+  await helloDone(c);
+  c.send({ type: "start" });
+  await advance(20); // the "recording" write is still on its way
+  c.send({ type: "done" });
+  await waitFor("the end", () => c.ws.phases().includes("ended"), 120_000);
+  await advance(LATENCY_MS + 50); // the last status write lands
+
+  assert.deepEqual(c.ws.phases(), ["intro", "wrapping_up", "ended"]);
+  assert.deepEqual(w.named("status").map((s) => s.args[0]), ["recording", "wrapping_up", "ended"]);
+  assert.equal(w.row.status, "ended");
+  assert.equal(w.decided.length, 0, "no live questions once she's done");
+  assert.deepEqual(w.named("logPrompt").map((p) => p.args[0]), ["intro", "end", "optin", "closing"]);
+});
+
+test("two quick starts: one status write and one recording phase", async () => {
+  const w = world();
+  const c = w.connect("rec-double-start");
+  await helloDone(c);
+  c.send({ type: "start" });
+  c.send({ type: "start" });
+  await advance(500);
+  c.send({ type: "start" });
+  await advance(30_000);
+
+  assert.deepEqual(w.named("status").map((s) => s.args[0]), ["recording"]);
+  assert.deepEqual(c.ws.phases(), ["intro", "recording"]);
+  assert.equal(w.named("logPrompt").filter((p) => p.args[0] === "intro").length, 1);
+  c.drop();
+});
+
+test("messages sent before the recording has loaded wait for it", async () => {
+  const w = world();
+  const c = w.connect("rec-early-done");
+  c.send({ type: "done" }); // before /live/session answers
+  await waitFor("the end", () => c.ws.phases().includes("ended"), 120_000);
+
+  assert.deepEqual(c.ws.phases(), ["intro", "wrapping_up", "ended"]);
+  assert.ok(!w.spoken.includes("Hello Rajani Aaji!"), "no hello once she's done");
+  assert.deepEqual(w.named("status").map((s) => s.args[0]), ["wrapping_up", "ended"]);
+});
+
+test("done while homie is asking: the question stops and is dropped before the end flow", async () => {
+  const w = world();
+  w.decisions.push(ask("How much salt is a pinch?"));
+  const c = w.connect("rec-done-asking");
+  await helloDone(c);
+  c.send({ type: "start" });
+  await waitFor("the question's audio", () => c.ws.of("say_end").length === 2);
+  const question = c.ws.of("ask")[0];
+  assert.equal(question.textEn, "How much salt is a pinch?");
+
+  // Sonic is done; the phone is still playing it (5 s of audio).
+  const before = c.ws.events.length;
+  const doneAt = Date.now();
+  c.send({ type: "done" });
+  await settle();
+  const after = c.ws.events.slice(before);
+  assert.deepEqual(after.slice(0, 3).map((e) => e.type), ["phase", "say_end", "drop"]);
+  assert.equal(after[1].interrupted, true);
+  assert.equal(after[2].promptId, question.promptId);
+  await advance(LATENCY_MS + 50);
+  assert.deepEqual(w.named("updatePrompt").map((u) => u.args), [[question.promptId, "ignored"]]);
+
+  // The end flow starts now, not after the question would have finished playing.
+  await waitFor("the end question", () => c.ws.of("ask").length === 2);
+  assert.ok(Date.now() - doneAt < AUDIO_S * 1000, "the end question waited for the dropped one");
+  assert.equal(c.ws.of("ask")[1].kind, "end");
+  await waitFor("the end", () => c.ws.phases().includes("ended"), 120_000);
+  assert.equal(c.ws.of("ask").filter((a) => a.kind === "amount").length, 1);
+});
+
+test("a reconnect while recording keeps the pacing, the questions and what she said", async () => {
+  const w = world();
+  w.decisions.push(ask("How much salt is a pinch?"));
+  const a = w.connect("rec-reconnect");
+  await helloDone(a);
+  a.send({ type: "start" });
+  await advance(1000);
+  w.says("Now I add a pinch of salt");
+  await waitFor("the first question", () => a.ws.of("say_end").length === 2);
+  await advance(AUDIO_S * 1000);
+  w.says("About half a teaspoon");
+  assert.equal(a.ws.of("answered").length, 1);
+  const firstAskS = w.decided.find((d) => d.mayAsk)!.nowS;
+  a.drop();
+
+  // She's back once the gap has passed: still no question right away.
+  await advance(45_000);
+  w.decisions.push(ask("How do you know the dal is done?"));
+  const decidedBefore = w.decided.length;
+  const b = w.connect("rec-reconnect");
+  await advance(14_000);
+  assert.deepEqual(b.ws.phases(), ["recording"]);
+  assert.equal(b.ws.of("ask").length, 0);
+  assert.equal(w.decided.length, decidedBefore, "listens before deciding anything");
+
+  await waitFor("the second question", () => b.ws.of("ask").length === 1, 30_000);
+  const second = w.decided.filter((d) => d.mayAsk).at(-1)!;
+  assert.ok(second.nowS - firstAskS >= RULES.gapS, "the gap counts from the question before the drop");
+  assert.deepEqual(second.asked, ["How much salt is a pinch?"]);
+  assert.deepEqual(second.heard, ["Now I add a pinch of salt", "About half a teaspoon"]);
+  assert.equal(w.named("logPrompt").filter((p) => p.args[0] === "intro").length, 1, "the hello is logged once");
+
+  // That was the second of maxLive 2: no third, ever.
+  w.decisions.push(ask("A third one?"));
+  await advance(300_000, 500);
+  assert.equal(b.ws.of("ask").length, 1);
+  b.drop();
+});
+
+test("a socket closed during the wrap-up writes nothing more; the reconnect finishes it once", async () => {
+  const w = world();
+  w.endQuestions.push({ kind: "cue", line: line("What do you use instead of ghee?") });
+  const a = w.connect("rec-closed-wrap");
+  await helloDone(a);
+  a.send({ type: "start" });
+  await advance(1000);
+  a.send({ type: "done" });
+  await waitFor("the first end question", () => a.ws.of("ask").length === 1);
+  assert.match(String(a.ws.of("ask")[0].textEn), /^Before you go, two quick ones\. How do you know/);
+  a.drop(); // mid-question
+  const droppedAt = Date.now();
+  await advance(120_000, 200);
+
+  assert.deepEqual(
+    w.calls.filter((c) => c.at > droppedAt).map((c) => c.fn),
+    [],
+    "nothing logged, no opt-in, no status after the socket closed",
+  );
+  assert.equal(w.row.status, "wrapping_up");
+
+  const b = w.connect("rec-closed-wrap");
+  await heardOut(b, "the second end question");
+  assert.deepEqual(b.ws.phases(), ["wrapping_up"]);
+  w.says("Butter works too");
+  await heardOut(b, "the opt-in");
+  w.says("Yes, of course");
+  await waitFor("the end", () => b.ws.phases().includes("ended"), 60_000);
+
+  assert.deepEqual(w.endCalls, [
+    { asked: [], max: 2 },
+    { asked: ["Before you go, two quick ones. How do you know the dal is done?"], max: 1 },
+  ]);
+  assert.deepEqual(b.ws.of("ask").map((q) => [q.kind, q.textEn]), [
+    ["end", "What do you use instead of ghee?"],
+    ["optin", "Can Shreya hear your stories too?"],
+  ]);
+  assert.equal(b.ws.of("answered").length, 2);
+  assert.deepEqual(w.named("setOptIn").map((c) => c.args), [[true]]);
+  assert.deepEqual(w.named("logPrompt").map((p) => p.args[0]), ["intro", "end", "end", "optin", "closing"]);
+  assert.deepEqual(w.named("status").map((s) => s.args[0]), ["recording", "wrapping_up", "ended"]);
+});
+
+test("closed while the end questions are being written: they're never asked", async () => {
+  const w = world();
+  const a = w.connect("rec-closed-thinking");
+  await helloDone(a);
+  a.send({ type: "start" });
+  await advance(1000);
+  a.send({ type: "done" });
+  await advance(THINK_MS / 2);
+  assert.equal(w.endCalls.length, 1);
+  a.drop();
+  await advance(60_000, 200);
+  assert.deepEqual(w.named("logPrompt").map((p) => p.args[0]), ["intro"]);
+  assert.equal(w.row.status, "wrapping_up");
+});
+
+test("never asks while she's telling a story, even when the pacing allows", async () => {
+  const w = world();
+  w.decisions.push(quiet(true), quiet(false), ask("How long does it simmer?"));
+  const c = w.connect("rec-story");
+  await helloDone(c);
+  c.send({ type: "start" });
+  await waitFor("three decisions", () => w.decided.length === 3, 120_000);
+  assert.deepEqual(w.decided.map((d) => d.mayAsk), [true, false, true]);
+  await waitFor("the question", () => c.ws.of("ask").length === 1);
+  c.drop();
+});
+
+test("a heartbeat every 10 minutes while the socket is open, none after", async () => {
+  const w = world();
+  const c = w.connect("rec-heartbeat");
+  await helloDone(c);
+  c.send({ type: "start" });
+  await advance(21 * 60_000, 1000);
+  assert.equal(w.named("touch").length, 2);
+  c.drop();
+  await advance(30 * 60_000, 5000);
+  assert.equal(w.named("touch").length, 2);
+});
+
+test("a newer socket for the same recording replaces the older one", async () => {
+  const w = world();
+  const a = w.connect("rec-replaced");
+  await helloDone(a);
+  const b = w.connect("rec-replaced");
+  await advance(500);
+  assert.equal(a.ws.closeCode, 4409);
+  assert.deepEqual(b.ws.phases(), ["intro"]);
+  b.drop();
+});
+
+test("closed while a question is being saved: it's marked ignored and never asked", async () => {
+  const w = world();
+  w.decisions.push(ask("How much salt is a pinch?"));
+  const a = w.connect("rec-closed-asking");
+  await helloDone(a);
+  a.send({ type: "start" });
+  await advance(1000);
+  w.says("Now I add a pinch of salt");
+  await waitFor("the question being saved", () => w.named("logPrompt").some((p) => p.args[0] === "amount"));
+  a.drop(); // inside the save's round trip
+  await advance(LATENCY_MS * 3);
+  assert.equal(a.ws.of("ask").length, 0, "the question went out after the socket closed");
+  const saved = w.named("logPrompt").filter((p) => p.args[0] === "amount");
+  assert.equal(saved.length, 1);
+  assert.deepEqual(w.named("updatePrompt").map((u) => u.args[1]), ["ignored"]);
+});

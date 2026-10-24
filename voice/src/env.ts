@@ -48,4 +48,15 @@ export const env = {
   claudeFast: get("CLAUDE_FAST") === "1",
   /** Cartesia voice for Sonic. Default "Katie", same as scripts/check-cartesia.mjs. */
   cartesiaVoice: get("CARTESIA_VOICE") || "6ccbfb76-1fc6-48f7-b71d-91ac6298247b",
+  /** homie's own voice while a cook records and for /speak. Default "Sindhu": a warm Indian voice
+   *  that Sonic 3.6 speaks in Marathi (mr-IN) and English. */
+  homieVoice: get("HOMIE_VOICE") || "07bc462a-c644-49f1-baf7-82d5599131be",
+  /** Gemini Live hears the languages Ink 2 doesn't (Marathi). Empty = those recordings get no transcript. */
+  geminiKey: get("GEMINI_API_KEY"),
+  geminiLiveModel: get("GEMINI_LIVE_MODEL") || "gemini-3.5-transcribe-live",
+  /** The glasses VM, for homie's look at the stove. Both empty = no frames. */
+  glassesUrl: get("GLASSES_URL").replace(/\/$/, ""),
+  glassesSecret: get("GLASSES_SECRET"),
+  /** Demo pacing: homie's first question at ~40 s instead of 4 min. */
+  homieDemo: get("HOMIE_DEMO") === "1",
 };

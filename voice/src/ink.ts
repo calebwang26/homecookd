@@ -1,20 +1,14 @@
 // Cartesia Ink 2, streaming speech-to-text with built-in turn detection.
 // Docs: https://docs.cartesia.ai/api-reference/stt/turns/websocket
 // We send 16 kHz mono 16-bit PCM as binary frames; Ink sends turn.start / turn.update / turn.end events.
+// Ink detects the language itself (en, fr, hi, ja, es), so there is no language to pass.
 import WebSocket from "ws";
 import { env } from "./env.js";
+import type { SttEvents } from "./stt.js";
 
 export const CARTESIA_VERSION = "2026-08-14";
 
-export type InkEvents = {
-  /** The kid started talking: stop any speech we're playing. */
-  onTurnStart: () => void;
-  /** Cumulative text of the turn so far (never revised). */
-  onPartial: (text: string) => void;
-  /** The turn is over: act on this. */
-  onTurnEnd: (text: string) => void;
-  onError: (message: string) => void;
-};
+export type InkEvents = SttEvents;
 
 // Words Ink should expect in a kitchen; the session adds the cook's name and the recipe title.
 const KEYTERMS = ["next step", "go back", "repeat that"];

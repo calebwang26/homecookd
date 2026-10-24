@@ -7,6 +7,8 @@ Uses Application Default Credentials (`gcloud auth login --update-adc`).
 Rebuilding the app's bundled copies keeps cook mode's short steps (substeps, uses, tip from shorten.py,
 and the step titles tidied with them) that a bundled copy has and its bucket copy lacks, when every step
 is the same step (_keep_short_steps).
+A family's own recipe (worker.py, Convex mode) is published without the cook's stories and tips
+(without_memories): the bucket is public, and Convex shows them only after her yes.
 Storage is GCS instead of the Supabase bucket in docs/HACKATHON-SPEC.md: Supabase's free plan caps files
 at 50 MB, and GCS's free tier holds full-length videos.
 """
@@ -41,6 +43,7 @@ MEDIA_FILES = {  # local name -> (content type, Media field)
 }
 JSON_CACHE = "no-cache, max-age=0"  # library & recipe JSON must update immediately
 MEDIA_CACHE = "public, max-age=3600"
+FAMILY_MARK = ".family"  # in data/out/<id>/: a family's own recipe, published by the worker in Convex mode
 
 
 def _bucket() -> storage.Bucket:
@@ -111,10 +114,24 @@ def _upload_json(bucket: storage.Bucket, path: str, data: str) -> None:
     blob.upload_from_string(data, content_type="application/json")
 
 
-def publish_recipe(recipe_id: str, force: bool = False, bucket: storage.Bucket | None = None) -> Recipe:
-    """Upload one processed recipe's media + recipe.json. Returns the published Recipe."""
+def without_memories(recipe: Recipe) -> Recipe:
+    """The recipe without what Convex keeps as its memories (convex/lib/recipeJson.ts): the stories, special
+    moments and step tips, the steps' links to them, and the intro, which the merge writes from the stories.
+    Steps, quotes, ingredients and media stay."""
+    steps = [s.model_copy(update={"story_ids": [], "special_ids": [], "tip": None}) for s in recipe.steps]
+    return recipe.model_copy(update={"intro": "", "stories": [], "special": [], "steps": steps})
+
+
+def publish_recipe(recipe_id: str, force: bool = False, bucket: storage.Bucket | None = None,
+                   family: bool = False) -> Recipe:
+    """Upload one processed recipe's media + recipe.json. Returns the published Recipe, memories and all.
+    family: a family's own recipe (worker.py, Convex mode). Its recipe.json is uploaded without_memories,
+    and it stays a family recipe (FAMILY_MARK), so publishing it again by hand leaves them out too."""
     bucket = bucket or _bucket()
     folder = OUT / recipe_id
+    if family:
+        (folder / FAMILY_MARK).touch()
+    family = (folder / FAMILY_MARK).exists()
     raw = json.loads((folder / "recipe.json").read_text())
     for local, (ctype, field) in MEDIA_FILES.items():
         path = folder / local
@@ -135,8 +152,10 @@ def publish_recipe(recipe_id: str, force: bool = False, bucket: storage.Bucket |
     raw["media"]["width"], raw["media"]["height"] = _video_size(folder / "play.mp4")
     _publish_step_stills(bucket, recipe_id, folder, raw, force)
     recipe = Recipe.model_validate(raw)  # reject & report; never publish an invalid recipe
-    _upload_json(bucket, f"{recipe_id}/recipe.json", recipe.model_dump_json(indent=2))
-    print(f"published {recipe_id}: {public_url(bucket, f'{recipe_id}/recipe.json')}")
+    public = without_memories(recipe) if family else recipe
+    _upload_json(bucket, f"{recipe_id}/recipe.json", public.model_dump_json(indent=2))
+    print(f"published {recipe_id}{' (no stories or tips)' if family else ''}: "
+          f"{public_url(bucket, f'{recipe_id}/recipe.json')}")
     return recipe
 
 

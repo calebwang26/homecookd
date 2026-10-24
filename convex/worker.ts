@@ -1,11 +1,46 @@
 // What the pipeline worker does to Convex, through the /worker/* routes in http.ts.
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
-import type { Id } from "./_generated/dataModel";
-import { internalMutation, internalQuery, type MutationCtx } from "./_generated/server";
-import schema from "./schema";
+import type { Doc, Id } from "./_generated/dataModel";
+import { internalMutation, internalQuery, type MutationCtx, type QueryCtx } from "./_generated/server";
+import schema, { memory } from "./schema";
 
 const moment = v.object({ startS: v.number(), endS: v.number() });
+const RELEASE_DELAY_MS = 30_000;
+
+const homieEntry = v.object({
+  atS: v.number(),
+  kind: schema.tables.homiePrompts.validator.fields.kind,
+  text: v.string(),
+  textEn: v.string(),
+  answer: v.optional(
+    v.object({ transcript: v.string(), transcriptEn: v.optional(v.string()), atS: v.number(), endS: v.number() }),
+  ),
+});
+
+/** What homie said while this video was filmed, on the video's own clock (atS is from recordings.startedAt;
+ *  the glasses' first frame can come later), oldest first. Anything said before the video started is left out. */
+async function homieLog(ctx: QueryCtx, recording: Doc<"recordings">) {
+  const shift =
+    recording.startedAt !== undefined && recording.videoStartedAt !== undefined
+      ? (recording.startedAt - recording.videoStartedAt) / 1000
+      : 0;
+  const t = (s: number) => Math.round((s + shift) * 10) / 10;
+  const prompts = await ctx.db
+    .query("homiePrompts")
+    .withIndex("by_recordingId", (q) => q.eq("recordingId", recording._id))
+    .take(200);
+  return prompts
+    .map((p) => ({
+      atS: t(p.atS),
+      kind: p.kind,
+      text: p.text,
+      textEn: p.textEn,
+      answer: p.answer && { ...p.answer, atS: t(p.answer.atS), endS: t(p.answer.endS) },
+    }))
+    .filter((p) => p.atS >= 0)
+    .sort((a, b) => a.atS - b.atS);
+}
 
 /** The oldest queued job, now marked as preparing, or null. */
 export const claim = internalMutation({
@@ -19,8 +54,14 @@ export const claim = internalMutation({
       supabaseFamilyId: v.string(),
       cookId: v.id("people"),
       cookName: v.string(),
+      relation: v.optional(v.string()),
       uploadPath: v.string(),
       source: v.union(v.literal("phone"), v.literal("glasses")),
+      title: v.optional(v.string()),
+      language: v.string(),
+      forKidName: v.optional(v.string()),
+      memoriesOptIn: v.optional(v.boolean()),
+      homieLog: v.array(homieEntry),
     }),
   ),
   handler: async (ctx) => {
@@ -32,6 +73,8 @@ export const claim = internalMutation({
     await ctx.db.patch("jobs", job._id, { stage: "preparing", claimedAt: Date.now() });
     const family = await ctx.db.get("families", job.familyId);
     const cook = await ctx.db.get("people", job.cookId);
+    const kid = job.forKidId && (await ctx.db.get("people", job.forKidId));
+    const recording = job.recordingId && (await ctx.db.get("recordings", job.recordingId));
     return {
       jobId: job._id,
       recipeId: job.recipeId ?? null,
@@ -39,9 +82,38 @@ export const claim = internalMutation({
       supabaseFamilyId: family?.supabaseFamilyId ?? "",
       cookId: job.cookId,
       cookName: cook?.name ?? "",
+      relation: cook?.relation,
       uploadPath: job.uploadPath,
       source: job.source,
+      title: job.title,
+      language: job.language ?? cook?.language ?? "en",
+      forKidName: kid ? kid.name : undefined,
+      memoriesOptIn: recording ? recording.memoriesOptIn : undefined,
+      homieLog: recording ? await homieLog(ctx, recording) : [],
     };
+  },
+});
+
+/** The worker found the upload incomplete: the job waits as "uploading" and is queued again in 30 s. */
+export const release = internalMutation({
+  args: { jobId: v.id("jobs") },
+  returns: v.boolean(),
+  handler: async (ctx, { jobId }) => {
+    const job = await ctx.db.get("jobs", jobId);
+    if (!job || job.stage !== "preparing") return false; // only the worker that just claimed it
+    await ctx.db.patch("jobs", jobId, { stage: "uploading", progress: 0, claimedAt: undefined });
+    await ctx.scheduler.runAfter(RELEASE_DELAY_MS, internal.worker.requeue, { jobId });
+    return true;
+  },
+});
+
+export const requeue = internalMutation({
+  args: { jobId: v.id("jobs") },
+  returns: v.null(),
+  handler: async (ctx, { jobId }) => {
+    const job = await ctx.db.get("jobs", jobId);
+    if (job?.stage === "uploading") await ctx.db.patch("jobs", jobId, { stage: "queued" });
+    return null;
   },
 });
 
@@ -82,8 +154,18 @@ export const published = internalMutation({
       libraryId: v.optional(v.string()),
       coverUrl: v.optional(v.string()),
       recipeJsonUrl: v.optional(v.string()),
-      steps: v.array(v.object({ order: v.number(), title: v.string(), text: v.string(), quote: v.optional(v.string()), moment })),
-      memories: v.array(v.object({ kind: v.union(v.literal("story"), v.literal("tip")), text: v.string(), moment })),
+      steps: v.array(
+        v.object({
+          order: v.number(),
+          title: v.string(),
+          text: v.string(),
+          quote: v.optional(v.string()),
+          quoteOriginal: v.optional(v.string()),
+          moment,
+        }),
+      ),
+      memories: v.array(memory),
+      language: v.optional(v.string()),
     }),
     memoriesOptIn: v.optional(v.boolean()),
   },
@@ -92,16 +174,17 @@ export const published = internalMutation({
     const job = await ctx.db.get("jobs", jobId);
     if (!job) return null;
     let recipeId = job.recipeId;
+    const fields = { ...recipe, language: recipe.language ?? job.language };
     if (recipeId && (await ctx.db.get("recipes", recipeId))) {
       await ctx.db.patch("recipes", recipeId, {
-        ...recipe,
+        ...fields,
         status: "ready",
         mossIndexedAt: undefined,
         ...(memoriesOptIn === undefined ? {} : { memoriesOptIn }),
       });
     } else {
       recipeId = await ctx.db.insert("recipes", {
-        ...recipe,
+        ...fields,
         familyId: job.familyId,
         cookId: job.cookId,
         status: "ready",
