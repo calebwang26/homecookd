@@ -498,23 +498,28 @@ export class Recording {
 
   /**
    * "Show me the plate": homie asks, the phone shows its camera big and takes the photo (it uploads it to
-   * Convex itself, live.setCover), then sends {type:"plate", ok}. No answer within PLATE_WAIT_MS, or a
-   * closed socket, is a skip; a reconnect doesn't ask again once it was answered.
+   * Convex itself, live.setCover), then sends {type:"plate", ok}, which counts from the ask on (a tap while
+   * homie still talks stops the line). No answer within PLATE_WAIT_MS after the line, or "not now", is a
+   * skip; a closed socket asks again on the reconnect; once answered it isn't asked again.
    */
   private async plate() {
     const line = await fixedLine("plate", this.who, this.whoLatin);
     const promptId = await this.log("plate", line, "spoken");
     if (this.closed || !promptId) return;
-    this.send({ type: "ask", promptId, text: line.text, textEn: line.textEn, kind: "plate" });
-    this.markSaid(promptId, await this.say(line, "plate"));
-    const ok = await new Promise<boolean | null>((resolve) => {
-      if (this.closed) return resolve(null);
-      const timer = setTimeout(() => resolve(false), PLATE_WAIT_MS);
+    // The phone shows its shutter with the ask: a photo (or "not now") counts from now, even mid-line.
+    let timer: NodeJS.Timeout | undefined;
+    const answer = new Promise<boolean | null>((resolve) => {
       this.plateWaiter = (got) => {
         clearTimeout(timer);
+        this.plateWaiter = undefined;
+        if (!this.closed) this.hush();
         resolve(this.closed ? null : got);
       };
     });
+    this.send({ type: "ask", promptId, text: line.text, textEn: line.textEn, kind: "plate" });
+    this.markSaid(promptId, await this.say(line, "plate"));
+    if (this.plateWaiter && !this.closed) timer = setTimeout(() => this.plateWaiter?.(false), PLATE_WAIT_MS);
+    const ok = this.closed && this.plateWaiter ? null : await answer;
     this.plateWaiter = undefined;
     if (ok === null) return; // the socket closed: a reconnect asks again
     this.mem.plateDone = true;

@@ -646,3 +646,19 @@ test("the plate photo can be skipped by saying not now", async () => {
   assert.ok(w.named("updatePrompt").some((u) => u.args[1] === "ignored"));
   c.drop();
 });
+
+test("the plate photo taken while homie is still asking for it counts (and stops the line)", async () => {
+  const w = world();
+  w.endQuestions.length = 0;
+  const c = w.connect("rec-camera-plate-early");
+  await helloDone(c);
+  c.send({ type: "start", camera: true });
+  await advance(1000);
+  c.send({ type: "done" });
+  await waitFor("the plate ask", () => c.ws.of("ask").some((a) => a.kind === "plate"), 60_000);
+  c.send({ type: "plate", ok: true }); // the phone's shutter, before the line has played out
+  await waitFor("the thanks", () => w.spoken.includes("Got it. Thank you!"), 30_000);
+  assert.ok(c.ws.of("say_end").some((e) => e.interrupted), "the plate line was cut short");
+  await waitFor("the opt-in", () => c.ws.of("ask").some((a) => a.kind === "optin"), 30_000);
+  c.drop();
+});
