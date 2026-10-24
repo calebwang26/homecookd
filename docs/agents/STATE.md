@@ -626,4 +626,4 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - **Open:** not deployed (Convex `grand-dragon-649` and the voice service both need it; waiting on Caleb). For the
     Oct 25 demo: if the demo cook's profile has filmed before (rehearsals), she hears the short hello, not the
     full one.
-- Oct 24 · #PRNUM · Claude · STATE: live versions after the Merge Agent's batch (Caleb: "merge everything and then deploy as quickly as possible"): Convex `grand-dragon-649` from main `ad8fd88ea` (adds `recordings.by_cookId_and_startedAt`), voice `homecookd-voice-00005-tvg` from `ad8fd88ea`, EAS Update `406438fe-d271-47d2-8f05-4ca15707e0ca` from `ad8fd88ea`. Docs only.
+- Oct 24 · #56 · Claude · STATE: live versions after the Merge Agent's batch (Caleb: "merge everything and then deploy as quickly as possible"): Convex `grand-dragon-649` from main `ad8fd88ea` (adds `recordings.by_cookId_and_startedAt`), voice `homecookd-voice-00005-tvg` from `ad8fd88ea`, EAS Update `406438fe-d271-47d2-8f05-4ca15707e0ca` from `ad8fd88ea`. Docs only.
