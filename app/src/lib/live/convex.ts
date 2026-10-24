@@ -8,6 +8,7 @@
 //   const shared = await sharePhoto(libraryId, photoUri) -> { draft, … } (Muse's note; nothing sent yet)
 //   await sendPhoto(shared, text)                        messages.send: the photo + the kid's note, to the cook
 //   await convexRecipeId(libraryId)                      the recipe's Convex _id (the voice socket needs it)
+//   invalidateConvexRecipes()                            after the family's recipe list changes (lib/recipes.ts)
 //
 // Functions are called by name, so the app builds before Track A's convex/ code exists. Until it is
 // deployed (no EXPO_PUBLIC_CONVEX_URL, or Convex says "Could not find public function"), every call
@@ -26,7 +27,7 @@ const URL = (process.env.EXPO_PUBLIC_CONVEX_URL ?? '').trim();
 const client = URL ? new ConvexClient(URL) : null;
 
 export type JobSource = 'phone' | 'glasses';
-export type JobStage = 'queued' | 'preparing' | 'understanding' | 'writing' | 'indexing' | 'done' | 'failed';
+export type JobStage = 'uploading' | 'queued' | 'preparing' | 'understanding' | 'writing' | 'indexing' | 'done' | 'failed';
 export type LiveJob = { _id: string; uploadPath: string; source: JobSource; stage: JobStage; progress: number; error?: string; recipeId?: string };
 export type CookQuestion = {
   _id: string;
@@ -232,6 +233,12 @@ async function convexRecipe(libraryId: string): Promise<RecipeRef> {
 
 export async function convexRecipeId(libraryId: string): Promise<string> {
   return (await convexRecipe(libraryId)).recipeId;
+}
+
+/** Forgets the library id → recipe map, so the next lookup reads recipes.list again (the library
+ *  calls it when the family's recipe list changes: a new dish, or another family signed in). */
+export function invalidateConvexRecipes(): void {
+  recipes = null;
 }
 
 // ---------------------------------------------------------------------------

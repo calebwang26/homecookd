@@ -62,6 +62,7 @@ export type ProcessingView = {
 };
 
 const STAGE_HINT: Record<Exclude<JobStage, 'done' | 'failed'>, string> = {
+  uploading: 'Still sending the video',
   queued: 'Waiting its turn',
   preparing: 'Getting your videos ready',
   understanding: 'Watching your video',
