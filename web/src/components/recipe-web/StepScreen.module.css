@@ -1,0 +1,493 @@
+/* The app's cook mode (app/src/app/cook/[id].tsx, components/recipe/StepMore.tsx, StepsSheet.tsx,
+   ui/Dropdown.tsx), values from app/src/theme/tokens.ts. Gap 24, 20 with the dropdown open. */
+.wrap {
+  padding: 24px 24px 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+.wrap[data-open] {
+  gap: 20px;
+}
+
+/* ---------- close + "Step 3 of 8 ⌄" + segments ---------- */
+.top {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+.progress {
+  flex: 1;
+  min-width: 0;
+  min-height: 48px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 8px;
+  text-align: left;
+  border-radius: 12px;
+  transition: transform 420ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+.progress:active {
+  transform: scale(0.98);
+  transition-duration: 90ms;
+}
+.progress:focus-visible {
+  outline: 3px solid #788c15;
+  outline-offset: 3px;
+}
+.stepOf {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 14px;
+  font-weight: 700;
+  line-height: 1.3;
+  color: #1e2410;
+}
+.chev {
+  color: #5f6352;
+}
+.segments {
+  display: flex;
+  gap: 6px;
+}
+.seg {
+  flex: 1;
+  height: 6px;
+  border-radius: 3px;
+  background: #e3e3d8;
+  transition: background-color 240ms ease;
+}
+.seg[data-on] {
+  background: #5b6f00;
+}
+
+/* ---------- the step: clip, title + how-to, Watch / Hear ---------- */
+.full {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  animation: fade 220ms ease both;
+}
+.cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.sample {
+  position: relative;
+  overflow: hidden;
+  border-radius: 28px;
+  background: #efefe6;
+}
+.sampleChip {
+  position: absolute;
+  left: 16px;
+  bottom: 16px;
+  height: 32px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.94);
+  color: #1e2410;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 32px;
+}
+.words {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.h1 {
+  margin: 0;
+  font-family: var(--ff-display);
+  font-weight: 500;
+  font-size: 30px;
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  color: #1e2410;
+}
+.body {
+  margin: 0;
+  font-size: 17px;
+  line-height: 1.5;
+  color: #2d3222;
+}
+.body[data-clamped] {
+  display: -webkit-box;
+  -webkit-line-clamp: 4;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.bodyWrap {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  cursor: pointer;
+}
+.readRest {
+  align-self: flex-start;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #4c5a10;
+}
+
+/* dropdown open: a 96 px thumbnail beside a 24 px title */
+.compact {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  animation: fade 220ms ease both;
+}
+.thumb {
+  position: relative;
+  flex: none;
+  width: 96px;
+  height: 96px;
+  border-radius: 22px;
+  overflow: hidden;
+  background: #efefe6;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.thumbPlay {
+  position: relative;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(255, 253, 247, 0.92);
+  color: #1e2410;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.h1Small {
+  flex: 1;
+  min-width: 0;
+  margin: 0;
+  font-family: var(--ff-display);
+  font-weight: 500;
+  font-size: 24px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: #1e2410;
+}
+
+/* ---------- "More from <cook>": a peach row closed, a cream panel open ---------- */
+.drawer {
+  padding: 0 20px;
+  border-radius: 20px;
+  background: #f9e3cf;
+  color: #1e2410;
+  transition:
+    background-color 280ms ease,
+    border-radius 280ms ease,
+    box-shadow 280ms ease;
+}
+.drawer[data-open] {
+  border-radius: 28px;
+  background: #fffdf7;
+  box-shadow: 0 8px 24px rgba(30, 36, 16, 0.06);
+}
+.drawerHead {
+  width: 100%;
+  height: 56px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  text-align: left;
+  color: #1e2410;
+  transition: padding-top 280ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.drawer[data-open] .drawerHead {
+  padding-top: 8px;
+}
+.drawerHead:focus-visible {
+  outline: 3px solid #788c15;
+  outline-offset: 2px;
+  border-radius: 12px;
+}
+.drawerTitle {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 16px;
+  font-weight: 700;
+}
+.specialChip {
+  flex: none;
+  height: 22px;
+  padding: 0 8px 0 4px;
+  border-radius: 999px;
+  background: #febe29;
+  color: #1e2410;
+  box-shadow: 0 2px 8px rgba(30, 36, 16, 0.05);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 700;
+}
+.chevron {
+  display: flex;
+}
+
+/* StepMore */
+.more {
+  padding: 18px 0 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+.said {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.bubble {
+  flex: 1;
+  min-width: 0;
+  padding: 12px 16px;
+  border-radius: 4px 18px 18px 18px;
+  background: #f9e3cf;
+  text-align: left;
+  font-family: var(--ff-display);
+  font-style: italic;
+  font-size: 17px;
+  line-height: 1.4;
+  color: #1e2410;
+  transition: transform 420ms cubic-bezier(0.34, 1.4, 0.64, 1);
+}
+.bubble:active {
+  transform: scale(0.98);
+  transition-duration: 90ms;
+}
+.inStep {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.eyebrow {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: #5f6352;
+}
+.ingRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  padding: 10px 0;
+  border-bottom: 1px solid #efefe6;
+}
+.ingRow:last-child {
+  border-bottom: 0;
+}
+.ingWords {
+  flex: 1;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #1e2410;
+}
+.ingAmt {
+  flex-shrink: 1;
+  max-width: 42%;
+  text-align: right;
+  font-size: 14px;
+  color: #5f6352;
+}
+.look {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: #e6ebcf;
+  color: #34430c;
+}
+.look svg {
+  flex: none;
+}
+.lookText {
+  flex: 1;
+  margin: 0;
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.35;
+}
+.caps {
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+.special {
+  padding: 16px;
+  border-radius: 16px;
+  background: #fff1c7;
+  color: #5a3a22;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.calloutHead {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.sun {
+  flex: none;
+  color: #febe29;
+}
+.specialText {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.35;
+}
+.specialWhy {
+  margin: 0;
+  font-size: 15px;
+  line-height: 1.45;
+}
+.story {
+  padding: 16px;
+  border-radius: 16px;
+  background: #ece6f2;
+  color: #3f3558;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.storyHead {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.storyTitle {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.3;
+}
+.storyText {
+  margin: 0;
+  font-family: var(--ff-display);
+  font-style: italic;
+  font-size: 16px;
+  line-height: 1.45;
+}
+.storyMore {
+  align-self: flex-start;
+  height: 32px;
+  margin-top: -4px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #3f3558;
+}
+.storyHear {
+  align-self: flex-start;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 14px;
+  font-weight: 700;
+  color: #3f3558;
+}
+.ask {
+  align-self: flex-start;
+  height: 44px;
+  margin: -6px 0 -12px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #4c5a10;
+}
+
+/* ---------- "All steps" sheet ---------- */
+.stepsList {
+  position: relative;
+  max-height: min(560px, 62svh);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  scrollbar-width: none;
+}
+.stepsList::-webkit-scrollbar {
+  display: none;
+}
+.stepRow {
+  min-height: 60px;
+  padding: 10px 12px;
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  text-align: left;
+}
+.stepRow[data-now] {
+  background: #e6ebcf;
+}
+.stepCircle {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #efefe6;
+  color: #5f6352;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 15px;
+  font-weight: 700;
+}
+.stepRow[data-now] .stepCircle,
+.stepRow[data-done] .stepCircle {
+  background: #5b6f00;
+  color: #fffdf7;
+}
+.stepTitle {
+  flex: 1;
+  min-width: 0;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #1e2410;
+}
+.stepRow[data-now] .stepTitle {
+  font-weight: 700;
+}
+.stepRow[data-done] .stepTitle {
+  color: #5f6352;
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .full,
+  .compact {
+    animation: none;
+  }
+}

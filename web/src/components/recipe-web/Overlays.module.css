@@ -1,0 +1,152 @@
+/* Overlays live in a fixed layer the width of the phone column, so they sit over the column on
+   desktop exactly as they do full-bleed on a phone. */
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+}
+.frame {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  height: 100%;
+}
+.catcher {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+}
+
+/* ---------- Get the app popover (Spotify web) ---------- */
+.pop {
+  position: absolute;
+  left: 8px;
+  right: 8px;
+  padding: 20px 20px 16px;
+  border-radius: 24px;
+  background: #5b6f00;
+  color: #fffdf7;
+  box-shadow: 0 18px 40px rgba(30, 36, 16, 0.28);
+  pointer-events: auto;
+}
+.pointer {
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  background: #5b6f00;
+  border-radius: 3px;
+  transform: rotate(45deg);
+  top: -7px;
+}
+.pointer[data-above] {
+  top: auto;
+  bottom: -7px;
+}
+.popTitle {
+  margin: 0;
+  font-family: var(--ff-display);
+  font-weight: 500;
+  font-size: 22px;
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: #fffdf7;
+}
+.popLine {
+  margin: 8px 0 0;
+  font-size: 16px;
+  line-height: 1.45;
+  color: rgba(255, 253, 247, 0.86);
+}
+.popActions {
+  margin-top: 16px;
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px;
+}
+.notNow {
+  height: 48px;
+  padding: 0 16px;
+  border-radius: 999px;
+  color: #fffdf7;
+  font-size: 16px;
+  font-weight: 700;
+}
+.getAppPill {
+  height: 52px;
+  padding: 0 26px;
+  border-radius: 999px;
+  background: #fffdf7;
+  color: #1e2410;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+/* ---------- bottom sheet (motion spec 4) ---------- */
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(30, 36, 16, 0.35);
+  -webkit-backdrop-filter: blur(6px);
+  backdrop-filter: blur(6px);
+  pointer-events: auto;
+}
+.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: calc(100% - 24px);
+  overflow-y: auto;
+  border-radius: 32px 32px 0 0;
+  background: #fffdf7;
+  padding: 12px 24px calc(28px + env(safe-area-inset-bottom));
+  box-shadow: 0 -24px 60px rgba(20, 22, 12, 0.18);
+  pointer-events: auto;
+}
+.grabber {
+  display: block;
+  width: 36px;
+  height: 5px;
+  margin: 0 auto;
+  border-radius: 3px;
+  background: rgba(30, 36, 16, 0.18);
+}
+.close {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: #f7f7f2;
+  color: #1e2410;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+/* the app hand-off (GetAppSheet): who's asking, one line, then Get the app / Open homecookd */
+.handoff {
+  padding-top: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.sheetTitle {
+  margin: 4px 0 4px;
+  padding-right: 44px; /* clear of the close button */
+  text-wrap: balance;
+  font-family: var(--ff-display);
+  font-weight: 500;
+  font-size: 28px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: #1e2410;
+}
+.sheetTitle:focus {
+  outline: none;
+}

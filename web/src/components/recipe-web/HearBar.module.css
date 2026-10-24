@@ -1,0 +1,121 @@
+/* The app's HearCard (app/src/components/media/HearCard.tsx, ProgressRow.tsx): peach #F9E3CF,
+   radius 28, padding 20, gap 16. */
+.card {
+  min-height: 200px;
+  padding: 20px;
+  border-radius: 28px;
+  background: #f9e3cf;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.listening {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.dot {
+  flex: none;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #5b6f00;
+  opacity: 0.35;
+  transition: opacity 200ms ease;
+}
+.dot[data-on] {
+  opacity: 1;
+  animation: pulse 1800ms ease-in-out infinite;
+}
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+.label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+  font-weight: 600;
+  color: #6e4a33;
+}
+.btn {
+  flex: none;
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  background: #1e2410;
+  color: #fffdf7;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.spin {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(255, 253, 247, 0.35);
+  border-top-color: #fffdf7;
+  animation: spin 800ms linear infinite;
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+.line {
+  margin: 0;
+  font-family: var(--ff-display);
+  font-style: italic;
+  font-size: 24px;
+  line-height: 1.25;
+  color: #1e2410;
+}
+.progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.time {
+  min-width: 34px;
+  font-size: 13px;
+  color: #6e4a33;
+  font-variant-numeric: tabular-nums;
+}
+.time:last-child {
+  text-align: right;
+}
+.track {
+  flex: 1;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(110, 74, 51, 0.18);
+  overflow: hidden;
+}
+.track span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: #6e4a33;
+  transform-origin: 0 50%;
+}
+.error {
+  margin: 0;
+  font-size: 13px;
+  color: #9a4f47;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dot[data-on] {
+    animation: none;
+  }
+}

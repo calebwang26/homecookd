@@ -1,0 +1,130 @@
+/* The app's recipe screen (bible Kid-Recipe, 390 frame): hero 380 tall with the sheet overlapping
+   from y=336 (44 px), sheet radius 32, padding 28 24, gap 20. On the web the hero starts at the top
+   of the column and runs under the slim 52 px frosted top bar (which takes the status bar's place),
+   so the photo shows the app's 336 px; its round buttons sit 12 px under the bar. */
+.wrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.hero {
+  position: relative;
+  height: 380px;
+  overflow: hidden;
+  background: #efefe6;
+  transform-origin: 50% 0%;
+}
+.heroImg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+/* No photo: the app's peach with the pot. */
+.heroEmpty {
+  position: absolute;
+  inset: 0;
+  background: #f9e3cf;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Share + heart: the app's 48 px glass IconButtons (rgba(255,253,247,0.92), ink glyph, no shadow). */
+.float {
+  position: absolute;
+  top: 64px;
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 253, 247, 0.92);
+  color: #1e2410;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.share {
+  right: calc(24px + 48px + 12px);
+}
+.heart {
+  right: 24px;
+}
+
+/* "<Sender> sent you this recipe": the bible's glass chip on a photo (Kid-Home "Just in from Mom":
+   40 tall, 0.88 cream, 14/600 ink, 32 px face), resting on the photo just above the sheet. */
+.sent {
+  position: absolute;
+  left: 24px;
+  bottom: calc(44px + 16px);
+  max-width: calc(100% - 48px);
+  height: 40px;
+  padding: 0 14px 0 4px;
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.88);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: #1e2410;
+  font-size: 14px;
+  font-weight: 600;
+}
+.sentText {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.sentText b {
+  font-weight: 700;
+}
+
+.sheet {
+  position: relative;
+  margin-top: -44px;
+  border-radius: 32px 32px 0 0;
+  background: #f7f7f2;
+  padding: 28px 24px 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.titleBlock {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.title {
+  margin: 0;
+  font-family: var(--ff-display);
+  font-weight: 500;
+  font-size: 30px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  color: #1e2410;
+}
+.meta {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  line-height: 1.35;
+  color: #5f6352;
+}
+.source {
+  margin: -4px 0 0;
+  font-size: 14px;
+  color: #5f6352;
+}
+
+.quote {
+  margin: 0;
+  padding: 16px 20px;
+  border-radius: 20px;
+  background: #f9e3cf;
+  font-family: var(--ff-display);
+  font-style: italic;
+  font-size: 17px;
+  line-height: 1.4;
+  color: #1e2410;
+}

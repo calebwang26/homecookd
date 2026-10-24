@@ -1,0 +1,276 @@
+/* The app's BottomSheet + MediaSheet / ClipVideo (app/src/components/ui/BottomSheet.tsx,
+   components/media/*), on the web's phone column. */
+
+/* ---------- sheet ---------- */
+.layer {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  display: flex;
+  justify-content: center;
+  pointer-events: none;
+  /* Portalled out of the page column: the column's type settings again. */
+  font-family: var(--ff-text);
+  font-size: 16px;
+  line-height: 1.3;
+  color: #2d3222;
+  font-variation-settings: 'SOFT' 0, 'WONK' 0;
+  -webkit-tap-highlight-color: transparent;
+}
+.frame {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  height: 100%;
+}
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(30, 36, 16, 0.35);
+  -webkit-backdrop-filter: blur(10px);
+  backdrop-filter: blur(10px);
+  pointer-events: auto;
+}
+.sheet {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  max-height: 92%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  border-radius: 32px 32px 0 0;
+  background: #fffdf7;
+  box-shadow: 0 -10px 30px rgba(30, 36, 16, 0.1);
+  padding-bottom: calc(max(env(safe-area-inset-bottom), 16px) + 8px);
+  pointer-events: auto;
+  outline: none;
+}
+.grabber {
+  display: block;
+  width: 36px;
+  height: 5px;
+  margin: 8px auto 11px;
+  border-radius: 2.5px;
+  background: rgba(30, 36, 16, 0.18);
+}
+.close {
+  position: absolute;
+  right: 16px;
+  top: 16px;
+  z-index: 2;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: #efefe6;
+  color: #1e2410;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+.content {
+  padding: 8px 24px 0;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.head {
+  padding-right: 48px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.title {
+  margin: 0;
+  font-family: var(--ff-display);
+  font-weight: 500;
+  font-size: 24px;
+  line-height: 1.2;
+  color: #1e2410;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+.subtitle {
+  margin: 0;
+  font-size: 14px;
+  color: #5f6352;
+}
+
+/* ---------- clip box (ClipVideo) ---------- */
+.clip {
+  position: relative;
+  width: 100%;
+  overflow: hidden;
+  border-radius: 28px;
+  background: #1e2410;
+  isolation: isolate;
+  flex: none;
+}
+.clip[data-fit] {
+  max-height: 460px;
+}
+.video,
+.poster {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.clip[data-fit] .video {
+  object-fit: contain;
+}
+.video {
+  opacity: 0;
+  transition: opacity 200ms ease;
+}
+.video[data-show] {
+  opacity: 1;
+}
+.tap {
+  position: absolute;
+  inset: 0;
+  z-index: 1;
+  border-radius: inherit;
+}
+.tap:focus-visible {
+  outline: 3px solid #788c15;
+  outline-offset: -3px;
+}
+.center {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+}
+.play {
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  background: rgba(255, 253, 247, 0.92);
+  color: #1e2410;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: fade 150ms ease both;
+}
+.spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 2.5px solid rgba(30, 36, 16, 0.18);
+  border-top-color: #1e2410;
+  animation: spin 800ms linear infinite;
+}
+.note {
+  max-width: calc(100% - 32px);
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.88);
+  color: #1e2410;
+  font-size: 14px;
+  font-weight: 600;
+  text-align: center;
+}
+.again {
+  height: 48px;
+  padding: 0 20px;
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.94);
+  color: #1e2410;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  font-weight: 700;
+  pointer-events: auto;
+  animation: fade 200ms ease both;
+}
+.pauseHint {
+  position: absolute;
+  right: 14px;
+  top: 14px;
+  z-index: 2;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: rgba(255, 253, 247, 0.88);
+  color: #1e2410;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  pointer-events: none;
+  animation: fade 300ms ease both;
+}
+.track {
+  position: absolute;
+  left: 16px;
+  right: 16px;
+  bottom: 12px;
+  z-index: 2;
+  height: 4px;
+  border-radius: 2px;
+  background: rgba(255, 253, 247, 0.35);
+  overflow: hidden;
+  pointer-events: none;
+}
+.track span {
+  display: block;
+  height: 100%;
+  border-radius: 2px;
+  background: #fffdf7;
+  transform-origin: 0 50%;
+}
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .play,
+  .again,
+  .pauseHint {
+    animation: none;
+  }
+}
+
+/* ---------- Watch sheet ---------- */
+.whole {
+  display: block;
+  width: 100%;
+  max-height: 460px;
+  border-radius: 28px;
+  background: #1e2410;
+  object-fit: contain;
+}
+.noVideo {
+  padding: 36px 20px;
+  border-radius: 28px;
+  background: #efefe6;
+  text-align: center;
+  font-family: var(--ff-display);
+  font-weight: 500;
+  font-size: 20px;
+  color: #1e2410;
+}
+.quote {
+  margin: 0;
+  padding: 18px;
+  border-radius: 20px;
+  background: #f9e3cf;
+  font-family: var(--ff-display);
+  font-style: italic;
+  font-size: 17px;
+  line-height: 1.4;
+  color: #1e2410;
+}
