@@ -2,6 +2,7 @@
 import assert from "node:assert/strict";
 import { mock } from "node:test";
 import WebSocket from "ws";
+import type { Voice } from "../src/sonic.js";
 
 /** Every line homie says is this long, in the fakes' Sonic (24 kHz s16le = 48,000 bytes a second). */
 export const AUDIO_S = 5;
@@ -46,11 +47,12 @@ export class FakeSocket {
   }
 }
 
-/** Sonic, faked: AUDIO_S seconds of silence 100 ms after the call; an abort ends it early. */
-export function fakeSpeak(spoken: string[]) {
-  return (text: string, _format: unknown, signal: AbortSignal, onChunk: (audio: Buffer) => void) =>
+/** Sonic, faked: AUDIO_S seconds of silence 100 ms after the call; an abort ends it early. `voices` gets each call's voice. */
+export function fakeSpeak(spoken: string[], voices: Voice[] = []) {
+  return (text: string, _format: unknown, signal: AbortSignal, onChunk: (audio: Buffer) => void, voice: Voice = {}) =>
     new Promise<void>((resolve) => {
       spoken.push(text);
+      voices.push(voice);
       const timer = setTimeout(() => (onChunk(Buffer.alloc(AUDIO_S * 48_000)), resolve()), 100);
       signal.addEventListener("abort", () => (clearTimeout(timer), resolve()), { once: true });
     });

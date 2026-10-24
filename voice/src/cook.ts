@@ -220,7 +220,7 @@ export class Cooking {
     await this.played(true);
     if (this.closed || this.reading || this.declined) return;
     this.offer = { read: true };
-    await this.say(`Want me to read ${this.cook}'s recipe out loud? Say yes or no.`, "offer");
+    await this.say(`Want me to read ${this.cook}'s recipe out loud? Just say yes or no.`, "offer");
   }
 
   /**
@@ -314,7 +314,7 @@ export class Cooking {
     } catch (err) {
       console.error("turn failed:", (err as Error).message);
       this.send({ type: "error", message: "turn failed" });
-      await this.say("Sorry, can you say that again?", "reply").catch(() => {});
+      await this.say("Sorry, I missed that. Can you say it again?", "reply").catch(() => {});
     }
   }
 
@@ -374,7 +374,7 @@ export class Cooking {
     if (Date.now() - this.lastActivity < QUIET_NUDGE_MS || this.quietNudged.has(this.step)) return;
     this.quietNudged.add(this.step);
     this.touch();
-    await this.say(`Still on step ${this.step}? Say "next" when you're ready.`, "nudge");
+    await this.say(`Still on step ${this.step}? No rush. Say "next" when you're ready.`, "nudge");
   }
 
   private touch() {
@@ -396,7 +396,7 @@ export class Cooking {
     if (this.closed) return;
     this.send({ type: "timer_done", id, label });
     this.touch();
-    await this.say(label === "timer" ? "Your timer is done." : `The ${label} timer is done.`, "timer");
+    await this.say(label === "timer" ? "Hey, your timer is done." : `Hey, the ${label} timer is done.`, "timer");
   }
 
   private actions: Actions = {
@@ -466,7 +466,7 @@ export class Cooking {
       const id = `timer-${++this.timerSeq}`;
       this.send({ type: "timer", id, seconds, label: name, endsAt: Date.now() + seconds * 1000 });
       this.timers.set(id, setTimeout(() => void this.timerDone(id, name), seconds * 1000));
-      await this.say(`Okay, ${duration(seconds)}${name === "timer" ? "" : ` for the ${name}`}.`, "reply");
+      await this.say(`Okay, ${duration(seconds)}${name === "timer" ? "" : ` for the ${name}`}. I'll tell you when it's done.`, "reply");
     },
     say: (text) => this.say(text, "reply"),
   };
@@ -502,7 +502,7 @@ export class Cooking {
           bytes += chunk.length;
           if (this.ws.readyState === WebSocket.OPEN) this.ws.send(chunk);
         },
-        { voice: env.homieVoice, language },
+        { voice: env.homieVoice, language, kind },
       );
     } catch (err) {
       if (!ctrl.signal.aborted) console.warn("sonic", (err as Error).message);

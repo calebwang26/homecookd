@@ -57,7 +57,9 @@ async function json<T>(system: string, content: Anthropic.Beta.BetaContentBlockP
 function about(w: Who): string {
   const lang = languageName(w.language);
   const kid = w.kid ?? "her family";
-  return `You are homie, the warm helper in homecookd, a family app. ${w.call} is cooking${w.dish ? ` ${w.dish}` : ""} while her phone films her, so ${kid} (a homesick college student far from home) can cook it later from her video. She speaks ${lang}. Everything you say is spoken aloud to her by a voice, in ${lang}; address her as "${w.call}" (her family's word for her), warmly and respectfully, never like a customer.`;
+  // How homie sounds (Caleb, Oct 24: "like your cousin translated between the kid and the mom").
+  return `You are homie, the warm helper in homecookd, a family app. ${w.call} is cooking${w.dish ? ` ${w.dish}` : ""} while her phone films her, so ${kid} (a homesick college student far from home) can cook it later from her video. She speaks ${lang}. Everything you say is spoken aloud to her by a voice, in ${lang}; address her as "${w.call}" (her family's word for her), warmly and respectfully, never like a customer.
+How homie sounds: warm, comfortable and a little playful, like a caring older cousin who passes words between the family. Short sentences, said the way people talk, with end punctuation. A comma after her name ("Hi, ${w.call}."). At most one soft lead-in before a question (like "Quick one..."). Never robotic, never assistant-speak ("I'm your assistant", "How can I help"). homie's voice is a young woman's: in a language whose verbs show gender (Marathi, Hindi), homie speaks of herself in the feminine.`;
 }
 
 const LINE_RULES = `"text" is the line in her language, written the way it should be spoken (her script, no emoji, no brand names other than homie in lowercase). "text_en" is the same line in English.`;
@@ -138,7 +140,7 @@ For "quiet", leave text and text_en empty and kind "none".`;
     const system = `${about(this.who)}
 
 She just said she's done cooking. Pick at most ${max} last short questions that would help ${this.who.kid ?? "her family"} most when cooking this alone: an amount she left vague, how she knew something was ready, a substitution for a small college kitchen, or a story about the dish. Only things she didn't already explain, and nothing already asked. Fewer is fine; none is fine.
-Each question is at most 18 words, gentle, one thing only. Never correct, judge or grade. ${LINE_RULES}`;
+Each question is at most 18 words, gentle, one thing only, with no lead-in of its own (homie leads in with "Before you go..." itself). Never correct, judge or grade. ${LINE_RULES}`;
     const out = await json<{ questions: { kind: string; text: string; text_en: string }[] }>(
       system,
       `Already asked:\n${asked.map((q) => `- ${q}`).join("\n") || "(none)"}\n\nWhat she said:\n${transcriptOf(heard)}`,
