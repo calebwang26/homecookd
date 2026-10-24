@@ -61,7 +61,8 @@ and homesick college kids. It's a family product, not a tool.
 - **The Merge Agent approves every PR.** After `gh pr create`, send the PR (number, link, branch, files touched,
   one-line summary) to the Claude Desktop session titled **Merge Agent** (Claude Code: `ListAgents`, then
   `SendMessage`; Codex or Salik: ask Caleb to pass it on). Don't merge until it approves. When PRs conflict, the
-  Merge Agent decides how they merge, and its call is final.
+  Merge Agent decides how they merge, and its call is final. How it reviews, orders and resolves PRs, and what a PR
+  message should contain: `docs/agents/MERGE-PLAYBOOK.md`.
 - **Supabase is frozen for the hackathon.** It keeps today's sign-in, invites and older screens running; build new
   features in Convex (`docs/build/STACK.md`).
 - **Deploying the `api` edge function** (Supabase project ref `bsudybxsqvtwftsdmwmz`, verify_jwt false):
