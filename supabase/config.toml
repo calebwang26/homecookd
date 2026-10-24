@@ -1,6 +1,6 @@
 # Only the bits the repo relies on. The `api` function does its own auth with the family code
 # (sha256 lookup, see supabase/functions/api/index.ts), so the gateway must not demand a JWT.
-project_id = "qeiednrjkiyzbolkepbk"
+project_id = "bsudybxsqvtwftsdmwmz"
 
 [functions.api]
 verify_jwt = false

@@ -20,7 +20,7 @@ const repo = join(appDir, '..');
 if (!process.env.EXPO_PUBLIC_API_URL) {
   const env = existsSync(join(appDir, '.env')) ? readFileSync(join(appDir, '.env'), 'utf8') : '';
   const m = /^EXPO_PUBLIC_API_URL=(.+)$/m.exec(env);
-  process.env.EXPO_PUBLIC_API_URL = (m?.[1] ?? 'https://qeiednrjkiyzbolkepbk.supabase.co/functions/v1/api').trim();
+  process.env.EXPO_PUBLIC_API_URL = (m?.[1] ?? 'https://bsudybxsqvtwftsdmwmz.supabase.co/functions/v1/api').trim();
 }
 const codeFile = join(repo, 'docs/build/.test-family-code');
 if (!existsSync(codeFile)) {

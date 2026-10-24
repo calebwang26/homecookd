@@ -17,4 +17,4 @@ On 2026-10-17 eight synthetic personas (Linda, Priya, Robert, Jake, Dad, Leo, Mo
 
 **How to apply:** when he says "build the approved items", read `decisions`, then ship each approved item as its own small PR (merge main first). Honor his notes, and treat "review" items as questions to ask him first. The App UI session owns the home and profile screens, so tell it what changed.
 
-Related: [[no-testflight-yet]], [[git-pr-workflow]]
+Related: [[testflight-live]], [[git-pr-workflow]]

@@ -269,7 +269,7 @@ t("migrations: the cron file leaves one secret & one of each job, and only its o
   await db.query(`select public.run_cron_hourly('2026-10-25 17:10:00-07')`);
   const [call] = await one<{ url: string; body: Record<string, string>; headers: Record<string, string>; timeout_ms: number }>(db,
     `select url, body, headers, timeout_ms from net.calls order by id desc limit 1`);
-  assertEquals(call.url, "https://qeiednrjkiyzbolkepbk.supabase.co/functions/v1/api/cron/hourly");
+  assertEquals(call.url, "https://bsudybxsqvtwftsdmwmz.supabase.co/functions/v1/api/cron/hourly");
   assertEquals([call.headers["x-cron-secret"] === secret, call.timeout_ms, Date.parse(call.body.now)],
     [true, 60000, Date.parse("2026-10-26T00:10:00Z")]);
 
