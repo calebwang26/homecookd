@@ -213,3 +213,17 @@ Before starting work, compare the last commit here with `git log origin/main` to
     convex 4/4 glasses tests. AGENTS.md lists `glasses/` and its two test commands.
   - **Open:** as above (VM not created, real firmware not tried). `npx convex codegen` after merge, so the
     hand-edited `api.d.ts` matches the generator; tell Track 0 about the STACK.md `/glasses/*` changes.
+- Oct 24 · #34 · Claude · Follow-up to #31: the kid's library no longer shows a family dish's stories and tips to
+  people the cook hasn't shared them with. The library loads the full `recipe.json` from `recipeJsonUrl`, and Convex
+  holds back `memories` only in its own `recipes.list`.
+  - **How:** `familyLibrary.ts` reads `memoriesOptIn` and `memories`. A dish is shared when she opted in, or when
+    the row came with memories, which Convex sends only to the cook. For any other listed dish, `lib/recipes.ts`
+    strips the stories, specials, step tips, `story_ids`/`special_ids` and the intro before caching, whichever copy
+    loads (bundled tips and the offline fallback too). The flag is in the change signature and a flip drops the
+    cached copy, so her later yes reloads the stories. `useRecipe`/`useRecipes` drop them from an open screen at
+    once. The library key is now family + person, so on a shared or lent phone the next person waits for their own
+    rows.
+  - **Tests:** `test-library.mjs` 24 pass (8 new), `test-shorten.mjs`, tsc and lint pass. On Expo web, a withheld
+    row took the tip and stories off an open cook screen and the yes brought them back. `test-profile-navigation`
+    passes.
+  - **Open:** not checked against live Convex on a phone (needs a real kid session).
