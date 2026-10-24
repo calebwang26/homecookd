@@ -18,6 +18,13 @@
 //
 // While Convex is stubbed (convex.ts) the feed is empty and the writes do nothing. The invite link
 // can't be made up, so it fails there. Opening an invite (POST /invite/open) is in invite.ts.
+//
+// The functions added on Oct 24 (shareRequests.*, community.mySwaps / requestSwap / cookTogether /
+// respondSwap, dinners.inviteLink) follow convex.ts's rule for that day's calls, so an app build that
+// reaches phones before they're deployed doesn't move every Convex call to the stub: the reads and the
+// invite link are "soft" (their stub, for that call only: no dishes, no swaps, "Invite links need the
+// homecookd server"), and the asks are "strict" (they throw and the toast says so, instead of
+// pretending homie asked).
 import { useEffect, useState } from 'react';
 
 import { call, token, useLive } from './convex';
@@ -150,32 +157,34 @@ export async function setLocation(lat: number, lng: number, campus?: string): Pr
 
 /** My family's ready dishes (null until it answers). */
 export function useFamilyDishes(enabled = true): FamilyDish[] | null {
-  return useLive<FamilyDish[] | null>('shareRequests:familyDishes', null, stubDishes, enabled);
+  return useLive<FamilyDish[] | null>('shareRequests:familyDishes', null, stubDishes, enabled, {}, true);
 }
 
 /** "shared": it's on the map now (mine, or it already was); "asked": homie asked its cook. */
 export async function askToShare(recipeId: string): Promise<'shared' | 'asked'> {
   const sessionToken = await token();
-  return call('mutation', 'shareRequests:ask', { sessionToken, recipeId }, () => 'asked' as const);
+  return call('mutation', 'shareRequests:ask', { sessionToken, recipeId }, () => 'asked' as const, { strict: true });
 }
 
 export function useMySwaps(enabled = true): Swap[] {
-  return useLive<Swap[]>('community:mySwaps', [], stubSwaps, enabled);
+  return useLive<Swap[]>('community:mySwaps', [], stubSwaps, enabled, {}, true);
 }
 
 export async function requestSwap(recipeId: string, myRecipeId?: string): Promise<string> {
   const sessionToken = await token();
-  return call('mutation', 'community:requestSwap', { sessionToken, recipeId, ...(myRecipeId ? { myRecipeId } : {}) }, () => `stub-swap-${Date.now()}`);
+  return call('mutation', 'community:requestSwap', { sessionToken, recipeId, ...(myRecipeId ? { myRecipeId } : {}) }, () => `stub-swap-${Date.now()}`, {
+    strict: true,
+  });
 }
 
 export async function cookTogether(recipeId: string): Promise<string> {
   const sessionToken = await token();
-  return call('mutation', 'community:cookTogether', { sessionToken, recipeId }, () => `stub-cook-${Date.now()}`);
+  return call('mutation', 'community:cookTogether', { sessionToken, recipeId }, () => `stub-cook-${Date.now()}`, { strict: true });
 }
 
 export async function respondSwap(swapId: string, accept: boolean): Promise<void> {
   const sessionToken = await token();
-  await call('mutation', 'community:respondSwap', { sessionToken, swapId, accept }, () => null);
+  await call('mutation', 'community:respondSwap', { sessionToken, swapId, accept }, () => null, { strict: true });
 }
 
 export type NewDinner = { recipeId: string; startsAt: number; placeKind?: PlaceKind; placeName: string; address: string; seats: number };
@@ -208,7 +217,13 @@ export type InviteLink = { token: string; url: string };
 /** The dinner's one invite link ("https://homecookd.app/d?t=…"), the same every time. */
 export async function inviteLink(dinnerId: string): Promise<InviteLink> {
   const sessionToken = await token();
-  return call<InviteLink>('action', 'dinners:inviteLink', { sessionToken, dinnerId }, () => {
-    throw new Error('Invite links need the homecookd server. Try again once it’s connected.');
-  });
+  return call<InviteLink>(
+    'action',
+    'dinners:inviteLink',
+    { sessionToken, dinnerId },
+    () => {
+      throw new Error('Invite links need the homecookd server. Try again once it’s connected.');
+    },
+    { soft: true },
+  );
 }

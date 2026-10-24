@@ -15,8 +15,8 @@ import s from './DinnerInvitePage.module.css';
 
 const DAY = 86_400_000;
 const FIXTURES: Record<string, () => Opened> = {
-  going: () => ({ ok: true, dinner: { dish: 'Jollof Rice', hostFirstName: 'Mom', startsAt: nextFriday7pm() } }),
-  past: () => ({ ok: true, dinner: { dish: 'Jollof Rice', hostFirstName: 'Mom', startsAt: Date.now() - DAY } }),
+  going: () => ({ ok: true, dinner: { dish: 'Jollof Rice', hostName: 'Mom', startsAt: nextFriday7pm() } }),
+  past: () => ({ ok: true, dinner: { dish: 'Jollof Rice', hostName: 'Mom', startsAt: Date.now() - DAY } }),
   gone: () => ({ ok: false, why: 'gone' }),
   offline: () => ({ ok: false, why: 'offline' }),
 };
@@ -83,9 +83,9 @@ export function DinnerInvitePage() {
   );
 }
 
-function Going({ dish, hostFirstName, startsAt, now }: { dish: string; hostFirstName: string; startsAt: number; now: number }) {
+function Going({ dish, hostName, startsAt, now }: { dish: string; hostName: string; startsAt: number; now: number }) {
   const ahead = startsAt > now;
-  const host = hostFirstName.trim();
+  const host = hostName.trim();
   return (
     <section className={s.hero} aria-labelledby="dinner-title">
       <div className={s.glow}>

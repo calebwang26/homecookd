@@ -1,6 +1,6 @@
 // "Invite friends" (dinners.inviteLink) and POST /invite/open (lib/inviteRoutes.ts): one stable link per
 // dinner for the host and the guests they said yes to; whoever opens it counts once per phone or browser
-// in "X going" and sees only the dish, the host's first name and when.
+// in "X going" and sees only the dish, the host's name and when.
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { api } from "./_generated/api";
 import { recipe, type Who, world } from "./community.helpers";
@@ -51,9 +51,9 @@ test("one stable, unguessable link per dinner, for the host and the guests they 
   await expect(link(shreya)).rejects.toThrow("isn't happening anymore");
 });
 
-test("opening the link counts each phone once and tells it only the dish, the host's first name and when", async () => {
+test("opening the link counts each phone once and tells it only the dish, the host's name and when", async () => {
   const { t, shreya, serene, dinnerId, link, get, open } = await dinnerWorld();
-  await t.run((ctx) => ctx.db.patch("people", shreya.personId, { name: "Shreya Pawar" }));
+  await t.run((ctx) => ctx.db.patch("people", shreya.personId, { name: "Grandma Rajani" }));
   const { token } = await link(shreya);
   const startsAt = (await get(shreya)).startsAt;
   expect((await get(shreya)).inviteOpens).toBe(0);
@@ -62,9 +62,11 @@ test("opening the link counts each phone once and tells it only the dish, the ho
   expect(res.status).toBe(200);
   expect(res.headers.get("Access-Control-Allow-Origin")).toBe("https://homecookd.app");
   const body = await res.json();
-  expect(body).toEqual({ dish: "Kanda Poha", hostFirstName: "Shreya", startsAt });
+  // The same name the invite text and the dinner page's "Hosted by" pill use: never cut to "Grandma".
+  expect(body).toEqual({ dish: "Kanda Poha", hostName: "Grandma Rajani", startsAt });
+  expect(body.hostName).toBe((await get(shreya)).hostName);
   const said = JSON.stringify(body);
-  for (const word of ["Baker", "Memorial", "Pawar", dinnerId, shreya.personId, token]) expect(said).not.toContain(word);
+  for (const word of ["Baker", "Memorial", dinnerId, shreya.personId, token]) expect(said).not.toContain(word);
   expect((await get(shreya)).inviteOpens).toBe(1);
 
   await open({ token, deviceId: device(1) }); // the same phone again (the app's fetch: no Origin)

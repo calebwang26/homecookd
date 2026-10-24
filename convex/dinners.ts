@@ -3,7 +3,7 @@
 // stays private: only the host and the guests they accepted ever see it.
 // "Invite friends": the host and accepted guests share one link per dinner (inviteLink); whoever opens
 // it (homecookd.app/d or the app's /d screen, through POST /invite/open in lib/inviteRoutes.ts) sees
-// only the dish, the host's first name and when, and counts once per phone or browser in "X going".
+// only the dish, the host's name and when, and counts once per phone or browser in "X going".
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
@@ -267,19 +267,23 @@ export const inviteToken = internalMutation({
 /**
  * Someone opened an invite link (POST /invite/open). Counts this phone or browser once per dinner, while
  * the dinner is still ahead, up to MAX_OPENS and OPEN_BURST per OPEN_BURST_MS. The reply is all the
- * opener ever sees: the dish, the host's first name and when. Never the place, the address or any id.
+ * opener ever sees: the dish, the host's name and when. Never the place, the address or any id. The name
+ * is the one the invite text ("Come to Kanda Poha Night with Grandma Rajani") and the dinner page's
+ * "Hosted by" pill show, so /d says the same "Hosted by Grandma Rajani".
+ * TODO(caleb): this is the host's whole display name; if families put surnames in it, decide whether a
+ * link anyone can forward should show less.
  */
 export const openInvite = internalMutation({
   args: { token: v.string(), deviceId: v.string() },
-  returns: v.union(v.null(), v.object({ dish: v.string(), hostFirstName: v.string(), startsAt: v.number() })),
+  returns: v.union(v.null(), v.object({ dish: v.string(), hostName: v.string(), startsAt: v.number() })),
   handler: async (ctx, { token, deviceId }) => {
     const d = await ctx.db
       .query("dinners")
       .withIndex("by_inviteToken", (q) => q.eq("inviteToken", token))
       .unique();
     if (!d || d.status === "cancelled") return null;
-    const hostName = (await ctx.db.get("people", d.hostId))?.name ?? "";
-    const reply = { dish: d.dish, hostFirstName: hostName.trim().split(/\s+/)[0] ?? "", startsAt: d.startsAt };
+    const hostName = ((await ctx.db.get("people", d.hostId))?.name ?? "").trim();
+    const reply = { dish: d.dish, hostName, startsAt: d.startsAt };
     const now = Date.now();
     if (d.startsAt <= now) return reply;
     const opens = await inviteOpens(ctx, d._id);

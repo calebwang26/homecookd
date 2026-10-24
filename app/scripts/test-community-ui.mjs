@@ -305,7 +305,7 @@ test('the dinner page: its title, who is going, and its one button', () => {
 const feedDinner = (over = {}) => ({ dinnerId: 'd1', startsAt: at(10, 30, 19), seatsLeft: 2, hostName: 'Mama Ngozi', distanceLabel: 'Under a mile', ...over });
 const rowsOf = (rows) => rows.map((r) => [r.title, r.line, r.primary, !!r.disabled]);
 
-test('Connect: join her dinner (when there is one), swap recipes, cook together; the first one green', () => {
+test('Connect: join her dinner (when there is one), swap recipes, cook together; the first one you can press green', () => {
   const recipe = { distanceLabel: 'Under a mile', dish: 'Jollof Rice', cookName: 'Mama Ngozi', familyName: 'The Okafor family' };
   const base = { recipe, dinner: feedDinner(), myRequest: null, swap: null, cook: null, now: NOW };
   assert.equal(C.dishTitle('Mama Ngozi', 'Jollof Rice'), 'Mama Ngozi’s Jollof Rice');
@@ -340,6 +340,15 @@ test('Connect: join her dinner (when there is one), swap recipes, cook together;
   assert.deepEqual(swapRow('pending'), ['Swap recipes', 'Asked · waiting', false, true]);
   assert.deepEqual(swapRow('accepted'), ['Swap recipes', 'You’re swapping recipes', false, false]);
   assert.deepEqual(swapRow('declined'), ['Swap recipes', 'They said not this time', false, true]);
+  // A row that only says how things stand is never the green button: the next one you can press is.
+  assert.deepEqual(rowsOf(C.connectRows({ ...base, dinner: null, swap: 'pending' })), [
+    ['Swap recipes', 'Asked · waiting', false, true],
+    ['Cook together', 'Ask Mama Ngozi to make it with you', true, false],
+  ]);
+  assert.deepEqual(rowsOf(C.connectRows({ ...base, dinner: null, swap: 'declined', cook: 'pending' })), [
+    ['Swap recipes', 'They said not this time', false, true],
+    ['Cook together', 'Asked · waiting', false, true],
+  ]);
 });
 
 const dish = (over = {}) => ({ recipeId: 'r1', dish: 'Kanda Poha', cookName: 'Grandma Rajani', mine: false, shared: false, asked: false, notNowAt: null, ...over });
@@ -353,16 +362,18 @@ test('Share your recipe: put it on the map (homie asks the cook first), host a d
     ],
   });
   const mapRow = (dishes) => rowsOf(C.shareChoices(dishes, NOW).rows)[0];
-  assert.deepEqual(mapRow([dish({ asked: true })]), ['Put it on the map', 'Asked Grandma Rajani', true, true]);
-  assert.deepEqual(mapRow([dish({ shared: true })]), ['Put it on the map', 'It’s on the map.', true, true]);
+  assert.deepEqual(mapRow([dish({ asked: true })]), ['Put it on the map', 'Asked Grandma Rajani', false, true]);
+  assert.deepEqual(mapRow([dish({ shared: true })]), ['Put it on the map', 'It’s on the map.', false, true]);
+  // The map row only says how things stand: "Host a dinner" is the green button.
+  assert.deepEqual(rowsOf(C.shareChoices([dish({ asked: true })], NOW).rows)[1], ['Host a dinner', 'Pick a time and place. Neighbors ask to join.', true, false]);
   assert.deepEqual(mapRow([dish({ mine: true })]), ['Put it on the map', 'Neighbors see the recipe text, one line you said and homie’s guess at where it’s from.', true, false]);
   assert.equal(C.shareChoices([dish({ mine: true })], NOW).title, 'Share your Kanda Poha');
-  assert.deepEqual(mapRow([]), ['Put it on the map', 'Your family hasn’t recorded a dish yet.', true, true]);
-  assert.deepEqual(mapRow(null), ['Put it on the map', 'One moment…', true, true]);
+  assert.deepEqual(mapRow([]), ['Put it on the map', 'Your family hasn’t recorded a dish yet.', false, true]);
+  assert.deepEqual(mapRow(null), ['Put it on the map', 'One moment…', false, true]);
   const two = [dish(), dish({ recipeId: 'r2', dish: 'Varan', cookName: 'Dad', shared: true })];
   assert.equal(C.shareChoices(two, NOW).title, 'Share your family’s dish');
   assert.deepEqual(mapRow(two), ['Put it on the map', 'Pick a dish. homie asks its cook first.', true, false]);
-  assert.deepEqual(mapRow(two.map((d) => ({ ...d, shared: true }))), ['Put it on the map', 'Your family’s dishes are on the map.', true, true]);
+  assert.deepEqual(mapRow(two.map((d) => ({ ...d, shared: true }))), ['Put it on the map', 'Your family’s dishes are on the map.', false, true]);
   assert.deepEqual(rowsOf(C.dishRows(two, NOW)), [
     ['Kanda Poha', 'homie asks Grandma Rajani first. The video stays private.', false, false],
     ['Varan', 'It’s on the map.', false, true],
@@ -374,7 +385,10 @@ test('after she says not now, the kid sees it and can’t ask again for a day', 
   const no = dish({ notNowAt: hourAgo });
   assert.equal(C.ASK_AGAIN_MS, 24 * 3_600_000);
   assert.ok(C.saidNotNow(no, NOW));
-  assert.deepEqual(rowsOf(C.shareChoices([no], NOW).rows)[0], ['Put it on the map', 'Grandma Rajani said not now', true, true]);
+  assert.deepEqual(rowsOf(C.shareChoices([no], NOW).rows), [
+    ['Put it on the map', 'Grandma Rajani said not now', false, true],
+    ['Host a dinner', 'Pick a time and place. Neighbors ask to join.', true, false],
+  ]);
   assert.deepEqual(rowsOf(C.dishRows([no, dish({ recipeId: 'r2', dish: 'Varan', cookName: 'the cook', notNowAt: hourAgo })], NOW)), [
     ['Kanda Poha', 'Grandma Rajani said not now', false, true],
     ['Varan', 'The cook said not now', false, true],
@@ -448,10 +462,10 @@ test('Invite friends: the message, the Convex site, the link check and what the 
   assert.ok(V.isInviteToken('abcdefghijklmnopqrstuvwxyz0123456789ABCDEFG'));
   for (const bad of ['short', 'has spaces in it at all, nope', 'a/b/c/d/e/f/g/h/i/j/k/l', 12, null, 'x'.repeat(65)]) assert.ok(!V.isInviteToken(bad));
 
-  const reply = { dish: 'Jollof Rice', hostFirstName: 'Mom', startsAt: at(10, 30, 19) };
+  const reply = { dish: 'Jollof Rice', hostName: 'Mom', startsAt: at(10, 30, 19) };
   assert.deepEqual(V.parseOpened(reply), reply);
   assert.deepEqual(V.parseOpened({ ...reply, address: '362 Memorial Dr' }), reply); // only the three fields, ever
-  for (const bad of [null, 'x', { ...reply, dish: ' ' }, { ...reply, startsAt: 'Friday' }, { ...reply, hostFirstName: null }, { ...reply, startsAt: Infinity }]) {
+  for (const bad of [null, 'x', { ...reply, dish: ' ' }, { ...reply, startsAt: 'Friday' }, { ...reply, hostName: null }, { ...reply, startsAt: Infinity }]) {
     assert.equal(V.parseOpened(bad), null);
   }
 
@@ -461,7 +475,7 @@ test('Invite friends: the message, the Convex site, the link check and what the 
 
   assert.deepEqual(V.openedWords(reply, NOW), { title: 'You’re going to Jollof Rice Night', host: 'Hosted by Mom', when: 'Friday · 7 pm' });
   assert.deepEqual(V.openedWords({ ...reply, startsAt: at(10, 24, 9) }, NOW), { title: 'Jollof Rice Night already happened', host: 'Hosted by Mom', when: '' });
-  assert.equal(V.openedWords({ ...reply, hostFirstName: '' }, NOW).host, '');
+  assert.equal(V.openedWords({ ...reply, hostName: '' }, NOW).host, '');
 });
 
 test('the next dinner on top', () => {

@@ -447,7 +447,10 @@ Before starting work, compare the last commit here with `git log origin/main` to
     pending "Swap recipes" no longer takes the green over a working row; `Chooser` draws those rows plain). The new
     reads (`shareRequests.familyDishes`, `community.mySwaps`) and `dinners.inviteLink` are soft, and the new asks
     (`shareRequests.ask`, `requestSwap`, `cookTogether`, `respondSwap`) are strict, so an app build that reaches
-    phones before this Convex deploy doesn't move every Convex call to the stub.
+    phones before this Convex deploy doesn't move every Convex call to the stub. `POST /invite/open` answers
+    `hostName` (was `hostFirstName`) on Convex, the web `/d` and the app `/d`. On the merged head: vitest 64,
+    `test-community-ui.mjs` 23, every other app script (`test-profile-navigation` against this checkout's Expo web),
+    tsc, lint and the web build pass; Expo web shows "Host a dinner" green under a plain "Put it on the map".
   - **Tests:** vitest 63 (new `dinnerInvites.test.ts` 4; `shareRequests.test.ts` 8 with the fixed question, the
     JSON answer and the day-long "not now"; `swaps.test.ts` 3 with cook together); breaking each key guard on
     purpose fails a test. `test-community-ui.mjs` 23 (cook together, "said not now", the dinner's button and count,

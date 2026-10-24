@@ -1,7 +1,7 @@
 // POST /invite/open { token, deviceId }: someone opened a dinner's invite link (homecookd.app/d?t=…, or
 // the app's homecookd://d?t=…). Public: no secret and no sign-in, so anyone a guest sends the link to
 // counts in "X going" (once per phone or browser: deviceId is a random id that page keeps). The reply is
-// only { dish, hostFirstName, startsAt } (dinners.openInvite); 404 when the link doesn't work.
+// only { dish, hostName, startsAt } (dinners.openInvite); 404 when the link doesn't work.
 // Browsers may call it from homecookd.app and local dev pages (CORS); a request from any other site is
 // refused. The app's own fetch sends no Origin.
 import type { HttpRouter } from "convex/server";

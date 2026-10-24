@@ -1,5 +1,6 @@
 // The map's choosers, one step at a time (Caleb's final Community canvas, Oct 24), as pure functions
-// (tested by scripts/test-community-ui.mjs). Each returns big rows, a title and one line, the first green:
+// (tested by scripts/test-community-ui.mjs). Each returns big rows, a title and one line, the first one
+// you can press green:
 //   connectRows   a dish's "Connect with Mama Ngozi": Join her dinner (when there is one), Swap recipes,
 //                 Cook together ("Ask Mama Ngozi to make it with you"; once they said yes, "Host a
 //                 dinner": "Cooking Jollof Rice together with the Okafor family")
@@ -20,7 +21,11 @@ export const ASK_AGAIN_MS = 24 * 60 * 60_000;
 
 const HOST_ROW = { key: 'host', title: 'Host a dinner', line: 'Pick a time and place. Neighbors ask to join.' };
 
-const firstGreen = (rows: Omit<ChoiceRow, 'primary'>[]): ChoiceRow[] => rows.map((r, i) => ({ ...r, primary: i === 0 }));
+/** The first row you can press is the one green button; when none can be pressed, none is green. */
+const firstGreen = (rows: Omit<ChoiceRow, 'primary'>[]): ChoiceRow[] => {
+  const green = rows.findIndex((r) => !r.disabled);
+  return rows.map((r, i) => ({ ...r, primary: i === green }));
+};
 
 /** "Mama Ngozi’s Jollof Rice", the chooser's title. */
 export function dishTitle(cookName: string, dish: string): string {

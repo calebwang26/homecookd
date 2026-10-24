@@ -1,7 +1,7 @@
 // A dinner's invite link opened in the app (homecookd://d?t=…, or homecookd.app/d where the app is
 // installed): POST /invite/open on the Convex HTTP host with this install's own random id, so the
 // dinner counts this phone once in "X going", whoever is signed in (or nobody). The reply is only the
-// dish, the host's first name and when (convex/lib/inviteRoutes.ts). The web page /d does the same.
+// dish, the host's name and when (convex/lib/inviteRoutes.ts). The web page /d does the same.
 import { isInviteToken, parseOpened, randomId, siteUrl, type OpenedDinner } from '@/components/community/invite';
 import { kvGet, kvSet } from '@/lib/storage';
 

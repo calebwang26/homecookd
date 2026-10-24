@@ -1,7 +1,7 @@
 // Public endpoints for the web pages (/r recipe, /i invite, /d dinner invite). All are public values
 // (no secrets): the API's share and invite-preview routes are unauthenticated by design, the bucket is
 // a public read-only bucket, and Convex's POST /invite/open is public too (it answers only a dinner's
-// dish, its host's first name and when). Override at build time with NEXT_PUBLIC_API_URL /
+// dish, its host's name and when). Override at build time with NEXT_PUBLIC_API_URL /
 // NEXT_PUBLIC_BUCKET_URL / NEXT_PUBLIC_CONVEX_SITE_URL.
 const trim = (s: string) => s.trim().replace(/\/+$/, '');
 

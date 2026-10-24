@@ -29,8 +29,8 @@ const nextFriday = () => {
   return d.getTime();
 };
 const FIXTURES: Record<string, Opened> = {
-  going: { ok: true, dinner: { dish: 'Jollof Rice', hostFirstName: 'Mom', startsAt: nextFriday() } },
-  past: { ok: true, dinner: { dish: 'Jollof Rice', hostFirstName: 'Mom', startsAt: Date.now() - 86_400_000 } },
+  going: { ok: true, dinner: { dish: 'Jollof Rice', hostName: 'Mom', startsAt: nextFriday() } },
+  past: { ok: true, dinner: { dish: 'Jollof Rice', hostName: 'Mom', startsAt: Date.now() - 86_400_000 } },
   gone: { ok: false, why: 'gone' },
   offline: { ok: false, why: 'offline' },
 };
@@ -100,7 +100,7 @@ export default function DinnerInviteScreen() {
         <Txt variant="display" size={32} align="center" accessibilityRole="header">
           {words.title}
         </Txt>
-        {opened.dinner.hostFirstName.trim() ? <HostPill name={opened.dinner.hostFirstName} /> : null}
+        {opened.dinner.hostName.trim() ? <HostPill name={opened.dinner.hostName} /> : null}
         {words.when ? (
           <View style={styles.when} accessible accessibilityLabel={words.when}>
             <CalendarIcon />

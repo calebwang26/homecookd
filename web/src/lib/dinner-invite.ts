@@ -1,11 +1,11 @@
 // /d?t=<token>: a dinner's invite link, sent from the app's "Invite friends". The page tells homecookd
 // this browser opened it (POST /invite/open on the Convex HTTP host: public, CORS for homecookd.app),
-// which counts it once in the dinner's "X going", and gets back only the dish, the host's first name
+// which counts it once in the dinner's "X going", and gets back only the dish, the host's name
 // and when. Never the place or the address. A random id kept in localStorage makes it "once per
 // browser"; where storage is blocked it's a fresh id each visit.
 import { CONVEX_SITE_URL } from './recipe-web/config';
 
-export type OpenedDinner = { dish: string; hostFirstName: string; startsAt: number };
+export type OpenedDinner = { dish: string; hostName: string; startsAt: number };
 export type Opened = { ok: true; dinner: OpenedDinner } | { ok: false; why: 'gone' | 'offline' };
 
 const TOKEN = /^[A-Za-z0-9_-]{20,64}$/;
@@ -35,9 +35,9 @@ function deviceId(): string {
 
 function parse(body: unknown): OpenedDinner | null {
   const b = body as Partial<OpenedDinner> | null;
-  if (!b || typeof b !== 'object' || typeof b.dish !== 'string' || !b.dish.trim() || typeof b.hostFirstName !== 'string') return null;
+  if (!b || typeof b !== 'object' || typeof b.dish !== 'string' || !b.dish.trim() || typeof b.hostName !== 'string') return null;
   if (typeof b.startsAt !== 'number' || !Number.isFinite(b.startsAt)) return null;
-  return { dish: b.dish, hostFirstName: b.hostFirstName, startsAt: b.startsAt };
+  return { dish: b.dish, hostName: b.hostName, startsAt: b.startsAt };
 }
 
 export async function openInvite(token: string): Promise<Opened> {

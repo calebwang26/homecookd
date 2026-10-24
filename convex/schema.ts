@@ -246,7 +246,7 @@ export default defineSchema({
     status: v.union(v.literal("open"), v.literal("full"), v.literal("cancelled")),
     // "Invite friends": one random token per dinner, made the first time the host or a guest asks
     // for the link (dinners.inviteLink). It opens homecookd.app/d, which shows only the dish, the
-    // host's first name and when.
+    // host's name and when.
     inviteToken: v.optional(v.string()),
   })
     .index("by_status", ["status"])

@@ -229,8 +229,9 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   `{ token, url: "https://homecookd.app/d?t=<token>" }`, for the host or an accepted guest only. One random
   43-character token per dinner (`dinners.inviteToken`, made the first time anyone asks, then the same every time).
   `POST /invite/open` on the `.convex.site` host (`convex/lib/inviteRoutes.ts`), public: `{ token, deviceId }`
-  (token 20–64 and deviceId 16–64 of `[A-Za-z0-9_-]`) → 200 `{ dish, hostFirstName, startsAt }` and nothing else
-  (never the place, the address or an id), 404 for a link that doesn't work (or a called-off dinner), 400 for a
+  (token 20–64 and deviceId 16–64 of `[A-Za-z0-9_-]`) → 200 `{ dish, hostName, startsAt }` and nothing else
+  (`hostName` is the host's display name, as the invite text and the dinner page say it; never the place, the
+  address or an id), 404 for a link that doesn't work (or a called-off dinner), 400 for a
   bad body, 403 from a site that isn't homecookd.app or localhost (CORS, with an OPTIONS preflight; the app's fetch
   sends no Origin). Each `deviceId` counts once per dinner (`dinnerInviteOpens`) while the dinner is ahead, at most
   `OPEN_BURST` (60) new ones per 10 minutes and `MAX_OPENS` (300) in all; past those the page still opens,

@@ -1,7 +1,7 @@
 // One step of the map's choosers (Caleb's Community mockup): a cream card with back ‹ and a title
-// ("Mama Ngozi’s Jollof Rice"), then big rows, each a title and one line, the first one green. A row
-// that only says how things stand ("Asked · waiting") isn't a button. While a row's action runs, the
-// rows wait.
+// ("Mama Ngozi’s Jollof Rice"), then big rows, each a title and one line, the first one you can press
+// green. A row that only says how things stand ("Asked · waiting") isn't a button and is never green.
+// While a row's action runs, the rows wait.
 import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
@@ -42,8 +42,9 @@ export function Chooser({
         </Txt>
       </View>
       {rows.map((r) => {
-        const ink = r.primary ? colors.card : colors.ink;
-        const sub = r.primary ? alpha.glassChip : colors.muted;
+        const green = r.primary && !r.disabled;
+        const ink = green ? colors.card : colors.ink;
+        const sub = green ? alpha.glassChip : colors.muted;
         const body = (
           <>
             <View style={styles.text}>
@@ -59,7 +60,7 @@ export function Chooser({
             {busy === r.key ? <ActivityIndicator color={ink} /> : r.disabled ? null : <ChevronRightIcon size={22} strokeWidth={2.2} color={ink} />}
           </>
         );
-        const look = [styles.row, { backgroundColor: r.primary ? colors.green : colors.page }];
+        const look = [styles.row, { backgroundColor: green ? colors.green : colors.page }];
         if (r.disabled) {
           return (
             <View key={r.key} style={look} accessible accessibilityLabel={[r.title, r.line].filter(Boolean).join('. ')} accessibilityState={{ disabled: true }}>
