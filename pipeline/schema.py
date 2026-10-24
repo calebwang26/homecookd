@@ -17,6 +17,14 @@ from pydantic import BaseModel, ValidationError, field_validator, model_validato
 Confidence = Literal["low", "medium", "high"]
 
 
+def _no_original_ok(data):
+    """quote_original (the cook's Marathi words) has no default, because Gemini's response_schema rejects
+    defaults; files and cached chunks written before it existed simply leave it out."""
+    if isinstance(data, dict):
+        data.setdefault("quote_original", None)
+    return data
+
+
 def _check_estimate(v: str) -> str:
     if not (v.startswith("~") or v == "unknown"):
         raise ValueError(f'estimate must start with "~" or be "unknown", got {v!r}')
@@ -40,9 +48,12 @@ class ChunkEvent(BaseModel):
     action: Optional[str]  # step
     ingredients: Optional[list[ChunkIngredient]]  # step
     sensory_cue: Optional[str]  # step
-    quote: Optional[str]  # step, verbatim
+    quote: Optional[str]  # step, in English
+    quote_original: Optional[str]  # step, the cook's words as spoken when not English (Devanagari)
     text: Optional[str]  # story / special
     why: Optional[str]  # special
+
+    _original = model_validator(mode="before")(_no_original_ok)
 
     @model_validator(mode="after")
     def _times(self) -> "ChunkEvent":
@@ -90,8 +101,11 @@ class TimedChunkEvent(BaseModel):
     ingredients: Optional[list[TimedIngredient]]
     sensory_cue: Optional[str]
     quote: Optional[str]
+    quote_original: Optional[str]
     text: Optional[str]
     why: Optional[str]
+
+    _original = model_validator(mode="before")(_no_original_ok)
 
 
 class TimedChunkOutput(BaseModel):
@@ -152,8 +166,11 @@ class DraftStep(BaseModel):
     sensory_cue: Optional[str]
     start_s: int
     end_s: int
-    quote: Optional[str]
+    quote: Optional[str]  # in English
+    quote_original: Optional[str]  # the cook's words as spoken when not English (Devanagari), else None
     wait_after: Optional[str]
+
+    _original = model_validator(mode="before")(_no_original_ok)
 
 
 class Substep(BaseModel):

@@ -11,7 +11,7 @@ pieces in.
 | Expo app | Kid mode (library, voice cooking, questions, share the dish) and parent mode (record or upload, progress, answer questions, messages). Plays the cook's clips, streams the mic while cooking | EAS dev build while coding; **TestFlight** for teammates, judges and the demo; EAS Update for JS-only fixes | |
 | Smart glasses | The cook's first-person video | Glasses → camera roll → the app's existing upload | Best Hardware Hack |
 | Convex | Families, recipes, jobs, questions, messages, photos and voice notes; live updates to both phones; schedules the AI steps | Convex cloud (`convex/`) | Convex |
-| Gemini | Watches the video and notes what the cook said and did, with timestamps; translates a non-English voice-note answer for the kid | The pipeline worker (`pipeline/`); Convex action | |
+| Gemini | Watches the video and notes what the cook said and did, with timestamps, in English even when the cook speaks Marathi (her words kept in `quote_original`); translates a non-English voice-note answer for the kid | The pipeline worker (`pipeline/`); Convex action | |
 | Muse Spark | Writes the final recipe, memories, dish suggestions, and the kid's note back to the cook | Pipeline worker (recipe, memories); Convex action (note, suggestions) | Meta |
 | Moss | Holds what the cook said and did; finds the moment that answers a question | Filled by a Convex action; searched by the live voice service | Moss |
 | Live voice service | The real-time cooking loop | Google Cloud Run (`voice/`), min instances 1 | |
