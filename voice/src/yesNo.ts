@@ -1,34 +1,63 @@
 // The kid's spoken yes or no: an answer to homie's offers (read it out loud, hear a story) and to the app's own
-// homie moments. The app's yesNo (app/src/lib/live/voiceLogic.ts) must decide the same words the same way, so
-// this file has no imports and can be copied there as it is.
+// homie moments. It follows the app's yesNo (app/src/lib/live/voiceLogic.ts, #36) and adds the everyday no's
+// that come with more words after them. No imports.
 //
-// - A reply that starts with a yes or a no counts, whatever follows: "Sure, read it.", "No, not right now.",
-//   "Nah, I'm good.", "Don't.". A no wins: "Okay, no." is a no.
-// - "Okay", "alright" and "please" count alone, or before a yes or a no. Kids start every kind of sentence with
-//   them, so "Okay, what's the next step?", "Okay, set a timer" and "Please go back" are not a yes.
-// - "Not yet", "later", "maybe later" and "skip it" count only as the whole reply: "Not yet sure how much salt" is
-//   a question.
-// - A yes is a yes even with a question after it ("Yes, but how much ginger?"): the app takes it as its moment's
-//   yes too, and the kid can ask again.
-// - "No problem", "no worries", "no idea", "don't know", "don't understand" and "oh no" are not a no.
+// - A yes word counts, whatever follows: "Sure, read it.", "Yes, I want to hear it.", and "Yes, but how much
+//   ginger?" (decided: a yes, as in the app; the kid can ask again).
+// - "Okay", "ok", "alright" and "please" count with any words after them ("Please do.", "Okay, let's do it."),
+//   unless a command or a question follows: "Okay, what's the next step?", "Okay, set a timer for 5 minutes" and
+//   "Please go back" go the usual way.
+// - A no counts, whatever follows ("No, not right now.", "Nah, I'm good.", "Don't.", and "No, it's fine.", decided),
+//   and wins after a yes or an okay: "Okay, no." and "Yeah, no, I'm good." are a no. A command or a question right
+//   after the no ("No, next step.") is still what the kid wants: afterNo gives it.
+// - "Not yet", "not really", "later", "maybe later", "skip it" and "I'm good" count only as the whole reply, and
+//   "don't" alone or before read, play, do, bother, want or need: "Not really sure how much salt", "I'm good at
+//   this" and "Don't forget the timer" are not a no.
+// - Not a no: "no problem", "no worries", "no idea", "no clue", "no one", "nobody", "don't know", "don't
+//   understand", and "oh no" unless a no follows it ("Oh no, I burned it!", but "Oh, no thanks." is a no).
 
-const YES = /^(yes|yeah|yep|yup|sure|of course|go ahead|do it|play it|read it|let'?s hear it)\b/;
-const NO = /^(no(?! (problem|worries|idea)\b)|nah|nope|don'?t(?! (know|understand)\b)|not now|not right now|not really|i'?m good)\b/;
-const WHOLE_NO = /^(not yet|later|maybe later|skip it)$/;
-const OPENERS = /^((ok|okay|alright|all right|please)( |$))+/;
-const FILLERS = /^((um|uh|oh(?! no\b)|ah|hmm|mm|well|wait|so|hey|and|now) )+/;
+const FILLERS = /^((um|uh|oh|ah|hmm|mm|well|wait|so|hey|and|now|but) )+/;
+const OH_NO = /^((um|uh|ah|hmm|mm|well|wait|so|hey|and|now|but) )*oh no\b/;
+/** Yes words, okays and fillers before the rest of the reply ("okay um yes but"). */
+const LEAD = /^((yes|yeah|yep|yup|sure|of course(?! not\b)|ok|okay|alright|all right|please|um|uh|oh|ah|hmm|mm|well|so|hey|and|now|but)( |$))+/;
+const SAID_YES = /\b(yes|yeah|yep|yup|sure|of course)\b/;
+const SAID_OK = /\b(ok|okay|alright|all right|please)\b/;
+const YES = /^(go ahead|do it|play it|read it|let'?s hear it|can do|will do)\b/;
+const NO = /^(no( no)*(?! (problem|worries|idea|clue|one|doubt|matter|wonder)\b)|nah|nope|not now|not right now|of course not|don'?t(?= (bother|worry|read|play|do|want|need)\b|$))( |$)/;
+const WHOLE_NO = /^(not yet|not really|later|maybe later|maybe not|skip it|i'?m good)$/;
+/** What a no can trail before a command: "no thanks, next step". */
+const NO_TAIL = /^((no|nah|nope|not now|not right now|thanks|thank you|but|just|um|uh|so|well|then|ok|okay)( |$))+/;
+/** A command or a question (what cook.ts's FAST commands, timers and Claude are for). */
+const COMMAND = /^(next|done|go on|go back|back|previous|last step|step back|repeat|again|say that|one more time|what|how|when|where|why|who|which|can|could|should|would|will|is|are|am i|do i|do you|do we|does|did|set|start|stop|pause|wait|hold on|hang on|help)\b|\btimer\b/;
 
-export function yesNo(text: string): "yes" | "no" | null {
-  const reply = text
+function parse(text: string) {
+  const all = text
     .toLowerCase()
     .replace(/[‘’]/g, "'")
-    .replace(/[^a-z' ]/g, " ")
+    .replace(/[^a-z0-9' ]/g, " ")
     .replace(/\s+/g, " ")
     .trim()
-    .replace(FILLERS, "")
     .replace(/( (please|thanks|thank you))+$/, "");
-  const rest = reply.replace(OPENERS, "").replace(FILLERS, "");
-  if (NO.test(rest) || WHOLE_NO.test(rest)) return "no";
-  if (YES.test(rest) || (reply && !rest)) return "yes";
-  return null;
+  const reply = all.replace(FILLERS, "");
+  const lead = reply.match(LEAD)?.[0] ?? "";
+  const rest = reply.slice(lead.length);
+  const no = NO.exec(rest);
+  const tail = no ? rest.slice(no[0].length) : "";
+  // "Oh no" is a no only when a no follows it, or nothing does.
+  const isNo = no ? !OH_NO.test(all) || !tail || NO.test(tail) || WHOLE_NO.test(tail) : WHOLE_NO.test(rest);
+  return { lead, rest, isNo, tail: tail.replace(NO_TAIL, "") };
+}
+
+export function yesNo(text: string): "yes" | "no" | null {
+  const { lead, rest, isNo } = parse(text);
+  if (isNo) return "no";
+  if (SAID_YES.test(lead) || YES.test(rest)) return "yes";
+  if (!SAID_OK.test(lead)) return null;
+  return rest && (COMMAND.test(rest) || /\?\s*$/.test(text)) ? null : "yes";
+}
+
+/** The command or question right after a spoken no ("No, next step." → "next step"), or "". */
+export function afterNo(text: string): string {
+  const { isNo, tail } = parse(text);
+  return isNo && COMMAND.test(tail) ? tail : "";
 }

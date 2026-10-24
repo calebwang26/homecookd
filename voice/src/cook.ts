@@ -14,7 +14,7 @@ import { SONIC_SAMPLE_RATE, type AudioFormat } from "./sonic.js";
 import { listenInk, speak } from "./speech.js";
 import type { Stt, SttEvents } from "./stt.js";
 import { translateQuote } from "./translate.js";
-import { yesNo } from "./yesNo.js";
+import { afterNo, yesNo } from "./yesNo.js";
 
 type SayKind = "step" | "reply" | "hint" | "translation" | "nudge" | "offer" | "greeting" | "timer";
 
@@ -272,13 +272,16 @@ export class Cooking {
     this.send({ type: "transcript", text, final: true });
     this.touch();
     // A moment the app has up hears the kid's yes or no itself (from that transcript): it isn't ours to act on.
+    // A command or question after the no is still ours ("No, next step.").
     const inMoment = spoken && this.moment !== null;
-    if (inMoment && yesNo(text)) {
+    const answer = inMoment ? yesNo(text) : null;
+    const then = answer === "no" ? afterNo(text) : "";
+    if (answer && !then) {
       console.log(`kid (to the app's ${this.moment} moment): ${text}`);
       return;
     }
     console.log(`kid: ${text}`);
-    this.turns = this.turns.then(() => this.turn(text, inMoment));
+    this.turns = this.turns.then(() => this.turn(then || text, inMoment));
   }
 
   /** One turn. `inMoment`: said while an app moment was up, so it never answers our own offer. */
@@ -288,8 +291,12 @@ export class Cooking {
     try {
       if (this.offer && !inMoment) {
         const answer = yesNo(text);
-        if (answer === "no") return this.declineOffer();
         if (answer === "yes") return await this.acceptOffer();
+        if (answer === "no") {
+          this.declineOffer();
+          text = afterNo(text); // "No, next step.": the step still moves (silently)
+          if (!text) return;
+        }
       }
       const fast = FAST.find(([re]) => re.test(command(text)))?.[1];
       const timer = timerAsk(text);

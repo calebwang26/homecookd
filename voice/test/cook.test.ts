@@ -276,7 +276,8 @@ test("the long-quiet nudge waits while an app moment is up", async () => {
 });
 
 test("every everyday no declines the offer with offer_closed, and a later okay doesn't turn reading on", async () => {
-  for (const no of ["No, not right now.", "Nah, I'm good.", "No, I don't want that.", "Don't.", "Not now, thanks."]) {
+  const nos = ["No, not right now.", "Nah, I'm good.", "No, I don't want that.", "Don't.", "Not now, thanks.", "Oh, no thanks.", "Oh no, not now.", "Yeah, no."];
+  for (const no of nos) {
     const w = world();
     const c = w.connect();
     await offered(c);
@@ -303,22 +304,60 @@ test("with a moment up, everyday yes and no answers are the moment's, and never 
   const c = w.connect();
   await offered(c);
   c.send({ type: "moment", open: true, kind: "answer" });
-  const replies = ["Sure, read it.", "Yeah, go ahead.", "Yes, play it.", "Yes, I want to hear it.", "Don't.", "No, not right now.", "Nah, I'm good."];
+  const replies = [
+    "Sure, read it.", "Yeah, go ahead.", "Yes, play it.", "Yes, I want to hear it.", "Please do.", "Okay, let's do it.", "Okay cool.",
+    "Don't.", "No, not right now.", "Nah, I'm good.", "Oh, no thanks.",
+  ];
   const since = c.mark();
   for (const reply of replies) w.says(reply);
   await advance(5000);
   assert.deepEqual(since(), replies.map((text) => ({ type: "transcript", text, final: true })));
   assert.deepEqual(w.turns, []);
 
-  // A command isn't an answer: it still goes the usual way with the moment up.
+  // A command or question isn't an answer: it still goes the usual way with the moment up.
   w.says("Okay, what's the next step?");
+  w.says("Not really sure how much salt.");
   await advance(1000);
-  assert.deepEqual(w.turns, ["Okay, what's the next step?"]);
+  assert.deepEqual(w.turns, ["Okay, what's the next step?", "Not really sure how much salt."]);
+
+  // A command after a no still runs, without Claude.
+  w.says("No, next step.");
+  await advance(AUDIO_S * 1000 + 2000);
+  assert.equal(c.ws.of("go_to_step").at(-1)?.stepOrder, 2);
+  assert.equal(w.turns.length, 2);
 
   // Once it closes, a no is ours again: the offer is declined.
   c.send({ type: "moment", open: false });
   w.says("Nah, I'm good.");
   await settle();
   assert.deepEqual(c.ws.of("offer_closed"), [{ type: "offer_closed", accepted: false }]);
+  c.close();
+});
+
+test("okay or please with more words says yes to the offer, and a no with a command declines it and still runs it", async () => {
+  for (const yes of ["Please do.", "Okay, let's do it.", "Okay, I want to hear it."]) {
+    const w = world();
+    const c = w.connect();
+    await offered(c);
+    w.says(yes);
+    await waitFor(`${yes}: the step`, () => c.ws.of("say").length === 3);
+    assert.deepEqual(c.ws.of("offer_closed"), [{ type: "offer_closed", accepted: true }], yes);
+    assert.equal(c.ws.of("say").at(-1)?.kind, "step", yes);
+    assert.deepEqual(w.turns, [], yes);
+    c.close();
+  }
+
+  const w = world();
+  const c = w.connect();
+  await offered(c);
+  const since = c.mark();
+  w.says("No, next step.");
+  await advance(AUDIO_S * 1000 + 2000);
+  assert.deepEqual(since(), [
+    { type: "transcript", text: "No, next step.", final: true },
+    { type: "offer_closed", accepted: false },
+    { type: "go_to_step", stepOrder: 2 },
+  ]);
+  assert.deepEqual(w.turns, []);
   c.close();
 });
