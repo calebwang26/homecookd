@@ -56,7 +56,7 @@ export function PlateControls({ ask, words, taken, busy, onShoot, onSkip }: { as
   return (
     <Animated.View style={[StyleSheet.absoluteFill, style]} pointerEvents="box-none" accessibilityViewIsModal onAccessibilityEscape={onSkip}>
       <View style={[styles.words, { top: Math.max(insets.top + 16, 40), height: Math.max(0, card.y - Math.max(insets.top + 16, 40) - 16) }]}>
-        <Txt variant="label" size={26} weight={700} leading={1.3} color={colors.card} align="center" accessibilityRole="header" numberOfLines={3}>
+        <Txt variant="label" size={24} weight={700} leading={1.3} color={colors.card} align="center" accessibilityRole="header" numberOfLines={4} adjustsFontSizeToFit>
           {taken ? got.text : q.text}
         </Txt>
         {(taken ? got.en : q.en) ? (

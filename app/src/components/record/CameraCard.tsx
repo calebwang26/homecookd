@@ -20,15 +20,15 @@ export type SlotFrame = { x: number; y: number; width: number; height: number };
 
 /** The card's slot in the column: a portrait 3:4, at most this share of the screen's height. */
 export function cameraSlotSize(screen: { width: number; height: number }, side: number) {
-  const height = Math.round(Math.min(screen.height * 0.3, ((screen.width - 2 * side) * 4) / 3, 300));
+  const height = Math.round(Math.min(screen.height * 0.28, ((screen.width - 2 * side) * 4) / 3, 300));
   return { width: Math.round((height * 3) / 4), height };
 }
 
-/** Where the card goes for the plate photo: as wide as the column allows, a little above the middle. */
+/** Where the card goes for the plate photo: about the middle, leaving room for homie's words above and the shutter below. */
 export function plateFrame(screen: { width: number; height: number }, side: number): SlotFrame {
-  const width = Math.min(screen.width - 2 * side, ((screen.height * 0.5) * 3) / 4);
+  const width = Math.min(screen.width - 2 * side, (screen.height * 0.42 * 3) / 4);
   const height = (width * 4) / 3;
-  return { x: (screen.width - width) / 2, y: screen.height * 0.44 - height / 2, width, height };
+  return { x: (screen.width - width) / 2, y: screen.height * 0.48 - height / 2, width, height };
 }
 
 const GROW_MS = 380;

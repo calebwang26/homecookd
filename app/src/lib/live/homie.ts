@@ -37,6 +37,8 @@
 // player (lib/live/say). The pot follows the service: lit just before a say, then speaking; listening
 // with the mic level, thinking. Her answers are spoken: the service hears them, and fades the question
 // itself when she says "not now" or after ~10 s of quiet. At `ended` the mic stops.
+// A lost line retries a few times, then says so; while the in-app camera films it keeps trying every
+// 10 s and the message clears when a socket opens (filming never depends on homie's line).
 // One socket at a time: a connect waits while another is on its way or open, and a socket that is no
 // longer the current one is not heard. A new socket has no open question (the server keeps it per
 // socket; the wrap-up asks again whatever is left).
@@ -59,6 +61,8 @@ const VOICE_URL = (process.env.EXPO_PUBLIC_VOICE_URL ?? '').trim().replace(/\/$/
 /** The service always ends a line with say_end; this only catches one that never came. */
 const SAY_GAP_MS = 3000;
 const RETRIES = 3;
+/** While the in-app camera films, a lost line keeps trying this often (Wi-Fi drops; filming goes on). */
+const FILMING_RETRY_MS = 10_000;
 /** The hello counts as said this long after it began, even if its end never came. */
 const INTRO_MAX_MS = 20_000;
 /** A phone recording waits this long for the server to save that filming began, then films anyway. */
@@ -323,6 +327,12 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
       setTimeout(() => want.current && !paused.current && void connectRef.current?.(), 1500 * retries.current);
       return;
     }
+    // Filming in the app: the camera keeps going, so homie keeps trying and comes back on its own.
+    if (cameraBusy.current) {
+      setError('lostConnection');
+      setTimeout(() => want.current && void connectRef.current?.(), FILMING_RETRY_MS);
+      return;
+    }
     want.current = false;
     void stopMic();
     setError('lostConnection');
@@ -334,7 +344,8 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
     const open = sock.current;
     if (open && (open.readyState === 0 || open.readyState === 1)) return;
     connecting.current = true;
-    setError(null);
+    // While filming in the app a lost line keeps its message until a socket opens (no flicker per retry).
+    if (!cameraBusy.current) setError(null);
     const token = await convexSession(meId.current).catch(() => null);
     connecting.current = false;
     if (!want.current || paused.current || sock.current) return;
@@ -359,6 +370,7 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
     s.onopen = () => {
       if (sock.current !== s) return;
       retries.current = 0;
+      setError((e) => (e === 'lostConnection' ? null : e));
       if (!paused.current) void startMic();
     };
     s.onclose = (e) => {

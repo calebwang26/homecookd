@@ -34,7 +34,8 @@
 // without homie; one already filmed goes straight to the done view and sends). The screen stays
 // awake, and can't be swiped away once filming started.
 // Dev aids (web screenshots only): ?preview=done shows the done view without sending; ?preview=ask
-// shows a made-up question from homie as a phone with a microphone would (the listening bars);
+// shows a made-up question from homie as a phone with a microphone would (the listening bars;
+// the question comes and goes every 4 s, to watch homie leave its corner and come back);
 // ?preview=camera filming in the app, ?preview=paused after she came back, ?preview=plate the plate
 // photo (a kitchen picture stands in for the camera).
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
@@ -148,6 +149,18 @@ export default function RecordingScreen() {
   const [finished, setFinished] = useState(false);
   if (!finished && (preview || filmedAlone || (phoneFilmed && !!homie.error) || (ended && !aiSpeaking))) setFinished(true);
 
+  // ?preview=ask: the question comes and goes, so the glide can be watched.
+  const [previewAskOn, setPreviewAskOn] = useState(false);
+  useEffect(() => {
+    if (devPreview !== 'ask') return;
+    const t = setInterval(() => setPreviewAskOn((on) => !on), 4000);
+    const first = setTimeout(() => setPreviewAskOn(true), 1500);
+    return () => {
+      clearInterval(t);
+      clearTimeout(first);
+    };
+  }, [devPreview]);
+
   // Filming in the app: the camera runs from the hello to the plate photo. The mic never starts or
   // stops while a file is being written (useInAppCamera); these callbacks say when it may.
   const cam = useInAppCamera({
@@ -204,14 +217,15 @@ export default function RecordingScreen() {
 
   // No swiping away once she's filming (the × comes back if homie's connection is lost).
   const navigation = useNavigation();
-  const filming = glasses ? glassesFilming : homie.phase === 'recording' || homie.phase === 'wrapping_up';
+  const filming = previewCamera || (glasses ? glassesFilming : homie.phase === 'recording' || homie.phase === 'wrapping_up');
   useEffect(() => {
     navigation.setOptions({ gestureEnabled: !filming && !finished });
   }, [navigation, filming, finished]);
 
-  // The corner pot hides while homie asks (it comes to the centre) and on the done view.
+  // The corner pot hides while homie asks (it comes to the centre), for the plate photo (homie's words
+  // fill the top) and on the done view.
   const [asking, setAsking] = useState(false);
-  useHomieScreen({ hidden: asking || finished });
+  useHomieScreen({ hidden: asking || !!plateAsk || finished });
 
   // "I'm done" while filming in the app: homie wraps up while the last file is saved.
   const doneInApp = async () => {
@@ -261,8 +275,10 @@ export default function RecordingScreen() {
 
   // Filming in the app: start on the server, then the camera; if the camera won't start, the system camera.
   const filmInApp = useCallback(async () => {
-    homie.cameraFilming(true);
-    const ok = await homie.filmInApp(() => cam.start());
+    const ok = await homie.filmInApp(() => {
+      homie.cameraFilming(true);
+      return cam.start();
+    });
     if (ok) return;
     homie.cameraFilming(false);
     toast.show('The camera didn’t start here. Opening the phone’s camera.', { tone: 'info' });
@@ -330,7 +346,7 @@ export default function RecordingScreen() {
   const error = homie.error ? words.line(homie.error) : null;
   const micOff = homie.micDenied ? words.line('micOff') : null;
   const showClose = !!homie.error || (!filming && !finished) || (stalled && !finished);
-  const beforeFilming = homie.phase === 'connecting' || homie.phase === 'intro';
+  const beforeFilming = !previewCamera && (homie.phase === 'connecting' || homie.phase === 'intro');
 
   return (
     <View style={styles.page}>
@@ -369,7 +385,7 @@ export default function RecordingScreen() {
                   }} />
               </View>
             ) : null}
-            {source === 'phone' && beforeFilming && !homie.error && !skipped ? (
+            {source === 'phone' && beforeFilming && !homie.error && !skipped && !camAsking ? (
               <View style={styles.skip}>
                 <ActionButton label={both(words.line('skipIntro'))} variant="outline" size="sm" onPress={skipIntro} />
               </View>
@@ -391,7 +407,7 @@ export default function RecordingScreen() {
           ) : null}
           {showCamera ? <PlateControls ask={plateAsk} words={words} taken={!!photo} busy={shooting} onShoot={() => void shootPlate()} onSkip={skipPlate} /> : null}
           <AskMoment
-            ask={devPreview === 'ask' ? PREVIEW_ASK : homie.ask?.kind === 'plate' ? null : homie.ask}
+            ask={devPreview === 'ask' ? (previewAskOn ? PREVIEW_ASK : null) : homie.ask?.kind === 'plate' ? null : homie.ask}
             words={words}
             micOn={devPreview === 'ask' || homie.micOn}
             onNotNow={homie.notNow}
