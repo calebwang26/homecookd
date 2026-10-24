@@ -102,7 +102,9 @@ HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-o
 
 **Voice service → Convex** (HTTP POST with JSON, `x-voice-secret`)
 - `/voice/session` `{ sessionToken, recipeId }` → `{ kid: { personId, name, role }, familyId, mossIndex, recipe:
-  { recipeId, title, cookName, steps[{ order, title, text, quote?, moment }], memories[] }, stepOrder }`.
+  { recipeId, title, cookName, cookLanguage?, cookRelation?, steps[{ order, title, text, quote?, quoteOriginal?,
+  moment }], memories[{ kind, text, moment, stepOrder? }] }, stepOrder }`. `cookLanguage` is the cook's
+  `people.language`, else the recipe's `language`, and is absent when neither is set (not `"en"`).
   It starts or resumes the kid's `cookingSessions` row. A recipe that isn't `ready` is `404`.
 - `/voice/step` `{ sessionToken, recipeId, stepOrder }` → `{ ok, stepOrder }` (updates `cookingSessions`)
 - `/voice/question` `{ sessionToken, recipeId, stepOrder?, text, found?: { startS, endS, quote } }` →
@@ -178,7 +180,9 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 - `/live/session` `{ sessionToken, recordingId }` → `{ recording, cook: { name, relation, language }, kid?: { name },
   dish? }` (404 if it isn't this cook's).
 - `/live/status` `{ sessionToken, recordingId, status }` → `{ ok, startedAt? }`. Moving to `recording` sets
-  `startedAt` (server clock) once; `ended` sets `endedAt`.
+  `startedAt` (server clock) once; `ended` sets `endedAt`. `{ sessionToken, recordingId, touch: true }` (no
+  status) → `{ ok }` is the service's heartbeat every 10 minutes while the socket is open: it only moves
+  `updatedAt`, so the 2 h idle cleanup (`live.abandonIdle`) leaves a long cook alone; 400 once ended or abandoned.
 - `/live/prompt` `{ sessionToken, recordingId, kind, text, textEn, atS, status }` → `{ promptId }`.
 - `/live/prompt-update` `{ sessionToken, promptId, status, answer? }` → `{ ok }`.
 - `/live/optin` `{ sessionToken, recordingId, optIn }` → `{ ok }` (stored on the recording, carried to the job).
@@ -192,10 +196,15 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   - `{ type: "phase", phase: "intro" | "recording" | "wrapping_up" | "ended" }`
   - `{ type: "state", state: "listening" | "thinking" | "speaking" | "quiet" }` (the pot's steam)
   - `{ type: "say", text, textEn, kind, ai: true, audio }` + binary audio + `{ type: "say_end", interrupted }`.
-    `kind` is a `homiePrompts.kind`. The app lights the pot just before audio starts.
+    `kind` is a `homiePrompts.kind`. The app lights the pot just before audio starts. If the cook taps start or
+    done while homie's line is still playing, an extra `{ type: "say_end", interrupted: true }` tells the app to
+    stop it.
   - `{ type: "ask", promptId, text, textEn, kind }`: show the caption card. `{ type: "drop", promptId }`: fade it
-    (no answer in ~10 s, or "not now"). `{ type: "answered", promptId }`.
-  - `{ type: "transcript", text, final }`, `{ type: "error", message }`. Close 4401 signed out, 4404 no such recording.
+    (no answer in ~10 s, "not now", or she's done). `{ type: "answered", promptId }`.
+  - `{ type: "transcript", text, final }`, `{ type: "error", message }`. Close 4401 signed out, 4404 no such recording
+    (or it already ended), 4409 a newer socket for the same recording took over (don't reconnect that one).
+- A reconnect picks up where the last socket stopped (same pacing, questions and transcript; the wrap-up finishes
+  what's left). Details in `voice/README.md`.
 - The service ignores incoming audio while homie speaks (+300 ms), so it never hears itself; the app also sends
   silence then. Pacing (normal): first question no earlier than 4 min, gaps of 4–5 min, doubled after an ignored
   one, at most 6 live plus 2 end questions, never while the cook talks or tells a story. `HOMIE_DEMO=1`: first
@@ -236,7 +245,8 @@ voice, in `lang` or the person's language). `translate: true` first turns Englis
   glasses recording.
 
 **New keys**: `GLASSES_SECRET` (Convex env, the VM, Cloud Run secret), `GEMINI_API_KEY` (Cloud Run secret, for live
-Marathi transcription), `HOMIE_VOICE` (Cloud Run env: homie's Cartesia voice id), `GLASSES_URL` (Cloud Run env).
+Marathi transcription), `HOMIE_VOICE` (Cloud Run env: homie's Cartesia voice id; default "Sindhu" `07bc462a-c644-49f1-baf7-82d5599131be`,
+which Sonic speaks in Marathi and English), `GLASSES_URL` (Cloud Run env).
 
 ## Keys (all server-side, never in `app/` or `web/`)
 

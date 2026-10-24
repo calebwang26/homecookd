@@ -1,10 +1,24 @@
 // What the live voice service reads through /voice/session (http.ts): who is cooking and the recipe
 // they're cooking, checked against the kid's own session token.
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { internalQuery } from "./_generated/server";
 import { findSession } from "./lib/auth";
 
 const moment = v.object({ startS: v.number(), endS: v.number() });
+type Moment = { startS: number; endS: number };
+
+const overlap = (a: Moment, b: Moment) => Math.max(0, Math.min(a.endS, b.endS) - Math.max(a.startS, b.startS));
+
+/** The step a memory was told during: the one whose moment overlaps it most (none if no overlap). */
+function stepOf(steps: Doc<"recipes">["steps"], m: Moment): number | undefined {
+  let best: { order: number; s: number } | undefined;
+  for (const st of steps) {
+    const s = overlap(st.moment, m);
+    if (s > 0 && (!best || s > best.s)) best = { order: st.order, s };
+  }
+  return best?.order;
+}
 
 export const sessionView = internalQuery({
   args: { sessionToken: v.string(), recipeId: v.string() },
@@ -18,8 +32,23 @@ export const sessionView = internalQuery({
         recipeId: v.id("recipes"),
         title: v.string(),
         cookName: v.string(),
-        steps: v.array(v.object({ order: v.number(), title: v.string(), text: v.string(), quote: v.optional(v.string()), moment })),
-        memories: v.array(v.object({ kind: v.union(v.literal("story"), v.literal("tip")), text: v.string(), moment })),
+        // The cook's language (Ink code), else the recipe's. Absent when neither is set: the voice service then
+        // still says her clip's words in English, as it did before languages were recorded.
+        cookLanguage: v.optional(v.string()),
+        cookRelation: v.optional(v.string()),
+        steps: v.array(
+          v.object({
+            order: v.number(),
+            title: v.string(),
+            text: v.string(),
+            quote: v.optional(v.string()),
+            quoteOriginal: v.optional(v.string()),
+            moment,
+          }),
+        ),
+        memories: v.array(
+          v.object({ kind: v.union(v.literal("story"), v.literal("tip")), text: v.string(), moment, stepOrder: v.optional(v.number()) }),
+        ),
       }),
     }),
   ),
@@ -40,8 +69,10 @@ export const sessionView = internalQuery({
         recipeId: recipe._id,
         title: recipe.title,
         cookName: cook?.name ?? "",
+        cookLanguage: cook?.language ?? recipe.language,
+        cookRelation: cook?.relation,
         steps: recipe.steps,
-        memories: recipe.memoriesOptIn ? recipe.memories : [],
+        memories: recipe.memoriesOptIn ? recipe.memories.map((m) => ({ ...m, stepOrder: stepOf(recipe.steps, m.moment) })) : [],
       },
     };
   },
