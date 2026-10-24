@@ -1,0 +1,93 @@
+// The recording screen's rules, pure (node scripts/test-recording-ui.mjs): the line under the big
+// button in each of homie's phases, when filming starts by itself, the pot for the voice service's
+// state, what "not now" sends, what the mic sends while the phone plays sound (half duplex), and how
+// long the wrap-up may sit still before the app ends the recording without homie.
+import type { HomieState } from '@/lib/homie/store';
+
+import type { Line, RecordWords } from './words';
+
+export type RecordPhase = 'connecting' | 'intro' | 'recording' | 'wrapping_up' | 'ended';
+export type ServerState = 'listening' | 'thinking' | 'speaking' | 'quiet';
+export type AskKind = 'intro' | 'amount' | 'cue' | 'substitution' | 'story' | 'reaction' | 'end' | 'closing' | 'optin';
+export type Ask = { promptId: string; text: string; textEn: string; kind: AskKind };
+
+export type RecordingView = {
+  /** The one line under the button ("माझं झालं" / "Tap when you're done" while filming). */
+  line: Line;
+  /** Filming: the button breathes and a tap is "I'm done". */
+  live: boolean;
+};
+
+/** Before filming the button rests under "homie is saying hello"; while filming it is the stop button. */
+export function recordingView(phase: RecordPhase, w: RecordWords): RecordingView {
+  switch (phase) {
+    case 'connecting':
+      return { line: w.line('gettingReady'), live: false };
+    case 'intro':
+      return { line: w.line('sayingHello'), live: false };
+    case 'recording':
+      return { line: w.line('stop'), live: true };
+    case 'wrapping_up':
+    case 'ended':
+      return { line: w.line('wrappingUp'), live: false };
+  }
+}
+
+/**
+ * Filming starts by itself once homie's hello has been said (`introDone`) and the phone has finished
+ * playing it: starting while it still plays would make the service cut the hello off. (The screen
+ * starts it once.)
+ */
+export function shouldAutoStart(s: { phase: RecordPhase; introDone: boolean; aiSpeaking: boolean; error: boolean }): boolean {
+  return s.phase === 'intro' && s.introDone && !s.aiSpeaking && !s.error;
+}
+
+/** The pot for the voice service's `state` ('speaking' comes from the say itself: pulseLit). */
+export function potFor(state: ServerState, micOn: boolean): HomieState | null {
+  if (state === 'speaking') return null;
+  if (state === 'thinking') return 'thinking';
+  return micOn ? 'listening' : 'off';
+}
+
+/** An end question or the stories opt-in waits for her next words, so "not now" is said as words. */
+export function notNowMessage(kind: AskKind): { type: 'not_now' } | { type: 'text'; text: string } {
+  return kind === 'end' || kind === 'optin' ? { type: 'text', text: 'not now' } : { type: 'not_now' };
+}
+
+/** homie's question with its English under it (none when it's already English). */
+export function askLine(ask: Pick<Ask, 'text' | 'textEn'>): Line {
+  const en = ask.textEn?.trim();
+  return { text: ask.text, en: en && en !== ask.text.trim() ? en : null };
+}
+
+/**
+ * Half duplex (docs/build/STACK.md): while homie is lit or speaking, or anything plays on the phone's
+ * shared player (homie's say, a clip), the voice service gets silence instead of the mic, so it never
+ * hears the phone's own sound as her words. The recorder itself keeps running.
+ */
+export function micQuiet(homie: HomieState, player: { key: string | null; phase: string }): boolean {
+  if (homie === 'lit' || homie === 'speaking') return true;
+  return !!player.key && (player.phase === 'loading' || player.phase === 'playing');
+}
+
+const silences = new Map<number, ArrayBuffer>();
+
+/** Zeros the size of a mic chunk: what the socket gets instead of the mic while the phone plays sound. */
+export function silence(bytes: number): ArrayBuffer {
+  let s = silences.get(bytes);
+  if (!s) {
+    s = new ArrayBuffer(bytes);
+    silences.set(bytes, s);
+  }
+  return s;
+}
+
+/** homie's wrap-up with nothing moving (no phase, question or line) for this long has stalled. */
+export const WRAP_STALL_MS = 120_000;
+/** ...or this long once the voice service reported an error or its connection was lost. */
+export const WRAP_TROUBLE_MS = 20_000;
+
+/** How long the wrap-up may sit still before the app ends the recording itself (live.endRecording). */
+export function wrapStallMs(trouble: boolean): number {
+  return trouble ? WRAP_TROUBLE_MS : WRAP_STALL_MS;
+}

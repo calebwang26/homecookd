@@ -1,0 +1,114 @@
+// "Grandma's done" (frame 3 of Caleb's walkthrough), the recording screen's last view: after homie's
+// last questions and goodbye, homie waves (its lid lifts, happy steam) over "झालं! Shreya ला पाठवतोय" /
+// "Done! Sending it to Shreya", and after ~4 s she is back on her home, with no button to tap.
+// Glasses: the glasses' computer uploads the video. A phone recording sends itself from here
+// (sendDraft, with the pre-record sheet's dish and kid): no Send screen to tap through. If that send
+// fails, Send opens with everything filled in, so she can try again there.
+import { router } from 'expo-router';
+import { useEffect, useRef } from 'react';
+import { AccessibilityInfo, StyleSheet, View } from 'react-native';
+import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
+
+import { Txt, useToast } from '@/components/ui';
+import { errorMessage } from '@/lib/api';
+import { useSession } from '@/lib/session';
+import { colors, motion } from '@/theme/tokens';
+
+import { clearDraft, getDraft, useDraft } from './draft';
+import { WavingHomie } from './GlowHomie';
+import { COLUMN, WarmGlow } from './RecordWash';
+import { sendDraft } from './sendDraft';
+import { doneLine, recordWords } from './words';
+
+export const DONE_HOLD_MS = 4000;
+const DONE_HOMIE_SIZE = 200;
+const wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
+
+function goHome() {
+  if (router.canGoBack()) router.dismissTo('/parent/home');
+  else router.replace('/parent/home');
+}
+
+export function DoneView({ source, lang, kidName, preview = false }: { source: 'phone' | 'glasses'; lang: string; kidName: string | null; preview?: boolean }) {
+  const reduce = useReducedMotion();
+  const { me, profiles } = useSession();
+  const draft = useDraft();
+  const toast = useToast();
+
+  const others = profiles.filter((p) => p.id !== me?.id);
+  const kid = draft.everyone ? null : (others.find((p) => p.id === draft.requestFrom) ?? null);
+  const recipients = draft.everyone ? others : kid ? [kid] : [];
+  const line = doneLine(recordWords(lang), { kid: kid?.name ?? kidName, everyone: draft.everyone, nobody: others.length === 0 });
+
+  // The mount effect below runs once; it reads who it's for from here.
+  const latest = useRef({ me, kid, recipients, toast });
+  useEffect(() => {
+    latest.current = { me, kid, recipients, toast };
+  });
+
+  useEffect(() => {
+    if (preview) return;
+    let alive = true;
+    const send = async (): Promise<boolean> => {
+      const { me: who, kid: to, recipients: all, toast: t } = latest.current;
+      const d = getDraft();
+      const clips = d.clips.filter((c) => c.selected);
+      if (source !== 'phone' || !clips.length) {
+        // The glasses' computer sends this one: the pre-record answers are used up.
+        if (!d.clips.length) clearDraft();
+        return true;
+      }
+      if (!who) return false;
+      try {
+        await sendDraft({ me: who, draft: d, clips, kid: to, recipients: all, toLabel: d.everyone ? 'everyone' : (to?.name ?? null), dish: (d.dish ?? '').trim() });
+        clearDraft();
+        return true;
+      } catch (e) {
+        t.show(errorMessage(e, 'It didn’t send. Try again.'), { tone: 'error', durationMs: 4000 });
+        return false;
+      }
+    };
+    void Promise.all([wait(DONE_HOLD_MS), send()]).then(([, ok]) => {
+      if (!alive) return;
+      if (ok) goHome();
+      else router.replace('/send');
+    });
+    return () => {
+      alive = false;
+    };
+  }, [preview, source]);
+
+  useEffect(() => {
+    AccessibilityInfo.announceForAccessibility(line.en ? `${line.text}. ${line.en}` : line.text);
+  }, [line.text, line.en]);
+
+  return (
+    <View style={styles.column}>
+      <Animated.View entering={reduce ? FadeIn.duration(motion.reducedFadeMs) : FadeIn.duration(320)} style={styles.hero}>
+        <WarmGlow box={DONE_HOMIE_SIZE} />
+        <WavingHomie size={DONE_HOMIE_SIZE} />
+      </Animated.View>
+      <Animated.View
+        entering={reduce ? FadeIn.duration(motion.reducedFadeMs) : FadeInDown.duration(380).delay(240)}
+        style={styles.label}
+        accessible
+        accessibilityRole="header"
+        accessibilityLabel={line.en ? `${line.text}. ${line.en}` : line.text}>
+        <Txt variant="label" size={32} weight={700} leading={1.3} color={colors.ink} align="center">
+          {line.text}
+        </Txt>
+        {line.en ? (
+          <Txt variant="meta" size={15} color={colors.muted} align="center">
+            {line.en}
+          </Txt>
+        ) : null}
+      </Animated.View>
+    </View>
+  );
+}
+
+const styles = StyleSheet.create({
+  column: { flex: 1, paddingHorizontal: COLUMN.side, alignItems: 'center', justifyContent: 'center' },
+  hero: { width: DONE_HOMIE_SIZE, height: DONE_HOMIE_SIZE },
+  label: { marginTop: COLUMN.toLabel, alignItems: 'center', gap: 6 },
+});

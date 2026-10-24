@@ -61,7 +61,8 @@ and homesick college kids. It's a family product, not a tool.
 - **The Merge Agent approves every PR.** After `gh pr create`, send the PR (number, link, branch, files touched,
   one-line summary) to the Claude Desktop session titled **Merge Agent** (Claude Code: `ListAgents`, then
   `SendMessage`; Codex or Salik: ask Caleb to pass it on). Don't merge until it approves. When PRs conflict, the
-  Merge Agent decides how they merge, and its call is final.
+  Merge Agent decides how they merge, and its call is final. How it reviews, orders and resolves PRs, and what a PR
+  message should contain: `docs/agents/MERGE-PLAYBOOK.md`.
 - **Supabase is frozen for the hackathon.** It keeps today's sign-in, invites and older screens running; build new
   features in Convex (`docs/build/STACK.md`).
 - **Deploying the `api` edge function** (Supabase project ref `bsudybxsqvtwftsdmwmz`, verify_jwt false):
@@ -146,7 +147,7 @@ cd app && npx eas-cli build -p ios --profile production --auto-submit   # TestFl
 cd app && npx eas-cli update --channel production -m "<what changed>"   # JS-only fix to TestFlight phones
 node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
-cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages
+cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/recording-ui/parent-jobs
 
 # web
 cd web && npm run dev -- --port 3000

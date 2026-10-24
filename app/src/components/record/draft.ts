@@ -4,6 +4,7 @@
 //
 //   const draft = useDraft();
 //   addClips(clips, { dish, requestFrom, glasses });   toggleClip(key);   clearDraft();
+//   setDraftMeta({ dish, requestFrom, everyone, language, recordingId })   the pre-record sheet's answers
 import type { ImagePickerAsset } from 'expo-image-picker';
 import { useSyncExternalStore } from 'react';
 
@@ -24,11 +25,17 @@ export type Draft = {
   dish: string | null;
   /** The profile who asked for it (pre-selected in "Who is it for?"). */
   requestFrom: string | null;
+  /** The pre-record sheet's "Everyone" (instead of one kid). */
+  everyone: boolean;
   /** Filmed on smart glasses, imported from the camera roll (Convex jobs.create `source`). */
   glasses: boolean;
+  /** The language she cooked in (an ISO 639-1 code), when she picked it or people.me had loaded. */
+  language: string | null;
+  /** homie's live session for these videos (phone camera), for jobs.create. */
+  recordingId: string | null;
 };
 
-const EMPTY: Draft = { clips: [], dish: null, requestFrom: null, glasses: false };
+const EMPTY: Draft = { clips: [], dish: null, requestFrom: null, everyone: false, glasses: false, language: null, recordingId: null };
 
 let draft: Draft = EMPTY;
 const listeners = new Set<() => void>();
@@ -67,11 +74,17 @@ export function addClips(clips: DraftClip[], ctx: { dish?: string | null; reques
   const known = new Set(draft.clips.map((c) => c.asset.assetId ?? c.asset.uri));
   const fresh = clips.filter((c) => !known.has(c.asset.assetId ?? c.asset.uri));
   set({
+    ...draft,
     clips: [...draft.clips, ...fresh],
     dish: draft.dish ?? ctx.dish ?? null,
     requestFrom: draft.requestFrom ?? ctx.requestFrom ?? null,
     glasses: draft.glasses || !!ctx.glasses,
   });
+}
+
+/** What the pre-record sheet settled, before any video is in. It replaces what was there. */
+export function setDraftMeta(meta: Partial<Pick<Draft, 'dish' | 'requestFrom' | 'everyone' | 'language' | 'recordingId'>>) {
+  set({ ...draft, ...meta });
 }
 
 export function toggleClip(key: string) {
