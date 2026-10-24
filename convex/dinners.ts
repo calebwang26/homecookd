@@ -1,4 +1,4 @@
-// Community dinners: someone hosts a dinner around one of their family's recipes and neighbors ask to
+// Community dinners: someone hosts a dinner around one of their family's shared recipes and neighbors ask to
 // join. The address stays private: only the host and the guests they accepted ever see it.
 import { ConvexError, v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
@@ -89,6 +89,8 @@ export const create = mutation({
     const signed = await requireSession(ctx, args.sessionToken);
     const recipe = await familyRecipe(ctx, signed, args.recipeId);
     if (!recipe || recipe.status !== "ready") throw new ConvexError("Pick one of your family's recipes.");
+    // The dish name reaches every neighbor's feed, so only the cook's own share switch lets it out.
+    if (!recipe.sharedAt) throw new ConvexError("Share this recipe first.");
     if (args.startsAt <= Date.now()) throw new ConvexError("Pick a time that hasn't passed.");
     if (!Number.isInteger(args.seats) || args.seats < 1 || args.seats > 20) throw new ConvexError("Seats go from 1 to 20.");
     return await ctx.db.insert("dinners", {

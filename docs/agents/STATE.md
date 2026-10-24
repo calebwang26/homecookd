@@ -177,4 +177,15 @@ Before starting work, compare the last commit here with `git log origin/main` to
     `lib/http` and `lib/liveRoutes`.
   - **Open:** the TEST family's Biryani still says `mossIndexedAt`, but its index was deleted on purpose; it
     re-indexes on its next publish.
-- Oct 24 · #24 · Claude · Track G: Community backend + app helper (no screens yet). `community.feed` (shared recipes from other families, nearest first, plus open dinners; whitelisted fields only, `coverUrl` only for our own stock/cover photos), `community.recipe` (text only), `community.setShare` (the recipe's cook only; Muse Spark writes a ≤25-word story card once, stories only if `memoriesOptIn`, a plain template without `MUSE_API_KEY`), `community.setLocation` (rounded to ~1 km), `dinners.create/get/mine/requestJoin/respond` (the address only for the host and accepted guests; full once every seat is accepted). `convex/lib/geo.ts`, `convex/seedCommunity.ts` (8 neighbor families 0.5–3 mi out, `place`, `publicName`), `app/src/lib/live/community.ts`. 7 new convex-tests (20 pass). Open: `DEMO_LOCATION` is a Cambridge MA placeholder (`TODO(caleb)`: the venue's coordinates); not deployed; run `seedCommunity:neighbors`, then `place` for the floormates and `publicName` for the Pawars after the deploy; screens wait for Caleb's mockups.
+- Oct 24 · #24 · Claude · Track G: Community backend + app helper (no screens yet). `community.feed` (shared recipes from other families, nearest first, plus open dinners; whitelisted fields only, `coverUrl` only for our own stock/cover photos), `community.recipe` (text only), `community.setShare` (the recipe's cook only; Muse Spark writes a ≤25-word story card once, stories only if `memoriesOptIn`, a plain template without `MUSE_API_KEY`), `community.setLocation` (rounded to ~1 km), `dinners.create/get/mine/requestJoin/respond` (the address only for the host and accepted guests; full once every seat is accepted). `convex/lib/geo.ts`, `convex/seedCommunity.ts` (8 neighbor families 0.5–3 mi out, `place`, `publicName`), `app/src/lib/live/community.ts`. 7 new convex-tests (21 pass). Open: `DEMO_LOCATION` is a Cambridge MA placeholder (`TODO(caleb)`: the venue's coordinates); not deployed; run `seedCommunity:neighbors`, then `place` for the floormates and `publicName` for the Pawars after the deploy; screens wait for Caleb's mockups.
+- Oct 24 · #24 · Claude · Track G review fixes:
+  - **Her stories:** the story card now records `usedStories` (one optional field on `recipes.storyCard` in
+    `convex/schema.ts`). Once the cook says no to her stories, `community.feed` and `community.recipe` show the plain
+    line instead of a card written from them, and her next `setShare(on)` has Muse rewrite it without them.
+  - **Dinners:** `dinners.create` needs a shared recipe ("Share this recipe first."), because the dish name reaches
+    every neighbor's feed.
+  - **Contract (STACK.md):** `community.feed`'s `now` is now required. The app helper already sends it.
+  - **Tests:** 3 new (stories taken back with Muse mocked, past and full dinners, cover photos); the address test
+    shares first. 24 pass.
+  - **Open:** `convex/_generated/api.d.ts` is still the hand-edited one from this PR; regenerate it on the next
+    deploy. Not deployed.

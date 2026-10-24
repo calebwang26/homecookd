@@ -90,7 +90,7 @@ test("only the recipe's own cook can share it; the story card falls back without
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   let r = await t.run((ctx) => ctx.db.get("recipes", recipeId));
   expect(r?.sharedAt).toBeTypeOf("number");
-  expect(r?.storyCard?.text).toBe("Rajani's Kanda Poha, from the Pawar family.");
+  expect(r?.storyCard).toMatchObject({ text: "Rajani's Kanda Poha, from the Pawar family.", usedStories: false });
 
   await t.mutation(api.community.setShare, { sessionToken: rajani.sessionToken, recipeId, on: false });
   r = await t.run((ctx) => ctx.db.get("recipes", recipeId));
@@ -112,8 +112,51 @@ test("Muse gets the stories only when the cook opted in", async () => {
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   expect(bodies).toHaveLength(2);
   expect(bodies.filter((b) => b.includes("every Sunday in Pune"))).toHaveLength(1);
-  const card = await t.run(async (ctx) => (await ctx.db.get("recipes", closed))?.storyCard?.text);
-  expect(card).toBe("Rajani's poha, rinsed quick and tempered with mustard seeds.");
+  const card = (recipeId: Id<"recipes">) => t.run(async (ctx) => (await ctx.db.get("recipes", recipeId))?.storyCard);
+  expect(await card(closed)).toMatchObject({ text: "Rajani's poha, rinsed quick and tempered with mustard seeds.", usedStories: false });
+  expect(await card(open)).toMatchObject({ usedStories: true });
+});
+
+test("a card written from her stories goes plain once she says no, and sharing again rewrites it", async () => {
+  const { t, rajani, serene } = await world();
+  delete process.env.MOSS_PROJECT_ID; // setMemoriesOptIn starts a Moss sync; keep it offline
+  delete process.env.MOSS_PROJECT_KEY;
+  process.env.MUSE_API_KEY = "muse-test";
+  const withStory = "Rajani's poha, the one her mother made every Sunday in Pune.";
+  const withoutStory = "Rajani's poha, rinsed quick and tempered with mustard seeds.";
+  const plain = "Rajani's Kanda Poha, from the Pawar family.";
+  const bodies: string[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => {
+    const body = String(init.body);
+    bodies.push(body);
+    return Response.json({ choices: [{ message: { content: body.includes("every Sunday in Pune") ? withStory : withoutStory } }] });
+  }));
+  const recipeId = await recipe(t, rajani, { memoriesOptIn: true });
+  const share = async () => {
+    await t.mutation(api.community.setShare, { sessionToken: rajani.sessionToken, recipeId, on: true });
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+  };
+  const seen = async () => ({
+    feed: (await t.query(api.community.feed, { sessionToken: serene.sessionToken, now: Date.now() })).recipes[0]?.story,
+    view: (await t.query(api.community.recipe, { sessionToken: serene.sessionToken, recipeId }))?.story,
+  });
+  const card = () => t.run(async (ctx) => (await ctx.db.get("recipes", recipeId))?.storyCard);
+
+  await share();
+  expect(await card()).toMatchObject({ text: withStory, usedStories: true });
+  expect(await seen()).toEqual({ feed: withStory, view: withStory });
+
+  await t.mutation(api.recipes.setMemoriesOptIn, { sessionToken: rajani.sessionToken, recipeId, optIn: false });
+  expect(await seen()).toEqual({ feed: plain, view: plain });
+
+  await share();
+  expect(bodies).toHaveLength(2);
+  expect(bodies[1]).not.toContain("every Sunday in Pune");
+  expect(await card()).toMatchObject({ text: withoutStory, usedStories: false });
+  expect(await seen()).toEqual({ feed: withoutStory, view: withoutStory });
+
+  await share(); // the card matches her answer now: Muse isn't asked again
+  expect(bodies).toHaveLength(2);
 });
 
 const FORBIDDEN = ["libraryId", "recipeJsonUrl", "moment", "quote", "memories", "personId", "cookId", "hostId", "familyId", "address", "approx", "storage.googleapis.com", "lib-poha-secret", "Not too long", "every Sunday in Pune", "Baker House, 362"];
@@ -135,9 +178,9 @@ test("the feed and the recipe view return only whitelisted fields", async () => 
   expect(Object.keys(feed.dinners[0]).sort()).toEqual(["dinnerId", "dish", "distanceLabel", "hostName", "placeName", "seatsLeft", "startsAt"]);
   for (const word of FORBIDDEN) expect(JSON.stringify(feed)).not.toContain(word);
 
-  const fromRajani = await t.query(api.community.feed, { sessionToken: rajani.sessionToken, maxMiles: 5 });
+  const fromRajani = await t.query(api.community.feed, { sessionToken: rajani.sessionToken, maxMiles: 5, now: Date.now() });
   expect(fromRajani.recipes[0]).toMatchObject({ dish: "Dumplings", familyName: "Mei's family", distanceLabel: "About 1 mi", coverUrl: "https://homecookd.app/media/stock/dish-dumplings.jpg" });
-  expect((await t.query(api.community.feed, { sessionToken: rajani.sessionToken, maxMiles: 1 })).recipes).toEqual([]);
+  expect((await t.query(api.community.feed, { sessionToken: rajani.sessionToken, maxMiles: 1, now: Date.now() })).recipes).toEqual([]);
   expect(stock).toBeTruthy();
 
   const view = await t.query(api.community.recipe, { sessionToken: serene.sessionToken, recipeId: poha });
@@ -151,16 +194,57 @@ test("the feed and the recipe view return only whitelisted fields", async () => 
   expect(await t.query(api.community.recipe, { sessionToken: rajani.sessionToken, recipeId: unshared })).not.toBeNull();
 });
 
+test("the feed shows only our own stock and cover photos", async () => {
+  const { t, rajani, serene } = await world();
+  const covers = {
+    Stock: "https://homecookd.app/media/stock/dish-dal.jpg",
+    Cover: "https://homecookd.app/media/app-covers/poha.webp",
+    Upload: "https://homecookd.app/media/uploads/x.jpg",
+    Poster: "https://storage.googleapis.com/edible-recipes/poha/poster.jpg",
+    Lookalike: "https://homecookd.app.example.com/media/stock/dish-dal.jpg",
+  };
+  for (const [title, coverUrl] of Object.entries(covers)) await recipe(t, rajani, { title, coverUrl, sharedAt: 1 });
+  const feed = await t.query(api.community.feed, { sessionToken: serene.sessionToken, now: Date.now() });
+  expect(Object.fromEntries(feed.recipes.map((r) => [r.dish, r.coverUrl]))).toEqual({
+    Stock: covers.Stock,
+    Cover: covers.Cover,
+    Upload: null,
+    Poster: null,
+    Lookalike: null,
+  });
+});
+
+test("the feed leaves out past and full dinners", async () => {
+  const { t, rajani, serene } = await world();
+  const poha = await recipe(t, rajani, { sharedAt: 1 });
+  const soon = Date.now() + 3_600_000;
+  const host = (startsAt: number, seats: number) =>
+    t.mutation(api.dinners.create, { sessionToken: rajani.sessionToken, recipeId: poha, startsAt, placeName: "Baker House kitchen", address: "Baker House, 362 Memorial Dr", seats });
+  const first = await host(soon, 1);
+  const later = await host(soon + 3_600_000, 2);
+  const open = async (now: number) => (await t.query(api.community.feed, { sessionToken: serene.sessionToken, now })).dinners.map((d) => d.dinnerId);
+
+  expect(await open(Date.now())).toEqual([first, later]);
+  expect(await open(soon)).toEqual([later]); // starting right now counts as past
+
+  const requestId = await t.mutation(api.dinners.requestJoin, { sessionToken: serene.sessionToken, dinnerId: first });
+  await t.mutation(api.dinners.respond, { sessionToken: rajani.sessionToken, requestId, accept: true });
+  expect(await open(Date.now())).toEqual([later]); // every seat taken
+});
+
 test("a dinner's address reaches only the host and accepted guests", async () => {
   const { t, rajani, shreya, serene, caleb } = await world();
   const poha = await recipe(t, rajani);
-  const dinnerId = await t.mutation(api.dinners.create, {
-    sessionToken: shreya.sessionToken, recipeId: poha, startsAt: Date.now() + 3_600_000, placeName: "Baker House kitchen", address: "Baker House, 362 Memorial Dr", seats: 1,
-  });
+  const dinner = { recipeId: poha, startsAt: Date.now() + 3_600_000, placeName: "Baker House kitchen", address: "Baker House, 362 Memorial Dr", seats: 1 };
+  // The dish name goes to every neighbor's feed, so the cook has to share the recipe first.
+  await expect(t.mutation(api.dinners.create, { sessionToken: shreya.sessionToken, ...dinner })).rejects.toThrow("Share this recipe first.");
+  await t.mutation(api.community.setShare, { sessionToken: rajani.sessionToken, recipeId: poha, on: true });
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  const dinnerId = await t.mutation(api.dinners.create, { sessionToken: shreya.sessionToken, ...dinner });
   const get = (who: Who) => t.query(api.dinners.get, { sessionToken: who.sessionToken, dinnerId });
 
   let stranger = await get(serene);
-  expect(stranger).toMatchObject({ address: null, requests: null, myRequest: null, isHost: false, recipeId: null, placeKind: "campus_kitchen" });
+  expect(stranger).toMatchObject({ address: null, requests: null, myRequest: null, isHost: false, recipeId: poha, placeKind: "campus_kitchen" });
 
   await expect(t.mutation(api.dinners.requestJoin, { sessionToken: rajani.sessionToken, dinnerId })).rejects.toThrow("your family");
   const requestId = await t.mutation(api.dinners.requestJoin, { sessionToken: serene.sessionToken, dinnerId });
@@ -179,6 +263,10 @@ test("a dinner's address reaches only the host and accepted guests", async () =>
 
   const mine = await t.query(api.dinners.mine, { sessionToken: serene.sessionToken });
   expect(mine.map((d) => d.dinnerId)).toEqual([dinnerId]);
+
+  // Unsharing later keeps the dinner, but the recipe's text no longer opens for guests.
+  await t.mutation(api.community.setShare, { sessionToken: rajani.sessionToken, recipeId: poha, on: false });
+  expect((await get(serene))?.recipeId).toBeNull();
 });
 
 test("the community seed is idempotent and puts neighbors 0.3–3 mi away", async () => {
@@ -186,7 +274,7 @@ test("the community seed is idempotent and puts neighbors 0.3–3 mi away", asyn
   expect((await t.mutation(internal.seedCommunity.neighbors, {})).familiesAdded).toBe(8);
   expect((await t.mutation(internal.seedCommunity.neighbors, {})).familiesAdded).toBe(0);
   await t.mutation(internal.seedCommunity.place, { personId: caleb.personId });
-  const feed = await t.query(api.community.feed, { sessionToken: caleb.sessionToken });
+  const feed = await t.query(api.community.feed, { sessionToken: caleb.sessionToken, now: Date.now() });
   expect(feed.recipes).toHaveLength(8);
   expect(feed.recipes.every((r) => r.story && r.coverUrl?.startsWith("https://homecookd.app/media/stock/dish-"))).toBe(true);
   expect(new Set(feed.recipes.map((r) => r.distanceLabel))).toEqual(new Set(["Under a mile", "About 1 mi", "About 2 mi", "About 3 mi"]));

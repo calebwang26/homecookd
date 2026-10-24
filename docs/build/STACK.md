@@ -157,11 +157,13 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 - `people.setLanguage({ language })` (self). `people.me` → `{ personId, name, role, language, relation }`.
 - `questions.forRecipe` already exists; the kid's cook mode reads it to hear the cook's answer (`answerAudioUrl`,
   `answer.translation`).
-- Community: `community.feed({ maxMiles?, now? })` → `{ recipes, dinners }` (`now` is the client's clock, rounded,
-  to hide past dinners; queries can't read it), `community.recipe({ recipeId })` (text only),
+- Community: `community.feed({ maxMiles?, now })` → `{ recipes, dinners }` (`now` is required: the client's clock,
+  rounded, to hide past dinners; queries can't read it), `community.recipe({ recipeId })` (text only),
   `community.setLocation({ lat, lng, campus? })` (snapped to the ~1 km grid before it's stored),
-  `community.setShare({ recipeId, on })` (the recipe's cook only), `dinners.create({ recipeId, startsAt, placeKind,
-  placeName, address, seats })`, `dinners.get({ dinnerId })`, `dinners.mine`, `dinners.requestJoin({ dinnerId })`,
+  `community.setShare({ recipeId, on })` (the recipe's cook only; a story card written from her stories shows as a
+  plain line once she says no to them, and her next share rewrites it), `dinners.create({ recipeId, startsAt,
+  placeKind, placeName, address, seats })` (the recipe must be shared first), `dinners.get({ dinnerId })`,
+  `dinners.mine`, `dinners.requestJoin({ dinnerId })`,
   `dinners.respond({ requestId, accept })` (host only). Community responses never include `libraryId`,
   `recipeJsonUrl`, `coverUrl` of a private recipe, moments, quotes, person ids of other families, or an address
   (except to the host and accepted guests). Distance is a label from `lib/geo.ts`. `families.publicName` is the

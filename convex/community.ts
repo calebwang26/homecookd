@@ -22,6 +22,21 @@ export function familyLabel(family: Doc<"families"> | null, cookName: string): s
   return `${cookName.split(/\s+/)[0] || "A"}'s family`;
 }
 
+/** The cook's stories Muse may use: only if she said yes to sharing them. */
+function storiesFor(r: Doc<"recipes">): string[] {
+  return r.memoriesOptIn ? r.memories.filter((m) => m.kind === "story").slice(0, 3).map((m) => m.text) : [];
+}
+
+/** The story card, or the plain line once she says no to the stories it was written from. A card that
+ *  doesn't record whether stories went in counts as written from them. */
+function publicStory(r: Doc<"recipes">, cookName: string, family: Doc<"families"> | null): string | null {
+  if (!r.storyCard) return null;
+  if (r.storyCard.usedStories !== false && !r.memoriesOptIn) {
+    return plainStory({ cookName, dish: r.title, publicName: family?.publicName ?? null });
+  }
+  return r.storyCard.text;
+}
+
 const feedRecipe = v.object({
   recipeId: v.id("recipes"),
   dish: v.string(),
@@ -52,12 +67,12 @@ export async function acceptedCount(ctx: QueryCtx, dinnerId: Id<"dinners">): Pro
 
 /**
  * Shared recipes from other families, nearest first, and open dinners nearby. Queries can't read the
- * clock, so the app passes `now` (rounded, so the subscription stays put) to hide past dinners.
+ * clock, so the app must pass `now` (rounded, so the subscription stays put) to hide past dinners.
  */
 export const feed = query({
-  args: { sessionToken: v.string(), maxMiles: v.optional(v.number()), now: v.optional(v.number()) },
+  args: { sessionToken: v.string(), maxMiles: v.optional(v.number()), now: v.number() },
   returns: v.object({ recipes: v.array(feedRecipe), dinners: v.array(feedDinner) }),
-  handler: async (ctx, { sessionToken, maxMiles, now = 0 }) => {
+  handler: async (ctx, { sessionToken, maxMiles, now }) => {
     const signed = await requireSession(ctx, sessionToken);
     const here = placeOf(signed.person);
     const near = (miles: number) => maxMiles === undefined || miles <= maxMiles;
@@ -74,16 +89,17 @@ export const feed = query({
       const miles = milesBetween(here, placeOf(cook));
       if (!near(miles)) continue;
       const cookName = cook?.name ?? "";
+      const family = await ctx.db.get("families", r.familyId);
       recipes.push({
         miles,
         sharedAt: r.sharedAt ?? 0,
         row: {
           recipeId: r._id,
           dish: r.title,
-          familyName: familyLabel(await ctx.db.get("families", r.familyId), cookName),
+          familyName: familyLabel(family, cookName),
           cookName,
           distanceLabel: distanceLabel(miles),
-          story: r.storyCard?.text ?? null,
+          story: publicStory(r, cookName, family),
           coverUrl: r.coverUrl && PUBLIC_COVER.test(r.coverUrl) ? r.coverUrl : null,
           stepCount: r.steps.length,
         },
@@ -138,18 +154,22 @@ export const recipe = query({
     const r = await ctx.db.get("recipes", recipeId);
     if (!r || r.status !== "ready" || (!r.sharedAt && r.familyId !== signed.family._id)) return null;
     const cookName = (await ctx.db.get("people", r.cookId))?.name ?? "";
+    const family = await ctx.db.get("families", r.familyId);
     return {
       recipeId: r._id,
       dish: r.title,
-      familyName: familyLabel(await ctx.db.get("families", r.familyId), cookName),
+      familyName: familyLabel(family, cookName),
       cookName,
-      story: r.storyCard?.text ?? null,
+      story: publicStory(r, cookName, family),
       steps: r.steps.map(({ order, title, text }) => ({ order, title, text })),
     };
   },
 });
 
-/** The cook's switch. On: shared, and Muse writes the story card the first time. Off keeps the card. */
+/**
+ * The cook's switch. On: shared, and Muse writes the story card the first time, or again when the card
+ * doesn't match her answer about her stories anymore. Off keeps the card.
+ */
 export const setShare = mutation({
   args: { sessionToken: v.string(), recipeId: v.id("recipes"), on: v.boolean() },
   returns: v.null(),
@@ -165,7 +185,11 @@ export const setShare = mutation({
     }
     if (recipe.status !== "ready") throw new ConvexError("Share it once the recipe is ready.");
     await ctx.db.patch("recipes", recipeId, { sharedAt: Date.now() });
-    if (!recipe.storyCard) await ctx.scheduler.runAfter(0, internal.community.writeStoryCard, { recipeId });
+    const card = recipe.storyCard;
+    const withStories = storiesFor(recipe).length > 0; // what Muse would get now
+    if (!card || (card.usedStories !== false) !== withStories) {
+      await ctx.scheduler.runAfter(0, internal.community.writeStoryCard, { recipeId });
+    }
     return null;
   },
 });
@@ -200,17 +224,18 @@ export const storyFacts = internalQuery({
       dish: r.title,
       publicName: family?.publicName ?? null,
       steps: r.steps.slice(0, 3).map((s) => `${s.title}: ${s.text}`),
-      // The cook's stories go to Muse only if she said yes to sharing them.
-      stories: r.memoriesOptIn ? r.memories.filter((m) => m.kind === "story").slice(0, 3).map((m) => m.text) : [],
+      stories: storiesFor(r),
     };
   },
 });
 
 export const saveStoryCard = internalMutation({
-  args: { recipeId: v.id("recipes"), text: v.string() },
+  args: { recipeId: v.id("recipes"), text: v.string(), usedStories: v.boolean() },
   returns: v.null(),
-  handler: async (ctx, { recipeId, text }) => {
-    if (await ctx.db.get("recipes", recipeId)) await ctx.db.patch("recipes", recipeId, { storyCard: { text, writtenAt: Date.now() } });
+  handler: async (ctx, { recipeId, text, usedStories }) => {
+    if (await ctx.db.get("recipes", recipeId)) {
+      await ctx.db.patch("recipes", recipeId, { storyCard: { text, writtenAt: Date.now(), usedStories } });
+    }
     return null;
   },
 });
@@ -265,7 +290,9 @@ export const writeStoryCard = internalAction({
         return null;
       });
     }
-    await ctx.runMutation(internal.community.saveStoryCard, { recipeId, text: text ?? plainStory(facts) });
+    // The plain line never holds a story; Muse's sentence may.
+    const usedStories = text !== null && facts.stories.length > 0;
+    await ctx.runMutation(internal.community.saveStoryCard, { recipeId, text: text ?? plainStory(facts), usedStories });
     return null;
   },
 });
