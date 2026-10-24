@@ -1,13 +1,15 @@
 // Reads the pipeline's recipe.json (docs/HACKATHON-SPEC.md, section 4) into the fields Convex keeps.
 // The full file stays in GCS; Convex keeps what the app lists, the voice service reads aloud, and Moss
 // indexes: the steps and the stories and tips, each with its moment in the video.
-// Every text field is English; a step's quote_original (the cook's Marathi) stays in the GCS file only.
+// Every text field is English; a step's quoteOriginal keeps the cook's own words (quote_original, e.g. her
+// Marathi) for the caption, and `language` is what she spoke (an ISO 639-1 code).
 type Moment = { startS: number; endS: number };
 export type ParsedRecipe = {
   title: string;
   libraryId?: string;
   coverUrl?: string;
-  steps: { order: number; title: string; text: string; quote?: string; moment: Moment }[];
+  language?: string;
+  steps: { order: number; title: string; text: string; quote?: string; quoteOriginal?: string; moment: Moment }[];
   memories: { kind: "story" | "tip"; text: string; moment: Moment }[];
 };
 
@@ -40,6 +42,7 @@ export function parseRecipeJson(raw: unknown): ParsedRecipe | string {
       title: str(s.title, 200) ?? `Step ${i + 1}`,
       text,
       quote: str(s.quote, 1000),
+      quoteOriginal: str(s.quote_original, 1000),
       moment: moment(s),
     });
   }
@@ -62,5 +65,13 @@ export function parseRecipeJson(raw: unknown): ParsedRecipe | string {
   }
 
   const media = r.media && typeof r.media === "object" ? (r.media as Record<string, unknown>) : {};
-  return { title, libraryId: str(r.id, 200), coverUrl: url(media.poster_url), steps, memories };
+  const language = str(r.language, 10)?.toLowerCase();
+  return {
+    title,
+    libraryId: str(r.id, 200),
+    coverUrl: url(media.poster_url),
+    language: language && /^[a-z]{2}$/.test(language) ? language : undefined,
+    steps,
+    memories,
+  };
 }

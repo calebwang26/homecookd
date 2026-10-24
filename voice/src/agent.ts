@@ -1,6 +1,7 @@
 // Claude as the cooking agent: each time the kid finishes talking, it picks one tool (STACK.md,
-// "Claude's tools"). find_moment is the only tool that hands control back for a second pick, so a
-// question becomes find_moment → play_clip, or find_moment → ask_cook.
+// "Claude's tools" and "kid cooking additions"). find_moment is the only tool that hands control back for
+// a second pick, so a question becomes find_moment → play_clip, or → give_hint / ask_cook. A hint is
+// general cooking knowledge, labelled as the AI's, and the question still goes to the cook (Caleb, Oct 24).
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "./env.js";
 import type { CookSession } from "./convex.js";
@@ -11,12 +12,23 @@ import type * as Beta from "@anthropic-ai/sdk/resources/beta/messages/messages.j
 /** What the agent can make happen. The cooking session implements these. */
 export type Actions = {
   currentStep: () => number;
-  goToStep: (order: number) => Promise<void>;
+  /** Shows the step; reads it aloud when the kid has said yes to reading, or always with `read`. */
+  goToStep: (order: number, read?: boolean) => Promise<void>;
   /** Moss search. `waitMs` caps how long to wait for the family's index to load. */
   findMoment: (query: string, waitMs: number) => Promise<Hit[]>;
-  /** Plays a moment of the cook's video. `question` is set when it answers something the kid asked. */
-  playClip: (startS: number, endS: number, question?: { text: string; quote: string }) => Promise<void>;
+  /**
+   * Plays a moment of the cook's video. `question` is set when it answers something the kid asked;
+   * `stepOrder` and `caption` pick the words shown under it.
+   */
+  playClip: (
+    startS: number,
+    endS: number,
+    clip: { question?: { text: string; quote: string }; stepOrder?: number; caption?: string },
+  ) => Promise<void>;
   askCook: (question: string) => Promise<void>;
+  /** A labelled AI hint ("Grandma didn't say. …"), then the question goes to the cook too. */
+  giveHint: (hint: string, question: string) => Promise<void>;
+  setTimer: (seconds: number, label: string) => Promise<void>;
   say: (text: string) => Promise<void>;
 };
 
@@ -51,6 +63,29 @@ const TOOLS: Beta.BetaTool[] = [
     input_schema: obj({ start_s: { type: "number" }, end_s: { type: "number" } }, ["start_s", "end_s"]),
   },
   {
+    name: "give_hint",
+    description:
+      "When no moment answers a question about general cooking (an amount, a time, the heat, a common swap) and you're sure of the common answer: one short hedged line the kid hears labelled as yours, not the cook's. The question also goes to the cook.",
+    input_schema: obj(
+      {
+        hint: { type: "string", description: "One short line of common knowledge, e.g. \"Most recipes use about a teaspoon.\" Never what the cook did." },
+        question: { type: "string", description: "The kid's question in their own words, for the cook." },
+      },
+      ["hint", "question"],
+    ),
+  },
+  {
+    name: "set_timer",
+    description: "Start a kitchen timer the kid asked for. The phone shows the countdown, and you say when it's done.",
+    input_schema: obj(
+      {
+        seconds: { type: "integer", description: "Length in seconds, e.g. 300 for five minutes." },
+        label: { type: "string", description: "What it's for in 1–3 words, e.g. \"rice\". \"timer\" if they didn't say." },
+      },
+      ["seconds", "label"],
+    ),
+  },
+  {
     name: "ask_cook",
     description:
       "Send the kid's question to the cook, when no moment answers it. The cook answers later on their phone. The kid hears that you asked.",
@@ -58,7 +93,7 @@ const TOOLS: Beta.BetaTool[] = [
   },
   {
     name: "say",
-    description: "Speak a very short line to the kid (under 15 words). Never a cooking fact, amount, time or tip.",
+    description: "Speak a very short line to the kid (under 15 words). Never a cooking fact, amount, time or tip (that's give_hint).",
     input_schema: obj({ text: { type: "string" } }, ["text"]),
   },
 ].map((t) => ({ ...t, strict: true }));
@@ -77,13 +112,14 @@ function systemPrompt(s: CookSession): string {
 
 Each turn, call exactly one tool:
 - "next", "done", "what's next", "ok go on" → next_step. "back", "last step" → previous_step. "again", "what?", "say that again" → repeat_step. "step 4", "go to the sauce part" → go_to_step.
-- A question about the dish (how much, how long, what should it look like, why, can I swap something): the message lists moments from ${cook}'s video that may match. If one clearly answers it, play_clip with its start_s and end_s. If none does, ask_cook. Use find_moment when no moments are listed, or when the kid's words were vague and other words would clearly find it.
+- A question about the dish (how much, how long, what should it look like, why, can I swap something): the message lists moments from ${cook}'s video that may match. If one clearly answers it, play_clip with its start_s and end_s. Use find_moment when no moments are listed, or when the kid's words were vague and other words would clearly find it. If no moment answers it: give_hint when it's general cooking knowledge you're sure of (it's labelled as yours, and the question still goes to ${cook}); otherwise ask_cook.
 - "show me how you did this step" → play_clip with the step's own video times.
+- "set a timer for five minutes", "time the rice for 20" → set_timer.
 - Small talk or thanks → say, briefly and warmly.
 - Unclear speech → say, asking them to repeat.
 - Speech not meant for you (talking to someone else, background noise, half a word) → call no tool and reply with an empty message. Silence is better than interrupting.
 
-The one rule that matters most: never state anything ${cook} didn't say. Don't answer from general cooking knowledge, don't guess an amount, time or temperature, and don't sum up a clip. The answer is ${cook}'s own clip, or the question goes to ${cook}. The only exception: if something is on fire or someone is hurt, say "Turn off the heat, and get help if anyone's hurt."
+The one rule that matters most: never present anything as ${cook}'s that ${cook} didn't say. Her own clip comes first. General cooking knowledge goes only in give_hint: short, hedged ("most recipes…", "usually…"), never about what ${cook} did or her secret, and never instead of a clip that answers. Don't sum up a clip. If something is on fire or someone is hurt, say "Turn off the heat, and get help if anyone's hurt."
 
 ${cook}'s recipe:
 ${steps}`;
@@ -97,7 +133,7 @@ export class TurnAgent {
   /** Results of the last turn's final tool call; they open the next user message. */
   private pending: Beta.BetaToolResultBlockParam[] = [];
   /** Moments the agent may play: the steps' own, plus whatever find_moment returned. */
-  private playable: { startS: number; endS: number; quote?: string }[];
+  private playable: { startS: number; endS: number; quote?: string; stepOrder?: number }[];
 
   constructor(
     private session: CookSession,
@@ -105,7 +141,7 @@ export class TurnAgent {
   ) {
     this.system = systemPrompt(session);
     this.cook = session.cook?.name ?? "the cook";
-    this.playable = session.recipe.steps.map((s) => s.moment);
+    this.playable = session.recipe.steps.map((s) => ({ ...s.moment, stepOrder: s.order }));
   }
 
   /** Handle one finished utterance from the kid. */
@@ -115,7 +151,7 @@ export class TurnAgent {
     const context = `[On step ${now?.order ?? "?"} of ${steps.length}: ${now?.title ?? ""}]`;
     // Search the video up front (in-memory, ~10 ms), so a question needs one model call, not two.
     let foundThisTurn = await this.actions.findMoment(utterance, 2000).catch(() => [] as Hit[]);
-    this.playable.push(...foundThisTurn.map((h) => ({ startS: h.startS, endS: h.endS, quote: h.quote })));
+    this.playable.push(...foundThisTurn.map((h) => ({ startS: h.startS, endS: h.endS, quote: h.quote, stepOrder: h.stepOrder })));
     const moments = foundThisTurn.length ? `\nMoments from ${this.cook}'s video that may match: ${momentsJson(foundThisTurn)}` : "";
     this.pushUser([...this.pending, { type: "text", text: `${context}\n${this.session.kid.name}: "${utterance}"${moments}` }]);
     this.pending = [];
@@ -139,7 +175,7 @@ export class TurnAgent {
       if (tool.name === "find_moment") {
         const hits = await this.actions.findMoment(String(input.query), 15000).catch(() => [] as Hit[]);
         foundThisTurn = [...foundThisTurn, ...hits];
-        this.playable.push(...hits.map((h) => ({ startS: h.startS, endS: h.endS, quote: h.quote })));
+        this.playable.push(...hits.map((h) => ({ startS: h.startS, endS: h.endS, quote: h.quote, stepOrder: h.stepOrder })));
         const body = hits.length ? momentsJson(hits) : "No moment in the video matches. Use ask_cook.";
         this.pushUser([result(body)]);
         continue;
@@ -154,7 +190,7 @@ export class TurnAgent {
           continue;
         }
         const question = known.quote ? { text: utterance, quote: known.quote } : undefined;
-        await this.actions.playClip(known.startS, known.endS, question);
+        await this.actions.playClip(known.startS, known.endS, { question, stepOrder: known.stepOrder });
         this.pending = [result("Playing.")];
         return;
       }
@@ -218,7 +254,7 @@ export class TurnAgent {
         await a.goToStep(Math.max(1, step - 1));
         return `Now on step ${Math.max(1, step - 1)}.`;
       case "repeat_step":
-        await a.goToStep(step);
+        await a.goToStep(step, true);
         return `Repeated step ${step}.`;
       case "go_to_step": {
         const n = Math.min(last, Math.max(1, Number(input.n)));
@@ -228,6 +264,18 @@ export class TurnAgent {
       case "ask_cook":
         await a.askCook(String(input.question));
         return "Sent to the cook.";
+      case "give_hint":
+        await a.giveHint(String(input.hint), String(input.question));
+        return "Hint given, labelled as yours; the question went to the cook too.";
+      case "set_timer": {
+        const seconds = Math.round(Number(input.seconds));
+        if (!(seconds >= 5 && seconds <= 4 * 3600)) {
+          await a.say("I can set timers up to four hours.");
+          return "Not set: timers run from 5 seconds to 4 hours.";
+        }
+        await a.setTimer(seconds, String(input.label || "timer"));
+        return `Timer set for ${seconds} s.`;
+      }
       case "say":
         await a.say(String(input.text));
         return "Said.";
