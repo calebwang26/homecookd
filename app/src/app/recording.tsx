@@ -4,6 +4,9 @@
 // (lib/live/homie). Her language big, small English under it. Nothing else.
 //   connecting, intro  homie says hello while the button rests ("homie is saying hello"). Then filming
 //                      starts by itself; "Skip, start filming" starts it now (homie stops mid-line).
+//                      Glasses (the MVP: start and stop are hers): filming starts as soon as homie's line
+//                      is up, with no hello, and "I'm done" ends it right away (live.endRecording, no
+//                      wrap-up questions), so the laptop saves the video and Home offers "Save to Photos".
 //   recording          glasses: rings pulse out of the button; a tap is "I'm done" ("माझं झालं" / "Tap
 //                      when you're done"). With homie's line down, that tap ends the recording through
 //                      Convex (live.endRecording), so the glasses' video still goes. phone: the phone's
@@ -152,7 +155,10 @@ export default function RecordingScreen() {
 
   // Filming starts by itself once homie's hello has played (once).
   const started = useRef(false);
-  const autoStart = shouldAutoStart({ phase: homie.phase, introDone: homie.introDone, aiSpeaking, error: !!homie.error });
+  const autoStart =
+    source === 'glasses'
+      ? homie.phase === 'intro' && !homie.error
+      : shouldAutoStart({ phase: homie.phase, introDone: homie.introDone, aiSpeaking, error: !!homie.error });
   const begin = useRef(() => {});
   useEffect(() => {
     begin.current = source === 'glasses' ? homie.start : () => void filmOnPhone();
@@ -170,6 +176,15 @@ export default function RecordingScreen() {
     if (started.current) return;
     started.current = true;
     begin.current();
+  };
+
+  // Glasses: "I'm done" ends the recording now (no wrap-up questions); if Convex can't be reached, homie's way.
+  const doneNow = homie.done;
+  const stop = () => {
+    if (source !== 'glasses') return doneNow();
+    void endWithoutHomie().then((ok) => {
+      if (!ok) doneNow();
+    });
   };
 
   const filmWithoutHomie = async () => {
@@ -196,13 +211,13 @@ export default function RecordingScreen() {
             <RecordButton
               live={view.live}
               disabled={!view.live || !!pick.busy}
-              onPress={homie.done}
+              onPress={stop}
               accessibilityLabel={view.live ? 'Recording. Tap when you’re done.' : view.line.en ?? view.line.text}
             />
             <Animated.View key={view.line.text} entering={FadeIn.duration(reduce ? motion.reducedFadeMs : 220)} style={styles.label}>
               <BiLine line={view.line} size={30} weight={700} enSize={15} leading={1.3} />
             </Animated.View>
-            {beforeFilming && !homie.error && !skipped ? (
+            {source === 'phone' && beforeFilming && !homie.error && !skipped ? (
               <View style={styles.skip}>
                 <ActionButton label={both(words.line('skipIntro'))} variant="outline" size="sm" onPress={skipIntro} />
               </View>

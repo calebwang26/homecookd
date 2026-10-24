@@ -22,6 +22,7 @@ import Animated from 'react-native-reanimated';
 import { InviteButton } from '@/components/invite/InviteButton';
 import { LiveQuestions } from '@/components/parent/LiveQuestions';
 import { PendingList, usePendingRecipes } from '@/components/parent/PendingRecipes';
+import { GlassesVideoCard } from '@/components/record/GlassesVideoCard';
 import { UpdatesCard } from '@/components/parent/UpdatesCard';
 import { ActingAsBar, MoveRequestPrompt, ProfileButton } from '@/components/profiles';
 import { RecapCard, useRecapCard } from '@/components/recap/RecapCard';
@@ -75,6 +76,7 @@ export default function ParentHome() {
               />
             </Animated.View>
 
+            <GlassesVideoCard />
             <PendingList pending={pending} jobs={pending.jobs.slice(0, 1)} startIndex={1} />
             <LiveQuestions enterIndex={1} />
             <UpdatesCard enterIndex={1} />
