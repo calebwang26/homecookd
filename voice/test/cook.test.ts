@@ -276,7 +276,8 @@ test("the long-quiet nudge waits while an app moment is up", async () => {
 });
 
 test("every everyday no declines the offer with offer_closed, and a later okay doesn't turn reading on", async () => {
-  const nos = ["No, not right now.", "Nah, I'm good.", "No, I don't want that.", "Don't.", "Not now, thanks.", "Oh, no thanks.", "Oh no, not now.", "Yeah, no."];
+  const nos = ["No, not right now.", "Nah, I'm good.", "No, I don't want that.", "Don't.", "Not now, thanks.", "Oh, no thanks.", "Oh no, not now.", "Yeah, no.",
+    "No, no need to read it.", "Nope, no need to read it out loud.", "Nah, no need for that.", "No, no need to play it."];
   for (const no of nos) {
     const w = world();
     const c = w.connect();

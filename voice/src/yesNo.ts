@@ -11,7 +11,8 @@
 //   and wins after a yes or an okay: "Okay, no." and "Yeah, no, I'm good." are a no. What the kid says after the no
 //   is still theirs (afterNo): a question ("No, the oil's too hot?"), a command ("No, go to step 3.", "No, play the
 //   video.") or 3+ words ("No, I'm out of ginger. Can I skip it?"), unless it's just more no ("No, maybe later.",
-//   "Nah, I'm good for now.", "No, don't read it.").
+//   "Nah, I'm good for now.", "No, don't read it.", "No, no need to read it.", "No, I got it."). A mixed signal
+//   goes on as said: "No, just read it." declines the offer and passes "read it" on (to Claude).
 // - "Not yet", "not really", "later", "maybe later", "skip it" and "I'm good" count only as the whole reply, and
 //   "don't" alone or before read, play, do, bother, want or need: "Not really sure how much salt", "I'm good at
 //   this" and "Don't forget the timer" are not a no.
@@ -25,26 +26,29 @@ const LEAD = /^((yes|yeah|yep|yup|sure|of course(?! not\b)|ok|okay|alright|all r
 const SAID_YES = /\b(yes|yeah|yep|yup|sure|of course)\b/;
 const SAID_OK = /\b(ok|okay|alright|all right|please)\b/;
 const YES = /^(go ahead|do it|play it|read it|let'?s hear it|can do|will do)\b/;
-const NO = /^(no( no)*(?! (problem|worries|idea|clue|one|doubt|matter|wonder)\b)|nah|nope|not now|not right now|of course not|don'?t(?= (bother|worry|read|play|do|want|need)\b|$))( |$)/;
+/** A no keeps the "no" of "no need", "no point" and "no reason", so NO_FILLER sees "no need to read it". */
+const NO = /^(?=no (need|point|reason)\b)|^(no( no(?! (need|point|reason)\b))*(?! (problem|worries|idea|clue|one|doubt|matter|wonder)\b)|nah|nope|not now|not right now|of course not|don'?t(?= (bother|worry|read|play|do|want|need)\b|$))( |$)/;
 const WHOLE_NO = /^(not yet|not really|later|maybe later|maybe not|skip it|i'?m good)$/;
-/** What a no can trail before a command: "no thanks, next step". */
-const NO_TAIL = /^((no|nah|nope|not now|not right now|thanks|thank you|but|just|um|uh|so|well|then|ok|okay)( |$))+/;
+/** What a no can trail before a command: "no thanks, next step", "nah, no need, next step". */
+const NO_TAIL = /^((no (need|point|reason)(?! (to|for)\b)|no(?! (need|point|reason)\b)|nah|nope|not now|not right now|thanks|thank you|but|just|um|uh|so|well|then|ok|okay)( |$))+/;
 /** A command or a question (what cook.ts's FAST commands, timers and Claude are for). */
 const COMMAND = /^(next|done|go on|go back|back|previous|last step|step back|repeat|again|say that|one more time|what|how|when|where|why|who|which|can|could|should|would|will|is|are|am i|do i|do you|do we|does|did|set|start|stop|pause|wait|hold on|hang on|help)\b|\btimer\b/;
 /** More commands, only after a no (after an okay they'd be a yes: "Okay, read it."). */
 const ACTION = /^(go to|skip|play|tell|show|read)\b/;
-/** What a no can trail and still be only the no: "No, I'm good for now.", "Nah, that's okay.", "No, skip it." */
+/** What a no can trail and still be only the no: "No, I'm good for now.", "Nah, no need for that.", "No, I got it." */
 const NO_FILLER = new RegExp(
   "^(" +
     [
-      "i'?m (all )?(good|fine|okay|ok|alright|set)",
+      "i'?m (all right|(all )?(good|fine|okay|ok|alright|set))( (on|with) (that|it|this))?",
       "(that'?s|it'?s) (fine|okay|ok|alright|all right)",
-      "all good|no need|never ?mind|i'?d rather not|skip( it| that)?",
+      "all good|never ?mind|i'?d rather not|skip( it| that)?",
+      "(there'?s )?no (need|point|reason)( to( (read|play|do)( it| that| them)?( out loud)?)?| for (it|that))?",
+      "i('?ve)? got (it|this)|i can do (it|this)|you don'?t (have|need) to",
       "(maybe )?(not|later|next time|another time)|not (yet|really|today|this time)",
       "don'?t( (bother|worry|read|play|do|want|need)( it| that| about it| to)?( out loud)?)?",
       "i don'?t (want|need) (it|that|this|one|any|to|to hear it)",
     ].join("|") +
-    ")( (for now|right now|today|though|anyway|really|thanks|thank you))*$",
+    ")( (for now|right now|today|though|anyway|really|thanks( so much)?|thank you( so much)?))*$",
 );
 
 function parse(text: string) {

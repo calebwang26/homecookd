@@ -112,3 +112,28 @@ test("afterNo: more no after a no is only the no", () => {
     assert.equal(yesNo(reply), "no", JSON.stringify(reply));
   }
 });
+
+test("afterNo: a no need after a no is only the no (it never reaches Claude as 'need to read it')", () => {
+  for (const reply of [
+    "No, no need to read it.", "Nope, no need to read it out loud.", "Nah, no need for that.", "No, no need to play it.",
+    "No need to read it.", "No need.", "No, there's no need.", "No, no need to.", "Nah, no need for now.",
+    "No, no need, I'm good.", "Oh no, no need to read it.", "No thanks, no need to read it.", "No point.",
+  ]) {
+    assert.equal(afterNo(reply), "", JSON.stringify(reply));
+    assert.equal(yesNo(reply), "no", JSON.stringify(reply));
+  }
+  assert.equal(afterNo("Nah, no need, next step."), "next step");
+});
+
+test("afterNo: the everyday ways to say I've got it are only the no", () => {
+  for (const reply of [
+    "No, I'm all right.", "No, I got it.", "No, I've got it.", "No, I can do it.", "No, I'm good on that.",
+    "Nah, I'm fine with that.", "No, you don't have to.", "No, I'm good, thank you so much.",
+  ]) {
+    assert.equal(afterNo(reply), "", JSON.stringify(reply));
+    assert.equal(yesNo(reply), "no", JSON.stringify(reply));
+  }
+  // A mixed signal goes on as said: the offer is declined and "read it" still reaches Claude.
+  assert.equal(afterNo("No, just read it."), "read it");
+  assert.equal(yesNo("No, just read it."), "no");
+});
