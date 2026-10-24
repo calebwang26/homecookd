@@ -1,6 +1,7 @@
 // Reads the pipeline's recipe.json (docs/HACKATHON-SPEC.md, section 4) into the fields Convex keeps.
 // The full file stays in GCS; Convex keeps what the app lists, the voice service reads aloud, and Moss
-// indexes: the steps and the stories and tips, each with its moment in the video.
+// indexes: the steps and the stories and tips, each with its moment in the video. A memory also keeps where
+// it sits in recipe.json (its step, id, title, why), because the public copy of the file leaves it out.
 // Every text field is English; a step's quoteOriginal keeps the cook's own words (quote_original, e.g. her
 // Marathi) for the caption, and `language` is what she spoke (an ISO 639-1 code).
 type Moment = { startS: number; endS: number };
@@ -10,7 +11,15 @@ export type ParsedRecipe = {
   coverUrl?: string;
   language?: string;
   steps: { order: number; title: string; text: string; quote?: string; quoteOriginal?: string; moment: Moment }[];
-  memories: { kind: "story" | "tip"; text: string; moment: Moment }[];
+  memories: {
+    kind: "story" | "tip";
+    text: string;
+    moment: Moment;
+    step?: number;
+    id?: string;
+    title?: string;
+    why?: string;
+  }[];
 };
 
 const str = (x: unknown, max = 4000) => (typeof x === "string" && x.trim() ? x.trim().slice(0, max) : undefined);
@@ -49,19 +58,26 @@ export function parseRecipeJson(raw: unknown): ParsedRecipe | string {
   if (!steps.length) return "recipe.steps is empty";
   steps.sort((a, b) => a.order - b.order);
 
+  const stepOrder = (n: unknown) => steps.find((s) => s.order === n)?.order;
   const stepMoment = (n: unknown) => steps.find((s) => s.order === n)?.moment;
   const memories: ParsedRecipe["memories"] = [];
   for (const s of objects(r.stories, 50)) {
     const text = str(s.text);
-    if (text) memories.push({ kind: "story", text, moment: moment(s, stepMoment(s.step)) });
+    if (text) {
+      const at = { step: stepOrder(s.step), id: str(s.id, 200), title: str(s.title, 200) };
+      memories.push({ kind: "story", text, moment: moment(s, stepMoment(s.step)), ...at });
+    }
   }
   for (const x of objects(r.special, 50)) {
     const text = str(x.text);
-    if (text) memories.push({ kind: "tip", text, moment: moment(x, stepMoment(x.step)) });
+    if (text) {
+      const at = { step: stepOrder(x.step), id: str(x.id, 200), why: str(x.why, 1000) };
+      memories.push({ kind: "tip", text, moment: moment(x, stepMoment(x.step)), ...at });
+    }
   }
-  for (const s of objects(r.steps, 100)) {
+  for (const [i, s] of objects(r.steps, 100).entries()) {
     const text = str(s.tip);
-    if (text) memories.push({ kind: "tip", text, moment: moment(s) });
+    if (text) memories.push({ kind: "tip", text, moment: moment(s), step: num(s.order) ?? i + 1 });
   }
 
   const media = r.media && typeof r.media === "object" ? (r.media as Record<string, unknown>) : {};
