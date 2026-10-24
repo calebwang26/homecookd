@@ -50,15 +50,17 @@ export class Cooking {
       this.session = await convex.startSession(this.token, this.recipeId);
     } catch (err) {
       const unauthorized = err instanceof convex.Unauthorized;
-      this.send({ type: "error", message: unauthorized ? "session expired" : "couldn't load the recipe" });
-      this.ws.close(unauthorized ? 4401 : 1011);
-      if (!unauthorized) console.error(err);
+      const notFound = err instanceof convex.NotFound;
+      const message = unauthorized ? "session expired" : notFound ? "recipe isn't ready" : "couldn't load the recipe";
+      this.send({ type: "error", message });
+      this.ws.close(unauthorized ? 4401 : notFound ? 4404 : 1011);
+      if (!unauthorized && !notFound) console.error(err);
       return;
     }
     if (this.closed) return;
-    const { recipe, cook, familyId } = this.session;
+    const { recipe, cook, mossIndex } = this.session;
     this.step = this.session.stepOrder ?? 1;
-    void warm(familyId);
+    void warm(mossIndex);
     this.agent = new TurnAgent(this.session, this.actions);
     this.ink = new InkStream(
       {
@@ -143,13 +145,13 @@ export class Cooking {
       this.persistStep();
       await this.say(`Step ${order}. ${step.text}`);
     },
-    findMoment: (query, waitMs) => findMoments(this.session.familyId, this.session.recipe.id, query, waitMs),
+    findMoment: (query, waitMs) => findMoments(this.session.mossIndex, this.session.recipe.id, query, waitMs),
     playClip: async (startS, endS, question) => {
       this.speaking?.abort();
       this.send({ type: "play_clip", startS, endS });
       if (question) {
         await convex
-          .logQuestion(this.token, this.recipeId, this.step, question.text, { moment: { startS, endS }, quote: question.quote })
+          .logQuestion(this.token, this.recipeId, this.step, question.text, { startS, endS, quote: question.quote })
           .catch((err) => console.warn("voice/question", err.message));
       }
     },

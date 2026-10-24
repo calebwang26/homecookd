@@ -1,11 +1,11 @@
 {
   "familyId": "voice-test",
+  "mossIndex": "family-voice-test",
   "kid": {
     "id": "kid-test",
     "name": "Leo"
   },
   "cook": {
-    "id": "cook-test",
     "name": "Grandma"
   },
   "recipe": {

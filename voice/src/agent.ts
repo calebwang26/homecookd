@@ -64,7 +64,9 @@ const TOOLS: Beta.BetaTool[] = [
 ].map((t) => ({ ...t, strict: true }));
 
 const momentsJson = (hits: Hit[]) =>
-  JSON.stringify(hits.map((h) => ({ cook_said: h.text, start_s: h.startS, end_s: h.endS, step: h.stepOrder, score: h.score })));
+  JSON.stringify(
+    hits.map((h) => ({ moment: h.text, cook_said: h.quote, start_s: h.startS, end_s: h.endS, step: h.stepOrder, score: h.score })),
+  );
 
 function systemPrompt(s: CookSession): string {
   const cook = s.cook?.name ?? "the cook";
@@ -113,7 +115,7 @@ export class TurnAgent {
     const context = `[On step ${now?.order ?? "?"} of ${steps.length}: ${now?.title ?? ""}]`;
     // Search the video up front (in-memory, ~10 ms), so a question needs one model call, not two.
     let foundThisTurn = await this.actions.findMoment(utterance, 2000).catch(() => [] as Hit[]);
-    this.playable.push(...foundThisTurn.map((h) => ({ startS: h.startS, endS: h.endS, quote: h.text })));
+    this.playable.push(...foundThisTurn.map((h) => ({ startS: h.startS, endS: h.endS, quote: h.quote })));
     const moments = foundThisTurn.length ? `\nMoments from ${this.cook}'s video that may match: ${momentsJson(foundThisTurn)}` : "";
     this.pushUser([...this.pending, { type: "text", text: `${context}\n${this.session.kid.name}: "${utterance}"${moments}` }]);
     this.pending = [];
@@ -137,7 +139,7 @@ export class TurnAgent {
       if (tool.name === "find_moment") {
         const hits = await this.actions.findMoment(String(input.query), 15000).catch(() => [] as Hit[]);
         foundThisTurn = [...foundThisTurn, ...hits];
-        this.playable.push(...hits.map((h) => ({ startS: h.startS, endS: h.endS, quote: h.text })));
+        this.playable.push(...hits.map((h) => ({ startS: h.startS, endS: h.endS, quote: h.quote })));
         const body = hits.length ? momentsJson(hits) : "No moment in the video matches. Use ask_cook.";
         this.pushUser([result(body)]);
         continue;

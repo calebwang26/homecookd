@@ -20,16 +20,19 @@ scripts/        test client, test-audio maker, Moss test-index seeder
 ## Run it locally
 
 Keys come from the repo's root `.env` (found by walking up, so a worktree works too) or the process env:
-`CARTESIA_API_KEY`, `ANTHROPIC_API_KEY`, `MOSS_PROJECT_ID`, `MOSS_PROJECT_KEY`. Optional: `CONVEX_SITE_URL` +
-`VOICE_SECRET` (without them, the stub serves one recipe and accepts any session token), `CLAUDE_FAST=1` (Opus fast
-mode), `CLAUDE_MODEL`, `CARTESIA_VOICE`.
+`CARTESIA_API_KEY`, `ANTHROPIC_API_KEY`, `MOSS_PROJECT_ID`, `MOSS_PROJECT_KEY`, `CONVEX_SITE_URL`
+(https://grand-dragon-649.convex.site) and `VOICE_SECRET`. Optional: `VOICE_STUB=1` (serve the stub recipe and
+accept any session token, for tests without a real sign-in), `CLAUDE_FAST=1` (Opus fast mode), `CLAUDE_MODEL`,
+`CARTESIA_VOICE`.
 
 ```bash
 cd voice && npm ci
-npm run dev                                   # ws://localhost:8080/cook
+npm run dev                                   # ws://localhost:8080/cook, live Convex
+VOICE_STUB=1 npm run dev                      # the stub recipe instead
 npm run make-audio                            # test-audio/*.wav, 16 kHz mono, spoken by Sonic
 npm run seed-moss                             # Moss index family-voice-test (the stub family)
 npm run test-client -- test-audio/next-step.wav test-audio/question.wav test-audio/unknown-question.wav
+SESSION=<kid's Convex sessionToken> RECIPE=<recipes _id> npm run test-client -- test-audio/next-step.wav  # live
 URL=wss://<cloud run host> npm run test-client -- test-audio/next-step.wav   # against the deployed one
 npm run typecheck
 ```
@@ -54,7 +57,8 @@ Service → app
 - `{ type: "say", text, ai: true, audio: { format, encoding: "pcm_s16le", sampleRate: 24000 } }`, then the audio
   as binary frames, then `{ type: "say_end", interrupted }`. `audio=pcm` (default) streams raw PCM to play as it
   arrives. With `audio=wav`, the frames joined together are one WAV file. A new `say` cuts off the one before it.
-- `{ type: "error", message }`. Close code 4401 means the session token was refused: sign in again.
+- `{ type: "error", message }`. Close code 4401 means the session token was refused (sign in again); 4404 means
+  the recipe isn't in this family or isn't ready.
 
 The phone must play audio with echo cancellation on (iOS voice processing). Otherwise Ink hears Sonic. The
 service also ignores a turn that mostly repeats what it just said, as a backstop.
