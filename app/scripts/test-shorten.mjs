@@ -28,6 +28,8 @@ const stubs = {
   react: stub('export const useCallback = (f) => f; export const useEffect = () => {}; export const useState = (v) => [v, () => {}]; export const useSyncExternalStore = (_s, get) => get();'),
   './bundled': stub('export const bundledLibrary = []; export const bundledRecipes = globalThis.__bundled;'),
   './deletes': stub('export const loadHiddenIds = () => [];'),
+  './live/convex': stub('export const useLive = (_n, initial) => initial; export const invalidateConvexRecipes = () => {};'),
+  './session': stub('export const useSession = () => ({ me: null, family: null, profiles: [] });'),
 };
 // Stubs for React & the modules that need Expo; the app's other siblings ('./http') resolve to .ts.
 registerHooks({
