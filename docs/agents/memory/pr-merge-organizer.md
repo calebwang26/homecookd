@@ -6,7 +6,7 @@ metadata:
 ---
 
 Oct 24 2026. When a PR in calebwang26/hackathon-homecookd is ready, don't merge it and don't ask Caleb whether to
-merge. Send the organizer session ("Cartesia integration setup", the overarching chat the track A–D sessions came
+merge. Send the organizer session ("Merge Agent", the overarching chat the track A–D sessions came
 from) the PR number and one line on what it does. The organizer checks it (no secrets or `.env`, clean against
 main, typecheck and tests pass), resolves conflicts and merges. Say what you already checked so it isn't redone.
 
