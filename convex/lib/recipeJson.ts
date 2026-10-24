@@ -1,6 +1,7 @@
 // Reads the pipeline's recipe.json (docs/HACKATHON-SPEC.md, section 4) into the fields Convex keeps.
 // The full file stays in GCS; Convex keeps what the app lists, the voice service reads aloud, and Moss
 // indexes: the steps and the stories and tips, each with its moment in the video.
+// Every text field is English; a step's quote_original (the cook's Marathi) stays in the GCS file only.
 type Moment = { startS: number; endS: number };
 export type ParsedRecipe = {
   title: string;

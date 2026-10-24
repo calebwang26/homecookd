@@ -150,13 +150,19 @@ def cut_clip(voice: Path, start: int, end: int, dest: Path) -> bytes:
 
 # ---------- the Gemini call ----------
 
+def said(step: dict) -> str:
+    """The step's quote, plus the Marathi the cook actually spoke, which is what the audio has."""
+    quote = step.get("quote") or "(nothing recorded)"
+    return f'{quote} (as spoken: "{step["quote_original"]}")' if step.get("quote_original") else quote
+
+
 def step_parts(recipe: dict, steps: list[dict], clips: dict[int, bytes]) -> list:
     parts: list = []
     for s in steps:
         subs = "\n".join(f"{i}. {x['text'].replace('**', '')}" + (f" ({x['detail']})" if x.get("detail") else "")
                          for i, x in enumerate(s["substeps"], 1))
         parts.append(ALIGN_STEP.format(order=s["order"], title=s["title"], clip_mmss=mmss(s["end_s"] - s["start_s"]),
-                                       substeps=subs, quote=s.get("quote") or "(nothing recorded)"))
+                                       substeps=subs, quote=said(s)))
         parts.append(types.Part.from_bytes(data=clips[s["order"]], mime_type="audio/mpeg"))
     return parts
 
