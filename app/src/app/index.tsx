@@ -23,9 +23,10 @@
 // to cook as them, or add family with + (an invite link, or someone without a phone, like Grandma).
 // A phone that just joined with a family link can't take over a face: tapping one asks "Is this you
 // on a new phone?" (NewPhoneSheet), and the family lets them in.
-// Opened from Home ("Mom ▾", `/?pick=1`), a quiet foot holds the phone's own settings: "Switch
-// family" (the code screen, /join-code) and "Sign out of this phone", which asks first ("Sign out on
-// this phone?" with Sign out / Keep) and then signs this phone out (session leaveFamily).
+// Opened from Home ("Mom ▾", `/?pick=1`), a quiet foot holds the phone's own settings: a cook's
+// "Your language" (components/profiles/LanguageEntry), "Switch family" (the code screen,
+// /join-code) and "Sign out of this phone", which asks first ("Sign out on this phone?" with Sign
+// out / Keep) and then signs this phone out (session leaveFamily).
 //
 // Launch (motion spec 1): while the bloom covers the screen this page waits hidden; when the
 // overlay clears it fades in from scale 1.03 -> 1 and the tiles rise in one after another.
@@ -43,6 +44,7 @@ import {
   ADD_BAR_HEIGHT,
   AddFamilySheet,
   AddFamilyTile,
+  LanguageEntry,
   NewPhoneSheet,
   PersonSheet,
   ProfileTile,
@@ -280,6 +282,7 @@ export default function Profiles() {
 
           {choosing && !loading && !covered ? (
             <Animated.View entering={listEnter(profiles.length + 2)} style={styles.foot}>
+              <LanguageEntry />
               <PressableScale
                 onPress={() => router.push('/join-code')}
                 accessibilityRole="button"

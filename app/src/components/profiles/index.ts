@@ -7,5 +7,6 @@ export * from './SameName';
 export * from './status';
 export * from './ProfileButton';
 export * from './AddPhonelessSheet';
+export * from './LanguageEntry';
 export * from './MoveRequestPrompt';
 export * from './NewPhoneSheet';
