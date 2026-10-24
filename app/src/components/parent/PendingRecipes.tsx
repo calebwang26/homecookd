@@ -4,7 +4,8 @@
 // Polls the job status on focus, every 60 s and on return to the app; retries the pending send
 // (who gets it) until the backend has it; drops a job once its recipe is in the library and, when
 // it was for someone, the backend knows who gets it (a late POST delivers right away). So a
-// finished row disappears and the real recipe takes its place.
+// finished row disappears and the real recipe takes its place. The worker's live stage comes from
+// Convex jobs.forFamily (matched by the upload folder, "<job_id>/").
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Alert, AppState, Platform, StyleSheet, View } from 'react-native';
@@ -12,6 +13,7 @@ import Animated from 'react-native-reanimated';
 
 import { fadeOutFast, listEnter, useToast } from '@/components/ui';
 import { requestCancel } from '@/lib/deletes';
+import { useLiveJobs } from '@/lib/live/convex';
 import { refreshLibrary, useLibrary } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
 import {
@@ -49,6 +51,7 @@ export function usePendingRecipes(): PendingState {
   // The clock the rows read (the writing estimate moves with it): set on every poll and upload report.
   const [now, setNow] = useState(() => Date.now());
   const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const liveJobs = useLiveJobs(me?.role === 'cook');
 
   // Re-read jobs and progress whenever an upload reports in.
   useEffect(
@@ -127,8 +130,11 @@ export function usePendingRecipes(): PendingState {
   );
 
   const views = useMemo(
-    () => Object.fromEntries(jobs.map((j) => [j.job_id, describeJob(j, statuses[j.job_id], now)])),
-    [jobs, statuses, now],
+    () => {
+      const live = new Map(liveJobs.map((l) => [l.uploadPath.replace(/\/$/, ''), l]));
+      return Object.fromEntries(jobs.map((j) => [j.job_id, describeJob(j, statuses[j.job_id], now, live.get(j.job_id))]));
+    },
+    [jobs, statuses, now, liveJobs],
   );
 
   const act = useCallback(

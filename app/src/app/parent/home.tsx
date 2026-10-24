@@ -4,8 +4,10 @@
 // week, nothing on the others; tap a face = their chat; no memorial faces; hidden until the table
 // loads and when nobody else is in the family), then three things only:
 //  1. "Record a new recipe": the big green button, first on screen -> /record
-//  2. <UpdatesCard/>: questions to answer, requests, and who made my dishes (gone when empty)
-//  3. "Invite family"
+//  2. A recording still being made (hackathon): its live row, the newest one only (all of them are in
+//     Recipes), and the kids' live questions to answer by voice (LiveQuestions); both gone when empty
+//  3. <UpdatesCard/>: questions to answer, requests, and who made my dishes (gone when empty)
+//  4. "Invite family"
 // From the 1st to the 7th only, "Your November in the kitchen" (3.7: last month's recap, until it's
 // opened; nothing at all for an empty month) comes after all three, the last thing on the page, so
 // its arrival moves nothing: no space is held while its answer is on its way, and an empty month or a
@@ -18,6 +20,8 @@ import { StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { InviteButton } from '@/components/invite/InviteButton';
+import { LiveQuestions } from '@/components/parent/LiveQuestions';
+import { PendingList, usePendingRecipes } from '@/components/parent/PendingRecipes';
 import { UpdatesCard } from '@/components/parent/UpdatesCard';
 import { ActingAsBar, MoveRequestPrompt, ProfileButton } from '@/components/profiles';
 import { RecapCard, useRecapCard } from '@/components/recap/RecapCard';
@@ -40,6 +44,7 @@ export default function ParentHome() {
   // width, like the bible.
   const avatar = <ProfileButton />;
   const recap = useRecapCard(me?.id, { last: true });
+  const pending = usePendingRecipes();
 
   return (
     <View style={styles.screen}>
@@ -70,6 +75,8 @@ export default function ParentHome() {
               />
             </Animated.View>
 
+            <PendingList pending={pending} jobs={pending.jobs.slice(0, 1)} startIndex={1} />
+            <LiveQuestions enterIndex={1} />
             <UpdatesCard enterIndex={1} />
 
             <Animated.View entering={listEnter(2)}>

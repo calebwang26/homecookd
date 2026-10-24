@@ -1,8 +1,9 @@
 // Record (bible: Parent-Record), a screen pushed from parent Home: Back, "What will you teach
 // today?", a gentle suggestion when a learner asked for a dish ("Leo asked for Sunday eggs"), the
 // 3-step guide with the tripod photo, then the two ways in: "Start recording" (camera) and the
-// full-width "Use videos I already took" (camera roll). Both continue to Send. On the web, both
-// explain that recording happens in the app on a phone.
+// full-width "Use videos I already took" (camera roll), and a quiet "From my glasses" (the camera roll
+// too: smart glasses save there; the job is tagged `source: "glasses"`). All continue to Send. On the
+// web, they explain that recording happens in the app on a phone.
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { ActivityIndicator, ScrollView, StyleSheet, View } from 'react-native';
@@ -45,8 +46,8 @@ export default function RecordScreen() {
   const dish = askedDish(request);
   const ctx: PickContext = request ? { dish, requestFrom: request.other.id } : {};
 
-  const go = async (kind: 'camera' | 'library') => {
-    const ok = kind === 'camera' ? await pick.record(ctx) : await pick.library(ctx);
+  const go = async (kind: 'camera' | 'library' | 'glasses') => {
+    const ok = kind === 'camera' ? await pick.record(ctx) : await pick.library({ ...ctx, glasses: kind === 'glasses' });
     if (ok) router.push('/send');
   };
 
@@ -127,6 +128,18 @@ export default function RecordScreen() {
             accessibilityHint="Opens your videos. Pick them in the order you filmed them."
           />
 
+          <PressableScale
+            onPress={() => void go('glasses')}
+            disabled={!!pick.busy}
+            accessibilityRole="button"
+            accessibilityLabel="From my glasses"
+            accessibilityHint="Opens your videos. Pick the ones your smart glasses filmed."
+            style={styles.glasses}>
+            <Txt variant="label" size={16} weight={700} color={colors.greenDeep}>
+              From my glasses
+            </Txt>
+          </PressableScale>
+
           {waiting > 0 ? (
             <PressableScale onPress={() => router.push('/send')} accessibilityLabel="Continue to send" style={styles.resume}>
               <Txt variant="label" size={15} weight={700} color={colors.ink}>
@@ -202,6 +215,7 @@ const styles = StyleSheet.create({
   },
   // The bible's dot: a r=8 circle in an 18 px, 24-unit viewBox = 12 px.
   redDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.danger },
+  glasses: { alignSelf: 'center', minHeight: 44, paddingHorizontal: 16, justifyContent: 'center' },
   resume: {
     alignSelf: 'center',
     height: 48,
