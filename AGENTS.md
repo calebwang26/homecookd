@@ -58,6 +58,10 @@ and homesick college kids. It's a family product, not a tool.
 - **Ship via PR, never straight to main.** Branch from `origin/main`, commit, `git fetch && git merge origin/main`,
   push, `gh pr create`, then check that `gh pr view --json mergeStateStatus` is `CLEAN`. Stage files by name, never
   `git add -A`: the tree holds untracked demo PNGs and Finder " 2" duplicates.
+- **The Merge Agent approves every PR.** After `gh pr create`, send the PR (number, link, branch, files touched,
+  one-line summary) to the Claude Desktop session titled **Merge Agent** (Claude Code: `ListAgents`, then
+  `SendMessage`; Codex or Salik: ask Caleb to pass it on). Don't merge until it approves. When PRs conflict, the
+  Merge Agent decides how they merge, and its call is final.
 - **Supabase is frozen for the hackathon.** It keeps today's sign-in, invites and older screens running; build new
   features in Convex (`docs/build/STACK.md`).
 - **Deploying the `api` edge function** (Supabase project ref `bsudybxsqvtwftsdmwmz`, verify_jwt false):
@@ -114,7 +118,8 @@ app/        Expo app (expo-router, TypeScript). EAS dev build while coding, Test
             src/lib/live/ = the Convex client, the voice socket and the mic (Expo Go hides the mic).
 web/        Next.js site: the lander, homecookd.app/r (recipe share page) and /i (invites). Vercel project "homecookd".
 convex/     The hackathon backend: schema.ts, functions, http.ts (worker + voice service endpoints)
-voice/      Live voice service (Cloud Run): WebSocket cooking loop with Cartesia, Claude and Moss
+voice/      Live voice service (Cloud Run): the kid's cooking loop (/cook) and homie while a cook records (/record)
+glasses/    ESP32 glasses → GCP VM (Python): WS ingest, MP4 mux, GCS upload, Convex job (glasses/README.md)
 supabase/   Frozen: functions/api (today's sign-in, invites, older screens), migrations/, tests/
 pipeline/   Python: prep.py → process.py (Gemini) → Muse Spark → publish.py, and worker.py (claims jobs from Convex)
 cloud/      GCS upload signer (Cloud Run) + IAM scripts
@@ -154,6 +159,7 @@ npx --yes deno@2 check --node-modules-dir=none supabase/functions/api/*.ts      
 # voice service (voice/README.md)
 cd voice && npm ci && npm run dev                                  # ws://localhost:8080/cook (VOICE_STUB=1: stub recipe, any token)
 cd voice && npm run test-client -- test-audio/next-step.wav test-audio/question.wav   # after npm run make-audio
+cd voice && npm run typecheck && npm test                          # src + tests; unit tests (pacing, /record phases; fakes only)
 voice/deploy.sh                                                    # Cloud Run homecookd-voice, us-west1
 
 # pipeline (uses .venv)
@@ -163,6 +169,10 @@ voice/deploy.sh                                                    # Cloud Run h
 .venv/bin/python pipeline/test_coverage.py
 .venv/bin/python pipeline/worker.py [--once]                        # claim Convex jobs (--gcs: the old GCS job files)
 .venv/bin/python pipeline/process.py --id <id> --rewrite            # re-write recipe.json from the cached extraction
+
+# glasses VM (glasses/README.md; uses .venv + ffmpeg)
+.venv/bin/python glasses/ingest/test_server.py                      # unit tests: the VM's state machine
+.venv/bin/python glasses/ingest/e2e_test.py                         # stub Convex + fake glasses → MP4, no cloud
 ```
 
 Use `npx expo install <pkg>`, never `npm install`, for app dependencies.
