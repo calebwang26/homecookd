@@ -237,7 +237,8 @@ Before starting work, compare the last commit here with `git log origin/main` to
     Messages that arrive before loading are kept.
   - **Heartbeat:** `/live/status` `{ touch: true }` every 10 min while the socket is open (`live.touch`), so a long
     cook isn't abandoned.
-  - **Tests:** new `voice/test/` (node:test + tsx, no new deps; `npm test`), 14 pass. Convex 19 pass (heartbeat,
-    `cookLanguage` absent).
+  - **Tests:** new `voice/test/` (node:test + tsx, no new deps; `npm test`), 14 pass. Convex 33 pass with main
+    merged (two live.test.ts tests extended: the heartbeat, `cookLanguage` absent). On the stub (`HOMIE_DEMO=1`):
+    `test-record` passes in Marathi and English, and the kid `test-client` runs greeting → offer → step → hint → timer.
   - **Open:** same as above (not deployed). The post-clip translation path needs a Moss hit, so it isn't exercised
     on the stub.
