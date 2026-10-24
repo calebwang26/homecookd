@@ -78,6 +78,8 @@ export default ({ config }: ConfigContext): ExpoConfig => {
       infoPlist: {
         ...config.ios?.infoPlist,
         LSApplicationQueriesSchemes: ['whatsapp', 'instagram', 'instagram-stories'],
+        // Only HTTPS/WSS (exempt encryption): TestFlight doesn't stop to ask about export compliance.
+        ITSAppUsesNonExemptEncryption: false,
       },
     },
     plugins,
