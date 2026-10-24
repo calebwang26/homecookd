@@ -8,10 +8,9 @@ Convex (docs/build/STACK.md, "Worker -> Convex"): the app uploads to the GCS upl
 jobs.create. This worker POSTs /worker/claim (204 = nothing queued), runs prep -> process (Gemini watches,
 Muse writes) -> publish, reports each stage to /worker/progress (preparing, understanding, writing, or failed
 with a message the cook can read) and sends the published recipe.json to /worker/published, which saves it
-and has Convex index it into Moss, then rebuilds the GCS library.json (the kid app's library reads it, as in
-GCS mode). Every call carries x-worker-secret. Env: CONVEX_SITE_URL (the deployment's .convex.site URL;
-pipeline/convex_stub.py for local tests), WORKER_SECRET. Raw uploads are kept, so a failed job can be queued
-again; the uploads bucket's 14-day lifecycle rule deletes them.
+and has Convex index it into Moss. Every call carries x-worker-secret. Env: CONVEX_SITE_URL (the deployment's
+.convex.site URL; pipeline/convex_stub.py for local tests), WORKER_SECRET. Raw uploads are kept, so a failed
+job can be queued again; the uploads bucket's 14-day lifecycle rule deletes them.
 The app may create the job while the signer upload is still going. A signer upload ("<job_id>/") lists its
 files in jobs/<job_id>.json, the file GCS mode waits on; the worker waits up to UPLOAD_WAIT_S for all of
 them, then hands the job back with /worker/release (Convex queues it again 30 s later) and moves on.
@@ -334,7 +333,12 @@ _releases: dict[str, int] = {}
 
 
 class UploadPending(Exception):
-    """Some of the upload's files haven't arrived yet; release the job and try again later."""
+    """Some of the upload's files haven't arrived yet; release the job and try again later. has_signer: the
+    signer's jobs/<job_id>.json lists the files, so its links' expiry (UPLOAD_GIVE_UP) says when to give up."""
+
+    def __init__(self, missing: str, has_signer: bool):
+        super().__init__(missing)
+        self.has_signer = has_signer
 
 
 class UploadMissing(Exception):
@@ -439,7 +443,7 @@ def _complete_upload(media: storage.Bucket, uploads: storage.Bucket, path: str,
                                     "the upload links expired")
             missing = f"waiting for {', '.join(absent)}"
         if time.monotonic() >= deadline:
-            raise UploadPending(missing)
+            raise UploadPending(missing, has_signer=signer is not None)
         time.sleep(UPLOAD_POLL_S)
 
 
@@ -470,10 +474,14 @@ def handle_convex(convex: Convex, job: dict, media: storage.Bucket, uploads: sto
             except UploadMissing as e:
                 return fail(MSG_MISSING, str(e))
             except UploadPending as e:
-                _releases[job_id] = _releases.get(job_id, 0) + 1
-                if _releases[job_id] > MAX_RELEASES:
-                    return fail(MSG_NO_UPLOAD, f"gs://{uploads.name}/{job['uploadPath']}: {e}")
-                print(f"  {job_id}: upload not complete ({e}); released ({_releases[job_id]}/{MAX_RELEASES})")
+                if e.has_signer:  # _complete_upload fails it once the signer's links have expired
+                    print(f"  {job_id}: upload not complete ({e}); released")
+                else:
+                    _releases[job_id] = _releases.get(job_id, 0) + 1
+                    if _releases[job_id] > MAX_RELEASES:
+                        _releases.pop(job_id)
+                        return fail(MSG_NO_UPLOAD, f"gs://{uploads.name}/{job['uploadPath']}: {e}")
+                    print(f"  {job_id}: upload not complete ({e}); released ({_releases[job_id]}/{MAX_RELEASES})")
                 convex.release(job_id)
                 return
             _releases.pop(job_id, None)
@@ -497,14 +505,12 @@ def handle_convex(convex: Convex, job: dict, media: storage.Bucket, uploads: sto
             prep.run(recipe_id, job.get("title") or "", cook, job.get("relation") or cook, inputs)
             process.run(recipe_id, report=report, language=job.get("language"), homie_log=job.get("homieLog") or [])
             report("writing", 0.9)
+            # Media + recipe.json only. No rebuild_library: Convex lists the family's recipes now, and the
+            # GCS library.json is shared by every pre-hackathon copy of the app.
             recipe = publish.publish_recipe(recipe_id, bucket=media)
             recipe_url = publish.public_url(media, f"{recipe_id}/recipe.json")
             convex_recipe = convex.published(job_id, recipe.model_dump(mode="json"), recipe_url,
                                              job.get("language"), job.get("memoriesOptIn"))
-            try:  # the kid app's library (app/src/lib/recipes.ts reads library.json); never fails the job
-                publish.rebuild_library(media)
-            except Exception as e:  # noqa: BLE001
-                print(f"  warning: library.json not rebuilt: {type(e).__name__}: {e}")
         except (Exception, SystemExit) as e:  # noqa: BLE001 - any failure fails this job; the loop keeps running
             traceback.print_exc()
             return fail(MSG_FAILED, f"{type(e).__name__}: {e}")

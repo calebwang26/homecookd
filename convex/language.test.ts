@@ -95,16 +95,17 @@ test("a job from homie's recording: title, language and kid, then the worker's h
   const dad = await signIn(t, "p-dad");
   const leo = await signIn(t, "p-leo");
   const recordingId = await addRecording(t, dad.familyId, dad.personId, leo.personId);
+  stubFetch({ family: { id: "fam-2", name: "Others" }, profiles: [{ id: "q-1", name: "Sam", role: "learner" }] });
+  const sam = await signIn(t, "q-1"); // another family's kid
 
-  await expect(
-    t.mutation(api.jobs.create, { sessionToken: dad.sessionToken, uploadPath: "u/a.mp4", source: "glasses", forKidId: dad.familyId as never }),
-  ).rejects.toThrow();
-  const notHers = await t.run((ctx) =>
-    ctx.db.insert("recordings", { familyId: dad.familyId, cookId: leo.personId, language: "en", source: "phone", status: "ended", updatedAt: 0 }),
-  );
-  await expect(
-    t.mutation(api.jobs.create, { sessionToken: dad.sessionToken, uploadPath: "u/a.mp4", source: "phone", recordingId: notHers }),
-  ).rejects.toThrow("isn't yours");
+  const create = (args: { forKidId?: Id<"people">; recordingId?: Id<"recordings"> }) =>
+    t.mutation(api.jobs.create, { sessionToken: dad.sessionToken, uploadPath: "u/a.mp4", source: "phone", ...args });
+  await expect(create({ forKidId: sam.personId })).rejects.toThrow("isn't in your family");
+  const recording = (familyId: Id<"families">, cookId: Id<"people">) =>
+    t.run((ctx) => ctx.db.insert("recordings", { familyId, cookId, language: "en", source: "phone", status: "ended", updatedAt: 0 }));
+  await expect(create({ recordingId: await recording(dad.familyId, leo.personId) })).rejects.toThrow("isn't yours");
+  await expect(create({ recordingId: await recording(sam.familyId, dad.personId) })).rejects.toThrow("isn't yours");
+  expect(await t.run((ctx) => ctx.db.query("jobs").collect())).toHaveLength(0);
   const { jobId, recipeId } = await t.mutation(api.jobs.create, {
     sessionToken: dad.sessionToken,
     uploadPath: "glasses/rec1.mp4",
@@ -159,8 +160,14 @@ test("/worker/release hands an incomplete upload back for 30 s", async () => {
   expect(await stage()).toBe("queued");
   expect((await (await post(t, "/worker/claim", {}, asWorker)).json()).jobId).toBe(jobId);
 
+  // Only a job the worker is preparing can go back: not one it's already writing, a failed one, or a queued one.
+  await post(t, "/worker/progress", { jobId, stage: "understanding", progress: 0.3 }, asWorker);
+  expect((await post(t, "/worker/release", { jobId }, asWorker)).status).toBe(404);
+  expect(await stage()).toBe("understanding");
   await post(t, "/worker/progress", { jobId, stage: "failed", progress: 0, error: "x" }, asWorker);
   expect((await post(t, "/worker/release", { jobId }, asWorker)).status).toBe(404);
+  const queued = await t.mutation(api.jobs.create, { sessionToken: dad.sessionToken, uploadPath: "b/", source: "phone" });
+  expect((await post(t, "/worker/release", { jobId: queued.jobId }, asWorker)).status).toBe(404);
 });
 
 test("/worker/published keeps the cook's language and her own words", async () => {
@@ -183,6 +190,14 @@ test("/worker/published keeps the cook's language and her own words", async () =
   expect(saved?.steps[0].quoteOriginal).toBe("चांगलं परतून घ्या");
   expect(saved?.steps[1].quoteOriginal).toBeUndefined();
   expect(saved?.memoriesOptIn).toBe(true);
+
+  // The kid's voice cooking reads the same steps, Marathi quote included.
+  const leo = await signIn(t, "p-leo");
+  const session = await post(t, "/voice/session", { sessionToken: leo.sessionToken, recipeId }, asVoice);
+  expect(session.status).toBe(200);
+  expect((await session.json()).recipe.steps[0].quoteOriginal).toBe("चांगलं परतून घ्या");
+  const step = await post(t, "/voice/step", { sessionToken: leo.sessionToken, recipeId, stepOrder: 2 }, asVoice);
+  expect(await step.json()).toEqual({ ok: true, stepOrder: 2 });
 });
 
 test("a question for a Marathi-speaking cook gets textForCook; English cooks and failures don't", async () => {

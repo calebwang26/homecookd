@@ -100,7 +100,7 @@ HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-o
 
 **Voice service → Convex** (HTTP POST with JSON, `x-voice-secret`)
 - `/voice/session` `{ sessionToken, recipeId }` → `{ kid: { personId, name, role }, familyId, mossIndex, recipe:
-  { recipeId, title, cookName, steps[{ order, title, text, quote?, moment }], memories[] }, stepOrder }`.
+  { recipeId, title, cookName, steps[{ order, title, text, quote?, quoteOriginal?, moment }], memories[] }, stepOrder }`.
   It starts or resumes the kid's `cookingSessions` row. A recipe that isn't `ready` is `404`.
 - `/voice/step` `{ sessionToken, recipeId, stepOrder }` → `{ ok, stepOrder }` (updates `cookingSessions`)
 - `/voice/question` `{ sessionToken, recipeId, stepOrder?, text, found?: { startS, endS, quote } }` →
@@ -222,12 +222,12 @@ voice, in `lang` or the person's language). `translate: true` first turns Englis
   1000` when `videoStartedAt` is set, else `atS`; answers shifted the same). Prompts said before the video started
   (negative video time, e.g. the intro) are left out.
 - `/worker/release` `{ jobId }` → `{ ok }`: the upload isn't complete yet. The job shows stage `uploading` and goes
-  back to `queued` after 30 s. `404` for a job that's `indexing`, `done` or `failed`. The worker waits up to 45 s for
-  every file the signer's `jobs/<job_id>.json` lists before releasing; with no signer file, for anything at
-  `uploadPath`. It fails the job once the signer's links have expired (8 days), or after 20 releases without one.
+  back to `queued` after 30 s. `404` unless the job is `preparing`. The worker waits up to 45 s for every file the
+  signer's `jobs/<job_id>.json` lists before releasing; with no signer file, for anything at `uploadPath`. It fails
+  the job once the signer's links have expired (8 days), or after 20 releases without one.
 - `/worker/published` accepts `language` (a two-letter code; else recipe.json's `language`, else the job's) and
   `steps[].quote_original` in recipe.json, stored as `recipes.language` and `steps[].quoteOriginal`. The worker sends
-  the claim's `memoriesOptIn` when it has one. After publishing, the worker rebuilds the GCS `library.json`.
+  the claim's `memoriesOptIn` when it has one.
 - The pipeline gets the job's `title` (the dish name; Muse names it only when there's none), `language` and
   `homieLog` (in its prompts: never quote homie as the cook; start a step at the cook's answer). recipe.json gains
   an optional `language`.

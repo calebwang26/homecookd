@@ -36,7 +36,7 @@ http.route({
     const id = await jobId(ctx, body.jobId);
     if (!id) return fail(404, "no such job");
     const ok = await ctx.runMutation(internal.worker.release, { jobId: id });
-    return ok ? json({ ok: true }) : fail(404, "no such job, or it's past preparing");
+    return ok ? json({ ok: true }) : fail(404, "no such job, or it isn't preparing");
   }),
 });
 

@@ -18,7 +18,7 @@ export const sessionView = internalQuery({
         recipeId: v.id("recipes"),
         title: v.string(),
         cookName: v.string(),
-        steps: v.array(v.object({ order: v.number(), title: v.string(), text: v.string(), quote: v.optional(v.string()), moment })),
+        steps: v.array(v.object({ order: v.number(), title: v.string(), text: v.string(), quote: v.optional(v.string()), quoteOriginal: v.optional(v.string()), moment })),
         memories: v.array(v.object({ kind: v.union(v.literal("story"), v.literal("tip")), text: v.string(), moment })),
       }),
     }),

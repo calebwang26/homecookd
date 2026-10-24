@@ -7,9 +7,12 @@ No network: the GCS buckets are small fakes.
 """
 from __future__ import annotations
 
+import contextlib
 import datetime as dt
+import io
 import json
 import sys
+import tempfile
 import traceback
 from pathlib import Path
 from types import SimpleNamespace
@@ -112,7 +115,7 @@ def test_worker_waits_for_every_signer_file():
     try:
         worker._complete_upload(signer_media(now), one, "varan-abc123/", wait_s=0)
     except worker.UploadPending as e:
-        assert "02.mov" in str(e)
+        assert "02.mov" in str(e) and e.has_signer
     else:
         raise AssertionError("a half-uploaded job must be released")
     try:
@@ -132,10 +135,50 @@ def test_worker_without_signer_file():
     assert [b.name for b in worker._complete_upload(media, glasses, "glasses/rec1.mp4", wait_s=0)] == ["glasses/rec1.mp4"]
     try:
         worker._complete_upload(media, FakeBucket({}), "glasses/rec2.mp4", wait_s=0)
-    except worker.UploadPending:
-        pass
+    except worker.UploadPending as e:
+        assert not e.has_signer
     else:
         raise AssertionError("nothing uploaded yet: release, don't fail")
+
+
+class FakeConvex:
+    def __init__(self):
+        self.released, self.failed = 0, []
+
+    def progress(self, _job_id, stage, _progress, error=None):
+        if stage == "failed":
+            self.failed.append(error)
+
+    def release(self, _job_id):
+        self.released += 1
+
+
+def releases(has_signer: bool, times: int) -> FakeConvex:
+    """Runs handle_convex `times` times on a job whose upload never completes."""
+    def pending(*_args, **_kw):
+        raise worker.UploadPending("waiting for 02.mov", has_signer=has_signer)
+
+    saved = worker._complete_upload, worker.LOCKS, worker.INPUT
+    convex, job = FakeConvex(), {"jobId": f"job{int(has_signer)}", "uploadPath": "varan-abc123/"}
+    with tempfile.TemporaryDirectory() as tmp:
+        worker._complete_upload, worker.LOCKS, worker.INPUT = pending, Path(tmp) / ".locks", Path(tmp)
+        try:
+            with contextlib.redirect_stdout(io.StringIO()):
+                for _ in range(times):
+                    worker.handle_convex(convex, job, FakeBucket({}), FakeBucket({}))
+        finally:
+            worker._complete_upload, worker.LOCKS, worker.INPUT = saved
+            worker._releases.pop(job["jobId"], None)
+    return convex
+
+
+def test_worker_counts_releases_only_without_signer_file():
+    # A signer upload waits for its links to expire (UPLOAD_GIVE_UP), however many releases that takes.
+    signer = releases(has_signer=True, times=worker.MAX_RELEASES + 5)
+    assert signer.released == worker.MAX_RELEASES + 5 and signer.failed == []
+    # Without one, the job fails after MAX_RELEASES releases.
+    plain = releases(has_signer=False, times=worker.MAX_RELEASES + 1)
+    assert plain.released == worker.MAX_RELEASES and plain.failed == [worker.MSG_NO_UPLOAD]
 
 
 def main() -> None:

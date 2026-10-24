@@ -100,7 +100,7 @@ export const release = internalMutation({
   returns: v.boolean(),
   handler: async (ctx, { jobId }) => {
     const job = await ctx.db.get("jobs", jobId);
-    if (!job || ["indexing", "done", "failed"].includes(job.stage)) return false;
+    if (!job || job.stage !== "preparing") return false; // only the worker that just claimed it
     await ctx.db.patch("jobs", jobId, { stage: "uploading", progress: 0, claimedAt: undefined });
     await ctx.scheduler.runAfter(RELEASE_DELAY_MS, internal.worker.requeue, { jobId });
     return true;
