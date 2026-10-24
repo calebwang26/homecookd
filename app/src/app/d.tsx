@@ -15,6 +15,7 @@ import { openedWords } from '@/components/community/invite';
 import { useNow } from '@/components/community/data';
 import { riseIn } from '@/components/community/motion';
 import { ActionButton, EmptyState, PotMark, ScreenWash, Skeleton, Txt } from '@/components/ui';
+import { useHomieScreen } from '@/lib/homie';
 import { openInvite, type Opened } from '@/lib/live/invite';
 import { useSession } from '@/lib/session';
 import { colors, radii, shadows } from '@/theme/tokens';
@@ -41,6 +42,8 @@ export default function DinnerInviteScreen() {
   const token = one(params.t);
   const fixture = DEV_WEB ? FIXTURES[one(params.fixture) ?? ''] : undefined;
   const { me, homeFor } = useSession();
+  // A link screen, like /i and /r: no pot in the corner.
+  useHomieScreen({ hidden: true });
   const insets = useSafeAreaInsets();
   const now = useNow();
   const reduce = useReducedMotion();
