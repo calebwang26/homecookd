@@ -47,7 +47,8 @@ older note in `memory/` disagrees, this file wins.
     CARTESIA, MOSS, MUSE, WORKER_SECRET, VOICE_SECRET. Redeploy with `--preview-name hackathon`, never
     `--preview-create`: that recreated the deployment and deleted `energized-starfish-920`. It has #37's memory
     fields (`step`, `id`, `title`, `why`), so the app can put a family dish's stories back. Last deployed Oct 24
-    by Salik from `glasses-bridge` `bdb2688` (main `ad8fd88ea` plus the laptop bridge, `glasses/BRIDGE.md`): new
+    by Salik from main `f964c57` (adds `liveFrames` and `POST /glasses/frame`, the glasses' live picture on the recording
+    screen); before that from `glasses-bridge` `bdb2688` (main `ad8fd88ea` plus the laptop bridge, `glasses/BRIDGE.md`): new
     tables `liveEvents` and `liveWindows`, `POST /glasses/live-events`, `liveEvents.forRecording`, `jobs.videoGaps`,
     and `jobId` in `/glasses/active`. Before that, from main `ad8fd88ea` by the Merge Agent (Caleb's go; adds
     `recordings.by_cookId_and_startedAt`). The one before, from `f28173a1f`, added `dinnerInviteOpens.by_dinnerId_and_deviceId`, `dinners.by_inviteToken`,
@@ -635,3 +636,4 @@ Before starting work, compare the last commit here with `git log origin/main` to
     full one.
 - Oct 24 · #56 · Claude · STATE: live versions after the Merge Agent's batch (Caleb: "merge everything and then deploy as quickly as possible"): Convex `grand-dragon-649` from main `ad8fd88ea` (adds `recordings.by_cookId_and_startedAt`), voice `homecookd-voice-00005-tvg` from `ad8fd88ea`, EAS Update `406438fe-d271-47d2-8f05-4ca15707e0ca` from `ad8fd88ea`. Docs only.
 - Oct 24 · no PR (merged directly) · Claude · Glasses laptop bridge (`glasses/BRIDGE.md`): edible-glasses' `receiver.py --cloud` pairs with the live glasses recording, relays to the VM, backs the raw stream up to `gs://<uploads>/glasses-backup/`, analyses 30 s windows live into Convex (`liveEvents`, `liveWindows`) and uploads the full video from its own backup on "I'm done"; the worker gets `liveLog`, `liveGaps` and `videoGaps`, and `pipeline/prompts.py live_block` puts them in both prompts; the recording screen shows the last step the live pass saw. Deployed: Convex `grand-dragon-649` and the glasses VM, both from `bdb2688`. Not shipped: the app line needs an EAS Update; the laptop worker needs a restart from main to read the live notes.
+- Oct 24 · no PR (direct to main) · Claude · Glasses live picture: the laptop bridge sends the newest frame about once a second (`POST /glasses/frame`, `liveFrames`, `liveEvents.frame`); the recording screen shows it with "Glasses live" / "Waiting for your glasses…" and what the live pass has seen (`components/record/GlassesView`). Record's extra glasses link is gone; the sheet holds every way to film. Deployed: Convex from `f964c57`. Needs an EAS Update for TestFlight phones.
