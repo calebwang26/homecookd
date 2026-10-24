@@ -8,6 +8,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, View } from 're
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Svg, { Path } from 'react-native-svg';
 
+import { ChipRow } from '@/components/community/ChipRow';
 import { useFamilyRecipes, useNow } from '@/components/community/data';
 import { goBack } from '@/components/community/DetailPage';
 import { dayOptions, errorText, firstOpenDay, PLACE_KINDS, startsAt, TIMES } from '@/components/community/labels';
@@ -120,16 +121,18 @@ export default function NewDinner() {
         </Section>
 
         <Section title="When">
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.rowScroll} contentContainerStyle={styles.row}>
-            {days.map((d) => (
-              <Chip key={d.offset} label={d.label} selectedTone="ink" selected={d.offset === day.offset} onPress={() => setPicked((p) => ({ ...p, day: d.offset }))} />
-            ))}
-          </ScrollView>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.rowScroll} contentContainerStyle={styles.row}>
-            {times.map((t) => (
-              <Chip key={timeKey(t)} label={t.label} selectedTone="ink" selected={timeKey(t) === timeKey(time)} onPress={() => setPicked((p) => ({ ...p, time: timeKey(t) }))} />
-            ))}
-          </ScrollView>
+          <ChipRow
+            accessibilityLabel="Day"
+            items={days.map((d) => ({ key: d.offset, label: d.label }))}
+            selected={day.offset}
+            onSelect={(offset) => setPicked((p) => ({ ...p, day: offset }))}
+          />
+          <ChipRow
+            accessibilityLabel="Time"
+            items={times.map((t) => ({ key: timeKey(t), label: t.label }))}
+            selected={timeKey(time)}
+            onSelect={(key) => setPicked((p) => ({ ...p, time: key }))}
+          />
         </Section>
 
         <Section title="Where">
@@ -138,10 +141,13 @@ export default function NewDinner() {
               <Chip key={p.key} label={p.label} selectedTone="ink" selected={p.key === placeKind} onPress={() => setPlaceKind(p.key)} />
             ))}
           </View>
+          <Txt variant="label" size={16} style={styles.label}>
+            Place name
+          </Txt>
           <SignInField
             value={placeName}
             onChangeText={setPlaceName}
-            placeholder="Place name, like Baker House kitchen"
+            placeholder="Baker House kitchen"
             accessibilityLabel="Place name"
             autoCapitalize="words"
             maxLength={200}
@@ -225,10 +231,8 @@ const styles = StyleSheet.create({
   },
   dishOn: { backgroundColor: colors.ink },
   flex: { flex: 1, minWidth: 0 },
-  // Out to the screen's edges, so a long row of chips scrolls under the gutter.
-  rowScroll: { marginHorizontal: -space.gutter, marginVertical: -10, flexGrow: 0 },
-  row: { paddingHorizontal: space.gutter, paddingVertical: 10, gap: space.sm },
   share: { gap: 6, padding: 20, borderRadius: radii.card, backgroundColor: colors.lavender },
+  label: { marginTop: 4 },
   private: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: 4 },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: 20 },
   seats: { minWidth: 44, textAlign: 'center' },

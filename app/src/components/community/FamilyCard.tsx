@@ -1,5 +1,5 @@
-// One shared recipe in "Near you": the dish photo (84 pt), the dish in Fraunces, "<family> ·
-// <distance>", and one line of its story card (written with AI: the screen's footnote says so).
+// One shared recipe in "Near you": the dish photo (84 pt), the dish in Fraunces, "Okafor family ·
+// Under a mile", and one line of its story card (written with AI: the screen's footnote says so).
 import { StyleSheet, View } from 'react-native';
 
 import { PressableScale, Txt } from '@/components/ui';
@@ -7,11 +7,12 @@ import type { FeedRecipe } from '@/lib/live/community';
 import { colors, radii, shadows } from '@/theme/tokens';
 
 import { DishPhoto } from './DishPhoto';
+import { familyLine } from './labels';
 
 const PHOTO = 84;
 
 export function FamilyCard({ recipe, onOpen }: { recipe: FeedRecipe; onOpen: () => void }) {
-  const meta = `${recipe.familyName} · ${recipe.distanceLabel}`;
+  const meta = familyLine(recipe.familyName, recipe.distanceLabel);
   return (
     <PressableScale
       onPress={onOpen}
@@ -25,7 +26,7 @@ export function FamilyCard({ recipe, onOpen }: { recipe: FeedRecipe; onOpen: () 
         <Txt variant="section" numberOfLines={2}>
           {recipe.dish}
         </Txt>
-        <Txt variant="body" size={15} numberOfLines={1}>
+        <Txt variant="meta" numberOfLines={1}>
           {meta}
         </Txt>
         {recipe.story ? (
@@ -42,7 +43,7 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 16,
+    gap: 14,
     padding: 14,
     borderRadius: radii.card,
     backgroundColor: colors.card,

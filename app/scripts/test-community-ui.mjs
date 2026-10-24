@@ -2,6 +2,7 @@
 //   time labels   "Dinner tonight · 7 pm", "Tonight · 7:00 pm · 6 seats", Tomorrow across a
 //                 daylight-saving change, weekday names, dates past a week
 //   seat text     "2 of 6 seats taken", "4 seats left", "1 seat left", "Full"
+//   family line   "Okafor family · Under a mile"
 //   host line     "Hosted by Shreya · the Pawar family"
 //   privacy note  "Rajani’s video and voice stay in the family. …"
 //   who's coming  the host's view (names) and a guest's ("You", "+2")
@@ -77,6 +78,13 @@ test('seat text', () => {
   assert.equal(L.seatLine(null, 1), '1 seat left');
   assert.equal(L.seatLine(undefined, 0), 'Full');
   assert.equal(L.seatLine(6, -1), '6 of 6 seats taken');
+});
+
+test('family card line', () => {
+  assert.equal(L.familyLine('The Okafor family', 'Under a mile'), 'Okafor family · Under a mile');
+  assert.equal(L.familyLine('Rajani’s family', 'In your building'), 'Rajani’s family · In your building');
+  assert.equal(L.familyLine('Theo’s family', 'About 3 mi'), 'Theo’s family · About 3 mi');
+  assert.equal(L.familyLine('The Pawar family', ''), 'Pawar family');
 });
 
 test('host line', () => {

@@ -2,6 +2,7 @@
 //   cardWhen        "Dinner tonight · 7 pm"            the dark dinner card
 //   detailWhen      "Tonight · 7:00 pm · 6 seats"       the dinner page
 //   seatLine        "2 of 6 seats taken" ("4 seats left" before the seat count is known)
+//   familyLine      "Okafor family · Under a mile"           a family card
 //   hostLine        "Hosted by Shreya · the Pawar family"
 //   privacyNote     "Rajani’s video and voice stay in the family. You’ll see the story and the recipe text."
 //   whoComing       the "Who's coming" chips
@@ -83,6 +84,12 @@ export function hostLine(hostName: string, familyName: string | null | undefined
   const host = `Hosted by ${hostName.trim() || 'a neighbor'}`;
   const family = (familyName ?? '').trim().replace(/^The /, 'the ');
   return family ? `${host} · ${family}` : host;
+}
+
+/** A family card's line: "Okafor family · Under a mile" (no leading "The", so it fits one line). */
+export function familyLine(familyName: string, distanceLabel: string): string {
+  const family = familyName.trim().replace(/^The /, '');
+  return [family, distanceLabel.trim()].filter(Boolean).join(' · ');
 }
 
 /** "Rajani’s", "James’". */

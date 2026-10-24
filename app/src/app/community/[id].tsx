@@ -33,6 +33,11 @@ export default function CommunityRecipePage() {
     };
   }, [id, attempt]);
 
+  const retry = () => {
+    setLoaded(null);
+    setAttempt((n) => n + 1);
+  };
+
   const mine = loaded?.id === id ? loaded : null;
   const recipe = mine && 'recipe' in mine ? mine.recipe : null;
   const title = recipe?.dish ?? '';
@@ -48,10 +53,7 @@ export default function CommunityRecipePage() {
   if (mine && 'failed' in mine) {
     return (
       <DetailPage title="" photo={coverFor(id)}>
-        <EmptyState title="Couldn’t open this recipe" actionLabel="Try again" onAction={() => {
-            setLoaded(null);
-            setAttempt((n) => n + 1);
-          }} />
+        <EmptyState title="Couldn’t open this recipe" actionLabel="Try again" onAction={retry} />
       </DetailPage>
     );
   }

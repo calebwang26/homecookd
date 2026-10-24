@@ -1,7 +1,7 @@
 // The dinner page's parts, one per person's view of it:
 //   GuestStatus   accepted: the sage "You're in. Shreya said yes." card with the place and the exact
 //                 address; asked: waiting; declined: a gentle no; nobody yet: "Ask to join"
-//   HostPanel     the host's own address card and the requests, each with Accept / Decline
+//   HostPanel     the host's own address card and the open requests, each with Accept / Decline
 //   WhoComing     the "Who's coming" chips
 // Every answer is live (dinners.get), so these redraw on both phones as requests come and go.
 import { StyleSheet, View } from 'react-native';
@@ -97,7 +97,9 @@ export function GuestStatus({ dinner }: { dinner: Dinner }) {
 /** For a dinner still ahead and not called off. */
 export function HostPanel({ dinner }: { dinner: Dinner }) {
   const toast = useToast();
-  const requests = (dinner.requests ?? []).filter((r) => r.status !== 'declined');
+  // Only open requests: the guests already in show under "Who's coming".
+  const requests = (dinner.requests ?? []).filter((r) => r.status === 'pending');
+  const anyIn = (dinner.requests ?? []).some((r) => r.status === 'accepted');
   const answer = (requestId: string, accept: boolean) => async () => {
     try {
       await respond(requestId, accept);
@@ -126,28 +128,24 @@ export function HostPanel({ dinner }: { dinner: Dinner }) {
                 <Txt variant="rowTitle" size={17} numberOfLines={1} style={styles.flex}>
                   {name}
                 </Txt>
-                {r.status === 'accepted' ? (
-                  <Pill tone="sage" size="sm" label="Coming" />
-                ) : (
-                  <View style={styles.answers}>
-                    <ActionButton label="Decline" variant="outline" size="xs" padH={14} onPress={answer(r.requestId, false)} accessibilityLabel={`Decline ${name}`} />
-                    <ActionButton
-                      label="Accept"
-                      size="xs"
-                      padH={14}
-                      flat
-                      disabled={dinner.seatsLeft <= 0}
-                      onPress={answer(r.requestId, true)}
-                      accessibilityLabel={`Accept ${name}`}
-                    />
-                  </View>
-                )}
+                <View style={styles.answers}>
+                  <ActionButton label="Decline" variant="outline" size="xs" padH={14} onPress={answer(r.requestId, false)} accessibilityLabel={`Decline ${name}`} />
+                  <ActionButton
+                    label="Accept"
+                    size="xs"
+                    padH={14}
+                    flat
+                    disabled={dinner.seatsLeft <= 0}
+                    onPress={answer(r.requestId, true)}
+                    accessibilityLabel={`Accept ${name}`}
+                  />
+                </View>
               </View>
             );
           })
         ) : (
           <Txt variant="body" size={16}>
-            No one has asked yet.
+            {anyIn ? 'No new requests.' : 'No one has asked yet.'}
           </Txt>
         )}
       </View>

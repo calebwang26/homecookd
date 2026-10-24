@@ -42,36 +42,38 @@ export function DinnerCard({ pick, now, onOpen }: { pick: DinnerPick; now: numbe
       accessibilityRole="link"
       accessibilityLabel={[when, d.dish, meta, badge?.label].filter(Boolean).join(', ')}
       style={styles.card}>
-      <View style={styles.text}>
-        <Txt variant="label" weight={700} color={colors.sun}>
-          {when}
-        </Txt>
-        <Txt variant="display" size={30} color={colors.card} numberOfLines={2}>
-          {d.dish}
-        </Txt>
-        <Txt variant="body" size={15} color={alpha.glassChip} numberOfLines={2}>
-          {meta}
-        </Txt>
-        {badge ? <Pill tone={badge.tone} size="sm" label={badge.label} style={styles.badge} /> : null}
+      <View style={styles.top}>
+        <View style={styles.text}>
+          <Txt variant="label" weight={700} color={colors.sun}>
+            {when}
+          </Txt>
+          <Txt variant="display" size={30} color={colors.card} numberOfLines={2}>
+            {d.dish}
+          </Txt>
+        </View>
+        <View style={styles.go}>
+          <ArrowRightIcon size={22} color={colors.ink} />
+        </View>
       </View>
-      <View style={styles.go}>
-        <ArrowRightIcon size={22} color={colors.ink} />
-      </View>
+      {/* The full width, so "In your building · 2 of 6 seats taken" stays on one line. */}
+      <Txt variant="body" size={15} color={alpha.glassChip} numberOfLines={2}>
+        {meta}
+      </Txt>
+      {badge ? <Pill tone={badge.tone} size="sm" label={badge.label} style={styles.badge} /> : null}
     </PressableScale>
   );
 }
 
 const styles = StyleSheet.create({
   card: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: space.lg,
+    gap: 6,
     padding: space.xxl,
     borderRadius: radii.panel,
     backgroundColor: colors.ink,
     boxShadow: shadows.hero,
   },
+  top: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
   text: { flex: 1, minWidth: 0, gap: 6 },
-  badge: { alignSelf: 'flex-start', marginTop: 6 },
+  badge: { alignSelf: 'flex-start', marginTop: 8 },
   go: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
 });
