@@ -21,7 +21,7 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from pipeline import coverage, process  # noqa: E402
+from pipeline import coverage, process, writer  # noqa: E402
 from pipeline.schema import RecipeDraft  # noqa: E402
 
 
@@ -159,8 +159,9 @@ KEEPS_SALT = draft((10, 40, "Chop the onions"), (45, 52, "Season with salt"), (6
 def run_merge(fake: FakeMerge, out: Path):
     (out / "work").mkdir(exist_ok=True)
     usage = process.Usage(out / "work" / "usage.json")
-    first = process.merge(fake, "fake-pro", MANIFEST, EVENTS, 1, out, usage)
-    return process.ensure_coverage(fake, "fake-pro", MANIFEST, EVENTS, 1, out, usage, first)
+    w = writer.GeminiWriter(fake, "fake-pro")
+    first = process.merge(w, MANIFEST, EVENTS, 1, out, usage)
+    return process.ensure_coverage(w, MANIFEST, EVENTS, 1, out, usage, first)
 
 
 def test_retry_recovers_missing_step():
@@ -239,7 +240,8 @@ def test_run_end_to_end_with_a_file_boundary():
     second = draft((10, 180, "Chop and fry the onions"), (210, 220, "Season with salt"))
     fake = FakeMerge(first, second)
     env = {"GEMINI_API_KEY": "fake-key-for-tests", "GEMINI_MODEL": "fake-pro", "GEMINI_EXTRACT_MODEL": "",
-           "GEMINI_MEDIA_RESOLUTION": "LOW", "COVERAGE_GAP_S": ""}
+           "GEMINI_MEDIA_RESOLUTION": "LOW", "COVERAGE_GAP_S": "",
+           "RECIPE_WRITER": "gemini"}  # the fake stands in for Gemini only; never call the real Muse
     saved_env = {k: os.environ.get(k) for k in env}
     os.environ.update(env)
     try:

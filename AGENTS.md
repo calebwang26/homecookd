@@ -140,6 +140,9 @@ npx --yes deno@2 check --node-modules-dir=none supabase/functions/api/*.ts      
 .venv/bin/python pipeline/schema.py data/out/*/recipe.json data/synthetic/*.json
 .venv/bin/python pipeline/test_order.py
 .venv/bin/python pipeline/test_shorten.py                           # cook mode's short steps: rules + stored data
+.venv/bin/python pipeline/test_coverage.py
+.venv/bin/python pipeline/worker.py [--once]                        # claim Convex jobs (--gcs: the old GCS job files)
+.venv/bin/python pipeline/process.py --id <id> --rewrite            # re-write recipe.json from the cached extraction
 ```
 
 Use `npx expo install <pkg>`, never `npm install`, for app dependencies.

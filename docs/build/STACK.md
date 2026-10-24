@@ -112,9 +112,16 @@ The app needs only public values: `EXPO_PUBLIC_CONVEX_URL` and the voice service
 **First 3 hours: check the risky parts before building on them.**
 - Mic streaming: a dev build on an iPhone sends PCM to a test WebSocket. If not, switch to push to talk now.
 - Muse Spark: the key works, and one Gemini output becomes a valid `recipe.json` (`pipeline/schema.py`).
-  Keep Gemini as the fallback writer.
+  Keep Gemini as the fallback writer. **Done Oct 23:** `muse-spark-1.3` at `https://api.meta.ai/v1/chat/completions`
+  with `json_schema` output. It's Standard mode on purpose: `-contributor` is cheaper, but it lets Meta train on
+  the family's words. It turned the biryani's cached Gemini extraction into a valid recipe on the first attempt
+  (46 s, ~$0.08). `RECIPE_WRITER=gemini` switches back, and the worker falls back to Gemini on its own if Muse
+  fails twice.
 - Glasses: one clip goes from the glasses to the camera roll and through the app's upload.
-- Timing: one full-length video goes through the pipeline. Note the minutes.
+- Timing: one full-length video goes through the pipeline. Note the minutes. **Done Oct 23:** a 17-minute
+  video (55 MB, 1 file) went from queued to published in **10.0 min** on a laptop: download 0.5, prep 1.7,
+  Gemini extraction 2.0, Muse writing 2.3, cook mode's short steps 1.4, publish 2.0. About $0.78 in model
+  calls. The worker reports each stage to Convex as it goes.
 
 | Track | Day 1 | Day 2 |
 |---|---|---|
@@ -132,4 +139,7 @@ The app needs only public values: `EXPO_PUBLIC_CONVEX_URL` and the voice service
 node scripts/check-cartesia.mjs     # Cartesia key: token + Sonic speech
 node scripts/check-moss.mjs         # Moss keys: list indexes
 npx convex deploy --preview-create hackathon -y   # push convex/ (preview deploy key in .env)
+.venv/bin/python pipeline/writer.py # Muse key: one tiny structured call
+.venv/bin/python pipeline/worker.py # the pipeline worker: claims Convex jobs (CONVEX_SITE_URL, WORKER_SECRET)
+.venv/bin/python pipeline/convex_stub.py --upload <uploadPath> --port 8797   # fake /worker/* routes for a local run
 ```
