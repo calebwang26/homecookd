@@ -45,7 +45,10 @@ older note in `memory/` disagrees, this file wins.
     Muse photo note, Ink transcripts, Moss indexing. The demo family is seeded under the placeholder id
     `seed:demo` (`npx convex run seed:claim '{"supabaseFamilyId":"…"}'` points it at the real one). Env:
     CARTESIA, MOSS, MUSE, WORKER_SECRET, VOICE_SECRET. Redeploy with `--preview-name hackathon`, never
-    `--preview-create`: that recreated the deployment and deleted `energized-starfish-920`.
+    `--preview-create`: that recreated the deployment and deleted `energized-starfish-920`. It has #37's memory
+    fields (`step`, `id`, `title`, `why`), so the app can put a family dish's stories back.
+  - **Worker** (`pipeline/worker.py`, Convex mode) runs on the laptop from `.claude/worktrees/worker-main` at main
+    `4d703d9` (#39, started Oct 24 03:14), so family `recipe.json` files go out without stories or tips.
   - **Moss** works again (billing fixed Oct 24). One index is left: `family-j97ctx…` (the demo family: 4 recipes,
     50 docs). `homecookd-app` (a crawl of the lander that nothing used) and the TEST family's Biryani index were
     deleted with Caleb's OK. The free plan caps Moss at 3 indexes, one per family. Writes to each family's index
@@ -279,11 +282,9 @@ Before starting work, compare the last commit here with `git log origin/main` to
   session key). The web share page reads the same file, so it shows none.
   - **Tests:** new `pipeline/test_publish.py` (4), other pipeline tests pass; vitest 40 (new `convex/memories.test.ts`,
     2); `test-library.mjs` 37 with #34's final head merged (6 new); every other app test script, tsc and lint pass.
-  - **Open:** not deployed. Deploy Convex first, then restart the worker from main (a stripped file with old Convex
-    rows still shows the stories, placed by time, but without titles). Not checked on a phone or against live
-    Convex. Family recipes the worker published before this still have their stories in the bucket (#34 hides them
-    in the app). `rebuild_library` lists every `*/recipe.json` in the bucket, so any `publish.py` run puts family
-    recipes into the shared `library.json` and the app bundle. The intro isn't kept anywhere now (no screen shows it).
+  - **Open:** live since Oct 24 (Convex deployed, worker restarted on main; see the log line below). Not checked on
+    a phone with a recipe published since then. The old family files were scrubbed (#40), and `rebuild_library`
+    leaves family recipes out (#39). The intro isn't kept anywhere now (no screen shows it).
 - Oct 24 · (this PR) · Claude · Root devDependency `@types/node`: `convex deploy` typechecks `convex/`, and a clean `npm ci` had no Node types, so every `process.env` failed (37 errors) and the deploy stopped. Now tsc is 0 and vitest 40/40.
 - Oct 24 · #39 · Claude · Family recipes stay out of the shared library, plus a scrub for the old ones (follow-up
   to #37). A family recipe's public `recipe.json` now says `"family": true` (`pipeline/schema.py` `Recipe.family`,
@@ -311,6 +312,12 @@ Before starting work, compare the last commit here with `git log origin/main` to
   now exist only in a local backup outside the repo.
   - **Open:** `play.mp4` and `voice.m4a` for both dishes are still public at unlisted URLs, with the stories as she
     spoke them.
+- Oct 24 · (this PR) · Claude · #37 is live. The `hackathon` Convex deployment has its memory fields:
+  `npx convex function-spec --preview-name hackathon` shows `step`, `id`, `title` and `why` on `worker:published`'s
+  args and on `recipes.get`/`recipes.list`'s returns. The worker on the laptop (`pipeline/worker.py`, started Oct 24
+  03:14) runs from `.claude/worktrees/worker-main` at main `4d703d9` (#39), which has #37 and #39.
+  - **Open:** no recipe published since then has been opened on a phone, before and after the cook's yes.
+    `play.mp4` and `voice.m4a` are still public at unlisted URLs.
 - Oct 24 · #33 · Claude · Track G screens: Caleb's simplified Community map, then his v2 "one step at a time"
   connect flow, share asks, swaps and the final Dinner page (built on #24's backend):
   - **Kid tab "Dishes near you"** (`kid/community.tsx`): the title (room left for homie at the top right), one
