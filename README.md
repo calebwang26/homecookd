@@ -1,9 +1,80 @@
 # homecookd
 
-Mom cooks. homecookd writes the recipe & keeps her voice. Spec: [docs/PRD.md](docs/PRD.md) ·
-agent rules: [AGENTS.md](AGENTS.md) · Gemini cost math: [docs/COSTS.md](docs/COSTS.md).
+**Mom cooks. homecookd writes the recipe and keeps her voice.**
 
-## How it fits together
+Family recipes live in our parents' hands and voices, not on paper. homecookd turns a parent's cooking
+video into a recipe their kid can follow, then guides the kid through it by voice while they cook.
+
+**Demo video:** _(link)_ · **Website:** [homecookd.app](https://homecookd.app)
+
+## How it works
+
+1. **Mom records.** She films herself cooking (phone or smart glasses). Our voice guide, **homie**, asks
+   her a few questions in her own language.
+2. **homecookd writes the recipe.** Each step is linked to the moment in the video where she did it.
+3. **The kid cooks hands-free.** They say "next", "go back" or ask a question. homie answers, or plays
+   Mom's own clip.
+4. **Questions go home.** If homie can't answer, it asks Mom. Her voice-note reply goes back to the kid.
+
+## Built with
+
+| Part | Tools |
+| --- | --- |
+| Voice (listening + speaking) | **Cartesia** Ink 2 and Sonic |
+| Cooking agent | **Claude** (Anthropic) |
+| Video understanding, live translation | **Gemini** |
+| Recipe writing | **Muse Spark** (Meta) |
+| Finding the right clip | **Moss** |
+| Backend and live updates | **Convex** (Supabase for sign-in) |
+| Mobile app | Expo, React Native, TypeScript |
+| Smart glasses | ESP32-S3, Google Compute Engine |
+| Hosting and storage | Google Cloud Run, Cloud Storage, Vercel (Next.js site) |
+| Video processing | Python, ffmpeg |
+
+## Voice with Cartesia
+
+Voice is how both people use homecookd: the kid's hands are busy, and many parents would rather talk
+than type, often not in English.
+
+- **Ink 2 (live speech-to-text):** hears the kid while cooking, with built-in turn detection.
+- **Ink (batch):** transcribes Mom's voice-note answers.
+- **Sonic 3.6 (text-to-speech):** homie's voice, streamed to the phone, with mood and speed set per line.
+- **Localized voice:** homie can speak both English and Marathi in one voice.
+
+First audio from Sonic arrives in about 120–250 ms.
+
+## Run it
+
+Copy `.env.example` to `.env` and `app/.env.example` to `app/.env`, then add your own keys.
+
+```bash
+# terminal 1: the voice service (homie)
+cd voice && npm ci && npm run dev
+
+# terminal 2: the app (scan the QR code with Expo Go)
+cd app && npm ci && npx expo start --clear
+```
+
+More detail: [voice/README.md](voice/README.md) · [docs/PRD.md](docs/PRD.md) ·
+[docs/build/STACK.md](docs/build/STACK.md)
+
+## Privacy and responsibility
+
+- **Mom's words stay hers.** homie never presents its own words as hers; only her real clips are.
+- **Private by default.** Recipes stay in the family until shared, one at a time.
+- **No voice cloning without consent.** The demo uses a stock voice.
+- **Approximate location only,** rounded to about 1 km.
+- **No API keys in the app or this repo.**
+
+## Known limitations
+
+- Live listening with Ink covers 5 languages. Others (like Marathi) use Gemini Live, which is slower.
+- The phone needs echo cancellation on, or homie hears itself.
+- The video worker runs on a laptop for the hackathon.
+- Voice cloning isn't built yet.
+
+<details>
+<summary><b>Developer notes: video pipeline</b></summary>
 
 ```
 iPhone (Expo app)                      Google Cloud (free tier)                 Laptop
@@ -13,59 +84,24 @@ pick videos ──POST──▶ Cloud Run fn "edible-upload" ──▶ jobs/<id>
 upload in background ─PUT─▶ gs://edible-uploads-… (private) ◀──poll── pipeline/worker.py
                                                                       prep → Gemini → publish
 library / recipe ◀──GET── gs://edible-media-… (public, no listing) ◀── play.mp4, voice.m4a,
-                                                                      poster.jpg, recipe.json, library.json
+                                                                       poster.jpg, recipe.json, library.json
 ```
 
-The Gemini key never leaves the laptop. The app ships only the public bucket URL and the signer URL. The
-signer lets in a signed-in phone (it checks the phone's Convex session with Convex) or, from older builds,
-the shared family code (`X-Edible-Family`). Signer tests: `python3 cloud/signer/test_main.py`.
+Setup: a Python `.venv` from `pipeline/requirements.txt`, ffmpeg, `gcloud auth login --update-adc`,
+`cloud/grant-iam.sh`, `cloud/deploy-signer.sh`.
 
-## One-time setup (done)
-
-`.venv` (Python deps from `pipeline/requirements.txt`), ffmpeg via Homebrew, `gcloud auth login --update-adc`,
-buckets in us-west1, `cloud/grant-iam.sh`, `cloud/deploy-signer.sh`, `.env` (see `.env.example`) and
-`app/.env` (see `app/.env.example`).
-
-## Process footage by hand (demo recipes)
+Process a video by hand:
 
 ```bash
-.venv/bin/python pipeline/prep.py --id weed-pancakes --title "Sunday Pancakes" --cook "Mom" --relation "Mom" input/pancakes/*.mov
-.venv/bin/python pipeline/process.py --id weed-pancakes
-.venv/bin/python pipeline/publish.py --id weed-pancakes
+.venv/bin/python pipeline/prep.py --id sunday-pancakes --title "Sunday Pancakes" --cook "Mom" --relation "Mom" input/pancakes/*.mov
+.venv/bin/python pipeline/process.py --id sunday-pancakes
+.venv/bin/python pipeline/publish.py --id sunday-pancakes
 ```
 
-YouTube videos: add `--source "Creator Name (YouTube)" --sample` to `prep.py`.
+Process phone uploads: `.venv/bin/python pipeline/worker.py --interval 60`
+(retry a job with `--retry <job_id>`).
 
-**Clips out of order** (camera-roll dates missing, identical or wrong): with 2+ clips, `process.py` decides
-the cooking order (prep, then cooking, then plating) after extraction, from a keyword scorer plus one cheap
-Flash call (order + confidence). It reorders only when the content clearly disagrees with the file dates
-and the dates look unreliable or the model is sure; a keyword clash keeps the file-date order. A reorder
-rebuilds `play.mp4` / `voice.m4a`, shifts every event time and records both orders and why under `order`
-in `work/manifest.json`. Tests: `.venv/bin/python pipeline/test_order.py` (ffmpeg, no API calls).
+If clips are out of order, `process.py` reorders them by content (tests: `pipeline/test_order.py`).
+Check recipes with `pipeline/schema.py`; republish everything with `pipeline/publish.py --all`.
 
-Check every recipe: `.venv/bin/python pipeline/schema.py data/out/*/recipe.json data/synthetic/*.json`.
-Republish everything (real + synthetic) and rebuild the library: `.venv/bin/python pipeline/publish.py --all`.
-
-## Process phone uploads
-
-```bash
-.venv/bin/python pipeline/worker.py --interval 60   # during the demo; default 600 s stays in the free tier
-.venv/bin/python pipeline/worker.py --retry <job_id>
-```
-
-## Run the app
-
-```bash
-cd app && npx expo start --clear
-```
-
-Scan the QR code with the iPhone camera (Expo Go installed, same Wi-Fi as the laptop). After changing
-any `EXPO_PUBLIC_*` value in `app/.env`, restart with `--clear`.
-
-## Known limits
-
-- Uploads keep going when the app is in the background or the phone is locked (iOS background
-  transfer). Swiping homecookd away in the app switcher cancels them; the app warns about this.
-- The worker runs on the laptop, so phone uploads are processed only while it is running.
-  TODO: move it to a server (PRD roadmap).
-- Anyone with a recipe's link can view its media; the bucket itself can't be listed.
+</details>
