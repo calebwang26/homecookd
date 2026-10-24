@@ -1,0 +1,39 @@
+/* The 404 (QA B25): centred on the lander's canvas, the pot over one Fraunces line and a big green
+   pill home (the lander's primary button look). */
+.page {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 32px 20px calc(32px + env(safe-area-inset-bottom));
+  text-align: center;
+  color: var(--ink);
+}
+.title {
+  max-width: 14ch;
+  text-wrap: balance;
+}
+.home {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60px;
+  padding: 0 32px;
+  border-radius: var(--r-pill);
+  background: var(--green);
+  color: var(--cream);
+  font-family: var(--ff-text);
+  font-weight: 600;
+  font-size: var(--fs-ui-lg);
+  text-decoration: none;
+  transition: background-color 200ms var(--ease-soft);
+}
+.home:hover {
+  background: var(--green-deep);
+}
+.home:focus-visible {
+  outline: 3px solid var(--focus-ring);
+  outline-offset: 3px;
+}
