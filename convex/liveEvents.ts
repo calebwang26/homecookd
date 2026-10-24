@@ -57,6 +57,55 @@ export const ingest = internalMutation({
   },
 });
 
+/**
+ * The laptop bridge's newest glasses frame (already in storage). Keeps one per recording: the previous
+ * file is deleted. A frame for a recording that isn't a live glasses one is refused and its file deleted.
+ */
+export const setFrame = internalMutation({
+  args: { recordingId: v.string(), storageId: v.id("_storage"), at: v.number() },
+  returns: v.union(v.object({ ok: v.boolean() }), v.object({ error: v.string(), status: v.union(v.literal(400), v.literal(404)) })),
+  handler: async (ctx, { recordingId, storageId, at }) => {
+    const id = ctx.db.normalizeId("recordings", recordingId);
+    const rec = id && (await ctx.db.get(id));
+    if (!rec || rec.source !== "glasses") {
+      await ctx.storage.delete(storageId);
+      return { error: "no such glasses recording", status: 404 as const };
+    }
+    if (rec.status === "ended" || rec.status === "abandoned") {
+      await ctx.storage.delete(storageId);
+      return { error: `the recording is ${rec.status}`, status: 400 as const };
+    }
+    const old = await ctx.db
+      .query("liveFrames")
+      .withIndex("by_recordingId", (q) => q.eq("recordingId", rec._id))
+      .unique();
+    if (old) {
+      await ctx.storage.delete(old.storageId);
+      await ctx.db.patch(old._id, { storageId, at });
+    } else {
+      await ctx.db.insert("liveFrames", { recordingId: rec._id, storageId, at });
+    }
+    return { ok: true };
+  },
+});
+
+/** What the glasses see right now, for the recording screen (own family only): the newest frame's URL and when it came. */
+export const frame = query({
+  args: { sessionToken: v.string(), recordingId: v.id("recordings") },
+  returns: v.union(v.null(), v.object({ url: v.string(), at: v.number() })),
+  handler: async (ctx, { sessionToken, recordingId }) => {
+    const signed = await requireSession(ctx, sessionToken);
+    const rec = await ctx.db.get(recordingId);
+    if (!rec || rec.familyId !== signed.family._id) return null;
+    const row = await ctx.db
+      .query("liveFrames")
+      .withIndex("by_recordingId", (q) => q.eq("recordingId", recordingId))
+      .unique();
+    const url = row && (await ctx.storage.getUrl(row.storageId));
+    return row && url ? { url, at: row.at } : null;
+  },
+});
+
 /** The live log for the app's recording screen (own family only), oldest first, wall-clock ms in `at`. */
 export const forRecording = query({
   args: { sessionToken: v.string(), recordingId: v.id("recordings") },

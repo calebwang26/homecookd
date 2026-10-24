@@ -13,6 +13,7 @@
 //   useRecording(recordingId)                            live.recording, live (the recording screen)
 //   await endRecording(recordingId)                      live.endRecording: the stop button with no voice line
 //   useLiveLog(recordingId)                              liveEvents.forRecording, live (what the glasses' live pass saw)
+//   useLiveFrame(recordingId)                            liveEvents.frame, live (the glasses' newest picture)
 //   useMe()  /  await setLanguage('mr')                  people.me (live) / people.setLanguage
 //   await convexPersonIdByName('Shreya')                 a family member's Convex id, from rows that name them
 //   await libraryIdOf(recipeId)                          a Convex recipe's library id (recipes.list)
@@ -313,6 +314,19 @@ export function useLiveLog(recordingId: string | null | undefined): LiveLog | nu
 }
 
 const noLiveLog = (onData: (v: LiveLog | null) => void) => {
+  onData(null);
+  return () => {};
+};
+
+/** What the glasses see now: the laptop bridge's newest frame (about one a second) and when it came (ms). */
+export type LiveFrame = { url: string; at: number };
+
+export function useLiveFrame(recordingId: string | null | undefined): LiveFrame | null {
+  const id = recordingId ?? '';
+  return useLive<LiveFrame | null>('liveEvents:frame', null, noLiveFrame, !!id, { recordingId: id }, true);
+}
+
+const noLiveFrame = (onData: (v: LiveFrame | null) => void) => {
   onData(null);
   return () => {};
 };

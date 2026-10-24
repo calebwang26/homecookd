@@ -9,9 +9,8 @@
 //   Videos I took    the camera roll, then Send (as before).
 // If homie can't start (no connection within 10 s, or live.* isn't on the server), glasses say so and
 // the phone camera opens without homie, then Send.
-// A quiet "Record from my glasses" under it starts that glasses recording in one tap, without the
-// sheet (the dish and learner from a request, her saved language). On the web, the camera and camera
-// roll explain that they work in the app on a phone.
+// "Start recording" is the only way in: the sheet holds every way to film. On the web, the camera and
+// camera roll explain that they work in the app on a phone.
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
 import { useState } from 'react';
@@ -113,10 +112,6 @@ export default function RecordScreen() {
     }
   };
 
-  /** One tap: a live glasses recording, with the dish and learner a request named (no sheet). */
-  const startGlasses = () =>
-    void start({ source: 'glasses', dish: dish ?? '', kid: request?.other ?? null, everyone: !request, language: null });
-
   const waiting = draft.clips.length;
 
   return (
@@ -178,18 +173,6 @@ export default function RecordScreen() {
             </View>
             <Txt variant="button" size={20} weight={700} color={colors.card} style={styles.flex} numberOfLines={1}>
               Start recording
-            </Txt>
-          </PressableScale>
-
-          <PressableScale
-            onPress={startGlasses}
-            disabled={!!busy || !!pick.busy}
-            accessibilityRole="button"
-            accessibilityLabel="Record from my glasses"
-            accessibilityHint="Starts filming from your glasses right away. Keep the phone near the stove: homie listens."
-            style={styles.glasses}>
-            <Txt variant="label" size={16} weight={700} color={colors.greenDeep}>
-              {busy === 'glasses' ? 'Starting…' : 'Record from my glasses'}
             </Txt>
           </PressableScale>
 
@@ -276,7 +259,6 @@ const styles = StyleSheet.create({
   },
   // The bible's dot: a r=8 circle in an 18 px, 24-unit viewBox = 12 px.
   redDot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.danger },
-  glasses: { alignSelf: 'center', minHeight: 44, paddingHorizontal: 16, justifyContent: 'center' },
   resume: {
     alignSelf: 'center',
     height: 48,

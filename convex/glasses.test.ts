@@ -1,5 +1,7 @@
 import { beforeEach, expect, test } from "vitest";
+import { api } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
+import { hashToken } from "./lib/auth";
 import { type Backend, newBackend } from "./test.helpers";
 
 beforeEach(() => {
@@ -250,4 +252,55 @@ test("/glasses/finished refuses malformed videoGaps", async () => {
   for (const videoGaps of ["none", [{ startS: 5, endS: 1 }], [{ startS: "a", endS: 1 }]]) {
     expect((await post(t, "/glasses/finished", { ...ok, videoGaps })).status).toBe(400);
   }
+});
+
+// ---- live frames for the recording screen ----
+
+const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 1, 2, 3, 0xff, 0xd9]);
+const postFrame = (t: Backend, rec: string, body: BodyInit = JPEG, secret = "glasses-secret-for-tests") =>
+  t.fetch(`/glasses/frame?recordingId=${rec}`, { method: "POST", headers: { "x-glasses-secret": secret, "Content-Type": "image/jpeg" }, body });
+
+async function sessionFor(t: Backend, familyId: Id<"families">, personId: Id<"people">) {
+  const token = `test-session-token-${familyId}-${personId}`;
+  const tokenHash = await hashToken(token);
+  await t.run(async (ctx) => ctx.db.insert("sessions", { tokenHash, familyId, personId, expiresAt: Date.now() + 3_600_000 }));
+  return token;
+}
+
+test("/glasses/frame keeps the newest frame of a live glasses recording, for its family only", async () => {
+  const t = newBackend();
+  const f = await family(t);
+  const rec = await recording(t, f, "recording");
+  expect((await postFrame(t, rec, JPEG, "wrong")).status).toBe(401);
+  expect((await postFrame(t, rec, new Uint8Array([1, 2, 3, 4]))).status).toBe(400);
+  expect((await postFrame(t, rec, new Uint8Array(600 * 1024).fill(0xff))).status).toBe(400);
+  expect((await postFrame(t, "nope")).status).toBe(404);
+
+  const token = await sessionFor(t, f.familyId, f.cookId);
+  expect(await t.query(api.liveEvents.frame, { sessionToken: token, recordingId: rec })).toBeNull();
+
+  expect((await postFrame(t, rec)).status).toBe(200);
+  const first = await t.run(async (ctx) => ctx.db.query("liveFrames").unique());
+  expect((await postFrame(t, rec)).status).toBe(200);
+  const rows = await t.run(async (ctx) => ctx.db.query("liveFrames").collect());
+  expect(rows).toHaveLength(1);
+  expect(rows[0].storageId).not.toBe(first!.storageId);
+  expect(await t.run(async (ctx) => ctx.storage.getUrl(first!.storageId))).toBeNull(); // the old file is gone
+
+  const shown = await t.query(api.liveEvents.frame, { sessionToken: token, recordingId: rec });
+  expect(shown?.url).toMatch(/^https?:/);
+  expect(shown?.at).toBe(rows[0].at);
+
+  const other = await t.run(async (ctx) => {
+    const familyId = await ctx.db.insert("families", { name: "Others", supabaseFamilyId: "fam-other" });
+    const personId = await ctx.db.insert("people", { familyId, supabaseProfileId: "p-o", name: "O", role: "cook" });
+    return { familyId, personId };
+  });
+  const stranger = await sessionFor(t, other.familyId, other.personId);
+  expect(await t.query(api.liveEvents.frame, { sessionToken: stranger, recordingId: rec })).toBeNull();
+
+  await setStatus(t, rec, "ended");
+  expect((await postFrame(t, rec)).status).toBe(400);
+  const phone = await recording(t, f, "recording", "phone");
+  expect((await postFrame(t, phone)).status).toBe(404);
 });

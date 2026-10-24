@@ -263,6 +263,14 @@ export default defineSchema({
     confidence: v.number(),
   }).index("by_recordingId", ["recordingId"]),
 
+  /** The newest glasses frame of a live recording (one row each, replaced about once a second by the laptop
+   *  bridge), so the cook's phone can show what the glasses see. Older frames' files are deleted. */
+  liveFrames: defineTable({
+    recordingId: v.id("recordings"),
+    storageId: v.id("_storage"),
+    at: v.number(), // when Convex got it (epoch ms)
+  }).index("by_recordingId", ["recordingId"]),
+
   /** Each window the live analysis tried, so a hole in liveEvents reads as "not analysed", not "nothing happened". */
   liveWindows: defineTable({
     recordingId: v.id("recordings"),

@@ -1,7 +1,8 @@
 // Routes for the glasses VM, with x-glasses-secret (glasses/INGEST.md, STACK.md "Glasses VM → Convex").
 import type { HttpRouter } from "convex/server";
 import { internal } from "../_generated/api";
-import { fail, glasses, isNum, isStr, json } from "./http";
+import { httpAction } from "../_generated/server";
+import { fail, glasses, isNum, isStr, json, sameSecret } from "./http";
 
 export function registerGlassesRoutes(http: HttpRouter): void {
   http.route({
@@ -40,6 +41,24 @@ export function registerGlassesRoutes(http: HttpRouter): void {
     }),
   });
 
+  // The newest glasses frame, about once a second from the laptop bridge, for the cook's recording screen.
+  // Raw JPEG body (not JSON), so it can't use glasses(); same secret.
+  http.route({
+    path: "/glasses/frame",
+    method: "POST",
+    handler: httpAction(async (ctx, req) => {
+      if (!sameSecret(req.headers.get("x-glasses-secret"), process.env.GLASSES_SECRET)) return fail(401, "wrong secret");
+      const recordingId = new URL(req.url).searchParams.get("recordingId");
+      if (!isStr(recordingId, 100)) return fail(400, "recordingId must be in the query string");
+      const bytes = new Uint8Array(await req.arrayBuffer());
+      if (bytes.length > MAX_FRAME_BYTES) return fail(400, "frame too large");
+      if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return fail(400, "body must be a JPEG");
+      const storageId = await ctx.storage.store(new Blob([bytes], { type: "image/jpeg" }));
+      const r = await ctx.runMutation(internal.liveEvents.setFrame, { recordingId, storageId, at: Date.now() });
+      return "ok" in r ? json(r) : fail(r.status, r.error);
+    }),
+  });
+
   // One window of the laptop bridge's live analysis (glasses/BRIDGE.md).
   http.route({
     path: "/glasses/live-events",
@@ -75,6 +94,7 @@ export function registerGlassesRoutes(http: HttpRouter): void {
   });
 }
 
+const MAX_FRAME_BYTES = 512 * 1024;
 const KINDS = ["step", "ingredient", "cue", "quote", "story", "marker"] as const;
 const optStr = (x: unknown) => x === undefined || typeof x === "string";
 

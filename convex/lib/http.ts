@@ -6,7 +6,7 @@ export const json = (body: unknown, status = 200) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
 export const fail = (status: number, error: string) => json({ error }, status);
 
-function sameSecret(given: string | null, expected: string | undefined): boolean {
+export function sameSecret(given: string | null, expected: string | undefined): boolean {
   if (!given || !expected || given.length !== expected.length) return false;
   let diff = 0;
   for (let i = 0; i < given.length; i++) diff |= given.charCodeAt(i) ^ expected.charCodeAt(i);

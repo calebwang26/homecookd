@@ -14,8 +14,8 @@
 //                      the recording itself; a phone video then sends anyway.
 //   ended              the done view (components/record/DoneView): homie waves, the video goes, home.
 // homie's questions come up as AskMoments: answered out loud, no buttons (a tap closes one).
-// Glasses through the laptop bridge (glasses/BRIDGE.md): while filming, one small line under the label
-// names the last step the live pass saw, so she (or whoever holds the phone) knows it's following along.
+// Glasses through the laptop bridge (glasses/BRIDGE.md): above the button, what the glasses see (about a
+// frame a second), whether they're live, and the last step the live pass saw (components/record/GlassesView).
 // If homie's connection is lost: the reason, "Try again" and the × (a phone recording can also film
 // without homie; one already filmed goes straight to the done view and sends). The screen stays
 // awake, and can't be swiped away once filming started.
@@ -31,15 +31,16 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AskMoment } from '@/components/record/AskMoment';
 import { BiLine } from '@/components/record/BiLine';
 import { DoneView } from '@/components/record/DoneView';
+import { GlassesView } from '@/components/record/GlassesView';
 import { useDraft } from '@/components/record/draft';
 import { RecordButton } from '@/components/record/RecordButton';
 import { recordingView, shouldAutoStart, wrapStallMs, type Ask } from '@/components/record/recordingLogic';
 import { COLUMN, RecordWash } from '@/components/record/RecordWash';
 import { usePickVideos } from '@/components/record/usePickVideos';
 import { recordWords, type Line } from '@/components/record/words';
-import { ActionButton, CloseIcon, IconButton, Txt } from '@/components/ui';
+import { ActionButton, CloseIcon, IconButton } from '@/components/ui';
 import { useAiSpeaking, useHomieScreen } from '@/lib/homie/hooks';
-import { useLiveLog, useRecording } from '@/lib/live/convex';
+import { useLiveFrame, useLiveLog, useRecording } from '@/lib/live/convex';
 import { useHomieRecording } from '@/lib/live/homie';
 import { colors, motion, space } from '@/theme/tokens';
 
@@ -81,7 +82,9 @@ export default function RecordingScreen() {
   const draft = useDraft();
   const pick = usePickVideos();
   const rec = useRecording(id);
-  const liveLog = useLiveLog(rec?.source === 'glasses' ? id : null);
+  const glassesId = rec?.source === 'glasses' ? id : null;
+  const liveLog = useLiveLog(glassesId);
+  const liveFrame = useLiveFrame(glassesId);
   const steps = liveLog?.events.filter((e) => e.kind === 'step') ?? [];
   const lastStep = steps.length ? steps[steps.length - 1] : null;
   const source = rec?.source ?? (params.source === 'phone' ? 'phone' : 'glasses');
@@ -178,6 +181,9 @@ export default function RecordingScreen() {
       ) : (
         <>
           <View style={styles.column}>
+            {source === 'glasses' && !devPreview ? (
+              <GlassesView frame={liveFrame} filming={view.live} lastStep={lastStep?.title ?? null} steps={steps.length} />
+            ) : null}
             <RecordButton
               live={view.live}
               disabled={!view.live || !!pick.busy}
@@ -187,13 +193,6 @@ export default function RecordingScreen() {
             <Animated.View key={view.line.text} entering={FadeIn.duration(reduce ? motion.reducedFadeMs : 220)} style={styles.label}>
               <BiLine line={view.line} size={30} weight={700} enSize={15} leading={1.3} />
             </Animated.View>
-            {view.live && lastStep ? (
-              <Animated.View key={lastStep.at} entering={FadeIn.duration(reduce ? motion.reducedFadeMs : 220)} style={styles.seen}>
-                <Txt variant="meta" size={14} color={colors.muted} align="center" accessibilityLabel={`Seen so far: ${steps.length} steps. Last: ${lastStep.title}`}>
-                  {`Seen so far: ${lastStep.title} · ${steps.length} ${steps.length === 1 ? 'step' : 'steps'}`}
-                </Txt>
-              </Animated.View>
-            ) : null}
             {micOff || error ? (
               <View style={styles.problem}>
                 {micOff ? <BiLine line={micOff} size={16} weight={600} color={colors.danger} enColor={colors.danger} /> : null}
@@ -228,6 +227,5 @@ const styles = StyleSheet.create({
   top: { position: 'absolute', left: 0, right: 0, top: 0, paddingHorizontal: space.gutter, flexDirection: 'row' },
   column: { flex: 1, paddingHorizontal: COLUMN.side, alignItems: 'center', justifyContent: 'center' },
   label: { marginTop: COLUMN.toLabel },
-  seen: { marginTop: 14 },
   problem: { marginTop: 24, alignItems: 'center', gap: 10 },
 });

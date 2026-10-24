@@ -31,6 +31,10 @@ The laptop and the VM both try to upload. The laptop usually wins.
 
 Only the video goes under `glasses-<rid>/`, because the worker treats every object there as a clip. Backups and gap lists go under `glasses-backup/<rid>/`. Both live in the uploads bucket, so the 14-day lifecycle applies.
 
+## Live picture → the cook's phone
+
+About once a second, the laptop sends the newest JPEG to `POST /glasses/frame?recordingId=<id>` (`x-glasses-secret`, raw `image/jpeg`, at most 512 KB). Convex keeps one frame per recording in `liveFrames`, plus its file in storage, and deletes the previous file each time. Frames for a recording that has ended are refused. `liveEvents.frame` gives the recording screen the frame's URL and time. `components/record/GlassesView` shows the picture with "Glasses live", or "Waiting for your glasses…" once the frame is over 5 s old. The receiver's `--frame-every` sets how often it sends (0 turns it off).
+
 ## Live analysis → Convex
 
 `POST /glasses/live-events` (`x-glasses-secret`), one call per window:
