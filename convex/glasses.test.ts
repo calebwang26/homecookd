@@ -384,3 +384,17 @@ test("/glasses/video saves the laptop's full video for the family; the VM sees i
   expect(vids.filter((x) => x.videoUrl)).toHaveLength(1);
   expect(vids.find((x) => x.videoUrl)).toMatchObject({ recordingId: rec, videoUrl: url, dish: "Varan bhaat" });
 });
+
+test("live.startFilming: her Start button moves her glasses recording from intro to recording, once", async () => {
+  const t = newBackend();
+  const f = await family(t);
+  const rec = await recording(t, f, "intro");
+  const token = await sessionFor(t, f.familyId, f.cookId);
+  expect(await t.mutation(api.live.startFilming, { sessionToken: token, recordingId: rec })).toEqual({ ok: true });
+  const row = await t.run(async (ctx) => ctx.db.get(rec));
+  expect(row?.status).toBe("recording");
+  expect(row?.startedAt).toBeGreaterThan(0);
+  expect(await t.mutation(api.live.startFilming, { sessionToken: token, recordingId: rec })).toEqual({ ok: true });
+  await setStatus(t, rec, "ended");
+  expect(await t.mutation(api.live.startFilming, { sessionToken: token, recordingId: rec })).toEqual({ ok: false });
+});

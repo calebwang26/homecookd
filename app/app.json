@@ -67,6 +67,14 @@
             "microphoneUsageDescription": "homecookd uses the microphone so you can cook hands-free by voice, and answer your family in your own voice."
           }
         }
+      ],
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "homecookd saves your cooking videos to Photos.",
+          "savePhotosPermission": "homecookd saves your cooking videos from your glasses to Photos.",
+          "isAccessMediaLocationEnabled": false
+        }
       ]
     ],
     "owner": "salikm1234",

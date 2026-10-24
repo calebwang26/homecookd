@@ -12,6 +12,7 @@
 //   const { recordingId } = await startRecording({ dish, forKidId, language?, source })   live.startRecording
 //   useRecording(recordingId)                            live.recording, live (the recording screen)
 //   await endRecording(recordingId)                      live.endRecording: the stop button with no voice line
+//   await startFilming(recordingId)                      live.startFilming: glasses, her Start button
 //   useLiveLog(recordingId)                              liveEvents.forRecording, live (what the glasses' live pass saw)
 //   useLiveFrame(recordingId)                            liveEvents.frame, live (the glasses' newest picture)
 //   await cancelLiveJob(jobId)                           jobs.cancel: stops a job (queued or mid-way) for good
@@ -292,6 +293,16 @@ export async function endRecording(recordingId: string): Promise<boolean> {
   }
 }
 
+/**
+ * Her Start button on a glasses recording: live.startFilming (intro -> recording, no homie needed). The
+ * laptop keeps glasses footage from here until endRecording. True once filming; throws when it couldn't.
+ */
+export async function startFilming(recordingId: string): Promise<boolean> {
+  const sessionToken = await token();
+  const r = await call<{ ok: boolean }>('mutation', 'live:startFilming', { sessionToken, recordingId }, () => stub.startFilming(recordingId), { strict: true });
+  return !!r?.ok;
+}
+
 /** The recording, live: null while it loads, or when it isn't this family's. */
 export function useRecording(recordingId: string | null | undefined): LiveRecording | null {
   const id = recordingId ?? '';
@@ -561,6 +572,12 @@ const stub = (() => {
       if (!r) return { ok: id.startsWith('stub-') };
       if (r.status === 'recording' || r.status === 'wrapping_up') setRecordingStatus(id, 'ended');
       return { ok: recordings.get(id)?.status === 'ended' };
+    },
+    startFilming(id: string): { ok: boolean } {
+      const r = recordings.get(id);
+      if (!r) return { ok: false };
+      if (r.status === 'intro') setRecordingStatus(id, 'recording');
+      return { ok: recordings.get(id)?.status === 'recording' };
     },
     watchMe: (me: StubPerson, onData: (v: Me | null) => void) => {
       meL.set(onData, me);

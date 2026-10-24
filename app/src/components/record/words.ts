@@ -41,6 +41,7 @@ const WORDS = {
   tryAgain: { en: 'Try again', mr: 'पुन्हा प्रयत्न करा' },
   filmWithoutHomie: { en: 'Film without homie', mr: 'homie शिवाय रेकॉर्ड करा' },
   skipIntro: { en: 'Skip, start filming', mr: 'वगळा, रेकॉर्डिंग सुरू करा' },
+  tapToStart: { en: 'Tap to start', mr: 'सुरू करायला टॅप करा', hint: 'Starts recording from your glasses' },
   leave: { en: 'Leave', mr: 'बाहेर पडा' },
 } as const satisfies Record<string, Words>;
 

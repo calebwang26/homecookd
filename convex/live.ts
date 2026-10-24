@@ -69,6 +69,26 @@ export const endRecording = mutation({
   },
 });
 
+/**
+ * Her Start button (glasses): filming begins now, without homie (no hello first). The laptop bridge
+ * keeps glasses footage only from this moment (status 'recording') until she stops. Idempotent.
+ */
+export const startFilming = mutation({
+  args: { sessionToken: v.string(), recordingId: v.id("recordings") },
+  returns: v.object({ ok: v.boolean() }),
+  handler: async (ctx, { sessionToken, recordingId }) => {
+    const signed = await requireSession(ctx, sessionToken);
+    requireCook(signed);
+    const row = await ctx.db.get("recordings", recordingId);
+    if (!row || row.cookId !== signed.person._id) throw new ConvexError("That recording isn't yours.");
+    if (row.status === "recording") return { ok: true };
+    if (row.status !== "intro") return { ok: false };
+    const now = Date.now();
+    await ctx.db.patch("recordings", row._id, { status: "recording", startedAt: row.startedAt ?? now, updatedAt: now });
+    return { ok: true };
+  },
+});
+
 /** The recording screen's live view of one recording (own family only). */
 export const recording = query({
   args: { sessionToken: v.string(), recordingId: v.id("recordings") },

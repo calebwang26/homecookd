@@ -4,9 +4,10 @@
 // (lib/live/homie). Her language big, small English under it. Nothing else.
 //   connecting, intro  homie says hello while the button rests ("homie is saying hello"). Then filming
 //                      starts by itself; "Skip, start filming" starts it now (homie stops mid-line).
-//                      Glasses (the MVP: start and stop are hers): filming starts as soon as homie's line
-//                      is up, with no hello, and "I'm done" ends it right away (live.endRecording, no
-//                      wrap-up questions), so the laptop saves the video and Home offers "Save to Photos".
+//                      Glasses (the MVP: start and stop are hers): one big button. "Tap to start" ->
+//                      live.startFilming (no hello; homie only connects once filming, for its timed
+//                      questions); then "I'm done" -> live.endRecording (no wrap-up questions). The laptop
+//                      keeps glasses footage only between the two, and Home offers "Save to Photos".
 //   recording          glasses: rings pulse out of the button; a tap is "I'm done" ("माझं झालं" / "Tap
 //                      when you're done"). With homie's line down, that tap ends the recording through
 //                      Convex (live.endRecording), so the glasses' video still goes. phone: the phone's
@@ -41,9 +42,9 @@ import { recordingView, shouldAutoStart, wrapStallMs, type Ask } from '@/compone
 import { COLUMN, RecordWash } from '@/components/record/RecordWash';
 import { usePickVideos } from '@/components/record/usePickVideos';
 import { recordWords, type Line } from '@/components/record/words';
-import { ActionButton, CloseIcon, IconButton } from '@/components/ui';
+import { ActionButton, CloseIcon, IconButton, useToast } from '@/components/ui';
 import { useAiSpeaking, useHomieScreen } from '@/lib/homie/hooks';
-import { useLiveFrame, useLiveLog, useRecording } from '@/lib/live/convex';
+import { endRecording, startFilming, useLiveFrame, useLiveLog, useRecording } from '@/lib/live/convex';
 import { useHomieRecording } from '@/lib/live/homie';
 import { colors, motion, space } from '@/theme/tokens';
 
@@ -81,6 +82,7 @@ export default function RecordingScreen() {
   const preview = devPreview === 'done';
   const id = devPreview ? null : params.id || null;
   const insets = useSafeAreaInsets();
+  const toast = useToast();
   const reduce = useReducedMotion();
   const draft = useDraft();
   const pick = usePickVideos();
@@ -91,14 +93,24 @@ export default function RecordingScreen() {
   const steps = liveLog?.events.filter((e) => e.kind === 'step') ?? [];
   const lastStep = steps.length ? steps[steps.length - 1] : null;
   const source = rec?.source ?? (params.source === 'phone' ? 'phone' : 'glasses');
-  const homie = useHomieRecording(id, { language: params.lang || 'en', kidName: params.kid || undefined, dish: draft.dish ?? undefined });
+  const glasses = source === 'glasses';
+  // Glasses: filming is exactly what Convex says, set by her two taps.
+  const glassesFilming = glasses && rec?.status === 'recording';
+  // homie joins a glasses recording only once she has started it: no hello before her Start.
+  const homie = useHomieRecording(glasses && !glassesFilming ? null : id, { language: params.lang || 'en', kidName: params.kid || undefined, dish: draft.dish ?? undefined });
   const lang = homie.info?.language ?? rec?.language ?? (params.lang || 'en');
   const words = useMemo(() => recordWords(lang), [lang]);
   const kid = homie.info?.kidName ?? (params.kid || null);
   const ended = homie.phase === 'ended' || rec?.status === 'ended' || rec?.status === 'abandoned';
   // A phone recording is over once its camera is back: homie only wraps up.
   const [phoneFilmed, setPhoneFilmed] = useState(false);
-  const view = recordingView(ended ? 'ended' : phoneFilmed && homie.phase === 'recording' ? 'wrapping_up' : homie.phase, words);
+  const [starting, setStarting] = useState(false);
+  const view =
+    glasses && !ended
+      ? glassesFilming
+        ? { line: words.line('stop'), live: true }
+        : { line: words.line(starting ? 'gettingReady' : 'tapToStart'), live: false }
+      : recordingView(ended ? 'ended' : phoneFilmed && homie.phase === 'recording' ? 'wrapping_up' : homie.phase, words);
 
   // Filmed without homie (its connection was lost before filming): straight to the done view.
   const [filmedAlone, setFilmedAlone] = useState(false);
@@ -135,7 +147,7 @@ export default function RecordingScreen() {
 
   // No swiping away once she's filming (the × comes back if homie's connection is lost).
   const navigation = useNavigation();
-  const filming = homie.phase === 'recording' || homie.phase === 'wrapping_up';
+  const filming = glasses ? glassesFilming : homie.phase === 'recording' || homie.phase === 'wrapping_up';
   useEffect(() => {
     navigation.setOptions({ gestureEnabled: !filming && !finished });
   }, [navigation, filming, finished]);
@@ -155,10 +167,8 @@ export default function RecordingScreen() {
 
   // Filming starts by itself once homie's hello has played (once).
   const started = useRef(false);
-  const autoStart =
-    source === 'glasses'
-      ? homie.phase === 'intro' && !homie.error
-      : shouldAutoStart({ phase: homie.phase, introDone: homie.introDone, aiSpeaking, error: !!homie.error });
+  // Glasses never start by themselves: her Start does it.
+  const autoStart = !glasses && shouldAutoStart({ phase: homie.phase, introDone: homie.introDone, aiSpeaking, error: !!homie.error });
   const begin = useRef(() => {});
   useEffect(() => {
     begin.current = source === 'glasses' ? homie.start : () => void filmOnPhone();
@@ -178,13 +188,29 @@ export default function RecordingScreen() {
     begin.current();
   };
 
-  // Glasses: "I'm done" ends the recording now (no wrap-up questions); if Convex can't be reached, homie's way.
-  const doneNow = homie.done;
-  const stop = () => {
-    if (source !== 'glasses') return doneNow();
-    void endWithoutHomie().then((ok) => {
-      if (!ok) doneNow();
-    });
+  // Glasses: her two taps. Start -> filming (live.startFilming); I'm done -> ended (live.endRecording).
+  const startGlasses = async () => {
+    if (!id || starting) return;
+    setStarting(true);
+    const ok = await startFilming(id).catch(() => false);
+    if (!ok) {
+      setStarting(false);
+      toast.show('Couldn’t start. Check the connection and try again.', { tone: 'error' });
+    }
+  };
+  const [stopping, setStopping] = useState(false);
+  const stopGlasses = async () => {
+    if (!id || stopping) return;
+    setStopping(true);
+    const ok = await endRecording(id);
+    if (!ok) {
+      setStopping(false);
+      toast.show('Couldn’t stop. Check the connection and try again.', { tone: 'error' });
+    }
+  };
+  const press = () => {
+    if (!glasses) return homie.done();
+    void (glassesFilming ? stopGlasses() : startGlasses());
   };
 
   const filmWithoutHomie = async () => {
@@ -205,13 +231,13 @@ export default function RecordingScreen() {
       ) : (
         <>
           <View style={styles.column}>
-            {source === 'glasses' && !devPreview ? (
+            {glassesFilming && !devPreview ? (
               <GlassesView frame={liveFrame} filming={view.live} lastStep={lastStep?.title ?? null} steps={steps.length} />
             ) : null}
             <RecordButton
               live={view.live}
-              disabled={!view.live || !!pick.busy}
-              onPress={stop}
+              disabled={glasses ? !id || ended || (starting && !glassesFilming) || stopping : !view.live || !!pick.busy}
+              onPress={press}
               accessibilityLabel={view.live ? 'Recording. Tap when you’re done.' : view.line.en ?? view.line.text}
             />
             <Animated.View key={view.line.text} entering={FadeIn.duration(reduce ? motion.reducedFadeMs : 220)} style={styles.label}>
