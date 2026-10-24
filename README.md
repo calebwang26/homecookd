@@ -16,8 +16,9 @@ library / recipe ◀──GET── gs://edible-media-… (public, no listing) �
                                                                       poster.jpg, recipe.json, library.json
 ```
 
-The Gemini key never leaves the laptop. The app ships only the public bucket URL, the signer URL and a
-family code.
+The Gemini key never leaves the laptop. The app ships only the public bucket URL and the signer URL. The
+signer lets in a signed-in phone (it checks the phone's Convex session with Convex) or, from older builds,
+the shared family code (`X-Edible-Family`). Signer tests: `python3 cloud/signer/test_main.py`.
 
 ## One-time setup (done)
 

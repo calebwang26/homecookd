@@ -1,7 +1,8 @@
 """homecookd upload signer (Cloud Run function).
 
 POST JSON {title, cook_name, relation, files: [{name, content_type, size, duration_s}]}
-with header X-Edible-Family. Returns V4 signed PUT URLs into the private uploads bucket
+with the phone's Convex session (Authorization: Bearer <sessionToken>, checked against Convex) or,
+from older builds, the shared X-Edible-Family code. Returns V4 signed PUT URLs into the private uploads bucket
 and writes a public jobs/<job_id>.json status file the app polls. No key files: URLs are
 signed through the IAM signBlob API as this function's own service account.
 """
@@ -10,6 +11,8 @@ import hmac
 import json
 import os
 import re
+import urllib.error
+import urllib.request
 import uuid
 
 import functions_framework
@@ -20,7 +23,8 @@ from google.cloud import storage
 
 MEDIA_BUCKET = os.environ["MEDIA_BUCKET"]
 UPLOAD_BUCKET = os.environ["UPLOAD_BUCKET"]
-FAMILY_CODE = os.environ["FAMILY_CODE"]
+FAMILY_CODE = os.environ.get("FAMILY_CODE", "")  # older builds only; empty turns that path off
+CONVEX_URL = os.environ.get("CONVEX_URL", "https://grand-dragon-649.convex.cloud").rstrip("/")
 MAX_FILES = 20
 MAX_FILE_BYTES = 20 * 1024**3  # 20 GB; a 3-hour iPhone recording is ~10 GB
 MAX_HOURS = 4  # same cap as pipeline/worker.py; reject before the phone uploads GBs for nothing
@@ -56,6 +60,67 @@ def _number(f: dict, key: str, limit: float, message: str) -> float | None:
     return value
 
 
+class ConvexDown(Exception):
+    pass
+
+
+TROUBLE = "The service is having trouble. Please try again in a minute."
+
+
+def _convex_query(path: str, args: dict):
+    """A public Convex query's value, or None if Convex refuses (e.g. a signed-out session). Raises
+    ConvexDown when Convex can't be reached, so a blip isn't reported as "signed out"."""
+    req = urllib.request.Request(
+        f"{CONVEX_URL}/api/query", method="POST", headers={"Content-Type": "application/json"},
+        data=json.dumps({"path": path, "args": args, "format": "json"}).encode())
+    try:
+        with urllib.request.urlopen(req, timeout=5) as res:
+            body = json.load(res)
+    except urllib.error.HTTPError as e:
+        if 400 <= e.code < 500:
+            return None
+        raise ConvexDown(f"HTTP {e.code}") from None
+    except (OSError, ValueError) as e:
+        raise ConvexDown(type(e).__name__) from None
+    return body.get("value") if isinstance(body, dict) and body.get("status") == "success" else None
+
+
+def _caller(request):
+    """(error, token): error is the JSON answer when the caller may not use the signer. token is the
+    Convex session for a signed-in phone, None for a family-code caller."""
+    code = request.headers.get("X-Edible-Family", "")
+    if FAMILY_CODE and code and hmac.compare_digest(code.encode(), FAMILY_CODE.encode()):
+        return None, None
+    auth = request.headers.get("Authorization", "")
+    token = auth[7:].strip() if auth[:7].lower() == "bearer " else ""
+    if not token:
+        return _json({"error": "unknown family"}, 403), None
+    if not 20 <= len(token) <= 200:
+        return _json({"error": "Please sign in again."}, 401), None
+    try:
+        me = _convex_query("people:me", {"sessionToken": token})
+    except ConvexDown as e:
+        print(f"session check failed: {e}")  # never the token
+        return _json({"error": TROUBLE}, 502), None
+    if not isinstance(me, dict) or not isinstance(me.get("personId"), str):
+        return _json({"error": "Please sign in again."}, 401), None
+    print(f"signed in as {me['personId']}")
+    return None, token
+
+
+def _not_theirs(token: str, kind: str, item_id) -> tuple | None:
+    """For a signed-in phone: refuse a cancel or delete unless the job or recipe is its family's
+    (signer:owns; only a cook may)."""
+    if not isinstance(item_id, str):
+        return None  # the action itself answers 400
+    try:
+        owns = _convex_query("signer:owns", {"sessionToken": token, "kind": kind, "id": item_id})
+    except ConvexDown as e:
+        print(f"ownership check failed: {e}")
+        return _json({"error": TROUBLE}, 502)
+    return None if owns is True else _json({"error": f"That {kind} isn't yours to change."}, 403)
+
+
 RECIPE_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,99}")
 
 
@@ -75,7 +140,7 @@ def _request_cancel(body: dict):
         pass  # already requested
     except Exception as e:  # noqa: BLE001
         print(f"cancel request for {job_id} failed: {e}")
-        return _json({"error": "The service is having trouble. Please try again in a minute."}, 502)
+        return _json({"error": TROUBLE}, 502)
     return _json({"ok": True, "job_id": job_id})
 
 
@@ -95,7 +160,7 @@ def _request_delete(body: dict):
         pass  # already requested; the worker hasn't picked it up yet
     except Exception as e:  # noqa: BLE001
         print(f"delete request for {recipe_id} failed: {e}")
-        return _json({"error": "The service is having trouble. Please try again in a minute."}, 502)
+        return _json({"error": TROUBLE}, 502)
     return _json({"ok": True, "recipe_id": recipe_id})
 
 
@@ -103,15 +168,16 @@ def _request_delete(body: dict):
 def create_upload(request):
     if request.method != "POST":
         return _json({"error": "POST only"}, 405)
-    if not hmac.compare_digest(request.headers.get("X-Edible-Family", "").encode(), FAMILY_CODE.encode()):
-        return _json({"error": "unknown family"}, 403)
+    denied, token = _caller(request)
+    if denied:
+        return denied
     body = request.get_json(silent=True)
     if not isinstance(body, dict):
         return _json({"error": "send a JSON object"}, 400)
     if body.get("action") == "delete":
-        return _request_delete(body)
+        return (token and _not_theirs(token, "recipe", body.get("recipe_id"))) or _request_delete(body)
     if body.get("action") == "cancel":
-        return _request_cancel(body)
+        return (token and _not_theirs(token, "job", body.get("job_id"))) or _request_cancel(body)
     try:
         title = _text(body, "title", 120)
         cook_name = _text(body, "cook_name", 60)

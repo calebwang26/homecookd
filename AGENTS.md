@@ -166,6 +166,10 @@ npx convex deploy --preview-name hackathon -y                      # deploy (CON
 npx --yes deno@2 test --node-modules-dir=none --allow-env --allow-read supabase/tests/   # unit tests
 npx --yes deno@2 check --node-modules-dir=none supabase/functions/api/*.ts              # typecheck
 
+# upload signer (cloud/signer)
+python3 cloud/signer/test_main.py                                  # sign-in check (Convex + GCS faked)
+cloud/deploy-signer.sh                                             # Cloud Run edible-upload, us-west1
+
 # voice service (voice/README.md)
 cd voice && npm ci && npm run dev                                  # ws://localhost:8080/cook (VOICE_STUB=1: stub recipe, any token)
 cd voice && VOICE_STUB=1 npm run dev:fake                          # the same with fake speech (offline checks)
