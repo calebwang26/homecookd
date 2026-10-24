@@ -284,33 +284,52 @@ Before starting work, compare the last commit here with `git log origin/main` to
     Convex. Family recipes the worker published before this still have their stories in the bucket (#34 hides them
     in the app). `rebuild_library` lists every `*/recipe.json` in the bucket, so any `publish.py` run puts family
     recipes into the shared `library.json` and the app bundle. The intro isn't kept anywhere now (no screen shows it).
-- Oct 24 · #33 · Claude · Track G screens, then Caleb's simplified Community map (built on #24's backend):
+- Oct 24 · #33 · Claude · Track G screens: Caleb's simplified Community map, then his v2 "one step at a time"
+  connect flow, share asks, swaps and the final Dinner page (built on #24's backend):
   - **Kid tab "Dishes near you"** (`kid/community.tsx`): the title (room left for homie at the top right), one
-    square map (358 pt on a 390 pt phone; react-native-svg, no new native module: made-up streets, real Cambridge
-    neighborhood names at their real spots, You in the middle) with a round dish photo per ~1 km grid cell, and one
-    line: "Tap a dish to see whose it is." `components/community/mapLayout.ts` places them (square-root distance
-    scale, circles nudged apart, families in the same cell share one circle with a count). A tap opens one card:
-    photo, dish, "cook · culture", "About 1 mi away", the cook's quote, "See the recipe". With an open dinner it adds
-    the butter line "Dinner Friday · 7 pm · 2 seats left" and "Ask to join", which opens the dinner page (you ask
-    there). The floormates' shared circle opens a row of their dishes. A tap on You opens your next dinner (the dark
-    card; "1 new request" for a host, and a sun dot on You) and "Host a dinner". Tapping the map or the same circle
-    closes it. Reduce Motion: no grow, only the ring. The filter chips, family cards and footnote are gone.
-  - **Also in #33, unchanged:** `/community/[id]` (the recipe's text and story card, never the video),
-    `/dinner/new`, `/dinner/[id]` (the host answers requests; accepted guests see the address; who's coming) and
-    "Share with people nearby" on `my-recipe/[id]`.
-  - **Backend:** `community.feed` adds `here`, each dish's `approx` (its cook's grid cell, never finer), `culture`,
-    `quote` and its open `dinner`. `recipes.storyCard` gains optional `culture` and `quote`. Muse picks one of her
-    English step quotes by number (at most 20 words; never a story, never its own words); without Muse, culture is
-    null and the quote is her first step quote (`convex/lib/storyCard.ts`). `seedCommunity:neighbors` sets culture
-    and the web cards' `feelQuote`; new `seedCommunity:floormateDish`; `place` also takes a `familyId`.
-  - **Docs:** STACK.md's Community lines; new memory `community-map` (the map, information only on tap).
-  - **Review fixes:** DinnerCard uses the live view only for its own dinner. `community/[id]` reads
-    `community.recipe` through `useLive`, so a cold open waits for sign-in instead of failing with "Sign in first."
-  - **Tests:** 7 new convex-tests (45 pass with main merged); `test-community-ui.mjs` 18 pass. Expo web screenshots
-    at 390x844 with local fixtures (not committed): the map, a dish with and without a dinner, the building row,
-    You, closing, empty, Reduce Motion, and both buttons' pages.
+    square map (330 pt on a 390 pt phone; react-native-svg, no new native module: made-up streets, real Cambridge
+    neighborhood names at their real spots, You in the middle) with a round dish photo per ~1 km grid cell
+    (`components/community/mapLayout.ts`: square-root distance scale, circles nudged apart, families in one cell
+    share a circle with a count). Under it: "Tap a dish to see whose it is." and ONE button, "Share your recipe".
+  - **One step at a time** (`DishSteps`, `ShareSteps`, `Chooser`, words in `choices.ts`): a dish's card (photo, dish,
+    "cook · culture", distance, her quote, "Translated" when she said it in another language) has one button,
+    "Connect with <cook>". It swaps to a chooser (back ‹, "<cook>'s <dish>"): "Join <host>'s dinner" (only with an
+    open dinner ahead; "Friday · 7 pm · 2 seats left", plus the dinner's own distance when it differs; green, opens
+    the dinner page), "Swap recipes", "Host a dinner". "Share your recipe" → "Put it on the map" and "Host a
+    dinner"; with several family dishes it asks which. Your own family's shared dishes are on the map too (`ours`;
+    their card's button is "Host a dinner"). The floormates' circle still opens their row of dishes. "You" opens
+    your next dinner, the swaps asked of you (Accept / Decline) and the ones agreed, and "Host a dinner"; its sun
+    dot counts dinner requests and swap asks. Tapping the map or the same circle closes it. Reduce Motion: no grow.
+  - **Share asks** (`convex/shareRequests.ts`): "Put it on the map" by someone who doesn't cook the dish adds a
+    `questions` row (`kind: "share"`, `shareRecipeId`) for that recipe's cook, translated for her like any question,
+    so it shows in her open questions with no parent UI change. Only she can answer it. Once her words are in (typed,
+    or the voice note's Ink transcript), a strict Gemini call (`lib/yesNo.ts`) reads the English: only "yes" shares
+    it, by the switch's own path (`community.shareOn`, which schedules the story card); no, unclear, a failure or no
+    transcript share nothing. Her own tap on her own dish shares at once. `questions.forRecipe` leaves share asks out
+    (cook mode never plays them).
+  - **Swaps** (`swapRequests`): `community.requestSwap` (their shared recipe, optionally one of ours that's shared),
+    `respondSwap` (anyone in the family that was asked, once), `mySwaps` (dishes only while ours or still shared, no
+    person ids). "Swap recipes" → pick one of your shared dishes or "Just ask"; an agreed swap reads "You're swapping
+    Kanda Poha ↔ Jollof Rice with the Okafor family" and opens their recipe's text.
+  - **Dinner page** (`/dinner/[id]`, Caleb's final Hearth version): lavender wash, cream back button, the dish photo
+    (326x300, sun glow, "DINNER" tag; `dinners.get` now has `coverUrl`, our stock photo only), "<Dish> Night", a
+    "Hosted by" pill, one card with when and where (the address only after the host says yes), "You're in" and a few
+    faces, "4 going", and one button: "Ask to join", "Asked · waiting" or "Add to calendar" (an .ics written with
+    expo-file-system and opened with expo-sharing; `ics.ts`). The host answers requests there. The quote, "Who's
+    coming", "See the recipe" and the privacy note are gone from it.
+  - **Review fixes:** the share switch's caption and hint and the privacy note now say neighbors see "one line you
+    said" (`TODO(caleb)` on the words); the feed's `now` moves on (rounded down to the quarter hour, checked each
+    minute); a dish's dinner carries its own `distanceLabel` and `hostName`. Muse's culture label stays untagged.
+  - **Also:** Muse's story card code moved to `convex/storyCards.ts`; `plainStory`, `storiesFor` and
+    `quoteTranslated` are in `lib/storyCard.ts`; Community test setup in `convex/community.helpers.ts`. `/dinner/new`
+    takes `?recipeId=`. Round 1's fixes stay (DinnerCard uses the live view only for its own dinner; `community/[id]`
+    waits for sign-in).
+  - **Tests:** vitest 56 with main merged (new `shareRequests.test.ts` 6, `swaps.test.ts` 2, 2 more in
+    `community.test.ts`); `test-community-ui.mjs` 22 (choosers, swap words, the dinner page's words, the .ics text).
+    Expo web screenshots at 390x844 with local fixtures (not committed).
   - **Open:** not deployed. After the deploy: `seedCommunity:neighbors`, then `floormateDish` and
     `place '{"familyId": …}'` for Serene's, Caleb's and Salik's families. `DEMO_LOCATION` is still the MIT placeholder
-    (`TODO(caleb)`); the neighborhood names are Cambridge's and drop off the map anywhere else. No `setLocation`
-    caller. A Marathi cook's quote shows in English with no "Translated" tag. A floormate dish has no in-app off
-    switch. "Community" fills its tab bubble. `api.d.ts` doesn't list `lib/storyCard` yet (codegen adds it).
+    (`TODO(caleb)`); the neighborhood names drop off the map anywhere else. No `setLocation` caller, so a dish sits
+    where its cook is, not where the kid who shared it is. "Add to calendar" isn't tried on a phone. Next round per
+    Caleb: "Host a dinner" on someone else's dish becomes "Cook together". A floormate dish has no in-app off switch.
+    "Community" fills its tab bubble.

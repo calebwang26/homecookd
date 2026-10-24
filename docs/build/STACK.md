@@ -145,7 +145,7 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 |---|---|---|
 | E · homie live | Parent live pass (`/record`), `/speak`, kid-side timers, nudges, read-aloud offer, labelled hints | `voice/`, `convex/live.ts`, `convex/lib/liveRoutes.ts` |
 | F · Translation + pipeline | Cook's language end to end, original + English quotes, homie log in the full pass, upload race, 8–12 steps | `pipeline/`, `convex/worker.ts`, `convex/lib/recipeJson.ts`, `convex/moss.ts`, `convex/people.ts`, `app/src/lib/languages.ts` |
-| G · Community | Feed, share switch + Muse story card, one dinner flow | `convex/community.ts`, `convex/dinners.ts`, `convex/lib/geo.ts`, `convex/seedCommunity.ts`, `app/src/app/community/*`, `app/src/app/dinner/*`, `app/src/app/kid/community.tsx`, `app/src/lib/live/community.ts` |
+| G · Community | Feed, share switch + Muse story card, share asks, swaps, one dinner flow | `convex/community.ts`, `convex/dinners.ts`, `convex/shareRequests.ts`, `convex/storyCards.ts`, `convex/lib/geo.ts`, `convex/seedCommunity.ts`, `app/src/app/community/*`, `app/src/app/dinner/*`, `app/src/app/kid/community.tsx`, `app/src/lib/live/community.ts` |
 | H · Glasses VM | ESP32 → free GCP e2-micro → MP4 → GCS → job | `glasses/`, `convex/glasses.ts`, `convex/lib/glassesRoutes.ts` |
 | I · App UI | homie pot everywhere, cook-screen chips + captions + timers, recording screen, walkie-talkie, language picker | `app/` (everything else) |
 
@@ -172,21 +172,40 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   `questions.textForCook` (the kid's question in her language) a moment later; on failure it stays unset.
   `questions.forRecipe` / `openForCook` return it.
 - `questions.forRecipe` already exists; the kid's cook mode reads it to hear the cook's answer (`answerAudioUrl`,
-  `answer.translation`).
+  `answer.translation`). It leaves out share asks (below): their answers are never played while cooking.
 - Community: `community.feed({ maxMiles?, now })` → `{ here, recipes, dinners }` (`now` is required: the client's
-  clock, rounded, to hide past dinners; queries can't read it). `here` is my own ~1 km grid cell (the map's middle).
+  clock rounded down to the quarter hour and moving on, to leave out dinners that have started; queries can't read
+  it). `here` is my own ~1 km grid cell (the map's middle).
   Each recipe row: `recipeId, dish, familyName, cookName, distanceLabel, approx` (the cook's grid cell, never finer;
-  no stored location = `DEMO_LOCATION`), `story`, `culture` (Muse's label, or null), `quote` (one of the cook's own
-  English step quotes, or null), `coverUrl` (our stock/cover photos only), `stepCount`, and `dinner` (the soonest
-  open one around that dish: `{ dinnerId, startsAt, seatsLeft }`, or null). `community.recipe({ recipeId })` (text
+  no stored location = `DEMO_LOCATION`), `ours` (my own family's shared dish, on the map too), `story`, `culture`
+  (Muse's label, or null), `quote` (one of the cook's own English step quotes, or null), `quoteTranslated` (that
+  step has her original words: the app tags it "Translated"), `coverUrl` (our stock/cover photos only), `stepCount`,
+  and `dinner` (the soonest open one around that dish still ahead, never on my own family's dish:
+  `{ dinnerId, startsAt, seatsLeft, hostName, distanceLabel }`; the distance is the dinner's own, where its host is),
+  or null. `community.recipe({ recipeId })` (text
   only), `community.setLocation({ lat, lng, campus? })` (snapped to the ~1 km grid before it's stored),
   `community.setShare({ recipeId, on })` (the recipe's cook only; a story card written from her stories shows as a
   plain line, with no culture, once she says no to them, and her next share rewrites it). The story card
-  (`writeStoryCard`, Muse Spark, one JSON call) holds the sentence, `culture` and `quote`: Muse only picks a quote by
+  (`storyCards.writeStoryCard`, Muse Spark, one JSON call) holds the sentence, `culture` and `quote`: Muse only picks a quote by
   its number from her step quotes (≤ 20 words; never a story, never its own words); without Muse, culture is null and
   the quote is her first step quote. A quote that stops being one of her step quotes stops showing.
+- **Share asks** ("Put it on the map", `convex/shareRequests.ts`): `shareRequests.ask({ recipeId })` → `"shared"`
+  (it already was, or I'm its cook: shared at once by the same path as the switch, `community.shareOn`) or
+  `"asked"`: a `questions` row with `kind: "share"` and `shareRecipeId`, addressed to that recipe's cook like any
+  open question (`textForCook` in her language; one open ask per recipe). Only her answer counts
+  (`questions.answer` refuses a share ask from anyone but the recipe's cook). Once her words are in (typed, or the
+  voice note's Ink transcript), `shareRequests.decide` asks Gemini, strictly, yes / no / unclear on the English
+  (`translation`, else `transcript`, else `text`; `lib/yesNo.ts`). Only "yes" shares; no, unclear, a failure, no
+  Gemini key or no transcript shares nothing. `shareRequests.familyDishes` → my family's ready dishes
+  `{ recipeId, dish, cookName, mine, shared, asked }` for the "Share your recipe" chooser.
+- **Swaps** (`swapRequests` table): `community.requestSwap({ recipeId, myRecipeId? })` (their recipe and the one I
+  offer must both be shared; asking again returns the same ask; after a no it says "They said not this time"),
+  `community.respondSwap({ swapId, accept })` (anyone in the family that was asked, once), `community.mySwaps` →
+  `{ swapId, status, incoming, ourDish, theirDish, familyName }` (a dish only while it's ours or still shared; no
+  person ids). A swap shows no recipe text neighbors couldn't already see.
   `dinners.create({ recipeId, startsAt, placeKind, placeName, address, seats })` (the recipe must be shared first),
-  `dinners.get({ dinnerId })`, `dinners.mine`, `dinners.requestJoin({ dinnerId })`,
+  `dinners.get({ dinnerId })` (with `coverUrl`, our stock photo, when the recipe opens), `dinners.mine`,
+  `dinners.requestJoin({ dinnerId })`,
   `dinners.respond({ requestId, accept })` (host only). Community responses never include `libraryId`,
   `recipeJsonUrl`, `coverUrl` of a private recipe, moments, memories, quotes other than the card's one, original-
   language quotes, person ids of other families, or an address (except to the host and accepted guests). Distance

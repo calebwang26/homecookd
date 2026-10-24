@@ -77,7 +77,7 @@ function Details({ dinner, now, photo }: { dinner: Dinner; now: number; photo: {
         <Txt variant="display" size={32} align="center" accessibilityRole="header">
           {nightTitle(dinner.dish)}
         </Txt>
-        <HostPill name={dinner.isHost ? 'You' : dinner.hostName} />
+        <HostPill name={dinner.hostName} />
       </View>
       <View style={styles.side}>
         <WhenWhere when={dinnerWhen(dinner.startsAt, now)} placeName={dinner.placeName} address={dinner.address} />
