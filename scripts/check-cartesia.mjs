@@ -1,21 +1,21 @@
-// Live check of our Cartesia setup: the server key mints a short-lived token (what POST /voice/token
-// does in api/cartesia.ts), then the token alone speaks a line, the way the app or web will.
+// Live check of our Cartesia key (docs/build/STACK.md): it mints a short-lived token, then the token
+// alone speaks a line through Sonic.
 // Dependency-free (Node 20+). Prints PASS / FAIL lines; exits 1 on any FAIL. Never prints the key or token.
 //
-//   node supabase/tests/cartesia_live.mjs            # key from CARTESIA_API_KEY or the repo's gitignored .env
-//   OUT=/tmp/hello.wav node supabase/tests/cartesia_live.mjs   # also keeps the audio to listen to
+//   node scripts/check-cartesia.mjs            # key from CARTESIA_API_KEY or the repo's gitignored .env
+//   OUT=/tmp/hello.wav node scripts/check-cartesia.mjs   # also keeps the audio to listen to
 
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
 const BASE = "https://api.cartesia.ai";
-const VERSION = "2026-08-14"; // keep in step with CARTESIA_VERSION in api/cartesia.ts
+const VERSION = "2026-08-14"; // send on every Cartesia call
 // "Katie" from Cartesia's own examples; swap for the voice we pick.
 const VOICE = process.env.CARTESIA_VOICE || "6ccbfb76-1fc6-48f7-b71d-91ac6298247b";
 
 function keyFromEnvFile() {
-  const file = join(dirname(fileURLToPath(import.meta.url)), "../../.env");
+  const file = join(dirname(fileURLToPath(import.meta.url)), "../.env");
   if (!existsSync(file)) return "";
   const line = readFileSync(file, "utf8").split("\n").find((l) => l.startsWith("CARTESIA_API_KEY="));
   return line ? line.slice("CARTESIA_API_KEY=".length).trim() : "";

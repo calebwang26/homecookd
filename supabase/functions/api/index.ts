@@ -27,7 +27,6 @@
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { createRemoteJWKSet, errors as joseErrors, jwtVerify, type JWTPayload } from "npm:jose@5.9.6";
-import { askMoss, mossIndexFor, MossNoIndex } from "./moss.ts";
 import {
   dishName,
   HEARD_MIN_S,
@@ -46,7 +45,6 @@ import {
   STAT_EVENT_KINDS,
   syncTz,
 } from "./retention.ts";
-import { CARTESIA_TOKEN_TTL_S, CARTESIA_URL, CARTESIA_VERSION, mintCartesiaToken } from "./cartesia.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -2368,42 +2366,6 @@ on("POST", "/voice-upload", async ({ ctx, body }) => {
     max_bytes: 10 * 1024 * 1024,
     expires_in_s: 7200,
   };
-});
-
-// --- Cartesia voice (TTS/STT): a short-lived token, so the API key never leaves the server
-
-on("POST", "/voice/token", async ({ ctx, body }) => {
-  requireMe(ctx);
-  const apiKey = Deno.env.get("CARTESIA_API_KEY");
-  if (!apiKey) throw new HttpError(503, "Voice isn't set up yet.");
-  await rateLimit("voice-token", ctx.family.id, 120, 60);
-  const b = await body();
-  const grants = { tts: true, stt: b.stt === true };
-  try {
-    const token = await mintCartesiaToken(apiKey, grants);
-    return { token, expires_in_s: CARTESIA_TOKEN_TTL_S, base_url: CARTESIA_URL, cartesia_version: CARTESIA_VERSION, grants };
-  } catch (e) {
-    console.error(e);
-    throw new HttpError(502, "Voice is unavailable right now. Please try again.");
-  }
-});
-
-// --- Moss search: answers from the family's own index; the Moss key never leaves the server
-
-on("POST", "/moss/ask", async ({ ctx, body }) => {
-  requireMe(ctx);
-  const projectId = Deno.env.get("MOSS_PROJECT_ID");
-  const projectKey = Deno.env.get("MOSS_PROJECT_KEY");
-  if (!projectId || !projectKey) throw new HttpError(503, "Search isn't set up yet.");
-  await rateLimit("moss-ask", ctx.family.id, 60, 60);
-  const question = str((await body()).question, "question", { max: 500, required: true })!;
-  try {
-    return await askMoss(projectId, projectKey, mossIndexFor(ctx.family.id), question);
-  } catch (e) {
-    if (e instanceof MossNoIndex) throw new HttpError(404, "There's nothing to search yet.");
-    console.error(e);
-    throw new HttpError(502, "Search is unavailable right now. Please try again.");
-  }
 });
 
 // --- photos ("I made it": a photo of the dish someone made, for the cook)

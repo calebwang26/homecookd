@@ -1,18 +1,18 @@
 // Live check of our Moss setup, read-only: the project credentials list the project's indexes (control
-// plane), Moss Inference accepts the same credentials the way POST /moss/ask sends them (api/moss.ts),
+// plane), Moss Inference accepts the same credentials (homecookd doesn't use Inference; it's a second check),
 // and a wrong key is refused. Dependency-free (Node 20+). Prints PASS / FAIL lines; exits 1 on any FAIL.
 // Never prints the key.
 //
-//   node supabase/tests/moss_live.mjs     # MOSS_PROJECT_ID / MOSS_PROJECT_KEY from the env or the repo's gitignored .env
+//   node scripts/check-moss.mjs     # MOSS_PROJECT_ID / MOSS_PROJECT_KEY from the env or the repo's gitignored .env
 
 import { existsSync, readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 
-const MANAGE = "https://service.usemoss.dev/v1/manage"; // keep in step with api/moss.ts
+const MANAGE = "https://service.usemoss.dev/v1/manage";
 const INFERENCE = "https://inference.moss.dev/v1";
 
-const envFile = join(dirname(fileURLToPath(import.meta.url)), "../../.env");
+const envFile = join(dirname(fileURLToPath(import.meta.url)), "../.env");
 const envLines = existsSync(envFile) ? readFileSync(envFile, "utf8").split("\n") : [];
 const fromEnv = (name) => {
   if (process.env[name]) return process.env[name];
@@ -44,7 +44,7 @@ const list = await listRes.json().catch(() => null);
 check(listRes.ok && Array.isArray(list), "listIndexes with project key", `${listRes.status}, ${Array.isArray(list) ? list.length : "?"} indexes`);
 if (Array.isArray(list) && list.length) console.log(`     indexes: ${list.map((i) => `${i.name} (${i.status}, ${i.docCount} docs)`).join(", ")}`);
 
-// 2. Inference: same credentials as POST /moss/ask, retrieval off so it needs no index
+// 2. Inference: same credentials, retrieval off so it needs no index
 const chatRes = await fetch(`${INFERENCE}/chat/completions`, {
   method: "POST",
   headers: { Authorization: `Bearer ${PROJECT}:${KEY}`, "Content-Type": "application/json", "X-Moss-Retrieve": "off" },
