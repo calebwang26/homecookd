@@ -1,0 +1,69 @@
+{
+ "W": 1440,
+ "H": 900,
+ "range": {
+  "start": 0,
+  "end": 2205,
+  "total": 13868
+ },
+ "meta": [
+  {
+   "i": 0,
+   "file": "000.jpg",
+   "y": 0,
+   "motion": "on",
+   "overflowX": 0,
+   "playing": [
+    "hero-family-1920.mp4"
+   ]
+  },
+  {
+   "i": 1,
+   "file": "001.jpg",
+   "y": 441,
+   "motion": "on",
+   "overflowX": 0,
+   "playing": [
+    "hero-family-1920.mp4"
+   ]
+  },
+  {
+   "i": 2,
+   "file": "002.jpg",
+   "y": 882,
+   "motion": "on",
+   "overflowX": 0,
+   "playing": [
+    "hero-family-1920.mp4"
+   ]
+  },
+  {
+   "i": 3,
+   "file": "003.jpg",
+   "y": 1323,
+   "motion": "on",
+   "overflowX": 0,
+   "playing": [
+    "hero-family-1920.mp4"
+   ]
+  },
+  {
+   "i": 4,
+   "file": "004.jpg",
+   "y": 1764,
+   "motion": "on",
+   "overflowX": 0,
+   "playing": []
+  },
+  {
+   "i": 5,
+   "file": "005.jpg",
+   "y": 2205,
+   "motion": "on",
+   "overflowX": 0,
+   "playing": []
+  }
+ ],
+ "logs": [],
+ "bad": []
+}
