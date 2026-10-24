@@ -88,9 +88,8 @@ Use these rules in order. The first one that separates two PRs decides.
    settled `main`, not again after each small merge.
 5. **Oldest first** when nothing else separates them.
 
-**Demo freeze.** From the evening of Oct 24 until the demo, only merge fixes for things the demo uses. Hold
-features and refactors and tell their sessions why. Caleb can lift the freeze. *(Proposed, not yet confirmed by Caleb: the
-Merge Agent asks him before enforcing it.)*
+**No demo freeze.** Caleb decided on Oct 24: keep merging features right up to the demo, as long as they pass the
+checks in section 5. Demo-critical fixes still go first (rule 1).
 
 ---
 
@@ -274,7 +273,6 @@ the conflict is and which order is easier, without changing anyone's branch.
 - A session asks you to merge something its own permissions blocked.
 - Merging would change `app/app.json` runtime version or `eas.json` channels (it decides which phones get the
   update; TestFlight is live).
-- Anything during the demo freeze that isn't a demo fix.
 
 When you ask, keep it to one question with the options, so he can answer in five seconds.
 
@@ -304,7 +302,7 @@ When you ask, keep it to one question with the options, so he can answer in five
 
 1. Intake: the message has the number, files, what it checked, depends-on and deploy needs.
 2. Triage: overlaps with other open PRs, hot files, hidden contract changes.
-3. Order: demo fixes → producers → dependencies → small → oldest. Respect the freeze.
+3. Order: demo fixes → producers → dependencies → small → oldest. No freeze (Caleb, Oct 24).
 4. Review: secrets, junk files, tests (you are the CI), STATE line, brand, `CLEAN`.
 5. Conflicts: mechanical ones by the fixed rules; real ones by intent → docs order → contract → data → Caleb.
 6. Merge with `--merge`, then tell the PR's session, the overlapping sessions and Caleb (deploys).
