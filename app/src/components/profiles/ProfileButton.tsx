@@ -7,10 +7,13 @@
 // ActingAsBar is the reminder at the top of each tab while an owner's phone is lent ("Cooking as
 // Grandma · Back to Mom"): inline under the header, so it never floats over a button.
 import { router } from 'expo-router';
-import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import type { ReactNode } from 'react';
+import { StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { Avatar, ChevronDownIcon, haptic, PressableScale, Txt } from '@/components/ui';
+import type { Profile } from '@/lib/api';
+import { useHomieSlot } from '@/lib/homie/hooks';
 import { useSession } from '@/lib/session';
 import { colors, shadows, space } from '@/theme/tokens';
 
@@ -33,9 +36,27 @@ export function openFamilyGateway() {
   router.replace('/?pick=1');
 }
 
-export function ProfileButton({ faceOnly = false }: { faceOnly?: boolean }) {
+/**
+ * `homieRoom` (Parent Home's date line): the pill also keeps the room to its left where homie's pot
+ * rests (lib/homie restFrame puts it just left of the pill), so the date beside it never runs under
+ * the pot; a long date wraps instead.
+ */
+export function ProfileButton({ faceOnly = false, homieRoom = false }: { faceOnly?: boolean; homieRoom?: boolean }) {
   const { me } = useSession();
   if (!me) return null;
+  const pill = <Pill faceOnly={faceOnly} me={me} />;
+  return homieRoom ? <HomieRoom>{pill}</HomieRoom> : pill;
+}
+
+function HomieRoom({ children }: { children: ReactNode }) {
+  const slot = useHomieSlot();
+  const { width } = useWindowDimensions();
+  // From the pot's left edge to the header's right padding (the row ends there).
+  const room = Math.max(0, width - space.gutter - slot.x);
+  return <View style={[styles.room, { minWidth: room }]}>{children}</View>;
+}
+
+function Pill({ faceOnly, me }: { faceOnly: boolean; me: Profile }) {
   return (
     <PressableScale
       onPress={openFamilyGateway}
@@ -81,6 +102,7 @@ export function ActingAsBar({ style }: { style?: StyleProp<ViewStyle> }) {
 }
 
 const styles = StyleSheet.create({
+  room: { alignItems: 'flex-end' },
   pill: {
     minHeight: 48,
     maxWidth: 190,

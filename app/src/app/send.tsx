@@ -1,9 +1,12 @@
 // Send (bible: Parent-Send). After Record: "Send your <dish>" (a name field when we don't know the
 // dish yet), the videos (tap to leave one out, "Add more" for another part), "Who is it for?"
-// (learners + Everyone), an optional hello voice note, and the big "Send to Leo".
+// (learners + Everyone), an optional hello voice note, and the big "Send to Leo". The dish and the kid
+// come filled in from Record's pre-record sheet (the draft), and so do her language and homie's
+// recording, which go to jobs.create. (A phone recording made with homie skips this screen: its done
+// screen sends it by itself. It lands here only when that send fails.)
 //
-// Send = upload the hello (if any) -> start the background video upload (lib/uploads.ts) -> POST
-// /pending-sends so the recipe reaches them once it's written -> SuccessBurst "On its way to Leo"
+// Send = upload the hello (if any) -> sendDraft (components/record/sendDraft: the background video
+// upload, jobs.create, POST /pending-sends so the recipe reaches them once it's written) -> SuccessBurst "On its way to Leo"
 // -> the Recipes tab, where a greyed "still cooking" row tracks it. Videos only upload from the
 // phone app; the web explains that instead.
 // Retention PR 7 touches (RETENTION-HANDOFF 4): while it works the button says "Wrapping…" beside
@@ -26,16 +29,14 @@ import { usePickVideos } from '@/components/record/usePickVideos';
 import { AddMoreLink, VideoGrid } from '@/components/record/VideoGrid';
 import { HelloCard } from '@/components/record/HelloCard';
 import { LidPot } from '@/components/record/LidPot';
+import { MAX_TITLE, sendDraft } from '@/components/record/sendDraft';
 import { ActionButton, Avatar, BackPill, Chip, PressableScale, ScreenWash, SendIcon, SuccessBurst, Txt, type ActionState } from '@/components/ui';
 import { WEB_URL, errorMessage, type Profile } from '@/lib/api';
 import { daysAgo } from '@/lib/format';
-import { createJob } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
-import { ensurePendingSend, MAX_RECORDING_HOURS, startUpload, uploadsConfigured } from '@/lib/uploads';
+import { MAX_RECORDING_HOURS, uploadsConfigured } from '@/lib/uploads';
 import { uploadVoice, type VoiceRecording } from '@/lib/voice';
 import { colors, motion, shadows, space } from '@/theme/tokens';
-
-const MAX_TITLE = 120; // the upload signer's limit
 
 type Who = string | 'everyone';
 
@@ -84,6 +85,7 @@ export default function SendScreen() {
   const people = useMemo(() => learners.filter((p) => p.id !== me?.id), [learners, me?.id]);
   const [who, setWho] = useState<Who | null>(null);
   const defaultWho: Who | null =
+    (draft.everyone && others.length > 0 ? 'everyone' : null) ??
     (draft.requestFrom && others.some((p) => p.id === draft.requestFrom) ? draft.requestFrom : null) ??
     people[0]?.id ??
     (others.length > 0 ? 'everyone' : null);
@@ -180,30 +182,10 @@ export default function SendScreen() {
           throw new Error(`Your hello didn’t upload. ${errorMessage(e, '')} Try again, or remove it.`.replace(/\s+/g, ' '));
         }
       }
-      const job = await startUpload({
-        title: dish.slice(0, MAX_TITLE),
-        cook_name: me.name,
-        relation: me.relation?.trim() || me.name,
-        assets: selected.map((c) => c.asset),
-        meta: {
-          sender_id: me.id,
-          recipient_ids: recipients.map((p) => p.id),
-          recipient_label: toLabel,
-          hello_path: helloUp?.path ?? null,
-          hello_duration_s: helloUp?.duration_s ?? null,
-          pending_send: null,
-          duration_s: Math.round(totalS),
-          thumb_video_uri: selected[0]?.asset.uri ?? null,
-        },
-      });
+      await sendDraft({ me, draft, clips: selected, kid: pickedProfile, recipients, toLabel, dish, hello: helloUp });
       // The videos are a job now (the home card tracks it): the draft must not outlive this screen,
       // or Record would offer them for sending again. (Cleared on unmount; kept on screen until then.)
       sentJob.current = true;
-      // The live progress (Convex jobs, hackathon): the worker finds the videos in "<job_id>/". A
-      // failure here never stops the send; the row falls back to the status file.
-      void createJob(`${job.job_id}/`, draft.glasses ? 'glasses' : 'phone').catch((e) => console.warn('[send] jobs.create failed', String(e)));
-      // Who gets it once it's written. If this fails, the home card keeps retrying.
-      if (recipients.length > 0) await ensurePendingSend(job);
       const wait = motion.loadingMinMs - (Date.now() - started);
       if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       if (!mounted.current) return;

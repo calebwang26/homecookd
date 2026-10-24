@@ -1,31 +1,24 @@
-// Keeps test runs off Cartesia's meter (AGENTS.md: at most one live Cartesia smoke test per merge).
-// By default a test client only talks to a service started with fake speech (`npm run dev:fake`), which it checks on
-// /health, and sends each recorded line's words as text. LIVE=1 streams the real audio to a real service (Ink 2 bills
-// 3 credits a second, silence included; Sonic 1 a character). Every run stops at a hard cap: MAX_S seconds, at most
-// 300 when live.
+// How a test client runs. By default it streams the recorded audio to a real service, so Ink 2 and Sonic are tested
+// for real (Caleb, Oct 24: we have the credits, use them to check voice quality). FAKE=1 is the quick offline check:
+// it needs a service started with fake speech (`npm run dev:fake`, which it checks on /health) and sends each recorded
+// line's words as text. Every run stops at MAX_S seconds (default 15 min), only so a stuck run can't stream for hours.
 import { basename } from "node:path";
 import { LINES } from "./testLines.js";
 
-export const live = process.env.LIVE === "1";
+export const fake = process.env.FAKE === "1";
+export const live = !fake;
 
-/** Checks the service is safe to run against, and arms the time cap. Exits if it isn't. */
-export async function guard(base: string, defaultCapS: { fake: number; live: number }): Promise<void> {
-  const asked = Number(process.env.MAX_S);
-  const cap = live ? Math.min(asked || defaultCapS.live, 300) : asked || defaultCapS.fake;
+/** Arms the safety cap; with FAKE=1, checks the service runs with fake speech and exits if it doesn't. */
+export async function guard(base: string, defaultCapS = 15 * 60): Promise<void> {
+  const cap = Number(process.env.MAX_S) || defaultCapS;
   setTimeout(() => {
-    console.log(`stopped: the ${cap} s cap (MAX_S) ran out`);
+    console.log(`stopped: the ${cap} s safety cap (MAX_S) ran out`);
     process.exit(3);
   }, cap * 1000).unref();
-  if (live) {
-    console.log(`LIVE: real Cartesia (about 3 credits a second while connected, plus 1 a spoken character); stops at ${cap} s`);
-    return;
-  }
+  if (!fake) return;
   const health = await fetch(`${base.replace(/^ws/, "http")}/health`).catch(() => null);
   if (health?.headers.get("x-fake-speech") !== "1") {
-    console.error(
-      `${base} isn't running with fake speech, so this run would spend Cartesia credits.\n` +
-        "Start it with `npm run dev:fake`, or make the one live smoke test of this merge with LIVE=1.",
-    );
+    console.error(`FAKE=1, but ${base} isn't running with fake speech. Start it with \`npm run dev:fake\`, or drop FAKE=1.`);
     process.exit(2);
   }
 }

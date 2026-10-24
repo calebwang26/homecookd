@@ -6,7 +6,8 @@
 //      when they didn't come from a recipe link, "What do you want to do first?" Record a dish (a
 //      cook, in a family of their own) / Learn a dish (a learner). Then Profiles. That step also
 //      has a small "Got an invite?": an invited Dad who tapped Apple first would otherwise end up
-//      in a new family of his own.
+//      in a new family of his own. A cook then gets "What language do you cook in?" (English
+//      first; homie talks with her in it), saved with people.setLanguage once she's in.
 //   3. "Paste invite" + Paste ("Have an invite code?" where the system Paste button isn't
 //      available) opens /i for that invite. A pasted recipe link stays here as `?s=`. When a link
 //      is on the clipboard (the invite page's "Get the app" put it there), this row comes first
@@ -18,7 +19,7 @@
 // ("That recipe link stopped working."), so someone new is asked what they want to do first.
 // Opened on a phone that's already in a family (an old link): a recipe link goes on to /r (the
 // dish), anything else to your home, else "Who's in the kitchen?".
-// Dev (web only): ?fixture=name|role|share|code draws each step without signing in.
+// Dev (web only): ?fixture=name|role|language|share|code draws each step without signing in.
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
@@ -43,8 +44,10 @@ import {
   useInviteOnClipboard,
   type Provider,
 } from '@/components/signin';
+import { LanguagePicker, LANGUAGE_QUESTION } from '@/components/record/LanguagePicker';
 import { ActionButton, haptic, type ActionState } from '@/components/ui';
 import type { Role } from '@/lib/api';
+import { setLanguage } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
 import { motion } from '@/theme/tokens';
 
@@ -53,9 +56,9 @@ const SHARE = /^[0-9A-Za-z_-]{4,64}$/;
 const WEB = Platform.OS === 'web';
 const DEV_WEB = __DEV__ && WEB;
 
-type Step = 'start' | 'name' | 'role';
-type Fixture = 'name' | 'role' | 'share' | 'code';
-const FIXTURES: readonly string[] = ['name', 'role', 'share', 'code'];
+type Step = 'start' | 'name' | 'role' | 'language';
+type Fixture = 'name' | 'role' | 'language' | 'share' | 'code';
+const FIXTURES: readonly string[] = ['name', 'role', 'language', 'share', 'code'];
 
 export default function JoinScreen() {
   const params = useLocalSearchParams<{ s?: string; fixture?: string }>();
@@ -63,12 +66,13 @@ export default function JoinScreen() {
   const linkToken = params.s && SHARE.test(params.s) ? params.s : null;
   const { status, signedIn, me, homeFor, error: sessionError, signInWithApple, signInWithGoogle, finishSignIn } = useSession();
 
-  const [step, setStep] = useState<Step>(fixture === 'name' ? 'name' : fixture === 'role' ? 'role' : 'start');
+  const [step, setStep] = useState<Step>(fixture === 'name' || fixture === 'role' || fixture === 'language' ? fixture : 'start');
   const [busy, setBusy] = useState<Provider | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [name, setName] = useState(fixture === 'name' || fixture === 'role' ? 'Dana' : '');
+  const [name, setName] = useState(fixture === 'name' || fixture === 'role' || fixture === 'language' ? 'Dana' : '');
   const [needsRole, setNeedsRole] = useState(true);
-  const [role, setRole] = useState<Role | null>(null);
+  const [role, setRole] = useState<Role | null>(fixture === 'language' ? 'cook' : null);
+  const [language, setLang] = useState('en');
   const [btn, setBtn] = useState<ActionState>('idle');
   const [share, setShare] = useState<{ token: string; from: string | null; recipeId: string } | null>(null);
   const [deadShare, setDeadShare] = useState<string | null>(null);
@@ -170,6 +174,10 @@ export default function JoinScreen() {
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     if (!alive.current) return;
     if (res.status === 'signed-in') {
+      // English is the default (unset); another language is saved for the new cook.
+      if (needsRole && role === 'cook' && language !== 'en' && res.profileId) {
+        void setLanguage(language, res.profileId).catch((e) => console.warn('[join] setLanguage', String(e)));
+      }
       setBtn('success');
       setTimeout(enter, 450);
     } else if (res.status === 'restart') {
@@ -196,7 +204,15 @@ export default function JoinScreen() {
   const back = () => {
     setBtn('idle');
     setError(null);
-    setStep(step === 'role' ? 'name' : 'start');
+    setStep(step === 'language' ? 'role' : step === 'role' ? 'name' : 'start');
+  };
+
+  /** The role step's Continue: a cook says her language first. */
+  const afterRole = () => {
+    if (role === 'cook') {
+      setError(null);
+      setStep('language');
+    } else void finish();
   };
 
   /** The role step's "Got an invite?": back to the start, with Paste first. */
@@ -256,7 +272,7 @@ export default function JoinScreen() {
           </View>
           <ActionButton label="Continue" onPress={next} state={btn} disabled={!name.trim()} successLabel="You’re in" />
         </Animated.View>
-      ) : (
+      ) : step === 'role' ? (
         <Animated.View key="role" entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)} style={styles.step}>
           <Headline title="What do you want to do first?" />
           <View style={styles.form}>
@@ -270,9 +286,24 @@ export default function JoinScreen() {
             <ErrorLine error={error} />
           </View>
           <View style={styles.form}>
-            <ActionButton label="Continue" onPress={() => void finish()} state={btn} disabled={!role} successLabel="You’re in" />
+            <ActionButton label="Continue" onPress={afterRole} state={btn} disabled={!role} successLabel="You’re in" />
             <SmallLink label="Got an invite?" hint="Back to the start, to paste it" onPress={toInvite} />
           </View>
+        </Animated.View>
+      ) : (
+        <Animated.View key="language" entering={FadeIn.duration(220)} exiting={FadeOut.duration(140)} style={styles.step}>
+          <Headline title={LANGUAGE_QUESTION} line="homie talks with you in it while you cook." />
+          <View style={styles.form}>
+            <ActionButton label="Continue" onPress={() => void finish()} state={btn} successLabel="You’re in" />
+            <ErrorLine error={error} />
+          </View>
+          <LanguagePicker
+            value={language}
+            onChange={(code) => {
+              setLang(code);
+              edited();
+            }}
+          />
         </Animated.View>
       )}
     </SignInScreen>

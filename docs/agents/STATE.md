@@ -195,7 +195,7 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - **Voice:** `lib/live/speak.ts` POSTs `/speak` and plays under a `say:` key, falling back to the phone's voice (expo-speech).
   - **mic.ts:** the echo comment is fixed (half duplex, not VoiceChat), plus an optional `onLevel`. Placeholder routes `/recording` and `/answer/[id]`.
   - **Tests:** `app/scripts/test-homie.mjs` (24 pass). Web screenshots checked.
-  - **Open:** nothing tested on an iPhone yet. `/speak` is on main (Track E, `voice/src/server.ts`); not tried against the deployed service. Parent Home's date runs under homie (the parent UI track should leave room). The cook screen's header leaves homie room since #36.
+  - **Open:** nothing tested on an iPhone yet. `/speak` is on main (Track E, `voice/src/server.ts`); not tried against the deployed service. Parent Home's date keeps clear of homie since #35 (`ProfileButton homieRoom`), and the cook screen's header leaves homie room since #36.
 - Oct 24 · #24 · Claude · Track G: Community backend + app helper (no screens yet). `community.feed` (shared recipes from other families, nearest first, plus open dinners; whitelisted fields only, `coverUrl` only for our own stock/cover photos), `community.recipe` (text only), `community.setShare` (the recipe's cook only; Muse Spark writes a ≤25-word story card once, stories only if `memoriesOptIn`, a plain template without `MUSE_API_KEY`), `community.setLocation` (rounded to ~1 km), `dinners.create/get/mine/requestJoin/respond` (the address only for the host and accepted guests; full once every seat is accepted). `convex/lib/geo.ts`, `convex/seedCommunity.ts` (8 neighbor families 0.5–3 mi out, `place`, `publicName`), `app/src/lib/live/community.ts`. 7 new convex-tests (21 pass). Open: `DEMO_LOCATION` is a Cambridge MA placeholder (`TODO(caleb)`: the venue's coordinates); not deployed; run `seedCommunity:neighbors`, then `place` for the floormates and `publicName` for the Pawars after the deploy; screens wait for Caleb's mockups.
 - Oct 24 · #24 · Claude · Track G review fixes:
   - **Her stories:** the story card now records `usedStories` (one optional field on `recipes.storyCard` in
@@ -347,7 +347,54 @@ Before starting work, compare the last commit here with `git log origin/main` to
     - Not deployed (`voice/deploy.sh`, Convex).
     - The app side in #35/#36: send `moment`, send the text no on a tap-to-close, read `offer_closed`, call
       `endRecording` when the socket is down.
-- Oct 24 · (this PR) · Claude · Cartesia credit fix C (Caleb): fake speech for voice tests. `VOICE_FAKE_SPEECH=1` (`npm run dev:fake`) swaps Ink, Gemini Live and Sonic for fakes (`voice/src/speech.ts`), so local runs cost nothing; `/health` adds `x-fake-speech: 1`. `test-client` and `test-record` refuse a service without it unless `LIVE=1`, send each recorded line's words as text (`voice/scripts/testLines.ts`, shared with `make-audio`), and stop at `MAX_S` (live at most 300 s). AGENTS.md rule: at most one live Cartesia smoke test per merge. Fixes A (server-side half duplex) and B (idle close) follow in a second PR; the phone side of A and B goes in #36.
+- Oct 24 · (this PR) · Claude · Cartesia credit fix C (Caleb): fake speech for voice tests. `VOICE_FAKE_SPEECH=1` (`npm run dev:fake`) swaps Ink, Gemini Live and Sonic for fakes (`voice/src/speech.ts`), so local runs cost nothing; `/health` adds `x-fake-speech: 1`. `test-client` and `test-record` refuse a service without it unless `LIVE=1`, send each recorded line's words as text (`voice/scripts/testLines.ts`, shared with `make-audio`), and stop at `MAX_S` (live at most 300 s). AGENTS.md rule: at most one live Cartesia smoke test per merge (replaced the same day: live tests are encouraged, see below). Fixes A (server-side half duplex) and B (idle close) follow in a second PR; the phone side of A and B goes in #36.
+- Oct 24 · (this PR) · Claude · Cartesia credit fixes A and B (Caleb), the server side. A: `cook.ts` sends mic frames to Ink only when homie's own line isn't playing on the phone, and always while a turn is open (Ink needs the trailing audio to end a turn; a turn with no end stops counting after 30 s); the cook's clips stay the phone's to mute. B: `ink.ts` closes the stream after 2 min without audio and reopens it on the next frame, backs off on reconnects (250 ms to 10 s), and keeps only 2 s queued while connecting. Live smoke test (real Ink 2 + Sonic, stub recipe): yes, next step, a question, go back, all transcribed exactly and acted on in under 70 ms, and no echoes. Open: the phone side (send nothing while quiet or unfocused, close on background) goes in #36. Not deployed: needs `voice/deploy.sh` (Caleb).
+- Oct 24 · (this PR) · Claude · Caleb: live Cartesia tests are encouraged (1.24M credits; use them to check voice quality). `test-client` and `test-record` stream to real Ink 2 and Sonic by default; fake speech is now the opt-in (`FAKE=1` against `npm run dev:fake`). The run cap is a 15 min safety stop (`MAX_S`), no longer a credit gate. AGENTS.md's "one live test per merge" rule is replaced, and voice/README.md updated.
+- Oct 24 · #35 · Claude · Track I-parent, the cook's side of homie (contains #32's homie core; #26 is in main now,
+  so it builds on its own). Final round: Caleb's v3/v4 screens, the review fixes and the #29 protocol follow-ups.
+  - **Record:** "Start recording" opens a pre-record sheet (dish, who it's for or Everyone, her language, then From my
+    glasses / Phone camera / Videos I took). Her language is sent only once she picked it or `people.me` loaded, so an
+    unknown one never overrides her saved one. `live.startRecording` and `people.setLanguage` are strict (a missing
+    function throws instead of faking a recording); homie's start gives up after 10 s offline.
+  - **`/recording` v3:** one 232 pt red stop button on a full-height peach wash with a warm glow, one line under it
+    ("माझं झालं" / "Tap when you're done"), homie top-right, nothing else. Filming starts by itself once homie's hello
+    has played. homie's questions are `AskMoment`s with no buttons: homie glowing, the question, five listening bars,
+    "बोला, मी ऐकतोय" / "Just answer out loud" (a tap anywhere closes it). Then the new done view: homie
+    waves, "झालं! Shreya ला पाठवतोय", home after ~4 s. A phone recording starts filming on the server, closes the
+    socket and mic (awaited) while the system camera is up, then reconnects and ends, and the done view sends the
+    video itself (`components/record/sendDraft.ts`, shared with Send). The mic stops at `ended`; a lost connection
+    shows the reason, Try again and the × (a phone recording can film without homie).
+  - **`/record` protocol (#29):** close 4409 is final (no reconnect); an extra `say_end interrupted` stops the line
+    already playing. A live recording with no session retries and never falls back to the stub. Lines end on
+    `say_end` (a 3 s gap timer is only a safety net).
+  - **`/answer/[id]` v2:** the walkie-talkie with no buttons: homie reads the question, the expo-audio recorder listens
+    with metering, ~2 s quiet after ≥1 s of talking sends it (`questions.answer`), homie says and shows "Shreya ला
+    पाठवलं", then it closes. No answer in 15 s: asked once more, then closes with nothing sent. A tap on the
+    question reads it again. `HoldToTalk` is back to main's version.
+  - **Parent Home:** a translated question says "Translated"; the 'uploading' stage keeps the sending half short of
+    full ("Still sending the video"); a live Convex job is dropped once it's 'done' and its recipe is in the library
+    (`libraryIdOf` in convex.ts).
+  - **Round 3 (verifier fixes + the shared contract):** the stop button with no `/record` socket ends the recording
+    through Convex `live.endRecording` (by name, soft; its stub ends only a stub recording), so the glasses' VM still
+    finalizes; if that fails, "done" waits for the socket. A wrap-up that stalls (2 min with nothing moving, 20 s
+    after a service error or a lost line) ends the same way, and a phone video then sends anyway. One socket at a
+    time (a connect waits while one is on its way; an older socket is ignored); a closed or new socket clears homie's
+    question, and a tap always closes it. Half duplex sends zeros of the same length while homie is lit/speaking or
+    anything plays. The asks moment follows canvas frame 2 (homie, then the question, then green bars); homie's glow
+    breathes; the rings pulse every 1.6 s; the done view's arm waves 3 times; the walkie's check pops in and its
+    bars move with her voice. The walkie reads `textForCook` in her language even before `people.me` loads. A share
+    ask (`questions.kind` 'share', #33) reads through the same rows and walkie: no step, a short yes/no is enough,
+    long text gets smaller type. Parent Home's date keeps clear of the pot (`ProfileButton homieRoom`; it wraps).
+    `lib/homie/strings.ts` is gone: its used lines moved to `components/record/words.ts`.
+  - **Tests:** `test-recording-ui.mjs` 23 pass, `test-parent-jobs.mjs` 4 pass; tsc, lint and every other app script
+    pass (`test-profile-navigation` against the web server). On Expo web (Convex and voice stubbed) the glasses flow
+    ran from hello to Home; screenshots of every state, and frame diffs show the rings, glow, arm and check moving
+    (still under Reduce Motion).
+  - **Open:** nothing on an iPhone yet (mic metering, the camera after the mic, the phone send, half duplex).
+    `live.endRecording` isn't deployed yet (the Track E follow-up), and the no-socket stop path couldn't be run on the
+    web stub (the stub socket never drops). GlowHomie's disc is cream, not the canvas's butter (HomiePot draws its
+    own disc; a disc color prop in components/homie would fix it). No public query maps a kid to a Convex person id
+    (found by name).
 - Oct 24 · #36 · Claude · Track I-kid, homie in cook mode (built on #32). The header stays put with homie at its top right; small chips under the pot (Back · Repeat · Ask <cook>; no Next chip, the big "Next step" button does that) talk to homie, or act on their own when voice is off or homie doesn't answer in 1.5 s. A dark "Timer 7:41" pill beside the step title (the phone's own clock, a buzz at zero, the pot's ring). Chips and pill match the canvas's Cook frame. The body's Ask pill is now the chip; the "waiting" line stays.
   - **Voice:** no mic button. In a dev build with the voice service, on a Convex dish, voice starts by itself once the "Let Mom see" sheet has its answer (`consentSettled`; a memorial cook has no sheet, `cookingSessionOn`). A tap on the pot turns the mic off or on (no moment; turning it on, homie says what the kid can say). `lib/live/voice.ts` handles say `kind`/`textEn`, clip `quote`/`quoteEn`, `timer`/`timer_done`, and sets the pot. The pot shrinks while the cook's own voice plays (store `shrunk`), and homie's next line waits until her clip or voice note ends (`setHold`). Stub in `lib/live/voiceStub.ts`.
   - **Half duplex** is `lib/live/mic`'s, for every caller: while homie is lit or speaking, anything plays on the shared player, or a step video plays, each frame goes out as zeroed PCM of the same length (`halfDuplex`, `useHalfDuplex`; `lib/media` `videoPlaying`, `useVideoPlaying`, `audioNow`). So the help line, homie's lines and her clips never reach the service as the kid's words.
