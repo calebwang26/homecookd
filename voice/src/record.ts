@@ -12,8 +12,9 @@ import { env } from "./env.js";
 import { HomieAgent, isNotNow, translate, type AskKind, type Heard, type Line, type Who } from "./homie.js";
 import { fixedLine } from "./lines.js";
 import { DEMO, NORMAL, Pacer, type PaceRules } from "./pacing.js";
-import { SONIC_SAMPLE_RATE, speak, type AudioFormat } from "./sonic.js";
-import { createStt, type Stt } from "./stt.js";
+import { SONIC_SAMPLE_RATE, type AudioFormat } from "./sonic.js";
+import { createStt, speak } from "./speech.js";
+import type { Stt } from "./stt.js";
 
 /** `loading` is ours only (the app never sees it): messages wait until the recording is read. */
 type Phase = "loading" | "intro" | "recording" | "wrapping_up" | "ended";
