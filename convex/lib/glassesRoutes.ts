@@ -20,15 +20,91 @@ export function registerGlassesRoutes(http: HttpRouter): void {
     path: "/glasses/finished",
     method: "POST",
     handler: glasses(async (ctx, body) => {
-      const { recordingId, videoStartedAt, durationS } = body;
+      const { recordingId, videoStartedAt, durationS, videoGaps } = body;
       if (!isStr(recordingId, 100)) return fail(400, "recordingId must be a string");
       // The VM only ever uploads to this folder. Any other path could point the job at another family's video.
       const path = `glasses-${recordingId}/`;
       if (body.uploadPath !== path) return fail(400, "uploadPath must be glasses-<recordingId>/");
       if (!isNum(videoStartedAt) || videoStartedAt <= 0) return fail(400, "videoStartedAt must be epoch ms");
       if (!isNum(durationS) || durationS <= 0) return fail(400, "durationS must be a positive number");
-      const r = await ctx.runMutation(internal.glasses.finished, { recordingId, uploadPath: path, videoStartedAt });
+      // The laptop bridge also says where even its full backup has no footage (the VM sends none).
+      const gaps = videoGaps === undefined ? undefined : spans(videoGaps);
+      if (gaps === null) return fail(400, "videoGaps must be [{startS, endS}] with startS <= endS");
+      const r = await ctx.runMutation(internal.glasses.finished, {
+        recordingId,
+        uploadPath: path,
+        videoStartedAt,
+        videoGaps: gaps,
+      });
       return "jobId" in r ? json(r) : fail(r.status, r.error);
     }),
   });
+
+  // One window of the laptop bridge's live analysis (glasses/BRIDGE.md).
+  http.route({
+    path: "/glasses/live-events",
+    method: "POST",
+    handler: glasses(async (ctx, body) => {
+      const { recordingId, sessionId, sessionStartedAt, windowStartS, windowEndS, ok, reason, events } = body;
+      if (!isStr(recordingId, 100)) return fail(400, "recordingId must be a string");
+      if (!isStr(sessionId, 100)) return fail(400, "sessionId must be a string");
+      if (!isNum(sessionStartedAt) || sessionStartedAt <= 0) return fail(400, "sessionStartedAt must be epoch ms");
+      if (!isNum(windowStartS) || !isNum(windowEndS) || windowEndS < windowStartS)
+        return fail(400, "windowStartS..windowEndS must be a span in seconds");
+      if (typeof ok !== "boolean") return fail(400, "ok must be true or false");
+      if (reason !== undefined && typeof reason !== "string") return fail(400, "reason must be a string");
+      if (!Array.isArray(events)) return fail(400, "events must be a list");
+      const clean = [];
+      for (const e of events) {
+        const ev = liveEvent(e);
+        if (!ev) return fail(400, "each event needs kind, atS, title, text and confidence");
+        clean.push(ev);
+      }
+      const r = await ctx.runMutation(internal.liveEvents.ingest, {
+        recordingId,
+        sessionId,
+        sessionStartedAt,
+        windowStartS,
+        windowEndS,
+        ok,
+        reason,
+        events: clean,
+      });
+      return "events" in r ? json(r) : fail(r.status, r.error);
+    }),
+  });
+}
+
+const KINDS = ["step", "ingredient", "cue", "quote", "story", "marker"] as const;
+const optStr = (x: unknown) => x === undefined || typeof x === "string";
+
+/** A live event with only the fields Convex stores, or null if it doesn't have the right shape. */
+function liveEvent(e: unknown) {
+  if (!e || typeof e !== "object") return null;
+  const { kind, atS, endS, title, text, saidAs, quoteOriginal, confidence } = e as Record<string, unknown>;
+  const k = KINDS.find((x) => x === kind);
+  if (!k || !isNum(atS) || !(endS === undefined || isNum(endS)) || !isNum(confidence)) return null;
+  if (typeof title !== "string" || title.length > 500 || typeof text !== "string" || text.length > 4000) return null;
+  if (!optStr(saidAs) || !optStr(quoteOriginal)) return null;
+  return {
+    kind: k,
+    atS,
+    endS: endS as number | undefined,
+    title,
+    text,
+    saidAs: (saidAs as string | undefined)?.slice(0, 500),
+    quoteOriginal: (quoteOriginal as string | undefined)?.slice(0, 2000),
+    confidence: Math.min(1, Math.max(0, confidence)),
+  };
+}
+
+function spans(x: unknown): { startS: number; endS: number }[] | null {
+  if (!Array.isArray(x) || x.length > 1000) return null;
+  const out = [];
+  for (const g of x) {
+    const { startS, endS } = (g ?? {}) as Record<string, unknown>;
+    if (!isNum(startS) || !isNum(endS) || endS < startS) return null;
+    out.push({ startS, endS });
+  }
+  return out;
 }

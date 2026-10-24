@@ -24,7 +24,7 @@ if str(ROOT) not in sys.path:
 from google.api_core.exceptions import NotFound  # noqa: E402
 
 from pipeline import process, worker  # noqa: E402
-from pipeline.prompts import EXTRACT_PROMPT, MERGE_PROMPT, context, homie_block, language_line  # noqa: E402
+from pipeline.prompts import EXTRACT_PROMPT, MERGE_PROMPT, context, homie_block, language_line, live_block  # noqa: E402
 from pipeline.schema import Recipe  # noqa: E402
 
 LOG = [
@@ -67,6 +67,48 @@ def test_prompts_render_with_context():
     assert "homie asked (amount)" in merge and "8 to 12 steps" in merge
     plain = EXTRACT_PROMPT.format(i=1, n=1, clip_mmss="10:00", context=context(None, []))
     assert "homie" not in plain and "{" not in plain
+
+
+LIVE = {
+    "liveLog": [
+        {"kind": "marker", "atS": 64, "title": "step marker", "text": "", "confidence": 1},
+        {"kind": "step", "atS": 65.5, "endS": 90, "title": "Fry the onions", "text": "Until golden.", "confidence": 0.8},
+        {"kind": "ingredient", "atS": 70, "title": "salt", "text": "~1 tsp", "saidAs": "thoda sa", "confidence": 0.8},
+        {"kind": "quote", "atS": 400, "title": "Dal", "text": "Patience", "quoteOriginal": "धीर धर", "confidence": 0.7},
+    ],
+    "liveGaps": [{"startS": 120, "endS": 150}],
+    "videoGaps": [{"startS": 95, "endS": 100}],
+}
+
+
+def test_live_block_merge_uses_video_seconds():
+    block = live_block(LIVE)
+    assert "they are hints, not facts" in block.lower() and "the video is right" in block
+    assert "- 64 s marker: step marker\n" in block
+    assert "- 66 s-90 s step: Fry the onions: Until golden." in block
+    assert '- 70 s ingredient: salt: ~1 tsp (said "thoda sa")' in block
+    assert '(spoken as "धीर धर")' in block
+    assert "did not look at 120 s-150 s" in block
+    assert "no footage at 95 s-100 s" in block and "Never invent steps there" in block
+    assert live_block(None) == "" and live_block({"liveLog": [], "liveGaps": [{"startS": 1, "endS": 2}]}) == ""
+
+
+def test_live_block_extraction_keeps_one_clip():
+    block = live_block(LIVE, base_s=60, clip_s=60)  # the clip covers 60..120 s of the video
+    assert "- 00:04 marker" in block and "- 00:06-00:30 step: Fry the onions" in block
+    assert "धीर धर" not in block  # 400 s is in another clip
+    assert "no footage at 00:35-00:40" in block
+    assert "did not look" not in block  # the missed span 120-150 s only touches this clip's end
+    assert "did not look at 00:40-01:00" in live_block(LIVE, base_s=80, clip_s=60)
+    assert live_block(LIVE, base_s=500, clip_s=60) == ""
+
+
+def test_prompts_render_with_live_context():
+    extract = EXTRACT_PROMPT.format(i=1, n=1, clip_mmss="10:00", context=context("mr", [], 0, 600, LIVE))
+    assert "quick live pass" in extract and "{" not in extract.replace("{ ", "")
+    merge = MERGE_PROMPT.format(n=1, title='"Varan"', duration_s=600, sessions="[]", events="[]",
+                                context=context("mr", LOG, live=LIVE))
+    assert "homie asked (amount)" in merge and "Fry the onions" in merge
 
 
 def test_recipe_language_round_trip():

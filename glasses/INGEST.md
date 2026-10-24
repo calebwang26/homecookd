@@ -11,6 +11,9 @@ ESP32 ──ws──► VM /ingest ──► disk (frames + PCM) ──ffmpeg─
                  └── GET /frame/latest (voice service, every ~5 s, x-glasses-secret)
 ```
 
+Glasses that stream to a laptop instead (edible-glasses, `receiver.py --cloud`) reach the VM through the laptop bridge;
+see BRIDGE.md.
+
 ## What the firmware sends
 
 One WebSocket: `ws://<vm-ip>:8090/ingest?device=<GLASSES_DEVICE_KEY>`. Use a phone hotspot at the venue

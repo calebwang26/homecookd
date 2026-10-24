@@ -12,6 +12,7 @@
 //   const { recordingId } = await startRecording({ dish, forKidId, language?, source })   live.startRecording
 //   useRecording(recordingId)                            live.recording, live (the recording screen)
 //   await endRecording(recordingId)                      live.endRecording: the stop button with no voice line
+//   useLiveLog(recordingId)                              liveEvents.forRecording, live (what the glasses' live pass saw)
 //   useMe()  /  await setLanguage('mr')                  people.me (live) / people.setLanguage
 //   await convexPersonIdByName('Shreya')                 a family member's Convex id, from rows that name them
 //   await libraryIdOf(recipeId)                          a Convex recipe's library id (recipes.list)
@@ -77,6 +78,9 @@ export type LiveRecording = {
   endedAt?: number;
   jobId?: string;
 };
+/** The glasses' live analysis (glasses/BRIDGE.md): what it saw so far, oldest first; `at` is wall-clock ms. */
+export type LiveLogEvent = { at: number; kind: 'step' | 'ingredient' | 'cue' | 'quote' | 'story' | 'marker'; title: string; text: string; saidAs?: string };
+export type LiveLog = { events: LiveLogEvent[]; windows: { analysed: number; missed: number } };
 export type Me = { personId: string; name: string; role: 'cook' | 'kid'; language: string; relation?: string };
 /** Who a stub people.me is for (useSession's `me`). */
 type StubPerson = { id: string; name: string; role: string; relation: string | null } | null | undefined;
@@ -301,6 +305,17 @@ function stubRecordingWatcher(id: string) {
   }
   return w;
 }
+
+/** The live pass's log for a glasses recording; null while it loads, without the laptop bridge, or on the stub. */
+export function useLiveLog(recordingId: string | null | undefined): LiveLog | null {
+  const id = recordingId ?? '';
+  return useLive<LiveLog | null>('liveEvents:forRecording', null, noLiveLog, !!id, { recordingId: id }, true);
+}
+
+const noLiveLog = (onData: (v: LiveLog | null) => void) => {
+  onData(null);
+  return () => {};
+};
 
 /** Who this is on Convex, with their language ('en' when unset). Null until it loads. */
 export function useMe(enabled = true): Me | null {

@@ -129,6 +129,9 @@ export default defineSchema({
     progress: v.number(), // 0..1 across the whole job
     error: v.optional(v.string()),
     claimedAt: v.optional(v.number()),
+    // Glasses: spans of the video with no footage even in the laptop's full backup (seconds from
+    // recordings.videoStartedAt). The worker tells Gemini not to invent steps there.
+    videoGaps: v.optional(v.array(moment)),
   })
     .index("by_familyId", ["familyId"])
     .index("by_stage", ["stage"]),
@@ -230,6 +233,46 @@ export default defineSchema({
     answer: v.optional(
       v.object({ transcript: v.string(), transcriptEn: v.optional(v.string()), atS: v.number(), endS: v.number() }),
     ),
+  }).index("by_recordingId", ["recordingId"]),
+
+  /**
+   * What the glasses' live analysis saw while the cook cooked (the laptop bridge, glasses/BRIDGE.md):
+   * steps, ingredients, cues, quotes and stories from Gemini, 30 s at a time, plus the cook's button
+   * taps. Hints for the app's live view and for the final recipe; the full video is still the source.
+   * atS is seconds on the glasses session's clock, which started at sessionStartedAt (epoch ms).
+   */
+  liveEvents: defineTable({
+    recordingId: v.id("recordings"),
+    familyId: v.id("families"),
+    sessionId: v.string(), // the glasses' own session id (a reboot mid-cook starts a new one)
+    sessionStartedAt: v.number(),
+    kind: v.union(
+      v.literal("step"),
+      v.literal("ingredient"),
+      v.literal("cue"),
+      v.literal("quote"),
+      v.literal("story"),
+      v.literal("marker"),
+    ),
+    atS: v.number(),
+    endS: v.optional(v.number()),
+    title: v.string(),
+    text: v.string(),
+    saidAs: v.optional(v.string()), // the cook's own words for an amount
+    quoteOriginal: v.optional(v.string()),
+    confidence: v.number(),
+  }).index("by_recordingId", ["recordingId"]),
+
+  /** Each window the live analysis tried, so a hole in liveEvents reads as "not analysed", not "nothing happened". */
+  liveWindows: defineTable({
+    recordingId: v.id("recordings"),
+    familyId: v.id("families"),
+    sessionId: v.string(),
+    sessionStartedAt: v.number(),
+    startS: v.number(),
+    endS: v.number(),
+    ok: v.boolean(),
+    reason: v.optional(v.string()), // why it failed: no footage, analysis behind, a Gemini error
   }).index("by_recordingId", ["recordingId"]),
 
   /** Community: a dinner hosted around one shared recipe. The address is private until the host accepts. */
