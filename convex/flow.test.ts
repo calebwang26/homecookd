@@ -181,10 +181,74 @@ test("a voice-note answer is transcribed by Cartesia Ink", async () => {
   const form = sttCall[1]?.body as FormData;
   expect(form.get("model")).toBe("ink-whisper");
   expect((form.get("file") as File).name).toBe("answer.m4a");
+  expect(form.get("language")).toBe("en");
+  expect(fetch.mock.calls.some(([u]) => String(u).includes("generativelanguage"))).toBe(false);
 
   const [q] = await t.query(api.questions.forRecipe, { sessionToken: leo.sessionToken, recipeId });
   expect(q.answer).toMatchObject({ audioId, transcript: "Yes, rinse them first." });
   expect(q.answerAudioUrl).toBeTypeOf("string");
+});
+
+test("a Marathi voice-note answer keeps the cook's words and adds English", async () => {
+  process.env.CARTESIA_API_KEY = "car-test";
+  process.env.GEMINI_API_KEY = "gem-test";
+  const marathi = "हो आधी तांदूळ तीन वेळा धुवून घे.";
+  const gemini = "https://generativelanguage.googleapis.com/v1beta/models/gemini-3.8-flash:generateContent";
+  const fetch = stubFetch(
+    undefined,
+    (url) => (url === "https://api.cartesia.ai/stt" ? Response.json({ text: ` ${marathi} ` }) : undefined),
+    (url) =>
+      url === gemini
+        ? Response.json({ candidates: [{ content: { parts: [{ text: "Yes, first wash the rice three times." }] } }] })
+        : undefined,
+  );
+  const t = newBackend();
+  const dad = await signIn(t, "p-dad");
+  const leo = await signIn(t, "p-leo");
+  await t.mutation(internal.seed.language, { personId: dad.personId, language: "mr" });
+  const recipeId = await addRecipe(t, dad.familyId, dad.personId);
+  const asked = await (
+    await post(t, "/voice/question", { sessionToken: leo.sessionToken, recipeId, text: "Wash the rice?" }, asVoice)
+  ).json();
+  const audioId = await t.run((ctx) => ctx.storage.store(new Blob([new Uint8Array(64)], { type: "audio/mp4" })));
+
+  await t.mutation(api.questions.answer, { sessionToken: dad.sessionToken, questionId: asked.questionId, audioId });
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+  const form = fetch.mock.calls.find(([u]) => u === "https://api.cartesia.ai/stt")![1]?.body as FormData;
+  expect(form.get("language")).toBe("mr");
+  const geminiCall = fetch.mock.calls.find(([u]) => u === gemini)!;
+  expect((geminiCall[1]?.headers as Record<string, string>)["x-goog-api-key"]).toBe("gem-test");
+  expect(JSON.parse(geminiCall[1]?.body as string).contents[0].parts[0].text).toBe(marathi);
+
+  const [q] = await t.query(api.questions.forRecipe, { sessionToken: leo.sessionToken, recipeId });
+  expect(q.answer).toMatchObject({ audioId, transcript: marathi, translation: "Yes, first wash the rice three times." });
+  expect(q.answerAudioUrl).toBeTypeOf("string"); // the kid still hears the cook's own voice
+});
+
+test("a failed translation still saves the cook's words", async () => {
+  process.env.CARTESIA_API_KEY = "car-test";
+  process.env.GEMINI_API_KEY = "gem-test";
+  stubFetch(
+    undefined,
+    (url) => (url === "https://api.cartesia.ai/stt" ? Response.json({ text: "हो." }) : undefined),
+    (url) => (url.startsWith("https://generativelanguage.googleapis.com/") ? new Response("busy", { status: 503 }) : undefined),
+  );
+  const t = newBackend();
+  const dad = await signIn(t, "p-dad");
+  const leo = await signIn(t, "p-leo");
+  await t.mutation(internal.seed.language, { personId: dad.personId, language: "mr" });
+  const recipeId = await addRecipe(t, dad.familyId, dad.personId);
+  const asked = await (
+    await post(t, "/voice/question", { sessionToken: leo.sessionToken, recipeId, text: "Wash the rice?" }, asVoice)
+  ).json();
+  const audioId = await t.run((ctx) => ctx.storage.store(new Blob([new Uint8Array(64)], { type: "audio/mp4" })));
+  await t.mutation(api.questions.answer, { sessionToken: dad.sessionToken, questionId: asked.questionId, audioId });
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+  const [q] = await t.query(api.questions.forRecipe, { sessionToken: leo.sessionToken, recipeId });
+  expect(q.answer?.transcript).toBe("हो.");
+  expect(q.answer?.translation).toBeUndefined();
 });
 
 test("messages: privacy, and the photo note Muse Spark drafts", async () => {
