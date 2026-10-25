@@ -15,7 +15,8 @@ The app may create the job while the signer upload is still going. A signer uplo
 files in jobs/<job_id>.json, the file GCS mode waits on; the worker waits up to UPLOAD_WAIT_S for all of
 them, then hands the job back with /worker/release (Convex queues it again 30 s later) and moves on.
 The claim also carries the job's title, language and homie's questions (homieLog), which go to process.py,
-and for glasses through the laptop bridge the live analysis (liveLog, liveGaps, videoGaps).
+and for glasses through the laptop bridge the live analysis (liveLog, liveGaps, videoGaps). An in-app recording
+may add coverUrl, the cook's photo of her plate: downloaded here, it becomes the recipe's cover (process.py).
 
 GCS mode (--gcs): the phone gets signed URLs from the Cloud Run signer (cloud/signer), uploads videos into the
 private uploads bucket in the background, and polls jobs/<job_id>.json in the public media
@@ -73,6 +74,7 @@ COST_PER_HOUR_USD = 2.5
 # up 120 s after the download STARTED, i.e. never for a multi-GB file. Allow resuming for hours.
 DOWNLOAD_RETRY = DEFAULT_RETRY.with_timeout(6 * 3600)
 DOWNLOAD_TIMEOUT = (30, 600)  # (connect, per-read stall) seconds; not a limit on the whole download
+MAX_COVER_BYTES = 20_000_000  # the app sends a ~1080x1920 JPEG; anything this big is not her plate photo
 
 MSG_FAILED = "We couldn't finish this recipe. We'll take a look and try again."
 MSG_MISSING = "Some of the videos never finished uploading, so we couldn't write this one. Please try adding them again."
@@ -207,6 +209,27 @@ def _download(blob: storage.Blob, dest: Path) -> None:
     if got != blob.size:
         raise RuntimeError(f"downloaded {got} bytes of {blob.name}, expected {blob.size}")
     part.replace(dest)
+
+
+def _download_cover(url: str, dest: Path) -> Path | None:
+    """The cook's plate photo (the claim's coverUrl). None when it can't be fetched: the cover is then a frame
+    from the video. The URL opens her photo, so it is never printed."""
+    try:
+        with requests.get(url, timeout=(10, 60), stream=True) as res:
+            res.raise_for_status()
+            data = b""
+            for chunk in res.iter_content(1 << 16):
+                data += chunk
+                if len(data) > MAX_COVER_BYTES:
+                    raise ValueError(f"over {MAX_COVER_BYTES // 1_000_000} MB")
+        dest.write_bytes(data)
+        print(f"  plate photo ({len(data) / 1e3:.0f} KB)")
+        return dest
+    except Exception as e:  # noqa: BLE001 - never fail the job over the cover
+        status = getattr(getattr(e, "response", None), "status_code", None)
+        why = f"HTTP {status}" if status else (str(e) if isinstance(e, ValueError) else type(e).__name__)
+        print(f"  no plate photo ({why}); the cover will be a frame from the video")
+        return None
 
 
 def handle(job_id: str, media: storage.Bucket, uploads: storage.Bucket, retry: bool = False) -> None:
@@ -505,8 +528,9 @@ def handle_convex(convex: Convex, job: dict, media: storage.Bucket, uploads: sto
             # The dish the cook named; without one the writer names it (process.NO_TITLE).
             prep.run(recipe_id, job.get("title") or "", cook, job.get("relation") or cook, inputs)
             live = {k: job.get(k) or [] for k in ("liveLog", "liveGaps", "videoGaps")}
+            photo = _download_cover(job["coverUrl"], folder / "plate-photo.jpg") if job.get("coverUrl") else None
             process.run(recipe_id, report=report, language=job.get("language"), homie_log=job.get("homieLog") or [],
-                        live=live if any(live.values()) else None)
+                        live=live if any(live.values()) else None, cover_photo=photo)
             report("writing", 0.9)
             # Media + recipe.json only. No rebuild_library: Convex lists the family's recipes now, and the
             # GCS library.json is shared by every pre-hackathon copy of the app. The public recipe.json

@@ -18,7 +18,8 @@ the run and saved, with long suspicious gaps between steps, in work/coverage.jso
 The merge (and its coverage retry) is the writing step: Muse Spark writes it by default, Gemini when
 RECIPE_WRITER=gemini or when Muse fails twice (pipeline/writer.py). Extraction always stays on Gemini.
 
-The cover (poster.jpg) is the sharpest real frame of the finished dish where Gemini says it looks best
+The cover (poster.jpg) is the cook's own plate photo when an in-app recording has one (the worker passes it as
+cover_photo), else the sharpest real frame of the finished dish where Gemini says it looks best
 (pipeline/cover.py), else the middle of the last step.
 
 Last, one more text call (pipeline/shorten.py) writes cook mode's short substeps, step ingredients and tips
@@ -36,6 +37,7 @@ import json
 import logging
 import math
 import os
+import shutil
 import sys
 import threading
 import time
@@ -706,11 +708,23 @@ def write_recipe(w: writer.GeminiWriter | writer.MuseWriter, fallback: writer.Ge
     return ensure_coverage(w, manifest, events, n, out_dir, usage, recipe, gap_s)
 
 
+COVER_PHOTO = "cover_photo.jpg"  # in work/: the cook's plate photo, kept for a later --rewrite
+
+
 def make_cover(client: genai.Client, model: str, recipe: Recipe, out_dir: Path, usage: Usage) -> str:
-    """poster.jpg = the finished dish where it looks best (pipeline/cover.py). When Gemini sees no finished dish
-    or the pick fails, the middle of the last step, which is usually plating or serving (the hackathon spec's
-    step 2 is usually raw prep). Returns where the poster came from, for the log."""
+    """poster.jpg = the cook's own plate photo (work/cover_photo.jpg) when she took one, with no frame pick.
+    Else the finished dish where it looks best in the video (pipeline/cover.py). When Gemini sees no finished
+    dish or the pick fails, the middle of the last step, which is usually plating or serving (the hackathon
+    spec's step 2 is usually raw prep). Returns where the poster came from, for the log."""
     from pipeline import cover  # here: cover.py imports this module
+    photo = out_dir / "work" / COVER_PHOTO
+    if photo.exists():
+        try:
+            cover.use_photo(photo, out_dir / "poster.jpg")
+            return "the cook's plate photo"
+        except Exception as e:  # noqa: BLE001 - a broken photo: pick a frame instead
+            log(f"[cover] WARNING: the cook's plate photo can't be used ({type(e).__name__}: {str(e)[:300]}); "
+                f"picking a frame from the video")
     try:
         at = cover.make_cover(client, model, recipe.model_dump(mode="json"), out_dir / "play.mp4",
                               out_dir / "poster.jpg", usage)
@@ -729,7 +743,8 @@ Report = Callable[[str, float], None]  # (Convex job stage, progress 0..1 across
 
 def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_s: float = BATCH_TIMEOUT_S,
         shorten: bool = True, rewrite: bool = False, report: Report | None = None,
-        language: str | None = None, homie_log: list[dict] | None = None, live: dict | None = None) -> Path:
+        language: str | None = None, homie_log: list[dict] | None = None, live: dict | None = None,
+        cover_photo: Path | None = None) -> Path:
     """Extract, merge and validate one recipe. Returns the recipe.json path. Raises ProcessError on failure.
     batch=True runs the extraction as one Batch API job (half price, slower); see extract_batch.
     shorten=False skips the short substeps (pipeline/shorten.py) and their times (pipeline/align.py).
@@ -737,7 +752,8 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
     report gets the worker's stages: understanding 0.2 -> 0.7 per extracted file, then writing 0.7 -> 0.95.
     language (ISO 639-1) and homie_log (Convex /worker/claim's homieLog, video seconds) come from the worker's
     job, and so does live (the glasses bridge's liveLog, liveGaps and videoGaps); they are saved in the manifest,
-    so a later --rewrite keeps them."""
+    so a later --rewrite keeps them. cover_photo is the cook's plate photo from an in-app recording (the worker
+    downloads the claim's coverUrl); it is kept as work/cover_photo.jpg and becomes the cover (make_cover)."""
     report = report or (lambda stage, progress: None)
     out_dir = OUT_ROOT / recipe_id
     work = out_dir / "work"
@@ -757,6 +773,8 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
         manifest.update({k: v for k, v in (("language", language), ("homie_log", homie_log), ("live", live))
                          if v is not None})
         manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
+    if cover_photo is not None:
+        shutil.copyfile(cover_photo, work / COVER_PHOTO)
     media_dur = manifest["duration_s"]
     jobs = order.chunk_jobs(manifest)  # recorded-order numbering: chunk caches survive a reorder
     n = len(jobs)

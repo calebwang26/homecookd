@@ -1,5 +1,6 @@
 """Tests for cover.py: which part of the video Gemini watches, the frames compared around its pick, and that
-the sharpest real frame wins (fake Gemini, a generated video; no API call).
+the sharpest real frame wins (fake Gemini, a generated video; no API call). Also process.make_cover's order:
+the cook's plate photo, used as it is with no frame pick; a broken photo falls back to the frame pick.
 
     .venv/bin/python pipeline/test_cover.py
 """
@@ -18,6 +19,8 @@ if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
 from pipeline import cover as C  # noqa: E402
+from pipeline import process  # noqa: E402
+from pipeline.schema import Recipe  # noqa: E402
 from pipeline.shorten import MemoryUsage  # noqa: E402
 
 
@@ -97,6 +100,54 @@ def test_bad_answers_are_retried_once_then_raise() -> None:
         raise AssertionError("ask accepted a time past the clip and an impossible time")
     assert [c["ok"] for c in usage.calls] == [False, False] and "past the clip's end" in usage.calls[0]["error"]
     assert C.ask(FakeGemini({"found": True, "at": "01:02"}), "fake-pro", "Poha", b"video", 87, MemoryUsage()) == 62
+
+
+def photo(path: Path, size: str = "1080x1920") -> bytes:
+    subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", f"testsrc2=size={size}", "-frames:v", "1",
+                    str(path)], check=True)
+    return path.read_bytes()
+
+
+def sample_recipe() -> Recipe:
+    return Recipe.model_validate_json((ROOT / "app/assets/data/recipes/weed-steak.json").read_text())
+
+
+def must_not_run(*_a, **_k):
+    raise AssertionError("the frame pick ran although the cook's plate photo was there")
+
+
+def test_plate_photo_is_the_cover_as_it_is() -> None:
+    with tempfile.TemporaryDirectory() as tmp:
+        out = Path(tmp)
+        (out / "work").mkdir()
+        mine = photo(out / "work" / process.COVER_PHOTO)
+        old = (C.make_cover, process.make_poster)
+        C.make_cover, process.make_poster = must_not_run, must_not_run
+        try:
+            got = process.make_cover(None, "fake-pro", sample_recipe(), out, MemoryUsage())
+        finally:
+            C.make_cover, process.make_poster = old
+        assert got == "the cook's plate photo", got
+        assert (out / "poster.jpg").read_bytes() == mine  # byte for byte: no filter, no crop, no re-encode
+
+
+def test_broken_plate_photo_falls_back_to_the_frame_pick() -> None:
+    for name, write in (("not an image", lambda p: p.write_bytes(b"not a jpeg")),
+                        ("a PNG", lambda p: photo(p.with_suffix(".png")) and p.with_suffix(".png").replace(p)),
+                        ("too small", lambda p: photo(p, "120x90"))):
+        with tempfile.TemporaryDirectory() as tmp:
+            out = Path(tmp)
+            (out / "work").mkdir()
+            write(out / "work" / process.COVER_PHOTO)
+            picked = []
+            old = C.make_cover
+            C.make_cover = lambda *a, **k: picked.append(a) or 12.0
+            try:
+                got = process.make_cover(None, "fake-pro", sample_recipe(), out, MemoryUsage())
+            finally:
+                C.make_cover = old
+            assert got == "the finished dish at 12.0 s" and len(picked) == 1, (name, got)
+            assert not (out / "poster.jpg").exists(), name  # the fake pick wrote nothing; the photo didn't either
 
 
 if __name__ == "__main__":

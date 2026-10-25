@@ -1,12 +1,14 @@
-"""The cover photo: a real frame of the finished dish, where it looks best.
+"""The cover photo: the cook's own plate photo, else a real frame of the finished dish where it looks best.
 
 python pipeline/cover.py --id ID [--out PATH]    # pick data/out/ID/poster.jpg again (or write PATH instead)
 
-process.py calls make_cover() after the merge. Gemini watches the end of play.mp4 (from the start of the
+When an in-app recording ends, homie asks the cook to photograph her plate; the worker downloads that photo and
+process.py's make_cover makes it the poster as it is (use_photo checks it is one real JPEG first). Without one,
+process.py calls make_cover() below after the merge. Gemini watches the end of play.mp4 (from the start of the
 second-to-last step, but at least MIN_WINDOW_S and at most MAX_WINDOW_S before the end, as a small 360p copy
 sent inline) and names the second where the finished, served dish looks best. ffmpeg grabs a frame every half
 second from a second before to a second after it, and the sharpest (least blur by ffmpeg's blurdetect) becomes
-the poster. Never generated or edited: always a frame of the cook's own video. When Gemini sees no finished
+the poster. Never generated or edited: always her photo or a frame of her own video. When Gemini sees no finished
 dish, make_cover returns None and leaves the poster alone; process.py then uses the middle of the last step,
 as it does when anything here fails.
 """
@@ -16,6 +18,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import sys
 import tempfile
 import time
@@ -29,7 +32,7 @@ from google import genai  # noqa: E402
 from google.genai import types  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
-from pipeline.prep import OUT_ROOT, PrepError, ffmpeg, find_tool, make_poster, run_cmd  # noqa: E402
+from pipeline.prep import OUT_ROOT, PrepError, ffmpeg, find_tool, make_poster, probe, run_cmd  # noqa: E402
 from pipeline.process import (HTTP_RETRY, REQUEST_TIMEOUT_MS, Usage, describe_call, load_config, log,  # noqa: E402
                               response_text)
 from pipeline.prompts import COVER_PROMPT  # noqa: E402
@@ -37,6 +40,7 @@ from pipeline.schema import parse_timestamp  # noqa: E402
 from pipeline.shorten import MemoryUsage  # noqa: E402
 
 MIN_WINDOW_S, MAX_WINDOW_S = 60, 300
+MIN_PHOTO_PX = 200  # a plate photo smaller than this on either side is a broken upload, not a cover
 NEAR_S = (-1.0, -0.5, 0.0, 0.5, 1.0)  # Gemini answers in whole seconds: look around its second
 
 
@@ -83,6 +87,24 @@ def blur(frame: Path) -> float:
     if not m:
         raise PrepError(f"blurdetect gave no score for {frame.name}")
     return float(m.group(1))
+
+
+def use_photo(photo: Path, dest: Path) -> None:
+    """The cook's plate photo becomes dest unchanged (no filters, no crop) once ffprobe reads it as one JPEG
+    image of a usable size. Raises otherwise; the caller then picks a frame from the video."""
+    with photo.open("rb") as f:
+        if f.read(3) != b"\xff\xd8\xff":  # ffprobe alone goes by the .jpg name for some files
+            raise CoverError("not a JPEG file")
+    streams = probe(photo).get("streams", [])
+    if len(streams) != 1 or streams[0].get("codec_name") != "mjpeg":
+        raise CoverError(f"not one JPEG image: {[x.get('codec_name') for x in streams]}")
+    w, h = streams[0].get("width") or 0, streams[0].get("height") or 0
+    if min(w, h) < MIN_PHOTO_PX:
+        raise CoverError(f"only {w}x{h} px")
+    part = dest.with_name(f"{dest.stem}.part{dest.suffix}")
+    shutil.copyfile(photo, part)
+    part.replace(dest)
+    log(f"[cover] {dest.name} is the cook's plate photo ({w}x{h})")
 
 
 # ---------- the Gemini call ----------
