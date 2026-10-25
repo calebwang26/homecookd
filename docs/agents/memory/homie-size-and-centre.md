@@ -16,7 +16,8 @@ On 2026-10-24 Caleb said:
 - `HOMIE_SIZE = { header: 48, bar: 60 }`: the height of the controls beside it. The header buttons and the profile
   pill are 48. Cook mode's Back and Next are 60, and its bar is Back · homie · Next with equal gaps.
 - The pot is drawn at its real size, never a small one scaled up, so it stays sharp when held.
-- A symmetric row centres homie: the dish page, with Back on the left and the heart on the right. Once the photo
+- A symmetric row centres homie: the dish page, with Back on the left and the heart on the right. With Share there
+  too, the row isn't even, so homie joins Share and the heart at the right, 12 pt apart like them. Once the photo
   scrolls away, homie glides to the corner, off the words.
 - Rows that aren't even keep homie at the right: tabs (a large title on the left), pages with only a Back button,
   and my-recipe (its scrolled title takes the centre). The my-recipe exception is waiting for Caleb's OK.

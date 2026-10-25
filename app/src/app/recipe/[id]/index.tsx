@@ -3,8 +3,9 @@
 // to play), then a cream sheet with the title, "by Dad", "~45 min  Serves 4" big, "N steps" (number +
 // title per step) and "Ingredients" (amount + name, tap to tick off; ticks saved per profile + dish).
 // Share and heart sit on the photo and scroll away with it; only Back stays pinned, on a solid disc, so
-// nothing see-through lands on the words. homie sits centred between Back and the heart (the row is
-// even); once the photo has scrolled away it glides to the top-right corner, off the words. No Share on a family dish whose stories and tips are kept
+// nothing see-through lands on the words. homie sits centred between Back and the heart when that's the
+// whole row (even); with Share there too it joins Share and the heart at the right, 12 pt apart like them.
+// Once the photo has scrolled away it glides to the top-right corner, off the words. No Share on a family dish whose stories and tips are kept
 // from this person (useStoriesWithheld): the web page a link opens would show them all. The photo is
 // ~42% of the screen (a small phone still shows the first steps above the button). One pinned green
 // "Start cooking" goes straight to step 1, or "Back to step 4" when this profile left off there.
@@ -89,8 +90,11 @@ export function RecipeScreen({ id }: { id: string }) {
   const { frame: homieRest } = useHomieRoute();
   const [pastPhoto, setPastPhoto] = useState(false);
   const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => setPastPhoto(e.nativeEvent.contentOffset.y > heroH - top - HOMIE_SIZE.header - 12);
-  const corner = { x: winW - 24 - HOMIE_SIZE.header, y: homieRest.y, size: HOMIE_SIZE.header };
-  useHomieScreen({ dock: pastPhoto ? corner : null });
+  const size = HOMIE_SIZE.header;
+  const corner = { x: winW - 24 - size, y: homieRest.y, size };
+  // Share (48) and the heart (48) sit 24 and 84 pt from the right edge; homie 12 pt left of Share.
+  const withShare = { x: winW - 24 - 48 - 12 - 48 - 12 - size, y: homieRest.y, size };
+  useHomieScreen({ dock: pastPhoto ? corner : storiesKept ? null : withShare });
 
   const back = () => (router.canGoBack() ? router.back() : router.replace('/'));
   const poster = recipe?.media.poster_url ?? entry?.poster_url ?? null;
