@@ -250,6 +250,10 @@ with a clean `web/` build.
   Tell the PR's session not to deploy (only the Merge Agent ships, so there are never two EAS Updates), log the
   versions in STATE.md, then tell Caleb what to test. Docs-only PRs need no deploy. Supabase `api` deploys and
   destructive data changes still need his explicit OK. See `memory/auto-ship-merged-prs.md`.
+- **Before every ship, check for direct pushes (Caleb, Oct 25):** list the commits on main's first-parent line since
+  the last check that aren't "Merge pull request #N" (someone pushed straight to main, so no one reviewed them). Read
+  their diffs, scan them for secrets and junk, and run the tests that cover the files they touch. Anything off: hold
+  the ship and tell Caleb who pushed what. Then mention them in the ship's STATE line.
 
 ---
 
