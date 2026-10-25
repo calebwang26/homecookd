@@ -9,9 +9,10 @@ import type { Who } from "../src/homie.js";
 
 process.env.CARTESIA_API_KEY = "test";
 process.env.ANTHROPIC_API_KEY = "test";
-const { SPEAKS_AS, decidePrompt, endPrompt, guessesFamily, introPrompt, neverGuess } = await import("../src/homie.js");
+const { SPEAKS_AS, decidePrompt, endPrompt, introPrompt, neverGuess } = await import("../src/homie.js");
+const { callOf, guessesFamily } = await import("../src/family.js");
 const { fixedLine, scriptedQuestion } = await import("../src/lines.js");
-const { TurnAgent } = await import("../src/agent.js");
+const { TurnAgent, cookCall } = await import("../src/agent.js");
 
 const GENDERED = /\b(she|her|hers|herself|he|him|his|himself|mom|mother|dad|father|son|daughter|grandson|granddaughter|grandchild|grandma|grandpa|parent)\b/i;
 
@@ -83,6 +84,8 @@ test("the written lines with a kid name use the name; Marathi says घरच्�
   assert.doesNotMatch([forAll.textEn, (await fixedLine("closing", ajoba)).textEn].join(" "), GENDERED);
 });
 
+const told = { names: ["Rajani Aaji", "Shreya", "Varan Bhaat"] };
+
 test("guessesFamily catches a guessed role or gender", () => {
   for (const line of [
     "Your son really wants to see you cook.",
@@ -92,11 +95,25 @@ test("guessesFamily catches a guessed role or gender", () => {
     "Your kids will love this.",
     "So Shreya can see what she's looking for.",
     "Is this how your mother made it?",
+    // Oct 24 review: the words added to the guard.
+    "Your nana would love this.",
+    "Shreya's nani is proud.",
+    "Your auntie taught you?",
+    "Was it your aunt or your uncle?",
+    "Thank you, ma'am.",
+    "Yes, sir.",
+    "Your granddad made it like this?",
+    "Did your grandpa cook too?",
+    "For your little one.",
+    "Your brother will love it.",
+    "Your sister asked for it.",
+    "Your boy will love it.",
+    "The girls will love it.",
   ])
-    assert.equal(guessesFamily(line, ["Rajani Aaji", "Shreya"]), true, line);
+    assert.equal(guessesFamily(line, told), true, line);
 });
 
-test("guessesFamily passes names, 'your family', and words homie was given", () => {
+test("guessesFamily passes names, the dish, 'your family', and the cook's own recent words", () => {
   for (const line of [
     "Hi, Rajani Aaji. You're making Varan Bhaat for Shreya today.",
     "How much salt was that?",
@@ -106,23 +123,63 @@ test("guessesFamily passes names, 'your family', and words homie was given", () 
     "Who taught you this dish?",
     // "the" and "other" contain "he" and "her", which aren't words of their own.
     "Is there another way the family could tell it's done?",
+    // Not about anyone.
+    "Oh boy, that smells good.",
+    "Oh, boy. That's a lot of chili.",
+    "Is it kid-friendly spicy?",
   ])
-    assert.equal(guessesFamily(line, ["Rajani Aaji", "Shreya"]), false, line);
-  assert.equal(guessesFamily("Hi, Dad. Good to see you again.", ["Dad"]), false, "the cook's own call");
-  assert.equal(guessesFamily("Hi, Grandma.", ["Mary Grandma"]), false);
-  // The cook talked about their son: homie may say it back.
-  assert.equal(guessesFamily("Does your son like it spicy?", ["Dad", "", "My son loves this one."]), false);
-  assert.equal(guessesFamily("Does your son like it spicy?", ["Dad", ""]), true);
+    assert.equal(guessesFamily(line, told), false, line);
+  assert.equal(guessesFamily("Hi, Dad. Good to see you again.", { names: ["Dad"] }), false, "the cook's own call");
+  assert.equal(guessesFamily("Hi, Grandma.", { names: ["Grandma"] }), false);
+  // The dish counts as given (finding 1): "Dad's Sunday Chili" for a cook called Vijay.
+  assert.equal(guessesFamily("Hi, Vijay. Dad's Sunday Chili for your family today.", { names: ["Vijay", undefined, "Dad's Sunday Chili"] }), false);
+  assert.equal(guessesFamily("Hi, Rajani Aaji. Grandma's Red-Braised Pork Belly, how lovely.", { names: ["Rajani Aaji", "Shreya", "Grandma's Red-Braised Pork Belly"] }), false);
+  // The cook talked about their son: homie may say "son" back, never a pronoun.
+  assert.equal(guessesFamily("Does your son like it spicy?", { names: ["Dad"], heard: ["My son loves this one."] }), false);
+  assert.equal(guessesFamily("Does your son like it spicy?", { names: ["Dad"] }), true);
+  assert.equal(guessesFamily("Does she like it spicy?", { names: ["Dad"], heard: ["She loves this one."] }), true);
 });
 
-test("the kid's cooking prompt speaks of the cook by name, with the rule", async () => {
+test("guessesFamily's narrower checks: questions skip pronouns, reactions check only the kid's role", () => {
+  assert.equal(guessesFamily("Who taught her this dish?", told, "roles"), false);
+  assert.equal(guessesFamily("Who taught her this dish?", told, "all"), true);
+  assert.equal(guessesFamily("Does your grandson like it?", told, "roles"), true);
+  assert.equal(guessesFamily("Oh, your grandmother taught you? I love that.", told, "kid"), false);
+  for (const line of ["Your son is lucky.", "Your granddaughter will love it.", "Your kids are lucky.", "Your little one will love it."])
+    assert.equal(guessesFamily(line, told, "kid"), true, line);
+});
+
+test("callOf: the family's word, with the name only when it needs one", () => {
+  // The relation already holds the name (convex/glasses.test.ts's data): no "Rajani Rajani Aaji".
+  assert.equal(callOf("Rajani", "Rajani Aaji"), "Rajani Aaji");
+  assert.equal(callOf("Rajani Pawar", "Rajani Aaji"), "Rajani Aaji");
+  // A word on its own: no "Vijay Dad" or "Mary Grandma".
+  assert.equal(callOf("Vijay", "Dad"), "Dad");
+  assert.equal(callOf("Mary", "Grandma"), "Grandma");
+  assert.equal(callOf("Ana", "Mom"), "Mom");
+  assert.equal(callOf("Ramesh", "Uncle"), "Uncle");
+  // A word that follows a name keeps it.
+  assert.equal(callOf("Rajani", "Aaji"), "Rajani Aaji");
+  assert.equal(callOf("Ramesh", "Ajoba"), "Ramesh Ajoba");
+  assert.equal(callOf("Rajani Pawar", "Aaji"), "Rajani Aaji");
+  // A profile already named for the family word; no relation; nothing at all.
+  assert.equal(callOf("Grandma", "Aaji"), "Grandma");
+  assert.equal(callOf("Dad", undefined), "Dad");
+  assert.equal(callOf("Vijay", ""), "Vijay");
+  assert.equal(callOf(undefined, undefined), undefined);
+});
+
+test("the kid's cooking prompt calls the cook by the family's word, with the rule", async () => {
   const session: CookSession = {
     familyId: "fam-1",
     mossIndex: "family-fam-1",
     kid: { id: "kid-1", name: "Shreya" },
-    cook: { name: "Vijay", language: "mr" },
+    cook: { name: "Vijay", language: "mr", relation: "Dad" },
     recipe: { id: "r1", title: "Varan Bhaat", steps: [{ order: 1, title: "Wash", text: "Wash the rice.", moment: { startS: 0, endS: 30 } }], memories: [] },
   };
+  assert.equal(cookCall(session), "Dad");
+  assert.equal(cookCall({ ...session, cook: { name: "Rajani", relation: "Aaji" } }), "Rajani Aaji");
+  assert.equal(cookCall({ ...session, cook: undefined }), "the cook");
   let system = "";
   const create = async (params: { system: string }) => ((system = params.system), { content: [{ type: "text", text: "" }], stop_reason: "end_turn" });
   const client = { beta: { messages: { create } } } as unknown as Anthropic;
@@ -143,8 +200,10 @@ test("the kid's cooking prompt speaks of the cook by name, with the rule", async
   } finally {
     console.log = origLog;
   }
-  assert.match(system, /Vijay's own clip comes first/);
-  assert.match(system, /Never guess anyone's family role or gender/);
+  assert.match(system, /Shreya is cooking Dad's "Varan Bhaat"/);
+  assert.match(system, /Dad's own clip comes first/);
+  // The rule lets homie say the family's own word.
+  assert.match(system, /unless that word is part of "Dad"/);
   const rule = system.slice(system.indexOf("Never guess"), system.indexOf("\n", system.indexOf("Never guess")));
-  assert.doesNotMatch(system.replace(rule, ""), /\b(she|her|herself|mom|grandma|son|daughter)\b/i);
+  assert.doesNotMatch(system.replace(rule, "").replaceAll("Dad", ""), /\b(she|her|herself|he|his|mom|grandma|son|daughter)\b/i);
 });

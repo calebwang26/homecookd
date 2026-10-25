@@ -95,7 +95,8 @@
       "dish": "Dal Tadka"
     },
     "cook": {
-      "name": "Dad",
+      "name": "Vijay",
+      "relation": "Dad",
       "language": "en"
     },
     "kid": {

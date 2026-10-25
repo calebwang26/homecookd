@@ -3,6 +3,7 @@
 // Claude writes every line in the cook's language plus English, as JSON (structured outputs).
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "./env.js";
+import { guessesFamily } from "./family.js";
 
 export type AskKind = "amount" | "show" | "cue" | "substitution" | "story";
 export type Line = { text: string; textEn: string };
@@ -52,9 +53,15 @@ const KINDS = ["amount", "show", "cue", "substitution", "story"];
 const END_KINDS = KINDS.filter((k) => k !== "show");
 
 /** One Claude call that must come back as JSON in `schema`. Null on refusal or bad JSON. */
-async function json<T>(system: string, content: Anthropic.Beta.BetaContentBlockParam[] | string, schema: Record<string, unknown>, model = env.claudeModel): Promise<T | null> {
+async function json<T>(
+  system: string,
+  content: Anthropic.Beta.BetaContentBlockParam[] | string,
+  schema: Record<string, unknown>,
+  model = env.claudeModel,
+  claude: Anthropic = client,
+): Promise<T | null> {
   const t0 = Date.now();
-  const res = await client.beta.messages.create({
+  const res = await claude.beta.messages.create({
     model,
     max_tokens: 2048,
     system,
@@ -104,19 +111,12 @@ export function soundsLikeAdvice(textEn: string): boolean {
   return ADVICE.some((re) => re.test(textEn));
 }
 
-// A family role or a gender, in English. The check under neverGuess, like ADVICE under GUIDANCE.
-const ROLE_OR_GENDER =
-  /\b(?:sons?|daughters?|grand(?:sons?|daughters?|child(?:ren)?|kids?|bab(?:y|ies)|ma|mas|mother|mothers|pa|pas|father|fathers|parents?)|granny|nephews?|nieces?|kids?|child(?:ren)?|boys?|girls?|moms?|mums?|mommy|mummy|mama|mothers?|dads?|daddy|papa|fathers?|parents?|he|she|him|his|her|hers|himself|herself)\b/gi;
+/** The cook's own words from the last few minutes may say a role homie can say back ("my son loves this"). */
+const RECENT_S = 180;
+const recent = (heard: Heard[], nowS: number) => heard.filter((h) => h.atS >= nowS - RECENT_S).map((h) => h.text);
 
-/**
- * A line (its English) that calls someone a son, a mom or a she when nobody said so: homie never says it.
- * `given`: the words homie was told (the cook's call, the kid's name, the cook's own words), so "Grandma" for a
- * cook whose family calls them Grandma, or "your son" after the cook talked about their son, passes.
- */
-export function guessesFamily(textEn: string, given: readonly string[] = []): boolean {
-  const known = new Set(given.flatMap((g) => g.toLowerCase().match(/\p{L}+/gu) ?? []));
-  return [...textEn.matchAll(ROLE_OR_GENDER)].some(([word]) => !known.has(word.toLowerCase()));
-}
+/** A written question of this kind not asked yet (lines.ts scriptedOf), for when Claude's guessed a family role. */
+export type Fallback = (kind: AskKind, asked: readonly string[], w: Who, latin: Who) => Promise<{ kind: AskKind; line: Line } | null>;
 
 /** The hello's prompt. `metBefore`: a short welcome back. */
 export function introPrompt(w: Who, metBefore: boolean): string {
@@ -179,9 +179,19 @@ const transcriptOf = (heard: Heard[]) => heard.slice(-40).map((h) => `[${fmt(h.a
 export class HomieAgent {
   /** The names as written in English, for guessesFamily (text_en has them in Latin letters). */
   private latin: Who;
+  private client: Anthropic;
+  private fallback?: Fallback;
+  /** Claude's questions homie dropped, so Claude doesn't offer them again (they never reach `asked`). */
+  private dropped: string[] = [];
 
-  constructor(private who: Who) {
+  /** `client`: tests pass a fake. `fallback`: the written question for a dropped one (record.ts passes scriptedOf). */
+  constructor(
+    private who: Who,
+    opts: { client?: Anthropic; fallback?: Fallback } = {},
+  ) {
     this.latin = who;
+    this.client = opts.client ?? client;
+    this.fallback = opts.fallback;
   }
 
   /** The names may arrive in the cook's script after the agent is made. */
@@ -189,10 +199,17 @@ export class HomieAgent {
     this.who = who;
   }
 
-  /** What homie was told: the names, and (for decide and the end) the cook's own words. */
-  private given(heard: Heard[] = []): string[] {
-    const { call, kid } = this.latin;
-    return [call, kid ?? "", ...heard.map((h) => h.text)];
+  /** What homie was told (the names and the dish, in Latin letters), and the cook's recent words. */
+  private given(heard: string[] = []) {
+    const { call, kid, dish } = this.latin;
+    return { names: [call, kid, dish], heard };
+  }
+
+  /** A question Claude wrote that guessed a family role: the written one of its kind instead, or nothing. */
+  private async instead(kind: AskKind, line: Line, asked: readonly string[]): Promise<{ kind: AskKind; line: Line } | null> {
+    console.warn(`homie: dropped a ${kind} question that guesses a family role or gender: ${line.textEn}`);
+    this.dropped.push(line.textEn);
+    return (await this.fallback?.(kind, [...asked, ...this.dropped], this.who, this.latin).catch(() => null)) ?? null;
   }
 
   /**
@@ -201,7 +218,7 @@ export class HomieAgent {
    * (the caller has a written one).
    */
   async intro(metBefore = false): Promise<Line | null> {
-    const out = await json<{ text: string; text_en: string }>(introPrompt(this.who, metBefore), "Write the hello.", obj({ text: str, text_en: str }));
+    const out = await json<{ text: string; text_en: string }>(introPrompt(this.who, metBefore), "Write the hello.", obj({ text: str, text_en: str }), env.claudeModel, this.client);
     if (!out?.text) return null;
     if (guessesFamily(out.text_en, this.given())) {
       console.warn(`homie: dropped a hello that guesses a family role or gender: ${out.text_en}`);
@@ -213,7 +230,8 @@ export class HomieAgent {
   /** Called only when the pacing allows it and the cook has been quiet ~3 s. `frame`: what the phone (or glasses) sees. */
   async decide(input: { heard: Heard[]; asked: string[]; nowS: number; mayAsk: boolean; mayReact: boolean; frame?: Buffer }): Promise<Decision> {
     const system = decidePrompt(this.who, { frame: !!input.frame, mayAsk: input.mayAsk, mayReact: input.mayReact });
-    const already = input.asked.length ? input.asked.map((q) => `- ${q}`).join("\n") : "(none)";
+    const asked = [...input.asked, ...this.dropped];
+    const already = asked.length ? asked.map((q) => `- ${q}`).join("\n") : "(none)";
     const content: Anthropic.Beta.BetaContentBlockParam[] = [];
     if (input.frame) content.push({ type: "image", source: { type: "base64", media_type: "image/jpeg", data: input.frame.toString("base64") } });
     content.push({
@@ -231,6 +249,7 @@ export class HomieAgent {
         story_in_progress: { type: "boolean" },
       }),
       env.homieDecideModel || env.claudeModel,
+      this.client,
     );
     if (!out || !out.text) return { action: "quiet", storyInProgress: !!out?.story_in_progress };
     const line = { text: out.text, textEn: out.text_en };
@@ -238,15 +257,21 @@ export class HomieAgent {
       console.warn(`homie: dropped a line that reads as cooking advice: ${line.textEn}`);
       return { action: "quiet", storyInProgress: false };
     }
-    // A question is homie's own framing, so it's checked. A reaction only echoes the story the cook just told
-    // ("Oh, your grandmother taught you?"), often in another language, so the check would mostly drop good ones.
-    if (out.action === "ask" && guessesFamily(line.textEn, this.given(input.heard))) {
-      console.warn(`homie: dropped a question that guesses a family role or gender: ${line.textEn}`);
+    const given = this.given(recent(input.heard, input.nowS));
+    // A "show" needs a picture to be about.
+    if (out.action === "ask" && input.mayAsk && KINDS.includes(out.kind) && (out.kind !== "show" || input.frame)) {
+      const kind = out.kind as AskKind;
+      // A role is checked; "she" mid-filming mostly echoes the cook ("she taught me"), so pronouns aren't.
+      if (!guessesFamily(line.textEn, given, "roles")) return { action: "ask", kind, line };
+      const written = await this.instead(kind, line, input.asked);
+      return written ? { action: "ask", ...written } : { action: "quiet", storyInProgress: false };
+    }
+    if (out.action === "react" && input.mayReact) {
+      // A reaction echoes the story just told ("your grandmother taught you?"), so only a guess about the kid counts.
+      if (!guessesFamily(line.textEn, given, "kid")) return { action: "react", line };
+      console.warn(`homie: dropped a reaction that guesses a family role: ${line.textEn}`);
       return { action: "quiet", storyInProgress: false };
     }
-    // A "show" needs a picture to be about.
-    if (out.action === "ask" && input.mayAsk && KINDS.includes(out.kind) && (out.kind !== "show" || input.frame)) return { action: "ask", kind: out.kind as AskKind, line };
-    if (out.action === "react" && input.mayReact) return { action: "react", line };
     return { action: "quiet", storyInProgress: out.story_in_progress };
   }
 
@@ -257,12 +282,21 @@ export class HomieAgent {
       endPrompt(this.who, max),
       `Already asked:\n${asked.map((q) => `- ${q}`).join("\n") || "(none)"}\n\nWhat the cook said:\n${transcriptOf(heard)}`,
       obj({ questions: { type: "array", items: obj({ kind: { type: "string", enum: END_KINDS }, text: str, text_en: str }) } }),
+      env.claudeModel,
+      this.client,
     );
-    const given = this.given(heard);
-    return (out?.questions ?? [])
-      .filter((q) => q.text && END_KINDS.includes(q.kind) && !soundsLikeAdvice(q.text_en) && !guessesFamily(q.text_en, given))
-      .slice(0, max)
-      .map((q) => ({ kind: q.kind as AskKind, line: { text: q.text, textEn: q.text_en } }));
+    const given = this.given(recent(heard, heard.at(-1)?.atS ?? 0));
+    const picked: { kind: AskKind; line: Line }[] = [];
+    for (const q of out?.questions ?? []) {
+      if (picked.length >= max) break;
+      if (!q.text || !END_KINDS.includes(q.kind) || soundsLikeAdvice(q.text_en)) continue;
+      const kind = q.kind as AskKind;
+      const line = { text: q.text, textEn: q.text_en };
+      // A guess gets the written question of its kind, so the end still asks what Claude meant to.
+      const ok = guessesFamily(line.textEn, given) ? await this.instead(kind, line, [...asked, ...picked.map((p) => p.line.textEn)]) : { kind, line };
+      if (ok) picked.push(ok);
+    }
+    return picked;
   }
 
   /** Is this answer a yes (true), a no (false) or neither (null)? */
@@ -273,6 +307,8 @@ export class HomieAgent {
       `homie asked a cook "Can your family hear your stories too?". Classify the cook's reply (any language) as yes, no or unclear.`,
       answer,
       obj({ answer: { type: "string", enum: ["yes", "no", "unclear"] } }),
+      env.claudeModel,
+      this.client,
     );
     return out?.answer === "yes" ? true : out?.answer === "no" ? false : null;
   }
