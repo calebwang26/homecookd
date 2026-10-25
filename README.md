@@ -6,7 +6,11 @@
 
 A family recipe app that keeps the person in the recipe and keeps the family talking.
 
-Demo video: https://youtu.be/8Ibl2QnL9dw
+<a href="https://youtu.be/8Ibl2QnL9dw"><img src="https://img.youtube.com/vi/8Ibl2QnL9dw/hqdefault.jpg" alt="Watch the homecookd demo video" width="600"></a>
+
+<a href="https://youtu.be/8Ibl2QnL9dw"><img src="https://img.shields.io/badge/%E2%96%B6%20Watch%20the%20demo-YouTube-FF0000?style=for-the-badge&logo=youtube&logoColor=white" alt="Watch the demo on YouTube"></a>
+
+<sub>Click the thumbnail or badge to watch the full demo video on YouTube</sub>
 
 </div>
 
