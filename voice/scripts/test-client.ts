@@ -2,8 +2,8 @@
 // what the service says to test-audio/out/. One file = one turn; we wait for the reply (and for homie to
 // go quiet) before the next. It waits out the hello first. `text:<words>` sends
 // { type: "text" } instead (the app's own answer), `step:<n>` sends { type: "step", stepOrder: n } (the kid tapped
-// Next, Back or a step; the first one within 3 s of `ready` is the app's restore, never read; `step:<n>:noread`
-// adds read: false, a step her clip moved the screen to, also never read), `moment:<kind>` /
+// Next, Back or a step; like the app, the client sends the step it starts on back once, the restore;
+// `step:<n>:noread` adds read: false, a step her clip moved the screen to, never read), `moment:<kind>` /
 // `moment:off` opens or closes one of the app's homie moments, `video:on` / `video:off` says a video started or
 // stopped on the phone, and `wait:<seconds>` keeps the mic open that long. Every line's first audio is printed with
 // how long it took after what asked for it (the transcript, or the step sent). It streams the audio for real (Ink 2
@@ -68,6 +68,7 @@ let lastKind = "";
 /** What the next line answers: the kid's final transcript, or a step we sent. */
 let asked = { at: 0, what: "" };
 let heardAudio = true;
+let restored = false;
 
 ws.on("message", (data, isBinary) => {
   if (isBinary) {
@@ -100,6 +101,12 @@ ws.on("message", (data, isBinary) => {
   if (ev.type === "transcript") lastEnd = Date.now();
   const lag = ev.type !== "transcript" && lastEnd ? `  (+${Date.now() - lastEnd}ms after transcript)` : "";
   console.log(`${stamp()}  ${JSON.stringify(ev)}${lag}`);
+  // Like the app, the step on the "screen" goes back once (the restore, never read), so step:<n> is a tap.
+  if (ev.type === "go_to_step" && !restored) {
+    restored = true;
+    ws.send(JSON.stringify({ type: "step", stepOrder: ev.stepOrder }));
+    console.log(`${stamp()}  ▶ {"type":"step","stepOrder":${ev.stepOrder}} (the restore)`);
+  }
   // A clip answers with the cook's voice, and a step that didn't change or words not meant for homie (`quiet`)
   // need no say. (A step's line comes right after go_to_step, and the wait below covers it.)
   if (ev.type === "play_clip" || ev.type === "go_to_step" || ev.type === "quiet") replied();

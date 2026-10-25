@@ -2,7 +2,7 @@
 // still being made plays what's there and then the rest, a failed one isn't kept, and the oldest go past the limits.
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, mock, test } from "node:test";
-import { LineCache, lineKey, MAKE_MAX_MS, type Line, type Make } from "../src/lineCache.js";
+import { FAILED_MS, LineCache, lineKey, MAKE_MAX_MS, type Line, type Make } from "../src/lineCache.js";
 import { advance, settle } from "./helpers.js";
 
 beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 }));
@@ -71,24 +71,53 @@ test("an abort stops the playing, not the making", async () => {
   assert.equal(cache.size, 1);
 });
 
-test("a line that fails, or makes no audio, isn't kept: the next ask makes it again", async () => {
+test("a line that fails, or makes no audio, isn't kept; asked again within FAILED_MS it fails at once, then it's made again", async () => {
   const cache = new LineCache();
   const failing: Make = async () => {
-    throw new Error("402");
+    throw new Error("network: socket hang up");
   };
   const line = cache.get("a", failing);
   await line.ready;
   await settle();
   assert.equal(line.state, "failed");
-  assert.equal(line.error?.message, "402");
+  assert.equal(line.error?.message, "network: socket hang up");
   assert.equal(await line.play(new AbortController().signal, () => {}), 0, "nothing to play");
   assert.equal(cache.size, 0);
   const empty = cache.get("b", async () => {});
   await empty.ready;
   assert.equal(empty.state, "failed");
   const m = maker();
+  const again = cache.get("a", m.make);
+  assert.equal(again.state, "failed", "remembered: fails at once");
+  assert.equal(again.error?.message, "network: socket hang up");
+  assert.equal(m.calls(), 0, "and isn't made");
+  await made(cache.get("c", m.make));
+  assert.equal(m.calls(), 1, "other lines are made as usual (not a 402 or 429)");
+  await advance(FAILED_MS, 1000);
   await made(cache.get("a", m.make));
-  assert.equal(m.calls(), 1);
+  assert.equal(m.calls(), 2, "a minute on, it's made again");
+  assert.equal(cache.size, 2);
+});
+
+test("Sonic out of credits or rate-limited (402, 429): every new line fails at once for FAILED_MS", async () => {
+  for (const status of ["402: insufficient credits", "429: too many requests"]) {
+    const cache = new LineCache();
+    const kept = maker(1);
+    await made(cache.get("kept", kept.make));
+    await cache.get("a", async () => Promise.reject(new Error(status))).ready;
+    await settle();
+    assert.ok(cache.sonicBusy, status);
+    const m = maker();
+    const b = cache.get("b", m.make);
+    assert.equal(b.state, "failed", status);
+    assert.equal(b.error?.message, status);
+    assert.equal(m.calls(), 0, `${status}: Sonic isn't asked`);
+    assert.equal(cache.get("kept", kept.make).state, "done", "a kept line still plays");
+    await advance(FAILED_MS, 1000);
+    assert.ok(!cache.sonicBusy);
+    await made(cache.get("b", m.make));
+    assert.equal(m.calls(), 1, `${status}: asked again a minute on`);
+  }
 });
 
 test("a line that stalls is given up after MAKE_MAX_MS, so nobody waits on it forever", async () => {
@@ -99,7 +128,64 @@ test("a line that stalls is given up after MAKE_MAX_MS, so nobody waits on it fo
   await advance(MAKE_MAX_MS + 100, 1000);
   assert.equal(await playing, 0);
   assert.equal(line.state, "failed");
+  assert.equal(line.error?.message, `not made in ${MAKE_MAX_MS / 1000} s`);
   assert.equal(cache.size, 0);
+});
+
+test("a make that ignores the abort still ends at MAKE_MAX_MS, keeping nothing it sends later", async () => {
+  const cache = new LineCache();
+  let send: (audio: Buffer) => void = () => {};
+  const deaf: Make = (onChunk) => ((send = onChunk), new Promise<void>(() => {})); // never settles, never stops
+  const line = cache.get("a", deaf);
+  send(Buffer.alloc(1000));
+  const got: number[] = [];
+  const playing = line.play(new AbortController().signal, (c) => got.push(c.length));
+  await advance(MAKE_MAX_MS + 100, 1000);
+  assert.equal(await playing, 1000, "the reader got what was there, then the end");
+  assert.equal(line.state, "failed");
+  assert.equal(cache.size, 0, "not kept: it was cut short");
+  send(Buffer.alloc(1000));
+  assert.equal(line.bytes, 1000, "a late piece is ignored");
+  assert.deepEqual(got, [1000]);
+});
+
+test("one reader that throws stops only itself: the others get every piece", async () => {
+  const cache = new LineCache();
+  const warn = mock.method(console, "warn", () => {});
+  const line = cache.get("a", maker().make);
+  const good: number[] = [];
+  const bad = line.play(new AbortController().signal, () => {
+    throw new Error("socket gone");
+  });
+  const fine = line.play(new AbortController().signal, (c) => good.push(c.length));
+  await made(line);
+  assert.equal(await bad, 0, "it stopped (the piece that threw isn't counted as sent)");
+  assert.equal(await fine, 3000);
+  assert.deepEqual(good, [1000, 1000, 1000]);
+  assert.equal(line.state, "done");
+  assert.ok(warn.mock.calls.length >= 1);
+  warn.mock.restore();
+});
+
+test("making ahead: at most aheadAtOnce lines at a time across the process; a kept line doesn't wait", async () => {
+  const cache = new LineCache(300, 64 * 2 ** 20, 2);
+  let making = 0;
+  let most = 0;
+  const counted: Make = (onChunk, signal) => {
+    most = Math.max(most, ++making);
+    return maker(1).make(onChunk, signal).finally(() => making--);
+  };
+  await made(cache.get("kept", counted));
+  making = most = 0;
+  // Two sessions asking for five lines between them, all at once.
+  const all = ["a", "b", "c", "d", "e"].map((k) => cache.ahead(k, counted));
+  const kept = cache.ahead("kept", counted);
+  await settle();
+  assert.equal((await kept).state, "done", "kept: no turn to wait for");
+  await advance(1000);
+  const lines = await Promise.all(all);
+  assert.deepEqual(lines.map((l) => l.state), ["done", "done", "done", "done", "done"]);
+  assert.equal(most, 2);
 });
 
 test("past the line or byte limit, the least recently used lines go first", async () => {

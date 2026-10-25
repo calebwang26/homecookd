@@ -93,6 +93,8 @@ test("a video playing at the start: the hello waits for it to stop", async () =>
   p.video(true);
   await advance(20_000);
   assert.equal(p.ws.of("say").length, 0, "nothing said over the video");
+  // The step lines don't wait for a hello that's waiting: they're made meanwhile.
+  assert.deepEqual(p.spoken, ["Step 1. Wash the rice three times.", "Step 2. Heat the ghee and add the cumin."]);
   p.video(false);
   await waitFor("the greeting", () => p.ws.of("say").length === 1);
   assert.deepEqual(p.kinds(), ["greeting"]);

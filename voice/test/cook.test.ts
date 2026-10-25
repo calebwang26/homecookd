@@ -8,7 +8,7 @@ import WebSocket from "ws";
 import type { Actions } from "../src/agent.js";
 import type { CookSession } from "../src/convex.js";
 import type { CookingDeps } from "../src/cook.js";
-import type { Voice } from "../src/sonic.js";
+import type { Route, Voice } from "../src/sonic.js";
 import type { SttEvents } from "../src/stt.js";
 import { advance, AUDIO_S, FakeSocket, settle, waitFor, type Ev } from "./helpers.js";
 
@@ -16,8 +16,8 @@ import { advance, AUDIO_S, FakeSocket, settle, waitFor, type Ev } from "./helper
 process.env.CARTESIA_API_KEY = "test";
 process.env.ANTHROPIC_API_KEY = "test";
 process.env.VOICE_STUB = "1";
-const { Cooking, AHEAD_AT_ONCE } = await import("../src/cook.js");
-const { lineCache } = await import("../src/lineCache.js");
+const { Cooking } = await import("../src/cook.js");
+const { lineCache, AHEAD_AT_ONCE, FAILED_MS } = await import("../src/lineCache.js");
 const { env } = await import("../src/env.js");
 
 beforeEach(() => {
@@ -35,6 +35,8 @@ const LINE: Record<number, string> = {
   2: "Step 2. Heat the ghee and add the cumin.",
   3: "Step 3. Simmer it for ten minutes.",
 };
+/** Step 3 in full, what "say that again" says there (its short line is only the first sentence). */
+const WHOLE_3 = "Step 3. Simmer it for ten minutes. Stir it now and then so the rice doesn't catch on the bottom of the pot.";
 const STORY = "Grandma has a story about this one. Want to hear it?";
 const LINE_BYTES = AUDIO_S * 48_000;
 let kids = 0;
@@ -51,7 +53,7 @@ const session = (kidId: string, stepOrder = 1): CookSession => ({
     steps: [
       { order: 1, title: "Wash the rice", text: "Wash the rice three times.", moment: { startS: 0, endS: 30 } },
       { order: 2, title: "Temper", text: "Heat the ghee and add the cumin.", moment: { startS: 30, endS: 90 } },
-      { order: 3, title: "Simmer", text: "Simmer it for ten minutes.", moment: { startS: 90, endS: 200 } },
+      { order: 3, title: "Simmer", text: WHOLE_3.slice("Step 3. ".length), moment: { startS: 90, endS: 200 } },
     ],
     memories: [{ kind: "story", text: "My mother made this every Sunday.", moment: { startS: 40, endS: 70 }, stepOrder: 2 }],
   },
@@ -83,7 +85,7 @@ function world(opts: { claude?: (actions: Actions) => Promise<void>; speak?: Spe
   const kidId = `kid-${++kids}`;
   const spoken: string[] = []; // every line sent to Sonic, made ahead or said live
   const voices: Voice[] = []; // how each line went to Sonic
-  const backups: boolean[] = []; // and whether Gemini could step in
+  const routes: Route[] = []; // and which voices could say it (Sonic, Gemini)
   const turns: string[] = []; // what reached Claude
   const notes: (string | undefined)[] = []; // and the service's note with each
   let inkFrames = 0;
@@ -99,11 +101,11 @@ function world(opts: { claude?: (actions: Actions) => Promise<void>; speak?: Spe
       stt = events;
       return { send: () => void inkFrames++, close: () => {} };
     },
-    speak: (text, format, signal, onChunk, voice = {}, backup = true) => {
+    speak: (text, format, signal, onChunk, voice = {}, route = {}) => {
       spoken.push(text);
       voices.push(voice);
-      backups.push(backup);
-      return fake(text, format, signal, onChunk, voice, backup);
+      routes.push(route);
+      return fake(text, format, signal, onChunk, voice, route);
     },
     agent: (_session, actions) => ({
       turn: async (text, note) => {
@@ -141,8 +143,9 @@ function world(opts: { claude?: (actions: Actions) => Promise<void>; speak?: Spe
   }
   /** The kid says something (Ink's turn ends with it). */
   const says = (text: string) => stt!.onTurnEnd(text);
-  const stepLines = () => spoken.filter((t) => t.startsWith("Step "));
-  return { spoken, voices, backups, turns, notes, connect, says, stepLines, inkFrames: () => inkFrames };
+  /** The short step lines that went to Sonic. */
+  const stepLines = () => spoken.filter((t) => Object.values(LINE).includes(t));
+  return { spoken, voices, routes, turns, notes, connect, says, stepLines, inkFrames: () => inkFrames };
 }
 
 type Phone = ReturnType<ReturnType<typeof world>["connect"]>;
@@ -165,24 +168,27 @@ async function nudged(w: ReturnType<typeof world>, c: Phone) {
   assert.deepEqual(c.says(), [["greeting", GREETING], ["step", LINE[2]], ["nudge", STORY]]);
 }
 
-test("every step's line is made when the recipe opens: two at a time, from the step they're on, then back", async () => {
+test("every step's line is made once the hello is playing: two at a time, from the step they're on, then back", async () => {
   let making = 0;
   let most = 0;
+  let helloAudio = 0;
   const counting: Speak = (text, format, signal, onChunk, voice) => {
-    if (voice?.kind !== "step") return sonic()(text, format, signal, onChunk);
+    if (voice?.kind !== "step") return sonic()(text, format, signal, (c) => ((helloAudio ||= Date.now()), onChunk(c)));
+    assert.ok(helloAudio && Date.now() >= helloAudio, "not before the hello's first audio");
     most = Math.max(most, ++making);
     return sonic()(text, format, signal, onChunk).finally(() => making--);
   };
   const w = world({ speak: counting, stepOrder: 2 });
   const c = w.connect();
   await greeted(c);
-  assert.deepEqual(w.spoken, [LINE[2], LINE[3], GREETING, LINE[1]]);
+  assert.deepEqual(w.spoken, [GREETING, LINE[2], LINE[3], LINE[1]], "Sonic says the hello first");
   assert.equal(most, AHEAD_AT_ONCE);
   assert.equal(AHEAD_AT_ONCE, 2);
   // In homie's voice for steps, exactly as a step said live goes; Sonic alone (no backup voice for a kept line).
   const step = { voice: env.homieVoice, language: undefined, kind: "step" };
-  assert.deepEqual(w.voices, [step, step, { voice: env.homieVoice, language: "mr", kind: "greeting" }, step]);
-  assert.deepEqual(w.backups, [false, false, true, false]);
+  assert.deepEqual(w.voices, [{ voice: env.homieVoice, language: "mr", kind: "greeting" }, step, step, step]);
+  const ahead = { backup: false };
+  assert.deepEqual(w.routes, [{ sonic: true }, ahead, ahead, ahead]);
   // Nothing is read until a step changes.
   assert.deepEqual(c.says(), [["greeting", GREETING]]);
   assert.deepEqual(types(c.ws.events).slice(0, 2), ["ready", "go_to_step"]);
@@ -246,7 +252,33 @@ test("the step the app restores on open isn't read (the screen's step wins); a t
   b.close();
 });
 
-test("voice and Claude moves say the new step's line; repeat says it again; a move to the same step says nothing", async () => {
+test("a tap while the recipe loads (after the restore) is read once it's ready, and a hello cut off unheard isn't counted", async () => {
+  const w = world();
+  const a = w.connect();
+  a.tap(2); // the restore, as the socket opens
+  a.tap(3); // the kid taps Next before `ready`
+  await settle();
+  assert.deepEqual(a.ws.of("go_to_step"), [{ type: "go_to_step", stepOrder: 3 }]);
+  assert.deepEqual(a.says(), [["greeting", GREETING], ["step", LINE[3]]], "the tap's line cuts off the hello");
+  assert.equal(a.ws.of("say_end")[0].interrupted, true);
+  await advance(AUDIO_S * 1000 + 500);
+  a.close();
+  // The hello was cut off before any of it played: the reconnect still says it.
+  const b = w.connect();
+  await greeted(b);
+  b.close();
+
+  // A tap before `ready` to the step the restore set changes nothing, so nothing is read.
+  const v = world();
+  const c = v.connect();
+  c.tap(2);
+  c.tap(2);
+  await greeted(c);
+  assert.deepEqual(c.says(), [["greeting", GREETING]]);
+  c.close();
+});
+
+test("voice and Claude moves say the new step's line; repeat says the whole step; a move to the same step says nothing", async () => {
   const w = world({ claude: (a) => a.goToStep(3) });
   const c = w.connect();
   await greeted(c);
@@ -273,10 +305,16 @@ test("voice and Claude moves say the new step's line; repeat says it again; a mo
     ["step", LINE[2]],
     ["nudge", STORY],
     ["step", LINE[1]],
-    ["step", LINE[1]], // say that again
+    ["step", LINE[1]], // say that again: step 1's line is the whole step
     ["step", LINE[3]], // Claude's go_to_step
   ]);
   assert.deepEqual(w.turns, ["Take me to the simmering part."], "only that one needed Claude");
+  // Say that again on step 3: the whole step, said live (Sonic, then Gemini if it must); never kept.
+  w.says("Say that again.");
+  await advance(AUDIO_S * 1000 + 500);
+  assert.deepEqual(c.says().at(-1), ["step", WHOLE_3]);
+  assert.deepEqual(w.routes[w.spoken.indexOf(WHOLE_3)], { sonic: true });
+  assert.equal(lineCache.size, 3, "only the short lines are kept");
   // The last step: no next, and a timer still works without Claude.
   w.says("Next.");
   w.says("Set a timer for 5 minutes for the rice.");
@@ -369,22 +407,53 @@ test("a second kid on the same recipe, and a reconnect, cost nothing: Sonic make
   again.close();
 });
 
-test("a line Sonic can't make ahead isn't kept: the flip says it live, where the backup voice can still step in", async () => {
+/** Sonic refuses step lines made ahead (`failing` decides which, with what error); everything else is said. */
+const refusing =
+  (failing: (text: string) => string | null): Speak =>
+  (text, format, signal, onChunk, voice, route = {}) => {
+    const error = voice?.kind === "step" && route.backup === false ? failing(text) : null;
+    return error ? Promise.reject(new Error(error)) : sonic()(text, format, signal, onChunk);
+  };
+/** The routes each try at `text` took: { backup: false } = Sonic alone, { sonic: false } = Gemini alone. */
+const triesAt = (w: ReturnType<typeof world>, text: string) => w.routes.filter((_, n) => w.spoken[n] === text);
+
+test("Sonic out of credits: making ahead stops, nothing is kept, and a flip goes straight to the backup voice", async () => {
   const warnings: string[] = [];
   mock.method(console, "warn", (...args: unknown[]) => void warnings.push(args.join(" ")));
-  const noSonic: Speak = (text, format, signal, onChunk, voice, backup = true) =>
-    voice?.kind === "step" && !backup ? Promise.reject(new Error("402: insufficient credits")) : sonic()(text, format, signal, onChunk);
-  const w = world({ speak: noSonic });
+  const w = world({ speak: refusing(() => "402: insufficient credits") });
   const c = w.connect();
   await greeted(c);
-  assert.ok(warnings.includes("step 2 line not made ahead: 402: insufficient credits"), warnings.join("\n"));
+  assert.ok(warnings.includes("step 1 line not made ahead: 402: insufficient credits"), warnings.join("\n"));
+  assert.deepEqual(w.stepLines(), [LINE[1], LINE[2]], "the two under way; step 3 is never asked for");
   assert.equal(lineCache.size, 0, "nothing kept");
   c.tap(2);
   await waitFor("step 2's line", () => c.ws.of("say_end").length === 2);
   const i = c.ws.events.findIndex((e) => e.text === LINE[2]);
-  assert.equal(c.ws.audioOf(i), LINE_BYTES);
-  // Made ahead (Sonic alone), again for the flip (Sonic alone), then said live with the backup allowed.
-  assert.deepEqual(w.backups.filter((_, n) => w.spoken[n] === LINE[2]), [false, false, true]);
+  assert.equal(c.ws.audioOf(i), LINE_BYTES, "said by the backup voice");
+  assert.deepEqual(triesAt(w, LINE[2]), [{ backup: false }, { sonic: false }], "one Sonic try in all, then Gemini");
+  c.tap(3);
+  await settle();
+  assert.deepEqual(triesAt(w, LINE[3]), [{ sonic: false }], "Sonic is busy: not asked at all");
+
+  // A minute on, Sonic gets asked again (once), and Gemini says it when it still can't.
+  await advance(FAILED_MS, 1000);
+  c.tap(1);
+  await waitFor("step 1's line", () => c.says().at(-1)?.[1] === LINE[1] && c.ws.of("say_end").length === 4);
+  assert.deepEqual(triesAt(w, LINE[1]), [{ backup: false }, { backup: false }, { sonic: false }]);
+  c.close();
+});
+
+test("a line Sonic failed to make (a network error) is remembered for a minute: the flip goes straight to the backup voice", async () => {
+  const w = world({ speak: refusing((text) => (text === LINE[2] ? "network: socket hang up" : null)) });
+  const c = w.connect();
+  await greeted(c);
+  assert.equal(lineCache.size, 2, "the other lines are kept: one failure doesn't stop the rest");
+  c.tap(2);
+  await waitFor("step 2's line", () => c.ws.of("say_end").length === 2);
+  assert.deepEqual(triesAt(w, LINE[2]), [{ backup: false }, { sonic: false }]);
+  c.tap(3);
+  await settle();
+  assert.deepEqual(triesAt(w, LINE[3]), [{ backup: false }], "kept: no new call");
   c.close();
 });
 

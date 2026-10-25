@@ -34,12 +34,11 @@ const MOODS: Record<string, Emotion> = {
   optin: "curious",
   reaction: "affectionate",
   closing: "grateful",
-  // The kid cooking: steps and hints read calmly, the offer asked, the cook's words passed on with love.
+  // The kid cooking: steps and hints read calmly, the cook's words passed on with love.
   greeting: "content",
   step: "calm",
   hint: "calm",
   reply: "content",
-  offer: "curious",
   nudge: "content",
   timer: "content",
   translation: "affectionate",
@@ -115,17 +114,25 @@ async function sonic(text: string, format: AudioFormat, signal: AbortSignal, onC
 }
 
 /**
- * Speak `text`, calling onChunk with each piece of audio. Resolves when done; rejects on a failure or an abort.
- * `backup: false` is Sonic alone, with no Gemini: for a line made ahead and kept (cook.ts), which must be homie's voice.
+ * Which voices may say a line. `backup: false` is Sonic alone, with no Gemini: for a line made ahead and kept
+ * (cook.ts), which must be homie's voice. `sonic: false` is Gemini alone: Sonic just failed on this line.
  */
+export type Route = { sonic?: boolean; backup?: boolean };
+
+/** Speak `text`, calling onChunk with each piece of audio. Resolves when done; rejects on a failure or an abort. */
 export async function speak(
   text: string,
   format: AudioFormat,
   signal: AbortSignal,
   onChunk: (audio: Buffer) => void,
   voice: Voice = {},
-  backup = true,
+  { sonic: useSonic = true, backup = true }: Route = {},
 ): Promise<void> {
+  if (!useSonic) {
+    if (!env.geminiKey) throw new Error("sonic failed, and there's no backup voice");
+    console.log("tts: gemini (sonic failed on this line already)");
+    return geminiSpeak(text, format, signal, onChunk, SONIC_SAMPLE_RATE);
+  }
   try {
     await sonic(text, format, signal, onChunk, voice);
   } catch (err) {
