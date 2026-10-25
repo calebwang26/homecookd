@@ -8,7 +8,7 @@
 // A tap on the resting pot always says something (lib/homie/tap): what's new for this person, once
 // (lib/homie/news keeps it ready; never while she films), else this screen's one line about its big
 // button, and "I’m right here." on a second tap in a row, with "Hi, I’m homie." before the very first one (lib/homie/intro); unless the screen
-// gave the pot its own onPress (and onLongPress). It's an answer to the tap, so it pauses a playing
+// gave the pot its own onPress (cook mode: on or off). It's an answer to the tap, so it pauses a playing
 // video. A screen can dock the pot somewhere else (cook mode: the middle of the bottom bar); low on the
 // screen its label sits above it. The pot shows the same Siri-like states everywhere (HomiePot).
 // Talking only
@@ -150,20 +150,17 @@ function RestingPot({
   const centred = Math.abs(frame.x + frame.size / 2 - windowW / 2) < 1;
   const box = { width: frame.size, height: frame.size };
   const a11y = state === 'speaking' ? 'homie, speaking' : state === 'listening' ? 'homie, listening' : 'homie';
-  const hint = h.onLongPress ? 'Ask anything. Touch and hold to turn the mic off or on.' : h.onPress ? undefined : 'Says what you can do here';
+  const hint = h.onPress ? 'Turns homie on or off' : 'Says what you can do here';
   return (
     <Animated.View style={[styles.rest, box, moveStyle]} pointerEvents={shown ? 'box-none' : 'none'}>
       <Animated.View style={[box, potStyle]}>
         <PressableScale
           onPress={onPress}
-          onLongPress={h.onLongPress}
           delayLongPress={450}
           haptic
           accessibilityRole="button"
           accessibilityLabel={a11y}
           accessibilityHint={hint}
-          accessibilityActions={h.onLongPress ? [{ name: 'longpress', label: 'Turn the mic off or on' }] : undefined}
-          onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && h.onLongPress?.()}
           style={[box, { borderRadius: frame.size / 2 }]}>
           <HomiePot state={state} level={h.level} size={frame.size} timerProgress={progress} />
         </PressableScale>

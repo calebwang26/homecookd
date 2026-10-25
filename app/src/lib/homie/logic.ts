@@ -2,7 +2,7 @@
 // screen, which screen's tap line it says (lib/homie/tap; the hello only once: lib/homie/intro), the centred moment's layout
 // and listening bars, the timer ring, the mic level, half duplex, and the voice service's https base.
 import type { Homie, HomieFrame, HomieMoment, HomieState } from './store';
-import { TAP_LINES, tapScreen, type TapScreen } from './tap';
+import { tapScreen, type TapScreen } from './tap';
 
 /**
  * The resting pot is exactly as tall as the controls beside it (Caleb, Oct 24): a header's 48 pt row
@@ -54,8 +54,6 @@ export function halfDuplex(v: { homie: HomieState; audio: string; video: boolean
 }
 
 export const HELP = {
-  /** Cook mode: what the kid can say (a long press on the pot there turns the mic on with it). */
-  cook: TAP_LINES.cook,
   /** Before the first tap line homie ever says to this person (lib/homie/intro). */
   hello: 'Hi, I’m homie.',
 } as const;

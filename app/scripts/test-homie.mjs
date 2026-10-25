@@ -340,8 +340,7 @@ await test('a screen claim is cleared only by its own release', () => {
   const a = {};
   const b = {};
   const press = () => {};
-  store.claimScreen(a, { dock: { x: 1, y: 2, size: 56 }, hidden: false, onPress: press, onLongPress: press });
-  assert.equal(store.get().onLongPress, press);
+  store.claimScreen(a, { dock: { x: 1, y: 2, size: 56 }, hidden: false, onPress: press });
   // B gains focus before A's blur runs.
   store.claimScreen(b, { dock: undefined, hidden: true, onPress: undefined });
   store.releaseScreen(a);
@@ -350,7 +349,6 @@ await test('a screen claim is cleared only by its own release', () => {
   assert.equal(store.get().hidden, false);
   assert.equal(store.get().dock, undefined);
   assert.equal(store.get().onPress, undefined);
-  assert.equal(store.get().onLongPress, undefined);
 });
 
 await test('docked low (cook mode’s bottom bar), the words go above the pot; the moment starts where the pot really is', () => {
@@ -431,7 +429,6 @@ await test('each screen gets its own tap line', () => {
   assert.equal(L.homieRoute('/recording').screen, 'recording');
   assert.equal(L.homieRoute('/dev/gallery').screen, 'other');
   assert.equal(L.homieRoute('/recipe/biryani/ingredients').screen, 'other');
-  assert.equal(L.HELP.cook, T.TAP_LINES.cook);
 });
 
 await test('one line per screen, short enough to say in one breath (12 words at most); each tab says "Explore X by doing X"', () => {
@@ -468,7 +465,7 @@ await test('chooseTapLine: news not told yet first (Claude’s words when writte
   assert.deepEqual(T.chooseTapLine({ ...base, facts: news, told: new Set(['answer:q1']) }), { text: 'Grandma just added Poha.', factId: 'recipe:r1' });
   assert.deepEqual(T.chooseTapLine({ ...base, facts: news, told: new Set(['answer:q1', 'recipe:r1']) }), { text: home1 });
   // Cook mode keeps its own line: no news over the kid's cooking. Nor while she films.
-  assert.deepEqual(T.chooseTapLine({ ...base, screen: 'cook', facts: news }), { text: L.HELP.cook });
+  assert.deepEqual(T.chooseTapLine({ ...base, screen: 'cook', facts: news }), { text: T.TAP_LINES.cook });
   assert.deepEqual(T.chooseTapLine({ ...base, screen: 'recording', facts: news }), { text: T.TAP_LINES.recording });
   assert.deepEqual(T.chooseTapLine({ ...base, screen: 'recording', facts: news, last: T.TAP_LINES.recording }), { text: again });
 });
