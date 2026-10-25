@@ -68,6 +68,57 @@ rather talk than type, often not in English.
 
 First audio from Sonic arrives in about 120–250 ms.
 
+## Gemini model pathways
+
+Gemini is the part of homecookd that watches the family cook's video. To get there we tested several
+Gemini models on real cooking footage and compared them on **time**, **cost** and **accuracy**. We finalized
+on **Gemini 3.8 Flash** (`gemini-3.8-flash`).
+
+### Where Gemini runs
+
+| Job | Model | Where |
+| --- | --- | --- |
+| Watch the video: steps, timestamps, ingredients, the cook's words | `gemini-3.8-flash` (final) | [`pipeline/process.py`](pipeline/process.py) |
+| Put out-of-order clips back in order (one small text-only call) | `gemini-3.8-flash` | [`pipeline/order.py`](pipeline/order.py) |
+| Check each recipe against frames from the video | `gemini-3.8-flash` | [`pipeline/evaluate.py`](pipeline/evaluate.py) |
+| Translate the cook's voice-note answers (e.g. Marathi to English) | `gemini-3.8-flash` | [`convex/lib/translate.ts`](convex/lib/translate.ts) |
+| Live listening for languages Ink 2 doesn't cover (Marathi) | `gemini-3.5-transcribe-live` | [`voice/src/geminiLive.ts`](voice/src/geminiLive.ts) |
+| homie's backup voice when Sonic fails | `gemini-3.8-flash-tts` | [`voice/src/geminiTts.ts`](voice/src/geminiTts.ts) |
+
+### What we compared (real API calls, same clips)
+
+| | Gemini 3.1 Pro (preview) | Gemini 3.8 Flash |
+| --- | --- | --- |
+| Price per 1M tokens (in / out) | $2.00 / $12.00 | $0.75 / $3.75 |
+| Extract + merge, same 2 clips | ~$0.20 (90 s clip alone: $0.08, 33 s) | **$0.047** for all 3 calls |
+| Projected 3-hour recording | ~$3.60 – $6.30 | ~$1.30 – $2.40 |
+| Speed | 15-min files could take 3+ min each | Noticeably faster; Batch API run of 2 clips done in ~3 min at half price |
+| Accuracy | Most consistent step count run to run | Good recipes; step count varied slightly between runs (8 vs 9), fixed with schema checks and a retry |
+
+Full numbers: [docs/COSTS.md](docs/COSTS.md).
+
+### What worked
+
+- **Gemini 3.8 Flash for video.** About 4× cheaper than Pro with recipe quality close enough that the cost and
+  speed won out, so a family can turn hours of cooking into a recipe on a small budget.
+- **A tiny AI copy of the video.** 360p, 1 fps, mono audio. Gemini samples video at 1 fps anyway, so uploads are
+  ~50× smaller with nothing lost.
+- **`MEDIA_RESOLUTION_LOW` pinned.** 5,460 tokens per minute of video vs 17,340 on HIGH (3.2× fewer).
+- **15-minute files.** Every call stays under 200k tokens (the cheaper price tier), files run in parallel, and one
+  failure never sinks the whole recipe.
+- **Structured output + validation.** Gemini returns JSON checked against a Pydantic schema
+  ([`pipeline/schema.py`](pipeline/schema.py)), with one retry, which evened out Flash's run-to-run variation.
+- **Text-only merge and ordering.** The video is sent once; later steps work from Gemini's text.
+
+### What didn't
+
+- **One long call for a full recording.** A 3-hour video is ~1.0–1.1M tokens: at the input limit and billed at
+  the higher > 200k rate.
+- **Pro for everything.** Most accurate, but slow on long files and too expensive for our $20 budget.
+- **HIGH media resolution.** 3.2× the tokens with no visible gain for cooking steps.
+- **Gemini Live for every language.** It hears Marathi better than the alternatives, but it's slower than Ink 2,
+  so we only use it where Ink 2 doesn't cover the language.
+
 ## Quick start
 
 **1. Add your keys.** Copy `.env.example` to `.env` and `app/.env.example` to `app/.env`, then fill in
