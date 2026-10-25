@@ -75,12 +75,13 @@ await test('the read-aloud offer and a story nudge are offers; other nudges and 
 });
 
 await test('homie never talks over a video: what it says on its own waits, an answer to the kid doesn’t', () => {
-  for (const k of ['greeting', 'offer', 'nudge', 'timer']) assert.equal(V.waitsForVideo(k), true, k);
-  for (const k of ['step', 'reply', 'hint', 'translation']) assert.equal(V.waitsForVideo(k), false, k);
+  for (const k of ['greeting', 'nudge', 'timer']) assert.equal(V.waitsForVideo(k), true, k);
+  // A step's line answers the kid's flip (made ahead, said at once); the read-aloud offer is gone.
+  for (const k of ['step', 'reply', 'hint', 'translation', 'offer']) assert.equal(V.waitsForVideo(k), false, k);
   // The same split as the service's (voice/src/cook.ts UNPROMPTED).
   const cook = readFileSync(join(root, '..', 'voice', 'src', 'cook.ts'), 'utf8');
   const unprompted = cook.match(/const UNPROMPTED[^=]*= new Set\(\[([^\]]*)\]/)[1].match(/"(\w+)"/g).map((w) => w.slice(1, -1));
-  assert.deepEqual(unprompted.sort(), ['greeting', 'nudge', 'offer', 'timer']);
+  assert.deepEqual(unprompted.sort(), ['greeting', 'nudge', 'timer']);
   assert.deepEqual(V.videoMessage(true), { type: 'video', playing: true });
   assert.deepEqual(V.videoMessage(false), { type: 'video', playing: false });
 });
@@ -963,6 +964,11 @@ await test('one socket at a time: a pause and a resume while the first connect w
   l.stop();
   first();
   assert.deepEqual(l.h.opened, []);
+});
+
+await test('a step line or a nudge (it asks the kid something) opens the listening window; other lines don’t', () => {
+  for (const k of ['step', 'nudge']) assert.equal(V.opensWindow(k), true, k);
+  for (const k of ['reply', 'hint', 'translation', 'greeting', 'timer', 'offer']) assert.equal(V.opensWindow(k), false, k);
 });
 
 console.log(`\n${passed} passed`);

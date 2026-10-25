@@ -30,7 +30,7 @@ export function offerOf(kind: SayKind, text: string): OfferKind | null {
  * homie never talks over a video). The service holds these too; this catches one already on its way.
  */
 export function waitsForVideo(kind: SayKind): boolean {
-  return kind === 'greeting' || kind === 'offer' || kind === 'nudge' || kind === 'timer';
+  return kind === 'greeting' || kind === 'nudge' || kind === 'timer';
 }
 
 /** What /cook gets when a video (or the cook's own voice) starts or stops on the phone. */
@@ -294,6 +294,14 @@ export const LISTEN_WINDOW_MS = 8000;
 export const ANSWER_GRACE_MS = 1000;
 /** The kid stopped talking (no partial transcript for this long) even if Ink's turn end never came. */
 export const KID_QUIET_MS = 6000;
+
+/**
+ * homie's lines that leave the kid something to answer open the listening window when they end: a step's
+ * line ("next", a question), and a nudge ("Still on step 3?", "Grandma has a story … want to hear it?").
+ */
+export function opensWindow(kind: SayKind): boolean {
+  return kind === 'step' || kind === 'nudge';
+}
 
 /**
  * The next hold. A tap turns homie off when it is on by a tap, else on until the next tap (a tap during

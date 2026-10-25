@@ -91,6 +91,7 @@ import {
   momentMessage,
   offerClosed,
   offerOf,
+  opensWindow,
   parseTimer,
   sayKind,
   sayLabel,
@@ -372,7 +373,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
   const speakNow = useCallback((s: PendingSay) => {
     const play = () => {
       beat.current = null;
-      if (s.kind === 'step') stepLine.current = true;
+      if (opensWindow(s.kind)) stepLine.current = true;
       setHomie({ state: 'speaking', label: s.label });
       if (!playSay(s.chunks, s.rate, s.translation)) doneSpeaking();
     };
