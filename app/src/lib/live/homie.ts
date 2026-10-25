@@ -7,8 +7,9 @@
 //                        plays, the pot's own "Hi, I’m homie." never comes for her (lib/homie/intro)
 //   homie.ask            homie's question while it waits for her spoken answer (null when none)
 //   homie.hold           the wrap-up holds homie in the centre across its run of questions ({type:"hold",
-//                        on}): from just before the count line to after the last answer (and a let-off).
-//                        Off on a new or lost socket, a pause and at the end; an older service never sends it
+//                        on}): from her "I'm done" (before a live card's drop) to after the last answer (and
+//                        a let-off). Off on `ready`, any close, a pause, a plate ask and at the end; an older
+//                        service never sends it
 //   homie.said           what homie is saying while held with no question up (the count line, a let-off)
 //   homie.start()        filming starts (glasses)
 //   homie.done()         "I'm done" (the stop button): over the socket when it's open; with no socket,
@@ -337,7 +338,7 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
         case 'ask':
           if (paused.current) return;
           showAsk({ promptId: m.promptId, text: m.text, textEn: m.textEn, kind: m.kind });
-          onHeld({ type: 'ask' });
+          onHeld({ type: 'ask', kind: m.kind });
           return;
         case 'drop':
         case 'answered':
@@ -627,9 +628,10 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
 // ---------------------------------------------------------------------------
 // The stand-in for the voice service: the same messages, homie's lines said by the phone's voice.
 // Where each stub recording is survives a reconnect (a phone recording closes the socket while the
-// camera is up), as the service's memory does. Its wrap-up runs like the service's: a hold, the count
-// line, two end questions and the stories opt-in, the hold off, the plate photo (filmed in the app),
-// the goodbye. With no speech-to-text, a question is answered by a typed `text`, skipped by "not now"
+// camera is up), as the service's memory does. Its wrap-up runs like the service's: the hold at once on
+// "I'm done" (before a live card's drop) and again right after the phase on a reconnect, homie thinking,
+// the count line, two end questions and the stories opt-in, the hold off, the plate photo (filmed in the
+// app), the goodbye. With no speech-to-text, a question is answered by a typed `text`, skipped by "not now"
 // (a tap), and dropped after 14 s.
 
 const STUB_LINES = {
@@ -637,7 +639,8 @@ const STUB_LINES = {
   ask: { en: 'About how much ginger was that?', mr: 'आलं साधारण किती घातलं?' },
   count: { en: 'Before we send it: two quick questions.', mr: 'पाठवण्याआधी दोन छोटे प्रश्न.' },
   end1: { en: 'What should {kid} never skip in this dish?', mr: '{kid} ने यात काय कधीच विसरू नये?' },
-  end2: { en: 'How do you know when it’s ready?', mr: 'हे तयार झालं हे तुम्हाला कसं कळतं?' },
+  // Long on purpose: the moment's layout on a short phone.
+  end2: { en: 'When you make the tadka, how do you know the mustard seeds are ready, before the curry leaves go in?', mr: 'फोडणी करताना मोहरी तयार झाली हे तुम्हाला कसं कळतं, कढीपत्ता घालण्याआधी?' },
   optin: { en: 'Can {kid} hear your stories too?', mr: '{kid} ला तुमच्या गोष्टी पण ऐकू द्यायच्या का?' },
   plate: { en: 'Last thing: hold the plate up to the camera.', mr: 'शेवटचं: ताट कॅमेऱ्यासमोर धरा.' },
   closing: { en: 'That’s a wrap. Thank you for sharing it.', mr: 'झालं! हे शेअर केल्याबद्दल खूप धन्यवाद.' },
@@ -711,11 +714,11 @@ function stubSocket(recordingId: string, info: RecordingInfo): Socket {
     sayLine('closing', 'closing');
     later(4000, () => toPhase('ended'));
   };
+  // homie thinks (held, no words) while the service would write the questions, then the count line.
   const wrapUp = () => {
     emit({ type: 'state', state: 'thinking' });
     later(1200, () => {
       if (mem.next >= STUB_WRAP.length) return wrapNext();
-      hold(true);
       if (mem.next === 0) {
         sayLine('count', 'reaction');
         later(3000, wrapNext);
@@ -729,8 +732,13 @@ function stubSocket(recordingId: string, info: RecordingInfo): Socket {
       toPhase('recording');
       filming();
     } else if (msg.type === 'done' && (mem.phase === 'intro' || mem.phase === 'recording')) {
-      if (waiting) answer(false);
+      // Like the service: the hold comes at once, before the live card's drop, so homie never shrinks.
       toPhase('wrapping_up');
+      hold(true);
+      if (waiting) {
+        emit({ type: 'drop', promptId: waiting.promptId });
+        waiting = null;
+      }
       wrapUp();
     } else if (msg.type === 'plate') {
       if (waiting?.kind === 'plate') answer(msg.ok === true);
@@ -766,7 +774,11 @@ function stubSocket(recordingId: string, info: RecordingInfo): Socket {
     emit({ type: 'ready', recording: { id: recordingId, language: info.language, cookName: info.cookName ?? '', kidName: info.kidName, dish: info.dish } });
     toPhase(mem.phase);
     if (mem.phase === 'recording') filming();
-    else if (mem.phase === 'wrapping_up') wrapUp();
+    else if (mem.phase === 'wrapping_up') {
+      // A reconnect mid-run: held again right after the phase.
+      if (mem.next < STUB_WRAP.length) hold(true);
+      wrapUp();
+    }
     else {
       emit({ type: 'state', state: 'thinking' });
       later(700, () => sayLine('intro', 'intro'));

@@ -13,7 +13,9 @@
 // answer out loud" go with the question). Between questions homie stays big, thinking, talking or
 // listening, with the line it is saying (the count line, a let-off) or nothing under it, and a tap does
 // nothing. It goes back to the corner once the hold is off and no question is up. homie sits at a fixed
-// height (TOP), so a longer question only reaches further down.
+// height (TOP), so a longer question only reaches further down; on a short phone the type is a little
+// smaller (28 pt), and if the words still wouldn't fit above the bottom, homie and its words go up just
+// enough, once and only up, for the rest of the moment (recordingLogic liftToFit).
 // Motion (Caleb, Oct 24: smooth, and less blur than the canvas's frames 2 and 4), all on the UI thread:
 // homie leaves its corner from the resting pot's exact spot and size, and the glide, the growth and the
 // light blur run together as one move (420 ms, easing out, no overshoot), like cook mode's HomieMoment;
@@ -25,7 +27,7 @@
 // needs neither, so it draws its own.
 import { BlurView } from 'expo-blur';
 import { useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, Pressable, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
   Easing,
   useAnimatedProps,
@@ -34,8 +36,8 @@ import Animated, {
   useSharedValue,
   withDelay,
   withTiming,
-  type SharedValue,
 } from 'react-native-reanimated';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { haptic, Txt } from '@/components/ui';
 import { useHomieSlot } from '@/lib/homie/hooks';
@@ -46,7 +48,7 @@ import { colors, motion } from '@/theme/tokens';
 
 import { GlowHomie } from './GlowHomie';
 import { ListeningBars } from './ListeningBars';
-import type { MomentView } from './recordingLogic';
+import { liftToFit, type MomentView } from './recordingLogic';
 import { COLUMN } from './RecordWash';
 import type { Line, RecordWords } from './words';
 
@@ -66,6 +68,16 @@ const CLOSE_MOVE_MS = 300;
 const CLOSE_MS = CLOSE_AT + CLOSE_MOVE_MS + 20;
 /** Landed back on the corner: both pots there this long, so the resting one fades in under this one. */
 const HANDOFF_MS = 200;
+/** Below this height (an iPhone SE is 667) the words are a little smaller. */
+const SHORT_SCREEN = 700;
+/** The sun ring round homie's disc (GlowHomie's glow: 10% of its size). */
+const RING = 18;
+/** The words end at least this far above the bottom; homie stays this far below the top when it goes up. */
+const BOTTOM_ROOM = 16;
+const TOP_ROOM = 8;
+const LIFT_MS = 320;
+/** Big type already: Larger Text grows it at most this much, so a question still fits. */
+const MAX_TYPE_SCALE = 1.2;
 /** The words changing while homie stays: the old ones fade out, the new ones fade in from WORDS_IN_AT. */
 const WORDS_OUT_MS = 220;
 const WORDS_IN_AT = 160;
@@ -101,28 +113,43 @@ export function AskMoment({ view, words, micOn, onNotNow, onActive }: { view: Mo
   const on = !landed;
   useEffect(() => active.current(on), [on]);
 
-  // The words: two layers in the same place, so a change crossfades. New words go into the layer that
-  // has faded out. While it closes they stay as they were, and leave with homie.
+  // The words: two layers in the same place, so a change crossfades. New words go into the current layer
+  // when it is empty (the words before may still be fading out in the other), else into the other one;
+  // each new set of words is a new layer that starts unseen and fades in (WordsLayer). While it closes
+  // they stay as they were, and leave with homie.
   const [slots, setSlots] = useState<[Slot, Slot]>([null, null]);
   const [cur, setCur] = useState<0 | 1>(0);
-  const [turn, setTurn] = useState(0);
   const nextKey = view.words?.key ?? null;
   if (open && nextKey !== (slots[cur]?.key ?? null)) {
-    const n = cur === 0 ? 1 : 0;
+    const n = slots[cur] ? (cur === 0 ? 1 : 0) : cur;
     const next: [Slot, Slot] = [slots[0], slots[1]];
     next[n] = slotOf(view);
     setSlots(next);
     setCur(n);
-    setTurn((t) => t + 1);
   }
-  const v0 = useSharedValue(0);
-  const v1 = useSharedValue(0);
+
+  // A short phone and a long question: homie and its words go up, once and only up, until the words fit
+  // above the bottom (recordingLogic liftToFit). Back to 0 for the next time it opens.
+  const insets = useSafeAreaInsets();
+  const { height: screenH } = useWindowDimensions();
+  const short = screenH < SHORT_SCREEN;
+  const [area, setArea] = useState<{ y: number; h: number } | null>(null);
+  const [wordsH, setWordsH] = useState(0);
+  const lift = useSharedValue(0);
+  const lifted = useRef(0);
   useEffect(() => {
-    if (!turn) return;
-    const [inV, outV] = cur === 0 ? [v0, v1] : [v1, v0];
-    outV.set(withTiming(0, { duration: reduce ? motion.reducedFadeMs : WORDS_OUT_MS, easing: inOut }));
-    inV.set(reduce ? withTiming(1, { duration: motion.reducedFadeMs }) : withDelay(WORDS_IN_AT, withTiming(1, { duration: WORDS_IN_MS, easing: out })));
-  }, [turn, cur, reduce, v0, v1]);
+    if (!open || !area || !wordsH) return;
+    const up = liftToFit({
+      wordsTop: area.y + COLUMN.toLabel,
+      wordsH,
+      bottom: area.y + area.h - insets.bottom - BOTTOM_ROOM,
+      homieTop: area.y - ASK_HOMIE_SIZE - RING,
+      topLimit: insets.top + TOP_ROOM,
+    });
+    if (up <= lifted.current + 0.5) return;
+    lifted.current = up;
+    lift.set(reduce ? up : withTiming(up, { duration: LIFT_MS, easing: inOut }));
+  }, [open, area, wordsH, insets.top, insets.bottom, reduce, lift]);
 
   // Where the big pot sits (measured), so the move ends exactly there.
   const [to, setTo] = useState<{ x: number; y: number } | null>(null);
@@ -163,10 +190,11 @@ export function AskMoment({ view, words, micOn, onNotNow, onActive }: { view: Mo
     const gone = setTimeout(
       () => {
         setMounted(false);
-        // Next time it opens on fresh words, never on these.
+        // Next time it opens on fresh words, never on these, and where it belongs.
         setSlots([null, null]);
-        v0.set(0);
-        v1.set(0);
+        setWordsH(0);
+        lifted.current = 0;
+        lift.set(0);
       },
       settle + (reduce ? 0 : HANDOFF_MS),
     );
@@ -174,7 +202,7 @@ export function AskMoment({ view, words, micOn, onNotNow, onActive }: { view: Mo
       clearTimeout(land);
       clearTimeout(gone);
     };
-  }, [closing, reduce, dim, grow, rise, v0, v1]);
+  }, [closing, reduce, dim, grow, rise, lift]);
 
   // A light tap and VoiceOver's reading for each new question.
   const askKey = open && view.asking ? nextKey : null;
@@ -189,16 +217,18 @@ export function AskMoment({ view, words, micOn, onNotNow, onActive }: { view: Mo
   const blurProps = useAnimatedProps(() => ({ intensity: BLUR * dim.value }));
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.value }));
   // One value moves it: from the corner pot's centre and size to its place in the column.
+  // Its place is `lift` above the measured one; at t = 0 it is still exactly on the corner pot.
   const potStyle = useAnimatedStyle(() => {
     if (!to) return { opacity: 0 };
-    if (reduce) return { opacity: dim.value };
+    const up = lift.value;
+    if (reduce) return { opacity: dim.value, transform: [{ translateY: -up }] };
     const start = from.size / ASK_HOMIE_SIZE;
     const dx = from.x + from.size / 2 - (to.x + ASK_HOMIE_SIZE / 2);
-    const dy = from.y + from.size / 2 - (to.y + ASK_HOMIE_SIZE / 2);
+    const dy = from.y + from.size / 2 - (to.y - up + ASK_HOMIE_SIZE / 2);
     const t = grow.value;
-    return { opacity: 1, transform: [{ translateX: dx * (1 - t) }, { translateY: dy * (1 - t) }, { scale: start + (1 - start) * t }] };
+    return { opacity: 1, transform: [{ translateX: dx * (1 - t) }, { translateY: dy * (1 - t) - up }, { scale: start + (1 - start) * t }] };
   });
-  const riseStyle = useAnimatedStyle(() => ({ opacity: rise.value, transform: [{ translateY: reduce ? 0 : 16 * (1 - rise.value) }] }));
+  const riseStyle = useAnimatedStyle(() => ({ opacity: rise.value, transform: [{ translateY: (reduce ? 0 : 16 * (1 - rise.value)) - lift.value }] }));
 
   if (!mounted) return null;
 
@@ -229,29 +259,79 @@ export function AskMoment({ view, words, micOn, onNotNow, onActive }: { view: Mo
             />
           </Animated.View>
         </View>
-        <Animated.View style={[styles.below, riseStyle]}>
-          {slots.map((slot, i) => (
-            <WordsLayer key={i} slot={slot} v={i === 0 ? v0 : v1} current={i === cur} hint={hint} micOn={micOn} level={talking ? 0 : h.level} />
-          ))}
+        <Animated.View
+          style={[styles.below, riseStyle]}
+          onLayout={(e) => {
+            const { y, height } = e.nativeEvent.layout;
+            if (!area || Math.abs(area.y - y) > 0.5 || Math.abs(area.h - height) > 0.5) setArea({ y, h: height });
+          }}>
+          {slots.map((slot, i) =>
+            slot ? (
+              <WordsLayer
+                key={`${i}:${slot.key}`}
+                slot={slot}
+                on={i === cur}
+                reduce={reduce}
+                short={short}
+                hint={hint}
+                micOn={micOn}
+                level={talking ? 0 : h.level}
+                onHeight={setWordsH}
+              />
+            ) : null,
+          )}
         </Animated.View>
       </Pressable>
     </View>
   );
 }
 
-function WordsLayer({ slot, v, current, hint, micOn, level }: { slot: Slot; v: SharedValue<number>; current: boolean; hint: Line; micOn: boolean; level: number }) {
+type LayerProps = {
+  slot: NonNullable<Slot>;
+  /** The words showing now (they fade in); false = the ones before, fading out. */
+  on: boolean;
+  reduce: boolean;
+  /** A short phone (an iPhone SE): a little smaller type. */
+  short: boolean;
+  hint: Line;
+  micOn: boolean;
+  level: number;
+  onHeight: (h: number) => void;
+};
+
+/** One set of words under homie. A new one starts unseen, so it never shows half way through a fade. */
+function WordsLayer({ slot, on, reduce, short, hint, micOn, level, onHeight }: LayerProps) {
+  const v = useSharedValue(0);
+  useEffect(() => {
+    if (!on) v.set(withTiming(0, { duration: reduce ? motion.reducedFadeMs : WORDS_OUT_MS, easing: inOut }));
+    else v.set(reduce ? withTiming(1, { duration: motion.reducedFadeMs }) : withDelay(WORDS_IN_AT, withTiming(1, { duration: WORDS_IN_MS, easing: out })));
+  }, [on, reduce, v]);
   const style = useAnimatedStyle(() => ({ opacity: v.value }));
-  if (!slot) return null;
   const { line, asking } = slot;
   return (
-    <Animated.View style={[styles.layer, style]} pointerEvents="none" accessibilityElementsHidden={!current} importantForAccessibility={current ? 'auto' : 'no-hide-descendants'}>
+    <Animated.View
+      style={[styles.layer, style]}
+      pointerEvents="none"
+      accessibilityElementsHidden={!on}
+      importantForAccessibility={on ? 'auto' : 'no-hide-descendants'}
+      onLayout={(e) => {
+        if (on) onHeight(e.nativeEvent.layout.height);
+      }}>
       <View style={styles.words}>
         {/* A question is the big line; homie's own line between questions is a little quieter. */}
-        <Txt variant="label" size={asking ? 32 : 26} weight={asking ? 700 : 600} leading={1.3} color={colors.card} align="center" accessibilityRole={asking ? 'header' : undefined}>
+        <Txt
+          variant="label"
+          size={asking ? (short ? 28 : 32) : short ? 24 : 26}
+          weight={asking ? 700 : 600}
+          leading={1.3}
+          color={colors.card}
+          align="center"
+          maxFontSizeMultiplier={MAX_TYPE_SCALE}
+          accessibilityRole={asking ? 'header' : undefined}>
           {line.text}
         </Txt>
         {line.en ? (
-          <Txt variant="body" size={16} leading={1.35} color={WHITE_SOFT} align="center">
+          <Txt variant="body" size={short ? 15 : 16} leading={1.35} color={WHITE_SOFT} align="center" maxFontSizeMultiplier={MAX_TYPE_SCALE}>
             “{line.en}”
           </Txt>
         ) : null}
@@ -259,11 +339,11 @@ function WordsLayer({ slot, v, current, hint, micOn, level }: { slot: Slot; v: S
       {asking ? (
         <View style={styles.label} accessible accessibilityLabel={hint.en ? `${hint.text}. ${hint.en}` : hint.text}>
           {micOn ? <ListeningBars level={level} color={colors.limeWash} /> : null}
-          <Txt variant="label" size={24} weight={700} color={colors.card} align="center">
+          <Txt variant="label" size={short ? 22 : 24} weight={700} color={colors.card} align="center" maxFontSizeMultiplier={MAX_TYPE_SCALE}>
             {hint.text}
           </Txt>
           {hint.en ? (
-            <Txt variant="meta" size={15} color={WHITE_SOFT} align="center">
+            <Txt variant="meta" size={short ? 14 : 15} color={WHITE_SOFT} align="center" maxFontSizeMultiplier={MAX_TYPE_SCALE}>
               {hint.en}
             </Txt>
           ) : null}

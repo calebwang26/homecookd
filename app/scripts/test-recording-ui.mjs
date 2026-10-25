@@ -233,6 +233,34 @@ test('moment: the plate photo has its own view, and the end closes it, held or n
   assert.equal(R.momentView({ ask: null, hold: true, said: null, ended: true }).open, false);
 });
 
+test('moment: a stalled wrap-up (the app ends it without homie) is never held, so the × can show', () => {
+  const held = { ask: null, hold: true, said: lineOf(1, 'count'), ended: false };
+  assert.equal(R.momentView({ ...held, stalled: true }).open, false, 'a half-open socket that never sends hold off');
+  assert.equal(R.momentView({ ...held, stalled: false }).open, true);
+  const q = R.momentView({ ...held, ask: askOf('p5'), stalled: true });
+  assert.equal(q.open, true, 'a question still up stays');
+  assert.equal(q.asking, true, 'and a tap closes it');
+});
+
+test('moment: on a short phone a long question lifts homie just enough, never past the top', () => {
+  // iPhone SE (375 x 667, insets 20 / 0): homie's bottom at 42% (280), the words 48 below it.
+  const se = (wordsH) => R.liftToFit({ wordsTop: 280.14 + 48, wordsH, bottom: 667 - 0 - 16, homieTop: 280.14 - 176 - 18, topLimit: 20 + 8 });
+  assert.equal(se(300), 0, 'a short question fits where homie is');
+  assert.ok(Math.abs(se(360) - 37.14) < 0.01, 'a long one: up by what it reaches past the bottom');
+  assert.ok(Math.abs(se(500) - 58.14) < 0.01, 'longer still: up until homie (and its sun ring) is 8 below the top inset');
+  // iPhone 15 (390 x 844, insets 59 / 34): the same long question fits with homie where it is.
+  assert.equal(R.liftToFit({ wordsTop: 354.48 + 48, wordsH: 380, bottom: 844 - 34 - 16, homieTop: 354.48 - 194, topLimit: 67 }), 0);
+  assert.equal(R.liftToFit({ wordsTop: 100, wordsH: 50, bottom: 400, homieTop: 10, topLimit: 30 }), 0, 'never down');
+});
+
+test('hold: a reconnect mid-run (ready resets it, the hold comes again right after the phase)', () => {
+  let s = R.heldAfter(R.NOT_HELD, { type: 'hold', on: true });
+  s = R.heldAfter(s, { type: 'reset' }); // ready, or the close before it (4409 included)
+  assert.deepEqual(s, R.NOT_HELD);
+  s = R.heldAfter(s, { type: 'hold', on: true });
+  assert.equal(R.momentView({ ask: null, hold: s.hold, said: s.said, ended: false }).open, true);
+});
+
 test('hold: what the hook keeps from the service’s messages', () => {
   let s = R.NOT_HELD;
   s = R.heldAfter(s, { type: 'say', line: lineOf(1, 'nice, the onions'), askUp: false });
@@ -242,7 +270,7 @@ test('hold: what the hook keeps from the service’s messages', () => {
   s = R.heldAfter(s, { type: 'say', line: lineOf(2, 'count'), askUp: false });
   assert.equal(s.said.id, 2, 'the count line shows');
   assert.equal(R.heldAfter(s, { type: 'hold', on: true }), s, 'a second hold on keeps the line');
-  s = R.heldAfter(s, { type: 'ask' });
+  s = R.heldAfter(s, { type: 'ask', kind: 'end' });
   assert.deepEqual(s, { hold: true, said: null }, 'a question clears it: never back once answered');
   assert.equal(R.heldAfter(s, { type: 'say', line: lineOf(3, 'the question'), askUp: true }), s, 'the question’s own line');
   assert.equal(R.heldAfter(s, { type: 'say', line: lineOf(4, 'still there?'), askUp: true }), s, 'a nudge under the question');
@@ -251,6 +279,7 @@ test('hold: what the hook keeps from the service’s messages', () => {
   assert.deepEqual(R.heldAfter(s, { type: 'hold', on: false }), R.NOT_HELD);
   assert.deepEqual(R.heldAfter(s, { type: 'reset' }), R.NOT_HELD, 'a new or lost socket, a pause, the end');
   assert.deepEqual(R.heldAfter(R.NOT_HELD, { type: 'hold', on: false }), R.NOT_HELD);
+  assert.deepEqual(R.heldAfter({ hold: true, said: lineOf(6, 'x') }, { type: 'ask', kind: 'plate' }), R.NOT_HELD, 'the plate photo ends the run, even with no hold off');
 });
 
 // The wrap-up as the service sends it, message by message; `open` after each one.
@@ -263,7 +292,7 @@ function runWrapUp(events) {
     if (e.hold !== undefined) held = R.heldAfter(held, { type: 'hold', on: e.hold });
     if (e.ask) {
       ask = e.ask;
-      held = R.heldAfter(held, { type: 'ask' });
+      held = R.heldAfter(held, { type: 'ask', kind: e.ask.kind });
     }
     if (e.gone) ask = null; // drop / answered
     if (e.say) held = R.heldAfter(held, { type: 'say', line: lineOf(++n, e.say), askUp: !!ask });
@@ -275,9 +304,14 @@ function runWrapUp(events) {
     return { at: e.at, open: v.open, words: v.words?.line.text ?? null, asking: v.asking };
   });
 }
+// The order the voice service sends (Oct 25): "I'm done" with a live card up → phase wrapping_up, say_end,
+// hold on, then the live card's drop; homie thinks (~3 s while Claude writes the questions), the count line…
 const WRAP = (hold) => [
-  { at: 'drop the live question at "I’m done"', gone: true },
+  { at: 'a live question up', ask: askOf('live', 'amount', 'How much ginger?') },
+  { at: '"I’m done": phase wrapping_up' },
   ...(hold ? [{ at: 'hold on', hold: true }] : []),
+  { at: 'drop the live question', gone: true },
+  { at: 'homie writes the questions (thinking)' },
   { at: 'count line', say: 'Before we send it: two quick questions and a photo of your plate.' },
   { at: 'question 1', ask: askOf('e1', 'end', 'What must Shreya never skip?') },
   { at: 'question 1 said', say: 'What must Shreya never skip?' },
@@ -294,13 +328,15 @@ const WRAP = (hold) => [
   { at: 'ended', ended: true },
 ];
 
-test('wrap-up with hold: homie stays in the middle from the count line to the last answer, then goes back', () => {
+test('wrap-up with hold: from the live card at "I’m done" to the last answer homie never leaves the middle', () => {
   const steps = runWrapUp(WRAP(true));
-  const from = steps.findIndex((s) => s.at === 'hold on');
   const to = steps.findIndex((s) => s.at === 'hold off');
-  for (const s of steps.slice(from, to)) assert.equal(s.open, true, `still up at "${s.at}"`);
+  for (const s of steps.slice(0, to)) assert.equal(s.open, true, `still up at "${s.at}"`);
   for (const s of steps.slice(to)) assert.equal(s.open, false, `back in the corner at "${s.at}" (the plate has its own view)`);
   const at = (name) => steps.find((s) => s.at === name);
+  assert.equal(at('hold on').words, 'How much ginger?', 'the hold comes before the drop: the live card is still up');
+  assert.deepEqual(at('drop the live question'), { at: 'drop the live question', open: true, words: null, asking: false }, 'its words fade out, homie stays');
+  assert.deepEqual(at('homie writes the questions (thinking)'), { at: 'homie writes the questions (thinking)', open: true, words: null, asking: false }, 'centred, thinking, no words');
   assert.equal(at('count line').words, 'Before we send it: two quick questions and a photo of your plate.');
   assert.equal(at('count line').asking, false, 'no "Just answer out loud" for the count line');
   assert.equal(at('still there?').words, 'What must Shreya never skip?', 'the nudge leaves the question up');
@@ -312,8 +348,18 @@ test('wrap-up with hold: homie stays in the middle from the count line to the la
 test('wrap-up with no hold (an older service): each question opens and closes on its own, as before', () => {
   const steps = runWrapUp(WRAP(false));
   const opened = steps.filter((s) => s.open).map((s) => s.at);
-  assert.deepEqual(opened, ['question 1', 'question 1 said', 'still there?', 'question 2', 'opt-in']);
+  assert.deepEqual(opened, ['a live question up', '"I’m done": phase wrapping_up', 'question 1', 'question 1 said', 'still there?', 'question 2', 'opt-in']);
+  assert.equal(steps.find((s) => s.at === 'drop the live question').open, false, 'the live card closes at "I’m done", as today');
   assert.ok(steps.every((s) => !s.open || s.asking), 'never up without a question');
+});
+
+test('wrap-up whose hold off never came: the plate photo still ends the hold, and nothing holds homie after it', () => {
+  const steps = runWrapUp(WRAP(true).filter((e) => e.at !== 'hold off'));
+  const at = (name) => steps.find((s) => s.at === name);
+  assert.equal(at('answered opt-in').open, true, 'still held after the last answer');
+  assert.equal(at('plate photo').open, false);
+  assert.equal(at('photo taken').open, false, 'not back in the middle after the photo');
+  assert.equal(at('goodbye').open, false, 'the goodbye in the corner');
 });
 
 test('wrap-up let-off: the let-off line shows while held, then homie goes back for the plate', () => {

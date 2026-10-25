@@ -36,9 +36,11 @@
 //                      middle, one shutter with the flip button on its right, so she can turn to the front
 //                      camera and hold the plate up; live.setCover), the thanks and the goodbye. The voice
 //                      service holds homie big in the middle across the run of questions ({type:"hold"},
-//                      homie.hold): from the count line ("Before we send it: two quick questions…") to the
-//                      last answer, homie never goes back to its corner between two questions; the words
-//                      under it change in place. It goes back before the plate photo or the goodbye. An
+//                      homie.hold): from her "I'm done" (a live question up then stays up; homie thinks
+//                      while the questions are written), through the count line ("Before we send it: two
+//                      quick questions…"), to the last answer, homie never goes back to its corner between
+//                      two questions; the words under it change in place. It goes back before the plate
+//                      photo or the goodbye, or when the wrap-up stalls (the × then shows). An
 //                      older service never holds: each question opens and closes on its own. If it stalls
 //                      (nothing moves for 2 min, or 20 s after an error or a lost line), the app ends
 //                      the recording itself; a phone video then sends anyway.
@@ -90,7 +92,13 @@ import { saveUnsent } from '@/lib/unsentRecordings';
 import { colors, motion, space } from '@/theme/tokens';
 
 const AWAKE_TAG = 'homecookd-recording';
-const PREVIEW_ASK: Ask = { promptId: 'preview', text: 'आजी, आलं साधारण किती घातलं?', textEn: 'About how much ginger was that?', kind: 'amount' };
+// A long one, so the preview shows the layout's worst case (an iPhone SE: homie goes up to fit it).
+const PREVIEW_ASK: Ask = {
+  promptId: 'preview',
+  text: 'आजी, फोडणी करताना मोहरी तयार झाली हे तुम्हाला कसं कळतं, कढीपत्ता घालण्याआधी?',
+  textEn: 'Aaji, when you make the tadka, how do you know the mustard seeds are ready, before the curry leaves go in?',
+  kind: 'cue',
+};
 const PREVIEW_PLATE: Ask = { promptId: 'preview-plate', text: 'शेवटचं, आजी. ताट कॅमेऱ्यासमोर धरा, म्हणजे Shreya ला दिसेल ते कसं दिसतं.', textEn: 'Last thing, Aaji. Hold the plate up to the camera, so Shreya can see how it looks.', kind: 'plate' };
 const PREVIEWS = ['done', 'ask', 'camera', 'paused', 'plate', 'wrapup'] as const;
 const KITCHEN = require('@/components/record/tripod.jpg') as number;
@@ -474,7 +482,7 @@ export default function RecordingScreen() {
             />
           ) : null}
           <AskMoment
-            view={momentView({ ask: devPreview === 'ask' ? PREVIEW_ASK : homie.ask, hold: homie.hold, said: homie.said, ended })}
+            view={momentView({ ask: devPreview === 'ask' ? PREVIEW_ASK : homie.ask, hold: homie.hold, said: homie.said, ended, stalled })}
             words={words}
             micOn={devPreview === 'ask' || homie.micOn}
             onNotNow={homie.notNow}
