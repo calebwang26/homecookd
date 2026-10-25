@@ -22,9 +22,11 @@ feel endless, and homie shrinking to the corner and jumping back between questio
   questions before we send it."). Numbers as words. Said once per recording; a reconnect doesn't repeat it, and asks
   the same questions it counted (`mem.endPlan`), never one more.
 - Nothing homie says later contradicts the count: no "one more", "another", "last question" (Claude's end-question
-  prompt says so too). The plate's "Last thing" is fine: it is the last thing.
-- `{type:"hold", on:true}` goes out just before the count line (on a reconnect mid-run, right after `ready`/`phase`),
+  prompt says so, and `homie.ts` `countsItself` swaps a question that opens that way for the written one of its
+  kind). The plate's "Last thing" is fine: it is the last thing.
+- `{type:"hold", on:true}` goes out the moment she taps "I'm done" (before the live card's drop and before any line,
+  so homie never shrinks while Claude writes the questions; on a reconnect mid-run, right after `ready`/`phase`),
   `on:false` right before the plate ask or the goodbye, after the last question's wait (and a let-off, once played).
-  The app keeps homie in the middle while it's on. Never on at `ended`.
+  The app keeps homie in the middle while it's on. Never on at `ended`, never between a `say` and its `say_end`.
 - Any new run of spoken questions homie adds later gets counted and held the same way.
 - Related: [[homie-waits-for-answers]], [[homie-size-and-centre]], [[in-app-recording]].

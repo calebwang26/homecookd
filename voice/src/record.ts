@@ -342,6 +342,7 @@ export class Recording {
         this.enterRecording();
       } else {
         this.setPhase("wrapping_up");
+        this.holdForQuestions(); // back in the middle of the questions: homie stays big from the first message
         this.flow(() => this.wrapUp());
       }
     }
@@ -501,6 +502,7 @@ export class Recording {
     if (this.phase !== "intro" && this.phase !== "recording") return;
     this.setPhase("wrapping_up");
     this.hush();
+    this.holdForQuestions(); // before the live card's drop, so homie never shrinks and grows again
     if (this.pending) this.drop("ignored");
     for (const t of this.timers) clearInterval(t);
     this.timers = [];
@@ -527,14 +529,15 @@ export class Recording {
     // number it may come to, while Claude writes the questions.
     void this.spareLines();
     const optInLine = fixedLine("optIn", this.who, this.whoLatin);
-    const most = wrapUpCount(this.pacer.rules.maxEnd - this.mem.endAsked, this.mem);
-    const counts = this.mem.counted ? [] : Array.from({ length: most.questions + 1 }, (_, n) => countLine(n, most.photo, this.who, this.whoLatin));
+    const { questions: most, photo } = wrapUpCount(this.pacer.rules.maxEnd - this.mem.endAsked, this.mem);
+    const counts = new Map<number, Promise<Line | null>>();
+    for (let n = 1; n <= most && !this.mem.counted; n++) counts.set(n, countLine(n, photo, this.who, this.whoLatin));
     const questions = await this.endLeft();
     if (this.closed) return;
-    const { questions: spoken, photo } = wrapUpCount(questions.length, this.mem);
-    if (spoken) this.hold(true);
+    const spoken = wrapUpCount(questions.length, this.mem).questions;
+    if (spoken) this.hold(true); // already on since done (holdForQuestions)
     if (!this.mem.counted) {
-      const count = await (counts[spoken] ?? countLine(spoken, photo, this.who, this.whoLatin));
+      const count = await (counts.get(spoken) ?? countLine(spoken, photo, this.who, this.whoLatin));
       if (count) {
         await this.untilQuiet();
         await this.sayFixed(count);
@@ -609,6 +612,15 @@ export class Recording {
     if (this.holding === on) return;
     this.holding = on;
     this.send({ type: "hold", on });
+  }
+
+  /**
+   * Holds from the wrap-up's first message ("I'm done", or a reconnect into it) when a spoken question is still to
+   * come: the opt-in, at least, since it comes after the end questions and only a let-off skips it. So homie doesn't
+   * shrink to the corner while Claude writes the end questions.
+   */
+  private holdForQuestions() {
+    if (!this.mem.letOff && !this.mem.optInDone) this.hold(true);
   }
 
   /**
@@ -1071,7 +1083,7 @@ export class Recording {
    */
   private async say(line: Line, kind: string): Promise<{ start: number; end: number } | undefined> {
     if (this.closed) return;
-    this.speaking?.abort();
+    if (this.speaking) this.hush(); // never two at once (flows run one by one); the old line gets its say_end
     const ctrl = new AbortController();
     this.speaking = ctrl;
     this.state("speaking");
@@ -1086,7 +1098,7 @@ export class Recording {
           console.log(`sonic first audio ${first - t0}ms (${kind})`);
         }
         bytes += chunk.length;
-        if (this.ws.readyState === WebSocket.OPEN) this.ws.send(chunk);
+        if (this.ws.readyState === WebSocket.OPEN && !ctrl.signal.aborted) this.ws.send(chunk);
       }, { language: this.who.language, voice: env.homieVoice, kind });
     } catch (err) {
       if (!ctrl.signal.aborted) console.warn("sonic", (err as Error).message);
@@ -1102,7 +1114,8 @@ export class Recording {
     // The phone sends silence while it plays, so this mute is only a backup. It ends when the phone can first have
     // finished (no load time), so a quick "yes" right after the line isn't cut.
     this.muteUntil = sayEnd + length;
-    this.send({ type: "say_end", interrupted: aborted });
+    // A stopped line had its say_end from hush() (or its socket closed).
+    if (!aborted) this.send({ type: "say_end", interrupted: false });
     if (this.speaking === ctrl) this.speaking = null;
     // The phone is still playing it; hush() can cut that short too.
     this.playing = ctrl;
@@ -1124,9 +1137,13 @@ export class Recording {
     void this.deps.convex.promptSaid(this.token, promptId, this.span(said)).catch((err) => console.warn("live/prompt-said", (err as Error).message));
   }
 
-  /** Stop homie now: the line Sonic is still making, or the one the phone is still playing (an extra say_end). */
+  /**
+   * Stop homie now: the line Sonic is still making (its say_end goes now, so nothing else is sent between its say and
+   * say_end), or the one the phone is still playing (an extra say_end).
+   */
   private hush() {
-    if (this.playing && !this.playing.signal.aborted && Date.now() < this.playingUntil) this.send({ type: "say_end", interrupted: true });
+    const making = this.speaking && !this.speaking.signal.aborted;
+    if (making || (this.playing && !this.playing.signal.aborted && Date.now() < this.playingUntil)) this.send({ type: "say_end", interrupted: true });
     this.speaking?.abort();
     this.playing?.abort();
     this.muteUntil = this.playingUntil = 0;

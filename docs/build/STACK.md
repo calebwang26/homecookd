@@ -321,7 +321,8 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   - `{ type: "say", text, textEn, kind, ai: true, audio }` + binary audio + `{ type: "say_end", interrupted }`.
     `kind` is a `homiePrompts.kind`. The app lights the pot just before audio starts. If the cook taps start or
     done while homie's line is still playing, an extra `{ type: "say_end", interrupted: true }` tells the app to
-    stop it.
+    stop it. A line stopped while it's still being made gets its `say_end` (`interrupted: true`) at once, and no
+    more of its audio: every `say` has exactly one `say_end` before any other message but `state`.
   - `{ type: "ask", promptId, text, textEn, kind }`: show the caption card. `{ type: "drop", promptId }`: fade it
     (no answer in ~10 s, "not now", or she's done; in the wrap-up, no answer even after "still there?"). `{ type: "answered", promptId }`. Kind `show` (filmed in the
     app): "Can you tilt the pan toward me?". Kind `plate` (filmed in the app, in the wrap-up after the last
@@ -329,12 +330,15 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
     `{ type: "plate", ok }`; no answer in 75 s, or "not now", skips it.
   - `{ type: "hold", on }` (Oct 25, wrap-up only): `on: true` = keep homie big in the middle; the spoken questions
     come back to back, so don't shrink it to the corner between them. `on: false` = they're over, back to the
-    corner. On comes just before the count line (on a reconnect in the middle of the questions, right after
-    `ready` and `phase`); off comes right before the plate `ask` or the goodbye `say`, after the last question's
+    corner. On comes with "I'm done": right after `phase: wrapping_up` (and the `say_end` of a line it stopped),
+    before the live card's `drop` and before any line, so homie never shrinks while Claude writes the end
+    questions (the opt-in is always still to come, so there is always a question). On a reconnect in the middle
+    of the questions: right after `ready` and `phase`. Off comes right before the plate `ask` or the goodbye `say`, after the last question's
     wait ended (answered, `not_now` or ignored) and after the let-off has played if there was one. "Still there?"
     and the let-off happen while it's on. No hold when no spoken question is left (a reconnect during the plate
     photo). Never on at `ended` (off is sent before the goodbye, and before `phase: ended` when the recording ended
-    underneath); a new socket starts with it off. Never sent between a `say` and its `say_end`. Backward
+    underneath: "I'm done" on a recording the app had already ended gives on, then off one round trip later); a new
+    socket starts with it off. Never sent between a `say` and its `say_end`. Backward
     compatible: older apps ignore unknown types (`app/src/lib/live/homie.ts` `onMessage` has no case for it).
   - `{ type: "transcript", text, final }`, `{ type: "error", message }`. Close 4401 signed out, 4404 no such recording
     (or it already ended), 4409 a newer socket for the same recording took over (don't reconnect that one).
@@ -373,8 +377,10 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   "Just two quick questions before we send it." / "Before we send it, one photo of your plate." (no line when
   there's nothing). Hand-written Marathi ("पाठवण्याआधी फक्त दोन छोटे प्रश्न."); other languages translate the
   English once, while Claude writes the questions. It replaces the old "Before you go, two quick ones." lead-in;
-  said once per recording (not again on a reconnect), and nothing later says "one more" or "last question". The
-  opt-in is asked once: a reconnect after its wait never asks it again (only a clear yes or no is saved). Live
+  said once per recording (not again on a reconnect unless it was cut off), and nothing later says "one more" or
+  "last question" (the prompt asks Claude not to, and an end question that opens that way, `homie.ts`
+  `countsItself`, becomes the written one of its kind). A spoken "not now" right after the count line answers
+  nothing: the first question is still asked, and she can say "not now" to it. The opt-in is asked once: a reconnect after its wait never asks it again (only a clear yes or no is saved). Live
   questions while she cooks are never back to back (the pacing's gap is 3.5 min, 90 s with `HOMIE_DEMO=1`), so
   they get no hold.
 - The service ignores incoming audio while homie speaks, until the phone can first have finished playing the line

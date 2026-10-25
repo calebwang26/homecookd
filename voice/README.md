@@ -255,7 +255,7 @@ What happens
    `lines.ts` `countLine`: "Just three quick questions before we send it." / "Before we send it, three quick
    questions and a photo of your plate."), then up to 2 end questions and "Can Shreya hear your stories too?"
    (yes/no → `/live/optin`) back to back, then (filmed in the app) the plate photo, then the closing, then phase
-   `ended`. `{type:"hold", on:true}` just before the count line keeps homie big in the middle of the app until
+   `ended`. `{type:"hold", on:true}` at done (before the live card's drop) keeps homie big in the middle of the app until
    `{type:"hold", on:false}` right before the plate ask or the goodbye (STACK.md).
    The wrap-up waits for her (`listen`): no line starts while she talks; an answer is every turn until no new words
    for 3.5 s (Ink 2, ink-whisper) or 4 s (Gemini Live), so a pause to think doesn't end it. "not now" (the card's

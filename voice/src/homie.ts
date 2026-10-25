@@ -111,6 +111,18 @@ export function soundsLikeAdvice(textEn: string): boolean {
   return ADVICE.some((re) => re.test(textEn));
 }
 
+/** "One more thing:", "Rajani Aaji, last question:", "Another quick one,", "And finally,": an opening that counts. */
+const COUNTING_LEAD_IN =
+  /^(?:[^,.?!:]{1,40},\s*)?(?:and\s+|just\s+)?(?:(?:one|two|three) (?:more|last)\b|last (?:quick )?(?:thing|question|one)\b|another (?:quick )?(?:thing|question|one)\b|finally\b|lastly\b)/i;
+
+/**
+ * An end question (its English) that opens by saying where it falls: homie has already told the cook how many
+ * questions it has (record.ts, the count line), so this would contradict it.
+ */
+export function countsItself(textEn: string): boolean {
+  return COUNTING_LEAD_IN.test(textEn.trim());
+}
+
 /** The cook's own words from the last few minutes may say a role homie can say back ("my son loves this"). */
 const RECENT_S = 180;
 const recent = (heard: Heard[], nowS: number) => heard.filter((h) => h.atS >= nowS - RECENT_S).map((h) => h.text);
@@ -205,9 +217,9 @@ export class HomieAgent {
     return { names: [call, kid, dish], heard };
   }
 
-  /** A question Claude wrote that guessed a family role: the written one of its kind instead, or nothing. */
-  private async instead(kind: AskKind, line: Line, asked: readonly string[]): Promise<{ kind: AskKind; line: Line } | null> {
-    console.warn(`homie: dropped a ${kind} question that guesses a family role or gender: ${line.textEn}`);
+  /** A question Claude wrote that homie can't say (`why`): the written one of its kind instead, or nothing. */
+  private async instead(kind: AskKind, line: Line, asked: readonly string[], why = "guesses a family role or gender"): Promise<{ kind: AskKind; line: Line } | null> {
+    console.warn(`homie: dropped a ${kind} question that ${why}: ${line.textEn}`);
     this.dropped.push(line.textEn);
     return (await this.fallback?.(kind, [...asked, ...this.dropped], this.who, this.latin).catch(() => null)) ?? null;
   }
@@ -292,8 +304,10 @@ export class HomieAgent {
       if (!q.text || !END_KINDS.includes(q.kind) || soundsLikeAdvice(q.text_en)) continue;
       const kind = q.kind as AskKind;
       const line = { text: q.text, textEn: q.text_en };
-      // A guess gets the written question of its kind, so the end still asks what Claude meant to.
-      const ok = guessesFamily(line.textEn, given) ? await this.instead(kind, line, [...asked, ...picked.map((p) => p.line.textEn)]) : { kind, line };
+      // A guess, or an opening that counts ("One more thing:"), gets the written question of its kind, so the end still
+      // asks what Claude meant to.
+      const why = guessesFamily(line.textEn, given) ? "guesses a family role or gender" : countsItself(line.textEn) ? "says where it falls" : "";
+      const ok = why ? await this.instead(kind, line, [...asked, ...picked.map((p) => p.line.textEn)], why) : { kind, line };
       if (ok) picked.push(ok);
     }
     return picked;

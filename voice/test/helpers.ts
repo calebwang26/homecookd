@@ -36,11 +36,24 @@ export class FakeSocket {
   /** Each binary frame: its size, `after` how many JSON messages, and when (the fake clock). */
   frames: { after: number; bytes: number; at: number }[] = [];
   closeCode?: number;
+  /** Broken promises of the /record contract (STACK.md): a hold between a say and its say_end, `ended` with hold on. */
+  violations: string[] = [];
+  private inSay = false;
+  private holdOn = false;
   send(data: string | Buffer) {
     if (typeof data === "string") {
-      this.events.push(JSON.parse(data));
+      const e = JSON.parse(data) as Ev;
+      this.check(e);
+      this.events.push(e);
       this.eventsAt.push(Date.now());
     } else this.frames.push({ after: this.events.length, bytes: data.length, at: Date.now() });
+  }
+  private check(e: Ev) {
+    if (e.type === "say") this.inSay = true;
+    else if (e.type === "say_end") this.inSay = false;
+    else if (e.type === "hold" && this.inSay) this.violations.push(`hold ${e.on} between a say and its say_end (event ${this.events.length})`);
+    if (e.type === "hold") this.holdOn = e.on === true;
+    if (e.type === "phase" && e.phase === "ended" && this.holdOn) this.violations.push(`phase ended with hold on (event ${this.events.length})`);
   }
   /** The audio bytes sent between the event at index `say` and the next say_end. */
   audioOf(say: number) {

@@ -29,10 +29,14 @@ const STREAM = { chunks: 5, everyMs: 200 };
 const MAKE_MS = STREAM.chunks * STREAM.everyMs;
 const THINK_MS = 1000; // every Claude call
 
+/** Every phone socket a test opened: none may break the /record contract (FakeSocket.violations). */
+const sockets: FakeSocket[] = [];
+
 beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: Date.parse("2026-10-25T17:00:00Z") }));
 afterEach(() => {
   mock.timers.reset();
   mock.restoreAll();
+  assert.deepEqual(sockets.splice(0).flatMap((ws) => ws.violations), []);
 });
 
 const line = (textEn: string): Line => ({ text: textEn, textEn });
@@ -145,6 +149,7 @@ function world(status: RecordingStatus = "intro", metBefore?: boolean, language 
   /** Opens a socket for `recordingId`, as the phone would. `drop()` is the socket closing. */
   function connect(recordingId: string) {
     const ws = new FakeSocket();
+    sockets.push(ws);
     const rec = new Recording(ws as unknown as WebSocket, "token", recordingId, "pcm", deps);
     void rec.start();
     return {
@@ -292,9 +297,10 @@ test("done while homie is asking: the question stops and is dropped before the e
   c.send({ type: "done" });
   await settle();
   const after = c.ws.events.slice(before);
-  assert.deepEqual(after.slice(0, 3).map((e) => e.type), ["phase", "say_end", "drop"]);
+  // The hold comes before the card's drop, so the app never shrinks homie and grows it again.
+  assert.deepEqual(after.slice(0, 4).map((e) => [e.type, e.on]), [["phase", undefined], ["say_end", undefined], ["hold", true], ["drop", undefined]]);
   assert.equal(after[1].interrupted, true);
-  assert.equal(after[2].promptId, question.promptId);
+  assert.equal(after[3].promptId, question.promptId);
   await advance(LATENCY_MS + 50);
   assert.deepEqual(w.named("updatePrompt").map((u) => u.args), [[question.promptId, "ignored"]]);
 
@@ -544,7 +550,9 @@ test("ended underneath, then done: no last questions, no opt-in, no goodbye", as
   assert.deepEqual(w.named("logPrompt").map((p) => p.args[0]), ["intro"]);
   assert.deepEqual(w.named("status").map((s) => s.args[0]), ["recording", "wrapping_up"]);
   assert.deepEqual(w.named("setOptIn"), []);
-  assert.deepEqual(c.ws.of("hold"), []);
+  // Done holds at once; the refused status write ends it one round trip later, off before `ended`.
+  assert.deepEqual(c.ws.of("hold").map((h) => h.on), [true, false]);
+  assert.deepEqual(c.ws.events.filter((e) => e.type === "hold" || e.type === "phase").slice(-2).map((e) => e.type), ["hold", "phase"]);
   assert.equal(w.row.status, "ended");
   assert.equal(warn.mock.callCount(), 0);
 });
@@ -1385,4 +1393,130 @@ test("a reconnect after the questions (during the plate photo): no hold and no c
   assert.deepEqual(b.ws.of("hold"), [], "nothing spoken is left to hold for");
   assert.deepEqual(afterDone(b), ["phase wrapping_up", "ask plate", "say plate", "answered", "say reaction", "say closing", "phase ended"]);
   assert.deepEqual(w.named("setOptIn").map((x) => x.args), [[true]], "the opt-in isn't asked again");
+});
+
+// ---- second review (Oct 25) ----
+
+test("done while homie is still making a live question: its say_end, then the hold, then the card's drop", async () => {
+  const w = world();
+  w.decisions.push(ask("How much salt is a pinch?"));
+  const c = w.connect("rec-done-making");
+  await helloDone(c);
+  c.send({ type: "start" });
+  await waitFor("the question being made", () => c.ws.of("say").length === 2 && c.ws.of("say_end").length === 1, 60_000);
+  const before = c.ws.events.length;
+  const frames = c.ws.frames.length;
+  c.send({ type: "done" });
+  await settle();
+  const after = c.ws.events.slice(before);
+  assert.deepEqual(after.slice(0, 4).map((e) => [e.type, e.on ?? e.interrupted]), [["phase", undefined], ["say_end", true], ["hold", true], ["drop", undefined]]);
+  await advance(500);
+  assert.equal(c.ws.of("say_end").length, 2, "the stopped line has one say_end");
+  assert.equal(c.ws.frames.length, frames, "no audio after its say_end");
+  c.drop();
+});
+
+test("ended underneath while homie is still making the count line: its say_end first, then hold off and ended", async () => {
+  const warn = quietly();
+  const w = world();
+  const a = w.connect("rec-ended-mid-count");
+  await helloDone(a);
+  a.send({ type: "start" });
+  await advance(1000);
+  a.send({ type: "done" });
+  await waitFor("the count line being made", () => a.ws.of("say").some((s) => s.kind === "reaction"), 30_000);
+  const say = a.ws.events.findIndex((e) => e.type === "say" && e.kind === "reaction");
+  w.row.status = "ended"; // the app's stop button, while it couldn't reach us; a new socket finds out
+  const b = w.connect("rec-ended-mid-count");
+  await waitFor("the close", () => a.ws.closeCode === 4404, 5000);
+  assert.deepEqual(
+    a.ws.events.slice(say + 1).filter((e) => e.type !== "state").map((e) => [e.type, e.interrupted ?? e.on ?? e.phase]),
+    [["say_end", true], ["hold", false], ["phase", "ended"]],
+  );
+  await advance(2000);
+  assert.equal(b.ws.closeCode, 4404);
+  assert.equal(warn.mock.callCount(), 0);
+});
+
+test("a reconnect while the count line plays: it's said again, with the same count and the same questions", async () => {
+  const w = world();
+  w.endQuestions.push({ kind: "cue", line: line("What do you use instead of ghee?") });
+  const a = w.connect("rec-count-reconnect");
+  await helloDone(a);
+  a.send({ type: "start" });
+  await advance(1000);
+  a.send({ type: "done" });
+  await waitFor("the count line made", () => a.ws.of("say_end").length === 2, 30_000);
+  await advance(1000); // the phone is playing it
+  a.drop();
+  await advance(3000);
+
+  const b = w.connect("rec-count-reconnect");
+  await heardOut(b, "the count line again");
+  await heardOut(b, "the first end question");
+  w.says("When it smells nutty.");
+  await heardOut(b, "the second end question");
+  w.says("Butter works too.");
+  await heardOut(b, "the opt-in");
+  w.says("Yes, of course");
+  await waitFor("the end", () => b.ws.phases().includes("ended"), 60_000);
+  assert.equal(w.spoken.filter((s) => s === "Just three quick questions before we send it.").length, 2);
+  assert.equal(w.endCalls.length, 1, "the same questions");
+  assert.deepEqual(afterDone(b), [
+    "phase wrapping_up",
+    "hold on",
+    "say reaction",
+    "ask end", "say end", "answered",
+    "ask end", "say end", "answered",
+    "ask optin", "say optin", "answered",
+    "hold off",
+    "say closing",
+    "phase ended",
+  ]);
+  assert.deepEqual(w.named("logPrompt").map((p) => p.args[0]), ["intro", "reaction", "end", "end", "optin", "closing"], "the cut count line isn't saved");
+});
+
+test("the opt-in skipped with 'not now', then a reconnect before the goodbye: it isn't asked again, and nothing is held", async () => {
+  const w = world();
+  w.endQuestions.length = 0;
+  const a = w.connect("rec-optin-skip-reconnect");
+  await helloDone(a);
+  a.send({ type: "start" });
+  await advance(1000);
+  w.says("Now the tadka goes in");
+  await advance(ANSWER_GAP_MS["ink-2"]);
+  a.send({ type: "done" });
+  await heardOut(a, "the count line");
+  await waitFor("the opt-in", () => a.ws.of("ask").some((x) => x.kind === "optin"), 30_000);
+  a.send({ type: "not_now" }); // the card's tap
+  w.says("Beta, bring the plates, the food is getting cold"); // the goodbye waits for her
+  await advance(1000);
+  assert.ok(!a.ws.of("say").some((s) => s.kind === "closing"));
+  a.drop();
+  await advance(5000);
+
+  const b = w.connect("rec-optin-skip-reconnect");
+  await waitFor("the end", () => b.ws.phases().includes("ended"), 60_000);
+  assert.deepEqual(afterDone(b), ["phase wrapping_up", "say closing", "phase ended"]);
+  assert.deepEqual(w.named("updatePrompt").map((u) => u.args[1]), ["not_now"]);
+  assert.deepEqual(w.named("setOptIn"), []);
+});
+
+test("an unanswered opt-in, then a reconnect during the goodbye: the goodbye again, no opt-in, nothing held", async () => {
+  const w = world();
+  w.endQuestions.length = 0;
+  const a = w.connect("rec-optin-ignored-reconnect");
+  await helloDone(a);
+  a.send({ type: "start" });
+  await advance(1000);
+  a.send({ type: "done" }); // her speech-to-text never showed anything: a plain 15 s wait
+  await waitFor("the goodbye", () => a.ws.of("say").some((s) => s.kind === "closing"), 60_000);
+  a.drop();
+  await advance(5000);
+
+  const b = w.connect("rec-optin-ignored-reconnect");
+  await waitFor("the end", () => b.ws.phases().includes("ended"), 60_000);
+  assert.deepEqual(afterDone(b), ["phase wrapping_up", "say closing", "phase ended"]);
+  assert.deepEqual(w.named("updatePrompt").map((u) => u.args[1]), ["ignored"]);
+  assert.deepEqual(w.named("setOptIn"), []);
 });

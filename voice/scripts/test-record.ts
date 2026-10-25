@@ -146,7 +146,7 @@ function checkScenario(t: { ask: Ev; playedAt: number; start: number; end: numbe
 }
 /**
  * The wrap-up (record.ts wrapUp), from done on: the count line first, then the end questions and the opt-in back to
- * back with the hold on from just before the count line until the last one's wait is over (and the let-off has
+ * back with the hold on from done until the last one's wait is over (and the let-off has
  * played), then the plate photo (CAMERA=1) and goodbye. As many questions as the count line said (fewer after a let-off).
  */
 function checkWrapUp(doneAt: number) {
@@ -171,7 +171,7 @@ function checkWrapUp(doneAt: number) {
   check(holds.map((h) => (h.on ? "on" : "off")).join(" ") === (spoken.length ? "on off" : ""), `hold: ${holds.map((h) => (h.on ? "on" : "off")).join(", ") || "none"}`);
   const on = holds.find((h) => h.on);
   const off = holds.find((h) => !h.on);
-  if (on && count) check(on.at <= count.at, `hold on ${s(count.at - on.at)} before the count line (${s(on.at - doneAt)} after done)`);
+  if (on && count) check(on.at - doneAt < 1000 && on.at <= count.at, `hold on ${s(count.at - on.at)} before the count line (${s(on.at - doneAt)} after done)`);
   const last = spoken.at(-1);
   const waitEnd = after.find((e) => (e.type === "answered" || e.type === "drop") && e.promptId === last?.promptId);
   if (off && waitEnd) check(off.at >= waitEnd.at, `hold off ${s(off.at - waitEnd.at)} after the last question's wait ended (${last?.kind})`);
@@ -179,6 +179,7 @@ function checkWrapUp(doneAt: number) {
   const next = off && after.find((e) => (e.type === "say" || e.type === "ask") && e.at >= off.at);
   if (off) check(next?.kind === (camera ? "plate" : "closing"), `then the ${next?.kind} ${next ? s(next.at - off.at) : "never"} after hold off`);
   check(!holds.at(-1)?.on, "hold is off before ended");
+  check(holdsInSay === 0, `no hold between a say and its say_end (${holdsInSay})`);
 }
 
 const waiters: { match: (e: Ev) => boolean; resolve: (e: Ev) => void }[] = [];
@@ -191,6 +192,9 @@ const next = (match: (e: Ev) => boolean, ms: number, what: string) =>
   ]);
 
 let audio: Buffer[] = [];
+/** A hold sent while a line's audio was still coming (an older app would cut the line there): never. */
+let inSay = false;
+let holdsInSay = 0;
 let sayAt = 0;
 let firstAudioAt = 0;
 let said = 0;
@@ -208,6 +212,9 @@ ws.on("message", (data, isBinary) => {
     return;
   }
   const ev = JSON.parse(data.toString()) as Ev;
+  if (ev.type === "say") inSay = true;
+  else if (ev.type === "say_end") inSay = false;
+  else if (ev.type === "hold" && inSay) holdsInSay++;
   if (ev.type === "transcript" && !ev.final) return;
   if (ev.type === "state") return;
   if (["say", "ask", "answered", "drop", "transcript", "hold"].includes(ev.type)) {
