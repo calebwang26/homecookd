@@ -14,7 +14,7 @@ merges, and the Merge Agent decides how conflicting PRs merge.
 |---|---|
 | Whether a PR is ready to merge | Product questions: what a screen shows, which feature wins |
 | The order PRs merge in | Anything marked `TODO(caleb)` |
-| How two PRs' code fits together | Deploys: Convex, `voice/deploy.sh`, EAS builds/updates, Supabase `api` |
+| How two PRs' code fits together, and shipping each merged fix/feature to TestFlight (Caleb, Oct 25) | Supabase `api` deploys, and any deploy not covered by the auto-ship rule below |
 | Sending a PR back to its session to fix | Deleting data, branches others still use, or secrets |
 | Which version wins when the docs settle it (section 7) | Two docs or two of his own decisions that disagree |
 
@@ -241,9 +241,15 @@ with a clean `web/` build.
 - Tell the PR's session it's merged.
 - Tell every session whose open PR overlaps it to `git fetch && git merge origin/main`, and say which files will
   conflict.
-- If it needs a deploy, tell Caleb exactly what: "#31 changes Convex functions. Deploy with
-  `npx convex deploy --preview-name hackathon -y` (never `--preview-create`)", "#36 is JS only: EAS update to
-  `production`", "#29 changes `voice/`: `voice/deploy.sh`". Deploys aren't yours to run.
+- **Auto-ship (Caleb, Oct 25: "after u receive new fixes/feature PRs, auto ship them to testflight and notify me so i can
+  test them in the app"):** a merged fix/feature PR goes out without asking, from a clean copy of merged main, in
+  this order: Convex if `convex/` changed (`npx convex deploy --preview-name hackathon -y`, never `--preview-create`)
+  → `voice/deploy.sh` if `voice/` changed → one EAS Update to `production` if `app/` changed → restart the laptop
+  pipeline worker if `pipeline/` changed. PRs that land close together share one update. A native change (new
+  native module or app.json plugin) needs a TestFlight build (`eas build -p ios --profile production --auto-submit`).
+  Tell the PR's session not to deploy (only the Merge Agent ships, so there are never two EAS Updates), log the
+  versions in STATE.md, then tell Caleb what to test. Docs-only PRs need no deploy. Supabase `api` deploys and
+  destructive data changes still need his explicit OK. See `memory/auto-ship-merged-prs.md`.
 
 ---
 
@@ -305,4 +311,5 @@ When you ask, keep it to one question with the options, so he can answer in five
 3. Order: demo fixes → producers → dependencies → small → oldest. No freeze (Caleb, Oct 24).
 4. Review: secrets, junk files, tests (you are the CI), STATE line, brand, `CLEAN`.
 5. Conflicts: mechanical ones by the fixed rules; real ones by intent → docs order → contract → data → Caleb.
-6. Merge with `--merge`, then tell the PR's session, the overlapping sessions and Caleb (deploys).
+6. Merge with `--merge`, then tell the PR's session and the overlapping sessions.
+7. Auto-ship the merged fix/feature to TestFlight (Convex → voice → EAS Update → worker), log it in STATE, tell Caleb what to test.
