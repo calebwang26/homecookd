@@ -176,6 +176,7 @@ cloud/deploy-signer.sh                                             # Cloud Run e
 cd voice && npm ci && npm run dev                                  # ws://localhost:8080/cook (VOICE_STUB=1: stub recipe, any token)
 cd voice && VOICE_STUB=1 npm run dev:fake                          # the same with fake speech (offline checks)
 cd voice && npm run test-client -- test-audio/next-step.wav test-audio/question.wav   # real Ink + Sonic; FAKE=1 = offline
+cd voice && COOK_LANG=ta npm run test-record                     # a live cook recording (VOICE_STUB=1 dev server): mr (default), en, ta, zh
 cd voice && CAMERA=1 npm run test-record                           # homie while filming in the app: frames, pause, plate photo
 cd voice && npx tsx scripts/try-decide.ts photo.jpg "what she said"   # one "should homie speak?" call (HOMIE_DECIDE_MODEL=…)
 cd voice && npm run typecheck && npm test                          # src + tests; unit tests (pacing, /record phases; fakes only)

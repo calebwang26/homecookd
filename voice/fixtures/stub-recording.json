@@ -34,5 +34,41 @@
       "name": "Shreya"
     },
     "dish": "Dal Tadka"
+  },
+  "ta": {
+    "recording": {
+      "_id": "stub-ta",
+      "language": "ta",
+      "status": "intro",
+      "source": "phone",
+      "dish": "Sambar"
+    },
+    "cook": {
+      "name": "Lakshmi",
+      "relation": "Paati",
+      "language": "ta"
+    },
+    "kid": {
+      "name": "Shreya"
+    },
+    "dish": "Sambar"
+  },
+  "zh": {
+    "recording": {
+      "_id": "stub-zh",
+      "language": "zh",
+      "status": "intro",
+      "source": "phone",
+      "dish": "Tomato Egg Stir-fry"
+    },
+    "cook": {
+      "name": "Mei",
+      "relation": "Nainai",
+      "language": "zh"
+    },
+    "kid": {
+      "name": "Shreya"
+    },
+    "dish": "Tomato Egg Stir-fry"
   }
 }
