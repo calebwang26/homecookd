@@ -749,3 +749,4 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - The chat opens only if the phone can't record (the mic refused, or no recorder).
   - Tests: test-voice-ui 81 (the moment, the stop rule, the hold's order), all scripts, tsc, lint. Web, on /cook/weed-steak: a hold opens "Ask Miles anything"; the pane blocks the mic, so it took the mic-refused fallback.
   - Not tried on a phone: recording the note and its stop timing. Needs an EAS Update (JS only).
+- Oct 25 · (this PR) · Claude · Auto-shipped #93 (Caleb's standing rule): EAS Update `ccd317a2-6346-430f-9883-d050fc3d92c2` (channel `production`) from main `9cd075efc`. App only; no Convex, voice or pipeline change since the last ship. Direct-push check: none since the last check. Before: app tsc 0 / lint / voice-ui 81, homie 47, cooking 35, recording-ui 61. Open: hold homie on Swordfish Steak on a phone and check the question reaches Miles' chat with the dish.
