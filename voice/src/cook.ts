@@ -283,7 +283,7 @@ export class Cooking {
       if (this.hearing()) this.ink?.send(data as Buffer);
       return;
     }
-    let msg: { type?: string; stepOrder?: number; text?: unknown; open?: unknown; kind?: unknown; playing?: unknown };
+    let msg: { type?: string; stepOrder?: number; read?: unknown; text?: unknown; open?: unknown; kind?: unknown; playing?: unknown };
     try {
       // `?? {}`: "null" is valid JSON, and reading .type off it used to end the whole process.
       msg = JSON.parse(data.toString()) ?? {};
@@ -291,7 +291,7 @@ export class Cooking {
       return;
     }
     if (msg.type === "step" && Number.isInteger(msg.stepOrder)) {
-      this.tapped(msg.stepOrder!);
+      this.tapped(msg.stepOrder!, msg.read !== false);
     } else if (msg.type === "text" && typeof msg.text === "string" && msg.text) {
       // Typed or push-to-talk input, or the app answering the story nudge ("yes", "no"): the same path as a
       // spoken turn. It's the app's own answer, so an open moment doesn't hold it.
@@ -308,9 +308,11 @@ export class Cooking {
 
   /**
    * A step from the phone. The first one, on open, restores the step on its screen: never read. After that it's a
-   * tap on Next, Back or a step: its line is read at once, unless the step didn't change.
+   * tap on Next, Back or a step: its line is read at once, unless the step didn't change. `read` false: her clip
+   * moved the screen there while it plays, so the step only moves (saved, no line over her), and the clip's
+   * translation still comes after it (clipSeq and clipUntil stay as they are).
    */
-  private tapped(order: number) {
+  private tapped(order: number, read = true) {
     this.touch();
     const restore = this.restorePending && (!this.readyAt || Date.now() - this.readyAt < RESTORE_MS);
     this.restorePending = false;
@@ -320,6 +322,11 @@ export class Cooking {
       return this.persistStep();
     }
     if (order === this.step || !this.lines.has(order)) return;
+    if (!read) {
+      this.step = order;
+      this.storyOffer = null;
+      return this.persistStep();
+    }
     this.moveTo(order);
     if (!restore) void this.readStep(order).catch((err) => console.warn("step line", err.message));
   }

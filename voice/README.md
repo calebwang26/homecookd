@@ -98,11 +98,15 @@ hear the hello again. A restart also empties the step-line cache.
 ## The WebSocket (`/cook?session=<sessionToken>&recipe=<recipeId>[&audio=pcm|wav]`)
 
 App → service
-- Binary frames: 16 kHz mono 16-bit little-endian PCM. ~100 ms per frame (3200 bytes). Keep streaming while the
-  screen is up, silence included: Ink waits for audio, it doesn't assume silence.
+- Binary frames: 16 kHz mono 16-bit little-endian PCM. ~100 ms per frame (3200 bytes). The app streams only while
+  homie is on (a tap, or the 8 s after a step line or a nudge) and the phone isn't making sound; frames may stop
+  and start again (Ink closes after 2 min without audio and reopens with the next frame). Keep streaming until a
+  sentence is over, silence included: Ink waits for audio to end a turn, it doesn't assume silence.
 - `{ "type": "step", "stepOrder": 3 }` when the kid taps Next, Back or a step. homie says that step's line at once
   (below). The first one on a socket, sent as it opens, restores the step on the screen: it isn't read (when it
   comes before `ready` or within 3 s of it), and the session starts there. A tap on the step it's on says nothing.
+  `"read": false` marks a step the cook's clip moved the screen to while it plays: the step only moves (no line
+  over her clip, and her translation still comes after it).
 - `{ "type": "text", "text": "how much soy sauce?" }`: typed or push-to-talk input, handled like speech. The app
   can answer the story nudge with `{ "type": "text", "text": "yes" }` or `"no"`. It's the app's own answer, so it
   counts even while one of its moments is up.

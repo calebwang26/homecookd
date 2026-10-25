@@ -140,6 +140,31 @@ test("two lines held by a video come one after the other, each whole", async () 
   p.close();
 });
 
+test("her clip moves the screen's step (read: false): no step line over her, her translation still comes, the step moved", async () => {
+  const clip = (a: Actions) => a.playClip(40, 70, { question: { text: "Why on Sundays?", quote: "My mother made this every Sunday." }, stepOrder: 2 });
+  for (const read of [false, undefined]) {
+    const p = phone(clip);
+    await waitFor("the greeting's end", () => p.ws.of("say_end").length === 1);
+    await advance(AUDIO_S * 1000 + 500);
+    p.says("Why did she make it on Sundays?");
+    await waitFor("her clip", () => p.ws.of("play_clip").length === 1);
+    // The phone moves to step 2, which holds that moment, and says so.
+    p.send(read === false ? { type: "step", stepOrder: 2, read: false } : { type: "step", stepOrder: 2 });
+    await advance(31_000 + AUDIO_S * 1000);
+    if (read === false) {
+      assert.ok(!p.kinds().includes("step"), "no step line over her clip");
+      assert.ok(p.kinds().includes("translation"), "her words in English, once the clip ends");
+      p.says("Go back.");
+      await waitFor("step 1's line", () => p.ws.of("say").at(-1)?.text === "Step 1. Wash the rice three times.");
+    } else {
+      // Without it (before Oct 24's fix): the step's line over her clip, and her translation dropped.
+      assert.ok(p.kinds().includes("step"));
+      assert.ok(!p.kinds().includes("translation"));
+    }
+    p.close();
+  }
+});
+
 test("the story nudge after a step's line waits for the kid's video", async () => {
   const p = phone();
   await waitFor("the greeting's end", () => p.ws.of("say_end").length === 1);

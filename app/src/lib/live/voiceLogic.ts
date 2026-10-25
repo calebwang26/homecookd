@@ -33,6 +33,14 @@ export function waitsForVideo(kind: SayKind): boolean {
   return kind === 'greeting' || kind === 'nudge' || kind === 'timer';
 }
 
+/**
+ * What /cook gets for a step the screen moved to. `read: false` for one her clip moved it to: the
+ * service moves silently, so it never reads that step's line over her, and her translation still comes.
+ */
+export function stepMessage(stepOrder: number, read = true): { type: 'step'; stepOrder: number; read?: false } {
+  return read ? { type: 'step', stepOrder } : { type: 'step', stepOrder, read: false };
+}
+
 /** What /cook gets when a video (or the cook's own voice) starts or stops on the phone. */
 export function videoMessage(playing: boolean): { type: 'video'; playing: boolean } {
   return { type: 'video', playing };
@@ -267,13 +275,15 @@ export function yesNoMoment(m: { id: string; question: string; questionEn?: stri
 
 /**
  * What the pot shows on the cook screen, under homie's own lit / speaking beat (the store puts those on
- * top). Truthful to the mic: `listening` only while homie is on and the recorder really streams
- * (`listening`), `thinking` while it is and the kid's words wait for an answer, else the timer or off.
- * So the mic never streams unless the pot shows listening or thinking. The ring follows store.timer
- * whatever the state.
+ * top). True to the mic both ways: `listening` only while homie is on, the recorder runs and its frames
+ * really go out; while the app makes sound (`sounding`: homie, her voice, a video) lib/live/mic zeroes
+ * every frame and cook mode sends none, so the pot shows off (or the timer) then, never a listening it
+ * isn't doing. `thinking` (the kid's words went out, the answer is on its way) stays true through that.
+ * So the mic never streams unless the pot shows listening or thinking. The ring follows store.timer.
  */
-export function cookPotState(v: { active: boolean; listening: boolean; thinking: boolean; timers: number; timerDue: boolean }): HomieState {
-  if (v.active && v.listening) return v.thinking ? 'thinking' : 'listening';
+export function cookPotState(v: { active: boolean; listening: boolean; sounding: boolean; thinking: boolean; timers: number; timerDue: boolean }): HomieState {
+  if (v.active && v.listening && v.thinking) return 'thinking';
+  if (v.active && v.listening && !v.sounding) return 'listening';
   return v.timers || v.timerDue ? 'timer' : 'off';
 }
 
@@ -281,19 +291,62 @@ export function cookPotState(v: { active: boolean; listening: boolean; thinking:
 // homie on or off (Caleb, Oct 24: one tap turns it on, the next turns it off; no always-on mic)
 
 /**
- * Why cook mode's mic is on: the kid's tap ('tap', until the next tap), the 8 s after a step line
- * ('window'), or a turn the kid began in that window ('turn', until homie's answer is over). 'off':
- * the recorder is stopped, so no frames and no Ink credits; the line stays open for step lines.
+ * Why cook mode's mic is on: the kid's tap ('tap', until the next tap or a minute with nobody talking),
+ * the 8 s after a step line ('window'), or a turn the kid began in that window ('turn', until homie's
+ * answer is over). 'off': the recorder is stopped, so no frames and no Ink credits; the line stays open
+ * for step lines.
  */
 export type MicHold = 'off' | 'tap' | 'window' | 'turn';
-export type MicEvent = 'tap' | 'step_line_end' | 'window_timeout' | 'heard' | 'answered';
+export type MicEvent = 'tap' | 'step_line_end' | 'window_timeout' | 'heard' | 'answered' | 'cap' | 'idle';
 
-/** How long the mic listens after a step line (only the time homie isn't talking counts). */
+/** How long the mic listens after a step line (only the time it really hears counts: no app sound). */
 export const LISTEN_WINDOW_MS = 8000;
 /** After homie's answer, a beat for the line that follows an action ("next step": the step, then its line). */
 export const ANSWER_GRACE_MS = 1000;
 /** The kid stopped talking (no partial transcript for this long) even if Ink's turn end never came. */
 export const KID_QUIET_MS = 6000;
+/** A window and any turn begun in it end this long after the window opened, whatever is still talking (a TV). */
+export const TURN_MAX_MS = 20_000;
+/** homie on by a tap goes off after this long with no word from the kid and nothing playing. */
+export const TAP_IDLE_MS = 60_000;
+/** A partial transcript this short ("um", a TV's stray word) never starts or holds a turn. */
+export const MIN_TURN_WORDS = 2;
+/**
+ * The mic level (lib/homie/logic pcmLevel: -50 dBFS is 0, -10 dBFS is 1) above which a frame is the kid
+ * talking: about -32 dBFS, a little under the walkie's -28 (components/record/walkieLogic) because the
+ * kid may be across the counter.
+ */
+export const SPEECH_LEVEL = 0.45;
+/** The kid is mid-sentence while the mic was that loud this recently. */
+export const SPEECH_TAIL_MS = 800;
+/** A window's end waits at most this much longer for a sentence to finish. */
+export const EDGE_MAX_MS = 3000;
+/** How often the wait re-checks while Ink's words are still coming (a partial with no final yet). */
+const EDGE_STEP_MS = 400;
+/**
+ * Ink's words are still coming this long after its last partial with no final since: its turn ends
+ * about 2 s after the kid stops (voice/src/ink.ts turn_end_timeout_ms). A stray word that never gets a
+ * final stops counting then.
+ */
+export const WORDS_OPEN_MS = 2500;
+
+/** A partial transcript that counts as the kid talking to homie (MIN_TURN_WORDS or more). */
+export function turnWords(text: string): boolean {
+  return text.trim().split(/\s+/).filter(Boolean).length >= MIN_TURN_WORDS;
+}
+
+/**
+ * The window's 8 s are up: how much longer to keep listening (0: close now). The kid is mid-sentence
+ * when the mic was loud in the last SPEECH_TAIL_MS (`loudAgo`), or Ink's words are still coming (its
+ * last partial `wordsAgo` ms ago, no final since; Infinity for none): Ink then gets the end of the
+ * sentence and can end its turn. `extended`: how long it already waited, EDGE_MAX_MS in all.
+ */
+export function edgeWait(v: { loudAgo: number; wordsAgo: number; extended: number }): number {
+  const left = EDGE_MAX_MS - v.extended;
+  if (left <= 0) return 0;
+  if (v.loudAgo < SPEECH_TAIL_MS) return Math.min(left, SPEECH_TAIL_MS - v.loudAgo);
+  return v.wordsAgo < WORDS_OPEN_MS ? Math.min(left, EDGE_STEP_MS) : 0;
+}
 
 /**
  * homie's lines that leave the kid something to answer open the listening window when they end: a step's
@@ -304,28 +357,56 @@ export function opensWindow(kind: SayKind): boolean {
 }
 
 /**
- * The next hold. A tap turns homie off when it is on by a tap, else on until the next tap (a tap during
- * a window keeps it on). A step line's end opens a fresh window, unless the kid's tap holds it. The
- * kid's words in a window hold it for the turn; the window's 8 s, or the turn's answer, close it.
+ * The next hold. A tap toggles what the kid sees: off turns homie on until the next tap, and any other
+ * hold (a pot that listens or thinks, by a tap or a window) turns it off. A step line's end opens a
+ * fresh window, unless the kid's tap holds homie on. The kid's words in a window hold it for the turn;
+ * the window's 8 s, the turn's answer, or the cap close it; a tapped-on homie left idle goes off.
  */
 export function micAfter(hold: MicHold, e: MicEvent): MicHold {
-  if (e === 'tap') return hold === 'tap' ? 'off' : 'tap';
+  if (e === 'tap') return hold === 'off' ? 'tap' : 'off';
   if (e === 'step_line_end') return hold === 'tap' ? 'tap' : 'window';
   if (e === 'heard') return hold === 'window' ? 'turn' : hold;
   if (e === 'window_timeout') return hold === 'window' ? 'off' : hold;
-  return hold === 'turn' ? 'off' : hold;
+  if (e === 'answered') return hold === 'turn' ? 'off' : hold;
+  if (e === 'cap') return hold === 'window' || hold === 'turn' ? 'off' : hold;
+  return hold === 'tap' ? 'off' : hold;
 }
 
+/** What the mic's timers look at (lib/live/voice keeps it). */
+export type MicNow = {
+  hold: MicHold;
+  /** The recorder really runs. */
+  listening: boolean;
+  /** The app makes sound (homie, her voice, a video): every frame is zeroed, nothing reaches Ink. */
+  sounding: boolean;
+  /** The kid's words went out and the answer is on its way. */
+  thinking: boolean;
+  /** homie's own line (lit or speaking). */
+  talking: boolean;
+  /** The kid is mid-sentence: partials of MIN_TURN_WORDS or more, no final yet. */
+  kidTalking: boolean;
+  /** This window's first finished words came (later words, a TV's, never hold the turn). */
+  heardFinal: boolean;
+  /** Since the window opened (ms). */
+  openFor: number;
+};
+
 /**
- * The timer homie's mic waits on now, or null. A window closes after LISTEN_WINDOW_MS of the mic really
- * listening with homie quiet (its own lines pause the count). A turn closes once its answer is over:
- * nothing on its way (`thinking`), homie quiet, the kid done talking, for ANSWER_GRACE_MS.
+ * The timer homie's mic waits on now, or null.
+ * - A window closes after LISTEN_WINDOW_MS of really hearing (no app sound, nobody mid-sentence).
+ * - A turn closes ANSWER_GRACE_MS after its answer is over: nothing on its way, homie quiet, and the kid
+ *   done talking, unless the first finished words already came (then more talking doesn't hold it).
+ * - Either ends TURN_MAX_MS after the window opened, whatever else.
+ * - On by a tap: TAP_IDLE_MS with the mic hearing and nobody talking or answering turns it off.
  */
-export function micTimer(v: { hold: MicHold; listening: boolean; thinking: boolean; talking: boolean; kidTalking: boolean }): { ms: number; event: MicEvent } | null {
-  if (v.talking || v.kidTalking) return null;
-  if (v.hold === 'window') return v.listening ? { ms: LISTEN_WINDOW_MS, event: 'window_timeout' } : null;
-  if (v.hold === 'turn') return v.thinking ? null : { ms: ANSWER_GRACE_MS, event: 'answered' };
-  return null;
+export function micTimer(v: MicNow): { ms: number; event: MicEvent } | null {
+  if (v.hold === 'tap') return v.listening && !v.sounding && !v.thinking && !v.kidTalking ? { ms: TAP_IDLE_MS, event: 'idle' } : null;
+  if (v.hold !== 'window' && v.hold !== 'turn') return null;
+  const cap = { ms: Math.max(0, TURN_MAX_MS - v.openFor), event: 'cap' as const };
+  const hears = v.hold === 'window' && v.listening && !v.sounding && !v.kidTalking;
+  const answered = v.hold === 'turn' && !v.thinking && !v.talking && (v.heardFinal || !v.kidTalking);
+  const t = hears ? { ms: LISTEN_WINDOW_MS, event: 'window_timeout' as const } : answered ? { ms: ANSWER_GRACE_MS, event: 'answered' as const } : null;
+  return t && t.ms <= cap.ms ? t : cap;
 }
 
 /**

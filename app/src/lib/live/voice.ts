@@ -27,13 +27,16 @@
 //                                    ({ type: "video" }) and holds what it would say on its own, and a
 //                                    line of that kind already on its way waits here too (voiceLogic
 //                                    waitsForVideo). Answers to the kid still play (they pause the video).
-// homie on or off (Caleb, Oct 24: no always-on mic; voiceLogic micAfter): a tap turns homie on (the
-// recorder starts and streams), the next tap turns it off (the recorder stops: no frames, no Ink
-// credits). When a step line has played, the mic listens for 8 s (homie's own lines pause the count);
-// if the kid talks, it stays on for that turn and closes once homie's answer is over, else it closes. A
-// tap during that window keeps homie on until the next tap. The line stays open either way, so step
-// lines still arrive; the service closes its Ink stream after 2 min without audio and opens it again
-// with the next frame (voice/src/ink.ts).
+// homie on or off (Caleb, Oct 24: no always-on mic; voiceLogic micAfter, micTimer): a tap toggles what
+// the kid sees. On a quiet pot it turns homie on (the recorder starts and streams) until the next tap,
+// or a minute with no word from the kid; on a listening or thinking pot it turns homie off (the
+// recorder stops: no frames, no Ink credits), and a step line still playing then opens no window.
+// When a step line or a nudge has played, the mic listens for 8 s of really hearing (no app sound);
+// the kid's words (two or more) keep it for that turn, which closes once homie's first answer is over,
+// and the window and its turn end 20 s after it opened whatever is still talking (a TV). At the 8 s
+// mark a kid mid-sentence (the mic loud just now, or Ink's words still coming) gets up to 3 s more,
+// so Ink hears the end. The line stays open either way, so step lines still arrive; the service closes
+// its Ink stream after 2 min without audio and opens it again with the next frame (voice/src/ink.ts).
 // Half duplex is lib/live/mic's: while the app makes sound, its frames are zeroed, and none of those
 // reach the socket (Cartesia's Ink bills every second it gets, silence too; voiceLogic cookSendsFrame).
 // The app in the background (AppState; not iOS 'inactive', still on screen) closes the line and turns
@@ -45,11 +48,13 @@
 //
 // The screen follows the server: go_to_step moves the step, play_clip plays that moment of the cook's
 // video (with her words, `quote` / `quoteEn`, for a caption), and a step the kid taps goes back as
-// { type: "step" } (the service then says that step's short line). On `ready` the screen's step goes
-// back too, and the service's own go_to_step right after it (the step it saved last) is not followed:
-// the step on screen is the truth.
-// homie shows the rest (lib/homie): listening while homie is on and the mic streams (the steam follows
-// the kid's voice), thinking from what the kid said to homie's answer, lit while homie's line arrives (at least a beat)
+// { type: "step" } (the service then says that step's short line); a step her clip moved the screen to
+// goes with read: false, so no line plays over her and her translation still comes. On `ready` the
+// screen's step goes back too, and the service's own go_to_step right after it (the step it saved
+// last) is not followed: the step on screen is the truth.
+// homie shows the rest (lib/homie): listening while homie is on and the mic's frames really go out
+// (not while the app makes sound: they're zeroed then; the steam follows the kid's voice), thinking
+// from what the kid said to homie's answer, lit while homie's line arrives (at least a beat)
 // and speaking while it plays, labelled "AI voice" ("Translated from Grandma", "AI hint"), and the ring
 // while a timer runs. Neither what the kid said nor homie's words are shown: homie only talks. Its
 // offers (read the steps aloud, hear a story) go to `onOffer`, which shows a moment or answers from a
@@ -79,6 +84,7 @@ import {
   cookSendsFrame,
   DECLINE_TEXT,
   echoAt,
+  edgeWait,
   endSay,
   endsThinking,
   hearsAnswers,
@@ -96,9 +102,12 @@ import {
   sayKind,
   sayLabel,
   sentText,
+  SPEECH_LEVEL,
+  stepMessage,
   thinksAfter,
   timerBuzz,
   timerDone,
+  turnWords,
   videoMessage,
   waitsForVideo,
   withTimer,
@@ -170,8 +179,8 @@ export type VoiceOptions = {
   /** Open the line on its own (cook mode, once per visit), and give up quietly when it can't. */
   auto?: boolean;
   onGoTo: (n: number) => void;
-  /** Plays her clip (moving to the step that holds it). */
-  onClip: (clip: VoiceClip) => void;
+  /** Plays her clip; returns the step it shows (a step the clip moved to is sent with read: false). */
+  onClip: (clip: VoiceClip) => number | void;
   /** 'skip' drops the offer's audio (the phone already knows the answer). */
   onOffer?: (offer: VoiceOffer) => 'play' | 'skip';
   /** The service closed its read-aloud offer: true, it reads now; false, it was declined. */
@@ -194,9 +203,21 @@ export function useVoiceCooking(opts: VoiceOptions) {
   const micHoldRef = useRef<MicHold>('off');
   // The recorder really started (the pot shows listening only then).
   const [listening, setListening] = useState(false);
-  // The kid is mid-sentence (partial transcripts are arriving): a window holds for the turn.
+  // The kid is mid-sentence (partial transcripts of 2+ words are arriving): a window holds for the turn.
   const [kidTalking, setKidTalking] = useState(false);
   const kidTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // This window's first finished words came (later ones never hold its turn), and a count of the kid's
+  // finished words (each one restarts a tapped-on homie's idle minute).
+  const [heardFinal, setHeardFinal] = useState(false);
+  const [finals, setFinals] = useState(0);
+  // When the window opened (its turn's cap counts from here); when the mic was last loud (the kid
+  // talking, for the window's edge); when Ink's last partial came with no final since (0: none).
+  const windowAt = useRef(0);
+  const loudAt = useRef(0);
+  const wordsAt = useRef(0);
+  // A video or her voice plays (VoiceHold): with homie's own lines, the app is making sound, and the mic's
+  // frames are all zeroed then.
+  const [videoState, setVideoState] = useState(false);
   // homie's lit / speaking beat (any line): a window's count pauses for it, and a step line's end opens one.
   const talking = useHomieSelect((h) => h.state === 'lit' || h.state === 'speaking');
   // A step line is playing: when homie goes quiet after it, the mic listens for a while.
@@ -242,6 +263,8 @@ export function useVoiceCooking(opts: VoiceOptions) {
   const timerList = useRef<CookTimer[]>([]);
   // The step the server just moved us to: not echoed back as a kid's tap.
   const lastServerStep = useRef<number | null>(null);
+  // The step her clip just moved the screen to: sent with read: false (no step line over her).
+  const fromClip = useRef<number | null>(null);
   // When `ready` came (0: not restoring): the service's go_to_step right after it isn't followed.
   const restoring = useRef(0);
   // Texts this phone sent that the service hasn't echoed yet.
@@ -269,7 +292,10 @@ export function useVoiceCooking(opts: VoiceOptions) {
       if (!s || s.readyState !== 1 || !cookSendsFrame({ quiet, focused: focusedRef.current, active: micOn.current })) return;
       s.send(pcm);
     },
-    (level) => setHomieLevel(focusedRef.current && micOn.current ? level : 0),
+    (level) => {
+      if (level >= SPEECH_LEVEL) loudAt.current = Date.now();
+      setHomieLevel(focusedRef.current && micOn.current ? level : 0);
+    },
   );
   const micRef = useRef(mic);
   useEffect(() => {
@@ -326,7 +352,18 @@ export function useVoiceCooking(opts: VoiceOptions) {
     },
     [syncMic],
   );
-  const micEvent = useCallback((e: MicEvent) => setMicHold(micAfter(micHoldRef.current, e)), [setMicHold]);
+  const micEvent = useCallback(
+    (e: MicEvent) => {
+      const next = micAfter(micHoldRef.current, e);
+      // A fresh window: its cap counts from now, and its first finished words are still to come.
+      if (e === 'step_line_end' && next === 'window') {
+        windowAt.current = Date.now();
+        setHeardFinal(false);
+      }
+      setMicHold(next);
+    },
+    [setMicHold],
+  );
 
   /** The kid's partial words: they're mid-sentence until the turn ends, or KID_QUIET_MS without more. */
   const kidSpeaks = useCallback(
@@ -443,9 +480,9 @@ export function useVoiceCooking(opts: VoiceOptions) {
     return true;
   }, []);
 
-  const sendStep = useCallback((stepOrder: number) => {
+  const sendStep = useCallback((stepOrder: number, read = true) => {
     const s = sock.current;
-    if (s?.readyState === 1) s.send(JSON.stringify({ type: 'step', stepOrder }));
+    if (s?.readyState === 1) s.send(JSON.stringify(stepMessage(stepOrder, read)));
   }, []);
 
   const onMessage = useCallback(
@@ -485,11 +522,15 @@ export function useVoiceCooking(opts: VoiceOptions) {
       } else if (m.type === 'transcript') {
         if (!m.text) return;
         // The kid is mid-sentence: a step line's window holds for the turn (Ink needs the audio after
-        // they stop to end it). An older service sends only finished turns, without `final`.
+        // they stop to end it). A word or two ("um", a TV's stray word) never does, but a window's end
+        // still waits for Ink to finish it. An older service sends only finished turns, without `final`.
         if (m.final === false) {
+          wordsAt.current = Date.now();
+          if (!turnWords(m.text)) return;
           kidSpeaks(true);
           return micEvent('heard');
         }
+        wordsAt.current = 0;
         answers.current += 1;
         const echo = echoAt(echoes.current, m.text, Date.now());
         // homie thinks only when an answer is on its way: never for this phone's own text (a tapped
@@ -501,6 +542,8 @@ export function useVoiceCooking(opts: VoiceOptions) {
           return;
         }
         kidSpeaks(false);
+        setHeardFinal(true);
+        setFinals((n) => n + 1);
         micEvent('heard');
         cb.current.onHeard?.(m.text);
       } else if (m.type === 'go_to_step') {
@@ -512,7 +555,8 @@ export function useVoiceCooking(opts: VoiceOptions) {
         lastServerStep.current = m.stepOrder;
         cb.current.onGoTo(m.stepOrder);
       } else if (m.type === 'play_clip') {
-        cb.current.onClip({ startS: m.startS, endS: m.endS, quote: m.quote || undefined, quoteEn: m.quoteEn || undefined });
+        const shows = cb.current.onClip({ startS: m.startS, endS: m.endS, quote: m.quote || undefined, quoteEn: m.quoteEn || undefined });
+        if (typeof shows === 'number' && shows !== cb.current.step) fromClip.current = shows;
       } else if (m.type === 'say') {
         openSays.current += 1;
         const kind = sayKind(m);
@@ -581,6 +625,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
     setLive(false);
     think(false);
     kidSpeaks(false);
+    wordsAt.current = 0;
     setHomieLevel(0);
     dropSay();
   }, [syncMic, think, kidSpeaks, dropSay]);
@@ -679,11 +724,13 @@ export function useVoiceCooking(opts: VoiceOptions) {
   }, [hangUp, setMicHold]);
 
   /**
-   * A tap on homie: on (the mic streams), or off again (voiceLogic micAfter). Turning it on tries a
-   * refused mic again, and opens the line when it isn't open (it failed, or never started).
+   * A tap on homie: on (the mic streams), or off again, from a tap or a window alike (voiceLogic
+   * micAfter). A step line still playing opens no window after it (off stays off; on stays on). Turning
+   * it on tries a refused mic again, and opens the line when it isn't open (it failed, or never started).
    */
   const toggle = useCallback(() => {
     const next = micAfter(micHoldRef.current, 'tap');
+    stepLine.current = false;
     if (next !== 'off' && mutedRef.current) {
       mutedRef.current = false;
       setMutedState(false);
@@ -732,6 +779,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
     (on: boolean) => {
       if (videoOn.current !== on) {
         videoOn.current = on;
+        setVideoState(on);
         const s = sock.current;
         if (s?.readyState === 1) s.send(JSON.stringify(videoMessage(on)));
       }
@@ -792,19 +840,35 @@ export function useVoiceCooking(opts: VoiceOptions) {
     if (liveRef.current && focusedRef.current && !mutedRef.current) micEvent('step_line_end');
   }, [talking, micEvent]);
 
-  // A window's 8 s of listening, or the beat after homie's answer to a turn begun in it (voiceLogic micTimer).
-  useEffect(() => {
-    const t = micTimer({ hold: micHold, listening, thinking, talking, kidTalking });
-    if (!t) return;
-    const timer = setTimeout(() => micEvent(t.event), t.ms);
-    return () => clearTimeout(timer);
-  }, [micHold, listening, thinking, talking, kidTalking, micEvent]);
+  // The app making sound: every mic frame is zeroed then (lib/live/mic), so nothing is heard.
+  const sounding = talking || videoState;
 
-  // A step the kid tapped (not one the server just sent) goes to the server, which says its short line.
+  // The mic's timers (voiceLogic micTimer): a window's 8 s of hearing, the beat after a turn's answer,
+  // the cap from the window's start, a tapped-on homie's idle minute (each word from the kid restarts
+  // it: `finals`). A window's end waits while the kid is mid-sentence (edgeWait), so Ink gets the end.
   useEffect(() => {
+    const t = micTimer({ hold: micHold, listening, sounding, thinking, talking, kidTalking, heardFinal, openFor: Date.now() - windowAt.current });
+    if (!t) return;
+    let extended = 0;
+    let timer: ReturnType<typeof setTimeout>;
+    const fire = () => {
+      const wait = t.event === 'window_timeout' ? edgeWait({ loudAgo: Date.now() - loudAt.current, wordsAgo: wordsAt.current ? Date.now() - wordsAt.current : Infinity, extended }) : 0;
+      if (wait <= 0) return micEvent(t.event);
+      extended += wait;
+      timer = setTimeout(fire, wait);
+    };
+    timer = setTimeout(fire, t.ms);
+    return () => clearTimeout(timer);
+  }, [micHold, listening, sounding, thinking, talking, kidTalking, heardFinal, finals, micEvent]);
+
+  // A step the kid tapped (not one the server just sent) goes to the server, which says its short line;
+  // one her clip moved the screen to goes with read: false, so no line plays over her.
+  useEffect(() => {
+    const clip = fromClip.current === opts.step;
+    fromClip.current = null;
     if (lastServerStep.current === opts.step) return;
     lastServerStep.current = null;
-    sendStep(opts.step);
+    sendStep(opts.step, !clip);
   }, [opts.step, sendStep]);
 
   // The soonest timer still to buzz, reaching zero on this phone's clock: one buzz and the pot's timer
@@ -824,8 +888,8 @@ export function useVoiceCooking(opts: VoiceOptions) {
   useEffect(() => {
     if (!focused) return;
     const timerDue = timerBuzz(timers, buzzed.current).due;
-    setHomie({ state: cookPotState({ active: micHold !== 'off', listening, thinking, timers: timers.length, timerDue }), timer: timers[0] });
-  }, [focused, micHold, listening, thinking, timers, buzzes]);
+    setHomie({ state: cookPotState({ active: micHold !== 'off', listening, sounding, thinking, timers: timers.length, timerDue }), timer: timers[0] });
+  }, [focused, micHold, listening, sounding, thinking, timers, buzzes]);
   useEffect(() => {
     if (!focused) return;
     return () => setHomie({ state: 'off', timer: undefined, level: 0 });
