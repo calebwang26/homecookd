@@ -31,12 +31,16 @@ export type Ev = { type: string; [k: string]: unknown };
 export class FakeSocket {
   readyState: number = WebSocket.OPEN;
   events: Ev[] = [];
+  /** When each of `events` was sent (the fake clock). */
+  eventsAt: number[] = [];
   /** Each binary frame: its size, `after` how many JSON messages, and when (the fake clock). */
   frames: { after: number; bytes: number; at: number }[] = [];
   closeCode?: number;
   send(data: string | Buffer) {
-    if (typeof data === "string") this.events.push(JSON.parse(data));
-    else this.frames.push({ after: this.events.length, bytes: data.length, at: Date.now() });
+    if (typeof data === "string") {
+      this.events.push(JSON.parse(data));
+      this.eventsAt.push(Date.now());
+    } else this.frames.push({ after: this.events.length, bytes: data.length, at: Date.now() });
   }
   /** The audio bytes sent between the event at index `say` and the next say_end. */
   audioOf(say: number) {

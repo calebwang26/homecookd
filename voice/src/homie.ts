@@ -170,7 +170,7 @@ export function endPrompt(w: Who, max: number): string {
 
 The cook just said the cooking is done. Pick at most ${max} last short questions that would help ${forWhom(w)} most when cooking this alone: an amount left vague, how the cook knew something was ready, what the cook would use in a small college kitchen if an ingredient is missing (ask; never suggest one), or a story about the dish. Only things the cook didn't already explain, and nothing already asked. Fewer is fine; none is fine.
 ${GUIDANCE(w)}
-Each question is at most 18 words, gentle, one thing only, with no lead-in of its own (homie leads in with "Before you go..." itself). ${LINE_RULES}`;
+Each question is at most 18 words, gentle, one thing only, with no lead-in of its own and no "one more", "another" or "last" (homie has already told the cook how many questions it has). ${LINE_RULES}`;
 }
 
 const fmt = (t: number) => `${t < 0 ? "-" : ""}${Math.floor(Math.abs(t) / 60)}:${String(Math.floor(Math.abs(t) % 60)).padStart(2, "0")}`;

@@ -55,7 +55,7 @@ test("with no kid name, the prompts say 'your family', never a guessed kid", () 
 });
 
 test("the written lines for a cook called Dad, with no kid name: 'your family', never a son or a mom", async () => {
-  const names = ["intro", "introAgain", "plate", "optIn", "closing", "beforeYouGo1", "beforeYouGo2", "plateThanks"] as const;
+  const names = ["intro", "introAgain", "plate", "optIn", "closing", "plateThanks", "stillThere", "letOff"] as const;
   const all: string[] = [];
   for (const name of names) {
     const line = await fixedLine(name, dad);

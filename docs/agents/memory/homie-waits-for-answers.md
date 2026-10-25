@@ -33,4 +33,6 @@ Being cut off is the opposite of the family feeling homecookd sells.
   follows a "still there?" she heard.
 - The let-off is warm, never a guilt trip; it gives permission ("no need to answer"), never guesses her motive.
 - Any new question homie asks a cook out loud (here or in a later feature) waits the same way.
-- Related: [[homie-voice]], [[homie-guidance-only]], [[in-app-recording]].
+- Oct 25: the wrap-up now starts with a count line and asks its questions back to back inside `{type:"hold"}`; the
+  nudge and the let-off happen inside the hold ([[homie-counts-end-questions]]).
+- Related: [[homie-voice]], [[homie-guidance-only]], [[in-app-recording]], [[homie-counts-end-questions]].
