@@ -104,7 +104,9 @@ and homesick college kids. It's a family product, not a tool.
   (`convex/lib/auth.ts`). Read `convex/_generated/ai/guidelines.md` before writing Convex code; the skills are in
   `.agents/skills` (Codex) and `.claude/skills` (Claude Code).
 - **TestFlight is live.** Teammates, judges and the demo use TestFlight builds; use an EAS dev build while coding
-  and EAS Update for JS-only fixes. Expo Go can't load the native mic-streaming module.
+  and EAS Update for JS-only fixes. Expo Go can't load the native mic-streaming module. Filming in the app
+  (VisionCamera, `docs/agents/memory/in-app-recording.md`) needs a build made after Oct 24; older builds keep the
+  system camera.
 - **`TODO(caleb)`** marks a decision only Caleb can make. Use the documented default and leave the marker.
 - English only.
 
@@ -175,6 +177,8 @@ cd voice && npm ci && npm run dev                                  # ws://localh
 cd voice && VOICE_STUB=1 npm run dev:fake                          # the same with fake speech (offline checks)
 cd voice && npm run test-client -- test-audio/next-step.wav test-audio/question.wav   # real Ink + Sonic; FAKE=1 = offline
 cd voice && COOK_LANG=ta npm run test-record                     # a live cook recording (VOICE_STUB=1 dev server): mr (default), en, ta, zh
+cd voice && CAMERA=1 npm run test-record                           # homie while filming in the app: frames, pause, plate photo
+cd voice && npx tsx scripts/try-decide.ts photo.jpg "what she said"   # one "should homie speak?" call (HOMIE_DECIDE_MODEL=…)
 cd voice && npm run typecheck && npm test                          # src + tests; unit tests (pacing, /record phases; fakes only)
 voice/deploy.sh                                                    # Cloud Run homecookd-voice, us-west1
 

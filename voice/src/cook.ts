@@ -336,12 +336,14 @@ export class Cooking {
       return;
     }
     console.log(`kid: ${text}`);
+    // Said while the app's "ask" moment is up (the kid tapped homie to ask): for homie, whatever the words.
+    const addressed = inMoment && this.moment === "ask";
     // A turn that throws anyway must not break the chain: every later turn would be skipped.
-    this.turns = this.turns.then(() => this.turn(text, inMoment)).catch((err) => console.error("turn:", err));
+    this.turns = this.turns.then(() => this.turn(text, inMoment, addressed)).catch((err) => console.error("turn:", err));
   }
 
   /** One turn. `inMoment`: said while an app moment was up, so its yes or no is the moment's, never our offer's. */
-  private async turn(text: string, inMoment = false) {
+  private async turn(text: string, inMoment = false, addressed = false) {
     if (this.closed) return;
     this.clipSeq++; // the kid moved on: drop a translation still waiting
     const before = this.answers;
@@ -353,7 +355,7 @@ export class Cooking {
         return await this.afterNoTurn(text, to);
       }
       if (answer === "yes" && !inMoment) return await this.acceptOffer();
-      if (!(await this.plain(text))) await this.agent!.turn(text);
+      if (!(await this.plain(text))) await this.agent!.turn(text, undefined, addressed);
     } catch (err) {
       console.error("turn failed:", (err as Error).message);
       this.send({ type: "error", message: "turn failed" });

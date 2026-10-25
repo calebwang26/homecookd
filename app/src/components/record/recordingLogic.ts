@@ -8,7 +8,7 @@ import type { Line, RecordWords } from './words';
 
 export type RecordPhase = 'connecting' | 'intro' | 'recording' | 'wrapping_up' | 'ended';
 export type ServerState = 'listening' | 'thinking' | 'speaking' | 'quiet';
-export type AskKind = 'intro' | 'amount' | 'cue' | 'substitution' | 'story' | 'reaction' | 'end' | 'closing' | 'optin';
+export type AskKind = 'intro' | 'amount' | 'show' | 'cue' | 'substitution' | 'story' | 'reaction' | 'end' | 'plate' | 'closing' | 'optin';
 export type Ask = { promptId: string; text: string; textEn: string; kind: AskKind };
 
 export type RecordingView = {

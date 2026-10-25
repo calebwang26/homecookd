@@ -6,16 +6,21 @@
 // the question when she says "not now" or after ~10 s of quiet (on the stories opt-in, quiet is a no).
 // A tap anywhere closes it too ("not now"): the only way out without a mic stream (Expo Go, the web,
 // where it says so), and an escape if the service never fades it. VoiceOver's escape gesture is the same.
-// Motion: the dim and blur come up while homie grows in (0-400 ms), then the words rise under it;
-// closing plays it backwards. Reduce Motion: everything fades in place (150 ms), nothing loops.
+// Motion (Caleb, Oct 24: smooth, and less blur than the canvas's frames 2 and 4), all on the UI thread:
+// homie leaves its corner from the resting pot's exact spot and size, and the glide, the growth and the
+// light blur run together as one move (420 ms, easing out, no overshoot), like cook mode's HomieMoment;
+// from 300 ms the words rise under it. Closing plays it backwards in one move and lands homie back on its
+// corner, where the resting pot fades in under it before this one goes (no blink). Reduce Motion:
+// everything fades in place (150 ms), nothing moves or loops.
 // The shared HomieMoment (components/homie) has big buttons and a green listening pill; this screen
 // needs neither, so it draws its own.
 import { BlurView } from 'expo-blur';
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Pressable, StyleSheet, View } from 'react-native';
-import Animated, { Easing, useAnimatedProps, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withSpring, withTiming } from 'react-native-reanimated';
+import Animated, { Easing, useAnimatedProps, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withTiming } from 'react-native-reanimated';
 
 import { haptic, Txt } from '@/components/ui';
+import { useHomieSlot } from '@/lib/homie/hooks';
 import { potState, sayPhase, speakingLabel } from '@/lib/homie/logic';
 import { useHomie } from '@/lib/homie/store';
 import { useNowPlaying } from '@/lib/media';
@@ -30,38 +35,53 @@ import type { RecordWords } from './words';
 const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 
 export const ASK_HOMIE_SIZE = 176;
-const BLUR = 70;
+/** expo-blur intensity: light, so the kitchen still reads behind homie (was 70). */
+const BLUR = 30;
 const TINT = 'rgba(30,36,16,0.5)';
 const WHITE_SOFT = 'rgba(255,253,247,0.8)';
-const OPEN_MS = 280;
-const RISE_AT = 400;
-const CLOSE_MS = 440;
-const GROW = { damping: 26, stiffness: 170, mass: 1, overshootClamping: true };
+const OPEN_MS = 420;
+const RISE_AT = 300;
+const CLOSE_AT = 80;
+const CLOSE_MOVE_MS = 300;
+const CLOSE_MS = CLOSE_AT + CLOSE_MOVE_MS + 20;
+/** Landed back on the corner: both pots there this long, so the resting one fades in under this one. */
+const HANDOFF_MS = 200;
 const out = Easing.out(Easing.cubic);
+const inOut = Easing.inOut(Easing.cubic);
+/** One curve for the move, the size and the blur (the same as HomieMoment's). */
+const move = Easing.bezier(0.2, 0.8, 0.2, 1);
 
 export function AskMoment({ ask, words, micOn, onNotNow, onActive }: { ask: Ask | null; words: RecordWords; micOn: boolean; onNotNow: () => void; onActive: (on: boolean) => void }) {
   const reduce = useReducedMotion();
   const h = useHomie();
   const now = useNowPlaying();
+  const from = useHomieSlot();
 
   // The question on screen: the hook's, or the last one while it fades.
   const [shown, setShown] = useState<Ask | null>(ask);
   const closing = !ask && !!shown;
   if (ask && ask !== shown) setShown(ask);
+  // The corner pot stays hidden from the first frame until this one has landed back on it.
+  const [landed, setLanded] = useState(true);
+  if (ask && landed) setLanded(false);
 
   const active = useRef(onActive);
   useEffect(() => {
     active.current = onActive;
   });
-  const on = !!shown;
+  const on = !landed;
   useEffect(() => active.current(on), [on]);
+
+  // Where the big pot sits in the column (measured), so the move ends exactly there.
+  const [to, setTo] = useState<{ x: number; y: number } | null>(null);
+  const measured = !!to;
 
   const dim = useSharedValue(0);
   const grow = useSharedValue(0);
   const rise = useSharedValue(0);
   const id = ask?.promptId ?? null;
   useEffect(() => {
-    if (!id) return;
+    if (!id || !measured) return;
     haptic('light');
     if (reduce) {
       grow.set(1);
@@ -69,20 +89,31 @@ export function AskMoment({ ask, words, micOn, onNotNow, onActive }: { ask: Ask 
       rise.set(withTiming(1, { duration: motion.reducedFadeMs }));
       return;
     }
-    dim.set(withTiming(1, { duration: OPEN_MS, easing: out }));
-    grow.set(withSpring(1, GROW));
+    const together = { duration: OPEN_MS, easing: move };
+    dim.set(withTiming(1, together));
+    grow.set(withTiming(1, together));
     rise.set(0);
-    rise.set(withDelay(RISE_AT, withTiming(1, { duration: 320, easing: out })));
-  }, [id, reduce, dim, grow, rise]);
+    rise.set(withDelay(RISE_AT, withTiming(1, { duration: 300, easing: out })));
+  }, [id, measured, reduce, dim, grow, rise]);
 
   useEffect(() => {
     if (!closing) return;
-    const fast = { duration: reduce ? motion.reducedFadeMs : 200 };
-    rise.set(withTiming(0, { duration: reduce ? motion.reducedFadeMs : 140 }));
-    grow.set(reduce ? 1 : withDelay(80, withTiming(0, fast)));
-    dim.set(reduce ? withTiming(0, fast) : withDelay(220, withTiming(0, fast)));
-    const t = setTimeout(() => setShown(null), reduce ? motion.reducedFadeMs + 20 : CLOSE_MS);
-    return () => clearTimeout(t);
+    if (reduce) {
+      dim.set(withTiming(0, { duration: motion.reducedFadeMs }));
+      rise.set(withTiming(0, { duration: motion.reducedFadeMs }));
+    } else {
+      rise.set(withTiming(0, { duration: 120 }));
+      const back = { duration: CLOSE_MOVE_MS, easing: inOut };
+      grow.set(withDelay(CLOSE_AT, withTiming(0, back)));
+      dim.set(withDelay(CLOSE_AT, withTiming(0, back)));
+    }
+    const settle = reduce ? motion.reducedFadeMs + 20 : CLOSE_MS;
+    const land = setTimeout(() => setLanded(true), settle);
+    const gone = setTimeout(() => setShown(null), settle + (reduce ? 0 : HANDOFF_MS));
+    return () => {
+      clearTimeout(land);
+      clearTimeout(gone);
+    };
   }, [closing, reduce, dim, grow, rise]);
 
   const question = ask?.text;
@@ -92,7 +123,16 @@ export function AskMoment({ ask, words, micOn, onNotNow, onActive }: { ask: Ask 
 
   const blurProps = useAnimatedProps(() => ({ intensity: BLUR * dim.value }));
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.value }));
-  const potStyle = useAnimatedStyle(() => ({ opacity: reduce ? dim.value : Math.min(1, grow.value * 1.5), transform: [{ scale: reduce ? 1 : 0.35 + 0.65 * grow.value }] }));
+  // One value moves it: from the corner pot's centre and size to its place in the column.
+  const potStyle = useAnimatedStyle(() => {
+    if (!to) return { opacity: 0 };
+    if (reduce) return { opacity: dim.value };
+    const start = from.size / ASK_HOMIE_SIZE;
+    const dx = from.x + from.size / 2 - (to.x + ASK_HOMIE_SIZE / 2);
+    const dy = from.y + from.size / 2 - (to.y + ASK_HOMIE_SIZE / 2);
+    const t = grow.value;
+    return { opacity: 1, transform: [{ translateX: dx * (1 - t) }, { translateY: dy * (1 - t) }, { scale: start + (1 - start) * t }] };
+  });
   const riseStyle = useAnimatedStyle(() => ({ opacity: rise.value, transform: [{ translateY: reduce ? 0 : 16 * (1 - rise.value) }] }));
 
   if (!shown) return null;
@@ -112,7 +152,12 @@ export function AskMoment({ ask, words, micOn, onNotNow, onActive }: { ask: Ask 
       <AnimatedBlurView tint="dark" style={StyleSheet.absoluteFill} animatedProps={blurProps} />
       <Animated.View style={[StyleSheet.absoluteFill, styles.tint, dimStyle]} />
       <Pressable style={styles.column} onPress={onNotNow} accessible={false}>
-        <Animated.View style={potStyle}>
+        <Animated.View
+          style={potStyle}
+          onLayout={(e) => {
+            const { x, y } = e.nativeEvent.layout;
+            if (!to || Math.abs(to.x - x) > 0.5 || Math.abs(to.y - y) > 0.5) setTo({ x, y });
+          }}>
           <GlowHomie size={ASK_HOMIE_SIZE} state={talking ? pot : micOn ? 'listening' : 'off'} level={h.level} label={talking ? speakingLabel(h, now.key) : null} breathe={!closing} />
         </Animated.View>
         <Animated.View style={[styles.words, riseStyle]}>

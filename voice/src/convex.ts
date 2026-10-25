@@ -116,7 +116,9 @@ export type RecordingSession = {
   /** homie has recorded with her before: a welcome back instead of the introduction. Missing (an older Convex) = no. */
   metBefore?: boolean;
 };
-export type PromptKind = "intro" | "amount" | "cue" | "substitution" | "story" | "reaction" | "end" | "closing" | "optin";
+export type PromptKind = "intro" | "amount" | "show" | "cue" | "substitution" | "story" | "reaction" | "end" | "plate" | "closing" | "optin";
+/** When homie's voice played on the phone, on the recording's clock (seconds, like atS). */
+export type Said = { atS: number; endS: number };
 export type PromptStatus = "spoken" | "answered" | "ignored" | "not_now";
 export type Answer = { transcript: string; transcriptEn?: string; atS: number; endS: number };
 
@@ -179,7 +181,7 @@ export async function touchRecording(sessionToken: string, recordingId: string):
 export async function logPrompt(
   sessionToken: string,
   recordingId: string,
-  prompt: { kind: PromptKind; text: string; textEn: string; atS: number; status: PromptStatus },
+  prompt: { kind: PromptKind; text: string; textEn: string; atS: number; status: PromptStatus; said?: Said },
 ): Promise<{ promptId: string }> {
   if (usingStub) {
     console.log(`[stub] prompt ${prompt.kind} at ${prompt.atS.toFixed(1)}s: ${prompt.textEn}`);
@@ -191,6 +193,12 @@ export async function logPrompt(
 export async function updatePrompt(sessionToken: string, promptId: string, status: PromptStatus, answer?: Answer): Promise<void> {
   if (usingStub) return void console.log(`[stub] prompt ${status}${answer ? `: ${answer.transcriptEn ?? answer.transcript}` : ""}`);
   await post("/live/prompt-update", { sessionToken, promptId, status, answer });
+}
+
+/** A question's voice finished playing (it was saved before it was said). */
+export async function promptSaid(sessionToken: string, promptId: string, said: Said): Promise<void> {
+  if (usingStub) return void console.log(`[stub] prompt said ${said.atS.toFixed(1)}-${said.endS.toFixed(1)}s`);
+  await post("/live/prompt-said", { sessionToken, promptId, said });
 }
 
 export async function setOptIn(sessionToken: string, recordingId: string, optIn: boolean): Promise<void> {

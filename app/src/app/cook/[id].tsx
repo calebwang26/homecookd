@@ -11,18 +11,20 @@
 //   4. "Ingredients" this step needs (StepIngredients)  5. "Dad’s tip ⌄", closed (TipPill), and
 //      "Story from Dad ›" (StepStory: a sheet), only on a step that has them
 //   6. one line while a question about this step waits ("You asked · waiting for Dad" / "Leo asked
-//      this 2 days ago · waiting"). Asking is the "Ask Dad" chip under homie: by voice when homie is
-//      listening, else my 1:1 with the dish's cook, the dish and step in the box ("Ask the family"
-//      when the cook isn't in the family).
+//      this 2 days ago · waiting"). Asking is a tap on homie: by voice when homie is listening, else
+//      my 1:1 with the dish's cook, the dish and step in the box ("Ask the family" when the cook isn't
+//      in the family).
 // One voice at a time: the video, the full screen and a story's voice stop each other (lib/media),
 // and leaving the screen (Ask pushes the chat) silences them. Family never sees the word "sample".
 // Header (it stays put while the step scrolls under it): close, "Step 3 of 8", "All steps" (the sheet:
 // tap a step to jump; "You're here"; the steps before the furthest one reached are checked) and one
 // small pot per step, filled up to the step on screen (retention PR 7, components/recipe/PotDots).
-// homie rests at its top right (the overlay draws the pot; the header leaves it room), and directly
-// under it a row of small chips: Back · Repeat · Ask Grandma (no Next chip: the big button does that).
-// Bottom: Back, then "Next step"; looking back at
-// an earlier step it is "Continue at step 6" (back to the furthest); on the last step "I made it".
+// Bottom (Caleb, Oct 24: like Siri, centred): Back · homie · Next step, the two buttons the same width
+// and the same gap either side of homie, who docks there (the overlay draws the pot; this screen holds
+// its place). A tap on homie asks ("Ask Grandma anything", or the chat when nobody's listening); a long
+// press turns the mic off or on. No chips: saying "back" or "repeat" does those, and the video replays
+// itself. Looking back at an earlier step the right button is "Continue" (back to the furthest); on the
+// last step "I made it".
 // The furthest step is what's saved as the last step, so the recipe and the next visit come back to it.
 // Param `step` is 1-based; without it the screen resumes the last step this profile was on.
 // Last step: "I made it" -> `cooked` event + message to the cook -> SuccessBurst ("You made it" /
@@ -49,9 +51,8 @@
 // screen follows it: go_to_step moves the step, play_clip plays that moment of the cook's video in the
 // step's own player (moving to the step that holds it, her words under it), homie's replies are only
 // spoken (the pot lights and its lid lifts, labelled "AI voice"), a timer counts down beside the step
-// title, and a question the video can't answer shows "I asked Grandma" under the pot. The chips say
-// the same words to homie, or act here when voice is off. A tap on the pot turns the mic off or on
-// (no moment). When the cook answers one of my questions by voice note, homie offers to play it
+// title, and a question the video can't answer shows "I asked Grandma" above the pot. A long press on
+// the pot turns the mic off or on (no moment). When the cook answers one of my questions by voice note, homie offers to play it
 // (CookAnswers). While that moment or "Ask Grandma anything" is up, the service is told (an app-only
 // moment: its own offer never takes that yes or no). Without a voice line that reads (Expo Go, web,
 // or the line gave up or failed), a kid who said yes to reading before hears each step in homie's
@@ -62,16 +63,16 @@ import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { ScrollView, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
 import Animated, { FadeIn, FadeInLeft, FadeInRight } from 'react-native-reanimated';
 
 import { ConsentSheet } from '@/components/cooking/ConsentSheet';
 import { CookAnswers, useCookMoments, useReadSteps } from '@/components/cooking/CookMoments';
-import { CHIP_H, ClipCaption, CookChips, TimerPill, VoiceHold, VoiceLine, type CookChip } from '@/components/cooking/VoiceCooking';
+import { ClipCaption, TimerPill, VoiceHold, VoiceLine } from '@/components/cooking/VoiceCooking';
 import { HeartBurst } from '@/components/cooking/HeartBurst';
 import { ClipVideo, type ClipVideoHandle } from '@/components/media';
 import { askForPushSoon } from '@/components/push/PushAskSheet';
-import { BottomBar, useAskTarget, useBottomClearance, useOtherCook, useScreenTop } from '@/components/recipe/parts';
+import { BottomBar, useAskTarget, useBottomClearance, useOtherCook, useScreenBottom, useScreenTop } from '@/components/recipe/parts';
 import { MadeItOverlay } from '@/components/recipe/MadeIt';
 import { PotDots } from '@/components/recipe/PotDots';
 import { refreshRecipeStats, useRecipeStats } from '@/components/recipes/stats';
@@ -84,9 +85,6 @@ import { Substeps } from '@/components/recipe/Substeps';
 import { TipPill } from '@/components/recipe/TipPill';
 import {
   ActionButton,
-  ArrowRightIcon,
-  BackIcon,
-  CheckIcon,
   ClockIcon,
   CloseIcon,
   EmptyState,
@@ -100,7 +98,7 @@ import {
 } from '@/components/ui';
 import { errorMessage, type RecipeQuestion } from '@/lib/api';
 import { daysAgo, mmss } from '@/lib/format';
-import { HOMIE_LABEL_SPACE, useHomieRoute, useHomieScreen, useHomieSelect } from '@/lib/homie';
+import { useHomieScreen, useHomieSelect } from '@/lib/homie';
 import { madeItMilestone, madeItTitle } from '@/lib/kitchenCounts';
 import { micStreamingSupported } from '@/lib/live/mic';
 import { speak } from '@/lib/live/speak';
@@ -118,6 +116,9 @@ import { alpha, colors, radii } from '@/theme/tokens';
 
 const AWAKE_TAG = 'cook-mode';
 const CONTENT_SIDE = 24;
+/** homie docked in the bottom bar: a little bigger than the buttons beside it (60 pt). */
+const DOCK = 64;
+const BAR_BUTTON_H = 60;
 
 /**
  * Hands in the dough: the screen never sleeps mid-step (its own tag, so leaving releases only it).
@@ -167,12 +168,14 @@ export default function CookScreen() {
   // The bible's 260 pt clip, a little shorter on a small phone so the step's words start sooner.
   const { width: winW, height: winH } = useWindowDimensions();
   const clipH = Math.round(Math.min(260, Math.max(200, winH * 0.31)));
-  // Where homie rests here (window pt; this screen never docks it elsewhere): the header keeps clear of
-  // it, the chips start under it, and the page scrolls under the header.
-  const { frame: slot } = useHomieRoute();
-  const chipsTop = slot.y + slot.size + HOMIE_LABEL_SPACE + 4;
-  const headH = chipsTop + CHIP_H + 12;
-  const potRoom = Math.max(0, winW - CONTENT_SIDE - slot.x) + 12;
+  // The header's height, once laid out (the page scrolls under it).
+  const [headH, setHeadH] = useState(top + 76);
+  const onHeadLayout = (e: LayoutChangeEvent) => setHeadH(Math.round(e.nativeEvent.layout.height));
+  // Where homie docks (window pt): the bar's row is symmetric, so its middle is the screen's middle,
+  // centred on the 60 pt buttons above the bar's bottom padding. Worked out, not measured: a screen
+  // still sliding in would measure off to the side.
+  const barBottom = useScreenBottom();
+  const dock = { x: (winW - DOCK) / 2, y: winH - barBottom - BAR_BUTTON_H / 2 - DOCK / 2, size: DOCK };
 
   const [chosen, setChosen] = useState<number | null>(Number.isFinite(asked) && asked > 0 ? asked : null);
   const [dir, setDir] = useState<1 | -1>(1);
@@ -287,15 +290,15 @@ export default function CookScreen() {
   // No voice line that reads (Expo Go, web, a dish the voice service doesn't have, or it failed): this
   // phone asks "read it out loud?" and reads the steps.
   const phoneReading = phoneReads({ voiceHere, live: voice.live, unavailable: voice.unavailable });
-  // A tap on the pot turns the mic off or on (only where the mic can work; elsewhere, the help line).
-  // While the phone reads, nobody is listening, so a tap reads this step again instead.
+  // A tap on homie asks: by voice while homie listens, else the chat with the cook; with neither, it
+  // reads this step. A long press turns the mic off or on (only where the mic can work).
   // "I made it" takes the screen: no pot over the celebration.
-  const potPress = phoneReading && voiceHere && step
-    ? () => void speak(`Step ${n}. ${step.instruction}`, { profileId: me?.id, answer: true })
-    : micStreamingSupported()
-      ? () => homie.potPress(voice)
-      : null;
-  useHomieScreen({ hidden: !!done, onPress: potPress });
+  const potTap = () => {
+    if ((voice.live && !voice.muted) || askTarget) return homie.ask(voice);
+    if (step) void speak(`Step ${n}. ${step.instruction}`, { profileId: me?.id, answer: true });
+  };
+  const micToggle = micStreamingSupported() ? () => homie.potPress(voice) : null;
+  useHomieScreen({ hidden: !!done, dock, onPress: potTap, onLongPress: micToggle });
   useReadSteps({ on: phoneReading && homie.readAloud && !done, step: n, text: step?.instruction ?? '' });
   // An app-only moment (her answer, "Ask Grandma anything") up on the phone: the service is told.
   const momentId = useHomieSelect((h) => h.moment?.id ?? null);
@@ -345,8 +348,8 @@ export default function CookScreen() {
   };
 
   const header = (
-    <View style={[styles.head, { height: headH, paddingTop: top }]} pointerEvents="box-none">
-      <View style={[styles.topRow, { paddingRight: potRoom }]}>
+    <View style={[styles.head, { paddingTop: top }]} pointerEvents="box-none" onLayout={onHeadLayout}>
+      <View style={styles.topRow}>
         <IconButton tone="cream" icon={<CloseIcon size={20} color={colors.ink} />} accessibilityLabel="Close and go back to the recipe" onPress={toRecipe} />
         <View style={styles.progressCol}>
           <View style={styles.stepRow}>
@@ -403,29 +406,12 @@ export default function CookScreen() {
   const poster = step.image_url || recipe.media.poster_url;
   const enter = (dir > 0 ? FadeInRight : FadeInLeft).duration(260);
 
-  // Again from the top of the step: its video (or its words, in homie's voice, when there's no video).
-  const replay = () => {
-    if (!hasVideo) return void speak(`Step ${n}. ${step.instruction}`, { profileId: me?.id });
-    if (moment) setMoment((was) => ({ startS: step.start_s, endS: step.end_s, key: (was?.key ?? 0) + 1 }));
-    else clip.current?.playFrom(step.start_s);
-  };
-  // Under homie: each says it to homie, or does it here when voice is off. homie asks the dish's cook;
-  // the chat goes to the family when the cook isn't in it. No Next chip: the big button does that.
-  // Repeat goes to homie only for a kid who chose read-aloud (homie's "repeat" turns reading on); for
-  // anyone else it replays the cook's video for this step here.
-  const askWho = voice.live || askTarget?.kind === 'cook' ? `Ask ${cookName}` : 'Ask family';
-  const chips: CookChip[] = [
-    { id: 'back', label: 'Back', accessibilityLabel: n > 1 ? `Back to step ${n - 1}` : 'Back', onPress: () => voice.command('back', () => n > 1 && goTo(n - 1)) },
-    { id: 'repeat', label: 'Repeat', accessibilityLabel: 'Repeat this step', onPress: () => (homie.readAloud ? voice.command('repeat', replay) : replay()) },
-    ...(voice.live || askTarget ? [{ id: 'ask', label: askWho, tone: 'ask' as const, accessibilityLabel: `${askWho} about step ${n}`, onPress: () => homie.ask(voice) }] : []),
-  ];
   // The kid can answer homie out loud right now.
   const hearing = voice.live && voice.status === 'listening' && !voice.muted;
 
   return (
     <View style={styles.page}>
       {header}
-      <CookChips chips={chips} top={chipsTop} />
       <ScrollHold value={hold.set}>
         <ScrollView ref={scroll} scrollEnabled={!hold.held} contentContainerStyle={[styles.content, { paddingTop: headH + 4, paddingBottom: clearance }]} showsVerticalScrollIndicator={false}>
           <Animated.View key={`step-${n}`} entering={enter} style={styles.body}>
@@ -484,35 +470,37 @@ export default function CookScreen() {
       </ScrollHold>
 
       <VoiceHold voice={voice} videoUrl={recipe.media.video_url} herClip={!!moment} />
-      <VoiceLine voice={voice} cookName={cookName} slot={slot} />
+      <VoiceLine voice={voice} cookName={cookName} slot={dock} />
       {done ? null : (
-        <CookAnswers libraryId={recipe.id} cookName={cookName} asked={voice.askedIds} top={chipsTop + CHIP_H + 10} hearing={hearing} listenFor={homie.listenFor} />
+        <CookAnswers libraryId={recipe.id} cookName={cookName} asked={voice.askedIds} top={headH + 8} hearing={hearing} listenFor={homie.listenFor} />
       )}
       <BottomBar>
         <ActionButton
           variant="outline"
           label="Back"
-          icon={<BackIcon size={20} color={colors.ink} />}
-          padH={18}
+          padH={12}
           labelWeight={700}
           accessibilityLabel={n > 1 ? `Back to step ${n - 1}` : 'Back to the recipe'}
           onPress={goBack}
-          style={styles.back}
+          style={styles.barButton}
         />
+        {/* homie's place: the overlay draws the pot here (useHomieScreen dock). */}
+        <View style={styles.dockSlot} pointerEvents="none" />
         {isLast ? (
           <ActionButton
             label={lentTo ? `${lentTo.name} made it` : 'I made it'}
-            icon={<CheckIcon size={20} strokeWidth={3} color={colors.card} />}
             successLabel="Made it"
+            padH={12}
             onPress={finish}
-            style={{ flex: 1 }}
+            style={styles.barButton}
           />
         ) : (
           <ActionButton
-            label={reviewing ? `Continue at step ${furthest}` : 'Next step'}
-            iconRight={reviewing ? undefined : <ArrowRightIcon size={22} color={colors.card} />}
+            label={reviewing ? 'Continue' : 'Next step'}
+            padH={12}
+            accessibilityLabel={reviewing ? `Continue at step ${furthest}` : `Next step, step ${n + 1}`}
             onPress={() => goTo(reviewing ? furthest : n + 1)}
-            style={{ flex: 1 }}
+            style={styles.barButton}
           />
         )}
       </BottomBar>
@@ -601,5 +589,8 @@ const styles = StyleSheet.create({
   compact: { flexDirection: 'row', alignItems: 'center', gap: 16 },
   compactTitle: { flex: 1, letterSpacing: -0.24 },
   thumb: { width: 96, height: 96, borderRadius: radii.segment, overflow: 'hidden', backgroundColor: colors.well, flexShrink: 0 },
-  back: { flexShrink: 0 },
+  // Back and Next the same width either side of homie (BottomBar's row keeps one 12 pt gap); words
+  // only, so "Next step" fits half a small phone.
+  barButton: { flex: 1, flexBasis: 0, alignSelf: 'center' },
+  dockSlot: { width: DOCK, height: BAR_BUTTON_H, alignSelf: 'center' },
 });

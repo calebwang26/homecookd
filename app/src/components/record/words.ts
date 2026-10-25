@@ -45,6 +45,14 @@ const WORDS = {
   skipIntro: { en: 'Skip, start filming', mr: 'वगळा, रेकॉर्डिंग सुरू करा' },
   tapToStart: { en: 'Tap to start', mr: 'सुरू करायला टॅप करा', hint: 'Starts recording from your glasses' },
   leave: { en: 'Leave', mr: 'बाहेर पडा' },
+  // Filming in the app (components/record/useInAppCamera, PlateMoment).
+  stopped: { en: 'Recording stopped while you were away', mr: 'तुम्ही बाहेर गेलात तेव्हा रेकॉर्डिंग थांबलं', hint: 'Your video so far is saved' },
+  keepFilming: { en: 'Keep filming', mr: 'रेकॉर्डिंग सुरू ठेवा' },
+  imDone: { en: 'I’m done', mr: 'माझं झालं' },
+  takePhoto: { en: 'Take the photo', mr: 'फोटो काढा' },
+  notNow: { en: 'Not now', mr: 'आत्ता नको' },
+  plateGot: { en: 'Got it! That’s the cover.', mr: 'मिळाला! हाच फोटो वर दिसेल.' },
+  cameraTrouble: { en: 'The camera stopped. Your video so far is saved.', mr: 'कॅमेरा थांबला. आतापर्यंतचं रेकॉर्डिंग जपलंय.' },
 } as const satisfies Record<string, Words>;
 
 export type RecordWordKey = keyof typeof WORDS;

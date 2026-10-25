@@ -6,6 +6,9 @@
 //   lit        a warm butter glow and a sun halo: the beat before homie speaks
 //   speaking   the glow, and the lid lifts gently, again and again
 //   timer      a ring around the pot empties like a clock (`timerProgress` 1 -> 0, in any state)
+// `aura` (docked in cook mode's bottom bar, like Siri): a soft green glow behind the pot that breathes
+// while it listens and swells with the kid's voice, slower while it thinks, faint with the mic off, and
+// hands over to the warm halo (which pulses) while homie speaks.
 // Reduce Motion: no loops. Each state is a still picture (speaking: the lid sits a little open) and a
 // change cross-fades in 150 ms. A picture only: whoever renders it gives it a label.
 import { useEffect } from 'react';
@@ -42,10 +45,15 @@ export type HomiePotProps = {
   timerProgress?: number | null;
   /** The cream disc's soft shadow (off on a dark backdrop). */
   shadow?: boolean;
+  /** The glow that follows the voice (cook mode's docked pot). */
+  aura?: boolean;
   style?: StyleProp<ViewStyle>;
 };
 
-export function HomiePot({ state, level = 0, size = 56, timerProgress = null, shadow = true, style }: HomiePotProps) {
+/** How much aura each state shows (listening and thinking breathe on top; speaking hands over to the halo). */
+const AURA: Record<HomieState, number> = { off: 0.18, listening: 0.75, thinking: 0.6, lit: 0, speaking: 0, timer: 0.75 };
+
+export function HomiePot({ state, level = 0, size = 56, timerProgress = null, shadow = true, aura = false, style }: HomiePotProps) {
   const reduce = useReducedMotion();
   const warm = state === 'lit' || state === 'speaking';
   const steam = useSharedValue(STEAM[state]);
@@ -55,6 +63,10 @@ export function HomiePot({ state, level = 0, size = 56, timerProgress = null, sh
   const glow = useSharedValue(warm ? 1 : 0);
   const ring = useSharedValue(timerProgress ?? 0);
   const ringOn = useSharedValue(timerProgress == null ? 0 : 1);
+  const auraOn = useSharedValue(aura ? AURA[state] : 0);
+  const breath = useSharedValue(0);
+  const voice = useSharedValue(0);
+  const pulse = useSharedValue(0);
 
   const listening = state === 'listening';
   useEffect(() => {
@@ -100,6 +112,31 @@ export function HomiePot({ state, level = 0, size = 56, timerProgress = null, sh
     glow.set(withTiming(warm ? 1 : 0, reduce ? fade : { duration: 200 }));
   }, [warm, reduce, glow]);
 
+  // The aura: how strong for this state, a slow breath while listening or thinking, the kid's voice.
+  useEffect(() => {
+    auraOn.set(withTiming(aura ? AURA[state] : 0, reduce ? fade : { duration: 260, easing: Easing.out(Easing.cubic) }));
+  }, [aura, state, reduce, auraOn]);
+  const breathing = aura && !reduce && (listening || state === 'thinking' || state === 'timer');
+  useEffect(() => {
+    if (breathing) breath.set(withRepeat(withTiming(1, { duration: state === 'thinking' ? 1100 : 1700, easing: inOut }), -1, true));
+    else {
+      cancelAnimation(breath);
+      breath.set(withTiming(0, fade));
+    }
+  }, [breathing, state, breath]);
+  useEffect(() => {
+    voice.set(withTiming(aura && listening && !reduce ? level : 0, { duration: 120 }));
+  }, [aura, listening, level, reduce, voice]);
+  // Speaking, docked: the warm halo pulses with the words.
+  const talking = aura && speaking && !reduce;
+  useEffect(() => {
+    if (talking) pulse.set(withRepeat(withSequence(withTiming(1, { duration: 260, easing: Easing.out(Easing.quad) }), withTiming(0.3, { duration: 340, easing: inOut })), -1, false));
+    else {
+      cancelAnimation(pulse);
+      pulse.set(withTiming(0, fade));
+    }
+  }, [talking, pulse]);
+
   const timed = timerProgress != null;
   useEffect(() => {
     ringOn.set(withTiming(timed ? 1 : 0, fade));
@@ -116,6 +153,11 @@ export function HomiePot({ state, level = 0, size = 56, timerProgress = null, sh
     transform: [{ translateY: -lift.value * size * 0.06 }, { rotate: `${-lift.value * 7}deg` }],
   }));
   const glowStyle = useAnimatedStyle(() => ({ opacity: glow.value }));
+  const haloStyle = useAnimatedStyle(() => ({ opacity: glow.value, transform: [{ scale: 1 + 0.12 * pulse.value }] }));
+  const auraStyle = useAnimatedStyle(() => ({
+    opacity: Math.min(1, auraOn.value * (0.8 + 0.2 * breath.value) + 0.25 * voice.value),
+    transform: [{ scale: (reduce ? 1.04 : 1) + 0.06 * breath.value + 0.3 * voice.value }],
+  }));
 
   const ringR = size / 2 + 1;
   const ringBox = size + 8;
@@ -129,10 +171,25 @@ export function HomiePot({ state, level = 0, size = 56, timerProgress = null, sh
   const potBox = { left: size * 0.19, top: size * 0.29, width: potW, height: potW * 0.92 };
   const disc = { borderRadius: size / 2 };
   const halo = size * 1.7;
+  const auraBox = size * 1.6;
 
   return (
     <View style={[{ width: size, height: size }, style]} pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Animated.View style={[styles.abs, { left: (size - halo) / 2, top: (size - halo) / 2, width: halo, height: halo }, glowStyle]}>
+      {aura ? (
+        <Animated.View style={[styles.abs, { left: (size - auraBox) / 2, top: (size - auraBox) / 2, width: auraBox, height: auraBox }, auraStyle]}>
+          <Svg width={auraBox} height={auraBox} viewBox="0 0 100 100">
+            <Defs>
+              <RadialGradient id="homieAura" cx="50%" cy="50%" r="50%">
+                <Stop offset="0.5" stopColor={colors.green} stopOpacity={0.42} />
+                <Stop offset="0.75" stopColor={colors.sun} stopOpacity={0.16} />
+                <Stop offset="1" stopColor={colors.green} stopOpacity={0} />
+              </RadialGradient>
+            </Defs>
+            <Circle cx={50} cy={50} r={50} fill="url(#homieAura)" />
+          </Svg>
+        </Animated.View>
+      ) : null}
+      <Animated.View style={[styles.abs, { left: (size - halo) / 2, top: (size - halo) / 2, width: halo, height: halo }, aura ? haloStyle : glowStyle]}>
         <Svg width={halo} height={halo} viewBox="0 0 100 100">
           <Defs>
             <RadialGradient id="homieHalo" cx="50%" cy="50%" r="50%">

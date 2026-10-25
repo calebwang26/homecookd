@@ -10,10 +10,20 @@
 //                      keeps glasses footage only between the two, and Home offers "Save to Photos".
 //   recording          glasses: rings pulse out of the button; a tap is "I'm done" ("माझं झालं" / "Tap
 //                      when you're done"). With homie's line down, that tap ends the recording through
-//                      Convex (live.endRecording), so the glasses' video still goes. phone: the phone's
-//                      own camera opens instead (homie waits, its socket closed); when the video is
-//                      back, homie wraps up. No video: back to Record.
-//   wrapping_up        homie's last questions and "Can Shreya hear your stories too?". If it stalls
+//                      Convex (live.endRecording), so the glasses' video still goes. phone, filmed in
+//                      the app (a build with VisionCamera, lib/live/camera): the back camera films at
+//                      1080p into 5-minute files (components/record/useInAppCamera) while homie stays
+//                      live: the mic and the /record socket stay open, a small still goes to homie
+//                      every 5 s, and the camera card above the button shows the shot ("● 4:07"). The
+//                      card shows from the hello on, so she can set the phone up. Leaving the app (a
+//                      lock, a call) finishes the file at once: "Recording stopped while you were away",
+//                      the button films again, "I'm done" ends. The stop button finishes the last file
+//                      and homie wraps up. Older builds (no VisionCamera, or no camera permission): the
+//                      phone's own camera opens instead (homie waits, its socket closed); when the
+//                      video is back, homie wraps up. No video: back to Record.
+//   wrapping_up        homie's last questions, the plate photo when filmed in the app (components/record/
+//                      PlateMoment: the camera card grows to the middle, one shutter; live.setCover),
+//                      and "Can Shreya hear your stories too?". If it stalls
 //                      (nothing moves for 2 min, or 20 s after an error or a lost line), the app ends
 //                      the recording itself; a phone video then sends anyway.
 //   ended              the done view (components/record/DoneView): homie waves, the video goes, home.
@@ -24,32 +34,41 @@
 // without homie; one already filmed goes straight to the done view and sends). The screen stays
 // awake, and can't be swiped away once filming started.
 // Dev aids (web screenshots only): ?preview=done shows the done view without sending; ?preview=ask
-// shows a made-up question from homie as a phone with a microphone would (the listening bars).
+// shows a made-up question from homie as a phone with a microphone would (the listening bars);
+// ?preview=camera filming in the app, ?preview=paused after she came back, ?preview=plate the plate
+// photo (a kitchen picture stands in for the camera).
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, StyleSheet, View } from 'react-native';
+import { Image, Platform, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { AskMoment } from '@/components/record/AskMoment';
 import { BiLine } from '@/components/record/BiLine';
+import { CameraCard, cameraSlotSize, type SlotFrame } from '@/components/record/CameraCard';
 import { DoneView } from '@/components/record/DoneView';
 import { GlassesView } from '@/components/record/GlassesView';
-import { useDraft } from '@/components/record/draft';
+import { addClips, useDraft } from '@/components/record/draft';
+import { PlateControls, PlateDim } from '@/components/record/PlateMoment';
 import { RecordButton } from '@/components/record/RecordButton';
 import { recordingView, shouldAutoStart, wrapStallMs, type Ask } from '@/components/record/recordingLogic';
 import { COLUMN, RecordWash } from '@/components/record/RecordWash';
+import { useInAppCamera } from '@/components/record/useInAppCamera';
 import { usePickVideos } from '@/components/record/usePickVideos';
 import { recordWords, type Line } from '@/components/record/words';
 import { ActionButton, CloseIcon, IconButton, useToast } from '@/components/ui';
 import { useAiSpeaking, useHomieScreen } from '@/lib/homie/hooks';
-import { endRecording, startFilming, useLiveFrame, useLiveLog, useRecording } from '@/lib/live/convex';
+import { inAppCameraSupported } from '@/lib/live/camera';
+import { endRecording, setCover, startFilming, useLiveFrame, useLiveLog, useRecording } from '@/lib/live/convex';
 import { useHomieRecording } from '@/lib/live/homie';
 import { colors, motion, space } from '@/theme/tokens';
 
 const AWAKE_TAG = 'homecookd-recording';
 const PREVIEW_ASK: Ask = { promptId: 'preview', text: 'आजी, आलं साधारण किती घातलं?', textEn: 'About how much ginger was that?', kind: 'amount' };
+const PREVIEW_PLATE: Ask = { promptId: 'preview-plate', text: 'शेवटचं, आजी. ताट कॅमेऱ्यासमोर धरा, म्हणजे Shreya ला दिसेल ते कसं दिसतं.', textEn: 'Last thing, Aaji. Hold the plate up to the camera, so Shreya can see how it looks.', kind: 'plate' };
+const PREVIEWS = ['done', 'ask', 'camera', 'paused', 'plate'] as const;
+const KITCHEN = require('@/components/record/tripod.jpg') as number;
 
 function useRecordingAwake() {
   useEffect(() => {
@@ -78,7 +97,8 @@ const both = (l: Line) => (l.en ? `${l.text} · ${l.en}` : l.text);
 export default function RecordingScreen() {
   useRecordingAwake();
   const params = useLocalSearchParams<{ id?: string; source?: string; kid?: string; lang?: string; preview?: string }>();
-  const devPreview = __DEV__ && Platform.OS === 'web' && (params.preview === 'done' || params.preview === 'ask') ? params.preview : null;
+  const devPreview = __DEV__ && Platform.OS === 'web' ? (PREVIEWS.find((p) => p === params.preview) ?? null) : null;
+  const previewCamera = devPreview === 'camera' || devPreview === 'paused' || devPreview === 'plate' || devPreview === 'ask';
   const preview = devPreview === 'done';
   const id = devPreview ? null : params.id || null;
   const insets = useSafeAreaInsets();
@@ -92,12 +112,18 @@ export default function RecordingScreen() {
   const liveFrame = useLiveFrame(glassesId);
   const steps = liveLog?.events.filter((e) => e.kind === 'step') ?? [];
   const lastStep = steps.length ? steps[steps.length - 1] : null;
-  const source = rec?.source ?? (params.source === 'phone' ? 'phone' : 'glasses');
+  const source = rec?.source ?? (params.source === 'phone' || previewCamera ? 'phone' : 'glasses');
   const glasses = source === 'glasses';
+  // A phone recording films in the app when this build has VisionCamera (else the system camera).
+  const inAppPossible = source === 'phone' && !devPreview && inAppCameraSupported();
   // Glasses: filming is exactly what Convex says, set by her two taps.
   const glassesFilming = glasses && rec?.status === 'recording';
   // homie joins a glasses recording only once she has started it: no hello before her Start.
-  const homie = useHomieRecording(glasses && !glassesFilming ? null : id, { language: params.lang || 'en', kidName: params.kid || undefined, dish: draft.dish ?? undefined });
+  const homie = useHomieRecording(
+    glasses && !glassesFilming ? null : id,
+    { language: params.lang || 'en', kidName: params.kid || undefined, dish: draft.dish ?? undefined },
+    { camera: inAppPossible },
+  );
   const lang = homie.info?.language ?? rec?.language ?? (params.lang || 'en');
   const words = useMemo(() => recordWords(lang), [lang]);
   const kid = homie.info?.kidName ?? (params.kid || null);
@@ -110,7 +136,9 @@ export default function RecordingScreen() {
       ? glassesFilming
         ? { line: words.line('stop'), live: true }
         : { line: words.line(starting ? 'gettingReady' : 'tapToStart'), live: false }
-      : recordingView(ended ? 'ended' : phoneFilmed && homie.phase === 'recording' ? 'wrapping_up' : homie.phase, words);
+      : devPreview === 'camera' || devPreview === 'ask'
+        ? recordingView('recording', words)
+        : recordingView(ended ? 'ended' : phoneFilmed && homie.phase === 'recording' ? 'wrapping_up' : homie.phase, words);
 
   // Filmed without homie (its connection was lost before filming): straight to the done view.
   const [filmedAlone, setFilmedAlone] = useState(false);
@@ -119,6 +147,35 @@ export default function RecordingScreen() {
   const aiSpeaking = useAiSpeaking();
   const [finished, setFinished] = useState(false);
   if (!finished && (preview || filmedAlone || (phoneFilmed && !!homie.error) || (ended && !aiSpeaking))) setFinished(true);
+
+  // Filming in the app: the camera runs from the hello to the plate photo. The mic never starts or
+  // stops while a file is being written (useInAppCamera); these callbacks say when it may.
+  const cam = useInAppCamera({
+    recordingId: id,
+    on: inAppPossible && !finished,
+    onFrame: homie.sendFrame,
+    onPause: homie.pause,
+    onResume: homie.resume,
+    beforeResume: async () => {
+      homie.cameraFilming(false);
+      await homie.restartMic();
+      homie.cameraFilming(true);
+    },
+    betweenFiles: async () => {
+      homie.cameraFilming(false);
+      await homie.restartMic({ fresh: false });
+      homie.cameraFilming(true);
+    },
+  });
+  const inApp = inAppPossible && cam.usable === true;
+  const camPaused = (inApp && cam.phase === 'paused') || devPreview === 'paused';
+  const plateAsk = devPreview === 'plate' ? PREVIEW_PLATE : homie.ask?.kind === 'plate' ? homie.ask : null;
+  const [photo, setPhoto] = useState<string | null>(null);
+  const [shooting, setShooting] = useState(false);
+  const [slot, setSlot] = useState<SlotFrame | null>(null);
+  const { width: screenW, height: screenH } = useWindowDimensions();
+  const slotSize = cameraSlotSize({ width: screenW, height: screenH }, COLUMN.side);
+  const showCamera = !finished && (inApp || previewCamera);
 
   // homie's wrap-up that never finishes (the voice service stalled): the app ends the recording
   // itself. Any new phase, question or line is progress; an error or a lost line shortens the wait.
@@ -147,16 +204,50 @@ export default function RecordingScreen() {
 
   // No swiping away once she's filming (the × comes back if homie's connection is lost).
   const navigation = useNavigation();
-  const filming = glasses ? glassesFilming : homie.phase === 'recording' || homie.phase === 'wrapping_up';
+  const filming = previewCamera || (glasses ? glassesFilming : homie.phase === 'recording' || homie.phase === 'wrapping_up');
   useEffect(() => {
     navigation.setOptions({ gestureEnabled: !filming && !finished });
   }, [navigation, filming, finished]);
 
-  // The corner pot hides while homie asks (it comes to the centre) and on the done view.
+  // The corner pot hides while homie asks (it comes to the centre), for the plate photo (homie's words
+  // fill the top) and on the done view.
   const [asking, setAsking] = useState(false);
-  useHomieScreen({ hidden: asking || finished });
+  useHomieScreen({ hidden: asking || !!plateAsk || finished });
 
-  // A phone recording: the system camera films; homie waits with its socket closed.
+  // "I'm done" while filming in the app: homie wraps up while the last file is saved.
+  const doneInApp = async () => {
+    homie.done();
+    const clips = await cam.stop();
+    homie.cameraFilming(false);
+    if (clips.length) {
+      addClips(clips, { dish: draft.dish, requestFrom: draft.requestFrom });
+      setPhoneFilmed(true);
+    } else {
+      toast.show('That didn’t record a video. Try again.', { tone: 'error' });
+      leave();
+    }
+  };
+
+  // The plate photo: a still from the camera, shown in the card, sent as the cover in the background.
+  const shootPlate = async () => {
+    if (shooting || photo) return;
+    if (devPreview) return setPhoto(Image.resolveAssetSource?.(KITCHEN)?.uri ?? null);
+    setShooting(true);
+    const uri = await cam.still();
+    setShooting(false);
+    if (!uri) {
+      toast.show('The photo didn’t work. Try again.', { tone: 'error' });
+      return;
+    }
+    setPhoto(uri);
+    homie.plateDone(true);
+    if (id) void setCover(id, uri);
+  };
+  const skipPlate = () => {
+    if (!devPreview) homie.plateDone(false);
+  };
+
+  // A phone recording on an older build: the system camera films; homie waits with its socket closed.
   const film = homie.filmWithPhone;
   const record = pick.record;
   const filmOnPhone = useCallback(async () => {
@@ -164,14 +255,32 @@ export default function RecordingScreen() {
     if (ok) setPhoneFilmed(true);
     else leave(); // no video: back to Record
   }, [film, record, draft.dish, draft.requestFrom]);
+  const filmOnPhoneRef = useRef(filmOnPhone);
+  useEffect(() => {
+    filmOnPhoneRef.current = filmOnPhone;
+  });
+
+  // Filming in the app: start on the server, then the camera; if the camera won't start, the system camera.
+  const filmInApp = useCallback(async () => {
+    const ok = await homie.filmInApp(() => {
+      homie.cameraFilming(true);
+      return cam.start();
+    });
+    if (ok) return;
+    homie.cameraFilming(false);
+    toast.show('The camera didn’t start here. Opening the phone’s camera.', { tone: 'info' });
+    await filmOnPhoneRef.current();
+  }, [homie, cam, toast]);
 
   // Filming starts by itself once homie's hello has played (once).
   const started = useRef(false);
   // Glasses never start by themselves: her Start does it.
-  const autoStart = !glasses && shouldAutoStart({ phase: homie.phase, introDone: homie.introDone, aiSpeaking, error: !!homie.error });
+  // In the app it waits for her answer to the camera and microphone prompts.
+  const camAsking = inAppPossible && cam.usable === null;
+  const autoStart = !glasses && !camAsking && shouldAutoStart({ phase: homie.phase, introDone: homie.introDone, aiSpeaking, error: !!homie.error });
   const begin = useRef(() => {});
   useEffect(() => {
-    begin.current = source === 'glasses' ? homie.start : () => void filmOnPhone();
+    begin.current = source === 'glasses' ? homie.start : inApp ? () => void filmInApp() : () => void filmOnPhone();
   });
   useEffect(() => {
     if (!autoStart || started.current) return;
@@ -209,6 +318,9 @@ export default function RecordingScreen() {
     }
   };
   const press = () => {
+    if (devPreview) return;
+    if (camPaused) return void cam.resume();
+    if (inApp && cam.phase === 'filming') return void doneInApp();
     if (!glasses) return homie.done();
     void (glassesFilming ? stopGlasses() : startGlasses());
   };
@@ -221,7 +333,7 @@ export default function RecordingScreen() {
   const error = homie.error ? words.line(homie.error) : null;
   const micOff = homie.micDenied ? words.line('micOff') : null;
   const showClose = !!homie.error || (!filming && !finished) || (stalled && !finished);
-  const beforeFilming = homie.phase === 'connecting' || homie.phase === 'intro';
+  const beforeFilming = !previewCamera && (homie.phase === 'connecting' || homie.phase === 'intro');
 
   return (
     <View style={styles.page}>
@@ -234,16 +346,33 @@ export default function RecordingScreen() {
             {glassesFilming && !devPreview ? (
               <GlassesView frame={liveFrame} filming={view.live} lastStep={lastStep?.title ?? null} steps={steps.length} />
             ) : null}
+            {showCamera ? (
+              <View
+                style={[styles.cameraSlot, slotSize]}
+                onLayout={(e) => {
+                  const { x, y, width, height } = e.nativeEvent.layout;
+                  if (!slot || slot.x !== x || slot.y !== y || slot.width !== width) setSlot({ x, y, width, height });
+                }}
+              />
+            ) : null}
             <RecordButton
-              live={view.live}
-              disabled={glasses ? !id || ended || (starting && !glassesFilming) || stopping : !view.live || !!pick.busy}
+              live={view.live && !camPaused}
+              resume={camPaused}
+              disabled={glasses ? !id || ended || (starting && !glassesFilming) || stopping : !(view.live || camPaused) || !!pick.busy}
               onPress={press}
-              accessibilityLabel={view.live ? 'Recording. Tap when you’re done.' : view.line.en ?? view.line.text}
+              accessibilityLabel={camPaused ? 'Keep filming' : view.live ? 'Recording. Tap when you’re done.' : view.line.en ?? view.line.text}
             />
-            <Animated.View key={view.line.text} entering={FadeIn.duration(reduce ? motion.reducedFadeMs : 220)} style={styles.label}>
-              <BiLine line={view.line} size={30} weight={700} enSize={15} leading={1.3} />
+            <Animated.View key={camPaused ? 'stopped' : view.line.text} entering={FadeIn.duration(reduce ? motion.reducedFadeMs : 220)} style={styles.label}>
+              <BiLine line={camPaused ? words.line('stopped') : view.line} size={camPaused ? 24 : 30} weight={700} enSize={15} leading={1.3} />
             </Animated.View>
-            {source === 'phone' && beforeFilming && !homie.error && !skipped ? (
+            {camPaused ? (
+              <View style={styles.skip}>
+                <ActionButton label={both(words.line('imDone'))} variant="outline" size="sm" onPress={() => {
+                    if (!devPreview) void doneInApp();
+                  }} />
+              </View>
+            ) : null}
+            {source === 'phone' && beforeFilming && !homie.error && !skipped && !camAsking ? (
               <View style={styles.skip}>
                 <ActionButton label={both(words.line('skipIntro'))} variant="outline" size="sm" onPress={skipIntro} />
               </View>
@@ -259,8 +388,13 @@ export default function RecordingScreen() {
               </View>
             ) : null}
           </View>
+          {showCamera ? <PlateDim on={!!plateAsk} /> : null}
+          {showCamera ? (
+            <CameraCard cam={cam} attach={cam.setCamera} slot={slot} big={!!plateAsk} side={COLUMN.side} photo={photo} standIn={previewCamera ? KITCHEN : null} />
+          ) : null}
+          {showCamera ? <PlateControls ask={plateAsk} words={words} taken={!!photo} busy={shooting} onShoot={() => void shootPlate()} onSkip={skipPlate} /> : null}
           <AskMoment
-            ask={devPreview === 'ask' ? PREVIEW_ASK : homie.ask}
+            ask={devPreview === 'ask' ? PREVIEW_ASK : homie.ask?.kind === 'plate' ? null : homie.ask}
             words={words}
             micOn={devPreview === 'ask' || homie.micOn}
             onNotNow={homie.notNow}
@@ -284,4 +418,5 @@ const styles = StyleSheet.create({
   label: { marginTop: COLUMN.toLabel },
   problem: { marginTop: 24, alignItems: 'center', gap: 10 },
   skip: { marginTop: 20 },
+  cameraSlot: { marginBottom: 28 },
 });

@@ -4,6 +4,8 @@
 //
 //   const mic = useMicStream((pcm) => socket.send(pcm), (level) => setHomieLevel(level));
 //   await mic.start();  await mic.stop();  mic.on
+//   await mic.start({ camera: true })   while the app's own camera films (lib/live/camera): the audio
+//                                       session the camera uses, so neither changes it under the other
 //
 // The iOS session is PlayAndRecord in VoiceChat mode, and DefaultToSpeaker keeps playback off the
 // earpiece. VoiceChat alone does NOT cancel echo: Apple only does that with voice processing (the
@@ -24,6 +26,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
 import { halfDuplex, pcmLevel } from '@/lib/homie/logic';
+import { CAMERA_AUDIO_SESSION } from '@/lib/live/camera';
 import { getHomie } from '@/lib/homie/store';
 import { audioNow, videoPlaying } from '@/lib/media';
 
@@ -63,7 +66,7 @@ export function useMicStream(onChunk: (pcm: ArrayBuffer, quiet: boolean) => void
     levelSink.current = onLevel;
   });
 
-  const start = useCallback(async (): Promise<'ok' | 'denied' | 'error'> => {
+  const start = useCallback(async ({ camera = false }: { camera?: boolean } = {}): Promise<'ok' | 'denied' | 'error'> => {
     if (!rec || !micStreamingSupported()) return 'error';
     const perm = await requestRecordingPermissionsAsync().catch(() => null);
     if (!perm?.granted) return 'denied';
@@ -75,7 +78,11 @@ export function useMicStream(onChunk: (pcm: ArrayBuffer, quiet: boolean) => void
         interval: 100,
         keepFullAnalysis: false,
         output: { primary: { enabled: false } },
-        ios: { audioSession: { category: 'PlayAndRecord', mode: 'VoiceChat', categoryOptions: ['DefaultToSpeaker', 'AllowBluetooth', 'MixWithOthers'] } },
+        ios: {
+          audioSession: camera
+            ? { category: CAMERA_AUDIO_SESSION.category, mode: CAMERA_AUDIO_SESSION.mode, categoryOptions: [...CAMERA_AUDIO_SESSION.categoryOptions] }
+            : { category: 'PlayAndRecord', mode: 'VoiceChat', categoryOptions: ['DefaultToSpeaker', 'AllowBluetooth', 'MixWithOthers'] },
+        },
         onAudioStream: async (e) => {
           const pcm = typeof e.data === 'string' ? decode(e.data) : e.data instanceof Int16Array ? e.data.slice().buffer : null;
           if (!pcm) return;

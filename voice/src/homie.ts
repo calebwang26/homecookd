@@ -4,7 +4,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "./env.js";
 
-export type AskKind = "amount" | "cue" | "substitution" | "story";
+export type AskKind = "amount" | "show" | "cue" | "substitution" | "story";
 export type Line = { text: string; textEn: string };
 /** Who homie is talking to. `call` is how homie addresses her ("Rajani Aaji"). */
 export type Who = { language: string; call: string; kid?: string; dish?: string };
@@ -36,13 +36,15 @@ const obj = (properties: Record<string, object>): Record<string, unknown> => ({
   required: Object.keys(properties),
   additionalProperties: false,
 });
-const KINDS = ["amount", "cue", "substitution", "story"];
+const KINDS = ["amount", "show", "cue", "substitution", "story"];
+/** The last questions come after filming stopped: nothing to show the camera then. */
+const END_KINDS = KINDS.filter((k) => k !== "show");
 
 /** One Claude call that must come back as JSON in `schema`. Null on refusal or bad JSON. */
-async function json<T>(system: string, content: Anthropic.Beta.BetaContentBlockParam[] | string, schema: Record<string, unknown>): Promise<T | null> {
+async function json<T>(system: string, content: Anthropic.Beta.BetaContentBlockParam[] | string, schema: Record<string, unknown>, model = env.claudeModel): Promise<T | null> {
   const t0 = Date.now();
   const res = await client.beta.messages.create({
-    model: env.claudeModel,
+    model,
     max_tokens: 2048,
     system,
     messages: [{ role: "user", content }],
@@ -50,7 +52,7 @@ async function json<T>(system: string, content: Anthropic.Beta.BetaContentBlockP
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
   });
-  console.log(`homie claude ${Date.now() - t0}ms stop=${res.stop_reason}`);
+  console.log(`homie claude ${model} ${Date.now() - t0}ms stop=${res.stop_reason} in=${res.usage.input_tokens} out=${res.usage.output_tokens}`);
   if (res.stop_reason === "refusal") return null;
   const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("");
   try {
@@ -69,6 +71,23 @@ How homie sounds: warm, comfortable and a little playful, like a caring older co
 }
 
 const LINE_RULES = `"text" is the line in her language, written the way it should be spoken (her script, no emoji, no brand names other than homie in lowercase). "text_en" is the same line in English, with people's names in Latin letters (Rajani Aaji, Shreya), never in her script.`;
+
+/** homie's job while she films, for every prompt that writes a question. */
+const GUIDANCE = (kid: string) => `homie gives GUIDANCE, never cooking advice. Guidance means helping her capture this recipe well on video, so ${kid} can follow it later: asking how much she used, asking her to show something to the camera, asking how she knows it's ready, inviting a story. homie never teaches, corrects or improves her cooking: never comment on her technique, never suggest a change to the dish (an ingredient, an amount, the heat, a time, a tool), never warn her, never say what she should do. Never judge, grade or praise her skill. She is the expert; homie only asks.`;
+
+const ADVICE = [
+  /\byou (should|shouldn'?t|need to|have to|might want to|could try|may want to)\b/i,
+  /\b(try|consider) (adding|using|cooking|lowering|raising|turning|reducing|stirring)\b/i,
+  /\b(be careful|careful not|don'?t (forget|burn|overcook|let it))\b/i,
+  /\bmake sure\b/i,
+  /\b(too (much|little|hot|long|high|low)|not enough)\b/i,
+  /\b(turn (the heat|it) (up|down)|lower the heat|add (a bit|some|more))\b/i,
+];
+
+/** A line (its English) that tells her how to cook instead of asking: homie never says it. */
+export function soundsLikeAdvice(textEn: string): boolean {
+  return ADVICE.some((re) => re.test(textEn));
+}
 
 const fmt = (t: number) => `${t < 0 ? "-" : ""}${Math.floor(Math.abs(t) / 60)}:${String(Math.floor(Math.abs(t) % 60)).padStart(2, "0")}`;
 const transcriptOf = (heard: Heard[]) => heard.slice(-40).map((h) => `[${fmt(h.atS)}] ${h.text}`).join("\n") || "(nothing yet)";
@@ -112,21 +131,24 @@ ${LINE_RULES}`;
     return out?.text ? { text: out.text, textEn: out.text_en } : null;
   }
 
-  /** Called only when the pacing allows it and she's been quiet ~3 s. */
+  /** Called only when the pacing allows it and she's been quiet ~3 s. `frame`: what her phone (or glasses) sees. */
   async decide(input: { heard: Heard[]; asked: string[]; nowS: number; mayAsk: boolean; mayReact: boolean; frame?: Buffer }): Promise<Decision> {
     const w = this.who;
+    const kid = w.kid ?? "her family";
     const system = `${about(w)}
 
-You hear a rolling transcript of what she says (in ${languageName(w.language)}, with transcription mistakes). Sometimes a photo from her glasses shows the stove. Decide what homie does right now: ask one short question, react, or stay quiet. Staying quiet is the usual answer.
+You hear a rolling transcript of what she says (in ${languageName(w.language)}, with transcription mistakes). ${input.frame ? "The photo is what her camera sees right now." : "There is no photo right now."} Decide what homie does right now: ask one short question, react, or stay quiet. Staying quiet is the usual answer.
 
-Ask only something that will help ${w.kid ?? "her family"} cook this later, in this order of priority:
-1. amount: she just used or said a vague amount ("a little", "andaz", "until it looks right", a handful) → ask how much, in a kitchen measure a student can follow.
-2. cue: how she knows a stage is done ("how do you know it's ready?").
-3. substitution: what to use in a small college kitchen if an ingredient or tool isn't there.
-4. story: during a wait (simmering, resting), invite a memory about this dish.
-Never correct her technique. Never judge, grade, praise her skill or give advice. Never repeat or rephrase a question already asked.
+${GUIDANCE(kid)}
+Ask only one of these, in this order of priority:
+1. amount: she just used or said a vague amount ("a little", "andaz", "until it looks right", a handful) → ask how much, in a kitchen measure a student can follow ("How much salt was that?").
+2. show: ${kid} won't be able to see or tell apart something important in the photo: the pan is turned away, the spice or ingredient can't be read, the food is out of frame → ask her to show it to the camera ("Can you tilt the pan toward me?", "Hold up the spice so ${kid} knows which one."). Only with a photo, and only about what the photo shows or hides.
+3. cue: how she knows a stage is done ("How do you know it's ready?").
+4. substitution: what she herself would use in a small college kitchen if an ingredient or tool isn't there. Ask her; never suggest one.
+5. story: during a wait (simmering, resting), invite a memory about this dish.
+Never repeat or rephrase a question already asked.
 If she seems to be in the middle of telling a story or explaining something, stay quiet and set story_in_progress true.
-React only when she has just finished telling a story or memory: one very short warm line (at most 8 words, like "Oh, I love that."). A reaction is not a question.
+React only when she has just finished telling a story or memory: one very short warm line (at most 8 words, like "Oh, I love that."). A reaction is not a question, and never comments on her cooking.
 ${input.mayAsk ? "" : "You may NOT ask a question right now: only react or stay quiet.\n"}${input.mayReact ? "" : "You may NOT react right now.\n"}A question is at most 18 words, gentle, one thing only. ${LINE_RULES}
 For "quiet", leave text and text_en empty and kind "none".`;
     const already = input.asked.length ? input.asked.map((q) => `- ${q}`).join("\n") : "(none)";
@@ -146,10 +168,16 @@ For "quiet", leave text and text_en empty and kind "none".`;
         text_en: str,
         story_in_progress: { type: "boolean" },
       }),
+      env.homieDecideModel || env.claudeModel,
     );
     if (!out || !out.text) return { action: "quiet", storyInProgress: !!out?.story_in_progress };
     const line = { text: out.text, textEn: out.text_en };
-    if (out.action === "ask" && input.mayAsk && KINDS.includes(out.kind)) return { action: "ask", kind: out.kind as AskKind, line };
+    if (soundsLikeAdvice(line.textEn)) {
+      console.warn(`homie: dropped a line that reads as cooking advice: ${line.textEn}`);
+      return { action: "quiet", storyInProgress: false };
+    }
+    // A "show" needs a picture to be about.
+    if (out.action === "ask" && input.mayAsk && KINDS.includes(out.kind) && (out.kind !== "show" || input.frame)) return { action: "ask", kind: out.kind as AskKind, line };
     if (out.action === "react" && input.mayReact) return { action: "react", line };
     return { action: "quiet", storyInProgress: out.story_in_progress };
   }
@@ -159,15 +187,16 @@ For "quiet", leave text and text_en empty and kind "none".`;
     if (max <= 0) return [];
     const system = `${about(this.who)}
 
-She just said she's done cooking. Pick at most ${max} last short questions that would help ${this.who.kid ?? "her family"} most when cooking this alone: an amount she left vague, how she knew something was ready, a substitution for a small college kitchen, or a story about the dish. Only things she didn't already explain, and nothing already asked. Fewer is fine; none is fine.
-Each question is at most 18 words, gentle, one thing only, with no lead-in of its own (homie leads in with "Before you go..." itself). Never correct, judge or grade. ${LINE_RULES}`;
+She just said she's done cooking. Pick at most ${max} last short questions that would help ${this.who.kid ?? "her family"} most when cooking this alone: an amount she left vague, how she knew something was ready, what she would use in a small college kitchen if an ingredient is missing (ask her; never suggest one), or a story about the dish. Only things she didn't already explain, and nothing already asked. Fewer is fine; none is fine.
+${GUIDANCE(this.who.kid ?? "her family")}
+Each question is at most 18 words, gentle, one thing only, with no lead-in of its own (homie leads in with "Before you go..." itself). ${LINE_RULES}`;
     const out = await json<{ questions: { kind: string; text: string; text_en: string }[] }>(
       system,
       `Already asked:\n${asked.map((q) => `- ${q}`).join("\n") || "(none)"}\n\nWhat she said:\n${transcriptOf(heard)}`,
-      obj({ questions: { type: "array", items: obj({ kind: { type: "string", enum: KINDS }, text: str, text_en: str }) } }),
+      obj({ questions: { type: "array", items: obj({ kind: { type: "string", enum: END_KINDS }, text: str, text_en: str }) } }),
     );
     return (out?.questions ?? [])
-      .filter((q) => q.text && KINDS.includes(q.kind))
+      .filter((q) => q.text && END_KINDS.includes(q.kind) && !soundsLikeAdvice(q.text_en))
       .slice(0, max)
       .map((q) => ({ kind: q.kind as AskKind, line: { text: q.text, textEn: q.text_en } }));
   }
