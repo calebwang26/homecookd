@@ -2,16 +2,18 @@
 // words) and one per story or tip the cook agreed to share, each pointing at its moment in the video.
 // The voice service searches it and plays the clip at startS..endS. Metadata values are strings (Moss).
 // The index model (moss-minilm) is English-only and kids ask in English, so the pipeline writes every
-// field in English (the cook's Marathi stays in recipe.json's quote_original); Devanagari text that still
-// slips through is left out of the searched text, where it would only blur the match.
+// field in English (the cook's own words stay in recipe.json's quote_original); text in another script
+// (Devanagari, Tamil, Chinese, Arabic, …) that still slips through is left out of the searched text, where it would
+// only blur the match.
 import type { Doc } from "../_generated/dataModel";
 
 export type MossDoc = { id: string; text: string; metadata: Record<string, string> };
 
 export const mossIndexName = (familyId: string) => `family-${familyId}`;
 
-const devanagari = /[\u0900-\u097F]/;
-const english = (s?: string) => (s && !devanagari.test(s) ? s : undefined);
+/** Any letter outside the Latin alphabet. */
+const notLatin = /(?![\p{Script=Latin}])\p{L}/u;
+const english = (s?: string) => (s && !notLatin.test(s) ? s : undefined);
 
 export function stepDocs(recipe: Doc<"recipes">): MossDoc[] {
   return recipe.steps.map((s) => ({

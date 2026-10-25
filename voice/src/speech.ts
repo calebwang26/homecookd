@@ -15,7 +15,7 @@ const deaf = (): Stt => ({ send() {}, close() {} });
 export const listenInk = (events: SttEvents, keyterms: string[] = []): Stt =>
   fakeSpeech ? deaf() : new InkStream(events, keyterms);
 
-/** The cook's speech to text while she records (Ink 2, or Gemini Live for Marathi). */
+/** The cook's speech to text while she records, picked by her language (stt.ts). */
 export const createStt: typeof realCreateStt = (language, events, keyterms = []) =>
   fakeSpeech ? deaf() : realCreateStt(language, events, keyterms);
 

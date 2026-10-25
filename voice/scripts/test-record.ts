@@ -5,7 +5,7 @@
 // audio for real; FAKE=1 against `npm run dev:fake` sends the cook's lines as text instead (scripts/guard.ts).
 //   VOICE_STUB=1 HOMIE_DEMO=1 npm run dev                       (in another terminal)
 //   npm run test-record                                          Marathi (stub recording "stub-mr")
-//   COOK_LANG=en npm run test-record                                  English ("stub-en")
+//   COOK_LANG=en npm run test-record                                  English ("stub-en"); ta, zh: Tamil, Mandarin
 //   RECORDING=stub-mr-again npm run test-record                       a cook homie has met (the short hello)
 //   SESSION=<cook's sessionToken> RECORDING=<recordings _id> npm run test-record   live Convex
 //   CAMERA=1 npm run test-record      filmed in the app: {type:"start", camera:true}, a still every 5 s
@@ -16,7 +16,8 @@ import WebSocket from "ws";
 import { guard, live, wordsOf } from "./guard.js";
 
 const base = process.env.URL ?? "ws://localhost:8080";
-const lang = process.env.COOK_LANG === "en" ? "en" : "mr";
+/** mr (default), en, ta or zh: the stub recording and the cook's test lines in that language. */
+const lang = ["en", "ta", "zh"].includes(process.env.COOK_LANG ?? "") ? process.env.COOK_LANG! : "mr";
 const token = process.env.SESSION ?? "test-session";
 const recording = process.env.RECORDING ?? `stub-${lang}`;
 const camera = process.env.CAMERA === "1";

@@ -1,6 +1,7 @@
 // The languages a cook can pick: the 30 most spoken that Cartesia Sonic 3.6 can speak, so homie can talk
 // to the cook in hers. Codes are ISO 639-1 (people.language, recordings.language). `inkLive` marks the five
-// Cartesia Ink 2 can hear live (en fr hi ja es); for the rest, Gemini listens.
+// Cartesia Ink 2 can hear live (en fr hi ja es); Cartesia ink-whisper hears the rest, except Marathi and Odia,
+// which Gemini hears (voice/src/stt.ts).
 // Pure TS (no React Native), so app/scripts/test-languages.mjs can run it under Node.
 
 export type Language = { code: string; name: string; native: string; inkLive: boolean };

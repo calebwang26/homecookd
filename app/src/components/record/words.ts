@@ -1,8 +1,8 @@
 // The cook's words on the recording screen v3, homie's questions while she records, the walkie-talkie
-// v2 and the done screen, in English and Marathi. A Marathi cook sees the Marathi big with the English
-// small under it; every other language gets the English alone (homie still speaks to her in her
-// language). A `hint` is a small English line under the words in every language ("Tap when you're
-// done"). Pure TS (node scripts/test-recording-ui.mjs).
+// v2 and the done screen, in English, Marathi (here) and the other languages a cook can pick
+// (wordsByLanguage.ts, Oct 24). She sees her language big with the English small under it; a language with
+// no words yet gets the English alone (homie still speaks to her in her language). A `hint` is a small English
+// line under the words in every language ("Tap when you're done"). Pure TS (node scripts/test-recording-ui.mjs).
 //
 //   const w = recordWords('mr');
 //   w.line('stop')                        -> { text: 'माझं झालं', en: 'Tap when you’re done' }
@@ -11,6 +11,8 @@
 //
 // TODO(caleb): native check of every Marathi line (drafts). A Latin name is followed by a space and
 // the Marathi ending ("Shreya ला"), as homie's own lines do.
+
+import { OTHER_WORDS } from './wordsByLanguage';
 
 /** A line in her language, and the small English under it (null when there is none). */
 export type Line = { text: string; en: string | null };
@@ -57,13 +59,16 @@ export type RecordWordKey = keyof typeof WORDS;
 
 /** Words for a cook who speaks `lang` (an ISO 639-1 code; unset = English). */
 export function recordWords(lang: string | null | undefined) {
-  const own = (lang ?? 'en').toLowerCase() === 'mr';
+  const code = (lang ?? 'en').toLowerCase();
+  const other = code === 'mr' ? undefined : OTHER_WORDS[code];
+  const own = code === 'mr' || !!other;
   const line = (key: RecordWordKey, vars: { kid?: string } = {}): Line => {
     const w: Words = WORDS[key];
     const kid = vars.kid?.trim();
     const en = w.en.replace(/\{kid\}/g, kid || 'your family');
     if (!own) return { text: en, en: w.hint ?? null };
-    return { text: w.mr.replace(/\{kid\}/g, kid || 'घरच्यां'), en: w.hint ?? en };
+    const [text, family] = other ? [other[key], other.family] : [w.mr, 'घरच्यां'];
+    return { text: text.replace(/\{kid\}/g, kid || family), en: w.hint ?? en };
   };
   return { line, text: (key: RecordWordKey, vars: { kid?: string } = {}) => line(key, vars).text };
 }

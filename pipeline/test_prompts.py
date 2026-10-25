@@ -41,6 +41,27 @@ def test_language_line():
     assert "xx" in language_line("xx")
 
 
+def test_language_line_marathi_unchanged_others_get_their_script():
+    # Marathi's line is exactly what it was before other languages (Oct 24): the demo's prompts don't move.
+    assert language_line("mr") == ("The family says the cook narrates in Marathi, maybe mixed with English. "
+                                   "Translate it as the Language rules below say for Marathi.\n")
+    ta = language_line("ta")
+    assert "read Tamil, and for Devanagari read Tamil script" in ta
+    assert "never write Tamil script or romanised Tamil sentences in the English fields" in ta
+    assert "quote_original as her exact Tamil words, in Tamil script" in ta
+    assert "in simplified Chinese characters" in language_line("zh")
+    es = language_line("es")
+    assert "never write Spanish sentences in the English fields" in es and "for Devanagari read the Latin alphabet" in es
+    for code in ("hi", "gu", "te", "pa", "ur", "ko", "tl", "pt", "ar"):
+        assert prompts_language_named(code) in language_line(code), code
+        assert "Marathi" in language_line(code)  # it points at the rules, which stay as written
+
+
+def prompts_language_named(code):
+    from pipeline.prompts import LANGUAGES
+    return LANGUAGES[code]
+
+
 def test_homie_block_merge_uses_video_seconds():
     block = homie_block(LOG)
     assert "never quote homie as the cook".lower() in block.lower()

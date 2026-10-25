@@ -13,7 +13,8 @@ validation errors back. Completeness (no step left out): the extraction's "Steps
 process.ensure_coverage adds when pipeline/coverage.py finds extracted steps that no recipe step covers.
 Language: the cook may narrate in Marathi, English or a mix. Extraction translates every text field into
 English (the app, cook mode and the English-only Moss index read them) and keeps the spoken Marathi of each
-quote in quote_original; the merge carries it, and align hears the Marathi but reads the English.
+quote in quote_original; the merge carries it, and align hears the Marathi but reads the English. Another
+language (Oct 24): language_line points the same rules at her language and its script.
 Oct 24 (Track F): {context} is the job's language line (language_line) plus, when homie (the AI helper that
 talks to the cook while she films) was there, its questions and her answers (homie_block), so homie's voice is
 never taken for the cook's. Glasses through the laptop bridge (glasses/BRIDGE.md) add live_block: what the live
@@ -88,21 +89,44 @@ and {clip_mmss}, with start before end; use the clip's own timeline, not any clo
 # ISO 639-1 codes the app offers (app/src/lib/languages.ts); any other code is named as itself.
 LANGUAGES = {
     "en": "English", "mr": "Marathi", "hi": "Hindi", "bn": "Bengali", "gu": "Gujarati", "kn": "Kannada",
-    "ml": "Malayalam", "pa": "Punjabi", "ta": "Tamil", "te": "Telugu", "ur": "Urdu", "zh": "Chinese",
+    "ml": "Malayalam", "pa": "Punjabi", "ta": "Tamil", "te": "Telugu", "ur": "Urdu", "zh": "Mandarin Chinese",
     "es": "Spanish", "fr": "French", "de": "German", "pt": "Portuguese", "ja": "Japanese", "ko": "Korean",
     "it": "Italian", "ru": "Russian", "ar": "Arabic", "tr": "Turkish", "vi": "Vietnamese", "tl": "Tagalog",
     "id": "Indonesian", "th": "Thai", "pl": "Polish", "uk": "Ukrainian", "ms": "Malay", "or": "Odia",
 }
 
 
+# The script each language is written in, for quote_original. Not listed: the Latin alphabet (Spanish, Tagalog, …).
+SCRIPTS = {
+    "mr": "Devanagari", "hi": "Devanagari", "bn": "Bengali script", "gu": "Gujarati script", "kn": "Kannada script",
+    "ml": "Malayalam script", "pa": "Gurmukhi", "ta": "Tamil script", "te": "Telugu script", "ur": "Urdu script",
+    "or": "Odia script", "zh": "simplified Chinese characters", "ja": "Japanese script", "ko": "Hangul",
+    "ar": "Arabic script", "ru": "Cyrillic", "uk": "Cyrillic", "th": "Thai script",
+}
+
+
 def language_line(code: str | None) -> str:
-    """The job's language as one prompt line ("" when the job doesn't say)."""
+    """The job's language as prompt lines ("" when the job doesn't say).
+
+    The prompts' Language rules name Marathi and Devanagari; for any other language these lines apply them to
+    hers (Oct 24), so her script stays out of the English fields and goes into quote_original. Marathi's line
+    and every prompt body are unchanged.
+    """
     if not code:
         return ""
     if code == "en":
         return "The family says the cook narrates in English.\n"
-    return (f"The family says the cook narrates in {LANGUAGES.get(code, code)}, maybe mixed with English. "
+    name = LANGUAGES.get(code, code)
+    line = (f"The family says the cook narrates in {name}, maybe mixed with English. "
             "Translate it as the Language rules below say for Marathi.\n")
+    if code == "mr":
+        return line
+    script = SCRIPTS.get(code)
+    words = f"{script} or romanised {name} sentences" if script else f"{name} sentences"
+    return line + (f"Wherever those rules say Marathi, read {name}, and for Devanagari read {script or 'the Latin alphabet'}: "
+                   f"never write {words} in the English fields, and "
+                   f"write quote_original as her exact {name} words{f', in {script}' if script else ''} "
+                   "(English words she says stay in English).\n")
 
 
 HOMIE_BLOCK = """\
