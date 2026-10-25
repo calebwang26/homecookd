@@ -9,17 +9,37 @@
 //   src/components/record/walkieLogic.ts     when her spoken answer is over (a share ask's short yes
 //                                            too), when nobody answered, how a question reads
 //   src/lib/languages.ts                     the picker's list and search (Track F's API)
+//   src/components/record/cameraLogic.ts     filming in the app: file names, the gap between two files,
+//                                            the clock, when leaving stops the camera and coming back
+//                                            films again by itself, the clip each file becomes
+//   build-4 safety                           an EAS Update reaches TestFlight builds without VisionCamera
+//                                            or expo-image-manipulator: recording.tsx's whole import graph
+//                                            never imports either by value, and src/lib/live/camera.ts (the
+//                                            only place that loads them) loads and answers null with their
+//                                            native halves missing
 //   node scripts/test-recording-ui.mjs
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
+// A build without the new native modules (TestFlight build 4): react-native without CameraView, no
+// ExpoImageManipulator, and the two packages throw if anything loads them.
+const NATIVE_NEW = ['react-native-vision-camera', 'expo-image-manipulator'];
+const js = (code) => `data:text/javascript,${encodeURIComponent(code)}`;
+const FAKES = {
+  'react-native': js("export const NativeModules = {}; export const Platform = { OS: 'ios' };"),
+  'expo-constants': js("export default { executionEnvironment: 'standalone' }; export const ExecutionEnvironment = { StoreClient: 'storeClient' };"),
+  'expo-modules-core': js('export const requireOptionalNativeModule = () => null;'),
+  ...Object.fromEntries(NATIVE_NEW.map((p) => [p, js(`throw new Error('${p}: no native module in this build');`)])),
+};
+
 registerHooks({
   resolve(spec, ctx, next) {
+    if (FAKES[spec]) return { url: FAKES[spec], shortCircuit: true };
     const base = spec.startsWith('@/') ? join(root, 'src', spec.slice(2)) : spec.startsWith('.') && ctx.parentURL ? join(dirname(fileURLToPath(ctx.parentURL)), spec) : null;
     if (base && !/\.[a-z]+$/.test(base) && existsSync(`${base}.ts`)) return next(pathToFileURL(`${base}.ts`).href, ctx);
     return next(spec, ctx);
@@ -30,6 +50,7 @@ const W = await import(pathToFileURL(join(root, 'src/components/record/words.ts'
 const R = await import(pathToFileURL(join(root, 'src/components/record/recordingLogic.ts')).href);
 const K = await import(pathToFileURL(join(root, 'src/components/record/walkieLogic.ts')).href);
 const L = await import(pathToFileURL(join(root, 'src/lib/languages.ts')).href);
+const C = await import(pathToFileURL(join(root, 'src/components/record/cameraLogic.ts')).href);
 
 let passed = 0;
 const test = (name, fn) => {
@@ -260,6 +281,79 @@ test('languages: English first; "mar" and "मरा" find Marathi', () => {
   assert.equal(L.languageName(undefined), 'English');
   const marathi = L.LANGUAGES.find((l) => l.code === 'mr');
   assert.equal(marathi.native, 'मराठी');
+});
+
+test('in-app camera: 5-minute files named in order, and the wall time between them that the video skips', () => {
+  assert.equal(C.CHUNK_MS, 300_000);
+  assert.equal(C.chunkName(1), 'part-01.mp4');
+  assert.equal(C.chunkName(12), 'part-12.mp4');
+  // Names sort in filming order (the worker downloads in name order; prep.py orders by file time).
+  assert.deepEqual([C.chunkName(10), C.chunkName(2)].sort(), ['part-02.mp4', 'part-10.mp4']);
+  assert.equal(C.gapS(undefined, 5000), 0, 'the first file has no gap');
+  const prev = { startedAt: 1_000_000, durationMs: 300_000 };
+  assert.equal(C.gapS(prev, 1_300_400), 0.4, 'a roll-over: under a second');
+  assert.equal(C.gapS(prev, 1_420_000), 120, 'a phone call: two minutes');
+  assert.equal(C.gapS(prev, 1_200_000), 0, 'never negative');
+});
+
+test('in-app camera: what has been filmed, and the clock on the card', () => {
+  assert.equal(C.filmedMs([{ durationMs: 300_000 }, { durationMs: 1000 }], null, 0), 301_000);
+  assert.equal(C.filmedMs([{ durationMs: 300_000 }], 10_000, 12_500), 302_500);
+  assert.equal(C.clockLabel(0), '0:00');
+  assert.equal(C.clockLabel(247_000), '4:07');
+  assert.equal(C.clockLabel(3_753_000), '1:02:33');
+});
+
+test('in-app camera: leaving the app stops the file; a short trip films again by itself, a real one waits for her', () => {
+  assert.equal(C.stopsFilming('active'), false);
+  assert.equal(C.stopsFilming('inactive'), true, 'Control Center, a call screen, the lock: before iOS takes the camera');
+  assert.equal(C.stopsFilming('background'), true);
+  assert.equal(C.resumesBySelf(2000, false), true, 'pulled down Control Center');
+  assert.equal(C.resumesBySelf(2000, true), false, 'went to the home screen');
+  assert.equal(C.resumesBySelf(60_000, false), false, 'a long call');
+});
+
+test('in-app camera: each file becomes a selected camera clip for the Send path', () => {
+  const clip = C.chunkClip({ uri: 'file:///doc/recordings/r1/part-02.mp4', startedAt: Date.parse('2026-10-25T17:05:00Z'), durationMs: 300_000, width: 1080, height: 1920 }, 2);
+  assert.equal(clip.source, 'camera');
+  assert.equal(clip.selected, true);
+  assert.equal(clip.recordedAt, '2026-10-25T17:05:00.000Z');
+  assert.deepEqual(clip.asset, { uri: 'file:///doc/recordings/r1/part-02.mp4', width: 1080, height: 1920, type: 'video', duration: 300_000, fileName: 'part-02.mp4', mimeType: 'video/mp4' });
+});
+
+test('build-4 safety: recording.tsx never imports VisionCamera or the image manipulator by value', () => {
+  // Every app/src file recording.tsx reaches through its imports (relative and @/ paths).
+  const file = (base) => ['', '.ts', '.tsx', '/index.ts', '/index.tsx'].map((x) => base + x).find((f) => existsSync(f) && /\.tsx?$/.test(f));
+  const seen = new Set();
+  const offenders = [];
+  const stack = [join(root, 'src/app/recording.tsx')];
+  while (stack.length) {
+    const f = stack.pop();
+    if (seen.has(f)) continue;
+    seen.add(f);
+    const src = readFileSync(f, 'utf8');
+    for (const m of src.matchAll(/(?:^|\n)\s*(?:import|export)\s+(type\s+)?(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g)) {
+      const [, typeOnly, spec] = m;
+      const local = spec.startsWith('@/') ? join(root, 'src', spec.slice(2)) : spec.startsWith('.') ? join(dirname(f), spec) : null;
+      if (local) {
+        const next = file(local);
+        if (next && !typeOnly) stack.push(next);
+      } else if (!typeOnly && NATIVE_NEW.some((p) => spec === p || spec.startsWith(`${p}/`))) offenders.push(`${f.slice(root.length + 1)} imports ${spec}`);
+    }
+    // A require() of either is only allowed in lib/live/camera.ts, behind its native-module checks.
+    if (!f.endsWith('src/lib/live/camera.ts')) for (const p of NATIVE_NEW) if (src.includes(`require('${p}')`)) offenders.push(`${f.slice(root.length + 1)} requires ${p}`);
+  }
+  assert.ok(seen.size > 30, `walked ${seen.size} files`);
+  assert.ok(seen.has(join(root, 'src/components/record/useInAppCamera.ts')), 'the camera hook is in the graph');
+  assert.deepEqual(offenders, []);
+});
+
+// Loaded here, not inside test(): an import that throws must fail the run.
+const camera = await import(pathToFileURL(join(root, 'src/lib/live/camera.ts')).href);
+test('build-4 safety: lib/live/camera.ts loads without the native modules, and both are null', () => {
+  assert.equal(camera.visionCamera(), null);
+  assert.equal(camera.inAppCameraSupported(), false);
+  assert.equal(camera.imageManipulator(), null);
 });
 
 console.log(`\n${passed} passed`);

@@ -41,7 +41,9 @@ function world(status: RecordingStatus = "intro", metBefore?: boolean) {
   const over = () => row.status === "ended" || row.status === "abandoned";
   const calls: Call[] = [];
   const decisions: Decision[] = [];
-  const decided: { nowS: number; mayAsk: boolean; asked: string[]; heard: string[] }[] = [];
+  const decided: { nowS: number; mayAsk: boolean; asked: string[]; heard: string[]; frame: boolean }[] = [];
+  /** Every prompt Convex was sent, in full (`said` included). */
+  const logged: { kind: string; textEn: string; atS: number; said?: { atS: number; endS: number } }[] = [];
   const endQuestions: { kind: "cue"; line: Line }[] = [{ kind: "cue", line: line("How do you know the dal is done?") }];
   const endCalls: { asked: string[]; max: number }[] = [];
   const spoken: string[] = [];
@@ -65,7 +67,7 @@ function world(status: RecordingStatus = "intro", metBefore?: boolean) {
       return hello.fails ? null : line(again ? "Good to see you again, Rajani Aaji!" : "Hello Rajani Aaji!");
     },
     decide: async (input: Parameters<HomieAgent["decide"]>[0]) => {
-      decided.push({ nowS: input.nowS, mayAsk: input.mayAsk, asked: [...input.asked], heard: input.heard.map((h) => h.text) });
+      decided.push({ nowS: input.nowS, mayAsk: input.mayAsk, asked: [...input.asked], heard: input.heard.map((h) => h.text), frame: !!input.frame });
       await sleep(THINK_MS);
       // Like the real one: an ask only comes back when it's allowed.
       if (decisions[0]?.action === "ask" && !input.mayAsk) return quiet();
@@ -114,10 +116,12 @@ function world(status: RecordingStatus = "intro", metBefore?: boolean) {
         }),
       logPrompt: (_token, _id, prompt) =>
         convexCall("logPrompt", [prompt.kind, prompt.textEn], () => {
+          logged.push(prompt);
           if (row.status === "abandoned" || (row.status === "ended" && prompt.kind !== "closing")) throw new Ended("/live/prompt");
           return { promptId: `p${++ids}` };
         }),
       updatePrompt: (_token, promptId, s) => convexCall("updatePrompt", [promptId, s], () => undefined),
+      promptSaid: (_token, promptId, said) => convexCall("promptSaid", [promptId, said], () => undefined),
       setOptIn: (_token, _id, optIn) => convexCall("setOptIn", [optIn], () => undefined),
     },
   };
@@ -144,7 +148,7 @@ function world(status: RecordingStatus = "intro", metBefore?: boolean) {
   }
 
   const named = (fn: string) => calls.filter((c) => c.fn === fn);
-  return { row, calls, named, decisions, decided, endQuestions, endCalls, spoken, voices, intros, hello, connect, says, deps };
+  return { row, calls, named, logged, decisions, decided, endQuestions, endCalls, spoken, voices, intros, hello, connect, says, deps };
 }
 
 type Phone = ReturnType<ReturnType<typeof world>["connect"]>;
@@ -540,4 +544,121 @@ test("HOMIE_SCRIPTED: a fixed question on the clock, with no Claude deciding, ev
   await waitFor("the second scripted question", () => c.ws.of("ask").length === 2, 60_000);
   assert.equal(c.ws.of("ask")[1].kind, "story");
   assert.equal(w.named("logPrompt").filter((p) => p.args[0] === "story").length, 1, "logged like any question");
+});
+
+const JPEG = Buffer.concat([Buffer.from([0xff, 0xd8, 0xff, 0xe0]), Buffer.alloc(200, 7)]).toString("base64");
+
+test("filming in the app: the phone's frames reach Claude while fresh, and a pause keeps homie quiet", async () => {
+  const w = world();
+  const c = w.connect("rec-camera-frames");
+  await helloDone(c);
+  c.send({ type: "start", camera: true });
+  await advance(1000);
+  c.send({ type: "frame", jpeg: "not a jpeg" });
+  c.send({ type: "frame", jpeg: JPEG });
+  w.says("Now the tadka goes in");
+  await waitFor("a decision", () => w.decided.some((d) => d.mayAsk), 60_000);
+  assert.equal(w.decided.find((d) => d.mayAsk)!.frame, true, "a fresh picture goes with the question");
+
+  // She left the app: nothing is decided or said until the camera films again.
+  c.send({ type: "pause" });
+  const before = w.decided.length;
+  await advance(120_000, 1000);
+  assert.equal(w.decided.length, before);
+  assert.equal(c.ws.of("ask").length, 0);
+  c.send({ type: "resume", gapS: 120 });
+  w.says("I am back, now the dal");
+  await waitFor("deciding again", () => w.decided.length > before, 60_000);
+  const after = w.decided.at(-1)!;
+  assert.equal(after.frame, false, "the picture from before the pause is stale");
+  c.drop();
+});
+
+test("a pause moves every later atS back onto the video's clock, and homie's spans are saved", async () => {
+  const w = world();
+  w.decisions.push(ask("How much salt was that?"));
+  const c = w.connect("rec-camera-gap");
+  await helloDone(c);
+  c.send({ type: "start", camera: true });
+  await advance(1000);
+  c.send({ type: "pause" });
+  await advance(60_000);
+  c.send({ type: "resume", gapS: 60 });
+  w.says("A pinch of salt");
+  await waitFor("the question", () => c.ws.of("say_end").length === 2, 60_000);
+  await advance(AUDIO_S * 1000 + 500);
+
+  const q = w.logged.find((p) => p.kind === "amount")!;
+  // About 30 s of video (the decide wait after the resume), not 90 s of wall time.
+  assert.ok(q.atS > 10 && q.atS < 40, `atS ${q.atS} is on the video's clock`);
+  const said = w.named("promptSaid")[0]?.args[1] as { atS: number; endS: number };
+  assert.ok(said && said.atS >= q.atS && said.endS > said.atS, "the question's voice span is saved");
+  assert.ok(w.logged.find((p) => p.kind === "intro")!.said!.endS < 0, "the hello played before filming started");
+  c.drop();
+});
+
+test("filmed in the app, the end asks for the plate photo; the phone's ok thanks her, then the opt-in", async () => {
+  const w = world();
+  w.endQuestions.length = 0;
+  const c = w.connect("rec-camera-plate");
+  await helloDone(c);
+  c.send({ type: "start", camera: true });
+  await advance(1000);
+  c.send({ type: "done" });
+  await waitFor("the plate ask", () => c.ws.of("ask").some((a) => a.kind === "plate"), 60_000);
+  const plate = c.ws.of("ask").find((a) => a.kind === "plate")!;
+  assert.match(String(plate.textEn), /plate up to the camera/);
+  await advance(AUDIO_S * 1000 + 500);
+  c.send({ type: "plate", ok: true });
+  await waitFor("the thanks", () => w.spoken.includes("Got it. Thank you!"), 30_000);
+  assert.equal(c.ws.of("answered").at(-1)!.promptId, plate.promptId);
+  await waitFor("the opt-in", () => c.ws.of("ask").some((a) => a.kind === "optin"), 30_000);
+  assert.deepEqual(w.named("logPrompt").map((p) => p.args[0]), ["intro", "plate", "optin"]);
+  c.drop();
+});
+
+test("no camera (glasses or the system camera): no plate step", async () => {
+  const w = world();
+  w.endQuestions.length = 0;
+  const c = w.connect("rec-no-camera");
+  await helloDone(c);
+  c.send({ type: "start" });
+  await advance(1000);
+  c.send({ type: "done" });
+  await waitFor("the opt-in", () => c.ws.of("ask").some((a) => a.kind === "optin"), 60_000);
+  assert.equal(c.ws.of("ask").filter((a) => a.kind === "plate").length, 0);
+  c.drop();
+});
+
+test("the plate photo can be skipped by saying not now", async () => {
+  const w = world();
+  w.endQuestions.length = 0;
+  const c = w.connect("rec-camera-plate-skip");
+  await helloDone(c);
+  c.send({ type: "start", camera: true });
+  await advance(1000);
+  c.send({ type: "done" });
+  await waitFor("the plate ask", () => c.ws.of("ask").some((a) => a.kind === "plate"), 60_000);
+  await advance(AUDIO_S * 1000 + 500);
+  w.says("not now");
+  await waitFor("the opt-in", () => c.ws.of("ask").some((a) => a.kind === "optin"), 30_000);
+  assert.ok(!w.spoken.includes("Got it. Thank you!"));
+  assert.ok(w.named("updatePrompt").some((u) => u.args[1] === "ignored"));
+  c.drop();
+});
+
+test("the plate photo taken while homie is still asking for it counts (and stops the line)", async () => {
+  const w = world();
+  w.endQuestions.length = 0;
+  const c = w.connect("rec-camera-plate-early");
+  await helloDone(c);
+  c.send({ type: "start", camera: true });
+  await advance(1000);
+  c.send({ type: "done" });
+  await waitFor("the plate ask", () => c.ws.of("ask").some((a) => a.kind === "plate"), 60_000);
+  c.send({ type: "plate", ok: true }); // the phone's shutter, before the line has played out
+  await waitFor("the thanks", () => w.spoken.includes("Got it. Thank you!"), 30_000);
+  assert.ok(c.ws.of("say_end").some((e) => e.interrupted), "the plate line was cut short");
+  await waitFor("the opt-in", () => c.ws.of("ask").some((a) => a.kind === "optin"), 30_000);
+  c.drop();
 });

@@ -2,7 +2,9 @@
 // cream border and a white rounded stop square inside, like a phone's voice recorder, on a warm glow.
 // While filming (`live`) two faint red rings pulse outward from it on a loop (one every 0.8 s, each
 // growing and fading over 1.6 s, out to the mockup's outer ring); Reduce Motion keeps them still.
-// Before filming starts and after it ends it rests, dimmed and without rings.
+// Before filming starts and after it ends it rests, dimmed and without rings. `resume`: filming in the
+// app stopped while she was away: the button is bright again, with a cream dot (record) in place of the
+// stop square, and a tap films again.
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withRepeat, withTiming, type SharedValue } from 'react-native-reanimated';
@@ -20,7 +22,7 @@ export const PULSE_MS = 1600;
 const RING_GROWTH = (2 * 46) / RECORD_SIZE;
 const RING = 'rgba(154,79,71,0.22)';
 
-export function RecordButton({ live, disabled, onPress, accessibilityLabel }: { live: boolean; disabled?: boolean; onPress: () => void; accessibilityLabel: string }) {
+export function RecordButton({ live, resume = false, disabled, onPress, accessibilityLabel }: { live: boolean; resume?: boolean; disabled?: boolean; onPress: () => void; accessibilityLabel: string }) {
   const reduce = useReducedMotion();
   const pulse = useSharedValue(0);
   const breathing = live && !reduce;
@@ -42,7 +44,7 @@ export function RecordButton({ live, disabled, onPress, accessibilityLabel }: { 
         </>
       ) : null}
       {/* The press animates opacity, so the resting dim sits on a wrapper. */}
-      <View style={!live && styles.resting}>
+      <View style={!live && !resume && styles.resting}>
         <PressableScale
           onPress={onPress}
           disabled={disabled}
@@ -50,8 +52,8 @@ export function RecordButton({ live, disabled, onPress, accessibilityLabel }: { 
           scaleTo={0.97}
           accessibilityRole="button"
           accessibilityLabel={accessibilityLabel}
-          style={[styles.button, !live && styles.flat]}>
-          <View style={styles.square} />
+          style={[styles.button, !live && !resume && styles.flat]}>
+          <View style={resume ? styles.dot : styles.square} />
         </PressableScale>
       </View>
     </View>
@@ -86,4 +88,5 @@ const styles = StyleSheet.create({
   resting: { opacity: 0.55 },
   flat: { boxShadow: 'none' },
   square: { width: SQUARE, height: SQUARE, borderRadius: 18, backgroundColor: colors.card },
+  dot: { width: SQUARE, height: SQUARE, borderRadius: SQUARE / 2, backgroundColor: colors.card },
 });

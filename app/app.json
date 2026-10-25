@@ -75,12 +75,30 @@
           "savePhotosPermission": "homecookd saves your cooking videos from your glasses to Photos.",
           "isAccessMediaLocationEnabled": false
         }
+      ],
+      [
+        "react-native-vision-camera",
+        {
+          "cameraPermissionText": "homecookd uses the camera so you can film yourself cooking, and your family can learn the dish from you, or snap a photo of a dish you made to send them.",
+          "enableMicrophonePermission": true,
+          "microphonePermissionText": "homecookd records sound with your cooking videos, so your family hears you explain each step in your own voice.",
+          "enableFrameProcessors": false,
+          "enableLocation": false
+        }
       ]
     ],
     "owner": "salikm1234",
-    "runtimeVersion": { "policy": "appVersion" },
-    "updates": { "url": "https://u.expo.dev/ef88fb83-09cf-4c73-9684-de9a95a1f1ef" },
-    "extra": { "eas": { "projectId": "ef88fb83-09cf-4c73-9684-de9a95a1f1ef" } },
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "updates": {
+      "url": "https://u.expo.dev/ef88fb83-09cf-4c73-9684-de9a95a1f1ef"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "ef88fb83-09cf-4c73-9684-de9a95a1f1ef"
+      }
+    },
     "experiments": {
       "typedRoutes": true,
       "reactCompiler": true
