@@ -15,7 +15,8 @@ src/server.ts   HTTP /health + POST /speak + POST /homie/line + WebSockets /cook
 src/safety.ts   the process's safety net: one session's error is logged with its id and never ends the others'
 src/cook.ts     one cooking session: wires Ink → (fast path | Claude) → actions → Sonic
 src/stepLine.ts what homie says on a step change: "Step 3. <the step, cut to ~20 words>" (plain rules, no Claude)
-src/lineCache.ts  the step lines' Sonic audio, made when the recipe opens and kept for every session (LRU)
+src/lineCache.ts  the step lines' Sonic audio, made when the recipe opens and kept for every session (LRU); failures
+                remembered a minute; at most 2 made ahead at once per process
 src/yesNo.ts    the kid's spoken yes or no, to homie's story nudge and the app's moments (follows the app's yesNo)
 src/agent.ts    Claude turn agent: tools, system prompt, the one-tool-per-turn loop
 src/translate.ts  the cook's words from a played clip → short English, spoken after the clip
@@ -102,7 +103,8 @@ App → service
   screen is up, silence included: Ink waits for audio, it doesn't assume silence.
 - `{ "type": "step", "stepOrder": 3 }` when the kid taps Next, Back or a step. homie says that step's line at once
   (below). The first one on a socket, sent as it opens, restores the step on the screen: it isn't read (when it
-  comes before `ready` or within 3 s of it), and the session starts there. A tap on the step it's on says nothing.
+  comes before `ready` or within 3 s of it), and the session starts there. A later one before `ready` is a tap
+  while the recipe loads: it's read once ready. A tap on the step it's on says nothing.
 - `{ "type": "text", "text": "how much soy sauce?" }`: typed or push-to-talk input, handled like speech. The app
   can answer the story nudge with `{ "type": "text", "text": "yes" }` or `"no"`. It's the app's own answer, so it
   counts even while one of its moments is up.
@@ -117,28 +119,35 @@ App → service
 - `{ "type": "video", "playing": true | false }` when any video (or the cook's voice note) starts or stops on the
   phone. While one plays, homie says nothing on its own (Caleb, Oct 24): a `greeting`, `nudge` or `timer` line waits
   for the next pause, one after another (`timer_done` still comes at once). An answer to what the kid just did or
-  said is spoken meanwhile, and a step's line is one: it answers the flip, video or not. A clip homie asked for counts as a video too. After a reconnect, send it again if one plays.
+  said is spoken meanwhile, and a step's line is one: it answers the flip, video or not. A clip homie asked for
+  counts as a video too. After a reconnect, send it again if one plays.
 - Silence while a `say` or a clip plays (half duplex).
 
 Service → app
 - `{ type: "ready", recipe: { id, title, steps } }`, then `{ type: "go_to_step", stepOrder }` for where to start.
 - Then homie's hello, a `say` of kind `greeting` in the cook's language (`"चला, स्वयंपाक करूया!"`, `textEn: "Let's
-  cook!"`). A kid greeted on this recipe in the last 3 hours (same instance) gets no second hello after a dropped
-  socket.
+  cook!"`). A kid whose hello started playing on this recipe in the last 3 hours (same instance) gets no second
+  hello after a dropped socket; a hello cut off before any of it played doesn't count.
 - Step lines (Caleb, Oct 24: "right when I flip to the next step, I need homie to … start talking"). On every step
   change homie says the step's short line at once, a `say` of kind `step`: "Step 2. Melt the sugar to amber." The
   line is the step's text cut to about 20 words by plain rules, no Claude (`stepLine.ts`: whole sentences that fit,
   else the first sentence up to a "; " or ", then ", else the step's title). A step change is a tap (`step`), a
-  plain command ("next", "go back"), or Claude's `next_step` / `previous_step` / `go_to_step`; "repeat" says the
-  line again. Not for the restore, and not when the step didn't change.
-  - Made ahead: when the session starts, Sonic makes every step's line, 2 at a time, from the step they're on
-    onwards, then the earlier ones, in homie's voice exactly as a step said live (voice, locale, speed, `calm`
-    mood, the session's format). The audio is kept per process (`lineCache.ts`, by voice, language, kind,
-    format and text; least recently used out past 300 lines or 64 MB), so a second kid on the same recipe or a
-    reconnect costs nothing. A kept line goes out all at once: `say`, every frame, `say_end`, with the same
-    half duplex and echo timing as a streamed line. A line still being made sends what's there, then the rest as
-    Sonic makes it; one not started yet is made at once and streamed (and kept). Ahead of time it's Sonic alone:
-    a line Sonic couldn't make isn't kept, and the flip says it live, where Gemini can still step in.
+  plain command ("next", "go back"), or Claude's `next_step` / `previous_step` / `go_to_step`. Not for the
+  restore, and not when the step didn't change. "Repeat" ("say that again", Claude's `repeat_step`) says the whole
+  step, `Step 3. <all of its text>`, live (it's rare, so it isn't kept); the next flip says the short line again.
+  - Made ahead: once the hello's first audio is out (so Sonic says the hello first), or at once when there's no
+    hello or it waits for a video, Sonic makes every step's line, from the step they're on onwards, then the
+    earlier ones, 2 at a time across the whole process, in homie's voice exactly as a step said live (voice,
+    locale, speed, `calm` mood, the session's format). The audio is kept per process (`lineCache.ts`, by voice,
+    language, kind, format and text; least recently used out past 300 lines or 64 MB), so a second kid on the same
+    recipe or a reconnect costs nothing. A kept line goes out all at once: `say`, every frame, `say_end`, with the
+    same half duplex and echo timing as a streamed line. A line still being made sends what's there, then the rest
+    as Sonic makes it; one not started yet is made at once and streamed (and kept). A line still unfinished after
+    20 s fails.
+  - When Sonic can't: ahead of time it's Sonic alone, so the backup voice is never kept. A line that failed isn't
+    kept, and for a minute it isn't asked of Sonic again: the flip goes straight to Gemini, so a flip waits for at
+    most one Sonic failure. A 402 or 429 (out of credits, rate-limited) stops making lines ahead and sends every
+    step line straight to Gemini for that minute, across sessions.
   - A flip cuts off the line playing (a new `say` always does), so rapid flips play only the latest step's line.
     A step line answers the kid's flip: it's spoken over a video too.
   - What it costs: about 1 Sonic credit a character, once per recipe per instance (Grandma's red-braised pork: 6

@@ -16,7 +16,7 @@ import type * as Beta from "@anthropic-ai/sdk/resources/beta/messages/messages.j
 /** What the agent can make happen. The cooking session implements these. */
 export type Actions = {
   currentStep: () => number;
-  /** Shows the step and says its short line when the step changes; `repeat` says it again with no change. */
+  /** Shows the step and says its short line when the step changes; `repeat` says the whole step, with no change. */
   goToStep: (order: number, repeat?: boolean) => Promise<void>;
   /** Moss search. `waitMs` caps how long to wait for the family's index to load. */
   findMoment: (query: string, waitMs: number) => Promise<Hit[]>;
@@ -54,7 +54,7 @@ const obj = (properties: Record<string, object>, required: string[] = []) => ({
 const TOOLS: Beta.BetaTool[] = [
   { name: "next_step", description: "Move to the next step and read it aloud.", input_schema: obj({}) },
   { name: "previous_step", description: "Go back one step and read it aloud.", input_schema: obj({}) },
-  { name: "repeat_step", description: "Read the current step aloud again.", input_schema: obj({}) },
+  { name: "repeat_step", description: "Read the whole current step aloud again, all of its text.", input_schema: obj({}) },
   {
     name: "go_to_step",
     description: "Jump to step n (1-based) and read it aloud.",
@@ -165,7 +165,8 @@ export class TurnAgent {
   }
 
   /**
-   * Handle one finished utterance from the kid. `note`: what the service already did with it (a no to an offer).
+   * Handle one finished utterance from the kid. `note`: what the service already did with it (a no to the story
+   * nudge, or to the app's moment).
    * `addressed`: the kid tapped homie to ask (the app's "ask" moment), so it's for homie whatever the words.
    */
   async turn(utterance: string, note?: string, addressed = false): Promise<void> {

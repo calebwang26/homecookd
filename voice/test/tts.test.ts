@@ -139,14 +139,15 @@ test("every kind's mood is one Cartesia lists, as auditioned; anything else is c
   const expected = {
     intro: "content", amount: "curious", cue: "curious", substitution: "curious", story: "curious", end: "curious", optin: "curious",
     reaction: "affectionate", closing: "grateful",
-    greeting: "content", step: "calm", hint: "calm", reply: "content", offer: "curious", nudge: "content", timer: "content",
+    greeting: "content", step: "calm", hint: "calm", reply: "content", nudge: "content", timer: "content",
     translation: "affectionate",
   };
   for (const [kind, mood] of Object.entries(expected)) {
     assert.equal(sonic.moodOf(kind), mood, kind);
     assert.ok(CARTESIA_EMOTIONS.has(mood), mood);
   }
-  for (const kind of [undefined, "", "toString", "something new"]) assert.equal(sonic.moodOf(kind), "content");
+  // "offer" was the read-aloud offer's (gone Oct 24).
+  for (const kind of [undefined, "", "toString", "something new", "offer"]) assert.equal(sonic.moodOf(kind), "content");
 });
 
 test("Sonic 402 before any audio: Gemini says the line, its audio goes out the same way, one log line", async () => {
@@ -166,12 +167,23 @@ test("backup off (a step line made ahead and kept): Sonic's 402 fails the line, 
   stub({ sonic: () => new Response("insufficient credits", { status: 402 }), gemini: () => assert.fail("no Gemini for a kept line") });
   const out: Buffer[] = [];
   const voice = { voice: env.homieVoice, kind: "step" };
-  const err = await sonic.speak("Step 2. Melt the sugar to amber.", "pcm", new AbortController().signal, (c) => out.push(c), voice, false).catch((e: Error) => e);
+  const err = await sonic
+    .speak("Step 2. Melt the sugar to amber.", "pcm", new AbortController().signal, (c) => out.push(c), voice, { backup: false })
+    .catch((e: Error) => e);
   assert.ok(err instanceof Error && err.message.startsWith("402"), String(err));
   assert.deepEqual(out, []);
   assert.deepEqual(calls.map((c) => c.url.split("/")[2]), ["api.cartesia.ai"]);
   // The same request as a line said live: one voice, one locale and mood, whether made ahead or not.
   assert.deepEqual(calls[0].body, sonic.sonicRequest("Step 2. Melt the sugar to amber.", "pcm", voice));
+});
+
+test("Sonic off (it just failed on this line): Gemini says it straight away, and Sonic isn't asked again", async () => {
+  stub({ sonic: () => assert.fail("no second Sonic try"), gemini: () => geminiEvents(geminiPieces) });
+  const out: Buffer[] = [];
+  await sonic.speak("Step 2. Melt the sugar to amber.", "pcm", new AbortController().signal, (c) => out.push(c), { kind: "step" }, { sonic: false });
+  assert.deepEqual(out, geminiPieces);
+  assert.deepEqual(calls.map((c) => c.url.split("/")[2]), ["generativelanguage.googleapis.com"]);
+  assert.deepEqual(logs, ["tts: gemini (sonic failed on this line already)"]);
 });
 
 test("the Gemini request: the TTS model, a warm voice, one short style, 24 kHz raw PCM, streamed, not stored", () => {
