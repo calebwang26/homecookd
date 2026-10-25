@@ -1,14 +1,14 @@
 // The walkie-talkie v2 (/answer/<questionId>, from a Parent Home question row): the cook answers a
-// kid's question out loud, with no buttons. The peach wash and warm glow of the recording screen, a
-// small cream × top-left, and one centred column (components/record/RecordWash COLUMN): "Shreya ने
-// विचारलं", the question big in her language (questions.textForCook, else what homie said when it
-// translated it), the kid's English small under it marked "Translated", then homie big and glowing
-// (the glow breathes), then five green listening bars that move with her voice and "बोला, मी ऐकतोय" /
-// "Just answer out loud". homie reads the question when it opens (lib/live/speak, labelled "AI
-// voice"; a translated question in her language even before people.me has loaded); then it listens,
-// sends her voice note when she stops, and says "Shreya ला पाठवलं" while a check pops in, before the
-// screen closes by itself (components/record/useWalkie). A tap on the question reads it again. The
-// corner pot is hidden here: the big one is homie.
+// kid's question out loud, with no buttons. The peach wash of the recording screen, a small cream ×
+// top-left, and one centred column (components/record/RecordWash COLUMN): "Shreya ने विचारलं", the
+// question big in her language (questions.textForCook, else what homie said when it translated it),
+// the kid's English small under it marked "Translated", then homie big (HomiePot is its only glow: the
+// ring while it listens, a plain white circle once it can't hear her), then five green listening bars
+// that move with her voice and "बोला, मी ऐकतोय" / "Just answer out loud". homie reads the question when
+// it opens (lib/live/speak, labelled "AI voice"; a translated question in her language even before
+// people.me has loaded); then it listens, sends her voice note when she stops, and says "Shreya ला
+// पाठवलं" while a check pops in, before the screen closes by itself (components/record/useWalkie). A
+// tap on the question reads it again. The corner pot is hidden here: the big one is homie.
 // A share ask (questions.kind 'share': someone wants her dish on the Community map) comes the same
 // way: "Shreya ने विचारलं", the ask in her language, and her spoken yes or no (a short word is enough)
 // goes as the voice note; the server reads it, and only a clear yes shares the dish.
@@ -23,7 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { BiLine } from '@/components/record/BiLine';
 import { GlowHomie } from '@/components/record/GlowHomie';
 import { ListeningBars } from '@/components/record/ListeningBars';
-import { COLUMN, RecordWash, WarmGlow } from '@/components/record/RecordWash';
+import { COLUMN, RecordWash } from '@/components/record/RecordWash';
 import { useWalkie, type WalkieStep } from '@/components/record/useWalkie';
 import { questionFit, questionLines } from '@/components/record/walkieLogic';
 import { recordWords, type Line, type RecordWords } from '@/components/record/words';
@@ -186,8 +186,7 @@ export default function AnswerScreen() {
             ) : null}
           </Animated.View>
           <Animated.View entering={enter(1)} style={[styles.hero, { width: fit.homie, height: fit.homie }]}>
-            <WarmGlow box={fit.homie} />
-            <GlowHomie size={fit.homie} state={homieState} level={walkie.level} label={talking ? speakingLabel(h, now.key) : null} breathe={step !== 'sent'} />
+            <GlowHomie size={fit.homie} state={homieState} level={walkie.level} label={talking ? speakingLabel(h, now.key) : null} />
           </Animated.View>
           <Animated.View key={step === 'sent' ? 'sent' : 'ask'} entering={enter(2)} style={[styles.label, (step === 'reading' || step === 'waiting') && styles.soft]} accessibilityLiveRegion="polite">
             {step === 'sent' ? <SentCheck /> : null}

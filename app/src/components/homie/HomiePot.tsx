@@ -52,6 +52,8 @@ const SEGMENTS = [0, 120, 240];
 const SEGMENT_DEG = 46;
 /** How far the ring can grow (pulse + mic level), so the clock ring sits clear of it. */
 const RING_GROW = 0.07;
+/** The halo's biggest scale: fully lit, plus speaking's pulse or the mic level (0.92 + 3 × 0.08). */
+const HALO_MAX = 1.16;
 const fade = { duration: motion.reducedFadeMs };
 const inOut = Easing.inOut(Easing.cubic);
 
@@ -187,19 +189,24 @@ export function HomiePot({ state, level = 0, size = 56, timerProgress = null, sh
     if (timed) clock.set(reduce ? timerProgress : withTiming(timerProgress, { duration: 900, easing: Easing.linear }));
   }, [timed, timerProgress, reduce, clock, clockOn]);
 
-  // Sizes: the ring hugs the circle's edge; the clock is drawn just outside the ring at its biggest, and
-  // scaled in to hug the edge while there is no ring (under Reduce Motion it stays out: no movement).
+  // Sizes: the ring hugs the circle's edge; the clock is drawn just outside the ring's glow at its biggest,
+  // and scaled in to hug the edge while there is no ring (under Reduce Motion it stays out: no movement).
+  // The ring and the halo are drawn at their biggest and only ever scaled down, so the ring stays crisp.
   const ringW = Math.max(3, size * 0.04);
-  const ringR = size / 2 + ringW / 2;
-  const glowW = ringW * 2;
-  const ringBox = Math.ceil(size + 3 * ringW + 2);
+  const ringOut = size / 2 + 1.5 * ringW; // how far the arcs' glow (twice the ring's width) reaches at rest
+  const big = 1 + RING_GROW;
+  const ringR = (size / 2 + ringW / 2) * big;
+  const lineW = ringW * big;
+  const glowW = lineW * 2;
+  const ringBox = Math.ceil(2 * ringOut * big + 2);
   const c = ringBox / 2;
+  const gap = Math.max(1, size * 0.01);
   const clockW = Math.max(3, size * 0.03);
-  const clockR = (size / 2 + ringW) * (1 + RING_GROW) + clockW / 2 + Math.max(1, size * 0.01);
+  const clockR = ringOut * big + gap + clockW / 2;
   const clockBox = Math.ceil(2 * clockR + clockW + 2);
   const clockC = 2 * Math.PI * clockR;
-  const clockIn = (size / 2 + clockW / 2 + Math.max(1, size * 0.01)) / clockR;
-  const haloBox = size * 1.5;
+  const clockIn = (size / 2 + gap + clockW / 2) / clockR;
+  const haloBox = size * 1.5 * HALO_MAX;
 
   const at = (deg: number) => {
     const a = (deg * Math.PI) / 180;
@@ -230,11 +237,11 @@ export function HomiePot({ state, level = 0, size = 56, timerProgress = null, sh
   const shadowStyle = useAnimatedStyle(() => ({ opacity: 1 - warm.value }));
   const haloStyle = useAnimatedStyle(() => ({
     opacity: Math.min(1, halo.value * (0.8 + 0.2 * pulse.value) + 0.3 * voice.value),
-    transform: [{ scale: 0.92 + 0.08 * halo.value + 0.08 * pulse.value + 0.08 * voice.value }],
+    transform: [{ scale: (0.92 + 0.08 * halo.value + 0.08 * pulse.value + 0.08 * voice.value) / HALO_MAX }],
   }));
   const ringStyle = useAnimatedStyle(() => ({
     opacity: ringOn.value,
-    transform: [{ scale: 1 + 0.02 * beat.value + (RING_GROW - 0.02) * voice.value }],
+    transform: [{ scale: (1 + 0.02 * beat.value + (RING_GROW - 0.02) * voice.value) / big }],
   }));
   const trackStyle = useAnimatedStyle(() => ({ opacity: Math.min(1, 0.35 + 0.3 * beat.value + 0.35 * voice.value) }));
   const orbitStyle = useAnimatedStyle(() => ({ opacity: orbitOn.value * (0.8 + 0.2 * beat.value), transform: [{ rotate: `${orbit.value * 360}deg` }] }));
@@ -302,7 +309,7 @@ export function HomiePot({ state, level = 0, size = 56, timerProgress = null, sh
       <Animated.View style={[styles.abs, around(ringBox), ringStyle]}>
         <Animated.View style={[StyleSheet.absoluteFill, trackStyle]}>
           <Svg width={ringBox} height={ringBox}>
-            <Circle cx={c} cy={c} r={ringR} stroke={colors.sun} strokeWidth={ringW * 0.6} fill="none" />
+            <Circle cx={c} cy={c} r={ringR} stroke={colors.sun} strokeWidth={lineW * 0.6} fill="none" />
           </Svg>
         </Animated.View>
         <Animated.View style={[StyleSheet.absoluteFill, orbitStyle]}>
@@ -315,7 +322,7 @@ export function HomiePot({ state, level = 0, size = 56, timerProgress = null, sh
               </LinearGradient>
             </Defs>
             <Path d={comet} stroke={`url(#${id}comet)`} strokeOpacity={0.35} strokeWidth={glowW} strokeLinecap="round" fill="none" />
-            <Path d={comet} stroke={`url(#${id}comet)`} strokeWidth={ringW} strokeLinecap="round" fill="none" />
+            <Path d={comet} stroke={`url(#${id}comet)`} strokeWidth={lineW} strokeLinecap="round" fill="none" />
           </Svg>
         </Animated.View>
         <Animated.View style={[StyleSheet.absoluteFill, spinStyle]}>
@@ -324,7 +331,7 @@ export function HomiePot({ state, level = 0, size = 56, timerProgress = null, sh
               <Path key={`glow${mid}`} d={arc(mid - SEGMENT_DEG / 2, mid + SEGMENT_DEG / 2)} stroke={colors.sun} strokeOpacity={0.3} strokeWidth={glowW} strokeLinecap="round" fill="none" />
             ))}
             {SEGMENTS.map((mid) => (
-              <Path key={mid} d={arc(mid - SEGMENT_DEG / 2, mid + SEGMENT_DEG / 2)} stroke={colors.sun} strokeWidth={ringW} strokeLinecap="round" fill="none" />
+              <Path key={mid} d={arc(mid - SEGMENT_DEG / 2, mid + SEGMENT_DEG / 2)} stroke={colors.sun} strokeWidth={lineW} strokeLinecap="round" fill="none" />
             ))}
           </Svg>
         </Animated.View>
