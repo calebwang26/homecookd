@@ -1,8 +1,8 @@
-// Filming in the app (lib/live/camera): the back camera at 1080p 30 fps with sound, saved in 5-minute
-// files (CHUNK_MS) under documents/recordings/<recordingId>/, so a crash or a kill loses at most the
-// file it was writing. Leaving the app (a lock, a call, the home screen) finishes the current file at
-// once and the camera waits ("paused"); back in the app it films again by itself after a short trip
-// (Control Center), else when she taps. Every FRAME_EVERY_MS while filming, a small still (640 px JPEG,
+// Filming in the app (lib/live/camera): the back camera (or the front one, after a flip) at 1080p 30 fps
+// with sound, saved in 5-minute files (CHUNK_MS) under documents/recordings/<recordingId>/, so a crash or
+// a kill loses at most the file it was writing. Leaving the app (a lock, a call, the home screen) finishes
+// the current file at once and the camera waits ("paused"); back in the app it films again by itself after
+// a short trip (Control Center), else when she taps. Every FRAME_EVERY_MS while filming, a small still (640 px JPEG,
 // base64) goes to `onFrame` for homie.
 //
 //   const cam = useInAppCamera({ recordingId, on, onFrame, onPause, onResume, beforeResume, betweenFiles });
@@ -12,12 +12,21 @@
 //   const clips = await cam.stop()    finishes the last file: the draft clips, in order
 //   await cam.resume()                after a pause: beforeResume (homie's mic restarts), then a new file
 //   const uri = await cam.still()     a full-size still (the plate photo), or null
+//   await cam.flip()                  the other camera (cameraLogic flipSteps); while filming, a file boundary
+//   cam.facing 'back' | 'front'    cam.canFlip (both cameras, ready, no flip running)    cam.flipping
 //   cam.phase  'idle' | 'filming' | 'paused' | 'done'    cam.filmedMs()    cam.error
 //
 // The audio session (lib/live/camera CAMERA_AUDIO_SESSION): homie's mic must already be running before a
 // file starts, and must not start or stop while one is being written; `beforeResume` (after a pause) and
-// `betweenFiles` (a 5-minute roll) are the only places it may restart. `onResume(gapS)` tells homie how
-// much wall time the video skipped.
+// `betweenFiles` (a 5-minute roll, a flip while filming) are the only places it may restart. `onResume(gapS)`
+// tells homie how much wall time the video skipped.
+//
+// A flip changes the <Camera>'s `device` (and its 1080p format) while no file is written. VisionCamera 4.7
+// then rebuilds the capture session's input and outputs (CameraSession+Configuration.swift) and calls
+// `onInitialized` again; the next file starts only after that, since a recording started on the old
+// outputs would lose them mid-file. The camera's sound has its own capture session, which a device change
+// leaves alone, so for the audio a flip is the same as a roll. start, resume, the roll and the flip run one
+// at a time (`serial`); leaving the app and "I'm done" never wait.
 import { Directory, File, Paths } from 'expo-file-system';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
@@ -25,7 +34,24 @@ import type { Camera, CameraDevice, CameraDeviceFormat } from 'react-native-visi
 
 import { imageManipulator, visionCamera } from '@/lib/live/camera';
 
-import { CHUNK_MS, chunkClip, chunkName, filmedMs, FRAME_EVERY_MS, FRAME_WIDTH, gapS, resumesBySelf, stopsFilming, type Chunk } from './cameraLogic';
+import {
+  CHUNK_MS,
+  chunkClip,
+  chunkName,
+  filmedMs,
+  FLIP_SETTLE_MS,
+  FLIP_WAIT_MS,
+  flipSteps,
+  FRAME_EVERY_MS,
+  FRAME_WIDTH,
+  gapS,
+  otherFacing,
+  resumesBySelf,
+  stopsFilming,
+  type CameraPhase,
+  type Chunk,
+  type Facing,
+} from './cameraLogic';
 import type { DraftClip } from './draft';
 
 export const VIDEO_BITRATE_MBPS = 6; // 1080p30 H.264: ~2 GB for 45 minutes (the pipeline makes a 720p copy anyway)
@@ -33,12 +59,21 @@ const FPS = 30;
 const READY_WAIT_MS = 10_000;
 
 const vc = visionCamera();
-const useDevice: () => CameraDevice | undefined = vc ? () => vc.useCameraDevice('back') : () => undefined;
+const useDevice: (f: Facing) => CameraDevice | undefined = vc ? (f) => vc.useCameraDevice(f) : () => undefined;
 const useFormat: (d: CameraDevice | undefined) => CameraDeviceFormat | undefined = vc
   ? (d) => vc.useCameraFormat(d, [{ videoResolution: { width: 1920, height: 1080 } }, { fps: FPS }])
   : () => undefined;
 
-export type CameraPhase = 'idle' | 'filming' | 'paused' | 'done';
+export type { CameraPhase, Facing };
+
+const sleep = (ms: number) => new Promise<void>((r) => setTimeout(r, Math.max(0, ms)));
+
+/** A promise for "the camera is ready", resolved from outside. */
+function deferred() {
+  let resolve!: (ok: boolean) => void;
+  const promise = new Promise<boolean>((r) => (resolve = r));
+  return { promise, resolve };
+}
 
 type Options = {
   recordingId: string | null;
@@ -86,8 +121,14 @@ export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, be
   }, []);
   /** What has been filmed, for the clock: the finished files' length, and since when the current one runs. */
   const [clock, setClock] = useState<{ doneMs: number; since: number | null }>({ doneMs: 0, since: null });
-  const device = useDevice();
+  // Both cameras are looked up; `facing` picks one, and the format follows it in the same render.
+  const back = useDevice('back');
+  const front = useDevice('front');
+  const [facing, setFacing] = useState<Facing>('back');
+  const facingRef = useRef<Facing>('back');
+  const device = facing === 'front' ? front : back;
   const format = useFormat(device);
+  const twoCameras = !!back && !!front && back.id !== front.id;
   const [phase, setPhaseState] = useState<CameraPhase>('idle');
   const [error, setError] = useState<string | null>(null);
   const [appActive, setAppActive] = useState(AppState.currentState === 'active');
@@ -115,19 +156,52 @@ export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, be
   /** The file being written: when it started, and resolvers for its end. */
   const current = useRef<{ startedAt: number; done: Promise<void>; finish: () => void } | null>(null);
   const rollTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const rollRef = useRef<() => Promise<void>>(async () => {});
-  const ready = useRef<{ promise: Promise<boolean>; resolve: (ok: boolean) => void } | null>(null);
-  if (ready.current == null) {
-    let resolve!: (ok: boolean) => void;
-    const promise = new Promise<boolean>((r) => (resolve = r));
-    ready.current = { promise, resolve };
-  }
+  const rollRef = useRef<(startedAt: number) => Promise<void>>(async () => {});
+  /** The camera is set up for the current device: VisionCamera's onInitialized (again after every flip). */
+  const ready = useRef<ReturnType<typeof deferred> | null>(null);
+  if (ready.current == null) ready.current = deferred();
+  const [initialized, setInitialized] = useState(false);
+  const [flipping, setFlipping] = useState(false);
+  const flippingRef = useRef(false);
+  /** start, resume, the roll and the flip, one at a time. */
+  const queue = useRef<Promise<unknown>>(Promise.resolve());
+  const serial = useCallback(<T,>(job: () => Promise<T>): Promise<T> => {
+    const run = queue.current.then(job);
+    queue.current = run.catch(() => {});
+    return run;
+  }, []);
   const cbs = useRef({ onFrame, onPause, onResume, beforeResume, betweenFiles, recordingId });
   useEffect(() => {
     cbs.current = { onFrame, onPause, onResume, beforeResume, betweenFiles, recordingId };
   });
 
-  const onInitialized = useCallback(() => ready.current?.resolve(true), []);
+  const onInitialized = useCallback(() => {
+    ready.current?.resolve(true);
+    setInitialized(true);
+  }, []);
+  /** Waits until the camera is ready for the device it has now (a flip meanwhile: the new one). */
+  const waitReady = useCallback(async (ms: number): Promise<boolean> => {
+    const until = Date.now() + ms;
+    for (;;) {
+      const r = ready.current!;
+      const ok = await Promise.race([r.promise, sleep(until - Date.now()).then(() => false)]);
+      if (!ok) return false;
+      if (r === ready.current) return true;
+    }
+  }, []);
+  /** Points the <Camera> at the other device and waits until VisionCamera has set it up. */
+  const switchTo = useCallback(
+    async (f: Facing): Promise<boolean> => {
+      const old = ready.current!;
+      ready.current = deferred();
+      old.resolve(true); // whoever waits on the old camera now waits for this one (waitReady)
+      setInitialized(false);
+      facingRef.current = f;
+      setFacing(f);
+      return waitReady(FLIP_WAIT_MS);
+    },
+    [waitReady],
+  );
   const onError = useCallback((e: { code?: string; message?: string }) => {
     console.warn('[camera]', e.code, e.message);
     setError(e.message ?? String(e.code));
@@ -168,7 +242,7 @@ export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, be
       return false;
     }
     if (rollTimer.current) clearTimeout(rollTimer.current);
-    rollTimer.current = setTimeout(() => void rollRef.current(), CHUNK_MS);
+    rollTimer.current = setTimeout(() => void rollRef.current(startedAt), CHUNK_MS);
     return true;
   }, []);
 
@@ -182,30 +256,42 @@ export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, be
     await c.done;
   }, []);
 
-  /** Every CHUNK_MS: finish this file and start the next (homie hears the small gap between them). */
-  const roll = useCallback(async () => {
-    if (phaseRef.current !== 'filming') return;
-    await endFile();
-    if (phaseRef.current !== 'filming') return;
+  /** Between two files while filming: homie's mic may restart, then the next file (homie hears the gap). */
+  const nextFile = useCallback(async () => {
+    if (phaseRef.current !== 'filming' || current.current) return;
     await cbs.current.betweenFiles?.().catch(() => {});
-    if (phaseRef.current !== 'filming') return;
+    if (phaseRef.current !== 'filming' || current.current) return;
     const at = Date.now();
     if (await startFile()) cbs.current.onResume?.(gapS(chunks.current.at(-1), at));
-  }, [endFile, startFile]);
+  }, [startFile]);
+
+  /** Every CHUNK_MS: finish this file and start the next. Not if that file has ended already (a flip, a pause). */
+  const roll = useCallback(
+    (startedAt: number) =>
+      serial(async () => {
+        if (phaseRef.current !== 'filming' || current.current?.startedAt !== startedAt) return;
+        await endFile();
+        await nextFile();
+      }),
+    [serial, endFile, nextFile],
+  );
   useEffect(() => {
     rollRef.current = roll;
   });
 
-  const start = useCallback(async (): Promise<boolean> => {
-    if (phaseRef.current !== 'idle') return phaseRef.current === 'filming';
-    const ok = await Promise.race([ready.current!.promise, new Promise<boolean>((r) => setTimeout(() => r(false), READY_WAIT_MS))]);
-    if (!ok || !(await startFile())) {
-      setError('The camera didn’t start.');
-      return false;
-    }
-    setPhase('filming');
-    return true;
-  }, [startFile, setPhase]);
+  const start = useCallback(
+    (): Promise<boolean> =>
+      serial(async () => {
+        if (phaseRef.current !== 'idle') return phaseRef.current === 'filming';
+        if (!(await waitReady(READY_WAIT_MS)) || !(await startFile())) {
+          setError('The camera didn’t start.');
+          return false;
+        }
+        setPhase('filming');
+        return true;
+      }),
+    [serial, waitReady, startFile, setPhase],
+  );
 
   const pause = useCallback(async () => {
     if (phaseRef.current !== 'filming') return;
@@ -214,16 +300,52 @@ export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, be
     await endFile();
   }, [endFile, setPhase]);
 
-  const resume = useCallback(async (): Promise<boolean> => {
-    if (phaseRef.current !== 'paused') return phaseRef.current === 'filming';
-    await cbs.current.beforeResume?.().catch(() => {});
-    if (phaseRef.current !== 'paused') return false;
-    const at = Date.now();
-    if (!(await startFile())) return false;
-    setPhase('filming');
-    cbs.current.onResume?.(gapS(chunks.current.at(-1), at));
-    return true;
-  }, [startFile, setPhase]);
+  const resume = useCallback(
+    (): Promise<boolean> =>
+      serial(async () => {
+        if (phaseRef.current !== 'paused') return phaseRef.current === 'filming';
+        await cbs.current.beforeResume?.().catch(() => {});
+        if (phaseRef.current !== 'paused') return false;
+        // Ready already after a lock or a call; after a flip while paused, this waits for the new camera.
+        await waitReady(FLIP_WAIT_MS);
+        const at = Date.now();
+        if (phaseRef.current !== 'paused' || !(await startFile())) return false;
+        setPhase('filming');
+        cbs.current.onResume?.(gapS(chunks.current.at(-1), at));
+        return true;
+      }),
+    [serial, waitReady, startFile, setPhase],
+  );
+
+  /**
+   * The other camera (cameraLogic flipSteps). While filming: the file ends, the camera switches, a new
+   * file starts on the other one (homie hears the gap), and the mic is never touched while a file is
+   * written. If the other camera isn't ready in FLIP_WAIT_MS: back to the one that worked. False when
+   * nothing changed.
+   */
+  const flip = useCallback(async (): Promise<boolean> => {
+    if (!twoCameras || flippingRef.current) return false;
+    flippingRef.current = true;
+    setFlipping(true);
+    try {
+      return await serial(async () => {
+        const from = facingRef.current;
+        const steps = flipSteps(phaseRef.current);
+        if (steps.includes('endFile')) await endFile();
+        const switched = await switchTo(otherFacing(from));
+        if (!switched) {
+          console.warn('[camera] the other camera did not get ready; back to', from);
+          await switchTo(from);
+        }
+        if (steps.includes('startFile')) await nextFile();
+        else await sleep(FLIP_SETTLE_MS);
+        return switched;
+      });
+    } finally {
+      flippingRef.current = false;
+      setFlipping(false);
+    }
+  }, [twoCameras, serial, endFile, switchTo, nextFile]);
 
   const stop = useCallback(async (): Promise<DraftClip[]> => {
     if (phaseRef.current === 'done') return chunks.current.map(chunkClip);
@@ -259,7 +381,8 @@ export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, be
       const cam = ref.current;
       const m = imageManipulator();
       // No manipulator in this build: no stills (a full-size one is too big for the socket); homie just listens.
-      if (!cam || !m || framing.current || !cbs.current.onFrame) return;
+      // Mid-flip the picture may still be the other camera's: none this time.
+      if (!cam || !m || framing.current || flippingRef.current || !cbs.current.onFrame) return;
       framing.current = true;
       let path: string | null = null;
       try {
@@ -308,6 +431,13 @@ export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, be
     device,
     format,
     fps: FPS,
+    /** Which camera films, and whether a flip is running (its button waits). */
+    facing,
+    flipping,
+    /** Both cameras exist (else no flip button). */
+    twoCameras,
+    /** The flip button works: both cameras, the camera ready, no flip running. */
+    canFlip: twoCameras && initialized && !flipping,
     bitRate: VIDEO_BITRATE_MBPS,
     /** The camera runs while the app is in front and the screen still needs it. */
     active: appActive && on,
@@ -318,6 +448,7 @@ export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, be
     start,
     stop,
     resume,
+    flip,
     still,
     /** Video filmed by `now` (render it with a ticking clock). */
     filmedMs: (now: number) => clock.doneMs + (clock.since === null ? 0 : Math.max(0, now - clock.since)),

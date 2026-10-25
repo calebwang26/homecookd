@@ -11,7 +11,8 @@
 //   src/lib/languages.ts                     the picker's list and search (Track F's API)
 //   src/components/record/cameraLogic.ts     filming in the app: file names, the gap between two files,
 //                                            the clock, when leaving stops the camera and coming back
-//                                            films again by itself, the clip each file becomes
+//                                            films again by itself, the clip each file becomes, the
+//                                            flip (a file boundary while filming; where its button goes)
 //   build-4 safety                           an EAS Update reaches TestFlight builds without VisionCamera
 //                                            or expo-image-manipulator: recording.tsx's whole import graph
 //                                            never imports either by value, and src/lib/live/camera.ts (the
@@ -347,6 +348,51 @@ test('in-app camera: each file becomes a selected camera clip for the Send path'
   assert.equal(clip.selected, true);
   assert.equal(clip.recordedAt, '2026-10-25T17:05:00.000Z');
   assert.deepEqual(clip.asset, { uri: 'file:///doc/recordings/r1/part-02.mp4', width: 1080, height: 1920, type: 'video', duration: 300_000, fileName: 'part-02.mp4', mimeType: 'video/mp4' });
+});
+
+test('flip: while filming it is a file boundary; otherwise only the camera switches', () => {
+  assert.deepEqual(C.flipSteps('filming'), ['endFile', 'switch', 'betweenFiles', 'startFile']);
+  for (const phase of ['idle', 'paused', 'done']) assert.deepEqual(C.flipSteps(phase), ['switch'], phase);
+  // The mic rule: homie's mic may restart only between the end of one file and the start of the next.
+  const s = C.flipSteps('filming');
+  assert.ok(s.indexOf('endFile') < s.indexOf('betweenFiles') && s.indexOf('betweenFiles') < s.indexOf('startFile'));
+  // The new file starts only once the other camera is set up.
+  assert.ok(s.indexOf('switch') < s.indexOf('startFile'));
+  assert.equal(C.otherFacing('back'), 'front');
+  assert.equal(C.otherFacing('front'), 'back');
+  assert.ok(C.FLIP_WAIT_MS <= 5000, 'never long without a file');
+  assert.ok(C.FLIP_SETTLE_MS < 1000);
+});
+
+test('flip: the button sits beside the card, beside the shutter for the plate, never under homie’s question', () => {
+  const on = { camera: true, twoCameras: true, asking: false, plate: false, photo: false };
+  assert.equal(C.flipPlace(on), 'card', 'from the hello on, filming, paused, wrapping up');
+  assert.equal(C.flipPlace({ ...on, asking: true }), null, 'homie’s question covers the screen');
+  assert.equal(C.flipPlace({ ...on, plate: true }), 'shutter');
+  assert.equal(C.flipPlace({ ...on, plate: true, photo: true }), null, '"Got it!": nothing left to shoot');
+  assert.equal(C.flipPlace({ ...on, camera: false }), null, 'no card: glasses, the system camera, the done view');
+  assert.equal(C.flipPlace({ ...on, twoCameras: false }), null, 'a phone with one camera');
+});
+
+test('flip: beside the card it fits the space to its right, its label ending at the card’s bottom', () => {
+  // iPhone 15 (390 wide): the card is 177 x 236 in the middle.
+  const card = { x: 106.5, y: 120, width: 177, height: 236 };
+  const b = C.flipBeside(card, 390, 68);
+  assert.ok(b.left >= card.x + card.width, 'right of the card, never on it');
+  assert.ok(b.left + b.width <= 390, 'on the screen');
+  assert.ok(b.width >= 68);
+  assert.equal(b.top + 68 + C.FLIP_LABEL_ROOM, card.y + card.height);
+  // iPhone SE (375 x 667): a 140-wide card; the button stays well below homie's corner pot (~52-108).
+  const se = C.flipBeside({ x: 117.5, y: 56, width: 140, height: 187 }, 375, 68);
+  assert.ok(se.left >= 257.5 && se.left + se.width <= 375);
+  assert.ok(se.top >= 140, `top ${se.top}`);
+});
+
+test('flip: "Flip camera" in her language', () => {
+  assert.deepEqual(rmr.line('flipCamera'), { text: 'कॅमेरा बदला', en: 'Flip camera' });
+  assert.deepEqual(ren.line('flipCamera'), { text: 'Flip camera', en: null });
+  assert.equal(W.recordWords('hi').text('flipCamera'), 'कैमरा बदलें');
+  assert.equal(W.recordWords('es').line('flipCamera').en, 'Flip camera', 'VoiceOver reads the English');
 });
 
 test('build-4 safety: recording.tsx never imports VisionCamera or the image manipulator by value', () => {

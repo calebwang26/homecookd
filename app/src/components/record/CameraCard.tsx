@@ -5,6 +5,9 @@
 // its slot into the middle of the screen (`big`), on the UI thread (Reanimated), and shrinks back after.
 // It's positioned absolutely over the slot the screen reserves for it (CAMERA_SLOT), so the plate
 // moment's dim can sit under it. Reduce Motion: it fades between the two places instead of moving.
+// The front camera's preview is a mirror (VisionCamera always mirrors it, so she sees herself as in a
+// mirror), but its video and stills are not (`isMirrored={false}`): words on a packet read the right way
+// round for the kid, and the plate photo shows the plate as it is.
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -81,18 +84,19 @@ export function CameraCard({
       ) : Camera && cam.device ? (
         <Camera
           ref={attach}
-        style={StyleSheet.absoluteFill}
-        device={cam.device}
-        format={cam.format}
-        fps={cam.fps}
-        isActive={cam.active}
-        video
-        audio
-        videoBitRate={cam.bitRate}
-        outputOrientation="device"
-        resizeMode="cover"
-        onInitialized={cam.onInitialized}
-        onError={cam.onError}
+          style={StyleSheet.absoluteFill}
+          device={cam.device}
+          format={cam.format}
+          fps={cam.fps}
+          isActive={cam.active}
+          video
+          audio
+          videoBitRate={cam.bitRate}
+          outputOrientation="device"
+          isMirrored={false}
+          resizeMode="cover"
+          onInitialized={cam.onInitialized}
+          onError={cam.onError}
         />
       ) : null}
       {photo ? <Image source={{ uri: photo }} style={StyleSheet.absoluteFill} contentFit="cover" accessibilityLabel="Your plate" /> : null}

@@ -3,9 +3,11 @@
 // homie's words sit above it and one big round shutter below: a tap takes the photo, which shows in the
 // card ("Got it!") and becomes the recipe's cover (live.setCover). "Not now" skips it, and so does
 // saying it (the service hears that). Two layers so the card sits between them: <PlateDim> under the
-// card, <PlateControls> over it. Reduce Motion: fades only.
+// card, <PlateControls> over it. `flip` (the flip-camera button) sits to the right of the shutter, as on
+// the iPhone's camera: a phone propped facing the stove can't see a plate she holds up while she looks
+// at the screen, the front camera can. Reduce Motion: fades only.
 import { BlurView } from 'expo-blur';
-import { useEffect } from 'react';
+import { useEffect, type ReactNode } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { useAnimatedProps, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -14,6 +16,7 @@ import { ActionButton, PressableScale, Txt } from '@/components/ui';
 import { colors, motion } from '@/theme/tokens';
 
 import { plateFrame } from './CameraCard';
+import { FLIP_SIZE } from './FlipCameraButton';
 import { askLine, type Ask } from './recordingLogic';
 import { COLUMN } from './RecordWash';
 import type { RecordWords } from './words';
@@ -23,6 +26,8 @@ const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 const BLUR = 70;
 const TINT = 'rgba(30,36,16,0.5)';
 const SHUTTER = 84;
+/** Room either side of the shutter: the flip button and its label on the right. */
+export const PLATE_FLIP_SIDE = 96;
 const WHITE_SOFT = 'rgba(255,253,247,0.8)';
 
 function useShown(on: boolean) {
@@ -46,7 +51,24 @@ export function PlateDim({ on }: { on: boolean }) {
   );
 }
 
-export function PlateControls({ ask, words, taken, busy, onShoot, onSkip }: { ask: Ask | null; words: RecordWords; taken: boolean; busy: boolean; onShoot: () => void; onSkip: () => void }) {
+export function PlateControls({
+  ask,
+  words,
+  taken,
+  busy,
+  onShoot,
+  onSkip,
+  flip = null,
+}: {
+  ask: Ask | null;
+  words: RecordWords;
+  taken: boolean;
+  busy: boolean;
+  onShoot: () => void;
+  onSkip: () => void;
+  /** The flip-camera button (FlipCameraButton onDark), right of the shutter; null = none. */
+  flip?: ReactNode;
+}) {
   const screen = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const v = useShown(!!ask);
@@ -69,9 +91,14 @@ export function PlateControls({ ask, words, taken, busy, onShoot, onSkip }: { as
       </View>
       {!taken ? (
         <View style={[styles.below, { top: card.y + card.height + 24 }]}>
-          <PressableScale onPress={onShoot} disabled={busy} haptic="medium" scaleTo={0.94} accessibilityRole="button" accessibilityLabel={words.line('takePhoto').en ?? words.line('takePhoto').text} style={styles.shutter}>
-            <View style={styles.shutterInner} />
-          </PressableScale>
+          <View style={styles.shutterRow}>
+            {/* An empty side as wide as the flip's, so the shutter stays in the middle. */}
+            <View style={styles.side} />
+            <PressableScale onPress={onShoot} disabled={busy} haptic="medium" scaleTo={0.94} accessibilityRole="button" accessibilityLabel={words.line('takePhoto').en ?? words.line('takePhoto').text} style={[styles.shutter, busy && styles.busy]}>
+              <View style={styles.shutterInner} />
+            </PressableScale>
+            <View style={styles.side}>{flip}</View>
+          </View>
           <Txt variant="label" size={18} weight={700} color={colors.card} align="center">
             {words.line('takePhoto').text}
           </Txt>
@@ -86,6 +113,10 @@ const styles = StyleSheet.create({
   tint: { backgroundColor: TINT },
   words: { position: 'absolute', left: COLUMN.side, right: COLUMN.side, justifyContent: 'flex-end', alignItems: 'center', gap: 6 },
   below: { position: 'absolute', left: 0, right: 0, alignItems: 'center', gap: 10 },
+  // The flip's circle level with the shutter; its label hangs below.
+  shutterRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 28 },
+  side: { width: PLATE_FLIP_SIDE, alignItems: 'center', paddingTop: (SHUTTER - FLIP_SIZE) / 2 },
+  busy: { opacity: 0.5 },
   shutter: { width: SHUTTER, height: SHUTTER, borderRadius: SHUTTER / 2, borderWidth: 5, borderColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   shutterInner: { width: SHUTTER - 18, height: SHUTTER - 18, borderRadius: (SHUTTER - 18) / 2, backgroundColor: colors.card },
 });

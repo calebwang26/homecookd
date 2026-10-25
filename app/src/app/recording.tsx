@@ -15,14 +15,22 @@
 //                      1080p into 5-minute files (components/record/useInAppCamera) while homie stays
 //                      live: the mic and the /record socket stay open, a small still goes to homie
 //                      every 5 s, and the camera card above the button shows the shot ("● 4:07"). The
-//                      card shows from the hello on, so she can set the phone up. Leaving the app (a
+//                      card shows from the hello on, so she can set the phone up. Beside it, a big
+//                      flip-camera button ("कॅमेरा बदला" / "Flip camera", components/record/
+//                      FlipCameraButton) swaps the back and the front camera at any time: before filming,
+//                      while paused, after "I'm done", and while filming, where the flip ends the file,
+//                      switches the camera and starts the next file on it (a gap of about a second that
+//                      homie is told about; the mic is never touched while a file is written). It hides
+//                      under homie's questions. The front camera's preview is a mirror, its video is
+//                      not (words on a packet read the right way). Leaving the app (a
 //                      lock, a call) finishes the file at once: "Recording stopped while you were away",
 //                      the button films again, "I'm done" ends. The stop button finishes the last file
 //                      and homie wraps up. Older builds (no VisionCamera, or no camera permission): the
 //                      phone's own camera opens instead (homie waits, its socket closed); when the
 //                      video is back, homie wraps up. No video: back to Record.
 //   wrapping_up        homie's last questions, the plate photo when filmed in the app (components/record/
-//                      PlateMoment: the camera card grows to the middle, one shutter; live.setCover),
+//                      PlateMoment: the camera card grows to the middle, one shutter with the flip button
+//                      on its right, so she can turn to the front camera and hold the plate up; live.setCover),
 //                      and "Can Shreya hear your stories too?". If it stalls
 //                      (nothing moves for 2 min, or 20 s after an error or a lost line), the app ends
 //                      the recording itself; a phone video then sends anyway.
@@ -36,7 +44,7 @@
 // Dev aids (web screenshots only): ?preview=done shows the done view without sending; ?preview=ask
 // shows a made-up question from homie as a phone with a microphone would (the listening bars);
 // ?preview=camera filming in the app, ?preview=paused after she came back, ?preview=plate the plate
-// photo (a kitchen picture stands in for the camera).
+// photo (a kitchen picture stands in for the camera; the flip button only spins its icon).
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -47,10 +55,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { AskMoment } from '@/components/record/AskMoment';
 import { BiLine } from '@/components/record/BiLine';
 import { CameraCard, cameraSlotSize, type SlotFrame } from '@/components/record/CameraCard';
+import { flipBeside, flipPlace, otherFacing, type Facing } from '@/components/record/cameraLogic';
 import { DoneView } from '@/components/record/DoneView';
+import { FLIP_SIZE, FlipCameraButton } from '@/components/record/FlipCameraButton';
 import { GlassesView } from '@/components/record/GlassesView';
 import { addClips, useDraft } from '@/components/record/draft';
-import { PlateControls, PlateDim } from '@/components/record/PlateMoment';
+import { PLATE_FLIP_SIDE, PlateControls, PlateDim } from '@/components/record/PlateMoment';
 import { RecordButton } from '@/components/record/RecordButton';
 import { recordingView, shouldAutoStart, wrapStallMs, type Ask } from '@/components/record/recordingLogic';
 import { COLUMN, RecordWash } from '@/components/record/RecordWash';
@@ -214,6 +224,11 @@ export default function RecordingScreen() {
   const [asking, setAsking] = useState(false);
   useHomieScreen({ hidden: asking || !!plateAsk || finished });
 
+  // The flip-camera button: beside the card, beside the shutter for the plate photo, hidden under
+  // homie's question. A flip while filming is a file boundary (useInAppCamera flip). The dev previews
+  // only turn the icon (no camera on the web).
+  const [previewFacing, setPreviewFacing] = useState<Facing>('back');
+
   // "I'm done" while filming in the app: homie wraps up while the last file is saved.
   const doneInApp = async () => {
     homie.done();
@@ -330,6 +345,23 @@ export default function RecordingScreen() {
     if (await pick.record({ dish: draft.dish, requestFrom: draft.requestFrom })) setFilmedAlone(true);
   };
 
+  const flipAt = flipPlace({ camera: showCamera, twoCameras: previewCamera || cam.twoCameras, asking, plate: !!plateAsk, photo: !!photo });
+  const flipCamera = () => {
+    if (devPreview) setPreviewFacing((f) => otherFacing(f));
+    else void cam.flip();
+  };
+  const flipButton = (onDark: boolean, width?: number) => (
+    <FlipCameraButton
+      label={words.line('flipCamera')}
+      facing={devPreview ? previewFacing : cam.facing}
+      disabled={!devPreview && !cam.canFlip}
+      onPress={flipCamera}
+      onDark={onDark}
+      width={width}
+    />
+  );
+  const beside = slot ? flipBeside(slot, screenW, FLIP_SIZE) : null;
+
   const error = homie.error ? words.line(homie.error) : null;
   const micOff = homie.micDenied ? words.line('micOff') : null;
   const showClose = !!homie.error || (!filming && !finished) || (stalled && !finished);
@@ -392,7 +424,22 @@ export default function RecordingScreen() {
           {showCamera ? (
             <CameraCard cam={cam} attach={cam.setCamera} slot={slot} big={!!plateAsk} side={COLUMN.side} photo={photo} standIn={previewCamera ? KITCHEN : null} />
           ) : null}
-          {showCamera ? <PlateControls ask={plateAsk} words={words} taken={!!photo} busy={shooting} onShoot={() => void shootPlate()} onSkip={skipPlate} /> : null}
+          {flipAt === 'card' && beside ? (
+            <Animated.View entering={FadeIn.duration(reduce ? motion.reducedFadeMs : 220)} style={[styles.flip, beside]}>
+              {flipButton(false, beside.width)}
+            </Animated.View>
+          ) : null}
+          {showCamera ? (
+            <PlateControls
+              ask={plateAsk}
+              words={words}
+              taken={!!photo}
+              busy={shooting || cam.flipping}
+              onShoot={() => void shootPlate()}
+              onSkip={skipPlate}
+              flip={flipAt === 'shutter' ? flipButton(true, PLATE_FLIP_SIDE) : null}
+            />
+          ) : null}
           <AskMoment
             ask={devPreview === 'ask' ? PREVIEW_ASK : homie.ask?.kind === 'plate' ? null : homie.ask}
             words={words}
@@ -419,4 +466,5 @@ const styles = StyleSheet.create({
   problem: { marginTop: 24, alignItems: 'center', gap: 10 },
   skip: { marginTop: 20 },
   cameraSlot: { marginBottom: 28 },
+  flip: { position: 'absolute', alignItems: 'center' },
 });

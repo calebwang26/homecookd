@@ -53,6 +53,9 @@ const WORDS = {
   notNow: { en: 'Not now', mr: 'आत्ता नको' },
   plateGot: { en: 'Got it! That’s the cover.', mr: 'मिळाला! हाच फोटो वर दिसेल.' },
   cameraTrouble: { en: 'The camera stopped. Your video so far is saved.', mr: 'कॅमेरा थांबला. आतापर्यंतचं रेकॉर्डिंग जपलंय.' },
+  // The flip button under the icon (FlipCameraButton). "बदला" (change), not "फिरवा" (turn), which could
+  // read as "turn the phone". TODO(caleb): native check, like every Marathi line.
+  flipCamera: { en: 'Flip camera', mr: 'कॅमेरा बदला' },
 } as const satisfies Record<string, Words>;
 
 export type RecordWordKey = keyof typeof WORDS;
