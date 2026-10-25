@@ -86,7 +86,7 @@ function isEcho(heard: string, spoken: string): boolean {
 }
 
 /** homie's hello in the cook's language, and its English (the pot greets the family in their own words). */
-const GREETINGS: Record<string, [string, string]> = {
+export const GREETINGS: Record<string, [string, string]> = {
   mr: ["चला, स्वयंपाक करूया!", "Let's cook!"],
   hi: ["चलो, खाना बनाते हैं!", "Let's cook!"],
   es: ["¿Listos? ¡A cocinar!", "Ready? Let's cook!"],
@@ -98,6 +98,14 @@ const GREETINGS: Record<string, [string, string]> = {
   ko: ["자, 요리해 볼까요?", "Shall we cook?"],
   vi: ["Nấu thôi nào!", "Let's cook!"],
   tl: ["Tara, luto na tayo!", "Come on, let's cook!"],
+  // Oct 24. TODO(caleb): a native speaker's check, like the Marathi lines.
+  gu: ["ચાલો, રસોઈ બનાવીએ!", "Let's cook!"],
+  ta: ["வாங்க, சமைக்கலாம்!", "Come, let's cook!"],
+  te: ["రండి, వంట చేద్దాం!", "Come, let's cook!"],
+  pa: ["ਆਓ, ਖਾਣਾ ਬਣਾਈਏ!", "Come, let's cook!"],
+  ur: ["چلیں، کھانا بناتے ہیں!", "Let's cook!"],
+  ar: ["هيا نطبخ!", "Let's cook!"],
+  bn: ["চলো, রান্না করি!", "Let's cook!"],
 };
 
 const duration = (s: number) => {
