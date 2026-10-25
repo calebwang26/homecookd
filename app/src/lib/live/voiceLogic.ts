@@ -274,6 +274,23 @@ export function yesNoMoment(m: { id: string; question: string; questionEn?: stri
 }
 
 /**
+ * "Ask <cook> anything" (a long press on homie in cook mode, Caleb Oct 25): no buttons, the listening bars
+ * and "Just say your question"; a tap anywhere closes it. Its id starts "ask:" (appMomentKind), so the
+ * service sends the kid's next words straight to the cook.
+ */
+export function askMoment(cookName: string, at: number): HomieMoment {
+  return {
+    id: `ask:${at}`,
+    question: `Ask ${cookName} anything`,
+    options: [],
+    bars: true,
+    prompt: { label: 'Just say your question' },
+    tapToClose: TAP_TO_CLOSE,
+    onChoose: () => {},
+  };
+}
+
+/**
  * What the pot shows on the cook screen, under homie's own lit / speaking beat (the store puts those on
  * top). True to the mic both ways: `listening` only while homie is on, the recorder runs and its frames
  * really go out; while the app makes sound (`sounding`: homie, her voice, a video) lib/live/mic zeroes
@@ -292,12 +309,12 @@ export function cookPotState(v: { active: boolean; listening: boolean; sounding:
 
 /**
  * Why cook mode's mic is on: the kid's tap ('tap', until the next tap or a minute with nobody talking),
- * the 8 s after a step line ('window'), or a turn the kid began in that window ('turn', until homie's
- * answer is over). 'off': the recorder is stopped, so no frames and no Ink credits; the line stays open
- * for step lines.
+ * the 8 s after a step line ('window'), a turn the kid began in that window ('turn', until homie's
+ * answer is over), or "Ask <cook> anything" up on the phone ('ask', a long press: until it closes).
+ * 'off': the recorder is stopped, so no frames and no Ink credits; the line stays open for step lines.
  */
-export type MicHold = 'off' | 'tap' | 'window' | 'turn';
-export type MicEvent = 'tap' | 'step_line_end' | 'window_timeout' | 'heard' | 'answered' | 'cap' | 'idle';
+export type MicHold = 'off' | 'tap' | 'window' | 'turn' | 'ask';
+export type MicEvent = 'tap' | 'step_line_end' | 'window_timeout' | 'heard' | 'answered' | 'cap' | 'idle' | 'ask' | 'ask_end';
 
 /** How long the mic listens after a step line (only the time it really hears counts: no app sound). */
 export const LISTEN_WINDOW_MS = 8000;
@@ -361,10 +378,14 @@ export function opensWindow(kind: SayKind): boolean {
  * hold (a pot that listens or thinks, by a tap or a window) turns it off. A step line's end opens a
  * fresh window, unless the kid's tap holds homie on. The kid's words in a window hold it for the turn;
  * the window's 8 s, the turn's answer, or the cap close it; a tapped-on homie left idle goes off.
+ * "Ask <cook> anything" holds it for exactly as long as it's up (its own 25 s close it), unless a tap
+ * already holds homie on: then homie stays on after it.
  */
 export function micAfter(hold: MicHold, e: MicEvent): MicHold {
+  if (e === 'ask') return hold === 'tap' ? 'tap' : 'ask';
+  if (e === 'ask_end') return hold === 'ask' ? 'off' : hold;
   if (e === 'tap') return hold === 'off' ? 'tap' : 'off';
-  if (e === 'step_line_end') return hold === 'tap' ? 'tap' : 'window';
+  if (e === 'step_line_end') return hold === 'tap' || hold === 'ask' ? hold : 'window';
   if (e === 'heard') return hold === 'window' ? 'turn' : hold;
   if (e === 'window_timeout') return hold === 'window' ? 'off' : hold;
   if (e === 'answered') return hold === 'turn' ? 'off' : hold;
@@ -398,6 +419,7 @@ export type MicNow = {
  *   done talking, unless the first finished words already came (then more talking doesn't hold it).
  * - Either ends TURN_MAX_MS after the window opened, whatever else.
  * - On by a tap: TAP_IDLE_MS with the mic hearing and nobody talking or answering turns it off.
+ * - "Ask <cook> anything" has none here: the moment closing ends it.
  */
 export function micTimer(v: MicNow): { ms: number; event: MicEvent } | null {
   if (v.hold === 'tap') return v.listening && !v.sounding && !v.thinking && !v.kidTalking ? { ms: TAP_IDLE_MS, event: 'idle' } : null;

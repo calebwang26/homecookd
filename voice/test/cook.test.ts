@@ -544,6 +544,28 @@ test("homie never nudges over an app moment: the story nudge waits for it to clo
   c.close();
 });
 
+test("in the app's ask moment (a long press on homie), the question goes straight to the cook without Claude, and a command still works", async () => {
+  const w = world();
+  const c = w.connect();
+  await greeted(c);
+  c.send({ type: "moment", open: true, kind: "ask" });
+  w.says("Next step.");
+  await waitFor("step 2", () => c.ws.of("go_to_step").at(-1)?.stepOrder === 2);
+  assert.equal(c.ws.of("asked_cook").length, 0, "a command isn't a question");
+  const question = "Can I use butter instead of ghee?";
+  w.says(question);
+  await waitFor("homie's answer", () => c.says().some(([, text]) => text === "Good question. I'll ask Grandma."));
+  assert.deepEqual(c.ws.of("asked_cook"), [{ type: "asked_cook", questionId: `q-${question}`, text: question }]);
+  assert.deepEqual(w.turns, [], "never reaches Claude");
+  // Once the moment closes, a question goes the usual way again.
+  c.send({ type: "moment", open: false });
+  w.says("Is it okay if it browns a bit?");
+  await waitFor("Claude's turn", () => w.turns.length === 1);
+  assert.deepEqual(w.turns, ["Is it okay if it browns a bit?"]);
+  assert.equal(c.ws.of("asked_cook").length, 1);
+  c.close();
+});
+
 test("the long-quiet nudge waits while an app moment is up", async () => {
   const w = world();
   const c = w.connect();

@@ -42,7 +42,6 @@ const session = (kidId: string): CookSession => ({
 
 function phone(claude?: (a: Actions) => Promise<void>) {
   const spoken: string[] = [];
-  const addressed: boolean[] = []; // each Claude turn: said in the app's "ask" moment?
   let stt: SttEvents | undefined;
   const deps: CookingDeps = {
     convex: {
@@ -52,7 +51,7 @@ function phone(claude?: (a: Actions) => Promise<void>) {
     },
     listen: (events) => ((stt = events), { send: () => {}, close: () => {} }),
     speak: fakeSpeak(spoken),
-    agent: (_session, actions) => ({ turn: async (_text, _note, tapped = false) => void (addressed.push(tapped), await claude?.(actions)) }),
+    agent: (_session, actions) => ({ turn: async () => void (await claude?.(actions)) }),
     findMoments: async () => [],
     warm: async () => false,
     translateQuote: async (quote) => quote,
@@ -64,7 +63,6 @@ function phone(claude?: (a: Actions) => Promise<void>) {
   return {
     ws,
     spoken,
-    addressed,
     says: (text: string) => stt!.onTurnEnd(text),
     video: (playing: boolean) => send({ type: "video", playing }),
     send,
@@ -197,20 +195,6 @@ test("a turn Claude leaves alone (not for homie) sends quiet, so the phone stops
   await waitFor("the answer", () => p.kinds().includes("reply"));
   await advance(1000);
   assert.equal(p.ws.of("quiet").length, 1);
-  p.close();
-});
-
-test("words said after the kid tapped homie to ask (the app's ask moment) are for homie, whatever they are", async () => {
-  const p = phone();
-  await waitFor("the greeting's end", () => p.ws.of("say_end").length === 1);
-  await advance(AUDIO_S * 1000 + 500);
-  p.says("How much salt goes in?");
-  p.send({ type: "moment", open: true, kind: "ask" });
-  p.says("Is it okay if it browns a bit?");
-  p.send({ type: "moment", open: false });
-  p.says("Is it okay if it smokes?");
-  await waitFor("three turns", () => p.addressed.length === 3);
-  assert.deepEqual(p.addressed, [false, true, false]);
   p.close();
 });
 

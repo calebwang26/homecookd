@@ -4,8 +4,10 @@
 // the cook's language; on every step change (a tap on the phone, "next", Claude) homie says the step's short
 // line at once, its audio made when the recipe opened (stepLine.ts, lineCache.ts); timers; labelled hints; and
 // two nudges (a step with a story, a long quiet on one step). While the app has one of its own homie moments
-// up, the kid's yes or no is that moment's answer, never ours. While any video plays on the phone (the app's
-// { type: "video" }, or a clip we played), homie says nothing on its own: the greeting, a nudge or a timer
+// up, the kid's yes or no is that moment's answer, never ours; in its "Ask <cook> anything" (a long press on
+// homie) anything but a plain command is the question, and it goes straight to the cook, without Claude. While
+// any video plays on the phone (the app's { type: "video" }, or a clip we played), homie says nothing on its
+// own: the greeting, a nudge or a timer
 // waits for the next pause (Caleb, Oct 24). An answer to what the kid just did or said is spoken meanwhile, and a
 // step line is one (the kid flipped the page). Claude decides whether the kid was talking to homie at all
 // (agent.ts); a turn that ends with nothing done or said sends { type: "quiet" }, so the phone stops showing
@@ -412,18 +414,26 @@ export class Cooking {
       return;
     }
     console.log(`kid: ${text}`);
-    // Said while the app's "ask" moment is up (the kid tapped homie to ask): for homie, whatever the words.
-    const addressed = inMoment && this.moment === "ask";
+    // Said while the app's "Ask <cook> anything" moment is up (a long press on homie): the question for the cook.
+    const asking = inMoment && this.moment === "ask";
     // A turn that throws anyway must not break the chain: every later turn would be skipped.
-    this.turns = this.turns.then(() => this.turn(text, inMoment, addressed)).catch((err) => console.error("turn:", err));
+    this.turns = this.turns.then(() => this.turn(text, inMoment, asking)).catch((err) => console.error("turn:", err));
   }
 
-  /** One turn. `inMoment`: said while an app moment was up, so its yes or no is the moment's, never our story nudge's. */
-  private async turn(text: string, inMoment = false, addressed = false) {
+  /**
+   * One turn. `inMoment`: said while an app moment was up, so its yes or no is the moment's, never our story nudge's.
+   * `asking`: said in the app's "Ask <cook> anything": a plain command still runs, and anything else goes straight
+   * to the cook (no Claude, no clip search).
+   */
+  private async turn(text: string, inMoment = false, asking = false) {
     if (this.closed) return;
     this.clipSeq++; // the kid moved on: drop a translation still waiting
     const before = this.answers;
     try {
+      if (asking) {
+        if (!(await this.plain(text))) await this.actions.askCook(text);
+        return;
+      }
       const answer = inMoment || this.storyOffer ? yesNo(text) : null;
       if (answer === "no") {
         // "No" or "not now" to the story nudge closes it, and nothing is said.
@@ -431,7 +441,7 @@ export class Cooking {
         return await this.afterNoTurn(text, inMoment ? "what's on their screen" : `hearing ${this.cook}'s story`);
       }
       if (answer === "yes" && !inMoment) return await this.playStory();
-      if (!(await this.plain(text))) await this.agent!.turn(text, undefined, addressed);
+      if (!(await this.plain(text))) await this.agent!.turn(text);
     } catch (err) {
       console.error("turn failed:", (err as Error).message);
       this.send({ type: "error", message: "turn failed" });
