@@ -2,7 +2,9 @@
 // Mandarin, Arabic, …). Docs: https://docs.cartesia.ai/api-reference/stt/websocket (the manual endpoint: no turn
 // detection). It takes her language (ISO 639-1) and writes in its script. max_silence_duration_secs finalizes a
 // piece of speech after a short pause (without it, the last words of a sentence wait for the next piece); we join
-// the pieces into one turn and end it once nothing new was heard for PAUSE_MS, as geminiLive.ts does.
+// the pieces into one turn and end it PAUSE_MS after the last piece, once the mic has been quiet that long and
+// every voiced second has its words: a piece arrives after its sentence ends, sometimes well after (Oct 24 live
+// run: 1.3 s after she stopped), so between two sentences nothing new comes for a while.
 // Like Ink 2 it bills for the audio it's fed, so a stream with no audio for IDLE_CLOSE_MS closes until the next frame.
 import WebSocket from "ws";
 import { env } from "./env.js";
@@ -13,6 +15,13 @@ import type { SttEvents } from "./stt.js";
 const SILENCE_S = "0.8";
 /** Nothing new for this long after a final piece ends her turn. */
 export const PAUSE_MS = 1500;
+/** Louder than this (RMS of 16-bit samples) is her voice; speech in the Oct 24 test audio is ~1400, pauses ~10. */
+const VOICE_RMS = 400;
+/** A noisy kitchen can't hold a turn open forever: it ends this long after the last piece regardless. */
+export const MAX_HOLD_MS = 5000;
+/** Voice this far (in seconds of audio) past the last transcribed word means a piece is still coming. */
+const UNHEARD_S = 0.5;
+const BYTES_PER_S = 16_000 * 2;
 /** Interim words that never got their final end the turn anyway. */
 const INTERIM_MS = 4000;
 /** No audio for this long with words still unfinalized (homie started speaking, the mic muted): ask for them. */
@@ -31,6 +40,12 @@ export class InkWhisperStream {
   private closedByUs = false;
   private idle = false;
   private lastFrameAt = Date.now();
+  private lastVoiceAt = 0;
+  private lastPieceAt = 0;
+  /** This socket's audio clock (seconds sent), the last voiced second, and the end of the last word heard. */
+  private sentS = 0;
+  private voiceS = 0;
+  private heardS = 0;
   private retryMs = RETRY_FIRST_MS;
   private idleCheck: NodeJS.Timeout;
   /** Finished pieces of this turn, and the piece still being heard. */
@@ -59,6 +74,7 @@ export class InkWhisperStream {
       cartesia_version: CARTESIA_VERSION,
       max_silence_duration_secs: SILENCE_S,
     });
+    this.sentS = this.voiceS = this.heardS = 0;
     const ws = this.connect(`wss://api.cartesia.ai/stt/websocket?${q}`, {
       "X-API-Key": env.cartesiaKey,
       "Cartesia-Version": CARTESIA_VERSION,
@@ -71,12 +87,14 @@ export class InkWhisperStream {
     });
     ws.on("message", (data, isBinary) => {
       if (isBinary) return;
-      let ev: { type: string; text?: string; is_final?: boolean; message?: string; title?: string };
+      let ev: { type: string; text?: string; is_final?: boolean; words?: { end: number }[]; message?: string; title?: string };
       try {
         ev = JSON.parse(data.toString());
       } catch {
         return;
       }
+      const lastWord = ev.words?.at(-1)?.end;
+      if (ev.type === "transcript" && ev.is_final && typeof lastWord === "number") this.heardS = Math.max(this.heardS, lastWord);
       if (ev.type === "transcript" && ev.text?.trim()) this.heard(ev.text, ev.is_final === true);
       else if (ev.type === "error") this.events.onError(ev.message || ev.title || "ink-whisper error");
     });
@@ -102,9 +120,20 @@ export class InkWhisperStream {
       this.interim = text.trim();
     }
     this.events.onPartial(this.text());
+    this.lastPieceAt = Date.now();
     clearTimeout(this.pauseTimer);
     // After interim words, wait for their final (the silence or a flush brings it).
-    this.pauseTimer = setTimeout(() => this.endTurn(), final ? PAUSE_MS : INTERIM_MS);
+    this.pauseTimer = setTimeout(() => this.maybeEndTurn(), final ? PAUSE_MS : INTERIM_MS);
+  }
+
+  /** Ends the turn unless she's still talking or a piece of what she said is still on its way. */
+  private maybeEndTurn() {
+    const now = Date.now();
+    const talking = now - this.lastVoiceAt < PAUSE_MS;
+    const coming = this.voiceS > this.heardS + UNHEARD_S;
+    if (!(talking || coming) || now - this.lastPieceAt >= MAX_HOLD_MS) return this.endTurn();
+    const wait = Math.min(PAUSE_MS - (now - this.lastVoiceAt), MAX_HOLD_MS - (now - this.lastPieceAt));
+    this.pauseTimer = setTimeout(() => this.maybeEndTurn(), Math.max(100, wait));
   }
 
   private text() {
@@ -129,6 +158,11 @@ export class InkWhisperStream {
   send(pcm: Buffer) {
     if (this.closedByUs) return;
     this.lastFrameAt = Date.now();
+    this.sentS += pcm.length / BYTES_PER_S;
+    if (rms(pcm) > VOICE_RMS) {
+      this.lastVoiceAt = this.lastFrameAt;
+      this.voiceS = this.sentS;
+    }
     clearTimeout(this.flushTimer);
     this.flushTimer = setTimeout(() => this.flush(), FLUSH_MS);
     if (this.idle) {
@@ -154,4 +188,13 @@ export class InkWhisperStream {
     clearTimeout(this.flushTimer);
     this.ws.close();
   }
+}
+
+/** Loudness of 16-bit little-endian PCM. */
+function rms(pcm: Buffer): number {
+  const n = Math.floor(pcm.length / 2);
+  if (!n) return 0;
+  let sum = 0;
+  for (let i = 0; i < n; i++) sum += pcm.readInt16LE(i * 2) ** 2;
+  return Math.sqrt(sum / n);
 }

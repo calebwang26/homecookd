@@ -11,13 +11,16 @@ import { advance } from "./helpers.js";
 process.env.CARTESIA_API_KEY = "test";
 process.env.ANTHROPIC_API_KEY = "test";
 const { sttEngine, INK_LANGUAGES, WHISPER_LANGUAGES } = await import("../src/stt.js");
-const { InkWhisperStream, PAUSE_MS, FLUSH_MS } = await import("../src/inkWhisper.js");
+const { InkWhisperStream, PAUSE_MS, FLUSH_MS, MAX_HOLD_MS } = await import("../src/inkWhisper.js");
 const { languageName } = await import("../src/homie.js");
 
 beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: Date.parse("2026-10-25T17:00:00Z") }));
 afterEach(() => mock.timers.reset());
 
 const FRAME = Buffer.alloc(3200);
+/** 100 ms of voice: a loud square wave. */
+const VOICE = Buffer.alloc(3200);
+for (let i = 0; i < 1600; i++) VOICE.writeInt16LE(i % 20 < 10 ? 2000 : -2000, i * 2);
 /** The 12 languages added Oct 24, plus Marathi and English. */
 const FIRST_SET = ["en", "mr", "hi", "gu", "ta", "te", "pa", "ur", "zh", "ko", "tl", "es", "pt", "ar"];
 
@@ -51,8 +54,10 @@ class FakeSocket extends EventEmitter {
   send(b: Buffer | string) {
     this.sent.push(b);
   }
-  say(text: string, final: boolean) {
-    this.emit("message", Buffer.from(JSON.stringify({ type: "transcript", text, is_final: final })), false);
+  /** A transcript piece; a final one carries its last word's end (seconds of this socket's audio), as ink-whisper's do. */
+  say(text: string, final: boolean, endS = 0) {
+    const words = final ? [{ word: text, start: 0, end: endS }] : undefined;
+    this.emit("message", Buffer.from(JSON.stringify({ type: "transcript", text, is_final: final, words })), false);
   }
   close() {
     if (this.readyState === WebSocket.CLOSED) return;
@@ -99,6 +104,52 @@ test("ink-whisper: pieces of one sentence join into one turn, ended by a pause",
   await advance(PAUSE_MS + 100);
   assert.deepEqual(got.turns, ["இப்போ எண்ணெயில் கடுகு போட்டு கொஞ்சம் வெடிக்க விடுங்க."]);
   assert.equal(got.starts, 1, "one turn");
+  s.close();
+});
+
+test("ink-whisper: while the mic still hears her, a second sentence joins the same turn", async () => {
+  const { s, got, ws } = whisper();
+  ws().say("ஒரு சின்ன ஸ்பூன் உப்பு போதும்.", true, 0);
+  for (let i = 0; i < 18; i++) {
+    s.send(VOICE); // she keeps talking: the next sentence's piece only comes after it ends
+    await advance(100);
+  }
+  assert.equal(got.turns.length, 0, "1.8 s after the first piece, but she's still talking");
+  ws().say(" ரொம்ப வேண்டாம்.", true, 1.8);
+  for (let i = 0; i < 20; i++) {
+    s.send(FRAME);
+    await advance(100);
+  }
+  assert.deepEqual(got.turns, ["ஒரு சின்ன ஸ்பூன் உப்பு போதும். ரொம்ப வேண்டாம்."]);
+  s.close();
+});
+
+test("ink-whisper: she stopped, but her last sentence's words are still on their way: the turn waits for them", async () => {
+  const { s, got, ws } = whisper();
+  for (let i = 0; i < 30; i++) {
+    s.send(VOICE); // 3 s of speech
+    await advance(100);
+  }
+  ws().say("好，先把西红柿切成块，", true, 1.4); // the first piece only covers the first 1.4 s
+  for (let i = 0; i < 25; i++) {
+    s.send(FRAME); // she's quiet now
+    await advance(100);
+  }
+  assert.equal(got.turns.length, 0, "2.5 s of quiet, but 1.6 s of her voice has no words yet");
+  ws().say("然后加一点盐。", true, 3);
+  await advance(PAUSE_MS + 200);
+  assert.deepEqual(got.turns, ["好，先把西红柿切成块，然后加一点盐。"]);
+  s.close();
+});
+
+test("ink-whisper: a loud kitchen holds the turn at most MAX_HOLD_MS", async () => {
+  const { s, got, ws } = whisper();
+  ws().say("Agora coloca o alho.", true);
+  for (let t = 0; t < MAX_HOLD_MS + 1000; t += 100) {
+    s.send(VOICE);
+    await advance(100);
+  }
+  assert.deepEqual(got.turns, ["Agora coloca o alho."]);
   s.close();
 });
 

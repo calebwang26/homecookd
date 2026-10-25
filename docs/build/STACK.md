@@ -159,7 +159,9 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   use about a teaspoon.") and **always** asks the cook too. The hint is never presented as the cook.
 - Change 7 is partly replaced: while recording, the parent never taps; homie listens. Answering a kid's question
   stays push to talk (now the half-screen walkie-talkie). Full voice navigation of parent mode is still a stretch.
-- Live Marathi speech-to-text is Gemini (Ink 2 only knows en/fr/hi/ja/es). Sonic 3.6 speaks Marathi (`locale`).
+- Live speech-to-text by language (`voice/src/stt.ts`): Ink 2 for en/fr/hi/ja/es; Cartesia ink-whisper (live, `language`
+  set, `voice/src/inkWhisper.ts`) for the other languages a cook can pick (Oct 24); Gemini Live for Marathi and Odia
+  until the move off Gemini. Sonic 3.6 speaks all of them except Cantonese (`docs/agents/memory/cook-languages.md`).
 - homie's voice everywhere (Caleb, Oct 24, `docs/agents/memory/homie-voice.md`): "Riya bilingual"
   `930eda72-c1af-4637-8d07-87d881d615fe`, `sonic-3.6`, 24 kHz, speed 0.85 on every line. Marathi as `locale: "mr-IN"`,
   English as `locale: "en-IN"` plus a mood per kind of line (`generation_config.emotion`, English only); other

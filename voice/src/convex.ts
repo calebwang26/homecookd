@@ -1,7 +1,7 @@
 // Convex HTTP actions for the voice service (docs/build/STACK.md, "Voice service → Convex" and "Voice
 // service → Convex for homie"), with the x-voice-secret header. VOICE_STUB=1 (or no CONVEX_SITE_URL)
 // uses a stub instead: fixtures/stub-session.json (Grandma's red-braised pork, no Moss index) for /cook and
-// fixtures/stub-recording.json (Rajani Aaji, recording "stub-mr" or "stub-en") for /record. The stub
+// fixtures/stub-recording.json (recording "stub-mr", "stub-en", "stub-ta" or "stub-zh") for /record. The stub
 // accepts any session token.
 import { randomUUID } from "node:crypto";
 import { readFileSync } from "node:fs";
@@ -120,7 +120,8 @@ export type PromptKind = "intro" | "amount" | "cue" | "substitution" | "story" |
 export type PromptStatus = "spoken" | "answered" | "ignored" | "not_now";
 export type Answer = { transcript: string; transcriptEn?: string; atS: number; endS: number };
 
-const stubRecordings = () => fixture<Record<"mr" | "en", RecordingSession>>("stub-recording.json");
+/** Stub recordings by language: "stub-mr", "stub-en", "stub-ta", "stub-zh" (and "-again" for each). */
+const stubRecordings = () => fixture<Record<string, RecordingSession>>("stub-recording.json");
 
 export async function person(sessionToken: string): Promise<Person> {
   if (usingStub) {
@@ -145,7 +146,11 @@ export async function news(sessionToken: string): Promise<News> {
 
 export async function recordingSession(sessionToken: string, recordingId: string): Promise<RecordingSession> {
   // "stub-mr-again" / "stub-en-again": a cook homie has recorded with before (the short hello).
-  if (usingStub) return { ...stubRecordings()[recordingId.startsWith("stub-en") ? "en" : "mr"], metBefore: recordingId.endsWith("-again") };
+  if (usingStub) {
+    const all = stubRecordings();
+    const lang = /^stub-([a-z]{2,3})\b/.exec(recordingId)?.[1] ?? "mr";
+    return { ...(all[lang] ?? all.mr), metBefore: recordingId.endsWith("-again") };
+  }
   return post("/live/session", { sessionToken, recordingId });
 }
 
