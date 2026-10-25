@@ -15,8 +15,8 @@
 // still the sending half: "Still sending the video", that half not full (components/parent/jobsLogic).
 // Its 'done' opens the recipe once PendingRecipes knows its library id.
 // A failed row says why in the worker's own words (or "send it again"), and tapping it opens Record
-// to send the videos again. A quiet x on the right stops a recording (after a confirm) or clears
-// one that failed.
+// to send the videos again. A quiet x on the right stops a recording (no confirm: the row says
+// "Stopped" with Undo for a few seconds, PendingRecipes + stops.ts) or clears one that failed.
 import { Image } from 'expo-image';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useDerivedValue, withTiming } from 'react-native-reanimated';
@@ -59,9 +59,17 @@ export type ProcessingView = {
   busy: boolean;
   /** Fill of each half of the bar (0..1), or null for no bar. */
   bar: { send: number; write: number } | null;
-  action: 'cancel' | 'remove' | null;
+  /** The right-hand button: x stops (cancel) or clears (remove); Undo; a spinner while it stops. */
+  action: 'cancel' | 'remove' | 'undo' | 'stopping' | null;
   /** Set once the recipe exists (the row opens it). */
   recipeId: string | null;
+};
+
+const stopped = { hint: 'Stopped', problem: false, busy: false, bar: null, recipeId: null };
+/** A row just stopped: Undo while it waits, a spinner while the real stop runs. */
+export const STOPPED_VIEW: Record<'waiting' | 'stopping', ProcessingView> = {
+  waiting: { ...stopped, action: 'undo' },
+  stopping: { ...stopped, action: 'stopping' },
 };
 
 /**
@@ -139,15 +147,13 @@ export function describeJob(job: StoredJob, status: JobStatus | undefined, now: 
 export function ProcessingRow({
   job,
   view,
-  cancelling,
   onAction,
   onOpen,
   onRetry,
 }: {
   job: StoredJob;
   view: ProcessingView;
-  cancelling: boolean;
-  /** Cancel (in progress) or remove (failed), per view.action. */
+  /** Stop, undo or clear, per view.action. */
   onAction: () => void;
   onOpen: (recipeId: string) => void;
   /** A problem row with no recipe: send the videos again. */
@@ -206,21 +212,30 @@ export function ProcessingRow({
           {body}
         </View>
       )}
-      {view.action ? (
-        cancelling ? (
-          <View style={styles.action}>
-            <ActivityIndicator color={colors.muted} />
-          </View>
-        ) : (
-          <IconButton
-            icon={(c) => <CloseIcon size={18} color={c} />}
-            tone="clear"
-            size={48}
-            onPress={onAction}
-            accessibilityLabel={view.action === 'cancel' ? `Stop making your ${job.title}` : `Clear your ${job.title}`}
-            style={styles.action}
-          />
-        )
+      {view.action === 'stopping' ? (
+        <View style={styles.action}>
+          <ActivityIndicator color={colors.muted} />
+        </View>
+      ) : view.action === 'undo' ? (
+        <PressableScale
+          onPress={onAction}
+          haptic
+          accessibilityRole="button"
+          accessibilityLabel={`Undo: keep making your ${job.title}`}
+          style={styles.undo}>
+          <Txt variant="label" size={17} weight={700} color={colors.greenDeep}>
+            Undo
+          </Txt>
+        </PressableScale>
+      ) : view.action ? (
+        <IconButton
+          icon={(c) => <CloseIcon size={18} color={c} />}
+          tone="clear"
+          size={48}
+          onPress={onAction}
+          accessibilityLabel={view.action === 'cancel' ? `Stop making your ${job.title}` : `Clear your ${job.title}`}
+          style={styles.action}
+        />
       ) : null}
     </View>
   );
@@ -255,4 +270,5 @@ const styles = StyleSheet.create({
   track: { flex: 1, height: 4, borderRadius: 2, backgroundColor: colors.track, overflow: 'hidden' },
   fill: { height: 4, borderRadius: 2, backgroundColor: colors.green },
   action: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', marginVertical: -8, marginRight: -8 },
+  undo: { minWidth: 64, height: 48, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center', marginVertical: -8, marginRight: -8 },
 });

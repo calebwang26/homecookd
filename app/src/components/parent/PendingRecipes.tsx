@@ -1,6 +1,13 @@
 // Recordings still on their way (lib/uploads.ts jobs), shown at the top of "Your recipes" as greyed
 // ProcessingRows.
-//   const pending = usePendingRecipes();   pending.jobs, pending.views[job_id], pending.act (cancel / clear)
+//   const pending = usePendingRecipes();   pending.jobs, pending.views[job_id], pending.act (stop / undo / clear)
+// Stop (Caleb, Oct 24: "let me actually cancel these uploads"): the x stops it with no confirm. The row
+// says "Stopped" with Undo for a few seconds (stops.ts), then the real stop runs: Convex first (what a
+// worker takes: jobs.cancel, or jobs.cancelUpload by the upload's folder when there's no job id here),
+// then this phone's upload. The signer's cancel marker is best-effort: it refuses an upload Convex
+// doesn't know yet, which used to fail the whole stop with "Couldn't stop it". The stop first waits
+// for this upload's jobs.create (sendDraft), and a running Convex job from a stopped upload that shows
+// up later anyway is stopped too. Leaving the app (app switcher, home) runs a waiting stop at once.
 // Polls the job status on focus, every 60 s and on return to the app; retries the pending send
 // (who gets it) until the backend has it; drops a job once its recipe is in the library and, when
 // it was for someone, the backend knows who gets it (a late POST delivers right away). So a
@@ -10,12 +17,13 @@
 // job's Convex recipeId, mapped to a library id through recipes.list) is in the library.
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, AppState, Platform, StyleSheet, View } from 'react-native';
+import { AccessibilityInfo, AppState, Platform, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
+import { jobCreated } from '@/components/record/sendDraft';
 import { fadeOutFast, listEnter, useToast } from '@/components/ui';
 import { requestCancel } from '@/lib/deletes';
-import { cancelLiveJob, libraryIdOf as findLibraryId, useLiveJobs, type LiveJob } from '@/lib/live/convex';
+import { cancelLiveJob, cancelLiveUpload, libraryIdOf as findLibraryId, useLiveJobs, type LiveJob } from '@/lib/live/convex';
 import { refreshLibrary, useLibrary } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
 import { dropUnsentJob } from '@/lib/unsentRecordings';
@@ -31,10 +39,29 @@ import {
   type StoredJob,
 } from '@/lib/uploads';
 
-import { liveJobFinished, recipeIdsToLookUp } from './jobsLogic';
-import { describeJob, ProcessingRow, type ProcessingView } from './ProcessingRow';
+import { liveJobCancelled, liveJobFinished, recipeIdsToLookUp } from './jobsLogic';
+import { describeJob, ProcessingRow, STOPPED_VIEW, type ProcessingView } from './ProcessingRow';
+import { flushStops, inTime, stopSoon, undoStop, UNDO_MS, UNDO_MS_SCREEN_READER, useStops } from './stops';
 
 const POLL_MS = 60_000;
+/** How long a stop waits for Convex (it queues a mutation while offline) or for jobs.create. */
+const STOP_WAIT_MS = 15_000;
+
+// Once for the app: a stop waiting out its Undo runs as soon as she leaves the app (timers may never
+// fire in the background, and a swipe-away from the app switcher would lose it).
+AppState.addEventListener('change', (s) => {
+  if (s !== 'active') flushStops();
+});
+// VoiceOver on: a longer Undo. (React Native Web always says a screen reader is on.)
+let screenReader = false;
+if (Platform.OS !== 'web') {
+  void AccessibilityInfo.isScreenReaderEnabled().then((on) => (screenReader = on));
+  AccessibilityInfo.addEventListener('screenReaderChanged', (on) => (screenReader = on));
+}
+/** Running Convex jobs from stopped uploads that this phone already asked to stop again. */
+const restopped = new Set<string>();
+
+const uploadIdOf = (l: LiveJob) => l.uploadPath.replace(/\/$/, '');
 /** Stages a Convex job is still in. */
 const RUNNING = new Set(['uploading', 'queued', 'preparing', 'understanding', 'writing', 'indexing']);
 
@@ -59,8 +86,7 @@ export type PendingState = {
   /** This cook's jobs still on screen, newest first. */
   jobs: StoredJob[];
   views: Record<string, ProcessingView>;
-  cancellingId: string | null;
-  /** Cancel (with a confirm) or clear, per the row's action. */
+  /** Stop (Undo for a few seconds), undo that, or clear, per the row's action. */
   act: (job: StoredJob) => void;
   poll: () => Promise<void>;
 };
@@ -73,7 +99,7 @@ export function usePendingRecipes(): PendingState {
   const [statuses, setStatuses] = useState<Record<string, JobStatus>>({});
   // The clock the rows read (the writing estimate moves with it): set on every poll and upload report.
   const [now, setNow] = useState(() => Date.now());
-  const [cancellingId, setCancellingId] = useState<string | null>(null);
+  const stops = useStops();
   const liveJobs = useLiveJobs(me?.role === 'cook');
 
   // Re-read jobs and progress whenever an upload reports in.
@@ -117,12 +143,26 @@ export function usePendingRecipes(): PendingState {
   );
 
   // The worker's live job per upload folder ("<job_id>/").
-  const liveByJob = useMemo(() => new Map<string, LiveJob>(liveJobs.map((l) => [l.uploadPath.replace(/\/$/, ''), l])), [liveJobs]);
-  // Jobs still running that no local row covers (the laptop's glasses jobs, another phone's uploads).
+  const liveByJob = useMemo(() => new Map<string, LiveJob>(liveJobs.map((l) => [uploadIdOf(l), l])), [liveJobs]);
+  // Jobs still running that no local row covers (the laptop's glasses jobs, another phone's uploads),
+  // except one from an upload she just stopped (its jobs.create landed late: stopped below).
   const liveOnly = useMemo(() => {
     const mine = new Set(jobs.map((j) => j.job_id));
-    return liveJobs.filter((l) => RUNNING.has(l.stage) && !mine.has(l.uploadPath.replace(/\/$/, '')));
-  }, [liveJobs, jobs]);
+    return liveJobs.filter((l) => RUNNING.has(l.stage) && !mine.has(uploadIdOf(l)) && stops.get(uploadIdOf(l)) !== 'gone');
+  }, [liveJobs, jobs, stops]);
+
+  // A Convex job still running for an upload she stopped (made after the stop, or before Convex had
+  // jobs.cancelUpload): stop it too, once.
+  useEffect(() => {
+    for (const l of liveJobs) {
+      if (!RUNNING.has(l.stage) || stops.get(uploadIdOf(l)) !== 'gone' || restopped.has(l._id)) continue;
+      restopped.add(l._id);
+      cancelLiveJob(l._id).catch((err) => {
+        restopped.delete(l._id); // tried again on the next update
+        console.warn('[uploads] late stop failed', err);
+      });
+    }
+  }, [liveJobs, stops]);
 
   // A finished live job's library id, from its Convex recipe id (asked again when the library changes).
   const libraryIds = entries.map((e) => e.id).join('|');
@@ -146,52 +186,49 @@ export function usePendingRecipes(): PendingState {
     const ids = new Set(libraryIds.split('|'));
     const done = jobs.filter((j) => {
       const s = statuses[j.job_id];
-      if (s?.status === 'cancelled') return true;
+      if (s?.status === 'cancelled' || liveJobCancelled(liveByJob.get(j.job_id))) return true;
       if (liveJobFinished(liveByJob.get(j.job_id), libraryIdOf, ids, needsPendingSend(j))) return true;
       return s?.status === 'published' && !!s.recipe_id && ids.has(s.recipe_id) && !needsPendingSend(j);
     });
     if (done.length === 0) return;
     for (const j of done) {
-      if (statuses[j.job_id]?.status === 'cancelled') cancelJobUploads(j.job_id);
+      if (statuses[j.job_id]?.status === 'cancelled' || liveJobCancelled(liveByJob.get(j.job_id))) cancelJobUploads(j.job_id);
       removeJob(j.job_id); // emits -> the subscription above re-reads the jobs
     }
   }, [jobs, statuses, libraryIds, liveByJob, libraryIdOf]);
 
-  const doCancel = useCallback(
-    async (job: StoredJob) => {
-      setCancellingId(job.job_id);
-      // Off this phone: its uploads, its row, and a crash note that would send it again (lib/unsentRecordings).
-      const drop = () => {
-        cancelJobUploads(job.job_id);
-        removeJob(job.job_id);
-        dropUnsentJob(job.job_id);
-        setJobs(loadJobs());
-        toast.show(`Stopped your ${job.title}`);
-      };
+  // The real stop, once Undo's few seconds are over. Only Convex failing (no connection) keeps the
+  // recipe going: then the row comes back and says so.
+  const stop = useCallback(
+    async (job: StoredJob): Promise<boolean> => {
+      const liveOnlyRow = liveOnly.some((l) => l._id === job.job_id);
+      const live = liveByJob.get(job.job_id);
       try {
-        // The Convex job is what a worker takes: stop it there, so nothing is left clogging the queue.
-        const live = liveByJob.get(job.job_id) ?? liveOnly.find((l) => l._id === job.job_id);
-        if (live) await cancelLiveJob(live._id);
-        if (liveOnly.some((l) => l._id === job.job_id)) {
-          toast.show(`Stopped your ${job.title}`);
-          return;
+        if (liveOnlyRow) await inTime(cancelLiveJob(job.job_id), STOP_WAIT_MS);
+        else if (live) await inTime(cancelLiveJob(live._id), STOP_WAIT_MS);
+        else {
+          // Sent from this phone a moment ago: let its job be made, then stop it by the upload's folder.
+          await inTime(jobCreated(job.job_id), STOP_WAIT_MS).catch(() => {});
+          await inTime(cancelLiveUpload(job.job_id), STOP_WAIT_MS);
         }
-        await requestCancel(job.job_id);
-        drop();
       } catch (err) {
-        // Convex never got this job (a send a crash cut off): no worker will take it, so it just goes.
-        if (!liveByJob.has(job.job_id) && (err as { status?: number }).status === 403) return drop();
-        console.warn('[uploads] cancel failed', err);
-        toast.show('Couldn’t stop it. Try again.', { tone: 'error' });
-      } finally {
-        setCancellingId(null);
+        console.warn('[uploads] stop failed', err);
+        toast.show('Couldn’t stop it. Check the connection and try again.', { tone: 'error' });
+        return false;
       }
+      if (liveOnlyRow) return true; // another phone's or the laptop's upload: nothing to stop here
+      cancelJobUploads(job.job_id);
+      requestCancel(job.job_id).catch((err) => console.warn('[uploads] signer cancel (best-effort)', err));
+      removeJob(job.job_id);
+      dropUnsentJob(job.job_id); // and a crash note that would send it again (lib/unsentRecordings)
+      setJobs(loadJobs());
+      return true;
     },
     [toast, liveByJob, liveOnly],
   );
 
-  const views = useMemo(
-    () => ({
+  const views = useMemo(() => {
+    const all: Record<string, ProcessingView> = {
       ...Object.fromEntries(
         jobs.map((j) => {
           const live = liveByJob.get(j.job_id);
@@ -199,13 +236,24 @@ export function usePendingRecipes(): PendingState {
         }),
       ),
       ...Object.fromEntries(liveOnly.map((l) => [l._id, describeJob(liveOnlyJob(l), undefined, now, l)])),
-    }),
-    [jobs, statuses, now, liveByJob, libraryIdOf, liveOnly],
-  );
+    };
+    for (const [id, state] of stops) if (all[id] && state !== 'gone') all[id] = STOPPED_VIEW[state];
+    return all;
+  }, [jobs, statuses, now, liveByJob, libraryIdOf, liveOnly, stops]);
 
   const act = useCallback(
     (job: StoredJob) => {
-      if (views[job.job_id]?.action === 'remove') {
+      const action = views[job.job_id]?.action;
+      if (action === 'undo') {
+        undoStop(job.job_id);
+        return;
+      }
+      if (action === 'cancel') {
+        stopSoon(job.job_id, () => stop(job), screenReader ? UNDO_MS_SCREEN_READER : UNDO_MS);
+        AccessibilityInfo.announceForAccessibility(`Stopped your ${job.title}. Undo is where the stop button was.`);
+        return;
+      }
+      if (action === 'remove') {
         // A stalled or half-sent upload is still open on the server: close it there too, quietly.
         if ((statuses[job.job_id]?.status ?? 'uploading') === 'uploading') {
           cancelJobUploads(job.job_id);
@@ -214,34 +262,23 @@ export function usePendingRecipes(): PendingState {
         removeJob(job.job_id);
         dropUnsentJob(job.job_id);
         setJobs(loadJobs());
-        return;
       }
-      if (cancellingId) return;
-      const title = `Stop making your ${job.title}?`;
-      const message = 'No recipe will be made from these videos.';
-      if (Platform.OS === 'web') {
-        if (globalThis.confirm?.(`${title}\n\n${message}`)) void doCancel(job);
-        return;
-      }
-      Alert.alert(title, message, [
-        { text: 'Keep going', style: 'cancel' },
-        { text: 'Stop', style: 'destructive', onPress: () => void doCancel(job) },
-      ]);
     },
-    [views, statuses, cancellingId, doCancel],
+    [views, statuses, stop],
   );
 
   // Only this cook's recordings (another profile on this phone has their own list), then every other job of
-  // the family still in the pipeline, so nothing is ever processing out of sight.
+  // the family still in the pipeline, so nothing is ever processing out of sight. A stopped one is gone.
   const visible = useMemo(
-    () => [
-      ...jobs.filter((j) => statuses[j.job_id]?.status !== 'cancelled' && (!me || !j.sender_id || j.sender_id === me.id)),
-      ...liveOnly.map(liveOnlyJob),
-    ],
-    [jobs, statuses, me, liveOnly],
+    () =>
+      [
+        ...jobs.filter((j) => statuses[j.job_id]?.status !== 'cancelled' && (!me || !j.sender_id || j.sender_id === me.id)),
+        ...liveOnly.map(liveOnlyJob),
+      ].filter((j) => stops.get(j.job_id) !== 'gone'),
+    [jobs, statuses, me, liveOnly, stops],
   );
 
-  return { jobs: visible, views, cancellingId, act, poll };
+  return { jobs: visible, views, act, poll };
 }
 
 /** The rows for `jobs` (a filtered subset of pending.jobs is fine). */
@@ -257,7 +294,6 @@ export function PendingList({ pending, jobs = pending.jobs, startIndex = 0 }: { 
             <ProcessingRow
               job={job}
               view={view}
-              cancelling={pending.cancellingId === job.job_id}
               onAction={() => pending.act(job)}
               onOpen={(id) => router.push({ pathname: '/my-recipe/[id]', params: { id } })}
               onRetry={() => router.push('/record')}

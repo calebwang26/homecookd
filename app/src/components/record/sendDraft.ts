@@ -6,6 +6,7 @@
 // on the note, and the note goes once jobs.create worked, so a crash before that sends it again.
 //
 //   const job = await sendDraft({ me, draft, clips, kids, recipients, toLabel, dish, hello })
+//   await jobCreated(job.job_id)   its jobs.create is over (a stop waits for it, then stops that job)
 import type { Profile } from '@/lib/api';
 import { convexKidIds, createJob } from '@/lib/live/convex';
 import { dropUnsent, markUnsentJob } from '@/lib/unsentRecordings';
@@ -14,6 +15,14 @@ import { ensurePendingSend, startUpload, type StoredJob } from '@/lib/uploads';
 import type { Draft, DraftClip } from './draft';
 
 export const MAX_TITLE = 120; // the upload signer's limit
+
+/** Each upload's jobs.create, in this app session. */
+const creating = new Map<string, Promise<void>>();
+
+/** Resolves once this upload's jobs.create is over (made or failed); at once when it isn't running here. */
+export function jobCreated(uploadId: string): Promise<void> {
+  return creating.get(uploadId) ?? Promise.resolve();
+}
 /** The signer needs a title; without a dish name Convex gets none and the writer names the recipe. */
 const NO_DISH = 'family recipe';
 
@@ -56,7 +65,7 @@ export async function sendDraft({ me, draft, clips, kids, recipients, toLabel, d
   // here never stops the send; the row falls back to the status file.
   const { glasses, language, recordingId } = draft;
   if (recordingId) markUnsentJob(recordingId, job.job_id);
-  void (async () => {
+  const made = (async () => {
     const forKidIds = await convexKidIds(kids);
     await createJob(`${job.job_id}/`, glasses ? 'glasses' : 'phone', {
       title: title || undefined,
@@ -66,6 +75,7 @@ export async function sendDraft({ me, draft, clips, kids, recipients, toLabel, d
     });
     if (recordingId) dropUnsent(recordingId);
   })().catch((e) => console.warn('[send] jobs.create failed', String(e)));
+  creating.set(job.job_id, made);
   // Who gets it once it's written. If this fails, the home card keeps retrying.
   if (recipients.length > 0) await ensurePendingSend(job);
   return job;

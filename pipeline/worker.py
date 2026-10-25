@@ -369,8 +369,13 @@ class UploadMissing(Exception):
     """The files can never arrive now; fail the job."""
 
 
+class JobCancelled(Exception):
+    """Convex answered 409: the cook stopped this job in the app. Drop it and publish nothing."""
+
+
 class Convex:
-    """The three /worker/* routes. progress() never raises: a missed update must not fail the job."""
+    """The /worker/* routes. progress() never raises, except JobCancelled: a missed update must not fail
+    the job, but a stopped one must stop."""
 
     def __init__(self, site_url: str, secret: str):
         self.base = site_url.rstrip("/")
@@ -379,6 +384,8 @@ class Convex:
 
     def _post(self, path: str, body: dict) -> requests.Response:
         res = self.session.post(f"{self.base}{path}", json=body, timeout=30)
+        if res.status_code == 409:
+            raise JobCancelled(f"Convex {path}: {res.text[:120]}")
         if res.status_code >= 400:
             raise RuntimeError(f"Convex {path}: HTTP {res.status_code} {res.text[:300]}")
         return res
@@ -394,6 +401,8 @@ class Convex:
         try:
             self._post("/worker/progress", body)
             print(f"  [{job_id}] {stage} {body['progress']:.0%}", flush=True)
+        except JobCancelled:
+            raise
         except Exception as e:  # noqa: BLE001
             print(f"  warning: progress {stage} not sent: {e}")
 
@@ -485,8 +494,10 @@ def handle_convex(convex: Convex, job: dict, media: storage.Bucket, uploads: sto
 
     def fail(message: str, error: str) -> None:
         print(f"failed {job_id}: {error}")
-        convex.progress(job_id, "failed", 0, message)
+        with contextlib.suppress(JobCancelled):  # stopped meanwhile: it already reads "Cancelled."
+            convex.progress(job_id, "failed", 0, message)
 
+    published_media = False
     with job_lock(recipe_id) as mine:
         if not mine:
             print(f"{recipe_id}: another worker process is on it; skipping")
@@ -536,9 +547,25 @@ def handle_convex(convex: Convex, job: dict, media: storage.Bucket, uploads: sto
             # GCS library.json is shared by every pre-hackathon copy of the app. The public recipe.json
             # leaves out her stories and tips; Convex gets them all and shows them only after her yes.
             recipe = publish.publish_recipe(recipe_id, bucket=media, family=True)
+            published_media = True
             recipe_url = publish.public_url(media, f"{recipe_id}/recipe.json")
             convex_recipe = convex.published(job_id, recipe.model_dump(mode="json"), recipe_url,
                                              job.get("language"), job.get("memoriesOptIn"))
+        except JobCancelled:
+            # The cook stopped it in the app (every report asks; so do release and published): Convex
+            # gets nothing, her raw videos and our copies go, and media published a moment before goes
+            # to trash/. A storage error here must not stop the worker.
+            shutil.rmtree(folder, ignore_errors=True)
+            print(f"cancelled {job_id} by the cook: stopped", flush=True)
+            cleanup = [("raw videos", lambda: _purge_cancelled(uploads, job["uploadPath"]))]
+            if published_media:
+                cleanup.append(("published media to trash/", lambda: _trash_recipe(media, recipe_id)))
+            for what, step in cleanup:
+                try:
+                    print(f"  {job_id}: {what}: {step()} file(s)", flush=True)
+                except Exception as e:  # noqa: BLE001
+                    print(f"  {job_id}: {what}: cleanup failed: {type(e).__name__}: {e}", flush=True)
+            return
         except (Exception, SystemExit) as e:  # noqa: BLE001 - any failure fails this job; the loop keeps running
             traceback.print_exc()
             return fail(MSG_FAILED, f"{type(e).__name__}: {e}")
@@ -597,6 +624,19 @@ def _purge_uploads(uploads: storage.Bucket, job_id: str) -> int:
         gone += 1
     shutil.rmtree(INPUT / job_id, ignore_errors=True)
     return gone
+
+
+def _purge_cancelled(uploads: storage.Bucket, upload_path: str) -> int:
+    """A stopped Convex job's raw video: the phone's upload folder ("<id>/"), else just the one object
+    (a glasses path like "glasses/rec1.mp4": never everything beside it)."""
+    folder = upload_path.strip("/")
+    if upload_path.endswith("/") and RECIPE_ID.fullmatch(folder):
+        return _purge_uploads(uploads, folder)
+    blob = uploads.get_blob(folder)
+    if blob is None:
+        return 0
+    blob.delete()
+    return 1
 
 
 def process_cancellations(media: storage.Bucket, uploads: storage.Bucket) -> None:
