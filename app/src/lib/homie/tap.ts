@@ -1,30 +1,39 @@
 // What a tap on the resting pot says (Caleb, Oct 24): a tap always gets a spoken answer. When something is
 // new for this person (convex/homie.ts news: an answer from Grandma, Leo cooking your dish, a quiet week),
-// homie says that, once, in Claude's words when they're ready (lib/homie/news). Otherwise the screen's own
-// "Explore X by doing X" line, two per screen taking turns, so taps in a row never repeat a line. Pure
-// (node scripts/test-homie.mjs); lib/homie/intro keeps the hello, the turns and what was told.
+// homie says that, once, in Claude's words when they're ready (lib/homie/news). Otherwise the screen's one
+// line, about its big button in the button's own words ("Cook something tonight by tapping Start
+// cooking."). A second tap in a row gets TAP_AGAIN, so homie never says the same line twice in a row.
+// Pure (node scripts/test-homie.mjs); lib/homie/intro keeps the hello and what was told.
 
-export type TapScreen = 'cook' | 'kidHome' | 'recipes' | 'community' | 'ask' | 'parentHome' | 'parentRecipes' | 'messages' | 'dish' | 'record' | 'other';
+export type TapScreen = 'cook' | 'kidHome' | 'recipes' | 'community' | 'ask' | 'parentHome' | 'parentRecipes' | 'messages' | 'dish' | 'record' | 'recording' | 'other';
 
 /** One thing that's new (convex/homie.ts Fact): `line` says it plainly. */
 export type TapFact = { id: string; kind: string; line: string; at: number };
 
-export const TAP_LINES: Record<TapScreen, readonly string[]> = {
-  // Cook mode's own tap turns the mic on with this line (HELP.cook).
-  cook: ['Say next, back, repeat, or ask me anything.'],
-  kidHome: ['Find your next dish by swiping through the cards.', 'Ask your family anything by tapping Have a question.'],
-  recipes: ['Find your next dish by scrolling the family table.', 'See one cook’s dishes by tapping their name.'],
-  community: ['Explore dishes near you by tapping a photo on the map.', 'Share your family’s cooking by tapping Share your recipe.'],
-  ask: ['Ask your family anything by tapping Ask about a dish.', 'Catch up with your family by opening a chat.'],
-  parentHome: ['Teach your family a new dish by tapping Record.', 'See who cooked with you this week by looking at the table.'],
-  parentRecipes: ['Share a dish with family by tapping Send a recipe.', 'See who made your dishes by scrolling your recipes.'],
-  messages: ['Talk to your family by opening a chat.', 'Start a conversation by tapping New message.'],
-  dish: ['Cook this one with me by tapping Start cooking.', 'Keep this dish close by tapping the heart.'],
-  record: ['Teach a new dish by tapping Start recording.', 'Film with your phone or your glasses by tapping Start recording.'],
-  other: ['I’m right here. Tap me anytime.', 'Find your way home by tapping Back.'],
+export const TAP_LINES: Record<TapScreen, string> = {
+  // Cook mode's own tap asks; a long press turning the mic on says this (HELP.cook).
+  cook: 'Say next, back, repeat, or ask me anything.',
+  kidHome: 'Cook something tonight by tapping Start cooking.',
+  recipes: 'Pick tonight’s dish by tapping its photo.',
+  community: 'Explore dishes near you by tapping a photo on the map.',
+  ask: 'Ask your family anything by tapping Ask about a dish.',
+  parentHome: 'Teach your family a new dish by tapping Record.',
+  parentRecipes: 'Share a dish with family by tapping Send a recipe.',
+  messages: 'Talk to your family by opening a chat.',
+  dish: 'Cook this one with me by tapping Start cooking.',
+  record: 'Teach a new dish by tapping Start recording.',
+  // While she films: homie is already listening, and nothing else goes into her video.
+  recording: 'Keep cooking. I’m listening.',
+  other: 'I’m right here. Tap me anytime.',
 };
 
-/** Which screen's lines a path gets. */
+/** A second tap in a row, after the screen's line. */
+export const TAP_AGAIN = 'I’m right here.';
+
+/** Screens where a tap never tells news: the kid cooking, the cook filming. */
+const NO_NEWS: ReadonlySet<TapScreen> = new Set(['cook', 'recording']);
+
+/** Which screen's line a path gets. */
 export function tapScreen(pathname: string): TapScreen {
   const p = pathname.replace(/\/+$/, '') || '/';
   if (p.startsWith('/cook/')) return 'cook';
@@ -37,13 +46,14 @@ export function tapScreen(pathname: string): TapScreen {
   if (p === '/parent/messages') return 'messages';
   if (/^\/(recipe|kid\/recipes|community)\/[^/]+$/.test(p)) return 'dish';
   if (p === '/record') return 'record';
+  if (p === '/recording') return 'recording';
   return 'other';
 }
 
 /**
  * The line for this tap: the newest fact not told yet (Claude's words from `written`, else its plain
- * line), else this screen's lines from `turn`; never `last` (the line the tap before said) when another
- * line is there. `factId`: the fact it tells, so it's never told again.
+ * line), else this screen's line, or TAP_AGAIN when that was `last` (the line the tap before said).
+ * `factId`: the fact it tells, so it's never told again.
  */
 export function chooseTapLine(o: {
   screen: TapScreen;
@@ -51,17 +61,12 @@ export function chooseTapLine(o: {
   told: ReadonlySet<string>;
   written?: ReadonlyMap<string, string>;
   last: string | null;
-  turn: number;
 }): { text: string; factId?: string } {
-  const fact = o.screen === 'cook' ? undefined : o.facts.find((f) => !o.told.has(f.id));
+  const fact = NO_NEWS.has(o.screen) ? undefined : o.facts.find((f) => !o.told.has(f.id));
   if (fact) {
     const text = o.written?.get(fact.id)?.trim() || fact.line;
     if (text !== o.last) return { text, factId: fact.id };
   }
-  const lines = TAP_LINES[o.screen];
-  for (let i = 0; i < lines.length; i++) {
-    const text = lines[(o.turn + i) % lines.length];
-    if (text !== o.last) return { text };
-  }
-  return { text: lines[0] };
+  const line = TAP_LINES[o.screen];
+  return { text: line === o.last ? TAP_AGAIN : line };
 }

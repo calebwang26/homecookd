@@ -5,8 +5,8 @@
 // (store.moment), HomieMoment takes the pot to the centre, and VoiceOver keeps to the moment (the
 // overlay is modal then: the screen behind it is out of reach).
 // A tap on the resting pot always says something (lib/homie/tap): what's new for this person, once
-// (lib/homie/news keeps it ready), else this screen's "Explore X by doing X" line, never the same line
-// twice in a row, with "Hi, I’m homie." before the very first one (lib/homie/intro); unless the screen
+// (lib/homie/news keeps it ready; never while she films), else this screen's one line about its big
+// button, and "I’m right here." on a second tap in a row, with "Hi, I’m homie." before the very first one (lib/homie/intro); unless the screen
 // gave the pot its own onPress (and onLongPress). It's an answer to the tap, so it pauses a playing
 // video. A screen can dock the pot somewhere else (cook mode: the middle of the bottom bar); docked, it
 // wears the glow that follows the voice (HomiePot aura), and low on the screen its label sits above it.

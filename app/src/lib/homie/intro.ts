@@ -1,8 +1,8 @@
 // What a tap on the resting pot says, with what it remembers (the lines themselves: lib/homie/tap).
 // homie says hello once per person on this phone (Caleb, Oct 24): the first tap line starts with "Hi,
 // I’m homie.", and the recording hello counts too (lib/live/homie). Each piece of news is told once
-// (kept per person, newest 50), and the screen's own lines take turns, never the same line twice in a
-// row. Kept with kv under `homie.introduced.<profileId>` and `homie.told.<profileId>`, so they last
+// (kept per person, newest 50), and a second tap in a row never says the same line again (lib/homie/tap
+// TAP_AGAIN). Kept with kv under `homie.introduced.<profileId>` and `homie.told.<profileId>`, so they last
 // across app restarts. Plain TS (lib/storage is a map in scripts/test-homie.mjs).
 import { kvGet, kvSet } from '@/lib/storage';
 
@@ -15,9 +15,8 @@ const TOLD_KEPT = 50;
 
 // Taps land faster than storage answers: the first one claims the hello.
 const claimed = new Set<string>();
-// This run's memory: the last line said, each screen's turn, and what was told (storage fills it once).
+// This run's memory: the last line said, and what was told (storage fills it once).
 let last: string | null = null;
-const turns = new Map<string, number>();
 const told = new Map<string, Promise<string[]>>();
 
 /** homie has said hello to this person (the recording hello). */
@@ -51,7 +50,7 @@ function toldIds(profileId: string): Promise<string[]> {
 }
 
 /**
- * What a tap here says: news first (once), else this screen's next line; the hello before the first
+ * What a tap here says: news first (once), else this screen's line; the hello before the first
  * one. `news`: the person's facts and Claude's words for them (lib/homie/news). Never throws (storage
  * failures read as "nothing said yet").
  */
@@ -62,13 +61,12 @@ export async function takeTapLine(
 ): Promise<string> {
   const ids = profileId ? await toldIds(profileId) : [];
   // Read after the wait: a second quick tap sees what the first one said.
-  const turn = turns.get(route.screen) ?? 0;
-  const pick = chooseTapLine({ screen: route.screen, facts: news.facts, told: new Set(ids), written: news.written, last, turn });
+  const pick = chooseTapLine({ screen: route.screen, facts: news.facts, told: new Set(ids), written: news.written, last });
   last = pick.text;
   if (pick.factId) {
     ids.push(pick.factId);
     if (profileId) void kvSet(toldKey(profileId), JSON.stringify(ids.slice(-TOLD_KEPT)));
-  } else turns.set(route.screen, turn + 1);
+  }
   const hello = !profileId || (await firstHello(profileId));
   return hello ? `${HELP.hello} ${pick.text}` : pick.text;
 }
@@ -77,6 +75,5 @@ export async function takeTapLine(
 export function resetIntroForTests(): void {
   claimed.clear();
   last = null;
-  turns.clear();
   told.clear();
 }
