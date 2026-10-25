@@ -69,7 +69,7 @@ import { ScrollView, StyleSheet, useWindowDimensions, View, type LayoutChangeEve
 import Animated, { FadeIn, FadeInLeft, FadeInRight } from 'react-native-reanimated';
 
 import { ConsentSheet } from '@/components/cooking/ConsentSheet';
-import { CookAnswers, useCookMoments, useReadSteps } from '@/components/cooking/CookMoments';
+import { CookAnswers, useAskByNote, useCookMoments, useReadSteps } from '@/components/cooking/CookMoments';
 import { ClipCaption, TimerPill, VoiceHold, VoiceLine } from '@/components/cooking/VoiceCooking';
 import { HeartBurst } from '@/components/cooking/HeartBurst';
 import { ClipVideo, type ClipVideoHandle } from '@/components/media';
@@ -107,12 +107,13 @@ import { speak, stopSpeaking } from '@/lib/live/speak';
 import { useVoiceCooking, VOICE_CONFIGURED, type VoiceClip } from '@/lib/live/voice';
 import { appMomentKind, askCloseIn, consentSettled, cookingSessionOn, cookTap, phoneReads } from '@/lib/live/voiceLogic';
 import { HANDOFF_FADE_MS, pauseAllVideos, stopAllMedia } from '@/lib/media';
-import { cooked, openChatWith, openCircle, useRecipeQuestions, type CookedRef } from '@/lib/messaging';
+import { cooked, openChatWith, openCircle, sendVoiceQuestion, useRecipeQuestions, type CookedRef } from '@/lib/messaging';
 import { madeItWords } from '@/lib/postcardLogic';
 import { backToRecipe } from '@/lib/navigation';
 import { useLibrary, useRecipe } from '@/lib/recipes';
 import { useSession, usingDevAid } from '@/lib/session';
 import { useCookingSession } from '@/lib/useCookingSession';
+import { recordingSupported } from '@/lib/voice';
 import type { Step } from '@/lib/types';
 import { alpha, colors, radii } from '@/theme/tokens';
 
@@ -308,6 +309,15 @@ export default function CookScreen() {
       asking.current = false;
     }
   };
+  const askByNote = useAskByNote({
+    cookName,
+    send: async (rec) => {
+      if (!recipe || !askTarget) return;
+      const thread = askTarget.kind === 'cook' ? await openChatWith(askTarget.cook.id) : await openCircle();
+      await sendVoiceQuestion(thread, rec, recipe.id, n);
+    },
+    onFail: () => void askInChat(),
+  });
   const potHold = () => {
     pauseAllVideos({ fadeMs: HANDOFF_FADE_MS });
     if (!askTarget) {
@@ -315,6 +325,9 @@ export default function CookScreen() {
       return;
     }
     if (voice.live && !voice.muted) return homie.ask();
+    // No live line for this dish (one Convex doesn't know) or the mic refused it: the same "Ask <cook>
+    // anything", sent as a voice note to the cook's chat with the dish (never opening the chat).
+    if (recordingSupported()) return void askByNote.ask();
     void askInChat();
   };
   useHomieScreen({ hidden: !!done, dock, onPress: potTap, onLongPress: potHold, longPressLabel: cookName ? `Ask ${cookName}` : undefined });

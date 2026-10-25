@@ -20,6 +20,7 @@
 //   await sendPostcard({ recipeId, cooked: r.ref, photo, rating: 4 }); // the postcard on that cooked card (PR 3)
 //   await sendJustLikeMine(threadId, cookedMessage);                // the cook's one-tap answer to a postcard
 //   await sendVoiceReply(threadId, recording, cookedMessage.id);    // hold to talk on the postcard (no chat open)
+//   await sendVoiceQuestion(threadId, recording, recipeId, step);   // cook mode's "Ask <cook> anything" (no chat open)
 //   await request({ to: momId, dish: 'Sunday eggs' });              // "Will you teach me your Sunday eggs?"
 //   logViewed(recipeId); const { activity } = useRecipeActivity(recipeId);
 // A learner's question reaching the server, and a cook's recipe card going out, may open the push
@@ -1030,6 +1031,19 @@ export async function sendJustLikeMine(threadId: string, cooked: Pick<Message, '
 export async function sendVoiceReply(threadId: string, recording: VoiceRecording, replyTo: string | null): Promise<Message> {
   const { path, duration_s } = await uploadVoice(recording);
   const saved = await api.sendMessage(threadId, voiceMessage(path, duration_s, { reply_to: replyTo }));
+  remember(threadId, saved);
+  invalidateTable();
+  return saved;
+}
+
+/**
+ * A spoken question about a dish's step, sent without opening the chat: cook mode's "Ask <cook>
+ * anything" for a dish the live voice line can't cook (it arrives as a question card with the dish).
+ * Throws with words for a toast.
+ */
+export async function sendVoiceQuestion(threadId: string, recording: VoiceRecording, recipeId: string, step: number | null): Promise<Message> {
+  const { path, duration_s } = await uploadVoice(recording);
+  const saved = await api.sendMessage(threadId, voiceMessage(path, duration_s, { kind: 'question', recipe_id: recipeId, step_order: step }));
   remember(threadId, saved);
   invalidateTable();
   return saved;
