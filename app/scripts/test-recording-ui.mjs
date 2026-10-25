@@ -20,7 +20,7 @@
 //                                            native halves missing
 //   node scripts/test-recording-ui.mjs
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -428,6 +428,25 @@ test('build-4 safety: lib/live/camera.ts loads without the native modules, and b
   assert.equal(camera.visionCamera(), null);
   assert.equal(camera.inAppCameraSupported(), false);
   assert.equal(camera.imageManipulator(), null);
+});
+
+test('expo-file-system moves and copies are never left un-awaited (an upload of a file still being moved crashed build 5)', () => {
+  const offenders = [];
+  const walk = (d) => {
+    for (const name of readdirSync(d)) {
+      const f = join(d, name);
+      if (statSync(f).isDirectory()) walk(f);
+      else if (/\.tsx?$/.test(f))
+        readFileSync(f, 'utf8')
+          .split('\n')
+          .forEach((line, i) => {
+            // `x.move(` / `x.copy(` (expo-file-system: async) must be awaited; the Sync forms are fine.
+            if (/\.(move|copy)\(/.test(line) && !/await\s+[\w.()\[\]'"]*\.(move|copy)\(/.test(line) && !/^\s*(\/\/|\*)/.test(line)) offenders.push(`${f.slice(root.length + 1)}:${i + 1}: ${line.trim()}`);
+          });
+    }
+  };
+  walk(join(root, 'src'));
+  assert.deepEqual(offenders, []);
 });
 
 console.log(`\n${passed} passed`);

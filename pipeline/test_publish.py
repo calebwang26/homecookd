@@ -4,7 +4,8 @@ scrub_family.py, which strips the ones published before.
 
     .venv/bin/python pipeline/test_publish.py        # plain runner (pytest is not in the venv)
 
-No network: a fake bucket keeps what would be uploaded, and the worker test fakes prep, process and Convex.
+No network: a fake bucket keeps what would be uploaded, and the worker tests fake prep, process and Convex
+(including a job the cook stops mid-way: Convex's 409).
 """
 from __future__ import annotations
 
@@ -277,6 +278,98 @@ def test_worker_publishes_a_family_recipe():
     assert len(calls["convex"]["stories"]) == 2, "Convex gets the stories the public file leaves out"
     assert calls["cover"] == ["https://convex.example/api/storage/abc"], calls["cover"]  # only the job with one
     assert [kw["cover_photo"] and kw["cover_photo"].name for kw in calls["process"]] == [None, "plate-photo.jpg"]
+
+
+def test_worker_stops_a_job_the_cook_cancelled():
+    """The cook stopped it in the app mid-way: Convex answers 409 to the next report, the worker
+    publishes nothing, reports no failure on top, and deletes her raw videos (only that folder)."""
+    calls: dict = {"progress": [], "purged": []}
+
+    class Convex:
+        def progress(self, _job_id, stage, _progress, error=None):
+            calls["progress"].append(stage)
+            if stage == "writing":
+                raise worker.JobCancelled("Convex /worker/progress: cancelled")
+
+        def published(self, *_a, **_kw):
+            calls["published"] = True
+
+    def publish_recipe(*_a, **_kw):
+        calls["publish"] = True
+
+    def process_run(_recipe_id, report, **_kw):
+        report("understanding", 0.2)
+        report("writing", 0.7)  # the cook stopped it while Gemini was watching
+        report("writing", 0.85)
+
+    upload = SimpleNamespace(name="chili-abc123/01.mov", size=10)
+    job = {"jobId": "job1", "uploadPath": "chili-abc123/", "cookName": "Dad", "title": "Chili"}
+    with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()) as log, \
+            patched(worker, LOCKS=Path(tmp) / ".locks", INPUT=Path(tmp), _complete_upload=lambda *_a: [upload],
+                    _download=lambda *_a: None, spend_cap=lambda: 100.0, spent_usd=lambda: 0.0,
+                    _purge_uploads=lambda _b, folder: calls["purged"].append(folder) or 1), \
+            patched(worker.prep, run=lambda *_a: None, probe_duration=lambda _p: 60.0), \
+            patched(worker.process, run=process_run), \
+            patched(publish, publish_recipe=publish_recipe):
+        worker.handle_convex(Convex(), job, FakeBucket(), FakeBucket())
+    assert "publish" not in calls and "published" not in calls, calls
+    assert "failed" not in calls["progress"], calls["progress"]
+    assert calls["progress"][-1] == "writing", calls["progress"]
+    assert calls["purged"] == ["chili-abc123"], calls["purged"]
+    assert "cancelled job1 by the cook: stopped" in log.getvalue(), log.getvalue()
+
+
+def test_worker_stopped_right_after_publishing_trashes_the_media_and_keeps_running():
+    """Stopped in the last moment: /worker/published answers 409. What publish_recipe put in the public
+    bucket goes to trash/, and a storage error while cleaning up doesn't take the worker down."""
+    calls: dict = {"trashed": []}
+
+    class Convex:
+        def progress(self, _job_id, stage, _progress, error=None):
+            assert stage != "failed", error
+
+        def published(self, *_a, **_kw):
+            raise worker.JobCancelled("Convex /worker/published: cancelled")
+
+    def purge(_b, _folder):
+        raise RuntimeError("GCS 503")
+
+    upload = SimpleNamespace(name="chili-abc123/01.mov", size=10)
+    job = {"jobId": "job1", "uploadPath": "chili-abc123/", "cookName": "Dad", "title": "Chili"}
+    full = Recipe.model_validate_json(SAMPLE.read_text())
+    with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()) as log, \
+            patched(worker, LOCKS=Path(tmp) / ".locks", INPUT=Path(tmp), _complete_upload=lambda *_a: [upload],
+                    _download=lambda *_a: None, spend_cap=lambda: 100.0, spent_usd=lambda: 0.0,
+                    _trash_recipe=lambda _m, rid: calls["trashed"].append(rid) or 3), \
+            patched(worker.prep, run=lambda *_a: None, probe_duration=lambda _p: 60.0), \
+            patched(worker.process, run=lambda *_a, **_kw: None), \
+            patched(publish, publish_recipe=lambda *_a, **_kw: full):
+        worker.handle_convex(Convex(), job, FakeBucket(), FakeBucket())  # trashes, then logs the 503
+        with patched(worker, _purge_uploads=purge):
+            worker.handle_convex(Convex(), job, FakeBucket(), FakeBucket())  # must not raise
+    assert calls["trashed"] == ["recipe-job1", "recipe-job1"], calls["trashed"]
+    assert "cleanup failed: RuntimeError: GCS 503" in log.getvalue(), log.getvalue()
+
+
+def test_a_cancelled_glasses_job_deletes_only_its_own_video():
+    gone: list[str] = []
+
+    class Blob:
+        def __init__(self, name):
+            self.name = name
+
+        def delete(self):
+            gone.append(self.name)
+
+    class Uploads:
+        def get_blob(self, name):
+            return Blob(name) if name == "glasses/rec1.mp4" else None
+
+    with patched(worker, _purge_uploads=lambda _b, folder: gone.append(f"folder {folder}") or 1):
+        assert worker._purge_cancelled(Uploads(), "glasses/rec1.mp4") == 1
+        assert worker._purge_cancelled(Uploads(), "glasses/missing.mp4") == 0
+        assert worker._purge_cancelled(Uploads(), "poha-ab12cd/") == 1
+    assert gone == ["glasses/rec1.mp4", "folder poha-ab12cd"], gone
 
 
 class FakeResponse:
