@@ -19,8 +19,8 @@ The merge (and its coverage retry) is the writing step: Muse Spark writes it by 
 RECIPE_WRITER=gemini or when Muse fails twice (pipeline/writer.py). Extraction always stays on Gemini.
 
 The cover (poster.jpg) is the cook's own plate photo when an in-app recording has one (the worker passes it as
-cover_photo), else the sharpest real frame of the finished dish where Gemini says it looks best
-(pipeline/cover.py), else the middle of the last step.
+cover_photo), else the sharpest real frame of the finished dish where Gemini says it looks best, cropped to
+the dish (pipeline/cover.py; the same pick gives the last step's still), else the middle of the last step.
 
 Last, one more text call (pipeline/shorten.py) writes cook mode's short substeps, step ingredients and tips
 into recipe.json, and pipeline/align.py times each substep on the recording; --no-shorten skips both.
@@ -709,15 +709,18 @@ def write_recipe(w: writer.GeminiWriter | writer.MuseWriter, fallback: writer.Ge
 
 
 COVER_PHOTO = "cover_photo.jpg"  # in work/: the cook's plate photo, kept for a later --rewrite
+STILL_TIMES = "still_times.json"  # in work/: {step order: second} for publish.py's step stills (the last step's)
 
 
 def make_cover(client: genai.Client, model: str, recipe: Recipe, out_dir: Path, usage: Usage) -> str:
     """poster.jpg = the cook's own plate photo (work/cover_photo.jpg) when she took one, with no frame pick.
-    Else the finished dish where it looks best in the video (pipeline/cover.py). When Gemini sees no finished
-    dish or the pick fails, the middle of the last step, which is usually plating or serving (the hackathon
-    spec's step 2 is usually raw prep). Returns where the poster came from, for the log."""
+    Else the finished dish where it looks best in the video, cropped to the dish (pipeline/cover.py); that pick
+    also saves the second where the last step shows the dish, for its still (work/still_times.json). When Gemini
+    sees no finished dish or the pick fails, the middle of the last step, which is usually plating or serving
+    (the hackathon spec's step 2 is usually raw prep). Returns where the poster came from, for the log."""
     from pipeline import cover  # here: cover.py imports this module
-    photo = out_dir / "work" / COVER_PHOTO
+    photo, still_times = out_dir / "work" / COVER_PHOTO, out_dir / "work" / STILL_TIMES
+    still_times.unlink(missing_ok=True)  # a --rewrite picks again
     if photo.exists():
         try:
             cover.use_photo(photo, out_dir / "poster.jpg")
@@ -726,10 +729,12 @@ def make_cover(client: genai.Client, model: str, recipe: Recipe, out_dir: Path, 
             log(f"[cover] WARNING: the cook's plate photo can't be used ({type(e).__name__}: {str(e)[:300]}); "
                 f"picking a frame from the video")
     try:
-        at = cover.make_cover(client, model, recipe.model_dump(mode="json"), out_dir / "play.mp4",
-                              out_dir / "poster.jpg", usage)
-        if at is not None:
-            return f"the finished dish at {at:.1f} s"
+        pick = cover.make_cover(client, model, recipe.model_dump(mode="json"), out_dir / "play.mp4",
+                                out_dir / "poster.jpg", usage)
+        if pick is not None:
+            if pick.still_at is not None:
+                still_times.write_text(json.dumps({str(recipe.steps[-1].order): pick.still_at}) + "\n")
+            return f"the finished dish at {pick.at:.1f} s" + (", cropped to the dish" if pick.cropped else "")
     except Exception as e:  # noqa: BLE001 - any failure: the old cover
         log(f"[cover] WARNING: could not pick the finished dish ({type(e).__name__}: {str(e)[:300]}); "
             f"using the last step")

@@ -45,6 +45,7 @@ MEDIA_FILES = {  # local name -> (content type, Media field)
 JSON_CACHE = "no-cache, max-age=0"  # library & recipe JSON must update immediately
 MEDIA_CACHE = "public, max-age=3600"
 FAMILY_MARK = ".family"  # in data/out/<id>/: a family's own recipe, published by the worker in Convex mode
+STILL_TIMES = "work/still_times.json"  # {step order: second}, written by process.make_cover (the last step's)
 
 
 def _bucket() -> storage.Bucket:
@@ -67,19 +68,30 @@ def versioned_url(bucket: storage.Bucket, blob: storage.Blob) -> str:
     return f"{public_url(bucket, blob.name)}?v={blob.generation}"
 
 
-def _publish_step_stills(bucket: storage.Bucket, recipe_id: str, folder: Path, raw: dict, force: bool) -> None:
-    """One still per step (from the middle of its range) for cook mode's hero image."""
+def still_time(step: dict, chosen: dict[str, float]) -> float:
+    """The second of a step's still: the one process.py chose (the last step's frame of the finished dish) when it
+    lies inside the step, else the middle of its range."""
+    t = chosen.get(str(step["order"]))
+    return t if t is not None and step["start_s"] <= t < step["end_s"] else (step["start_s"] + step["end_s"]) / 2
+
+
+def grab_still(play: Path, t: float, dest: Path) -> None:
     ffmpeg = shutil.which("ffmpeg") or "/opt/homebrew/bin/ffmpeg"
+    subprocess.run([ffmpeg, "-y", "-loglevel", "error", "-ss", f"{t:.1f}", "-i", str(play),
+                    "-frames:v", "1", "-vf", "scale='min(960,iw)':-2", "-q:v", "4", "-update", "1", str(dest)],
+                   check=True)
+
+
+def _publish_step_stills(bucket: storage.Bucket, recipe_id: str, folder: Path, raw: dict, force: bool) -> None:
+    """One still per step (from the middle of its range, or the second in STILL_TIMES) for cook mode's hero image."""
     stills = folder / "steps"
     stills.mkdir(exist_ok=True)
     for old in stills.glob("*.jpg"):
         old.unlink()  # steps may have been renumbered since the last publish
+    chosen = json.loads((folder / STILL_TIMES).read_text()) if (folder / STILL_TIMES).exists() else {}
     for step in raw["steps"]:
         name = f"{step['order']:02d}.jpg"
-        t = (step["start_s"] + step["end_s"]) / 2
-        subprocess.run([ffmpeg, "-y", "-loglevel", "error", "-ss", f"{t:.1f}", "-i", str(folder / "play.mp4"),
-                        "-frames:v", "1", "-vf", "scale='min(960,iw)':-2", "-q:v", "4", "-update", "1",
-                        str(stills / name)], check=True)
+        grab_still(folder / "play.mp4", still_time(step, chosen), stills / name)
         blob = bucket.blob(f"{recipe_id}/steps/{name}")
         unchanged = False
         if not force and blob.exists():

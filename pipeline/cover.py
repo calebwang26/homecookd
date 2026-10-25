@@ -1,14 +1,21 @@
-"""The cover photo: the cook's own plate photo, else a real frame of the finished dish where it looks best.
+"""The cover photo: the cook's own plate photo, else a real frame of the finished dish, cropped to the dish.
 
 python pipeline/cover.py --id ID [--out PATH]    # pick data/out/ID/poster.jpg again (or write PATH instead)
 
 When an in-app recording ends, homie asks the cook to photograph her plate; the worker downloads that photo and
 process.py's make_cover makes it the poster as it is (use_photo checks it is one real JPEG first). Without one,
-process.py calls make_cover() below after the merge. Gemini watches the end of play.mp4 (from the start of the
-second-to-last step, but at least MIN_WINDOW_S and at most MAX_WINDOW_S before the end, as a small 360p copy
-sent inline) and names the second where the finished, served dish looks best. ffmpeg grabs a frame every half
-second from a second before to a second after it, and the sharpest (least blur by ffmpeg's blurdetect) becomes
-the poster. Never generated or edited: always her photo or a frame of her own video. When Gemini sees no finished
+process.py calls make_cover() below after the merge:
+1. Gemini watches the end of play.mp4 (from the start of the second-to-last step, but at least MIN_WINDOW_S and at
+   most MAX_WINDOW_S before the end, as a small 360p copy sent inline). It names the second where the finished,
+   served dish looks best, and the second inside the last step where the finished dish shows best, if it does.
+2. ffmpeg grabs a frame every half second from a second before to a second after each, and the sharpest (least
+   blur by ffmpeg's blurdetect) wins.
+3. The cover frame is cropped to the dish: ffmpeg's cropdetect trims black side bars, Gemini gives the dish's box
+   in the frame, and crop_rect cuts a 4:5 picture around it, sized so the dish stays whole in every way the app
+   center-crops a cover (SLOT_ASPECTS). A box that is missing, tiny or outside the picture: the whole frame.
+4. The last step's second goes to process.py, which saves it for publish.py's step still (cook mode shows it
+   before the step's video plays), so the last step shows the dish instead of whatever its middle second shows.
+Crop only: never generated or edited, always her photo or a frame of her own video. When Gemini sees no finished
 dish, make_cover returns None and leaves the poster alone; process.py then uses the middle of the last step,
 as it does when anything here fails.
 """
@@ -22,6 +29,7 @@ import shutil
 import sys
 import tempfile
 import time
+from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -35,13 +43,23 @@ from pydantic import BaseModel  # noqa: E402
 from pipeline.prep import OUT_ROOT, PrepError, ffmpeg, find_tool, make_poster, probe, run_cmd  # noqa: E402
 from pipeline.process import (HTTP_RETRY, REQUEST_TIMEOUT_MS, Usage, describe_call, load_config, log,  # noqa: E402
                               response_text)
-from pipeline.prompts import COVER_PROMPT  # noqa: E402
+from pipeline.prompts import COVER_BOX_PROMPT, COVER_PROMPT  # noqa: E402
 from pipeline.schema import parse_timestamp  # noqa: E402
 from pipeline.shorten import MemoryUsage  # noqa: E402
 
 MIN_WINDOW_S, MAX_WINDOW_S = 60, 300
 MIN_PHOTO_PX = 200  # a plate photo smaller than this on either side is a broken upload, not a cover
 NEAR_S = (-1.0, -0.5, 0.0, 0.5, 1.0)  # Gemini answers in whole seconds: look around its second
+
+ASPECT = 0.8  # the cropped cover's width : height (4:5)
+# The app center-crops covers into slots from 0.78 wide (kid Home's deck card, its title over the bottom) to about
+# 1.1 (the recipe page's hero on today's iPhones); square thumbnails sit in between. The dish stays whole in all of
+# them, unless it sits at the frame's edge, where no crop can center it. Wider slots (my-recipe's ~1.35 hero) may
+# trim its top and bottom: sizing for them would shrink the dish on the cards that matter most.
+SLOT_ASPECTS = (0.78, 1.1)
+DISH_PAD = 1.15  # room around the dish's box inside what every slot shows
+MIN_DISH_SHARE = 0.02  # a dish box under 2% of the picture is a misread (or too small to crop to)
+MIN_CROP_SHARE = 0.5  # never crop to less than half the picture's height: it gets too soft
 
 
 class CoverError(RuntimeError):
@@ -51,6 +69,22 @@ class CoverError(RuntimeError):
 class CoverAnswer(BaseModel):  # no defaults: the response_schema rejects them
     found: bool
     at: str  # MM:SS in the clip
+    step_at: str  # MM:SS in the clip, inside the last step, where the finished dish shows best; "" if it doesn't
+
+
+class DishBox(BaseModel):
+    found: bool
+    box_2d: list[int]  # [ymin, xmin, ymax, xmax], each 0-1000 of the image's height or width
+
+
+@dataclass
+class Pick:
+    at: float  # the cover's second on play.mp4
+    cropped: bool  # cut to the dish, else the whole frame
+    still_at: float | None  # the last step's still: its second on play.mp4, when the finished dish shows there
+
+
+Box = tuple[float, float, float, float]  # x1, y1, x2, y2 in pixels
 
 
 # ---------- rules (pure, tested in test_cover.py) ----------
@@ -62,13 +96,32 @@ def window(steps: list[dict], duration: float) -> tuple[float, float]:
     return max(0.0, float(start)), float(duration)
 
 
-def near(at: float, duration: float) -> list[float]:
-    """The frames to compare around Gemini's second, all inside the video."""
-    return sorted({round(min(max(at + d, 0.0), duration - 0.5), 2) for d in NEAR_S})
+def near(at: float, lo: float, hi: float) -> list[float]:
+    """The frames to compare around Gemini's second, all in [lo, hi - 0.5]."""
+    return sorted({round(min(max(at + d, lo), hi - 0.5), 2) for d in NEAR_S})
 
 
 def mmss(s: float) -> str:
     return f"{int(s) // 60:02d}:{int(s) % 60:02d}"
+
+
+def crop_rect(dish: Box, picture: Box) -> tuple[int, int, int, int] | None:
+    """The 4:5 crop (x, y, w, h) around the dish, inside the picture (the frame without black bars), or None when
+    the box can't be the dish. Every slot in SLOT_ASPECTS keeps the crop's middle strip of
+    min(ASPECT, narrowest) x height by min(1, ASPECT / widest) x height; the dish plus DISH_PAD must fit it."""
+    px1, py1, px2, py2 = picture
+    x1, y1, x2, y2 = max(dish[0], px1), max(dish[1], py1), min(dish[2], px2), min(dish[3], py2)
+    pw, ph, dw, dh = px2 - px1, py2 - py1, x2 - x1, y2 - y1
+    if dw <= 0 or dh <= 0 or dw * dh < MIN_DISH_SHARE * pw * ph:
+        return None
+    narrow, wide = SLOT_ASPECTS
+    h = max(dw * DISH_PAD / min(ASPECT, narrow), dh * DISH_PAD / min(1.0, ASPECT / wide), MIN_CROP_SHARE * ph)
+    h = min(h, ph, pw / ASPECT)
+    w = ASPECT * h
+    x = min(max((x1 + x2) / 2 - w / 2, px1), px2 - w)
+    y = min(max((y1 + y2) / 2 - h / 2, py1), py2 - h)
+    even = lambda v: int(v) // 2 * 2  # noqa: E731 - JPEG chroma likes even sizes
+    return even(x), even(y), even(w), even(h)
 
 
 # ---------- ffmpeg ----------
@@ -79,14 +132,43 @@ def cut_clip(play: Path, start: float, end: float, dest: Path) -> bytes:
     return dest.read_bytes()
 
 
+def _frame_metadata(frame: Path, vf: str) -> str:
+    return run_cmd([find_tool("ffmpeg"), "-hide_banner", "-nostdin", "-v", "error", "-i", str(frame),
+                    "-vf", f"{vf},metadata=mode=print:file=-", "-f", "null", "-"])
+
+
 def blur(frame: Path) -> float:
     """ffmpeg's blurdetect score for one image: lower is sharper."""
-    out = run_cmd([find_tool("ffmpeg"), "-hide_banner", "-nostdin", "-v", "error", "-i", str(frame),
-                   "-vf", "blurdetect,metadata=mode=print:file=-", "-f", "null", "-"])
-    m = re.search(r"lavfi\.blur=([\d.]+)", out)
+    m = re.search(r"lavfi\.blur=([\d.]+)", _frame_metadata(frame, "blurdetect"))
     if not m:
         raise PrepError(f"blurdetect gave no score for {frame.name}")
     return float(m.group(1))
+
+
+def picture_box(frame: Path, width: int, height: int) -> Box:
+    """The frame without its black bars (glasses footage is 4:3 inside 16:9), by ffmpeg's cropdetect. The whole
+    frame when it finds less than half of either side (a dark frame, not bars)."""
+    out = _frame_metadata(frame, "cropdetect=limit=24:round=2:skip=0")
+    edge = {k: int(v) for k, v in re.findall(r"lavfi\.cropdetect\.(x1|y1|x2|y2)=(\d+)", out)}
+    if len(edge) == 4 and edge["x2"] - edge["x1"] >= width / 2 and edge["y2"] - edge["y1"] >= height / 2:
+        return edge["x1"], edge["y1"], edge["x2"] + 1, edge["y2"] + 1
+    return 0, 0, width, height
+
+
+def sharpest(play: Path, times: list[float], tmp: Path) -> tuple[float, dict[float, float]]:
+    scores = {}
+    for t in times:
+        make_poster(play, t, tmp / f"{t:.2f}.jpg")
+        scores[t] = blur(tmp / f"{t:.2f}.jpg")
+    return min(scores, key=scores.get), scores
+
+
+def grab_crop(play: Path, at_s: float, rect: tuple[int, int, int, int], dest: Path) -> None:
+    x, y, w, h = rect
+    part = dest.with_name(f"{dest.stem}.part{dest.suffix}")
+    ffmpeg("-ss", f"{at_s:.2f}", "-i", str(play), "-frames:v", "1", "-vf", f"crop={w}:{h}:{x}:{y}", "-q:v", "2",
+           "-update", "1", str(part))
+    part.replace(dest)
 
 
 def use_photo(photo: Path, dest: Path) -> None:
@@ -107,11 +189,15 @@ def use_photo(photo: Path, dest: Path) -> None:
     log(f"[cover] {dest.name} is the cook's plate photo ({w}x{h})")
 
 
-# ---------- the Gemini call ----------
+# ---------- the Gemini calls ----------
 
-def ask(client: genai.Client, model: str, title: str, video: bytes, length: float, usage: Usage) -> int | None:
-    """Gemini's second in the clip, or None when it sees no finished dish. Raises CoverError after two failures."""
-    prompt = COVER_PROMPT.format(title=json.dumps(title), clip_mmss=mmss(length))
+def ask(client: genai.Client, model: str, title: str, video: bytes, length: float, step: tuple[float, float] | None,
+        usage: Usage) -> tuple[int | None, int | None]:
+    """(the cover's second in the clip, the last step's still's second in the clip). The cover is None when Gemini
+    sees no finished dish; the still is None when the dish doesn't show inside `step` (the last step's span in the
+    clip; None = not in the clip). Raises CoverError after two failures."""
+    span = f"from {mmss(step[0])} to {mmss(step[1])} in this clip" if step else "not in this clip"
+    prompt = COVER_PROMPT.format(title=json.dumps(title), clip_mmss=mmss(length), step_span=span)
     error = ""
     for attempt in (1, 2):
         resp, t0 = None, time.monotonic()
@@ -130,31 +216,87 @@ def ask(client: genai.Client, model: str, title: str, video: bytes, length: floa
             log(f"[cover] attempt {attempt} failed ({describe_call(call)}): {error[:300]}")
             continue
         call = usage.add("cover", model, None, attempt, time.monotonic() - t0, resp)
-        log(f"[cover] {model}: {f'finished dish at {answer.at}' if at is not None else 'no finished dish seen'} "
-            f"in a {mmss(length)} clip, {describe_call(call)}")
-        return at
+        still = None
+        if answer.found and step and answer.step_at.strip():
+            try:  # the still is a bonus: a bad one is dropped, not retried
+                still = parse_timestamp(answer.step_at)
+            except ValueError:
+                pass
+            if still is not None and not step[0] - 1 <= still <= step[1] + 1:
+                still = None
+        log(f"[cover] {model}: {f'finished dish at {answer.at}' if at is not None else 'no finished dish seen'}"
+            f"{f', last step shows it at {mmss(still)}' if still is not None else ''} in a {mmss(length)} clip, "
+            f"{describe_call(call)}")
+        return at, still
     raise CoverError(f"{model} gave no usable answer: {error[:300]}")
 
 
-def make_cover(client: genai.Client, model: str, recipe: dict, play: Path, dest: Path, usage: Usage) -> float | None:
-    """Writes dest from the sharpest frame around the moment Gemini picks. Returns that second on play.mp4, or
-    None (dest untouched) when Gemini saw no finished dish. Raises on errors."""
+def find_dish(client: genai.Client, model: str, title: str, frame: bytes, usage: Usage) -> tuple[float, ...] | None:
+    """The finished dish's box in the frame as (x1, y1, x2, y2) shares 0-1, or None when Gemini sees none or
+    answers badly twice (the cover is then the whole frame)."""
+    for attempt in (1, 2):
+        resp, t0 = None, time.monotonic()
+        try:
+            resp = client.models.generate_content(
+                model=model, contents=[types.Part.from_bytes(data=frame, mime_type="image/jpeg"),
+                                       COVER_BOX_PROMPT.format(title=json.dumps(title))],
+                config=types.GenerateContentConfig(response_mime_type="application/json",
+                                                   response_schema=DishBox, temperature=0.1))
+            answer = DishBox.model_validate_json(response_text(resp))
+            if answer.found:
+                ymin, xmin, ymax, xmax = answer.box_2d  # ValueError unless exactly four
+                if not (0 <= xmin < xmax <= 1000 and 0 <= ymin < ymax <= 1000):
+                    raise ValueError(f"box {answer.box_2d} is not [ymin, xmin, ymax, xmax] in 0-1000")
+        except Exception as e:  # noqa: BLE001
+            call = usage.add("cover-box", model, None, attempt, time.monotonic() - t0, resp,
+                             f"{type(e).__name__}: {e}"[:2000])
+            log(f"[cover] dish box attempt {attempt} failed ({describe_call(call)}): {type(e).__name__}: {e}"[:400])
+            continue
+        call = usage.add("cover-box", model, None, attempt, time.monotonic() - t0, resp)
+        log(f"[cover] dish box {answer.box_2d if answer.found else 'not found'}, {describe_call(call)}")
+        return (xmin / 1000, ymin / 1000, xmax / 1000, ymax / 1000) if answer.found else None
+    return None
+
+
+def make_cover(client: genai.Client, model: str, recipe: dict, play: Path, dest: Path, usage: Usage) -> Pick | None:
+    """Writes dest from the sharpest frame around the moment Gemini picks, cropped to the dish when it can be.
+    Returns what it picked, or None (dest untouched) when Gemini saw no finished dish. Raises on errors."""
     duration = recipe["media"]["duration_s"]
     start, end = window(recipe["steps"], duration)
+    last = recipe["steps"][-1]
+    step = (max(last["start_s"], start) - start, last["end_s"] - start) if last["end_s"] > start else None
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
-        at = ask(client, model, recipe["title"], cut_clip(play, start, end, tmp / "end.mp4"), end - start, usage)
+        at, step_at = ask(client, model, recipe["title"], cut_clip(play, start, end, tmp / "end.mp4"), end - start,
+                          step, usage)
         if at is None:
             return None
-        scores = {}
-        for t in near(start + at, duration):
-            make_poster(play, t, tmp / f"{t:.2f}.jpg")
-            scores[t] = blur(tmp / f"{t:.2f}.jpg")
-    best = min(scores, key=scores.get)
-    make_poster(play, best, dest)
-    log(f"[cover] {dest.name} from {best:.1f} s, the sharpest of "
-        + ", ".join(f"{t:.1f} s ({b:.2f})" for t, b in sorted(scores.items())))
-    return best
+        best, scores = sharpest(play, near(start + at, 0.0, duration), tmp)
+        log(f"[cover] frame at {best:.1f} s, the sharpest of "
+            + ", ".join(f"{t:.1f} s ({b:.2f})" for t, b in sorted(scores.items())))
+        still_at = None
+        if step_at is not None:
+            (tmp / "still").mkdir()
+            still_at, _ = sharpest(play, near(start + step_at, last["start_s"], last["end_s"]), tmp / "still")
+            log(f"[cover] last step {last['order']}'s still at {still_at:.1f} s")
+        frame = tmp / f"{best:.2f}.jpg"
+        rect = None
+        try:
+            stream = probe(frame)["streams"][0]
+            w, h = stream["width"], stream["height"]
+            share = find_dish(client, model, recipe["title"], frame.read_bytes(), usage)
+            if share:
+                rect = crop_rect((share[0] * w, share[1] * h, share[2] * w, share[3] * h), picture_box(frame, w, h))
+                if rect is None:
+                    log("[cover] the dish box can't be cropped to (tiny or outside the picture); whole frame")
+        except Exception as e:  # noqa: BLE001 - the crop is a bonus: the whole frame still works
+            log(f"[cover] WARNING: no crop ({type(e).__name__}: {str(e)[:300]}); whole frame")
+    if rect:
+        grab_crop(play, best, rect, dest)
+        log(f"[cover] {dest.name}: {rect[2]}x{rect[3]} at ({rect[0]}, {rect[1]}) of the frame at {best:.1f} s")
+    else:
+        make_poster(play, best, dest)
+    return Pick(at=best, cropped=rect is not None, still_at=still_at)
 
 
 def main() -> None:
@@ -168,9 +310,11 @@ def main() -> None:
                           http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS, retry_options=HTTP_RETRY))
     usage = Usage(folder / "work" / "usage.json") if (folder / "work").is_dir() else MemoryUsage()
     recipe = json.loads((folder / "recipe.json").read_text())
-    at = make_cover(client, cfg["extract_model"], recipe, folder / "play.mp4", args.out or folder / "poster.jpg", usage)
-    if at is None:
+    pick = make_cover(client, cfg["extract_model"], recipe, folder / "play.mp4", args.out or folder / "poster.jpg",
+                      usage)
+    if pick is None:
         sys.exit("cover: Gemini saw no finished dish; the poster is unchanged")
+    print(json.dumps(pick.__dict__))
 
 
 if __name__ == "__main__":
