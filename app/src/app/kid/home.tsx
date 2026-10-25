@@ -57,7 +57,7 @@ export default function KidHome() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.muted} />}
         contentContainerStyle={styles.content}>
         <ScreenWash tone="kid" height={360} />
-        <LargeHeader title={name ? `Hi, ${name}` : 'Hi there'} right={<ProfileButton faceOnly />} scrollY={scrollY} fadeEnd={56} />
+        <LargeHeader title={name ? `Hi, ${name}` : 'Hi there'} right={<ProfileButton faceOnly homieRoom />} scrollY={scrollY} fadeEnd={56} />
         <ActingAsBar />
 
         {dishes.length ? (

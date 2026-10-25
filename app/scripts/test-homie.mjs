@@ -5,7 +5,8 @@
 //                           stale close, a tap anywhere dismisses), the shrunk pot, a screen's dock /
 //                           hidden / onPress claims
 //   src/lib/homie/logic.ts  what the pot shows while a say loads or plays, its label, half duplex,
-//                           where it rests on each screen, the help lines, the centred moment (which
+//                           its size and where it rests on each screen (centred on an even header
+//                           row), cook mode's dock, the help lines, the centred moment (which
 //                           ones, its frame, the listening bars), the timer ring, PCM loudness, the
 //                           voice service's https base, the phone voice's language
 //   src/lib/homie/tap.ts    each screen's one tap line (about its big button), "I’m right here." on a
@@ -353,14 +354,26 @@ await test('a screen claim is cleared only by its own release', () => {
 });
 
 await test('docked low (cook mode’s bottom bar), the words go above the pot; the moment starts where the pot really is', () => {
-  assert.equal(L.labelAbove({ x: 163, y: 742, size: 64 }, 844), true);
-  assert.equal(L.labelAbove({ x: 310, y: 63, size: 56 }, 844), false);
-  assert.deepEqual(L.shownFrame({ x: 100, y: 700, size: 64 }, false), { x: 100, y: 700, size: 64 });
-  const shrunk = L.shownFrame({ x: 100, y: 700, size: 64 }, true);
-  assert.equal(shrunk.size, 64 * L.SHRUNK_SCALE);
-  // Same centre.
-  assert.equal(shrunk.x + shrunk.size / 2, 132);
-  assert.equal(shrunk.y + shrunk.size / 2, 732);
+  assert.equal(L.labelAbove(L.barFrame({ width: 390, height: 844 }, 34), 844), true);
+  assert.equal(L.labelAbove(L.restFrame(L.homieRoute('/kid/home'), { width: 390, insetsTop: 59 }), 844), false);
+  assert.deepEqual(L.shownFrame({ x: 100, y: 700, size: 60 }, false), { x: 100, y: 700, size: 60 });
+  const shrunk = L.shownFrame({ x: 100, y: 700, size: 60 }, true);
+  assert.equal(shrunk.size, 60 * L.SHRUNK_SCALE);
+  // Same centre, and only ever smaller (the pot is drawn at its real size; scaling it up blurs it).
+  assert.equal(shrunk.x + shrunk.size / 2, 130);
+  assert.equal(shrunk.y + shrunk.size / 2, 730);
+  assert.ok(L.SHRUNK_SCALE < 1);
+});
+
+await test('a moment starts exactly where the resting pot is, centred or in the corner', () => {
+  const screen = { width: 390, insetsTop: 59 };
+  for (const p of ['/kid/recipes/poha', '/recipe/poha', '/kid/home', '/record']) {
+    const rest = L.restFrame(L.homieRoute(p), screen);
+    assert.deepEqual(L.shownFrame(rest, false), rest, p);
+    const small = L.shownFrame(rest, true);
+    assert.equal(small.x + small.size / 2, rest.x + rest.size / 2, p);
+    assert.equal(small.y + small.size / 2, rest.y + rest.size / 2, p);
+  }
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -518,14 +531,65 @@ await test('nobody signed in: the hello and the line, nothing stored', async () 
   assert.equal(kv.size, 0);
 });
 
-await test('homie rests top-right, left of the profile face or Share where a screen has one', () => {
+await test('homie is exactly as tall as the controls beside it: 48 in a header, 60 in cook mode’s bar', () => {
+  assert.deepEqual(L.HOMIE_SIZE, { header: 48, bar: 60 });
   const screen = { width: 390, insetsTop: 59 };
-  const plain = L.restFrame(L.homieRoute('/record'), screen);
-  assert.deepEqual(plain, { x: 390 - 24 - 56, y: 63 + 24 - 28, size: 56 });
+  for (const p of ['/kid/home', '/kid/recipes', '/kid/community', '/kid/ask', '/parent/home', '/parent/recipes', '/parent/messages', '/recipe/poha', '/kid/recipes/poha', '/my-recipe/poha', '/community/c1', '/record', '/recording', '/send', '/dinner/new', '/dinner/d1']) {
+    assert.equal(L.restFrame(L.homieRoute(p, 'Mom'), screen).size, 48, p);
+  }
+  // Cook mode: Back and Next (ActionButton lg, 60 pt) either side, 24 pt gutters, 12 pt gaps.
+  const bottom = 34;
+  const dock = L.barFrame({ width: 390, height: 844 }, bottom);
+  assert.equal(dock.size, 60);
+  assert.equal(dock.y, 844 - bottom - 60); // level with the buttons, on the bar's bottom padding
+  const button = (390 - 2 * 24 - 2 * 12 - 60) / 2;
+  assert.equal(dock.x - (24 + button), 12); // Back's right edge to homie
+  assert.equal(390 - 24 - button - (dock.x + dock.size), 12); // homie to Next's left edge
+});
+
+await test('homie rests on the header’s 48 pt row, level with the buttons there', () => {
+  const notch = 59;
+  const at = (p) => L.restFrame(L.homieRoute(p, 'Mom'), { width: 390, insetsTop: notch });
+  // Tabs: the large title's row (LargeHeader max(60, inset + 13)), the profile pill's top.
+  for (const p of ['/kid/home', '/kid/recipes', '/kid/community', '/parent/home', '/parent/messages']) assert.equal(at(p).y, notch + 13, p);
+  // The dish, cook mode's top row, recording: useScreenTop max(56, inset + 4).
+  for (const p of ['/recipe/poha', '/kid/recipes/poha', '/recording', '/answer/q1']) assert.equal(at(p).y, notch + 4, p);
+  // A page whose Back sits a little lower (record, send, my dish, community and dinner pages): max(56, inset + 9).
+  for (const p of ['/record', '/send', '/my-recipe/poha', '/community/c1', '/dinner/new', '/dinner/d1']) assert.equal(at(p).y, notch + 9, p);
+  // No notch: the bible's own top lines.
+  assert.equal(L.restFrame(L.homieRoute('/record'), { width: 375, insetsTop: 20 }).y, 56);
+  assert.equal(L.restFrame(L.homieRoute('/recipe/poha'), { width: 375, insetsTop: 20 }).y, 56);
+  assert.equal(L.restFrame(L.homieRoute('/kid/home'), { width: 375, insetsTop: 20 }).y, 60);
+});
+
+await test('an even header row (the dish: Back and the heart) puts homie in the middle', () => {
+  for (const width of [375, 390, 430]) {
+    for (const p of ['/recipe/poha', '/kid/recipes/poha']) {
+      const f = L.restFrame(L.homieRoute(p), { width, insetsTop: 59 });
+      assert.equal(f.x + f.size / 2, width / 2, `${p} @${width}`);
+    }
+  }
+  // Clear of Back (24 + 48) and of Share beside the heart (390 - 24 - 48 - 12 - 48) on a dish.
+  const dish = L.restFrame(L.homieRoute('/kid/recipes/poha'), { width: 375, insetsTop: 59 });
+  assert.ok(dish.x >= 24 + 48 + 12);
+  assert.ok(dish.x + dish.size <= 375 - 24 - 48 - 12 - 48 - 12);
+  // A tab (title left, pill right), a lone Back, and my dish (a Back pill and Share; its compact title
+  // takes the middle once scrolled) stay in the top-right corner.
+  for (const p of ['/kid/home', '/kid/recipes', '/parent/home', '/record', '/recording', '/community/c1', '/my-recipe/poha']) {
+    assert.equal(L.homieRoute(p, 'Mom').centred, false, p);
+  }
+  // My dish: just left of Share.
+  assert.equal(L.restFrame(L.homieRoute('/my-recipe/poha'), { width: 390, insetsTop: 59 }).x, 390 - 24 - 48 - 10 - 48);
+});
+
+await test('homie rests top-right, left of the profile face where a screen has one', () => {
+  const screen = { width: 390, insetsTop: 59 };
+  const plain = L.restFrame(L.homieRoute('/recording'), screen);
+  assert.deepEqual(plain, { x: 390 - 24 - 48, y: 63, size: 48 });
   // Kid Home: the face pill (76) at the gutter, then a 10 pt gap.
   const kid = L.restFrame(L.homieRoute('/kid/home'), screen);
-  assert.equal(kid.x, 390 - (24 + 76) - 10 - 56);
-  assert.equal(kid.y, 72 + 24 - 28); // the large title's row
+  assert.equal(kid.x, 390 - (24 + 76) - 10 - 48);
+  assert.equal(kid.y, 72); // the large title's row, the pill's top
   // Parent Home: the "Mom ▾" pill is wider for a longer name, never past 190.
   const mom = L.restFrame(L.homieRoute('/parent/home', 'Mom'), screen);
   const grandma = L.restFrame(L.homieRoute('/parent/home', 'Grandma'), screen);
@@ -533,12 +597,6 @@ await test('homie rests top-right, left of the profile face or Share where a scr
   assert.equal(L.namePillWidth('A very long name indeed'), 190);
   // "Mom ▾" measured 128 pt on the web build: never estimate it narrower (homie would touch it).
   assert.ok(L.namePillWidth('Mom') >= 128);
-  // A dish: Share and the heart.
-  assert.equal(L.restFrame(L.homieRoute('/recipe/biryani'), screen).x, 390 - 132 - 10 - 56);
-  assert.equal(L.restFrame(L.homieRoute('/kid/recipes/biryani'), screen).x, 390 - 132 - 10 - 56);
-  // No notch: the bible's own top lines.
-  assert.equal(L.restFrame(L.homieRoute('/record'), { width: 375, insetsTop: 20 }).y, 56 + 24 - 28);
-  assert.equal(L.restFrame(L.homieRoute('/kid/home'), { width: 375, insetsTop: 20 }).y, 60 + 24 - 28);
 });
 
 await test('the moment pot is centred, at most 170, smaller on a short phone', () => {
