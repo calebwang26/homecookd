@@ -162,10 +162,3 @@ test("every turn tells Claude whether the kid said homie's name; speech not for 
   assert.match(lastUserText(claude.requests[1]), /\[They said your name: this is for you\.\]/);
   assert.deepEqual(calls.at(-1), ["goToStep", 2]);
 });
-
-test("a question asked after tapping homie is for homie, even without the name", async () => {
-  const claude = fakeClaude([{ name: "ask_cook", input: { question: "Is it okay if it browns?" } }]);
-  const { actions } = fakeActions([]);
-  await new TurnAgent(session, actions, claude.client).turn("Is it okay if it browns a bit?", undefined, true);
-  assert.match(lastUserText(claude.requests[0]), /\[They tapped you to ask this: it's for you\.\]/);
-});

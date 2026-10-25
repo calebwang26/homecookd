@@ -7,6 +7,7 @@
 //   voice.unavailable     no line will read for the kid: auto start gave up (no service, a dish Convex
 //                         doesn't know, 4404), or the line failed for good (the phone reads instead)
 //   voice.active          homie is on (a tap, or a step line's 8 s window): the mic streams
+//   voice.kidTalking      the kid is mid-sentence ("Ask Grandma anything" never closes then)
 //   voice.listening       the recorder really runs (the pot's listening); voice.hearing: the kid can
 //                         answer a yes-or-no out loud for as long as it's up (on by a tap)
 //   voice.muted           the mic can't work here (refused, or it failed to start): a tap tries again
@@ -20,13 +21,25 @@
 //                                    or nothing comes back within 1.5 s (an older service)
 //   voice.sendText('yes')            words for homie, as if the kid said them
 //   voice.setMoment('answer' | null) an app-only moment is up on the phone ({ type: "moment" }; the
-//                                    service then never takes its yes or no for its own offer)
+//                                    service then never takes its yes or no for its own offer); 'ask'
+//                                    ("Ask Grandma anything") also holds the mic on until it closes
 //   voice.setHold(on)                the cook's own voice is playing (her clip, her voice note): homie's
 //                                    next line waits until she's done, so it never talks over her
-//   voice.setVideo(on)               any video (or the cook's voice) is playing: the service is told
+//   voice.setVideo(on, kid)          any video (or the cook's voice) is playing: the service is told
 //                                    ({ type: "video" }) and holds what it would say on its own, and a
 //                                    line of that kind already on its way waits here too (voiceLogic
 //                                    waitsForVideo). Answers to the kid still play (they pause the video).
+//                                    `kid`: a video the kid started (not her clip): it has the sound.
+// homie and a video hand the sound to each other (Caleb, Oct 25): a tap on homie while a video plays
+// fades the video out and pauses it (lib/media), turns homie on and sends { type: "tap" }, so the
+// service says the step's short line at once (the pot lights now), then homie listens. A video the
+// kid starts while homie talks, listens or thinks fades homie's voice out (lib/media useClipVideo) and
+// turns homie off; an answer or a clip of hers still on its way is dropped, and the lines homie says
+// on its own still wait for the video (voiceLogic dropsForKidVideo). Her clip homie played doesn't
+// turn homie off. The iOS session: audio-studio deactivates it whenever the recorder starts or stops,
+// which stops whatever plays. So a video waits at lib/media's gate (videoGate) for the recorder to stop
+// (after homie's voice has faded), the recorder starts only once a video has paused, and homie's line
+// waits for a start or stop under way (voiceLogic lineMayStart).
 // homie on or off (Caleb, Oct 24: no always-on mic; voiceLogic micAfter, micTimer): a tap toggles what
 // the kid sees. On a quiet pot it turns homie on (the recorder starts and streams) until the next tap,
 // or a minute with no word from the kid; on a listening or thinking pot it turns homie off (the
@@ -71,26 +84,30 @@ import * as Haptics from 'expo-haptics';
 
 import { sayPhase } from '@/lib/homie/logic';
 import { doneSpeaking, getHomie, LIT_BEAT_MS, setHomie, setHomieLevel, useHomieSelect } from '@/lib/homie/store';
-import { audioNow } from '@/lib/media';
+import { audioFaded, audioNow, HANDOFF_FADE_MS, kidVideoPlaying, pauseAllVideos, setVideoGate, VIDEO_GATE_MAX_MS, videoPlaying } from '@/lib/media';
 import { useSession } from '@/lib/session';
 
 import { convexRecipeId, convexSession } from './convex';
 import { useMicStream } from './mic';
 import { playSay, stopSay } from './say';
 import {
+  answersTap,
   appInForeground,
   appStateStep,
   cookPotState,
   cookSendsFrame,
   DECLINE_TEXT,
+  dropsForKidVideo,
   echoAt,
   edgeWait,
   endSay,
   endsThinking,
   hearsAnswers,
+  holdAfterTap,
   HOMIE_ACTIONS,
   KID_QUIET_MS,
   lineMayOpen,
+  lineMayStart,
   micAfter,
   micTimer,
   micWanted,
@@ -102,8 +119,11 @@ import {
   sayKind,
   sayLabel,
   sentText,
+  saysOnTap,
   SPEECH_LEVEL,
   stepMessage,
+  TAP_LINE_WAIT_MS,
+  TAP_MESSAGE,
   thinksAfter,
   timerBuzz,
   timerDone,
@@ -136,6 +156,8 @@ const TIMER_DUE_HOLD_MS = 10_000;
 /** The service's go_to_step to its saved step comes right after `ready`. */
 const RESTORE_MS = 3000;
 const ECHOES_KEPT = 8;
+/** How often homie's next line checks again for a recorder start or stop under way (lineMayStart). */
+const MIC_POLL_MS = 25;
 
 type ServerMsg =
   | { type: 'ready' }
@@ -185,8 +207,8 @@ export type VoiceOptions = {
   onOffer?: (offer: VoiceOffer) => 'play' | 'skip';
   /** The service closed its read-aloud offer: true, it reads now; false, it was declined. */
   onOfferClosed?: (accepted: boolean) => void;
-  /** Every line homie says, by kind (after onOffer). */
-  onSay?: (kind: SayKind) => void;
+  /** Every line homie says, by kind (after onOffer); `tap`: the line a tap on homie asked for. */
+  onSay?: (kind: SayKind, line: { tap: boolean }) => void;
   /** What the kid finished saying (answers or closes a moment). Never the phone's own texts. */
   onHeard?: (text: string) => void;
 };
@@ -245,6 +267,10 @@ export function useVoiceCooking(opts: VoiceOptions) {
   const hold = useRef(false);
   // A video (or her voice) is playing: lines homie says on its own wait (waitsForVideo).
   const videoOn = useRef(false);
+  // VoiceHold's last word on a video the kid started (lib/media kidVideoPlaying): its start turns homie off.
+  const kidSaid = useRef(false);
+  // When the app last sent { type: "tap" } (0: its line came): that line isn't a yes to reading aloud.
+  const tapAt = useRef(0);
   // The app-only moment up on the phone (the service hears about it, and again on a new socket).
   const appMoment = useRef<AppMomentKind | null>(null);
   const focusedRef = useRef(focused);
@@ -275,6 +301,8 @@ export function useVoiceCooking(opts: VoiceOptions) {
   // A whole line that arrived while the cook's own voice played: it plays once she's done.
   const waiting = useRef<PendingSay | null>(null);
   const beat = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The line in that beat (while `beat` is set).
+  const beatSay = useRef<PendingSay | null>(null);
   const thinkTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const cb = useRef(opts);
   const meId = useRef(me?.id);
@@ -311,7 +339,9 @@ export function useVoiceCooking(opts: VoiceOptions) {
    * line stays open (step lines still play); a tap tries again.
    */
   const syncMic = useCallback(function sync() {
-    const on = micWanted({ hold: micHoldRef.current, open: sock.current?.readyState === 1, focused: focusedRef.current, muted: mutedRef.current, video: videoOn.current });
+    // A video about to play counts at once (lib/media sets its playhead before the gate lets it sound).
+    const video = videoOn.current || videoPlaying();
+    const on = micWanted({ hold: micHoldRef.current, open: sock.current?.readyState === 1, focused: focusedRef.current, muted: mutedRef.current, video });
     micOn.current = on;
     if (!on) setHomieLevel(0);
     if (micBusy.current) return;
@@ -319,11 +349,14 @@ export function useVoiceCooking(opts: VoiceOptions) {
     micBusy.current = true;
     if (!on) {
       setListening(false);
-      void micRef.current.stop().finally(() => {
-        recording.current = false;
-        micBusy.current = false;
-        sync();
-      });
+      // The stop deactivates the iOS session (audio-studio), which would cut homie's voice off mid-fade.
+      void audioFaded()
+        .then(() => micRef.current.stop())
+        .finally(() => {
+          recording.current = false;
+          micBusy.current = false;
+          sync();
+        });
       return;
     }
     void micRef.current.start().then((r) => {
@@ -406,18 +439,38 @@ export function useVoiceCooking(opts: VoiceOptions) {
     setThinking(on);
   }, []);
 
-  /** The lit beat before homie's voice (even when the line arrived at once), then the line. */
+  /**
+   * The lit beat before homie's voice (even when the line arrived at once), then the line, once no
+   * recorder start or stop is under way (voiceLogic lineMayStart: it changes the iOS session).
+   */
   const speakNow = useCallback((s: PendingSay) => {
+    const beatEnd = s.at + LIT_BEAT_MS;
     const play = () => {
+      if (!lineMayStart({ micBusy: micBusy.current, since: beatEnd, now: Date.now() })) {
+        beat.current = setTimeout(play, MIC_POLL_MS);
+        return;
+      }
       beat.current = null;
       if (opensWindow(s.kind)) stepLine.current = true;
       setHomie({ state: 'speaking', label: s.label });
       if (!playSay(s.chunks, s.rate, s.translation)) doneSpeaking();
     };
-    const wait = LIT_BEAT_MS - (Date.now() - s.at);
+    beatSay.current = s;
+    const wait = beatEnd - Date.now();
     if (wait > 0) beat.current = setTimeout(play, wait);
     else play();
   }, []);
+
+  /** Resolves once no recorder start or stop is under way, or after `ms`. */
+  const micIdle = useCallback(
+    (ms: number) =>
+      new Promise<void>((resolve) => {
+        const until = Date.now() + ms;
+        const check = () => (!micBusy.current || Date.now() >= until ? resolve() : void setTimeout(check, MIC_POLL_MS));
+        check();
+      }),
+    [],
+  );
 
   /** Her voice holds every line; a video holds the ones homie says on its own. */
   const waits = useCallback((s: PendingSay) => hold.current || (videoOn.current && waitsForVideo(s.kind)), []);
@@ -450,11 +503,14 @@ export function useVoiceCooking(opts: VoiceOptions) {
     doneSpeaking();
   }, [waits, begin]);
 
-  /** The waiting line, once nothing holds it any more and no line of homie's is playing (an answer that paused the video). */
+  /**
+   * The waiting line, once nothing holds it any more and no line of homie's is playing or in its lit
+   * beat (an answer that paused the video, the line a tap on homie asked for).
+   */
   const release = useCallback(() => {
     const s = waiting.current;
     const now = audioNow();
-    if (!s || waits(s) || sayPhase(now.key, now.phase) !== 'none') return;
+    if (!s || waits(s) || beat.current || sayPhase(now.key, now.phase) !== 'none') return;
     waiting.current = null;
     begin(s, true);
   }, [waits, begin]);
@@ -535,7 +591,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
         const echo = echoAt(echoes.current, m.text, Date.now());
         // homie thinks only when an answer is on its way: never for this phone's own text (a tapped
         // "no" gets none), nor a yes or no the service holds or answers with silence.
-        if (thinksAfter({ echo: echo >= 0, appMoment: !!appMoment.current, momentUp: !!getHomie().moment, text: m.text })) think(true);
+        if (thinksAfter({ echo: echo >= 0, appMoment: !!appMoment.current, asking: appMoment.current === 'ask', momentUp: !!getHomie().moment, text: m.text })) think(true);
         if (echo >= 0) {
           // This phone's own text: never the kid's words.
           echoes.current = echoes.current.filter((_, i) => i !== echo);
@@ -555,6 +611,9 @@ export function useVoiceCooking(opts: VoiceOptions) {
         lastServerStep.current = m.stepOrder;
         cb.current.onGoTo(m.stepOrder);
       } else if (m.type === 'play_clip') {
+        // From a turn still on its way when the kid started a video: the kid's video keeps the sound
+        // (voiceLogic dropsForKidVideo). The service's own wait for the clip ends with a tap or a step.
+        if (dropsForKidVideo('clip', kidVideoPlaying())) return;
         const shows = cb.current.onClip({ startS: m.startS, endS: m.endS, quote: m.quote || undefined, quoteEn: m.quoteEn || undefined });
         if (typeof shows === 'number' && shows !== cb.current.step) fromClip.current = shows;
       } else if (m.type === 'say') {
@@ -567,7 +626,11 @@ export function useVoiceCooking(opts: VoiceOptions) {
         const ask = () => !!offer && cb.current.onOffer?.({ kind: offer, text, hearing: hearing(), ...answer }) === 'skip';
         // Sent just before the service heard a video started: its offer and its words wait for the video.
         const later = videoOn.current && waitsForVideo(kind);
-        const drop = !later && ask();
+        // A video the kid started has the sound: an answer still on its way isn't said over it.
+        const drop = !later && (dropsForKidVideo(kind, kidVideoPlaying()) || ask());
+        // The line a tap on homie asked for: never a yes to reading aloud (onSay).
+        const tap = answersTap(kind, tapAt.current, Date.now());
+        if (kind === 'step') tapAt.current = 0;
         const label = sayLabel(kind, cb.current.cookName);
         say.current = {
           kind,
@@ -581,7 +644,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
           offer: later && offer ? ask : undefined,
         };
         if (!drop && !hold.current && !later) setHomie({ state: 'lit', label });
-        cb.current.onSay?.(kind);
+        cb.current.onSay?.(kind, { tap });
       } else if (m.type === 'say_end') {
         const end = endSay(openSays.current);
         openSays.current = end.open;
@@ -723,24 +786,48 @@ export function useVoiceCooking(opts: VoiceOptions) {
     setStatus('off');
   }, [hangUp, setMicHold]);
 
+  /** homie, just turned on by a tap, says the step's short line at once ({ type: "tap" }): the pot lights for it now. */
+  const sayOnTap = useCallback(() => {
+    const s = sock.current;
+    const h = getHomie().state;
+    if (!s || !saysOnTap({ live: liveRef.current, open: s.readyState === 1, talking: h === 'lit' || h === 'speaking' })) return;
+    s.send(JSON.stringify(TAP_MESSAGE));
+    tapAt.current = Date.now();
+    setHomie({ state: 'lit' });
+    const mark = answers.current;
+    later(() => {
+      if (answers.current === mark && !say.current && !beat.current && getHomie().state === 'lit') doneSpeaking();
+    }, TAP_LINE_WAIT_MS);
+  }, [later]);
+
   /**
    * A tap on homie: on (the mic streams), or off again, from a tap or a window alike (voiceLogic
-   * micAfter). A step line still playing opens no window after it (off stays off; on stays on). Turning
-   * it on tries a refused mic again, and opens the line when it isn't open (it failed, or never started).
+   * micAfter); while a video plays, always on (holdAfterTap). A step line still playing opens no window
+   * after it (off stays off; on stays on). Turning it on takes the sound: any video fades out and pauses,
+   * and homie says the step's short line. It also tries a refused mic again, and opens the line when it
+   * isn't open (it failed, or never started).
    */
   const toggle = useCallback(() => {
-    const next = micAfter(micHoldRef.current, 'tap');
+    const video = videoPlaying();
+    const next = holdAfterTap(micHoldRef.current, video);
     stepLine.current = false;
     if (next !== 'off' && mutedRef.current) {
       mutedRef.current = false;
       setMutedState(false);
     }
+    if (next !== 'off') {
+      // Her clip is the video fading out: it holds homie's line no longer. The recorder starts only
+      // once the video has paused (micWanted), so the session change can't stop it.
+      if (video) hold.current = false;
+      pauseAllVideos({ fadeMs: HANDOFF_FADE_MS });
+    }
     setMicHold(next);
+    if (next !== 'off') sayOnTap();
     if (next === 'off' || sock.current || want.current) return;
     want.current = true;
     retries.current = 0;
     void connect(false);
-  }, [setMicHold, connect]);
+  }, [setMicHold, sayOnTap, connect]);
 
   /** A chip: `text` to homie when it's there (and answers), else `fallback` does it here. */
   const command = useCallback(
@@ -753,17 +840,21 @@ export function useVoiceCooking(opts: VoiceOptions) {
     [sendText, later],
   );
 
-  /** An app-only moment opened (its kind) or closed (null): the service is told, once per change. */
+  /**
+   * An app-only moment opened (its kind) or closed (null): the service is told, once per change. "Ask
+   * <cook> anything" holds the mic on for as long as it's up (voiceLogic micAfter 'ask').
+   */
   const setMoment = useCallback((kind: AppMomentKind | null) => {
     const was = appMoment.current;
     if (was === kind) return;
     appMoment.current = kind;
+    if (kind === 'ask' || was === 'ask') micEvent(kind === 'ask' ? 'ask' : 'ask_end');
     const s = sock.current;
     if (s?.readyState !== 1) return;
     // One moment straight after another: the first one closes, then the next opens.
     if (was && kind) s.send(JSON.stringify(momentMessage(null)));
     s.send(JSON.stringify(momentMessage(kind)));
-  }, []);
+  }, [micEvent]);
 
   // She's done (or the video stopped): now homie's line, after its lit beat.
   const setHold = useCallback(
@@ -774,9 +865,43 @@ export function useVoiceCooking(opts: VoiceOptions) {
     [release],
   );
 
+  /**
+   * A video the kid started: it has the sound. homie's voice is already fading out (lib/media
+   * useClipVideo), and homie turns off: no line in its lit beat, no answer still on its way, no
+   * thinking. The lines homie says on its own (in their beat too) wait for the video instead.
+   */
+  const hush = useCallback(() => {
+    if (say.current && dropsForKidVideo(say.current.kind, true)) say.current.drop = true;
+    if (waiting.current && dropsForKidVideo(waiting.current.kind, true)) waiting.current = null;
+    const inBeat = beat.current ? beatSay.current : null;
+    if (beat.current) clearTimeout(beat.current);
+    beat.current = null;
+    if (inBeat && !dropsForKidVideo(inBeat.kind, true) && !waiting.current) waiting.current = inBeat;
+    stepLine.current = false;
+    stopSay();
+    doneSpeaking();
+    think(false);
+    setMicHold('off');
+  }, [think, setMicHold]);
+
+  /**
+   * lib/media's gate before a video sounds: a play the kid started turns homie off first, and any video
+   * stops the recorder (micWanted reads the playhead). It waits while the recorder starts or stops
+   * (after homie's voice has faded): that deactivates the iOS session, which would stop the video.
+   */
+  const videoGate = useCallback(
+    (kid: boolean) => {
+      if (kid) hush();
+      else syncMic();
+      return micBusy.current ? micIdle(VIDEO_GATE_MAX_MS) : null;
+    },
+    [hush, syncMic, micIdle],
+  );
+  useEffect(() => setVideoGate(videoGate), [videoGate]);
+
   /** Also called when homie's own line stops playing, so a line that waited goes then. */
   const setVideo = useCallback(
-    (on: boolean) => {
+    (on: boolean, kid = false) => {
       if (videoOn.current !== on) {
         videoOn.current = on;
         setVideoState(on);
@@ -785,9 +910,13 @@ export function useVoiceCooking(opts: VoiceOptions) {
         // No recorder while a video plays, so it plays at full volume (voiceLogic micWanted).
         syncMic();
       }
+      if (kidSaid.current !== kid) {
+        kidSaid.current = kid;
+        if (kid) hush();
+      }
       release();
     },
-    [release, syncMic],
+    [release, syncMic, hush],
   );
 
   /** Opens the line again after a pause, the way it was opened (homie stays off until a tap). */
@@ -890,7 +1019,9 @@ export function useVoiceCooking(opts: VoiceOptions) {
   useEffect(() => {
     if (!focused) return;
     const timerDue = timerBuzz(timers, buzzed.current).due;
-    setHomie({ state: cookPotState({ active: micHold !== 'off', listening, sounding, thinking, timers: timers.length, timerDue }), timer: timers[0] });
+    // A video that just started counts at once (VoiceHold tells this hook a render later): never a listening blip under it.
+    const sound = sounding || videoPlaying();
+    setHomie({ state: cookPotState({ active: micHold !== 'off', listening, sounding: sound, thinking, timers: timers.length, timerDue }), timer: timers[0] });
   }, [focused, micHold, listening, sounding, thinking, timers, buzzes]);
   useEffect(() => {
     if (!focused) return;
@@ -914,7 +1045,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
 
   const active = micHold !== 'off';
   const hearing = hearsAnswers({ live, hold: micHold, listening });
-  return { status, live, unavailable, active, listening, hearing, muted, timers, askedAt, askedIds, error, toggle, stop, command, sendText, setMoment, setHold, setVideo };
+  return { status, live, unavailable, active, listening, hearing, muted, kidTalking, timers, askedAt, askedIds, error, toggle, stop, command, sendText, setMoment, setHold, setVideo };
 }
 
 export type VoiceCooking = ReturnType<typeof useVoiceCooking>;

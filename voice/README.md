@@ -118,8 +118,14 @@ App → service
   is the moment's answer: it never answers our nudge and never reaches Claude. Anything else (a question for the
   "ask" moment, "next") goes the usual way, and still isn't taken as a yes to our nudge. homie says no nudge while
   a moment is up; it waits for it to close. After a reconnect, send it again if one is up.
-  What the kid says while the `ask` moment is up (they tapped homie to ask) is always for homie: Claude is told so
-  and never judges it as speech meant for someone else.
+  What the kid says while the `ask` moment is up ("Ask Grandma anything", a long press on homie) follows
+  `askWords` in `src/cook.ts`, never the yes-or-no rules. A plain command still runs, after any lead word too
+  ("Yeah, next step"). A cancel word ("never mind", "no", "stop") gets "Okay." A sound, a bare yes, "wait" or
+  fewer than three real words gets no transcript, so the moment stays up for the question. Anything else, a
+  yes word and all ("Yeah, how long do I fry the onions?"), and the family's own language as it is, goes straight
+  to `askCook` (`asked_cook`, then "Good question. I'll ask Grandma."), with no Claude call and no clip search.
+  The moment then counts as closed, so a second sentence goes the usual way. Opening it drops her clip's hold:
+  the phone paused the clip.
 - `{ "type": "video", "playing": true | false }` when any video (or the cook's voice note) starts or stops on the
   phone. While one plays, homie says nothing on its own (Caleb, Oct 24): a `greeting`, `nudge` or `timer` line waits
   for the next pause, one after another (`timer_done` still comes at once). An answer to what the kid just did or

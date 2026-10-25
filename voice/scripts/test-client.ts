@@ -5,14 +5,16 @@
 // Next, Back or a step; like the app, the client sends the step it starts on back once, the restore;
 // `step:<n>:noread` adds read: false, a step her clip moved the screen to, never read), `moment:<kind>` /
 // `moment:off` opens or closes one of the app's homie moments, `video:on` / `video:off` says a video started or
-// stopped on the phone, and `wait:<seconds>` keeps the mic open that long. Every line's first audio is printed with
-// how long it took after what asked for it (the transcript, or the step sent). It streams the audio for real (Ink 2
-// and Sonic); FAKE=1 against `npm run dev:fake` sends each WAV's words as text instead, for a quick offline check
+// stopped on the phone, `tap` sends { type: "tap" } (the kid tapped homie on: the step's short line comes at once),
+// and `wait:<seconds>` keeps the mic open that long. Every line's first audio is printed with how long it took after
+// what asked for it (the transcript, the step sent, or the tap). It streams the audio for real (Ink 2 and Sonic);
+// FAKE=1 against `npm run dev:fake` sends each WAV's words as text instead, for a quick offline check
 // (scripts/guard.ts).
 //   VOICE_STUB=1 npm run dev                                        (in another terminal)
 //   npm run test-client -- test-audio/next-step.wav test-audio/question.wav
 //   npm run test-client -- step:2 step:3 test-audio/go-back.wav           # taps, then a spoken "go back"
 //   npm run test-client -- video:on "text:Set a timer for 10 seconds." wait:15 video:off wait:8   # held line
+//   npm run test-client -- wait:3 step:2 video:on tap                     # a tap on homie mid-video: step 2's line
 //   URL=wss://<cloud run host> npm run test-client -- test-audio/next-step.wav   # against the deployed one
 //   FAKE=1 npm run test-client -- test-audio/next-step.wav                       # offline, against dev:fake
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
@@ -138,7 +140,11 @@ for (const file of files) {
     continue;
   }
   const done = new Promise<void>((r) => (replied = r));
-  if (file.startsWith("step:")) {
+  if (file === "tap") {
+    console.log(`${stamp()}  ▶ {"type":"tap"}`);
+    asked = { at: Date.now(), what: "tap" };
+    ws.send(JSON.stringify({ type: "tap" }));
+  } else if (file.startsWith("step:")) {
     // `step:<n>:noread`: a step her clip moved the screen to, sent with read: false (moved, never read).
     const [n, flag] = file.slice("step:".length).split(":");
     const msg = flag === "noread" ? { type: "step", stepOrder: Number(n), read: false } : { type: "step", stepOrder: Number(n) };

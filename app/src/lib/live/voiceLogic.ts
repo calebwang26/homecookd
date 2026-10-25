@@ -3,8 +3,9 @@
 // to what, when voice starts on its own, when the phone reads aloud itself, app-only moments and the
 // read-aloud offer's end, the kid's spoken yes or no, when homie is 'thinking', the kitchen timers the
 // app counts down, what the pot shows, when homie's mic is on (a tap, or the 8 s after a step line) and
-// what a tap does, which of the cook's answers to offer the kid, and what keeps Cartesia from billing
-// for audio nobody said (which mic frames go out, the app in the background).
+// what a tap does, how homie and a video hand the sound to each other, which of the cook's answers to
+// offer the kid, and what keeps Cartesia from billing for audio nobody said (which mic frames go out,
+// the app in the background).
 import type { HomieMoment, HomieState } from '@/lib/homie/store';
 
 export type SayKind = 'step' | 'reply' | 'hint' | 'translation' | 'nudge' | 'offer' | 'greeting' | 'timer';
@@ -238,10 +239,13 @@ export function afterNo(text: string): { more: boolean; fastTail: string } {
  * "no" for a tap on the offer). While an app-only moment is up, the service holds a yes, or a no with
  * nothing more, for the phone; what follows a no is still its own ("No, I'm out of ginger. Can I skip
  * it?"). While its own offer is up (the read-aloud offer, a story), a no with nothing more closes it
- * and nothing is said.
+ * and nothing is said. In "Ask <cook> anything" (`asking`) every finished sentence the phone hears gets
+ * an answer (a command, "Okay.", or "I'll ask Grandma."): the service sends no transcript for the
+ * sounds it waits past.
  */
-export function thinksAfter(v: { echo: boolean; appMoment: boolean; momentUp: boolean; text: string }): boolean {
+export function thinksAfter(v: { echo: boolean; appMoment: boolean; asking?: boolean; momentUp: boolean; text: string }): boolean {
   if (v.echo) return false;
+  if (v.asking) return true;
   const yn = yesNo(v.text);
   const onlyNo = yn === 'no' && !afterNo(v.text).more;
   if (v.appMoment) return yn !== 'yes' && !onlyNo;
@@ -273,6 +277,39 @@ export function yesNoMoment(m: { id: string; question: string; questionEn?: stri
   return m.hearing ? { ...base, options: [], bars: true, prompt: { label: SAY_YES_NO } } : { ...base, options: [{ id: 'yes', label: m.button, kind: 'primary' }] };
 }
 
+/** "Ask <cook> anything" closes this long after the kid last talked (or it opened). */
+export const ASK_OPEN_MS = 25_000;
+/** ...and this soon once homie can't hear it (the line lost, the app in the background, homie off for a video). */
+export const ASK_LOST_MS = 2000;
+
+/**
+ * When "Ask <cook> anything" closes on its own, in ms (null: not now). Never while the kid is
+ * mid-sentence, so the recorder isn't cut off; the count starts again once they stop. A moment homie
+ * can't hear (`hears`: the line is live and homie's mic is held) closes after a short grace, which also
+ * covers the beat before the mic hold catches up with the moment opening.
+ */
+export function askCloseIn(v: { hears: boolean; kidTalking: boolean }): number | null {
+  if (!v.hears) return ASK_LOST_MS;
+  return v.kidTalking ? null : ASK_OPEN_MS;
+}
+
+/**
+ * "Ask <cook> anything" (a long press on homie in cook mode, Caleb Oct 25): no buttons, the listening bars
+ * and "Just say your question"; a tap anywhere closes it. Its id starts "ask:" (appMomentKind), so the
+ * service sends the kid's next words straight to the cook.
+ */
+export function askMoment(cookName: string, at: number): HomieMoment {
+  return {
+    id: `ask:${at}`,
+    question: `Ask ${cookName} anything`,
+    options: [],
+    bars: true,
+    prompt: { label: 'Just say your question' },
+    tapToClose: TAP_TO_CLOSE,
+    onChoose: () => {},
+  };
+}
+
 /**
  * What the pot shows on the cook screen, under homie's own lit / speaking beat (the store puts those on
  * top). True to the mic both ways: `listening` only while homie is on, the recorder runs and its frames
@@ -292,12 +329,12 @@ export function cookPotState(v: { active: boolean; listening: boolean; sounding:
 
 /**
  * Why cook mode's mic is on: the kid's tap ('tap', until the next tap or a minute with nobody talking),
- * the 8 s after a step line ('window'), or a turn the kid began in that window ('turn', until homie's
- * answer is over). 'off': the recorder is stopped, so no frames and no Ink credits; the line stays open
- * for step lines.
+ * the 8 s after a step line ('window'), a turn the kid began in that window ('turn', until homie's
+ * answer is over), or "Ask <cook> anything" up on the phone ('ask', a long press: until it closes).
+ * 'off': the recorder is stopped, so no frames and no Ink credits; the line stays open for step lines.
  */
-export type MicHold = 'off' | 'tap' | 'window' | 'turn';
-export type MicEvent = 'tap' | 'step_line_end' | 'window_timeout' | 'heard' | 'answered' | 'cap' | 'idle';
+export type MicHold = 'off' | 'tap' | 'window' | 'turn' | 'ask';
+export type MicEvent = 'tap' | 'step_line_end' | 'window_timeout' | 'heard' | 'answered' | 'cap' | 'idle' | 'ask' | 'ask_end';
 
 /** How long the mic listens after a step line (only the time it really hears counts: no app sound). */
 export const LISTEN_WINDOW_MS = 8000;
@@ -361,10 +398,14 @@ export function opensWindow(kind: SayKind): boolean {
  * hold (a pot that listens or thinks, by a tap or a window) turns it off. A step line's end opens a
  * fresh window, unless the kid's tap holds homie on. The kid's words in a window hold it for the turn;
  * the window's 8 s, the turn's answer, or the cap close it; a tapped-on homie left idle goes off.
+ * "Ask <cook> anything" holds it for exactly as long as it's up (its own 25 s close it), unless a tap
+ * already holds homie on: then homie stays on after it.
  */
 export function micAfter(hold: MicHold, e: MicEvent): MicHold {
+  if (e === 'ask') return hold === 'tap' ? 'tap' : 'ask';
+  if (e === 'ask_end') return hold === 'ask' ? 'off' : hold;
   if (e === 'tap') return hold === 'off' ? 'tap' : 'off';
-  if (e === 'step_line_end') return hold === 'tap' ? 'tap' : 'window';
+  if (e === 'step_line_end') return hold === 'tap' || hold === 'ask' ? hold : 'window';
   if (e === 'heard') return hold === 'window' ? 'turn' : hold;
   if (e === 'window_timeout') return hold === 'window' ? 'off' : hold;
   if (e === 'answered') return hold === 'turn' ? 'off' : hold;
@@ -398,6 +439,7 @@ export type MicNow = {
  *   done talking, unless the first finished words already came (then more talking doesn't hold it).
  * - Either ends TURN_MAX_MS after the window opened, whatever else.
  * - On by a tap: TAP_IDLE_MS with the mic hearing and nobody talking or answering turns it off.
+ * - "Ask <cook> anything" has none here: the moment closing ends it.
  */
 export function micTimer(v: MicNow): { ms: number; event: MicEvent } | null {
   if (v.hold === 'tap') return v.listening && !v.sounding && !v.thinking && !v.kidTalking ? { ms: TAP_IDLE_MS, event: 'idle' } : null;
@@ -437,6 +479,63 @@ export function hearsAnswers(v: { live: boolean; hold: MicHold; listening: boole
 export function cookTap(v: { voiceHere: boolean; status: 'off' | 'connecting' | 'listening' | 'error'; unavailable: boolean; talking: boolean }): 'toggle' | 'read' | 'stop' {
   if (v.status !== 'off' || (v.voiceHere && !v.unavailable)) return 'toggle';
   return v.talking ? 'stop' : 'read';
+}
+
+// ---------------------------------------------------------------------------------------------
+// homie and a video hand the sound to each other (Caleb, Oct 25: "anything that's clicked (between
+// video & homie) should be the one with audio. this transition should be smooth.")
+
+/** What /cook gets when a tap turns homie on: the service says the step's short line at once. */
+export const TAP_MESSAGE = { type: 'tap' } as const;
+
+/**
+ * A tap on homie: micAfter's toggle, except while a video plays. Then homie takes the sound (the video
+ * fades out and pauses) and turns on, whatever its hold: under a video the pot looks off.
+ */
+export function holdAfterTap(hold: MicHold, video: boolean): MicHold {
+  return video ? 'tap' : micAfter(hold, 'tap');
+}
+
+/**
+ * The tap turned homie on: homie says the step's short line at once ({ type: "tap" }). Only to a real
+ * service on an open line, and not while homie is already talking (that line is its answer).
+ */
+export function saysOnTap(v: { live: boolean; open: boolean; talking: boolean }): boolean {
+  return v.live && v.open && !v.talking;
+}
+
+/** A `say` this soon after the app sent { type: "tap" } (its first step line) is the tap's own line. */
+export const TAP_LINE_WAIT_MS = 2000;
+
+/**
+ * The line a tap on homie asked for: the first step line within TAP_LINE_WAIT_MS of the tap (`tapAt`,
+ * 0: none). It isn't the kid's yes to reading aloud (components/cooking/CookMoments onSay).
+ */
+export function answersTap(kind: SayKind, tapAt: number, now: number): boolean {
+  return kind === 'step' && tapAt > 0 && now - tapAt < TAP_LINE_WAIT_MS;
+}
+
+/**
+ * While a video the kid started plays (lib/media kidVideoPlaying: a play the kid tapped, never her clip
+ * homie played), whatever of homie's would pause it is dropped: an answer or a step line still on its
+ * way, and a clip of hers from a turn still on its way ('clip': the kid's video keeps the sound). The
+ * lines homie says on its own wait for it instead (waitsForVideo). A tap on homie takes the sound back.
+ */
+export function dropsForKidVideo(kind: SayKind | 'clip', kidVideo: boolean): boolean {
+  return kidVideo && (kind === 'clip' || !waitsForVideo(kind));
+}
+
+/**
+ * The iOS session and homie's recorder: audio-studio deactivates the session whenever the recorder
+ * starts or stops, and that stops anything playing (a video, homie's line). So a video waits for a
+ * start or stop under way (lib/media's gate, VIDEO_GATE_MAX_MS), and so does homie's next line, at most
+ * this long after its lit beat; a stop waits for homie's voice to fade out first.
+ */
+export const LINE_WAITS_FOR_MIC_MS = 600;
+
+/** homie's line may start now: no recorder start or stop under way, or it has waited long enough. */
+export function lineMayStart(v: { micBusy: boolean; since: number; now: number }): boolean {
+  return !v.micBusy || v.now - v.since >= LINE_WAITS_FOR_MIC_MS;
 }
 
 // ---------------------------------------------------------------------------------------------
