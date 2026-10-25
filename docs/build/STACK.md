@@ -426,8 +426,9 @@ then `/speak` with `translate: true`.
   1000` when `videoStartedAt` is set, else `atS`; answers shifted the same). Prompts said before the video started
   (negative video time, e.g. the intro) are left out. Each entry may carry `said: { atS, endS }` (Oct 24): when
   homie's own voice played, which is in the phone's video too (lower or cut it there). `coverUrl?` (Oct 24): the
-  plate photo homie asked for at the end of an in-app phone recording (`recordings.coverStorageId`); use it as the
-  recipe's cover. In-app phone clips are `part-01.mp4`, `part-02.mp4`, ... (signer objects `01.mp4`, `02.mp4` in
+  plate photo homie asked for at the end of an in-app phone recording (`recordings.coverStorageId`); the worker
+  downloads it and makes it the recipe's cover as it is, with no frame pick (`pipeline/cover.py` `use_photo`; a
+  photo that fails to download or isn't one usable JPEG falls back to the frame pick). In-app phone clips are `part-01.mp4`, `part-02.mp4`, ... (signer objects `01.mp4`, `02.mp4` in
   the same order) with no creation-date tag: their order is the upload order.
 - `/worker/release` `{ jobId }` → `{ ok }`: the upload isn't complete yet. The job shows stage `uploading` and goes
   back to `queued` after 30 s. `404` unless the job is `preparing`. The worker waits up to 45 s for every file the

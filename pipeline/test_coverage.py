@@ -224,8 +224,9 @@ def test_complete_merge_is_not_retried():
 
 def test_run_end_to_end_with_a_file_boundary():
     """process.run on cached extractions of two 150 s AI files: the merge first drops a step, the retry
-    puts it back, and recipe.json + work/coverage.json reflect that. After it, the cover pick and the substep
-    times both fail here, and neither stops the recipe: the poster falls back to the last step's middle."""
+    puts it back, and recipe.json + work/coverage.json reflect that. After it, the cook's plate photo (broken
+    here), the cover pick and the substep times all fail, and none stops the recipe: the photo is kept in work/
+    for a --rewrite and the poster falls back to the last step's middle."""
     manifest = json.loads(json.dumps(MANIFEST))
     manifest["sessions"][0]["ai_files"] = [
         {"path": "work/ai_01_00.mp4", "start_in_file_s": 0, "duration_s": 150.0},
@@ -264,7 +265,10 @@ def test_run_end_to_end_with_a_file_boundary():
             (out / "work" / "manifest.json").write_text(json.dumps(manifest))
             for i, events in raws.items():
                 (out / "work" / f"chunk_{i:02d}.raw.json").write_text(json.dumps({"chunk_index": i, "events": events}))
-            process.run("t-cover")
+            plate = Path(tmp) / "plate-photo.jpg"
+            plate.write_bytes(b"not a jpeg")
+            process.run("t-cover", cover_photo=plate)
+            assert (out / "work" / process.COVER_PHOTO).read_bytes() == b"not a jpeg"
             recipe = json.loads((out / "recipe.json").read_text())
             assert [s["title"] for s in recipe["steps"]] == ["Chop and fry the onions", "Season with salt"], recipe
             report = json.loads((out / "work" / "coverage.json").read_text())
