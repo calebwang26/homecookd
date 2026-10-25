@@ -6,7 +6,7 @@
 
 A family recipe app that keeps the person in the recipe and keeps the family talking.
 
-Demo video: _(link)_
+Demo video: https://youtu.be/8Ibl2QnL9dw
 
 </div>
 
