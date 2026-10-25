@@ -7,6 +7,7 @@
 //   voice.unavailable     no line will read for the kid: auto start gave up (no service, a dish Convex
 //                         doesn't know, 4404), or the line failed for good (the phone reads instead)
 //   voice.active          homie is on (a tap, or a step line's 8 s window): the mic streams
+//   voice.kidTalking      the kid is mid-sentence ("Ask Grandma anything" never closes then)
 //   voice.listening       the recorder really runs (the pot's listening); voice.hearing: the kid can
 //                         answer a yes-or-no out loud for as long as it's up (on by a tap)
 //   voice.muted           the mic can't work here (refused, or it failed to start): a tap tries again
@@ -556,7 +557,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
         const echo = echoAt(echoes.current, m.text, Date.now());
         // homie thinks only when an answer is on its way: never for this phone's own text (a tapped
         // "no" gets none), nor a yes or no the service holds or answers with silence.
-        if (thinksAfter({ echo: echo >= 0, appMoment: !!appMoment.current, momentUp: !!getHomie().moment, text: m.text })) think(true);
+        if (thinksAfter({ echo: echo >= 0, appMoment: !!appMoment.current, asking: appMoment.current === 'ask', momentUp: !!getHomie().moment, text: m.text })) think(true);
         if (echo >= 0) {
           // This phone's own text: never the kid's words.
           echoes.current = echoes.current.filter((_, i) => i !== echo);
@@ -987,7 +988,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
 
   const active = micHold !== 'off';
   const hearing = hearsAnswers({ live, hold: micHold, listening });
-  return { status, live, unavailable, active, listening, hearing, muted, timers, askedAt, askedIds, error, toggle, stop, command, sendText, setMoment, setHold, setVideo };
+  return { status, live, unavailable, active, listening, hearing, muted, kidTalking, timers, askedAt, askedIds, error, toggle, stop, command, sendText, setMoment, setHold, setVideo };
 }
 
 export type VoiceCooking = ReturnType<typeof useVoiceCooking>;

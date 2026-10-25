@@ -36,7 +36,6 @@ import { colors, radii, shadows } from '@/theme/tokens';
 
 const READ_KEY = 'homie.readAloud';
 const READ_QUESTION = 'Want me to read each step out loud?';
-const ASK_OPEN_MS = 25_000;
 /** Answers to questions older than this don't pop up any more. */
 const ANSWER_MAX_AGE_MS = 7 * 24 * 3600_000;
 
@@ -235,15 +234,15 @@ export function useCookMoments({ cookName }: { cookName: string }) {
 
   /**
    * "Ask <cook> anything" (a long press on homie, voiceLogic askMoment), said out loud too. The kid's next
-   * words are the question (the service sends it straight to the cook) and close it, and so do a tap
-   * anywhere or 25 s with no words. The mic stays on meanwhile (lib/live/voice setMoment('ask')).
+   * words are the question (the service sends it straight to the cook) and close it, and so does a tap
+   * anywhere; the cook screen closes it 25 s after the kid last talked, or once homie can't hear it
+   * (voiceLogic askCloseIn). The mic stays on meanwhile (lib/live/voice setMoment('ask')).
    */
   const ask = useCallback(() => {
     const { cookName, meId } = args.current;
     const m = askMoment(cookName, Date.now());
     listenFor(m);
     void speak(`${m.question}.`, { profileId: meId, answer: true });
-    setTimeout(() => closeMoment(m.id), ASK_OPEN_MS);
   }, [listenFor]);
 
   return { onOffer, onOfferClosed, onHeard, onSay, listenFor, ask, readAloud: read.choice === 'yes' };

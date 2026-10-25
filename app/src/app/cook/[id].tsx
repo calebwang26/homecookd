@@ -105,7 +105,7 @@ import { madeItMilestone, madeItTitle } from '@/lib/kitchenCounts';
 import { micStreamingSupported } from '@/lib/live/mic';
 import { speak, stopSpeaking } from '@/lib/live/speak';
 import { useVoiceCooking, VOICE_CONFIGURED, type VoiceClip } from '@/lib/live/voice';
-import { appMomentKind, consentSettled, cookingSessionOn, cookTap, phoneReads } from '@/lib/live/voiceLogic';
+import { appMomentKind, askCloseIn, consentSettled, cookingSessionOn, cookTap, phoneReads } from '@/lib/live/voiceLogic';
 import { HANDOFF_FADE_MS, pauseAllVideos, stopAllMedia } from '@/lib/media';
 import { cooked, openChatWith, openCircle, useRecipeQuestions, type CookedRef } from '@/lib/messaging';
 import { madeItWords } from '@/lib/postcardLogic';
@@ -291,9 +291,10 @@ export default function CookScreen() {
     void speak(`Step ${n}. ${step.instruction}`, { profileId: me?.id, answer: true });
   };
 
-  // A long press asks the cook (Caleb, Oct 25; never the tap's toggle): "Ask Grandma anything" while homie
-  // can hear (the kid's next words go straight to her), else my chat with her, the dish and step in the
-  // box (no voice line, or the mic refused); with nobody to ask, it reads this step like a tap.
+  // A long press asks the cook (Caleb, Oct 25; never the tap's toggle). It takes the sound, as a tap does
+  // (the video fades out). With nobody else to ask (the cook on her own dish) it reads this step like a
+  // tap; else "Ask Grandma anything" while homie can hear (the kid's next words go straight to her), or my
+  // chat with her, the dish and step in the box (no voice line, or the mic refused).
   const asking = useRef(false);
   const askInChat = async () => {
     if (!recipe || !askTarget || asking.current) return;
@@ -308,9 +309,13 @@ export default function CookScreen() {
     }
   };
   const potHold = () => {
+    pauseAllVideos({ fadeMs: HANDOFF_FADE_MS });
+    if (!askTarget) {
+      if (step) void speak(`Step ${n}. ${step.instruction}`, { profileId: me?.id, answer: true });
+      return;
+    }
     if (voice.live && !voice.muted) return homie.ask();
-    if (askTarget) return void askInChat();
-    if (step) void speak(`Step ${n}. ${step.instruction}`, { profileId: me?.id, answer: true });
+    void askInChat();
   };
   useHomieScreen({ hidden: !!done, dock, onPress: potTap, onLongPress: potHold, longPressLabel: cookName ? `Ask ${cookName}` : undefined });
   useReadSteps({ on: phoneReading && homie.readAloud && !done, step: n, text: step?.instruction ?? '' });
@@ -318,18 +323,30 @@ export default function CookScreen() {
   const momentId = useHomieSelect((h) => h.moment?.id ?? null);
   const tellMoment = voice.setMoment;
   useEffect(() => tellMoment(appMomentKind(momentId)), [momentId, tellMoment]);
-  // The mic refused while "Ask Grandma anything" is up: the chat with her instead.
+  // "Ask Grandma anything" lives only while homie can hear it: the mic refused, the chat with her instead;
+  // the line or homie's mic gone (the app in the background, the line lost, homie off for a video the kid
+  // played), it closes after a short grace; and 25 s after the kid last talked, never mid-sentence
+  // (voiceLogic askCloseIn).
   const askUp = appMomentKind(momentId) === 'ask';
   const micRefused = voice.muted;
+  const askHears = voice.live && voice.active;
+  const kidTalking = voice.kidTalking;
   const chat = useRef(askInChat);
   useEffect(() => {
     chat.current = askInChat;
   });
   useEffect(() => {
-    if (!askUp || !micRefused) return;
-    closeMoment();
-    void chat.current();
-  }, [askUp, micRefused]);
+    if (!askUp || !momentId) return;
+    if (micRefused) {
+      closeMoment(momentId);
+      void chat.current();
+      return;
+    }
+    const ms = askCloseIn({ hears: askHears, kidTalking });
+    if (ms == null) return;
+    const t = setTimeout(() => closeMoment(momentId), ms);
+    return () => clearTimeout(t);
+  }, [askUp, momentId, micRefused, askHears, kidTalking]);
   const voiceError = voice.error;
   const showToast = toast.show;
   useEffect(() => {

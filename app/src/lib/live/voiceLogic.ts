@@ -239,10 +239,13 @@ export function afterNo(text: string): { more: boolean; fastTail: string } {
  * "no" for a tap on the offer). While an app-only moment is up, the service holds a yes, or a no with
  * nothing more, for the phone; what follows a no is still its own ("No, I'm out of ginger. Can I skip
  * it?"). While its own offer is up (the read-aloud offer, a story), a no with nothing more closes it
- * and nothing is said.
+ * and nothing is said. In "Ask <cook> anything" (`asking`) every finished sentence the phone hears gets
+ * an answer (a command, "Okay.", or "I'll ask Grandma."): the service sends no transcript for the
+ * sounds it waits past.
  */
-export function thinksAfter(v: { echo: boolean; appMoment: boolean; momentUp: boolean; text: string }): boolean {
+export function thinksAfter(v: { echo: boolean; appMoment: boolean; asking?: boolean; momentUp: boolean; text: string }): boolean {
   if (v.echo) return false;
+  if (v.asking) return true;
   const yn = yesNo(v.text);
   const onlyNo = yn === 'no' && !afterNo(v.text).more;
   if (v.appMoment) return yn !== 'yes' && !onlyNo;
@@ -272,6 +275,22 @@ export const TAP_TO_CLOSE = 'Tap anywhere to close';
 export function yesNoMoment(m: { id: string; question: string; questionEn?: string; hearing: boolean; button: string; onChoose: (choice: string) => void }): HomieMoment {
   const base = { id: m.id, question: m.question, questionEn: m.questionEn, tapToClose: TAP_TO_CLOSE, onChoose: m.onChoose };
   return m.hearing ? { ...base, options: [], bars: true, prompt: { label: SAY_YES_NO } } : { ...base, options: [{ id: 'yes', label: m.button, kind: 'primary' }] };
+}
+
+/** "Ask <cook> anything" closes this long after the kid last talked (or it opened). */
+export const ASK_OPEN_MS = 25_000;
+/** ...and this soon once homie can't hear it (the line lost, the app in the background, homie off for a video). */
+export const ASK_LOST_MS = 2000;
+
+/**
+ * When "Ask <cook> anything" closes on its own, in ms (null: not now). Never while the kid is
+ * mid-sentence, so the recorder isn't cut off; the count starts again once they stop. A moment homie
+ * can't hear (`hears`: the line is live and homie's mic is held) closes after a short grace, which also
+ * covers the beat before the mic hold catches up with the moment opening.
+ */
+export function askCloseIn(v: { hears: boolean; kidTalking: boolean }): number | null {
+  if (!v.hears) return ASK_LOST_MS;
+  return v.kidTalking ? null : ASK_OPEN_MS;
 }
 
 /**

@@ -376,6 +376,7 @@ await test('cook mode’s long press ("Ask Grandma anything"): claimed with what
   // The pot: a long press after about 400 ms, a VoiceOver action for it, and only the 0.96 press scale.
   const overlay = readFileSync(join(root, 'src/components/homie/HomieOverlay.tsx'), 'utf8');
   assert.match(overlay, /onPress=\{onPress\}\s*onLongPress=\{hold\}\s*delayLongPress=\{400\}/);
+  assert.match(overlay, /\(\) => \{\s*haptic\('medium'\);\s*onHold\(\);\s*\}/, 'one buzz when the hold takes');
   assert.match(overlay, /accessibilityActions=\{hold \? \[\{ name: 'longpress', label: h\.longPressLabel/);
   assert.ok(!/scaleTo=/.test(overlay), 'never scaled up while held: drawn at its real size');
 });
