@@ -11,7 +11,7 @@
 // (agent.ts); a turn that ends with nothing done or said sends { type: "quiet" }, so the phone stops showing
 // homie thinking.
 import WebSocket from "ws";
-import { TurnAgent, type Actions } from "./agent.js";
+import { TurnAgent, cookCall, type Actions } from "./agent.js";
 import * as convex from "./convex.js";
 import { env } from "./env.js";
 import { lineCache, lineKey } from "./lineCache.js";
@@ -190,7 +190,7 @@ export class Cooking {
   ) {}
 
   private get cook() {
-    return this.session.cook?.name ?? "the cook";
+    return cookCall(this.session);
   }
   /** homie's voice for one kind of line, the same object for a line made ahead and one said live. */
   private voiceFor(kind: SayKind, language?: string): Voice {

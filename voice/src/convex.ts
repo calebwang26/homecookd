@@ -148,7 +148,7 @@ export async function news(sessionToken: string): Promise<News> {
 
 export async function recordingSession(sessionToken: string, recordingId: string): Promise<RecordingSession> {
   // "stub-mr-again" / "stub-en-again": a cook homie has recorded with before (the short hello).
-  // "stub-mr-ajoba" (a grandfather, for the whole family) and "stub-en-dad" (a cook named Dad): not every cook is a mom.
+  // "stub-mr-ajoba" (a grandfather, for the whole family) and "stub-en-dad" (Vijay, whom the family calls Dad): not every cook is a mom.
   if (usingStub) {
     const all = stubRecordings();
     const key = recordingId.replace(/^stub-/, "").replace(/-again$/, "");

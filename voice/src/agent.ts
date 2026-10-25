@@ -9,6 +9,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "./env.js";
 import type { CookSession } from "./convex.js";
+import { callOf } from "./family.js";
 import type { Hit } from "./moss.js";
 
 import type * as Beta from "@anthropic-ai/sdk/resources/beta/messages/messages.js";
@@ -113,8 +114,11 @@ const momentsJson = (hits: Hit[]) =>
     hits.map((h) => ({ moment: h.text, cook_said: h.quote, start_s: h.startS, end_s: h.endS, step: h.stepOrder, score: h.score })),
   );
 
+/** What homie calls the cook to the kid: the family's word for them ("Rajani Aaji", "Dad"), as the cook hears it too. */
+export const cookCall = (s: CookSession) => callOf(s.cook?.name, s.cook?.relation) ?? "the cook";
+
 function systemPrompt(s: CookSession): string {
-  const cook = s.cook?.name ?? "the cook";
+  const cook = cookCall(s);
   const steps = s.recipe.steps
     .map((st) => `${st.order}. ${st.title}: ${st.text} [video ${st.moment.startS}-${st.moment.endS}s]`)
     .join("\n");
@@ -160,7 +164,7 @@ export class TurnAgent {
     private client: Anthropic = new Anthropic({ apiKey: env.anthropicKey }),
   ) {
     this.system = systemPrompt(session);
-    this.cook = session.cook?.name ?? "the cook";
+    this.cook = cookCall(session);
     this.playable = session.recipe.steps.map((s) => ({ ...s.moment, stepOrder: s.order }));
   }
 

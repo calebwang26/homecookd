@@ -8,7 +8,7 @@
 //   COOK_LANG=en npm run test-record                                  English ("stub-en"); ta, zh: Tamil, Mandarin
 //   RECORDING=stub-mr-again npm run test-record                       a cook homie has met (the short hello)
 //   RECORDING=stub-mr-ajoba npm run test-record                       a grandfather, for the whole family (no kid name)
-//   COOK_LANG=en RECORDING=stub-en-dad npm run test-record            a cook named "Dad", for Shreya
+//   COOK_LANG=en RECORDING=stub-en-dad npm run test-record            Vijay, whom the family calls "Dad", for Shreya
 //   SESSION=<cook's sessionToken> RECORDING=<recordings _id> npm run test-record   live Convex
 //   CAMERA=1 npm run test-record      filmed in the app: {type:"start", camera:true}, a still every 5 s
 //                                     (FRAME=<jpeg>, default a pot of chili), a 6 s pause and resume, and

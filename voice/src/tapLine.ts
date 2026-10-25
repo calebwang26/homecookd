@@ -4,7 +4,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { News, NewsFact } from "./convex.js";
 import { env } from "./env.js";
-import { guessesFamily } from "./homie.js";
+import { guessesFamily } from "./family.js";
 
 const client = new Anthropic({ apiKey: env.anthropicKey });
 const MAX_WORDS = 22;
@@ -21,14 +21,22 @@ Rules:
 const cache = new Map<string, string>();
 const CACHE_MAX = 500;
 
-/** homie's line for `fact`; the fact's own plain line when Claude fails or says too much. */
-export async function tapLine(who: Pick<News, "name" | "role">, fact: NewsFact, tab?: string): Promise<{ text: string; written: boolean }> {
+/**
+ * homie's line for `fact`; the fact's own plain line when Claude fails, says too much, or adds a family role or a
+ * he/she the fact doesn't have. `claude`: tests pass a fake.
+ */
+export async function tapLine(
+  who: Pick<News, "name" | "role">,
+  fact: NewsFact,
+  tab?: string,
+  claude: Pick<Anthropic, "messages"> = client,
+): Promise<{ text: string; written: boolean }> {
   const key = `${who.name}\n${fact.id}\n${fact.line}`;
   const hit = cache.get(key);
   if (hit) return { text: hit, written: true };
   try {
     const t0 = Date.now();
-    const res = await client.messages.create({
+    const res = await claude.messages.create({
       model: env.claudeModel,
       max_tokens: 400,
       system: SYSTEM,
@@ -43,7 +51,7 @@ export async function tapLine(who: Pick<News, "name" | "role">, fact: NewsFact, 
     console.log(`tap line claude ${Date.now() - t0}ms stop=${res.stop_reason}`);
     const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim().replace(/^["“]|["”]$/g, "");
     if (res.stop_reason === "refusal" || !text || text.split(/\s+/).length > MAX_WORDS + 4) return { text: fact.line, written: false };
-    if (guessesFamily(text, [fact.line, who.name])) {
+    if (guessesFamily(text, { names: [fact.line, who.name] })) {
       console.warn(`tap line: guessed a family role or gender, saying the plain line: ${text}`);
       return { text: fact.line, written: false };
     }

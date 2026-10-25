@@ -52,19 +52,21 @@ const FIXED = {
 
 export type FixedLine = keyof typeof FIXED;
 
-/** A fixed line in the cook's language, with its English. `latin` has the names as written in English. */
-export async function fixedLine(name: FixedLine, w: Who, latin: Who = w): Promise<Line> {
-  const { mr } = FIXED[name](w);
-  const { en } = FIXED[name](latin);
+/** A written line in the cook's language, with its English. `latin` has the names as written in English. */
+async function lineOf(line: Fixed, w: Who, latin: Who): Promise<Line> {
+  const { en } = line(latin);
   if (w.language === "en") return { text: en, textEn: en };
-  if (w.language === "mr") return { text: mr, textEn: en };
-  const text = await translate(FIXED[name](w).en, w.language, "homie").catch(() => "");
+  if (w.language === "mr") return { text: line(w).mr, textEn: en };
+  const text = await translate(line(w).en, w.language, "homie").catch(() => "");
   return { text: text || en, textEn: en };
 }
 
+/** A fixed line in the cook's language, with its English. */
+export const fixedLine = (name: FixedLine, w: Who, latin: Who = w): Promise<Line> => lineOf(FIXED[name], w, latin);
+
 /**
  * HOMIE_SCRIPTED=1 (the filmed demo): homie asks these in turn, one every 5 minutes, without deciding
- * anything from what it hears. Generic on purpose, so they fit any moment of any dish; her answers are
+ * anything from what it hears. Generic on purpose, so they fit any moment of any dish; the cook's answers are
  * logged like any question's and reach the recipe through homieLog.
  * TODO(caleb): a native Marathi speaker still has to check these, like the lines above.
  */
@@ -80,10 +82,14 @@ const SCRIPTED: { kind: AskKind; line: Fixed }[] = [
 /** The nth scripted question (it wraps around), in the cook's language, with its English. */
 export async function scriptedQuestion(n: number, w: Who, latin: Who = w): Promise<{ kind: AskKind; line: Line }> {
   const q = SCRIPTED[n % SCRIPTED.length];
-  const { mr } = q.line(w);
-  const { en } = q.line(latin);
-  if (w.language === "en") return { kind: q.kind, line: { text: en, textEn: en } };
-  if (w.language === "mr") return { kind: q.kind, line: { text: mr, textEn: en } };
-  const text = await translate(q.line(w).en, w.language, "homie").catch(() => "");
-  return { kind: q.kind, line: { text: text || en, textEn: en } };
+  return { kind: q.kind, line: await lineOf(q.line, w, latin) };
+}
+
+/**
+ * A scripted question of this kind that hasn't been asked (`asked`: the English of what was), or null. homie asks
+ * it when Claude's question guessed a family role (homie.ts guessesFamily). There's none for "show".
+ */
+export async function scriptedOf(kind: AskKind, asked: readonly string[], w: Who, latin: Who = w): Promise<{ kind: AskKind; line: Line } | null> {
+  const q = SCRIPTED.find((s) => s.kind === kind && !asked.includes(s.line(latin).en));
+  return q ? { kind, line: await lineOf(q.line, w, latin) } : null;
 }
