@@ -37,9 +37,9 @@ export function openFamilyGateway() {
 }
 
 /**
- * `homieRoom` (Parent Home's date line): the pill also keeps the room to its left where homie's pot
- * rests (lib/homie restFrame puts it just left of the pill), so the date beside it never runs under
- * the pot; a long date wraps instead.
+ * `homieRoom` (Parent Home's date line, Kid Home's "Hi, Leo"): the pill also keeps the room to its left
+ * where homie's pot rests (lib/homie restFrame puts it just left of the pill), so the words beside it
+ * never run under the pot; a long date or name wraps instead.
  */
 export function ProfileButton({ faceOnly = false, homieRoom = false }: { faceOnly?: boolean; homieRoom?: boolean }) {
   const { me } = useSession();

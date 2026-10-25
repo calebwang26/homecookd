@@ -1,6 +1,6 @@
 // While a video plays on the kid's phone, homie stays quiet (Caleb, Oct 24): cook.ts holds every line it would
 // say on its own (the greeting, a nudge, a timer) until the app says the video stopped, and still answers what
-// the kid just said. Also: the read-aloud offer is off by default (no VOICE_READ_OFFER here).
+// the kid just did or said. A step's line is one of those: it comes on the flip, video or not.
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, mock, test } from "node:test";
 import WebSocket from "ws";
@@ -13,10 +13,13 @@ import { advance, AUDIO_S, FakeSocket, fakeSpeak, waitFor } from "./helpers.js";
 process.env.CARTESIA_API_KEY = "test";
 process.env.ANTHROPIC_API_KEY = "test";
 process.env.VOICE_STUB = "1";
-delete process.env.VOICE_READ_OFFER;
 const { Cooking } = await import("../src/cook.js");
+const { lineCache } = await import("../src/lineCache.js");
 
-beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: Date.parse("2026-10-25T17:00:00Z") }));
+beforeEach(() => {
+  lineCache.clear();
+  mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: Date.parse("2026-10-25T17:00:00Z") });
+});
 afterEach(() => mock.timers.reset());
 
 let kids = 0;
@@ -70,18 +73,18 @@ function phone(claude?: (a: Actions) => Promise<void>) {
   };
 }
 
-test("no read-aloud offer by default: the hello only, and steps change silently", async () => {
+test("the hello only, then each step's line on the flip, even while a video plays (it answers the kid)", async () => {
   const p = phone();
   await waitFor("the greeting", () => p.ws.of("say_end").length === 1);
   await advance(AUDIO_S * 1000 + 5000);
-  assert.deepEqual(p.kinds(), ["greeting"]);
-  p.says("Next step.");
-  await waitFor("step 2", () => p.ws.of("go_to_step").some((s) => s.stepOrder === 2));
-  await advance(1000);
-  assert.deepEqual(p.kinds(), ["greeting"], "not read aloud");
-  // Asking for it reads it, and every step after.
-  p.says("Say that again.");
-  await waitFor("the step read", () => p.kinds().includes("step"));
+  assert.deepEqual(p.kinds(), ["greeting"], "no offer: nothing more until a step changes");
+  p.video(true);
+  p.send({ type: "step", stepOrder: 2 }); // a tap on Next while her video plays
+  await waitFor("step 2's line", () => p.kinds().includes("step"));
+  assert.equal(p.ws.of("say").at(-1)?.text, "Step 2. Heat the ghee and add the cumin.");
+  await advance(AUDIO_S * 1000 + 500);
+  p.says("Go back."); // and by voice
+  await waitFor("step 1's line", () => p.ws.of("say").at(-1)?.text === "Step 1. Wash the rice three times.");
   p.close();
 });
 
@@ -90,6 +93,8 @@ test("a video playing at the start: the hello waits for it to stop", async () =>
   p.video(true);
   await advance(20_000);
   assert.equal(p.ws.of("say").length, 0, "nothing said over the video");
+  // The step lines don't wait for a hello that's waiting: they're made meanwhile.
+  assert.deepEqual(p.spoken, ["Step 1. Wash the rice three times.", "Step 2. Heat the ghee and add the cumin."]);
   p.video(false);
   await waitFor("the greeting", () => p.ws.of("say").length === 1);
   assert.deepEqual(p.kinds(), ["greeting"]);
@@ -137,16 +142,38 @@ test("two lines held by a video come one after the other, each whole", async () 
   p.close();
 });
 
-test("the story nudge after a read step waits for the kid's video", async () => {
+test("her clip moves the screen's step (read: false): no step line over her, her translation still comes, the step moved", async () => {
+  const clip = (a: Actions) => a.playClip(40, 70, { question: { text: "Why on Sundays?", quote: "My mother made this every Sunday." }, stepOrder: 2 });
+  for (const read of [false, undefined]) {
+    const p = phone(clip);
+    await waitFor("the greeting's end", () => p.ws.of("say_end").length === 1);
+    await advance(AUDIO_S * 1000 + 500);
+    p.says("Why did she make it on Sundays?");
+    await waitFor("her clip", () => p.ws.of("play_clip").length === 1);
+    // The phone moves to step 2, which holds that moment, and says so.
+    p.send(read === false ? { type: "step", stepOrder: 2, read: false } : { type: "step", stepOrder: 2 });
+    await advance(31_000 + AUDIO_S * 1000);
+    if (read === false) {
+      assert.ok(!p.kinds().includes("step"), "no step line over her clip");
+      assert.ok(p.kinds().includes("translation"), "her words in English, once the clip ends");
+      p.says("Go back.");
+      await waitFor("step 1's line", () => p.ws.of("say").at(-1)?.text === "Step 1. Wash the rice three times.");
+    } else {
+      // Without it (before Oct 24's fix): the step's line over her clip, and her translation dropped.
+      assert.ok(p.kinds().includes("step"));
+      assert.ok(!p.kinds().includes("translation"));
+    }
+    p.close();
+  }
+});
+
+test("the story nudge after a step's line waits for the kid's video", async () => {
   const p = phone();
   await waitFor("the greeting's end", () => p.ws.of("say_end").length === 1);
   await advance(AUDIO_S * 1000 + 500);
-  p.says("Say that again."); // reading on
-  await waitFor("step 1 read", () => p.kinds().includes("step"));
-  await advance(AUDIO_S * 1000 + 500);
   p.says("Next step.");
-  await waitFor("step 2 read", () => p.kinds().filter((k) => k === "step").length === 2);
-  p.video(true); // the kid taps play while step 2 is being read
+  await waitFor("step 2's line", () => p.kinds().includes("step"));
+  p.video(true); // the kid taps play while step 2's line plays
   await advance(AUDIO_S * 1000 + 30_000);
   assert.ok(!p.kinds().includes("nudge"), "no story offer over the video");
   p.video(false);
@@ -190,8 +217,6 @@ test("words said after the kid tapped homie to ask (the app's ask moment) are fo
 test("no quiet nudge while a video plays", async () => {
   const p = phone();
   await waitFor("the greeting's end", () => p.ws.of("say_end").length === 1);
-  p.says("Say that again."); // reading on: the quiet nudge can come
-  await waitFor("step 1 read", () => p.kinds().includes("step"));
   await advance(AUDIO_S * 1000 + 500);
   p.video(true);
   await advance(7 * 60_000, 1000);

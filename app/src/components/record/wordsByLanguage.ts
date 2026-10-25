@@ -41,6 +41,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
     notNow: 'अभी नहीं',
     plateGot: 'हो गया! यही कवर फ़ोटो है.',
     cameraTrouble: 'कैमरा रुक गया. अब तक का आपका वीडियो सुरक्षित है.',
+    flipCamera: 'कैमरा बदलें',
     family: 'आपके परिवार',
   },
   // Gujarati
@@ -77,6 +78,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
     notNow: 'હમણાં નહીં',
     plateGot: 'મળી ગયો! આ જ કવર ફોટો રહેશે.',
     cameraTrouble: 'કેમેરા બંધ થઈ ગયો. અત્યાર સુધીનો તમારો વીડિયો સચવાઈ ગયો છે.',
+    flipCamera: 'કેમેરા બદલો',
     family: 'તમારા પરિવાર',
   },
   // Tamil
@@ -113,6 +115,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
     notNow: 'இப்போது வேண்டாம்',
     plateGot: 'கிடைத்துவிட்டது! இதுதான் முகப்புப் படம்.',
     cameraTrouble: 'கேமரா நின்றுவிட்டது. இதுவரை எடுத்த உங்கள் வீடியோ பத்திரமாகச் சேமிக்கப்பட்டுள்ளது.',
+    flipCamera: 'கேமராவை மாற்றுங்கள்',
     family: 'குடும்பத்தினர்',
   },
   // Telugu
@@ -149,6 +152,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
     notNow: 'ఇప్పుడు వద్దు',
     plateGot: 'తీసుకున్నాను! ఇదే ముఖచిత్రం.',
     cameraTrouble: 'కెమెరా ఆగిపోయింది. ఇప్పటివరకు తీసిన మీ వీడియో భద్రంగా ఉంది.',
+    flipCamera: 'కెమెరా మార్చండి',
     family: 'మీ కుటుంబం',
   },
   // Punjabi
@@ -185,6 +189,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
     notNow: 'ਹੁਣ ਨਹੀਂ',
     plateGot: 'ਮਿਲ ਗਈ! ਇਹੀ ਮੁੱਖ ਤਸਵੀਰ ਹੈ।',
     cameraTrouble: 'ਕੈਮਰਾ ਰੁਕ ਗਿਆ। ਹੁਣ ਤੱਕ ਦੀ ਤੁਹਾਡੀ ਵੀਡੀਓ ਸੰਭਾਲੀ ਹੋਈ ਹੈ।',
+    flipCamera: 'ਕੈਮਰਾ ਬਦਲੋ',
     family: 'ਤੁਹਾਡੇ ਪਰਿਵਾਰ',
   },
   // Urdu
@@ -221,6 +226,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
     notNow: 'ابھی نہیں',
     plateGot: 'تصویر آ گئی! یہی سرورق کی تصویر ہوگی۔',
     cameraTrouble: 'کیمرہ رک گیا۔ اب تک کی آپ کی ویڈیو محفوظ ہے۔',
+    flipCamera: 'کیمرہ بدلیں',
     family: 'آپ کے گھر والوں',
   },
   // Mandarin Chinese
@@ -257,6 +263,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
     notNow: '先不用',
     plateGot: '好啦！这张就是封面。',
     cameraTrouble: '相机停了。您已经拍好的视频都保存好了。',
+    flipCamera: '切换摄像头',
     family: '家人',
   },
   // Korean
@@ -293,6 +300,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
     notNow: '나중에 할게요',
     plateGot: '찍었어요! 이 사진이 표지가 돼요.',
     cameraTrouble: '카메라가 멈췄어요. 지금까지 찍으신 영상은 잘 저장됐어요.',
+    flipCamera: '카메라 바꾸기',
     family: '가족',
   },
   // Tagalog
@@ -329,6 +337,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
     notNow: 'Mamaya na lang',
     plateGot: 'Nakuha ko na po! Iyan na ang pabalat na larawan.',
     cameraTrouble: 'Huminto po ang kamera. Nakatabi na ang video ninyo hanggang dito.',
+    flipCamera: 'Palitan ang kamera',
     family: 'Pamilya ninyo',
   },
   // Spanish
@@ -365,6 +374,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
     notNow: 'Ahora no',
     plateGot: '¡Listo! Esa es la portada.',
     cameraTrouble: 'La cámara se detuvo. Lo que grabó hasta ahora quedó guardado.',
+    flipCamera: 'Cambiar la cámara',
     family: 'su familia',
   },
   // Portuguese
@@ -401,6 +411,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
     notNow: 'Agora não',
     plateGot: 'Pronto! Essa é a capa.',
     cameraTrouble: 'A câmera parou. O seu vídeo até aqui está guardado.',
+    flipCamera: 'Trocar a câmera',
     family: 'sua família',
   },
   // Arabic
@@ -437,6 +448,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
     notNow: 'ليس الآن',
     plateGot: 'حسنًا! هذه صورة الغلاف.',
     cameraTrouble: 'توقّفت الكاميرا. ما صُوِّر من الفيديو حتى الآن محفوظ.',
+    flipCamera: 'تبديل الكاميرا',
     family: 'عائلتكم',
   },
 };

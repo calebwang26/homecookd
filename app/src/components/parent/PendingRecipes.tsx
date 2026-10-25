@@ -26,6 +26,7 @@ import { requestCancel } from '@/lib/deletes';
 import { cancelLiveJob, cancelLiveUpload, libraryIdOf as findLibraryId, useLiveJobs, type LiveJob } from '@/lib/live/convex';
 import { refreshLibrary, useLibrary } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
+import { dropUnsentFor } from '@/lib/unsentRecordings';
 import {
   cancelJobUploads,
   ensurePendingSend,
@@ -219,6 +220,7 @@ export function usePendingRecipes(): PendingState {
       cancelJobUploads(job.job_id);
       requestCancel(job.job_id).catch((err) => console.warn('[uploads] signer cancel (best-effort)', err));
       removeJob(job.job_id);
+      dropUnsentFor(job); // and a crash note that would send it again (lib/unsentRecordings)
       setJobs(loadJobs());
       return true;
     },
@@ -258,6 +260,7 @@ export function usePendingRecipes(): PendingState {
           requestCancel(job.job_id).catch((err) => console.warn('[uploads] quiet cancel failed', err));
         }
         removeJob(job.job_id);
+        dropUnsentFor(job);
         setJobs(loadJobs());
       }
     },

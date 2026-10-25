@@ -20,9 +20,10 @@
 import WebSocket from "ws";
 import * as convex from "./convex.js";
 import { env } from "./env.js";
+import { callOf } from "./family.js";
 import { HomieAgent, isNotNow, translate, type AskKind, type Heard, type Line, type Who } from "./homie.js";
 import { rms, VOICE_RMS } from "./inkWhisper.js";
-import { fixedLine, scriptedQuestion } from "./lines.js";
+import { fixedLine, scriptedOf, scriptedQuestion } from "./lines.js";
 import { DEMO, NORMAL, Pacer, SCRIPTED, type PaceRules } from "./pacing.js";
 import { SONIC_SAMPLE_RATE, type AudioFormat } from "./sonic.js";
 import { createStt, speak } from "./speech.js";
@@ -170,7 +171,7 @@ const LIVE: RecordingDeps = {
   convex,
   createStt,
   speak,
-  agent: (who) => new HomieAgent(who),
+  agent: (who) => new HomieAgent(who, { fallback: scriptedOf }),
   translate,
   rules: env.homieScripted ? SCRIPTED : env.homieDemo ? DEMO : NORMAL,
   scripted: env.homieScripted,
@@ -285,7 +286,7 @@ export class Recording {
     this.mem = memoryOf(this.recordingId, this.deps.rules, recording.status === "intro");
     this.decidedThrough = this.mem.heard.length; // what she said before a reconnect was already weighed
 
-    const call = cook.relation && !cook.name.includes(cook.relation) ? `${cook.name} ${cook.relation}` : cook.name;
+    const call = callOf(cook.name, cook.relation) ?? cook.name;
     const dish = this.s.dish ?? recording.dish;
     this.who = this.whoLatin = { language: recording.language, call, kid: kid?.name.split(" ")[0], dish };
     this.homie = this.deps.agent(this.who);

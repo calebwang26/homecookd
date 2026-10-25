@@ -78,4 +78,25 @@ test('first pick: the draft, then Everyone, then who asked, then the first kid',
   assert.deepEqual(W.firstWho([], []), []);
 });
 
+test('a finished recording (the done view, a resend after a crash) goes to the sheet\'s pick, not to the cook', () => {
+  const mom = { id: 'c-mom', name: 'Mom' };
+  const profiles = [mom, grandpa, caleb, serene];
+  const learners = [caleb, serene];
+  const none = { forKids: null, requestFrom: null, everyone: false };
+  // The sheet ticked Serene.
+  let to = W.doneTo(mom.id, profiles, learners, { ...none, forKids: [serene.id] });
+  assert.deepEqual(to.recipients, [serene]);
+  assert.equal(to.label, 'Serene');
+  assert.equal(to.nobody, false);
+  // Everyone: the rest of the family, never herself.
+  to = W.doneTo(mom.id, profiles, learners, { ...none, everyone: true });
+  assert.equal(to.everyone, true);
+  assert.deepEqual(to.recipients, [grandpa, caleb, serene]);
+  assert.deepEqual(to.picked, [caleb, serene]);
+  // No pick saved but a kid asked for it.
+  assert.deepEqual(W.doneTo(mom.id, profiles, learners, { ...none, requestFrom: caleb.id }).recipients, [caleb]);
+  // Alone in the family: nobody to send to.
+  assert.equal(W.doneTo(mom.id, [mom], [], none).nobody, true);
+});
+
 console.log(`\n${passed} passed`);

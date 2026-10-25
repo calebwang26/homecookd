@@ -1,6 +1,6 @@
 ---
 name: homie-docked-cook-bar
-description: "Oct 24: in kid cook mode homie docks centred in the bottom bar like Siri (Back · homie · Next, even spacing); no chips; tap asks, long press mutes; the expand is one smooth move with light blur"
+description: "Oct 24: in kid cook mode homie docks centred in the bottom bar like Siri (Back · homie · Next, even spacing); no chips; tap turns homie on/off (since the Siri round); the expand is one smooth move with light blur"
 metadata:
   type: project
 ---
@@ -11,14 +11,13 @@ be like a siri." He also approved the rest of the proposal as written ([[unanswe
 
 **What shipped:**
 - The bottom bar is **Back · homie · Next step**. The two buttons are the same width, with the same 12 pt gap on
-  each side of homie and 24 pt margins, and words only, so "Next step" fits a small phone. homie docks there at 64 pt
-  (`useHomieScreen({ dock })`), computed from the window, not measured.
+  each side of homie and 24 pt margins, and words only, so "Next step" fits a small phone. homie docks there at 60 pt,
+  exactly the buttons' height ([[homie-size-and-centre]]; it was 64 at first), computed from the window, not measured.
 - **No chips under homie.** Back is the bottom button or "back" said out loud. Repeat is the video's own replay or
   "repeat" said out loud.
-- **Like Siri:** the docked pot wears a soft green aura (`HomiePot aura`). It breathes while listening, swells
-  with the kid's voice, is faint with the mic off, and hands over to the warm halo, which pulses while homie speaks.
-- **A tap asks** ("Ask Grandma anything", or the chat when nobody's listening). **A long press turns the mic off
-  or on.** Words said in that ask moment are always for homie ([[homie-judges-who-was-talking]]).
+- **Like Siri:** the pot shows Siri-like states everywhere ([[homie-siri-states]]; the first docked-only aura is gone).
+- **A tap turns homie on or off** (later the same day: it never opens the chat, and there's no long press;
+  [[homie-mic-on-demand]]). The first version had the tap ask and a long press mute.
 - Labels ("AI voice", "Mic off", "I asked Grandma") sit above the docked pot.
 - **The expand** (cook mode's HomieMoment and the recording screen's AskMoment): from the pot's exact frame, the
   glide, the growth and the blur run as one 420 ms move. The blur is 30 (it was 70), and the tint stays at 50% so the

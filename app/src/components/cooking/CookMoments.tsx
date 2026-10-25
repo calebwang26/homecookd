@@ -2,14 +2,13 @@
 // homie needs a yes or no, there are no buttons (Caleb, Oct 24): the question, the listening bars, "Say
 // “yes” or “no”" and "Tap anywhere to close" (lib/live/voiceLogic yesNoMoment). A spoken yes does it,
 // a spoken no or a tap anywhere closes it, and the mic keeps listening for commands. Only a phone that
-// can't hear the answer (Expo Go, web, the mic off) gets one button for yes.
+// can't hear the answer for as long as it's up (Expo Go, web, homie off, or only a step line's short
+// window) gets one button for yes. A tap on homie never opens one (it turns homie on or off).
 //   useCookMoments()  "Want me to read each step out loud?" when the service offers it (off by default
 //                     since Oct 24: VOICE_READ_OFFER; a spoken answer or the button is kept on this phone,
 //                     and the next visit answers it for the kid; a tap anywhere is "not now" for this
 //                     visit only. Without a voice line, a kept yes reads the steps here: useReadSteps),
-//                     "<cook> has a story about this step", "Ask Grandma anything" (a tap on homie,
-//                     docked in the bottom bar: the kid's next words are the question), and a long
-//                     press on it (the mic off, or on again with the help line said out loud; no moment)
+//                     and "<cook> has a story about this step"
 //   <CookAnswers/>    "Grandma answered your question": yes plays her voice note on the shared player,
 //                     and the English translation shows small under the chips, labelled "Translated
 //                     from Grandma" (her real voice is what plays)
@@ -23,12 +22,12 @@ import { StyleSheet } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { Txt } from '@/components/ui';
-import { closeMoment, getHomie, HELP, showMoment, useAiSpeaking, useHomieSelect, type HomieMoment } from '@/lib/homie';
+import { closeMoment, getHomie, showMoment, useAiSpeaking, useHomieSelect, type HomieMoment } from '@/lib/homie';
 import { ANSWER_KEY, useHeardAnswers, useRecipeAnswers } from '@/lib/live/answers';
 import { stopSay } from '@/lib/live/say';
 import { speak, stopSpeaking } from '@/lib/live/speak';
-import type { VoiceCooking, VoiceOffer } from '@/lib/live/voice';
-import { answersToHear, readAfterOfferClosed, TAP_TO_CLOSE, yesNo, yesNoMoment, type SayKind } from '@/lib/live/voiceLogic';
+import type { VoiceOffer } from '@/lib/live/voice';
+import { answersToHear, readAfterOfferClosed, yesNo, yesNoMoment, type SayKind } from '@/lib/live/voiceLogic';
 import { playClip, useNowPlaying, useVideoPlaying } from '@/lib/media';
 import { useSession } from '@/lib/session';
 import { kvGet, kvSet } from '@/lib/storage';
@@ -36,7 +35,6 @@ import { colors, radii, shadows } from '@/theme/tokens';
 
 const READ_KEY = 'homie.readAloud';
 const READ_QUESTION = 'Want me to read each step out loud?';
-const ASK_OPEN_MS = 25_000;
 /** Answers to questions older than this don't pop up any more. */
 const ANSWER_MAX_AGE_MS = 7 * 24 * 3600_000;
 
@@ -88,29 +86,19 @@ export type SpokenAnswer = { yes?: () => void; no?: () => void; other?: () => vo
 /** Opens a moment the kid can answer out loud. */
 export type ListenFor = (m: HomieMoment, on?: SpokenAnswer) => void;
 
-type Args = {
-  cookName: string;
-  /** Opens my chat about this step (the existing Ask); null when there's nobody to ask. */
-  onWrite: (() => void) | null;
-};
-
-/** The voice line as it is when a chip or the pot is tapped. */
-type VoiceNow = Pick<VoiceCooking, 'live' | 'muted' | 'status' | 'setMuted' | 'listen'>;
 /** How this phone answers the service's offer for the kid. */
 type OfferAnswer = Pick<VoiceOffer, 'accept' | 'decline'>;
 
-/** `ask(voice)` and `potPress(voice)` take the voice line as it is at the tap. */
-export function useCookMoments({ cookName, onWrite }: Args) {
-  const { me } = useSession();
+export function useCookMoments({ cookName }: { cookName: string }) {
   const read = useReadAloud();
   const open = useOwnMoments();
   // The moment up now that the kid's words answer or close.
   const spoken = useRef<(SpokenAnswer & { id: string }) | null>(null);
   // The read-aloud offer, until the kid's choice is known (an answer, or homie starting to read).
   const offer = useRef<{ id: string; heard: boolean } | null>(null);
-  const args = useRef({ cookName, onWrite, meId: me?.id });
+  const args = useRef({ cookName });
   useEffect(() => {
-    args.current = { cookName, onWrite, meId: me?.id };
+    args.current = { cookName };
   });
   const { ref: readRef, set: setRead } = read;
 
@@ -242,42 +230,7 @@ export function useCookMoments({ cookName, onWrite }: Args) {
     [setRead],
   );
 
-  /**
-   * The Ask chip: by voice when homie is listening ("Ask Grandma anything", no buttons: the kid's next
-   * words are the question), else the chat with the cook.
-   */
-  const ask = useCallback(
-    (v: VoiceNow) => {
-      const { cookName: name, onWrite: write, meId } = args.current;
-      if (!v.live || v.muted) return write?.();
-      const id = `ask:${Date.now()}`;
-      listenFor({
-        id,
-        question: `Ask ${name} anything`,
-        bars: true,
-        prompt: { label: 'Just say your question' },
-        tapToClose: TAP_TO_CLOSE,
-        options: [],
-        onChoose: () => {},
-      });
-      void speak(`Ask ${name} anything.`, { profileId: meId, answer: true });
-      setTimeout(() => closeMoment(id), ASK_OPEN_MS);
-    },
-    [listenFor],
-  );
-
-  /**
-   * A long press on the pot turns the mic off, or on again (VoiceLine says "Mic off" meanwhile). No
-   * moment: turning it on, homie only says what the kid can say (the pot lights, "AI voice").
-   */
-  const potPress = useCallback((v: VoiceNow) => {
-    if (v.status === 'connecting') return;
-    if (v.status === 'listening' && !v.muted) return v.setMuted(true);
-    v.listen();
-    void speak(HELP.cook, { translate: true, profileId: args.current.meId, answer: true });
-  }, []);
-
-  return { onOffer, onOfferClosed, onHeard, onSay, ask, potPress, listenFor, readAloud: read.choice === 'yes' };
+  return { onOffer, onOfferClosed, onHeard, onSay, listenFor, readAloud: read.choice === 'yes' };
 }
 
 /**

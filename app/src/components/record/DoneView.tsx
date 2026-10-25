@@ -3,7 +3,9 @@
 // "Done! Sending it to Shreya", and after ~4 s she is back on her home, with no button to tap.
 // Glasses: the glasses' computer uploads the video. A phone recording sends itself from here
 // (sendDraft, with the pre-record sheet's dish and kids): no Send screen to tap through. If that send
-// fails, Send opens with everything filled in, so she can try again there.
+// fails, Send opens with everything filled in, so she can try again there. If the app closes before
+// the job is made and every video is up, the next launch sends it again in the background, as her
+// (useResendUnsent).
 import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { AccessibilityInfo, StyleSheet, View } from 'react-native';
@@ -18,7 +20,7 @@ import { clearDraft, getDraft, useDraft } from './draft';
 import { WavingHomie } from './GlowHomie';
 import { COLUMN, WarmGlow } from './RecordWash';
 import { sendDraft } from './sendDraft';
-import { firstWho, whoTo } from './who';
+import { doneTo } from './who';
 import { doneLine, recordWords } from './words';
 
 export const DONE_HOLD_MS = 4000;
@@ -36,10 +38,8 @@ export function DoneView({ source, lang, kidName, preview = false }: { source: '
   const draft = useDraft();
   const toast = useToast();
 
-  const others = profiles.filter((p) => p.id !== me?.id);
-  const people = learners.filter((p) => p.id !== me?.id);
-  const to = whoTo(firstWho(people, others, { picked: draft.forKids ?? (draft.requestFrom ? [draft.requestFrom] : []), everyone: draft.everyone }), people, others);
-  const line = doneLine(recordWords(lang), { kid: to.everyone ? null : (to.label ?? kidName), everyone: to.everyone, nobody: others.length === 0 });
+  const to = doneTo(me?.id, profiles, learners, draft);
+  const line = doneLine(recordWords(lang), { kid: to.everyone ? null : (to.label ?? kidName), everyone: to.everyone, nobody: to.nobody });
 
   // The mount effect below runs once; it reads who it's for from here.
   const latest = useRef({ me, to, toast });

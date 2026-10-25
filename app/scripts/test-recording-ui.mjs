@@ -11,7 +11,13 @@
 //   src/lib/languages.ts                     the picker's list and search (Track F's API)
 //   src/components/record/cameraLogic.ts     filming in the app: file names, the gap between two files,
 //                                            the clock, when leaving stops the camera and coming back
-//                                            films again by itself, the clip each file becomes
+//                                            films again by itself, the clip each file becomes, the
+//                                            flip (a file boundary while filming; where its button goes);
+//                                            every upload task checks its file is there first (the Oct 24
+//                                            crash)
+//   src/lib/unsentLogic.ts                   a recording the app died before fully sending: where its
+//                                            videos are, what a launch does with it (wait, make the job,
+//                                            stop and send again, done, give up)
 //   build-4 safety                           an EAS Update reaches TestFlight builds without VisionCamera
 //                                            or expo-image-manipulator: recording.tsx's whole import graph
 //                                            never imports either by value, and src/lib/live/camera.ts (the
@@ -51,6 +57,8 @@ const R = await import(pathToFileURL(join(root, 'src/components/record/recording
 const K = await import(pathToFileURL(join(root, 'src/components/record/walkieLogic.ts')).href);
 const L = await import(pathToFileURL(join(root, 'src/lib/languages.ts')).href);
 const C = await import(pathToFileURL(join(root, 'src/components/record/cameraLogic.ts')).href);
+const U = await import(pathToFileURL(join(root, 'src/lib/unsentLogic.ts')).href);
+const Fm = await import(pathToFileURL(join(root, 'src/components/record/filming.ts')).href);
 
 let passed = 0;
 const test = (name, fn) => {
@@ -347,6 +355,434 @@ test('in-app camera: each file becomes a selected camera clip for the Send path'
   assert.equal(clip.selected, true);
   assert.equal(clip.recordedAt, '2026-10-25T17:05:00.000Z');
   assert.deepEqual(clip.asset, { uri: 'file:///doc/recordings/r1/part-02.mp4', width: 1080, height: 1920, type: 'video', duration: 300_000, fileName: 'part-02.mp4', mimeType: 'video/mp4' });
+});
+
+// iOS closes the app on an upload task for a file that isn't there (an Objective-C exception no JS can
+// catch), so every upload task in the app is preceded by a check that throws when the file is missing.
+test('every upload task first checks its file is on the phone (signer videos, plate photo, voice notes, photos)', () => {
+  const missing = [];
+  let tasks = 0;
+  const walk = (dir) => {
+    for (const name of readdirSync(dir)) {
+      const f = join(dir, name);
+      if (statSync(f).isDirectory()) walk(f);
+      else if (/\.tsx?$/.test(f)) {
+        const lines = readFileSync(f, 'utf8').split('\n');
+        lines.forEach((line, i) => {
+          if (!line.includes('.createUploadTask(')) return;
+          tasks += 1;
+          const before = lines.slice(Math.max(0, i - 14), i).join('\n');
+          if (!/if \(!\s*(fileOnPhone\(|new File\([^)]*\)\.exists|[\w.]+\.exists\b)/.test(before)) missing.push(`${f.slice(root.length + 1)}:${i + 1}`);
+        });
+      }
+    }
+  };
+  walk(join(root, 'src'));
+  assert.ok(tasks >= 4, `found ${tasks} upload tasks`);
+  assert.deepEqual(missing, [], 'an upload task with no "is the file there?" check before it');
+  const uploads = readFileSync(join(root, 'src/lib/uploads.ts'), 'utf8');
+  assert.match(uploads, /if \(input\.assets\.some\(\(a\) => !fileOnPhone\(a\.uri\)\)\) throw new Error\(MISSING_VIDEO\);/, 'before the signer is even asked');
+});
+
+test('unsent recordings: a video\'s place inside documents/ survives the app folder moving', () => {
+  const docs = 'file:///var/mobile/Containers/Data/Application/AAAA/Documents/';
+  assert.equal(U.docPath(`${docs}recordings/r1/part-01.mp4`, docs), 'recordings/r1/part-01.mp4');
+  assert.equal(U.docPath(`${docs}recordings/r1/part-01.mp4`, docs.slice(0, -1)), 'recordings/r1/part-01.mp4', 'with or without the slash');
+  // Left in tmp (the move failed): kept as is.
+  const tmp = 'file:///private/var/mobile/Containers/Data/Application/AAAA/tmp/ABC.mp4';
+  assert.equal(U.docPath(tmp, docs), tmp);
+  assert.equal(U.isFullUri(tmp), true);
+  assert.equal(U.isFullUri('recordings/r1/part-01.mp4'), false);
+});
+
+const NOW = Date.parse('2026-10-24T19:30:00Z');
+const note = (id, extra = {}) => ({
+  recordingId: id,
+  familyId: 'fam-1',
+  cookId: 'cook-1',
+  clips: [{ path: `recordings/${id}/part-01.mp4`, durationMs: 3000, width: 1080, height: 1920, startedAt: 1 }],
+  dish: null,
+  language: 'en',
+  forKids: null,
+  everyone: true,
+  requestFrom: null,
+  savedAt: '2026-10-24T19:20:00Z',
+  jobId: null,
+  resends: 0,
+  ...extra,
+});
+
+test('unsent recordings: one note per recording, the newest first; the job goes on it; stopping its row on Home drops it', () => {
+  let list = U.withUnsent([], note('r1'));
+  list = U.withUnsent(list, note('r2'));
+  assert.deepEqual(list.map((u) => u.recordingId), ['r2', 'r1']);
+  list = U.withUnsent(list, note('r1', { dish: 'Poha' }));
+  assert.deepEqual(list.map((u) => u.recordingId), ['r1', 'r2'], 'saved again: replaced, not doubled');
+  assert.equal(list[0].dish, 'Poha');
+  list = U.patchUnsent(list, 'r2', { jobId: 'family-recipe-ea10a0' });
+  assert.equal(list[1].jobId, 'family-recipe-ea10a0');
+  assert.equal(list[0].jobId, null);
+  assert.deepEqual(U.withoutUnsent(list, 'r1').map((u) => u.recordingId), ['r2']);
+  // Home's Stop / clear: by the row's job, or by its recording (a crash before the job went on the note).
+  assert.deepEqual(U.withoutUnsentFor(list, { job_id: 'family-recipe-ea10a0' }).map((u) => u.recordingId), ['r1']);
+  assert.deepEqual(U.withoutUnsentFor(list, { job_id: 'other', recording_id: 'r1' }).map((u) => u.recordingId), ['r2']);
+  assert.equal(U.withoutUnsentFor(list, { job_id: 'other', recording_id: null }).length, 2, 'an unrelated row');
+});
+
+test('unsent recordings: what a launch does with one, from what Convex and the upload row say', () => {
+  const at = (convexJob, extra = {}) => ({ convexJob, upload: 'uploading', clipsHere: 1, now: NOW, ...extra });
+  const job = (stage, error = null) => ({ stage, error });
+  const later = NOW + U.REDO_AFTER_MS; // over an hour after "I'm done"
+  // Convex couldn't say: wait, whatever the phone has (never a second copy on a guess).
+  assert.equal(U.resendStep(note('r'), at(undefined)), 'wait');
+  assert.equal(U.resendStep(note('r'), at(undefined, { clipsHere: 0 })), 'wait', 'even with its videos gone');
+  // The Oct 24 crash: the signer made the upload, then the app died before jobs.create.
+  assert.equal(U.resendStep(note('r'), at(null)), 'send');
+  assert.equal(U.resendStep(note('r'), at(null, { upload: null })), 'send', 'its row is gone too');
+  // The upload finished but jobs.create didn't: make only the job.
+  assert.equal(U.resendStep(note('r'), at(null, { upload: 'uploaded' })), 'create');
+  // Only the worker's own word that files are missing ('uploading') redoes, and only an hour on: iOS may
+  // still be finishing a background upload the app was killed during.
+  assert.equal(U.resendStep(note('r'), at(job('uploading'))), 'wait', 'ten minutes on');
+  assert.equal(U.resendStep(note('r'), at(job('uploading'), { now: later })), 'redo');
+  assert.equal(U.resendStep(note('r'), at(job('uploading'), { upload: 'failed' })), 'redo', 'this phone saw the upload fail: no need to wait');
+  // Queued (the worker hasn't looked, maybe offline with every file in) and preparing (it claimed the job and
+  // is checking, or waiting 45 s for missing files) never redo: a cut-off upload shows 'uploading' soon after.
+  for (const s of ['queued', 'preparing']) {
+    assert.equal(U.resendStep(note('r'), at(job(s))), 'wait', s);
+    assert.equal(U.resendStep(note('r'), at(job(s), { now: later })), 'wait', `${s}, hours on`);
+  }
+  // Nothing to do.
+  assert.equal(U.resendStep(note('r'), at(job('uploading'), { upload: 'uploaded', now: later })), 'done', 'this phone saw every file go');
+  for (const s of ['understanding', 'writing', 'indexing', 'done']) assert.equal(U.resendStep(note('r'), at(job(s))), 'done', s);
+  assert.equal(U.resendStep(note('r'), at(job('failed', U.CANCELLED))), 'done', 'she stopped it');
+  assert.equal(U.resendStep(note('r'), at(job('failed', 'We couldn’t finish this recipe.'), { now: later })), 'wait', 'failed for its own reason: her row says so');
+  assert.equal(U.resendStep(note('r'), at(job(null))), 'done', 'not among the newest jobs: long since handled');
+  // No videos left: nothing to send (a job is left alone; its files may have arrived).
+  assert.equal(U.resendStep(note('r'), at(null, { clipsHere: 0 })), 'gone');
+  assert.equal(U.resendStep(note('r'), at(job('uploading'), { clipsHere: 0, now: later })), 'gone');
+  // Too many tries; too old.
+  assert.equal(U.resendStep(note('r', { resends: U.MAX_RESENDS - 1 }), at(null)), 'send');
+  assert.equal(U.resendStep(note('r', { resends: U.MAX_RESENDS }), at(null)), 'give-up');
+  assert.equal(U.resendStep(note('r', { resends: U.MAX_RESENDS }), at(null, { upload: 'uploaded' })), 'give-up');
+  assert.equal(U.resendStep(note('r', { resends: U.MAX_RESENDS }), at(job('uploading'), { now: later })), 'give-up');
+  const old = note('r', { savedAt: new Date(NOW - U.MAX_AGE_MS - 1).toISOString() });
+  assert.equal(U.resendStep(old, at(undefined)), 'give-up', 'a week old: stop asking, even offline');
+});
+
+test('flip: while filming it is a file boundary; otherwise only the camera switches', () => {
+  assert.deepEqual(C.flipSteps('filming'), ['endFile', 'switch', 'betweenFiles', 'startFile']);
+  for (const phase of ['idle', 'paused', 'done']) assert.deepEqual(C.flipSteps(phase), ['switch'], phase);
+  assert.equal(C.otherFacing('back'), 'front');
+  assert.equal(C.otherFacing('front'), 'back');
+  assert.ok(C.FLIP_WAIT_MS <= 5000, 'never long without a file');
+  assert.ok(C.FLIP_SETTLE_MS >= 1000, 'a still after a flip is the new camera’s');
+  assert.ok(C.END_WAIT_MS <= 10_000);
+});
+
+// ---- filming.ts with a fake camera: the order of things when files, flips, rolls, pauses and "I'm done" meet ----
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const until = async (cond, what, ms = 2000) => {
+  const end = Date.now() + ms;
+  while (!cond()) {
+    if (Date.now() > end) throw new Error(`timed out waiting for ${what}`);
+    await wait(1);
+  }
+};
+const gate = () => {
+  let open;
+  const promise = new Promise((r) => (open = r));
+  return { promise, open };
+};
+
+/**
+ * A fake <Camera>. A file is open from its start until it is saved (saveMs after a stop); a new device or a
+ * fresh <Camera> (cameraKey) is ready readyMs later unless `dead(view)`. The log says what happened, and marks
+ * a mic restart while a file is open, or a camera switch while one is still saving.
+ */
+const rigs = [];
+function rig({ saveMs = 5, readyMs = 5, dead = () => false, between = null } = {}) {
+  const log = [];
+  const events = [];
+  const f = new Fm.Filming({ chunkMs: 60_000, readyWaitMs: 300, flipWaitMs: 60, endWaitMs: 120, settleMs: 30 });
+  rigs.push(f);
+  const cam = {
+    open: null,
+    saving: 0,
+    n: 0,
+    neverSaves: false,
+    readyAt: 0,
+    startRecording(finished, failed) {
+      if (cam.open) throw new Error('two files open at once');
+      cam.open = { n: ++cam.n, finished, failed };
+      log.push(`start ${cam.n} ${f.snapshot().facing}`);
+    },
+    async stopRecording() {
+      const file = cam.open;
+      if (!file || file.stopping) return;
+      file.stopping = true;
+      log.push(`stop ${file.n}`);
+      if (cam.neverSaves) return;
+      cam.saving += 1;
+      setTimeout(() => {
+        cam.saving -= 1;
+        cam.open = null;
+        file.finished({ path: `/tmp/${file.n}.mp4`, duration: 2, width: 1080, height: 1920 });
+      }, saveMs);
+    },
+    keep: (path) => path,
+    /** The open file fails by itself (VisionCamera's onRecordingError). */
+    fail() {
+      const file = cam.open;
+      cam.open = null;
+      file.failed({ code: 'capture/unknown', message: 'boom' });
+    },
+  };
+  const open = () => (cam.open ? ' WHILE A FILE IS OPEN' : '');
+  f.connect(cam, {
+    onPause: () => events.push('pause'),
+    onResume: () => events.push('resume'),
+    beforeResume: async (goesOn) => {
+      events.push(`beforeResume${open()}`);
+      events.push(`goesOn ${goesOn()}`);
+    },
+    betweenFiles: async (goesOn) => {
+      events.push(`betweenFiles${open()}`);
+      if (between) await between.promise;
+      events.push(`goesOn ${goesOn()}`);
+    },
+  });
+  // The <Camera>: onInitialized once per device and per fresh one.
+  let seen = '';
+  const mount = () => {
+    const v = f.snapshot();
+    const now = `${v.facing}#${v.cameraKey}`;
+    if (now === seen) return;
+    seen = now;
+    log.push(`camera ${now}${cam.saving ? ' WHILE A FILE IS SAVING' : ''}`);
+    if (!dead(v))
+      setTimeout(() => {
+        cam.readyAt = Date.now();
+        f.initialized();
+      }, readyMs);
+  };
+  f.subscribe(mount);
+  mount();
+  const files = () => log.filter((l) => /^(start|stop) /.test(l));
+  const rulesKept = () => {
+    assert.ok(!events.some((e) => e.includes('WHILE')), `homie’s mic restarted while a file was open: ${events}`);
+    assert.ok(!log.some((l) => l.includes('WHILE')), `the camera switched while a file was saving: ${log}`);
+  };
+  return { f, cam, log, events, files, rulesKept };
+}
+
+const atest = async (name, fn) => {
+  try {
+    await fn();
+    passed += 1;
+    console.log(`ok   ${name}`);
+  } catch (e) {
+    console.error(`FAIL ${name}`);
+    throw e;
+  } finally {
+    for (const f of rigs.splice(0)) f.dispose(); // no 5-minute timers left running
+  }
+};
+
+await atest('filming: a flip while filming ends the file, waits for the other camera, starts the next file on it', async () => {
+  const r = rig();
+  assert.equal(await r.f.start(), true);
+  assert.equal(await r.f.flip(), true);
+  assert.equal(r.f.snapshot().facing, 'front');
+  assert.equal(r.f.phase, 'filming');
+  const clips = await r.f.stop();
+  assert.deepEqual(r.files(), ['start 1 back', 'stop 1', 'start 2 front', 'stop 2']);
+  assert.deepEqual(r.log.filter((l) => l.startsWith('camera')), ['camera back#0', 'camera front#0']);
+  assert.deepEqual(r.events, ['betweenFiles', 'goesOn true', 'resume'], 'the mic may restart between the files; homie hears the gap');
+  assert.deepEqual(clips.map((c) => c.asset.fileName), ['part-01.mp4', 'part-02.mp4']);
+  r.rulesKept();
+});
+
+await atest('filming: "I’m done" during each step of a flip returns every finished file and starts none after it', async () => {
+  for (const step of ['saving the file', 'waiting for the other camera', 'betweenFiles', 'the new file just started']) {
+    const between = step === 'betweenFiles' ? gate() : null;
+    const r = rig({ saveMs: 20, readyMs: 20, between });
+    await r.f.start();
+    const flipping = r.f.flip();
+    if (step === 'saving the file') await until(() => r.log.includes('stop 1'), step);
+    if (step === 'waiting for the other camera') await until(() => r.f.snapshot().facing === 'front', step);
+    if (step === 'betweenFiles') await until(() => r.events.includes('betweenFiles'), step);
+    if (step === 'the new file just started') await until(() => r.log.includes('start 2 front'), step);
+    const stopping = r.f.stop();
+    between?.open();
+    const clips = await stopping;
+    await flipping;
+    await wait(80);
+    const started = r.files().filter((l) => l.startsWith('start')).length;
+    assert.equal(started, step === 'the new file just started' ? 2 : 1, `${step}: no file starts after "I’m done"`);
+    assert.equal(clips.length, started, `${step}: every file is in the clips`);
+    assert.equal(r.cam.open, null, `${step}: nothing left open`);
+    assert.equal(r.f.phase, 'done');
+    if (between) assert.ok(r.events.includes('goesOn false'), 'after "I’m done" the mic is not marked busy again');
+    r.rulesKept();
+  }
+});
+
+await atest('filming: the 5-minute timer firing during a flip does nothing; on the open file it rolls', async () => {
+  const r = rig({ saveMs: 10, readyMs: 10 });
+  await r.f.start();
+  const first = r.f.openSince;
+  await Promise.all([r.f.flip(), r.f.roll(first)]);
+  assert.deepEqual(r.files(), ['start 1 back', 'stop 1', 'start 2 front'], 'the flip already ended that file');
+  await r.f.roll(r.f.openSince);
+  assert.deepEqual(r.files().slice(-2), ['stop 2', 'start 3 front']);
+  r.rulesKept();
+});
+
+await atest('filming: leaving the app during a flip starts no file; coming back films on the new camera', async () => {
+  const r = rig({ readyMs: 20 });
+  await r.f.start();
+  const flipping = r.f.flip();
+  await until(() => r.f.snapshot().facing === 'front', 'the switch');
+  await r.f.pause();
+  await flipping;
+  await wait(30);
+  assert.equal(r.f.phase, 'paused');
+  assert.equal(r.cam.open, null);
+  assert.deepEqual(r.files(), ['start 1 back', 'stop 1']);
+  assert.ok(r.events.includes('pause'));
+  assert.equal(await r.f.resume(), true);
+  assert.equal(r.files().at(-1), 'start 2 front');
+  r.rulesKept();
+});
+
+await atest('filming: a flip after "I’m done" waits for the last file to be saved before it switches', async () => {
+  const r = rig({ saveMs: 40 });
+  await r.f.start();
+  const stopping = r.f.stop();
+  const flipping = r.f.flip();
+  assert.equal((await stopping).length, 1);
+  assert.equal(await flipping, true);
+  assert.deepEqual(r.log.filter((l) => l.startsWith('camera')), ['camera back#0', 'camera front#0']);
+  r.rulesKept(); // no "WHILE A FILE IS SAVING"
+});
+
+await atest('filming: coming back right after leaving: the mic restarts only once the file is saved', async () => {
+  const r = rig({ saveMs: 30 });
+  await r.f.start();
+  void r.f.pause();
+  assert.equal(await r.f.resume(), true);
+  assert.deepEqual(r.events, ['pause', 'beforeResume', 'goesOn true', 'resume']);
+  r.rulesKept();
+});
+
+await atest('filming: the other camera never gets ready: a fresh camera on the one that worked, and filming goes on', async () => {
+  const r = rig({ dead: (v) => v.facing === 'front' });
+  await r.f.start();
+  assert.equal(await r.f.flip(), false);
+  const v = r.f.snapshot();
+  assert.equal(v.facing, 'back');
+  assert.equal(v.cameraKey, 1, 'a fresh <Camera>');
+  assert.equal(r.f.phase, 'filming');
+  assert.equal(v.trouble, false);
+  assert.deepEqual(r.files(), ['start 1 back', 'stop 1', 'start 2 back'], 'a file only once the fresh camera is ready');
+  r.rulesKept();
+});
+
+await atest('filming: no camera comes back: no file, paused, the trouble line; a resume waits until one does', async () => {
+  let broken = false;
+  const r = rig({ dead: () => broken });
+  await r.f.start();
+  broken = true;
+  assert.equal(await r.f.flip(), false);
+  let v = r.f.snapshot();
+  assert.equal(r.f.phase, 'paused', 'never "filming" with nothing filmed');
+  assert.equal(v.trouble, true);
+  assert.equal(v.since, null, 'the clock stops');
+  assert.equal(v.cameraKey, 2, 'and the <Camera> starts over again');
+  assert.equal(r.cam.open, null);
+  assert.deepEqual(r.files(), ['start 1 back', 'stop 1']);
+  assert.ok(r.events.includes('pause'), 'homie is told');
+  // That fresh camera never came up either: the resume starts no file, and the camera starts over once more.
+  broken = false;
+  assert.equal(await r.f.resume(), false);
+  assert.equal(r.f.phase, 'paused');
+  assert.equal(r.f.snapshot().cameraKey, 3);
+  assert.equal(await r.f.resume(), true);
+  v = r.f.snapshot();
+  assert.equal(v.trouble, false);
+  assert.equal(r.files().at(-1), 'start 2 back');
+  r.rulesKept();
+});
+
+await atest('filming: a file that fails by itself pauses filming (no ticking clock over nothing), with the trouble line', async () => {
+  const r = rig();
+  await r.f.start();
+  r.cam.fail();
+  const v = r.f.snapshot();
+  assert.equal(r.f.phase, 'paused');
+  assert.equal(v.trouble, true);
+  assert.equal(v.since, null);
+  assert.ok(r.events.includes('pause'));
+  assert.equal(await r.f.resume(), true, 'her tap films again on a fresh camera');
+  r.rulesKept();
+});
+
+await atest('filming: a file that never says it ended is let go, so nothing waits forever', async () => {
+  const r = rig();
+  await r.f.start();
+  r.cam.neverSaves = true;
+  const t0 = Date.now();
+  assert.deepEqual(await r.f.stop(), []);
+  assert.ok(Date.now() - t0 >= 100 && Date.now() - t0 < 1000, 'after endWaitMs');
+  r.cam.neverSaves = false;
+  r.cam.open = null;
+  assert.equal(await r.f.flip(), true, 'the queue still moves');
+});
+
+await atest('filming: a still right after a flip waits for the new camera’s frames', async () => {
+  const r = rig({ readyMs: 15 });
+  assert.equal(await r.f.flip(), false, 'not before the camera is first ready');
+  await until(() => r.f.snapshot().ready, 'the first camera');
+  const flipping = r.f.flip();
+  await until(() => r.f.snapshot().facing === 'front', 'the switch');
+  await r.f.readyForStill();
+  assert.ok(Date.now() >= r.cam.readyAt + 30 - 2, 'settleMs after the new camera was ready');
+  await flipping;
+});
+
+test('flip: the button sits beside the card, beside the shutter for the plate, never under homie’s question', () => {
+  const on = { camera: true, twoCameras: true, asking: false, plate: false, photo: false };
+  assert.equal(C.flipPlace(on), 'card', 'from the hello on, filming, paused, wrapping up');
+  assert.equal(C.flipPlace({ ...on, asking: true }), null, 'homie’s question covers the screen');
+  assert.equal(C.flipPlace({ ...on, plate: true }), 'shutter');
+  assert.equal(C.flipPlace({ ...on, plate: true, photo: true }), null, '"Got it!": nothing left to shoot');
+  assert.equal(C.flipPlace({ ...on, camera: false }), null, 'no card: glasses, the system camera, the done view');
+  assert.equal(C.flipPlace({ ...on, twoCameras: false }), null, 'a phone with one camera');
+});
+
+test('flip: beside the card it fits the space to its right, its label ending at the card’s bottom', () => {
+  // iPhone 15 (390 wide): the card is 177 x 236 in the middle.
+  const card = { x: 106.5, y: 120, width: 177, height: 236 };
+  const b = C.flipBeside(card, 390, 68);
+  assert.ok(b.left >= card.x + card.width, 'right of the card, never on it');
+  assert.ok(b.left + b.width <= 390, 'on the screen');
+  assert.ok(b.width >= 68);
+  assert.equal(b.top + 68 + C.FLIP_LABEL_ROOM, card.y + card.height);
+  assert.deepEqual(C.flipBeside(card, 390, 68, { x: 310, y: 52, size: 56 }), b, 'homie’s pot is far above it');
+  // iPhone SE (375 x 667): a 140-wide card, and homie's corner pot at 52-108 right above it.
+  const pot = { x: 295, y: 52, size: 56 };
+  const se = C.flipBeside({ x: 117.5, y: 56, width: 140, height: 187 }, 375, 68, pot);
+  assert.ok(se.left >= 257.5 && se.left + se.width <= 375);
+  assert.ok(se.top >= pot.y + pot.size + C.FLIP_POT_GAP, `top ${se.top}: not a pair with the pot`);
+});
+
+test('flip: "Flip camera" in her language', () => {
+  assert.deepEqual(rmr.line('flipCamera'), { text: 'कॅमेरा बदला', en: 'Flip camera' });
+  assert.deepEqual(ren.line('flipCamera'), { text: 'Flip camera', en: null });
+  assert.equal(W.recordWords('hi').text('flipCamera'), 'कैमरा बदलें');
+  assert.equal(W.recordWords('es').line('flipCamera').en, 'Flip camera', 'VoiceOver reads the English');
 });
 
 test('build-4 safety: recording.tsx never imports VisionCamera or the image manipulator by value', () => {

@@ -100,7 +100,7 @@ function world(status: RecordingStatus = "intro", metBefore?: boolean, language 
       stt = events;
       return { send: () => {}, close: () => {} };
     },
-    speak: (...args) => (spokenAt.push(Date.now()), speak(...args)),
+    speak: (text, format, signal, onChunk, voice) => (spokenAt.push(Date.now()), speak(text, format, signal, onChunk, voice)),
     // Like Convex (live.ts): once a recording is over, status writes, heartbeats and new lines are refused
     // (only the goodbye may still land).
     convex: {

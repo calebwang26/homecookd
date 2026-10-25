@@ -6,7 +6,9 @@
 // PushBridge (RETENTION-HANDOFF 2.3) opens the screen a tapped push points at (the same hold covers a
 // push that launched the app), files this phone's push token under its person, and starts "heard"
 // logging; PushAskHost is the one "Want a note when…?" sheet any screen can ask for. HomieOverlay is
-// homie, the pot that rests top-right on every screen (components/homie).
+// homie, the pot that rests top-right on every screen (components/homie). ResendUnsent sends, in the
+// background and as its cook, an in-app recording the app died before finishing (components/record/
+// useResendUnsent).
 //
 // Stack motion (docs/design/ANIMATIONS.md 3): detail screens use a quick fade underneath their own
 // Reanimated hero/content entrances; drill-down screens (ingredients -> steps, chat) slide.
@@ -31,6 +33,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { HomieOverlay } from '@/components/homie';
 import { LaunchSplash } from '@/components/LaunchSplash';
 import { MediaSheetProvider } from '@/components/media';
+import { useResendUnsent } from '@/components/record/useResendUnsent';
 import { PushAskHost } from '@/components/push/PushAskSheet';
 import { holdAfterPick, holdPushAfterPick, linkSearch, openHeld, peekAfterPick, takeAfterPick } from '@/components/signin/handoff';
 import { ToastProvider } from '@/components/ui';
@@ -99,6 +102,7 @@ export default function RootLayout() {
                 <AppStack />
                 <SessionGate />
                 <PushBridge />
+                <ResendUnsent />
                 <PushAskHost register={registerPush} />
                 <HomieOverlay />
               </ShareSheetProvider>
@@ -149,6 +153,11 @@ function AppStack() {
       <Stack.Screen name="+not-found" options={{ title: 'homecookd', animation: 'fade' }} />
     </Stack>
   );
+}
+
+function ResendUnsent() {
+  useResendUnsent();
+  return null;
 }
 
 /** Screens that work without a signed-in phone: the first screen, the code backup, invite, recipe and dinner-invite links. */
