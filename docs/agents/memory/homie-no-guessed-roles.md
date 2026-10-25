@@ -24,4 +24,9 @@ Or … use more general terms like 'cooked for your loved one'."
 - The guard `guessesFamily` falls back to a written line when Claude slips anyway.
 - Written lines say "for your family" when there's no kid name. A native Marathi check of "घरच्यांसाठी" is
   still a TODO(caleb).
-- Open: `record.ts` builds `call` as name + relation, so a "Vijay" whose relation is "Dad" becomes "Vijay Dad".
+- What homie calls the cook (`voice/src/family.ts` `callOf`, recording and kid side):
+  - the relation alone when it already holds the name ("Rajani Aaji");
+  - the relation alone when it's an English word that stands on its own ("Vijay" + "Dad" → "Dad");
+  - otherwise the first name plus the word ("Rajani" + "Aaji" → "Rajani Aaji").
+  Which words stand alone is one set, `ON_ITS_OWN`, marked TODO(caleb).
+- Open: Convex's tap news (`convex/homie.ts` `call`) still uses the relation alone ("Aaji answered…").
