@@ -18,6 +18,8 @@ notify me so i can test them in the app".
   restart of the laptop pipeline worker if `pipeline/` changed. PRs that land close together share one update.
 - A native change needs a TestFlight build (`eas build -p ios --profile production --auto-submit`).
 - Log the versions in `docs/agents/STATE.md`, then tell Caleb what to test.
+- Before shipping, check main for commits pushed straight to it, without a PR (Caleb, Oct 25): review, scan and test
+  them, and hold the ship if anything is off.
 - Supabase `api` deploys and destructive data changes still need his explicit OK.
 
 Related: [[merge-agent-approval]], `docs/agents/MERGE-PLAYBOOK.md`.
