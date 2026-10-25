@@ -499,6 +499,36 @@ await test('a tap in cook mode never navigates: it toggles homie with a voice li
   assert.equal(V.cookTap({ ...none, voiceHere: true, unavailable: true, talking: true }), 'stop');
 });
 
+await test('a tap on homie while a video plays always turns homie on (it takes the sound); else it toggles', () => {
+  for (const hold of ['off', 'tap', 'window', 'turn']) assert.equal(V.holdAfterTap(hold, true), 'tap', hold);
+  assert.equal(V.holdAfterTap('off', false), 'tap');
+  for (const hold of ['tap', 'window', 'turn']) assert.equal(V.holdAfterTap(hold, false), 'off', hold);
+});
+
+await test('a tap that turns homie on says the step’s line ({ type: "tap" }) on a real open line, unless homie already talks', () => {
+  const ok = { live: true, open: true, talking: false };
+  assert.equal(V.saysOnTap(ok), true);
+  assert.equal(V.saysOnTap({ ...ok, live: false }), false, 'the stub reads nothing');
+  assert.equal(V.saysOnTap({ ...ok, open: false }), false, 'the line is still opening');
+  assert.equal(V.saysOnTap({ ...ok, talking: true }), false, 'the line playing is the answer');
+  assert.deepEqual(V.TAP_MESSAGE, { type: 'tap' });
+  const cook = readFileSync(join(root, '..', 'voice', 'src', 'cook.ts'), 'utf8');
+  assert.match(cook, /msg\.type === "tap"/, 'the service handles it');
+});
+
+await test('a video the kid started takes the sound (homie off, answers dropped); her clip homie played doesn’t', () => {
+  assert.equal(V.kidStartedVideo({ anyVideo: true, herClip: false, stepVideo: true }), true, 'the kid played the step video');
+  assert.equal(V.kidStartedVideo({ anyVideo: true, herClip: false, stepVideo: false }), true, 'the full-screen player');
+  assert.equal(V.kidStartedVideo({ anyVideo: true, herClip: true, stepVideo: true }), false, 'her clip answering the kid');
+  assert.equal(V.kidStartedVideo({ anyVideo: false, herClip: true, stepVideo: false }), false);
+  assert.equal(V.kidStartedVideo({ anyVideo: false, herClip: false, stepVideo: false }), false);
+  // While it plays: an answer, a hint, a step line or a translation would pause it, so it's dropped;
+  // what homie says on its own waits (the same split as waitsForVideo).
+  for (const k of ['reply', 'hint', 'step', 'translation', 'offer']) assert.equal(V.dropsForKidVideo(k, true), true, k);
+  for (const k of ['greeting', 'nudge', 'timer']) assert.equal(V.dropsForKidVideo(k, true), false, k);
+  for (const k of ['reply', 'step', 'greeting']) assert.equal(V.dropsForKidVideo(k, false), false, k);
+});
+
 await test('a step her clip moved the screen to goes to the service with read: false; any other with no flag', () => {
   assert.deepEqual(V.stepMessage(3), { type: 'step', stepOrder: 3 });
   assert.deepEqual(V.stepMessage(3, true), { type: 'step', stepOrder: 3 });

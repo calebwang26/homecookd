@@ -7,9 +7,9 @@
 // up, the kid's yes or no is that moment's answer, never ours. While any video plays on the phone (the app's
 // { type: "video" }, or a clip we played), homie says nothing on its own: the greeting, a nudge or a timer
 // waits for the next pause (Caleb, Oct 24). An answer to what the kid just did or said is spoken meanwhile, and a
-// step line is one (the kid flipped the page). Claude decides whether the kid was talking to homie at all
-// (agent.ts); a turn that ends with nothing done or said sends { type: "quiet" }, so the phone stops showing
-// homie thinking.
+// step line is one (the kid flipped the page, or tapped homie on: { type: "tap" }). Claude decides whether the kid
+// was talking to homie at all (agent.ts); a turn that ends with nothing done or said sends { type: "quiet" }, so the
+// phone stops showing homie thinking.
 import WebSocket from "ws";
 import { TurnAgent, cookCall, type Actions } from "./agent.js";
 import * as convex from "./convex.js";
@@ -325,7 +325,23 @@ export class Cooking {
       // A video started or stopped on the phone. Watching counts as activity (no quiet nudge after it).
       this.videoOn = msg.playing;
       this.touch();
+    } else if (msg.type === "tap") {
+      this.homieTapped();
     }
+  }
+
+  /**
+   * The kid tapped homie on (Caleb, Oct 25). The phone fades out and pauses any video for it, and homie says the
+   * step's short line at once, from the cache: the same line a flip says, without a move. It's an answer to the
+   * tap, so a video never holds it. A clip of hers that was playing is over (the phone paused it): the kid's
+   * next words count in full, and its translation is dropped. Before `ready` the hello comes instead.
+   */
+  private homieTapped() {
+    this.touch();
+    if (!this.readyAt || this.closed) return;
+    this.clipUntil = 0;
+    this.clipSeq++;
+    void this.readStep(this.step).catch((err) => console.warn("tap line", err.message));
   }
 
   /**

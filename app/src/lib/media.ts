@@ -19,6 +19,10 @@
 // video) pauses any playing video. The audio player keeps the app's audio session active when it
 // pauses: expo-audio otherwise deactivates the shared session 100 ms after a pause, and iOS then
 // stops the video that just started (Caleb's "videos keep pausing", Oct 22).
+// The hand-off between homie and a video is smooth (Caleb, Oct 25): a video the kid plays fades the
+// audio out over HANDOFF_FADE_MS (`stopAudio(key, { fadeMs })`: the clip is over at once, only its
+// sound trails off), and a tap on homie fades the videos out the same way, then pauses them
+// (`pauseAllVideos({ fadeMs })`). Each player is back at full volume for its next play.
 //
 // FOLLOWING ALONG: `usePlayhead(select)` reads where a step video is right now (one plays at a
 // time), so a list can light up the line being said (Substeps). `playFrom(at)` jumps the clip to a
@@ -110,6 +114,40 @@ const NUDGE_MS = 1_000;
 const BEFORE_START_S = 0.5;
 // Audio seeks land within this of the target (expo-audio's default lets iOS land anywhere near).
 const AUDIO_SEEK_TOLERANCE_MS = 100;
+/** How long homie and a video take to hand the sound to each other. */
+export const HANDOFF_FADE_MS = 150;
+const FADE_STEP_MS = 25;
+
+/** A player's volume; a released one is let go. */
+function setVolume(p: { volume: number }, v: number) {
+  try {
+    p.volume = v;
+  } catch {
+    // released
+  }
+}
+
+/** Turns `p` down from where it is to 0 over `ms`, then `done()`. Returns a cancel (no `done` then). */
+function fadeOut(p: { volume: number }, ms: number, done: () => void): () => void {
+  const from = p.volume ?? 1;
+  const steps = Math.max(1, Math.round(ms / FADE_STEP_MS));
+  let i = 0;
+  let t: ReturnType<typeof setTimeout> | null = null;
+  const tick = () => {
+    i += 1;
+    setVolume(p, from * Math.max(0, 1 - i / steps));
+    if (i < steps) t = setTimeout(tick, ms / steps);
+    else {
+      t = null;
+      done();
+    }
+  };
+  t = setTimeout(tick, ms / steps);
+  return () => {
+    if (t) clearTimeout(t);
+    t = null;
+  };
+}
 
 export function clipKey(c: AudioClip): string {
   return c.key ?? `${c.url ?? ''}#${Math.floor(c.start_s ?? 0)}-${c.end_s ?? 'end'}`;
@@ -141,6 +179,22 @@ let seeking = false;
 let seekVersion = 0;
 let seekQueue: Promise<void> = Promise.resolve();
 let loadTimer: ReturnType<typeof setTimeout> | null = null;
+// A stopped clip's sound still trailing off (stopAudio's fade): anything that plays or stops next ends it.
+let audioFade: { player: AudioPlayer; cancel: () => void } | null = null;
+
+/** The trailing sound stops now, and its player is at full volume again for the next play. */
+function endAudioFade() {
+  const f = audioFade;
+  if (!f) return;
+  audioFade = null;
+  f.cancel();
+  try {
+    f.player.pause();
+  } catch {
+    // released
+  }
+  setVolume(f.player, 1);
+}
 
 function set(next: Partial<EngineState>) {
   state = { ...state, ...next };
@@ -261,6 +315,7 @@ export function playClip(clip: AudioClip) {
   const key = clipKey(clip);
   const start = Math.max(0, Math.floor(clip.start_s ?? 0));
   const end = clip.end_s != null && clip.end_s > start ? clip.end_s : null;
+  endAudioFade();
 
   if (state.key === key && player && playerUrl === url) {
     if (state.phase === 'paused') {
@@ -334,8 +389,11 @@ export function seekAudio(elapsed: number, onlyKey?: string) {
   requestAudioSeek(position);
 }
 
-/** Stops any clip (e.g. when a video starts or a sheet closes). */
-export function stopAudio(onlyKey?: string) {
+/**
+ * Stops any clip (e.g. when a video starts or a sheet closes). `fadeMs`: a clip playing now is over at
+ * once (idle, so homie's pot goes quiet with it), and its sound turns down to nothing over that long.
+ */
+export function stopAudio(onlyKey?: string, opts: { fadeMs?: number } = {}) {
   if (onlyKey && state.key !== onlyKey) return;
   flushHeard();
   heardMeta = null;
@@ -346,10 +404,20 @@ export function stopAudio(onlyKey?: string) {
   pendingStart = false;
   clearLoadTimer();
   if (!state.key) return; // nothing current: the native player is already still
-  try {
-    player?.pause();
-  } catch {
-    // released
+  endAudioFade();
+  const p = player;
+  if (p && opts.fadeMs && state.phase === 'playing') {
+    const fading = { player: p, cancel: () => {} };
+    fading.cancel = fadeOut(p, opts.fadeMs, () => {
+      if (audioFade === fading) endAudioFade();
+    });
+    audioFade = fading;
+  } else {
+    try {
+      p?.pause();
+    } catch {
+      // released
+    }
   }
   set({ key: null, phase: 'idle' });
 }
@@ -568,17 +636,21 @@ function seekVideo(p: VideoPlayer, seconds: number) {
   p.currentTime = seconds;
 }
 
-// Each mounted clip's "pause now", so only one voice plays at a time.
-const videoPausers = new Map<VideoPlayer, () => void>();
+// Each mounted clip's "pause now" (or after turning its sound down over `fadeMs`), so only one voice plays at a time.
+const videoPausers = new Map<VideoPlayer, (fadeMs?: number) => void>();
 
 /** Pauses every playing video but `except` (audio starting, or another video starting). */
-function pauseVideos(except?: VideoPlayer) {
-  for (const [p, pause] of videoPausers) if (p !== except) pause();
+function pauseVideos(except?: VideoPlayer, fadeMs = 0) {
+  for (const [p, pause] of videoPausers) if (p !== except) pause(fadeMs);
 }
 
-/** Pauses every playing video (the phone's own voice answering the kid: it doesn't go through the player). */
-export function pauseAllVideos() {
-  pauseVideos();
+/**
+ * Pauses every playing video (the phone's own voice answering the kid: it doesn't go through the
+ * player). `fadeMs`: homie takes the sound (a tap on homie): each fades out first, still playing
+ * until it pauses, and is back at full volume for its next play.
+ */
+export function pauseAllVideos(opts: { fadeMs?: number } = {}) {
+  pauseVideos(undefined, opts.fadeMs ?? 0);
 }
 
 /** Silence: stops the voice and pauses every video (a screen losing focus to a pushed one). */
@@ -648,6 +720,8 @@ export function useClipVideo(
   // Whether the native player is really moving; bumped when it is loaded but still while it should play.
   const [moving, setMoving] = useState(false);
   const [stalled, setStalled] = useState(0);
+  // The cancel of a fade under way (homie taking the sound): a play or a pause meanwhile ends it.
+  const fading = useRef<(() => void) | null>(null);
 
   const player = useVideoPlayer(url, (p) => {
     p.timeUpdateEventInterval = 0.25;
@@ -665,15 +739,25 @@ export function useClipVideo(
     seekVideo(player, seconds);
     setNow(seconds);
   };
+  /** A fade under way stops; the sound is back at full volume. */
+  const unfade = () => {
+    fading.current?.();
+    fading.current = null;
+    setVolume(player, 1);
+  };
   const resume = () => {
     wanted.current = true;
-    stopAudio(); // never talk over the video
+    unfade();
     pauseVideos(player);
+    // In the room before the voice is let go, so homie never shows listening in between (lib/live/voice).
+    if (url) setVideoHead({ owner: player, url, at: Date.now() < ignore.current ? target.current : now });
+    stopAudio(undefined, { fadeMs: HANDOFF_FADE_MS }); // never talk over the video: homie's voice trails off
     player.play();
     setPhase('playing');
   };
   const halt = (next: Phase) => {
     wanted.current = false;
+    unfade();
     player.pause();
     setPhase(next);
   };
@@ -800,21 +884,36 @@ export function useClipVideo(
     return () => sub.remove();
   }, [player]);
 
-  // Audio or another video starting pauses this one (or, still loading, keeps it from starting).
+  // Audio or another video starting pauses this one (or, still loading, keeps it from starting). With
+  // `fadeMs` (homie taking the sound) it turns down first and still counts as playing until it pauses.
   useEffect(() => {
-    videoPausers.set(player, () => {
-      if (!started.current) skipStart.current = true;
-      if (!wanted.current) return;
+    const stop = () => {
+      fading.current = null;
       wanted.current = false;
       try {
         player.pause();
       } catch {
         // released
       }
+      setVolume(player, 1);
       setPhase((p) => (p === 'playing' ? 'paused' : p));
+    };
+    videoPausers.set(player, (fadeMs = 0) => {
+      if (!started.current) skipStart.current = true;
+      if (!wanted.current) return;
+      if (fading.current) {
+        // Already turning down: it pauses at the end of that fade, or now when asked to.
+        if (fadeMs) return;
+        fading.current();
+        return stop();
+      }
+      if (!fadeMs) return stop();
+      fading.current = fadeOut(player, fadeMs, stop);
     });
     return () => {
       videoPausers.delete(player);
+      fading.current?.();
+      fading.current = null;
     };
   }, [player]);
 

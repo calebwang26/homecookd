@@ -56,7 +56,9 @@
 // never takes that yes or no). Without a voice line (Expo Go, web, no service, or the line gave up),
 // a tap on the pot reads the step in homie's voice and a tap while it talks stops it, and a kid who
 // said yes to reading before hears each step (useReadSteps). homie never talks over a video
-// (VoiceHold, lib/live/speak). "I made it" hangs up.
+// (VoiceHold, lib/live/speak): a tap on homie takes the sound from it (the video fades out and pauses),
+// and a video the kid plays takes it back (homie fades out and turns off; lib/live/voice). "I made it"
+// hangs up.
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -103,7 +105,7 @@ import { micStreamingSupported } from '@/lib/live/mic';
 import { speak, stopSpeaking } from '@/lib/live/speak';
 import { useVoiceCooking, VOICE_CONFIGURED, type VoiceClip } from '@/lib/live/voice';
 import { appMomentKind, consentSettled, cookingSessionOn, cookTap, phoneReads } from '@/lib/live/voiceLogic';
-import { stopAllMedia } from '@/lib/media';
+import { HANDOFF_FADE_MS, pauseAllVideos, stopAllMedia } from '@/lib/media';
 import { cooked, useRecipeQuestions, type CookedRef } from '@/lib/messaging';
 import { madeItWords } from '@/lib/postcardLogic';
 import { backToRecipe } from '@/lib/navigation';
@@ -282,7 +284,10 @@ export default function CookScreen() {
     const tap = cookTap({ voiceHere, status: voice.status, unavailable: voice.unavailable, talking: h === 'lit' || h === 'speaking' });
     if (tap === 'toggle') return voice.toggle();
     if (tap === 'stop') return stopSpeaking();
-    if (step) void speak(`Step ${n}. ${step.instruction}`, { profileId: me?.id, answer: true });
+    if (!step) return;
+    // homie takes the sound: the video fades out first (with a voice line, voice.toggle does this).
+    pauseAllVideos({ fadeMs: HANDOFF_FADE_MS });
+    void speak(`Step ${n}. ${step.instruction}`, { profileId: me?.id, answer: true });
   };
   useHomieScreen({ hidden: !!done, dock, onPress: potTap });
   useReadSteps({ on: phoneReading && homie.readAloud && !done, step: n, text: step?.instruction ?? '' });
