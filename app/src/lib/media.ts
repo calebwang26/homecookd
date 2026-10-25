@@ -42,6 +42,13 @@ import { AppState, Platform } from 'react-native';
 
 import type { Recipe, Step } from './types';
 
+/**
+ * The app's playback audio mode (set at launch, app/_layout): the cook's voice and her videos play
+ * even with the silent switch on. Anything that changes the session to record (homie's mic) puts this
+ * back when it stops, or the next video plays in a recording mode, near silent (lib/live/mic).
+ */
+export const PLAYBACK_AUDIO_MODE = { playsInSilentMode: true, interruptionMode: 'duckOthers', allowsRecording: false } as const;
+
 export type Phase = 'idle' | 'loading' | 'playing' | 'paused' | 'ended' | 'error';
 
 /** A range inside a media file. `end_s` null = play to the end of the file. */

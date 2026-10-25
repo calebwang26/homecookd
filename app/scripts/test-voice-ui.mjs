@@ -441,14 +441,16 @@ await test('the window’s edge waits for a kid mid-sentence, up to 3 s more', (
   assert.equal(V.EDGE_MAX_MS, 3000);
 });
 
-await test('the recorder runs only while homie is on, the line is open, the screen is on top and the mic isn’t refused', () => {
-  const on = { hold: 'tap', open: true, focused: true, muted: false };
+await test('the recorder runs only while homie is on, the line is open, the screen is on top, the mic isn’t refused and no video plays', () => {
+  const on = { hold: 'tap', open: true, focused: true, muted: false, video: false };
   assert.equal(V.micWanted(on), true);
   for (const hold of ['window', 'turn']) assert.equal(V.micWanted({ ...on, hold }), true, hold);
   assert.equal(V.micWanted({ ...on, hold: 'off' }), false, 'homie off: no frames, no Ink');
   assert.equal(V.micWanted({ ...on, open: false }), false, 'the line is still opening (or dropped)');
   assert.equal(V.micWanted({ ...on, focused: false }), false);
   assert.equal(V.micWanted({ ...on, muted: true }), false);
+  // A video plays at full volume: no recorder (its voice-chat mode turned the video's sound right down).
+  for (const hold of ['tap', 'window', 'turn']) assert.equal(V.micWanted({ ...on, hold, video: true }), false, hold);
 });
 
 await test('the rule, both ways: frames go out only while the pot shows listening or thinking, and listening means they do', () => {
@@ -461,7 +463,7 @@ await test('the rule, both ways: frames go out only while the pot shows listenin
           for (const quiet of bools)
             for (const thinking of bools)
               for (const timerDue of bools) {
-                const wanted = V.micWanted({ hold, open, focused, muted });
+                const wanted = V.micWanted({ hold, open, focused, muted, video: false });
                 // The recorder streams once it has started for a wanted mic; a frame goes out only then.
                 const listening = wanted;
                 const sends = listening && V.cookSendsFrame({ quiet, focused, active: wanted });
@@ -511,7 +513,7 @@ await test('a step her clip moved the screen to goes to the service with read: f
  */
 function cookMic() {
   const h = { now: 0, hold: 'off', thinking: false, talking: false, video: false, kidTalking: false, heardFinal: false, finals: 0, loud: false, windowAt: 0, loudAt: -1e9, wordsAt: 0, stepLine: false, sentS: 0 };
-  const listening = () => V.micWanted({ hold: h.hold, open: true, focused: true, muted: false });
+  const listening = () => V.micWanted({ hold: h.hold, open: true, focused: true, muted: false, video: h.video });
   const sounding = () => h.talking || h.video;
   const ev = (e) => {
     const next = V.micAfter(h.hold, e);
@@ -1164,6 +1166,14 @@ await test('one socket at a time: a pause and a resume while the first connect w
 await test('a step line or a nudge (it asks the kid something) opens the listening window; other lines don’t', () => {
   for (const k of ['step', 'nudge']) assert.equal(V.opensWindow(k), true, k);
   for (const k of ['reply', 'hint', 'translation', 'greeting', 'timer', 'offer']) assert.equal(V.opensWindow(k), false, k);
+});
+
+await test('stopping the mic hands iOS back to playback (else the next step video plays near silent), never under the camera', () => {
+  const mic = readFileSync(join(root, 'src/lib/live/mic.ts'), 'utf8');
+  const stop = mic.slice(mic.indexOf('const stop = useCallback'), mic.indexOf('}, [rec]);', mic.indexOf('const stop = useCallback')));
+  assert.match(stop, /stopRecording\(\)[\s\S]*if \(!withCamera\.current\) await setAudioModeAsync\(PLAYBACK_AUDIO_MODE\)/);
+  const layout = readFileSync(join(root, 'src/app/_layout.tsx'), 'utf8');
+  assert.match(layout, /setAudioModeAsync\(PLAYBACK_AUDIO_MODE\)/, 'the launch mode and the mode put back are one');
 });
 
 console.log(`\n${passed} passed`);

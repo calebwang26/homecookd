@@ -39,6 +39,7 @@ import { holdAfterPick, holdPushAfterPick, linkSearch, openHeld, peekAfterPick, 
 import { ToastProvider } from '@/components/ui';
 import { api } from '@/lib/api';
 import { registerHeardLogging } from '@/lib/listening';
+import { PLAYBACK_AUDIO_MODE } from '@/lib/media';
 import { openRecipe } from '@/lib/navigation';
 import { addTapListener, initPush, pushUrl, syncRegistration, type PushData, type PushPlatform } from '@/lib/push';
 import { SessionProvider, useSession } from '@/lib/session';
@@ -86,7 +87,7 @@ export default function RootLayout() {
 
   useEffect(() => {
     // "Hear the cook" must play even with the iPhone's silent switch on.
-    setAudioModeAsync({ playsInSilentMode: true, interruptionMode: 'duckOthers' }).catch(() => {});
+    setAudioModeAsync(PLAYBACK_AUDIO_MODE).catch(() => {});
   }, []);
 
   if (!fonts.ready) return null;
