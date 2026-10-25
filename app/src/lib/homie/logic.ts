@@ -1,6 +1,7 @@
 // homie's pure rules (node scripts/test-homie.mjs): what the pot shows, where it rests on each
 // screen, which screen's tap line it says (lib/homie/tap; the hello only once: lib/homie/intro), the centred moment's layout
-// and listening bars, the timer ring, the mic level, half duplex, and the voice service's https base.
+// and listening bars, the timer ring, the mic level, half duplex, the pot's VoiceOver hint, and the voice
+// service's https base.
 import type { Homie, HomieFrame, HomieMoment, HomieState } from './store';
 import { tapScreen, type TapScreen } from './tap';
 
@@ -51,6 +52,16 @@ export function speakingLabel(h: Pick<Homie, 'label'>, key: string | null | unde
  */
 export function halfDuplex(v: { homie: HomieState; audio: string; video: boolean }): boolean {
   return v.homie === 'lit' || v.homie === 'speaking' || v.audio === 'playing' || v.audio === 'loading' || v.video;
+}
+
+/**
+ * VoiceOver's hint on the resting pot: what a tap does, and the long press a screen gave it (cook mode:
+ * "Turns homie on or off. Touch and hold to ask Grandma.").
+ */
+export function potHint(h: Pick<Homie, 'onPress' | 'onLongPress' | 'longPressLabel'>): string {
+  const tap = h.onPress ? 'Turns homie on or off' : 'Says what you can do here';
+  const hold = h.onLongPress ? h.longPressLabel : undefined;
+  return hold ? `${tap}. Touch and hold to ${hold[0].toLowerCase()}${hold.slice(1)}.` : tap;
 }
 
 export const HELP = {

@@ -20,7 +20,8 @@
 //                                    or nothing comes back within 1.5 s (an older service)
 //   voice.sendText('yes')            words for homie, as if the kid said them
 //   voice.setMoment('answer' | null) an app-only moment is up on the phone ({ type: "moment" }; the
-//                                    service then never takes its yes or no for its own offer)
+//                                    service then never takes its yes or no for its own offer); 'ask'
+//                                    ("Ask Grandma anything") also holds the mic on until it closes
 //   voice.setHold(on)                the cook's own voice is playing (her clip, her voice note): homie's
 //                                    next line waits until she's done, so it never talks over her
 //   voice.setVideo(on)               any video (or the cook's voice) is playing: the service is told
@@ -753,17 +754,21 @@ export function useVoiceCooking(opts: VoiceOptions) {
     [sendText, later],
   );
 
-  /** An app-only moment opened (its kind) or closed (null): the service is told, once per change. */
+  /**
+   * An app-only moment opened (its kind) or closed (null): the service is told, once per change. "Ask
+   * <cook> anything" holds the mic on for as long as it's up (voiceLogic micAfter 'ask').
+   */
   const setMoment = useCallback((kind: AppMomentKind | null) => {
     const was = appMoment.current;
     if (was === kind) return;
     appMoment.current = kind;
+    if (kind === 'ask' || was === 'ask') micEvent(kind === 'ask' ? 'ask' : 'ask_end');
     const s = sock.current;
     if (s?.readyState !== 1) return;
     // One moment straight after another: the first one closes, then the next opens.
     if (was && kind) s.send(JSON.stringify(momentMessage(null)));
     s.send(JSON.stringify(momentMessage(kind)));
-  }, []);
+  }, [micEvent]);
 
   // She's done (or the video stopped): now homie's line, after its lit beat.
   const setHold = useCallback(

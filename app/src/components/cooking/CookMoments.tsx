@@ -8,7 +8,8 @@
 //                     since Oct 24: VOICE_READ_OFFER; a spoken answer or the button is kept on this phone,
 //                     and the next visit answers it for the kid; a tap anywhere is "not now" for this
 //                     visit only. Without a voice line, a kept yes reads the steps here: useReadSteps),
-//                     and "<cook> has a story about this step"
+//                     "<cook> has a story about this step", and "Ask <cook> anything" (`ask`: a long
+//                     press on homie; the kid's next words go straight to the cook)
 //   <CookAnswers/>    "Grandma answered your question": yes plays her voice note on the shared player,
 //                     and the English translation shows small under the chips, labelled "Translated
 //                     from Grandma" (her real voice is what plays)
@@ -27,7 +28,7 @@ import { ANSWER_KEY, useHeardAnswers, useRecipeAnswers } from '@/lib/live/answer
 import { stopSay } from '@/lib/live/say';
 import { speak, stopSpeaking } from '@/lib/live/speak';
 import type { VoiceOffer } from '@/lib/live/voice';
-import { answersToHear, readAfterOfferClosed, yesNo, yesNoMoment, type SayKind } from '@/lib/live/voiceLogic';
+import { answersToHear, askMoment, readAfterOfferClosed, yesNo, yesNoMoment, type SayKind } from '@/lib/live/voiceLogic';
 import { playClip, useNowPlaying, useVideoPlaying } from '@/lib/media';
 import { useSession } from '@/lib/session';
 import { kvGet, kvSet } from '@/lib/storage';
@@ -35,6 +36,7 @@ import { colors, radii, shadows } from '@/theme/tokens';
 
 const READ_KEY = 'homie.readAloud';
 const READ_QUESTION = 'Want me to read each step out loud?';
+const ASK_OPEN_MS = 25_000;
 /** Answers to questions older than this don't pop up any more. */
 const ANSWER_MAX_AGE_MS = 7 * 24 * 3600_000;
 
@@ -90,15 +92,16 @@ export type ListenFor = (m: HomieMoment, on?: SpokenAnswer) => void;
 type OfferAnswer = Pick<VoiceOffer, 'accept' | 'decline'>;
 
 export function useCookMoments({ cookName }: { cookName: string }) {
+  const { me } = useSession();
   const read = useReadAloud();
   const open = useOwnMoments();
   // The moment up now that the kid's words answer or close.
   const spoken = useRef<(SpokenAnswer & { id: string }) | null>(null);
   // The read-aloud offer, until the kid's choice is known (an answer, or homie starting to read).
   const offer = useRef<{ id: string; heard: boolean } | null>(null);
-  const args = useRef({ cookName });
+  const args = useRef({ cookName, meId: me?.id });
   useEffect(() => {
-    args.current = { cookName };
+    args.current = { cookName, meId: me?.id };
   });
   const { ref: readRef, set: setRead } = read;
 
@@ -230,7 +233,20 @@ export function useCookMoments({ cookName }: { cookName: string }) {
     [setRead],
   );
 
-  return { onOffer, onOfferClosed, onHeard, onSay, listenFor, readAloud: read.choice === 'yes' };
+  /**
+   * "Ask <cook> anything" (a long press on homie, voiceLogic askMoment), said out loud too. The kid's next
+   * words are the question (the service sends it straight to the cook) and close it, and so do a tap
+   * anywhere or 25 s with no words. The mic stays on meanwhile (lib/live/voice setMoment('ask')).
+   */
+  const ask = useCallback(() => {
+    const { cookName, meId } = args.current;
+    const m = askMoment(cookName, Date.now());
+    listenFor(m);
+    void speak(`${m.question}.`, { profileId: meId, answer: true });
+    setTimeout(() => closeMoment(m.id), ASK_OPEN_MS);
+  }, [listenFor]);
+
+  return { onOffer, onOfferClosed, onHeard, onSay, listenFor, ask, readAloud: read.choice === 'yes' };
 }
 
 /**

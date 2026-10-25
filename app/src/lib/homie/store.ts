@@ -70,6 +70,9 @@ export type Homie = {
   dock?: HomieFrame;
   /** A tap on the resting pot does this instead of the screen's help line. */
   onPress?: () => void;
+  /** A long press on the resting pot (cook mode: "Ask Grandma anything"), and what it does ("Ask Grandma"). */
+  onLongPress?: () => void;
+  longPressLabel?: string;
   /** The cook's own voice is playing (her clip, her voice note): the resting pot shrinks a little. */
   shrunk?: boolean;
 };
@@ -207,14 +210,14 @@ export function createHomieStore(timers: Timers = globalThis as unknown as Timer
         console.warn('[homie] onChoose', String(e));
       }
     },
-    claimScreen(owner: object, patch: Pick<Homie, 'dock' | 'hidden' | 'onPress'>) {
+    claimScreen(owner: object, patch: Pick<Homie, 'dock' | 'hidden' | 'onPress' | 'onLongPress' | 'longPressLabel'>) {
       screenOwner = owner;
       set(patch);
     },
     releaseScreen(owner: object) {
       if (screenOwner !== owner) return;
       screenOwner = null;
-      set({ dock: undefined, hidden: false, onPress: undefined });
+      set({ dock: undefined, hidden: false, onPress: undefined, onLongPress: undefined, longPressLabel: undefined });
     },
   };
 }

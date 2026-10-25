@@ -11,9 +11,10 @@
 //   4. "Ingredients" this step needs (StepIngredients)  5. "Dad’s tip ⌄", closed (TipPill), and
 //      "Story from Dad ›" (StepStory: a sheet), only on a step that has them
 //   6. one line while a question about this step waits ("You asked · waiting for Dad" / "Leo asked
-//      this 2 days ago · waiting"). Cook mode asks only by voice ("ask Grandma …" with homie on:
-//      homie sends it to her); without a voice line it can't ask (the recipe page's Ask and the Ask
-//      tab still can). A tap on homie never opens a chat.
+//      this 2 days ago · waiting"). Cook mode asks by voice ("ask Grandma …" with homie on: homie
+//      sends it to her), or with a long press on homie: "Ask Grandma anything", and the kid's next
+//      words go straight to her; without a voice line (or with the mic refused) the long press opens
+//      my chat with her instead. A tap on homie never opens a chat.
 // One voice at a time: the video, the full screen and a story's voice stop each other (lib/media),
 // and leaving the screen silences them. Family never sees the word "sample".
 // Header (it stays put while the step scrolls under it): close, "Step 3 of 8", "All steps" (the sheet:
@@ -21,7 +22,7 @@
 // small pot per step, filled up to the step on screen (retention PR 7, components/recipe/PotDots).
 // Bottom (Caleb, Oct 24: like Siri, centred): Back · homie · Next step, the two buttons the same width
 // and the same gap either side of homie, who docks there (the overlay draws the pot; this screen holds
-// its place). A tap on homie turns it on, the next tap off (it never opens a chat; no long press). No
+// its place). A tap on homie turns it on, the next tap off (it never opens a chat); a long press asks. No
 // chips: saying "back" or "repeat" does those, and the video replays
 // itself. Looking back at an earlier step the right button is "Continue" (back to the furthest); on the
 // last step "I made it".
@@ -95,16 +96,16 @@ import {
   useScrollHold,
   useToast,
 } from '@/components/ui';
-import type { RecipeQuestion } from '@/lib/api';
+import { errorMessage, type RecipeQuestion } from '@/lib/api';
 import { daysAgo, mmss } from '@/lib/format';
-import { barFrame, getHomie, HOMIE_SIZE, useHomieScreen, useHomieSelect } from '@/lib/homie';
+import { barFrame, closeMoment, getHomie, HOMIE_SIZE, useHomieScreen, useHomieSelect } from '@/lib/homie';
 import { madeItMilestone, madeItTitle } from '@/lib/kitchenCounts';
 import { micStreamingSupported } from '@/lib/live/mic';
 import { speak, stopSpeaking } from '@/lib/live/speak';
 import { useVoiceCooking, VOICE_CONFIGURED, type VoiceClip } from '@/lib/live/voice';
 import { appMomentKind, consentSettled, cookingSessionOn, cookTap, phoneReads } from '@/lib/live/voiceLogic';
 import { stopAllMedia } from '@/lib/media';
-import { cooked, useRecipeQuestions, type CookedRef } from '@/lib/messaging';
+import { cooked, openChatWith, openCircle, useRecipeQuestions, type CookedRef } from '@/lib/messaging';
 import { madeItWords } from '@/lib/postcardLogic';
 import { backToRecipe } from '@/lib/navigation';
 import { useLibrary, useRecipe } from '@/lib/recipes';
@@ -284,12 +285,46 @@ export default function CookScreen() {
     if (tap === 'stop') return stopSpeaking();
     if (step) void speak(`Step ${n}. ${step.instruction}`, { profileId: me?.id, answer: true });
   };
-  useHomieScreen({ hidden: !!done, dock, onPress: potTap });
+
+  // A long press asks the cook (Caleb, Oct 25; never the tap's toggle): "Ask Grandma anything" while homie
+  // can hear (the kid's next words go straight to her), else my chat with her, the dish and step in the
+  // box (no voice line, or the mic refused); with nobody to ask, it reads this step like a tap.
+  const asking = useRef(false);
+  const askInChat = async () => {
+    if (!recipe || !askTarget || asking.current) return;
+    asking.current = true;
+    try {
+      const thread = askTarget.kind === 'cook' ? await openChatWith(askTarget.cook.id) : await openCircle();
+      router.push({ pathname: '/chat/[id]', params: { id: thread, recipe: recipe.id, step: String(n), ask: '1' } });
+    } catch (e) {
+      toast.show(errorMessage(e, `Couldn’t reach ${askTarget.kind === 'cook' ? cookName : 'the family'} right now.`), { tone: 'error' });
+    } finally {
+      asking.current = false;
+    }
+  };
+  const potHold = () => {
+    if (voice.live && !voice.muted) return homie.ask();
+    if (askTarget) return void askInChat();
+    if (step) void speak(`Step ${n}. ${step.instruction}`, { profileId: me?.id, answer: true });
+  };
+  useHomieScreen({ hidden: !!done, dock, onPress: potTap, onLongPress: potHold, longPressLabel: cookName ? `Ask ${cookName}` : undefined });
   useReadSteps({ on: phoneReading && homie.readAloud && !done, step: n, text: step?.instruction ?? '' });
-  // An app-only moment (her answer) up on the phone: the service is told.
+  // An app-only moment (her answer, "Ask Grandma anything") up on the phone: the service is told.
   const momentId = useHomieSelect((h) => h.moment?.id ?? null);
   const tellMoment = voice.setMoment;
   useEffect(() => tellMoment(appMomentKind(momentId)), [momentId, tellMoment]);
+  // The mic refused while "Ask Grandma anything" is up: the chat with her instead.
+  const askUp = appMomentKind(momentId) === 'ask';
+  const micRefused = voice.muted;
+  const chat = useRef(askInChat);
+  useEffect(() => {
+    chat.current = askInChat;
+  });
+  useEffect(() => {
+    if (!askUp || !micRefused) return;
+    closeMoment();
+    void chat.current();
+  }, [askUp, micRefused]);
   const voiceError = voice.error;
   const showToast = toast.show;
   useEffect(() => {

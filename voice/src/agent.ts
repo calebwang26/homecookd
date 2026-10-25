@@ -171,16 +171,11 @@ export class TurnAgent {
   /**
    * Handle one finished utterance from the kid. `note`: what the service already did with it (a no to the story
    * nudge, or to the app's moment).
-   * `addressed`: the kid tapped homie to ask (the app's "ask" moment), so it's for homie whatever the words.
    */
-  async turn(utterance: string, note?: string, addressed = false): Promise<void> {
+  async turn(utterance: string, note?: string): Promise<void> {
     const steps = this.session.recipe.steps;
     const now = steps.find((s) => s.order === this.actions.currentStep());
-    const named = addressed
-      ? "They tapped you to ask this: it's for you."
-      : saysHomie(utterance)
-        ? "They said your name: this is for you."
-        : "They didn't say your name: answer only if it's plainly for you.";
+    const named = saysHomie(utterance) ? "They said your name: this is for you." : "They didn't say your name: answer only if it's plainly for you.";
     const context = `[On step ${now?.order ?? "?"} of ${steps.length}: ${now?.title ?? ""}]\n[${named}]${note ? `\n[${note}]` : ""}`;
     // Search the video up front (in-memory, ~10 ms), so a question needs one model call, not two. Saying when
     // nothing matched matters as much: otherwise Claude searches again first (a whole extra call, ~3 s).
