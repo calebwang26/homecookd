@@ -75,6 +75,8 @@ import { useAiSpeaking, useHomieScreen, useHomieSlot } from '@/lib/homie/hooks';
 import { inAppCameraSupported } from '@/lib/live/camera';
 import { endRecording, setCover, startFilming, useLiveFrame, useLiveLog, useRecording } from '@/lib/live/convex';
 import { useHomieRecording } from '@/lib/live/homie';
+import { useSession } from '@/lib/session';
+import { saveUnsent } from '@/lib/unsentRecordings';
 import { colors, motion, space } from '@/theme/tokens';
 
 const AWAKE_TAG = 'homecookd-recording';
@@ -118,6 +120,7 @@ export default function RecordingScreen() {
   const toast = useToast();
   const reduce = useReducedMotion();
   const draft = useDraft();
+  const session = useSession();
   const pick = usePickVideos();
   const rec = useRecording(id);
   const glassesId = rec?.source === 'glasses' ? id : null;
@@ -236,12 +239,18 @@ export default function RecordingScreen() {
   // only turn the icon (no camera on the web).
   const [previewFacing, setPreviewFacing] = useState<Facing>('back');
 
-  // "I'm done" while filming in the app: homie wraps up while the last file is saved.
+  // "I'm done" while filming in the app: homie wraps up while the last file is saved. A note on the
+  // phone keeps the videos queued until Convex has the job and every file is uploaded; if the app dies
+  // before that, the next launch sends them again (lib/unsentRecordings).
   const doneInApp = async () => {
     homie.done();
     const clips = await cam.stop();
     homie.cameraFilming(false);
     if (clips.length) {
+      if (id && session.me) {
+        const { dish, language, forKids, everyone, requestFrom } = draft;
+        saveUnsent({ recordingId: id, cookId: session.me.id, familyId: session.family?.id ?? null, clips, dish, language, forKids, everyone, requestFrom });
+      }
       addClips(clips, { dish: draft.dish, requestFrom: draft.requestFrom });
       setPhoneFilmed(true);
     } else {

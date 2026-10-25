@@ -8,9 +8,10 @@
 // changes. The credential is this phone's own device key (`x-device-key`), or, only until an older
 // phone has swapped it for a key, the family code (`x-family-code`); the profile is `x-profile-id`.
 // Any call can override them (`{ deviceKey, code, profileId }`); overriding one credential drops
-// the other, e.g. joinFamily() checking a typed code. A 401 on the phone's own device key means it
-// was signed out (someone removed this person): the key is dropped and setSignedOutHandler() hears
-// it once. A 403 for the current profile because that person was removed (from another phone)
+// the other, e.g. joinFamily() checking a typed code. A 401 "This phone was signed out." on the
+// phone's own device key means it was signed out (someone removed this person): the key is dropped
+// and setSignedOutHandler() hears it once. Any other 401 is only an error (isSignedOutAnswer). A
+// 403 for the current profile because that person was removed (from another phone)
 // tells setProfileRemovedHandler(), so the session can go back to "Who's in the kitchen?". Device
 // keys, family codes and id tokens are never logged.
 // Every request has a 10 s timeout (longer for sign-in and joining, which do more on the server). Safe (idempotent) calls retry once on a network error or 5xx;
@@ -381,6 +382,15 @@ export function errorMessage(e: unknown, fallback = 'Something went wrong. Try a
 /** The server's exact sentence for a device key it no longer accepts (the person was removed). */
 export const SIGNED_OUT = 'This phone was signed out.';
 
+/**
+ * The server's definite word that this phone's key is off: a 401 with exactly SIGNED_OUT. Only that,
+ * or the person's own "Sign out", may forget the key. Any other 401 (a gateway, a proxy, a deploy with
+ * the wrong settings) is trouble to wait out, never a sign-out.
+ */
+export function isSignedOutAnswer(status: number, body: Record<string, unknown> | null): boolean {
+  return status === 401 && body?.error === SIGNED_OUT;
+}
+
 type AuthState = { deviceKey: string | null; code: string | null; profileId: string | null };
 let auth: AuthState = { deviceKey: null, code: null, profileId: null };
 let signedOutHandler: ((message: string) => void) | null = null;
@@ -533,7 +543,7 @@ async function once<T>(path: string, o: CallOpts): Promise<T> {
       (typeof body?.error === 'string' && body.error ? body.error : null) ??
       (res.status >= 500 ? 'Something went wrong on our side. Try again.' : `Request failed (${res.status}).`);
     // This phone's own key was refused: drop it before anything else can send it, then tell the session.
-    if (res.status === 401 && sentKey && sentKey === auth.deviceKey) {
+    if (sentKey && sentKey === auth.deviceKey && isSignedOutAnswer(res.status, body)) {
       auth = { ...auth, deviceKey: null, profileId: null };
       try {
         signedOutHandler?.(msg);

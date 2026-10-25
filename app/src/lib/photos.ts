@@ -84,9 +84,11 @@ export async function uploadPhoto(photo: Photo): Promise<string> {
     if (!res.ok) throw new ApiError(DIDNT_UPLOAD, res.status, 'http');
     return up.path;
   }
-  const up = await api.photoUpload(sendableType(photo.mimeType));
   const file = new File(photo.uri);
-  if (file.exists && file.size > up.max_bytes) throw new ApiError(TOO_BIG, 413, 'http');
+  // iOS closes the app on an upload task for a file that isn't there (lib/uploads fileOnPhone).
+  if (!file.exists) throw new Error('That photo isn’t on this phone any more.');
+  const up = await api.photoUpload(sendableType(photo.mimeType));
+  if (file.size > up.max_bytes) throw new ApiError(TOO_BIG, 413, 'http');
   let lastStatus = 0;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {

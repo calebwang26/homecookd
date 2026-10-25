@@ -12,7 +12,12 @@
 //   src/components/record/cameraLogic.ts     filming in the app: file names, the gap between two files,
 //                                            the clock, when leaving stops the camera and coming back
 //                                            films again by itself, the clip each file becomes, the
-//                                            flip (a file boundary while filming; where its button goes)
+//                                            flip (a file boundary while filming; where its button goes);
+//                                            every upload task checks its file is there first (the Oct 24
+//                                            crash)
+//   src/lib/unsentLogic.ts                   a recording the app died before fully sending: where its
+//                                            videos are, what a launch does with it (wait, make the job,
+//                                            stop and send again, done, give up)
 //   build-4 safety                           an EAS Update reaches TestFlight builds without VisionCamera
 //                                            or expo-image-manipulator: recording.tsx's whole import graph
 //                                            never imports either by value, and src/lib/live/camera.ts (the
@@ -52,6 +57,7 @@ const R = await import(pathToFileURL(join(root, 'src/components/record/recording
 const K = await import(pathToFileURL(join(root, 'src/components/record/walkieLogic.ts')).href);
 const L = await import(pathToFileURL(join(root, 'src/lib/languages.ts')).href);
 const C = await import(pathToFileURL(join(root, 'src/components/record/cameraLogic.ts')).href);
+const U = await import(pathToFileURL(join(root, 'src/lib/unsentLogic.ts')).href);
 const Fm = await import(pathToFileURL(join(root, 'src/components/record/filming.ts')).href);
 
 let passed = 0;
@@ -349,6 +355,119 @@ test('in-app camera: each file becomes a selected camera clip for the Send path'
   assert.equal(clip.selected, true);
   assert.equal(clip.recordedAt, '2026-10-25T17:05:00.000Z');
   assert.deepEqual(clip.asset, { uri: 'file:///doc/recordings/r1/part-02.mp4', width: 1080, height: 1920, type: 'video', duration: 300_000, fileName: 'part-02.mp4', mimeType: 'video/mp4' });
+});
+
+// iOS closes the app on an upload task for a file that isn't there (an Objective-C exception no JS can
+// catch), so every upload task in the app is preceded by a check that throws when the file is missing.
+test('every upload task first checks its file is on the phone (signer videos, plate photo, voice notes, photos)', () => {
+  const missing = [];
+  let tasks = 0;
+  const walk = (dir) => {
+    for (const name of readdirSync(dir)) {
+      const f = join(dir, name);
+      if (statSync(f).isDirectory()) walk(f);
+      else if (/\.tsx?$/.test(f)) {
+        const lines = readFileSync(f, 'utf8').split('\n');
+        lines.forEach((line, i) => {
+          if (!line.includes('.createUploadTask(')) return;
+          tasks += 1;
+          const before = lines.slice(Math.max(0, i - 14), i).join('\n');
+          if (!/if \(!\s*(fileOnPhone\(|new File\([^)]*\)\.exists|[\w.]+\.exists\b)/.test(before)) missing.push(`${f.slice(root.length + 1)}:${i + 1}`);
+        });
+      }
+    }
+  };
+  walk(join(root, 'src'));
+  assert.ok(tasks >= 4, `found ${tasks} upload tasks`);
+  assert.deepEqual(missing, [], 'an upload task with no "is the file there?" check before it');
+  const uploads = readFileSync(join(root, 'src/lib/uploads.ts'), 'utf8');
+  assert.match(uploads, /if \(input\.assets\.some\(\(a\) => !fileOnPhone\(a\.uri\)\)\) throw new Error\(MISSING_VIDEO\);/, 'before the signer is even asked');
+});
+
+test('unsent recordings: a video\'s place inside documents/ survives the app folder moving', () => {
+  const docs = 'file:///var/mobile/Containers/Data/Application/AAAA/Documents/';
+  assert.equal(U.docPath(`${docs}recordings/r1/part-01.mp4`, docs), 'recordings/r1/part-01.mp4');
+  assert.equal(U.docPath(`${docs}recordings/r1/part-01.mp4`, docs.slice(0, -1)), 'recordings/r1/part-01.mp4', 'with or without the slash');
+  // Left in tmp (the move failed): kept as is.
+  const tmp = 'file:///private/var/mobile/Containers/Data/Application/AAAA/tmp/ABC.mp4';
+  assert.equal(U.docPath(tmp, docs), tmp);
+  assert.equal(U.isFullUri(tmp), true);
+  assert.equal(U.isFullUri('recordings/r1/part-01.mp4'), false);
+});
+
+const NOW = Date.parse('2026-10-24T19:30:00Z');
+const note = (id, extra = {}) => ({
+  recordingId: id,
+  familyId: 'fam-1',
+  cookId: 'cook-1',
+  clips: [{ path: `recordings/${id}/part-01.mp4`, durationMs: 3000, width: 1080, height: 1920, startedAt: 1 }],
+  dish: null,
+  language: 'en',
+  forKids: null,
+  everyone: true,
+  requestFrom: null,
+  savedAt: '2026-10-24T19:20:00Z',
+  jobId: null,
+  resends: 0,
+  ...extra,
+});
+
+test('unsent recordings: one note per recording, the newest first; the job goes on it; stopping its row on Home drops it', () => {
+  let list = U.withUnsent([], note('r1'));
+  list = U.withUnsent(list, note('r2'));
+  assert.deepEqual(list.map((u) => u.recordingId), ['r2', 'r1']);
+  list = U.withUnsent(list, note('r1', { dish: 'Poha' }));
+  assert.deepEqual(list.map((u) => u.recordingId), ['r1', 'r2'], 'saved again: replaced, not doubled');
+  assert.equal(list[0].dish, 'Poha');
+  list = U.patchUnsent(list, 'r2', { jobId: 'family-recipe-ea10a0' });
+  assert.equal(list[1].jobId, 'family-recipe-ea10a0');
+  assert.equal(list[0].jobId, null);
+  assert.deepEqual(U.withoutUnsent(list, 'r1').map((u) => u.recordingId), ['r2']);
+  // Home's Stop / clear: by the row's job, or by its recording (a crash before the job went on the note).
+  assert.deepEqual(U.withoutUnsentFor(list, { job_id: 'family-recipe-ea10a0' }).map((u) => u.recordingId), ['r1']);
+  assert.deepEqual(U.withoutUnsentFor(list, { job_id: 'other', recording_id: 'r1' }).map((u) => u.recordingId), ['r2']);
+  assert.equal(U.withoutUnsentFor(list, { job_id: 'other', recording_id: null }).length, 2, 'an unrelated row');
+});
+
+test('unsent recordings: what a launch does with one, from what Convex and the upload row say', () => {
+  const at = (convexJob, extra = {}) => ({ convexJob, upload: 'uploading', clipsHere: 1, now: NOW, ...extra });
+  const job = (stage, error = null) => ({ stage, error });
+  const later = NOW + U.REDO_AFTER_MS; // over an hour after "I'm done"
+  // Convex couldn't say: wait, whatever the phone has (never a second copy on a guess).
+  assert.equal(U.resendStep(note('r'), at(undefined)), 'wait');
+  assert.equal(U.resendStep(note('r'), at(undefined, { clipsHere: 0 })), 'wait', 'even with its videos gone');
+  // The Oct 24 crash: the signer made the upload, then the app died before jobs.create.
+  assert.equal(U.resendStep(note('r'), at(null)), 'send');
+  assert.equal(U.resendStep(note('r'), at(null, { upload: null })), 'send', 'its row is gone too');
+  // The upload finished but jobs.create didn't: make only the job.
+  assert.equal(U.resendStep(note('r'), at(null, { upload: 'uploaded' })), 'create');
+  // Only the worker's own word that files are missing ('uploading') redoes, and only an hour on: iOS may
+  // still be finishing a background upload the app was killed during.
+  assert.equal(U.resendStep(note('r'), at(job('uploading'))), 'wait', 'ten minutes on');
+  assert.equal(U.resendStep(note('r'), at(job('uploading'), { now: later })), 'redo');
+  assert.equal(U.resendStep(note('r'), at(job('uploading'), { upload: 'failed' })), 'redo', 'this phone saw the upload fail: no need to wait');
+  // Queued (the worker hasn't looked, maybe offline with every file in) and preparing (it claimed the job and
+  // is checking, or waiting 45 s for missing files) never redo: a cut-off upload shows 'uploading' soon after.
+  for (const s of ['queued', 'preparing']) {
+    assert.equal(U.resendStep(note('r'), at(job(s))), 'wait', s);
+    assert.equal(U.resendStep(note('r'), at(job(s), { now: later })), 'wait', `${s}, hours on`);
+  }
+  // Nothing to do.
+  assert.equal(U.resendStep(note('r'), at(job('uploading'), { upload: 'uploaded', now: later })), 'done', 'this phone saw every file go');
+  for (const s of ['understanding', 'writing', 'indexing', 'done']) assert.equal(U.resendStep(note('r'), at(job(s))), 'done', s);
+  assert.equal(U.resendStep(note('r'), at(job('failed', U.CANCELLED))), 'done', 'she stopped it');
+  assert.equal(U.resendStep(note('r'), at(job('failed', 'We couldn’t finish this recipe.'), { now: later })), 'wait', 'failed for its own reason: her row says so');
+  assert.equal(U.resendStep(note('r'), at(job(null))), 'done', 'not among the newest jobs: long since handled');
+  // No videos left: nothing to send (a job is left alone; its files may have arrived).
+  assert.equal(U.resendStep(note('r'), at(null, { clipsHere: 0 })), 'gone');
+  assert.equal(U.resendStep(note('r'), at(job('uploading'), { clipsHere: 0, now: later })), 'gone');
+  // Too many tries; too old.
+  assert.equal(U.resendStep(note('r', { resends: U.MAX_RESENDS - 1 }), at(null)), 'send');
+  assert.equal(U.resendStep(note('r', { resends: U.MAX_RESENDS }), at(null)), 'give-up');
+  assert.equal(U.resendStep(note('r', { resends: U.MAX_RESENDS }), at(null, { upload: 'uploaded' })), 'give-up');
+  assert.equal(U.resendStep(note('r', { resends: U.MAX_RESENDS }), at(job('uploading'), { now: later })), 'give-up');
+  const old = note('r', { savedAt: new Date(NOW - U.MAX_AGE_MS - 1).toISOString() });
+  assert.equal(U.resendStep(old, at(undefined)), 'give-up', 'a week old: stop asking, even offline');
 });
 
 test('flip: while filming it is a file boundary; otherwise only the camera switches', () => {

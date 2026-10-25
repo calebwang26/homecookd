@@ -11,6 +11,7 @@
 //   invalidateConvexRecipes()                            after the family's recipe list changes (lib/recipes.ts)
 //   const { recordingId } = await startRecording({ dish, forKidIds, language?, source })  live.startRecording
 //   useRecording(recordingId)                            live.recording, live (the recording screen)
+//   await recordingJob(recordingId, cookId)              live.recording's job and its stage, once (a resend after a crash)
 //   await endRecording(recordingId)                      live.endRecording: the stop button with no voice line
 //   await startFilming(recordingId)                      live.startFilming: glasses, her Start button
 //   await setCover(recordingId, photoUri)                files.uploadUrl + live.setCover: the plate photo (in-app filming)
@@ -140,7 +141,7 @@ export async function call<T>(
     if (type === 'action') return await client.action(ref<'action'>(name), args);
     return await client.query(ref<'query'>(name), args);
   } catch (e) {
-    if (signedOut(e)) session = null;
+    if (signedOut(e)) sessions.clear();
     if (!isMissing(e)) throw e;
     if (opts.strict) throw new Error(`${name} isn't on the server yet.`);
     if (opts.soft) {
@@ -153,10 +154,12 @@ export async function call<T>(
 }
 
 // ---------------------------------------------------------------------------
-// Session: sessions.start({ deviceKey, profileId }), once per phone + person
+// Session: sessions.start({ deviceKey, profileId }), once per phone + person. Kept per person, so a
+// send in the background as a cook (components/record/useResendUnsent) and the screens of whoever is
+// in don't keep replacing each other's session.
 
 type ConvexSession = { sessionToken: string; familyId: string; personId: string; role: 'cook' | 'kid' };
-let session: { key: string; run: Promise<ConvexSession | null> } | null = null;
+const sessions = new Map<string, Promise<ConvexSession | null>>();
 
 /** True when this phone can get a real Convex session (not the stub): the upload signer accepts it. */
 export function convexSignedIn(profileId = getSession()?.me?.id): boolean {
@@ -172,15 +175,17 @@ export async function convexSession(profileId = getSession()?.me?.id): Promise<s
   const deviceKey = await secretGet('deviceKey');
   if (!profileId || !deviceKey) return stubbed ? 'stub' : null;
   const key = `${deviceKey}:${profileId}`;
-  if (session?.key !== key) {
-    const run = call<ConvexSession | null>('action', 'sessions:start', { deviceKey, profileId }, () => stub.session()).catch((e) => {
+  let run = sessions.get(key);
+  if (!run) {
+    const started: Promise<ConvexSession | null> = call<ConvexSession | null>('action', 'sessions:start', { deviceKey, profileId }, () => stub.session()).catch((e) => {
       console.warn('[convex] sessions.start failed', String(e).slice(0, 160));
-      if (session?.run === run) session = null; // try again next time
+      if (sessions.get(key) === started) sessions.delete(key); // try again next time
       return null;
     });
-    session = { key, run };
+    sessions.set(key, started);
+    run = started;
   }
-  return (await session.run)?.sessionToken ?? null;
+  return (await run)?.sessionToken ?? null;
 }
 
 const LIVE_RETRIES = 3;
@@ -247,8 +252,9 @@ export function useCookQuestions(enabled = true): CookQuestion[] {
   return useLive<CookQuestion[]>('questions:openForCook', [], stub.watchQuestions, enabled);
 }
 
-export async function token(): Promise<string> {
-  const t = await convexSession();
+/** The session token for `as` (a profile id), by default whoever is in. */
+export async function token(as?: string): Promise<string> {
+  const t = await convexSession(as);
   if (!t) throw new Error('Sign in first.');
   return t;
 }
@@ -270,10 +276,11 @@ function oneKid({ forKidIds, ...rest }: Record<string, unknown>): Record<string,
 /**
  * jobs.create for a signer upload: `uploadPath` is "<job_id>/", the folder in the uploads bucket.
  * `extras` (the dish, the cook's language, the kid, homie's recording) need Track F's jobs.create; an
- * older deployment refuses fields it doesn't know, so the job is then made without them.
+ * older deployment refuses fields it doesn't know, so the job is then made without them. `as`: the
+ * cook it's for (a profile id), by default whoever is in.
  */
-export async function createJob(uploadPath: string, source: JobSource, extras: JobExtras = {}): Promise<void> {
-  const sessionToken = await token();
+export async function createJob(uploadPath: string, source: JobSource, extras: JobExtras = {}, as?: string): Promise<void> {
+  const sessionToken = await token(as);
   const extra = present(extras);
   const run = (more: Record<string, unknown>) => call('mutation', 'jobs:create', { sessionToken, uploadPath, source, ...more }, () => stub.createJob(uploadPath, source));
   try {
@@ -350,6 +357,31 @@ export async function setCover(recordingId: string, photoUri: string): Promise<b
   }
 }
 
+/** A recording's Convex job: its stage and error ("Cancelled." once stopped); stage null when it isn't among the family's 20 newest jobs (long since handled). */
+export type RecordingJob = { id: string; stage: JobStage | null; error: string | null };
+
+/**
+ * The Convex job made for a recording (live.recording's jobId), asked once before a resend after a
+ * crash: null when it has none, undefined when Convex couldn't say (offline, signed out, the stub, a
+ * function not deployed, a recording it doesn't find). `as`: the cook (a profile id).
+ */
+export async function recordingJob(recordingId: string, as?: string): Promise<RecordingJob | null | undefined> {
+  if (stubbed || !client) return undefined;
+  try {
+    const sessionToken = await token(as);
+    const row = await call<LiveRecording | null | undefined>('query', 'live:recording', { sessionToken, recordingId }, () => undefined, { soft: true });
+    if (!row) return undefined;
+    if (!row.jobId) return null;
+    const jobs = await call<LiveJob[] | undefined>('query', 'jobs:forFamily', { sessionToken }, () => undefined, { soft: true });
+    if (!jobs) return undefined;
+    const job = jobs.find((j) => j._id === row.jobId);
+    return { id: row.jobId, stage: job?.stage ?? null, error: job?.error ?? null };
+  } catch (e) {
+    console.warn('[convex] live.recording', String(e).slice(0, 160));
+    return undefined;
+  }
+}
+
 /** The recording, live: null while it loads, or when it isn't this family's. */
 export function useRecording(recordingId: string | null | undefined): LiveRecording | null {
   const id = recordingId ?? '';
@@ -392,8 +424,8 @@ const noLiveFrame = (onData: (v: LiveFrame | null) => void) => {
 };
 
 /** Stops one of her family's jobs on Convex (the worker's later reports are ignored). True once stopped. */
-export async function cancelLiveJob(jobId: string): Promise<boolean> {
-  const sessionToken = await token();
+export async function cancelLiveJob(jobId: string, as?: string): Promise<boolean> {
+  const sessionToken = await token(as);
   return call<boolean>('mutation', 'jobs:cancel', { sessionToken, jobId }, () => true, { soft: true });
 }
 
@@ -482,9 +514,9 @@ export async function convexPersonIdByName(name: string | null | undefined): Pro
  * These kids' Convex ids, in order, matched by their profile id (people.family); a deployment without
  * people.family falls back to the name lookup above. Kids Convex doesn't know are left out.
  */
-export async function convexKidIds(kids: { id: string; name: string }[]): Promise<string[]> {
+export async function convexKidIds(kids: { id: string; name: string }[], as?: string): Promise<string[]> {
   if (!kids.length || stubbed) return [];
-  const sessionToken = await convexSession().catch(() => null);
+  const sessionToken = await convexSession(as).catch(() => null);
   if (!sessionToken) return [];
   type Person = { personId: string; supabaseProfileId: string };
   const family = await call<Person[]>('query', 'people:family', { sessionToken }, () => [], { soft: true }).catch(() => [] as Person[]);
@@ -500,6 +532,8 @@ async function uploadFile(uri: string, contentType: string): Promise<string> {
   if (stubbed) return `stub-file-${Date.now()}`;
   const url = await call<string>('mutation', 'files:uploadUrl', { sessionToken }, () => '');
   if (!url) return `stub-file-${Date.now()}`;
+  // iOS can't upload a file that isn't there and closes the app instead of failing (lib/uploads fileOnPhone).
+  if (!new File(uri).exists) throw new Error('That file isn’t on this phone any more.');
   const res = await new File(uri).createUploadTask(url, { httpMethod: 'POST', headers: { 'Content-Type': contentType }, uploadType: UploadType.BINARY_CONTENT }).uploadAsync();
   if (res.status < 200 || res.status >= 300) throw new Error('The upload didn’t go through. Try again.');
   return (JSON.parse(res.body) as { storageId: string }).storageId;

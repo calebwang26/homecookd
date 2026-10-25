@@ -65,4 +65,7 @@ earpiece).
 - Not yet proven on a real iPhone (no device build yet on Oct 24): the first device test is "record 2+ minutes
   while homie talks; the video has her voice; homie's mic stream keeps going". For the flip: "flip twice while
   filming; three files, each with sound, the front one not mirrored; homie's mic never stops".
+- Oct 24, the first TestFlight try crashed at "Sending it to …": the finished file was moved with the async
+  `File.move()` and its old tmp path uploaded. Files move with `moveSync` (#77), and a note keeps each recording
+  queued until Convex has its job and every file is uploaded ([[never-signed-out-by-a-crash]]).
 - Related: [[homie-guidance-only]], [[testflight-live]].
