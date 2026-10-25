@@ -4,8 +4,10 @@
 //                                            small English, names filled in, English for other languages
 //   src/components/record/recordingLogic.ts  the line under the button in each phase, when filming
 //                                            starts by itself, the pot for the service's state, what
-//                                            "not now" sends, homie's question with its English, half
-//                                            duplex (silence while the phone talks), the wrap-up watchdog
+//                                            "not now" sends, homie's question with its English, homie
+//                                            held in the middle across the wrap-up's questions (the
+//                                            service's hold; none = as before), half duplex (silence
+//                                            while the phone talks), the wrap-up watchdog
 //   src/components/record/walkieLogic.ts     when her spoken answer is over (a share ask's short yes
 //                                            too), when nobody answered, how a question reads
 //   src/lib/languages.ts                     the picker's list and search (Track F's API)
@@ -195,6 +197,145 @@ test('homie’s question: her words, the English under them once', () => {
   assert.deepEqual(R.askLine({ text: 'आलं साधारण किती घातलं?', textEn: 'About how much ginger was that?' }), { text: 'आलं साधारण किती घातलं?', en: 'About how much ginger was that?' });
   assert.deepEqual(R.askLine({ text: 'How much ginger?', textEn: 'How much ginger?' }), { text: 'How much ginger?', en: null });
   assert.deepEqual(R.askLine({ text: 'How much ginger?', textEn: '' }), { text: 'How much ginger?', en: null });
+});
+
+// homie held in the middle across the wrap-up's questions (Caleb, Oct 25: "homie should STAY in center
+// expanded view until all questions are finished, then snap back to small corner").
+const askOf = (promptId, kind = 'end', text = `q ${promptId}`) => ({ promptId, text, textEn: `${text} (en)`, kind });
+const lineOf = (id, text) => ({ id, text, textEn: `${text} (en)` });
+
+test('moment: with no hold (an older service, or filming) it is up exactly while a question is', () => {
+  const none = { ask: null, hold: false, said: null, ended: false };
+  assert.deepEqual(R.momentView(none), { open: false, words: null, asking: false });
+  const v = R.momentView({ ...none, ask: askOf('p1', 'amount', 'आलं किती?') });
+  assert.equal(v.open, true);
+  assert.equal(v.asking, true);
+  assert.deepEqual(v.words, { key: 'ask:p1', line: { text: 'आलं किती?', en: 'आलं किती? (en)' } });
+  assert.notEqual(R.momentView({ ...none, ask: askOf('p2') }).words.key, v.words.key, 'a new question is a new key: it crossfades');
+  assert.equal(R.momentView({ ...none, said: lineOf(1, 'Before we send it') }).open, false, 'a line with no hold shows nothing');
+});
+
+test('moment: held with no question up, homie stays big with no stale question; a tap closes nothing', () => {
+  const held = { ask: null, hold: true, said: null, ended: false };
+  assert.deepEqual(R.momentView(held), { open: true, words: null, asking: false }, 'between two questions');
+  const said = R.momentView({ ...held, said: lineOf(7, 'पाठवण्याआधी दोन छोटे प्रश्न.') });
+  assert.deepEqual(said, { open: true, words: { key: 'said:7', line: { text: 'पाठवण्याआधी दोन छोटे प्रश्न.', en: 'पाठवण्याआधी दोन छोटे प्रश्न. (en)' } }, asking: false });
+  assert.equal(R.momentView({ ...held, said: { id: 8, text: 'Okay.', textEn: 'Okay.' } }).words.line.en, null, 'English once');
+  const q = R.momentView({ ...held, said: lineOf(7, 'count'), ask: askOf('p3') });
+  assert.equal(q.words.key, 'ask:p3', 'a question up wins over homie’s line');
+  assert.equal(q.asking, true);
+});
+
+test('moment: the plate photo has its own view, and the end closes it, held or not', () => {
+  assert.equal(R.momentView({ ask: askOf('plate', 'plate'), hold: false, said: null, ended: false }).open, false);
+  assert.equal(R.momentView({ ask: askOf('plate', 'plate'), hold: true, said: null, ended: false }).open, false, 'a plate ask under a hold that never went off');
+  assert.equal(R.momentView({ ask: askOf('p4'), hold: true, said: lineOf(1, 'x'), ended: true }).open, false);
+  assert.equal(R.momentView({ ask: null, hold: true, said: null, ended: true }).open, false);
+});
+
+test('hold: what the hook keeps from the service’s messages', () => {
+  let s = R.NOT_HELD;
+  s = R.heldAfter(s, { type: 'say', line: lineOf(1, 'nice, the onions'), askUp: false });
+  assert.deepEqual(s, R.NOT_HELD, 'a reaction while filming is never kept for later');
+  s = R.heldAfter(s, { type: 'hold', on: true });
+  assert.deepEqual(s, { hold: true, said: null });
+  s = R.heldAfter(s, { type: 'say', line: lineOf(2, 'count'), askUp: false });
+  assert.equal(s.said.id, 2, 'the count line shows');
+  assert.equal(R.heldAfter(s, { type: 'hold', on: true }), s, 'a second hold on keeps the line');
+  s = R.heldAfter(s, { type: 'ask' });
+  assert.deepEqual(s, { hold: true, said: null }, 'a question clears it: never back once answered');
+  assert.equal(R.heldAfter(s, { type: 'say', line: lineOf(3, 'the question'), askUp: true }), s, 'the question’s own line');
+  assert.equal(R.heldAfter(s, { type: 'say', line: lineOf(4, 'still there?'), askUp: true }), s, 'a nudge under the question');
+  s = R.heldAfter(s, { type: 'say', line: lineOf(5, 'no need to answer today'), askUp: false });
+  assert.equal(s.said.id, 5, 'the let-off, after the drop');
+  assert.deepEqual(R.heldAfter(s, { type: 'hold', on: false }), R.NOT_HELD);
+  assert.deepEqual(R.heldAfter(s, { type: 'reset' }), R.NOT_HELD, 'a new or lost socket, a pause, the end');
+  assert.deepEqual(R.heldAfter(R.NOT_HELD, { type: 'hold', on: false }), R.NOT_HELD);
+});
+
+// The wrap-up as the service sends it, message by message; `open` after each one.
+function runWrapUp(events) {
+  let held = R.NOT_HELD;
+  let ask = null;
+  let ended = false;
+  let n = 0;
+  return events.map((e) => {
+    if (e.hold !== undefined) held = R.heldAfter(held, { type: 'hold', on: e.hold });
+    if (e.ask) {
+      ask = e.ask;
+      held = R.heldAfter(held, { type: 'ask' });
+    }
+    if (e.gone) ask = null; // drop / answered
+    if (e.say) held = R.heldAfter(held, { type: 'say', line: lineOf(++n, e.say), askUp: !!ask });
+    if (e.ended) {
+      ended = true;
+      held = R.heldAfter(held, { type: 'reset' });
+    }
+    const v = R.momentView({ ask, hold: held.hold, said: held.said, ended });
+    return { at: e.at, open: v.open, words: v.words?.line.text ?? null, asking: v.asking };
+  });
+}
+const WRAP = (hold) => [
+  { at: 'drop the live question at "I’m done"', gone: true },
+  ...(hold ? [{ at: 'hold on', hold: true }] : []),
+  { at: 'count line', say: 'Before we send it: two quick questions and a photo of your plate.' },
+  { at: 'question 1', ask: askOf('e1', 'end', 'What must Shreya never skip?') },
+  { at: 'question 1 said', say: 'What must Shreya never skip?' },
+  { at: 'still there?', say: 'Still there? Take your time.' },
+  { at: 'answered 1', gone: true },
+  { at: 'question 2', ask: askOf('e2', 'end', 'How do you know it’s ready?') },
+  { at: 'not now', gone: true },
+  { at: 'opt-in', ask: askOf('o', 'optin', 'Can Shreya hear your stories too?') },
+  { at: 'answered opt-in', gone: true },
+  ...(hold ? [{ at: 'hold off', hold: false }] : []),
+  { at: 'plate photo', ask: askOf('pl', 'plate', 'Hold the plate up') },
+  { at: 'photo taken', gone: true },
+  { at: 'goodbye', say: 'That’s a wrap.' },
+  { at: 'ended', ended: true },
+];
+
+test('wrap-up with hold: homie stays in the middle from the count line to the last answer, then goes back', () => {
+  const steps = runWrapUp(WRAP(true));
+  const from = steps.findIndex((s) => s.at === 'hold on');
+  const to = steps.findIndex((s) => s.at === 'hold off');
+  for (const s of steps.slice(from, to)) assert.equal(s.open, true, `still up at "${s.at}"`);
+  for (const s of steps.slice(to)) assert.equal(s.open, false, `back in the corner at "${s.at}" (the plate has its own view)`);
+  const at = (name) => steps.find((s) => s.at === name);
+  assert.equal(at('count line').words, 'Before we send it: two quick questions and a photo of your plate.');
+  assert.equal(at('count line').asking, false, 'no "Just answer out loud" for the count line');
+  assert.equal(at('still there?').words, 'What must Shreya never skip?', 'the nudge leaves the question up');
+  assert.equal(at('answered 1').words, null, 'the answered question fades out; nothing stale under homie');
+  assert.equal(at('answered 1').asking, false);
+  assert.equal(at('question 2').words, 'How do you know it’s ready?');
+});
+
+test('wrap-up with no hold (an older service): each question opens and closes on its own, as before', () => {
+  const steps = runWrapUp(WRAP(false));
+  const opened = steps.filter((s) => s.open).map((s) => s.at);
+  assert.deepEqual(opened, ['question 1', 'question 1 said', 'still there?', 'question 2', 'opt-in']);
+  assert.ok(steps.every((s) => !s.open || s.asking), 'never up without a question');
+});
+
+test('wrap-up let-off: the let-off line shows while held, then homie goes back for the plate', () => {
+  const steps = runWrapUp([
+    { at: 'hold on', hold: true },
+    { at: 'question 1', ask: askOf('e1') },
+    { at: 'still there?', say: 'Still there? Take your time.' },
+    { at: 'drop', gone: true },
+    { at: 'let-off', say: 'That’s okay. No need to answer today.' },
+    { at: 'hold off', hold: false },
+  ]);
+  assert.deepEqual(
+    steps.map((s) => [s.at, s.open, s.words]),
+    [
+      ['hold on', true, null],
+      ['question 1', true, 'q e1'],
+      ['still there?', true, 'q e1'],
+      ['drop', true, null],
+      ['let-off', true, 'That’s okay. No need to answer today.'],
+      ['hold off', false, null],
+    ],
+  );
 });
 
 test('half duplex: silence while homie is lit or speaking, or anything plays on the phone', () => {

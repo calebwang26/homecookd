@@ -31,14 +31,21 @@
 //                      and homie wraps up. Older builds (no VisionCamera, or no camera permission): the
 //                      phone's own camera opens instead (homie waits, its socket closed); when the
 //                      video is back, homie wraps up. No video: back to Record.
-//   wrapping_up        homie's last questions, the plate photo when filmed in the app (components/record/
-//                      PlateMoment: the camera card grows to the middle, one shutter with the flip button
-//                      on its right, so she can turn to the front camera and hold the plate up; live.setCover),
-//                      and "Can Shreya hear your stories too?". If it stalls
+//   wrapping_up        homie's last questions and "Can Shreya hear your stories too?", then the plate photo
+//                      when filmed in the app (components/record/PlateMoment: the camera card grows to the
+//                      middle, one shutter with the flip button on its right, so she can turn to the front
+//                      camera and hold the plate up; live.setCover), the thanks and the goodbye. The voice
+//                      service holds homie big in the middle across the run of questions ({type:"hold"},
+//                      homie.hold): from the count line ("Before we send it: two quick questions…") to the
+//                      last answer, homie never goes back to its corner between two questions; the words
+//                      under it change in place. It goes back before the plate photo or the goodbye. An
+//                      older service never holds: each question opens and closes on its own. If it stalls
 //                      (nothing moves for 2 min, or 20 s after an error or a lost line), the app ends
 //                      the recording itself; a phone video then sends anyway.
 //   ended              the done view (components/record/DoneView): homie waves, the video goes, home.
-// homie's questions come up as AskMoments: answered out loud, no buttons (a tap closes one).
+// homie's questions come up as AskMoments: answered out loud, no buttons (a tap closes one; while homie is
+// only held between questions, a tap does nothing). Live questions while filming are minutes apart (the
+// service's pacing: 3.5 min, 90 s in its demo mode), so each opens and closes on its own.
 // Glasses through the laptop bridge (glasses/BRIDGE.md): above the button, what the glasses see (about a
 // frame a second), whether they're live, and the last step the live pass saw (components/record/GlassesView).
 // If homie's connection is lost: the reason, "Try again" and the × (a phone recording can also film
@@ -47,7 +54,10 @@
 // Dev aids (web screenshots only): ?preview=done shows the done view without sending; ?preview=ask
 // shows a made-up question from homie as a phone with a microphone would (the listening bars);
 // ?preview=camera filming in the app, ?preview=paused after she came back, ?preview=plate the plate
-// photo (a kitchen picture stands in for the camera; the flip button only spins its icon).
+// photo (a kitchen picture stands in for the camera; the flip button only spins its icon), ?preview=wrapup
+// the stub's whole wrap-up through the real hook (homie held across two questions and the opt-in, then
+// the plate photo and the goodbye; a tap skips a question; &plate=0 without the plate photo, as filmed
+// with the system camera; &lang=mr&kid=Shreya for her words).
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -65,7 +75,7 @@ import { GlassesView } from '@/components/record/GlassesView';
 import { addClips, useDraft } from '@/components/record/draft';
 import { PLATE_FLIP_SIDE, PlateControls, PlateDim } from '@/components/record/PlateMoment';
 import { RecordButton } from '@/components/record/RecordButton';
-import { recordingView, shouldAutoStart, wrapStallMs, type Ask } from '@/components/record/recordingLogic';
+import { momentView, recordingView, shouldAutoStart, wrapStallMs, type Ask } from '@/components/record/recordingLogic';
 import { COLUMN, RecordWash } from '@/components/record/RecordWash';
 import { useInAppCamera } from '@/components/record/useInAppCamera';
 import { usePickVideos } from '@/components/record/usePickVideos';
@@ -74,7 +84,7 @@ import { ActionButton, CloseIcon, IconButton, useToast } from '@/components/ui';
 import { useAiSpeaking, useHomieScreen, useHomieSlot } from '@/lib/homie/hooks';
 import { inAppCameraSupported } from '@/lib/live/camera';
 import { endRecording, setCover, startFilming, useLiveFrame, useLiveLog, useRecording } from '@/lib/live/convex';
-import { useHomieRecording } from '@/lib/live/homie';
+import { STUB_NO_PLATE, STUB_WRAPUP_PREFIX, useHomieRecording } from '@/lib/live/homie';
 import { useSession } from '@/lib/session';
 import { saveUnsent } from '@/lib/unsentRecordings';
 import { colors, motion, space } from '@/theme/tokens';
@@ -82,7 +92,7 @@ import { colors, motion, space } from '@/theme/tokens';
 const AWAKE_TAG = 'homecookd-recording';
 const PREVIEW_ASK: Ask = { promptId: 'preview', text: 'आजी, आलं साधारण किती घातलं?', textEn: 'About how much ginger was that?', kind: 'amount' };
 const PREVIEW_PLATE: Ask = { promptId: 'preview-plate', text: 'शेवटचं, आजी. ताट कॅमेऱ्यासमोर धरा, म्हणजे Shreya ला दिसेल ते कसं दिसतं.', textEn: 'Last thing, Aaji. Hold the plate up to the camera, so Shreya can see how it looks.', kind: 'plate' };
-const PREVIEWS = ['done', 'ask', 'camera', 'paused', 'plate'] as const;
+const PREVIEWS = ['done', 'ask', 'camera', 'paused', 'plate', 'wrapup'] as const;
 const KITCHEN = require('@/components/record/tripod.jpg') as number;
 
 function useRecordingAwake() {
@@ -111,9 +121,11 @@ const both = (l: Line) => (l.en ? `${l.text} · ${l.en}` : l.text);
 
 export default function RecordingScreen() {
   useRecordingAwake();
-  const params = useLocalSearchParams<{ id?: string; source?: string; kid?: string; lang?: string; preview?: string }>();
+  const params = useLocalSearchParams<{ id?: string; source?: string; kid?: string; lang?: string; preview?: string; plate?: string }>();
   const devPreview = __DEV__ && Platform.OS === 'web' ? (PREVIEWS.find((p) => p === params.preview) ?? null) : null;
-  const previewCamera = devPreview === 'camera' || devPreview === 'paused' || devPreview === 'plate' || devPreview === 'ask';
+  const previewCamera = devPreview === 'camera' || devPreview === 'paused' || devPreview === 'plate' || devPreview === 'ask' || devPreview === 'wrapup';
+  // ?preview=wrapup: the stub voice service runs its wrap-up for this made-up recording (one per page load).
+  const [wrapupId] = useState(() => `${STUB_WRAPUP_PREFIX}${params.plate === '0' ? STUB_NO_PLATE : ''}${Date.now()}`);
   const preview = devPreview === 'done';
   const id = devPreview ? null : params.id || null;
   const insets = useSafeAreaInsets();
@@ -136,7 +148,7 @@ export default function RecordingScreen() {
   const glassesFilming = glasses && rec?.status === 'recording';
   // homie joins a glasses recording only once she has started it: no hello before her Start.
   const homie = useHomieRecording(
-    glasses && !glassesFilming ? null : id,
+    glasses && !glassesFilming ? null : devPreview === 'wrapup' ? wrapupId : id,
     { language: params.lang || 'en', kidName: params.kid || undefined, dish: draft.dish ?? undefined },
     { camera: inAppPossible },
   );
@@ -201,7 +213,7 @@ export default function RecordingScreen() {
   // Not when another phone has taken this recording over: that one finishes it.
   const wrapping = !finished && !devPreview && homie.error !== 'elsewhere' && (phoneFilmed || homie.phase === 'wrapping_up');
   const trouble = homie.serverError || homie.error === 'lostConnection';
-  const progress = `${homie.phase}|${homie.ask?.promptId ?? ''}|${aiSpeaking}`;
+  const progress = `${homie.phase}|${homie.ask?.promptId ?? ''}|${homie.hold}|${aiSpeaking}`;
   const [stalled, setStalled] = useState(false);
   useEffect(() => {
     if (!wrapping || stalled) return;
@@ -262,7 +274,11 @@ export default function RecordingScreen() {
   // The plate photo: a still from the camera, shown in the card, sent as the cover in the background.
   const shootPlate = async () => {
     if (shooting || photo) return;
-    if (devPreview) return setPhoto(Image.resolveAssetSource?.(KITCHEN)?.uri ?? null);
+    if (devPreview) {
+      setPhoto(Image.resolveAssetSource?.(KITCHEN)?.uri ?? null);
+      if (devPreview === 'wrapup') homie.plateDone(true);
+      return;
+    }
     setShooting(true);
     const uri = await cam.still();
     setShooting(false);
@@ -275,7 +291,7 @@ export default function RecordingScreen() {
     if (id) void setCover(id, uri);
   };
   const skipPlate = () => {
-    if (!devPreview) homie.plateDone(false);
+    if (!devPreview || devPreview === 'wrapup') homie.plateDone(false);
   };
 
   // A phone recording on an older build: the system camera films; homie waits with its socket closed.
@@ -388,7 +404,7 @@ export default function RecordingScreen() {
     <View style={styles.page}>
       <RecordWash />
       {finished ? (
-        <DoneView source={source} lang={lang} kidName={kid} preview={preview} />
+        <DoneView source={source} lang={lang} kidName={kid} preview={!!devPreview} />
       ) : (
         <>
           <View style={styles.column}>
@@ -458,7 +474,7 @@ export default function RecordingScreen() {
             />
           ) : null}
           <AskMoment
-            ask={devPreview === 'ask' ? PREVIEW_ASK : homie.ask?.kind === 'plate' ? null : homie.ask}
+            view={momentView({ ask: devPreview === 'ask' ? PREVIEW_ASK : homie.ask, hold: homie.hold, said: homie.said, ended })}
             words={words}
             micOn={devPreview === 'ask' || homie.micOn}
             onNotNow={homie.notNow}

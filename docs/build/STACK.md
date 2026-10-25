@@ -355,6 +355,18 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   it has all of it, ~250 ms after `say_end` (`PLAYER_LOAD_MS`), not from the first chunk. A turn with no
   words (Ink can end one empty) answers nothing, and a live question's card fades 10 s after it. No new messages:
   the app needs no change.
+- homie stays in the centre across the wrap-up's questions (Oct 25, Caleb: no "back to the corner, then
+  straight back to the middle" between two questions). Service → app `{ type: "hold", on: true }` right before the
+  count line (or the first question) of the wrap-up's run of spoken questions, and again after a reconnect mid-run;
+  `{ type: "hold", on: false }` once the run is over (after the last answer or skip, and after any let-off line),
+  right before the plate photo ask or the goodbye. App side (`lib/live/homie` `hold`/`said`,
+  `components/record/recordingLogic` `heldAfter`/`momentView`, `AskMoment`): homie's centred moment is up while
+  held or while a question (not the plate) is up; homie never moves or shrinks while held, and the words under it
+  crossfade in place. Between questions it shows only what homie is saying (a `say` that starts while held with no
+  question up: the count line, a let-off; a question clears it) or nothing; the listening bars, "Just answer out
+  loud" and the tap that skips ("not now") only while a question is up. A new or lost socket, a pause and `ended`
+  turn the hold off (like the question). An older service never sends it: each question opens and closes on its
+  own, as before. Live questions while filming are minutes apart (the pacing below), so they never need it.
 - The service ignores incoming audio while homie speaks, until the phone can first have finished playing the line
   (`say_end` + its length), so it never hears itself; the app also sends silence while it plays, so a quick reply
   right after the line isn't cut. homie gives guidance, never cooking advice (`docs/agents/memory/homie-guidance-only.md`). Pacing
