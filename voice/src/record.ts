@@ -38,7 +38,6 @@ const QUIET_MS = 3000; // never ask while she's talking
 const DECIDE_EVERY_MS = 15_000;
 const STORY_CHECK_WORDS = 25; // outside the ask window, a long turn may be a story worth a reaction
 const DROP_MS = 10_000;
-const MUTE_AFTER_MS = 300;
 const INTRO_WAIT_MS = 7000; // then the hand-written hello
 const FRAME_EVERY_MS = 5000;
 const FRAME_FRESH_MS = 20_000; // an older picture isn't shown to Claude
@@ -71,7 +70,8 @@ const STUCK_TURN_MS = 6000;
 const SOUND_HOLD_MS = 1500;
 /**
  * ...but this long with sound, or with turns the speech-to-text opens and ends empty, and no words is the kitchen
- * (a fan, the sink), not her: it stops holding.
+ * (a fan, the sink), not her: it stops holding. The trade-off: during a run of empty turns (Ink on the range hood),
+ * a real turn of hers that starts within it gets no hold until its first words show (~0.3 s on Ink).
  */
 const NOISE_MS = 4000;
 /** One answer ends by this long after the question played, at the latest: under the app's 120 s wrap-up stall. */
@@ -87,8 +87,12 @@ const POLL_MS = 100;
  */
 export const PLAYER_LOAD_MS = 250;
 
-/** One wrap-up question's answer while homie waits on it (listen): every turn she finishes, from the ask on. */
-type Answer = { turns: string[]; from: number; to: number; notNow: boolean; since: number };
+/**
+ * One wrap-up question's answer while homie waits on it (listen). The card's tap counts from the ask on; a spoken turn
+ * counts only if its words came after the question `played` (the mic is muted while homie speaks, so a turn ending
+ * during the line is talk from before it: an afterthought, family).
+ */
+type Answer = { turns: string[]; from: number; to: number; notNow: boolean; played: number };
 
 /** What homie keeps about one recording across reconnects (Cloud Run's session affinity sends her back here). */
 type Memory = {
@@ -236,7 +240,9 @@ export class Recording {
   private speaking: AbortController | null = null;
   /** The last line, while the phone plays it. */
   private playing?: AbortController;
+  /** The mic is ignored until then; the phone should be playing homie's last line until `playingUntil`. */
   private muteUntil = 0;
+  private playingUntil = 0;
   private frame?: Buffer;
   private frameAt = 0;
   /** The plate step waits on the phone's {type:"plate"} through this. */
@@ -567,24 +573,26 @@ export class Recording {
       this.mem.endAsked++;
       this.mem.asked.push(line.textEn);
     }
-    const a: Answer = { turns: [], from: 0, to: 0, notNow: false, since: Date.now() };
+    const a: Answer = { turns: [], from: 0, to: 0, notNow: false, played: 0 };
     this.answer = a;
     try {
       this.send({ type: "ask", promptId, text: line.text, textEn: line.textEn, kind });
       this.markSaid(promptId, await this.say(line, kind));
-      const played = Date.now();
+      const played = (a.played = Date.now());
       let got = await this.listen(a, this.sttWorks() ? SILENT_MS : NO_STT_WAIT_MS);
-      let secondChance = false;
-      if (got === "silent" && this.sttWorks()) {
+      // "Still there?" only once she's quiet; the let-off only after she has heard it. A wait that ended while she
+      // may be talking (her words came meanwhile, or sound held it to its cap) is waited again, a few times at most.
+      let nudged = false;
+      for (let tries = 0; got === "silent" && !nudged && this.sttWorks() && tries < 3; tries++) {
         const { stillThere } = await this.spareLines();
-        // Her first words may have come in the meantime: then she has started, and there's no nudge.
         if (!this.closed && !a.notNow && !a.turns.length && !this.talking(Date.now())) {
           console.log(`cook quiet ${SILENT_MS / 1000}s after the ${kind} question: still there?`);
           await this.sayFixed(stillThere);
+          nudged = true;
         }
-        secondChance = true;
         got = await this.listen(a, SILENT_MS);
-      } else if (got === "silent" && Date.now() - played < NO_STT_WAIT_MS) {
+      }
+      if (got === "silent" && !nudged && !this.sttWorks() && Date.now() - played < NO_STT_WAIT_MS) {
         // Her speech-to-text just failed: homie can't tell whether she's talking, so it only waits.
         got = await this.listen(a, NO_STT_WAIT_MS - (Date.now() - played));
       }
@@ -598,7 +606,7 @@ export class Recording {
       this.send({ type: "drop", promptId });
       void this.deps.convex.updatePrompt(this.token, promptId, got === "skipped" ? "not_now" : "ignored").catch(() => {});
       if (got === "skipped") console.log(`cook said not now to the ${kind} question: skipped`);
-      else if (secondChance && this.sttWorks()) {
+      else if (nudged && this.sttWorks()) {
         console.log(`cook quiet after "still there?" too: letting her off`);
         this.mem.letOff = true;
         this.answer = undefined; // nothing she says now answers this question
@@ -646,11 +654,11 @@ export class Recording {
         if (this.closed) return null;
         if (a.notNow) return "skipped";
         const now = Date.now();
-        if (a.turns.length || this.lastWordsAt > a.since) {
+        if (a.turns.length || this.lastWordsAt >= a.played) {
           // She has started: wait until she's done.
           if (this.talking(now) && now - start < ANSWER_MAX_MS) continue;
-          // A turn the speech-to-text never closed still counts with the words it had.
-          if (this.turnOpen && this.turnWords) {
+          // A turn the speech-to-text never closed still counts with the words it had (since the question).
+          if (this.turnOpen && this.turnWords && this.lastWordsAt >= a.played) {
             a.turns.push(this.turnWords);
             a.to = this.lastWordsAt;
             this.turnWords = "";
@@ -838,7 +846,8 @@ export class Recording {
     this.mem.heard.push({ atS: this.atS(startedAt || now), text });
     console.log(`cook: ${text}`);
     const a = this.answer;
-    if (a) {
+    // A spoken turn whose words came before the question had played is talk from before it: it answers nothing.
+    if (a && (typed || (a.played && this.lastWordsAt >= a.played))) {
       // The card's tap is final; said, "not now" skips the question only as her first words (not "…later" at the end).
       if (isNotNow(text) && (typed || !a.turns.length)) return this.skipAsk();
       a.from ||= startedAt || now;
@@ -1024,9 +1033,14 @@ export class Recording {
     // The phone plays a line only once it has all of it (say_end), after loading it into its player; an interrupted
     // one it never plays.
     const aborted = ctrl.signal.aborted;
-    const playStart = Date.now() + PLAYER_LOAD_MS;
-    const playEnd = aborted || !first ? Date.now() : playStart + (bytes / 2 / SONIC_SAMPLE_RATE) * 1000;
-    this.muteUntil = playEnd + MUTE_AFTER_MS;
+    const sayEnd = Date.now();
+    const length = aborted || !first ? 0 : (bytes / 2 / SONIC_SAMPLE_RATE) * 1000;
+    const playStart = sayEnd + PLAYER_LOAD_MS;
+    const playEnd = length ? playStart + length : sayEnd;
+    this.playingUntil = playEnd;
+    // The phone sends silence while it plays, so this mute is only a backup. It ends when the phone can first have
+    // finished (no load time), so a quick "yes" right after the line isn't cut.
+    this.muteUntil = sayEnd + length;
     this.send({ type: "say_end", interrupted: aborted });
     if (this.speaking === ctrl) this.speaking = null;
     // The phone is still playing it; hush() can cut that short too.
@@ -1051,10 +1065,10 @@ export class Recording {
 
   /** Stop homie now: the line Sonic is still making, or the one the phone is still playing (an extra say_end). */
   private hush() {
-    if (this.playing && !this.playing.signal.aborted && Date.now() < this.muteUntil) this.send({ type: "say_end", interrupted: true });
+    if (this.playing && !this.playing.signal.aborted && Date.now() < this.playingUntil) this.send({ type: "say_end", interrupted: true });
     this.speaking?.abort();
     this.playing?.abort();
-    this.muteUntil = 0;
+    this.muteUntil = this.playingUntil = 0;
   }
 
   /** Saves one of homie's lines; null when Convex says the recording is over (this socket then ends). */

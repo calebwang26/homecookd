@@ -275,9 +275,11 @@ notice yet) finds out at its next Convex write: the heartbeat, a status, or homi
 line is said or saved, no warning is logged, the phone gets `phase: ended`, and the socket closes with 4404. A new
 socket that finds the recording ended also closes an older one that's still open.
 
-Half duplex: incoming audio is dropped while homie speaks and 300 ms after the phone should have finished playing.
-The phone plays a line only once it has all of it (it starts ~250 ms after `say_end`), so that's where "finished
-playing" and each line's `said` span count from.
+Half duplex: incoming audio is dropped while homie speaks and until the phone can first have finished playing
+(`say_end` + the line's length; the phone sends silence while it plays, so a quick reply isn't cut). The phone plays
+a line only once it has all of it (it starts ~250 ms after `say_end`), so that's where the wrap-up's waits and each
+line's `said` span count from. A spoken turn ending under a wrap-up question is talk from before it: it answers
+nothing.
 
 Speech to text: Ink 2 for en/fr/hi/ja/es (it detects which). Anything else (Marathi) goes to Gemini Live,
 `gemini-3.5-transcribe-live` with `inputAudioTranscription.languageCodes: ["mr-IN"]`. A Live session lasts about

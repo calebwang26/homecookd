@@ -28,6 +28,9 @@ Being cut off is the opposite of the family feeling homecookd sells.
   plays a line only once it has all of it (~250 ms after `say_end`), never from the first chunk.
 - "not now" (the card's tap, or her first words) skips only that question, at once: no nudge, no let-off. If homie
   can't hear her at all (speech-to-text showed nothing, or errored), no nudge either: just a plain wait.
+- Only words she says after a question has played answer it. Talk that started before (an afterthought, family
+  saying "no, beta, come and eat") never answers the next question or decides the opt-in. The let-off only ever
+  follows a "still there?" she heard.
 - The let-off is warm, never a guilt trip; it gives permission ("no need to answer"), never guesses her motive.
 - Any new question homie asks a cook out loud (here or in a later feature) waits the same way.
 - Related: [[homie-voice]], [[homie-guidance-only]], [[in-app-recording]].
