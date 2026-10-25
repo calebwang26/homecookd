@@ -12,17 +12,34 @@
 //   src/components/record/cameraLogic.ts     filming in the app: file names, the gap between two files,
 //                                            the clock, when leaving stops the camera and coming back
 //                                            films again by itself, the clip each file becomes
+//   build-4 safety                           an EAS Update reaches TestFlight builds without VisionCamera
+//                                            or expo-image-manipulator: recording.tsx's whole import graph
+//                                            never imports either by value, and src/lib/live/camera.ts (the
+//                                            only place that loads them) loads and answers null with their
+//                                            native halves missing
 //   node scripts/test-recording-ui.mjs
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 
+// A build without the new native modules (TestFlight build 4): react-native without CameraView, no
+// ExpoImageManipulator, and the two packages throw if anything loads them.
+const NATIVE_NEW = ['react-native-vision-camera', 'expo-image-manipulator'];
+const js = (code) => `data:text/javascript,${encodeURIComponent(code)}`;
+const FAKES = {
+  'react-native': js("export const NativeModules = {}; export const Platform = { OS: 'ios' };"),
+  'expo-constants': js("export default { executionEnvironment: 'standalone' }; export const ExecutionEnvironment = { StoreClient: 'storeClient' };"),
+  'expo-modules-core': js('export const requireOptionalNativeModule = () => null;'),
+  ...Object.fromEntries(NATIVE_NEW.map((p) => [p, js(`throw new Error('${p}: no native module in this build');`)])),
+};
+
 registerHooks({
   resolve(spec, ctx, next) {
+    if (FAKES[spec]) return { url: FAKES[spec], shortCircuit: true };
     const base = spec.startsWith('@/') ? join(root, 'src', spec.slice(2)) : spec.startsWith('.') && ctx.parentURL ? join(dirname(fileURLToPath(ctx.parentURL)), spec) : null;
     if (base && !/\.[a-z]+$/.test(base) && existsSync(`${base}.ts`)) return next(pathToFileURL(`${base}.ts`).href, ctx);
     return next(spec, ctx);
@@ -302,6 +319,41 @@ test('in-app camera: each file becomes a selected camera clip for the Send path'
   assert.equal(clip.selected, true);
   assert.equal(clip.recordedAt, '2026-10-25T17:05:00.000Z');
   assert.deepEqual(clip.asset, { uri: 'file:///doc/recordings/r1/part-02.mp4', width: 1080, height: 1920, type: 'video', duration: 300_000, fileName: 'part-02.mp4', mimeType: 'video/mp4' });
+});
+
+test('build-4 safety: recording.tsx never imports VisionCamera or the image manipulator by value', () => {
+  // Every app/src file recording.tsx reaches through its imports (relative and @/ paths).
+  const file = (base) => ['', '.ts', '.tsx', '/index.ts', '/index.tsx'].map((x) => base + x).find((f) => existsSync(f) && /\.tsx?$/.test(f));
+  const seen = new Set();
+  const offenders = [];
+  const stack = [join(root, 'src/app/recording.tsx')];
+  while (stack.length) {
+    const f = stack.pop();
+    if (seen.has(f)) continue;
+    seen.add(f);
+    const src = readFileSync(f, 'utf8');
+    for (const m of src.matchAll(/(?:^|\n)\s*(?:import|export)\s+(type\s+)?(?:[\s\S]*?\s+from\s+)?['"]([^'"]+)['"]/g)) {
+      const [, typeOnly, spec] = m;
+      const local = spec.startsWith('@/') ? join(root, 'src', spec.slice(2)) : spec.startsWith('.') ? join(dirname(f), spec) : null;
+      if (local) {
+        const next = file(local);
+        if (next && !typeOnly) stack.push(next);
+      } else if (!typeOnly && NATIVE_NEW.some((p) => spec === p || spec.startsWith(`${p}/`))) offenders.push(`${f.slice(root.length + 1)} imports ${spec}`);
+    }
+    // A require() of either is only allowed in lib/live/camera.ts, behind its native-module checks.
+    if (!f.endsWith('src/lib/live/camera.ts')) for (const p of NATIVE_NEW) if (src.includes(`require('${p}')`)) offenders.push(`${f.slice(root.length + 1)} requires ${p}`);
+  }
+  assert.ok(seen.size > 30, `walked ${seen.size} files`);
+  assert.ok(seen.has(join(root, 'src/components/record/useInAppCamera.ts')), 'the camera hook is in the graph');
+  assert.deepEqual(offenders, []);
+});
+
+// Loaded here, not inside test(): an import that throws must fail the run.
+const camera = await import(pathToFileURL(join(root, 'src/lib/live/camera.ts')).href);
+test('build-4 safety: lib/live/camera.ts loads without the native modules, and both are null', () => {
+  assert.equal(camera.visionCamera(), null);
+  assert.equal(camera.inAppCameraSupported(), false);
+  assert.equal(camera.imageManipulator(), null);
 });
 
 console.log(`\n${passed} passed`);

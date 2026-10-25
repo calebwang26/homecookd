@@ -18,13 +18,12 @@
 // file starts, and must not start or stop while one is being written; `beforeResume` (after a pause) and
 // `betweenFiles` (a 5-minute roll) are the only places it may restart. `onResume(gapS)` tells homie how
 // much wall time the video skipped.
-import { manipulateAsync, SaveFormat } from 'expo-image-manipulator';
 import { Directory, File, Paths } from 'expo-file-system';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import type { Camera, CameraDevice, CameraDeviceFormat } from 'react-native-vision-camera';
 
-import { visionCamera } from '@/lib/live/camera';
+import { imageManipulator, visionCamera } from '@/lib/live/camera';
 
 import { CHUNK_MS, chunkClip, chunkName, filmedMs, FRAME_EVERY_MS, FRAME_WIDTH, gapS, resumesBySelf, stopsFilming, type Chunk } from './cameraLogic';
 import type { DraftClip } from './draft';
@@ -258,13 +257,15 @@ export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, be
     if (phase !== 'filming' || !onFrame) return;
     const t = setInterval(async () => {
       const cam = ref.current;
-      if (!cam || framing.current || !cbs.current.onFrame) return;
+      const m = imageManipulator();
+      // No manipulator in this build: no stills (a full-size one is too big for the socket); homie just listens.
+      if (!cam || !m || framing.current || !cbs.current.onFrame) return;
       framing.current = true;
       let path: string | null = null;
       try {
         const snap = await cam.takeSnapshot({ quality: 70 });
         path = fileUri(snap.path);
-        const small = await manipulateAsync(path, [{ resize: { width: FRAME_WIDTH } }], { compress: 0.6, format: SaveFormat.JPEG, base64: true });
+        const small = await m.manipulateAsync(path, [{ resize: { width: FRAME_WIDTH } }], { compress: 0.6, format: m.SaveFormat.JPEG, base64: true });
         if (small.base64) cbs.current.onFrame?.(small.base64);
         remove(small.uri);
       } catch {
