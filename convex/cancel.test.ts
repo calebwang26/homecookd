@@ -110,9 +110,23 @@ test("a job can't use another family's upload folder (a worker would read, and o
   await expect(
     t.mutation(api.jobs.create, { sessionToken: sam.sessionToken, uploadPath: "dad-poha-ab12cd/", source: "phone" }),
   ).rejects.toThrow("Upload the video");
-  // Her own family may send from the same folder again (a retry).
-  const again = await t.mutation(api.jobs.create, { sessionToken: dad.sessionToken, uploadPath: "dad-poha-ab12cd/", source: "phone" });
-  expect(again.jobId).toBeTruthy();
+});
+
+test("jobs.create is idempotent per upload folder: the phone's retries never make a second recipe", async () => {
+  const { t, dad } = await family();
+  const create = () => t.mutation(api.jobs.create, { sessionToken: dad.sessionToken, uploadPath: "dad-poha-ab12cd/", source: "phone", title: "Poha" });
+  const first = await create();
+  expect(await create()).toEqual(first);
+  const count = () => t.run(async (ctx) => ({ jobs: (await ctx.db.query("jobs").collect()).length, recipes: (await ctx.db.query("recipes").collect()).length }));
+  expect(await count()).toEqual({ jobs: 1, recipes: 1 });
+  // Stopped meanwhile: a late retry gets the stopped job back, it doesn't start the recipe again.
+  await t.mutation(api.jobs.cancel, { sessionToken: dad.sessionToken, jobId: first.jobId });
+  expect(await create()).toEqual(first);
+  expect((await t.run((ctx) => ctx.db.get(first.jobId)))?.error).toBe("Cancelled.");
+  expect(await count()).toEqual({ jobs: 1, recipes: 1 });
+  // Another folder is another recipe.
+  const other = await t.mutation(api.jobs.create, { sessionToken: dad.sessionToken, uploadPath: "dad-dal-ef34ab/", source: "phone" });
+  expect(other.jobId).not.toBe(first.jobId);
 });
 
 test("the upload signer still recognises a stopped job as hers (its cancel marker is best-effort)", async () => {

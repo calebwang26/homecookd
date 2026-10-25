@@ -28,6 +28,8 @@ import type { LiveJob } from '@/lib/live/convex';
 import { jobProgress, jobUploadLeftMs, needsPendingSend, PENDING_SEND_GIVE_UP, type JobStatus, type StoredJob } from '@/lib/uploads';
 import { colors } from '@/theme/tokens';
 
+import { JOB_FAILED_HINT } from '@/components/record/jobRetry';
+
 import { STAGE_HINT, uploadingView } from './jobsLogic';
 import { rowStyles } from './RecipeRow';
 
@@ -78,6 +80,11 @@ export const STOPPED_VIEW: Record<'waiting' | 'stopping', ProcessingView> = {
  */
 export function describeJob(job: StoredJob, status: JobStatus | undefined, now: number, worker?: LiveJob, libraryId?: string): ProcessingView {
   const server = status?.status ?? 'uploading';
+  // Convex never took this send (every jobs.create try failed) and nothing else knows of it: no recipe
+  // is coming; say so.
+  if (job.convex_job === 'failed' && !worker && server === 'uploading') {
+    return { hint: JOB_FAILED_HINT, problem: true, busy: false, bar: null, action: 'remove', recipeId: null };
+  }
   const ok = { problem: false, busy: true, bar: null, action: null, recipeId: null };
   const problem = { problem: true, busy: false, bar: null, action: 'remove' as const, recipeId: null };
 
