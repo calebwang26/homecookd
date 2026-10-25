@@ -14,7 +14,6 @@ import { advance, AUDIO_S, FakeSocket, fakeSpeak, settle, waitFor } from "./help
 process.env.CARTESIA_API_KEY = "test";
 process.env.ANTHROPIC_API_KEY = "test";
 process.env.VOICE_STUB = "1";
-process.env.VOICE_READ_OFFER = "1"; // these tests walk through the read-aloud offer (off by default)
 const { Cooking } = await import("../src/cook.js");
 
 const unhandled: unknown[] = [];
@@ -44,7 +43,7 @@ const session = (kidId: string): CookSession => ({
   stepOrder: 1,
 });
 
-/** One kid's phone, past the greeting and the offer. `claude`: what the fake Claude does with each turn. */
+/** One kid's phone, past the greeting. `claude`: what the fake Claude does with each turn. */
 async function phone(claude: (actions: Actions, text: string) => Promise<void>, logQuestion?: CookingDeps["convex"]["logQuestion"]) {
   const spoken: string[] = [];
   const turns: string[] = [];
@@ -68,8 +67,7 @@ async function phone(claude: (actions: Actions, text: string) => Promise<void>, 
   const ws = new FakeSocket();
   const cooking = new Cooking(ws as unknown as WebSocket, "token", "recipe-1", "pcm", deps);
   void cooking.start();
-  await waitFor("the offer", () => ws.of("say").some((s) => s.kind === "offer"));
-  await waitFor("the offer's end", () => ws.of("say_end").length === 2);
+  await waitFor("the greeting's end", () => ws.of("say_end").length === 1);
   await advance(AUDIO_S * 1000 + 500);
   return {
     ws,
@@ -110,7 +108,7 @@ test("the ask line starts within half a second of the hint finishing on the phon
   const p = await phone((a) => a.giveHint(HINT.hint, HINT.question));
   const t0 = Date.now();
   p.says("Can I use maple syrup?");
-  await waitFor("the hint's audio", () => p.ws.of("say_end").length === 3);
+  await waitFor("the hint's audio", () => p.ws.of("say_end").length === 2);
   const hintEnds = t0 + 100 + AUDIO_S * 1000; // first audio 100 ms after the call, then AUDIO_S of it
   await waitFor("the ask line", () => p.ws.of("say").some((s) => s.text === "I'll ask Grandma too."));
   const gap = Date.now() - hintEnds;

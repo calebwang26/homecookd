@@ -62,36 +62,56 @@ export function withoutUnsentFor(list: Unsent[], row: { job_id: string; recordin
   return list.filter((u) => u.jobId !== row.job_id && (!row.recording_id || u.recordingId !== row.recording_id));
 }
 
-/** Worker stages that mean the videos are all in (it took the job). */
-const PAST_UPLOAD = new Set(['preparing', 'understanding', 'writing', 'indexing', 'done']);
+/**
+ * Worker stages that mean it has every file: past its upload check (pipeline/worker.py
+ * _complete_upload). Not 'preparing': the worker sets that the moment it claims a job, before it looks,
+ * and holds it while it waits up to 45 s for missing files.
+ */
+const HAS_FILES = new Set(['understanding', 'writing', 'indexing', 'done']);
+/** What a stopped job says (convex/jobs.ts CANCELLED). */
+export const CANCELLED = 'Cancelled.';
+/**
+ * The worker saying files are missing ('uploading') is believed only this long after "I'm done": iOS
+ * may still be finishing a background upload the app was killed during, and the job shows the same.
+ */
+export const REDO_AFTER_MS = 60 * 60_000;
 
 /**
  * What a launch does with one that's waiting:
- *   'wait'      Convex couldn't say: ask again later (never a second copy on a guess)
- *   'done'      nothing to do: the worker has the videos, the job finished or failed or was stopped, or
- *               the job exists and this phone's upload finished
+ *   'wait'      Convex couldn't say, or the job is queued, being claimed ('preparing'), or failed for its
+ *               own reason (her row says so): ask again later, never a second copy on a guess
+ *   'done'      nothing to do: the worker has every file, the job was stopped, it isn't among the
+ *               family's newest jobs (long since handled), or this phone saw every file go
  *   'create'    the upload finished but jobs.create never did: make the job for those videos
- *   'redo'      the job exists but its upload never finished (the app was closed): stop that job, send again
+ *   'redo'      the worker says files are missing ('uploading') and it's been an hour (or this phone saw
+ *               the upload fail): stop that job, send again
  *   'send'      no job and no finished upload: send again
- *   'gone'      none of its videos are on the phone: nothing to send
+ *   'gone'      none of its videos are on the phone: nothing to send (its job is left alone: the files
+ *               may have arrived)
  *   'give-up'   too many tries, or too old (the videos stay in documents/recordings/)
- * `convexJob`: undefined = Convex couldn't say, null = no job. `uploaded`: this phone's upload row for
- * `jobId` says every file went. `clipsHere`: how many of its videos are still on the phone.
+ * `convexJob`: undefined = Convex couldn't say, null = no job. `upload`: this phone's row for the note's
+ * job (null: none). `clipsHere`: how many of its videos are still on the phone.
  */
 export type ResendStep = 'wait' | 'done' | 'create' | 'redo' | 'send' | 'gone' | 'give-up';
 
+export type JobSeen = { stage: string | null; error?: string | null };
+
 export function resendStep(
   u: Pick<Unsent, 'resends' | 'savedAt'>,
-  at: { convexJob: { stage: string | null } | null | undefined; uploaded: boolean; clipsHere: number; now: number },
+  at: { convexJob: JobSeen | null | undefined; upload: 'uploading' | 'uploaded' | 'failed' | null; clipsHere: number; now: number },
 ): ResendStep {
   if (at.now - Date.parse(u.savedAt) > MAX_AGE_MS) return 'give-up';
   if (at.convexJob === undefined) return 'wait';
-  const stage = at.convexJob?.stage;
+  const uploaded = at.upload === 'uploaded';
   if (at.convexJob) {
-    // Not among the family's newest jobs, past the upload, failed (or stopped), or this phone saw it all go.
-    if (stage === null || stage === undefined || PAST_UPLOAD.has(stage) || stage === 'failed' || at.uploaded) return 'done';
-  } else if (at.uploaded) return u.resends >= MAX_RESENDS ? 'give-up' : 'create';
+    const { stage, error } = at.convexJob;
+    if (stage === null || HAS_FILES.has(stage) || (stage === 'failed' && error === CANCELLED) || uploaded) return 'done';
+    if (stage !== 'uploading') return 'wait';
+    if (!at.clipsHere) return 'gone';
+    if (at.upload !== 'failed' && at.now - Date.parse(u.savedAt) < REDO_AFTER_MS) return 'wait';
+    return u.resends >= MAX_RESENDS ? 'give-up' : 'redo';
+  }
+  if (uploaded) return u.resends >= MAX_RESENDS ? 'give-up' : 'create';
   if (!at.clipsHere) return 'gone';
-  if (u.resends >= MAX_RESENDS) return 'give-up';
-  return at.convexJob ? 'redo' : 'send';
+  return u.resends >= MAX_RESENDS ? 'give-up' : 'send';
 }

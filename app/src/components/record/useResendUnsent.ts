@@ -1,11 +1,12 @@
 // After the app died with an in-app recording not fully sent (a crash at "Done! Sending it to Shreya",
 // a swipe-away mid-upload): sends it again in the background, as the cook who filmed it, whoever is in
 // on the phone (lib/unsentRecordings; the phone opens as usual). It runs once the family is loaded and
-// each time the app comes back to the front, each recording once per run of the app unless Convex
-// couldn't answer. Convex first says what exists (lib/unsentLogic resendStep); then it makes only a
-// missing job, or stops a job whose upload never finished and sends again the way the done view does
-// (sendDraft). The recording's old rows on Home go first (found by its recording id), so one "Sending
-// your videos" row shows. A note stopped on Home while this ran is left alone (re-read before acting).
+// each time the app comes back to the front, each recording once per run of the app unless it's
+// waiting (Convex couldn't answer, or the worker hasn't said yet). Convex first says what exists
+// (lib/unsentLogic resendStep); then it makes only a missing job, or stops a job the worker says is
+// missing files (an hour on) and sends again the way the done view does (sendDraft). The recording's
+// old rows on Home go first (found by its recording id), so one "Sending your videos" row shows. A
+// note stopped on Home while this ran is left alone (re-read before acting).
 //
 //   useResendUnsent();   (app/_layout, inside the session)
 import { useEffect, useRef } from 'react';
@@ -33,7 +34,7 @@ async function resendOne(u: Unsent, cook: Profile, profiles: Profile[], learners
   const here = clipsHere(u);
   const job = await recordingJob(u.recordingId, cook.id);
   const row = loadJobs().find((j) => j.job_id === u.jobId);
-  const step = resendStep(u, { convexJob: job, uploaded: row?.local_state === 'uploaded', clipsHere: here.length, now: Date.now() });
+  const step = resendStep(u, { convexJob: job, upload: row?.local_state ?? null, clipsHere: here.length, now: Date.now() });
   if (step === 'wait') return void looked.delete(u.recordingId);
   if (!stillUnsent(u.recordingId)) return; // stopped on Home meanwhile
   const to = doneTo(cook.id, profiles, learners, u);
@@ -49,14 +50,19 @@ async function resendOne(u: Unsent, cook: Profile, profiles: Profile[], learners
     await makeJob(u.jobId!, cook.id, { kids: to.picked, glasses: false, language: u.language, recordingId: u.recordingId, title });
     return dropUnsent(u.recordingId);
   }
-  // 'gone', 'redo', 'send': a job that never got its videos is stopped first, and the old rows go.
-  if (step !== 'gone') countResend(u.recordingId);
+  // 'gone': nothing to send. A job is left alone (its files may have arrived); with none, its rows are dead.
+  if (step === 'gone') {
+    if (!job) for (const r of rowsOf(u)) removeJob(r.job_id);
+    return dropUnsent(u.recordingId);
+  }
+  // 'redo', 'send': the job the worker says is missing files is stopped first, and the old rows go.
+  countResend(u.recordingId);
   if (job && !(await cancelLiveJob(job.id, cook.id))) return dropUnsent(u.recordingId); // it finished meanwhile
   for (const r of rowsOf(u)) {
     cancelJobUploads(r.job_id);
     removeJob(r.job_id);
   }
-  if (step === 'gone' || !stillUnsent(u.recordingId)) return dropUnsent(u.recordingId);
+  if (!stillUnsent(u.recordingId)) return;
   await sendDraft({
     me: cook,
     draft: { glasses: false, language: u.language, recordingId: u.recordingId },
@@ -77,7 +83,7 @@ async function resendAll(familyId: string, profiles: Profile[], learners: Profil
       const cook = profiles.find((p) => p.id === u.cookId);
       if (!cook) {
         // Not in this family any more: kept until it's too old to send.
-        if (resendStep(u, { convexJob: undefined, uploaded: false, clipsHere: 0, now: Date.now() }) === 'give-up') dropUnsent(u.recordingId);
+        if (resendStep(u, { convexJob: undefined, upload: null, clipsHere: 0, now: Date.now() }) === 'give-up') dropUnsent(u.recordingId);
         continue;
       }
       looked.add(u.recordingId);

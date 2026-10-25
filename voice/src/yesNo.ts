@@ -1,5 +1,5 @@
-// The kid's spoken yes or no: an answer to homie's offers (read it out loud, hear a story) and to the app's own
-// homie moments. It follows the app's yesNo (app/src/lib/live/voiceLogic.ts, #36) and adds the everyday no's
+// The kid's spoken yes or no: an answer to homie's story nudge ("Want to hear it?") and to the app's own homie
+// moments. It follows the app's yesNo (app/src/lib/live/voiceLogic.ts, #36) and adds the everyday no's
 // that come with more words after them. No imports.
 //
 // - A yes word counts, whatever follows: "Sure, read it.", "Yes, I want to hear it.", and "Yes, but how much

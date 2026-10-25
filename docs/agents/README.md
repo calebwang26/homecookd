@@ -35,12 +35,17 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [homie-talks-no-bubble](memory/homie-talks-no-bubble.md) | Oct 24: homie talking = no text (pot lights, lid lifts, "AI voice"); asking = centred, no buttons, answer out loud |
 | [homie-hello-once](memory/homie-hello-once.md) | Oct 24: homie introduces itself once: the pot per person on a phone, the recording hello per cook (`metBefore`) |
 | [homie-guidance-only](memory/homie-guidance-only.md) | Oct 24: while a cook films, homie gives guidance (how much, show it to the camera, the plate), never cooking advice |
-| [in-app-recording](memory/in-app-recording.md) | Oct 24: phone recording films inside the app at 1080p (VisionCamera 4) so homie stays live; the audio-session rules |
+| [in-app-recording](memory/in-app-recording.md) | Oct 24: phone recording films inside the app at 1080p (VisionCamera 4) so homie stays live; the audio-session rules; the flip-camera button (a file boundary while filming, video not mirrored) |
 | [never-signed-out-by-a-crash](memory/never-signed-out-by-a-crash.md) | Oct 24: a crash or a passing error never signs anyone out (only Sign out or the exact "This phone was signed out." 401 forget the key); an in-app recording the app dies on after "I'm done" is sent again |
 | [homie-silent-during-video](memory/homie-silent-during-video.md) | Oct 24: while any video plays homie says nothing on its own (held for the next pause); only answers to the kid; reading steps aloud off by default |
 | [homie-tap-always-answers](memory/homie-tap-always-answers.md) | Oct 24: a tap on homie always gets a spoken answer: news first (Claude), else the screen's one line about its big button; "I'm right here." on a repeat tap |
 | [homie-judges-who-was-talking](memory/homie-judges-who-was-talking.md) | Oct 24: in cook mode Claude judges whether the kid was talking to homie (silent if not); "homie" spelled loosely is a strong yes; no wake word |
 | [homie-docked-cook-bar](memory/homie-docked-cook-bar.md) | Oct 24: cook mode is Back · homie · Next (even spacing), homie like Siri, no chips; tap asks, long press mutes; one smooth expand, light blur |
+| [homie-siri-states](memory/homie-siri-states.md) | Oct 24: Siri-like states (off white · lit halo · listening ring · thinking · speaking), truthful to the mic; a tap is on/off, never navigates |
+| [homie-mic-on-demand](memory/homie-mic-on-demand.md) | Oct 24: the mic is on only when homie is tapped on, or 8 s after a step line or nudge; cost numbers per cook and per 1M credits |
+| [homie-step-lines](memory/homie-step-lines.md) | Oct 24: every step change says the step's short line at once, Sonic audio made ahead and cached; no read-aloud offer |
+| [homie-size-and-centre](memory/homie-size-and-centre.md) | Oct 24: homie is as tall as its neighbours (48 header, 60 bar), drawn at real size, centred when the row is symmetric |
+| [homie-no-guessed-roles](memory/homie-no-guessed-roles.md) | Oct 24: homie never guesses a family role or gender; names and the family's word, else "your family" / "your loved one" |
 | [unanswered-part-is-approved](memory/unanswered-part-is-approved.md) | Oct 24, Caleb: a part of a proposal he doesn't reply to is approved as proposed |
 | [lander-design-references](memory/lander-design-references.md) | Lander taste: video hero, giant type, footer wordmark animation |
 | [lander-copy-feedback](memory/lander-copy-feedback.md) | Copy rules: sell emotion, 3-second demo steps, instantly intuitive |

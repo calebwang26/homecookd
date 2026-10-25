@@ -357,8 +357,8 @@ export async function setCover(recordingId: string, photoUri: string): Promise<b
   }
 }
 
-/** A recording's Convex job: its stage, or null when it isn't among the family's 20 newest jobs (long since handled). */
-export type RecordingJob = { id: string; stage: JobStage | null };
+/** A recording's Convex job: its stage and error ("Cancelled." once stopped); stage null when it isn't among the family's 20 newest jobs (long since handled). */
+export type RecordingJob = { id: string; stage: JobStage | null; error: string | null };
 
 /**
  * The Convex job made for a recording (live.recording's jobId), asked once before a resend after a
@@ -374,7 +374,8 @@ export async function recordingJob(recordingId: string, as?: string): Promise<Re
     if (!row.jobId) return null;
     const jobs = await call<LiveJob[] | undefined>('query', 'jobs:forFamily', { sessionToken }, () => undefined, { soft: true });
     if (!jobs) return undefined;
-    return { id: row.jobId, stage: jobs.find((j) => j._id === row.jobId)?.stage ?? null };
+    const job = jobs.find((j) => j._id === row.jobId);
+    return { id: row.jobId, stage: job?.stage ?? null, error: job?.error ?? null };
   } catch (e) {
     console.warn('[convex] live.recording', String(e).slice(0, 160));
     return undefined;
