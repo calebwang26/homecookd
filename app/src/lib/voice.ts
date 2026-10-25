@@ -200,9 +200,11 @@ export async function uploadVoice(rec: VoiceRecording): Promise<{ path: string; 
     if (!res.ok) throw new ApiError('The voice note didn’t upload. Try again.', res.status, 'http');
     return { path: up.path, duration_s: rec.duration_s };
   }
-  const up = await api.voiceUpload(rec.contentType || 'audio/m4a');
   const file = new File(rec.uri);
-  if (file.exists && file.size > up.max_bytes) throw new ApiError('That voice note is too long to send.', 413, 'http');
+  // iOS closes the app on an upload task for a file that isn't there (lib/uploads fileOnPhone).
+  if (!file.exists) throw new Error('That voice note isn’t on this phone any more.');
+  const up = await api.voiceUpload(rec.contentType || 'audio/m4a');
+  if (file.size > up.max_bytes) throw new ApiError('That voice note is too long to send.', 413, 'http');
   let lastStatus = 0;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {

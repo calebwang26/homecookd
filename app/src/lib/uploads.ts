@@ -26,9 +26,9 @@ export function uploadsConfigured(profileId?: string | null): boolean {
   return !!UPLOAD_URL && (!!FAMILY_CODE || convexSignedIn(profileId ?? undefined));
 }
 
-/** Headers for a signer call: the Convex session when there is one, the family code when it's set. */
-export async function signerHeaders(): Promise<Record<string, string>> {
-  const token = convexSignedIn() ? await convexSession() : null;
+/** Headers for a signer call: the Convex session when there is one (`as`: that person's, by default whoever is in), the family code when it's set. */
+export async function signerHeaders(as?: string): Promise<Record<string, string>> {
+  const token = convexSignedIn(as) ? await convexSession(as) : null;
   if (!token && !FAMILY_CODE) throw new Error('Please sign in again.');
   return {
     'Content-Type': 'application/json',
@@ -82,6 +82,8 @@ export type JobMeta = {
   duration_s?: number | null;
   /** A local video file to draw the card's thumbnail from (may be gone after a relaunch). */
   thumb_video_uri?: string | null;
+  /** homie's recording these videos are from (a resend after a crash finds its old rows by it). */
+  recording_id?: string | null;
 };
 
 export type JobStatus = {
@@ -237,6 +239,14 @@ export function cancelJobUploads(jobId: string) {
   }
 }
 
+/** Each upload started in this app session: true once every file is in, false when one failed or it was stopped. */
+const finishing = new Map<string, Promise<boolean>>();
+
+/** Resolves when this job's files are all uploaded (true) or not (false); false at once when it isn't running here. */
+export function uploadFinished(jobId: string): Promise<boolean> {
+  return finishing.get(jobId) ?? Promise.resolve(false);
+}
+
 // ---------------------------------------------------------------------------
 
 export function contentTypeFor(asset: ImagePickerAsset): string {
@@ -267,7 +277,7 @@ export function fileOnPhone(uri: string): boolean {
   }
 }
 
-export const MISSING_VIDEO = 'A video isn’t on this phone any more. Record it again.';
+export const MISSING_VIDEO = 'A video isn’t on this phone any more. Record or pick it again.';
 
 export function fileSizeFor(asset: ImagePickerAsset): number {
   // Prefer the size of the exact file we will upload; fall back to the picker's number.
@@ -289,6 +299,8 @@ export type StartUploadInput = {
   assets: ImagePickerAsset[];
   /** Extras saved with the job (who it is for, the hello, a thumbnail source). */
   meta?: JobMeta;
+  /** Who is sending (a profile id; their Convex session signs the upload), by default whoever is in. */
+  as?: string;
 };
 
 /**
@@ -296,7 +308,7 @@ export type StartUploadInput = {
  * WITHOUT waiting for the uploads to finish.
  */
 export async function startUpload(input: StartUploadInput): Promise<StoredJob> {
-  if (!uploadsConfigured()) throw new Error("Uploads aren't set up yet.");
+  if (!uploadsConfigured(input.as)) throw new Error("Uploads aren't set up yet.");
   if (!uploadsSupportedHere) throw new Error('Uploads work from the homecookd app on your phone.');
   if (input.assets.some((a) => !fileOnPhone(a.uri))) throw new Error(MISSING_VIDEO);
 
@@ -313,7 +325,7 @@ export async function startUpload(input: StartUploadInput): Promise<StoredJob> {
   try {
     const res = await fetch(UPLOAD_URL, {
       method: 'POST',
-      headers: await signerHeaders(),
+      headers: await signerHeaders(input.as),
       body: JSON.stringify({ title: input.title, cook_name: input.cook_name, relation: input.relation, files }),
       signal: controller.signal,
     });
@@ -401,13 +413,15 @@ export async function startUpload(input: StartUploadInput): Promise<StoredJob> {
     }
   });
 
-  void Promise.allSettled(runs).then((results) => {
-    if (cancelledJobs.has(stored.job_id)) return; // cancelled & already removed: nothing to report
+  const settled = Promise.allSettled(runs).then((results) => {
+    if (cancelledJobs.has(stored.job_id)) return false; // cancelled & already removed: nothing to report
     const failed = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
     if (failed.length > 0) console.warn('[uploads] some files failed', failed.map((f) => String(f.reason)));
     updateJob(stored.job_id, { local_state: failed.length > 0 ? 'failed' : 'uploaded' });
     emit();
+    return failed.length === 0;
   });
+  finishing.set(stored.job_id, settled);
 
   return stored;
 }

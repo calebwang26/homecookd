@@ -3,7 +3,7 @@
 //   kv*:     everything else (cached family, profile lines, composer.mode.<id>). AsyncStorage on native, localStorage on web.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
-import { Platform } from 'react-native';
+import { AppState, Platform } from 'react-native';
 import { nativeClearLegacy, nativeGet, PREFIX, webGetItem, webSetItem } from './legacyKeys';
 
 const web = Platform.OS === 'web';
@@ -28,11 +28,31 @@ export async function secretRead(key: string): Promise<string | null> {
   return v ?? secretGet(key); // nothing under the new name: the old "edible.*" one, moved over
 }
 
-export async function secretSet(key: string, value: string | null): Promise<void> {
+/**
+ * secretRead, tried again after each of `waitsMs`: the value, null when nothing is saved, or undefined
+ * when the keychain still can't answer while the app isn't in front (ask again when it is). In front, a
+ * keychain that keeps failing counts as nothing saved: better a sign-in screen than a phone stuck forever.
+ */
+export async function secretReadRetried(key: string, waitsMs: number[] = [300, 600]): Promise<string | null | undefined> {
+  for (let i = 0; ; i++) {
+    try {
+      return await secretRead(key);
+    } catch {
+      if (i >= waitsMs.length) return AppState.currentState === 'active' ? null : undefined;
+      await new Promise((r) => setTimeout(r, waitsMs[i]));
+    }
+  }
+}
+
+/**
+ * `afterFirstUnlock`: readable from the first unlock after a restart (a launch in the background can
+ * read it), instead of only while the phone is unlocked. It applies when the item is created.
+ */
+export async function secretSet(key: string, value: string | null, { afterFirstUnlock = false } = {}): Promise<void> {
   if (web) return webSet(key, value);
   try {
     if (value == null) await SecureStore.deleteItemAsync(PREFIX + key);
-    else await SecureStore.setItemAsync(PREFIX + key, value);
+    else await SecureStore.setItemAsync(PREFIX + key, value, afterFirstUnlock ? { keychainAccessible: SecureStore.AFTER_FIRST_UNLOCK } : undefined);
   } catch {
     // ignore
   }

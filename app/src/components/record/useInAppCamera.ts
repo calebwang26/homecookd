@@ -55,24 +55,22 @@ type Options = {
 const fileUri = (path: string) => (path.startsWith('file://') ? path : `file://${path}`);
 
 /**
- * Moves a finished file out of tmp into documents/recordings/<id>/part-NN.mp4 (tmp can be purged) and
- * returns where it is now. The move must be the sync one: `move()` is async in expo-file-system 57, so
- * reading the uri right after it gave the old tmp path, the file was gone from there a moment later,
- * and the upload of a file that isn't there crashed the app (Oct 24, TestFlight build 5).
+ * Moves a finished file out of tmp into documents/recordings/<id>/part-NN.mp4 (tmp can be purged). The move
+ * must be done before this returns (moveSync; expo-file-system's `move` is async): the upload reads this path,
+ * and an upload task for a file that isn't there crashes the app (TestFlight build 5, Oct 24).
  */
 function keep(path: string, recordingId: string | null, n: number): string {
-  const tmp = new File(fileUri(path));
   try {
     const dir = new Directory(Paths.document, 'recordings', recordingId ?? 'unsaved');
     if (!dir.exists) dir.create({ intermediates: true });
     const target = new File(dir, chunkName(n));
     if (target.exists) target.delete();
-    tmp.moveSync(target);
-    if (target.exists) return target.uri;
+    new File(fileUri(path)).moveSync(target);
+    return target.uri;
   } catch (e) {
     console.warn('[camera] could not move the file; it stays in tmp', String(e).slice(0, 160));
+    return fileUri(path);
   }
-  return tmp.uri;
 }
 
 function remove(uri: string) {
@@ -231,11 +229,10 @@ export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, be
   }, [startFile, setPhase]);
 
   const stop = useCallback(async (): Promise<DraftClip[]> => {
-    if (phaseRef.current !== 'done') {
-      setPhase('done');
-      await endFile();
-    }
-    return chunks.current.map((c, i) => chunkClip(c, i + 1)); // part-01.mp4 first, as on disk
+    if (phaseRef.current === 'done') return chunks.current.map((c, i) => chunkClip(c, i + 1));
+    setPhase('done');
+    await endFile();
+    return chunks.current.map((c, i) => chunkClip(c, i + 1));
   }, [endFile, setPhase]);
 
   // Leaving the app ends the file at once; coming back films again by itself after a short trip.

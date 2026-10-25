@@ -1,19 +1,22 @@
-// In-app recordings filmed but not yet handed to the worker, so a crash or a kill at "Done! Sending it
-// to Shreya" never loses one (Oct 24). One note per recording in Paths.document/unsent-recordings.json:
-// written when filming stops (app/recording.tsx), given the upload job once the signer made one, and
-// dropped once Convex has the job (components/record/sendDraft). On the next launch the phone opens as
-// that cook (session `defaultPerson`) and their Home sends what's left (components/record/
-// useResendUnsent). The videos stay in documents/recordings/<recordingId>/ either way. Rules: lib/unsentLogic.
+// In-app recordings filmed but not yet fully handed to the worker (Oct 24), so that if the app dies
+// after "I'm done" (a crash at "Done! Sending it to Shreya", a swipe-away mid-upload) the next launch
+// sends it again. One note per recording in Paths.document/unsent-recordings.json: written when filming
+// stops (app/recording.tsx), given the upload job once the signer made one, and dropped once Convex has
+// the job and every file is uploaded (components/record/sendDraft), or when she stops or clears its
+// row on Home. The next launch sends what's left in the background, as that cook, whoever is in
+// (components/record/useResendUnsent). The videos stay in documents/recordings/<recordingId>/.
+// Not covered: a recording the app dies in before "I'm done" (its finished 5-minute files are kept,
+// but nothing sends them). Rules: lib/unsentLogic.
 //
 //   saveUnsent({ recordingId, cookId, familyId, clips, dish, language, forKids, everyone, requestFrom })
-//   markUnsentJob(recordingId, jobId)   dropUnsent(recordingId)   dropUnsentJob(jobId)   countResend(recordingId)
-//   loadUnsent()   savedHere(recordingId)   unsentUri(clip)   clipsOnPhone(note)
+//   markUnsentJob(recordingId, jobId)   dropUnsent(recordingId)   dropUnsentFor(row)   countResend(recordingId)
+//   loadUnsent()   stillUnsent(recordingId)   savedHere(recordingId)   clipsHere(note)   unsentUri(clip)
 import { File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 
 import type { DraftClip } from '@/components/record/draft';
 
-import { docPath, isFullUri, patchUnsent, withoutUnsent, withUnsent, type Unsent, type UnsentClip } from './unsentLogic';
+import { docPath, isFullUri, patchUnsent, withoutUnsent, withoutUnsentFor, withUnsent, type Unsent, type UnsentClip } from './unsentLogic';
 
 const FILE = 'unsent-recordings.json';
 const native = Platform.OS !== 'web'; // the web build never films in the app
@@ -72,18 +75,21 @@ export function dropUnsent(recordingId: string) {
 }
 
 /** She stopped or cleared that upload's row on Home: its recording is never sent again by itself. */
-export function dropUnsentJob(jobId: string) {
+export function dropUnsentFor(row: { job_id: string; recording_id?: string | null }) {
   const list = loadUnsent();
-  const rest = list.filter((u) => u.jobId !== jobId);
+  const rest = withoutUnsentFor(list, row);
   if (rest.length !== list.length) save(rest);
 }
 
-/** Counted before a resend starts, so a send that crashes the app again still counts. */
+/** Counted before a resend starts, so a send that closes the app again still counts. */
 export function countResend(recordingId: string) {
   const list = loadUnsent();
   const u = list.find((x) => x.recordingId === recordingId);
   if (u) save(patchUnsent(list, recordingId, { resends: u.resends + 1 }));
 }
+
+/** Its note is still there (not stopped on Home meanwhile, not sent by another run). */
+export const stillUnsent = (recordingId: string) => loadUnsent().some((u) => u.recordingId === recordingId);
 
 export const savedHere = (recordingId: string) => mine.has(recordingId);
 
@@ -92,15 +98,14 @@ export function unsentUri(c: UnsentClip): string {
   return isFullUri(c.path) ? c.path : new File(Paths.document, c.path).uri;
 }
 
-/** Every one of its videos is still on the phone (and not empty). */
-export function clipsOnPhone(u: Unsent): boolean {
-  if (!u.clips.length) return false;
-  try {
-    return u.clips.every((c) => {
+/** Its videos that are still on the phone and not empty (a missing one is left out, the rest still go). */
+export function clipsHere(u: Unsent): UnsentClip[] {
+  return u.clips.filter((c) => {
+    try {
       const f = new File(unsentUri(c));
       return f.exists && (f.size ?? 0) > 0;
-    });
-  } catch {
-    return false;
-  }
+    } catch {
+      return false;
+    }
+  });
 }

@@ -1,7 +1,7 @@
-// The rules for in-app recordings that haven't reached the worker yet (lib/unsentRecordings), pure
-// (node scripts/test-recording-ui.mjs): where each video is kept (a path inside documents/, because iOS
-// moves the app's folder when the app updates), what the next launch does with a recording that's
-// still waiting, and which cook the phone opens as so that send can finish.
+// The rules for in-app recordings that haven't fully reached the worker yet (lib/unsentRecordings),
+// pure (node scripts/test-recording-ui.mjs): where each video is kept (a path inside documents/, because
+// iOS moves the app's folder when the app updates), and what a launch does with a recording that's
+// still waiting, from what Convex and the phone's upload row say.
 
 export type UnsentClip = {
   /** Inside documents/ ("recordings/<id>/part-01.mp4"), or a full file:// uri when it's elsewhere. */
@@ -28,12 +28,14 @@ export type Unsent = {
   savedAt: string;
   /** The upload signer's job, once one was made (its row in jobs.json). */
   jobId: string | null;
-  /** Sends started after a relaunch. */
+  /** Sends (or jobs.create calls) started after a relaunch. */
   resends: number;
 };
 
 /** A recording that fails to send this many launches in a row stops being sent by itself (its videos stay). */
 export const MAX_RESENDS = 3;
+/** Nor one older than this (the signer's upload links last 7 days, and a cook may have left the family). */
+export const MAX_AGE_MS = 7 * 24 * 3600 * 1000;
 
 /** Where a file is inside documents/, or its full uri when it isn't in there. */
 export function docPath(uri: string, documentsUri: string): string {
@@ -55,23 +57,41 @@ export function withoutUnsent(list: Unsent[], recordingId: string): Unsent[] {
   return list.filter((u) => u.recordingId !== recordingId);
 }
 
-/**
- * What a launch does with one that's waiting. `convexJobId`: the job on its Convex recording (null =
- * none, undefined = Convex couldn't say). 'sent': the job exists, forget the note. 'gone': its videos
- * aren't on the phone, nothing to send. 'wait': ask again next launch. 'give-up': it failed too often
- * (the videos stay in documents/recordings/). 'send': send it now.
- */
-export type ResendStep = 'sent' | 'gone' | 'wait' | 'give-up' | 'send';
-
-export function resendStep(u: Pick<Unsent, 'resends'>, at: { convexJobId: string | null | undefined; filesHere: boolean }): ResendStep {
-  if (at.convexJobId) return 'sent';
-  if (!at.filesHere) return 'gone';
-  if (at.convexJobId === undefined) return 'wait';
-  return u.resends >= MAX_RESENDS ? 'give-up' : 'send';
+/** Stopped or cleared on Home (that upload row): its note goes, found by the row's job or recording. */
+export function withoutUnsentFor(list: Unsent[], row: { job_id: string; recording_id?: string | null }): Unsent[] {
+  return list.filter((u) => u.jobId !== row.job_id && (!row.recording_id || u.recordingId !== row.recording_id));
 }
 
-/** The cook with a recording still waiting in this family (the newest), or null. */
-export function waitingCook(list: Unsent[], familyId: string | null): string | null {
-  if (!familyId) return null;
-  return list.find((u) => u.familyId === familyId && u.resends < MAX_RESENDS)?.cookId ?? null;
+/** Worker stages that mean the videos are all in (it took the job). */
+const PAST_UPLOAD = new Set(['preparing', 'understanding', 'writing', 'indexing', 'done']);
+
+/**
+ * What a launch does with one that's waiting:
+ *   'wait'      Convex couldn't say: ask again later (never a second copy on a guess)
+ *   'done'      nothing to do: the worker has the videos, the job finished or failed or was stopped, or
+ *               the job exists and this phone's upload finished
+ *   'create'    the upload finished but jobs.create never did: make the job for those videos
+ *   'redo'      the job exists but its upload never finished (the app was closed): stop that job, send again
+ *   'send'      no job and no finished upload: send again
+ *   'gone'      none of its videos are on the phone: nothing to send
+ *   'give-up'   too many tries, or too old (the videos stay in documents/recordings/)
+ * `convexJob`: undefined = Convex couldn't say, null = no job. `uploaded`: this phone's upload row for
+ * `jobId` says every file went. `clipsHere`: how many of its videos are still on the phone.
+ */
+export type ResendStep = 'wait' | 'done' | 'create' | 'redo' | 'send' | 'gone' | 'give-up';
+
+export function resendStep(
+  u: Pick<Unsent, 'resends' | 'savedAt'>,
+  at: { convexJob: { stage: string | null } | null | undefined; uploaded: boolean; clipsHere: number; now: number },
+): ResendStep {
+  if (at.now - Date.parse(u.savedAt) > MAX_AGE_MS) return 'give-up';
+  if (at.convexJob === undefined) return 'wait';
+  const stage = at.convexJob?.stage;
+  if (at.convexJob) {
+    // Not among the family's newest jobs, past the upload, failed (or stopped), or this phone saw it all go.
+    if (stage === null || stage === undefined || PAST_UPLOAD.has(stage) || stage === 'failed' || at.uploaded) return 'done';
+  } else if (at.uploaded) return u.resends >= MAX_RESENDS ? 'give-up' : 'create';
+  if (!at.clipsHere) return 'gone';
+  if (u.resends >= MAX_RESENDS) return 'give-up';
+  return at.convexJob ? 'redo' : 'send';
 }

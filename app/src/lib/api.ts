@@ -10,7 +10,8 @@
 // Any call can override them (`{ deviceKey, code, profileId }`); overriding one credential drops
 // the other, e.g. joinFamily() checking a typed code. A 401 "This phone was signed out." on the
 // phone's own device key means it was signed out (someone removed this person): the key is dropped
-// and setSignedOutHandler() hears it once. Any other 401 is only an error (isSignedOutAnswer). A 403 for the current profile because that person was removed (from another phone)
+// and setSignedOutHandler() hears it once. Any other 401 is only an error (isSignedOutAnswer). A
+// 403 for the current profile because that person was removed (from another phone)
 // tells setProfileRemovedHandler(), so the session can go back to "Who's in the kitchen?". Device
 // keys, family codes and id tokens are never logged.
 // Every request has a 10 s timeout (longer for sign-in and joining, which do more on the server). Safe (idempotent) calls retry once on a network error or 5xx;

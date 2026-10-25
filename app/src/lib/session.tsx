@@ -35,9 +35,7 @@
 // Profiles come from GET /family and are cached, so the app opens offline with the last known family.
 // One phone, one person: every launch goes straight to this phone's `defaultPerson`: its owner (a
 // phone that signed in as someone: Apple, Google or an invite), else whoever was picked here last
-// (a shared family-code phone). One exception: a recording filmed here that a crash kept from
-// sending (lib/unsentRecordings) opens the phone as its cook, so it sends as them. "Who's in the
-// kitchen?" shows only before anyone is picked, for a
+// (a shared family-code phone). "Who's in the kitchen?" shows only before anyone is picked, for a
 // phone that hasn't said who it is yet, or when someone taps their own face (`/?pick=1`) to cook as
 // someone without a phone of their own. Every cold start goes through "/" (which enters the default
 // person at once), and so does coming back after a long time away (RESUME_RESET_MS), unless the
@@ -77,11 +75,9 @@ import * as google from './auth/google';
 import { NOT_AN_INVITE, parseInviteInput } from './auth/links';
 import { SignInError, type ProviderSignIn } from './auth/types';
 import { lastMessagePushAt, unregister as unregisterPush } from './push';
-import { kvGet, kvGetJson, kvSet, kvSetJson, secretGet, secretRead, secretSet } from './storage';
+import { kvGet, kvGetJson, kvSet, kvSetJson, secretGet, secretReadRetried, secretSet } from './storage';
 import { buzzForUnread, TAP_WAIT_MS, tapStillDue, unreadSeenAfter, type UnreadSeen } from './touches';
 import { deviceTimeZone } from './tz';
-import { waitingCook } from './unsentLogic';
-import { loadUnsent } from './unsentRecordings';
 
 // Every signed-in call carries the phone's zone (x-tz): quiet hours, Sunday weeks, the 1st's recap.
 // Not while the web `?as=` dev aid borrows the build's code (screenshots never write a zone).
@@ -184,9 +180,8 @@ export type Session = {
    */
   owner: Profile | null;
   /**
-   * Who this phone opens to: the cook of a recording a crash kept from sending (this launch only),
-   * else its owner, else whoever was picked here last (still in the family, not on their own phone
-   * elsewhere, not only invited). null = "Who's in the kitchen?" asks.
+   * Who this phone opens to: its owner, else whoever was picked here last (still in the family, not
+   * on their own phone elsewhere, not only invited). null = "Who's in the kitchen?" asks.
    */
   defaultPerson: Profile | null;
   /**
@@ -266,23 +261,21 @@ function deviceLabel(): string {
 const providerAuth = (p: Provider, input: ProviderAuthInput) => (p === 'apple' ? api.authApple(input) : api.authGoogle(input));
 
 /**
- * This phone's saved key: null when none is saved, undefined when the keychain can't answer right now
- * (a locked phone, a launch in the background). Never read the second as "signed out".
+ * This phone's saved key: null when none is saved, undefined when the keychain can't answer while the
+ * app isn't in front (a locked phone, a launch in the background), which is never "signed out"
+ * (storage secretReadRetried).
  */
-async function readSavedKey(): Promise<string | null | undefined> {
-  for (let i = 0; i < 3; i++) {
-    try {
-      return await secretRead(KEY_DEVICE);
-    } catch {
-      await new Promise((r) => setTimeout(r, 300 * (i + 1)));
-    }
-  }
-  return undefined;
-}
+const readSavedKey = () => secretReadRetried(KEY_DEVICE);
 
-/** Save this phone's key and read it back: true only when it is really stored. */
+/**
+ * Save this phone's key and read it back: true only when it is really stored. Saved readable from the
+ * first unlock after a restart, so a launch in the background (an upload finishing) can read it too.
+ * The old item goes first: the keychain only changes the value of an item that's already there, not
+ * when it can be read. (A key saved before Oct 24 keeps "while unlocked"; readSavedKey covers that.)
+ */
 async function saveKey(key: string): Promise<boolean> {
-  await secretSet(KEY_DEVICE, key);
+  await secretSet(KEY_DEVICE, null);
+  await secretSet(KEY_DEVICE, key, { afterFirstUnlock: true });
   return (await secretGet(KEY_DEVICE)) === key;
 }
 
@@ -386,8 +379,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   /** The keychain couldn't be read at boot: boot again when the app comes to the front, or on refresh. */
   const keyUnread = useRef(false);
   const bootRef = useRef<() => Promise<boolean>>(async () => false);
-  /** A recording filmed here that a crash kept from sending (read once): the phone opens as its cook. */
-  const [unsent] = useState(loadUnsent); // [] on the web, which never films in the app
 
   /** Point the session and the API client at a credential. */
   const setCredential = useCallback((c: Cred) => {
@@ -580,9 +571,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const owner = useMemo(() => profiles.find((p) => p.id === ownerId && !p.locked && !p.invited) ?? null, [profiles, ownerId]);
   const familyId = data?.family.id ?? null;
   const usable = (p: Profile | undefined) => (p && !p.locked && !p.invited ? p : null);
-  const waiting = usable(profiles.find((p) => p.id === waitingCook(unsent, familyId)));
   const defaultPerson =
-    waiting ?? owner ?? (last && last.familyId === familyId ? usable(profiles.find((p) => p.id === last.id)) : null);
+    owner ?? (last && last.familyId === familyId ? usable(profiles.find((p) => p.id === last.id)) : null);
   const defaultRef = useRef<string | null>(null);
   const meRef = useRef<string | null>(null);
   useEffect(() => {

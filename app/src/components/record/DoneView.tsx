@@ -4,7 +4,8 @@
 // Glasses: the glasses' computer uploads the video. A phone recording sends itself from here
 // (sendDraft, with the pre-record sheet's dish and kids): no Send screen to tap through. If that send
 // fails, Send opens with everything filled in, so she can try again there. If the app closes before
-// Convex has the job, her Home sends it on the next launch (useResendUnsent).
+// the job is made and every video is up, the next launch sends it again in the background, as her
+// (useResendUnsent).
 import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { AccessibilityInfo, StyleSheet, View } from 'react-native';

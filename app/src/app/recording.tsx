@@ -218,8 +218,8 @@ export default function RecordingScreen() {
   useHomieScreen({ hidden: asking || !!plateAsk || finished });
 
   // "I'm done" while filming in the app: homie wraps up while the last file is saved. A note on the
-  // phone keeps the videos queued until Convex has the job, so a crash before then sends them on the
-  // next launch (lib/unsentRecordings).
+  // phone keeps the videos queued until Convex has the job and every file is uploaded; if the app dies
+  // before that, the next launch sends them again (lib/unsentRecordings).
   const doneInApp = async () => {
     homie.done();
     const clips = await cam.stop();
