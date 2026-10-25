@@ -64,7 +64,6 @@ export default function DinnerPage() {
       </ScrollView>
       <IconButton
         tone="cream"
-        size={44}
         accessibilityLabel="Back"
         icon={(c) => <BackIcon size={22} color={c} />}
         onPress={() => goBack()}

@@ -2,9 +2,13 @@
 // screen, which screen's tap line it says (lib/homie/tap; the hello only once: lib/homie/intro), the centred moment's layout
 // and listening bars, the timer ring, the mic level, half duplex, and the voice service's https base.
 import type { Homie, HomieFrame, HomieMoment, HomieState } from './store';
-import { TAP_LINES, tapScreen, type TapScreen } from './tap';
+import { tapScreen, type TapScreen } from './tap';
 
-export const HOMIE_REST_SIZE = 56;
+/**
+ * The resting pot is exactly as tall as the controls beside it (Caleb, Oct 24): a header's 48 pt row
+ * (IconButton, the profile pill, Share), or cook mode's bottom bar (Back and Next, ActionButton lg, 60).
+ */
+export const HOMIE_SIZE = { header: 48, bar: 60 } as const;
 export const HOMIE_MOMENT_SIZE = 170;
 /** Room the "AI voice" label hangs below the resting pot: put anything under homie this much lower. */
 export const HOMIE_LABEL_SPACE = 16;
@@ -50,16 +54,19 @@ export function halfDuplex(v: { homie: HomieState; audio: string; video: boolean
 }
 
 export const HELP = {
-  /** Cook mode: what the kid can say (a long press on the pot there turns the mic on with it). */
-  cook: TAP_LINES.cook,
   /** Before the first tap line homie ever says to this person (lib/homie/intro). */
   hello: 'Hi, I’m homie.',
 } as const;
 
 export type HomieRoute = {
   hidden: boolean;
-  /** The header homie lines up with: a tab's large title row, or a detail screen's 48 pt buttons. */
-  header: 'tab' | 'detail';
+  /**
+   * The 48 pt header row homie lines up with: a tab's large title row, a detail screen's buttons
+   * (useScreenTop), or a page whose Back sits a little lower.
+   */
+  header: 'tab' | 'detail' | 'page';
+  /** In the middle of the row: the row is even (one round button each side, like Back and the heart). */
+  centred: boolean;
   /** Points from the right edge already taken by the screen's own controls (0 = none). */
   reserve: number;
   /** Whose tap line a tap here says (lib/homie/tap). */
@@ -69,8 +76,12 @@ export type HomieRoute = {
 // Sign-in, the launch gateway, invite and share links, the month story (its Close is top-right), and
 // chat (the parent's header puts the faces and name at the right).
 const HIDDEN = new Set(['/', '/join', '/join-code', '/i', '/r', '/recap', '/_sitemap']);
+// Pages whose Back starts the first row at max(56, inset + 9): record, send, my dish, the community
+// and dinner pages.
+const PAGES = /^\/(record|send|dinner\/[^/]+|my-recipe\/[^/]+|community\/[^/]+)$/;
 const KID_FACE_PILL = 76; // ProfileButton faceOnly: 6 + 36 face + 6 + 16 chevron + 12
-const BUTTON = 48;
+/** A header row: IconButton, the profile pill and Share are all 48 pt. */
+const ROW = 48;
 
 /**
  * ProfileButton with the name ("Mom ▾"): 88 pt of face, chevron and padding, plus the name (DM Sans
@@ -83,22 +94,39 @@ export function namePillWidth(name: string): number {
 export function homieRoute(pathname: string, profileName = ''): HomieRoute {
   const p = pathname.replace(/\/+$/, '') || '/';
   const tab = /^\/(kid|parent)(\/|$)/.test(p);
-  const base: HomieRoute = { hidden: false, header: tab ? 'tab' : 'detail', reserve: 0, screen: tapScreen(p) };
+  const header = tab ? 'tab' : PAGES.test(p) ? 'page' : 'detail';
+  const base: HomieRoute = { hidden: false, header, centred: false, reserve: 0, screen: tapScreen(p) };
   if (HIDDEN.has(p) || p.startsWith('/chat/')) return { ...base, hidden: true };
   if (p === '/kid/home' || p === '/kid') return { ...base, reserve: GUTTER + KID_FACE_PILL };
   if (p === '/parent/home' || p === '/parent') return { ...base, reserve: GUTTER + namePillWidth(profileName) };
-  // A dish: Share and the heart sit at the top right of the photo.
-  if (/^\/(recipe|kid\/recipes)\/[^/]+$/.test(p)) return { ...base, header: 'detail', reserve: GUTTER + BUTTON + 12 + BUTTON };
-  if (p.startsWith('/my-recipe/')) return { ...base, reserve: GUTTER + BUTTON };
+  // A dish: the round Back at the left, the heart at the right (Share beside it unless the stories are
+  // kept from you), and no compact header to collide with: homie sits in the middle (Caleb, Oct 24).
+  if (/^\/(recipe|kid\/recipes)\/[^/]+$/.test(p)) return { ...base, header: 'detail', centred: true };
+  // My own dish: the Back pill and Share don't match, and its compact title takes the middle once scrolled.
+  if (p.startsWith('/my-recipe/')) return { ...base, reserve: GUTTER + ROW };
   return base;
 }
 
-/** Where the pot rests: centred on the header's 48 pt row, at the right (left of the screen's own control). */
-export function restFrame(route: Pick<HomieRoute, 'header' | 'reserve'>, screen: { width: number; insetsTop: number }, size = HOMIE_REST_SIZE): HomieFrame {
-  // Header tops: LargeHeader max(60, inset + 13); detail screens useScreenTop max(56, inset + 4).
-  const rowTop = route.header === 'tab' ? Math.max(60, screen.insetsTop + 13) : Math.max(56, screen.insetsTop + 4);
-  const right = route.reserve ? route.reserve + GAP : GUTTER;
-  return { x: screen.width - right - size, y: rowTop + BUTTON / 2 - size / 2, size };
+/**
+ * Where the pot rests: on the header's 48 pt row, as tall as it. In the middle of the screen when the
+ * row is even, else at the right (left of the screen's own control).
+ */
+export function restFrame(
+  route: Pick<HomieRoute, 'header' | 'centred' | 'reserve'>,
+  screen: { width: number; insetsTop: number },
+  size: number = HOMIE_SIZE.header,
+): HomieFrame {
+  // Row tops: LargeHeader max(60, inset + 13); useScreenTop max(56, inset + 4); PAGES max(56, inset + 9).
+  const inset = screen.insetsTop;
+  const rowTop = route.header === 'tab' ? Math.max(60, inset + 13) : Math.max(56, inset + (route.header === 'page' ? 9 : 4));
+  const x = route.centred ? (screen.width - size) / 2 : screen.width - (route.reserve ? route.reserve + GAP : GUTTER) - size;
+  return { x, y: rowTop + (ROW - size) / 2, size };
+}
+
+/** Cook mode's dock: the middle of the bottom bar's row, between Back and Next, `bottom` above the window's foot. */
+export function barFrame(screen: { width: number; height: number }, bottom: number): HomieFrame {
+  const size = HOMIE_SIZE.bar;
+  return { x: (screen.width - size) / 2, y: screen.height - bottom - size, size };
 }
 
 /** The pot in a moment: centred, high enough that the question and big buttons fit under it. */

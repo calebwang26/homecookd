@@ -431,11 +431,24 @@ function Gallery() {
   );
 }
 
-const HOMIE_STATES: HomieState[] = ['off', 'listening', 'thinking', 'lit', 'speaking', 'timer'];
+const HOMIE_STATES: HomieState[] = ['off', 'lit', 'listening', 'thinking', 'speaking', 'timer'];
 // TODO(caleb): native check of the Marathi sample.
 const QUESTION = 'कांदे झाले हे कसं ओळखायचं?';
 
-/** Every pot state, plus the moments: Grandma's live question (Marathi) and the corner pot's states. */
+/** One pot with its state under it: listening at a mid mic level, a timer 60% left. The cell leaves room for the halo. */
+function PotCell({ state, size, timer = state === 'timer', label = state }: { state: HomieState; size: number; timer?: boolean; label?: string }) {
+  return (
+    <View style={[styles.homieCell, { width: Math.round(size * 1.6) }]}>
+      <View style={{ margin: Math.round(size * 0.3) }}>
+        <HomiePot state={state} level={0.5} size={size} timerProgress={timer ? 0.6 : null} />
+      </View>
+      <Txt variant="caption">{label}</Txt>
+    </View>
+  );
+}
+
+/** Every pot state at the header's 48, cook mode's bar 60 and the centred moment's 176, plus the moments:
+ *  Grandma's live question (Marathi) and the corner pot's states. */
 function HomieStates() {
   const [corner, setCorner] = useState<HomieState>('off');
   const ask = () => void speak(QUESTION, { lang: 'mr' });
@@ -462,16 +475,18 @@ function HomieStates() {
   };
   return (
     <>
-      <View style={styles.wrapGap}>
+      {[48, 60].map((size) => (
+        <View key={size} style={styles.homieRow}>
+          {HOMIE_STATES.map((st) => (
+            <PotCell key={st} state={st} size={size} />
+          ))}
+          <PotCell state="listening" size={size} timer label="listening + timer" />
+        </View>
+      ))}
+      <View style={styles.homieRow}>
         {HOMIE_STATES.map((st) => (
-          <View key={st} style={styles.homieCell}>
-            <HomiePot state={st} level={0.7} size={64} timerProgress={st === 'timer' ? 0.6 : null} />
-            <Txt variant="caption">{st}</Txt>
-          </View>
+          <PotCell key={st} state={st} size={176} />
         ))}
-      </View>
-      <View style={styles.homieCell}>
-        <HomiePot state="speaking" size={170} />
       </View>
       <ActionButton label="Open a sample moment" variant="ink" onPress={sample} />
       <ActionButton label={`Corner pot: ${corner} (tap for next)`} variant="outline" onPress={nextCorner} />
@@ -583,6 +598,7 @@ const styles = StyleSheet.create({
   pressDemo: { height: 72, borderRadius: 24, backgroundColor: colors.card, boxShadow: shadows.card, alignItems: 'center', justifyContent: 'center' },
   tabDemo: { height: 124, marginHorizontal: -24 },
   sheetHead: { alignItems: 'center', gap: 6, paddingTop: 8 },
-  homieCell: { alignItems: 'center', gap: 8, paddingVertical: 8, minWidth: 76 },
+  homieRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
+  homieCell: { alignItems: 'center' },
   sheetThumb: { width: 120, height: 120, borderRadius: 20, backgroundColor: colors.peach, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
 });

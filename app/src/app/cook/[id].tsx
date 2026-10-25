@@ -11,18 +11,18 @@
 //   4. "Ingredients" this step needs (StepIngredients)  5. "Dad’s tip ⌄", closed (TipPill), and
 //      "Story from Dad ›" (StepStory: a sheet), only on a step that has them
 //   6. one line while a question about this step waits ("You asked · waiting for Dad" / "Leo asked
-//      this 2 days ago · waiting"). Asking is a tap on homie: by voice when homie is listening, else
-//      my 1:1 with the dish's cook, the dish and step in the box ("Ask the family" when the cook isn't
-//      in the family).
+//      this 2 days ago · waiting"). Cook mode asks only by voice ("ask Grandma …" with homie on:
+//      homie sends it to her); without a voice line it can't ask (the recipe page's Ask and the Ask
+//      tab still can). A tap on homie never opens a chat.
 // One voice at a time: the video, the full screen and a story's voice stop each other (lib/media),
-// and leaving the screen (Ask pushes the chat) silences them. Family never sees the word "sample".
+// and leaving the screen silences them. Family never sees the word "sample".
 // Header (it stays put while the step scrolls under it): close, "Step 3 of 8", "All steps" (the sheet:
 // tap a step to jump; "You're here"; the steps before the furthest one reached are checked) and one
 // small pot per step, filled up to the step on screen (retention PR 7, components/recipe/PotDots).
 // Bottom (Caleb, Oct 24: like Siri, centred): Back · homie · Next step, the two buttons the same width
 // and the same gap either side of homie, who docks there (the overlay draws the pot; this screen holds
-// its place). A tap on homie asks ("Ask Grandma anything", or the chat when nobody's listening); a long
-// press turns the mic off or on. No chips: saying "back" or "repeat" does those, and the video replays
+// its place). A tap on homie turns it on, the next tap off (it never opens a chat; no long press). No
+// chips: saying "back" or "repeat" does those, and the video replays
 // itself. Looking back at an earlier step the right button is "Continue" (back to the furthest); on the
 // last step "I made it".
 // The furthest step is what's saved as the last step, so the recipe and the next visit come back to it.
@@ -44,20 +44,19 @@
 // back closes it for this visit only and saves nothing). A
 // heart the cook sends from that row pops up here (HeartBurst + "Mom sent you a heart"); no push.
 // Voice cooking (docs/build/STACK.md "kid cooking additions"; lib/live/voice): in a build with the
-// native mic module (not Expo Go or web), with the voice service set and a dish Convex knows, the mic
-// turns on by itself (after the one-time permission, and once the "Let Mom see" sheet has its answer)
-// and streams the kid's voice to homie. homie greets, then asks once "Want me to read each step out
-// loud?" (components/cooking/CookMoments: no buttons, the kid says yes or no, a tap closes it). The
-// screen follows it: go_to_step moves the step, play_clip plays that moment of the cook's video in the
-// step's own player (moving to the step that holds it, her words under it), homie's replies are only
-// spoken (the pot lights and its lid lifts, labelled "AI voice"), a timer counts down beside the step
-// title, and a question the video can't answer shows "I asked Grandma" above the pot. A long press on
-// the pot turns the mic off or on (no moment). When the cook answers one of my questions by voice note, homie offers to play it
-// (CookAnswers). While that moment or "Ask Grandma anything" is up, the service is told (an app-only
-// moment: its own offer never takes that yes or no). Without a voice line that reads (Expo Go, web,
-// or the line gave up or failed), a kid who said yes to reading before hears each step in homie's
-// voice (useReadSteps); reading aloud is off by default (Caleb, Oct 24), and a tap on the pot reads
-// the step. homie never talks over a video (VoiceHold, lib/live/speak). "I made it" hangs up.
+// native mic module (not Expo Go or web), with the voice service set and a dish Convex knows, the line
+// to homie opens by itself (once the "Let Mom see" sheet has its answer), with homie off: the mic
+// streams only while homie is on (a tap; the next tap turns it off) and for 8 s after homie says a
+// step's short line or a nudge (Caleb, Oct 24). The screen follows it: go_to_step moves the step,
+// play_clip plays that moment of the cook's video in the step's own player (moving to the step that
+// holds it, unread: no step line over her; her words under it), homie's replies are only spoken (the pot lights and its lid lifts, labelled "AI
+// voice"), a timer counts down beside the step title, and a question the video can't answer shows "I
+// asked Grandma" above the pot. When the cook answers one of my questions by voice note, homie offers to play it
+// (CookAnswers). While that moment is up, the service is told (an app-only moment: its own offer
+// never takes that yes or no). Without a voice line (Expo Go, web, no service, or the line gave up),
+// a tap on the pot reads the step in homie's voice and a tap while it talks stops it, and a kid who
+// said yes to reading before hears each step (useReadSteps). homie never talks over a video
+// (VoiceHold, lib/live/speak). "I made it" hangs up.
 import { router, useFocusEffect, useLocalSearchParams } from 'expo-router';
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -96,16 +95,16 @@ import {
   useScrollHold,
   useToast,
 } from '@/components/ui';
-import { errorMessage, type RecipeQuestion } from '@/lib/api';
+import type { RecipeQuestion } from '@/lib/api';
 import { daysAgo, mmss } from '@/lib/format';
-import { useHomieScreen, useHomieSelect } from '@/lib/homie';
+import { barFrame, getHomie, HOMIE_SIZE, useHomieScreen, useHomieSelect } from '@/lib/homie';
 import { madeItMilestone, madeItTitle } from '@/lib/kitchenCounts';
 import { micStreamingSupported } from '@/lib/live/mic';
-import { speak } from '@/lib/live/speak';
+import { speak, stopSpeaking } from '@/lib/live/speak';
 import { useVoiceCooking, VOICE_CONFIGURED, type VoiceClip } from '@/lib/live/voice';
-import { appMomentKind, consentSettled, cookingSessionOn, phoneReads } from '@/lib/live/voiceLogic';
+import { appMomentKind, consentSettled, cookingSessionOn, cookTap, phoneReads } from '@/lib/live/voiceLogic';
 import { stopAllMedia } from '@/lib/media';
-import { cooked, openChatWith, openCircle, useRecipeQuestions, type CookedRef } from '@/lib/messaging';
+import { cooked, useRecipeQuestions, type CookedRef } from '@/lib/messaging';
 import { madeItWords } from '@/lib/postcardLogic';
 import { backToRecipe } from '@/lib/navigation';
 import { useLibrary, useRecipe } from '@/lib/recipes';
@@ -116,9 +115,8 @@ import { alpha, colors, radii } from '@/theme/tokens';
 
 const AWAKE_TAG = 'cook-mode';
 const CONTENT_SIDE = 24;
-/** homie docked in the bottom bar: a little bigger than the buttons beside it (60 pt). */
-const DOCK = 64;
-const BAR_BUTTON_H = 60;
+/** homie docked in the bottom bar: exactly as tall as Back and Next beside it (60 pt). */
+const DOCK = HOMIE_SIZE.bar;
 
 /**
  * Hands in the dough: the screen never sleeps mid-step (its own tag, so leaving releases only it).
@@ -172,10 +170,10 @@ export default function CookScreen() {
   const [headH, setHeadH] = useState(top + 76);
   const onHeadLayout = (e: LayoutChangeEvent) => setHeadH(Math.round(e.nativeEvent.layout.height));
   // Where homie docks (window pt): the bar's row is symmetric, so its middle is the screen's middle,
-  // centred on the 60 pt buttons above the bar's bottom padding. Worked out, not measured: a screen
+  // level with the 60 pt buttons above the bar's bottom padding. Worked out, not measured: a screen
   // still sliding in would measure off to the side.
   const barBottom = useScreenBottom();
-  const dock = { x: (winW - DOCK) / 2, y: winH - barBottom - BAR_BUTTON_H / 2 - DOCK / 2, size: DOCK };
+  const dock = barFrame({ width: winW, height: winH }, barBottom);
 
   const [chosen, setChosen] = useState<number | null>(Number.isFinite(asked) && asked > 0 ? asked : null);
   const [dir, setDir] = useState<1 | -1>(1);
@@ -183,7 +181,6 @@ export default function CookScreen() {
   const [done, setDone] = useState<{ title: string; subtitle?: string; told?: boolean; card: CookedRef | null } | null>(null);
   // A moment of the cook's video the voice service asked for (play_clip), playing in the step's player.
   const [moment, setMoment] = useState<(VoiceClip & { key: number }) | null>(null);
-  const [asking, setAsking] = useState(false);
 
   const total = recipe?.steps.length ?? 0;
   const fallback = last.loaded ? last.step || 1 : 1;
@@ -212,8 +209,8 @@ export default function CookScreen() {
     onHeart: () => setHeartKey((k) => k + 1),
   });
 
-  // One voice at a time across screens too: Ask pushes the chat over this screen, and the step's
-  // video (or a story's voice) must not keep playing under it.
+  // One voice at a time across screens too: when a screen is pushed over this one, the step's video
+  // (or a story's voice) must not keep playing under it.
   useFocusEffect(useCallback(() => () => stopAllMedia(), []));
 
   // Remember the furthest step, so the recipe can offer "Back to step N" (only once the saved one
@@ -247,21 +244,8 @@ export default function CookScreen() {
 
   // The cook this dish's questions go to, by their profile name ("Ask Grandma").
   const cookName = askTarget?.kind === 'cook' ? askTarget.cook.name : (recipe?.cook.name ?? '');
-  // The existing Ask: my chat with the cook (or the family), the dish and step in the box.
-  const askInChat = async () => {
-    if (!recipe || !askTarget || asking) return;
-    setAsking(true);
-    try {
-      const thread = askTarget.kind === 'cook' ? await openChatWith(askTarget.cook.id) : await openCircle();
-      router.push({ pathname: '/chat/[id]', params: { id: thread, recipe: recipe.id, step: String(n), ask: '1' } });
-    } catch (e) {
-      toast.show(errorMessage(e, `Couldn’t reach ${askTarget.kind === 'cook' ? cookName : 'the family'} right now.`), { tone: 'error' });
-    } finally {
-      setAsking(false);
-    }
-  };
 
-  const homie = useCookMoments({ cookName, onWrite: askTarget ? () => void askInChat() : null });
+  const homie = useCookMoments({ cookName });
   // One thing asks at a time: voice (and homie's questions) wait for the "Let Mom see" sheet's answer,
   // when there is one to wait for (not for a memorial cook: the session is off then).
   const sessionOn = cookingSessionOn({ enabled: liveOn, cookId: liveCook?.id, memorial: liveCook?.memorial, recipeId: recipe?.id, total });
@@ -273,13 +257,13 @@ export default function CookScreen() {
     step: n,
     cookName,
     auto: voiceHere && settled,
-    readAloud: homie.readAloud,
     onGoTo: (k) => total && goTo(Math.min(Math.max(1, k), total)),
     onClip: (c) => {
       homie.onHeard();
       const at = recipe?.steps.findIndex((s) => c.startS >= s.start_s && c.startS < s.end_s) ?? -1;
       if (at >= 0) goTo(at + 1);
       setMoment((was) => ({ ...c, key: (was?.key ?? 0) + 1 }));
+      // The step it shows: one it moved to goes to the service unread (no step line over her clip).
       return at >= 0 ? at + 1 : n;
     },
     onOffer: homie.onOffer,
@@ -290,17 +274,19 @@ export default function CookScreen() {
   // No voice line that reads (Expo Go, web, a dish the voice service doesn't have, or it failed): this
   // phone asks "read it out loud?" and reads the steps.
   const phoneReading = phoneReads({ voiceHere, live: voice.live, unavailable: voice.unavailable });
-  // A tap on homie asks: by voice while homie listens, else the chat with the cook; with neither, it
-  // reads this step. A long press turns the mic off or on (only where the mic can work).
+  // A tap on homie never navigates (Caleb, Oct 24; voiceLogic cookTap): with a voice line it turns homie
+  // on or off; with none it reads this step, and a tap while homie talks stops it. One gesture only.
   // "I made it" takes the screen: no pot over the celebration.
   const potTap = () => {
-    if ((voice.live && !voice.muted) || askTarget) return homie.ask(voice);
+    const h = getHomie().state;
+    const tap = cookTap({ voiceHere, status: voice.status, unavailable: voice.unavailable, talking: h === 'lit' || h === 'speaking' });
+    if (tap === 'toggle') return voice.toggle();
+    if (tap === 'stop') return stopSpeaking();
     if (step) void speak(`Step ${n}. ${step.instruction}`, { profileId: me?.id, answer: true });
   };
-  const micToggle = micStreamingSupported() ? () => homie.potPress(voice) : null;
-  useHomieScreen({ hidden: !!done, dock, onPress: potTap, onLongPress: micToggle });
+  useHomieScreen({ hidden: !!done, dock, onPress: potTap });
   useReadSteps({ on: phoneReading && homie.readAloud && !done, step: n, text: step?.instruction ?? '' });
-  // An app-only moment (her answer, "Ask Grandma anything") up on the phone: the service is told.
+  // An app-only moment (her answer) up on the phone: the service is told.
   const momentId = useHomieSelect((h) => h.moment?.id ?? null);
   const tellMoment = voice.setMoment;
   useEffect(() => tellMoment(appMomentKind(momentId)), [momentId, tellMoment]);
@@ -406,8 +392,8 @@ export default function CookScreen() {
   const poster = step.image_url || recipe.media.poster_url;
   const enter = (dir > 0 ? FadeInRight : FadeInLeft).duration(260);
 
-  // The kid can answer homie out loud right now.
-  const hearing = voice.live && voice.status === 'listening' && !voice.muted;
+  // The kid can answer homie out loud while a moment is up (homie on by a tap).
+  const hearing = voice.hearing;
 
   return (
     <View style={styles.page}>
@@ -538,7 +524,7 @@ export default function CookScreen() {
 }
 
 /**
- * The one "waiting" line under Ask for this step's open questions: mine first ("You asked · waiting
+ * The one "waiting" line for this step's open questions: mine first ("You asked · waiting
  * for Dad"; a 1:1 names who I asked, the circle the dish's cook), else the newest someone else
  * asked in the circle ("Leo asked this 2 days ago · waiting").
  */
@@ -592,5 +578,5 @@ const styles = StyleSheet.create({
   // Back and Next the same width either side of homie (BottomBar's row keeps one 12 pt gap); words
   // only, so "Next step" fits half a small phone.
   barButton: { flex: 1, flexBasis: 0, alignSelf: 'center' },
-  dockSlot: { width: DOCK, height: BAR_BUTTON_H, alignSelf: 'center' },
+  dockSlot: { width: DOCK, height: DOCK, alignSelf: 'center' },
 });

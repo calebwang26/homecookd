@@ -1,29 +1,26 @@
 // homie needs something from you (store.showMoment): the pot leaves its corner (or cook mode's bottom
-// bar) for the centre and grows, lit; the screen behind dims and blurs a little (Caleb, Oct 24: less
-// than the canvas, so the page still shows through). Motion, all on the UI thread: the glide, the
-// growth and the blur run together as one move (420 ms, easing out, no overshoot), from exactly where
-// and how big the resting pot is; from 300 ms the words and buttons rise. Answering or "Not now" plays
-// it backwards in one move, and the pot lands back where it rests. Reduce Motion: the dim, pot and
-// words fade in place (150 ms).
+// bar) for the centre and grows, lit (with its ring while it listens or thinks); the screen behind dims
+// and blurs a little (Caleb, Oct 24: less than the canvas, so the page still shows through). Motion, all
+// on the UI thread: the glide, the growth and the blur run together as one move (420 ms, easing out, no
+// overshoot), from exactly where and how big the resting pot is; from 300 ms the words and buttons rise.
+// Answering or "Not now" plays it backwards in one move, and the pot lands back where it rests. Reduce
+// Motion: the dim, pot and words fade in place (150 ms).
 // The option with id 'not_now' (else 'ok') is also VoiceOver's escape gesture.
 // When homie asks out loud (a moment with bars, a prompt or tapToClose; lib/homie isCentredMoment):
-// no buttons, one centred column like Grandma's screens. The glowing pot (176, its glow breathing),
-// 56 pt, the question (Fraunces 32), the five listening bars and "Say “yes” or “no”", then the small
-// "Tap anywhere to close". A tap anywhere is "not now" (dismissMoment). At most one button, for a
-// phone that can't hear the answer.
+// no buttons, one centred column like Grandma's screens. The pot (176; its own halo and ring are its
+// only glow), 56 pt, the question (Fraunces 32), the five listening bars and "Say “yes” or “no”", then
+// the small "Tap anywhere to close". A tap anywhere is "not now" (dismissMoment). At most one button,
+// for a phone that can't hear the answer.
 import { BlurView } from 'expo-blur';
 import { useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, {
-  cancelAnimation,
   Easing,
   useAnimatedProps,
   useAnimatedStyle,
   useReducedMotion,
   useSharedValue,
   withDelay,
-  withRepeat,
-  withSequence,
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -56,7 +53,6 @@ const move = Easing.bezier(0.2, 0.8, 0.2, 1);
 const inOut = Easing.inOut(Easing.cubic);
 /** The centred column's words before they are measured (a two-line question, the bars, the prompt). */
 const WORDS_GUESS = 240;
-const BREATH_MS = 1400;
 
 type Props = {
   /** The resting pot's frame: where the glide starts and ends. */
@@ -89,7 +85,6 @@ export function HomieMoment({ from, state, level, label, onActive }: Props) {
   const grow = useSharedValue(0);
   const rise = useSharedValue(0);
   const dim = useSharedValue(0);
-  const breath = useSharedValue(1);
 
   const active = !!shown;
   const activeRef = useRef(onActive);
@@ -135,17 +130,6 @@ export function HomieMoment({ from, state, level, label, onActive }: Props) {
     return () => clearTimeout(t);
   }, [closing, reduce, glide, grow, rise, dim]);
 
-  // The centred pot's glow breathes while it waits for an answer (still under Reduce Motion).
-  const breathing = centred && !closing && !reduce;
-  useEffect(() => {
-    if (!breathing) {
-      cancelAnimation(breath);
-      breath.set(1);
-      return;
-    }
-    breath.set(withRepeat(withSequence(withTiming(0.5, { duration: BREATH_MS, easing: inOut }), withTiming(1, { duration: BREATH_MS, easing: inOut })), -1, false));
-  }, [breathing, breath]);
-
   // Screen readers hear the question once it is up.
   const question = moment?.question;
   const questionEn = moment?.questionEn;
@@ -169,7 +153,6 @@ export function HomieMoment({ from, state, level, label, onActive }: Props) {
     opacity: rise.value,
     transform: [{ translateY: reduce ? 0 : 16 * (1 - rise.value) }],
   }));
-  const glowStyle = useAnimatedStyle(() => ({ opacity: grow.value * breath.value }));
 
   if (!shown) return null;
 
@@ -185,6 +168,8 @@ export function HomieMoment({ from, state, level, label, onActive }: Props) {
   };
   const escape = shown.options.find((o) => o.id === 'not_now') ?? shown.options.find((o) => o.id === 'ok');
   const speaking = state === 'speaking';
+  // The pot is lit while it's up, and shows the ring whenever homie hears you.
+  const pot: HomieState = speaking || state === 'listening' || state === 'thinking' ? state : 'lit';
 
   if (centred) {
     const listens = !!(shown.bars || shown.prompt);
@@ -202,8 +187,7 @@ export function HomieMoment({ from, state, level, label, onActive }: Props) {
         <Animated.View style={[StyleSheet.absoluteFill, styles.tint, dimStyle]} />
 
         <Animated.View style={[styles.pot, { left: to.x, top: to.y, width: to.size, height: to.size }, potStyle]}>
-          <Animated.View style={[styles.glow, { width: to.size, height: to.size, borderRadius: to.size / 2 }, glowStyle]} />
-          <HomiePot state={speaking ? 'speaking' : 'lit'} level={level} size={to.size} shadow={false} />
+          <HomiePot state={pot} level={level} size={to.size} shadow={false} />
           {speaking && label ? (
             <View style={styles.labelWrap}>
               <Txt variant="label" size={13} weight={700} color={colors.butterInk} style={styles.label}>
@@ -268,7 +252,7 @@ export function HomieMoment({ from, state, level, label, onActive }: Props) {
       <Animated.View style={[StyleSheet.absoluteFill, styles.tint, dimStyle]} />
 
       <Animated.View style={[styles.pot, { left: to.x, top: to.y, width: to.size, height: to.size }, potStyle]}>
-        <HomiePot state={speaking ? 'speaking' : 'lit'} level={level} size={to.size} shadow={false} />
+        <HomiePot state={pot} level={level} size={to.size} shadow={false} />
         {speaking && label ? (
           <View style={styles.labelWrap}>
             <Txt variant="label" size={13} weight={700} color={colors.butterInk} style={styles.label}>
@@ -362,8 +346,6 @@ const styles = StyleSheet.create({
   button: { minHeight: 64, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 999, alignItems: 'center', justifyContent: 'center', gap: 2 },
   primary: { backgroundColor: colors.green },
   secondary: { backgroundColor: alpha.glassOnDark },
-  // The centred column (the mockup's ring and glow around the pot: sun 28 %, then 55 % blurred).
-  glow: { position: 'absolute', left: 0, top: 0, backgroundColor: colors.butter, boxShadow: '0 0 0 18px rgba(254,190,41,0.28), 0 0 70px rgba(254,190,41,0.55)' },
   askScroll: { paddingHorizontal: ASK_SIDE },
   askEn: { marginTop: 8 },
   askListen: { marginTop: 48, alignItems: 'center', gap: 16 },

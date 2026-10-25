@@ -1,6 +1,6 @@
 // homie asks the cook something while she records (Caleb's v4, canvas frame 2): no buttons. Over the
-// blurred, dimmed recording screen, one centred column: homie big and glowing (its steam follows her
-// voice, its glow breathes; "AI voice" while it says the question), the question under it in her
+// blurred, dimmed recording screen, one centred column: homie big, in its Siri-like states (the ring
+// while it listens; "AI voice" while it says the question), the question under it in her
 // language (32 pt) with the English small, then five green listening bars that move with her voice
 // and "बोला, मी ऐकतोय" / "Just answer out loud". She answers out loud: the service hears it, and fades
 // the question when she says "not now" or after ~10 s of quiet (on the stories opt-in, quiet is a no).
@@ -158,7 +158,7 @@ export function AskMoment({ ask, words, micOn, onNotNow, onActive }: { ask: Ask 
             const { x, y } = e.nativeEvent.layout;
             if (!to || Math.abs(to.x - x) > 0.5 || Math.abs(to.y - y) > 0.5) setTo({ x, y });
           }}>
-          <GlowHomie size={ASK_HOMIE_SIZE} state={talking ? pot : micOn ? 'listening' : 'off'} level={h.level} label={talking ? speakingLabel(h, now.key) : null} breathe={!closing} />
+          <GlowHomie size={ASK_HOMIE_SIZE} state={talking ? pot : micOn ? 'listening' : 'off'} level={h.level} label={talking ? speakingLabel(h, now.key) : null} />
         </Animated.View>
         <Animated.View style={[styles.words, riseStyle]}>
           <Txt variant="label" size={32} weight={700} leading={1.3} color={colors.card} align="center" accessibilityRole="header">

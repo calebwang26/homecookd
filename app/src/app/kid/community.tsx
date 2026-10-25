@@ -22,6 +22,7 @@ import { ShareSteps, type ShareStep } from '@/components/community/ShareSteps';
 import { YouCard } from '@/components/community/YouCard';
 import { ActingAsBar } from '@/components/profiles';
 import { ActionButton, LargeHeader, ScreenWash, StickyHeader, Txt, useScrollY } from '@/components/ui';
+import { HOMIE_SIZE } from '@/lib/homie';
 import { useCommunityFeed, useFamilyDishes, useMyDinners, useMySwaps } from '@/lib/live/community';
 import { colors, space, tabBar } from '@/theme/tokens';
 
@@ -31,8 +32,8 @@ const HOW = 'Tap a photo to learn about a dish and cook together.';
 const GUTTER = 16;
 const MAP_GUTTER = 30;
 const MAX_MAP = 420;
-/** Room homie takes at the top right (its resting pot, 56 pt). */
-const HOMIE_ROOM = 56;
+/** Room homie takes at the top right (its resting pot, lib/homie HOMIE_SIZE.header). */
+const HOMIE_ROOM = HOMIE_SIZE.header;
 /** The feed starts empty; give it this long before "nothing nearby" (it's usually back sooner). */
 const SETTLE_MS = 1500;
 
@@ -160,7 +161,7 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.page },
   content: { paddingBottom: tabBar.clearance + space.sm },
   header: { paddingHorizontal: GUTTER },
-  homie: { width: HOMIE_ROOM, height: 48 },
+  homie: { width: HOMIE_ROOM, height: HOMIE_ROOM },
   body: { marginTop: space.md, alignItems: 'center', gap: space.lg },
   idle: { alignItems: 'center', gap: space.lg, paddingTop: 2 },
   hint: { paddingHorizontal: space.sm },

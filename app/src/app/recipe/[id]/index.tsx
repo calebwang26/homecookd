@@ -3,7 +3,9 @@
 // to play), then a cream sheet with the title, "by Dad", "~45 min  Serves 4" big, "N steps" (number +
 // title per step) and "Ingredients" (amount + name, tap to tick off; ticks saved per profile + dish).
 // Share and heart sit on the photo and scroll away with it; only Back stays pinned, on a solid disc, so
-// nothing see-through lands on the words. No Share on a family dish whose stories and tips are kept
+// nothing see-through lands on the words. homie sits centred between Back and the heart when that's the
+// whole row (even); with Share there too it joins Share and the heart at the right, 12 pt apart like them.
+// Once the photo has scrolled away it glides to the top-right corner, off the words. No Share on a family dish whose stories and tips are kept
 // from this person (useStoriesWithheld): the web page a link opens would show them all. The photo is
 // ~42% of the screen (a small phone still shows the first steps above the button). One pinned green
 // "Start cooking" goes straight to step 1, or "Back to step 4" when this profile left off there.
@@ -12,8 +14,8 @@
 // Logs a `viewed` event once per visit, only once the recipe has loaded.
 import { Image } from 'expo-image';
 import { router, useLocalSearchParams } from 'expo-router';
-import { useEffect } from 'react';
-import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { useEffect, useState } from 'react';
+import { ScrollView, StyleSheet, useWindowDimensions, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { useMediaSheet } from '@/components/media';
@@ -38,6 +40,7 @@ import {
   Txt,
 } from '@/components/ui';
 import { mmss } from '@/lib/format';
+import { HOMIE_SIZE, useHomieRoute, useHomieScreen } from '@/lib/homie';
 import { logViewed } from '@/lib/messaging';
 import { useRecipe, useStoriesWithheld } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
@@ -81,6 +84,17 @@ export function RecipeScreen({ id }: { id: string }) {
   useEffect(() => {
     if (loadedId && meId) logViewed(loadedId);
   }, [loadedId, meId]);
+
+  // Past the photo (Share and the heart gone with it), homie moves to the corner instead of the words.
+  const { width: winW } = useWindowDimensions();
+  const { frame: homieRest } = useHomieRoute();
+  const [pastPhoto, setPastPhoto] = useState(false);
+  const onScroll = (e: NativeSyntheticEvent<NativeScrollEvent>) => setPastPhoto(e.nativeEvent.contentOffset.y > heroH - top - HOMIE_SIZE.header - 12);
+  const size = HOMIE_SIZE.header;
+  const corner = { x: winW - 24 - size, y: homieRest.y, size };
+  // Share (48) and the heart (48) sit 24 and 84 pt from the right edge; homie 12 pt left of Share.
+  const withShare = { x: winW - 24 - 48 - 12 - 48 - 12 - size, y: homieRest.y, size };
+  useHomieScreen({ dock: pastPhoto ? corner : storiesKept ? null : withShare });
 
   const back = () => (router.canGoBack() ? router.back() : router.replace('/'));
   const poster = recipe?.media.poster_url ?? entry?.poster_url ?? null;
@@ -128,6 +142,8 @@ export function RecipeScreen({ id }: { id: string }) {
         style={StyleSheet.absoluteFill}
         contentContainerStyle={{ paddingBottom: clearance }}
         showsVerticalScrollIndicator={false}
+        onScroll={onScroll}
+        scrollEventThrottle={32}
         bounces={false}>
         <Hero recipe={recipe} poster={poster} height={heroH} below={top + 48 + 12} onWatch={() => media.watch({ recipe, whole: true })} />
         {storiesKept ? null : (

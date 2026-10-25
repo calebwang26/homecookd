@@ -1,13 +1,13 @@
-// homie big and glowing at the centre of the cook's screens: a sun ring and a soft glow around the pot
-// (the mockups' 0 0 0 18px sun at 28% + a 70 px glow, scaled to the size).
-//   <GlowHomie size={200} state level label />   HomiePot: its steam follows her voice while it listens;
+// homie big at the centre of the cook's screens, and the done screen's waving pot.
+//   <GlowHomie size={200} state level label />   HomiePot, the only glow: it lights up, rings and pulses
+//                                                by state like everywhere else (off is a plain white
+//                                                circle, so she can tell when homie can't hear her);
 //                                                "AI voice" under it while it speaks (homie asks, walkie).
-//                                                The glow breathes slowly while homie waits for her.
-//   <WavingHomie size={200} />                   the done screen: PotMark's waving pose, the arm waving
-//                                                a few times, the lid lifting twice and happy steam.
-// Reduce Motion: no loops and no waving: still pictures (the glow stays full).
-// The shared HomiePot draws its own cream disc with no glow; if it gains one (components/homie), these
-// screens can use that instead.
+//   <WavingHomie size={200} />                   the done screen: PotMark's waving pose on a butter disc in
+//                                                a sun ring and glow (the mockups' 0 0 0 18px sun at 28% +
+//                                                a 70 px glow, scaled), the arm waving a few times, the lid
+//                                                lifting twice and happy steam.
+// Reduce Motion: no waving: a still picture.
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withDelay, withRepeat, withSequence, withTiming } from 'react-native-reanimated';
@@ -18,10 +18,6 @@ import { Txt } from '@/components/ui';
 import type { HomieState } from '@/lib/homie/store';
 import { colors } from '@/theme/tokens';
 
-/** One breath of the glow, in and out. */
-export const BREATH_MS = 3200;
-/** The glow's faintest point in a breath. */
-const BREATH_LOW = 0.55;
 const WAVES = 3;
 
 function glow(size: number) {
@@ -29,29 +25,16 @@ function glow(size: number) {
   return { width: size, height: size, borderRadius: size / 2, boxShadow: `0 0 0 ${ring}px rgba(254,190,41,0.28), 0 0 ${Math.round(size * 0.4)}px rgba(254,190,41,0.55)` };
 }
 
-/** The sun ring and glow behind the disc; `breathe` lets it fade softly in and out. */
-function Glow({ size, butter = false, breathe }: { size: number; butter?: boolean; breathe: boolean }) {
-  const reduce = useReducedMotion();
-  const breath = useSharedValue(1);
-  const on = breathe && !reduce;
-  useEffect(() => {
-    if (!on) {
-      cancelAnimation(breath);
-      breath.set(1);
-      return;
-    }
-    const half = { duration: BREATH_MS / 2, easing: Easing.inOut(Easing.sin) };
-    breath.set(withRepeat(withSequence(withTiming(BREATH_LOW, half), withTiming(1, half)), -1, false));
-    return () => cancelAnimation(breath);
-  }, [on, breath]);
-  const style = useAnimatedStyle(() => ({ opacity: breath.value }));
-  return <Animated.View style={[StyleSheet.absoluteFill, styles.disc, butter && styles.butter, glow(size), style]} />;
-}
+type Props = {
+  size: number;
+  state: HomieState;
+  level?: number;
+  label?: string | null;
+};
 
-export function GlowHomie({ size, state, level = 0, label = null, breathe = true }: { size: number; state: HomieState; level?: number; label?: string | null; breathe?: boolean }) {
+export function GlowHomie({ size, state, level = 0, label = null }: Props) {
   return (
     <View style={{ width: size, height: size }}>
-      <Glow size={size} breathe={breathe} />
       <HomiePot state={state} level={level} size={size} shadow={false} />
       {label ? (
         <View style={styles.labelWrap} pointerEvents="none">
@@ -95,7 +78,7 @@ export function WavingHomie({ size }: { size: number }) {
 
   return (
     <View style={{ width: size, height: size }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-      <Glow size={size} butter breathe={false} />
+      <View style={[StyleSheet.absoluteFill, styles.butter, glow(size)]} />
       <Animated.View style={[StyleSheet.absoluteFill, steamStyle]}>
         <Svg width={size} height={size} viewBox="0 0 100 100">
           {CURLS.map((x, i) => (
@@ -131,7 +114,6 @@ export function WavingHomie({ size }: { size: number }) {
 
 const styles = StyleSheet.create({
   abs: { position: 'absolute' },
-  disc: { backgroundColor: colors.card },
   butter: { backgroundColor: colors.butter },
   labelWrap: { position: 'absolute', bottom: -14, left: 0, right: 0, alignItems: 'center' },
   label: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, backgroundColor: colors.butter, overflow: 'hidden' },

@@ -21,7 +21,8 @@ timer is done", "Step 3…") or pausing her video to say something nobody asked 
   (`voiceLogic` `waitsForVideo`, the same split, checked by `test-voice-ui.mjs`). `lib/live/speak` waits for
   `videoStopped()` unless `answer: true` (a tap on homie or on Ask), and the phone's own voice stops when a video
   starts. "Grandma answered your question" waits for the video too.
-- Reading aloud: no offer after the hello (`VOICE_READ_OFFER=1` brings it back); steps are read once the kid asks
-  ("repeat", "read it to me"), and a kid's saved yes on a phone still counts. The phone no longer offers it itself.
+- Reading aloud: replaced later the same day by [[homie-step-lines]]. Every step change says the step's short
+  line at once (made ahead); there's no offer and no `VOICE_READ_OFFER`. A step line answers the kid's flip, so it
+  plays even if a video is playing. Everything homie says on its own still waits.
 - Any new line homie says on its own must go through these holds, never straight to the player.
 - Related: [[homie-tap-always-answers]], [[homie-talks-no-bubble]], [[homie-voice]].

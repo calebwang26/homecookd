@@ -9,6 +9,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "./env.js";
 import type { CookSession } from "./convex.js";
+import { callOf } from "./family.js";
 import type { Hit } from "./moss.js";
 
 import type * as Beta from "@anthropic-ai/sdk/resources/beta/messages/messages.js";
@@ -16,8 +17,8 @@ import type * as Beta from "@anthropic-ai/sdk/resources/beta/messages/messages.j
 /** What the agent can make happen. The cooking session implements these. */
 export type Actions = {
   currentStep: () => number;
-  /** Shows the step; reads it aloud when the kid has said yes to reading, or always with `read`. */
-  goToStep: (order: number, read?: boolean) => Promise<void>;
+  /** Shows the step and says its short line when the step changes; `repeat` says the whole step, with no change. */
+  goToStep: (order: number, repeat?: boolean) => Promise<void>;
   /** Moss search. `waitMs` caps how long to wait for the family's index to load. */
   findMoment: (query: string, waitMs: number) => Promise<Hit[]>;
   /**
@@ -54,7 +55,7 @@ const obj = (properties: Record<string, object>, required: string[] = []) => ({
 const TOOLS: Beta.BetaTool[] = [
   { name: "next_step", description: "Move to the next step and read it aloud.", input_schema: obj({}) },
   { name: "previous_step", description: "Go back one step and read it aloud.", input_schema: obj({}) },
-  { name: "repeat_step", description: "Read the current step aloud again.", input_schema: obj({}) },
+  { name: "repeat_step", description: "Read the whole current step aloud again, all of its text.", input_schema: obj({}) },
   {
     name: "go_to_step",
     description: "Jump to step n (1-based) and read it aloud.",
@@ -113,8 +114,11 @@ const momentsJson = (hits: Hit[]) =>
     hits.map((h) => ({ moment: h.text, cook_said: h.quote, start_s: h.startS, end_s: h.endS, step: h.stepOrder, score: h.score })),
   );
 
+/** What homie calls the cook to the kid: the family's word for them ("Rajani Aaji", "Dad"), as the cook hears it too. */
+export const cookCall = (s: CookSession) => callOf(s.cook?.name, s.cook?.relation) ?? "the cook";
+
 function systemPrompt(s: CookSession): string {
-  const cook = s.cook?.name ?? "the cook";
+  const cook = cookCall(s);
   const steps = s.recipe.steps
     .map((st) => `${st.order}. ${st.title}: ${st.text} [video ${st.moment.startS}-${st.moment.endS}s]`)
     .join("\n");
@@ -136,7 +140,9 @@ When it's for you, call exactly one tool:
 - Small talk or thanks → say, briefly and warmly.
 - Unclear speech → say, asking them to repeat.
 
-The one rule that matters most: never present anything as ${cook}'s that ${cook} didn't say. Her own clip comes first. General cooking knowledge goes only in give_hint: short, hedged ("most recipes…", "usually…"), never about what ${cook} did or her secret, and never instead of a clip that answers. Don't sum up a clip. If something is on fire or someone is hurt, say "Turn off the heat, and get help if anyone's hurt."
+The one rule that matters most: never present anything as ${cook}'s that ${cook} didn't say. ${cook}'s own clip comes first. General cooking knowledge goes only in give_hint: short, hedged ("most recipes…", "usually…"), never about what ${cook} did or ${cook}'s secret, and never instead of a clip that answers. Don't sum up a clip. If something is on fire or someone is hurt, say "Turn off the heat, and get help if anyone's hurt."
+
+Never guess anyone's family role or gender: use the names given (${cook}, ${s.kid.name}), or "your family". Nobody told you how ${s.kid.name} is related to ${cook}: never say "your mom", "your dad", "your grandma", "your grandpa" or "your parent" unless that word is part of "${cook}", and never he, she, his or her for ${cook} or ${s.kid.name}: say the name again.
 
 ${cook}'s recipe:
 ${steps}`;
@@ -158,12 +164,13 @@ export class TurnAgent {
     private client: Anthropic = new Anthropic({ apiKey: env.anthropicKey }),
   ) {
     this.system = systemPrompt(session);
-    this.cook = session.cook?.name ?? "the cook";
+    this.cook = cookCall(session);
     this.playable = session.recipe.steps.map((s) => ({ ...s.moment, stepOrder: s.order }));
   }
 
   /**
-   * Handle one finished utterance from the kid. `note`: what the service already did with it (a no to an offer).
+   * Handle one finished utterance from the kid. `note`: what the service already did with it (a no to the story
+   * nudge, or to the app's moment).
    * `addressed`: the kid tapped homie to ask (the app's "ask" moment), so it's for homie whatever the words.
    */
   async turn(utterance: string, note?: string, addressed = false): Promise<void> {
@@ -178,7 +185,7 @@ export class TurnAgent {
     // Search the video up front (in-memory, ~10 ms), so a question needs one model call, not two. Saying when
     // nothing matched matters as much: otherwise Claude searches again first (a whole extra call, ~3 s).
     // But an empty answer that took the whole wait is a search still loading (the first question on a fresh
-    // server), not "nothing in her video": then Claude may search itself, so her own clip isn't lost.
+    // server), not "nothing in the cook's video": then Claude may search itself, so the cook's own clip isn't lost.
     const searchStart = Date.now();
     let foundThisTurn = await this.actions.findMoment(utterance, UPFRONT_SEARCH_MS).catch(() => [] as Hit[]);
     const searchTimedOut = !foundThisTurn.length && Date.now() - searchStart >= UPFRONT_SEARCH_MS - 100;
