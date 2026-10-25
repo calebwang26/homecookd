@@ -27,13 +27,21 @@ export async function waitFor(what: string, check: () => boolean, maxMs = 60_000
 
 export type Ev = { type: string; [k: string]: unknown };
 
-/** The phone's end of the socket: keeps every JSON message the service sends. */
+/** The phone's end of the socket: keeps every JSON message the service sends, and where each audio frame came. */
 export class FakeSocket {
   readyState: number = WebSocket.OPEN;
   events: Ev[] = [];
+  /** Each binary frame: its size, `after` how many JSON messages, and when (the fake clock). */
+  frames: { after: number; bytes: number; at: number }[] = [];
   closeCode?: number;
   send(data: string | Buffer) {
     if (typeof data === "string") this.events.push(JSON.parse(data));
+    else this.frames.push({ after: this.events.length, bytes: data.length, at: Date.now() });
+  }
+  /** The audio bytes sent between the event at index `say` and the next say_end. */
+  audioOf(say: number) {
+    const end = this.events.findIndex((e, i) => i > say && e.type === "say_end");
+    return this.frames.filter((f) => f.after > say && (end < 0 || f.after <= end)).reduce((n, f) => n + f.bytes, 0);
   }
   close(code?: number) {
     this.closeCode = code;

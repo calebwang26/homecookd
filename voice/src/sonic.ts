@@ -114,18 +114,22 @@ async function sonic(text: string, format: AudioFormat, signal: AbortSignal, onC
   }
 }
 
-/** Speak `text`, calling onChunk with each piece of audio. Resolves when done; rejects on a failure or an abort. */
+/**
+ * Speak `text`, calling onChunk with each piece of audio. Resolves when done; rejects on a failure or an abort.
+ * `backup: false` is Sonic alone, with no Gemini: for a line made ahead and kept (cook.ts), which must be homie's voice.
+ */
 export async function speak(
   text: string,
   format: AudioFormat,
   signal: AbortSignal,
   onChunk: (audio: Buffer) => void,
   voice: Voice = {},
+  backup = true,
 ): Promise<void> {
   try {
     await sonic(text, format, signal, onChunk, voice);
   } catch (err) {
-    if (!(err instanceof SonicFailed) || signal.aborted || !env.geminiKey) throw err;
+    if (!(err instanceof SonicFailed) || signal.aborted || !backup || !env.geminiKey) throw err;
     console.log(`tts: gemini fallback (sonic ${err.reason})`);
     await geminiSpeak(text, format, signal, onChunk, SONIC_SAMPLE_RATE).catch((gemini: Error) => {
       if (signal.aborted) throw gemini;

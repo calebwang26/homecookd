@@ -127,7 +127,8 @@ HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-o
 - After a Moss outage, `npx convex run worker:reindexMissing` re-syncs every family with a recipe Moss is missing.
 
 **App ↔ voice service** (WebSocket `wss://<voice>/cook?session=<sessionToken>&recipe=<recipeId>`)
-- App → server: binary frames of 16 kHz mono 16-bit PCM; `{ "type": "step", "stepOrder" }` when the kid taps.
+- App → server: binary frames of 16 kHz mono 16-bit PCM; `{ "type": "step", "stepOrder" }` when the kid taps (the
+  server says that step's line; the first one, sent on open, restores the screen's step and isn't read).
 - Server → app: `{ type: "transcript", text }`, `{ type: "go_to_step", stepOrder }`,
   `{ type: "play_clip", startS, endS }`, `{ type: "say", text, ai: true }` followed by binary audio,
   `{ type: "asked_cook", questionId }`.
@@ -348,19 +349,26 @@ screen's one line about its big button, or "I’m right here." on a second tap i
 then `/speak` with `translate: true`.
 
 **App ↔ voice service: kid cooking additions** (`/cook`, backward compatible)
-- `say` gains `kind`: `step | reply | hint | translation | nudge | offer | greeting | timer`, and `textEn` when the
+- `say` gains `kind`: `step | reply | hint | translation | nudge | greeting | timer`, and `textEn` when the
   spoken text isn't English. A `hint` is AI general knowledge: always labelled, always followed by `asked_cook`.
 - `play_clip` gains `quote?` and `quoteEn?` for the caption.
 - `{ type: "timer", id, seconds, label, endsAt }`, `{ type: "timer_done", id, label }`. The app owns the countdown.
-- After `ready`: one `say` of kind `greeting` (a word in the cook's language + `textEn`). Steps change silently
-  until the kid asks for them to be read ("repeat", "read it to me"). With `VOICE_READ_OFFER=1` (off by default since
-  Oct 24) the greeting is followed by an `offer` ("Want me to read Grandma's recipe out loud? Say yes or no.").
-  - Yes (spoken, or `{ type: "text", text: "yes" }`) → `{ type: "offer_closed", accepted: true }`, then the current
-    step is read (and every step after).
-  - No or "not now" (spoken, or `{ type: "text", text: "no" }`) → `{ type: "offer_closed", accepted: false }`.
-    Reading stays off for that visit: steps change silently, plain commands still work ("repeat" reads the
-    current step once).
-  - Either answer is kept 3 h on the instance, so a reconnect gets no second hello or offer.
+- After `ready`: one `say` of kind `greeting` (a word in the cook's language + `textEn`), once per kid and recipe
+  per 3 h on the instance (a reconnect gets no second hello). No read-aloud offer any more (Oct 24): there's no
+  `offer` kind and no `offer_closed`.
+- Step lines (Caleb, Oct 24): on every step change the server says the step's short line at once, a `say` of kind
+  `step` ("Step 2. Melt the sugar to amber."), pre-generated so a flip never lags. A step change is the app's
+  `{ type: "step" }` (a tap on Next, Back or a step) or homie's own move ("next", "go back", Claude's `next_step`,
+  `previous_step`, `go_to_step`); "repeat" says the line again. Not for the `step` the app sends as the socket opens
+  (the restore: before `ready` or within 3 s of it; the session starts on that step), and not when the step didn't
+  change. The line is the step's text cut to about 20 words with plain rules, no Claude (`voice/src/stepLine.ts`).
+  When the session starts, Sonic makes every step's line ahead, 2 at a time, from the current step on, in homie's
+  voice exactly as a step said live, and the audio is kept per process (`voice/src/lineCache.ts`, LRU: 300 lines or
+  64 MB), so another kid on the same recipe or a reconnect costs nothing (about 1 credit a character, once: ~380
+  for a 6-step recipe). A kept line goes out all at once (`say`, every frame, `say_end`); one not made yet streams
+  from Sonic and is kept. A line Sonic couldn't make ahead isn't kept and is said live (Gemini may step in). A new
+  `say` cuts off the one playing, so rapid flips play only the latest step's line. A step line answers the kid's
+  flip, so it's spoken over a video too. The story `nudge` can follow a step's line, as before.
 - Was it for homie? Claude decides on every turn that reaches it (no wake word): "homie" in the transcript, however
   Ink spells it (homey, holmy, homi), is a strong yes; plain commands (next, back, repeat, timers) skip Claude and
   always work. Words not meant for homie get no tool and no speech, and the service sends `{ type: "quiet" }` so
@@ -368,20 +376,20 @@ then `/speak` with `translate: true`.
   ask) are always for homie.
 - App → service: `{ type: "video", playing: boolean }` when any video (or the cook's own voice note) starts or stops
   on the kid's phone. While one plays (or a clip the service asked for), homie says nothing on its own: a
-  `greeting`, `offer`, `nudge` or `timer` line waits for the next pause, one after another (`timer_done` is still
-  sent at once). Answers to what the kid just said are spoken meanwhile; the app pauses the video for them.
+  `greeting`, `nudge` or `timer` line waits for the next pause, one after another (`timer_done` is still
+  sent at once). Answers to what the kid just did or said are spoken meanwhile (a step's line is one); the app
+  pauses the video for them.
 - App → service: `{ type: "moment", open: true, kind: "answer" | "story" | "ask" | "help" }` when an app-only homie
   moment opens on the kid's phone, `{ type: "moment", open: false }` when it closes. While one is open the service
-  still streams transcripts, but a spoken yes, no, sure or not now is not applied to its read-aloud offer or
-  story nudge (and doesn't reach Claude); other speech goes the usual way. It says no offer or nudge until the
-  moment closes. A `{ type: "text" }` answer is the app's own and always counts. What counts as a yes or a no, for
-  the offers and the moments: `voice/src/yesNo.ts`, which follows the app's `yesNo`. A yes word (yes, yeah, sure,
+  still streams transcripts, but a spoken yes, no, sure or not now is not applied to its story nudge (and doesn't
+  reach Claude); other speech goes the usual way. It says no nudge until the moment closes. A `{ type: "text" }` answer is the app's own and always counts. What counts as a yes or a no, for
+  the nudge and the moments: `voice/src/yesNo.ts`, which follows the app's `yesNo`. A yes word (yes, yeah, sure,
   of course) is a yes whatever follows ("Yes, but how much ginger?"). Only okay, ok, alright and please have an
   exception: with a command or a question after them ("Okay, what's the next step?") they go the usual way. It also
   takes a no with more after it ("No, not right now"), and a no wins. The no is handled first; then, even with a
   moment up, anything after it that isn't just more no is still the service's: a plain command or a timer that is
   the whole ask takes the fast path ("No, next step"), and anything else goes to Claude as the kid's whole sentence,
-  never a cut-down copy, with a note that the offer was declined ("No, I'm out of ginger. Can I skip it?"). "No,
+  never a cut-down copy, with a note that the nudge was declined ("No, I'm out of ginger. Can I skip it?"). "No,
   maybe later" is only the no. The app's `yesNo` and `afterNo` (`app/src/lib/live/voiceLogic.ts`) are a copy of
   it, so the phone's own moments and the service agree.
 - Half duplex: while the app makes sound (homie lit or speaking, anything on the shared player, a step video

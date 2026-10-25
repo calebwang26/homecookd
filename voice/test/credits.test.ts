@@ -12,7 +12,6 @@ import { advance, AUDIO_S, FakeSocket, fakeSpeak, waitFor } from "./helpers.js";
 process.env.CARTESIA_API_KEY = "test";
 process.env.ANTHROPIC_API_KEY = "test";
 process.env.VOICE_STUB = "1";
-process.env.VOICE_READ_OFFER = "1"; // these tests walk through the read-aloud offer (off by default)
 const { Cooking } = await import("../src/cook.js");
 const { InkStream, IDLE_CLOSE_MS } = await import("../src/ink.js");
 
@@ -21,10 +20,12 @@ afterEach(() => mock.timers.reset());
 
 const FRAME = Buffer.alloc(3200); // 100 ms of 16 kHz s16le
 
-const session: CookSession = {
+let kids = 0;
+/** A new kid each time: homie greets a kid once per recipe (a reconnect gets no second hello). */
+const session = (): CookSession => ({
   familyId: "fam-1",
   mossIndex: "family-fam-1",
-  kid: { id: "kid-credits", name: "Shreya" },
+  kid: { id: `kid-credits-${++kids}`, name: "Shreya" },
   cook: { name: "Grandma", language: "en" },
   recipe: {
     id: "recipe-1",
@@ -33,14 +34,15 @@ const session: CookSession = {
     memories: [],
   },
   stepOrder: 1,
-};
+});
 
 /** A cooking session whose Ink only counts the frames it gets. */
 function cooking() {
   let stt: SttEvents | undefined;
   let frames = 0;
+  const kid = session();
   const deps: CookingDeps = {
-    convex: { startSession: async () => session, setStep: async () => {}, logQuestion: async () => ({ status: "asked_cook", questionId: "q" }) },
+    convex: { startSession: async () => kid, setStep: async () => {}, logQuestion: async () => ({ status: "asked_cook", questionId: "q" }) },
     listen: (events) => ((stt = events), { send: () => void frames++, close: () => {} }),
     speak: fakeSpeak([]),
     agent: () => ({ turn: async () => {} }),
@@ -62,15 +64,17 @@ test("half duplex, server side: no frames reach Ink while homie's line plays, th
   for (let i = 0; i < 10; i++) k.mic();
   assert.equal(k.frames(), 0, "the greeting is playing: the mic only hears homie");
   await waitFor("the greeting's end", () => k.ws.of("say_end").length === 1);
-  await advance(AUDIO_S * 1000 + 100); // the phone finishes playing it; the offer starts after a beat
-  const before = k.frames();
-  await waitFor("the offer", () => k.ws.of("say").length === 2);
+  await advance(AUDIO_S * 1000 + 100); // the phone finishes playing it
   k.mic();
-  assert.equal(k.frames(), before, "the offer is playing");
-  await waitFor("the offer's end", () => k.ws.of("say_end").length === 2);
+  assert.equal(k.frames(), 1, "nothing playing: the frame goes to Ink");
+  // A step line sent all at once from the cache plays just as long on the phone.
+  k.text("repeat");
+  await waitFor("the step's line", () => k.ws.of("say_end").length === 2);
+  k.mic();
+  assert.equal(k.frames(), 1, "the step's line is playing");
   await advance(AUDIO_S * 1000 + 100);
   for (let i = 0; i < 5; i++) k.mic();
-  assert.equal(k.frames() - before, 5, "nothing playing: every frame goes to Ink");
+  assert.equal(k.frames(), 6, "nothing playing: every frame goes to Ink");
   k.close();
 });
 
@@ -93,7 +97,7 @@ test("a turn whose end never came stops holding the mic open after 30 s", async 
   k.mic();
   assert.equal(k.frames(), 1);
   await advance(31_000); // no turn.end ever came
-  k.text("yes"); // yes to reading: homie reads step 1
+  k.text("repeat"); // homie says step 1's line
   await waitFor("step 1 read aloud", () => k.ws.of("say").some((x) => x.kind === "step"));
   k.mic();
   assert.equal(k.frames(), 1, "the stale turn no longer holds half duplex open");
