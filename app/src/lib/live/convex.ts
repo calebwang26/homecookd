@@ -17,6 +17,7 @@
 //   useLiveLog(recordingId)                              liveEvents.forRecording, live (what the glasses' live pass saw)
 //   useLiveFrame(recordingId)                            liveEvents.frame, live (the glasses' newest picture)
 //   await cancelLiveJob(jobId)                           jobs.cancel: stops a job (queued or mid-way) for good
+//   await cancelLiveUpload(uploadId)                     jobs.cancelUpload: the same, by the upload's folder
 //   useGlassesVideos()                                   glasses.videos, live (the laptop's saved full videos)
 //   useMe()  /  await setLanguage('mr')                  people.me (live) / people.setLanguage
 //   await convexPersonIdByName('Shreya')                 a family member's Convex id, from rows that name them
@@ -394,6 +395,12 @@ const noLiveFrame = (onData: (v: LiveFrame | null) => void) => {
 export async function cancelLiveJob(jobId: string): Promise<boolean> {
   const sessionToken = await token();
   return call<boolean>('mutation', 'jobs:cancel', { sessionToken, jobId }, () => true, { soft: true });
+}
+
+/** jobs.cancelUpload: stops the job made from this upload ("<uploadId>/"), when the phone has no job id. */
+export async function cancelLiveUpload(uploadId: string): Promise<boolean> {
+  const sessionToken = await token();
+  return call<boolean>('mutation', 'jobs:cancelUpload', { sessionToken, uploadId }, () => false, { soft: true });
 }
 
 /** The cook's Home card "Leo made your Poha" (messages.madeMyDish): the newest photo of one of her dishes. */

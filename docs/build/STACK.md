@@ -93,7 +93,10 @@ HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-o
   source }`. The job is now `preparing`.
 - `/worker/progress` `{ jobId, stage, progress, error? }`. `stage` is one of
   `preparing | understanding | writing | indexing | done | failed`, and `progress` runs 0..1.
-  `failed` also marks the recipe failed.
+  `failed` also marks the recipe failed. A job the cook stopped answers **409** `cancelled` here, on `/worker/release`
+  and on `/worker/published` (Oct 24): the worker stops there, saves nothing to Convex, deletes that upload's raw
+  files and moves media it published a moment before to `trash/` (`pipeline/worker.py` `JobCancelled`).
+  `jobs.create` refuses an upload folder another family's job already uses (`jobs.by_uploadPath`).
 - `/worker/published` `{ jobId, recipe, recipeJsonUrl?, memoriesOptIn? }` → `{ recipeId }`.
   - `recipe` is the pipeline's `recipe.json` as is.
   - Convex keeps `title`, `id` (as `libraryId`), `media.poster_url` (https only), each step's
@@ -197,6 +200,9 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 - `people.setLanguage({ language })` (self; a two-letter code, lowercased). `people.me` → `{ personId, name, role,
   language, relation? }` (`language` is `en` when unset). `people.family` → `[{ personId, supabaseProfileId, name,
   role }]` (my family only), so the app maps profile ids to Convex ids (Oct 24).
+- `jobs.cancel({ jobId })` / `jobs.cancelUpload({ uploadId })` → `boolean` (cook only, her family's jobs): stops an
+  unfinished job (stage `failed`, error `Cancelled.`, its recipe `failed`); `cancelUpload` finds it by the phone's upload
+  folder (`<uploadId>/`) when the phone has no job id. False when there's nothing left to stop.
 - `messages.madeMyDish` → the newest photo someone else sent of one of my dishes in the last 14 days (`{ messageId,
   fromName, recipeTitle, libraryId?, photoUrl, text?, at }`), or null: the cook's Home card "Leo made your Poha".
 - `questions.ask` (the voice service's `asked_cook`): when the recipe's cook doesn't speak English, Gemini fills
