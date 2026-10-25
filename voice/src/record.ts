@@ -13,16 +13,21 @@
 // (wall time minus the seconds the video doesn't have). At the end homie asks for a photo of the plate
 // ({type:"ask", kind:"plate"}); the phone takes it and answers {type:"plate", ok}. Each line homie says is
 // saved with `said` (when its voice played), so the pipeline can lower or cut it in the video.
+// The wrap-up waits for her (Caleb, Oct 24: "you have to give time for the person to actually respond"): homie never
+// starts a line while she talks, her answer is every turn until she's been quiet a while (listen), "not now" (the
+// card's tap, or said) skips just that question, and a question she doesn't answer gets one "still there?" and then
+// a kind let-off, after which homie asks nothing more. Every wait counts from when the phone has played the line.
 import WebSocket from "ws";
 import * as convex from "./convex.js";
 import { env } from "./env.js";
 import { callOf } from "./family.js";
 import { HomieAgent, isNotNow, translate, type AskKind, type Heard, type Line, type Who } from "./homie.js";
+import { rms, VOICE_RMS } from "./inkWhisper.js";
 import { fixedLine, scriptedOf, scriptedQuestion } from "./lines.js";
 import { DEMO, NORMAL, Pacer, SCRIPTED, type PaceRules } from "./pacing.js";
 import { SONIC_SAMPLE_RATE, type AudioFormat } from "./sonic.js";
 import { createStt, speak } from "./speech.js";
-import type { Stt } from "./stt.js";
+import { sttEngine, type Stt, type SttEngine } from "./stt.js";
 
 /** `loading` is ours only (the app never sees it): messages wait until the recording is read. */
 type Phase = "loading" | "intro" | "recording" | "wrapping_up" | "ended";
@@ -33,8 +38,6 @@ const QUIET_MS = 3000; // never ask while she's talking
 const DECIDE_EVERY_MS = 15_000;
 const STORY_CHECK_WORDS = 25; // outside the ask window, a long turn may be a story worth a reaction
 const DROP_MS = 10_000;
-const END_ANSWER_MS = 15_000;
-const MUTE_AFTER_MS = 300;
 const INTRO_WAIT_MS = 7000; // then the hand-written hello
 const FRAME_EVERY_MS = 5000;
 const FRAME_FRESH_MS = 20_000; // an older picture isn't shown to Claude
@@ -43,6 +46,53 @@ const PLATE_WAIT_MS = 75_000; // for the phone's plate photo (or her "not now")
 const MAX_GAP_S = 4 * 3600;
 const HEARTBEAT_MS = 10 * 60_000; // Convex abandons a recording nobody touched for 2 h
 const MEMORY_TTL_MS = 3 * 3600_000;
+
+// ---- the wrap-up's turn-taking (listen, untilQuiet) ----
+/**
+ * After a wrap-up question has finished playing on the phone: this long with no word from her and homie checks she's
+ * still there; as long again after that line has played and homie lets her off (Caleb's 5 s and 5 s, Oct 24).
+ */
+export const SILENT_MS = 5000;
+/**
+ * Her answer is over once no new words have come for this long and no turn is still open, so several turns join into
+ * one answer and a pause to think doesn't end it. Counted from her last words as the speech-to-text shows them, so it
+ * depends on the engine's lag. Ink 2 (English) shows words ~0.3 s after she says them: 3.5 s ≈ 3.8 s of real quiet,
+ * room for the 2–3 s an older cook stops to think mid-answer (an Oct 24 live run with 3 s cut a 3 s pause: her
+ * resumed voice reached the mic 0.15 s too late). ink-whisper's pieces come up to ~1.3 s late, but its turn stays
+ * open while the mic still hears her (inkWhisper.ts), so 3.5 s holds there too. Gemini Live (Marathi) shows her
+ * last words ~1.2 s after she stops (its turn ends 1.5 s after that: the 2.7 s measured end to end) and the first
+ * words of a resumed sentence ~1 s late, so it gets 4 s: ~5.2 s of real quiet, room for a ~4 s pause.
+ */
+export const ANSWER_GAP_MS: Record<SttEngine, number> = { "ink-2": 3500, "ink-whisper": 3500, "gemini-live": 4000 };
+/** A turn the speech-to-text opened and never closed (a dropped stream) stops holding her answer after this long. */
+const STUCK_TURN_MS = 6000;
+/** Sound on the mic holds the answer (and the nudge) this long: her words may still be on their way. */
+const SOUND_HOLD_MS = 1500;
+/**
+ * ...but this long with sound, or with turns the speech-to-text opens and ends empty, and no words is the kitchen
+ * (a fan, the sink), not her: it stops holding. The trade-off: during a run of empty turns (Ink on the range hood),
+ * a real turn of hers that starts within it gets no hold until its first words show (~0.3 s on Ink).
+ */
+const NOISE_MS = 4000;
+/** One answer ends by this long after the question played, at the latest: under the app's 120 s wrap-up stall. */
+const ANSWER_MAX_MS = 100_000;
+/** Before each wrap-up line homie waits for her to stop talking (she may be talking to family), at most this long. */
+const QUIET_MAX_MS = 30_000;
+/** Her speech-to-text has shown nothing at all (no key, an error): no "still there?", just this long a wait. */
+const NO_STT_WAIT_MS = 15_000;
+const POLL_MS = 100;
+/**
+ * The phone plays a line only once it has all of it (say_end: lib/live/homie.ts flushSay writes a WAV and loads
+ * the player), so it starts about this long after say_end, not with the first chunk.
+ */
+export const PLAYER_LOAD_MS = 250;
+
+/**
+ * One wrap-up question's answer while homie waits on it (listen). The card's tap counts from the ask on; a spoken turn
+ * counts only if its words came after the question `played` (the mic is muted while homie speaks, so a turn ending
+ * during the line is talk from before it: an afterthought, family).
+ */
+type Answer = { turns: string[]; from: number; to: number; notNow: boolean; played: number };
 
 /** What homie keeps about one recording across reconnects (Cloud Run's session affinity sends her back here). */
 type Memory = {
@@ -61,6 +111,10 @@ type Memory = {
   reactedAt: number;
   endAsked: number;
   optInDone: boolean;
+  /** She didn't answer a wrap-up question even after "still there?": homie asks nothing more (the plate is a tap). */
+  letOff: boolean;
+  /** Her speech-to-text has shown something in this recording (a turn, words): it works. */
+  sttHeard: boolean;
   /** Filmed with the phone's camera in the app: it sends frames, can pause, and takes the plate photo. */
   camera: boolean;
   /** Seconds of wall time since t0 that the video doesn't have (paused, between clips): off every atS. */
@@ -92,6 +146,8 @@ function memoryOf(recordingId: string, rules: PaceRules, fresh: boolean): Memory
     reactedAt: 0,
     endAsked: 0,
     optInDone: false,
+    letOff: false,
+    sttHeard: old?.sttHeard ?? false,
     camera: false,
     gapS: 0,
     paused: false,
@@ -152,19 +208,41 @@ export class Recording {
   private wrapStarted = false;
   /** Her and the kid's names in her script, for the fixed lines (lines.ts). */
   private names: Promise<void> = Promise.resolve();
+  /** Her speech-to-text's last event of any kind (a turn starting, its words so far, its end). */
   private lastSpeechAt = 0;
   private turnStartedAt = 0;
+  /** A turn has started and not ended; `turnWords` = its words so far. */
+  private turnOpen = false;
+  private turnWords = "";
+  /** When her last words showed up (a partial, or a turn that had none); the wrap-up counts its quiet from this. */
+  private lastWordsAt = 0;
+  /** Since when the speech-to-text has opened turns with no words in them (0: it showed words since). */
+  private noiseSince = 0;
+  /** The speech-to-text's last event, and its last error: an error with nothing after it means it's down. */
+  private sttAt = 0;
+  private sttErrorAt = 0;
+  /** In the wrap-up: the mic's last loud chunk, and when that stretch of sound began. */
+  private soundAt = 0;
+  private soundSince = 0;
+  /** The mic's loudest chunk (RMS) in this wait: logged, so phone runs can tune VOICE_RMS. */
+  private loudest = 0;
+  /** homie's "still there?" and let-off in her language, made once per wrap-up. */
+  private spare?: Promise<{ stillThere: Line; letOff: Line }>;
+  /** Quiet after her last words that ends a wrap-up answer, for her speech-to-text (ANSWER_GAP_MS). */
+  private gapMs = ANSWER_GAP_MS["ink-2"];
   private storyInProgress = false;
   private lastDecideAt = 0;
   private decidedThrough = 0; // heard length at the last decision
   private deciding = false;
   private pending?: Pending;
-  /** The end flow waits on her next turn through this. */
-  private waiter?: (text: string | null) => void;
+  /** While a wrap-up question is up (from its ask), every turn she finishes goes in here (listen). */
+  private answer?: Answer;
   private speaking: AbortController | null = null;
   /** The last line, while the phone plays it. */
   private playing?: AbortController;
+  /** The mic is ignored until then; the phone should be playing homie's last line until `playingUntil`. */
   private muteUntil = 0;
+  private playingUntil = 0;
   private frame?: Buffer;
   private frameAt = 0;
   /** The plate step waits on the phone's {type:"plate"} through this. */
@@ -219,14 +297,15 @@ export class Recording {
     this.who = this.whoLatin = { language: recording.language, call, kid: kid?.name.split(" ")[0], dish };
     this.homie = this.deps.agent(this.who);
     this.names = this.who.language === "en" ? Promise.resolve() : this.nativeNames();
+    this.gapMs = ANSWER_GAP_MS[sttEngine(recording.language)];
     this.stt = this.deps.createStt(recording.language, {
       onTurnStart: () => this.onTurnStart(),
-      onPartial: (text) => {
-        this.lastSpeechAt = Date.now();
-        this.send({ type: "transcript", text, final: false });
+      onPartial: (text) => this.onPartial(text),
+      onTurnEnd: (text) => this.onTurnEnd(text),
+      onError: (message) => {
+        this.sttErrorAt = Date.now();
+        console.warn(`stt: ${message}`);
       },
-      onTurnEnd: (text) => this.heard(text),
-      onError: (message) => console.warn(`stt: ${message}`),
     }, [dish, cook.name, kid?.name].filter((x): x is string => !!x));
     this.send({ type: "ready", recording: { id: recording._id, language: recording.language, cookName: call, kidName: this.who.kid, dish } });
     console.log(`record start: ${call}, ${recording.language}, ${recording.status}, met before=${this.s.metBefore === true}, stub=${convex.usingStub}, demo=${env.homieDemo}`);
@@ -253,7 +332,9 @@ export class Recording {
   onMessage(data: WebSocket.RawData, isBinary: boolean) {
     if (isBinary) {
       // Half duplex: homie never hears itself (the phone sends silence then too).
-      if (!this.speaking && Date.now() >= this.muteUntil) this.stt?.send(data as Buffer);
+      if (this.speaking || Date.now() < this.muteUntil) return;
+      this.stt?.send(data as Buffer);
+      if (this.phase === "wrapping_up") this.onSound(data as Buffer);
       return;
     }
     if (this.phase !== "loading") this.control(data.toString());
@@ -276,9 +357,12 @@ export class Recording {
     else if (msg.type === "resume") this.resumeFilming((msg as { gapS?: unknown }).gapS);
     else if (msg.type === "plate") this.plateWaiter?.((msg as { ok?: unknown }).ok === true);
     else if (msg.type === "text" && typeof msg.text === "string" && msg.text) {
-      this.turnStartedAt = Date.now();
-      this.heard(msg.text);
-    } else if (msg.type === "not_now" && this.pending) this.drop("not_now");
+      // Typed (the app's "not now" tap on a wrap-up question is sent this way): words, but not speech.
+      this.heard(msg.text, Date.now(), true);
+    } else if (msg.type === "not_now") {
+      if (this.answer) this.skipAsk();
+      else if (this.pending) this.drop("not_now");
+    }
   }
 
   close() {
@@ -292,7 +376,6 @@ export class Recording {
     for (const t of this.timers) clearInterval(t);
     clearInterval(this.heartbeat);
     if (this.pending?.dropTimer) clearTimeout(this.pending.dropTimer);
-    this.waiter?.(null);
     this.plateWaiter?.(false);
   }
 
@@ -408,17 +491,21 @@ export class Recording {
 
   /**
    * The last questions, the stories opt-in and the goodbye. If the socket closes partway, it stops without
-   * writing anything more and leaves Convex at wrapping_up; her reconnect finishes what's left.
+   * writing anything more and leaves Convex at wrapping_up; her reconnect finishes what's left. After a let-off
+   * (she didn't answer, even after "still there?") homie asks nothing more: the plate photo (a tap), then goodbye.
    */
   private async wrapUp() {
     if (this.wrapStarted || this.closed) return;
     this.wrapStarted = true;
     this.state("thinking");
     await this.names;
+    void this.spareLines(); // made now (translated, in most languages) so homie never goes deaf to make one
     const first = this.mem.endAsked === 0;
-    const questions = await this.homie
-      .endQuestions(this.mem.heard, this.mem.asked, this.pacer.rules.maxEnd - this.mem.endAsked)
-      .catch((err) => (console.warn("end questions", err.message), []));
+    const questions = this.mem.letOff
+      ? []
+      : await this.homie
+          .endQuestions(this.mem.heard, this.mem.asked, this.pacer.rules.maxEnd - this.mem.endAsked)
+          .catch((err) => (console.warn("end questions", err.message), []));
     for (const [i, q] of questions.entries()) {
       let line = q.line;
       if (i === 0 && first) {
@@ -427,6 +514,7 @@ export class Recording {
       }
       await this.askAndWait("end", line);
       if (this.closed) return;
+      if (this.mem.letOff) break;
     }
 
     // Filmed in the app: a photo of the plate for the cover. The phone takes it; she can skip it.
@@ -435,7 +523,8 @@ export class Recording {
       if (this.closed) return;
     }
 
-    if (!this.mem.optInDone) {
+    // Unanswered (a let-off included), the opt-in stays unset.
+    if (!this.mem.optInDone && !this.mem.letOff) {
       const optIn = await fixedLine("optIn", this.who, this.whoLatin);
       const reply = await this.askAndWait("optin", optIn);
       if (this.closed && !reply) return;
@@ -449,6 +538,7 @@ export class Recording {
     }
 
     const closing = await fixedLine("closing", this.who, this.whoLatin);
+    await this.untilQuiet();
     if (this.closed) return;
     const closingSaid = await this.say(closing, "closing");
     if (this.closed) return; // she may not have heard the goodbye: a reconnect says it again
@@ -462,8 +552,16 @@ export class Recording {
     await this.saveStatus("ended").catch(this.failed("live/status"));
   }
 
-  /** An end question: ask, wait for her next turn (or ~15 s), log the answer. Returns her words. */
+  /**
+   * A wrap-up question: once she isn't talking, ask, then wait for her whole answer (listen) and log it. From the ask
+   * on (the card is up while homie still asks) her turns are collected, and a "not now" (the card's tap, or her first
+   * words) skips this question at once. No word for SILENT_MS after it played: homie checks she's still there and
+   * gives her as long again; still nothing, and homie lets her off kindly (mem.letOff: nothing more is asked). With a
+   * speech-to-text that has shown nothing at all, just a plain NO_STT_WAIT_MS wait. Returns her words, or null.
+   */
   private async askAndWait(kind: "end" | "optin", line: Line): Promise<string | null> {
+    if (this.closed) return null;
+    await this.untilQuiet();
     if (this.closed) return null;
     const promptId = await this.log(kind, line, "spoken");
     if (this.closed || !promptId) {
@@ -475,26 +573,151 @@ export class Recording {
       this.mem.endAsked++;
       this.mem.asked.push(line.textEn);
     }
-    this.send({ type: "ask", promptId, text: line.text, textEn: line.textEn, kind });
-    this.markSaid(promptId, await this.say(line, kind));
-    const reply = await new Promise<string | null>((resolve) => {
-      if (this.closed) return resolve(null);
-      const timer = setTimeout(() => resolve(null), END_ANSWER_MS);
-      this.waiter = (text) => {
-        clearTimeout(timer);
-        resolve(text);
-      };
-    });
-    this.waiter = undefined;
-    if (reply && !isNotNow(reply)) {
-      this.send({ type: "answered", promptId });
-      void this.saveAnswer(promptId, reply);
-      return reply;
+    const a: Answer = { turns: [], from: 0, to: 0, notNow: false, played: 0 };
+    this.answer = a;
+    try {
+      this.send({ type: "ask", promptId, text: line.text, textEn: line.textEn, kind });
+      this.markSaid(promptId, await this.say(line, kind));
+      const played = (a.played = Date.now());
+      let got = await this.listen(a, this.sttWorks() ? SILENT_MS : NO_STT_WAIT_MS);
+      // "Still there?" only once she's quiet; the let-off only after she has heard it. A wait that ended while she
+      // may be talking (her words came meanwhile, or sound held it to its cap) is waited again, a few times at most.
+      let nudged = false;
+      for (let tries = 0; got === "silent" && !nudged && this.sttWorks() && tries < 3; tries++) {
+        const { stillThere } = await this.spareLines();
+        if (!this.closed && !a.notNow && !a.turns.length && !this.talking(Date.now())) {
+          console.log(`cook quiet ${SILENT_MS / 1000}s after the ${kind} question: still there?`);
+          await this.sayFixed(stillThere);
+          nudged = true;
+        }
+        got = await this.listen(a, SILENT_MS);
+      }
+      if (got === "silent" && !nudged && !this.sttWorks() && Date.now() - played < NO_STT_WAIT_MS) {
+        // Her speech-to-text just failed: homie can't tell whether she's talking, so it only waits.
+        got = await this.listen(a, NO_STT_WAIT_MS - (Date.now() - played));
+      }
+      if (got === null || this.closed) return null; // the socket closed: nothing to record
+      if (got === "answered") {
+        this.send({ type: "answered", promptId });
+        const text = a.turns.join(" ");
+        void this.saveAnswer(promptId, text, a.from, a.to);
+        return text;
+      }
+      this.send({ type: "drop", promptId });
+      void this.deps.convex.updatePrompt(this.token, promptId, got === "skipped" ? "not_now" : "ignored").catch(() => {});
+      if (got === "skipped") console.log(`cook said not now to the ${kind} question: skipped`);
+      else if (nudged && this.sttWorks()) {
+        console.log(`cook quiet after "still there?" too: letting her off`);
+        this.mem.letOff = true;
+        this.answer = undefined; // nothing she says now answers this question
+        await this.sayFixed((await this.spareLines()).letOff);
+      }
+      return null;
+    } finally {
+      if (this.answer === a) this.answer = undefined;
     }
-    if (this.closed) return null; // no answer because the socket closed: nothing to record
-    this.send({ type: "drop", promptId });
-    void this.deps.convex.updatePrompt(this.token, promptId, reply ? "not_now" : "ignored").catch(() => {});
-    return null;
+  }
+
+  /** The card's "not now" (or {type:"not_now"}) while a wrap-up question is up: stop asking, skip it now. */
+  private skipAsk() {
+    if (!this.answer || this.answer.notNow) return;
+    this.answer.notNow = true;
+    this.hush();
+  }
+
+  /** homie's "still there?" and let-off in her language, made once (a translation for most languages). */
+  private spareLines() {
+    this.spare ??= Promise.all([fixedLine("stillThere", this.who, this.whoLatin), fixedLine("letOff", this.who, this.whoLatin)]).then(
+      ([stillThere, letOff]) => ({ stillThere, letOff }),
+    );
+    return this.spare;
+  }
+
+  /** One of homie's own wrap-up lines, said and then saved as a reaction (no answer expected). */
+  private async sayFixed(line: Line) {
+    if (this.closed) return;
+    const said = await this.say(line, "reaction");
+    if (!this.closed) void this.log("reaction", line, "spoken", undefined, said && this.span(said));
+  }
+
+  /**
+   * After homie's line has finished playing on the phone, waits for her whole answer in `a`: every turn from her first
+   * words until she has been quiet for the engine's gap (talking()), so a pause to think doesn't end it and homie
+   * never moves on while she talks. "silent" when she hasn't said a word in `silentMs` (sound or an open turn that may
+   * be her first words holds that a little, at most NOISE_MS); "skipped" on a "not now"; null when the socket closed.
+   */
+  private async listen(a: Answer, silentMs: number): Promise<"answered" | "silent" | "skipped" | null> {
+    const start = Date.now();
+    this.loudest = 0;
+    try {
+      for (;; await sleep(POLL_MS)) {
+        if (this.closed) return null;
+        if (a.notNow) return "skipped";
+        const now = Date.now();
+        if (a.turns.length || this.lastWordsAt >= a.played) {
+          // She has started: wait until she's done.
+          if (this.talking(now) && now - start < ANSWER_MAX_MS) continue;
+          // A turn the speech-to-text never closed still counts with the words it had (since the question).
+          if (this.turnOpen && this.turnWords && this.lastWordsAt >= a.played) {
+            a.turns.push(this.turnWords);
+            a.to = this.lastWordsAt;
+            this.turnWords = "";
+          }
+          if (a.turns.length) {
+            const n = a.turns.length;
+            console.log(`cook answered (${n} turn${n > 1 ? "s" : ""}): homie waited ${((now - this.lastWordsAt) / 1000).toFixed(1)}s after her last words`);
+            return "answered";
+          }
+          // Words that came to nothing (a cough, the pan): as if she hadn't started.
+        }
+        const holding = this.turnHolds(now) || this.soundHolds(now);
+        if (now - start >= silentMs && (!holding || now - start >= silentMs + NOISE_MS)) return "silent";
+      }
+    } finally {
+      if (this.phase === "wrapping_up") {
+        const db = (v: number) => (v > 0 ? (20 * Math.log10(v / 32768)).toFixed(1) : "-inf");
+        console.log(`wrap-up mic: loudest ${Math.round(this.loudest)} rms (${db(this.loudest)} dBFS), voice above ${VOICE_RMS} (${db(VOICE_RMS)} dBFS)`);
+      }
+    }
+  }
+
+  /** Before each wrap-up line: wait while she's talking (at most QUIET_MAX_MS), so homie never starts over her. */
+  private async untilQuiet() {
+    const start = Date.now();
+    while (!this.closed && this.talking(Date.now()) && Date.now() - start < QUIET_MAX_MS) await sleep(POLL_MS);
+  }
+
+  /** She's talking, or may be: a turn still open, sound on the mic, or words in the last ANSWER_GAP_MS. */
+  private talking(now: number) {
+    return this.turnHolds(now) || this.soundHolds(now) || now - this.lastWordsAt < this.gapMs;
+  }
+
+  /**
+   * An open turn holds while its words keep coming (a stuck one stops after STUCK_TURN_MS); turns with no words yet,
+   * one after another (Ink opening them on kitchen noise), hold only NOISE_MS in all.
+   */
+  private turnHolds(now: number) {
+    if (!this.turnOpen) return false;
+    return this.turnWords ? now - this.lastSpeechAt < STUCK_TURN_MS : now - this.noiseSince < NOISE_MS;
+  }
+
+  private soundHolds(now: number) {
+    return now - this.soundAt < SOUND_HOLD_MS && now - Math.max(this.lastWordsAt, this.soundSince) < NOISE_MS;
+  }
+
+  /** Her speech-to-text works: it showed something in this recording, and no error since its last event. */
+  private sttWorks() {
+    return this.mem.sttHeard && this.sttErrorAt <= this.sttAt;
+  }
+
+  /** The mic in the wrap-up: a loud chunk may be her voice before the speech-to-text shows its words. */
+  private onSound(pcm: Buffer) {
+    const level = rms(pcm);
+    this.loudest = Math.max(this.loudest, level);
+    if (level <= VOICE_RMS) return;
+    const now = Date.now();
+    if (now - this.soundAt > SOUND_HOLD_MS) this.soundSince = now;
+    this.soundAt = now;
   }
 
   /**
@@ -505,6 +728,8 @@ export class Recording {
    */
   private async plate() {
     const line = await fixedLine("plate", this.who, this.whoLatin);
+    await this.untilQuiet();
+    if (this.closed) return;
     const promptId = await this.log("plate", line, "spoken");
     if (this.closed || !promptId) return;
     // The phone shows its shutter with the ask: a photo (or "not now") counts from now, even mid-line.
@@ -526,7 +751,11 @@ export class Recording {
     this.mem.plateDone = true;
     this.send({ type: ok ? "answered" : "drop", promptId });
     void this.deps.convex.updatePrompt(this.token, promptId, ok ? "answered" : "ignored").catch(() => {});
-    if (ok) await this.say(await fixedLine("plateThanks", this.who, this.whoLatin), "reaction");
+    // A spoken "not now" may be the start of more ("not now, I'll send one later"): the next line waits for the rest.
+    if (!ok) return;
+    const thanks = await fixedLine("plateThanks", this.who, this.whoLatin);
+    await this.untilQuiet();
+    if (!this.closed) await this.say(thanks, "reaction");
   }
 
   // ---- filming in the app ----
@@ -567,7 +796,13 @@ export class Recording {
   // ---- listening ----
 
   private onTurnStart() {
-    this.lastSpeechAt = this.turnStartedAt = Date.now();
+    const now = Date.now();
+    // A run of turns with no words starts here, unless one is already going (it ends when words come).
+    if (!this.noiseSince || now - this.lastSpeechAt > NOISE_MS) this.noiseSince = now;
+    this.lastSpeechAt = this.turnStartedAt = this.sttAt = now;
+    this.mem.sttHeard = true;
+    this.turnOpen = true;
+    this.turnWords = "";
     this.state("listening");
     // She's answering: don't fade the question while she talks.
     if (this.pending?.dropTimer) {
@@ -576,13 +811,50 @@ export class Recording {
     }
   }
 
-  private heard(text: string) {
-    if (this.closed || this.phase === "ended") return;
-    this.lastSpeechAt = this.mem.usedAt = Date.now();
+  private onPartial(text: string) {
+    this.lastSpeechAt = this.sttAt = Date.now();
+    this.mem.sttHeard = true;
+    if (text.trim()) {
+      this.lastWordsAt = this.lastSpeechAt;
+      this.turnWords = text.trim();
+      this.noiseSince = 0;
+    }
+    this.send({ type: "transcript", text, final: false });
+  }
+
+  private onTurnEnd(text: string) {
+    this.lastSpeechAt = this.sttAt = Date.now();
+    this.mem.sttHeard = true;
+    if (text.trim()) {
+      // A turn with words but no partials (a quick "yes"): its end is the best time we have for them.
+      if (!this.turnWords) this.lastWordsAt = this.lastSpeechAt;
+      this.noiseSince = 0;
+    } else if (this.pending && !this.pending.dropTimer) this.armDrop(this.pending); // a cough: the card fades again
+    this.turnOpen = false;
+    this.turnWords = "";
+    this.heard(text);
+  }
+
+  /** One finished turn of hers (`typed`: a text message, such as the card's "not now" on a wrap-up question). */
+  private heard(raw: string, startedAt = this.turnStartedAt, typed = false) {
+    const text = raw.trim();
+    // A turn with no words (a cough, the pan; Ink can end one empty) is nothing she said: it answers nothing.
+    if (this.closed || this.phase === "ended" || !text) return;
+    const now = Date.now();
+    this.lastSpeechAt = this.mem.usedAt = now;
     this.send({ type: "transcript", text, final: true });
-    this.mem.heard.push({ atS: this.atS(this.turnStartedAt || Date.now()), text });
+    this.mem.heard.push({ atS: this.atS(startedAt || now), text });
     console.log(`cook: ${text}`);
-    if (this.waiter) return this.waiter(text);
+    const a = this.answer;
+    // A spoken turn whose words came before the question had played is talk from before it: it answers nothing.
+    if (a && (typed || (a.played && this.lastWordsAt >= a.played))) {
+      // The card's tap is final; said, "not now" skips the question only as her first words (not "…later" at the end).
+      if (isNotNow(text) && (typed || !a.turns.length)) return this.skipAsk();
+      a.from ||= startedAt || now;
+      a.to = typed ? now : this.lastWordsAt;
+      a.turns.push(text);
+      return;
+    }
     // "Not now" while homie waits for the plate photo skips it.
     if (this.plateWaiter && isNotNow(text)) return this.plateWaiter(false);
     if (this.pending) {
@@ -592,14 +864,15 @@ export class Recording {
       this.pending = undefined;
       this.pacer.answered();
       this.send({ type: "answered", promptId });
-      void this.saveAnswer(promptId, text);
+      void this.saveAnswer(promptId, text, startedAt);
     }
     if (this.phase === "recording") this.state("quiet");
   }
 
-  private async saveAnswer(promptId: string, transcript: string) {
-    const atS = this.atS(this.turnStartedAt || Date.now());
-    const endS = this.atS(Date.now());
+  /** `from`/`to` = when her answer began and her last words came (a wrap-up answer can be several turns). */
+  private async saveAnswer(promptId: string, transcript: string, from = this.turnStartedAt, to = Date.now()) {
+    const atS = this.atS(from || Date.now());
+    const endS = Math.max(atS, this.atS(to || Date.now()));
     const transcriptEn = this.who.language === "en" ? undefined : await this.deps.translate(transcript, "en").catch(() => undefined);
     await this.deps.convex
       .updatePrompt(this.token, promptId, "answered", { transcript, transcriptEn: transcriptEn || undefined, atS, endS })
@@ -681,7 +954,13 @@ export class Recording {
     this.send({ type: "ask", promptId, text: line.text, textEn: line.textEn, kind });
     this.markSaid(promptId, await this.say(line, kind));
     // ~10 s after she heard it with no answer, the card fades (her starting to talk holds it).
-    if (this.pending === pending) pending.dropTimer = setTimeout(() => this.pending === pending && this.drop("ignored"), DROP_MS);
+    if (this.pending === pending) this.armDrop(pending);
+  }
+
+  /** The live question's card fades DROP_MS from now unless she answers. */
+  private armDrop(p: Pending) {
+    clearTimeout(p.dropTimer);
+    p.dropTimer = setTimeout(() => this.pending === p && this.drop("ignored"), DROP_MS);
   }
 
   private drop(status: "ignored" | "not_now") {
@@ -726,7 +1005,8 @@ export class Recording {
 
   /**
    * Speaks in her language with homie's voice; resolves once the phone should have finished playing it, with
-   * when its voice played (wall-clock ms; cut short if it was interrupted), or nothing when no audio went out.
+   * when its voice played on the phone (wall-clock ms; cut short if it was stopped while playing), or nothing when
+   * the phone never played it.
    */
   private async say(line: Line, kind: string): Promise<{ start: number; end: number } | undefined> {
     if (this.closed) return;
@@ -750,16 +1030,26 @@ export class Recording {
     } catch (err) {
       if (!ctrl.signal.aborted) console.warn("sonic", (err as Error).message);
     }
-    const playEnd = ctrl.signal.aborted ? Date.now() : (first || Date.now()) + (bytes / 2 / SONIC_SAMPLE_RATE) * 1000;
-    this.muteUntil = playEnd + MUTE_AFTER_MS;
-    this.send({ type: "say_end", interrupted: ctrl.signal.aborted });
+    // The phone plays a line only once it has all of it (say_end), after loading it into its player; an interrupted
+    // one it never plays.
+    const aborted = ctrl.signal.aborted;
+    const sayEnd = Date.now();
+    const length = aborted || !first ? 0 : (bytes / 2 / SONIC_SAMPLE_RATE) * 1000;
+    const playStart = sayEnd + PLAYER_LOAD_MS;
+    const playEnd = length ? playStart + length : sayEnd;
+    this.playingUntil = playEnd;
+    // The phone sends silence while it plays, so this mute is only a backup. It ends when the phone can first have
+    // finished (no load time), so a quick "yes" right after the line isn't cut.
+    this.muteUntil = sayEnd + length;
+    this.send({ type: "say_end", interrupted: aborted });
     if (this.speaking === ctrl) this.speaking = null;
     // The phone is still playing it; hush() can cut that short too.
     this.playing = ctrl;
     await pause(playEnd - Date.now(), ctrl.signal);
     if (this.playing === ctrl) this.playing = undefined;
     if (!this.speaking) this.state(this.phase === "ended" ? "quiet" : "listening");
-    return first ? { start: first, end: Math.min(playEnd, Date.now()) } : undefined;
+    const end = Math.min(playEnd, Date.now());
+    return first && !aborted && end > playStart ? { start: playStart, end } : undefined;
   }
 
   /** A wall-clock span as `said` on the recording's clock. */
@@ -775,10 +1065,10 @@ export class Recording {
 
   /** Stop homie now: the line Sonic is still making, or the one the phone is still playing (an extra say_end). */
   private hush() {
-    if (this.playing && !this.playing.signal.aborted && Date.now() < this.muteUntil) this.send({ type: "say_end", interrupted: true });
+    if (this.playing && !this.playing.signal.aborted && Date.now() < this.playingUntil) this.send({ type: "say_end", interrupted: true });
     this.speaking?.abort();
     this.playing?.abort();
-    this.muteUntil = 0;
+    this.muteUntil = this.playingUntil = 0;
   }
 
   /** Saves one of homie's lines; null when Convex says the recording is over (this socket then ends). */

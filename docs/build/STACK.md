@@ -323,7 +323,7 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
     done while homie's line is still playing, an extra `{ type: "say_end", interrupted: true }` tells the app to
     stop it.
   - `{ type: "ask", promptId, text, textEn, kind }`: show the caption card. `{ type: "drop", promptId }`: fade it
-    (no answer in ~10 s, "not now", or she's done). `{ type: "answered", promptId }`. Kind `show` (filmed in the
+    (no answer in ~10 s, "not now", or she's done; in the wrap-up, no answer even after "still there?"). `{ type: "answered", promptId }`. Kind `show` (filmed in the
     app): "Can you tilt the pan toward me?". Kind `plate` (filmed in the app, in the wrap-up after the last
     questions): the app shows the camera big and takes the photo (`live.setCover`), then sends
     `{ type: "plate", ok }`; no answer in 75 s, or "not now", skips it.
@@ -334,8 +334,30 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 - Ended underneath (the app called `live.endRecording` while it couldn't reach the service): a socket still open
   for it finds out at its next Convex write (heartbeat, status or homie's next line). It then says and saves
   nothing more, sends `{ type: "phase", phase: "ended" }` and closes with 4404.
-- The service ignores incoming audio while homie speaks (+300 ms), so it never hears itself; the app also sends
-  silence then. homie gives guidance, never cooking advice (`docs/agents/memory/homie-guidance-only.md`). Pacing
+- The wrap-up waits for her (Oct 24, `docs/agents/memory/homie-waits-for-answers.md`; `voice/src/record.ts`
+  `listen`). homie never starts a wrap-up line (end question, plate ask, thanks, opt-in, goodbye) while she talks
+  (it waits at most 30 s). The card's tap counts from the `ask` on; a spoken turn counts only if its words came
+  after the question played (the mic is muted under homie's line, so a turn ending during it is talk from before:
+  an afterthought, or family, never the answer). An answer is every turn from her first words until no new words
+  have come for 3.5 s (Ink 2, ink-whisper) or 4 s (Gemini Live, Marathi) and no turn is
+  open, so a pause to think doesn't end it; sound on the mic, or turns the speech-to-text opens and ends empty
+  (kitchen noise), hold that at most 4 s with no words. One answer ends 100 s after the question at the latest
+  (under the app's 120 s wrap-up stall). "not now" (the card's tap, sent as `{ type: "text", text: "not now" }`, or
+  `{ type: "not_now" }`, or said as her first words) stops homie's line and skips that question at once (`drop`,
+  `not_now`); the next one comes. No word 5 s after a question finished playing: homie says "Still there, Rajani
+  Aaji? Take your time. I'm listening." (once she's quiet: not if her words arrived meanwhile, and a wait that noise
+  held to its cap is waited again first); 5 s more after that line played (never without it):
+  `drop` (`ignored`), the let-off "That's okay, Rajani Aaji. No need to answer today. All good, let's finish up.",
+  and nothing more is asked (no further end question, no opt-in, which stays unset); the plate photo still comes
+  when filmed in the app, then the goodbye. Both lines are `say` kind `reaction` and saved as `reaction` prompts. A
+  speech-to-text that has shown nothing in the recording (or errored since): no nudge or let-off, a plain 15 s wait
+  per question. Every wait and each line's `said` span count from when the phone plays the line: it plays only once
+  it has all of it, ~250 ms after `say_end` (`PLAYER_LOAD_MS`), not from the first chunk. A turn with no
+  words (Ink can end one empty) answers nothing, and a live question's card fades 10 s after it. No new messages:
+  the app needs no change.
+- The service ignores incoming audio while homie speaks, until the phone can first have finished playing the line
+  (`say_end` + its length), so it never hears itself; the app also sends silence while it plays, so a quick reply
+  right after the line isn't cut. homie gives guidance, never cooking advice (`docs/agents/memory/homie-guidance-only.md`). Pacing
   (normal, Oct 24): first question no earlier than 2 min, gaps of 3.5 min, doubled after an ignored one, at most 8
   live plus 2 end questions, never while the cook talks or tells a story. `HOMIE_DEMO=1`: first
   question at ~40 s, then 90 s gaps, at most 2 live.

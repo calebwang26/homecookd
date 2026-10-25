@@ -16,7 +16,7 @@ const SILENCE_S = "0.8";
 /** Nothing new for this long after a final piece ends her turn. */
 export const PAUSE_MS = 1500;
 /** Louder than this (RMS of 16-bit samples) is her voice; speech in the Oct 24 test audio is ~1400, pauses ~10. */
-const VOICE_RMS = 400;
+export const VOICE_RMS = 400;
 /** A noisy kitchen can't hold a turn open forever: it ends this long after the last piece regardless. */
 export const MAX_HOLD_MS = 5000;
 /** Voice this far (in seconds of audio) past the last transcribed word means a piece is still coming. */
@@ -191,7 +191,7 @@ export class InkWhisperStream {
 }
 
 /** Loudness of 16-bit little-endian PCM. */
-function rms(pcm: Buffer): number {
+export function rms(pcm: Buffer): number {
   const n = Math.floor(pcm.length / 2);
   if (!n) return 0;
   let sum = 0;

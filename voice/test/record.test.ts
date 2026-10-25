@@ -1,6 +1,7 @@
 // Recording's phases (record.ts) with a fake socket, speech-to-text, voice, Claude and Convex, on a fake
 // clock: start/done ordering, double start, done during a question, reconnects, a socket closed mid-wrap-up,
-// a recording the app ended underneath an open socket, and the hello for a cook homie has met before.
+// a recording the app ended underneath an open socket, the hello for a cook homie has met before, and the
+// wrap-up's turn-taking (an answer in several turns, "still there?", the let-off).
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, mock, test } from "node:test";
 import WebSocket from "ws";
@@ -15,12 +16,15 @@ import { advance, AUDIO_S, FakeSocket, fakeSpeak, settle, sleep, waitFor } from 
 process.env.CARTESIA_API_KEY = "test";
 process.env.ANTHROPIC_API_KEY = "test";
 process.env.VOICE_STUB = "1";
-const { Recording } = await import("../src/record.js");
+const { Recording, ANSWER_GAP_MS, PLAYER_LOAD_MS, SILENT_MS } = await import("../src/record.js");
 const { Ended } = await import("../src/convex.js");
 const { env } = await import("../src/env.js");
 
 const RULES = { firstS: 10, gapS: 30, maxLive: 2, maxEnd: 2 };
 const LATENCY_MS = 100; // every Convex call
+/** The fake Sonic makes each line in 5 pieces, one every 200 ms (faster than it plays, like the real one). */
+const STREAM = { chunks: 5, everyMs: 200 };
+const MAKE_MS = STREAM.chunks * STREAM.everyMs;
 const THINK_MS = 1000; // every Claude call
 
 beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: Date.parse("2026-10-25T17:00:00Z") }));
@@ -36,7 +40,7 @@ const quiet = (storyInProgress = false): Decision => ({ action: "quiet", storyIn
 type Call = { fn: string; args: unknown[]; at: number };
 
 /** One recording's backend: a Convex row, Claude's answers, the voice and the mic. */
-function world(status: RecordingStatus = "intro", metBefore?: boolean) {
+function world(status: RecordingStatus = "intro", metBefore?: boolean, language = "en") {
   const row: { status: RecordingStatus; startedAt?: number } = { status };
   const over = () => row.status === "ended" || row.status === "abandoned";
   const calls: Call[] = [];
@@ -47,7 +51,13 @@ function world(status: RecordingStatus = "intro", metBefore?: boolean) {
   const endQuestions: { kind: "cue"; line: Line }[] = [{ kind: "cue", line: line("How do you know the dal is done?") }];
   const endCalls: { asked: string[]; max: number }[] = [];
   const spoken: string[] = [];
+  /** When each line went to Sonic: it has played on the phone AUDIO_S s and 100 ms later (fakeSpeak). */
+  const spokenAt: number[] = [];
+  /** When each mic chunk reached her speech-to-text (the rest were muted). */
+  const heardAudioAt: number[] = [];
   const voices: Voice[] = [];
+  /** Every answer saved with /live/prompt-update. */
+  const answers: { promptId: string; transcript: string; atS: number; endS: number }[] = [];
   /** Each hello Claude was asked for: true = a welcome back. `hello.fails`: Claude can't write it. */
   const intros: boolean[] = [];
   const hello = { fails: false };
@@ -83,22 +93,23 @@ function world(status: RecordingStatus = "intro", metBefore?: boolean) {
     setWho: () => {},
   };
 
+  const speak = fakeSpeak(spoken, voices, STREAM);
   const deps: RecordingDeps = {
     rules: RULES,
     agent: () => agent,
     translate: async (text) => text,
     createStt: (_language, events) => {
       stt = events;
-      return { send: () => {}, close: () => {} };
+      return { send: () => void heardAudioAt.push(Date.now()), close: () => {} };
     },
-    speak: fakeSpeak(spoken, voices),
+    speak: (text, format, signal, onChunk, voice) => (spokenAt.push(Date.now()), speak(text, format, signal, onChunk, voice)),
     // Like Convex (live.ts): once a recording is over, status writes, heartbeats and new lines are refused
     // (only the goodbye may still land).
     convex: {
       recordingSession: (_token, recordingId) =>
         convexCall("recordingSession", [recordingId], () => ({
-          recording: { _id: recordingId, language: "en", status: row.status, startedAt: row.startedAt, dish: "Dal Tadka" },
-          cook: { name: "Rajani", relation: "Aaji", language: "en" },
+          recording: { _id: recordingId, language, status: row.status, startedAt: row.startedAt, dish: "Dal Tadka" },
+          cook: { name: "Rajani", relation: "Aaji", language },
           kid: { name: "Shreya" },
           dish: "Dal Tadka",
           metBefore,
@@ -120,7 +131,10 @@ function world(status: RecordingStatus = "intro", metBefore?: boolean) {
           if (row.status === "abandoned" || (row.status === "ended" && prompt.kind !== "closing")) throw new Ended("/live/prompt");
           return { promptId: `p${++ids}` };
         }),
-      updatePrompt: (_token, promptId, s) => convexCall("updatePrompt", [promptId, s], () => undefined),
+      updatePrompt: (_token, promptId, s, answer) =>
+        convexCall("updatePrompt", [promptId, s], () => {
+          if (answer) answers.push({ promptId, transcript: answer.transcript, atS: answer.atS, endS: answer.endS });
+        }),
       promptSaid: (_token, promptId, said) => convexCall("promptSaid", [promptId, said], () => undefined),
       setOptIn: (_token, _id, optIn) => convexCall("setOptIn", [optIn], () => undefined),
     },
@@ -134,6 +148,8 @@ function world(status: RecordingStatus = "intro", metBefore?: boolean) {
     return {
       ws,
       send: (msg: object) => rec.onMessage(Buffer.from(JSON.stringify(msg)), false),
+      /** 100 ms of mic audio: loud (her voice, or the kitchen) or silent. */
+      mic: (loud: boolean) => rec.onMessage(loud ? LOUD : Buffer.alloc(3200), true),
       drop: () => {
         ws.close(1001);
         rec.close();
@@ -147,9 +163,20 @@ function world(status: RecordingStatus = "intro", metBefore?: boolean) {
     stt!.onTurnEnd(text);
   }
 
+  /** Her words as the speech-to-text shows them while she still talks (no turn end yet). */
+  function partial(text: string) {
+    stt!.onPartial(text);
+  }
+
+  /** When homie's nth line (0 = the first) finished playing on the phone: it plays once it has all of it. */
+  const playedAt = (n: number) => spokenAt[n] + MAKE_MS + PLAYER_LOAD_MS + AUDIO_S * 1000;
   const named = (fn: string) => calls.filter((c) => c.fn === fn);
-  return { row, calls, named, logged, decisions, decided, endQuestions, endCalls, spoken, voices, intros, hello, connect, says, deps };
+  return { row, calls, named, logged, decisions, decided, endQuestions, endCalls, spoken, spokenAt, playedAt, heardAudioAt, voices, intros, hello, answers, connect, says, partial, stt: () => stt!, deps };
 }
+
+/** 100 ms of loud 16 kHz s16le audio (RMS 3000, well above the voice threshold). */
+const LOUD = Buffer.alloc(3200);
+for (let i = 0; i < LOUD.length; i += 2) LOUD.writeInt16LE(i % 4 ? -3000 : 3000, i);
 
 type Phone = ReturnType<ReturnType<typeof world>["connect"]>;
 
@@ -216,6 +243,7 @@ test("done while start is still saving: straight to the end, recording never com
   assert.deepEqual(w.named("status").map((s) => s.args[0]), ["recording", "wrapping_up", "ended"]);
   assert.equal(w.row.status, "ended");
   assert.equal(w.decided.length, 0, "no live questions once she's done");
+  // Her speech-to-text never showed a thing: a plain wait on each question, no "still there?" or let-off.
   assert.deepEqual(w.named("logPrompt").map((p) => p.args[0]), ["intro", "end", "optin", "closing"]);
 });
 
@@ -660,5 +688,509 @@ test("the plate photo taken while homie is still asking for it counts (and stops
   await waitFor("the thanks", () => w.spoken.includes("Got it. Thank you!"), 30_000);
   assert.ok(c.ws.of("say_end").some((e) => e.interrupted), "the plate line was cut short");
   await waitFor("the opt-in", () => c.ws.of("ask").some((a) => a.kind === "optin"), 30_000);
+  c.drop();
+});
+
+// ---- the wrap-up waits for her (Caleb, Oct 24: "you have to give time for the person to actually respond") ----
+
+/** Starts filming, says done, and waits until the first end question has finished playing on the phone. */
+async function firstEndQuestion(w: ReturnType<typeof world>, id: string) {
+  const c = w.connect(id);
+  await helloDone(c);
+  c.send({ type: "start" });
+  await advance(1000);
+  w.says("Now the tadka goes in"); // her speech-to-text works
+  await advance(ANSWER_GAP_MS["gemini-live"]);
+  c.send({ type: "done" });
+  await waitFor("the end question", () => c.ws.of("ask").some((a) => a.kind === "end"), 60_000);
+  const n = w.spokenAt.length - 1;
+  await waitFor("the end question played", () => w.spokenAt.length === n + 1 && Date.now() >= w.playedAt(n), 30_000);
+  return { c, question: c.ws.of("ask").find((a) => a.kind === "end")!, n };
+}
+
+const STILL_THERE = "Still there, Rajani Aaji? Take your time. I'm listening.";
+const LET_OFF = "That's okay, Rajani Aaji. No need to answer today. All good, let's finish up.";
+
+test("an answer in two parts with a 2 s pause is one answer: homie doesn't move on mid-answer", async () => {
+  const w = world();
+  const { c, question } = await firstEndQuestion(w, "rec-two-part");
+  await advance(1000);
+  w.says("Hmm, the dal...");
+  const asksBefore = c.ws.of("ask").length;
+  const linesBefore = w.spoken.length;
+  await advance(2000); // she stops to think
+  assert.equal(c.ws.of("ask").length, asksBefore, "no next question in her pause");
+  assert.equal(w.spoken.length, linesBefore, "homie says nothing in her pause");
+  w.says("you know it's done when it smells nutty.");
+  const lastWords = Date.now();
+
+  await waitFor("the opt-in", () => c.ws.of("ask").some((a) => a.kind === "optin"), 30_000);
+  const waited = Date.now() - lastWords;
+  assert.ok(waited >= ANSWER_GAP_MS["ink-2"] && waited < ANSWER_GAP_MS["ink-2"] + 600, `the next question came ${waited} ms after her last words`);
+  assert.deepEqual(c.ws.of("answered").map((a) => a.promptId), [question.promptId]);
+  await advance(LATENCY_MS + 50);
+  assert.deepEqual(w.answers.map((a) => [a.promptId, a.transcript]), [[question.promptId, "Hmm, the dal... you know it's done when it smells nutty."]]);
+  assert.ok(!w.spoken.includes(STILL_THERE), "she answered: no nudge");
+  c.drop();
+});
+
+test("a long answer with many pauses is never cut off (no 15 s cap)", async () => {
+  const w = world();
+  const { c, question } = await firstEndQuestion(w, "rec-long-answer");
+  await advance(4000); // she thinks first: no nudge before 5 s
+  assert.ok(!w.spoken.includes(STILL_THERE));
+  for (let i = 0; i < 10; i++) {
+    w.says(`part ${i + 1}`);
+    await advance(2500);
+    assert.ok(!c.ws.of("ask").some((a) => a.kind === "optin"), `homie moved on during her answer (part ${i + 1})`);
+  }
+  await waitFor("the opt-in", () => c.ws.of("ask").some((a) => a.kind === "optin"), 30_000);
+  await advance(LATENCY_MS + 50);
+  assert.equal(w.answers[0].promptId, question.promptId);
+  assert.equal(w.answers[0].transcript.split("part").length - 1, 10, "all ten parts in one answer");
+  c.drop();
+});
+
+test("silence: 'still there?' 5 s after the question played, a kind let-off 5 s after that, then no more questions", async () => {
+  const w = world();
+  w.endQuestions.push({ kind: "cue", line: line("What do you use instead of ghee?") });
+  const { c, question, n } = await firstEndQuestion(w, "rec-silent");
+  await waitFor("the nudge", () => w.spoken.length > n + 1, 30_000);
+  assert.equal(w.spoken[n + 1], STILL_THERE);
+  const nudgeAfter = w.spokenAt[n + 1] - w.playedAt(n);
+  assert.ok(nudgeAfter >= SILENT_MS && nudgeAfter < SILENT_MS + 300, `the nudge came ${nudgeAfter} ms after the question played`);
+  assert.equal(c.ws.of("drop").length, 0, "the question is still up while homie waits");
+
+  await waitFor("the let-off", () => w.spoken.length > n + 2, 30_000);
+  assert.equal(w.spoken[n + 2], LET_OFF);
+  const letOffAfter = w.spokenAt[n + 2] - w.playedAt(n + 1);
+  assert.ok(letOffAfter >= SILENT_MS && letOffAfter < SILENT_MS + 300, `the let-off came ${letOffAfter} ms after the nudge played`);
+  assert.equal(c.ws.of("drop").at(-1)!.promptId, question.promptId);
+
+  await waitFor("the end", () => c.ws.phases().includes("ended"), 60_000);
+  assert.equal(w.spoken.at(-1), "That's a wrap! Shreya is going to hear every bit of this. Thank you for sharing it.");
+  assert.deepEqual(c.ws.of("ask").map((a) => a.kind), ["end"], "no second end question, no opt-in");
+  assert.deepEqual(w.named("setOptIn"), [], "the opt-in stays unset");
+  assert.deepEqual(w.named("updatePrompt").map((u) => u.args), [[question.promptId, "ignored"]]);
+  assert.deepEqual(
+    w.logged.filter((p) => p.kind === "reaction").map((p) => [p.textEn, !!p.said]),
+    [[STILL_THERE, true], [LET_OFF, true]],
+  );
+});
+
+test("talking after 'still there?' is waited for, and the questions go on", async () => {
+  const w = world();
+  w.endQuestions.push({ kind: "cue", line: line("What do you use instead of ghee?") });
+  const { c, question, n } = await firstEndQuestion(w, "rec-after-nudge");
+  await waitFor("the nudge", () => w.spoken[n + 1] === STILL_THERE, 30_000);
+  await waitFor("the nudge played", () => Date.now() >= w.playedAt(n + 1), 30_000);
+  await advance(4000); // nearly the let-off, then she answers
+  w.says("Oh, sorry. When it turns golden");
+  await advance(2000);
+  w.says("and the cumin crackles.");
+  const lastWords = Date.now();
+  await waitFor("the second question", () => c.ws.of("ask").length === 2, 30_000);
+  assert.ok(Date.now() - lastWords >= ANSWER_GAP_MS["ink-2"]);
+  assert.equal(c.ws.of("ask")[1].textEn, "What do you use instead of ghee?");
+  assert.ok(!w.spoken.includes(LET_OFF));
+  await advance(LATENCY_MS + 50);
+  assert.deepEqual(w.answers.map((a) => a.transcript), ["Oh, sorry. When it turns golden and the cumin crackles."]);
+  assert.equal(c.ws.of("answered")[0].promptId, question.promptId);
+  c.drop();
+});
+
+test("Marathi (Gemini Live) waits longer after her last words than English (Ink 2)", async () => {
+  assert.ok(ANSWER_GAP_MS["gemini-live"] > ANSWER_GAP_MS["ink-2"]);
+  const waits: Record<string, number> = {};
+  for (const language of ["en", "mr"]) {
+    const w = world("intro", undefined, language);
+    const { c } = await firstEndQuestion(w, `rec-gap-${language}`);
+    w.says("When it smells nutty.");
+    const lastWords = Date.now();
+    await waitFor("the opt-in", () => c.ws.of("ask").some((a) => a.kind === "optin"), 30_000);
+    waits[language] = Date.now() - lastWords;
+    if (language === "mr") assert.match(String(c.ws.of("ask").at(-1)!.text), /ऐकू द्यायच्या का/);
+    c.drop();
+  }
+  assert.ok(waits.mr >= ANSWER_GAP_MS["gemini-live"], `Marathi waited ${waits.mr} ms`);
+  assert.ok(waits.en >= ANSWER_GAP_MS["ink-2"] && waits.en < ANSWER_GAP_MS["gemini-live"], `English waited ${waits.en} ms`);
+});
+
+test("Marathi: 'still there?' and the let-off in her language", async () => {
+  const w = world("intro", undefined, "mr");
+  const { n } = await firstEndQuestion(w, "rec-silent-mr");
+  await waitFor("the let-off", () => w.spoken.length > n + 2, 60_000);
+  assert.equal(w.spoken[n + 1], "Rajani Aaji, आहात ना? सावकाश सांगा, मी ऐकतेय.");
+  assert.match(w.spoken[n + 2], /^काही हरकत नाही, Rajani Aaji\./);
+  assert.equal(w.logged.find((p) => p.kind === "reaction")!.textEn, STILL_THERE);
+});
+
+test("her words still on their way: sound on the mic and an open turn hold 'still there?'", async () => {
+  const w = world();
+  const { c, n } = await firstEndQuestion(w, "rec-hold-nudge");
+  await advance(4500);
+  // She starts talking at 4.5 s; her first words show ~1 s later (Gemini Live's lag).
+  for (let i = 0; i < 12; i++) {
+    c.mic(true);
+    await advance(100);
+  }
+  w.stt().onTurnStart();
+  w.partial("When the");
+  await advance(1000);
+  w.stt().onTurnEnd("When the oil separates.");
+  await waitFor("the opt-in", () => c.ws.of("ask").some((a) => a.kind === "optin"), 30_000);
+  assert.ok(!w.spoken.includes(STILL_THERE), "homie talked over her first words");
+  await advance(LATENCY_MS + 50);
+  assert.deepEqual(w.answers.map((a) => a.transcript), ["When the oil separates."]);
+  assert.equal(w.spoken.length, n + 2, "the opt-in came next");
+  c.drop();
+});
+
+test("a turn with no words (a cough, the pan) isn't an answer", async () => {
+  const w = world();
+  const { c, question, n } = await firstEndQuestion(w, "rec-noise-turn");
+  await advance(500);
+  w.stt().onTurnStart();
+  w.stt().onTurnEnd("");
+  await waitFor("the nudge", () => w.spoken.length > n + 1, 30_000);
+  assert.equal(w.spoken[n + 1], STILL_THERE);
+  assert.equal(c.ws.of("answered").length, 0);
+  assert.ok(!w.named("updatePrompt").some((u) => u.args[0] === question.promptId), "not saved as answered");
+  c.drop();
+});
+
+test("loud kitchen noise with no words holds 'still there?' only a little", async () => {
+  const w = world();
+  const { c, n } = await firstEndQuestion(w, "rec-noise-mic");
+  const from = Date.now();
+  while (w.spoken.length === n + 1) {
+    c.mic(true); // the extractor fan, the whole time
+    await advance(100);
+    assert.ok(Date.now() - from < 15_000, "no nudge in a noisy kitchen");
+  }
+  assert.equal(w.spoken[n + 1], STILL_THERE);
+  c.drop();
+});
+
+test("the plate skipped with a spoken 'not now' and more: the opt-in waits for the rest, which doesn't answer it", async () => {
+  const w = world();
+  w.endQuestions.length = 0;
+  const c = w.connect("rec-plate-not-now-more");
+  await helloDone(c);
+  c.send({ type: "start", camera: true });
+  await advance(1000);
+  c.send({ type: "done" });
+  await waitFor("the plate ask", () => c.ws.of("ask").some((a) => a.kind === "plate"), 60_000);
+  await advance(AUDIO_S * 1000 + 500);
+  w.says("not now");
+  await advance(2000);
+  assert.ok(!c.ws.of("ask").some((a) => a.kind === "optin"), "the opt-in started while she was still talking");
+  w.says("I'll take a nicer one tomorrow, the plate is a mess.");
+  const lastWords = Date.now();
+  await waitFor("the opt-in", () => c.ws.of("ask").some((a) => a.kind === "optin"), 30_000);
+  assert.ok(Date.now() - lastWords >= ANSWER_GAP_MS["ink-2"]);
+  // The opt-in now waits for its own answer, after it has played.
+  const optIn = w.spokenAt.length - 1;
+  await waitFor("the opt-in played", () => Date.now() >= w.playedAt(optIn) + 500, 30_000);
+  assert.equal(c.ws.of("answered").length, 0);
+  w.says("Yes, of course");
+  await waitFor("the end", () => c.ws.phases().includes("ended"), 60_000);
+  assert.deepEqual(w.named("setOptIn").map((x) => x.args), [[true]]);
+});
+
+// ---- review fixes (Oct 24) ----
+
+/** Seconds into the recording, as record.ts's atS. */
+const atS = (w: ReturnType<typeof world>, ms: number) => Math.round((ms - w.row.startedAt!) / 100) / 10;
+
+test("the 5 s count from when the phone has played the question, which it plays only once it has all of it", async () => {
+  const w = world();
+  const { question, n } = await firstEndQuestion(w, "rec-played-on-phone");
+  const sayEnd = w.spokenAt[n] + MAKE_MS;
+  await waitFor("the nudge", () => w.spoken.length > n + 1, 30_000);
+  const after = w.spokenAt[n + 1] - (sayEnd + PLAYER_LOAD_MS + AUDIO_S * 1000);
+  assert.ok(after >= SILENT_MS && after < SILENT_MS + 300, `the nudge came ${after} ms after the phone finished the question`);
+  // The question's saved span is when the phone played it, too.
+  const said = w.named("promptSaid").find((p) => p.args[0] === question.promptId)!.args[1] as { atS: number; endS: number };
+  assert.equal(said.atS, atS(w, sayEnd + PLAYER_LOAD_MS));
+  assert.equal(Math.round((said.endS - said.atS) * 10) / 10, AUDIO_S);
+});
+
+test("'not now' tapped while homie still asks: the line stops, that question is skipped at once, the next one comes", async () => {
+  const w = world();
+  w.endQuestions.push({ kind: "cue", line: line("What do you use instead of ghee?") });
+  const c = w.connect("rec-tap-not-now");
+  await helloDone(c);
+  c.send({ type: "start" });
+  await advance(1000);
+  w.says("Now the tadka goes in");
+  await advance(4000);
+  c.send({ type: "done" });
+  await waitFor("the end question", () => c.ws.of("ask").some((a) => a.kind === "end"), 60_000);
+  const first = c.ws.of("ask")[0];
+  await advance(MAKE_MS + 1000); // the phone is playing it
+  const endsBefore = c.ws.of("say_end").length;
+  c.send({ type: "text", text: "not now" }); // the card's tap
+  const tappedAt = Date.now();
+  await settle();
+  assert.equal(c.ws.of("say_end").length, endsBefore + 1, "the line was stopped");
+  assert.equal(c.ws.of("say_end").at(-1)!.interrupted, true);
+  await waitFor("the second question", () => c.ws.of("ask").length === 2, 10_000);
+  assert.ok(Date.now() - tappedAt < 1000, `the next question waited ${Date.now() - tappedAt} ms after the tap`);
+  assert.equal(c.ws.of("ask")[1].textEn, "What do you use instead of ghee?");
+  assert.equal(c.ws.of("drop")[0].promptId, first.promptId);
+  await advance(LATENCY_MS + 50);
+  assert.deepEqual(w.named("updatePrompt").map((u) => u.args), [[first.promptId, "not_now"]]);
+  assert.ok(!w.spoken.includes(STILL_THERE) && !w.spoken.includes(LET_OFF), "a skip is no let-off");
+  c.drop();
+});
+
+test("'not now' tapped, then she talks to family: nothing she says answers the skipped question", async () => {
+  const w = world();
+  w.endQuestions.push({ kind: "cue", line: line("What do you use instead of ghee?") });
+  const { c, question } = await firstEndQuestion(w, "rec-tap-then-talk");
+  await advance(500);
+  c.send({ type: "text", text: "not now" });
+  w.says("Beta, bring the plates, the food is getting cold"); // as she taps
+  const talkedAt = Date.now();
+  await waitFor("the second question", () => c.ws.of("ask").length === 2, 30_000);
+  assert.ok(Date.now() - talkedAt >= ANSWER_GAP_MS["ink-2"], "homie waited for her to finish talking");
+  await advance(LATENCY_MS + 50);
+  assert.deepEqual(w.answers, [], "no answer saved");
+  assert.deepEqual(w.named("updatePrompt").map((u) => u.args), [[question.promptId, "not_now"]]);
+  c.drop();
+});
+
+test("'not now' said as her first words skips the question; 'later' at the end of an answer doesn't", async () => {
+  const w = world();
+  w.endQuestions.push({ kind: "cue", line: line("What do you use instead of ghee?") });
+  const { c, question } = await firstEndQuestion(w, "rec-said-not-now");
+  w.says("Not now");
+  await advance(150);
+  assert.equal(c.ws.of("drop").at(-1)?.promptId, question.promptId, "skipped at once");
+  await waitFor("the second question", () => c.ws.of("ask").length === 2, 30_000);
+  await waitFor("it played", () => Date.now() >= w.playedAt(w.spokenAt.length - 1), 30_000);
+  w.says("Butter works too.");
+  await advance(1500);
+  w.says("I'll tell you more later");
+  await waitFor("the opt-in", () => c.ws.of("ask").some((a) => a.kind === "optin"), 30_000);
+  await advance(LATENCY_MS + 50);
+  assert.deepEqual(w.answers.map((a) => a.transcript), ["Butter works too. I'll tell you more later"]);
+  assert.ok(!w.spoken.includes(STILL_THERE));
+  c.drop();
+});
+
+test("her words that come while 'still there?' plays still answer the question: no let-off", async () => {
+  const w = world();
+  w.endQuestions.push({ kind: "cue", line: line("What do you use instead of ghee?") });
+  const { c, question, n } = await firstEndQuestion(w, "rec-words-during-nudge");
+  await waitFor("the nudge", () => w.spoken[n + 1] === STILL_THERE, 30_000);
+  w.says("When it smells nutty."); // she started just before; her words show up late
+  await waitFor("the second question", () => c.ws.of("ask").length === 2, 30_000);
+  assert.ok(!w.spoken.includes(LET_OFF));
+  await advance(LATENCY_MS + 50);
+  assert.deepEqual(w.answers.map((a) => [a.promptId, a.transcript]), [[question.promptId, "When it smells nutty."]]);
+  c.drop();
+});
+
+test("the saved answer ends at her last words, not when homie stopped waiting", async () => {
+  const w = world();
+  const { c } = await firstEndQuestion(w, "rec-answer-end");
+  w.says("Hmm, the dal...");
+  await advance(2000);
+  w.says("when it smells nutty.");
+  const lastWords = Date.now();
+  await waitFor("the opt-in", () => c.ws.of("ask").some((a) => a.kind === "optin"), 30_000);
+  await advance(LATENCY_MS + 50);
+  assert.equal(w.answers[0].endS, atS(w, lastWords));
+  assert.equal(w.answers[0].atS, atS(w, lastWords - 2000));
+  c.drop();
+});
+
+test("turns with no words, one after another (Ink on kitchen noise), hold an answer only a little", async () => {
+  const w = world();
+  const { c } = await firstEndQuestion(w, "rec-noise-turns");
+  w.says("When it smells nutty.");
+  const answeredAt = Date.now();
+  let next = 0;
+  while (!c.ws.of("ask").some((a) => a.kind === "optin")) {
+    if (Date.now() >= next) {
+      w.stt().onTurnEnd(""); // the range hood: a turn every 2 s, ended empty
+      w.stt().onTurnStart();
+      next = Date.now() + 2000;
+    }
+    await advance(100);
+    assert.ok(Date.now() - answeredAt < 10_000, "the opt-in waited on the noise");
+  }
+  assert.ok(Date.now() - answeredAt <= 4000 + 400, `the opt-in came ${Date.now() - answeredAt} ms after her answer`);
+  c.drop();
+});
+
+test("live question: a cough (a turn with no words) doesn't stop its card from fading", async () => {
+  const w = world();
+  w.decisions.push(ask("How much salt is a pinch?"));
+  const c = w.connect("rec-live-cough");
+  await helloDone(c);
+  c.send({ type: "start" });
+  await advance(1000);
+  w.says("Now I add a pinch of salt");
+  await waitFor("the question", () => c.ws.of("ask").length === 1, 60_000);
+  const q = c.ws.of("ask")[0];
+  await waitFor("it played", () => Date.now() >= w.playedAt(w.spokenAt.length - 1), 30_000);
+  await advance(2000);
+  w.stt().onTurnStart(); // a cough
+  w.stt().onTurnEnd("");
+  const coughAt = Date.now();
+  await waitFor("the card fading", () => c.ws.of("drop").length === 1, 15_000);
+  assert.ok(Date.now() - coughAt >= 10_000 - 100, "it fades the usual 10 s after the cough");
+  assert.equal(c.ws.of("drop")[0].promptId, q.promptId);
+  w.says("okay now the turmeric");
+  await advance(LATENCY_MS + 50);
+  assert.equal(c.ws.of("answered").length, 0, "her next words aren't taken as its answer");
+  c.drop();
+});
+
+test("a speech-to-text that never showed anything: a plain 15 s wait, no 'still there?' or let-off", async () => {
+  const w = world();
+  w.endQuestions.push({ kind: "cue", line: line("What do you use instead of ghee?") });
+  const c = w.connect("rec-no-stt");
+  await helloDone(c);
+  c.send({ type: "start" });
+  await advance(1000);
+  c.send({ type: "done" });
+  await waitFor("the end question", () => c.ws.of("ask").length === 1, 60_000);
+  const n = w.spokenAt.length - 1;
+  await waitFor("it played", () => Date.now() >= w.playedAt(n), 30_000);
+  await advance(14_000);
+  assert.equal(c.ws.of("drop").length, 0, "still waiting at 14 s");
+  await waitFor("the second question", () => c.ws.of("ask").length === 2, 5000);
+  await waitFor("the end", () => c.ws.phases().includes("ended"), 120_000);
+  assert.ok(!w.spoken.includes(STILL_THERE) && !w.spoken.includes(LET_OFF), "no nudge over a cook homie can't hear");
+  assert.deepEqual(c.ws.of("ask").map((a) => a.kind), ["end", "end", "optin"], "every question still asked");
+});
+
+test("a speech-to-text error with nothing after it: no 'still there?' either", async () => {
+  const warn = quietly();
+  const w = world();
+  const { c, n } = await firstEndQuestion(w, "rec-stt-error");
+  w.stt().onError("gemini live: socket closed");
+  await advance(SILENT_MS + 1000);
+  assert.equal(w.spoken.length, n + 1, "no nudge");
+  assert.equal(warn.mock.callCount(), 1);
+  // It waits the plain 15 s from the question, then the opt-in comes with no let-off.
+  await waitFor("the opt-in", () => c.ws.of("ask").some((a) => a.kind === "optin"), 15_000);
+  assert.ok(Date.now() - w.playedAt(n) >= 15_000);
+  assert.ok(!w.spoken.includes(LET_OFF));
+  c.drop();
+});
+
+test("loudness is logged per wait, so phone runs can set the voice threshold", async () => {
+  const log = mock.method(console, "log", () => {});
+  const w = world();
+  const { c } = await firstEndQuestion(w, "rec-loudness");
+  await advance(400); // the mic is muted 300 ms past homie's line
+  c.mic(true);
+  w.says("When it smells nutty.");
+  await waitFor("the opt-in", () => c.ws.of("ask").some((a) => a.kind === "optin"), 30_000);
+  const lines = log.mock.calls.map((x) => String(x.arguments[0])).filter((m) => m.startsWith("wrap-up mic:"));
+  assert.match(lines[0], /^wrap-up mic: loudest 3000 rms \(-20\.8 dBFS\), voice above 400 \(-38\.3 dBFS\)$/);
+  c.drop();
+});
+
+// ---- second review (Oct 24): talk from before a question never answers it ----
+
+test("an afterthought she started just as homie asked doesn't answer the new question", async () => {
+  const w = world();
+  w.endQuestions.push({ kind: "cue", line: line("What do you use instead of ghee?") });
+  const { c } = await firstEndQuestion(w, "rec-afterthought");
+  w.says("When it smells nutty.");
+  await waitFor("the second question being saved", () => w.named("logPrompt").filter((p) => p.args[0] === "end").length === 2, 30_000);
+  // She adds a few words as homie starts; the mic is muted under homie's line, so her turn ends during it.
+  w.stt().onTurnStart();
+  w.partial("and a little");
+  await waitFor("the second question", () => c.ws.of("ask").length === 2, 5000);
+  await advance(1500);
+  w.stt().onTurnEnd("and a little salt");
+  const n = w.spokenAt.length - 1;
+  await waitFor("it played", () => Date.now() >= w.playedAt(n), 30_000);
+  await waitFor("the nudge", () => w.spoken.length > n + 1, 30_000);
+  assert.equal(w.spoken[n + 1], STILL_THERE, "the second question still waits for its own answer");
+  assert.ok(w.spokenAt[n + 1] - w.playedAt(n) >= SILENT_MS);
+  await advance(LATENCY_MS + 50);
+  assert.deepEqual(w.answers.map((a) => a.transcript), ["When it smells nutty."], "the afterthought answered nothing");
+  c.drop();
+});
+
+test("family talk begun before the opt-in and ending under it doesn't decide the opt-in", async () => {
+  const w = world();
+  w.endQuestions.length = 0;
+  const c = w.connect("rec-family-optin");
+  await helloDone(c);
+  c.send({ type: "start" });
+  await advance(1000);
+  w.says("Now the tadka goes in");
+  await advance(5000);
+  c.send({ type: "done" });
+  await waitFor("the opt-in being saved", () => w.named("logPrompt").some((p) => p.args[0] === "optin"), 30_000);
+  w.stt().onTurnStart(); // someone in the kitchen, as homie starts asking
+  w.partial("No, beta, come");
+  await waitFor("the opt-in", () => c.ws.of("ask").some((a) => a.kind === "optin"), 5000);
+  await advance(1000);
+  w.stt().onTurnEnd("No, beta, come and eat");
+  const n = w.spokenAt.length - 1;
+  await waitFor("it played", () => Date.now() >= w.playedAt(n) + 1000, 30_000);
+  assert.deepEqual(w.named("setOptIn"), [], "nothing decided yet");
+  w.says("Yes, of course");
+  await waitFor("the end", () => c.ws.phases().includes("ended"), 60_000);
+  assert.deepEqual(w.named("setOptIn").map((x) => x.args), [[true]]);
+});
+
+test("Marathi: her answer starting just before 'still there?' (words a little late) gets no nudge", async () => {
+  const w = world("intro", undefined, "mr");
+  const { c, n } = await firstEndQuestion(w, "rec-mr-just-in-time");
+  await advance(4900);
+  w.stt().onTurnStart();
+  w.partial("जेव्हा");
+  await advance(1500);
+  w.stt().onTurnEnd("जेव्हा वास येतो");
+  await waitFor("the opt-in", () => c.ws.of("ask").some((a) => a.kind === "optin"), 60_000);
+  assert.ok(!w.spoken.slice(n + 1).includes("Rajani Aaji, आहात ना? सावकाश सांगा, मी ऐकतेय."), "no nudge over her");
+  await advance(LATENCY_MS + 50);
+  assert.deepEqual(w.answers.map((a) => a.transcript), ["जेव्हा वास येतो"]);
+  c.drop();
+});
+
+test("a quick reply right after the line reaches her speech-to-text (the mute ends when the phone can have finished)", async () => {
+  const w = world();
+  const { c, n } = await firstEndQuestion(w, "rec-quick-reply");
+  // The phone may load the line faster than the 250 ms homie allows: the mic is live from say_end + its length.
+  const earliest = w.spokenAt[n] + MAKE_MS + AUDIO_S * 1000;
+  assert.ok(Date.now() >= earliest);
+  const before = w.heardAudioAt.length;
+  c.mic(true);
+  assert.equal(w.heardAudioAt.length, before + 1, "her first syllable was muted");
+  c.drop();
+});
+
+test("'still there?' held by noise is said later, and the let-off never comes without it", async () => {
+  const w = world();
+  w.endQuestions.push({ kind: "cue", line: line("What do you use instead of ghee?") });
+  const { c, n } = await firstEndQuestion(w, "rec-noise-then-letoff");
+  await advance(4500);
+  // The extractor fan comes on and stays on, loud, with no words; at 8.4 s Ink opens a turn on it. So the first wait
+  // runs to its cap (9 s) while she may still be talking, and "still there?" waits for another round.
+  let turnOpened = false;
+  while (!w.spoken.includes(LET_OFF) && !c.ws.phases().includes("ended")) {
+    c.mic(true);
+    await advance(100);
+    if (!turnOpened && Date.now() - w.playedAt(n) >= 8400) {
+      turnOpened = true;
+      w.stt().onTurnStart();
+    }
+    assert.ok(Date.now() - w.playedAt(n) < 60_000, "stuck");
+  }
+  const nudge = w.spoken.indexOf(STILL_THERE);
+  assert.ok(nudge > n && nudge < w.spoken.indexOf(LET_OFF), `the let-off came without "still there?" first: ${JSON.stringify(w.spoken.slice(n + 1))}`);
+  assert.ok(w.spokenAt[nudge] - w.playedAt(n) > SILENT_MS + 4000, "the nudge waited for the noise round");
   c.drop();
 });

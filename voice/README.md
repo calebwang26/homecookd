@@ -252,6 +252,13 @@ What happens
    "Not now", "later", "आत्ता नाही", "नंतर" in a short turn drops it.
 5. `done`: homie stops talking and drops an open question, then up to 2 end questions ("Before you go, two quick
    ones…"), then "Can Shreya hear your stories too?" (yes/no → `/live/optin`), then the closing, then phase `ended`.
+   The wrap-up waits for her (`listen`): no line starts while she talks; an answer is every turn until no new words
+   for 3.5 s (Ink 2, ink-whisper) or 4 s (Gemini Live), so a pause to think doesn't end it. "not now" (the card's
+   tap or her first words) skips just that question at once. No word 5 s after a question played: "Still there,
+   Rajani Aaji? Take your time. I'm listening."; 5 s more: the let-off ("That's okay… No need to answer today. All
+   good, let's finish up."), and nothing more is asked (the plate photo still, then goodbye). With a speech-to-text
+   that has shown nothing, a plain 15 s wait instead. Each wait logs the mic's loudest level (`wrap-up mic:`), for
+   tuning `VOICE_RMS` on phones. Live run: `SCENARIO=long|silent|late npm run test-record`.
 
 Reconnects: what homie knows about a recording (the pacing counters, the questions it asked, what she said, the
 hello) is kept per recording on the instance (Cloud Run's session affinity sends her back to it) until it ends,
@@ -268,7 +275,11 @@ notice yet) finds out at its next Convex write: the heartbeat, a status, or homi
 line is said or saved, no warning is logged, the phone gets `phase: ended`, and the socket closes with 4404. A new
 socket that finds the recording ended also closes an older one that's still open.
 
-Half duplex: incoming audio is dropped while homie speaks and 300 ms after the phone should have finished playing.
+Half duplex: incoming audio is dropped while homie speaks and until the phone can first have finished playing
+(`say_end` + the line's length; the phone sends silence while it plays, so a quick reply isn't cut). The phone plays
+a line only once it has all of it (it starts ~250 ms after `say_end`), so that's where the wrap-up's waits and each
+line's `said` span count from. A spoken turn ending under a wrap-up question is talk from before it: it answers
+nothing.
 
 Speech to text: Ink 2 for en/fr/hi/ja/es (it detects which). Anything else (Marathi) goes to Gemini Live,
 `gemini-3.5-transcribe-live` with `inputAudioTranscription.languageCodes: ["mr-IN"]`. A Live session lasts about
