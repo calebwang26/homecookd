@@ -16,7 +16,7 @@ import { advance, AUDIO_S, FakeSocket, settle, waitFor, type Ev } from "./helper
 process.env.CARTESIA_API_KEY = "test";
 process.env.ANTHROPIC_API_KEY = "test";
 process.env.VOICE_STUB = "1";
-const { Cooking } = await import("../src/cook.js");
+const { Cooking, askWords } = await import("../src/cook.js");
 const { lineCache, AHEAD_AT_ONCE, FAILED_MS } = await import("../src/lineCache.js");
 const { env } = await import("../src/env.js");
 
@@ -533,7 +533,7 @@ test("homie never nudges over an app moment: the story nudge waits for it to clo
   const w = world();
   const c = w.connect();
   await greeted(c);
-  c.send({ type: "moment", open: true, kind: "ask" });
+  c.send({ type: "moment", open: true, kind: "answer" });
   w.says("Next."); // a plain command still works with a moment up
   await waitFor("step 2", () => c.says().length === 2);
   await advance(60_000, 500);
@@ -541,6 +541,106 @@ test("homie never nudges over an app moment: the story nudge waits for it to clo
   c.send({ type: "moment", open: false });
   await waitFor("the story nudge", () => c.says().length === 3);
   assert.deepEqual(c.says().at(-1), ["nudge", STORY]);
+  c.close();
+});
+
+test("the ask moment's words: a question even after a yes word, a command after any lead, cancel words, and sounds that wait", () => {
+  const kind = (t: string) => askWords(t).kind;
+  for (const q of ["Yeah, how long do I fry the onions?", "Yes, can I use butter instead of ghee?", "Sure, ask her if I can skip the cumin.",
+    "Please ask her how much salt.", "Can I use butter instead of ghee?", "No, how do I know when it's done?", "Wait, how long do I fry it?",
+    "Okay so is it fine if it browns a bit?", "मीठ किती घालायचं आजी?"]) {
+    assert.equal(kind(q), "question", q);
+  }
+  for (const c of ["Never mind.", "Nevermind", "Forget it.", "Cancel.", "Stop.", "No.", "Nope.", "No thanks.", "No, I'm good.", "Yeah, no, never mind.", "Oh, forget about it."]) {
+    assert.equal(kind(c), "cancel", c);
+  }
+  for (const n of ["Um.", "Wait.", "Hold on.", "Yes.", "Yeah.", "Okay.", "Um, yeah.", "Salt?", "How long?", "Thanks.", "हो"]) assert.equal(kind(n), "nothing", n);
+  assert.deepEqual(askWords("Next step."), { kind: "command", command: "next step" });
+  assert.deepEqual(askWords("Yeah, next step please."), { kind: "command", command: "next step" });
+  assert.deepEqual(askWords("No, go back."), { kind: "command", command: "go back" });
+  assert.deepEqual(askWords("Set a timer for 5 minutes."), { kind: "command", command: "Set a timer for 5 minutes." });
+});
+
+test("in the app's ask moment (a long press on homie), each question goes straight to the cook without Claude, yes word and all", async () => {
+  const w = world();
+  const c = w.connect();
+  await greeted(c);
+  const questions = ["Yeah, how long do I fry the onions?", "Yes, can I use butter instead of ghee?", "Sure, ask her if I can skip the cumin.", "Please ask her how much salt."];
+  for (const [i, question] of questions.entries()) {
+    c.send({ type: "moment", open: true, kind: "ask" });
+    w.says(question);
+    await waitFor(question, () => c.ws.of("asked_cook").length === i + 1);
+    assert.deepEqual(c.ws.of("asked_cook").at(-1), { type: "asked_cook", questionId: `q-${question}`, text: question });
+    await waitFor("homie's answer", () => c.says().filter(([, text]) => text === "Good question. I'll ask Grandma.").length === i + 1);
+    c.send({ type: "moment", open: false });
+  }
+  assert.deepEqual(w.turns, [], "never reaches Claude");
+  // A command still works, after a lead word too.
+  c.send({ type: "moment", open: true, kind: "ask" });
+  w.says("Yeah, next step.");
+  await waitFor("step 2", () => c.ws.of("go_to_step").at(-1)?.stepOrder === 2);
+  c.send({ type: "moment", open: false });
+  assert.equal(c.ws.of("asked_cook").length, questions.length, "a command isn't a question");
+  // Once the moment closes, a question goes the usual way again.
+  w.says("Is it okay if it browns a bit?");
+  await waitFor("Claude's turn", () => w.turns.length === 1);
+  assert.deepEqual(w.turns, ["Is it okay if it browns a bit?"]);
+  assert.equal(c.ws.of("asked_cook").length, questions.length);
+  c.close();
+});
+
+test("in the ask moment, a cancel word gets \"Okay.\" (the app closes the moment on it) and sounds wait for the question", async () => {
+  const w = world();
+  const c = w.connect();
+  await greeted(c);
+  for (const cancel of ["Never mind.", "Forget it.", "Cancel.", "Stop."]) {
+    c.send({ type: "moment", open: true, kind: "ask" });
+    const since = c.mark();
+    w.says(cancel);
+    await waitFor(`${cancel}: okay`, () => since().some((e) => e.type === "say" && e.text === "Okay."));
+    assert.deepEqual(since()[0], { type: "transcript", text: cancel, final: true }, "the app hears it and closes the moment");
+    await advance(AUDIO_S * 1000 + 500);
+    c.send({ type: "moment", open: false });
+  }
+  // Sounds, a bare yes, "wait" or a word or two: nothing sent (the moment stays up), then the question asks.
+  c.send({ type: "moment", open: true, kind: "ask" });
+  const since = c.mark();
+  for (const sound of ["Um.", "Wait.", "Yes.", "Salt?"]) w.says(sound);
+  await advance(2000);
+  assert.deepEqual(since(), []);
+  w.says("Wait, how much salt goes in?");
+  await waitFor("asked", () => c.ws.of("asked_cook").length === 1);
+  assert.equal(c.ws.of("asked_cook")[0].text, "Wait, how much salt goes in?");
+  assert.deepEqual(w.turns, []);
+  c.close();
+});
+
+test("the ask moment asks once: a second sentence before the app's close arrives goes the usual way", async () => {
+  const w = world();
+  const c = w.connect();
+  await greeted(c);
+  c.send({ type: "moment", open: true, kind: "ask" });
+  w.says("Can I use butter instead of ghee?");
+  w.says("And is it okay if it browns a bit?");
+  await waitFor("Claude's turn", () => w.turns.length === 1);
+  await advance(AUDIO_S * 1000 + 500);
+  assert.deepEqual(c.ws.of("asked_cook").map((a) => a.text), ["Can I use butter instead of ghee?"]);
+  assert.deepEqual(w.turns, ["And is it okay if it browns a bit?"]);
+  c.close();
+});
+
+test("the ask moment takes the family's own language as it is, and her clip it paused no longer drops the question", async () => {
+  const w = world({ claude: (a) => a.playClip(40, 100, {}) });
+  const c = w.connect();
+  await greeted(c);
+  w.says("Homie, show me the tempering.");
+  await waitFor("her clip", () => c.ws.of("play_clip").length === 1);
+  // The long press pauses her clip on the phone; the question counts in full.
+  c.send({ type: "moment", open: true, kind: "ask" });
+  w.says("मीठ किती घालायचं आजी?");
+  await waitFor("asked", () => c.ws.of("asked_cook").length === 1);
+  assert.equal(c.ws.of("asked_cook")[0].text, "मीठ किती घालायचं आजी?");
+  assert.equal(w.turns.length, 1, "only the first one reached Claude");
   c.close();
 });
 

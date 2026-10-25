@@ -3,7 +3,7 @@
 //                           watchdogs (speaking, and a lit line whose audio never comes), the mic
 //                           level's re-render threshold, moments (choose closes first, keepOpen, a
 //                           stale close, a tap anywhere dismisses), the shrunk pot, a screen's dock /
-//                           hidden / onPress claims
+//                           hidden / onPress / onLongPress claims (cook mode's long press and its hint)
 //   src/lib/homie/logic.ts  what the pot shows while a say loads or plays, its label, half duplex,
 //                           its size and where it rests on each screen (centred on an even header
 //                           row), cook mode's dock, the help lines, the centred moment (which
@@ -18,7 +18,7 @@
 // 'react' is a stub (the store only needs useSyncExternalStore to exist); the store gets a fake clock.
 // '@/lib/storage' is a map that outlives resetIntroForTests (the phone's storage across a restart).
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -349,6 +349,36 @@ await test('a screen claim is cleared only by its own release', () => {
   assert.equal(store.get().hidden, false);
   assert.equal(store.get().dock, undefined);
   assert.equal(store.get().onPress, undefined);
+});
+
+await test('cook mode’s long press ("Ask Grandma anything"): claimed with what it does, gone with its screen; VoiceOver hears both gestures', () => {
+  const { store } = fresh();
+  const a = {};
+  const b = {};
+  const tap = () => {};
+  const hold = () => {};
+  const cook = { dock: undefined, hidden: false, onPress: tap, onLongPress: hold, longPressLabel: 'Ask Grandma' };
+  store.claimScreen(a, cook);
+  assert.equal(store.get().onLongPress, hold);
+  assert.equal(store.get().onPress, tap, 'two gestures, each its own');
+  assert.equal(L.potHint(store.get()), 'Turns homie on or off. Touch and hold to ask Grandma.');
+  // The next screen has none, and gains focus before cook mode's blur runs.
+  store.claimScreen(b, { dock: undefined, hidden: false, onPress: undefined, onLongPress: undefined, longPressLabel: undefined });
+  store.releaseScreen(a);
+  assert.equal(store.get().onLongPress, undefined);
+  assert.equal(L.potHint(store.get()), 'Says what you can do here');
+  store.claimScreen(a, cook);
+  store.releaseScreen(a);
+  assert.equal(store.get().onLongPress, undefined);
+  assert.equal(store.get().longPressLabel, undefined);
+  assert.equal(L.potHint({ onPress: tap }), 'Turns homie on or off');
+  assert.equal(L.potHint({ onPress: tap, longPressLabel: 'Ask Grandma' }), 'Turns homie on or off', 'no long press, no hint for one');
+  // The pot: a long press after about 400 ms, a VoiceOver action for it, and only the 0.96 press scale.
+  const overlay = readFileSync(join(root, 'src/components/homie/HomieOverlay.tsx'), 'utf8');
+  assert.match(overlay, /onPress=\{onPress\}\s*onLongPress=\{hold\}\s*delayLongPress=\{400\}/);
+  assert.match(overlay, /\(\) => \{\s*haptic\('medium'\);\s*onHold\(\);\s*\}/, 'one buzz when the hold takes');
+  assert.match(overlay, /accessibilityActions=\{hold \? \[\{ name: 'longpress', label: h\.longPressLabel/);
+  assert.ok(!/scaleTo=/.test(overlay), 'never scaled up while held: drawn at its real size');
 });
 
 await test('docked low (cook mode’s bottom bar), the words go above the pot; the moment starts where the pot really is', () => {

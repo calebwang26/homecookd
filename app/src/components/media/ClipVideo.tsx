@@ -47,6 +47,8 @@ export type ClipVideoProps = {
   radius?: number;
   /** Start playing on mount (sheets) instead of waiting for a tap (inline). */
   autoPlay?: boolean;
+  /** That autoplay is the app's own, not the kid's tap (cook mode: her clip homie played; lib/media). */
+  appPlays?: boolean;
   /** Full video with native controls (the recipe's "Full video"). */
   whole?: boolean;
   /** "This step" over the photo before it plays (cook mode). Sheets say it in their subtitle instead. Default true. */
@@ -189,6 +191,7 @@ function ActiveClip({
   onFull,
   chapters,
   startAt,
+  appPlays,
   ref,
 }: ClipVideoProps & {
   url: string;
@@ -201,7 +204,7 @@ function ActiveClip({
   /** Full screen, from where this clip is (null when it had ended: the step's start). */
   onFull?: (at: number | null) => void;
 }) {
-  const v = useClipVideo(url, start_s, end_s ?? null, { whole, aspectHint, at: startAt });
+  const v = useClipVideo(url, start_s, end_s ?? null, { whole, aspectHint, at: startAt, appPlays });
   useImperativeHandle(ref, () => ({ playFrom: v.playFrom }));
   const [firstFrame, setFirstFrame] = useState(false);
   const [shown, setShown] = useState(false);

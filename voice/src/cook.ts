@@ -4,12 +4,15 @@
 // the cook's language; on every step change (a tap on the phone, "next", Claude) homie says the step's short
 // line at once, its audio made when the recipe opened (stepLine.ts, lineCache.ts); timers; labelled hints; and
 // two nudges (a step with a story, a long quiet on one step). While the app has one of its own homie moments
-// up, the kid's yes or no is that moment's answer, never ours. While any video plays on the phone (the app's
-// { type: "video" }, or a clip we played), homie says nothing on its own: the greeting, a nudge or a timer
+// up, the kid's yes or no is that moment's answer, never ours; in its "Ask <cook> anything" (a long press on
+// homie, askWords) a plain command runs, "never mind" gets "Okay.", and a question of three words or more goes
+// straight to the cook, without Claude. While
+// any video plays on the phone (the app's { type: "video" }, or a clip we played), homie says nothing on its
+// own: the greeting, a nudge or a timer
 // waits for the next pause (Caleb, Oct 24). An answer to what the kid just did or said is spoken meanwhile, and a
-// step line is one (the kid flipped the page). Claude decides whether the kid was talking to homie at all
-// (agent.ts); a turn that ends with nothing done or said sends { type: "quiet" }, so the phone stops showing
-// homie thinking.
+// step line is one (the kid flipped the page, or tapped homie on: { type: "tap" }). Claude decides whether the kid
+// was talking to homie at all (agent.ts); a turn that ends with nothing done or said sends { type: "quiet" }, so the
+// phone stops showing homie thinking.
 import WebSocket from "ws";
 import { TurnAgent, cookCall, type Actions } from "./agent.js";
 import * as convex from "./convex.js";
@@ -81,6 +84,41 @@ const notLatin = (t: string) => {
   const letters = t.match(/\p{L}/gu) ?? [];
   return letters.length > 0 && letters.filter((c) => !/\p{Script=Latin}/u.test(c)).length / letters.length > 0.5;
 };
+
+/** Sounds, yes words and "wait" (more is coming) before the kid's words in the app's "Ask <cook> anything". */
+const ASK_LEAD = /^(um|uh|er|erm|hmm|hm|mm|ah|oh|eh|so|well|like|hey|homie|homey|and|now|ok|okay|alright|all right|please|wait|hold on|hang on|yes|yeah|yep|yup|sure)( |$)/;
+/** Words that take the question back. */
+const ASK_CANCEL = /^(no thanks|no thank you|no|nope|nah|not now|nothing|never ?mind|forget about it|forget it|cancel that|cancel it|cancel|stop|i'?m good|that'?s all|don'?t worry about it)( |$)/;
+/** Words that aren't the question, wherever they are. */
+const ASK_FILLER = new Set(["um", "uh", "er", "erm", "hmm", "hm", "mm", "ah", "oh", "eh", "so", "well", "like", "hey", "homie", "homey", "ok", "okay", "alright", "please", "thanks", "wait", "yes", "yeah", "yep", "yup", "sure", "then", "just", "actually", "anyway"]);
+/** A question for the cook has at least this many real words ("How long?" isn't one yet). */
+const ASK_MIN_WORDS = 3;
+
+/**
+ * What the kid's words are while the app's "Ask <cook> anything" is up (a long press on homie). Never the yes-or-no
+ * rules: "Yeah, how long do I fry the onions?" is the question. `nothing` (a sound, a bare yes, "wait", fewer than
+ * three real words): the moment stays up for the question. `cancel` ("Never mind.", "No.", "Stop."). `command`: a
+ * plain command, after any lead words ("Yeah, next step."). `question`: the whole sentence goes to the cook. The
+ * family's own language (Devanagari, from the cook's own mouth) goes as it is.
+ */
+export function askWords(text: string): { kind: "nothing" | "cancel" | "question" } | { kind: "command"; command: string } {
+  if (notLatin(text)) return { kind: text.trim().split(/\s+/).length >= ASK_MIN_WORDS ? "question" : "nothing" };
+  if (timerAsk(text)) return { kind: "command", command: text };
+  let rest = normalize(text.replace(/[‘’]/g, "'")).replace(/( (please|thanks|thank you))+$/, "");
+  // Peel off the lead: sounds, yes words and cancel words ("Yeah, no, never mind").
+  let cancel = false;
+  for (;;) {
+    const lead = ASK_LEAD.exec(rest);
+    const no = lead ? null : ASK_CANCEL.exec(rest);
+    if (!lead && !no) break;
+    if (no) cancel = true;
+    rest = rest.slice((lead ?? no)![0].length);
+  }
+  const real = rest.split(" ").filter((w) => w && !ASK_FILLER.has(w));
+  if (!real.length) return { kind: cancel ? "cancel" : "nothing" };
+  if (FAST.some(([re]) => re.test(rest))) return { kind: "command", command: rest };
+  return { kind: real.length >= ASK_MIN_WORDS ? "question" : "nothing" };
+}
 
 /** True when `heard` is mostly words we just said: our own voice coming back through the mic. */
 function isEcho(heard: string, spoken: string): boolean {
@@ -321,11 +359,32 @@ export class Cooking {
     } else if (msg.type === "moment" && typeof msg.open === "boolean") {
       // One of the app's own homie moments opened or closed on the phone.
       this.moment = msg.open ? (typeof msg.kind === "string" && msg.kind ? msg.kind.slice(0, 20) : "moment") : null;
+      // "Ask <cook> anything": the phone paused any clip of hers for it, so the kid's question counts in full.
+      if (this.moment === "ask") {
+        this.clipUntil = 0;
+        this.clipSeq++;
+      }
     } else if (msg.type === "video" && typeof msg.playing === "boolean") {
       // A video started or stopped on the phone. Watching counts as activity (no quiet nudge after it).
       this.videoOn = msg.playing;
       this.touch();
+    } else if (msg.type === "tap") {
+      this.homieTapped();
     }
+  }
+
+  /**
+   * The kid tapped homie on (Caleb, Oct 25). The phone fades out and pauses any video for it, and homie says the
+   * step's short line at once, from the cache: the same line a flip says, without a move. It's an answer to the
+   * tap, so a video never holds it. A clip of hers that was playing is over (the phone paused it): the kid's
+   * next words count in full, and its translation is dropped. Before `ready` the hello comes instead.
+   */
+  private homieTapped() {
+    this.touch();
+    if (!this.readyAt || this.closed) return;
+    this.clipUntil = 0;
+    this.clipSeq++;
+    void this.readStep(this.step).catch((err) => console.warn("tap line", err.message));
   }
 
   /**
@@ -388,21 +447,34 @@ export class Cooking {
 
   private act(text: string, spoken: boolean) {
     if (!text || !this.agent || this.closed) return;
-    const ignore = !spoken
-      ? ""
-      : notLatin(text)
-        ? "not English"
-        : Date.now() < this.lastSpoken.until && isEcho(text, this.lastSpoken.text)
-          ? "echo"
-          : Date.now() < this.clipUntil && !FAST.some(([re]) => re.test(command(text)))
-            ? "during clip"
-            : "";
+    // The app's "Ask <cook> anything" (a long press on homie) has its own rules (askWords), never the yes-or-no
+    // gate below, and the family's own language counts in it.
+    const asking = this.moment === "ask" ? askWords(text) : null;
+    const ignore = asking?.kind === "nothing"
+      ? "not a question yet"
+      : !spoken
+        ? ""
+        : notLatin(text) && !asking
+          ? "not English"
+          : Date.now() < this.lastSpoken.until && isEcho(text, this.lastSpoken.text)
+            ? "echo"
+            : Date.now() < this.clipUntil && !FAST.some(([re]) => re.test(command(text)))
+              ? "during clip"
+              : "";
     if (ignore) {
       console.log(`ignored (${ignore}): ${text}`);
       return;
     }
     this.send({ type: "transcript", text, final: true });
     this.touch();
+    if (asking) {
+      // Asked once: the app closes the moment on these words, and a second sentence before that arrives is
+      // the usual kind again, never a second question to the cook.
+      this.moment = null;
+      console.log(`kid (asking ${this.cook}, ${asking.kind}): ${text}`);
+      this.turns = this.turns.then(() => this.turn(text, false, asking)).catch((err) => console.error("turn:", err));
+      return;
+    }
     // A moment the app has up hears the kid's yes or no itself (from that transcript): it isn't ours to act on.
     // What the kid says after the no is still ours ("No, next step.", "No, I'm out of ginger. Can I skip it?").
     const inMoment = spoken && this.moment !== null;
@@ -412,18 +484,23 @@ export class Cooking {
       return;
     }
     console.log(`kid: ${text}`);
-    // Said while the app's "ask" moment is up (the kid tapped homie to ask): for homie, whatever the words.
-    const addressed = inMoment && this.moment === "ask";
     // A turn that throws anyway must not break the chain: every later turn would be skipped.
-    this.turns = this.turns.then(() => this.turn(text, inMoment, addressed)).catch((err) => console.error("turn:", err));
+    this.turns = this.turns.then(() => this.turn(text, inMoment)).catch((err) => console.error("turn:", err));
   }
 
-  /** One turn. `inMoment`: said while an app moment was up, so its yes or no is the moment's, never our story nudge's. */
-  private async turn(text: string, inMoment = false, addressed = false) {
+  /**
+   * One turn. `inMoment`: said while an app moment was up, so its yes or no is the moment's, never our story nudge's.
+   * `asking`: said in the app's "Ask <cook> anything" (askWords): a plain command still runs, a cancel word gets
+   * "Okay.", and a question goes straight to the cook (no Claude, no clip search).
+   */
+  private async turn(text: string, inMoment = false, asking: ReturnType<typeof askWords> | null = null) {
     if (this.closed) return;
     this.clipSeq++; // the kid moved on: drop a translation still waiting
     const before = this.answers;
     try {
+      if (asking?.kind === "command") return void (await this.plain(asking.command));
+      if (asking?.kind === "cancel") return await this.say("Okay.", "reply");
+      if (asking) return await this.actions.askCook(text);
       const answer = inMoment || this.storyOffer ? yesNo(text) : null;
       if (answer === "no") {
         // "No" or "not now" to the story nudge closes it, and nothing is said.
@@ -431,7 +508,7 @@ export class Cooking {
         return await this.afterNoTurn(text, inMoment ? "what's on their screen" : `hearing ${this.cook}'s story`);
       }
       if (answer === "yes" && !inMoment) return await this.playStory();
-      if (!(await this.plain(text))) await this.agent!.turn(text, undefined, addressed);
+      if (!(await this.plain(text))) await this.agent!.turn(text);
     } catch (err) {
       console.error("turn failed:", (err as Error).message);
       this.send({ type: "error", message: "turn failed" });

@@ -451,8 +451,11 @@ then `/speak` with `translate: true`.
 - Was it for homie? Claude decides on every turn that reaches it (no wake word): "homie" in the transcript, however
   Ink spells it (homey, holmy, homi), is a strong yes; plain commands (next, back, repeat, timers) skip Claude and
   always work. Words not meant for homie get no tool and no speech, and the service sends `{ type: "quiet" }` so
-  the app stops showing homie thinking. Words said while an app `ask` moment is up are always for homie (the
-  app no longer opens one on a tap; the mic itself is on only when homie is, see below).
+  the app stops showing homie thinking. Words said while the app's `ask` moment is up ("Ask Grandma anything",
+  a long press on homie; the app holds the mic on while it's up) skip Claude: a plain command still runs, a
+  cancel word gets "Okay.", sounds and fewer than three real words wait for the question, and anything else (a
+  yes word and all) goes straight to the cook (`askCook`), once (`voice/README.md`). A tap never opens it; the
+  mic itself is on only when homie is, see below.
 - App → service: `{ type: "video", playing: boolean }` when any video (or the cook's own voice note) starts or stops
   on the kid's phone. While one plays (or a clip the service asked for), homie says nothing on its own: a
   `greeting`, `nudge` or `timer` line waits for the next pause, one after another (`timer_done` is still

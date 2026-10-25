@@ -8,9 +8,9 @@
 // A tap on the resting pot always says something (lib/homie/tap): what's new for this person, once
 // (lib/homie/news keeps it ready; never while she films), else this screen's one line about its big
 // button, and "I’m right here." on a second tap in a row, with "Hi, I’m homie." before the very first one (lib/homie/intro); unless the screen
-// gave the pot its own onPress (cook mode: on or off). It's an answer to the tap, so it pauses a playing
-// video. A screen can dock the pot somewhere else (cook mode: the middle of the bottom bar); low on the
-// screen its label sits above it. The pot shows the same Siri-like states everywhere (HomiePot).
+// gave the pot its own onPress (cook mode: on or off) and long press (cook mode: "Ask Grandma
+// anything"). It's an answer to the tap, so it pauses a playing video. A screen can dock the pot
+// somewhere else (cook mode: the middle of the bottom bar); low on the screen its label sits above it. The pot shows the same Siri-like states everywhere (HomiePot).
 // Talking only
 // (Caleb): no words on screen, the pot lights, its lid lifts and "AI voice" shows under it. While the
 // cook's own voice plays (store `shrunk`) the resting pot shrinks a little about its centre.
@@ -20,11 +20,11 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
-import { PressableScale, Txt } from '@/components/ui';
+import { haptic, PressableScale, Txt } from '@/components/ui';
 import { useHomieRoute } from '@/lib/homie/hooks';
 import { takeTapLine } from '@/lib/homie/intro';
 import { useHomieNews } from '@/lib/homie/news';
-import { labelAbove, potState, sayPhase, shownFrame, SHRUNK_SCALE, speakingLabel, timerProgress } from '@/lib/homie/logic';
+import { labelAbove, potHint, potState, sayPhase, shownFrame, SHRUNK_SCALE, speakingLabel, timerProgress } from '@/lib/homie/logic';
 import { doneSpeaking, getHomie, useHomie, type Homie } from '@/lib/homie/store';
 import { speak, stopSpeaking } from '@/lib/live/speak';
 import { useNowPlaying } from '@/lib/media';
@@ -150,17 +150,28 @@ function RestingPot({
   const centred = Math.abs(frame.x + frame.size / 2 - windowW / 2) < 1;
   const box = { width: frame.size, height: frame.size };
   const a11y = state === 'speaking' ? 'homie, speaking' : state === 'listening' ? 'homie, listening' : 'homie';
-  const hint = h.onPress ? 'Turns homie on or off' : 'Says what you can do here';
+  // A long press never fires the tap too (Pressable skips onPress after onLongPress), buzzes once when it
+  // takes, and the press only scales the pot down (0.96): it stays drawn at its real size.
+  const onHold = h.onLongPress;
+  const hold = onHold
+    ? () => {
+        haptic('medium');
+        onHold();
+      }
+    : undefined;
   return (
     <Animated.View style={[styles.rest, box, moveStyle]} pointerEvents={shown ? 'box-none' : 'none'}>
       <Animated.View style={[box, potStyle]}>
         <PressableScale
           onPress={onPress}
-          delayLongPress={450}
+          onLongPress={hold}
+          delayLongPress={400}
           haptic
           accessibilityRole="button"
           accessibilityLabel={a11y}
-          accessibilityHint={hint}
+          accessibilityHint={potHint(h)}
+          accessibilityActions={hold ? [{ name: 'longpress', label: h.longPressLabel ?? 'Touch and hold' }] : undefined}
+          onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && hold?.()}
           style={[box, { borderRadius: frame.size / 2 }]}>
           {/* Hidden (a moment has it, or the screen hides it): still and quiet, no loops running unseen. */}
           <HomiePot state={shown ? state : 'off'} level={shown ? h.level : 0} size={frame.size} timerProgress={shown ? progress : null} />

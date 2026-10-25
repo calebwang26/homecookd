@@ -6,7 +6,8 @@
 //                               the offer's end (the shared contract's messages; the service's answer
 //                               kept), a spoken yes or no and what follows a no (the service's own rules,
 //                               checked against voice/src/yesNo.ts), when homie is 'thinking', the
-//                               no-buttons yes-or-no moment, what the pot shows (true to the mic),
+//                               no-buttons yes-or-no moment, "Ask <cook> anything" (a long press:
+//                               the mic held while it's up), what the pot shows (true to the mic),
 //                               homie on or off (a tap, a step line's 8 s window, a turn begun in it),
 //                               what a tap does (never the chat), kitchen timers on the
 //                               phone's clock (parse, order, ids per socket, each buzzing once, at its
@@ -333,6 +334,38 @@ await test('a yes-or-no moment on a phone that can’t hear: one yes button, a t
   assert.equal(m.questionEn, '“How much salt?”');
 });
 
+await test('"Ask Grandma anything" (a long press): the cook’s name, the bars and "Just say your question", no buttons; the service hears it’s up', () => {
+  const m = V.askMoment('Grandma', 1729800000000);
+  assert.equal(m.question, 'Ask Grandma anything');
+  assert.deepEqual(m.options, []);
+  assert.equal(m.bars, true);
+  assert.deepEqual(m.prompt, { label: 'Just say your question' });
+  assert.equal(m.tapToClose, 'Tap anywhere to close');
+  assert.equal(V.appMomentKind(m.id), 'ask');
+  assert.deepEqual(V.momentMessage(V.appMomentKind(m.id)), { type: 'moment', open: true, kind: 'ask' });
+  assert.equal(V.askMoment('Salik', 1).question, 'Ask Salik anything');
+});
+
+await test('"Ask Grandma anything" closes 25 s after the kid last talked, never mid-sentence, and soon once homie can’t hear it', () => {
+  assert.equal(V.askCloseIn({ hears: true, kidTalking: false }), V.ASK_OPEN_MS);
+  assert.equal(V.ASK_OPEN_MS, 25_000);
+  assert.equal(V.askCloseIn({ hears: true, kidTalking: true }), null, 'the recorder is never cut off mid-sentence');
+  // The line lost, the app in the background, homie off for a video the kid played (or the beat before
+  // the mic hold catches up with the moment opening): a short grace, talking or not.
+  for (const kidTalking of [false, true]) assert.equal(V.askCloseIn({ hears: false, kidTalking }), V.ASK_LOST_MS);
+  assert.ok(V.ASK_LOST_MS > 0 && V.ASK_LOST_MS <= 3000);
+});
+
+await test('in "Ask Grandma anything" every sentence the phone hears gets an answer: homie thinks, a yes word and all', () => {
+  const asking = { echo: false, appMoment: true, asking: true, momentUp: true };
+  for (const text of ['Yeah, how long do I fry the onions?', 'Yes, can I use butter instead of ghee?', 'Never mind.', 'Next step.']) {
+    assert.equal(V.thinksAfter({ ...asking, text }), true, text);
+  }
+  assert.equal(V.thinksAfter({ ...asking, echo: true, text: 'yes' }), false, 'never this phone’s own text');
+  // Any other app moment still keeps a yes for itself.
+  assert.equal(V.thinksAfter({ ...asking, asking: false, text: 'Yeah, how long do I fry the onions?' }), false);
+});
+
 // ---------------------------------------------------------------------------------------------
 // The pot
 
@@ -396,6 +429,24 @@ await test('a step line’s end opens a window; the kid’s words hold it for th
   assert.equal(V.micAfter(V.micAfter('turn', 'step_line_end'), 'answered'), 'window');
 });
 
+await test('"Ask Grandma anything" holds the mic for exactly as long as it’s up; on by a tap, homie stays on after it', () => {
+  for (const hold of ['off', 'window', 'turn']) assert.equal(V.micAfter(hold, 'ask'), 'ask', hold);
+  assert.equal(V.micAfter('ask', 'ask_end'), 'off');
+  assert.equal(V.micAfter('tap', 'ask'), 'tap');
+  assert.equal(V.micAfter(V.micAfter('tap', 'ask'), 'ask_end'), 'tap');
+  for (const hold of ['off', 'window', 'turn']) assert.equal(V.micAfter(hold, 'ask_end'), hold, hold);
+  // Up, nothing else closes it: the kid's words (they close the moment), a step line ending, the
+  // window's timers, the idle minute. A tap would turn homie off (the moment takes it first).
+  for (const e of ['heard', 'step_line_end', 'window_timeout', 'answered', 'cap', 'idle', 'ask']) assert.equal(V.micAfter('ask', e), 'ask', e);
+  assert.equal(V.micAfter('ask', 'tap'), 'off');
+  const base = { hold: 'ask', listening: true, sounding: false, thinking: false, talking: false, kidTalking: false, heardFinal: false, openFor: 30_000 };
+  assert.equal(V.micTimer(base), null, 'the moment’s own 25 s close it');
+  // The recorder runs and the pot shows listening: true to the mic.
+  assert.equal(V.micWanted({ hold: 'ask', open: true, focused: true, muted: false, video: false }), true);
+  assert.equal(V.micWanted({ hold: 'ask', open: true, focused: true, muted: true, video: false }), false, 'the mic refused');
+  assert.equal(V.cookPotState({ active: true, listening: true, sounding: false, thinking: false, timers: 0, timerDue: false }), 'listening');
+});
+
 await test('the mic’s timers: 8 s of really hearing, a beat after the answer, the 20 s cap, the idle minute', () => {
   const base = { hold: 'window', listening: true, sounding: false, thinking: false, talking: false, kidTalking: false, heardFinal: false, openFor: 0 };
   assert.deepEqual(V.micTimer(base), { ms: V.LISTEN_WINDOW_MS, event: 'window_timeout' });
@@ -454,7 +505,7 @@ await test('the recorder runs only while homie is on, the line is open, the scre
 });
 
 await test('the rule, both ways: frames go out only while the pot shows listening or thinking, and listening means they do', () => {
-  const holds = ['off', 'tap', 'window', 'turn'];
+  const holds = ['off', 'tap', 'window', 'turn', 'ask'];
   const bools = [false, true];
   for (const hold of holds)
     for (const open of bools)
@@ -497,6 +548,60 @@ await test('a tap in cook mode never navigates: it toggles homie with a voice li
   // No line will read (a dish the service can't cook, or no real service): the phone reads.
   assert.equal(V.cookTap({ ...none, voiceHere: true, unavailable: true }), 'read');
   assert.equal(V.cookTap({ ...none, voiceHere: true, unavailable: true, talking: true }), 'stop');
+});
+
+await test('a tap on homie while a video plays always turns homie on (it takes the sound); else it toggles', () => {
+  for (const hold of ['off', 'tap', 'window', 'turn']) assert.equal(V.holdAfterTap(hold, true), 'tap', hold);
+  assert.equal(V.holdAfterTap('off', false), 'tap');
+  for (const hold of ['tap', 'window', 'turn']) assert.equal(V.holdAfterTap(hold, false), 'off', hold);
+});
+
+await test('a tap that turns homie on says the step’s line ({ type: "tap" }) on a real open line, unless homie already talks', () => {
+  const ok = { live: true, open: true, talking: false };
+  assert.equal(V.saysOnTap(ok), true);
+  assert.equal(V.saysOnTap({ ...ok, live: false }), false, 'the stub reads nothing');
+  assert.equal(V.saysOnTap({ ...ok, open: false }), false, 'the line is still opening');
+  assert.equal(V.saysOnTap({ ...ok, talking: true }), false, 'the line playing is the answer');
+  assert.deepEqual(V.TAP_MESSAGE, { type: 'tap' });
+  const cook = readFileSync(join(root, '..', 'voice', 'src', 'cook.ts'), 'utf8');
+  assert.match(cook, /msg\.type === "tap"/, 'the service handles it');
+});
+
+await test('while a video the kid started plays, what would pause it is dropped (a late clip too); homie’s own lines wait', () => {
+  // An answer, a hint, a step line, a translation, or a clip of hers from a turn still on its way.
+  for (const k of ['reply', 'hint', 'step', 'translation', 'offer', 'clip']) assert.equal(V.dropsForKidVideo(k, true), true, k);
+  // What homie says on its own waits for the video (the same split as waitsForVideo).
+  for (const k of ['greeting', 'nudge', 'timer']) assert.equal(V.dropsForKidVideo(k, true), false, k);
+  // Her clip homie played, or no video: nothing is dropped (lib/media kidVideoPlaying says which).
+  for (const k of ['reply', 'step', 'greeting', 'clip']) assert.equal(V.dropsForKidVideo(k, false), false, k);
+  const voice = readFileSync(join(root, 'src/lib/live/voice.ts'), 'utf8');
+  assert.match(voice, /dropsForKidVideo\('clip', kidVideoPlaying\(\)\)/, 'play_clip checks it');
+});
+
+await test('the step line a tap on homie asked for is its own line (never a yes to reading aloud)', () => {
+  const at = 1_000_000;
+  assert.equal(V.answersTap('step', at, at + 120), true);
+  assert.equal(V.answersTap('step', at, at + V.TAP_LINE_WAIT_MS), false, 'too late: a flip’s line');
+  assert.equal(V.answersTap('step', 0, at), false, 'no tap');
+  for (const k of ['reply', 'greeting', 'nudge', 'translation']) assert.equal(V.answersTap(k, at, at + 120), false, k);
+  const moments = readFileSync(join(root, 'src/components/cooking/CookMoments.tsx'), 'utf8');
+  assert.match(moments, /line\?\.tap\) return/, 'onSay skips it');
+});
+
+await test('the iOS session: homie’s line waits while the recorder starts or stops, and a video waits at the gate', () => {
+  const now = 10_000;
+  assert.equal(V.lineMayStart({ micBusy: false, since: now, now }), true);
+  assert.equal(V.lineMayStart({ micBusy: true, since: now, now: now + 100 }), false, 'the session is changing');
+  assert.equal(V.lineMayStart({ micBusy: true, since: now, now: now + V.LINE_WAITS_FOR_MIC_MS }), true, 'not for ever');
+  // The order, in the code: a video's playhead counts for micWanted before the gate lets it sound, the
+  // gate turns homie off for the kid's play and waits for the recorder, and a stop waits for homie's fade.
+  const voice = readFileSync(join(root, 'src/lib/live/voice.ts'), 'utf8');
+  assert.match(voice, /videoOn\.current \|\| videoPlaying\(\)/);
+  assert.match(voice, /if \(kid\) hush\(\);\s+else syncMic\(\);\s+return micBusy\.current \? micIdle\(VIDEO_GATE_MAX_MS\) : null;/);
+  assert.match(voice, /useEffect\(\(\) => setVideoGate\(videoGate\), \[videoGate\]\)/);
+  assert.match(voice, /audioFaded\(\)\s+\.then\(\(\) => micRef\.current\.stop\(\)\)/);
+  // A tap on homie: the video fades and pauses first; the recorder starts only after (micWanted's video).
+  for (const hold of ['tap', 'window', 'turn']) assert.equal(V.micWanted({ hold, open: true, focused: true, muted: false, video: true }), false, hold);
 });
 
 await test('a step her clip moved the screen to goes to the service with read: false; any other with no flag', () => {
@@ -694,6 +799,43 @@ await test('a tap on a listening pot turns it off, during a window too; during a
   assert.equal(c.h.hold, 'off');
   c.pass(10);
   assert.equal(c.pot(), 'off');
+});
+
+await test('a long press, "Ask Grandma anything": listening while it’s up, past 8 s; off once her question closes it', () => {
+  const c = cookMic();
+  c.ev('ask'); // the moment opens (lib/live/voice setMoment('ask'))
+  c.h.talking = true; // homie says "Ask Grandma anything."
+  c.pass(1.5);
+  c.h.talking = false;
+  assert.equal(c.pot(), 'listening');
+  c.pass(15);
+  assert.equal(c.h.hold, 'ask', 'no 8 s window here');
+  assert.equal(c.pot(), 'listening');
+  c.partial('can I use butter');
+  c.pass(2);
+  c.final();
+  assert.equal(c.h.hold, 'ask');
+  c.ev('ask_end'); // her words closed the moment
+  assert.equal(c.h.hold, 'off');
+  assert.equal(c.pot(), 'off');
+  const sent = c.h.sentS;
+  c.pass(60);
+  assert.equal(c.h.sentS, sent, 'nothing more reaches Ink');
+  // Nobody speaks: the moment's 25 s (or a tap anywhere) close it, and homie is off.
+  const q = cookMic();
+  q.ev('ask');
+  q.pass(25);
+  q.ev('ask_end');
+  assert.equal(q.h.hold, 'off');
+  assert.ok(q.h.sentS <= 25.1, `at most 25 s reached Ink: ${q.h.sentS}`);
+  // On by a tap before the long press: homie stays on after it.
+  const t = cookMic();
+  t.tap();
+  t.ev('ask');
+  t.pass(3);
+  t.ev('ask_end');
+  assert.equal(t.h.hold, 'tap');
+  assert.equal(t.pot(), 'listening');
 });
 
 await test('on by a tap: a minute with no word from the kid turns it off; each word starts the minute again', () => {
@@ -1038,14 +1180,28 @@ await test('credit fix A: /cook gets only the kid’s frames while homie is on, 
   assert.equal(V.cookSendsFrame({ quiet: false, focused: true, active: false }), false);
 });
 
-await test('cook mode’s tap never opens the chat, there is no long press, and a tapped step sends no "repeat"', () => {
+await test('cook mode’s tap never opens the chat; a long press asks (the chat only without a voice line); a tapped step sends no "repeat"', () => {
   const screen = readFileSync(join(root, 'src', 'app', 'cook', '[id].tsx'), 'utf8');
   const hook = readFileSync(join(root, 'src', 'lib', 'live', 'voice.ts'), 'utf8');
   const moments = readFileSync(join(root, 'src', 'components', 'cooking', 'CookMoments.tsx'), 'utf8');
-  assert.ok(!/onLongPress/.test(screen), 'one gesture only');
-  assert.ok(!/openChatWith|openCircle|\/chat\/\[id\]/.test(screen), 'the pot never navigates to Messages');
+  const tap = screen.match(/const potTap = \(\) => \{[\s\S]*?\n {2}\};/)?.[0] ?? '';
+  const hold = screen.match(/const potHold = \(\) => \{[\s\S]*?\n {2}\};/)?.[0] ?? '';
+  assert.ok(tap && hold, 'the tap and the long press');
+  assert.ok(!/askInChat|openChatWith|openCircle|\/chat\/|homie\.ask/.test(tap), 'a tap never asks or navigates to Messages');
+  assert.match(screen, /onPress: potTap, onLongPress: potHold/);
+  // The long press takes the sound (the video fades out); nobody else to ask (the cook on her own dish):
+  // the step aloud; else by voice while homie can hear, else the chat. Never the tap's toggle.
+  assert.match(hold, /pauseAllVideos\(\{ fadeMs: HANDOFF_FADE_MS \}\);\s*if \(!askTarget\) \{\s*if \(step\) void speak\([^\n]*\n\s*return;\s*\}\s*if \(voice\.live && !voice\.muted\) return homie\.ask\(\);\s*void askInChat\(\);/);
+  assert.ok(!/toggle/.test(hold));
+  // The moment's own close (askCloseIn) lives on the screen, which sees the kid talking.
+  assert.match(screen, /askCloseIn\(\{ hears: askHears, kidTalking \}\)/);
+  assert.match(screen, /const askHears = voice\.live && voice\.active;/);
+  assert.ok(!/setTimeout/.test(moments.slice(moments.indexOf('const ask = useCallback'))), 'no blind 25 s timer');
+  assert.match(moments, /askMoment\(cookName, Date\.now\(\)\)/);
+  assert.ok(!/potPress/.test(moments));
   assert.ok(!/sendText\('repeat'\)/.test(hook), 'the service says a step’s line itself (builder D)');
-  assert.ok(!/potPress|Ask \$\{name\} anything/.test(moments), 'no tap-to-ask moment');
+  // "Ask <cook> anything" holds the mic through the moment the service hears about.
+  assert.match(hook, /if \(kind === 'ask' \|\| was === 'ask'\) micEvent\(kind === 'ask' \? 'ask' : 'ask_end'\);/);
   // Voice connects on its own, but the mic starts off: onopen only syncs the recorder to homie's state.
   assert.ok(!/startMic/.test(hook));
 });
