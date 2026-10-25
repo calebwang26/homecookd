@@ -22,7 +22,10 @@
 //                      switches the camera and starts the next file on it (a gap of about a second that
 //                      homie is told about; the mic is never touched while a file is written). It hides
 //                      under homie's questions. The front camera's preview is a mirror, its video is
-//                      not (words on a packet read the right way). Leaving the app (a
+//                      not (words on a packet read the right way). A camera that stops by itself (a
+//                      flip that never comes up, a file that fails) never leaves the clock ticking:
+//                      filming pauses with "The camera stopped. Your video so far is saved." and the
+//                      button films again (components/record/filming.ts). Leaving the app (a
 //                      lock, a call) finishes the file at once: "Recording stopped while you were away",
 //                      the button films again, "I'm done" ends. The stop button finishes the last file
 //                      and homie wraps up. Older builds (no VisionCamera, or no camera permission): the
@@ -68,7 +71,7 @@ import { useInAppCamera } from '@/components/record/useInAppCamera';
 import { usePickVideos } from '@/components/record/usePickVideos';
 import { recordWords, type Line } from '@/components/record/words';
 import { ActionButton, CloseIcon, IconButton, useToast } from '@/components/ui';
-import { useAiSpeaking, useHomieScreen } from '@/lib/homie/hooks';
+import { useAiSpeaking, useHomieScreen, useHomieSlot } from '@/lib/homie/hooks';
 import { inAppCameraSupported } from '@/lib/live/camera';
 import { endRecording, setCover, startFilming, useLiveFrame, useLiveLog, useRecording } from '@/lib/live/convex';
 import { useHomieRecording } from '@/lib/live/homie';
@@ -166,19 +169,22 @@ export default function RecordingScreen() {
     onFrame: homie.sendFrame,
     onPause: homie.pause,
     onResume: homie.resume,
-    beforeResume: async () => {
+    // Busy again only if filming goes on: after "I'm done" (doneInApp) the mic must be free to stop.
+    beforeResume: async (goesOn) => {
       homie.cameraFilming(false);
       await homie.restartMic();
-      homie.cameraFilming(true);
+      if (goesOn()) homie.cameraFilming(true);
     },
-    betweenFiles: async () => {
+    betweenFiles: async (goesOn) => {
       homie.cameraFilming(false);
       await homie.restartMic({ fresh: false });
-      homie.cameraFilming(true);
+      if (goesOn()) homie.cameraFilming(true);
     },
   });
   const inApp = inAppPossible && cam.usable === true;
   const camPaused = (inApp && cam.phase === 'paused') || devPreview === 'paused';
+  // Paused because she left the app, or because the camera stopped by itself (filming.ts `trouble`).
+  const pausedLine = words.line(inApp && cam.trouble ? 'cameraTrouble' : 'stopped');
   const plateAsk = devPreview === 'plate' ? PREVIEW_PLATE : homie.ask?.kind === 'plate' ? homie.ask : null;
   const [photo, setPhoto] = useState<string | null>(null);
   const [shooting, setShooting] = useState(false);
@@ -223,6 +229,7 @@ export default function RecordingScreen() {
   // fill the top) and on the done view.
   const [asking, setAsking] = useState(false);
   useHomieScreen({ hidden: asking || !!plateAsk || finished });
+  const potSlot = useHomieSlot();
 
   // The flip-camera button: beside the card, beside the shutter for the plate photo, hidden under
   // homie's question. A flip while filming is a file boundary (useInAppCamera flip). The dev previews
@@ -354,13 +361,14 @@ export default function RecordingScreen() {
     <FlipCameraButton
       label={words.line('flipCamera')}
       facing={devPreview ? previewFacing : cam.facing}
-      disabled={!devPreview && !cam.canFlip}
+      disabled={shooting || (!devPreview && !cam.canFlip)}
       onPress={flipCamera}
       onDark={onDark}
       width={width}
     />
   );
-  const beside = slot ? flipBeside(slot, screenW, FLIP_SIZE) : null;
+  // Beside the card, and clear of homie's corner pot (on a small phone the two would read as a pair).
+  const beside = slot ? flipBeside(slot, screenW, FLIP_SIZE, potSlot) : null;
 
   const error = homie.error ? words.line(homie.error) : null;
   const micOff = homie.micDenied ? words.line('micOff') : null;
@@ -394,8 +402,8 @@ export default function RecordingScreen() {
               onPress={press}
               accessibilityLabel={camPaused ? 'Keep filming' : view.live ? 'Recording. Tap when you’re done.' : view.line.en ?? view.line.text}
             />
-            <Animated.View key={camPaused ? 'stopped' : view.line.text} entering={FadeIn.duration(reduce ? motion.reducedFadeMs : 220)} style={styles.label}>
-              <BiLine line={camPaused ? words.line('stopped') : view.line} size={camPaused ? 24 : 30} weight={700} enSize={15} leading={1.3} />
+            <Animated.View key={camPaused ? pausedLine.text : view.line.text} entering={FadeIn.duration(reduce ? motion.reducedFadeMs : 220)} style={styles.label}>
+              <BiLine line={camPaused ? pausedLine : view.line} size={camPaused ? 24 : 30} weight={700} enSize={15} leading={1.3} />
             </Animated.View>
             {camPaused ? (
               <View style={styles.skip}>

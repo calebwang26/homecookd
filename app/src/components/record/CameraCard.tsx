@@ -83,6 +83,8 @@ export function CameraCard({
         <Image source={standIn} style={StyleSheet.absoluteFill} contentFit="cover" />
       ) : Camera && cam.device ? (
         <Camera
+          // A new key is a fresh camera session (filming.ts: a camera that didn't come back).
+          key={cam.cameraKey}
           ref={attach}
           style={StyleSheet.absoluteFill}
           device={cam.device}

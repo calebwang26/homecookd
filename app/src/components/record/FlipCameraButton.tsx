@@ -1,9 +1,10 @@
 // The flip-camera button on the recording screen (Caleb, Oct 24: "make the camera flip logo VERY clear"):
-// a 68 pt round button with the iPhone's own flip-camera icon (SF Symbol arrow.triangle.2.circlepath.camera;
-// the same drawing in SVG on Android and the web), her word for it under it ("कॅमेरा बदला" / "Flip camera").
-// It sits beside the camera card (recording.tsx, cameraLogic flipBeside), and beside the shutter in the
-// plate photo's big view (`onDark`). The icon spins once when the camera changes; while the other camera
-// gets ready the button is dimmed and waits. Reduce Motion: no spin.
+// a 68 pt round button with the iPhone's own flip-camera icon, filled (SF Symbol
+// arrow.triangle.2.circlepath.camera.fill; the same drawing in SVG on Android and the web), her word for it
+// under it in 17 pt ("कॅमेरा बदला" / "Flip camera"). It sits beside the camera card (recording.tsx,
+// cameraLogic flipBeside), and beside the shutter in the plate photo's big view (`onDark`). The icon spins
+// once when the camera changes; while the other camera gets ready the button is dimmed and waits. Reduce
+// Motion: no spin.
 import { SymbolView } from 'expo-symbols';
 import { useEffect, useRef } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
@@ -17,16 +18,16 @@ import type { Facing } from './cameraLogic';
 import type { Line } from './words';
 
 export const FLIP_SIZE = 68;
-const ICON = 38;
+const ICON = 42;
 const TURN_MS = 420;
 
-/** The SF Symbol's drawing: a camera with two arrows going round (24 x 24, 2 pt strokes like icons.tsx). */
-function FlipCameraIcon({ size, color }: { size: number; color: string }) {
+/** The SF Symbol's drawing: a filled camera with two arrows going round cut out of it (24 x 24). */
+function FlipCameraIcon({ size, color, cutout }: { size: number; color: string; cutout: string }) {
   return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M4.5 7.5h2.8l1.4-2h6.6l1.4 2h2.8A1.5 1.5 0 0 1 21 9v9a1.5 1.5 0 0 1-1.5 1.5h-15A1.5 1.5 0 0 1 3 18V9a1.5 1.5 0 0 1 1.5-1.5z" />
-      <Path d="M8.75 12.93A3.3 3.3 0 0 1 14.86 11.85M15.16 10.18 14.86 11.85 13.26 11.27" strokeWidth={1.7} />
-      <Path d="M15.25 14.07A3.3 3.3 0 0 1 9.14 15.15M8.84 16.82 9.14 15.15 10.74 15.73" strokeWidth={1.7} />
+    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" strokeLinecap="round" strokeLinejoin="round">
+      <Path d="M4.5 7h2.6l1.5-2.2h6.8L16.9 7h2.6A2 2 0 0 1 21.5 9v9.5a2 2 0 0 1-2 2h-15a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z" fill={color} />
+      <Path d="M8.55 13.39A3.5 3.5 0 0 1 15.03 12.25M15.33 10.58 15.03 12.25 13.43 11.67" stroke={cutout} strokeWidth={1.8} />
+      <Path d="M15.45 14.61A3.5 3.5 0 0 1 8.97 15.75M8.67 17.42 8.97 15.75 10.57 16.33" stroke={cutout} strokeWidth={1.8} />
     </Svg>
   );
 }
@@ -43,7 +44,7 @@ export function FlipCameraButton({
   label: Line;
   facing: Facing;
   onPress: () => void;
-  /** A flip is running, or the camera isn't ready yet. */
+  /** A flip is running, the camera isn't ready yet, or the plate photo is being taken. */
   disabled?: boolean;
   /** Over the plate photo's dark dim: a glass circle, a cream label. */
   onDark?: boolean;
@@ -52,26 +53,19 @@ export function FlipCameraButton({
 }) {
   const reduce = useReducedMotion();
   const turn = useSharedValue(0);
-  const first = useRef(true);
+  const shown = useRef(facing);
   useEffect(() => {
-    // One turn each time the camera changes (not when the screen first shows); it lands upright.
-    if (first.current) return void (first.current = false);
+    // One turn each time the camera changes (not on the first show, nor when Reduce Motion changes); it lands upright.
+    if (shown.current === facing) return;
+    shown.current = facing;
     if (!reduce) turn.set(withTiming(turn.get() + 360, { duration: TURN_MS, easing: Easing.inOut(Easing.cubic) }));
   }, [facing, reduce, turn]);
   const iconStyle = useAnimatedStyle(() => ({ transform: [{ rotate: `${turn.value}deg` }] }));
 
   const other = facing === 'back' ? 'front' : 'back';
-  const glyph = Platform.OS === 'ios' ? (
-    <SymbolView
-      name="arrow.triangle.2.circlepath.camera"
-      size={ICON}
-      weight="semibold"
-      tintColor={colors.ink}
-      fallback={<FlipCameraIcon size={ICON} color={colors.ink} />}
-    />
-  ) : (
-    <FlipCameraIcon size={ICON} color={colors.ink} />
-  );
+  const drawn = <FlipCameraIcon size={ICON} color={colors.ink} cutout={colors.card} />;
+  const glyph =
+    Platform.OS === 'ios' ? <SymbolView name="arrow.triangle.2.circlepath.camera.fill" size={ICON} weight="semibold" tintColor={colors.ink} fallback={drawn} /> : drawn;
   return (
     <View style={[styles.wrap, { width }]}>
       <PressableScale
@@ -81,7 +75,7 @@ export function FlipCameraButton({
         scaleTo={0.92}
         accessibilityRole="button"
         accessibilityLabel={label.en ?? label.text}
-        accessibilityHint={`Films with the ${other} camera`}
+        accessibilityHint={`Switches to the ${other} camera`}
         accessibilityState={{ disabled }}
         hitSlop={8}
         style={[styles.button, onDark ? styles.onDark : styles.onPage, disabled && styles.waiting]}>
@@ -89,7 +83,7 @@ export function FlipCameraButton({
       </PressableScale>
       <Txt
         variant="label"
-        size={15}
+        size={17}
         weight={700}
         leading={1.2}
         color={onDark ? colors.card : colors.ink}

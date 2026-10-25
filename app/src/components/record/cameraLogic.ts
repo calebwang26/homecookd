@@ -64,17 +64,24 @@ export function chunkClip(c: Chunk, n: number): DraftClip {
 export type Facing = 'back' | 'front';
 export const otherFacing = (f: Facing): Facing => (f === 'back' ? 'front' : 'back');
 
-/** How long a flip waits for the other camera to be ready before it goes back to the one that worked. */
+/** How long filming waits for the camera to be ready the first time. */
+export const READY_WAIT_MS = 10_000;
+/** How long a flip (or a resume) waits for the camera to be ready before it starts the camera over. */
 export const FLIP_WAIT_MS = 5000;
-/** Not filming: a moment after the other camera is ready, so the plate photo has its picture, not the old one's. */
-export const FLIP_SETTLE_MS = 400;
+/**
+ * After a flip, how long until a still is the new camera's: VisionCamera says it's ready before the new
+ * format is set and the session committed, and a still is its last video frame. The shutter waits this long.
+ */
+export const FLIP_SETTLE_MS = 1200;
+/** A file that never says it ended is let go after this (so nothing waits on it forever). */
+export const END_WAIT_MS = 10_000;
 
 /**
  * What a flip does in each phase. While a file is being written the flip is a file boundary, like the
  * 5-minute roll: finish the file, switch the camera, homie's mic may restart (betweenFiles), a new file on
  * the other camera (homie hears the small gap). The mic never starts or stops while a file is written.
- * Before filming, while paused and after "I'm done" there is no file: only the camera switches (the next
- * file, or the plate photo, uses it).
+ * Before filming, while paused and after "I'm done" no file is being filmed: only the camera switches (the
+ * next file, or the plate photo, uses it), once a file still being saved has been saved (filming.ts).
  */
 export type FlipStep = 'endFile' | 'switch' | 'betweenFiles' | 'startFile';
 export function flipSteps(phase: CameraPhase): FlipStep[] {
@@ -92,15 +99,26 @@ export function flipPlace(s: { camera: boolean; twoCameras: boolean; asking: boo
 }
 
 /** Room under the flip button for one line of its label. */
-export const FLIP_LABEL_ROOM = 24;
+export const FLIP_LABEL_ROOM = 27;
+/** At least this much between homie's corner pot and the flip button under it. */
+export const FLIP_POT_GAP = 56;
 
 /**
- * The flip button and its label beside the card: centred in the space to its right, at the card's
- * bottom (a camera's controls sit low, and up by the middle it crowds homie's corner pot on a small phone).
+ * The flip button and its label beside the card: centred in the space to its right, at the card's bottom
+ * (a camera's controls sit low), and at least FLIP_POT_GAP under homie's corner pot when it's on that
+ * side too: on a small phone two round buttons stacked close would read as a pair.
  */
-export function flipBeside(card: { x: number; y: number; width: number; height: number }, screenWidth: number, button: number) {
+export function flipBeside(
+  card: { x: number; y: number; width: number; height: number },
+  screenWidth: number,
+  button: number,
+  pot?: { x: number; y: number; size: number },
+) {
   const from = card.x + card.width;
   const space = screenWidth - from;
-  const width = Math.max(button, Math.min(space - 8, 104));
-  return { left: from + Math.max(4, (space - width) / 2), top: card.y + card.height - button - FLIP_LABEL_ROOM, width };
+  const width = Math.max(button, Math.min(space - 4, 110));
+  const left = from + Math.max(2, (space - width) / 2);
+  let top = card.y + card.height - button - FLIP_LABEL_ROOM;
+  if (pot && pot.x < left + width && pot.x + pot.size > left) top = Math.max(top, pot.y + pot.size + FLIP_POT_GAP);
+  return { left, top, width };
 }

@@ -27,7 +27,7 @@ const BLUR = 70;
 const TINT = 'rgba(30,36,16,0.5)';
 const SHUTTER = 84;
 /** Room either side of the shutter: the flip button and its label on the right. */
-export const PLATE_FLIP_SIDE = 96;
+export const PLATE_FLIP_SIDE = 104;
 const WHITE_SOFT = 'rgba(255,253,247,0.8)';
 
 function useShown(on: boolean) {
