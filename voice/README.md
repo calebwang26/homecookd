@@ -5,8 +5,9 @@ Two live loops from `docs/build/STACK.md`, plus one HTTP route:
   one tool per turn: move a step, play the cook's clip (found by Moss), or send the question to the cook. Sonic
   speaks the short reply. Nothing is ever presented as the cook's words unless it is her clip.
 - `/record`: homie while a cook records. The phone by the stove streams the mic; homie hears her in her language
-  (Gemini Live for Marathi), says hello, asks a few short questions at the right moments, then the last
-  questions, the stories opt-in and goodbye. Everything it says goes to Convex (`/live/*`).
+  (Gemini Live for Marathi), says hello, asks a few short questions at the right moments, then says how many
+  questions are left, asks the last questions and the stories opt-in back to back, the plate photo (filmed in the
+  app) and goodbye. Everything it says goes to Convex (`/live/*`).
 - `POST /speak`: a line in homie's voice, for the walkie-talkie and the pot's tap hints.
 - `POST /homie/line`: homie's words, written by Claude, for one thing that's new for the person tapping homie.
 
@@ -248,7 +249,7 @@ What happens
    takes over 7 s or fails, a hand-written one is said instead (`lines.ts`, Marathi or English).
 2. `start`: Convex sets `startedAt` once; every line's `atS` counts from it (the hello's is negative).
 3. While she cooks, every 2 s the code checks the pacing (`pacing.ts`): normal = first question no earlier than
-   4 min, 4.5 min gaps, doubled after an ignored one, at most 6 live; `HOMIE_DEMO=1` = 40 s, 90 s, at most 2; `HOMIE_SCRIPTED=1` (the filmed demo) = a fixed question from `lines.ts` every 5 min, in turn, with no backing off and no Claude deciding. Never
+   2 min, 3.5 min gaps, doubled after an ignored one, at most 8 live (so live questions are never back to back); `HOMIE_DEMO=1` = 40 s, 90 s, at most 2; `HOMIE_SCRIPTED=1` (the filmed demo) = a fixed question from `lines.ts` every 5 min, in turn, with no backing off and no Claude deciding. Never
    while she talks (speech in the last 3 s). When a question is allowed, or she said something long that may be a
    story, Claude sees the transcript (and the newest glasses frame) and returns ask, react or stay quiet. Priority:
    vague amounts, then "how do you know it's ready", then substitutions for a college kitchen, then stories during
@@ -256,8 +257,12 @@ What happens
    ("Oh, I love that"), not counted as a question.
 4. Her next turn after a question is the answer (`/live/prompt-update`, with English when she spoke Marathi).
    "Not now", "later", "आत्ता नाही", "नंतर" in a short turn drops it.
-5. `done`: homie stops talking and drops an open question, then up to 2 end questions ("Before you go, two quick
-   ones…"), then "Can Shreya hear your stories too?" (yes/no → `/live/optin`), then the closing, then phase `ended`.
+5. `done`: homie stops talking and drops an open question, then says how many questions are left (the count line,
+   `lines.ts` `countLine`: "Just three quick questions before we send it." / "Before we send it, three quick
+   questions and a photo of your plate."), then up to 2 end questions and "Can Shreya hear your stories too?"
+   (yes/no → `/live/optin`) back to back, then (filmed in the app) the plate photo, then the closing, then phase
+   `ended`. `{type:"hold", on:true}` at done (before the live card's drop) keeps homie big in the middle of the app until
+   `{type:"hold", on:false}` right before the plate ask or the goodbye (STACK.md).
    The wrap-up waits for her (`listen`): no line starts while she talks; an answer is every turn until no new words
    for 3.5 s (Ink 2, ink-whisper) or 4 s (Gemini Live), so a pause to think doesn't end it. "not now" (the card's
    tap or her first words) skips just that question at once. No word 5 s after a question played: "Still there,
@@ -270,7 +275,8 @@ Reconnects: what homie knows about a recording (the pacing counters, the questio
 hello) is kept per recording on the instance (Cloud Run's session affinity sends her back to it) until it ends,
 or for 3 h. A socket back in `recording` listens 15 s before deciding anything and keeps the gaps and the limit. A
 socket that closes during the wrap-up stops without writing anything more and leaves Convex at `wrapping_up`; the
-next one asks only what's left (no second opt-in once she answered) and says goodbye. Text messages sent before
+next one asks only what's left (the same end questions homie counted, no second count line, no second opt-in once
+it was asked) and says goodbye. Text messages sent before
 the recording has loaded are handled once it has. While the socket is open, the service touches the recording
 every 10 minutes (`/live/status` `{ touch: true }`), so a long cook isn't abandoned as idle after 2 h.
 

@@ -1,6 +1,8 @@
 // Runs one homie recording against the voice service like the phone by the stove would: hears the
-// hello, sends start, says a line with a vague amount, answers homie's question, sends done, answers
-// the end questions and the stories opt-in, and waits for the goodbye. The mic streams silence
+// hello, sends start, says a line with a vague amount, answers homie's question, sends done, hears the
+// count line, answers the end questions and the stories opt-in, and waits for the goodbye. Every run checks the
+// wrap-up's order (the count line, the questions back to back inside {type:"hold"}, the plate photo, goodbye) and
+// prints the count line and the hold's timings. The mic streams silence
 // between lines. Prints every event with timings and saves homie's lines to test-audio/out/. It streams the recorded
 // audio for real; FAKE=1 against `npm run dev:fake` sends the cook's lines as text instead (scripts/guard.ts).
 //   VOICE_STUB=1 HOMIE_DEMO=1 npm run dev                       (in another terminal)
@@ -142,6 +144,44 @@ function checkScenario(t: { ask: Ev; playedAt: number; start: number; end: numbe
     if (scenario === "long") check(!lines.some((l) => /^Still there/.test(l.textEn ?? "")), `no "still there?" while she answered`);
   }
 }
+/**
+ * The wrap-up (record.ts wrapUp), from done on: the count line first, then the end questions and the opt-in back to
+ * back with the hold on from done until the last one's wait is over (and the let-off has
+ * played), then the plate photo (CAMERA=1) and goodbye. As many questions as the count line said (fewer after a let-off).
+ */
+function checkWrapUp(doneAt: number) {
+  console.log("\nwrap-up:");
+  const after = seen.filter((e) => e.at >= doneAt);
+  const lines = after.filter((e) => e.type === "say");
+  const asks = after.filter((e) => e.type === "ask");
+  const holds = after.filter((e) => e.type === "hold");
+  const count = lines[0];
+  console.log(`  count line: "${count?.text}"${count?.text !== count?.textEn ? ` ("${count?.textEn}")` : ""}`);
+  const said = /\b(one|two|three) quick question/.exec(count?.textEn ?? "")?.[1];
+  const photo = /photo of your plate/.test(count?.textEn ?? "");
+  check(count?.kind === "reaction" && (!!said || photo), "the count line first, before any question");
+  const n = said ? ["one", "two", "three"].indexOf(said) + 1 : 0;
+  const spoken = asks.filter((a) => a.kind === "end" || a.kind === "optin");
+  const letOff = lines.find((l) => /No need to answer today/.test(l.textEn ?? ""));
+  check(letOff ? spoken.length <= n : spoken.length === n, `${spoken.length} question${spoken.length === 1 ? "" : "s"} asked; the count line said ${n}${letOff ? " (a let-off)" : ""}`);
+  check(photo === camera, `the plate photo ${photo ? "counted" : "not counted"} (CAMERA=${camera ? 1 : 0})`);
+  const rank = { end: 0, optin: 1, plate: 2 } as Record<string, number>;
+  const kinds = asks.map((a) => a.kind ?? "");
+  check(kinds.every((k, i) => i === 0 || rank[kinds[i - 1]] <= rank[k]) && kinds.includes("plate") === camera, `order: ${kinds.join(" → ")} → goodbye`);
+  check(holds.map((h) => (h.on ? "on" : "off")).join(" ") === (spoken.length ? "on off" : ""), `hold: ${holds.map((h) => (h.on ? "on" : "off")).join(", ") || "none"}`);
+  const on = holds.find((h) => h.on);
+  const off = holds.find((h) => !h.on);
+  if (on && count) check(on.at - doneAt < 1000 && on.at <= count.at, `hold on ${s(count.at - on.at)} before the count line (${s(on.at - doneAt)} after done)`);
+  const last = spoken.at(-1);
+  const waitEnd = after.find((e) => (e.type === "answered" || e.type === "drop") && e.promptId === last?.promptId);
+  if (off && waitEnd) check(off.at >= waitEnd.at, `hold off ${s(off.at - waitEnd.at)} after the last question's wait ended (${last?.kind})`);
+  if (off && letOff) check(off.at >= (letOff.playedAt ?? Infinity) - 100, `hold off ${s(off.at - (letOff.playedAt ?? 0))} after the let-off played`);
+  const next = off && after.find((e) => (e.type === "say" || e.type === "ask") && e.at >= off.at);
+  if (off) check(next?.kind === (camera ? "plate" : "closing"), `then the ${next?.kind} ${next ? s(next.at - off.at) : "never"} after hold off`);
+  check(!holds.at(-1)?.on, "hold is off before ended");
+  check(holdsInSay === 0, `no hold between a say and its say_end (${holdsInSay})`);
+}
+
 const waiters: { match: (e: Ev) => boolean; resolve: (e: Ev) => void }[] = [];
 const next = (match: (e: Ev) => boolean, ms: number, what: string) =>
   Promise.race([
@@ -152,13 +192,16 @@ const next = (match: (e: Ev) => boolean, ms: number, what: string) =>
   ]);
 
 let audio: Buffer[] = [];
+/** A hold sent while a line's audio was still coming (an older app would cut the line there): never. */
+let inSay = false;
+let holdsInSay = 0;
 let sayAt = 0;
 let firstAudioAt = 0;
 let said = 0;
 /** When the phone would finish playing homie's last line (the cook waits for it, like a person would). */
 let playedAt = 0;
 /** homie's lines and questions with when they came, and when each line finished playing (the scenarios' checks). */
-const seen: { type: string; kind?: string; textEn?: string; promptId?: string; at: number; playedAt?: number }[] = [];
+const seen: { type: string; kind?: string; text?: string; textEn?: string; promptId?: string; on?: boolean; at: number; playedAt?: number }[] = [];
 ws.on("message", (data, isBinary) => {
   if (isBinary) {
     if (!audio.length && sayAt) {
@@ -169,10 +212,14 @@ ws.on("message", (data, isBinary) => {
     return;
   }
   const ev = JSON.parse(data.toString()) as Ev;
+  if (ev.type === "say") inSay = true;
+  else if (ev.type === "say_end") inSay = false;
+  else if (ev.type === "hold" && inSay) holdsInSay++;
   if (ev.type === "transcript" && !ev.final) return;
   if (ev.type === "state") return;
-  if (ev.type === "say" || ev.type === "ask" || ev.type === "answered" || ev.type === "transcript") {
-    seen.push({ type: ev.type, kind: ev.kind as string, textEn: (ev.textEn ?? ev.text) as string, promptId: ev.promptId as string, at: Date.now() });
+  if (["say", "ask", "answered", "drop", "transcript", "hold"].includes(ev.type)) {
+    const text = ev.text as string | undefined;
+    seen.push({ type: ev.type, kind: ev.kind as string, text, textEn: (ev.textEn as string) ?? text, promptId: ev.promptId as string, on: ev.on as boolean, at: Date.now() });
   }
   if (ev.type === "say") {
     audio = [];
@@ -221,8 +268,10 @@ try {
   say("answer");
   await next((e) => e.type === "answered" && e.promptId === ask.promptId, 20_000, "answered");
   await sleep(1000);
+  const doneAt = Date.now();
   ws.send(JSON.stringify({ type: "done" }));
-  // End questions, then the opt-in; then the goodbye. SCENARIO picks how she answers the first one.
+  // The count line; end questions, then the opt-in; the plate (CAMERA=1); then the goodbye. SCENARIO picks how she
+  // answers the first question.
   let tested: { ask: Ev; playedAt: number; start: number; end: number } | undefined;
   for (;;) {
     const ev = await next((e) => e.type === "ask" || (e.type === "phase" && e.phase === "ended"), 90_000, "end question");
@@ -260,6 +309,7 @@ try {
   }
   clearInterval(frames);
   console.log("\nlatency:\n  " + timings.join("\n  "));
+  checkWrapUp(doneAt);
   if (scenario) checkScenario(tested);
   console.log(process.exitCode ? "\nFAIL" : "\nPASS");
 } catch (err) {

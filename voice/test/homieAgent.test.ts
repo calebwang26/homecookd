@@ -1,6 +1,7 @@
 // homie's Claude-written lines with a fake Claude: when one guesses a family role or a gender (family.ts
 // guessesFamily), the hello falls back to the written one, a question to the written question of its kind
-// (lines.ts scriptedOf), and a tap line to Convex's plain line. Nothing here calls a real service.
+// (lines.ts scriptedOf), and a tap line to Convex's plain line. An end question that opens by counting ("One more
+// thing:") goes the same way as a guess. Nothing here calls a real service.
 import assert from "node:assert/strict";
 import { afterEach, beforeEach, mock, test } from "node:test";
 import type Anthropic from "@anthropic-ai/sdk";
@@ -8,7 +9,7 @@ import type { Heard, Who } from "../src/homie.js";
 
 process.env.CARTESIA_API_KEY = "test";
 process.env.ANTHROPIC_API_KEY = "test";
-const { HomieAgent } = await import("../src/homie.js");
+const { HomieAgent, countsItself } = await import("../src/homie.js");
 const { scriptedOf } = await import("../src/lines.js");
 const { tapLine } = await import("../src/tapLine.js");
 
@@ -124,6 +125,20 @@ test("end questions that all guess a role become the written ones of their kinds
       ["story", "Dad, is there a story behind this dish? Who taught you?"],
     ],
   );
+});
+
+test("an end question that opens by counting ('One more thing:') becomes the written one of its kind", async () => {
+  for (const opening of ["One more thing: ", "Dad, one last question: ", "Another quick one, ", "And finally, ", "Last one: ", "Just one more: "]) {
+    assert.ok(countsItself(`${opening}how much ghee was that?`), opening);
+  }
+  for (const fine of ["Dad, how much ghee went in last?", "Last time you made this, what changed?", "In the last step, how much salt was that?", "Dad, is there another way to know it's done?"]) {
+    assert.ok(!countsItself(fine), fine);
+  }
+  const en = "Dad, one more thing: how do you know the tadka is ready?";
+  const { client } = fakeClaude([{ questions: [{ kind: "cue", text: en, text_en: en }] }]);
+  const qs = await new HomieAgent(dad, { client, fallback: scriptedOf }).endQuestions([], [], 2);
+  assert.deepEqual(qs.map((q) => [q.kind, q.line.textEn]), [["cue", "Dad, how do you know this part is ready?"]]);
+  assert.match(warnings.join("\n"), /says where it falls/);
 });
 
 test("an end question that's fine stays as Claude wrote it", async () => {

@@ -1,8 +1,9 @@
 // homie while a cook records (/record, STACK.md "homie while recording"). The phone by the stove
 // streams the mic; we transcribe it in her language (stt.ts), and every few seconds, when the pacing
 // allows and she's quiet, homie decides whether to ask one short question (homie.ts). Phases:
-// intro (the hello) → recording ({type:"start"}) → wrapping_up ({type:"done"}: last questions, the
-// stories opt-in, goodbye) → ended. Status and every line homie says go to Convex (/live/*).
+// intro (the hello) → recording ({type:"start"}) → wrapping_up ({type:"done"}: how many questions are left, the
+// last questions and the stories opt-in back to back, the plate photo, goodbye) → ended. Status and every line
+// homie says go to Convex (/live/*).
 // What homie knows about a recording (pacing, what it asked, what she said, the hello) is kept per
 // recording, so a dropped socket picks up where it left off instead of starting over. A recording the
 // app ended while it couldn't reach us (live.endRecording) ends its socket quietly at the next Convex write.
@@ -17,13 +18,16 @@
 // starts a line while she talks, her answer is every turn until she's been quiet a while (listen), "not now" (the
 // card's tap, or said) skips just that question, and a question she doesn't answer gets one "still there?" and then
 // a kind let-off, after which homie asks nothing more. Every wait counts from when the phone has played the line.
+// homie first says how many questions it has (Caleb, Oct 25: so she "can expect how long they need to stay"), and the
+// app keeps homie big in the middle until they're over ({type:"hold"}: "homie should STAY in center expanded view
+// until all questions are finished").
 import WebSocket from "ws";
 import * as convex from "./convex.js";
 import { env } from "./env.js";
 import { callOf } from "./family.js";
 import { HomieAgent, isNotNow, translate, type AskKind, type Heard, type Line, type Who } from "./homie.js";
 import { rms, VOICE_RMS } from "./inkWhisper.js";
-import { fixedLine, scriptedOf, scriptedQuestion } from "./lines.js";
+import { countLine, fixedLine, scriptedOf, scriptedQuestion } from "./lines.js";
 import { DEMO, NORMAL, Pacer, SCRIPTED, type PaceRules } from "./pacing.js";
 import { SONIC_SAMPLE_RATE, type AudioFormat } from "./sonic.js";
 import { createStt, speak } from "./speech.js";
@@ -109,7 +113,12 @@ type Memory = {
   /** The hello's voice, wall-clock ms (logged with the hello once t0 is known). */
   introSaid?: { start: number; end: number };
   reactedAt: number;
+  /** The end questions, written once (a reconnect asks the rest of these, so the count line stays true). */
+  endPlan?: { kind: AskKind; line: Line }[];
   endAsked: number;
+  /** The wrap-up's count line has been said (a reconnect doesn't say it again). */
+  counted: boolean;
+  /** The opt-in was asked and its wait is over (answered, skipped or not): it isn't asked again. */
   optInDone: boolean;
   /** She didn't answer a wrap-up question even after "still there?": homie asks nothing more (the plate is a tap). */
   letOff: boolean;
@@ -145,6 +154,7 @@ function memoryOf(recordingId: string, rules: PaceRules, fresh: boolean): Memory
     introLogged: false,
     reactedAt: 0,
     endAsked: 0,
+    counted: false,
     optInDone: false,
     letOff: false,
     sttHeard: old?.sttHeard ?? false,
@@ -156,6 +166,14 @@ function memoryOf(recordingId: string, rules: PaceRules, fresh: boolean): Memory
   };
   memories.set(recordingId, m);
   return m;
+}
+
+/**
+ * What the wrap-up's count line counts (lines.ts countLine): the spoken questions left, `endLeft` end questions and then
+ * the stories opt-in (none after a let-off), and whether the plate photo comes (filmed in the app, not taken yet).
+ */
+export function wrapUpCount(endLeft: number, m: Pick<Memory, "optInDone" | "letOff" | "camera" | "plateDone">) {
+  return { questions: m.letOff ? 0 : endLeft + (m.optInDone ? 0 : 1), photo: m.camera && !m.plateDone };
 }
 
 /** What a Recording talks to. Tests pass fakes. */
@@ -228,6 +246,8 @@ export class Recording {
   private loudest = 0;
   /** homie's "still there?" and let-off in her language, made once per wrap-up. */
   private spare?: Promise<{ stillThere: Line; letOff: Line }>;
+  /** This socket told the app to keep homie big in the middle ({type:"hold", on:true}) while the questions run. */
+  private holding = false;
   /** Quiet after her last words that ends a wrap-up answer, for her speech-to-text (ANSWER_GAP_MS). */
   private gapMs = ANSWER_GAP_MS["ink-2"];
   private storyInProgress = false;
@@ -322,6 +342,7 @@ export class Recording {
         this.enterRecording();
       } else {
         this.setPhase("wrapping_up");
+        this.holdForQuestions(); // back in the middle of the questions: homie stays big from the first message
         this.flow(() => this.wrapUp());
       }
     }
@@ -397,6 +418,7 @@ export class Recording {
     this.hush();
     if (this.pending?.dropTimer) clearTimeout(this.pending.dropTimer);
     this.pending = undefined;
+    this.hold(false);
     this.setPhase("ended");
     this.state("quiet");
     this.ws.close(4404);
@@ -480,6 +502,7 @@ export class Recording {
     if (this.phase !== "intro" && this.phase !== "recording") return;
     this.setPhase("wrapping_up");
     this.hush();
+    this.holdForQuestions(); // before the live card's drop, so homie never shrinks and grows again
     if (this.pending) this.drop("ignored");
     for (const t of this.timers) clearInterval(t);
     this.timers = [];
@@ -490,56 +513,68 @@ export class Recording {
   }
 
   /**
-   * The last questions, the stories opt-in and the goodbye. If the socket closes partway, it stops without
-   * writing anything more and leaves Convex at wrapping_up; her reconnect finishes what's left. After a let-off
-   * (she didn't answer, even after "still there?") homie asks nothing more: the plate photo (a tap), then goodbye.
+   * The end, in this order: the count line ("Before we send it, two quick questions and a photo of your plate."), the
+   * end questions and the stories opt-in back to back, then (filmed in the app) the plate photo, and the goodbye. The
+   * app keeps homie big in the middle from just before the count line until the next line after the last question
+   * (hold). If the socket closes partway, it stops without writing anything more and leaves Convex at wrapping_up; her
+   * reconnect finishes what's left (the same questions, with no second count line). After a let-off (she didn't
+   * answer, even after "still there?") homie asks nothing more: the plate photo (a tap), then goodbye.
    */
   private async wrapUp() {
     if (this.wrapStarted || this.closed) return;
     this.wrapStarted = true;
     this.state("thinking");
     await this.names;
-    void this.spareLines(); // made now (translated, in most languages) so homie never goes deaf to make one
-    const first = this.mem.endAsked === 0;
-    const questions = this.mem.letOff
-      ? []
-      : await this.homie
-          .endQuestions(this.mem.heard, this.mem.asked, this.pacer.rules.maxEnd - this.mem.endAsked)
-          .catch((err) => (console.warn("end questions", err.message), []));
-    for (const [i, q] of questions.entries()) {
-      let line = q.line;
-      if (i === 0 && first) {
-        const pre = await fixedLine(questions.length > 1 ? "beforeYouGo2" : "beforeYouGo1", this.who, this.whoLatin);
-        line = { text: `${pre.text} ${line.text}`, textEn: `${pre.textEn} ${line.textEn}` };
+    // Made now (translated, in most languages) so homie never goes deaf to make one, and the count line for every
+    // number it may come to, while Claude writes the questions.
+    void this.spareLines();
+    const optInLine = fixedLine("optIn", this.who, this.whoLatin);
+    const { questions: most, photo } = wrapUpCount(this.pacer.rules.maxEnd - this.mem.endAsked, this.mem);
+    const counts = new Map<number, Promise<Line | null>>();
+    for (let n = 1; n <= most && !this.mem.counted; n++) counts.set(n, countLine(n, photo, this.who, this.whoLatin));
+    const questions = await this.endLeft();
+    if (this.closed) return;
+    const spoken = wrapUpCount(questions.length, this.mem).questions;
+    if (spoken) this.hold(true); // already on since done (holdForQuestions)
+    if (!this.mem.counted) {
+      const count = await (counts.get(spoken) ?? countLine(spoken, photo, this.who, this.whoLatin));
+      if (count) {
+        await this.untilQuiet();
+        await this.sayFixed(count);
+        if (this.closed) return; // she may not have heard it: a reconnect says it again
       }
-      await this.askAndWait("end", line);
+      this.mem.counted = true;
+    }
+
+    for (const q of questions) {
+      await this.askAndWait("end", q.line);
       if (this.closed) return;
       if (this.mem.letOff) break;
     }
 
-    // Filmed in the app: a photo of the plate for the cover. The phone takes it; she can skip it.
-    if (this.mem.camera && !this.mem.plateDone) {
-      await this.plate();
+    // Unanswered (a let-off included), the opt-in stays unset.
+    if (!this.mem.optInDone && !this.mem.letOff) {
+      const reply = await this.askAndWait("optin", await optInLine);
+      if (this.closed && !reply) return; // she may not have heard it: a reconnect asks again
+      // Asked: a reconnect never asks it again (that would be one more than the count line said).
+      this.mem.optInDone = true;
+      // Her answer counts even if the socket closed while we read it.
+      const yes = reply ? await this.homie.yesNo(reply).catch(() => null) : null;
+      if (yes !== null) await this.deps.convex.setOptIn(this.token, this.recordingId, yes).catch((err) => console.warn("live/optin", err.message));
       if (this.closed) return;
     }
 
-    // Unanswered (a let-off included), the opt-in stays unset.
-    if (!this.mem.optInDone && !this.mem.letOff) {
-      const optIn = await fixedLine("optIn", this.who, this.whoLatin);
-      const reply = await this.askAndWait("optin", optIn);
-      if (this.closed && !reply) return;
-      const yes = reply ? await this.homie.yesNo(reply).catch(() => null) : null;
-      if (yes !== null) {
-        // Her answer counts even if the socket closed while we read it.
-        this.mem.optInDone = true;
-        await this.deps.convex.setOptIn(this.token, this.recordingId, yes).catch((err) => console.warn("live/optin", err.message));
-      }
+    // The questions are over; the hold ends with the next line. Filmed in the app: a photo of the plate for the
+    // cover. The phone takes it; she can skip it.
+    if (photo) {
+      await this.plate();
       if (this.closed) return;
     }
 
     const closing = await fixedLine("closing", this.who, this.whoLatin);
     await this.untilQuiet();
     if (this.closed) return;
+    this.hold(false);
     const closingSaid = await this.say(closing, "closing");
     if (this.closed) return; // she may not have heard the goodbye: a reconnect says it again
     void this.log("closing", closing, "spoken", undefined, closingSaid && this.span(closingSaid));
@@ -550,6 +585,42 @@ export class Recording {
     memories.delete(this.recordingId);
     // Already ended underneath (the app's stop button) is fine: that's where this was going.
     await this.saveStatus("ended").catch(this.failed("live/status"));
+  }
+
+  /**
+   * The end questions still to ask. Claude writes them once per recording (mem.endPlan), so a reconnect asks the rest
+   * of the same ones and what the count line said stays true. None after a let-off.
+   */
+  private async endLeft() {
+    if (this.mem.letOff) return [];
+    if (!this.mem.endPlan) {
+      const plan = await this.homie
+        .endQuestions(this.mem.heard, this.mem.asked, this.pacer.rules.maxEnd - this.mem.endAsked)
+        .catch((err) => (console.warn("end questions", err.message), []));
+      if (this.closed) return []; // the reconnect writes its own
+      this.mem.endPlan = plan;
+    }
+    return this.mem.endPlan.slice(this.mem.endAsked);
+  }
+
+  /**
+   * {type:"hold"}: on, the app keeps homie big in the middle through the wrap-up's spoken questions, back to back
+   * (Caleb, Oct 25: "homie should STAY in center expanded view until all questions are finished"); off, it goes back to
+   * its corner. Never sent between a say and its say_end (an older app ends a line's audio on any other message).
+   */
+  private hold(on: boolean) {
+    if (this.holding === on) return;
+    this.holding = on;
+    this.send({ type: "hold", on });
+  }
+
+  /**
+   * Holds from the wrap-up's first message ("I'm done", or a reconnect into it) when a spoken question is still to
+   * come: the opt-in, at least, since it comes after the end questions and only a let-off skips it. So homie doesn't
+   * shrink to the corner while Claude writes the end questions.
+   */
+  private holdForQuestions() {
+    if (!this.mem.letOff && !this.mem.optInDone) this.hold(true);
   }
 
   /**
@@ -732,6 +803,7 @@ export class Recording {
     if (this.closed) return;
     const promptId = await this.log("plate", line, "spoken");
     if (this.closed || !promptId) return;
+    this.hold(false); // the questions are over: homie goes back to its corner as the camera comes up
     // The phone shows its shutter with the ask: a photo (or "not now") counts from now, even mid-line.
     let timer: NodeJS.Timeout | undefined;
     const answer = new Promise<boolean | null>((resolve) => {
@@ -999,6 +1071,7 @@ export class Recording {
   private flow(fn: () => Promise<void>) {
     this.flows = this.flows.then(fn).catch((err) => {
       console.error("record flow:", (err as Error).message);
+      this.hold(false);
       this.send({ type: "error", message: "homie had a problem" });
     });
   }
@@ -1010,7 +1083,7 @@ export class Recording {
    */
   private async say(line: Line, kind: string): Promise<{ start: number; end: number } | undefined> {
     if (this.closed) return;
-    this.speaking?.abort();
+    if (this.speaking) this.hush(); // never two at once (flows run one by one); the old line gets its say_end
     const ctrl = new AbortController();
     this.speaking = ctrl;
     this.state("speaking");
@@ -1025,7 +1098,7 @@ export class Recording {
           console.log(`sonic first audio ${first - t0}ms (${kind})`);
         }
         bytes += chunk.length;
-        if (this.ws.readyState === WebSocket.OPEN) this.ws.send(chunk);
+        if (this.ws.readyState === WebSocket.OPEN && !ctrl.signal.aborted) this.ws.send(chunk);
       }, { language: this.who.language, voice: env.homieVoice, kind });
     } catch (err) {
       if (!ctrl.signal.aborted) console.warn("sonic", (err as Error).message);
@@ -1041,7 +1114,8 @@ export class Recording {
     // The phone sends silence while it plays, so this mute is only a backup. It ends when the phone can first have
     // finished (no load time), so a quick "yes" right after the line isn't cut.
     this.muteUntil = sayEnd + length;
-    this.send({ type: "say_end", interrupted: aborted });
+    // A stopped line had its say_end from hush() (or its socket closed).
+    if (!aborted) this.send({ type: "say_end", interrupted: false });
     if (this.speaking === ctrl) this.speaking = null;
     // The phone is still playing it; hush() can cut that short too.
     this.playing = ctrl;
@@ -1063,9 +1137,13 @@ export class Recording {
     void this.deps.convex.promptSaid(this.token, promptId, this.span(said)).catch((err) => console.warn("live/prompt-said", (err as Error).message));
   }
 
-  /** Stop homie now: the line Sonic is still making, or the one the phone is still playing (an extra say_end). */
+  /**
+   * Stop homie now: the line Sonic is still making (its say_end goes now, so nothing else is sent between its say and
+   * say_end), or the one the phone is still playing (an extra say_end).
+   */
   private hush() {
-    if (this.playing && !this.playing.signal.aborted && Date.now() < this.playingUntil) this.send({ type: "say_end", interrupted: true });
+    const making = this.speaking && !this.speaking.signal.aborted;
+    if (making || (this.playing && !this.playing.signal.aborted && Date.now() < this.playingUntil)) this.send({ type: "say_end", interrupted: true });
     this.speaking?.abort();
     this.playing?.abort();
     this.muteUntil = this.playingUntil = 0;

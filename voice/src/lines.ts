@@ -31,8 +31,6 @@ const FIXED = {
     en: `Hi, ${w.call}. Good to see you again. ${forToday(w).en}Start whenever you're ready.`,
     mr: `नमस्कार, ${w.call}! पुन्हा भेटून छान वाटलं. ${forToday(w).mr}तयार झालात की सुरू करा.`,
   }),
-  beforeYouGo2: () => ({ en: "Before you go, two quick ones.", mr: "जाण्याआधी दोन छोटे प्रश्न." }),
-  beforeYouGo1: () => ({ en: "Before you go, one quick one.", mr: "जाण्याआधी एक छोटा प्रश्न." }),
   // Filmed in the app: the last thing homie asks for is a photo of the plate (the recipe's cover).
   // TODO(caleb): native Marathi check, like the lines above.
   plate: (w) => ({
@@ -75,6 +73,29 @@ async function lineOf(line: Fixed, w: Who, latin: Who): Promise<Line> {
 
 /** A fixed line in the cook's language, with its English. */
 export const fixedLine = (name: FixedLine, w: Who, latin: Who = w): Promise<Line> => lineOf(FIXED[name], w, latin);
+
+const EN_NUMBERS = ["", "one", "two", "three"];
+const MR_NUMBERS = ["", "एक", "दोन", "तीन"];
+
+/**
+ * The wrap-up's first line: how many questions homie has left and whether a plate photo comes, so she knows how long
+ * to stay (Caleb, Oct 25: "homie should specify the number of questions it has for the parent"). Nothing to count
+ * (no question, no photo): null. Nothing homie says later may contradict it ("one more", "last question").
+ * TODO(caleb): native Marathi check, like the lines above (new on Oct 25).
+ */
+const COUNT: (questions: number, photo: boolean) => Fixed = (n, photo) => () => {
+  if (!n) return { en: "Before we send it, one photo of your plate.", mr: "पाठवण्याआधी तुमच्या ताटाचा एक फोटो." };
+  const en = `${EN_NUMBERS[n] ?? n} quick question${n === 1 ? "" : "s"}`;
+  const mr = `${MR_NUMBERS[n] ?? n} ${n === 1 ? "छोटा" : "छोटे"} प्रश्न`;
+  return photo
+    ? { en: `Before we send it, ${en} and a photo of your plate.`, mr: `पाठवण्याआधी ${mr}, आणि तुमच्या ताटाचा एक फोटो.` }
+    : { en: `Just ${en} before we send it.`, mr: `पाठवण्याआधी फक्त ${mr}.` };
+};
+
+/** The count line for `questions` spoken questions (and the plate photo, if `photo`), or null when there's neither. */
+export async function countLine(questions: number, photo: boolean, w: Who, latin: Who = w): Promise<Line | null> {
+  return questions > 0 || photo ? lineOf(COUNT(questions, photo), w, latin) : null;
+}
 
 /**
  * HOMIE_SCRIPTED=1 (the filmed demo): homie asks these in turn, one every 5 minutes, without deciding

@@ -321,12 +321,25 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   - `{ type: "say", text, textEn, kind, ai: true, audio }` + binary audio + `{ type: "say_end", interrupted }`.
     `kind` is a `homiePrompts.kind`. The app lights the pot just before audio starts. If the cook taps start or
     done while homie's line is still playing, an extra `{ type: "say_end", interrupted: true }` tells the app to
-    stop it.
+    stop it. A line stopped while it's still being made gets its `say_end` (`interrupted: true`) at once, and no
+    more of its audio: every `say` has exactly one `say_end` before any other message but `state`.
   - `{ type: "ask", promptId, text, textEn, kind }`: show the caption card. `{ type: "drop", promptId }`: fade it
     (no answer in ~10 s, "not now", or she's done; in the wrap-up, no answer even after "still there?"). `{ type: "answered", promptId }`. Kind `show` (filmed in the
     app): "Can you tilt the pan toward me?". Kind `plate` (filmed in the app, in the wrap-up after the last
-    questions): the app shows the camera big and takes the photo (`live.setCover`), then sends
+    question, the opt-in): the app shows the camera big and takes the photo (`live.setCover`), then sends
     `{ type: "plate", ok }`; no answer in 75 s, or "not now", skips it.
+  - `{ type: "hold", on }` (Oct 25, wrap-up only): `on: true` = keep homie big in the middle; the spoken questions
+    come back to back, so don't shrink it to the corner between them. `on: false` = they're over, back to the
+    corner. On comes with "I'm done": right after `phase: wrapping_up` (and the `say_end` of a line it stopped),
+    before the live card's `drop` and before any line, so homie never shrinks while Claude writes the end
+    questions (the opt-in is always still to come, so there is always a question). On a reconnect in the middle
+    of the questions: right after `ready` and `phase`. Off comes right before the plate `ask` or the goodbye `say`, after the last question's
+    wait ended (answered, `not_now` or ignored) and after the let-off has played if there was one. "Still there?"
+    and the let-off happen while it's on. No hold when no spoken question is left (a reconnect during the plate
+    photo). Never on at `ended` (off is sent before the goodbye, and before `phase: ended` when the recording ended
+    underneath: "I'm done" on a recording the app had already ended gives on, then off one round trip later); a new
+    socket starts with it off. Never sent between a `say` and its `say_end`. Backward
+    compatible: older apps ignore unknown types (`app/src/lib/live/homie.ts` `onMessage` has no case for it).
   - `{ type: "transcript", text, final }`, `{ type: "error", message }`. Close 4401 signed out, 4404 no such recording
     (or it already ended), 4409 a newer socket for the same recording took over (don't reconnect that one).
 - A reconnect picks up where the last socket stopped (same pacing, questions and transcript; the wrap-up finishes
@@ -353,8 +366,39 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   speech-to-text that has shown nothing in the recording (or errored since): no nudge or let-off, a plain 15 s wait
   per question. Every wait and each line's `said` span count from when the phone plays the line: it plays only once
   it has all of it, ~250 ms after `say_end` (`PLAYER_LOAD_MS`), not from the first chunk. A turn with no
-  words (Ink can end one empty) answers nothing, and a live question's card fades 10 s after it. No new messages:
-  the app needs no change.
+  words (Ink can end one empty) answers nothing, and a live question's card fades 10 s after it. (#83 added no
+  messages.)
+- The wrap-up's order and count (Oct 25, `docs/agents/memory/homie-counts-end-questions.md`; `record.ts` `wrapUp`):
+  the count line, the end questions (≤ 2, written once per recording: a reconnect asks the rest of the same ones)
+  and the stories opt-in back to back inside `hold`, then (filmed in the app) the plate photo and "Got it. Thank
+  you!", then the goodbye. The count line is homie's first line after "I'm done", a `say` kind `reaction` (saved as
+  a `reaction` prompt with `said`), never an `ask`: the real number of spoken questions (end questions left + the
+  opt-in) and the plate photo if it comes: "Before we send it, three quick questions and a photo of your plate." /
+  "Just two quick questions before we send it." / "Before we send it, one photo of your plate." (no line when
+  there's nothing). Hand-written Marathi ("पाठवण्याआधी फक्त दोन छोटे प्रश्न."); other languages translate the
+  English once, while Claude writes the questions. It replaces the old "Before you go, two quick ones." lead-in;
+  said once per recording (not again on a reconnect unless it was cut off), and nothing later says "one more" or
+  "last question" (the prompt asks Claude not to, and an end question that opens that way, `homie.ts`
+  `countsItself`, becomes the written one of its kind). A spoken "not now" right after the count line answers
+  nothing: the first question is still asked, and she can say "not now" to it. The opt-in is asked once: a reconnect after its wait never asks it again (only a clear yes or no is saved). Live
+  questions while she cooks are never back to back (the pacing's gap is 3.5 min, 90 s with `HOMIE_DEMO=1`), so
+  they get no hold.
+- homie stays in the centre across the wrap-up's questions (Oct 25, Caleb: no "back to the corner, then
+  straight back to the middle" between two questions). Service → app `{ type: "hold", on: true }` the moment she
+  taps "I'm done" (order: phase `wrapping_up`, `say_end`, hold on, then the drop of any live card), before the
+  count line or any line, and on a reconnect mid-run right after the phase; `{ type: "hold", on: false }` once the
+  run is over (after the last answer or skip, and after any let-off line), right before the plate photo ask or the
+  goodbye. App side (`lib/live/homie` `hold`/`said`, `components/record/recordingLogic`
+  `heldAfter`/`momentView`/`liftToFit`, `AskMoment`): homie's centred moment is up while held or while a question
+  (not the plate) is up, so a live card up at "I'm done" never shrinks: its words fade out and homie stays, thinking
+  with no words while the questions are written. homie never moves or shrinks while held (on a short phone a long
+  question can lift it once, only up, to fit), and the words under it crossfade in place. Between questions it
+  shows only what homie is saying (a `say` that starts while held with no question up: the count line, a let-off;
+  a question clears it) or nothing; the listening bars, "Just answer out loud" and the tap that skips ("not now")
+  only while a question is up. `ready`, any close (4409 included), a pause, `ended`, a plate ask and a stalled
+  wrap-up (the app ending it without homie) turn the hold off. An older service never sends it: each question
+  opens and closes on its own, as before. Live questions while filming are minutes apart (the pacing below), so
+  they never need it.
 - The service ignores incoming audio while homie speaks, until the phone can first have finished playing the line
   (`say_end` + its length), so it never hears itself; the app also sends silence while it plays, so a quick reply
   right after the line isn't cut. homie gives guidance, never cooking advice (`docs/agents/memory/homie-guidance-only.md`). Pacing
