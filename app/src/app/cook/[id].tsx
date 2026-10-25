@@ -474,6 +474,7 @@ export default function CookScreen() {
                   start_s={moment?.startS ?? step.start_s}
                   end_s={moment?.endS ?? step.end_s}
                   autoPlay={!!moment}
+                  appPlays={!!moment}
                   onEnded={moment ? () => setMoment(null) : undefined}
                   height={clipH}
                   radius={radii.panel}

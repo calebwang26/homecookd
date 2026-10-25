@@ -25,8 +25,8 @@ import { labelAbove, sayPhase } from '@/lib/homie/logic';
 import { setHomie, type HomieFrame } from '@/lib/homie/store';
 import { ANSWER_KEY } from '@/lib/live/answers';
 import type { VoiceCooking } from '@/lib/live/voice';
-import { clockText, kidStartedVideo, secondsLeft, timerA11y, type CookTimer } from '@/lib/live/voiceLogic';
-import { playheadAt, useNowPlaying, usePlayhead, useVideoPlaying } from '@/lib/media';
+import { clockText, secondsLeft, timerA11y, type CookTimer } from '@/lib/live/voiceLogic';
+import { playheadAt, useKidVideoPlaying, useNowPlaying, usePlayhead, useVideoPlaying } from '@/lib/media';
 import { colors, radii, shadows } from '@/theme/tokens';
 
 const ASKED_SHOWN_MS = 8000;
@@ -117,8 +117,8 @@ export function ClipCaption({ quote, quoteEn }: { quote: string; quoteEn?: strin
  * The cook's own voice is playing: the resting pot steps back (shrinks) and homie says nothing on its
  * own until it stops (setVideo); while her clip or her voice note answers the kid, homie's next line
  * waits for her too. `herClip`: the moment homie asked for is on screen (play_clip), so the step video
- * playing is her answer. Any other video is one the kid started: it has the sound, and homie turns off
- * (setVideo's `kid`). (Half duplex is lib/live/mic's.)
+ * playing is her answer. A play the kid started (lib/media kidVideoPlaying: a tap, never her clip) has
+ * the sound, and homie turns off (setVideo's `kid`). (Half duplex is lib/live/mic's.)
  */
 export function VoiceHold({ voice, videoUrl, herClip }: { voice: Pick<VoiceCooking, 'setHold' | 'setVideo'>; videoUrl?: string | null; herClip: boolean }) {
   const now = useNowPlaying();
@@ -129,7 +129,7 @@ export function VoiceHold({ voice, videoUrl, herClip }: { voice: Pick<VoiceCooki
   // (a story, her voice note).
   const hers = anyVideo || (sound && sayPhase(now.key, now.phase) === 'none');
   const answering = (herClip && video) || (sound && !!now.key?.startsWith(ANSWER_KEY));
-  const kid = kidStartedVideo({ anyVideo, herClip, stepVideo: video });
+  const kid = useKidVideoPlaying();
   // homie's own line playing (an answer that paused the video): a line that waited goes once it ends.
   const talking = sayPhase(now.key, now.phase) !== 'none';
   const { setHold, setVideo } = voice;

@@ -22,7 +22,9 @@
 // The hand-off between homie and a video is smooth (Caleb, Oct 25): a video the kid plays fades the
 // audio out over HANDOFF_FADE_MS (`stopAudio(key, { fadeMs })`: the clip is over at once, only its
 // sound trails off), and a tap on homie fades the videos out the same way, then pauses them
-// (`pauseAllVideos({ fadeMs })`). Each player is back at full volume for its next play.
+// (`pauseAllVideos({ fadeMs })`). Each player is back at full volume for its next play. A play waits
+// at the gate lib/live/voice registers (setVideoGate) until homie's recorder has let go of the iOS
+// session, at most VIDEO_GATE_MAX_MS; the playhead says whether the kid started it (kidVideoPlaying).
 //
 // FOLLOWING ALONG: `usePlayhead(select)` reads where a step video is right now (one plays at a
 // time), so a list can light up the line being said (Substeps). `playFrom(at)` jumps the clip to a
@@ -180,7 +182,9 @@ let seekVersion = 0;
 let seekQueue: Promise<void> = Promise.resolve();
 let loadTimer: ReturnType<typeof setTimeout> | null = null;
 // A stopped clip's sound still trailing off (stopAudio's fade): anything that plays or stops next ends it.
-let audioFade: { player: AudioPlayer; cancel: () => void } | null = null;
+// `done` resolves when it has (audioFaded).
+type AudioFade = { player: AudioPlayer; cancel: () => void; done: Promise<void>; ended: () => void };
+let audioFade: AudioFade | null = null;
 
 /** The trailing sound stops now, and its player is at full volume again for the next play. */
 function endAudioFade() {
@@ -194,6 +198,7 @@ function endAudioFade() {
     // released
   }
   setVolume(f.player, 1);
+  f.ended();
 }
 
 function set(next: Partial<EngineState>) {
@@ -211,11 +216,11 @@ function clearLoadTimer() {
   loadTimer = null;
 }
 
-/** The native seek, or SEEK_TIMEOUT_MS, whichever comes first. */
-function settle(seek: Promise<void>): Promise<void> {
+/** The native seek (or another wait), or `ms` (SEEK_TIMEOUT_MS), whichever comes first. */
+function settle(seek: Promise<void>, ms = SEEK_TIMEOUT_MS): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   const late = new Promise<void>((resolve) => {
-    timer = setTimeout(resolve, SEEK_TIMEOUT_MS);
+    timer = setTimeout(resolve, ms);
   });
   return Promise.race([seek, late]).finally(() => clearTimeout(timer));
 }
@@ -407,7 +412,9 @@ export function stopAudio(onlyKey?: string, opts: { fadeMs?: number } = {}) {
   endAudioFade();
   const p = player;
   if (p && opts.fadeMs && state.phase === 'playing') {
-    const fading = { player: p, cancel: () => {} };
+    let ended = () => {};
+    const done = new Promise<void>((resolve) => (ended = resolve));
+    const fading: AudioFade = { player: p, cancel: () => {}, done, ended };
     fading.cancel = fadeOut(p, opts.fadeMs, () => {
       if (audioFade === fading) endAudioFade();
     });
@@ -563,8 +570,10 @@ export function subtitleAt(quote: string | null | undefined, progress: number): 
 // ---------------------------------------------------------------------------------------------
 // Following along
 
-// The step video playing now (one at a time) and where it is, in seconds in its file.
-let videoHead: { owner: object; url: string; at: number } | null = null;
+// The step video playing now (one at a time), where it is (seconds in its file), and whether the kid
+// started this play and it still has the sound (`kid`: a tap on play, a substep, Watch again; never
+// her clip homie played, nor a video a tap on homie is fading out).
+let videoHead: { owner: object; url: string; at: number; kid: boolean } | null = null;
 const headListeners = new Set<() => void>();
 
 function setVideoHead(next: typeof videoHead) {
@@ -597,6 +606,41 @@ export function videoPlaying(): boolean {
 /** videoPlaying() in a component: re-renders only when a video starts or stops. */
 export function useVideoPlaying(): boolean {
   return useSyncExternalStore(subscribeHead, videoPlaying, videoPlaying);
+}
+
+/** A video the kid started is playing and has the sound (homie stays off and quiet meanwhile). */
+export function kidVideoPlaying(): boolean {
+  return videoHead?.kid === true;
+}
+
+/** kidVideoPlaying() in a component. */
+export function useKidVideoPlaying(): boolean {
+  return useSyncExternalStore(subscribeHead, kidVideoPlaying, kidVideoPlaying);
+}
+
+/**
+ * What a video waits for before it plays (lib/live/voice registers it): homie's recorder lets go of the
+ * iOS session first. audio-studio deactivates the session whenever the recorder starts or stops, and
+ * that stops a video already playing (it came back near silent, a second later). `kid`: the kid started
+ * this play, so homie turns off. Null: nothing is in the way, play now.
+ */
+export type VideoGate = (kid: boolean) => Promise<void> | null;
+let videoGate: VideoGate | null = null;
+/** The longest a video waits at the gate (homie's fade, then the recorder's stop); then it plays anyway. */
+export const VIDEO_GATE_MAX_MS = 400;
+
+/** Registers the gate; returns its removal (only while it is still this one). */
+export function setVideoGate(gate: VideoGate): () => void {
+  videoGate = gate;
+  return () => {
+    if (videoGate === gate) videoGate = null;
+  };
+}
+
+/** Resolves once no fade of the shared player is under way (at once when none is). */
+export function audioFaded(): Promise<void> {
+  const f = audioFade;
+  return f ? f.done : Promise.resolve();
 }
 
 /** Calls `l` whenever a video starts, moves or stops; returns the unsubscribe. */
@@ -687,15 +731,18 @@ export type ClipVideoState = {
  * inside the range) is where that first play starts instead of `start` (the full-screen player
  * picking up where the inline one was). A seek asked for before the source is ready lands there,
  * paused, once it is (the inline clip coming back from full screen).
+ * Every play is the kid's (a tap mounted the player, or a tap on it) unless `appPlays`: its autoplay is
+ * the app's own (her clip homie played). Each play waits at the gate (setVideoGate) before it sounds.
  */
 export function useClipVideo(
   url: string | null,
   start: number,
   end: number | null,
-  opts: { whole?: boolean; autoPlay?: boolean; aspectHint?: number | null; muted?: boolean; at?: number | null } = {},
+  opts: { whole?: boolean; autoPlay?: boolean; aspectHint?: number | null; muted?: boolean; at?: number | null; appPlays?: boolean } = {},
 ): ClipVideoState {
   const whole = !!opts.whole;
   const autoPlay = opts.autoPlay ?? true;
+  const appPlays = !!opts.appPlays;
   const s0 = Math.max(0, Math.floor(start || 0));
   const e0 = end != null && end > s0 ? end : null;
   const [phase, setPhase] = useState<Phase>(url ? 'loading' : 'error');
@@ -722,6 +769,10 @@ export function useClipVideo(
   const [stalled, setStalled] = useState(0);
   // The cancel of a fade under way (homie taking the sound): a play or a pause meanwhile ends it.
   const fading = useRef<(() => void) | null>(null);
+  // The kid started this play and it has the sound (videoHead `kid`); counted up on each play, so a
+  // play still waiting at the gate goes only if it's the latest.
+  const byKid = useRef(false);
+  const plays = useRef(0);
 
   const player = useVideoPlayer(url, (p) => {
     p.timeUpdateEventInterval = 0.25;
@@ -745,15 +796,26 @@ export function useClipVideo(
     fading.current = null;
     setVolume(player, 1);
   };
-  const resume = () => {
+  /**
+   * Plays (`kid`: the kid's own play). The video is in the room at once, before homie's voice is let
+   * go, so homie never shows listening in between (lib/live/voice); homie's voice trails off; and the
+   * sound starts once the gate is through (homie's recorder has let go of the iOS session).
+   */
+  const resume = (kid: boolean) => {
     wanted.current = true;
+    byKid.current = kid;
     unfade();
     pauseVideos(player);
-    // In the room before the voice is let go, so homie never shows listening in between (lib/live/voice).
-    if (url) setVideoHead({ owner: player, url, at: Date.now() < ignore.current ? target.current : now });
-    stopAudio(undefined, { fadeMs: HANDOFF_FADE_MS }); // never talk over the video: homie's voice trails off
-    player.play();
+    if (url) setVideoHead({ owner: player, url, at: Date.now() < ignore.current ? target.current : now, kid });
+    stopAudio(undefined, { fadeMs: HANDOFF_FADE_MS }); // never talk over the video
     setPhase('playing');
+    const play = ++plays.current;
+    const go = () => {
+      if (play === plays.current && wanted.current) player.play();
+    };
+    const gate = videoGate?.(kid);
+    if (!gate) return go();
+    void settle(gate.catch(() => {}), VIDEO_GATE_MAX_MS).then(go);
   };
   const halt = (next: Phase) => {
     wanted.current = false;
@@ -761,12 +823,12 @@ export function useClipVideo(
     player.pause();
     setPhase(next);
   };
-  const begin = () => {
+  const begin = (kid: boolean) => {
     started.current = true;
     const at = firstAt.current;
     firstAt.current = null;
     jump(whole ? 0 : at != null && at > s0 && (e0 == null || at < e0) ? at : s0);
-    resume();
+    resume(kid);
   };
   // The source is ready for the first time: a seek that waited lands (paused), else autoplay.
   const ready = () => {
@@ -778,7 +840,7 @@ export function useClipVideo(
       started.current = true;
       jump(waited);
       setPhase(e0 != null && waited >= e0 ? 'ended' : 'paused');
-    } else if (autoPlay && !skipStart.current) begin();
+    } else if (autoPlay && !skipStart.current) begin(!appPlays);
     else setPhase((p) => (p === 'loading' ? 'idle' : p));
   };
 
@@ -908,6 +970,9 @@ export function useClipVideo(
         return stop();
       }
       if (!fadeMs) return stop();
+      // homie has the sound from now on: a kid's video fading out no longer keeps it.
+      byKid.current = false;
+      if (videoHead?.owner === player && videoHead.kid) setVideoHead({ ...videoHead, kid: false });
       fading.current = fadeOut(player, fadeMs, stop);
     });
     return () => {
@@ -919,7 +984,7 @@ export function useClipVideo(
 
   // Following along (usePlayhead): where this clip is while it plays; let go when it stops or goes.
   useEffect(() => {
-    if (url && phase === 'playing') setVideoHead({ owner: player, url, at: now });
+    if (url && phase === 'playing') setVideoHead({ owner: player, url, at: now, kid: byKid.current });
     else if (videoHead?.owner === player) setVideoHead(null);
   }, [player, url, phase, now]);
   useEffect(
@@ -983,26 +1048,27 @@ export function useClipVideo(
         // Not playing yet: the first play starts there (now, or once the source is ready).
         firstAt.current = to;
         skipStart.current = false;
-        if (phase !== 'loading') begin();
+        if (phase !== 'loading') begin(true);
         return;
       }
       jump(to);
-      resume();
+      resume(true);
     },
     progress,
     aspect,
+    // The kid's own plays (a tap).
     play: () => {
-      if (!started.current || phase === 'ended') begin();
-      else resume();
+      if (!started.current || phase === 'ended') begin(true);
+      else resume(true);
     },
     pause: () => {
       if (phase === 'playing') halt('paused');
     },
     toggle: () => {
       if (phase === 'playing') halt('paused');
-      else if (!started.current || phase === 'ended') begin();
-      else resume();
+      else if (!started.current || phase === 'ended') begin(true);
+      else resume(true);
     },
-    replay: begin,
+    replay: () => begin(true),
   };
 }

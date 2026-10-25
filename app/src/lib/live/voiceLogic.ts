@@ -504,21 +504,38 @@ export function saysOnTap(v: { live: boolean; open: boolean; talking: boolean })
   return v.live && v.open && !v.talking;
 }
 
+/** A `say` this soon after the app sent { type: "tap" } (its first step line) is the tap's own line. */
+export const TAP_LINE_WAIT_MS = 2000;
+
 /**
- * A video the kid started is playing: any video but her clip homie played as an answer (play_clip, on
- * the step's own player). It takes the sound: homie's voice fades out and homie turns off.
+ * The line a tap on homie asked for: the first step line within TAP_LINE_WAIT_MS of the tap (`tapAt`,
+ * 0: none). It isn't the kid's yes to reading aloud (components/cooking/CookMoments onSay).
  */
-export function kidStartedVideo(v: { anyVideo: boolean; herClip: boolean; stepVideo: boolean }): boolean {
-  return v.anyVideo && !(v.herClip && v.stepVideo);
+export function answersTap(kind: SayKind, tapAt: number, now: number): boolean {
+  return kind === 'step' && tapAt > 0 && now - tapAt < TAP_LINE_WAIT_MS;
 }
 
 /**
- * While a video the kid started plays, a line of homie's that would pause it (an answer still on its
- * way, a step line) is dropped; the ones homie says on its own wait for it (waitsForVideo). A tap on
- * homie takes the sound back.
+ * While a video the kid started plays (lib/media kidVideoPlaying: a play the kid tapped, never her clip
+ * homie played), whatever of homie's would pause it is dropped: an answer or a step line still on its
+ * way, and a clip of hers from a turn still on its way ('clip': the kid's video keeps the sound). The
+ * lines homie says on its own wait for it instead (waitsForVideo). A tap on homie takes the sound back.
  */
-export function dropsForKidVideo(kind: SayKind, kidVideo: boolean): boolean {
-  return kidVideo && !waitsForVideo(kind);
+export function dropsForKidVideo(kind: SayKind | 'clip', kidVideo: boolean): boolean {
+  return kidVideo && (kind === 'clip' || !waitsForVideo(kind));
+}
+
+/**
+ * The iOS session and homie's recorder: audio-studio deactivates the session whenever the recorder
+ * starts or stops, and that stops anything playing (a video, homie's line). So a video waits for a
+ * start or stop under way (lib/media's gate, VIDEO_GATE_MAX_MS), and so does homie's next line, at most
+ * this long after its lit beat; a stop waits for homie's voice to fade out first.
+ */
+export const LINE_WAITS_FOR_MIC_MS = 600;
+
+/** homie's line may start now: no recorder start or stop under way, or it has waited long enough. */
+export function lineMayStart(v: { micBusy: boolean; since: number; now: number }): boolean {
+  return !v.micBusy || v.now - v.since >= LINE_WAITS_FOR_MIC_MS;
 }
 
 // ---------------------------------------------------------------------------------------------

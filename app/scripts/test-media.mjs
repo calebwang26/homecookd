@@ -734,7 +734,111 @@ try {
   M.stopAudio();
   watched.unmount();
 
-  console.log('Media regressions passed: audio/video seeking, bounds, pause/end states, stale updates, range ends inside the seek grace, stuck seeks, loading more video, paused while loading more, iOS "not playing" never a pause (nudged instead), the audio session kept for video, 60 s of play through stalls, native-control pauses, background, scrubbing before the first play, load timeouts, one voice at a time, full screen hand-off, listening accounting, chapter gaps, playhead, play from a substep, the homie-video hand-off fades.');
+  // Who started the play: the kid (a tap on it, or the tap that mounted it), or the app (her clip).
+  const tapped = mountVideo('kid-video', 0, 60, { autoPlay: false });
+  tapped.ready();
+  tapped.render().play();
+  assert.equal(M.kidVideoPlaying(), true, 'a tap on play is the kid’s');
+  tapped.render().pause();
+  tapped.render();
+  assert.equal(M.kidVideoPlaying(), false);
+  tapped.render().toggle();
+  assert.equal(M.kidVideoPlaying(), true, 'and so is a tap on the video');
+  M.pauseAllVideos({ fadeMs: M.HANDOFF_FADE_MS });
+  assert.equal(M.videoPlaying(), true, 'fading out for homie, still playing');
+  assert.equal(M.kidVideoPlaying(), false, 'but homie has the sound from the tap on');
+  fadeBy();
+  tapped.unmount();
+  const mounted = mountVideo('kid-mounted', 0, 60);
+  mounted.ready();
+  assert.equal(M.kidVideoPlaying(), true, 'autoplay after the kid’s tap mounted it (the poster, full screen)');
+  mounted.unmount();
+  const hers = mountVideo('her-clip', 0, 60, { appPlays: true });
+  hers.ready();
+  assert.equal(M.videoPlaying(), true);
+  assert.equal(M.kidVideoPlaying(), false, 'her clip homie played is the app’s');
+  hers.render().pause();
+  hers.render().play();
+  assert.equal(M.kidVideoPlaying(), true, 'played again by a tap: the kid’s');
+  hers.unmount();
+
+  // The gate (lib/live/voice): a play waits for homie's recorder to let go of the iOS session.
+  // The video is in the room first (playhead set, homie's voice let go), then the gate, then the sound.
+  const gateCalls = [];
+  let open;
+  const removeGate = M.setVideoGate((kid) => {
+    gateCalls.push({ kid, inRoom: M.videoPlaying(), voice: M.useNowPlaying().phase });
+    return new Promise((resolve) => (open = resolve));
+  });
+  M.playClip({ url: 'say-gate', key: 'say:gate' });
+  await flush();
+  const gated = mountVideo('gate-video', 0, 60, { autoPlay: false });
+  gated.ready();
+  gated.render().play();
+  assert.deepEqual(gateCalls, [{ kid: true, inRoom: true, voice: 'idle' }], 'the gate runs after the video is in the room and the voice is let go');
+  assert.equal(gated.player.playing, false, 'no sound until the gate is through');
+  assert.equal(gated.render().phase, 'playing', 'a spinner meanwhile, not a Play button');
+  open();
+  await flush();
+  assert.equal(gated.player.playing, true, 'then it plays');
+  // Capped: a gate that never opens lets it play after VIDEO_GATE_MAX_MS.
+  gated.render().pause();
+  gated.render().play();
+  assert.equal(gated.player.playing, false);
+  advance(M.VIDEO_GATE_MAX_MS);
+  await flush();
+  assert.equal(gated.player.playing, true, 'it plays anyway after the cap');
+  // A pause while it waits: the gate opening later plays nothing. Two plays: only the last one goes.
+  gated.render().pause();
+  gated.render().play();
+  const first = open;
+  gated.render().pause();
+  first();
+  await flush();
+  assert.equal(gated.player.playing, false, 'paused while waiting stays paused');
+  let playCount = 0;
+  const realPlay = gated.player.play;
+  gated.player.play = function () { playCount += 1; realPlay.call(this); };
+  gated.render().play();
+  const older = open;
+  gated.render().pause();
+  gated.render().play();
+  older();
+  open();
+  await flush();
+  assert.equal(playCount, 1, 'one play, the latest');
+  gated.unmount();
+  // Her clip asks the gate as the app's play; a gate with nothing in the way (null) plays at once.
+  gateCalls.length = 0;
+  removeGate();
+  const removeNull = M.setVideoGate((kid) => (gateCalls.push({ kid }), null));
+  const herGated = mountVideo('her-gate', 0, 60, { appPlays: true });
+  herGated.ready();
+  assert.deepEqual(gateCalls, [{ kid: false }]);
+  assert.equal(herGated.player.playing, true, 'nothing in the way: it plays at once');
+  herGated.unmount();
+  removeNull();
+  // homie's recorder stops only once homie's voice has faded (audioFaded).
+  fadeBy(); // the gate's fades above are over
+  let faded = false;
+  void M.audioFaded().then(() => { faded = true; });
+  await flush();
+  assert.equal(faded, true, 'no fade: at once');
+  faded = false;
+  M.playClip({ url: 'say-faded', key: 'say:faded' });
+  await flush();
+  const fader = mountVideo('fader-video', 0, 60, { autoPlay: false });
+  fader.ready();
+  fader.render().play();
+  void M.audioFaded().then(() => { faded = true; });
+  await flush();
+  assert.equal(faded, false, 'still fading');
+  fadeBy();
+  await flush();
+  assert.equal(faded, true, 'faded out');
+  fader.unmount();
+
+  console.log('Media regressions passed: audio/video seeking, bounds, pause/end states, stale updates, range ends inside the seek grace, stuck seeks, loading more video, paused while loading more, iOS "not playing" never a pause (nudged instead), the audio session kept for video, 60 s of play through stalls, native-control pauses, background, scrubbing before the first play, load timeouts, one voice at a time, full screen hand-off, listening accounting, chapter gaps, playhead, play from a substep, the homie-video hand-off fades, who started a play, the gate before a video sounds.');
 } finally {
   M.stopAudio();
   M.setHeardListener(null);

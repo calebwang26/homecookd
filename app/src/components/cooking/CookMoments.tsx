@@ -219,10 +219,11 @@ export function useCookMoments({ cookName }: { cookName: string }) {
   }, []);
 
   // homie reading a step after the offer = the kid said yes out loud; any other line = they didn't.
+  // The step line a tap on homie asked for (`tap`) is neither.
   const onSay = useCallback(
-    (kind: SayKind) => {
+    (kind: SayKind, line?: { tap: boolean }) => {
       const o = offer.current;
-      if (!o || kind === 'offer') return;
+      if (!o || kind === 'offer' || line?.tap) return;
       if (kind === 'step') {
         setRead('yes', true);
         closeMoment(o.id);
