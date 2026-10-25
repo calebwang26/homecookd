@@ -28,6 +28,13 @@ export const create = mutation({
     }
     const familyId = signed.family._id;
     const cookId = signed.person._id;
+    // An upload folder belongs to the family whose phone sent it: never another family's videos (a
+    // worker reads them, and deletes them when the job is stopped).
+    const sameFolder = await ctx.db
+      .query("jobs")
+      .withIndex("by_uploadPath", (q) => q.eq("uploadPath", path))
+      .take(20);
+    if (sameFolder.some((j) => j.familyId !== familyId)) throw new ConvexError("Upload the video before sending it.");
 
     const recording = args.recordingId && (await ctx.db.get("recordings", args.recordingId));
     if (args.recordingId && (!recording || recording.familyId !== familyId || recording.cookId !== cookId)) {
@@ -109,6 +116,30 @@ export const cancel = mutation({
     const job = await ctx.db.get(jobId);
     if (!job || job.familyId !== signed.family._id) return false;
     return await cancelJob(ctx, job);
+  },
+});
+
+/**
+ * The same stop by the upload folder, for a phone that doesn't have the Convex job id (its live list
+ * hasn't loaded, or matched nothing): `uploadId` is the signer's job id, the folder jobs.create got as
+ * "<uploadId>/". Stops every unfinished job of her family from that folder; true when one was stopped.
+ */
+export const cancelUpload = mutation({
+  args: { sessionToken: v.string(), uploadId: v.string() },
+  returns: v.boolean(),
+  handler: async (ctx, { sessionToken, uploadId }) => {
+    const signed = await requireSession(ctx, sessionToken);
+    requireCook(signed);
+    const id = uploadId.trim();
+    if (!id || id.length > 100 || id.includes("/")) return false;
+    const jobs = await ctx.db
+      .query("jobs")
+      .withIndex("by_familyId", (q) => q.eq("familyId", signed.family._id))
+      .order("desc")
+      .take(200);
+    let stopped = false;
+    for (const job of jobs) if (job.uploadPath === `${id}/` && (await cancelJob(ctx, job))) stopped = true;
+    return stopped;
   },
 });
 

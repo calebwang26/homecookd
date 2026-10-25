@@ -3,7 +3,12 @@
 //   src/components/parent/jobsLogic.ts   'uploading' keeps the sending half of the bar short of full,
 //                                        with "Still sending the video"; a live job is finished once
 //                                        it's 'done' and its recipe is in the library; which finished
-//                                        jobs still need their library id looked up
+//                                        jobs still need their library id looked up,
+//                                        and a job stopped anywhere is dropped
+//   src/components/parent/stops.ts       the x's "Stopped · Undo": Undo in time stops nothing (but a
+//                                        double tap on the x doesn't undo it), the stop runs once after
+//                                        the wait (or at once when she leaves the app), a stop that
+//                                        worked stays gone, a failed or timed-out one comes back
 //   node scripts/test-parent-jobs.mjs
 import assert from 'node:assert/strict';
 import { dirname, join } from 'node:path';
@@ -11,6 +16,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const J = await import(pathToFileURL(join(root, 'src/components/parent/jobsLogic.ts')).href);
+const S = await import(pathToFileURL(join(root, 'src/components/parent/stops.ts')).href);
 
 let passed = 0;
 const test = (name, fn) => {
@@ -62,6 +68,73 @@ test('only finished jobs with an unknown library id are looked up, once each', (
   ];
   assert.deepEqual(J.recipeIdsToLookUp(workers, { b: 'dish-b' }), ['a']);
   assert.deepEqual(J.recipeIdsToLookUp([], {}), []);
+});
+
+const wait = (ms) => new Promise((r) => setTimeout(r, ms));
+const atest = async (name, fn) => {
+  try {
+    await fn();
+    passed += 1;
+    console.log(`ok   ${name}`);
+  } catch (e) {
+    console.error(`FAIL ${name}`);
+    throw e;
+  }
+};
+
+await atest('the x: Undo in time stops nothing; otherwise the stop runs once and the row stays gone', async () => {
+  let runs = 0;
+  const run = async () => {
+    runs += 1;
+    return true;
+  };
+  S.stopSoon('a', run, 30);
+  assert.equal(S.stopState('a'), 'waiting');
+  S.stopSoon('a', run, 30); // a second tap while it waits
+  assert.equal(S.undoStop('a'), false, 'a double tap on the x lands on Undo: ignored');
+  assert.equal(S.stopState('a'), 'waiting');
+  assert.equal(S.undoStop('a', Date.now() + S.UNDO_GUARD_MS), true);
+  assert.equal(S.stopState('a'), null);
+  await wait(60);
+  assert.equal(runs, 0, 'undone: nothing stopped');
+
+  S.stopSoon('b', run, 30);
+  await wait(60);
+  assert.equal(runs, 1);
+  assert.equal(S.stopState('b'), 'gone');
+  assert.equal(S.undoStop('b', Date.now() + S.UNDO_GUARD_MS), false, 'too late to undo');
+  S.stopSoon('b', run, 10); // already gone: nothing more
+  await wait(30);
+  assert.equal(runs, 1);
+});
+
+await atest('a stop that fails comes back as it was; the background runs a waiting stop at once', async () => {
+  let release;
+  S.stopSoon('c', () => new Promise((r) => (release = r)), 10_000);
+  S.flushStops();
+  assert.equal(S.stopState('c'), 'stopping');
+  assert.equal(S.undoStop('c', Date.now() + S.UNDO_GUARD_MS), false, 'no undo once it is running');
+  S.flushStops(); // a second flush doesn't run it again
+  release(false);
+  await wait(0);
+  assert.equal(S.stopState('c'), null, 'failed: the row comes back');
+
+  S.stopSoon('d', async () => {
+    throw new Error('offline');
+  }, 10);
+  await wait(30);
+  assert.equal(S.stopState('d'), null, 'a throw counts as a failure');
+
+  // Offline, Convex queues the mutation instead of failing it: the wait gives up, so the row comes back.
+  await assert.rejects(S.inTime(new Promise(() => {}), 20), /no answer/);
+  assert.equal(await S.inTime(Promise.resolve(7), 20), 7);
+});
+
+test('a job stopped anywhere (this phone or another) is dropped; a real failure is not', () => {
+  assert.equal(J.liveJobCancelled({ stage: 'failed', error: 'Cancelled.' }), true);
+  assert.equal(J.liveJobCancelled({ stage: 'failed', error: 'We couldn’t finish this recipe.' }), false);
+  assert.equal(J.liveJobCancelled({ stage: 'writing' }), false);
+  assert.equal(J.liveJobCancelled(undefined), false);
 });
 
 console.log(`\n${passed} passed`);

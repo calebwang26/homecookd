@@ -37,8 +37,9 @@ http.route({
   handler: worker(async (ctx, body) => {
     const id = await jobId(ctx, body.jobId);
     if (!id) return fail(404, "no such job");
-    const ok = await ctx.runMutation(internal.worker.release, { jobId: id });
-    return ok ? json({ ok: true }) : fail(404, "no such job, or it isn't preparing");
+    const result = await ctx.runMutation(internal.worker.release, { jobId: id });
+    if (result === "cancelled") return fail(409, "cancelled");
+    return result === "ok" ? json({ ok: true }) : fail(404, "no such job, or it isn't preparing");
   }),
 });
 
@@ -54,13 +55,15 @@ http.route({
     if (!STAGES.includes(body.stage as Stage)) return fail(400, `stage must be one of ${STAGES.join(", ")}`);
     if (!isNum(body.progress) || body.progress < 0 || body.progress > 1) return fail(400, "progress must be 0..1");
     if (body.error !== undefined && typeof body.error !== "string") return fail(400, "error must be a string");
-    const ok = await ctx.runMutation(internal.worker.progress, {
+    const result = await ctx.runMutation(internal.worker.progress, {
       jobId: id,
       stage: body.stage as Stage,
       progress: body.progress,
       error: body.error as string | undefined,
     });
-    return ok ? json({ ok: true }) : fail(404, "no such job");
+    // 409: the cook stopped this job; the worker drops it and publishes nothing.
+    if (result === "cancelled") return fail(409, "cancelled");
+    return result === "ok" ? json({ ok: true }) : fail(404, "no such job");
   }),
 });
 
@@ -88,7 +91,8 @@ http.route({
       recipe: { ...parsed, recipeJsonUrl, language },
       memoriesOptIn: body.memoriesOptIn as boolean | undefined,
     });
-    return recipeId ? json({ recipeId }) : fail(404, "no such job");
+    if (recipeId === "cancelled") return fail(409, "cancelled");
+    return recipeId === "missing" ? fail(404, "no such job") : json({ recipeId });
   }),
 });
 

@@ -5,9 +5,17 @@
 //                                              video, so the sending half of the bar isn't full
 //   liveJobFinished(worker, libraryIds, ...)   'done' and its recipe is in the library: drop the row
 //   recipeIdsToLookUp(workers, known)          finished jobs whose library id isn't known yet
+//   liveJobCancelled(worker)                   stopped (on this phone or another): drop the row
 import type { JobStage } from '@/lib/live/convex';
 
-type Worker = { stage: JobStage; recipeId?: string };
+type Worker = { stage: JobStage; recipeId?: string; error?: string };
+
+/** What Convex's jobs.cancel writes (convex/jobs.ts CANCELLED). */
+const CANCELLED = 'Cancelled.';
+
+export function liveJobCancelled(worker: Worker | undefined): boolean {
+  return worker?.stage === 'failed' && worker.error === CANCELLED;
+}
 
 export const STAGE_HINT: Record<Exclude<JobStage, 'done' | 'failed'>, string> = {
   uploading: 'Still sending the video',
