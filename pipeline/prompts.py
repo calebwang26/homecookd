@@ -30,8 +30,10 @@ SHORTEN_PROMPT.format(recipe=<json>)   (pipeline/shorten.py: cook mode's short s
 SHORTEN_RETRY_SUFFIX.format(errors=..., previous=<json>)
 ALIGN_PROMPT.format(title=<json string>), ALIGN_STEP.format(...), ALIGN_RETRY_SUFFIX.format(errors=...)
     (pipeline/align.py: when each substep starts in its step's audio clip; clip times are MM:SS like extraction's)
-COVER_PROMPT.format(title=<json string>, clip_mmss=...)
-    (pipeline/cover.py: the second in the video's last minutes where the finished dish looks best; the cover photo)
+COVER_PROMPT.format(title=<json string>, clip_mmss=..., step_span=...)
+    (pipeline/cover.py: the second in the video's last minutes where the finished dish looks best, the cover photo,
+    and the second inside the last step where it shows best, that step's still)
+COVER_BOX_PROMPT.format(title=<json string>)   (pipeline/cover.py: the dish's box in the cover frame, to crop to)
 """
 
 EXTRACT_PROMPT = """\
@@ -464,14 +466,26 @@ Answer again for the steps below only, following all the rules above.
 
 COVER_PROMPT = """\
 This is the end of a home video of a cook making {title}. The clip is {clip_mmss} long. We need the recipe's
-cover photo: one real frame from this clip, shown big on the family's phones.
+cover photo: one real frame from this clip, which we crop tightly to the dish and show big on the family's phones.
 
-Find the moment where the FINISHED dish looks best: cooked, and ideally served on a plate or in a bowl, with
-any garnish on. Prefer a frame where the food is in focus, well lit, seen from above or close up, fills a good
-part of the frame and is not hidden by hands, a spoon, steam or a lid. Food still cooking in the pan counts
-only if the finished dish is never shown served. Never pick a closed container or a raw ingredient, and avoid
-frames where people (the cook or anyone watching) take up much of the picture: the food is the subject.
+Find the moment, anywhere in the clip, where the FINISHED dish itself looks best: cooked, and ideally served on
+a plate or in a bowl, with all its garnish on. Because we crop to the dish, what else is in the frame (people,
+jars, the counter) doesn't matter. What matters: the dish is as BIG in the frame as it gets (close to the
+camera), in focus, well lit, seen whole, and not hidden by hands, a spoon, steam or a lid. Food still cooking in
+the pan counts only if the finished dish is never shown served. Never pick a closed container or a raw ingredient.
 
 Return found = true and at = the MM:SS time in THIS clip (from 00:00) of that moment. If the finished dish is
 never clearly visible, return found = false and at = "00:00".
+
+The recipe's last step is {step_span}. Its photo is shown while the family cooks that step.
+Separately, step_at = the MM:SS time in THIS clip, inside that span only, where the finished dish shows best (the
+same rules; this one is shown uncropped, so the dish should read well in the whole frame), or "" if it isn't
+visible inside that span. at and step_at may be the same moment if that is the best one for both.
+"""
+
+COVER_BOX_PROMPT = """\
+This frame is the cover photo of a home recipe for {title}. Find the finished dish in it: the plate, bowl or pan
+of food, with its whole rim and any garnish, and nothing else (not the hands, other dishes, jars or people).
+Return found = true and box_2d = [ymin, xmin, ymax, xmax], each a whole number from 0 to 1000 as a share of the
+image's height (y) or width (x). If no finished dish is in the frame, return found = false and box_2d = [0, 0, 0, 0].
 """

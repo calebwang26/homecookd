@@ -410,6 +410,13 @@ def test_worker_plate_photo_download():
             assert "secret.example" not in log.getvalue(), log.getvalue()  # her photo's URL is never printed
 
 
+def test_step_still_second():
+    step = {"order": 10, "start_s": 578, "end_s": 603}
+    assert publish.still_time(step, {}) == 590.5  # the middle of the step
+    assert publish.still_time(step, {"10": 584.5}) == 584.5  # process.make_cover's frame of the finished dish
+    assert publish.still_time(step, {"10": 614.5}) == 590.5  # outside the step: the middle again
+    assert publish.still_time(step, {"9": 584.5}) == 590.5  # another step's second
+
 def main() -> None:
     tests = [(n, f) for n, f in globals().items() if n.startswith("test_") and callable(f)]
     failed = 0
