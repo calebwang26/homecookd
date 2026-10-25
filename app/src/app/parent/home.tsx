@@ -3,7 +3,8 @@
 // + "Good morning, Mom", then only:
 //  1. "Record a new recipe": the big green button, first on screen -> /record
 //  2. A recording still being made: the glasses video, its live row (the newest one only; all of them
-//     are in Recipes) and the kids' live questions to answer by voice (LiveQuestions); gone when empty
+//     are in Recipes) and the kids' live questions to answer by voice (LiveQuestions); gone when empty.
+//     An in-app recording a crash kept from sending is sent from here (components/record/useResendUnsent)
 //  3. "Leo made your Poha": the newest photo a kid sent of one of her dishes (MadeYourDishCard); gone
 //     when there's none
 //  4. "Invite family :)" (Caleb, Oct 24: back on Home, right under the photo card)
@@ -18,6 +19,7 @@ import { LiveQuestions } from '@/components/parent/LiveQuestions';
 import { MadeYourDishCard } from '@/components/parent/MadeYourDishCard';
 import { PendingList, usePendingRecipes } from '@/components/parent/PendingRecipes';
 import { GlassesVideoCard } from '@/components/record/GlassesVideoCard';
+import { useResendUnsent } from '@/components/record/useResendUnsent';
 import { ActingAsBar, MoveRequestPrompt, ProfileButton } from '@/components/profiles';
 import { ActionButton, LargeHeader, listEnter, RecordDotIcon, ScreenWash, ScrollHold, StickyHeader, useScrollHold, useScrollY } from '@/components/ui';
 import { WEB_URL } from '@/lib/api';
@@ -48,6 +50,8 @@ export default function ParentHome() {
   // width, like the bible. It also keeps homie's corner free, so the date never runs under the pot.
   const avatar = <ProfileButton homieRoom />;
   const pending = usePendingRecipes();
+  // A recording filmed in the app that a crash kept from sending goes now (its row joins `pending`).
+  useResendUnsent();
   const live = useMadeMyDish();
   const made = PREVIEW_MADE ?? live;
 

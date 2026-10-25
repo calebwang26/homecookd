@@ -11,6 +11,7 @@
 //   invalidateConvexRecipes()                            after the family's recipe list changes (lib/recipes.ts)
 //   const { recordingId } = await startRecording({ dish, forKidIds, language?, source })  live.startRecording
 //   useRecording(recordingId)                            live.recording, live (the recording screen)
+//   await recordingJobId(recordingId)                    live.recording's jobId, once (a resend after a crash)
 //   await endRecording(recordingId)                      live.endRecording: the stop button with no voice line
 //   await startFilming(recordingId)                      live.startFilming: glasses, her Start button
 //   await setCover(recordingId, photoUri)                files.uploadUrl + live.setCover: the plate photo (in-app filming)
@@ -349,6 +350,22 @@ export async function setCover(recordingId: string, photoUri: string): Promise<b
   }
 }
 
+/**
+ * The Convex job made for a recording (live.recording's jobId): its id, null when it has none, or
+ * undefined when Convex couldn't say (offline, signed out, the stub). A resend after a crash asks first.
+ */
+export async function recordingJobId(recordingId: string): Promise<string | null | undefined> {
+  if (stubbed || !client) return undefined;
+  try {
+    const sessionToken = await token();
+    const row = await call<LiveRecording | null>('query', 'live:recording', { sessionToken, recordingId }, () => null, { soft: true });
+    return row?.jobId ?? null;
+  } catch (e) {
+    console.warn('[convex] live.recording', String(e).slice(0, 160));
+    return undefined;
+  }
+}
+
 /** The recording, live: null while it loads, or when it isn't this family's. */
 export function useRecording(recordingId: string | null | undefined): LiveRecording | null {
   const id = recordingId ?? '';
@@ -493,6 +510,8 @@ async function uploadFile(uri: string, contentType: string): Promise<string> {
   if (stubbed) return `stub-file-${Date.now()}`;
   const url = await call<string>('mutation', 'files:uploadUrl', { sessionToken }, () => '');
   if (!url) return `stub-file-${Date.now()}`;
+  // iOS can't upload a file that isn't there and closes the app instead of failing (lib/uploads fileOnPhone).
+  if (!new File(uri).exists) throw new Error('That file isn’t on this phone any more.');
   const res = await new File(uri).createUploadTask(url, { httpMethod: 'POST', headers: { 'Content-Type': contentType }, uploadType: UploadType.BINARY_CONTENT }).uploadAsync();
   if (res.status < 200 || res.status >= 300) throw new Error('The upload didn’t go through. Try again.');
   return (JSON.parse(res.body) as { storageId: string }).storageId;

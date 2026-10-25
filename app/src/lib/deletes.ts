@@ -64,7 +64,8 @@ export async function requestCancel(jobId: string): Promise<void> {
     }
     if (!res.ok || data?.ok === false) {
       const reason = typeof data?.error === 'string' ? data.error : text.slice(0, 160);
-      throw new Error(`The cancel was refused (${res.status}). ${reason}`.trim());
+      // `status` 403: Convex has no job for this upload (one a crash cut off), so no worker will take it.
+      throw Object.assign(new Error(`The cancel was refused (${res.status}). ${reason}`.trim()), { status: res.status });
     }
   } finally {
     clearTimeout(timer);

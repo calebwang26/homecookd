@@ -18,6 +18,7 @@ import { requestCancel } from '@/lib/deletes';
 import { cancelLiveJob, libraryIdOf as findLibraryId, useLiveJobs, type LiveJob } from '@/lib/live/convex';
 import { refreshLibrary, useLibrary } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
+import { dropUnsentJob } from '@/lib/unsentRecordings';
 import {
   cancelJobUploads,
   ensurePendingSend,
@@ -159,6 +160,14 @@ export function usePendingRecipes(): PendingState {
   const doCancel = useCallback(
     async (job: StoredJob) => {
       setCancellingId(job.job_id);
+      // Off this phone: its uploads, its row, and a crash note that would send it again (lib/unsentRecordings).
+      const drop = () => {
+        cancelJobUploads(job.job_id);
+        removeJob(job.job_id);
+        dropUnsentJob(job.job_id);
+        setJobs(loadJobs());
+        toast.show(`Stopped your ${job.title}`);
+      };
       try {
         // The Convex job is what a worker takes: stop it there, so nothing is left clogging the queue.
         const live = liveByJob.get(job.job_id) ?? liveOnly.find((l) => l._id === job.job_id);
@@ -168,11 +177,10 @@ export function usePendingRecipes(): PendingState {
           return;
         }
         await requestCancel(job.job_id);
-        cancelJobUploads(job.job_id);
-        removeJob(job.job_id);
-        setJobs(loadJobs());
-        toast.show(`Stopped your ${job.title}`);
+        drop();
       } catch (err) {
+        // Convex never got this job (a send a crash cut off): no worker will take it, so it just goes.
+        if (!liveByJob.has(job.job_id) && (err as { status?: number }).status === 403) return drop();
         console.warn('[uploads] cancel failed', err);
         toast.show('Couldn’t stop it. Try again.', { tone: 'error' });
       } finally {
@@ -204,6 +212,7 @@ export function usePendingRecipes(): PendingState {
           requestCancel(job.job_id).catch((err) => console.warn('[uploads] quiet cancel failed', err));
         }
         removeJob(job.job_id);
+        dropUnsentJob(job.job_id);
         setJobs(loadJobs());
         return;
       }

@@ -36,6 +36,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [homie-hello-once](memory/homie-hello-once.md) | Oct 24: homie introduces itself once: the pot per person on a phone, the recording hello per cook (`metBefore`) |
 | [homie-guidance-only](memory/homie-guidance-only.md) | Oct 24: while a cook films, homie gives guidance (how much, show it to the camera, the plate), never cooking advice |
 | [in-app-recording](memory/in-app-recording.md) | Oct 24: phone recording films inside the app at 1080p (VisionCamera 4) so homie stays live; the audio-session rules |
+| [never-signed-out-by-a-crash](memory/never-signed-out-by-a-crash.md) | Oct 24: a crash or a passing error never signs anyone out or loses a recording; only Sign out or the exact "This phone was signed out." 401 forget the key |
 | [homie-silent-during-video](memory/homie-silent-during-video.md) | Oct 24: while any video plays homie says nothing on its own (held for the next pause); only answers to the kid; reading steps aloud off by default |
 | [homie-tap-always-answers](memory/homie-tap-always-answers.md) | Oct 24: a tap on homie always gets a spoken answer: news first (Claude), else the screen's one line about its big button; "I'm right here." on a repeat tap |
 | [homie-judges-who-was-talking](memory/homie-judges-who-was-talking.md) | Oct 24: in cook mode Claude judges whether the kid was talking to homie (silent if not); "homie" spelled loosely is a strong yes; no wake word |

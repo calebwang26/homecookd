@@ -37,4 +37,7 @@ earpiece).
   between two files (`beforeResume`, `betweenFiles`).
 - Not yet proven on a real iPhone (no device build yet on Oct 24): the first device test is "record 2+ minutes
   while homie talks; the video has her voice; homie's mic stream keeps going".
+- Oct 24, the first TestFlight try crashed at "Sending it to …": the finished file was moved with the async
+  `File.move()` and its old tmp path uploaded. Files move with `moveSync`, and a note keeps each recording queued
+  until Convex has its job ([[never-signed-out-by-a-crash]]).
 - Related: [[homie-guidance-only]], [[testflight-live]].

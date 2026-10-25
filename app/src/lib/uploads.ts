@@ -253,6 +253,22 @@ export function fileNameFor(asset: ImagePickerAsset, i: number): string {
   return last && last.length > 0 ? decodeURIComponent(last) : `video-${i + 1}.mov`;
 }
 
+/**
+ * The file is still on the phone. A file that isn't must never reach a native upload task: iOS throws
+ * an exception there ("Cannot read file at …") that no JS can catch, and the app closes (Oct 24, the
+ * in-app camera's clip). The web build can't tell (it never uploads).
+ */
+export function fileOnPhone(uri: string): boolean {
+  if (Platform.OS === 'web') return true;
+  try {
+    return new File(uri).exists;
+  } catch {
+    return false;
+  }
+}
+
+export const MISSING_VIDEO = 'A video isn’t on this phone any more. Record it again.';
+
 export function fileSizeFor(asset: ImagePickerAsset): number {
   // Prefer the size of the exact file we will upload; fall back to the picker's number.
   if (Platform.OS !== 'web') {
@@ -282,6 +298,7 @@ export type StartUploadInput = {
 export async function startUpload(input: StartUploadInput): Promise<StoredJob> {
   if (!uploadsConfigured()) throw new Error("Uploads aren't set up yet.");
   if (!uploadsSupportedHere) throw new Error('Uploads work from the homecookd app on your phone.');
+  if (input.assets.some((a) => !fileOnPhone(a.uri))) throw new Error(MISSING_VIDEO);
 
   const files = input.assets.map((a, i) => ({
     name: fileNameFor(a, i),
@@ -347,6 +364,7 @@ export async function startUpload(input: StartUploadInput): Promise<StoredJob> {
     // GCS V4 signed URL: raw bytes as the body & exactly the signed Content-Type.
     const headers = u.headers ?? { 'Content-Type': files[assetIndex]?.content_type ?? 'video/quicktime' };
     for (let attempt = 1; ; attempt++) {
+      if (!fileOnPhone(asset.uri)) throw new Error(`Upload ${i + 1} failed: ${MISSING_VIDEO}`);
       const task = new File(asset.uri).createUploadTask(u.url, {
         httpMethod: 'PUT',
         headers,

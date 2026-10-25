@@ -11,7 +11,11 @@
 //   src/lib/languages.ts                     the picker's list and search (Track F's API)
 //   src/components/record/cameraLogic.ts     filming in the app: file names, the gap between two files,
 //                                            the clock, when leaving stops the camera and coming back
-//                                            films again by itself, the clip each file becomes
+//                                            films again by itself, the clip each file becomes; every
+//                                            file move is sync or awaited, and no upload starts from a
+//                                            file that isn't there (the Oct 24 crash)
+//   src/lib/unsentLogic.ts                   a recording a crash kept from sending: where its videos
+//                                            are, what the next launch does, who the phone opens as
 //   build-4 safety                           an EAS Update reaches TestFlight builds without VisionCamera
 //                                            or expo-image-manipulator: recording.tsx's whole import graph
 //                                            never imports either by value, and src/lib/live/camera.ts (the
@@ -19,7 +23,7 @@
 //                                            native halves missing
 //   node scripts/test-recording-ui.mjs
 import assert from 'node:assert/strict';
-import { existsSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -51,6 +55,7 @@ const R = await import(pathToFileURL(join(root, 'src/components/record/recording
 const K = await import(pathToFileURL(join(root, 'src/components/record/walkieLogic.ts')).href);
 const L = await import(pathToFileURL(join(root, 'src/lib/languages.ts')).href);
 const C = await import(pathToFileURL(join(root, 'src/components/record/cameraLogic.ts')).href);
+const U = await import(pathToFileURL(join(root, 'src/lib/unsentLogic.ts')).href);
 
 let passed = 0;
 const test = (name, fn) => {
@@ -347,6 +352,100 @@ test('in-app camera: each file becomes a selected camera clip for the Send path'
   assert.equal(clip.selected, true);
   assert.equal(clip.recordedAt, '2026-10-25T17:05:00.000Z');
   assert.deepEqual(clip.asset, { uri: 'file:///doc/recordings/r1/part-02.mp4', width: 1080, height: 1920, type: 'video', duration: 300_000, fileName: 'part-02.mp4', mimeType: 'video/mp4' });
+});
+
+// The Oct 24 crash at "Sending it to Shreya": File.move() is async in expo-file-system 57, so the uri
+// read right after it was the old tmp path, the file was gone from there, and iOS closed the app when
+// the upload started from a file that wasn't there. Every move or copy must be the sync one or awaited.
+test('in-app camera: a file is moved with moveSync (or an awaited move), and the clips are named as on disk', () => {
+  const offenders = [];
+  const walk = (dir) => {
+    for (const name of readdirSync(dir)) {
+      const f = join(dir, name);
+      if (statSync(f).isDirectory()) walk(f);
+      else if (/\.tsx?$/.test(f)) {
+        readFileSync(f, 'utf8').split('\n').forEach((line, i) => {
+          if (/\.(move|copy)\(/.test(line) && !/\bawait\b/.test(line)) offenders.push(`${f.slice(root.length + 1)}:${i + 1}`);
+        });
+      }
+    }
+  };
+  walk(join(root, 'src'));
+  assert.deepEqual(offenders, [], 'a File.move()/copy() that nobody waits for');
+  const hook = readFileSync(join(root, 'src/components/record/useInAppCamera.ts'), 'utf8');
+  assert.match(hook, /\.moveSync\(target\)/);
+  assert.ok(!hook.includes('.map(chunkClip)'), 'map passes the 0-based index: the first clip would be part-00.mp4');
+  assert.match(hook, /chunkClip\(c, i \+ 1\)/);
+});
+
+test('in-app camera: an upload never starts from a file that isn\'t on the phone', () => {
+  const uploads = readFileSync(join(root, 'src/lib/uploads.ts'), 'utf8');
+  assert.match(uploads, /if \(input\.assets\.some\(\(a\) => !fileOnPhone\(a\.uri\)\)\) throw new Error\(MISSING_VIDEO\);/, 'before the signer');
+  const beforeTask = uploads.slice(0, uploads.indexOf('.createUploadTask('));
+  assert.match(beforeTask.slice(-300), /fileOnPhone\(asset\.uri\)/, 'right before each upload task');
+  const convex = readFileSync(join(root, 'src/lib/live/convex.ts'), 'utf8');
+  const beforePhoto = convex.slice(0, convex.indexOf('.createUploadTask('));
+  assert.match(beforePhoto.slice(-300), /new File\(uri\)\.exists/, 'the plate photo and voice notes too');
+});
+
+test('unsent recordings: a video\'s place inside documents/ survives the app folder moving', () => {
+  const docs = 'file:///var/mobile/Containers/Data/Application/AAAA/Documents/';
+  assert.equal(U.docPath(`${docs}recordings/r1/part-01.mp4`, docs), 'recordings/r1/part-01.mp4');
+  assert.equal(U.docPath(`${docs}recordings/r1/part-01.mp4`, docs.slice(0, -1)), 'recordings/r1/part-01.mp4', 'with or without the slash');
+  // Left in tmp (the move failed): kept as is.
+  const tmp = 'file:///private/var/mobile/Containers/Data/Application/AAAA/tmp/ABC.mp4';
+  assert.equal(U.docPath(tmp, docs), tmp);
+  assert.equal(U.isFullUri(tmp), true);
+  assert.equal(U.isFullUri('recordings/r1/part-01.mp4'), false);
+});
+
+const note = (id, extra = {}) => ({
+  recordingId: id,
+  familyId: 'fam-1',
+  cookId: 'cook-1',
+  clips: [{ path: `recordings/${id}/part-01.mp4`, durationMs: 3000, width: 1080, height: 1920, startedAt: 1 }],
+  dish: null,
+  language: 'en',
+  forKids: null,
+  everyone: true,
+  requestFrom: null,
+  savedAt: '2026-10-24T19:20:00Z',
+  jobId: null,
+  resends: 0,
+  ...extra,
+});
+
+test('unsent recordings: one note per recording, the newest first; the job goes on it; it goes once sent', () => {
+  let list = U.withUnsent([], note('r1'));
+  list = U.withUnsent(list, note('r2'));
+  assert.deepEqual(list.map((u) => u.recordingId), ['r2', 'r1']);
+  list = U.withUnsent(list, note('r1', { dish: 'Poha' }));
+  assert.deepEqual(list.map((u) => u.recordingId), ['r1', 'r2'], 'saved again: replaced, not doubled');
+  assert.equal(list[0].dish, 'Poha');
+  list = U.patchUnsent(list, 'r2', { jobId: 'family-recipe-ea10a0' });
+  assert.equal(list[1].jobId, 'family-recipe-ea10a0');
+  assert.equal(list[0].jobId, null);
+  assert.deepEqual(U.withoutUnsent(list, 'r1').map((u) => u.recordingId), ['r2']);
+});
+
+test('unsent recordings: what the next launch does with one', () => {
+  const at = (convexJobId, filesHere = true) => ({ convexJobId, filesHere });
+  assert.equal(U.resendStep(note('r'), at('job-1')), 'sent', 'Convex has its job: nothing to send');
+  assert.equal(U.resendStep(note('r'), at('job-1', false)), 'sent');
+  assert.equal(U.resendStep(note('r'), at(null, false)), 'gone', 'its videos are not on the phone');
+  assert.equal(U.resendStep(note('r'), at(undefined)), 'wait', 'Convex could not say: never a second copy');
+  assert.equal(U.resendStep(note('r'), at(null)), 'send', 'the Oct 24 case: the crash came before jobs.create');
+  assert.equal(U.resendStep(note('r', { resends: U.MAX_RESENDS - 1 }), at(null)), 'send');
+  assert.equal(U.resendStep(note('r', { resends: U.MAX_RESENDS }), at(null)), 'give-up', 'a send that keeps failing stops');
+});
+
+test('unsent recordings: the phone opens as the cook whose recording is waiting, in that family only', () => {
+  const list = [note('r2', { cookId: 'grandma' }), note('r1')];
+  assert.equal(U.waitingCook(list, 'fam-1'), 'grandma', 'the newest');
+  assert.equal(U.waitingCook(list, 'fam-2'), null, 'another family on this phone now');
+  assert.equal(U.waitingCook(list, null), null);
+  assert.equal(U.waitingCook([note('r1', { resends: U.MAX_RESENDS })], 'fam-1'), null, 'given up: the owner again');
+  assert.equal(U.waitingCook([], 'fam-1'), null);
 });
 
 test('build-4 safety: recording.tsx never imports VisionCamera or the image manipulator by value', () => {

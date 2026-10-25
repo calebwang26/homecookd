@@ -1,11 +1,14 @@
 // Sends a recording: the background upload (lib/uploads.ts), the live progress card (Convex
 // jobs.create with the dish, her language, the kids and homie's recording), and who gets the recipe
 // once it's written (POST /pending-sends). Send's big button uses it, and so does Grandma's done
-// screen, which sends a phone recording by itself (components/record/DoneView).
+// screen, which sends a phone recording by itself (components/record/DoneView). A recording filmed in
+// the app has a note on the phone until Convex has its job (lib/unsentRecordings): the upload job goes
+// on the note, and the note goes once jobs.create worked, so a crash before that sends it again.
 //
 //   const job = await sendDraft({ me, draft, clips, kids, recipients, toLabel, dish, hello })
 import type { Profile } from '@/lib/api';
 import { convexKidIds, createJob } from '@/lib/live/convex';
+import { dropUnsent, markUnsentJob } from '@/lib/unsentRecordings';
 import { ensurePendingSend, startUpload, type StoredJob } from '@/lib/uploads';
 
 import type { Draft, DraftClip } from './draft';
@@ -52,6 +55,7 @@ export async function sendDraft({ me, draft, clips, kids, recipients, toLabel, d
   // The live progress (Convex jobs, hackathon): the worker finds the videos in "<job_id>/". A failure
   // here never stops the send; the row falls back to the status file.
   const { glasses, language, recordingId } = draft;
+  if (recordingId) markUnsentJob(recordingId, job.job_id);
   void (async () => {
     const forKidIds = await convexKidIds(kids);
     await createJob(`${job.job_id}/`, glasses ? 'glasses' : 'phone', {
@@ -60,6 +64,7 @@ export async function sendDraft({ me, draft, clips, kids, recipients, toLabel, d
       forKidIds,
       recordingId: recordingId ?? undefined,
     });
+    if (recordingId) dropUnsent(recordingId);
   })().catch((e) => console.warn('[send] jobs.create failed', String(e)));
   // Who gets it once it's written. If this fails, the home card keeps retrying.
   if (recipients.length > 0) await ensurePendingSend(job);

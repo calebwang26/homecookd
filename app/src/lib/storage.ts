@@ -1,5 +1,5 @@
-// Small persistence helpers. Never throw: storage can be missing (private windows, previews).
-//   secret*: the family code. expo-secure-store on native, localStorage on web.
+// Small persistence helpers. Never throw (except secretRead): storage can be missing (private windows, previews).
+//   secret*: the device key and family code. expo-secure-store on native, localStorage on web.
 //   kv*:     everything else (cached family, profile lines, composer.mode.<id>). AsyncStorage on native, localStorage on web.
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as SecureStore from 'expo-secure-store';
@@ -16,6 +16,16 @@ export async function secretGet(key: string): Promise<string | null> {
   if (web) return webGet(key);
   return nativeGet(PREFIX + key, (k) => SecureStore.getItemAsync(k), (k, v) => SecureStore.setItemAsync(k, v),
     (k) => SecureStore.deleteItemAsync(k));
+}
+
+/**
+ * Like secretGet, but a keychain that can't answer right now (a locked phone, a launch in the
+ * background) throws instead of looking empty, so it is never mistaken for "nothing saved".
+ */
+export async function secretRead(key: string): Promise<string | null> {
+  if (web) return webGet(key);
+  const v = await SecureStore.getItemAsync(PREFIX + key);
+  return v ?? secretGet(key); // nothing under the new name: the old "edible.*" one, moved over
 }
 
 export async function secretSet(key: string, value: string | null): Promise<void> {

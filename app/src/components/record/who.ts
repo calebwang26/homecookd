@@ -8,6 +8,8 @@
 //   const now = who ?? firstWho(kids, others, { requestFrom });
 //   onPress={() => setWho(toggleKid(now, kid.id))}     onPress={() => setWho(toggleEveryone(now, kids, others))}
 //   const { picked, everyone, recipients, label } = whoTo(now, kids, others);
+//   const to = doneTo(me.id, profiles, learners, draft)   who a finished recording goes to (the done
+//                                                       view, and a resend after a crash)
 
 export type Person = { id: string; name: string };
 /** The ticked kids' ids, or [EVERYONE] in a family with no kids. */
@@ -61,4 +63,20 @@ export function whoTo<P extends Person>(who: Who, kids: P[], others: P[]): { pic
   const recipients = everyone ? others : picked;
   const label = everyone ? 'everyone' : picked.length ? namesLabel(picked.map((p) => p.name)) : null;
   return { picked, everyone, recipients, label };
+}
+
+/**
+ * Who a finished recording goes to, from the pre-record sheet's answers (the kids ticked, else the kid
+ * who asked, or everyone). `nobody`: there's nobody else in the family.
+ */
+export function doneTo<P extends Person>(
+  meId: string | null | undefined,
+  profiles: P[],
+  learners: P[],
+  d: { forKids: string[] | null; requestFrom: string | null; everyone: boolean },
+) {
+  const others = profiles.filter((p) => p.id !== meId);
+  const kids = learners.filter((p) => p.id !== meId);
+  const who = firstWho(kids, others, { picked: d.forKids ?? (d.requestFrom ? [d.requestFrom] : []), everyone: d.everyone });
+  return { ...whoTo(who, kids, others), nobody: others.length === 0 };
 }

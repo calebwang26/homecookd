@@ -21,8 +21,12 @@
 // Phones from before device keys have a saved family code: on boot it is swapped for a key
 // (POST /devices) and then deleted. When the server refuses the key (401 "This phone was signed
 // out.": someone removed this person), the key and the cache are cleared and status goes to
-// `needs-code` with `error` "You were signed out of <Family>.". When the current person was removed
-// from another phone (a 403 on their calls), nobody is picked any more: back to Profiles.
+// `needs-code` with `error` "You were signed out of <Family>.". Only that answer, or "Sign out"
+// (leaveFamily), ever signs this phone out (docs/agents/memory/never-signed-out-by-a-crash.md): any
+// other error keeps the key and the cached family, and a keychain that can't be read at launch (a
+// locked phone, a launch in the background) is read again when the app comes to the front. When the
+// current person was removed from another phone (a 403 on their calls), nobody is picked any more:
+// back to Profiles.
 // `deviceProfileId` is the server's word for who holds this phone, trusted only when this phone
 // signed in as a person (Apple, Google or an invite); a family-code phone is shared, so it's null.
 // Locked faces (E1): someone with their own phone that isn't this one (`Profile.locked`). Only
@@ -31,7 +35,9 @@
 // Profiles come from GET /family and are cached, so the app opens offline with the last known family.
 // One phone, one person: every launch goes straight to this phone's `defaultPerson`: its owner (a
 // phone that signed in as someone: Apple, Google or an invite), else whoever was picked here last
-// (a shared family-code phone). "Who's in the kitchen?" shows only before anyone is picked, for a
+// (a shared family-code phone). One exception: a recording filmed here that a crash kept from
+// sending (lib/unsentRecordings) opens the phone as its cook, so it sends as them. "Who's in the
+// kitchen?" shows only before anyone is picked, for a
 // phone that hasn't said who it is yet, or when someone taps their own face (`/?pick=1`) to cook as
 // someone without a phone of their own. Every cold start goes through "/" (which enters the default
 // person at once), and so does coming back after a long time away (RESUME_RESET_MS), unless the
@@ -71,9 +77,11 @@ import * as google from './auth/google';
 import { NOT_AN_INVITE, parseInviteInput } from './auth/links';
 import { SignInError, type ProviderSignIn } from './auth/types';
 import { lastMessagePushAt, unregister as unregisterPush } from './push';
-import { kvGet, kvGetJson, kvSet, kvSetJson, secretGet, secretSet } from './storage';
+import { kvGet, kvGetJson, kvSet, kvSetJson, secretGet, secretRead, secretSet } from './storage';
 import { buzzForUnread, TAP_WAIT_MS, tapStillDue, unreadSeenAfter, type UnreadSeen } from './touches';
 import { deviceTimeZone } from './tz';
+import { waitingCook } from './unsentLogic';
+import { loadUnsent } from './unsentRecordings';
 
 // Every signed-in call carries the phone's zone (x-tz): quiet hours, Sunday weeks, the 1st's recap.
 // Not while the web `?as=` dev aid borrows the build's code (screenshots never write a zone).
@@ -176,8 +184,9 @@ export type Session = {
    */
   owner: Profile | null;
   /**
-   * Who this phone opens to: its owner, else whoever was picked here last (still in the family, not
-   * on their own phone elsewhere, not only invited). null = "Who's in the kitchen?" asks.
+   * Who this phone opens to: the cook of a recording a crash kept from sending (this launch only),
+   * else its owner, else whoever was picked here last (still in the family, not on their own phone
+   * elsewhere, not only invited). null = "Who's in the kitchen?" asks.
    */
   defaultPerson: Profile | null;
   /**
@@ -255,6 +264,21 @@ function deviceLabel(): string {
 }
 
 const providerAuth = (p: Provider, input: ProviderAuthInput) => (p === 'apple' ? api.authApple(input) : api.authGoogle(input));
+
+/**
+ * This phone's saved key: null when none is saved, undefined when the keychain can't answer right now
+ * (a locked phone, a launch in the background). Never read the second as "signed out".
+ */
+async function readSavedKey(): Promise<string | null | undefined> {
+  for (let i = 0; i < 3; i++) {
+    try {
+      return await secretRead(KEY_DEVICE);
+    } catch {
+      await new Promise((r) => setTimeout(r, 300 * (i + 1)));
+    }
+  }
+  return undefined;
+}
 
 /** Save this phone's key and read it back: true only when it is really stored. */
 async function saveKey(key: string): Promise<boolean> {
@@ -359,9 +383,15 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const creating = useRef<Promise<CreateSelfResult> | null>(null);
   /** Web dev only: the `?profiles=` made-up family (no API at all). */
   const fixture = useRef<CachedFamily | null>(webProfilesFixture());
+  /** The keychain couldn't be read at boot: boot again when the app comes to the front, or on refresh. */
+  const keyUnread = useRef(false);
+  const bootRef = useRef<() => Promise<boolean>>(async () => false);
+  /** A recording filmed here that a crash kept from sending (read once): the phone opens as its cook. */
+  const [unsent] = useState(loadUnsent); // [] on the web, which never films in the app
 
   /** Point the session and the API client at a credential. */
   const setCredential = useCallback((c: Cred) => {
+    if (credId(c)) keyUnread.current = false; // a sign-in meanwhile: nothing left to read
     if (credId(c) !== credId(credRef.current)) setCredentialVersion((v) => v + 1);
     credRef.current = c;
     setCred(c);
@@ -412,7 +442,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
         // A saved family code the server no longer knows (a refused key is the handler's job).
         const deadCode = e instanceof ApiError && e.status === 401 && !c.deviceKey;
         setError(deadCode ? 'That family code stopped working. Ask your family for an invite.' : errorMessage(e));
-        if (e instanceof ApiError && (e.status === 401 || e.status === 403)) {
+        // Only a refused family code ends here. A key the server signed out never gets this far (the
+        // handler dropped it), and any other answer for a key is trouble: keep what we had.
+        if (!c.deviceKey && e instanceof ApiError && (e.status === 401 || e.status === 403)) {
           setStatus('needs-code');
           return false;
         }
@@ -469,15 +501,25 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setStatus('ready');
       return;
     }
-    (async () => {
+    const boot = async (): Promise<boolean> => {
       const [savedKey, savedCode, cached, via] = await Promise.all([
-        secretGet(KEY_DEVICE),
+        readSavedKey(),
         secretGet(KEY_CODE),
         kvGetJson<CachedFamily>(KEY_FAMILY),
         kvGet(KEY_VIA),
       ]);
-      if (!alive) return;
+      if (!alive) return false;
       void kvSet(KEY_ME, null);
+      // The keychain can't answer yet: never "signed out". The last family shows; the key is read again soon.
+      keyUnread.current = savedKey === undefined;
+      if (savedKey === undefined) {
+        setPersonal(via === 'person');
+        if (cached && Array.isArray(cached.profiles)) {
+          applyFamily(cached);
+          setStatus('ready');
+        } else setStatus('offline');
+        return false;
+      }
       const key = savedKey?.trim() || null;
       const code = savedCode?.trim() || null;
       // A leftover code next to a key means a swap finished just before the app closed.
@@ -499,8 +541,10 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
       // A refused code falls through: load() says so with the server's sentence.
       if (!key && code) await swapCode(code);
-      if (alive) await load(credRef.current);
-    })();
+      return alive ? load(credRef.current) : false;
+    };
+    bootRef.current = boot;
+    void boot();
     return () => {
       alive = false;
     };
@@ -536,8 +580,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const owner = useMemo(() => profiles.find((p) => p.id === ownerId && !p.locked && !p.invited) ?? null, [profiles, ownerId]);
   const familyId = data?.family.id ?? null;
   const usable = (p: Profile | undefined) => (p && !p.locked && !p.invited ? p : null);
+  const waiting = usable(profiles.find((p) => p.id === waitingCook(unsent, familyId)));
   const defaultPerson =
-    owner ?? (last && last.familyId === familyId ? usable(profiles.find((p) => p.id === last.id)) : null);
+    waiting ?? owner ?? (last && last.familyId === familyId ? usable(profiles.find((p) => p.id === last.id)) : null);
   const defaultRef = useRef<string | null>(null);
   const meRef = useRef<string | null>(null);
   useEffect(() => {
@@ -552,6 +597,8 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     const sub = AppState.addEventListener('change', (s) => {
       if (s === 'background') leftAt = Date.now();
       else if (s === 'active') {
+        // The keychain couldn't be read at launch (a locked phone): the phone is open now.
+        if (keyUnread.current) void bootRef.current();
         // The zone may have changed while away (a flight home): quiet hours follow it from now on.
         if (!devAid.current) setApiTimeZone(deviceTimeZone());
         const away = leftAt !== null && Date.now() - leftAt > RESUME_RESET_MS;
@@ -595,6 +642,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
   const refresh = useCallback(async () => {
     if (fixture.current) return true;
+    if (keyUnread.current) return bootRef.current();
     const c = credRef.current;
     if (!c.deviceKey && c.code && !devAid.current) await swapCode(c.code);
     return load(credRef.current);
