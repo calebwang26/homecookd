@@ -47,6 +47,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [homie-step-lines](memory/homie-step-lines.md) | Oct 24: every step change says the step's short line at once, Sonic audio made ahead and cached; no read-aloud offer |
 | [homie-size-and-centre](memory/homie-size-and-centre.md) | Oct 24: homie is as tall as its neighbours (48 header, 60 bar), drawn at real size, centred when the row is symmetric |
 | [homie-no-guessed-roles](memory/homie-no-guessed-roles.md) | Oct 24: homie never guesses a family role or gender; names and the family's word, else "your family" / "your loved one" |
+| [homie-tap-hold-and-audio-handoff](memory/homie-tap-hold-and-audio-handoff.md) | Oct 25: cook mode tap = homie on (talks, then listens), hold = "Ask <cook> anything"; whatever was tapped last (homie or video) has the sound |
 | [unanswered-part-is-approved](memory/unanswered-part-is-approved.md) | Oct 24, Caleb: a part of a proposal he doesn't reply to is approved as proposed |
 | [lander-design-references](memory/lander-design-references.md) | Lander taste: video hero, giant type, footer wordmark animation |
 | [lander-copy-feedback](memory/lander-copy-feedback.md) | Copy rules: sell emotion, 3-second demo steps, instantly intuitive |
