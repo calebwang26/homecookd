@@ -83,8 +83,9 @@ test("the voice service names one kid, and lists several", async () => {
 
 test("a job takes the kids from Send, else from homie's recording, and the worker sees every name", async () => {
   const { t, dad, leo, zoe } = await family();
+  let n = 0;
   const create = (args: Kids & { recordingId?: Id<"recordings"> }) =>
-    t.mutation(api.jobs.create, { sessionToken: dad.sessionToken, uploadPath: "u/a.mp4", source: "phone", ...args });
+    t.mutation(api.jobs.create, { sessionToken: dad.sessionToken, uploadPath: `upload-${++n}/`, source: "phone", ...args });
   const claim = async () => (await post(t, "/worker/claim", {}, asWorker)).json();
 
   await expect(create({ forKidIds: [leo.personId, dad.personId] })).rejects.toThrow("isn't in your family");
