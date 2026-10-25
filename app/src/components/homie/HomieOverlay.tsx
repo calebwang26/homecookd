@@ -20,7 +20,7 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
-import { PressableScale, Txt } from '@/components/ui';
+import { haptic, PressableScale, Txt } from '@/components/ui';
 import { useHomieRoute } from '@/lib/homie/hooks';
 import { takeTapLine } from '@/lib/homie/intro';
 import { useHomieNews } from '@/lib/homie/news';
@@ -150,9 +150,15 @@ function RestingPot({
   const centred = Math.abs(frame.x + frame.size / 2 - windowW / 2) < 1;
   const box = { width: frame.size, height: frame.size };
   const a11y = state === 'speaking' ? 'homie, speaking' : state === 'listening' ? 'homie, listening' : 'homie';
-  // A long press never fires the tap too (Pressable skips onPress after onLongPress), and the press only
-  // scales the pot down (0.96): it stays drawn at its real size.
-  const hold = h.onLongPress;
+  // A long press never fires the tap too (Pressable skips onPress after onLongPress), buzzes once when it
+  // takes, and the press only scales the pot down (0.96): it stays drawn at its real size.
+  const onHold = h.onLongPress;
+  const hold = onHold
+    ? () => {
+        haptic('medium');
+        onHold();
+      }
+    : undefined;
   return (
     <Animated.View style={[styles.rest, box, moveStyle]} pointerEvents={shown ? 'box-none' : 'none'}>
       <Animated.View style={[box, potStyle]}>

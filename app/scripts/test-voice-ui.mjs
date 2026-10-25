@@ -346,6 +346,26 @@ await test('"Ask Grandma anything" (a long press): the cook’s name, the bars a
   assert.equal(V.askMoment('Salik', 1).question, 'Ask Salik anything');
 });
 
+await test('"Ask Grandma anything" closes 25 s after the kid last talked, never mid-sentence, and soon once homie can’t hear it', () => {
+  assert.equal(V.askCloseIn({ hears: true, kidTalking: false }), V.ASK_OPEN_MS);
+  assert.equal(V.ASK_OPEN_MS, 25_000);
+  assert.equal(V.askCloseIn({ hears: true, kidTalking: true }), null, 'the recorder is never cut off mid-sentence');
+  // The line lost, the app in the background, homie off for a video the kid played (or the beat before
+  // the mic hold catches up with the moment opening): a short grace, talking or not.
+  for (const kidTalking of [false, true]) assert.equal(V.askCloseIn({ hears: false, kidTalking }), V.ASK_LOST_MS);
+  assert.ok(V.ASK_LOST_MS > 0 && V.ASK_LOST_MS <= 3000);
+});
+
+await test('in "Ask Grandma anything" every sentence the phone hears gets an answer: homie thinks, a yes word and all', () => {
+  const asking = { echo: false, appMoment: true, asking: true, momentUp: true };
+  for (const text of ['Yeah, how long do I fry the onions?', 'Yes, can I use butter instead of ghee?', 'Never mind.', 'Next step.']) {
+    assert.equal(V.thinksAfter({ ...asking, text }), true, text);
+  }
+  assert.equal(V.thinksAfter({ ...asking, echo: true, text: 'yes' }), false, 'never this phone’s own text');
+  // Any other app moment still keeps a yes for itself.
+  assert.equal(V.thinksAfter({ ...asking, asking: false, text: 'Yeah, how long do I fry the onions?' }), false);
+});
+
 // ---------------------------------------------------------------------------------------------
 // The pot
 
@@ -1145,9 +1165,14 @@ await test('cook mode’s tap never opens the chat; a long press asks (the chat 
   assert.ok(tap && hold, 'the tap and the long press');
   assert.ok(!/askInChat|openChatWith|openCircle|\/chat\/|homie\.ask/.test(tap), 'a tap never asks or navigates to Messages');
   assert.match(screen, /onPress: potTap, onLongPress: potHold/);
-  // The long press: by voice while homie can hear, else the chat, else the step aloud; never the tap's toggle.
-  assert.match(hold, /if \(voice\.live && !voice\.muted\) return homie\.ask\(\);\s*if \(askTarget\) return void askInChat\(\);\s*if \(step\) void speak/);
+  // The long press takes the sound (the video fades out); nobody else to ask (the cook on her own dish):
+  // the step aloud; else by voice while homie can hear, else the chat. Never the tap's toggle.
+  assert.match(hold, /pauseAllVideos\(\{ fadeMs: HANDOFF_FADE_MS \}\);\s*if \(!askTarget\) \{\s*if \(step\) void speak\([^\n]*\n\s*return;\s*\}\s*if \(voice\.live && !voice\.muted\) return homie\.ask\(\);\s*void askInChat\(\);/);
   assert.ok(!/toggle/.test(hold));
+  // The moment's own close (askCloseIn) lives on the screen, which sees the kid talking.
+  assert.match(screen, /askCloseIn\(\{ hears: askHears, kidTalking \}\)/);
+  assert.match(screen, /const askHears = voice\.live && voice\.active;/);
+  assert.ok(!/setTimeout/.test(moments.slice(moments.indexOf('const ask = useCallback'))), 'no blind 25 s timer');
   assert.match(moments, /askMoment\(cookName, Date\.now\(\)\)/);
   assert.ok(!/potPress/.test(moments));
   assert.ok(!/sendText\('repeat'\)/.test(hook), 'the service says a step’s line itself (builder D)');
