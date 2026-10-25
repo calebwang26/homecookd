@@ -1,6 +1,7 @@
 // homie on every screen: mounted once in app/_layout, above the navigator. The pot rests top-right
-// (just left of the profile face or Share where a screen has one; a screen can dock it elsewhere with
-// useHomieScreen), not on sign-in, the launch gateway or link screens, and not before someone is in.
+// (just left of the profile face or Share where a screen has one), or in the middle of an even header
+// row (a dish: Back and the heart); a screen can dock it elsewhere with useHomieScreen. Not on sign-in,
+// the launch gateway or link screens, and not before someone is in.
 // Native Modals (sheets, the full-screen step player) cover it on their own. When homie needs you
 // (store.moment), HomieMoment takes the pot to the centre, and VoiceOver keeps to the moment (the
 // overlay is modal then: the screen behind it is out of reach).
@@ -8,11 +9,13 @@
 // (lib/homie/news keeps it ready; never while she films), else this screen's one line about its big
 // button, and "I’m right here." on a second tap in a row, with "Hi, I’m homie." before the very first one (lib/homie/intro); unless the screen
 // gave the pot its own onPress (and onLongPress). It's an answer to the tap, so it pauses a playing
-// video. A screen can dock the pot somewhere else (cook mode: the middle of the bottom bar); docked, it
-// wears the glow that follows the voice (HomiePot aura), and low on the screen its label sits above it.
+// video. A screen can dock the pot somewhere else (cook mode: the middle of the bottom bar); low on the
+// screen its label sits above it. The pot shows the same Siri-like states everywhere (HomiePot).
 // Talking only
 // (Caleb): no words on screen, the pot lights, its lid lifts and "AI voice" shows under it. While the
 // cook's own voice plays (store `shrunk`) the resting pot shrinks a little about its centre.
+// The pot is drawn at its real size (lib/homie HOMIE_SIZE: 48 in a header, 60 in cook mode's bar) and
+// only ever scaled down, so it stays sharp when held.
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
@@ -21,7 +24,7 @@ import { PressableScale, Txt } from '@/components/ui';
 import { useHomieRoute } from '@/lib/homie/hooks';
 import { takeTapLine } from '@/lib/homie/intro';
 import { useHomieNews } from '@/lib/homie/news';
-import { HOMIE_REST_SIZE, labelAbove, potState, sayPhase, shownFrame, SHRUNK_SCALE, speakingLabel, timerProgress } from '@/lib/homie/logic';
+import { labelAbove, potState, sayPhase, shownFrame, SHRUNK_SCALE, speakingLabel, timerProgress } from '@/lib/homie/logic';
 import { doneSpeaking, getHomie, useHomie, type Homie } from '@/lib/homie/store';
 import { speak } from '@/lib/live/speak';
 import { useNowPlaying } from '@/lib/media';
@@ -122,20 +125,18 @@ function RestingPot({
     opacity: opacity.value * (reduce ? 1 - 0.35 * small.value : 1),
     transform: [{ translateX: x.value }, { translateY: y.value }],
   }));
-  const potStyle = useAnimatedStyle(() => {
-    // Scaled about its centre (the box scales from its top left).
-    const s = reduce ? 1 : 1 - (1 - SHRUNK_SCALE) * small.value;
-    const inset = ((1 - s) * frame.size) / 2;
-    return { transform: [{ translateX: inset }, { translateY: inset }, { scale: (frame.size / HOMIE_REST_SIZE) * s }] };
-  });
+  // Smaller about its centre, never bigger than it's drawn.
+  const potStyle = useAnimatedStyle(() => ({ transform: [{ scale: reduce ? 1 : 1 - (1 - SHRUNK_SCALE) * small.value }] }));
 
-  const { height: windowH } = useWindowDimensions();
+  const { width: windowW, height: windowH } = useWindowDimensions();
   const above = labelAbove(frame, windowH);
+  const centred = Math.abs(frame.x + frame.size / 2 - windowW / 2) < 1;
+  const box = { width: frame.size, height: frame.size };
   const a11y = state === 'speaking' ? 'homie, speaking' : state === 'listening' ? 'homie, listening' : 'homie';
   const hint = h.onLongPress ? 'Ask anything. Touch and hold to turn the mic off or on.' : h.onPress ? undefined : 'Says what you can do here';
   return (
-    <Animated.View style={[styles.rest, { width: frame.size, height: frame.size }, moveStyle]} pointerEvents={shown ? 'box-none' : 'none'}>
-      <Animated.View style={[styles.pot, potStyle]}>
+    <Animated.View style={[styles.rest, box, moveStyle]} pointerEvents={shown ? 'box-none' : 'none'}>
+      <Animated.View style={[box, potStyle]}>
         <PressableScale
           onPress={onPress}
           onLongPress={h.onLongPress}
@@ -146,12 +147,20 @@ function RestingPot({
           accessibilityHint={hint}
           accessibilityActions={h.onLongPress ? [{ name: 'longpress', label: 'Turn the mic off or on' }] : undefined}
           onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && h.onLongPress?.()}
-          style={styles.press}>
-          <HomiePot state={state} level={h.level} size={HOMIE_REST_SIZE} timerProgress={progress} />
+          style={[box, { borderRadius: frame.size / 2 }]}>
+          <HomiePot state={state} level={h.level} size={frame.size} timerProgress={progress} />
         </PressableScale>
       </Animated.View>
       {label ? (
-        <View style={above ? [styles.labelAbove, { bottom: frame.size + 6, left: frame.size / 2 - LABEL_W / 2 }] : [styles.labelWrap, { top: frame.size - 6 }]} pointerEvents="none">
+        <View
+          style={
+            above
+              ? [styles.labelMid, { bottom: frame.size + 6, left: frame.size / 2 - LABEL_W / 2 }]
+              : centred
+                ? [styles.labelMid, { top: frame.size - 6, left: frame.size / 2 - LABEL_W / 2 }]
+                : [styles.labelWrap, { top: frame.size - 6 }]
+          }
+          pointerEvents="none">
           <Txt variant="caption" size={11} weight={700} color={colors.lavenderInk} numberOfLines={1} style={styles.label}>
             {label}
           </Txt>
@@ -181,11 +190,9 @@ const LABEL_W = 220;
 
 const styles = StyleSheet.create({
   rest: { position: 'absolute', left: 0, top: 0 },
-  pot: { position: 'absolute', left: 0, top: 0, width: HOMIE_REST_SIZE, height: HOMIE_REST_SIZE, transformOrigin: 'top left' },
-  press: { width: HOMIE_REST_SIZE, height: HOMIE_REST_SIZE, borderRadius: HOMIE_REST_SIZE / 2 },
   // Its right edge a little past the pot's, so "Translated from Grandma" grows left and stays on screen.
   labelWrap: { position: 'absolute', right: -8, alignItems: 'flex-end', width: LABEL_W },
-  // Docked low (the bottom bar): centred above the pot.
-  labelAbove: { position: 'absolute', alignItems: 'center', width: LABEL_W },
+  // Docked low (the bottom bar): centred above the pot; in the middle of a header: centred under it.
+  labelMid: { position: 'absolute', alignItems: 'center', width: LABEL_W },
   label: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: colors.lavender, overflow: 'hidden' },
 });

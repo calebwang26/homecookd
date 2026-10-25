@@ -98,7 +98,7 @@ import {
 } from '@/components/ui';
 import { errorMessage, type RecipeQuestion } from '@/lib/api';
 import { daysAgo, mmss } from '@/lib/format';
-import { useHomieScreen, useHomieSelect } from '@/lib/homie';
+import { barFrame, HOMIE_SIZE, useHomieScreen, useHomieSelect } from '@/lib/homie';
 import { madeItMilestone, madeItTitle } from '@/lib/kitchenCounts';
 import { micStreamingSupported } from '@/lib/live/mic';
 import { speak } from '@/lib/live/speak';
@@ -116,9 +116,8 @@ import { alpha, colors, radii } from '@/theme/tokens';
 
 const AWAKE_TAG = 'cook-mode';
 const CONTENT_SIDE = 24;
-/** homie docked in the bottom bar: a little bigger than the buttons beside it (60 pt). */
-const DOCK = 64;
-const BAR_BUTTON_H = 60;
+/** homie docked in the bottom bar: exactly as tall as Back and Next beside it (60 pt). */
+const DOCK = HOMIE_SIZE.bar;
 
 /**
  * Hands in the dough: the screen never sleeps mid-step (its own tag, so leaving releases only it).
@@ -172,10 +171,10 @@ export default function CookScreen() {
   const [headH, setHeadH] = useState(top + 76);
   const onHeadLayout = (e: LayoutChangeEvent) => setHeadH(Math.round(e.nativeEvent.layout.height));
   // Where homie docks (window pt): the bar's row is symmetric, so its middle is the screen's middle,
-  // centred on the 60 pt buttons above the bar's bottom padding. Worked out, not measured: a screen
+  // level with the 60 pt buttons above the bar's bottom padding. Worked out, not measured: a screen
   // still sliding in would measure off to the side.
   const barBottom = useScreenBottom();
-  const dock = { x: (winW - DOCK) / 2, y: winH - barBottom - BAR_BUTTON_H / 2 - DOCK / 2, size: DOCK };
+  const dock = barFrame({ width: winW, height: winH }, barBottom);
 
   const [chosen, setChosen] = useState<number | null>(Number.isFinite(asked) && asked > 0 ? asked : null);
   const [dir, setDir] = useState<1 | -1>(1);
@@ -592,5 +591,5 @@ const styles = StyleSheet.create({
   // Back and Next the same width either side of homie (BottomBar's row keeps one 12 pt gap); words
   // only, so "Next step" fits half a small phone.
   barButton: { flex: 1, flexBasis: 0, alignSelf: 'center' },
-  dockSlot: { width: DOCK, height: BAR_BUTTON_H, alignSelf: 'center' },
+  dockSlot: { width: DOCK, height: DOCK, alignSelf: 'center' },
 });
