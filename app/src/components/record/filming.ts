@@ -274,6 +274,8 @@ export class Filming {
         this.set({ error: 'The camera didn’t start.' });
         return false;
       }
+      // A camera that failed during the hello and came back: a later lock says "stopped", not "trouble".
+      this.set({ trouble: false });
       this.setPhase('filming');
       return true;
     });
