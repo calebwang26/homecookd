@@ -122,7 +122,7 @@ export type Said = { atS: number; endS: number };
 export type PromptStatus = "spoken" | "answered" | "ignored" | "not_now";
 export type Answer = { transcript: string; transcriptEn?: string; atS: number; endS: number };
 
-/** Stub recordings by language: "stub-mr", "stub-en", "stub-ta", "stub-zh" (and "-again" for each). */
+/** Stub recordings by language: "stub-mr", "stub-en", "stub-ta", "stub-zh", "stub-mr-ajoba", "stub-en-dad" (and "-again" for each). */
 const stubRecordings = () => fixture<Record<string, RecordingSession>>("stub-recording.json");
 
 export async function person(sessionToken: string): Promise<Person> {
@@ -148,10 +148,12 @@ export async function news(sessionToken: string): Promise<News> {
 
 export async function recordingSession(sessionToken: string, recordingId: string): Promise<RecordingSession> {
   // "stub-mr-again" / "stub-en-again": a cook homie has recorded with before (the short hello).
+  // "stub-mr-ajoba" (a grandfather, for the whole family) and "stub-en-dad" (a cook named Dad): not every cook is a mom.
   if (usingStub) {
     const all = stubRecordings();
+    const key = recordingId.replace(/^stub-/, "").replace(/-again$/, "");
     const lang = /^stub-([a-z]{2,3})\b/.exec(recordingId)?.[1] ?? "mr";
-    return { ...(all[lang] ?? all.mr), metBefore: recordingId.endsWith("-again") };
+    return { ...(all[key] ?? all[lang] ?? all.mr), metBefore: recordingId.endsWith("-again") };
   }
   return post("/live/session", { sessionToken, recordingId });
 }

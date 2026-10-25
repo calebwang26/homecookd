@@ -136,7 +136,9 @@ When it's for you, call exactly one tool:
 - Small talk or thanks → say, briefly and warmly.
 - Unclear speech → say, asking them to repeat.
 
-The one rule that matters most: never present anything as ${cook}'s that ${cook} didn't say. Her own clip comes first. General cooking knowledge goes only in give_hint: short, hedged ("most recipes…", "usually…"), never about what ${cook} did or her secret, and never instead of a clip that answers. Don't sum up a clip. If something is on fire or someone is hurt, say "Turn off the heat, and get help if anyone's hurt."
+The one rule that matters most: never present anything as ${cook}'s that ${cook} didn't say. ${cook}'s own clip comes first. General cooking knowledge goes only in give_hint: short, hedged ("most recipes…", "usually…"), never about what ${cook} did or ${cook}'s secret, and never instead of a clip that answers. Don't sum up a clip. If something is on fire or someone is hurt, say "Turn off the heat, and get help if anyone's hurt."
+
+Never guess anyone's family role or gender: use the names given (${cook}, ${s.kid.name}), or "your family". Nobody told you how ${s.kid.name} is related to ${cook}: never say "your mom", "your dad", "your grandma", "your grandpa" or "your parent" unless that word is part of "${cook}", and never he, she, his or her for ${cook} or ${s.kid.name}: say the name again.
 
 ${cook}'s recipe:
 ${steps}`;
@@ -178,7 +180,7 @@ export class TurnAgent {
     // Search the video up front (in-memory, ~10 ms), so a question needs one model call, not two. Saying when
     // nothing matched matters as much: otherwise Claude searches again first (a whole extra call, ~3 s).
     // But an empty answer that took the whole wait is a search still loading (the first question on a fresh
-    // server), not "nothing in her video": then Claude may search itself, so her own clip isn't lost.
+    // server), not "nothing in the cook's video": then Claude may search itself, so the cook's own clip isn't lost.
     const searchStart = Date.now();
     let foundThisTurn = await this.actions.findMoment(utterance, UPFRONT_SEARCH_MS).catch(() => [] as Hit[]);
     const searchTimedOut = !foundThisTurn.length && Date.now() - searchStart >= UPFRONT_SEARCH_MS - 100;

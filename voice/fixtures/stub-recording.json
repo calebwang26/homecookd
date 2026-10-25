@@ -70,5 +70,37 @@
       "name": "Shreya"
     },
     "dish": "Tomato Egg Stir-fry"
+  },
+  "mr-ajoba": {
+    "recording": {
+      "_id": "stub-mr-ajoba",
+      "language": "mr",
+      "status": "intro",
+      "source": "phone",
+      "dish": "Varan Bhaat"
+    },
+    "cook": {
+      "name": "Ramesh",
+      "relation": "Ajoba",
+      "language": "mr"
+    },
+    "dish": "Varan Bhaat"
+  },
+  "en-dad": {
+    "recording": {
+      "_id": "stub-en-dad",
+      "language": "en",
+      "status": "intro",
+      "source": "phone",
+      "dish": "Dal Tadka"
+    },
+    "cook": {
+      "name": "Dad",
+      "language": "en"
+    },
+    "kid": {
+      "name": "Shreya"
+    },
+    "dish": "Dal Tadka"
   }
 }
