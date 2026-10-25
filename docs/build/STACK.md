@@ -128,7 +128,8 @@ HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-o
 
 **App ↔ voice service** (WebSocket `wss://<voice>/cook?session=<sessionToken>&recipe=<recipeId>`)
 - App → server: binary frames of 16 kHz mono 16-bit PCM; `{ "type": "step", "stepOrder" }` when the kid taps (the
-  server says that step's line; the first one, sent on open, restores the screen's step and isn't read).
+  server says that step's line; the first one, sent on open, restores the screen's step and isn't read; with
+  `"read": false`, a step the cook's clip moved the screen to, it only moves, so no line plays over her clip).
 - Server → app: `{ type: "transcript", text }`, `{ type: "go_to_step", stepOrder }`,
   `{ type: "play_clip", startS, endS }`, `{ type: "say", text, ai: true }` followed by binary audio,
   `{ type: "asked_cook", questionId }`.

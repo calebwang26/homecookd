@@ -11,7 +11,9 @@
 //   4. "Ingredients" this step needs (StepIngredients)  5. "Dad’s tip ⌄", closed (TipPill), and
 //      "Story from Dad ›" (StepStory: a sheet), only on a step that has them
 //   6. one line while a question about this step waits ("You asked · waiting for Dad" / "Leo asked
-//      this 2 days ago · waiting"). Asking is by voice: "ask Grandma …" with homie on (homie sends it).
+//      this 2 days ago · waiting"). Cook mode asks only by voice ("ask Grandma …" with homie on:
+//      homie sends it to her); without a voice line it can't ask (the recipe page's Ask and the Ask
+//      tab still can). A tap on homie never opens a chat.
 // One voice at a time: the video, the full screen and a story's voice stop each other (lib/media),
 // and leaving the screen silences them. Family never sees the word "sample".
 // Header (it stays put while the step scrolls under it): close, "Step 3 of 8", "All steps" (the sheet:
@@ -45,9 +47,9 @@
 // native mic module (not Expo Go or web), with the voice service set and a dish Convex knows, the line
 // to homie opens by itself (once the "Let Mom see" sheet has its answer), with homie off: the mic
 // streams only while homie is on (a tap; the next tap turns it off) and for 8 s after homie says a
-// step's short line (Caleb, Oct 24). The screen follows it: go_to_step moves the step, play_clip plays
-// that moment of the cook's video in the step's own player (moving to the step that holds it, her
-// words under it), homie's replies are only spoken (the pot lights and its lid lifts, labelled "AI
+// step's short line or a nudge (Caleb, Oct 24). The screen follows it: go_to_step moves the step,
+// play_clip plays that moment of the cook's video in the step's own player (moving to the step that
+// holds it, unread: no step line over her; her words under it), homie's replies are only spoken (the pot lights and its lid lifts, labelled "AI
 // voice"), a timer counts down beside the step title, and a question the video can't answer shows "I
 // asked Grandma" above the pot. When the cook answers one of my questions by voice note, homie offers to play it
 // (CookAnswers). While that moment is up, the service is told (an app-only moment: its own offer
@@ -261,6 +263,8 @@ export default function CookScreen() {
       const at = recipe?.steps.findIndex((s) => c.startS >= s.start_s && c.startS < s.end_s) ?? -1;
       if (at >= 0) goTo(at + 1);
       setMoment((was) => ({ ...c, key: (was?.key ?? 0) + 1 }));
+      // The step it shows: one it moved to goes to the service unread (no step line over her clip).
+      return at >= 0 ? at + 1 : n;
     },
     onOffer: homie.onOffer,
     onOfferClosed: homie.onOfferClosed,
@@ -520,7 +524,7 @@ export default function CookScreen() {
 }
 
 /**
- * The one "waiting" line under Ask for this step's open questions: mine first ("You asked · waiting
+ * The one "waiting" line for this step's open questions: mine first ("You asked · waiting
  * for Dad"; a 1:1 names who I asked, the circle the dish's cook), else the newest someone else
  * asked in the circle ("Leo asked this 2 days ago · waiting").
  */
