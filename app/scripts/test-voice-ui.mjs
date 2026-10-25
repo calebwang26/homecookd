@@ -1191,12 +1191,13 @@ await test('cook mode’s tap never opens the chat; a long press asks (the chat 
   assert.match(screen, /onPress: potTap, onLongPress: potHold/);
   // The long press takes the sound (the video fades out); nobody else to ask (the cook on her own dish):
   // the step aloud; else by voice while homie can hear, else the chat. Never the tap's toggle.
-  assert.match(hold, /pauseAllVideos\(\{ fadeMs: HANDOFF_FADE_MS \}\);\s*if \(!askTarget\) \{\s*if \(step\) void speak\([^\n]*\n\s*return;\s*\}\s*if \(voice\.live && !voice\.muted\) return homie\.ask\(\);\s*void askInChat\(\);/);
+  assert.match(hold, /pauseAllVideos\(\{ fadeMs: HANDOFF_FADE_MS \}\);\s*if \(!askTarget\) \{\s*if \(step\) void speak\([^\n]*\n\s*return;\s*\}\s*if \(voice\.live && !voice\.muted\) return homie\.ask\(\);[\s\S]*if \(recordingSupported\(\)\) return void askByNote\.ask\(\);\s*void askInChat\(\);/);
   assert.ok(!/toggle/.test(hold));
   // The moment's own close (askCloseIn) lives on the screen, which sees the kid talking.
   assert.match(screen, /askCloseIn\(\{ hears: askHears, kidTalking \}\)/);
   assert.match(screen, /const askHears = voice\.live && voice\.active;/);
-  assert.ok(!/setTimeout/.test(moments.slice(moments.indexOf('const ask = useCallback'))), 'no blind 25 s timer');
+  const liveAsk = moments.slice(moments.indexOf('const ask = useCallback'));
+  assert.ok(!/setTimeout/.test(liveAsk.slice(0, liveAsk.indexOf('export function'))), 'no blind 25 s timer');
   assert.match(moments, /askMoment\(cookName, Date\.now\(\)\)/);
   assert.ok(!/potPress/.test(moments));
   assert.ok(!/sendText\('repeat'\)/.test(hook), 'the service says a step’s line itself (builder D)');
@@ -1330,6 +1331,25 @@ await test('stopping the mic hands iOS back to playback (else the next step vide
   assert.match(stop, /stopRecording\(\)[\s\S]*if \(!withCamera\.current\) await setAudioModeAsync\(PLAYBACK_AUDIO_MODE\)/);
   const layout = readFileSync(join(root, 'src/app/_layout.tsx'), 'utf8');
   assert.match(layout, /setAudioModeAsync\(PLAYBACK_AUDIO_MODE\)/, 'the launch mode and the mode put back are one');
+});
+
+await test('a dish the live line can’t cook: the same “Ask <cook> anything”, recorded as a note, sent once the kid talked and went quiet', () => {
+  const m = V.noteAskMoment('Miles', 5);
+  assert.equal(m.question, 'Ask Miles anything');
+  assert.equal(m.id, 'asknote:5');
+  assert.equal(V.appMomentKind(m.id), null, 'never the live line’s ask moment (its mic hold, its 2 s close)');
+  assert.equal(m.bars, true);
+  const step = (talked, quietMs, elapsedMs) => V.noteAskStep({ talked, quietMs, elapsedMs });
+  assert.equal(step(false, 0, 3000), 'record', 'waiting for the question');
+  assert.equal(step(false, 0, V.NOTE_WAIT_MS), 'cancel', 'nobody talked');
+  assert.equal(step(true, 500, 4000), 'record', 'a pause mid-question');
+  assert.equal(step(true, V.NOTE_END_QUIET_MS, 5000), 'send', 'talked, then quiet');
+  assert.equal(step(true, 0, V.NOTE_MAX_MS), 'send', 'the cap');
+  assert.equal(step(false, 0, V.NOTE_MAX_MS), 'cancel');
+  const screen = readFileSync(join(root, 'src/app/cook/[id].tsx'), 'utf8');
+  const hold = screen.slice(screen.indexOf('const potHold'), screen.indexOf('useHomieScreen({'));
+  assert.ok(hold.indexOf('homie.ask()') < hold.indexOf('askByNote.ask()'), 'the live line first');
+  assert.ok(hold.indexOf('askByNote.ask()') < hold.indexOf('askInChat()'), 'the chat only when the phone can’t record');
 });
 
 console.log(`\n${passed} passed`);

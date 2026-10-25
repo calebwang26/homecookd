@@ -23,15 +23,16 @@ import { StyleSheet } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { Txt } from '@/components/ui';
-import { closeMoment, getHomie, showMoment, useAiSpeaking, useHomieSelect, type HomieMoment } from '@/lib/homie';
+import { closeMoment, getHomie, setHomieLevel, showMoment, useAiSpeaking, useHomieSelect, type HomieMoment } from '@/lib/homie';
 import { ANSWER_KEY, useHeardAnswers, useRecipeAnswers } from '@/lib/live/answers';
 import { stopSay } from '@/lib/live/say';
 import { speak, stopSpeaking } from '@/lib/live/speak';
 import type { VoiceOffer } from '@/lib/live/voice';
-import { answersToHear, askMoment, readAfterOfferClosed, yesNo, yesNoMoment, type SayKind } from '@/lib/live/voiceLogic';
+import { answersToHear, askMoment, NOTE_SPEECH_LEVEL, noteAskMoment, noteAskStep, readAfterOfferClosed, yesNo, yesNoMoment, type SayKind } from '@/lib/live/voiceLogic';
 import { playClip, useNowPlaying, useVideoPlaying } from '@/lib/media';
 import { useSession } from '@/lib/session';
 import { kvGet, kvSet } from '@/lib/storage';
+import { useVoiceRecorder, type VoiceRecording } from '@/lib/voice';
 import { colors, radii, shadows } from '@/theme/tokens';
 
 const READ_KEY = 'homie.readAloud';
@@ -247,6 +248,80 @@ export function useCookMoments({ cookName }: { cookName: string }) {
   }, [listenFor]);
 
   return { onOffer, onOfferClosed, onHeard, onSay, listenFor, ask, readAloud: read.choice === 'yes' };
+}
+
+type NoteRun = { id: string; at: number; talked: boolean; loudAt: number; timer: ReturnType<typeof setInterval> | null };
+
+/**
+ * "Ask <cook> anything" on a dish the live voice line can't cook (Caleb, Oct 25: the hold must ask on
+ * every dish, never open the chat): the same centred moment, then the phone records the question as a
+ * voice note, stops once the kid has talked and gone quiet (voiceLogic noteAskStep), and `send`s it (a
+ * question card with the dish, in the cook's chat); homie says it went. A tap anywhere sends what's
+ * been said so far (or closes it if nothing was). `onFail`: the mic can't record (refused, web).
+ */
+export function useAskByNote({ cookName, send, onFail }: { cookName: string; send: (rec: VoiceRecording) => Promise<void>; onFail: () => void }) {
+  const { me } = useSession();
+  const rec = useVoiceRecorder({ maxSeconds: 30 });
+  const run = useRef<NoteRun | null>(null);
+  const args = useRef({ cookName, send, onFail, meId: me?.id, rec });
+  useEffect(() => {
+    args.current = { cookName, send, onFail, meId: me?.id, rec };
+  });
+
+  const finish = useCallback(async (how: 'send' | 'cancel') => {
+    const r = run.current;
+    if (!r) return;
+    run.current = null;
+    if (r.timer) clearInterval(r.timer);
+    closeMoment(r.id);
+    setHomieLevel(0);
+    const { rec: recorder, send: deliver, cookName: name, meId } = args.current;
+    if (how === 'cancel') return void recorder.cancel();
+    const note = await recorder.stop();
+    if (!note) return;
+    try {
+      await deliver(note);
+      void speak(`I sent it to ${name}.`, { translate: true, profileId: meId, answer: true });
+    } catch {
+      void speak(`I couldn’t send that to ${name}. Try again in a moment.`, { translate: true, profileId: meId, answer: true });
+    }
+  }, []);
+
+  const ask = useCallback(async () => {
+    if (run.current) return;
+    const { cookName: name, meId } = args.current;
+    const m = noteAskMoment(name, Date.now());
+    const r: NoteRun = { id: m.id, at: 0, talked: false, loudAt: 0, timer: null };
+    run.current = r;
+    showMoment({ ...m, onChoose: () => void finish(r.talked ? 'send' : 'cancel') });
+    // homie says it first; the note starts once homie is quiet, so its own voice isn't in it.
+    await speak(`${m.question}.`, { profileId: meId, answer: true });
+    for (let waited = 0; waited < 6000 && run.current === r && ['lit', 'speaking'].includes(getHomie().state); waited += 100) {
+      await new Promise((ok) => setTimeout(ok, 100));
+    }
+    if (run.current !== r) return;
+    if (!(await args.current.rec.start())) {
+      void finish('cancel');
+      return args.current.onFail();
+    }
+    r.at = Date.now();
+    r.timer = setInterval(() => {
+      const now = Date.now();
+      const level = args.current.rec.level;
+      setHomieLevel(level);
+      if (level >= NOTE_SPEECH_LEVEL) {
+        r.talked = true;
+        r.loudAt = now;
+      }
+      const next = noteAskStep({ talked: r.talked, quietMs: r.talked ? now - r.loudAt : 0, elapsedMs: now - r.at });
+      if (next !== 'record') void finish(next);
+    }, 100);
+  }, [finish]);
+
+  // Leaving the screen: nothing half-recorded is sent.
+  useEffect(() => () => void finish('cancel'), [finish]);
+
+  return { ask };
 }
 
 /**

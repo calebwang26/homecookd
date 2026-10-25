@@ -311,6 +311,33 @@ export function askMoment(cookName: string, at: number): HomieMoment {
 }
 
 /**
+ * "Ask <cook> anything" for a dish the live voice line can't cook (one Convex doesn't know, or no
+ * service): the same moment, but the phone records the question as a voice note and sends it to the
+ * cook's chat with the dish (CookMoments useAskByNote). Its own id, so the live line's ask rules (the
+ * service's `ask` moment, its mic hold) never touch it; a tap anywhere sends what's said so far.
+ */
+export function noteAskMoment(cookName: string, at: number): HomieMoment {
+  return { ...askMoment(cookName, at), id: `asknote:${at}`, tapToClose: 'Tap when you’re done' };
+}
+
+/** The voice note's input level (0..1, metering) that counts as talking; a quiet kitchen stays under it. */
+export const NOTE_SPEECH_LEVEL = 0.45;
+export const NOTE_END_QUIET_MS = 1600;
+export const NOTE_WAIT_MS = 10_000;
+export const NOTE_MAX_MS = 30_000;
+
+/**
+ * The voice-note question, checked as it records: 'send' once the kid has talked and then been quiet
+ * for NOTE_END_QUIET_MS (or at NOTE_MAX_MS), 'cancel' when nobody talked for NOTE_WAIT_MS, else 'record'.
+ * `quietMs`: since the level last reached NOTE_SPEECH_LEVEL (0 while loud).
+ */
+export function noteAskStep(v: { talked: boolean; quietMs: number; elapsedMs: number }): 'record' | 'send' | 'cancel' {
+  if (v.elapsedMs >= NOTE_MAX_MS) return v.talked ? 'send' : 'cancel';
+  if (!v.talked) return v.elapsedMs >= NOTE_WAIT_MS ? 'cancel' : 'record';
+  return v.quietMs >= NOTE_END_QUIET_MS ? 'send' : 'record';
+}
+
+/**
  * What the pot shows on the cook screen, under homie's own lit / speaking beat (the store puts those on
  * top). True to the mic both ways: `listening` only while homie is on, the recorder runs and its frames
  * really go out; while the app makes sound (`sounding`: homie, her voice, a video) lib/live/mic zeroes
