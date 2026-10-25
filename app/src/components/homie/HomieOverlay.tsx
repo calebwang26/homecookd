@@ -162,7 +162,8 @@ function RestingPot({
           accessibilityLabel={a11y}
           accessibilityHint={hint}
           style={[box, { borderRadius: frame.size / 2 }]}>
-          <HomiePot state={state} level={h.level} size={frame.size} timerProgress={progress} />
+          {/* Hidden (a moment has it, or the screen hides it): still and quiet, no loops running unseen. */}
+          <HomiePot state={shown ? state : 'off'} level={shown ? h.level : 0} size={frame.size} timerProgress={shown ? progress : null} />
         </PressableScale>
       </Animated.View>
       {label ? (
@@ -171,7 +172,7 @@ function RestingPot({
             above
               ? [styles.labelMid, { bottom: frame.size + 6, left: frame.size / 2 - LABEL_W / 2 }]
               : centred
-                ? [styles.labelMid, { top: frame.size - 6, left: frame.size / 2 - LABEL_W / 2 }]
+                ? [styles.labelMid, { top: frame.size + 8, left: frame.size / 2 - LABEL_W / 2 }]
                 : [styles.labelWrap, { top: frame.size - 6 }]
           }
           pointerEvents="none">
@@ -206,7 +207,8 @@ const styles = StyleSheet.create({
   rest: { position: 'absolute', left: 0, top: 0 },
   // Its right edge a little past the pot's, so "Translated from Grandma" grows left and stays on screen.
   labelWrap: { position: 'absolute', right: -8, alignItems: 'flex-end', width: LABEL_W },
-  // Docked low (the bottom bar): centred above the pot; in the middle of a header: centred under it.
+  // Docked low (the bottom bar): centred above the pot; in the middle of a header: centred under it,
+  // clear of the row's 48 pt buttons (Share sits close by on a dish).
   labelMid: { position: 'absolute', alignItems: 'center', width: LABEL_W },
   label: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: colors.lavender, overflow: 'hidden' },
 });

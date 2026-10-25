@@ -148,7 +148,7 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 
 | Track | What | Owns |
 |---|---|---|
-| E · homie live | Parent live pass (`/record`), `/speak`, kid-side timers, nudges, read-aloud offer, labelled hints | `voice/`, `convex/live.ts`, `convex/lib/liveRoutes.ts` |
+| E · homie live | Parent live pass (`/record`), `/speak`, kid-side timers, nudges, step lines made ahead, labelled hints | `voice/`, `convex/live.ts`, `convex/lib/liveRoutes.ts` |
 | F · Translation + pipeline | Cook's language end to end, original + English quotes, homie log in the full pass, upload race, 8–12 steps | `pipeline/`, `convex/worker.ts`, `convex/lib/recipeJson.ts`, `convex/moss.ts`, `convex/people.ts`, `app/src/lib/languages.ts` |
 | G · Community | Feed, share switch + Muse story card, share asks, swaps, cook together, one dinner flow, dinner invite links | `convex/community.ts`, `convex/dinners.ts`, `convex/shareRequests.ts`, `convex/storyCards.ts`, `convex/lib/geo.ts`, `convex/lib/inviteRoutes.ts`, `convex/seedCommunity.ts`, `app/src/app/community/*`, `app/src/app/dinner/*`, `app/src/app/d.tsx`, `app/src/app/kid/community.tsx`, `app/src/lib/live/community.ts`, `app/src/lib/live/invite.ts`, `web/src/app/d/` |
 | H · Glasses VM | ESP32 → free GCP e2-micro → MP4 → GCS → job | `glasses/`, `convex/glasses.ts`, `convex/lib/glassesRoutes.ts` |
@@ -372,8 +372,8 @@ then `/speak` with `translate: true`.
 - Was it for homie? Claude decides on every turn that reaches it (no wake word): "homie" in the transcript, however
   Ink spells it (homey, holmy, homi), is a strong yes; plain commands (next, back, repeat, timers) skip Claude and
   always work. Words not meant for homie get no tool and no speech, and the service sends `{ type: "quiet" }` so
-  the app stops showing homie thinking. Words said while the app's `ask` moment is up (the kid tapped homie to
-  ask) are always for homie.
+  the app stops showing homie thinking. Words said while an app `ask` moment is up are always for homie (the
+  app no longer opens one on a tap; the mic itself is on only when homie is, see below).
 - App → service: `{ type: "video", playing: boolean }` when any video (or the cook's own voice note) starts or stops
   on the kid's phone. While one plays (or a clip the service asked for), homie says nothing on its own: a
   `greeting`, `nudge` or `timer` line waits for the next pause, one after another (`timer_done` is still
@@ -400,23 +400,19 @@ then `/speak` with `translate: true`.
   socket, where the service starts its timer ids again at `timer-1`, so timer ids are per socket on the phone: a
   timer from an older socket keeps counting down and buzzing there, and leaves on its own (its `timer_done` can't
   come).
-- What the app sends (Track I-kid): no chips since Oct 24 (cook mode's bar is Back · homie · Next step; a tap on
-  homie opens the `ask` moment, a long press turns the mic off or on). The buttons send `{ type: "step" }`; "back"
-  and "repeat" are said out loud. `voice.command(text, fallback)` stays for any button that speaks for the kid: the
-  service's echo of the text (a `transcript` with `final: true`) counts as its answer, and the fallback runs only
-  if nothing (echo, step, clip, line, timer) comes back within 1.5 s. A kid who said yes once has `"yes"` sent for
-  them on that phone, and the offer's audio is dropped. After a step the kid tapped, a kid who chose read-aloud
-  also gets `"repeat"`, so it is read; not when her clip moved the step. On `ready` the app sends its own
-  `{ type: "step" }` and doesn't follow the service's go_to_step right after it (the screen's step wins). A
-  `say_end` while a newer line is open belongs to the line that newer one cut off. The offer, a story `nudge`
-  and "Grandma answered your question" are no-buttons moments: the kid says yes or no, and a tap anywhere
-  closes it ("not now" for that visit only; a spoken answer is kept on the phone).
-- The app's side of the offer and moments (Track I-kid): it sends `moment` open / close for "Grandma answered
-  your question" (`answer`) and "Ask Grandma anything" (`ask`), again on a new socket while one is up; the
-  read-aloud offer and the story nudge are the service's own, so they never count. It sends `"no"` for a tap
-  anywhere on the read-aloud offer and for a no the phone remembers, and `"yes"` for "Read it to me" and a
-  remembered yes. On `offer_closed` it closes the offer's moment if it's still up (homie heard the answer
-  itself) and keeps that answer.
+- What the app sends (Track I-kid): no chips (cook mode's bar is Back · homie · Next step, homie 60 pt like the
+  buttons). A tap on homie turns it on or off: on, the mic records and streams (pot `listening`), off, the
+  recorder is stopped (no frames, no Ink) and the pot is a plain white circle. When a `say` of kind `step` or
+  `nudge` finishes playing, the mic listens for an 8 s window; words in it hold it on until the answer is over
+  (`voiceLogic` `micAfter`, `micTimer`, `opensWindow`). The socket opens by itself either way, so step lines
+  arrive. The buttons send `{ type: "step" }` (the service then says that step's line); "back" and "repeat" are
+  also said out loud. On `ready` the app sends its own `{ type: "step" }` and doesn't follow the service's
+  go_to_step right after it (the screen's step wins). A `say_end` while a newer line is open belongs to the line
+  that newer one cut off. A story `nudge` and "Grandma answered your question" are no-buttons moments: the kid
+  says yes or no (out loud while homie is on), or gets one button when homie isn't listening; a tap anywhere
+  closes it.
+- The app's side of moments (Track I-kid): it sends `moment` open / close for "Grandma answered your question"
+  (`answer`), again on a new socket while one is up; the story nudge is the service's own, so it never counts.
 
 **Upload signer ↔ Convex**
 - The upload signer (`cloud/signer`, Cloud Run `edible-upload`) lets a phone in with `Authorization: Bearer

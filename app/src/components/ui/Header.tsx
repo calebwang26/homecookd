@@ -114,7 +114,8 @@ export function LargeHeader({
           </Txt>
         ) : null}
       </View>
-      {right}
+      {/* On the title's first line, even when a long title wraps: homie rests level with it there. */}
+      {right ? <View style={styles.rightTop}>{right}</View> : null}
     </Animated.View>
   );
 }
@@ -167,6 +168,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   titleCol: { flex: 1 },
+  rightTop: { alignSelf: 'flex-start' },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   shrink: { flexShrink: 1 },
   eyebrowRight: { justifyContent: 'center', alignItems: 'flex-end' },
