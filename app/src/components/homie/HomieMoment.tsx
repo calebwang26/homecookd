@@ -1,9 +1,10 @@
-// homie needs something from you (store.showMoment): the pot leaves its corner for the centre and
-// grows, lit; the screen behind dims and really blurs; the question (big, white) and big buttons rise
-// under it. Motion: 0-280 ms the pot glides to the centre while the dim starts; 280-560 ms it grows and
-// glows (a spring that settles without overshoot); from 560 ms the words and buttons rise. Answering
-// or "Not now" plays it backwards, and the pot lands back on its corner. Reduce Motion: the dim, pot
-// and words fade in place (150 ms).
+// homie needs something from you (store.showMoment): the pot leaves its corner (or cook mode's bottom
+// bar) for the centre and grows, lit; the screen behind dims and blurs a little (Caleb, Oct 24: less
+// than the canvas, so the page still shows through). Motion, all on the UI thread: the glide, the
+// growth and the blur run together as one move (420 ms, easing out, no overshoot), from exactly where
+// and how big the resting pot is; from 300 ms the words and buttons rise. Answering or "Not now" plays
+// it backwards in one move, and the pot lands back where it rests. Reduce Motion: the dim, pot and
+// words fade in place (150 ms).
 // The option with id 'not_now' (else 'ok') is also VoiceOver's escape gesture.
 // When homie asks out loud (a moment with bars, a prompt or tapToClose; lib/homie isCentredMoment):
 // no buttons, one centred column like Grandma's screens. The glowing pot (176, its glow breathing),
@@ -23,7 +24,6 @@ import Animated, {
   withDelay,
   withRepeat,
   withSequence,
-  withSpring,
   withTiming,
 } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -40,18 +40,19 @@ import { ListeningBars } from './ListeningBars';
 // The blur's strength animates, not its opacity: iOS draws a fading blur view broken until it is opaque.
 const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 
-const GLIDE_MS = 280;
-const GROW_AT = 280;
-const RISE_AT = 560;
-const RISE_MS = 320;
-const CLOSE_MS = 440;
-/** Critically damped: settles on its size, never past it. */
-const GROW = { damping: 26, stiffness: 170, mass: 1, overshootClamping: true };
-const BLUR = 70;
+const OPEN_MS = 420;
+const RISE_AT = 300;
+const RISE_MS = 300;
+const CLOSE_AT = 80;
+const CLOSE_MOVE_MS = 300;
+const CLOSE_MS = CLOSE_AT + CLOSE_MOVE_MS + 20;
+const BLUR = 30;
 const TINT = 'rgba(30,36,16,0.5)';
 const WHITE = colors.card;
 const WHITE_SOFT = 'rgba(255,253,247,0.78)';
 const out = Easing.out(Easing.cubic);
+/** Fast out of the corner, settling softly into the centre (one curve for the move, the size and the blur). */
+const move = Easing.bezier(0.2, 0.8, 0.2, 1);
 const inOut = Easing.inOut(Easing.cubic);
 /** The centred column's words before they are measured (a two-line question, the bars, the prompt). */
 const WORDS_GUESS = 240;
@@ -110,9 +111,10 @@ export function HomieMoment({ from, state, level, label, onActive }: Props) {
       rise.set(withTiming(1, { duration: motion.reducedFadeMs }));
       return;
     }
-    dim.set(withTiming(1, { duration: GLIDE_MS, easing: out }));
-    glide.set(withTiming(1, { duration: GLIDE_MS, easing: out }));
-    grow.set(withDelay(GROW_AT, withSpring(1, GROW)));
+    const together = { duration: OPEN_MS, easing: move };
+    dim.set(withTiming(1, together));
+    glide.set(withTiming(1, together));
+    grow.set(withTiming(1, together));
     rise.set(0);
     rise.set(withDelay(RISE_AT, withTiming(1, { duration: RISE_MS, easing: out })));
   }, [id, reduce, glide, grow, rise, dim]);
@@ -123,10 +125,11 @@ export function HomieMoment({ from, state, level, label, onActive }: Props) {
       dim.set(withTiming(0, { duration: motion.reducedFadeMs }));
       rise.set(withTiming(0, { duration: motion.reducedFadeMs }));
     } else {
-      rise.set(withTiming(0, { duration: 140 }));
-      grow.set(withDelay(80, withTiming(0, { duration: 200, easing: inOut })));
-      glide.set(withDelay(220, withTiming(0, { duration: 200, easing: inOut })));
-      dim.set(withDelay(220, withTiming(0, { duration: 200 })));
+      rise.set(withTiming(0, { duration: 120 }));
+      const back = { duration: CLOSE_MOVE_MS, easing: inOut };
+      grow.set(withDelay(CLOSE_AT, withTiming(0, back)));
+      glide.set(withDelay(CLOSE_AT, withTiming(0, back)));
+      dim.set(withDelay(CLOSE_AT, withTiming(0, back)));
     }
     const t = setTimeout(() => setShown(null), reduce ? motion.reducedFadeMs + 20 : CLOSE_MS);
     return () => clearTimeout(t);

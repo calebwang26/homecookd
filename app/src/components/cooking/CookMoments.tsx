@@ -7,9 +7,9 @@
 //                     since Oct 24: VOICE_READ_OFFER; a spoken answer or the button is kept on this phone,
 //                     and the next visit answers it for the kid; a tap anywhere is "not now" for this
 //                     visit only. Without a voice line, a kept yes reads the steps here: useReadSteps),
-//                     "<cook> has a story about this step", "Ask Grandma anything" (the kid's next
-//                     words are the question), and a tap on the pot (the mic off, or on again with the
-//                     help line said out loud; no moment)
+//                     "<cook> has a story about this step", "Ask Grandma anything" (a tap on homie,
+//                     docked in the bottom bar: the kid's next words are the question), and a long
+//                     press on it (the mic off, or on again with the help line said out loud; no moment)
 //   <CookAnswers/>    "Grandma answered your question": yes plays her voice note on the shared player,
 //                     and the English translation shows small under the chips, labelled "Translated
 //                     from Grandma" (her real voice is what plays)
@@ -267,7 +267,7 @@ export function useCookMoments({ cookName, onWrite }: Args) {
   );
 
   /**
-   * A tap on the resting pot turns the mic off, or on again (VoiceLine says "Mic off" meanwhile). No
+   * A long press on the pot turns the mic off, or on again (VoiceLine says "Mic off" meanwhile). No
    * moment: turning it on, homie only says what the kid can say (the pot lights, "AI voice").
    */
   const potPress = useCallback((v: VoiceNow) => {

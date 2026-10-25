@@ -5,6 +5,7 @@
 //   useHomieScreen({ dock: { x, y, size } })     rest somewhere else while this screen is focused
 //   useHomieScreen({ hidden: true })             no pot on this screen
 //   useHomieScreen({ onPress: toggleMic })       a tap does this instead of the screen's help line
+//   useHomieScreen({ onLongPress })              and a long press does this (cook mode: the mic)
 //   useAiSpeaking()                              true while homie or any AI say is speaking (what the
 //                                                screen shows: "AI voice" under the pot, nothing over it)
 //   useHalfDuplex()                              true while the app itself makes sound: homie lit or
@@ -39,22 +40,40 @@ export function useHomieSlot(): HomieFrame {
   return useHomieSelect((h) => h.dock) ?? frame;
 }
 
-export function useHomieScreen({ dock, hidden = false, onPress }: { dock?: HomieFrame | null; hidden?: boolean; onPress?: (() => void) | null }) {
+export function useHomieScreen({
+  dock,
+  hidden = false,
+  onPress,
+  onLongPress,
+}: {
+  dock?: HomieFrame | null;
+  hidden?: boolean;
+  onPress?: (() => void) | null;
+  onLongPress?: (() => void) | null;
+}) {
   const [owner] = useState(() => ({}));
   const press = useRef(onPress);
+  const longPress = useRef(onLongPress);
   useEffect(() => {
     press.current = onPress;
+    longPress.current = onLongPress;
   });
   const hasPress = !!onPress;
+  const hasLongPress = !!onLongPress;
   const x = dock?.x;
   const y = dock?.y;
   const size = dock?.size;
   useFocusEffect(
     useCallback(() => {
       const frame = x != null && y != null && size != null ? { x, y, size } : undefined;
-      claimScreen(owner, { dock: frame, hidden, onPress: hasPress ? () => press.current?.() : undefined });
+      claimScreen(owner, {
+        dock: frame,
+        hidden,
+        onPress: hasPress ? () => press.current?.() : undefined,
+        onLongPress: hasLongPress ? () => longPress.current?.() : undefined,
+      });
       return () => releaseScreen(owner);
-    }, [owner, x, y, size, hidden, hasPress]),
+    }, [owner, x, y, size, hidden, hasPress, hasLongPress]),
   );
 }
 

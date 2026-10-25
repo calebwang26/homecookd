@@ -338,7 +338,8 @@ await test('a screen claim is cleared only by its own release', () => {
   const a = {};
   const b = {};
   const press = () => {};
-  store.claimScreen(a, { dock: { x: 1, y: 2, size: 56 }, hidden: false, onPress: press });
+  store.claimScreen(a, { dock: { x: 1, y: 2, size: 56 }, hidden: false, onPress: press, onLongPress: press });
+  assert.equal(store.get().onLongPress, press);
   // B gains focus before A's blur runs.
   store.claimScreen(b, { dock: undefined, hidden: true, onPress: undefined });
   store.releaseScreen(a);
@@ -347,6 +348,18 @@ await test('a screen claim is cleared only by its own release', () => {
   assert.equal(store.get().hidden, false);
   assert.equal(store.get().dock, undefined);
   assert.equal(store.get().onPress, undefined);
+  assert.equal(store.get().onLongPress, undefined);
+});
+
+await test('docked low (cook mode’s bottom bar), the words go above the pot; the moment starts where the pot really is', () => {
+  assert.equal(L.labelAbove({ x: 163, y: 742, size: 64 }, 844), true);
+  assert.equal(L.labelAbove({ x: 310, y: 63, size: 56 }, 844), false);
+  assert.deepEqual(L.shownFrame({ x: 100, y: 700, size: 64 }, false), { x: 100, y: 700, size: 64 });
+  const shrunk = L.shownFrame({ x: 100, y: 700, size: 64 }, true);
+  assert.equal(shrunk.size, 64 * L.SHRUNK_SCALE);
+  // Same centre.
+  assert.equal(shrunk.x + shrunk.size / 2, 132);
+  assert.equal(shrunk.y + shrunk.size / 2, 732);
 });
 
 // ---------------------------------------------------------------------------------------------

@@ -119,6 +119,18 @@ export const ASK_SIDE = 32;
 /** The resting pot's size while the cook's own voice plays (store `shrunk`). */
 export const SHRUNK_SCALE = 0.82;
 
+/** Docked low on the screen (cook mode's bottom bar): the words go above the pot, not under it. */
+export function labelAbove(frame: HomieFrame, windowH: number): boolean {
+  return frame.y + frame.size / 2 > windowH / 2;
+}
+
+/** Where the resting pot really is: a little smaller about its centre while the cook's voice plays. */
+export function shownFrame(frame: HomieFrame, shrunk: boolean): HomieFrame {
+  if (!shrunk) return frame;
+  const size = frame.size * SHRUNK_SCALE;
+  return { x: frame.x + (frame.size - size) / 2, y: frame.y + (frame.size - size) / 2, size };
+}
+
 /** A moment homie asks out loud (bars, a spoken prompt, or a tap anywhere to close) uses the centred column. */
 export function isCentredMoment(m: Pick<HomieMoment, 'bars' | 'prompt' | 'tapToClose'>): boolean {
   return !!(m.bars || m.prompt || m.tapToClose);
