@@ -1,6 +1,6 @@
 ---
 name: homie-waits-for-answers
-description: "Oct 24: at the end of a recording homie waits for the cook's whole answer, never talks over her; quiet 5 s → \"still there?\", 5 s more → a kind let-off and no more questions"
+description: "Oct 24: at the end of a recording homie waits for the cook's whole answer, never talks over her; quiet 5 s → \"still there?\", 5 s more → a kind let-off and no more questions; \"not now\" skips one"
 metadata:
   type: project
 ---
@@ -19,11 +19,15 @@ Being cut off is the opposite of the family feeling homecookd sells.
 
 **How to apply:**
 - In the wrap-up (`voice/src/record.ts` `listen`, `untilQuiet`), homie never starts a line while she talks, and an
-  answer is every turn until no new words for 3 s (Ink 2, ink-whisper) or 3.5 s (Gemini Live, slower words). These
-  are minimums: give time; never shorten them to make homie feel snappier without Caleb hearing it.
+  answer is every turn until no new words for 3.5 s (Ink 2, ink-whisper) or 4 s (Gemini Live, slower words). These
+  are minimums: give time; never shorten them to make homie feel snappier without Caleb hearing it (3 s cut a 3 s
+  pause in an Oct 24 live run).
 - Quiet 5 s after a question finished playing → "Still there, Rajani Aaji? Take your time. I'm listening."; quiet 5 s
   more → "That's okay, Rajani Aaji. No need to answer today. All good, let's finish up." and no more questions (the
-  plate photo is a tap, so it stays). Timers start when the phone has finished playing homie's line.
+  plate photo is a tap, so it stays). Timers start when the phone has finished playing homie's line, and the phone
+  plays a line only once it has all of it (~250 ms after `say_end`), never from the first chunk.
+- "not now" (the card's tap, or her first words) skips only that question, at once: no nudge, no let-off. If homie
+  can't hear her at all (speech-to-text showed nothing, or errored), no nudge either: just a plain wait.
 - The let-off is warm, never a guilt trip; it gives permission ("no need to answer"), never guesses her motive.
 - Any new question homie asks a cook out loud (here or in a later feature) waits the same way.
 - Related: [[homie-voice]], [[homie-guidance-only]], [[in-app-recording]].

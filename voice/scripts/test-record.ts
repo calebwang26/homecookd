@@ -22,6 +22,8 @@ import WebSocket from "ws";
 import { guard, live, wordsOf } from "./guard.js";
 
 const base = process.env.URL ?? "ws://localhost:8080";
+/** The phone starts playing a line about this long after its say_end (record.ts PLAYER_LOAD_MS). */
+const PLAYER_LOAD_MS = 250;
 /** mr (default), en, ta or zh: the stub recording and the cook's test lines in that language. */
 const lang = ["en", "ta", "zh"].includes(process.env.COOK_LANG ?? "") ? process.env.COOK_LANG! : "mr";
 const token = process.env.SESSION ?? "test-session";
@@ -179,7 +181,8 @@ ws.on("message", (data, isBinary) => {
     const pcm = Buffer.concat(audio);
     const file = new URL(`record-${lang}-${++said}.wav`, outDir);
     writeFileSync(file, wavOf(pcm, 24000));
-    if (!ev.interrupted) playedAt = (firstAudioAt || sayAt) + (pcm.length / 48000) * 1000;
+    // Like the phone: it plays a line only once it has all of it, ~250 ms after say_end (lib/live/homie.ts flushSay).
+    if (!ev.interrupted) playedAt = Date.now() + PLAYER_LOAD_MS + (pcm.length / 48000) * 1000;
     const line = seen.findLast((s) => s.type === "say");
     if (line) line.playedAt = playedAt;
     console.log(`${stamp()}  say_end → ${file.pathname} (${(pcm.length / 48000).toFixed(1)}s)`);
