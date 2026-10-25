@@ -23,7 +23,7 @@ import { takeTapLine } from '@/lib/homie/intro';
 import { useHomieNews } from '@/lib/homie/news';
 import { HOMIE_REST_SIZE, labelAbove, potState, sayPhase, shownFrame, SHRUNK_SCALE, speakingLabel, timerProgress } from '@/lib/homie/logic';
 import { doneSpeaking, getHomie, useHomie, type Homie } from '@/lib/homie/store';
-import { speak } from '@/lib/live/speak';
+import { speak, stopSpeaking } from '@/lib/live/speak';
 import { useNowPlaying } from '@/lib/media';
 import { useSession } from '@/lib/session';
 import { colors, motion } from '@/theme/tokens';
@@ -54,9 +54,26 @@ export function HomieOverlay() {
     wasOn.current = sayOn;
   }, [sayOn]);
 
+  // The tap line homie is saying (from the tap until the pot is quiet again): a tap meanwhile stops it,
+  // instead of starting another.
+  const tapLine = useRef(false);
+  const voiced = state === 'lit' || state === 'speaking';
+  useEffect(() => {
+    if (!voiced) tapLine.current = false;
+  }, [voiced]);
   const onPress = () => {
     if (h.onPress) return h.onPress();
-    void takeTapLine(route, me?.id, news).then((line) => speak(line, { translate: true, profileId: me?.id, answer: true }));
+    if (tapLine.current) {
+      tapLine.current = false;
+      return stopSpeaking();
+    }
+    tapLine.current = true;
+    void takeTapLine(route, me?.id, news)
+      .then((line) => speak(line, { translate: true, profileId: me?.id, answer: true }))
+      .then((said) => {
+        // Nothing was said (a newer line, or the tap that stopped it): the next tap speaks again.
+        if (said.via === 'none') tapLine.current = false;
+      });
   };
 
   const resting = !!me && !route.hidden && !h.hidden && !inMoment;

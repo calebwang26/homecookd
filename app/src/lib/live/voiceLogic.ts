@@ -2,8 +2,9 @@
 // means for homie (docs/build/STACK.md "kid cooking additions"), which `say_end` and transcript belong
 // to what, when voice starts on its own, when the phone reads aloud itself, app-only moments and the
 // read-aloud offer's end, the kid's spoken yes or no, when homie is 'thinking', the kitchen timers the
-// app counts down, what the pot shows, which of the cook's answers to offer the kid, and what keeps
-// Cartesia from billing for audio nobody said (which mic frames go out, the app in the background).
+// app counts down, what the pot shows, when homie's mic is on (a tap, or the 8 s after a step line) and
+// what a tap does, which of the cook's answers to offer the kid, and what keeps Cartesia from billing
+// for audio nobody said (which mic frames go out, the app in the background).
 import type { HomieMoment, HomieState } from '@/lib/homie/store';
 
 export type SayKind = 'step' | 'reply' | 'hint' | 'translation' | 'nudge' | 'offer' | 'greeting' | 'timer';
@@ -264,12 +265,86 @@ export function yesNoMoment(m: { id: string; question: string; questionEn?: stri
   return m.hearing ? { ...base, options: [], bars: true, prompt: { label: SAY_YES_NO } } : { ...base, options: [{ id: 'yes', label: m.button, kind: 'primary' }] };
 }
 
-/** What the pot shows on the cook screen, under homie's own lit / speaking beat. */
-export function cookPotState(v: { status: 'off' | 'connecting' | 'listening' | 'error'; muted: boolean; thinking: boolean; timers: number; timerDue: boolean }): HomieState {
-  if (v.timerDue) return 'timer';
-  if (v.status === 'connecting') return 'thinking';
-  if (v.status === 'listening' && !v.muted) return v.thinking ? 'thinking' : 'listening';
-  return v.timers ? 'timer' : 'off';
+/**
+ * What the pot shows on the cook screen, under homie's own lit / speaking beat (the store puts those on
+ * top). Truthful to the mic: `listening` only while homie is on and the recorder really streams
+ * (`listening`), `thinking` while it is and the kid's words wait for an answer, else the timer or off.
+ * So the mic never streams unless the pot shows listening or thinking. The ring follows store.timer
+ * whatever the state.
+ */
+export function cookPotState(v: { active: boolean; listening: boolean; thinking: boolean; timers: number; timerDue: boolean }): HomieState {
+  if (v.active && v.listening) return v.thinking ? 'thinking' : 'listening';
+  return v.timers || v.timerDue ? 'timer' : 'off';
+}
+
+// ---------------------------------------------------------------------------------------------
+// homie on or off (Caleb, Oct 24: one tap turns it on, the next turns it off; no always-on mic)
+
+/**
+ * Why cook mode's mic is on: the kid's tap ('tap', until the next tap), the 8 s after a step line
+ * ('window'), or a turn the kid began in that window ('turn', until homie's answer is over). 'off':
+ * the recorder is stopped, so no frames and no Ink credits; the line stays open for step lines.
+ */
+export type MicHold = 'off' | 'tap' | 'window' | 'turn';
+export type MicEvent = 'tap' | 'step_line_end' | 'window_timeout' | 'heard' | 'answered';
+
+/** How long the mic listens after a step line (only the time homie isn't talking counts). */
+export const LISTEN_WINDOW_MS = 8000;
+/** After homie's answer, a beat for the line that follows an action ("next step": the step, then its line). */
+export const ANSWER_GRACE_MS = 1000;
+/** The kid stopped talking (no partial transcript for this long) even if Ink's turn end never came. */
+export const KID_QUIET_MS = 6000;
+
+/**
+ * The next hold. A tap turns homie off when it is on by a tap, else on until the next tap (a tap during
+ * a window keeps it on). A step line's end opens a fresh window, unless the kid's tap holds it. The
+ * kid's words in a window hold it for the turn; the window's 8 s, or the turn's answer, close it.
+ */
+export function micAfter(hold: MicHold, e: MicEvent): MicHold {
+  if (e === 'tap') return hold === 'tap' ? 'off' : 'tap';
+  if (e === 'step_line_end') return hold === 'tap' ? 'tap' : 'window';
+  if (e === 'heard') return hold === 'window' ? 'turn' : hold;
+  if (e === 'window_timeout') return hold === 'window' ? 'off' : hold;
+  return hold === 'turn' ? 'off' : hold;
+}
+
+/**
+ * The timer homie's mic waits on now, or null. A window closes after LISTEN_WINDOW_MS of the mic really
+ * listening with homie quiet (its own lines pause the count). A turn closes once its answer is over:
+ * nothing on its way (`thinking`), homie quiet, the kid done talking, for ANSWER_GRACE_MS.
+ */
+export function micTimer(v: { hold: MicHold; listening: boolean; thinking: boolean; talking: boolean; kidTalking: boolean }): { ms: number; event: MicEvent } | null {
+  if (v.talking || v.kidTalking) return null;
+  if (v.hold === 'window') return v.listening ? { ms: LISTEN_WINDOW_MS, event: 'window_timeout' } : null;
+  if (v.hold === 'turn') return v.thinking ? null : { ms: ANSWER_GRACE_MS, event: 'answered' };
+  return null;
+}
+
+/**
+ * The recorder runs only while homie is on, the line is open, this screen is on top, and the mic
+ * hasn't been refused (`muted`: a tap tries again).
+ */
+export function micWanted(v: { hold: MicHold; open: boolean; focused: boolean; muted: boolean }): boolean {
+  return v.hold !== 'off' && v.open && v.focused && !v.muted;
+}
+
+/**
+ * The kid can answer homie's yes-or-no out loud for as long as it's up: homie is on by a tap and the
+ * mic streams. A step line's window may close first, so a moment then gets its one button instead.
+ */
+export function hearsAnswers(v: { live: boolean; hold: MicHold; listening: boolean }): boolean {
+  return v.live && v.hold === 'tap' && v.listening;
+}
+
+/**
+ * A tap on homie in cook mode never navigates. With a voice line (open, opening, one that failed and
+ * says "Tap homie to try again", or one this build can start), it turns homie on or off ('toggle').
+ * With none (Expo Go, web, no service, a dish the service can't cook), it reads the step aloud
+ * ('read'), and a tap while homie talks stops it ('stop').
+ */
+export function cookTap(v: { voiceHere: boolean; status: 'off' | 'connecting' | 'listening' | 'error'; unavailable: boolean; talking: boolean }): 'toggle' | 'read' | 'stop' {
+  if (v.status !== 'off' || (v.voiceHere && !v.unavailable)) return 'toggle';
+  return v.talking ? 'stop' : 'read';
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -392,12 +467,13 @@ export function answersToHear<T extends AnswerRow>(
 // Half duplex and Cartesia credits (Ink 2 bills every second of audio it gets, silence too)
 
 /**
- * A mic frame goes to /cook only when it is the kid's (Cartesia credit fix A): never one lib/live/mic
- * zeroed because the app makes sound (`quiet`), nor one while another screen is on top. Nothing is
- * sent instead; the service's own half duplex (voice/src/cook.ts hearing) is the backup.
+ * A mic frame goes to /cook only when it is the kid's (Cartesia credit fix A) and homie is on
+ * (`active`: a frame still arriving after the recorder was told to stop is dropped): never one
+ * lib/live/mic zeroed because the app makes sound (`quiet`), nor one while another screen is on top.
+ * Nothing is sent instead; the service's own half duplex (voice/src/cook.ts hearing) is the backup.
  */
-export function cookSendsFrame(v: { quiet: boolean; focused: boolean }): boolean {
-  return !v.quiet && v.focused;
+export function cookSendsFrame(v: { quiet: boolean; focused: boolean; active: boolean }): boolean {
+  return v.active && !v.quiet && v.focused;
 }
 
 /**
