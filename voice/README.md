@@ -105,6 +105,8 @@ App → service
   is the moment's answer: it never answers our offer or nudge and never reaches Claude. Anything else (a question
   for the "ask" moment, "next") goes the usual way, and still isn't taken as a yes to our offer. homie says no
   offer or nudge while a moment is up; they wait for it to close. After a reconnect, send it again if one is up.
+  What the kid says while the `ask` moment is up (they tapped homie to ask) is always for homie: Claude is told so
+  and never judges it as speech meant for someone else.
 - `{ "type": "video", "playing": true | false }` when any video (or the cook's voice note) starts or stops on the
   phone. While one plays, homie says nothing on its own (Caleb, Oct 24): a `greeting`, `offer`, `nudge` or `timer`
   line waits for the next pause, one after another (`timer_done` still comes at once). An answer to what the kid just

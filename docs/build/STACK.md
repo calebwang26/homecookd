@@ -151,7 +151,7 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 | F · Translation + pipeline | Cook's language end to end, original + English quotes, homie log in the full pass, upload race, 8–12 steps | `pipeline/`, `convex/worker.ts`, `convex/lib/recipeJson.ts`, `convex/moss.ts`, `convex/people.ts`, `app/src/lib/languages.ts` |
 | G · Community | Feed, share switch + Muse story card, share asks, swaps, cook together, one dinner flow, dinner invite links | `convex/community.ts`, `convex/dinners.ts`, `convex/shareRequests.ts`, `convex/storyCards.ts`, `convex/lib/geo.ts`, `convex/lib/inviteRoutes.ts`, `convex/seedCommunity.ts`, `app/src/app/community/*`, `app/src/app/dinner/*`, `app/src/app/d.tsx`, `app/src/app/kid/community.tsx`, `app/src/lib/live/community.ts`, `app/src/lib/live/invite.ts`, `web/src/app/d/` |
 | H · Glasses VM | ESP32 → free GCP e2-micro → MP4 → GCS → job | `glasses/`, `convex/glasses.ts`, `convex/lib/glassesRoutes.ts` |
-| I · App UI | homie pot everywhere, cook-screen chips + captions + timers, recording screen, walkie-talkie, language picker | `app/` (everything else) |
+| I · App UI | homie pot everywhere (docked in cook mode's bottom bar), captions + timers, recording screen, walkie-talkie, language picker | `app/` (everything else) |
 
 **Decisions that change earlier rules** (Caleb, Oct 24):
 - Change 5 is replaced: the ESP32 glasses stream to a VM, not the camera roll. "From my glasses" stays as a fallback.
@@ -342,7 +342,8 @@ x-voice-secret) and Claude says that one fact warmly (`voice/src/tapLine.ts`; th
 - Was it for homie? Claude decides on every turn that reaches it (no wake word): "homie" in the transcript, however
   Ink spells it (homey, holmy, homi), is a strong yes; plain commands (next, back, repeat, timers) skip Claude and
   always work. Words not meant for homie get no tool and no speech, and the service sends `{ type: "quiet" }` so
-  the app stops showing homie thinking.
+  the app stops showing homie thinking. Words said while the app's `ask` moment is up (the kid tapped homie to
+  ask) are always for homie.
 - App → service: `{ type: "video", playing: boolean }` when any video (or the cook's own voice note) starts or stops
   on the kid's phone. While one plays (or a clip the service asked for), homie says nothing on its own: a
   `greeting`, `offer`, `nudge` or `timer` line waits for the next pause, one after another (`timer_done` is still
@@ -369,11 +370,11 @@ x-voice-secret) and Claude says that one fact warmly (`voice/src/tapLine.ts`; th
   socket, where the service starts its timer ids again at `timer-1`, so timer ids are per socket on the phone: a
   timer from an older socket keeps counting down and buzzing there, and leaves on its own (its `timer_done` can't
   come).
-- What the app sends (Track I-kid): the chips under homie send `{ type: "text", text: "back" | "repeat" }` (no
-  Next chip; the big "Next step" button sends `{ type: "step" }`). The service's echo of the text (a `transcript`
-  with `final: true`) counts as its answer; a chip acts on its own only if nothing (echo, step, clip, line, timer)
-  comes back within 1.5 s. "repeat" goes only for a kid who chose read-aloud (the service's repeat turns reading
-  on); for anyone else Repeat replays the step's video on the phone. A kid who said yes once has `"yes"` sent for
+- What the app sends (Track I-kid): no chips since Oct 24 (cook mode's bar is Back · homie · Next step; a tap on
+  homie opens the `ask` moment, a long press turns the mic off or on). The buttons send `{ type: "step" }`; "back"
+  and "repeat" are said out loud. `voice.command(text, fallback)` stays for any button that speaks for the kid: the
+  service's echo of the text (a `transcript` with `final: true`) counts as its answer, and the fallback runs only
+  if nothing (echo, step, clip, line, timer) comes back within 1.5 s. A kid who said yes once has `"yes"` sent for
   them on that phone, and the offer's audio is dropped. After a step the kid tapped, a kid who chose read-aloud
   also gets `"repeat"`, so it is read; not when her clip moved the step. On `ready` the app sends its own
   `{ type: "step" }` and doesn't follow the service's go_to_step right after it (the screen's step wins). A
