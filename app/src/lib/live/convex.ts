@@ -13,6 +13,7 @@
 //   useRecording(recordingId)                            live.recording, live (the recording screen)
 //   await endRecording(recordingId)                      live.endRecording: the stop button with no voice line
 //   await startFilming(recordingId)                      live.startFilming: glasses, her Start button
+//   await setCover(recordingId, photoUri)                files.uploadUrl + live.setCover: the plate photo (in-app filming)
 //   useLiveLog(recordingId)                              liveEvents.forRecording, live (what the glasses' live pass saw)
 //   useLiveFrame(recordingId)                            liveEvents.frame, live (the glasses' newest picture)
 //   await cancelLiveJob(jobId)                           jobs.cancel: stops a job (queued or mid-way) for good
@@ -331,6 +332,21 @@ export async function startFilming(recordingId: string): Promise<boolean> {
   const sessionToken = await token();
   const r = await call<{ ok: boolean }>('mutation', 'live:startFilming', { sessionToken, recordingId }, () => stub.startFilming(recordingId), { strict: true });
   return !!r?.ok;
+}
+
+/** The plate photo homie asked for at the end of an in-app recording: the recipe's cover. False if it didn't save. */
+export async function setCover(recordingId: string, photoUri: string): Promise<boolean> {
+  try {
+    if (recordingId.startsWith('stub-')) return true;
+    const storageId = await uploadFile(photoUri, 'image/jpeg');
+    if (storageId.startsWith('stub-file-')) return true;
+    const sessionToken = await token();
+    const r = await call<{ ok: boolean }>('mutation', 'live:setCover', { sessionToken, recordingId, storageId }, () => ({ ok: true }), { soft: true });
+    return !!r?.ok;
+  } catch (e) {
+    console.warn('[convex] live.setCover', String(e).slice(0, 160));
+    return false;
+  }
 }
 
 /** The recording, live: null while it loads, or when it isn't this family's. */

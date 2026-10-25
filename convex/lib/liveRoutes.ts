@@ -5,7 +5,7 @@ import { internal } from "../_generated/api";
 import { fail, isNum, isStr, json, voice, type Body, type Handler } from "./http";
 
 const STATUSES = ["recording", "wrapping_up", "ended"] as const;
-const KINDS = ["intro", "amount", "cue", "substitution", "story", "reaction", "end", "closing", "optin"] as const;
+const KINDS = ["intro", "amount", "cue", "substitution", "story", "show", "reaction", "end", "plate", "closing", "optin"] as const;
 const PROMPT_STATUSES = ["spoken", "answered", "ignored", "not_now"] as const;
 type Of<T extends readonly string[]> = T[number];
 const oneOf = <T extends readonly string[]>(list: T, x: unknown): x is Of<T> => list.includes(x as string);
@@ -27,6 +27,14 @@ const route = (needsRecording: boolean, handler: (ctx: Parameters<Handler>[0], b
     if (needsRecording && !isStr(body.recordingId, 100)) return fail(400, "recordingId is required");
     return handler(ctx, body as Body & { sessionToken: string; recordingId: string });
   });
+
+/** When homie's voice played: `{ atS, endS }` on the recording's clock. */
+function saidOf(raw: unknown): { atS: number; endS: number } | string | undefined {
+  if (raw === undefined || raw === null) return undefined;
+  const a = raw as Record<string, unknown>;
+  if (typeof a !== "object" || !isNum(a.atS) || !isNum(a.endS) || a.endS < a.atS) return "said must be { atS, endS } with endS >= atS";
+  return { atS: a.atS, endS: a.endS };
+}
 
 function answerOf(raw: unknown): { transcript: string; transcriptEn?: string; atS: number; endS: number } | string | undefined {
   if (raw === undefined || raw === null) return undefined;
@@ -68,13 +76,26 @@ export function registerLiveRoutes(http: HttpRouter): void {
   http.route({
     path: "/live/prompt",
     method: "POST",
-    handler: route(true, async (ctx, { sessionToken, recordingId, kind, text, textEn, atS, status }) => {
+    handler: route(true, async (ctx, { sessionToken, recordingId, kind, text, textEn, atS, status, said }) => {
       if (!oneOf(KINDS, kind)) return fail(400, `kind must be one of ${KINDS.join(", ")}`);
       if (!isStr(text, 2000) || !isStr(textEn, 2000)) return fail(400, "text and textEn are required");
       if (!isNum(atS)) return fail(400, "atS must be a number");
       const s = status ?? "spoken";
       if (!oneOf(PROMPT_STATUSES, s)) return fail(400, `status must be one of ${PROMPT_STATUSES.join(", ")}`);
-      return reply(await ctx.runMutation(internal.live.addPrompt, { sessionToken, recordingId, kind, text, textEn, atS, status: s }));
+      const spoke = saidOf(said);
+      if (typeof spoke === "string") return fail(400, spoke);
+      return reply(await ctx.runMutation(internal.live.addPrompt, { sessionToken, recordingId, kind, text, textEn, atS, status: s, said: spoke }));
+    }),
+  });
+
+  http.route({
+    path: "/live/prompt-said",
+    method: "POST",
+    handler: route(false, async (ctx, { sessionToken, promptId, said }) => {
+      if (!isStr(promptId, 100)) return fail(400, "promptId is required");
+      const spoke = saidOf(said);
+      if (spoke === undefined || typeof spoke === "string") return fail(400, spoke ?? "said is required");
+      return reply(await ctx.runMutation(internal.live.promptSaid, { sessionToken, promptId, said: spoke }));
     }),
   });
 

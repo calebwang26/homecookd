@@ -267,3 +267,38 @@ test("the kid's /voice/session carries the cook's language (absent when unknown)
   // The story (130–230 s) was told during step 1 (60–330 s).
   expect(view.memories).toEqual([{ kind: "story", text: "My first apartment had one pot.", moment: { startS: 130, endS: 230 }, stepOrder: 1 }]);
 });
+
+test("in-app filming: show and plate questions, when homie's voice played, and the plate photo as the cover", async () => {
+  const { t, dad, leo } = await family();
+  process.env.WORKER_SECRET = "worker-secret-for-tests";
+  const { recordingId } = await t.mutation(api.live.startRecording, { sessionToken: dad.sessionToken, source: "phone" });
+  const s = { sessionToken: dad.sessionToken, recordingId };
+  await post(t, "/live/status", { ...s, status: "recording" });
+
+  // A reaction is logged after it is said, with its span; a question before, then marked when it played.
+  const said = { atS: 61.2, endS: 63.4 };
+  expect((await post(t, "/live/prompt", { ...s, kind: "reaction", text: "x", textEn: "Oh, I love that.", atS: 61, said: { atS: 5, endS: 2 } })).status).toBe(400);
+  expect((await post(t, "/live/prompt", { ...s, kind: "reaction", text: "x", textEn: "Oh, I love that.", atS: 61, said })).status).toBe(200);
+  const { promptId } = await (await post(t, "/live/prompt", { ...s, kind: "show", text: "x", textEn: "Can you hold up the spice?", atS: 120 })).json();
+  expect((await post(t, "/live/prompt-said", { sessionToken: dad.sessionToken, promptId })).status).toBe(400);
+  expect(await (await post(t, "/live/prompt-said", { sessionToken: dad.sessionToken, promptId, said: { atS: 120.3, endS: 122.9 } })).json()).toEqual({ ok: true });
+  expect((await post(t, "/live/prompt", { ...s, kind: "plate", text: "x", textEn: "Show me the plate!", atS: 900 })).status).toBe(200);
+
+  // Only her own recording takes a cover; a second photo replaces the first and deletes its file.
+  const first = await t.run((ctx) => ctx.storage.store(new Blob([new Uint8Array(64)], { type: "image/jpeg" })));
+  const second = await t.run((ctx) => ctx.storage.store(new Blob([new Uint8Array(64)], { type: "image/jpeg" })));
+  await expect(t.mutation(api.live.setCover, { sessionToken: leo.sessionToken, recordingId, storageId: first })).rejects.toThrow();
+  expect(await t.mutation(api.live.setCover, { ...s, storageId: first })).toEqual({ ok: true });
+  expect(await t.mutation(api.live.setCover, { ...s, storageId: second })).toEqual({ ok: true });
+  expect(await t.run((ctx) => ctx.storage.getUrl(first))).toBeNull();
+
+  // The worker's claim carries the cover and homie's spans, on the video's clock.
+  await t.mutation(api.jobs.create, { sessionToken: dad.sessionToken, uploadPath: "chili-1a2b3c/", source: "phone", recordingId });
+  const claimed = await (await post(t, "/worker/claim", {}, { "x-worker-secret": "worker-secret-for-tests" })).json();
+  expect(claimed.coverUrl).toBeTypeOf("string");
+  expect(claimed.homieLog.map((p: { kind: string; said?: object }) => [p.kind, p.said])).toEqual([
+    ["reaction", said],
+    ["show", { atS: 120.3, endS: 122.9 }],
+    ["plate", undefined],
+  ]);
+});

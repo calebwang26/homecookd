@@ -12,9 +12,22 @@
 //                        still uploads; if that fails too, "done" goes once the socket is back
 //   await homie.end()    ends the recording through Convex without homie (a stalled wrap-up)
 //   homie.notNow()       closes the question (a tap on it, VoiceOver's escape)
-//   await homie.filmWithPhone(record)   a phone recording: start, wait until the server has saved
-//                        that filming began, close the socket and the mic, run the phone's camera, then
-//                        reconnect and end (the server finishes with homie's last questions)
+//   await homie.filmWithPhone(record)   a phone recording with the system camera (older builds): start,
+//                        wait until the server has saved that filming began, close the socket and the
+//                        mic, run the phone's camera, then reconnect and end (the server finishes with
+//                        homie's last questions)
+//   const homie = useHomieRecording(id, info, { camera: true })   filming in the app (useInAppCamera): the
+//                        socket and the mic stay open the whole time, the mic in the camera's audio
+//                        settings (lib/live/camera). Then:
+//   await homie.filmInApp(() => cam.start())   start ({type:"start", camera:true}), wait for the server,
+//                        then the camera; homie keeps listening and asking while she films
+//   homie.cameraFilming(on)   the camera is writing a file: the mic never starts or stops meanwhile (the
+//                        recorder deactivates iOS's audio session when it does); a start waits for
+//                        restartMic, between two files
+//   await homie.restartMic()  between two files (after a pause): the mic fresh, in the camera's settings
+//   homie.sendFrame(jpeg)     a small still for homie's look at the stove (open socket only)
+//   homie.pause() / homie.resume(gapS)   the camera stopped / films again; gapS = seconds the video skipped
+//   homie.plateDone(ok)       the plate photo was taken (or skipped): answers homie's "plate" ask
 //   homie.error          'lostConnection' | 'signedOut' | 'ended' | 'elsewhere' (components/record/words)
 //   homie.serverError    the service reported an error after "I'm done" (the wrap-up may be stuck)
 //
@@ -24,6 +37,8 @@
 // player (lib/live/say). The pot follows the service: lit just before a say, then speaking; listening
 // with the mic level, thinking. Her answers are spoken: the service hears them, and fades the question
 // itself when she says "not now" or after ~10 s of quiet. At `ended` the mic stops.
+// A lost line retries a few times, then says so; while the in-app camera films it keeps trying every
+// 10 s and the message clears when a socket opens (filming never depends on homie's line).
 // One socket at a time: a connect waits while another is on its way or open, and a socket that is no
 // longer the current one is not heard. A new socket has no open question (the server keeps it per
 // socket; the wrap-up asks again whatever is left).
@@ -46,6 +61,8 @@ const VOICE_URL = (process.env.EXPO_PUBLIC_VOICE_URL ?? '').trim().replace(/\/$/
 /** The service always ends a line with say_end; this only catches one that never came. */
 const SAY_GAP_MS = 3000;
 const RETRIES = 3;
+/** While the in-app camera films, a lost line keeps trying this often (Wi-Fi drops; filming goes on). */
+const FILMING_RETRY_MS = 10_000;
 /** The hello counts as said this long after it began, even if its end never came. */
 const INTRO_MAX_MS = 20_000;
 /** A phone recording waits this long for the server to save that filming began, then films anyway. */
@@ -79,7 +96,7 @@ type PendingSay = { chunks: ArrayBuffer[]; rate: number; kind?: string; drop: bo
 /** Close codes that never get better on retry (STACK.md): signed out, no such recording, a newer socket took over. */
 const FINAL_CLOSE: Record<number, HomieError> = { 4401: 'signedOut', 4404: 'ended', 4409: 'elsewhere' };
 
-export function useHomieRecording(recordingId: string | null | undefined, stubInfo: RecordingInfo) {
+export function useHomieRecording(recordingId: string | null | undefined, stubInfo: RecordingInfo, { camera = false }: { camera?: boolean } = {}) {
   const { me } = useSession();
   const [phase, setPhase] = useState<RecordPhase>('connecting');
   const [info, setInfo] = useState<RecordingInfo | null>(null);
@@ -106,12 +123,18 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
   const say = useRef<PendingSay | null>(null);
   const askRef = useRef<Ask | null>(null);
   const micLive = useRef(false);
+  /** The in-app camera is writing a file: the mic must not start or stop now. */
+  const cameraBusy = useRef(false);
+  /** A mic start that waited for the camera (restartMic does it). */
+  const micWanted = useRef(false);
+  const cameraMode = useRef(camera);
   const meId = useRef(me?.id);
   const stubRef = useRef(stubInfo);
   const introTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
     meId.current = me?.id;
     stubRef.current = stubInfo;
+    cameraMode.current = camera;
   });
 
   // Half duplex: silence instead of the mic (and no steam from the speaker) while the phone talks.
@@ -149,16 +172,23 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
 
   const startMic = useCallback(async () => {
     if (micLive.current || !micStreamingSupported()) return;
+    if (cameraBusy.current) {
+      micWanted.current = true;
+      return;
+    }
     micLive.current = true;
-    const r = await micRef.current.start();
+    micWanted.current = false;
+    const r = await micRef.current.start({ camera: cameraMode.current });
     if (r === 'ok') return setMicOn(true);
     micLive.current = false;
     setMicOn(false);
     if (r === 'denied') setMicDenied(true);
   }, []);
 
-  /** Resolves once the recorder has let go of the audio session. */
+  /** Resolves once the recorder has let go of the audio session. While the camera films it keeps running. */
   const stopMic = useCallback(async () => {
+    micWanted.current = false;
+    if (cameraBusy.current) return;
     micLive.current = false;
     setMicOn(false);
     setHomieLevel(0);
@@ -297,6 +327,12 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
       setTimeout(() => want.current && !paused.current && void connectRef.current?.(), 1500 * retries.current);
       return;
     }
+    // Filming in the app: the camera keeps going, so homie keeps trying and comes back on its own.
+    if (cameraBusy.current) {
+      setError('lostConnection');
+      setTimeout(() => want.current && void connectRef.current?.(), FILMING_RETRY_MS);
+      return;
+    }
     want.current = false;
     void stopMic();
     setError('lostConnection');
@@ -308,7 +344,8 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
     const open = sock.current;
     if (open && (open.readyState === 0 || open.readyState === 1)) return;
     connecting.current = true;
-    setError(null);
+    // While filming in the app a lost line keeps its message until a socket opens (no flicker per retry).
+    if (!cameraBusy.current) setError(null);
     const token = await convexSession(meId.current).catch(() => null);
     connecting.current = false;
     if (!want.current || paused.current || sock.current) return;
@@ -333,6 +370,7 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
     s.onopen = () => {
       if (sock.current !== s) return;
       retries.current = 0;
+      setError((e) => (e === 'lostConnection' ? null : e));
       if (!paused.current) void startMic();
     };
     s.onclose = (e) => {
@@ -434,6 +472,48 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
     [sendOrQueue, reached, showAsk, hush, closeSocket, stopMic],
   );
 
+  /** Filming in the app: start on the server, then the camera (`begin`); the socket and mic stay open. */
+  const filmInApp = useCallback(
+    async (begin: () => Promise<boolean>): Promise<boolean> => {
+      sendOrQueue({ type: 'start', camera: true } as { type: string });
+      await reached('recording', START_WAIT_MS);
+      return begin();
+    },
+    [sendOrQueue, reached],
+  );
+
+  const cameraFilming = useCallback((on: boolean) => {
+    cameraBusy.current = on;
+  }, []);
+
+  /**
+   * Between two files: the mic fresh, in the camera's audio settings (an interruption may have changed
+   * them). `fresh: false` only starts one that waited for the camera (a file rolling over).
+   */
+  const restartMic = useCallback(async ({ fresh = true }: { fresh?: boolean } = {}) => {
+    if (cameraBusy.current || !want.current) return;
+    if (!fresh && (micLive.current || !micWanted.current)) return;
+    if (micLive.current) {
+      micLive.current = false;
+      await micRef.current.stop();
+    }
+    await startMic();
+  }, [startMic]);
+
+  const sendFrame = useCallback(
+    (jpeg: string) => {
+      if (phaseRef.current === 'recording') send({ type: 'frame', jpeg } as { type: string });
+    },
+    [send],
+  );
+  const pause = useCallback(() => {
+    showAsk(null);
+    hush();
+    sendOrQueue({ type: 'pause' });
+  }, [showAsk, hush, sendOrQueue]);
+  const resume = useCallback((gapS: number) => sendOrQueue({ type: 'resume', gapS } as { type: string }), [sendOrQueue]);
+  const plateDone = useCallback((ok: boolean) => sendOrQueue({ type: 'plate', ok } as { type: string }), [sendOrQueue]);
+
   const notNow = useCallback(() => {
     const a = askRef.current;
     if (!a) return;
@@ -492,6 +572,13 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
     end,
     notNow,
     filmWithPhone,
+    filmInApp,
+    cameraFilming,
+    restartMic,
+    sendFrame,
+    pause,
+    resume,
+    plateDone,
     retry,
   };
 }

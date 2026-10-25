@@ -16,6 +16,7 @@ const homieEntry = v.object({
   kind: schema.tables.homiePrompts.validator.fields.kind,
   text: v.string(),
   textEn: v.string(),
+  said: v.optional(v.object({ atS: v.number(), endS: v.number() })),
   answer: v.optional(
     v.object({ transcript: v.string(), transcriptEn: v.optional(v.string()), atS: v.number(), endS: v.number() }),
   ),
@@ -39,6 +40,7 @@ async function homieLog(ctx: QueryCtx, recording: Doc<"recordings">) {
       kind: p.kind,
       text: p.text,
       textEn: p.textEn,
+      said: p.said && { atS: t(p.said.atS), endS: t(p.said.endS) },
       answer: p.answer && { ...p.answer, atS: t(p.answer.atS), endS: t(p.answer.endS) },
     }))
     .filter((p) => p.atS >= 0)
@@ -65,6 +67,8 @@ export const claim = internalMutation({
       forKidName: v.optional(v.string()), // only when it's for exactly one kid
       forKidNames: v.array(v.string()),
       memoriesOptIn: v.optional(v.boolean()),
+      // The plate photo homie asked for at the end of an in-app phone recording: use it as the cover.
+      coverUrl: v.optional(v.string()),
       homieLog: v.array(homieEntry),
       // Glasses through the laptop bridge: the live analysis (video seconds) as hints, the spans it missed,
       // and the spans with no footage at all.
@@ -99,6 +103,7 @@ export const claim = internalMutation({
       forKidName: kids.length === 1 ? kids[0] : undefined,
       forKidNames: kids,
       memoriesOptIn: recording ? recording.memoriesOptIn : undefined,
+      coverUrl: (recording && recording.coverStorageId && (await ctx.storage.getUrl(recording.coverStorageId))) || undefined,
       homieLog: recording ? await homieLog(ctx, recording) : [],
       ...(recording ? await liveLog(ctx, recording) : { liveLog: [], liveGaps: [] }),
       videoGaps: job.videoGaps ?? [],

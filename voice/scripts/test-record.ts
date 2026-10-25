@@ -8,6 +8,9 @@
 //   COOK_LANG=en npm run test-record                                  English ("stub-en")
 //   RECORDING=stub-mr-again npm run test-record                       a cook homie has met (the short hello)
 //   SESSION=<cook's sessionToken> RECORDING=<recordings _id> npm run test-record   live Convex
+//   CAMERA=1 npm run test-record      filmed in the app: {type:"start", camera:true}, a still every 5 s
+//                                     (FRAME=<jpeg>, default a pot of chili), a 6 s pause and resume, and
+//                                     the plate photo at the end ({type:"plate", ok:true})
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import WebSocket from "ws";
 import { guard, live, wordsOf } from "./guard.js";
@@ -16,6 +19,8 @@ const base = process.env.URL ?? "ws://localhost:8080";
 const lang = process.env.COOK_LANG === "en" ? "en" : "mr";
 const token = process.env.SESSION ?? "test-session";
 const recording = process.env.RECORDING ?? `stub-${lang}`;
+const camera = process.env.CAMERA === "1";
+const frame = camera ? readFileSync(process.env.FRAME ?? new URL("../../data/synthetic/posters/dad-sunday-chili.jpg", import.meta.url)).toString("base64") : "";
 const audioDir = new URL("../test-audio/", import.meta.url);
 const outDir = new URL("out/", audioDir);
 mkdirSync(outDir, { recursive: true });
@@ -116,7 +121,18 @@ ws.on("close", (code) => console.log(`${stamp()}  closed ${code}`));
 try {
   await next((e) => e.type === "say_end", 30_000, "intro");
   await sleep(playedAt - Date.now() + 500);
-  ws.send(JSON.stringify({ type: "start" }));
+  ws.send(JSON.stringify(camera ? { type: "start", camera: true } : { type: "start" }));
+  const frames = camera ? setInterval(() => ws.send(JSON.stringify({ type: "frame", jpeg: frame })), 5000) : undefined;
+  if (camera) {
+    ws.send(JSON.stringify({ type: "frame", jpeg: frame }));
+    // She steps away (a call): the camera stops for 6 s, then films again.
+    await sleep(1500);
+    console.log(`${stamp()}  ▶ pause`);
+    ws.send(JSON.stringify({ type: "pause" }));
+    await sleep(6000);
+    console.log(`${stamp()}  ▶ resume (gapS 6)`);
+    ws.send(JSON.stringify({ type: "resume", gapS: 6 }));
+  }
   await sleep(1000);
   say("cooking");
   const ask = await next((e) => e.type === "ask", 150_000, "question");
@@ -134,8 +150,14 @@ try {
     if (ev.type === "phase") break;
     await next((e) => e.type === "say_end", 30_000, "end question audio");
     await sleep(playedAt - Date.now() + 800);
+    if (ev.kind === "plate") {
+      console.log(`${stamp()}  ▶ plate photo taken`);
+      ws.send(JSON.stringify({ type: "plate", ok: true }));
+      continue;
+    }
     say(ev.kind === "optin" ? "yes" : "answer");
   }
+  clearInterval(frames);
   console.log("\nlatency:\n  " + timings.join("\n  "));
   console.log("\nPASS");
 } catch (err) {
