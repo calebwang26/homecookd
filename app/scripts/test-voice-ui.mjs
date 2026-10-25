@@ -547,17 +547,41 @@ await test('a tap that turns homie on says the step’s line ({ type: "tap" }) o
   assert.match(cook, /msg\.type === "tap"/, 'the service handles it');
 });
 
-await test('a video the kid started takes the sound (homie off, answers dropped); her clip homie played doesn’t', () => {
-  assert.equal(V.kidStartedVideo({ anyVideo: true, herClip: false, stepVideo: true }), true, 'the kid played the step video');
-  assert.equal(V.kidStartedVideo({ anyVideo: true, herClip: false, stepVideo: false }), true, 'the full-screen player');
-  assert.equal(V.kidStartedVideo({ anyVideo: true, herClip: true, stepVideo: true }), false, 'her clip answering the kid');
-  assert.equal(V.kidStartedVideo({ anyVideo: false, herClip: true, stepVideo: false }), false);
-  assert.equal(V.kidStartedVideo({ anyVideo: false, herClip: false, stepVideo: false }), false);
-  // While it plays: an answer, a hint, a step line or a translation would pause it, so it's dropped;
-  // what homie says on its own waits (the same split as waitsForVideo).
-  for (const k of ['reply', 'hint', 'step', 'translation', 'offer']) assert.equal(V.dropsForKidVideo(k, true), true, k);
+await test('while a video the kid started plays, what would pause it is dropped (a late clip too); homie’s own lines wait', () => {
+  // An answer, a hint, a step line, a translation, or a clip of hers from a turn still on its way.
+  for (const k of ['reply', 'hint', 'step', 'translation', 'offer', 'clip']) assert.equal(V.dropsForKidVideo(k, true), true, k);
+  // What homie says on its own waits for the video (the same split as waitsForVideo).
   for (const k of ['greeting', 'nudge', 'timer']) assert.equal(V.dropsForKidVideo(k, true), false, k);
-  for (const k of ['reply', 'step', 'greeting']) assert.equal(V.dropsForKidVideo(k, false), false, k);
+  // Her clip homie played, or no video: nothing is dropped (lib/media kidVideoPlaying says which).
+  for (const k of ['reply', 'step', 'greeting', 'clip']) assert.equal(V.dropsForKidVideo(k, false), false, k);
+  const voice = readFileSync(join(root, 'src/lib/live/voice.ts'), 'utf8');
+  assert.match(voice, /dropsForKidVideo\('clip', kidVideoPlaying\(\)\)/, 'play_clip checks it');
+});
+
+await test('the step line a tap on homie asked for is its own line (never a yes to reading aloud)', () => {
+  const at = 1_000_000;
+  assert.equal(V.answersTap('step', at, at + 120), true);
+  assert.equal(V.answersTap('step', at, at + V.TAP_LINE_WAIT_MS), false, 'too late: a flip’s line');
+  assert.equal(V.answersTap('step', 0, at), false, 'no tap');
+  for (const k of ['reply', 'greeting', 'nudge', 'translation']) assert.equal(V.answersTap(k, at, at + 120), false, k);
+  const moments = readFileSync(join(root, 'src/components/cooking/CookMoments.tsx'), 'utf8');
+  assert.match(moments, /line\?\.tap\) return/, 'onSay skips it');
+});
+
+await test('the iOS session: homie’s line waits while the recorder starts or stops, and a video waits at the gate', () => {
+  const now = 10_000;
+  assert.equal(V.lineMayStart({ micBusy: false, since: now, now }), true);
+  assert.equal(V.lineMayStart({ micBusy: true, since: now, now: now + 100 }), false, 'the session is changing');
+  assert.equal(V.lineMayStart({ micBusy: true, since: now, now: now + V.LINE_WAITS_FOR_MIC_MS }), true, 'not for ever');
+  // The order, in the code: a video's playhead counts for micWanted before the gate lets it sound, the
+  // gate turns homie off for the kid's play and waits for the recorder, and a stop waits for homie's fade.
+  const voice = readFileSync(join(root, 'src/lib/live/voice.ts'), 'utf8');
+  assert.match(voice, /videoOn\.current \|\| videoPlaying\(\)/);
+  assert.match(voice, /if \(kid\) hush\(\);\s+else syncMic\(\);\s+return micBusy\.current \? micIdle\(VIDEO_GATE_MAX_MS\) : null;/);
+  assert.match(voice, /useEffect\(\(\) => setVideoGate\(videoGate\), \[videoGate\]\)/);
+  assert.match(voice, /audioFaded\(\)\s+\.then\(\(\) => micRef\.current\.stop\(\)\)/);
+  // A tap on homie: the video fades and pauses first; the recorder starts only after (micWanted's video).
+  for (const hold of ['tap', 'window', 'turn']) assert.equal(V.micWanted({ hold, open: true, focused: true, muted: false, video: true }), false, hold);
 });
 
 await test('a step her clip moved the screen to goes to the service with read: false; any other with no flag', () => {
