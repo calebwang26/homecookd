@@ -383,6 +383,22 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   nothing: the first question is still asked, and she can say "not now" to it. The opt-in is asked once: a reconnect after its wait never asks it again (only a clear yes or no is saved). Live
   questions while she cooks are never back to back (the pacing's gap is 3.5 min, 90 s with `HOMIE_DEMO=1`), so
   they get no hold.
+- homie stays in the centre across the wrap-up's questions (Oct 25, Caleb: no "back to the corner, then
+  straight back to the middle" between two questions). Service → app `{ type: "hold", on: true }` the moment she
+  taps "I'm done" (order: phase `wrapping_up`, `say_end`, hold on, then the drop of any live card), before the
+  count line or any line, and on a reconnect mid-run right after the phase; `{ type: "hold", on: false }` once the
+  run is over (after the last answer or skip, and after any let-off line), right before the plate photo ask or the
+  goodbye. App side (`lib/live/homie` `hold`/`said`, `components/record/recordingLogic`
+  `heldAfter`/`momentView`/`liftToFit`, `AskMoment`): homie's centred moment is up while held or while a question
+  (not the plate) is up, so a live card up at "I'm done" never shrinks: its words fade out and homie stays, thinking
+  with no words while the questions are written. homie never moves or shrinks while held (on a short phone a long
+  question can lift it once, only up, to fit), and the words under it crossfade in place. Between questions it
+  shows only what homie is saying (a `say` that starts while held with no question up: the count line, a let-off;
+  a question clears it) or nothing; the listening bars, "Just answer out loud" and the tap that skips ("not now")
+  only while a question is up. `ready`, any close (4409 included), a pause, `ended`, a plate ask and a stalled
+  wrap-up (the app ending it without homie) turn the hold off. An older service never sends it: each question
+  opens and closes on its own, as before. Live questions while filming are minutes apart (the pacing below), so
+  they never need it.
 - The service ignores incoming audio while homie speaks, until the phone can first have finished playing the line
   (`say_end` + its length), so it never hears itself; the app also sends silence while it plays, so a quick reply
   right after the line isn't cut. homie gives guidance, never cooking advice (`docs/agents/memory/homie-guidance-only.md`). Pacing

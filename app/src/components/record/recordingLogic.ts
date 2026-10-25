@@ -1,7 +1,8 @@
 // The recording screen's rules, pure (node scripts/test-recording-ui.mjs): the line under the big
 // button in each of homie's phases, when filming starts by itself, the pot for the voice service's
-// state, what "not now" sends, what the mic sends while the phone plays sound (half duplex), and how
-// long the wrap-up may sit still before the app ends the recording without homie.
+// state, what "not now" sends, when homie's centred moment is up and what it shows (a question, or
+// held between the wrap-up's questions), what the mic sends while the phone plays sound (half
+// duplex), and how long the wrap-up may sit still before the app ends the recording without homie.
 import type { HomieState } from '@/lib/homie/store';
 
 import type { Line, RecordWords } from './words';
@@ -58,6 +59,82 @@ export function notNowMessage(kind: AskKind): { type: 'not_now' } | { type: 'tex
 export function askLine(ask: Pick<Ask, 'text' | 'textEn'>): Line {
   const en = ask.textEn?.trim();
   return { text: ask.text, en: en && en !== ask.text.trim() ? en : null };
+}
+
+/**
+ * A line homie says while the wrap-up holds it in the centre with no question up (the count line,
+ * "That's okay, no need to answer today"). `id` is new for every line, so the same words said twice
+ * still count as a new line.
+ */
+export type HeldLine = { id: number; text: string; textEn?: string | null };
+
+/** homie's centred moment (AskMoment): when it is up, and what it shows. */
+export type MomentView = {
+  /** homie big in the middle: a question is up, or the wrap-up holds homie there between questions. */
+  open: boolean;
+  /** The words under homie, keyed so a change crossfades in place: the question, else (held) homie's line. */
+  words: { key: string; line: Line } | null;
+  /** A question is up: the listening bars and "Just answer out loud", and a tap is "not now". */
+  asking: boolean;
+};
+
+/** What lib/live/homie keeps from the service's hold: whether homie is held, and its line meanwhile. */
+export type Held = { hold: boolean; said: HeldLine | null };
+export const NOT_HELD: Held = { hold: false, said: null };
+
+export type HeldEvent =
+  | { type: 'hold'; on: boolean }
+  /** A line homie starts saying; `askUp` = a question is on screen (then it is that question, or a nudge under it). */
+  | { type: 'say'; line: HeldLine; askUp: boolean }
+  /** A question comes up. The plate photo ends the run of questions, so it ends the hold too. */
+  | { type: 'ask'; kind: AskKind }
+  /** A new or lost socket, a pause, the end: like the question, the hold goes with it. */
+  | { type: 'reset' };
+
+/**
+ * The hold from the service's messages. Only a line said while held with no question up is shown
+ * (so a reaction from earlier in the filming never turns up), and a question clears it: once that
+ * question is answered, nothing stale comes back under homie.
+ */
+export function heldAfter(s: Held, e: HeldEvent): Held {
+  switch (e.type) {
+    case 'hold':
+      return e.on ? (s.hold ? s : { hold: true, said: null }) : NOT_HELD;
+    case 'say':
+      return s.hold && !e.askUp ? { hold: true, said: e.line } : s;
+    case 'ask':
+      if (e.kind === 'plate') return NOT_HELD;
+      return s.said ? { ...s, said: null } : s;
+    case 'reset':
+      return NOT_HELD;
+  }
+}
+
+const CLOSED: MomentView = { open: false, words: null, asking: false };
+
+/**
+ * homie's centred moment keeps homie at one height, so a long question on a short phone (an iPhone SE)
+ * could reach past the bottom. Then homie and its words go up by this much (y down, in points): just
+ * enough for the words to end at `bottom`, and never so far that homie passes `topLimit`. 0 when they fit.
+ */
+export function liftToFit(s: { wordsTop: number; wordsH: number; bottom: number; homieTop: number; topLimit: number }): number {
+  const need = s.wordsTop + s.wordsH - s.bottom;
+  return Math.max(0, Math.min(need, s.homieTop - s.topLimit));
+}
+
+/**
+ * The voice service's `{type:"hold", on}` keeps homie in the middle across the wrap-up's run of
+ * questions, so it never goes back to its corner between two of them. With no hold (an older
+ * service, or filming) it is up exactly while a question is. The plate photo has its own view
+ * (PlateMoment), and once the recording has ended nothing holds homie. Nor once the wrap-up has
+ * stalled (`stalled`: the app is ending it without homie, and the screen's × must show): a question
+ * still up stays, and a tap closes it.
+ */
+export function momentView(s: { ask: Ask | null; hold: boolean; said: HeldLine | null; ended: boolean; stalled?: boolean }): MomentView {
+  if (s.ended || s.ask?.kind === 'plate') return CLOSED;
+  if (s.ask) return { open: true, words: { key: `ask:${s.ask.promptId}`, line: askLine(s.ask) }, asking: true };
+  if (!s.hold || s.stalled) return CLOSED;
+  return { open: true, words: s.said ? { key: `said:${s.said.id}`, line: askLine({ text: s.said.text, textEn: s.said.textEn ?? '' }) } : null, asking: false };
 }
 
 /**
