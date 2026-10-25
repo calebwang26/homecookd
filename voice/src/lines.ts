@@ -31,6 +31,18 @@ const FIXED = {
     en: w.kid ? `Can ${w.kid} hear your stories too?` : "Can your family hear your stories too?",
     mr: w.kid ? `${w.kid} ला तुमच्या गोष्टी पण ऐकू द्यायच्या का?` : "घरच्यांना तुमच्या गोष्टी पण ऐकू द्यायच्या का?",
   }),
+  // A wrap-up question she hasn't answered after 5 s: homie checks she's still there, with no hurry (Caleb, Oct 24:
+  // "Are you still there? Can you answer the question?"). Still quiet 5 s later: homie lets her off kindly and wraps
+  // up ("That's okay. It seems like you don't want to answer today. All good, we can wrap up the dish"), never a
+  // guilt trip. TODO(caleb): native Marathi check, like the lines above (both are new on Oct 24).
+  stillThere: (w) => ({
+    en: `Still there, ${w.call}? Take your time. I'm listening.`,
+    mr: `${w.call}, आहात ना? सावकाश सांगा, मी ऐकतेय.`,
+  }),
+  letOff: (w) => ({
+    en: `That's okay, ${w.call}. No need to answer today. All good, let's finish up.`,
+    mr: `काही हरकत नाही, ${w.call}. आज उत्तर नाही दिलं तरी चालेल. चला, आता आटोपूया.`,
+  }),
   closing: (w) => ({
     en: `That's a wrap! ${w.kid ?? "Your family"} is going to hear every bit of this. Thank you for sharing it.`,
     mr: `झालं! ${w.kid ? `${w.kid} हे सगळं ऐकणार आहे.` : "घरचे हे सगळं ऐकणार आहेत."} हे शेअर केल्याबद्दल खूप खूप धन्यवाद.`,

@@ -35,6 +35,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [homie-talks-no-bubble](memory/homie-talks-no-bubble.md) | Oct 24: homie talking = no text (pot lights, lid lifts, "AI voice"); asking = centred, no buttons, answer out loud |
 | [homie-hello-once](memory/homie-hello-once.md) | Oct 24: homie introduces itself once: the pot per person on a phone, the recording hello per cook (`metBefore`) |
 | [homie-guidance-only](memory/homie-guidance-only.md) | Oct 24: while a cook films, homie gives guidance (how much, show it to the camera, the plate), never cooking advice |
+| [homie-waits-for-answers](memory/homie-waits-for-answers.md) | Oct 24: the wrap-up waits for her whole answer (3 s / 3.5 s Marathi of quiet), never talks over her; quiet 5 s → "still there?", 5 s more → a kind let-off, no more questions |
 | [in-app-recording](memory/in-app-recording.md) | Oct 24: phone recording films inside the app at 1080p (VisionCamera 4) so homie stays live; the audio-session rules |
 | [homie-silent-during-video](memory/homie-silent-during-video.md) | Oct 24: while any video plays homie says nothing on its own (held for the next pause); only answers to the kid; reading steps aloud off by default |
 | [homie-tap-always-answers](memory/homie-tap-always-answers.md) | Oct 24: a tap on homie always gets a spoken answer: news first (Claude), else the screen's one line about its big button; "I'm right here." on a repeat tap |

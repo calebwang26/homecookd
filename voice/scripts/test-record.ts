@@ -11,6 +11,12 @@
 //   CAMERA=1 npm run test-record      filmed in the app: {type:"start", camera:true}, a still every 5 s
 //                                     (FRAME=<jpeg>, default a pot of chili), a 6 s pause and resume, and
 //                                     the plate photo at the end ({type:"plate", ok:true})
+// The wrap-up's turn-taking (record.ts listen), on the first question after done:
+//   SCENARIO=long npm run test-record    a long, slow answer: three of her lines with 2.5 s and 3 s pauses between
+//                                        them. PASS needs homie silent until she's finished, then one answer.
+//   SCENARIO=silent npm run test-record  she says nothing: "still there?" ~5 s after the question played, the
+//                                        let-off ~5 s after that, then no more questions (no opt-in) and goodbye.
+//   SCENARIO=late npm run test-record    she answers 2 s after "still there?" played: no let-off, the questions go on.
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import WebSocket from "ws";
 import { guard, live, wordsOf } from "./guard.js";
@@ -21,6 +27,7 @@ const lang = ["en", "ta", "zh"].includes(process.env.COOK_LANG ?? "") ? process.
 const token = process.env.SESSION ?? "test-session";
 const recording = process.env.RECORDING ?? `stub-${lang}`;
 const camera = process.env.CAMERA === "1";
+const scenario = ["long", "silent", "late"].includes(process.env.SCENARIO ?? "") ? process.env.SCENARIO! : "";
 const frame = camera ? readFileSync(process.env.FRAME ?? new URL("../../data/synthetic/posters/dad-sunday-chili.jpg", import.meta.url)).toString("base64") : "";
 const audioDir = new URL("../test-audio/", import.meta.url);
 const outDir = new URL("out/", audioDir);
@@ -57,10 +64,12 @@ await new Promise((r, j) => (ws.once("open", r), ws.once("error", j)));
 // The mic: whatever line is queued, else silence, 100 ms at a time.
 let queue: Buffer[] = [];
 let speechEndAt = 0;
+/** Every time a line of hers finished playing into the mic (SCENARIO=long finds its answer's end here). */
+const speechEnds: number[] = [];
 const mic = setInterval(() => {
   const chunk = queue.shift();
   ws.send(chunk ?? Buffer.alloc(3200));
-  if (chunk && !queue.length) speechEndAt = Date.now();
+  if (chunk && !queue.length) speechEnds.push((speechEndAt = Date.now()));
 }, 100);
 function say(name: string) {
   if (!live) {
@@ -71,13 +80,64 @@ function say(name: string) {
     speechEndAt = Date.now();
     return;
   }
-  const pcm = pcmOf(name);
+  play(name, pcmOf(name));
+}
+function play(name: string, pcm: Buffer) {
   console.log(`${stamp()}  ▶ cook says ${name} (${(pcm.length / 32000).toFixed(1)}s)`);
   queue = [];
   for (let i = 0; i < pcm.length; i += 3200) queue.push(pcm.subarray(i, i + 3200));
 }
+/** SCENARIO=long: three of her lines with 2.5 s and 3 s of silence between them, like a cook stopping to think. */
+function longAnswer(): Buffer {
+  const quiet = (s: number) => Buffer.alloc(Math.round(s * 16_000) * 2);
+  return Buffer.concat([pcmOf("answer"), quiet(2.5), pcmOf("cooking"), quiet(3), pcmOf("yes")]);
+}
 
 type Ev = { type: string; [k: string]: unknown };
+
+const s = (ms: number) => `${(ms / 1000).toFixed(1)}s`;
+/** Fails the run (exit code 1) with `what` unless `ok`. */
+function check(ok: boolean, what: string) {
+  console.log(`  ${ok ? "ok  " : "FAIL"} ${what}`);
+  if (!ok) process.exitCode = 1;
+}
+
+/** The SCENARIO's checks, from what homie said and asked after the tested question (`seen`). */
+function checkScenario(t: { ask: Ev; playedAt: number; start: number; end: number } | undefined) {
+  console.log(`\nscenario ${scenario}:`);
+  if (!t) return check(false, "no wrap-up question to test");
+  const after = seen.filter((e) => e.at >= t.start);
+  const lines = after.filter((e) => e.type === "say");
+  const asks = after.filter((e) => e.type === "ask");
+  const answered = after.filter((e) => e.type === "answered" && e.promptId === t.ask.promptId);
+  if (scenario === "silent") {
+    const [nudge, letOff] = lines;
+    check(/^Still there/.test(nudge?.textEn ?? ""), `"still there?" first: ${nudge?.textEn}`);
+    if (nudge) check(nudge.at - t.playedAt >= 4800 && nudge.at - t.playedAt < 6500, `…${s(nudge.at - t.playedAt)} after the ${t.ask.kind} question played (5 s wanted)`);
+    check(/No need to answer today/.test(letOff?.textEn ?? ""), `then the let-off: ${letOff?.textEn}`);
+    if (letOff && nudge?.playedAt) check(letOff.at - nudge.playedAt >= 4800 && letOff.at - nudge.playedAt < 6500, `…${s(letOff.at - nudge.playedAt)} after "still there?" played (5 s wanted)`);
+    check(!asks.some((a) => a.kind === "end" || a.kind === "optin"), `no more questions after the let-off (asked: ${asks.map((a) => a.kind).join(", ") || "none"})`);
+    check(answered.length === 0, "nothing marked answered");
+    check(lines.at(-1)?.kind === "closing", `the goodbye last: ${lines.at(-1)?.textEn}`);
+  } else {
+    let from = t.start;
+    if (scenario === "late") {
+      const nudge = lines[0];
+      check(/^Still there/.test(nudge?.textEn ?? ""), `"still there?" ${nudge ? s(nudge.at - t.playedAt) : "never"} after the ${t.ask.kind} question played`);
+      check(!lines.some((l) => /No need to answer today/.test(l.textEn ?? "")), "no let-off once she answered");
+      from = (nudge?.playedAt ?? t.start) + 1000;
+    }
+    const end = speechEnds.find((x) => x > t.start) ?? t.end;
+    const during = after.filter((e) => (e.type === "say" || e.type === "ask") && e.at > from && e.at < end);
+    check(during.length === 0, `homie silent for the whole ${s(end - from)} answer${during.length ? ` (said ${during.map((e) => e.textEn).join(" | ")})` : ""}`);
+    const finals = after.filter((e) => e.type === "transcript" && e.at <= (answered[0]?.at ?? Infinity));
+    check(answered.length === 1 && answered[0].at > end, `one answer, after she finished (${finals.length} final transcript${finals.length === 1 ? "" : "s"} joined)`);
+    const nextLine = after.find((e) => (e.type === "say" || e.type === "ask") && e.at >= end);
+    if (nextLine) check(nextLine.at - end >= 2500 && nextLine.at - end < 12_000, `homie's next line ${s(nextLine.at - end)} after her last word: ${nextLine.textEn}`);
+    else check(false, "homie said nothing after her answer");
+    if (scenario === "long") check(!lines.some((l) => /^Still there/.test(l.textEn ?? "")), `no "still there?" while she answered`);
+  }
+}
 const waiters: { match: (e: Ev) => boolean; resolve: (e: Ev) => void }[] = [];
 const next = (match: (e: Ev) => boolean, ms: number, what: string) =>
   Promise.race([
@@ -89,27 +149,39 @@ const next = (match: (e: Ev) => boolean, ms: number, what: string) =>
 
 let audio: Buffer[] = [];
 let sayAt = 0;
+let firstAudioAt = 0;
 let said = 0;
 /** When the phone would finish playing homie's last line (the cook waits for it, like a person would). */
 let playedAt = 0;
+/** homie's lines and questions with when they came, and when each line finished playing (the scenarios' checks). */
+const seen: { type: string; kind?: string; textEn?: string; promptId?: string; at: number; playedAt?: number }[] = [];
 ws.on("message", (data, isBinary) => {
   if (isBinary) {
-    if (!audio.length && sayAt) timings.push(`say → first audio ${Date.now() - sayAt}ms`);
+    if (!audio.length && sayAt) {
+      firstAudioAt = Date.now();
+      timings.push(`say → first audio ${firstAudioAt - sayAt}ms`);
+    }
     audio.push(data as Buffer);
     return;
   }
   const ev = JSON.parse(data.toString()) as Ev;
   if (ev.type === "transcript" && !ev.final) return;
   if (ev.type === "state") return;
+  if (ev.type === "say" || ev.type === "ask" || ev.type === "answered" || ev.type === "transcript") {
+    seen.push({ type: ev.type, kind: ev.kind as string, textEn: (ev.textEn ?? ev.text) as string, promptId: ev.promptId as string, at: Date.now() });
+  }
   if (ev.type === "say") {
     audio = [];
     sayAt = Date.now();
+    firstAudioAt = 0;
   }
   if (ev.type === "say_end") {
     const pcm = Buffer.concat(audio);
     const file = new URL(`record-${lang}-${++said}.wav`, outDir);
     writeFileSync(file, wavOf(pcm, 24000));
-    if (!ev.interrupted) playedAt = sayAt + (pcm.length / 48000) * 1000;
+    if (!ev.interrupted) playedAt = (firstAudioAt || sayAt) + (pcm.length / 48000) * 1000;
+    const line = seen.findLast((s) => s.type === "say");
+    if (line) line.playedAt = playedAt;
     console.log(`${stamp()}  say_end → ${file.pathname} (${(pcm.length / 48000).toFixed(1)}s)`);
   } else {
     if (ev.type === "transcript" && speechEndAt) timings.push(`speech end → final transcript ${Date.now() - speechEndAt}ms`);
@@ -145,22 +217,46 @@ try {
   await next((e) => e.type === "answered" && e.promptId === ask.promptId, 20_000, "answered");
   await sleep(1000);
   ws.send(JSON.stringify({ type: "done" }));
-  // End questions, then the opt-in; then the goodbye.
+  // End questions, then the opt-in; then the goodbye. SCENARIO picks how she answers the first one.
+  let tested: { ask: Ev; playedAt: number; start: number; end: number } | undefined;
   for (;;) {
-    const ev = await next((e) => e.type === "ask" || (e.type === "phase" && e.phase === "ended"), 60_000, "end question");
+    const ev = await next((e) => e.type === "ask" || (e.type === "phase" && e.phase === "ended"), 90_000, "end question");
     if (ev.type === "phase") break;
     await next((e) => e.type === "say_end", 30_000, "end question audio");
+    const asked = playedAt;
     await sleep(playedAt - Date.now() + 800);
     if (ev.kind === "plate") {
       console.log(`${stamp()}  ▶ plate photo taken`);
       ws.send(JSON.stringify({ type: "plate", ok: true }));
       continue;
     }
+    if (scenario && !tested && live) {
+      const start = Date.now();
+      if (scenario === "silent") {
+        console.log(`${stamp()}  ▶ cook stays quiet`);
+        tested = { ask: ev, playedAt: asked, start, end: start };
+        continue;
+      }
+      if (scenario === "late") {
+        console.log(`${stamp()}  ▶ cook stays quiet until "still there?" has played`);
+        await next((e) => e.type === "say" && e.kind === "reaction", 15_000, `"still there?"`);
+        await next((e) => e.type === "say_end", 30_000, `"still there?" audio`);
+        await sleep(playedAt - Date.now() + 2000);
+        say(ev.kind === "optin" ? "yes" : "answer");
+        tested = { ask: ev, playedAt: asked, start, end: start };
+        continue;
+      }
+      const pcm = longAnswer();
+      play("a long answer (answer, 2.5 s, cooking, 3 s, yes)", pcm);
+      tested = { ask: ev, playedAt: asked, start, end: start + (pcm.length / 32000) * 1000 };
+      continue;
+    }
     say(ev.kind === "optin" ? "yes" : "answer");
   }
   clearInterval(frames);
   console.log("\nlatency:\n  " + timings.join("\n  "));
-  console.log("\nPASS");
+  if (scenario) checkScenario(tested);
+  console.log(process.exitCode ? "\nFAIL" : "\nPASS");
 } catch (err) {
   console.log(`\nFAIL: ${(err as Error).message}`);
   process.exitCode = 1;

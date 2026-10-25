@@ -219,6 +219,11 @@ What happens
    "Not now", "later", "आत्ता नाही", "नंतर" in a short turn drops it.
 5. `done`: homie stops talking and drops an open question, then up to 2 end questions ("Before you go, two quick
    ones…"), then "Can Shreya hear your stories too?" (yes/no → `/live/optin`), then the closing, then phase `ended`.
+   The wrap-up waits for her (`listen`): no line starts while she talks; an answer is every turn until no new words
+   for 3 s (Ink 2, ink-whisper) or 3.5 s (Gemini Live), so a pause to think doesn't end it. No word 5 s after a
+   question played: "Still there, Rajani Aaji? Take your time. I'm listening."; 5 s more: the let-off ("That's okay…
+   No need to answer today. All good, let's finish up."), and nothing more is asked (the plate photo still, then
+   goodbye). Live run: `SCENARIO=long|silent|late npm run test-record`.
 
 Reconnects: what homie knows about a recording (the pacing counters, the questions it asked, what she said, the
 hello) is kept per recording on the instance (Cloud Run's session affinity sends her back to it) until it ends,
