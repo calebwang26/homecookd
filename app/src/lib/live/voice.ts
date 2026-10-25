@@ -311,7 +311,7 @@ export function useVoiceCooking(opts: VoiceOptions) {
    * line stays open (step lines still play); a tap tries again.
    */
   const syncMic = useCallback(function sync() {
-    const on = micWanted({ hold: micHoldRef.current, open: sock.current?.readyState === 1, focused: focusedRef.current, muted: mutedRef.current });
+    const on = micWanted({ hold: micHoldRef.current, open: sock.current?.readyState === 1, focused: focusedRef.current, muted: mutedRef.current, video: videoOn.current });
     micOn.current = on;
     if (!on) setHomieLevel(0);
     if (micBusy.current) return;
@@ -782,10 +782,12 @@ export function useVoiceCooking(opts: VoiceOptions) {
         setVideoState(on);
         const s = sock.current;
         if (s?.readyState === 1) s.send(JSON.stringify(videoMessage(on)));
+        // No recorder while a video plays, so it plays at full volume (voiceLogic micWanted).
+        syncMic();
       }
       release();
     },
-    [release],
+    [release, syncMic],
   );
 
   /** Opens the line again after a pause, the way it was opened (homie stays off until a tap). */

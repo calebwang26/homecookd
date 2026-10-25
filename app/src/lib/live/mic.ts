@@ -19,16 +19,19 @@
 // cookSendsFrame).
 // `onLevel` (optional) gets each chunk's loudness, 0..1 (lib/homie/logic pcmLevel), for homie's steam.
 // In Expo Go the native module isn't there: the module is never loaded and start() says 'error'.
+// Stopping hands the session back to the app's playback mode (lib/media PLAYBACK_AUDIO_MODE): left in
+// PlayAndRecord / VoiceChat, the next step video played near silent (Caleb, Oct 25). Not after a camera
+// start: the camera owns its session then.
 import type * as Studio from '@siteed/audio-studio';
 import Constants, { ExecutionEnvironment } from 'expo-constants';
-import { requestRecordingPermissionsAsync } from 'expo-audio';
+import { requestRecordingPermissionsAsync, setAudioModeAsync } from 'expo-audio';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
 import { halfDuplex, pcmLevel } from '@/lib/homie/logic';
 import { CAMERA_AUDIO_SESSION } from '@/lib/live/camera';
 import { getHomie } from '@/lib/homie/store';
-import { audioNow, videoPlaying } from '@/lib/media';
+import { audioNow, PLAYBACK_AUDIO_MODE, videoPlaying } from '@/lib/media';
 
 import { silence } from './voiceLogic';
 
@@ -61,6 +64,8 @@ export function useMicStream(onChunk: (pcm: ArrayBuffer, quiet: boolean) => void
   const [on, setOn] = useState(false);
   const sink = useRef(onChunk);
   const levelSink = useRef(onLevel);
+  // Started for the app's own camera: its session isn't ours to hand back.
+  const withCamera = useRef(false);
   useEffect(() => {
     sink.current = onChunk;
     levelSink.current = onLevel;
@@ -70,6 +75,7 @@ export function useMicStream(onChunk: (pcm: ArrayBuffer, quiet: boolean) => void
     if (!rec || !micStreamingSupported()) return 'error';
     const perm = await requestRecordingPermissionsAsync().catch(() => null);
     if (!perm?.granted) return 'denied';
+    withCamera.current = camera;
     try {
       await rec.startRecording({
         sampleRate: MIC_SAMPLE_RATE,
@@ -103,6 +109,7 @@ export function useMicStream(onChunk: (pcm: ArrayBuffer, quiet: boolean) => void
   const stop = useCallback(async (): Promise<void> => {
     setOn(false);
     await rec?.stopRecording().catch(() => {});
+    if (!withCamera.current) await setAudioModeAsync(PLAYBACK_AUDIO_MODE).catch(() => {});
   }, [rec]);
 
   // Leaving the screen never leaves the microphone on.
@@ -110,7 +117,14 @@ export function useMicStream(onChunk: (pcm: ArrayBuffer, quiet: boolean) => void
   useEffect(() => {
     recRef.current = rec;
   });
-  useEffect(() => () => void recRef.current?.stopRecording().catch(() => {}), []);
+  useEffect(
+    () => () =>
+      void recRef.current
+        ?.stopRecording()
+        .catch(() => {})
+        .then(() => (withCamera.current ? undefined : setAudioModeAsync(PLAYBACK_AUDIO_MODE).catch(() => {}))),
+    [],
+  );
 
   return { on, start, stop };
 }

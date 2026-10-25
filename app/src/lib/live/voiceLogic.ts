@@ -410,11 +410,14 @@ export function micTimer(v: MicNow): { ms: number; event: MicEvent } | null {
 }
 
 /**
- * The recorder runs only while homie is on, the line is open, this screen is on top, and the mic
- * hasn't been refused (`muted`: a tap tries again).
+ * The recorder runs only while homie is on, the line is open, this screen is on top, the mic hasn't
+ * been refused (`muted`: a tap tries again), and no video plays. A video's frames are zeroed anyway
+ * (half duplex), and a running recorder holds iOS in its voice-chat mode, which turns the video's sound
+ * right down (Caleb, Oct 25: "when i click into the video after homie stops talking, it'll be muted").
+ * The recorder stops for it (lib/live/mic then hands the session back to playback) and starts again after.
  */
-export function micWanted(v: { hold: MicHold; open: boolean; focused: boolean; muted: boolean }): boolean {
-  return v.hold !== 'off' && v.open && v.focused && !v.muted;
+export function micWanted(v: { hold: MicHold; open: boolean; focused: boolean; muted: boolean; video: boolean }): boolean {
+  return v.hold !== 'off' && v.open && v.focused && !v.muted && !v.video;
 }
 
 /**
