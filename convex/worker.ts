@@ -114,13 +114,14 @@ export const claim = internalMutation({
 /** The worker found the upload incomplete: the job waits as "uploading" and is queued again in 30 s. */
 export const release = internalMutation({
   args: { jobId: v.id("jobs") },
-  returns: v.boolean(),
+  returns: v.union(v.literal("ok"), v.literal("cancelled"), v.literal("no")),
   handler: async (ctx, { jobId }) => {
     const job = await ctx.db.get("jobs", jobId);
-    if (!job || job.stage !== "preparing") return false; // only the worker that just claimed it
+    if (job?.error === CANCELLED) return "cancelled"; // the cook stopped it while it waited for the video
+    if (!job || job.stage !== "preparing") return "no"; // only the worker that just claimed it
     await ctx.db.patch("jobs", jobId, { stage: "uploading", progress: 0, claimedAt: undefined });
     await ctx.scheduler.runAfter(RELEASE_DELAY_MS, internal.worker.requeue, { jobId });
-    return true;
+    return "ok";
   },
 });
 
@@ -148,18 +149,19 @@ export const progress = internalMutation({
     progress: v.number(),
     error: v.optional(v.string()),
   },
-  returns: v.boolean(),
+  returns: v.union(v.literal("ok"), v.literal("missing"), v.literal("cancelled")),
   handler: async (ctx, { jobId, stage, progress, error }) => {
     const job = await ctx.db.get("jobs", jobId);
-    if (!job) return false;
-    if (job.error === CANCELLED) return false; // the cook cancelled it: a worker mid-way can't bring it back
+    if (!job) return "missing";
+    // The cook stopped it: a worker mid-way can't bring it back, and is told to stop (HTTP 409).
+    if (job.error === CANCELLED) return "cancelled";
     await ctx.db.patch("jobs", jobId, {
       stage,
       progress: Math.min(1, Math.max(0, progress)),
       error: stage === "failed" ? (error ?? "Something went wrong.").slice(0, 500) : undefined,
     });
     if (stage === "failed" && job.recipeId) await ctx.db.patch("recipes", job.recipeId, { status: "failed" });
-    return true;
+    return "ok";
   },
 });
 
@@ -187,10 +189,11 @@ export const published = internalMutation({
     }),
     memoriesOptIn: v.optional(v.boolean()),
   },
-  returns: v.union(v.null(), v.id("recipes")),
+  returns: v.union(v.id("recipes"), v.literal("missing"), v.literal("cancelled")),
   handler: async (ctx, { jobId, recipe, memoriesOptIn }) => {
     const job = await ctx.db.get("jobs", jobId);
-    if (!job || job.error === CANCELLED) return null;
+    if (!job) return "missing";
+    if (job.error === CANCELLED) return "cancelled";
     let recipeId = job.recipeId;
     const fields = { ...recipe, language: recipe.language ?? job.language };
     if (recipeId && (await ctx.db.get("recipes", recipeId))) {

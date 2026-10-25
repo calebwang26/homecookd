@@ -135,7 +135,8 @@ export default defineSchema({
     videoGaps: v.optional(v.array(moment)),
   })
     .index("by_familyId", ["familyId"])
-    .index("by_stage", ["stage"]),
+    .index("by_stage", ["stage"])
+    .index("by_uploadPath", ["uploadPath"]),
 
   /** What the kid is cooking right now, so the cook's phone can show "Leo is on step 3". */
   cookingSessions: defineTable({
