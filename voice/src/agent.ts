@@ -16,8 +16,8 @@ import type * as Beta from "@anthropic-ai/sdk/resources/beta/messages/messages.j
 /** What the agent can make happen. The cooking session implements these. */
 export type Actions = {
   currentStep: () => number;
-  /** Shows the step; reads it aloud when the kid has said yes to reading, or always with `read`. */
-  goToStep: (order: number, read?: boolean) => Promise<void>;
+  /** Shows the step and says its short line when the step changes; `repeat` says it again with no change. */
+  goToStep: (order: number, repeat?: boolean) => Promise<void>;
   /** Moss search. `waitMs` caps how long to wait for the family's index to load. */
   findMoment: (query: string, waitMs: number) => Promise<Hit[]>;
   /**

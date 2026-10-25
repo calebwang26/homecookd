@@ -14,7 +14,6 @@ process.env.CARTESIA_API_KEY = "test";
 process.env.ANTHROPIC_API_KEY = "test";
 process.env.GEMINI_API_KEY = "test-gemini";
 process.env.VOICE_STUB = "1";
-process.env.VOICE_READ_OFFER = "1"; // these tests walk through the read-aloud offer (off by default)
 process.env.PORT = "0";
 const { Cooking } = await import("../src/cook.js");
 const { speak } = await import("../src/sonic.js");
@@ -101,9 +100,14 @@ test("Gemini stalls after Sonic failed: each line still ends at 6 s (say_end), t
 
   await advance(100);
   assert.deepEqual(ws.of("say_end"), [{ type: "say_end", interrupted: false }]);
-  assert.deepEqual(warnings, ["sonic 402: insufficient credits, then gemini tts: no audio in 6 s"]);
-  // The session moves on: the offer comes next (Gemini stalls on it too) and ends the same way.
-  assert.deepEqual(ws.of("say").map((s) => s.kind), ["greeting", "offer"]);
+  // The step's line couldn't be made ahead (Sonic alone, never Gemini for a line that's kept).
+  assert.deepEqual(warnings, ["step 1 line not made ahead: 402: insufficient credits", "sonic 402: insufficient credits, then gemini tts: no audio in 6 s"]);
+  assert.equal(geminiCalls, 1);
+  // The session moves on: "repeat" says the step's line live, Gemini stalls on it too, and it ends the same way.
+  cooking.onMessage(Buffer.from(JSON.stringify({ type: "text", text: "repeat" })), false);
+  await settle();
+  assert.deepEqual(ws.of("say").map((s) => s.kind), ["greeting", "step"]);
+  assert.equal(geminiCalls, 2, "said live, the step's line may use the backup voice");
   await advance(GEMINI_FIRST_AUDIO_MS);
   assert.equal(ws.of("say_end").length, 2);
   cooking.onMessage(Buffer.alloc(3200), true);

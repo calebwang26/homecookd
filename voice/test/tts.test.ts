@@ -162,6 +162,18 @@ test("Sonic 402 before any audio: Gemini says the line, its audio goes out the s
   assert.deepEqual(logs, ["tts: gemini fallback (sonic 402)"]);
 });
 
+test("backup off (a step line made ahead and kept): Sonic's 402 fails the line, and Gemini is never asked", async () => {
+  stub({ sonic: () => new Response("insufficient credits", { status: 402 }), gemini: () => assert.fail("no Gemini for a kept line") });
+  const out: Buffer[] = [];
+  const voice = { voice: env.homieVoice, kind: "step" };
+  const err = await sonic.speak("Step 2. Melt the sugar to amber.", "pcm", new AbortController().signal, (c) => out.push(c), voice, false).catch((e: Error) => e);
+  assert.ok(err instanceof Error && err.message.startsWith("402"), String(err));
+  assert.deepEqual(out, []);
+  assert.deepEqual(calls.map((c) => c.url.split("/")[2]), ["api.cartesia.ai"]);
+  // The same request as a line said live: one voice, one locale and mood, whether made ahead or not.
+  assert.deepEqual(calls[0].body, sonic.sonicRequest("Step 2. Melt the sugar to amber.", "pcm", voice));
+});
+
 test("the Gemini request: the TTS model, a warm voice, one short style, 24 kHz raw PCM, streamed, not stored", () => {
   assert.deepEqual(geminiRequest("Hi, Rajani Aaji.", 24000), {
     model: "gemini-3.8-flash-tts",
