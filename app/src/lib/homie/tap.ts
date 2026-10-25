@@ -11,7 +11,7 @@ export type TapScreen = 'cook' | 'kidHome' | 'recipes' | 'community' | 'ask' | '
 export type TapFact = { id: string; kind: string; line: string; at: number };
 
 export const TAP_LINES: Record<TapScreen, string> = {
-  // Cook mode's own tap asks; a long press turning the mic on says this (HELP.cook).
+  // Cook mode's tap turns homie on or off instead (the screen claims it); this line is for any other way in.
   cook: 'Say next, back, repeat, or ask me anything.',
   kidHome: 'Cook something tonight by tapping Start cooking.',
   recipes: 'Pick tonight’s dish by tapping its photo.',

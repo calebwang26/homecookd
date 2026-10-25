@@ -14,7 +14,10 @@ Two live loops from `docs/build/STACK.md`, plus one HTTP route:
 src/server.ts   HTTP /health + POST /speak + POST /homie/line + WebSockets /cook and /record
 src/safety.ts   the process's safety net: one session's error is logged with its id and never ends the others'
 src/cook.ts     one cooking session: wires Ink → (fast path | Claude) → actions → Sonic
-src/yesNo.ts    the kid's spoken yes or no, to homie's offers and the app's moments (follows the app's yesNo)
+src/stepLine.ts what homie says on a step change: "Step 3. <the step, cut to ~20 words>" (plain rules, no Claude)
+src/lineCache.ts  the step lines' Sonic audio, made when the recipe opens and kept for every session (LRU); failures
+                remembered a minute; at most 2 made ahead at once per process
+src/yesNo.ts    the kid's spoken yes or no, to homie's story nudge and the app's moments (follows the app's yesNo)
 src/agent.ts    Claude turn agent: tools, system prompt, the one-tool-per-turn loop
 src/translate.ts  the cook's words from a played clip → short English, spoken after the clip
 src/record.ts   one recording with homie: phases, listening, when to ask, the end flow, Convex logging
@@ -31,7 +34,8 @@ src/convex.ts   Convex HTTP actions (/voice/*, /live/*) + the local stub
 fixtures/       stub session (Grandma's red-braised pork) and stub recordings (Rajani Aaji, mr and en)
 scripts/        test clients (/cook and /record), test-audio maker
 test/           unit tests (node:test) with a fake socket, Claude, voice and Convex: pacing, /record's phases
-                (and a recording ended underneath it), /cook's read-aloud offer and the app's moments, and
+                (and a recording ended underneath it), /cook's step lines (made ahead, said on every flip,
+                the cache), the story nudge and the app's moments, and
                 homie's voice (tts.test.ts: the exact Sonic requests, the moods, the Gemini fallback; fallback.test.ts: a stalled
                 Gemini still ends the line, /speak's 502; fetch stubbed)
 ```
@@ -57,7 +61,7 @@ VOICE_STUB=1 npm run dev:fake                 # fake speech, no Cartesia or Gemi
 npm run make-audio                            # test-audio/*.wav, 16 kHz mono, spoken by Sonic (~590 credits for all 23)
 npm run make-audio -- no                      # only the lines named (here test-audio/no.wav)
 npm run test-client -- test-audio/next-step.wav test-audio/question.wav test-audio/unknown-question.wav
-npm run test-client -- test-audio/no.wav test-audio/next-step.wav   # no to reading: steps change silently
+npm run test-client -- step:2 step:3 test-audio/go-back.wav   # taps on the screen, then a spoken "go back"
 npm run test-client -- moment:answer test-audio/yes.wav moment:off text:no   # an app moment, then the app's no
 SESSION=<kid's Convex sessionToken> RECIPE=<recipes _id> npm run test-client -- test-audio/next-step.wav  # live Convex
 URL=wss://<cloud run host> npm run test-client -- test-audio/next-step.wav   # against the deployed one
@@ -88,46 +92,72 @@ a clean one. `test/server.test.ts` sends each of those to a real service in a ch
 The test client streams each WAV in 100 ms chunks at real-time speed, keeps sending silence like an open mic,
 prints every event with timings, and saves what the service says to `test-audio/out/`. `text:<words>` sends a
 `{ type: "text" }` message instead, and `moment:<kind>` / `moment:off` opens or closes one of the app's moments.
-The service remembers a kid's answer to the offer for 3 hours, so restart it between runs that answer it.
+`step:<n>` sends `{ type: "step", stepOrder: n }`, a tap; every line's first audio is printed with its delay after
+the transcript or the step. homie greets a kid once per recipe for 3 hours (per instance): restart the service to
+hear the hello again. A restart also empties the step-line cache.
 
 ## The WebSocket (`/cook?session=<sessionToken>&recipe=<recipeId>[&audio=pcm|wav]`)
 
 App → service
-- Binary frames: 16 kHz mono 16-bit little-endian PCM. ~100 ms per frame (3200 bytes). Keep streaming while the
-  screen is up, silence included: Ink waits for audio, it doesn't assume silence.
-- `{ "type": "step", "stepOrder": 3 }` when the kid taps a step (no speech).
+- Binary frames: 16 kHz mono 16-bit little-endian PCM. ~100 ms per frame (3200 bytes). The app streams only while
+  homie is on (a tap, or the 8 s after a step line or a nudge) and the phone isn't making sound; frames may stop
+  and start again (Ink closes after 2 min without audio and reopens with the next frame). Keep streaming until a
+  sentence is over, silence included: Ink waits for audio to end a turn, it doesn't assume silence.
+- `{ "type": "step", "stepOrder": 3 }` when the kid taps Next, Back or a step. homie says that step's line at once
+  (below). The first one on a socket, sent as it opens, restores the step on the screen: it isn't read (when it
+  comes before `ready` or within 3 s of it), and the session starts there. A later one before `ready` is a tap
+  while the recipe loads: it's read once ready. A tap on the step it's on says nothing.
+  `"read": false` marks a step the cook's clip moved the screen to while it plays: the step only moves (no line
+  over her clip, and her translation still comes after it).
 - `{ "type": "text", "text": "how much soy sauce?" }`: typed or push-to-talk input, handled like speech. The app
-  answers the read-aloud offer with `{ "type": "text", "text": "yes" }` or `"no"`. It's the app's own answer, so it
+  can answer the story nudge with `{ "type": "text", "text": "yes" }` or `"no"`. It's the app's own answer, so it
   counts even while one of its moments is up.
 - `{ "type": "moment", "open": true, "kind": "answer" | "story" | "ask" | "help" }` when one of the app's own homie
-  moments opens on the phone (not our offer or story nudge), and `{ "type": "moment", "open": false }` when it
+  moments opens on the phone (not our story nudge), and `{ "type": "moment", "open": false }` when it
   closes. While it's up, transcripts still come, but a spoken yes or no ("yes", "sure", "no thanks", "not now")
-  is the moment's answer: it never answers our offer or nudge and never reaches Claude. Anything else (a question
-  for the "ask" moment, "next") goes the usual way, and still isn't taken as a yes to our offer. homie says no
-  offer or nudge while a moment is up; they wait for it to close. After a reconnect, send it again if one is up.
+  is the moment's answer: it never answers our nudge and never reaches Claude. Anything else (a question for the
+  "ask" moment, "next") goes the usual way, and still isn't taken as a yes to our nudge. homie says no nudge while
+  a moment is up; it waits for it to close. After a reconnect, send it again if one is up.
   What the kid says while the `ask` moment is up (they tapped homie to ask) is always for homie: Claude is told so
   and never judges it as speech meant for someone else.
 - `{ "type": "video", "playing": true | false }` when any video (or the cook's voice note) starts or stops on the
-  phone. While one plays, homie says nothing on its own (Caleb, Oct 24): a `greeting`, `offer`, `nudge` or `timer`
-  line waits for the next pause, one after another (`timer_done` still comes at once). An answer to what the kid just
-  said is spoken meanwhile. A clip homie asked for counts as a video too. After a reconnect, send it again if one plays.
+  phone. While one plays, homie says nothing on its own (Caleb, Oct 24): a `greeting`, `nudge` or `timer` line waits
+  for the next pause, one after another (`timer_done` still comes at once). An answer to what the kid just did or
+  said is spoken meanwhile, and a step's line is one: it answers the flip, video or not. A clip homie asked for
+  counts as a video too. After a reconnect, send it again if one plays.
 - Silence while a `say` or a clip plays (half duplex).
 
 Service → app
 - `{ type: "ready", recipe: { id, title, steps } }`, then `{ type: "go_to_step", stepOrder }` for where to start.
 - Then homie's hello, a `say` of kind `greeting` in the cook's language (`"चला, स्वयंपाक करूया!"`, `textEn: "Let's
-  cook!"`). Reading aloud is off by default (Oct 24): steps change silently (only `go_to_step`) until the kid asks
-  ("repeat", "read it to me"), and from then on each step is read. With `VOICE_READ_OFFER=1` the hello is followed
-  by one `offer`: "Want me to read Grandma's recipe out loud? Just say yes or no.":
-  - Yes (spoken, or `text` "yes"): `{ type: "offer_closed", accepted: true }`, then the current step is read, and
-    every step after it.
-  - No or "not now" (spoken, or `text` "no"): `{ type: "offer_closed", accepted: false }` and nothing is said.
-    Reading stays off for the visit: steps change silently, plain commands, questions and timers still work, and
-    "repeat" reads the step they're on once.
-  - A kid who answered in the last 3 hours (same instance) gets no hello and no offer again after a dropped
-    socket, and keeps their answer.
+  cook!"`). A kid whose hello started playing on this recipe in the last 3 hours (same instance) gets no second
+  hello after a dropped socket; a hello cut off before any of it played doesn't count.
+- Step lines (Caleb, Oct 24: "right when I flip to the next step, I need homie to … start talking"). On every step
+  change homie says the step's short line at once, a `say` of kind `step`: "Step 2. Melt the sugar to amber." The
+  line is the step's text cut to about 20 words by plain rules, no Claude (`stepLine.ts`: whole sentences that fit,
+  else the first sentence up to a "; " or ", then ", else the step's title). A step change is a tap (`step`), a
+  plain command ("next", "go back"), or Claude's `next_step` / `previous_step` / `go_to_step`. Not for the
+  restore, and not when the step didn't change. "Repeat" ("say that again", Claude's `repeat_step`) says the whole
+  step, `Step 3. <all of its text>`, live (it's rare, so it isn't kept); the next flip says the short line again.
+  - Made ahead: once the hello's first audio is out (so Sonic says the hello first), or at once when there's no
+    hello or it waits for a video, Sonic makes every step's line, from the step they're on onwards, then the
+    earlier ones, 2 at a time across the whole process, in homie's voice exactly as a step said live (voice,
+    locale, speed, `calm` mood, the session's format). The audio is kept per process (`lineCache.ts`, by voice,
+    language, kind, format and text; least recently used out past 300 lines or 64 MB), so a second kid on the same
+    recipe or a reconnect costs nothing. A kept line goes out all at once: `say`, every frame, `say_end`, with the
+    same half duplex and echo timing as a streamed line. A line still being made sends what's there, then the rest
+    as Sonic makes it; one not started yet is made at once and streamed (and kept). A line still unfinished after
+    20 s fails.
+  - When Sonic can't: ahead of time it's Sonic alone, so the backup voice is never kept. A line that failed isn't
+    kept, and for a minute it isn't asked of Sonic again: the flip goes straight to Gemini, so a flip waits for at
+    most one Sonic failure. A 402 or 429 (out of credits, rate-limited) stops making lines ahead and sends every
+    step line straight to Gemini for that minute, across sessions.
+  - A flip cuts off the line playing (a new `say` always does), so rapid flips play only the latest step's line.
+    A step line answers the kid's flip: it's spoken over a video too.
+  - What it costs: about 1 Sonic credit a character, once per recipe per instance (Grandma's red-braised pork: 6
+    lines, 376 characters; the synthetic recipes 300–480).
 - `{ type: "transcript", text, final }`: `final: false` while the kid talks, `true` once the turn ends.
-- `{ type: "go_to_step", stepOrder }`: show that step. Its text is spoken right after.
+- `{ type: "go_to_step", stepOrder }`: show that step (a move by voice or Claude). Its line is said right after.
 - `{ type: "play_clip", startS, endS, quote?, quoteEn? }`: play that span of the cook's video. Nothing is spoken
   over it. `quote` is her words for the caption (the Devanagari `quoteOriginal` when the clip is a step's own
   moment), `quoteEn` the English when they differ. When the clip answers a question, half a second after it ends
@@ -137,10 +167,10 @@ Service → app
 - `{ type: "asked_cook", questionId, text }`: the question went to the cook. "I'll ask Grandma" follows.
 - `{ type: "say", text, kind, textEn?, ai: true, audio: { format, encoding: "pcm_s16le", sampleRate: 24000 } }`,
   then the audio as binary frames, then `{ type: "say_end", interrupted }`. `kind` is one of `step`, `reply`,
-  `hint`, `translation`, `nudge`, `offer`, `greeting`, `timer`; `textEn` comes when the line isn't English.
+  `hint`, `translation`, `nudge`, `greeting`, `timer`; `textEn` comes when the line isn't English.
   `audio=pcm` (default) streams raw PCM to play as it arrives. With `audio=wav`, the frames joined together are
   one WAV file. A new `say` cuts off the one before it. Every line is homie's one voice (Riya bilingual, 0.85 speed);
-  an English line's `kind` sets its mood (step and hint `calm`, offer `curious`, translation `affectionate`, the rest
+  an English line's `kind` sets its mood (step and hint `calm`, translation `affectionate`, the rest
   `content`). If Sonic fails before any audio, Gemini says the line in the same format (24 kHz s16le). If Gemini
   fails too (an error, no audio at all, nothing within 6 s, or the line not done within 10 s + 100 ms a character),
   the line ends with no voice and `say_end` still comes.
@@ -149,8 +179,8 @@ Service → app
   AI.
 - `{ type: "timer", id, seconds, label, endsAt }` when the kid asks for one; the app shows the countdown. At the
   end, `{ type: "timer_done", id, label }` and a `say` of kind `timer` ("Hey, the rice timer is done.").
-- Nudges (kind `nudge`, only once reading is on): after a step with one of the cook's stories, "Grandma has a story
-  about this one. Want to hear it?" ("yes" plays it; "no" or "not now" closes it quietly, with no `offer_closed`);
+- Nudges (kind `nudge`): after a step's line, for a step with one of the cook's stories, "Grandma has a story
+  about this one. Want to hear it?" once per story ("yes" plays it; "no" or "not now" closes it quietly);
   and once per step after 6 quiet minutes, "Still on step 3?".
 - `{ type: "quiet" }`: the kid's words reached Claude, and homie did and said nothing: they weren't meant for homie
   (Claude judges; "homie", however Ink spells it, is a strong yes; no wake word), or a no with nothing after it.
@@ -168,7 +198,7 @@ cook's clips. As a backstop, the service ignores:
 
 1. Ink's `turn.end` gives the kid's words (the turn ends ~2 s after they stop, or sooner when Ink is sure).
 2. Plain commands ("next", "go back", "say that again", with "um, wait, okay, please" around them), "yes" or "no"
-   to an open offer, and "set a timer for 5 minutes" skip Claude.
+   to the story nudge, and "set a timer for 5 minutes" skip Claude.
 3. Anything else: Moss searches the recipe's moments first (~10 ms, in memory), and Claude gets the words, the
    current step and those moments. It calls one tool: `next_step`, `previous_step`, `repeat_step`, `go_to_step`,
    `play_clip` (only times that came from Moss or a step), `give_hint` (labelled general knowledge, and the
@@ -179,6 +209,9 @@ cook's clips. As a backstop, the service ignores:
 
 Model: `claude-opus-5-5` at low effort, with server-side refusal fallbacks on. Measured locally (Oct 23):
 plain commands ~0 ms after the transcript; a question 1.4–2.3 s standard, 1.1–1.6 s with `CLAUDE_FAST=1`.
+Step lines, live on the stub (Oct 24, real Ink and Sonic): all 6 made ahead during the hello; a flip's first audio
+0–4 ms after the transcript or the tap when made ahead, 172 ms when the tap came before its line was made (streamed
+live from Sonic).
 
 ## homie while recording (`/record?session=<cook's sessionToken>&recording=<recordingId>[&audio=pcm|wav]`)
 
