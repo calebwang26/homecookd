@@ -195,7 +195,9 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 - `jobs.create` gains optional `title`, `language`, `forKidIds` (or the older `forKidId`), `recordingId`.
   `recordingId` must be this cook's recording; the job then sets `recordings.jobId` and takes the recording's
   `dish`, `language` and kids for any not given. `language` defaults to the cook's `people.language` (else `en`);
-  every kid must be a kid in the family.
+  every kid must be a kid in the family. **Idempotent per upload folder** (Oct 24): a second call for a folder this family
+  already has a job for returns that job (a stopped one stays stopped), so the phone asks again until it hears back
+  (`app/src/components/record/jobRetry.ts`); a folder another family's job uses is refused.
   The `title` (or dish) is the processing card's title instead of "New recipe", and the recipe's name.
 - `people.setLanguage({ language })` (self; a two-letter code, lowercased). `people.me` → `{ personId, name, role,
   language, relation? }` (`language` is `en` when unset). `people.family` → `[{ personId, supabaseProfileId, name,

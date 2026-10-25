@@ -5,22 +5,27 @@
 // the app has a note on the phone (lib/unsentRecordings): the upload job goes on the note, and the note
 // goes only once Convex has the job and every file is uploaded, so if the app dies before both, the next
 // launch sends it again (components/record/useResendUnsent). Everything runs as `me` (their Convex
-// session), so that resend can send as the cook while someone else is in.
+// session), so that resend can send as the cook while someone else is in. Every upload row keeps what
+// jobs.create needs, and the home card asks again until Convex has the job (ensureJob, jobRetry.ts).
 //
 //   const job = await sendDraft({ me, draft, clips, kids, recipients, toLabel, dish, hello })
 //   await jobCreated(job.job_id)   its jobs.create is over (a stop waits for it, then stops that job)
 //   await makeJob(uploadId, as, { kids, glasses, language, recordingId, title })   jobs.create alone
+//   void ensureJob(row, liveKnown)   the home card: jobs.create again for a row Convex doesn't have yet
 import type { Profile } from '@/lib/api';
 import { convexKidIds, createJob } from '@/lib/live/convex';
-import { dropUnsent, markUnsentJob } from '@/lib/unsentRecordings';
-import { ensurePendingSend, startUpload, uploadFinished, type StoredJob } from '@/lib/uploads';
+import { dropUnsent, markUnsentJob, stillUnsent } from '@/lib/unsentRecordings';
+import { ensurePendingSend, startUpload, updateJobMeta, uploadFinished, type StoredJob } from '@/lib/uploads';
 
 import type { Draft, DraftClip } from './draft';
+import { afterFailure, jobNext } from './jobRetry';
 
 export const MAX_TITLE = 120; // the upload signer's limit
 
 /** Each upload's jobs.create, in this app session. */
 const creating = new Map<string, Promise<void>>();
+/** Uploads whose jobs.create is running right now. */
+const inFlight = new Set<string>();
 
 /** Resolves once this upload's jobs.create is over (made or failed); at once when it isn't running here. */
 export function jobCreated(uploadId: string): Promise<void> {
@@ -44,17 +49,74 @@ export type SendInput = {
   hello?: { path: string; duration_s: number } | null;
 };
 
-export type JobFields = Pick<Draft, 'glasses' | 'language' | 'recordingId'> & { kids: Profile[]; title: string };
+export type JobFields = Pick<Draft, 'glasses' | 'language' | 'recordingId'> & { kids: { id: string; name: string }[]; title: string };
 
-/** jobs.create for the upload in "<uploadId>/", as the cook `as` (a profile id). Throws when it fails. */
+/**
+ * Convex said no to what was asked (a ConvexError carries its sentence in `data`): not a dropped line,
+ * and not "signed out" (call() starts a new session; the next try asks with everything again).
+ */
+const refused = (e: unknown) => {
+  const data = (e as { data?: unknown } | null)?.data;
+  return typeof data === 'string' && !/signed out/i.test(data);
+};
+
+/**
+ * jobs.create for the upload in "<uploadId>/", as the cook `as` (a profile id). Throws when it fails.
+ * A refusal of the details (a kid Convex doesn't take, the language) asks again without them, then
+ * (not from a recording, whose job must stay linked to it for the resend after a crash) with nothing
+ * but the folder: the recipe matters more than who it's for.
+ */
 export async function makeJob(uploadId: string, as: string, { kids, glasses, language, recordingId, title }: JobFields): Promise<void> {
+  const path = `${uploadId}/`;
+  const source = glasses ? 'glasses' : 'phone';
   const forKidIds = await convexKidIds(kids, as);
-  await createJob(
-    `${uploadId}/`,
-    glasses ? 'glasses' : 'phone',
+  const tries: Record<string, unknown>[] = [
     { title: title || undefined, language: language ?? undefined, forKidIds, recordingId: recordingId ?? undefined },
-    as,
+    { title: title || undefined, recordingId: recordingId ?? undefined },
+  ];
+  if (!recordingId) tries.push({});
+  for (let i = 0; ; i++) {
+    try {
+      return await createJob(path, source, tries[i], as);
+    } catch (e) {
+      if (!refused(e) || i === tries.length - 1) throw e;
+      console.warn('[send] jobs.create refused; asking with less', String(e).slice(0, 160));
+    }
+  }
+}
+
+/** One jobs.create for this row, remembered on it: 'ok', or a failed try (the row backs off, then says so). */
+function tryJob(row: StoredJob): Promise<boolean> {
+  const fields = row.job_fields!;
+  inFlight.add(row.job_id);
+  const run = makeJob(row.job_id, row.sender_id!, { ...fields, recordingId: row.recording_id ?? null })
+    .then(
+      () => (updateJobMeta(row.job_id, { convex_job: 'ok' }), true),
+      (e) => {
+        console.warn('[send] jobs.create failed', String(e).slice(0, 160));
+        updateJobMeta(row.job_id, afterFailure(row, Date.now()));
+        return false;
+      },
+    )
+    .finally(() => inFlight.delete(row.job_id));
+  creating.set(
+    row.job_id,
+    run.then(() => {}),
   );
+  return run;
+}
+
+/**
+ * The home card, for each of its rows: jobs.create again when Convex doesn't have the job yet and
+ * the backoff allows (`liveKnown`: Convex's live list has it). No-op for rows from older builds, and
+ * for an in-app recording's row this run of the app didn't send: its note's resend owns it
+ * (useResendUnsent), so the two never make two jobs for one recording.
+ */
+export function ensureJob(row: StoredJob, liveKnown: boolean): void {
+  if (row.recording_id && !creating.has(row.job_id) && stillUnsent(row.recording_id)) return;
+  const step = jobNext(row, { now: Date.now(), liveKnown, inFlight: inFlight.has(row.job_id) });
+  if (step === 'mark-ok') updateJobMeta(row.job_id, { convex_job: 'ok' });
+  else if (step === 'create') void tryJob(row);
 }
 
 /** Starts the upload and returns once the job exists (the videos keep uploading in the background). */
@@ -78,19 +140,13 @@ export async function sendDraft({ me, draft, clips, kids, recipients, toLabel, d
       duration_s: Math.round(totalS),
       thumb_video_uri: clips[0]?.asset.uri ?? null,
       recording_id: recordingId ?? null,
+      job_fields: { glasses, language: language ?? null, title, kids: kids.map((k) => ({ id: k.id, name: k.name })) },
     },
   });
   // The live progress (Convex jobs, hackathon): the worker finds the videos in "<job_id>/". A failure
-  // here never stops the send; the row falls back to the status file.
+  // here never stops the send: the home card asks again until Convex has the job (ensureJob).
   if (recordingId) markUnsentJob(recordingId, job.job_id);
-  const made = makeJob(job.job_id, me.id, { kids, glasses, language, recordingId, title }).then(
-    () => true,
-    (e) => (console.warn('[send] jobs.create failed', String(e)), false),
-  );
-  creating.set(
-    job.job_id,
-    made.then(() => {}),
-  );
+  const made = tryJob(job);
   // The note goes once the job exists and the videos are all in (a 45-minute upload takes a while).
   if (recordingId) {
     void Promise.all([made, uploadFinished(job.job_id)]).then(([jobMade, uploaded]) => {

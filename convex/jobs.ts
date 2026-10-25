@@ -1,4 +1,5 @@
-// A cook's upload going through the pipeline. The app creates the job after the video is in GCS;
+// A cook's upload going through the pipeline. The app creates the job once the upload has started
+// (jobs.create is idempotent per upload folder, so the phone retries it until it lands);
 // the worker (worker.ts, over HTTP) claims it and reports each stage, and the cook's phone watches.
 import { ConvexError, v } from "convex/values";
 import { internalMutation, mutation, query, type MutationCtx } from "./_generated/server";
@@ -33,8 +34,13 @@ export const create = mutation({
     const sameFolder = await ctx.db
       .query("jobs")
       .withIndex("by_uploadPath", (q) => q.eq("uploadPath", path))
+      .order("desc")
       .take(20);
     if (sameFolder.some((j) => j.familyId !== familyId)) throw new ConvexError("Upload the video before sending it.");
+    // Idempotent per folder: the phone asks again until it hears back (a lost answer, a relaunch), so a
+    // second call gets the job the first one made, never a second recipe. (A stopped one stays stopped.)
+    const made = sameFolder.find((j) => j.recipeId);
+    if (made?.recipeId) return { jobId: made._id, recipeId: made.recipeId };
 
     const recording = args.recordingId && (await ctx.db.get("recordings", args.recordingId));
     if (args.recordingId && (!recording || recording.familyId !== familyId || recording.cookId !== cookId)) {

@@ -20,7 +20,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AccessibilityInfo, AppState, Platform, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
-import { jobCreated } from '@/components/record/sendDraft';
+import { ensureJob, jobCreated } from '@/components/record/sendDraft';
 import { fadeOutFast, listEnter, useToast } from '@/components/ui';
 import { requestCancel } from '@/lib/deletes';
 import { cancelLiveJob, cancelLiveUpload, libraryIdOf as findLibraryId, useLiveJobs, type LiveJob } from '@/lib/live/convex';
@@ -150,6 +150,11 @@ export function usePendingRecipes(): PendingState {
     const mine = new Set(jobs.map((j) => j.job_id));
     return liveJobs.filter((l) => RUNNING.has(l.stage) && !mine.has(uploadIdOf(l)) && stops.get(uploadIdOf(l)) !== 'gone');
   }, [liveJobs, jobs, stops]);
+
+  // Every row sent from this phone gets its Convex job: jobs.create again until Convex lists it (jobRetry).
+  useEffect(() => {
+    for (const j of jobs) if (stops.get(j.job_id) == null) ensureJob(j, liveByJob.has(j.job_id));
+  }, [jobs, liveByJob, stops, now]);
 
   // A Convex job still running for an upload she stopped (made after the stop, or before Convex had
   // jobs.cancelUpload): stop it too, once.

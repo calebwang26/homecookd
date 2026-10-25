@@ -9,6 +9,8 @@
 //                                        double tap on the x doesn't undo it), the stop runs once after
 //                                        the wait (or at once when she leaves the app), a stop that
 //                                        worked stays gone, a failed or timed-out one comes back
+//   src/components/record/jobRetry.ts    every send gets its Convex job: jobs.create again with a
+//                                        backoff until Convex lists it, then the row says it failed
 //   node scripts/test-parent-jobs.mjs
 import assert from 'node:assert/strict';
 import { dirname, join } from 'node:path';
@@ -17,6 +19,7 @@ import { fileURLToPath, pathToFileURL } from 'node:url';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const J = await import(pathToFileURL(join(root, 'src/components/parent/jobsLogic.ts')).href);
 const S = await import(pathToFileURL(join(root, 'src/components/parent/stops.ts')).href);
+const R = await import(pathToFileURL(join(root, 'src/components/record/jobRetry.ts')).href);
 
 let passed = 0;
 const test = (name, fn) => {
@@ -128,6 +131,35 @@ await atest('a stop that fails comes back as it was; the background runs a waiti
   // Offline, Convex queues the mutation instead of failing it: the wait gives up, so the row comes back.
   await assert.rejects(S.inTime(new Promise(() => {}), 20), /no answer/);
   assert.equal(await S.inTime(Promise.resolve(7), 20), 7);
+});
+
+test('jobs.create is asked again until Convex lists the job, backing off, then the row says it failed', () => {
+  const fields = { glasses: false, language: 'mr', title: 'Poha', kids: [] };
+  const row = { sender_id: 'p-mom', job_fields: fields, local_state: 'uploading' };
+  const at = (now, more = {}) => ({ now, liveKnown: false, inFlight: false, ...more });
+  assert.equal(R.jobNext(row, at(0)), 'create', 'the first try goes at once');
+  assert.equal(R.jobNext(row, at(0, { inFlight: true })), 'skip', 'never two at once');
+  assert.equal(R.jobNext(row, at(0, { liveKnown: true })), 'mark-ok', 'Convex already has it');
+  assert.equal(R.jobNext({ ...row, convex_job: 'ok' }, at(0)), 'skip');
+  assert.equal(R.jobNext({ ...row, job_fields: undefined }, at(0)), 'skip', 'a row from an older build');
+  assert.equal(R.jobNext({ ...row, sender_id: null }, at(0)), 'skip');
+  assert.equal(R.jobNext({ ...row, local_state: 'failed' }, at(0)), 'skip', 'the upload itself failed');
+
+  // Each failed try waits longer; after the last one the row is 'failed' and isn't tried again.
+  let r = { ...row };
+  let t = 1_000_000;
+  for (let i = 0; i < R.JOB_RETRY_MS.length; i++) {
+    r = { ...r, ...R.afterFailure(r, t) };
+    assert.equal(r.convex_job, null, `try ${i + 1}`);
+    assert.equal(R.jobNext(r, at(t + R.JOB_RETRY_MS[i] - 1)), 'skip', `waits before try ${i + 2}`);
+    t += R.JOB_RETRY_MS[i];
+    assert.equal(R.jobNext(r, at(t)), 'create', `try ${i + 2}`);
+  }
+  r = { ...r, ...R.afterFailure(r, t) };
+  assert.equal(r.convex_job, 'failed');
+  assert.equal(R.jobNext(r, at(t + 10 * 3600_000)), 'skip');
+  // Convex turning up with it later still clears the failure.
+  assert.equal(R.jobNext(r, at(t, { liveKnown: true })), 'mark-ok');
 });
 
 test('a job stopped anywhere (this phone or another) is dropped; a real failure is not', () => {
