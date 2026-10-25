@@ -131,7 +131,6 @@ function RestingPot({
 
   const { height: windowH } = useWindowDimensions();
   const above = labelAbove(frame, windowH);
-  const docked = !!h.dock;
   const a11y = state === 'speaking' ? 'homie, speaking' : state === 'listening' ? 'homie, listening' : 'homie';
   const hint = h.onLongPress ? 'Ask anything. Touch and hold to turn the mic off or on.' : h.onPress ? undefined : 'Says what you can do here';
   return (
@@ -148,7 +147,7 @@ function RestingPot({
           accessibilityActions={h.onLongPress ? [{ name: 'longpress', label: 'Turn the mic off or on' }] : undefined}
           onAccessibilityAction={(e) => e.nativeEvent.actionName === 'longpress' && h.onLongPress?.()}
           style={styles.press}>
-          <HomiePot state={state} level={h.level} size={HOMIE_REST_SIZE} timerProgress={progress} aura={docked} />
+          <HomiePot state={state} level={h.level} size={HOMIE_REST_SIZE} timerProgress={progress} />
         </PressableScale>
       </Animated.View>
       {label ? (
