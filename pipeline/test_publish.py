@@ -267,11 +267,54 @@ def test_worker_publishes_a_family_recipe():
             patched(worker, LOCKS=Path(tmp) / ".locks", INPUT=Path(tmp), _complete_upload=lambda *_a: [upload],
                     _download=lambda *_a: None, spend_cap=lambda: 100.0, spent_usd=lambda: 0.0), \
             patched(worker.prep, run=lambda *_a: None, probe_duration=lambda _p: 60.0), \
-            patched(worker.process, run=lambda *_a, **_kw: None), \
+            patched(worker.process, run=lambda *_a, **kw: calls.setdefault("process", []).append(kw)), \
+            patched(worker, _download_cover=lambda url, dest: calls.setdefault("cover", []).append(url) or dest), \
             patched(publish, publish_recipe=publish_recipe):
         worker.handle_convex(Convex(), job, FakeBucket(), FakeBucket())
+        worker.handle_convex(Convex(), {**job, "coverUrl": "https://convex.example/api/storage/abc"}, FakeBucket(),
+                             FakeBucket())
     assert calls["publish"][1]["family"] is True, "the worker publishes a family recipe"
     assert len(calls["convex"]["stories"]) == 2, "Convex gets the stories the public file leaves out"
+    assert calls["cover"] == ["https://convex.example/api/storage/abc"], calls["cover"]  # only the job with one
+    assert [kw["cover_photo"] and kw["cover_photo"].name for kw in calls["process"]] == [None, "plate-photo.jpg"]
+
+
+class FakeResponse:
+    def __init__(self, status: int, chunks: list[bytes]):
+        self.status_code, self.chunks = status, chunks
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *_a):
+        return False
+
+    def raise_for_status(self):
+        if self.status_code >= 400:
+            import requests
+            raise requests.HTTPError(f"{self.status_code} for url: https://secret.example/photo", response=self)
+
+    def iter_content(self, _size):
+        return iter(self.chunks)
+
+
+def test_worker_plate_photo_download():
+    url = "https://secret.example/photo"
+    with tempfile.TemporaryDirectory() as tmp:
+        dest = Path(tmp) / "plate-photo.jpg"
+        for status, chunks, want in ((200, [b"\xff\xd8", b"jpeg"], b"\xff\xd8jpeg"),
+                                     (404, [], None),
+                                     (200, [b"x" * 1_000_000] * 21, None)):  # over MAX_COVER_BYTES
+            dest.unlink(missing_ok=True)
+            log = io.StringIO()
+            with contextlib.redirect_stdout(log), \
+                    patched(worker.requests, get=lambda *_a, **_kw: FakeResponse(status, chunks)):
+                got = worker._download_cover(url, dest)
+            if want:
+                assert got == dest and dest.read_bytes() == want, status
+            else:
+                assert got is None and not dest.exists(), (status, got)
+            assert "secret.example" not in log.getvalue(), log.getvalue()  # her photo's URL is never printed
 
 
 def main() -> None:
