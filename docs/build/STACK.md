@@ -341,8 +341,9 @@ app; `now` rounded to 10 min) gives at most 3 facts `{ id, kind: answer | asked 
 newest first, a quiet week only when nothing else is new. The app asks `POST /homie/line { sessionToken, factId, tab? }`
 → `{ text, written }` ahead of the tap: the voice service reads the facts itself (`POST /homie/news` on Convex,
 x-voice-secret) and Claude says that one fact warmly (`voice/src/tapLine.ts`; the plain `line` when Claude fails,
-`written: false`). A tap says the newest untold fact once, else the screen's "Explore X by doing X" line
-(`app/src/lib/homie/tap.ts`), then `/speak` with `translate: true`.
+`written: false`). A tap says the newest untold fact once (never in cook mode or while she films), else the
+screen's one line about its big button, or "I’m right here." on a second tap in a row (`app/src/lib/homie/tap.ts`),
+then `/speak` with `translate: true`.
 
 **App ↔ voice service: kid cooking additions** (`/cook`, backward compatible)
 - `say` gains `kind`: `step | reply | hint | translation | nudge | offer | greeting | timer`, and `textEn` when the

@@ -8,7 +8,8 @@
 //                           where it rests on each screen, the help lines, the centred moment (which
 //                           ones, its frame, the listening bars), the timer ring, PCM loudness, the
 //                           voice service's https base, the phone voice's language
-//   src/lib/homie/tap.ts    each screen's tap lines ("Explore X by doing X", taking turns), news first
+//   src/lib/homie/tap.ts    each screen's one tap line (about its big button), "I’m right here." on a
+//                           second tap in a row, news first (never in cook mode or while she films)
 //                           and once, never the same line twice in a row
 //   src/lib/homie/intro.ts  the hello once per person on this phone (after a restart too), two quick
 //                           taps, the recording hello counting, news told once per person
@@ -401,7 +402,7 @@ await test('homie stays off sign-in, the gateway, links, the month story and cha
   for (const p of ['/kid/home', '/parent/home', '/cook/biryani', '/recipe/biryani', '/record', '/recording', '/answer/q1', '/dev/gallery']) assert.equal(L.homieRoute(p).hidden, false, p);
 });
 
-await test('each screen gets its own tap lines', () => {
+await test('each screen gets its own tap line', () => {
   assert.equal(L.homieRoute('/cook/biryani').screen, 'cook');
   assert.equal(L.homieRoute('/kid/home').screen, 'kidHome');
   assert.equal(L.homieRoute('/kid').screen, 'kidHome');
@@ -414,57 +415,62 @@ await test('each screen gets its own tap lines', () => {
   assert.equal(L.homieRoute('/parent/recipes').screen, 'parentRecipes');
   assert.equal(L.homieRoute('/parent/messages/').screen, 'messages');
   assert.equal(L.homieRoute('/record').screen, 'record');
+  assert.equal(L.homieRoute('/recording').screen, 'recording');
   assert.equal(L.homieRoute('/dev/gallery').screen, 'other');
-  assert.equal(L.HELP.cook, T.TAP_LINES.cook[0]);
+  assert.equal(L.homieRoute('/recipe/biryani/ingredients').screen, 'other');
+  assert.equal(L.HELP.cook, T.TAP_LINES.cook);
 });
 
-await test('every line is short enough to say in one breath (12 words at most); each tab says "Explore X by doing X"', () => {
+await test('one line per screen, short enough to say in one breath (12 words at most); each tab says "Explore X by doing X"', () => {
   for (const [k, line] of Object.entries(L.HELP)) assert.ok(line.split(/\s+/).length <= 12, `${k}: ${line}`);
-  for (const [screen, lines] of Object.entries(T.TAP_LINES)) {
-    assert.ok(lines.length >= 1, screen);
-    for (const line of lines) assert.ok(line.split(/\s+/).length <= 12, `${screen}: ${line}`);
-    if (screen === 'cook' || screen === 'other') continue;
-    assert.ok(lines.length >= 2, `${screen}: two lines take turns`);
-    for (const line of lines) assert.match(line, /^[A-Z].* by [a-z]+ing\b.*\.$/, `${screen}: ${line}`);
+  for (const [screen, line] of [...Object.entries(T.TAP_LINES), ['again', T.TAP_AGAIN]]) {
+    assert.equal(typeof line, 'string', screen);
+    assert.ok(line.split(/\s+/).length <= 12, `${screen}: ${line}`);
+    if (['cook', 'recording', 'other', 'again'].includes(screen)) continue;
+    assert.match(line, /^[A-Z].* by [a-z]+ing\b.*\.$/, `${screen}: ${line}`);
   }
+  // The table was cut from parent Home (#64), and Back mid-recording would stop her filming.
+  for (const line of Object.values(T.TAP_LINES)) assert.doesNotMatch(line, /\btable\b|\bBack\b/, line);
 });
 
 const hello = 'Hi, I’m homie.';
-const [home1, home2] = T.TAP_LINES.kidHome;
+const home1 = T.TAP_LINES.kidHome;
+const again = T.TAP_AGAIN;
 const freshIntro = () => {
   kv.clear();
   I.resetIntroForTests();
 };
 const fact = (id, line, kind = 'answer') => ({ id, kind, line, at: 1 });
 
-await test('chooseTapLine: news not told yet first (Claude’s words when written), else the screen’s lines in turn, never the last line again', () => {
-  const base = { screen: 'kidHome', facts: [], told: new Set(), last: null, turn: 0 };
+await test('chooseTapLine: news not told yet first (Claude’s words when written), else the screen’s line, never the last line again', () => {
+  const base = { screen: 'kidHome', facts: [], told: new Set(), last: null };
   assert.deepEqual(T.chooseTapLine(base), { text: home1 });
-  assert.deepEqual(T.chooseTapLine({ ...base, turn: 1 }), { text: home2 });
-  assert.deepEqual(T.chooseTapLine({ ...base, turn: 2 }), { text: home1 });
-  // The turn would repeat the line just said: the other one.
-  assert.deepEqual(T.chooseTapLine({ ...base, turn: 0, last: home1 }), { text: home2 });
+  // The screen's line was just said: "I’m right here.", then the line again.
+  assert.deepEqual(T.chooseTapLine({ ...base, last: home1 }), { text: again });
+  assert.deepEqual(T.chooseTapLine({ ...base, last: again }), { text: home1 });
   const news = [fact('answer:q1', 'Grandma answered your question about the Poha.'), fact('recipe:r1', 'Grandma just added Poha.', 'recipe')];
   assert.deepEqual(T.chooseTapLine({ ...base, facts: news }), { text: 'Grandma answered your question about the Poha.', factId: 'answer:q1' });
   const written = new Map([['answer:q1', 'Grandma answered your poha question! Go have a listen.']]);
   assert.deepEqual(T.chooseTapLine({ ...base, facts: news, written }), { text: 'Grandma answered your poha question! Go have a listen.', factId: 'answer:q1' });
   assert.deepEqual(T.chooseTapLine({ ...base, facts: news, told: new Set(['answer:q1']) }), { text: 'Grandma just added Poha.', factId: 'recipe:r1' });
   assert.deepEqual(T.chooseTapLine({ ...base, facts: news, told: new Set(['answer:q1', 'recipe:r1']) }), { text: home1 });
-  // Cook mode keeps its own line: no news over the kid's cooking.
+  // Cook mode keeps its own line: no news over the kid's cooking. Nor while she films.
   assert.deepEqual(T.chooseTapLine({ ...base, screen: 'cook', facts: news }), { text: L.HELP.cook });
+  assert.deepEqual(T.chooseTapLine({ ...base, screen: 'recording', facts: news }), { text: T.TAP_LINES.recording });
+  assert.deepEqual(T.chooseTapLine({ ...base, screen: 'recording', facts: news, last: T.TAP_LINES.recording }), { text: again });
 });
 
 await test('a tap always gets a line: the hello once per person, then lines that never repeat in a row', async () => {
   freshIntro();
   const home = L.homieRoute('/kid/home');
   assert.equal(await I.takeTapLine(home, 'kid1'), `${hello} ${home1}`);
-  assert.equal(await I.takeTapLine(home, 'kid1'), home2);
+  assert.equal(await I.takeTapLine(home, 'kid1'), again);
   assert.equal(await I.takeTapLine(home, 'kid1'), home1);
   assert.ok(kv.has(I.introducedKey('kid1')));
   assert.equal(I.introducedKey('kid1'), 'homie.introduced.kid1');
-  // Another tab has its own lines.
+  // Another tab has its own line.
   const community = L.homieRoute('/kid/community');
-  assert.equal(await I.takeTapLine(community, 'kid1'), T.TAP_LINES.community[0]);
+  assert.equal(await I.takeTapLine(community, 'kid1'), T.TAP_LINES.community);
   // Someone else on the same phone gets their own hello.
   assert.ok((await I.takeTapLine(home, 'mom1')).startsWith(`${hello} `));
   // A restart: the in-memory guard is gone, the phone's storage remembers the hello.
@@ -491,13 +497,13 @@ await test('news is told once per person (after a restart too), then the tab’s
 await test('two quick taps before storage answers: one hello, two different lines', async () => {
   freshIntro();
   const home = L.homieRoute('/kid/home');
-  assert.deepEqual(await Promise.all([I.takeTapLine(home, 'kid1'), I.takeTapLine(home, 'kid1')]), [`${hello} ${home1}`, home2]);
+  assert.deepEqual(await Promise.all([I.takeTapLine(home, 'kid1'), I.takeTapLine(home, 'kid1')]), [`${hello} ${home1}`, again]);
 });
 
 await test('the recording hello counts as homie’s hello (after a restart too)', async () => {
   freshIntro();
   I.markIntroduced('mom1');
-  assert.equal(await I.takeTapLine(L.homieRoute('/record'), 'mom1'), T.TAP_LINES.record[0]);
+  assert.equal(await I.takeTapLine(L.homieRoute('/record'), 'mom1'), T.TAP_LINES.record);
   I.resetIntroForTests();
   assert.ok(!(await I.takeTapLine(L.homieRoute('/record'), 'mom1')).startsWith(hello));
   I.markIntroduced(undefined);
@@ -508,7 +514,7 @@ await test('the recording hello counts as homie’s hello (after a restart too)'
 await test('nobody signed in: the hello and the line, nothing stored', async () => {
   freshIntro();
   assert.equal(await I.takeTapLine(L.homieRoute('/kid/home'), null), `${hello} ${home1}`);
-  assert.equal(await I.takeTapLine(L.homieRoute('/kid/home'), undefined), `${hello} ${home2}`);
+  assert.equal(await I.takeTapLine(L.homieRoute('/kid/home'), undefined), `${hello} ${again}`);
   assert.equal(kv.size, 0);
 });
 
