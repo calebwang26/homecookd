@@ -3,8 +3,9 @@
 // to what, when voice starts on its own, when the phone reads aloud itself, app-only moments and the
 // read-aloud offer's end, the kid's spoken yes or no, when homie is 'thinking', the kitchen timers the
 // app counts down, what the pot shows, when homie's mic is on (a tap, or the 8 s after a step line) and
-// what a tap does, which of the cook's answers to offer the kid, and what keeps Cartesia from billing
-// for audio nobody said (which mic frames go out, the app in the background).
+// what a tap does, how homie and a video hand the sound to each other, which of the cook's answers to
+// offer the kid, and what keeps Cartesia from billing for audio nobody said (which mic frames go out,
+// the app in the background).
 import type { HomieMoment, HomieState } from '@/lib/homie/store';
 
 export type SayKind = 'step' | 'reply' | 'hint' | 'translation' | 'nudge' | 'offer' | 'greeting' | 'timer';
@@ -459,6 +460,46 @@ export function hearsAnswers(v: { live: boolean; hold: MicHold; listening: boole
 export function cookTap(v: { voiceHere: boolean; status: 'off' | 'connecting' | 'listening' | 'error'; unavailable: boolean; talking: boolean }): 'toggle' | 'read' | 'stop' {
   if (v.status !== 'off' || (v.voiceHere && !v.unavailable)) return 'toggle';
   return v.talking ? 'stop' : 'read';
+}
+
+// ---------------------------------------------------------------------------------------------
+// homie and a video hand the sound to each other (Caleb, Oct 25: "anything that's clicked (between
+// video & homie) should be the one with audio. this transition should be smooth.")
+
+/** What /cook gets when a tap turns homie on: the service says the step's short line at once. */
+export const TAP_MESSAGE = { type: 'tap' } as const;
+
+/**
+ * A tap on homie: micAfter's toggle, except while a video plays. Then homie takes the sound (the video
+ * fades out and pauses) and turns on, whatever its hold: under a video the pot looks off.
+ */
+export function holdAfterTap(hold: MicHold, video: boolean): MicHold {
+  return video ? 'tap' : micAfter(hold, 'tap');
+}
+
+/**
+ * The tap turned homie on: homie says the step's short line at once ({ type: "tap" }). Only to a real
+ * service on an open line, and not while homie is already talking (that line is its answer).
+ */
+export function saysOnTap(v: { live: boolean; open: boolean; talking: boolean }): boolean {
+  return v.live && v.open && !v.talking;
+}
+
+/**
+ * A video the kid started is playing: any video but her clip homie played as an answer (play_clip, on
+ * the step's own player). It takes the sound: homie's voice fades out and homie turns off.
+ */
+export function kidStartedVideo(v: { anyVideo: boolean; herClip: boolean; stepVideo: boolean }): boolean {
+  return v.anyVideo && !(v.herClip && v.stepVideo);
+}
+
+/**
+ * While a video the kid started plays, a line of homie's that would pause it (an answer still on its
+ * way, a step line) is dropped; the ones homie says on its own wait for it (waitsForVideo). A tap on
+ * homie takes the sound back.
+ */
+export function dropsForKidVideo(kind: SayKind, kidVideo: boolean): boolean {
+  return kidVideo && !waitsForVideo(kind);
 }
 
 // ---------------------------------------------------------------------------------------------

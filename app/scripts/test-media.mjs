@@ -60,6 +60,8 @@ const advance = (ms) => {
 };
 const tick = () => { clock += 1000; };
 const flush = () => new Promise(resolve => setImmediate(resolve));
+/** Runs a hand-off fade to its end (each step schedules the next, so the clock moves a step at a time). */
+const fadeBy = () => { for (let t = 0; t <= M.HANDOFF_FADE_MS + 25; t += 25) advance(25); };
 
 /** One mounted <ClipVideo/>'s hook, with its own state, listeners and stand-in player. */
 function mountVideo(url, start, end, opts) {
@@ -651,7 +653,9 @@ try {
   quiet.render().playFrom(101);
   assert.equal(quiet.player.currentTime, 101);
   assert.equal(quiet.player.playing, true, 'the tap plays it');
-  assert.equal(globalThis.__audio.playing, false, 'and stops the other voice');
+  assert.equal(M.useNowPlaying().phase, 'idle', 'and stops the other voice');
+  fadeBy();
+  assert.equal(globalThis.__audio.playing, false, 'its sound gone once it has faded out');
   quiet.unmount();
   // Back from full screen, still loading: a waited seek lands paused, and Watch again is the step's start.
   const backAt = mountVideo('substep-back', 63, 253, { at: 139 });
@@ -666,7 +670,71 @@ try {
   assert.equal(backAt.player.currentTime, 63, 'Watch again: the step start, not the old tap');
   backAt.unmount();
 
-  console.log('Media regressions passed: audio/video seeking, bounds, pause/end states, stale updates, range ends inside the seek grace, stuck seeks, loading more video, paused while loading more, iOS "not playing" never a pause (nudged instead), the audio session kept for video, 60 s of play through stalls, native-control pauses, background, scrubbing before the first play, load timeouts, one voice at a time, full screen hand-off, listening accounting, chapter gaps, playhead, play from a substep.');
+  // ---- Oct 25: homie and a video hand the sound to each other, smoothly (HANDOFF_FADE_MS).
+  // The kid plays a video while homie talks: homie's line is over at once, its sound turns down, then stops.
+  M.playClip({ url: 'say-fade', key: 'say:fade' });
+  await flush();
+  const said = globalThis.__audio;
+  said.volume = 1;
+  assert.equal(said.playing, true);
+  const kidPlays = mountVideo('fade-video', 0, 60, { autoPlay: false });
+  kidPlays.ready();
+  kidPlays.render().play();
+  assert.equal(kidPlays.player.playing, true, 'the video plays at once');
+  assert.equal(M.useNowPlaying().phase, 'idle', 'homie’s line is over at once (the pot goes quiet with it)');
+  assert.equal(M.videoPlaying(), true, 'and the video is in the room before that (no listening in between)');
+  advance(50);
+  assert.ok(said.playing && said.volume > 0 && said.volume < 1, `its sound turns down (${said.volume})`);
+  fadeBy();
+  assert.equal(said.playing, false, 'then stops');
+  assert.equal(said.volume, 1, 'at full volume for the next line');
+  // The next line during a fade: the fade ends, and it plays at full volume.
+  M.playClip({ url: 'say-fade', key: 'say:fade' });
+  await flush();
+  kidPlays.render().play();
+  advance(50);
+  M.playClip({ url: 'say-fade', key: 'say:fade-2' });
+  await flush();
+  assert.equal(said.playing, true);
+  fadeBy();
+  assert.equal(said.playing, true, 'the old fade never stops the new line');
+  assert.equal(said.volume, 1);
+  M.stopAudio();
+  kidPlays.unmount();
+  // A tap on homie: a playing video turns down, still counts as playing (homie listens only after), then
+  // pauses, at full volume for its next play.
+  const watched = mountVideo('tap-video', 0, 60);
+  watched.ready();
+  watched.player.volume = 1;
+  assert.equal(watched.player.playing, true);
+  M.pauseAllVideos({ fadeMs: M.HANDOFF_FADE_MS });
+  advance(50);
+  assert.ok(watched.player.playing && watched.player.volume < 1, `turning down (${watched.player.volume})`);
+  assert.equal(watched.render().phase, 'playing');
+  assert.equal(M.videoPlaying(), true);
+  fadeBy();
+  assert.equal(watched.player.playing, false, 'paused');
+  assert.equal(watched.render().phase, 'paused');
+  assert.equal(M.videoPlaying(), false);
+  assert.equal(watched.player.volume, 1, 'full volume for its next play');
+  // A play during the fade (the kid changed their mind) wins, at full volume.
+  watched.render().play();
+  M.pauseAllVideos({ fadeMs: M.HANDOFF_FADE_MS });
+  advance(50);
+  watched.render().play();
+  fadeBy();
+  assert.equal(watched.player.playing, true, 'a play during the fade wins');
+  assert.equal(watched.player.volume, 1);
+  // A voice starting during the fade pauses it at once.
+  M.pauseAllVideos({ fadeMs: M.HANDOFF_FADE_MS });
+  advance(50);
+  M.playClip({ url: 'voice-now', start_s: 0, end_s: 10 });
+  assert.equal(watched.player.playing, false, 'paused at once');
+  assert.equal(watched.player.volume, 1);
+  M.stopAudio();
+  watched.unmount();
+
+  console.log('Media regressions passed: audio/video seeking, bounds, pause/end states, stale updates, range ends inside the seek grace, stuck seeks, loading more video, paused while loading more, iOS "not playing" never a pause (nudged instead), the audio session kept for video, 60 s of play through stalls, native-control pauses, background, scrubbing before the first play, load timeouts, one voice at a time, full screen hand-off, listening accounting, chapter gaps, playhead, play from a substep, the homie-video hand-off fades.');
 } finally {
   M.stopAudio();
   M.setHeardListener(null);

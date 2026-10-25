@@ -198,6 +198,47 @@ test("a turn Claude leaves alone (not for homie) sends quiet, so the phone stops
   p.close();
 });
 
+test("a tap on homie: the step's short line at once from the cache, while a video plays too, and no move", async () => {
+  const p = phone();
+  p.send({ type: "tap" }); // before ready: the hello comes instead
+  await waitFor("the greeting's end", () => p.ws.of("say_end").length === 1);
+  await advance(AUDIO_S * 1000 + 5000); // the step lines are made ahead meanwhile
+  assert.deepEqual(p.kinds(), ["greeting"]);
+  p.video(true); // the kid's video, which the phone fades out for homie
+  const moves = p.ws.of("go_to_step").length;
+  const at = Date.now();
+  p.send({ type: "tap" });
+  await waitFor("step 1's line", () => p.kinds().includes("step"));
+  const say = p.ws.events.findIndex((e) => e.type === "say" && e.kind === "step");
+  assert.equal(p.ws.events[say].text, "Step 1. Wash the rice three times.");
+  const first = p.ws.frames.find((f) => f.after > say);
+  assert.ok(first && first.at - at <= 50, `its audio at once (${first && first.at - at} ms)`);
+  assert.equal(p.ws.of("go_to_step").length, moves, "the step doesn't change");
+  assert.equal(p.spoken.filter((t) => t.startsWith("Step 1.")).length, 1, "no second Sonic call: the line was kept");
+  p.close();
+});
+
+test("a tap on homie mid-clip: her clip is over (the phone paused it), so the kid's words count, and no translation", async () => {
+  let turns = 0;
+  const p = phone(async (a) => {
+    if (++turns === 1) await a.playClip(40, 70, { question: { text: "Why on Sundays?", quote: "My mother made this every Sunday." }, stepOrder: 2 });
+    else await a.say("A big pinch.");
+  });
+  await waitFor("the greeting's end", () => p.ws.of("say_end").length === 1);
+  await advance(AUDIO_S * 1000 + 500);
+  p.says("Why did she make it on Sundays?");
+  await waitFor("her clip", () => p.ws.of("play_clip").length === 1);
+  await advance(3000);
+  p.send({ type: "tap" });
+  await waitFor("the step's line", () => p.kinds().includes("step"));
+  await advance(AUDIO_S * 1000 + 500);
+  p.says("How much salt goes in?"); // inside the clip's 30 s: before the tap, only "next" or "back" counted
+  await waitFor("the answer", () => p.ws.of("say").some((s) => s.text === "A big pinch."));
+  await advance(40_000);
+  assert.ok(!p.kinds().includes("translation"), "no translation of a clip the kid stopped");
+  p.close();
+});
+
 test("no quiet nudge while a video plays", async () => {
   const p = phone();
   await waitFor("the greeting's end", () => p.ws.of("say_end").length === 1);
