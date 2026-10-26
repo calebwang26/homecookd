@@ -71,7 +71,7 @@ SILENCE_S, KEEP_S, ABOVE_FLOOR_DB = 1.5, 0.3, 3.6  # a pause this long keeps KEE
 COOK_LANGUAGES = ("mr", "hi", "gu", "ta", "te", "pa", "ur", "zh", "ko", "tl", "es", "pt", "ar")
 SAMPLE_S, LOOP_SHARE, MIN_WORDS_A_MINUTE = 90, 0.4, 40
 PROOFREAD_BATCH = 120  # lines a call
-MIN_KEPT = 0.45  # a correction keeping less of the line's sound than this is a rewrite: the raw line stays
+MIN_KEPT = 0.55  # a correction keeping less of the line's sound than this is a rewrite: the raw line stays
 PROOFREAD_LINE_S = 30.0  # lines end only at pauses up to this long, so a word isn't split across two (मिर|ची)
 # Poha (Oct 26), the same tightened prompt: Opus got all 7 facts we check in 2 of 3 runs (6 in the other); Sonnet 5 and
 # Haiku 6, and both wrote chili powder for her cumin powder every time. Opus: ~$0.12 for 10.5 min of Marathi.
@@ -249,9 +249,11 @@ class Proofread(BaseModel):
 
 
 def kept_sounds(raw: str, fixed: str) -> float:
-    """How much of a line's sound a correction keeps (difflib's ratio on the text): spelling fixes keep 0.6 and up,
-    a rewritten line far less (on Poha a story line replaced by another line's words: 0.14)."""
-    return difflib.SequenceMatcher(None, raw, fixed).ratio()
+    """How much of a line's sound a correction keeps (difflib's ratio on the text). On Poha (Oct 26) Opus's
+    corrections keep 0.72 and up; a line compared with another line's correction keeps 0.42 at most. autojunk off:
+    on text over 200 characters difflib otherwise ignores characters that recur often, and Devanagari's vowel signs
+    do, so Poha's 290-character story line scored 0.24 and lost its correction (0.84 without it)."""
+    return difflib.SequenceMatcher(None, raw, fixed, autojunk=False).ratio()
 
 
 def proofread(spoken: list[dict], language: str, title: str, gen: claude.ClaudeText) -> tuple[list[dict], dict]:
