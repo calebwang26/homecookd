@@ -22,7 +22,6 @@ import { useKitchen } from '@/components/parent/kitchen';
 import { PendingList, usePendingRecipes } from '@/components/parent/PendingRecipes';
 import { RecipeRow, RecipeRowSkeleton, rowStyles } from '@/components/parent/RecipeRow';
 import { SendRecipeButton, useSendable } from '@/components/parent/SendRecipe';
-import { ActingAsBar } from '@/components/profiles';
 import { EVERYONE, RecipeList, type RecipeFilter } from '@/components/recipes/RecipeList';
 import { useRecipeStats } from '@/components/recipes/stats';
 import { ChevronRightIcon, LargeHeader, listEnter, PressableScale, RecordDotIcon, ScreenWash, StickyHeader, Txt, useScrollY } from '@/components/ui';
@@ -100,7 +99,6 @@ export default function ParentRecipes() {
         contentContainerStyle={styles.content}>
         <ScreenWash tone="parent" height={300} />
         <LargeHeader title={t('parent.tab.recipes')} size={34} scrollY={scrollY} fadeEnd={40} />
-        <ActingAsBar />
 
         <Txt variant="section" accessibilityRole="header" style={styles.heading}>
           {t('parent.recipes.yours')}

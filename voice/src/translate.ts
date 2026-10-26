@@ -2,6 +2,7 @@
 // labeled as a translation. Claude sees only the cook's own words here, so nothing else can creep in.
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "./env.js";
+import { logClaude } from "./claudeCost.js";
 
 const client = new Anthropic({ apiKey: env.anthropicKey });
 
@@ -23,6 +24,7 @@ export async function translateQuote(quote: string): Promise<string> {
     output_config: { effort: "low" },
     messages: [{ role: "user", content: quote }],
   });
+  logClaude("translate", res);
   if (res.stop_reason === "refusal") return "";
   const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim();
   return text.replace(/^["“]|["”]$/g, "");

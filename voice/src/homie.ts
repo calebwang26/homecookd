@@ -4,6 +4,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import { env } from "./env.js";
 import { guessesFamily } from "./family.js";
+import { logClaude } from "./claudeCost.js";
 
 export type AskKind = "amount" | "show" | "cue" | "substitution" | "story";
 export type Line = { text: string; textEn: string };
@@ -70,7 +71,7 @@ async function json<T>(
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
   });
-  console.log(`homie claude ${model} ${Date.now() - t0}ms stop=${res.stop_reason} in=${res.usage.input_tokens} out=${res.usage.output_tokens}`);
+  logClaude("homie", res, Date.now() - t0);
   if (res.stop_reason === "refusal") return null;
   const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("");
   try {

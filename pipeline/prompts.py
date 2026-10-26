@@ -275,8 +275,10 @@ with its MM:SS time in the clip, and at the end of this message the transcript o
 speech-to-text, also in MM:SS from the clip's start. The transcript can have spelling slips, words in the wrong
 script, missing words and repeats, so read it as speech and go by its meaning. Most stories are only in the
 transcript. Treat the frames and the transcript together as the video and follow every rule below as if you were
-watching it. For quote_original, copy the cook's words from the transcript in her own script, fixing only clear
-speech-to-text slips; never write words she didn't say.
+watching it. For quote_original, copy ALL the cook's words from the transcript lines inside the step's start..end,
+in order and in her own script, as one passage: every sentence she says about the step (amounts, cues, why), not a
+few key words. Fix only clear speech-to-text slips, leave out loops and words repeated back to back, and never
+write words she didn't say. quote is the English of that same passage, nothing more and nothing less.
 
 """
 

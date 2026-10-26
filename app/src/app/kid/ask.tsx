@@ -10,7 +10,7 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
 import { AskSheet, ThreadRow, useDishLookup } from '@/components/messages';
-import { ActingAsBar, AddFamilySheet } from '@/components/profiles';
+import { AddFamilySheet } from '@/components/profiles';
 import { ActionButton, Card, EmptyState, LargeHeader, listEnter, PlusIcon, PressableScale, ScreenWash, ShareIcon, SkeletonRow, Txt } from '@/components/ui';
 import { inboxOrder, useThreads } from '@/lib/messaging';
 import { useSession } from '@/lib/session';
@@ -28,7 +28,6 @@ export default function KidAsk() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <ScreenWash tone="kid" height={300} />
         <LargeHeader title="Ask your family" />
-        <ActingAsBar />
         <View style={styles.ask}>
           <ActionButton
             label="Ask about a dish"

@@ -2,6 +2,7 @@
 // the kitchen?" (its "+ Add someone without a phone" link) and from the invite sheet's "No phone?
 // Add them to this phone" row (AddFamilySheet), so Home has it too.
 // Their name and The cooks / The ones who miss it (the picker's own section names; POST /profiles).
+// Opened from one section's Add (`role`), it asks only the name: that section is the answer.
 // A name that is nearly someone's already ("grandma1") asks "There's already a Grandma. Same
 // person?" first (SameName: Yes closes, No adds). Then the family reloads and the sheet turns to
 // "Grandpa Joe is in the family." with a big Done (stay who you are: nothing goes out under his name
@@ -30,6 +31,8 @@ export type AddPhonelessSheetProps = {
   onClose: () => void;
   /** "Switch to Grandpa Joe" after adding: cook as them now. */
   onSwitch: (them: Profile) => void;
+  /** The section it was opened from: no section choice, just the name. */
+  role?: Role;
 };
 
 export function AddPhonelessSheet(props: AddPhonelessSheetProps) {
@@ -38,11 +41,11 @@ export function AddPhonelessSheet(props: AddPhonelessSheetProps) {
   return <AddPhoneless key={opened.n} {...props} />;
 }
 
-function AddPhoneless({ visible, onClose, onSwitch }: AddPhonelessSheetProps) {
+function AddPhoneless({ visible, onClose, onSwitch, role: fixedRole }: AddPhonelessSheetProps) {
   const { refresh, profiles } = useSession();
   const { t } = useWords();
   const [name, setName] = useState('');
-  const [role, setRole] = useState<Role>('cook');
+  const [role, setRole] = useState<Role>(fixedRole ?? 'cook');
   const [error, setError] = useState<string | null>(null);
   // Someone with nearly this name already: asked about before anything is added.
   const [dupe, setDupe] = useState<Profile | null>(null);
@@ -161,16 +164,18 @@ function AddPhoneless({ visible, onClose, onSwitch }: AddPhonelessSheetProps) {
         />
         <ErrorLine error={error} />
         {dupe ? <SameNameAsk who={dupe} noLabel={t('profiles.phoneless.noAddThem')} onYes={onClose} onNo={() => void go(true)} /> : null}
-        <SegmentedChoice
-          options={[
-            { key: 'cook', title: t('profiles.picker.cooks') },
-            { key: 'learner', title: t('profiles.picker.missIt') },
-          ]}
-          value={role}
-          onChange={setRole}
-          height={68}
-          accessibilityLabel={t('profiles.phoneless.sectionLabel')}
-        />
+        {fixedRole ? null : (
+          <SegmentedChoice
+            options={[
+              { key: 'cook', title: t('profiles.picker.cooks') },
+              { key: 'learner', title: t('profiles.picker.missIt') },
+            ]}
+            value={role}
+            onChange={setRole}
+            height={68}
+            accessibilityLabel={t('profiles.phoneless.sectionLabel')}
+          />
+        )}
       </View>
     </BottomSheet>
   );

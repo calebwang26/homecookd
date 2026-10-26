@@ -87,8 +87,9 @@ and homesick college kids. It's a family product, not a tool.
   transcription. Send `Cartesia-Version: 2026-08-14` on every call, and read https://docs.cartesia.ai/llms.txt
   before guessing fields or voice ids. A cloned voice needs that person's consent (`people.voiceClone`).
   homie's voice (Riya bilingual), its locale fields, speed and moods are Caleb's pick (`voice/src/sonic.ts`,
-  `docs/agents/memory/homie-voice.md`): change them only after he has heard samples. Gemini TTS is the backup voice
-  when Sonic fails before a line starts. Key check: `node scripts/check-cartesia.mjs`.
+  `docs/agents/memory/homie-voice.md`): change them only after he has heard samples. Sonic's previous model
+  (`sonic-3.5`, same voice) is the backup when Sonic fails before a line starts, and the phone's own voice after
+  that (say_end `failed`). Key check: `node scripts/check-cartesia.mjs`.
 - **Live Cartesia tests are encouraged.** We have the credits (1.24M on Oct 24), and Caleb wants them used to check
   voice quality, so `test-client` and `test-record` stream to real Ink 2 and Sonic by default. `FAKE=1` against
   `npm run dev:fake` (`VOICE_FAKE_SPEECH=1`: no Cartesia or Gemini Live) is an opt-in for quick offline checks. Every
@@ -151,7 +152,7 @@ app/        Expo app (expo-router, TypeScript). EAS dev build while coding, Test
 web/        Next.js site: the lander, homecookd.app/r (recipe share page), /i (invites) and /d (dinner invites). Vercel project "homecookd".
 convex/     The hackathon backend: schema.ts, functions, http.ts (worker + voice service endpoints)
 voice/      Live voice service (Cloud Run): the kid's cooking loop (/cook) and homie while a cook records (/record);
-            homie speaks with Sonic, and Gemini TTS when Sonic fails
+            homie speaks with Sonic (Sonic 3.5 as the backup, the phone's voice last)
 glasses/    ESP32 glasses → GCP VM (Python): WS ingest, MP4 mux, GCS upload, Convex job (glasses/README.md)
 supabase/   Frozen: functions/api (today's sign-in, invites, older screens), migrations/, tests/
 pipeline/   Python: prep.py → process.py (Gemini) → Muse Spark → publish.py, and worker.py (claims jobs from Convex)
@@ -218,6 +219,8 @@ voice/deploy.sh                                                    # Cloud Run h
 .venv/bin/python pipeline/test_extract_claude.py                    # EXTRACTOR=claude: frames + transcript -> events (fakes)
 .venv/bin/python pipeline/transcribe.py --id <id> [--language mr]   # work/transcript.json: cleaned audio, language check, proofread (real Cartesia)
 .venv/bin/python pipeline/scrub_family.py                          # dry run: old family recipe.json files to strip (--write: Caleb's OK)
+.venv/bin/python pipeline/fix_upside_down.py                      # dry run: front clips stored upside down (#79-#104); --try CLIP local; --write --clip PATH: Caleb's OK
+.venv/bin/python pipeline/test_fix_upside_down.py                 # which clips it flags + the repair (ffmpeg, no network)
 .venv/bin/python pipeline/test_account_purge.py                      # a deleted account's purge outside Convex (fakes)
 .venv/bin/python pipeline/worker.py [--once]                        # claim Convex jobs (--gcs: the old GCS job files)
 .venv/bin/python pipeline/worker.py --purge-dry-run                 # what each deleted account's purge would delete

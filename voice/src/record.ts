@@ -30,7 +30,7 @@ import { rms, VOICE_RMS } from "./inkWhisper.js";
 import { countLine, fixedLine, scriptedOf, scriptedQuestion } from "./lines.js";
 import { DEMO, NORMAL, Pacer, SCRIPTED, type PaceRules } from "./pacing.js";
 import { SONIC_SAMPLE_RATE, type AudioFormat } from "./sonic.js";
-import { createStt, speak } from "./speech.js";
+import { createStt, speak, speakingSeconds } from "./speech.js";
 import { sttEngine, type Stt, type SttEngine } from "./stt.js";
 
 /** `loading` is ours only (the app never sees it): messages wait until the recording is read. */
@@ -68,6 +68,9 @@ export const SILENT_MS = 5000;
  * words of a resumed sentence ~1 s late, so it gets 4 s: ~5.2 s of real quiet, room for a ~4 s pause.
  */
 export const ANSWER_GAP_MS: Record<SttEngine, number> = { "ink-2": 3500, "ink-whisper": 3500, "gemini-live": 4000 };
+/** A Marathi cook gets Gemini Live's longer wait on either engine (memory homie-waits-for-answers: 4 s Marathi). */
+export const answerGapMs = (language: string) =>
+  language === "mr" ? ANSWER_GAP_MS["gemini-live"] : ANSWER_GAP_MS[sttEngine(language)];
 /** A turn the speech-to-text opened and never closed (a dropped stream) stops holding her answer after this long. */
 const STUCK_TURN_MS = 6000;
 /** Sound on the mic holds the answer (and the nudge) this long: her words may still be on their way. */
@@ -317,7 +320,7 @@ export class Recording {
     this.who = this.whoLatin = { language: recording.language, call, kid: kid?.name.split(" ")[0], dish };
     this.homie = this.deps.agent(this.who);
     this.names = this.who.language === "en" ? Promise.resolve() : this.nativeNames();
-    this.gapMs = ANSWER_GAP_MS[sttEngine(recording.language)];
+    this.gapMs = answerGapMs(recording.language);
     this.stt = this.deps.createStt(recording.language, {
       onTurnStart: () => this.onTurnStart(),
       onPartial: (text) => this.onPartial(text),
@@ -1091,6 +1094,7 @@ export class Recording {
     const t0 = Date.now();
     let first = 0;
     let bytes = 0;
+    let failed = false;
     try {
       await this.deps.speak(line.text, this.audio, ctrl.signal, (chunk) => {
         if (!first) {
@@ -1102,12 +1106,13 @@ export class Recording {
       }, { language: this.who.language, voice: env.homieVoice, kind });
     } catch (err) {
       if (!ctrl.signal.aborted) console.warn("sonic", (err as Error).message);
+      failed = !first && !ctrl.signal.aborted;
     }
     // The phone plays a line only once it has all of it (say_end), after loading it into its player; an interrupted
-    // one it never plays.
+    // one it never plays. A line no voice could make, it says in its own voice (say_end `failed`), about this long.
     const aborted = ctrl.signal.aborted;
     const sayEnd = Date.now();
-    const length = aborted || !first ? 0 : (bytes / 2 / SONIC_SAMPLE_RATE) * 1000;
+    const length = aborted ? 0 : failed ? speakingSeconds(line.text) * 1000 : !first ? 0 : (bytes / 2 / SONIC_SAMPLE_RATE) * 1000;
     const playStart = sayEnd + PLAYER_LOAD_MS;
     const playEnd = length ? playStart + length : sayEnd;
     this.playingUntil = playEnd;
@@ -1115,7 +1120,7 @@ export class Recording {
     // finished (no load time), so a quick "yes" right after the line isn't cut.
     this.muteUntil = sayEnd + length;
     // A stopped line had its say_end from hush() (or its socket closed).
-    if (!aborted) this.send({ type: "say_end", interrupted: false });
+    if (!aborted) this.send({ type: "say_end", interrupted: false, ...(failed ? { failed: true } : {}) });
     if (this.speaking === ctrl) this.speaking = null;
     // The phone is still playing it; hush() can cut that short too.
     this.playing = ctrl;

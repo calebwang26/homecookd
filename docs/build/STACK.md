@@ -202,10 +202,11 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
 - homie's voice everywhere (Caleb, Oct 24, `docs/agents/memory/homie-voice.md`): "Riya bilingual"
   `930eda72-c1af-4637-8d07-87d881d615fe`, `sonic-3.6`, 24 kHz, speed 0.85 on every line. Marathi as `locale: "mr-IN"`,
   English as `locale: "en-IN"` plus a mood per kind of line (`generation_config.emotion`, English only); other
-  languages as `language`. If Sonic fails before any audio (HTTP error, network, nothing in 4 s), Gemini TTS
-  (`gemini-3.8-flash-tts`) says the line in the same 24 kHz s16le format; after audio started, the line just ends.
-  Gemini has its own guard (first audio within 6 s, the whole line within 10 s + 100 ms a character); a stall, an
-  empty stream or a failed interaction ends the line (`say_end`), and `/speak` answers 502.
+  languages as `language`. If Sonic fails before any audio (HTTP error, network, nothing in 4 s), Sonic's previous
+  model (`sonic-3.5`) says the line in the same voice, locale, pace and mood and the same 24 kHz s16le format; after
+  audio started, the line just ends. If the backup fails too (same 4 s guard), the line ends with
+  `{ type: "say_end", failed: true }` and the app says its text in the phone's own voice; `/speak` answers 502 (the
+  app's phone voice again). Gemini TTS was the backup until Oct 26.
 - Languages are Ink-style ISO 639-1 codes (`mr`, `en`) everywhere: `people.language`, `recordings.language`,
   `jobs.language`, `recipes.language`. Unset means `en`.
 
@@ -368,7 +369,9 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   - `{ type: "ready", recording: { id, language, cookName, kidName?, dish? } }`
   - `{ type: "phase", phase: "intro" | "recording" | "wrapping_up" | "ended" }`
   - `{ type: "state", state: "listening" | "thinking" | "speaking" | "quiet" }` (the pot's steam)
-  - `{ type: "say", text, textEn, kind, ai: true, audio }` + binary audio + `{ type: "say_end", interrupted }`.
+  - `{ type: "say", text, textEn, kind, ai: true, audio }` + binary audio + `{ type: "say_end", interrupted, failed? }`
+    (`failed: true`: neither of Cartesia's models could make the line, so the app says `text` in the phone's own
+    voice; cook mode's `say_end` carries it too, and the app says `textEn ?? text` there).
     `kind` is a `homiePrompts.kind`. The app lights the pot just before audio starts. If the cook taps start or
     done while homie's line is still playing, an extra `{ type: "say_end", interrupted: true }` tells the app to
     stop it. A line stopped while it's still being made gets its `say_end` (`interrupted: true`) at once, and no
@@ -591,7 +594,7 @@ then `/speak` with `translate: true`.
 **New keys**: `GLASSES_SECRET` (Convex env, the VM, Cloud Run secret), `GEMINI_API_KEY` (Cloud Run secret, for live
 Marathi transcription), `HOMIE_VOICE` (Cloud Run env, optional: homie's Cartesia voice id; the code default is "Riya bilingual"
 `930eda72-c1af-4637-8d07-87d881d615fe`, which Sonic speaks in Marathi and Indian English), `HOMIE_SPEED` (optional,
-default 0.85), `GEMINI_TTS_MODEL` / `GEMINI_TTS_VOICE` (optional; the backup voice, also on `GEMINI_API_KEY`),
+default 0.85), `MARATHI_STT=cartesia` (Marathi heard by Cartesia ink-whisper; unset = Gemini Live, as before),
 `GLASSES_URL` (Cloud Run env).
 
 ## Keys (all server-side, never in `app/` or `web/`)

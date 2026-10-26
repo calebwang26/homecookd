@@ -15,7 +15,8 @@ moments, the cook's voice, Marathi for Poha). Made-up or YouTube recipes don't.
 - Swordfish steak: bundled id `weed-steak` (the id stays for URLs and caches), `app/assets/data/recipes/weed-steak.json`
   and the public media bucket. English.
 - Poha: the Convex recipe "Poha" (`libraryId recipe-pjjjp58gxt44`, files under `recipe-pjjjp58gxt44/` in the
-  `edible-media-…` bucket). The cook speaks Marathi, so it's the dish for checking Marathi paths.
+  `edible-media-…` bucket). The cook speaks Marathi. Since Oct 26 Marathi isn't a cook language ([[marathi-dropped]]),
+  so Poha stays as an existing recipe and example, not the test for new language work; use the 13 languages for that.
 - Pick these two for screenshots, demo scripts, example data and live pipeline checks (align, cover, shorten).
   Don't rerun Chicken Biryani for these.
 - A change that touches cook mode or the pipeline is checked on both dishes where it can be.
