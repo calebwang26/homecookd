@@ -31,9 +31,8 @@ import { refreshThreads } from '@/lib/messaging';
 import { openRecipe } from '@/lib/navigation';
 import { recipesByCook, refreshLibrary, useLibrary, useRecipes, type LibraryEntry } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
+import { useWords } from '@/lib/words/useWords';
 import { colors, space, tabBar } from '@/theme/tokens';
-
-const TITLE = 'Recipes';
 
 /** Every word of the query appears in the title. */
 function matches(title: string, words: string[]): boolean {
@@ -43,6 +42,7 @@ function matches(title: string, words: string[]): boolean {
 
 export default function ParentRecipes() {
   const { me, cooks, profiles } = useSession();
+  const { t } = useWords();
   const { entries, loaded } = useLibrary();
   const fav = useFavorites();
   const stats = useRecipeStats();
@@ -99,18 +99,18 @@ export default function ParentRecipes() {
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.muted} />}
         contentContainerStyle={styles.content}>
         <ScreenWash tone="parent" height={300} />
-        <LargeHeader title={TITLE} size={34} scrollY={scrollY} fadeEnd={40} />
+        <LargeHeader title={t('parent.tab.recipes')} size={34} scrollY={scrollY} fadeEnd={40} />
         <ActingAsBar />
 
         <Txt variant="section" accessibilityRole="header" style={styles.heading}>
-          Your recipes
+          {t('parent.recipes.yours')}
         </Txt>
         <CookMirrorLine entries={mine} stats={dishStats} profiles={profiles} meId={me?.id} style={styles.mirror} />
         {hasAny ? (
           <>
             {mine.length ? (
               <Animated.View entering={listEnter(0)} style={styles.search}>
-                <SearchBar value={query} onChangeText={setQuery} placeholder="Search your recipes" />
+                <SearchBar value={query} onChangeText={setQuery} placeholder={t('parent.recipes.search')} />
               </Animated.View>
             ) : null}
             <View style={styles.col}>
@@ -137,7 +137,7 @@ export default function ParentRecipes() {
                 </View>
               ) : (
                 <Txt variant="body" align="center" style={styles.noMatch}>
-                  No match for “{query.trim()}”
+                  {t('parent.recipes.noMatch', { query: query.trim() })}
                 </Txt>
               )}
             </View>
@@ -148,7 +148,7 @@ export default function ParentRecipes() {
             {sendable.dishes.length ? <SendRecipeButton dishes={sendable.dishes} mine={sendable.mine} /> : null}
           </Animated.View>
         ) : (
-          <View accessible accessibilityLabel="Loading your recipes" style={[styles.col, styles.list]}>
+          <View accessible accessibilityLabel={t('parent.recipes.loading')} style={[styles.col, styles.list]}>
             <RecipeRowSkeleton />
             <RecipeRowSkeleton />
             <RecipeRowSkeleton />
@@ -158,7 +158,7 @@ export default function ParentRecipes() {
         {family.length ? (
           <Animated.View entering={listEnter(2)} style={styles.family}>
             <Txt variant="section" accessibilityRole="header" style={styles.familyHeading}>
-              Family recipes
+              {t('parent.recipes.family')}
             </Txt>
             <RecipeList
               entries={family}
@@ -174,27 +174,28 @@ export default function ParentRecipes() {
           </Animated.View>
         ) : null}
       </Animated.ScrollView>
-      <StickyHeader title={TITLE} scrollY={scrollY} start={40} />
+      <StickyHeader title={t('parent.tab.recipes')} scrollY={scrollY} start={40} />
     </View>
   );
 }
 
 /** Nothing of mine yet: one row, not a whole empty screen, so the family's dishes show below. */
 function RecordFirstRow() {
+  const { t } = useWords();
   return (
     <PressableScale
       onPress={() => router.push('/record')}
       scaleTo={0.98}
       pressedOpacity={0.85}
       accessibilityRole="button"
-      accessibilityLabel="Record your first recipe"
-      accessibilityHint="Film yourself cooking, then send it to the family"
+      accessibilityLabel={t('parent.recipes.recordFirst')}
+      accessibilityHint={t('parent.home.recordHint')}
       style={rowStyles.card}>
       <View style={styles.recordDisc}>
         <RecordDotIcon size={16} color={colors.danger} />
       </View>
       <Txt variant="title" size={17} numberOfLines={2} style={rowStyles.text}>
-        Record your first recipe
+        {t('parent.recipes.recordFirst')}
       </Txt>
       <ChevronRightIcon size={22} strokeWidth={2.2} color={colors.muted} />
     </PressableScale>

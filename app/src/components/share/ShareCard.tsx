@@ -8,6 +8,7 @@ import { StyleSheet, View } from 'react-native';
 import Animated, { interpolateColor, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { Avatar, Brand, PotMark, Skeleton, Txt } from '@/components/ui';
+import { useWords } from '@/lib/words/useWords';
 import { colors, radii } from '@/theme/tokens';
 
 import { SWATCHES, type SwatchId } from './swatches';
@@ -107,6 +108,7 @@ const STAGE_COLORS = SWATCHES.map((s) => s.stage);
 const indexOf = (id: SwatchId) => Math.max(0, ORDER.indexOf(id));
 
 export function ShareCard({ data, swatch, photo, stageHeight, compact = false }: ShareCardProps) {
+  const { t } = useWords();
   const reduce = useReducedMotion();
   const idx = useSharedValue(indexOf(swatch));
   useEffect(() => {
@@ -131,7 +133,7 @@ export function ShareCard({ data, swatch, photo, stageHeight, compact = false }:
   // "by Dad · ~50 min" when it fits on one line beside the avatar, else just "by Grandma".
   // Room: the text column (inner - 4) minus the 20 px avatar and its 6 px gap; DM Sans 14 runs
   // about 7.4 px a character.
-  const by = data?.byline ?? (data?.cook ? `by ${data.cook}` : '');
+  const by = data?.byline ?? (data?.cook ? t('share.card.by', { name: data.cook }) : '');
   const full = [by || null, data?.time ?? null].filter(Boolean).join(' · ');
   const meta = full.length <= Math.floor((inner - 30) / 7.4) ? full : by || full;
 
@@ -139,7 +141,15 @@ export function ShareCard({ data, swatch, photo, stageHeight, compact = false }:
     <Animated.View
       style={[styles.stage, { width: cardW + 44, height: stageHeight, paddingVertical: compact ? STAGE_PAD.compact : STAGE_PAD.regular }, stageStyle]}
       accessibilityRole="image"
-      accessibilityLabel={data ? `${title}${data.byline ? `, ${data.byline}` : data.cook ? `, from ${data.cook}` : ''}, on homecookd` : 'Recipe card'}>
+      accessibilityLabel={
+        data
+          ? data.byline
+            ? t('share.card.a11yByline', { title, byline: data.byline })
+            : data.cook
+              ? t('share.card.a11yFrom', { title, name: data.cook })
+              : t('share.card.a11y', { title })
+          : t('share.card.a11yLoading')
+      }>
       <View style={[styles.card, { width: cardW, boxShadow: dark ? '0 16px 40px rgba(0,0,0,0.32)' : '0 10px 30px rgba(30,36,16,0.10)' }]}>
         {photo > 0 ? (
           <View style={[styles.photo, { width: inner, height: photo }]}>

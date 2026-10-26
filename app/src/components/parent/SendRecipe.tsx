@@ -11,6 +11,7 @@ import { recipesByCook, useLibrary } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
 import { useShare } from '@/lib/share';
 import type { LibraryEntry } from '@/lib/types';
+import { useWords } from '@/lib/words/useWords';
 import { colors } from '@/theme/tokens';
 
 import { SendRecipesSheet } from './SendRecipesSheet';
@@ -41,6 +42,7 @@ export function SendRecipeButton({
   style?: StyleProp<ViewStyle>;
 }) {
   const share = useShare();
+  const { t } = useWords();
   // A fresh key per open, so the list starts at the top.
   const [sheet, setSheet] = useState({ open: false, n: 0 });
   if (!dishes.length) return null;
@@ -51,11 +53,11 @@ export function SendRecipeButton({
   return (
     <>
       <ActionButton
-        label="Send a recipe"
+        label={t('parent.sendRecipe.button')}
         size="xl"
         icon={<SendIcon size={22} color={colors.card} />}
         onPress={start}
-        accessibilityHint={dishes.length === 1 ? 'Opens ways to send it' : 'Pick a recipe, then who to send it to'}
+        accessibilityHint={t(dishes.length === 1 ? 'parent.sendRecipe.hintOne' : 'parent.sendRecipe.hintMany')}
         style={style}
       />
       <SendRecipesSheet

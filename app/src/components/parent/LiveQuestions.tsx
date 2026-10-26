@@ -17,16 +17,18 @@ import { ChevronRightIcon, fadeOutFast, listEnter, PressableScale, Txt } from '@
 import { answerQuestion, useCookQuestions, type CookQuestion } from '@/lib/live/convex';
 import { getCachedEntry } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
+import { useWords } from '@/lib/words/useWords';
+import type { T } from '@/lib/words/words';
 import { colors, radii, shadows, space } from '@/theme/tokens';
 
 import { dishName } from './kitchen';
 
-function who(q: CookQuestion): string {
-  const name = q.askedByName?.trim() || 'Your family';
+function who(q: CookQuestion, t: T): string {
+  const name = q.askedByName?.trim() || t('parent.questions.yourFamily');
   const e = getCachedEntry(q.recipeId);
-  const dish = q.recipeTitle || (e ? dishName(e.title, e.cook_name) : null);
-  const step = q.stepOrder && q.kind !== 'share' ? ` · step ${q.stepOrder}` : '';
-  return dish ? `${name} · ${dish}${step}` : `${name} asked`;
+  const dish = q.recipeTitle || (e ? dishName(e.title, e.cook_name, t) : null);
+  if (!dish) return t('parent.questions.asked', { name });
+  return q.stepOrder && q.kind !== 'share' ? t('parent.questions.whoDishStep', { name, dish, step: q.stepOrder }) : `${name} · ${dish}`;
 }
 
 export function LiveQuestions({ enterIndex = 0 }: { enterIndex?: number }) {
@@ -43,6 +45,7 @@ export function LiveQuestions({ enterIndex = 0 }: { enterIndex?: number }) {
 }
 
 function QuestionRow({ q }: { q: CookQuestion }) {
+  const { t } = useWords();
   const lines = questionLines(q);
   const open = () => router.push({ pathname: '/answer/[id]', params: { id: q._id } });
   return (
@@ -51,11 +54,11 @@ function QuestionRow({ q }: { q: CookQuestion }) {
         onPress={open}
         scaleTo={0.98}
         accessibilityRole="button"
-        accessibilityLabel={lines.en ? `${who(q)}: ${lines.main}. Translated from: ${lines.en}` : `${who(q)}: ${lines.main}`}
-        accessibilityHint="Opens the question. homie reads it to you, and you answer out loud."
+        accessibilityLabel={lines.en ? t('parent.questions.labelTranslated', { who: who(q, t), question: lines.main, english: lines.en }) : `${who(q, t)}: ${lines.main}`}
+        accessibilityHint={t('parent.questions.hint')}
         style={styles.open}>
         <Txt variant="label" size={15} weight={700} color={colors.greenDeep} numberOfLines={1}>
-          {who(q)}
+          {who(q, t)}
         </Txt>
         <Txt variant="title" size={20} leading={1.25} color={colors.ink}>
           “{lines.main}”
@@ -63,15 +66,15 @@ function QuestionRow({ q }: { q: CookQuestion }) {
         {/* Gemini's translation of the kid's words: AI words are always labelled. */}
         {lines.en ? (
           <Txt variant="meta" size={14}>
-            Translated · “{lines.en}”
+            {t('parent.questions.translated', { text: lines.en })}
           </Txt>
         ) : null}
       </PressableScale>
       <View style={styles.actions}>
-        <HoldToTalk toName={q.askedByName ?? 'them'} onSend={(rec) => answerQuestion(q._id, { audioUri: rec.uri, contentType: rec.contentType })} />
-        <PressableScale onPress={open} accessibilityRole="button" accessibilityLabel="Answer" hitSlop={8} style={styles.answer}>
+        <HoldToTalk toName={q.askedByName ?? t('messages.hold.them')} onSend={(rec) => answerQuestion(q._id, { audioUri: rec.uri, contentType: rec.contentType })} />
+        <PressableScale onPress={open} accessibilityRole="button" accessibilityLabel={t('parent.ask.answer')} hitSlop={8} style={styles.answer}>
           <Txt variant="label" size={15} weight={700} color={colors.greenDeep}>
-            Answer
+            {t('parent.ask.answer')}
           </Txt>
           <ChevronRightIcon size={16} color={colors.greenDeep} />
         </PressableScale>

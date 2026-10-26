@@ -13,10 +13,21 @@
 //                                        backoff until Convex lists it, then the row says it failed
 //   node scripts/test-parent-jobs.mjs
 import assert from 'node:assert/strict';
+import { existsSync } from 'node:fs';
+import { registerHooks } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+// '@/…' and extensionless imports (jobsLogic reads its words from src/lib/words: a folder's index.ts too).
+registerHooks({
+  resolve(spec, ctx, next) {
+    const base = spec.startsWith('@/') ? join(root, 'src', spec.slice(2)) : spec.startsWith('.') && ctx.parentURL ? join(dirname(fileURLToPath(ctx.parentURL)), spec) : null;
+    if (base && !/\.[a-z]+$/.test(base) && existsSync(`${base}.ts`)) return next(pathToFileURL(`${base}.ts`).href, ctx);
+    if (base && !/\.[a-z]+$/.test(base) && existsSync(join(base, 'index.ts'))) return next(pathToFileURL(join(base, 'index.ts')).href, ctx);
+    return next(spec, ctx);
+  },
+});
 const J = await import(pathToFileURL(join(root, 'src/components/parent/jobsLogic.ts')).href);
 const S = await import(pathToFileURL(join(root, 'src/components/parent/stops.ts')).href);
 const R = await import(pathToFileURL(join(root, 'src/components/record/jobRetry.ts')).href);
@@ -34,8 +45,8 @@ const test = (name, fn) => {
 };
 
 test('every stage still going has its line; uploading says the video is still on its way', () => {
-  for (const stage of ['uploading', 'queued', 'preparing', 'understanding', 'writing', 'indexing']) assert.ok(J.STAGE_HINT[stage], stage);
-  assert.equal(J.STAGE_HINT.uploading, 'Still sending the video');
+  for (const stage of ['uploading', 'queued', 'preparing', 'understanding', 'writing', 'indexing']) assert.ok(J.stageHint(stage), stage);
+  assert.equal(J.stageHint('uploading'), 'Still sending the video');
 });
 
 test('uploading: this phone’s own progress, else the server’s count; never a full sending half', () => {

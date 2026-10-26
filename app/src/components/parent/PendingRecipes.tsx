@@ -27,6 +27,8 @@ import { cancelLiveJob, cancelLiveUpload, libraryIdOf as findLibraryId, useLiveJ
 import { refreshLibrary, useLibrary } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
 import { dropUnsentFor } from '@/lib/unsentRecordings';
+import { useWords } from '@/lib/words/useWords';
+import type { T } from '@/lib/words/words';
 import {
   cancelJobUploads,
   ensurePendingSend,
@@ -40,7 +42,7 @@ import {
 } from '@/lib/uploads';
 
 import { liveJobCancelled, liveJobFinished, recipeIdsToLookUp } from './jobsLogic';
-import { describeJob, ProcessingRow, STOPPED_VIEW, type ProcessingView } from './ProcessingRow';
+import { describeJob, ProcessingRow, stoppedView, type ProcessingView } from './ProcessingRow';
 import { flushStops, inTime, stopSoon, undoStop, UNDO_MS, UNDO_MS_SCREEN_READER, useStops } from './stops';
 
 const POLL_MS = 60_000;
@@ -69,11 +71,11 @@ const RUNNING = new Set(['uploading', 'queued', 'preparing', 'understanding', 'w
  * A Convex job this phone didn't send (the laptop's glasses jobs, another phone's) as a row: no upload
  * here, so it reads straight from the worker's live stage. Its id is the Convex job id.
  */
-function liveOnlyJob(l: LiveJob): StoredJob {
+function liveOnlyJob(l: LiveJob, t: T): StoredJob {
   return {
     job_id: l._id,
     status_url: '',
-    title: l.title || (l.source === 'glasses' ? 'glasses recording' : 'recording'),
+    title: l.title || t(l.source === 'glasses' ? 'parent.pending.glassesRecording' : 'parent.pending.recording'),
     cook_name: '',
     relation: '',
     created_at: new Date(l._creationTime ?? Date.now()).toISOString(),
@@ -95,6 +97,7 @@ export function usePendingRecipes(): PendingState {
   const { me } = useSession();
   const { entries } = useLibrary();
   const toast = useToast();
+  const { t } = useWords();
   const [jobs, setJobs] = useState<StoredJob[]>(() => loadJobs());
   const [statuses, setStatuses] = useState<Record<string, JobStatus>>({});
   // The clock the rows read (the writing estimate moves with it): set on every poll and upload report.
@@ -218,7 +221,7 @@ export function usePendingRecipes(): PendingState {
         }
       } catch (err) {
         console.warn('[uploads] stop failed', err);
-        toast.show('Couldn’t stop it. Check the connection and try again.', { tone: 'error' });
+        toast.show(t('parent.pending.stopFailed'), { tone: 'error' });
         return false;
       }
       if (liveOnlyRow) return true; // another phone's or the laptop's upload: nothing to stop here
@@ -229,7 +232,7 @@ export function usePendingRecipes(): PendingState {
       setJobs(loadJobs());
       return true;
     },
-    [toast, liveByJob, liveOnly],
+    [toast, liveByJob, liveOnly, t],
   );
 
   const views = useMemo(() => {
@@ -237,14 +240,14 @@ export function usePendingRecipes(): PendingState {
       ...Object.fromEntries(
         jobs.map((j) => {
           const live = liveByJob.get(j.job_id);
-          return [j.job_id, describeJob(j, statuses[j.job_id], now, live, live?.recipeId ? libraryIdOf[live.recipeId] : undefined)];
+          return [j.job_id, describeJob(j, statuses[j.job_id], now, live, live?.recipeId ? libraryIdOf[live.recipeId] : undefined, t)];
         }),
       ),
-      ...Object.fromEntries(liveOnly.map((l) => [l._id, describeJob(liveOnlyJob(l), undefined, now, l)])),
+      ...Object.fromEntries(liveOnly.map((l) => [l._id, describeJob(liveOnlyJob(l, t), undefined, now, l, undefined, t)])),
     };
-    for (const [id, state] of stops) if (all[id] && state !== 'gone') all[id] = STOPPED_VIEW[state];
+    for (const [id, state] of stops) if (all[id] && state !== 'gone') all[id] = stoppedView(state, t);
     return all;
-  }, [jobs, statuses, now, liveByJob, libraryIdOf, liveOnly, stops]);
+  }, [jobs, statuses, now, liveByJob, libraryIdOf, liveOnly, stops, t]);
 
   const act = useCallback(
     (job: StoredJob) => {
@@ -255,7 +258,7 @@ export function usePendingRecipes(): PendingState {
       }
       if (action === 'cancel') {
         stopSoon(job.job_id, () => stop(job), screenReader ? UNDO_MS_SCREEN_READER : UNDO_MS);
-        AccessibilityInfo.announceForAccessibility(`Stopped your ${job.title}. Undo is where the stop button was.`);
+        AccessibilityInfo.announceForAccessibility(t('parent.pending.stoppedAnnounce', { dish: job.title }));
         return;
       }
       if (action === 'remove') {
@@ -269,7 +272,7 @@ export function usePendingRecipes(): PendingState {
         setJobs(loadJobs());
       }
     },
-    [views, statuses, stop],
+    [views, statuses, stop, t],
   );
 
   // Only this cook's recordings (another profile on this phone has their own list), then every other job of
@@ -278,9 +281,9 @@ export function usePendingRecipes(): PendingState {
     () =>
       [
         ...jobs.filter((j) => statuses[j.job_id]?.status !== 'cancelled' && (!me || !j.sender_id || j.sender_id === me.id)),
-        ...liveOnly.map(liveOnlyJob),
+        ...liveOnly.map((l) => liveOnlyJob(l, t)),
       ].filter((j) => stops.get(j.job_id) !== 'gone'),
-    [jobs, statuses, me, liveOnly, stops],
+    [jobs, statuses, me, liveOnly, stops, t],
   );
 
   return { jobs: visible, views, act, poll };

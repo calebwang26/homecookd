@@ -16,6 +16,8 @@ import { errorMessage, type Profile } from '@/lib/api';
 import { openChatWith, openCircle } from '@/lib/messaging';
 import { useSession } from '@/lib/session';
 import type { LibraryEntry } from '@/lib/types';
+import { useWords } from '@/lib/words/useWords';
+import type { WordKey } from '@/lib/words/words';
 import { colors } from '@/theme/tokens';
 
 import { dishName, possessivePronoun } from './helpers';
@@ -28,10 +30,18 @@ const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 /** What the question is about: a dish, or "Something else" (no dish). */
 type Choice = { dish: LibraryEntry | null };
 
+/** "Her recipe" / "His recipe" / "Their recipe" under the dish's cook. */
+const THEIR_RECIPE: Record<ReturnType<typeof possessivePronoun>, WordKey> = {
+  her: 'messages.ask.herRecipe',
+  his: 'messages.ask.hisRecipe',
+  their: 'messages.ask.theirRecipe',
+};
+
 export function AskSheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
   const { me, profiles } = useSession();
   const dishes = useFamilyDishes();
   const toast = useToast();
+  const { t } = useWords();
   const { height: winH } = useWindowDimensions();
   const [opening, setOpening] = useState<string | null>(null);
   const [pick, setPick] = useState<Choice | null>(null);
@@ -59,17 +69,14 @@ export function AskSheet({ visible, onClose }: { visible: boolean; onClose: () =
         params: { id, ...(recipe ? { recipe } : {}), ...(ask ? { ask: '1' } : {}) },
       });
     } catch (e) {
-      toast.show(errorMessage(e, 'That didn’t open. Try again.'), { tone: 'error' });
+      toast.show(errorMessage(e, t('messages.openFailed')), { tone: 'error' });
     } finally {
       setTimeout(() => setOpening(null), 300);
     }
   };
 
   const personLine = (p: Profile) => {
-    if (cookOfDish && p.id === cookOfDish.id) {
-      const his = possessivePronoun(p);
-      return `${his.charAt(0).toUpperCase()}${his.slice(1)} recipe`;
-    }
+    if (cookOfDish && p.id === cookOfDish.id) return t(THEIR_RECIPE[possessivePronoun(p)]);
     const rel = (p.relation ?? '').trim();
     return rel && norm(rel) !== norm(p.name) ? rel : null;
   };
@@ -78,15 +85,15 @@ export function AskSheet({ visible, onClose }: { visible: boolean; onClose: () =
     <BottomSheet
       visible={visible}
       onClose={onClose}
-      title={pick ? 'Who should answer?' : 'Ask about a dish'}
-      accessibilityLabel={pick ? 'Who should answer?' : 'Ask about a dish'}>
+      title={pick ? t('messages.ask.whoTitle') : t('messages.ask.title')}
+      accessibilityLabel={pick ? t('messages.ask.whoTitle') : t('messages.ask.title')}>
       <ScrollView style={[styles.scroll, { maxHeight: Math.max(320, winH * 0.92 - 230) }]} contentContainerStyle={styles.scrollPad} showsVerticalScrollIndicator={false}>
         {!pick ? (
           <Animated.View key="dishes" entering={FadeIn.duration(180)}>
-            <DishList dishes={dishes} onPick={(d) => setPick({ dish: d })} rowLabel={(d) => `Ask about ${d.title}`}>
+            <DishList dishes={dishes} onPick={(d) => setPick({ dish: d })} rowLabel={(d) => t('messages.ask.aboutDish', { dish: d.title })}>
               <OptionRow
                 icon={<ChatIcon size={24} color={colors.lavenderInk} />}
-                title="Something else"
+                title={t('messages.ask.somethingElse')}
                 last
                 onPress={() => setPick({ dish: null })}
               />
@@ -99,7 +106,7 @@ export function AskSheet({ visible, onClose }: { visible: boolean; onClose: () =
                 icon={<BackIcon size={20} color={colors.ink} strokeWidth={2.2} />}
                 tone="well"
                 size={48}
-                accessibilityLabel="Back to the dishes"
+                accessibilityLabel={t('messages.ask.backToDishes')}
                 onPress={() => setPick(null)}
               />
               {pick.dish ? (
@@ -119,7 +126,7 @@ export function AskSheet({ visible, onClose }: { visible: boolean; onClose: () =
                     <ChatIcon size={18} color={colors.lavenderInk} />
                   </View>
                   <Txt variant="meta" weight={700} color={colors.ink}>
-                    Something else
+                    {t('messages.ask.somethingElse')}
                   </Txt>
                 </View>
               )}
@@ -127,7 +134,8 @@ export function AskSheet({ visible, onClose }: { visible: boolean; onClose: () =
             <ListCard padH={12}>
               <TargetRow
                 face={<CircleFaces members={profiles} me={me} size={52} />}
-                title="The family"
+                title={t('messages.ask.theFamily')}
+                label={t('messages.ask.askFamily')}
                 busy={opening === 'family'}
                 last={!people.length}
                 onPress={() => go('family', async () => ({ id: await openCircle() }))}
@@ -137,6 +145,7 @@ export function AskSheet({ visible, onClose }: { visible: boolean; onClose: () =
                   key={p.id}
                   face={<Avatar profile={p} size={52} />}
                   title={p.name}
+                  label={t('messages.ask.askName', { name: p.name })}
                   line={personLine(p)}
                   busy={opening === p.id}
                   last={i === people.length - 1}
@@ -166,6 +175,7 @@ function OptionRow({ icon, title, last, onPress }: { icon: ReactNode; title: str
 function TargetRow({
   face,
   title,
+  label,
   line,
   busy,
   last,
@@ -173,13 +183,15 @@ function TargetRow({
 }: {
   face: ReactNode;
   title: string;
+  /** Its accessibility label ("Ask Dad"). */
+  label: string;
   line?: string | null;
   busy: boolean;
   last?: boolean;
   onPress: () => void;
 }) {
   return (
-    <ListRow padV={10} last={last} onPress={onPress} accessibilityLabel={`Ask ${title}`}>
+    <ListRow padV={10} last={last} onPress={onPress} accessibilityLabel={label}>
       {face}
       <View style={styles.rowText}>
         <Txt variant="title" numberOfLines={1}>

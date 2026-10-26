@@ -17,6 +17,7 @@ import type { DinnerInvite } from '@/components/share/DinnerInviteBody';
 import { ShareSheet } from '@/components/share/ShareSheet';
 import { useToast } from '@/components/ui';
 import { trail, trailStart } from '@/components/share/trail';
+import { useWords } from '@/lib/words/useWords';
 
 export type { DinnerInvite };
 type ShareInput = { recipeId: string } | { dinner: DinnerInvite };
@@ -65,6 +66,7 @@ export function ShareSheetProvider({ children }: { children: ReactNode }) {
   const watchdog = useRef<ReturnType<typeof setTimeout> | null>(null);
   const visibleRef = useRef(false);
   const toast = useToast();
+  const { t } = useWords();
 
   useEffect(() => {
     visibleRef.current = visible;
@@ -123,8 +125,8 @@ export function ShareSheetProvider({ children }: { children: ReactNode }) {
     clearWatchdog();
     setVisible(false);
     setGeneration((g) => g + 1);
-    toast.show('Sharing didn’t open. Try again.', { tone: 'error' });
-  }, [toast, clearWatchdog]);
+    toast.show(t('share.sheet.didntOpenToast'), { tone: 'error' });
+  }, [toast, clearWatchdog, t]);
 
   useEffect(() => {
     if (Platform.OS !== 'web') return;

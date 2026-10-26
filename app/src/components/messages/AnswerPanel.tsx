@@ -28,6 +28,7 @@ import type { Profile } from '@/lib/api';
 import { mmss } from '@/lib/format';
 import { composerModeKey, kvGet, kvSet } from '@/lib/storage';
 import { useVoiceRecorder, type VoiceRecording } from '@/lib/voice';
+import { useWords } from '@/lib/words/useWords';
 import { colors, shadows } from '@/theme/tokens';
 
 import { AttachedDish, FOCUS_AFTER_PICK_MS, GrowingInput, NO_MIC_NOTE, SendPill, type ComposerDish } from './KidComposer';
@@ -38,10 +39,12 @@ export type Answering = { who: Pick<Profile, 'name' | 'avatar_key'> | null; word
 
 /** "Answering Leo: how long do I let the beef sit…" with the asker's face and a × to cancel. */
 export function AnsweringStrip({ answering, style }: { answering: Answering; style?: StyleProp<ViewStyle> }) {
-  const name = answering.who?.name ?? 'them';
+  const { t } = useWords();
+  const name = answering.who?.name ?? null;
+  const words = answering.words;
   return (
     <Animated.View entering={FadeIn.duration(180)} exiting={FadeOut.duration(150)} style={[styles.strip, style]}>
-      <Avatar profile={answering.who ?? { name }} size={28} />
+      <Avatar profile={answering.who ?? { name: 'them' }} size={28} />
       <Txt
         variant="label"
         size={15}
@@ -49,9 +52,9 @@ export function AnsweringStrip({ answering, style }: { answering: Answering; sty
         color={colors.butterInk}
         numberOfLines={2}
         style={styles.stripText}
-        accessibilityLabel={`Answering ${name}: ${answering.words}`}>
+        accessibilityLabel={name != null ? t('messages.strip.label', { name, words }) : t('messages.strip.labelThem', { words })}>
         <Txt variant="label" size={15} weight={700} color={colors.butterInk}>
-          Answering {name}:{' '}
+          {name != null ? t('messages.strip.answering', { name }) : t('messages.strip.answeringThem')}{' '}
         </Txt>
         {answering.words}
       </Txt>
@@ -59,8 +62,8 @@ export function AnsweringStrip({ answering, style }: { answering: Answering; sty
         onPress={answering.onCancel}
         haptic
         accessibilityRole="button"
-        accessibilityLabel={`Don’t answer ${name}`}
-        accessibilityHint="Your next message goes to everyone as a plain message"
+        accessibilityLabel={name != null ? t('messages.strip.cancel', { name }) : t('messages.strip.cancelThem')}
+        accessibilityHint={t('messages.strip.cancelHint')}
         style={styles.stripX}>
         <View style={styles.stripXDisc}>
           <CloseIcon size={14} color={colors.butterInk} strokeWidth={2.4} />
@@ -106,6 +109,7 @@ function useComposerMode(personId: string | null | undefined): [Mode | null, (m:
 
 export function AnswerPanel({
   otherName,
+  family,
   personId,
   prompt,
   face,
@@ -116,10 +120,13 @@ export function AnswerPanel({
   onSendVoice,
   onSendText,
 }: {
-  otherName: string;
+  /** Who hears it; null: nobody named (`family`: the family, else "them"). */
+  otherName: string | null;
+  /** The family circle: no name means the whole family. */
+  family?: boolean;
   /** Who is writing: their last mode (voice / typing) is remembered on this phone. */
   personId?: string | null;
-  /** The field's words when nothing is attached (default "Write to <otherName>"). */
+  /** The field's words when nothing is attached (default "Write to <otherName>" / "Write to the family"). */
   prompt?: string;
   /** A lent phone: the person it is writing as (their face in the field and by "Tap to talk"). */
   face?: Pick<Profile, 'name' | 'avatar_key'> | null;
@@ -134,6 +141,7 @@ export function AnswerPanel({
 }) {
   const insets = useSafeAreaInsets();
   const toast = useToast();
+  const { t } = useWords();
   const sendVoice = useRef(onSendVoice);
   useEffect(() => {
     sendVoice.current = onSendVoice;
@@ -190,20 +198,26 @@ export function AnswerPanel({
       const note = await rec.stop();
       if (note) {
         onSendVoice(note);
-        toast.show(`${otherName.charAt(0).toUpperCase()}${otherName.slice(1)} will hear it`, { tone: 'success' });
+        const heard =
+          otherName != null
+            ? t('messages.panel.willHear', { name: `${otherName.charAt(0).toUpperCase()}${otherName.slice(1)}` })
+            : family
+              ? t('messages.panel.familyWillHear')
+              : t('messages.panel.theyWillHear');
+        toast.show(heard, { tone: 'success' });
       } else {
-        toast.show('Too short to send. Try again.', { tone: 'info' });
+        toast.show(t('messages.composer.tooShort'), { tone: 'info' });
       }
       return;
     }
     const ok = await rec.start();
-    if (!ok && !rec.supported) toast.show('Recording works in the homecookd app on your phone.', { tone: 'info' });
+    if (!ok && !rec.supported) toast.show(t('messages.composer.appOnly'), { tone: 'info' });
   };
 
   const submit = () => {
-    const t = text.trim();
-    if (!t) return;
-    onSendText(t);
+    const words = text.trim();
+    if (!words) return;
+    onSendText(words);
     setText('');
   };
 
@@ -213,7 +227,14 @@ export function AnswerPanel({
   const sheet = onAttach ? (
     <RecipePickerSheet visible={picking} onClose={() => setPicking(false)} onPick={(e) => pick(e.id)} selectedId={attachment?.id ?? null} />
   ) : null;
-  const writePrompt = attachment ? 'Write about this dish' : (prompt ?? `Write to ${otherName}`);
+  const writePrompt = attachment
+    ? t('messages.panel.writeAboutDish')
+    : (prompt ??
+      (otherName != null
+        ? t('messages.chat.writeTo', { name: otherName })
+        : family
+          ? t('messages.chat.writeToFamily')
+          : t('messages.chat.writeToThem')));
 
   // Still reading this person's last mode (a moment): the empty panel, so neither mode flashes.
   if (mode === null && canTalk) return <View style={[styles.panel, pad]} />;
@@ -225,7 +246,7 @@ export function AnswerPanel({
         {card}
         {canTalk ? null : (
           <Txt variant="meta" size={15} align="center">
-            {NO_MIC_NOTE}
+            {t(NO_MIC_NOTE)}
           </Txt>
         )}
         <View style={styles.typeRow}>
@@ -241,9 +262,9 @@ export function AnswerPanel({
           <SendPill tone="green" onPress={submit} disabled={!text.trim()} />
         </View>
         {canTalk ? (
-          <PressableScale onPress={() => setMode('voice')} style={[styles.linkBtn, styles.center]} accessibilityLabel="Use your voice">
+          <PressableScale onPress={() => setMode('voice')} style={[styles.linkBtn, styles.center]} accessibilityLabel={t('messages.panel.useVoice')}>
             <Txt variant="label" size={15} weight={600} color={colors.greenDeep}>
-              Use your voice
+              {t('messages.panel.useVoice')}
             </Txt>
           </PressableScale>
         ) : null}
@@ -277,7 +298,13 @@ export function AnswerPanel({
       <View style={styles.talkRow}>
         {face && !recording ? <Avatar profile={face} size={24} /> : null}
         <Txt variant="title" size={18}>
-          {recording ? 'Tap again to send' : attachment ? 'Tap to talk about it' : face ? `Tap to talk as ${face.name}` : 'Tap to talk'}
+          {recording
+            ? t('messages.panel.tapAgain')
+            : attachment
+              ? t('messages.panel.tapAboutIt')
+              : face
+                ? t('messages.panel.tapAs', { name: face.name })
+                : t('messages.composer.tapToTalk')}
         </Txt>
       </View>
       <PressableScale
@@ -287,9 +314,9 @@ export function AnswerPanel({
           setMode('type');
         }}
         style={styles.linkBtn}
-        accessibilityLabel="Type instead">
+        accessibilityLabel={t('messages.panel.typeInstead')}>
         <Txt variant="label" size={15} weight={600} color={colors.greenDeep}>
-          Type instead
+          {t('messages.panel.typeInstead')}
         </Txt>
       </PressableScale>
       {sheet}
@@ -299,6 +326,7 @@ export function AnswerPanel({
 
 function BigMic({ recording, busy, level, onPress }: { recording: boolean; busy: boolean; level: number; onPress: () => void }) {
   const reduce = useReducedMotion();
+  const { t } = useWords();
   const on = useSharedValue(0);
   const lvl = useSharedValue(0);
   useEffect(() => {
@@ -319,7 +347,7 @@ function BigMic({ recording, busy, level, onPress }: { recording: boolean; busy:
         onPress={onPress}
         disabled={busy}
         haptic={recording ? 'medium' : true}
-        accessibilityLabel={recording ? 'Tap again to send' : 'Tap to talk'}
+        accessibilityLabel={recording ? t('messages.panel.tapAgain') : t('messages.composer.tapToTalk')}
         accessibilityState={{ selected: recording, busy }}
         style={[
           styles.mic,

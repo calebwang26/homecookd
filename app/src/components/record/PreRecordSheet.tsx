@@ -11,7 +11,8 @@ import Svg, { Circle, Path } from 'react-native-svg';
 
 import { ActionButton, Avatar, BottomSheet, Chip, PressableScale, RecordDotIcon, Txt, VideoIcon } from '@/components/ui';
 import type { Profile } from '@/lib/api';
-import { setLanguage, useMe } from '@/lib/live/convex';
+import { useMe } from '@/lib/live/convex';
+import { useWords } from '@/lib/words/useWords';
 import { useSession } from '@/lib/session';
 import { colors, fonts, shadows, space } from '@/theme/tokens';
 
@@ -60,6 +61,7 @@ export function PreRecordSheet({
   const [who, setWho] = useState<Who | null>(null);
   const [picked, setPicked] = useState<string | null>(null);
   const [choosingLanguage, setChoosingLanguage] = useState(false);
+  const { t, choose } = useWords();
 
   const others = profiles.filter((p) => p.id !== me?.id);
   const people = learners.filter((p) => p.id !== me?.id);
@@ -71,7 +73,8 @@ export function PreRecordSheet({
   const pickLanguage = (code: string) => {
     setPicked(code);
     setChoosingLanguage(false);
-    if (code !== convexMe?.language) void setLanguage(code).catch((e) => console.warn('[record] setLanguage', String(e)));
+    // Her language everywhere: homie, this recording and the app's words.
+    if (code !== convexMe?.language) void choose(code).catch((e) => console.warn('[record] setLanguage', String(e)));
   };
 
   const start = (source: CaptureSource) => {
@@ -85,7 +88,7 @@ export function PreRecordSheet({
   };
 
   return (
-    <BottomSheet visible={visible} onClose={close} accessibilityLabel="Before you start" maxHeightRatio={0.92}>
+    <BottomSheet visible={visible} onClose={close} accessibilityLabel={t('parent.preRecord.label')} maxHeightRatio={0.92}>
       {choosingLanguage ? (
         <Animated.View key="language" entering={FadeIn.duration(180)} style={styles.col}>
           <Txt variant="display" size={28} leading={1.1} accessibilityRole="header" style={styles.title}>
@@ -98,26 +101,26 @@ export function PreRecordSheet({
       ) : (
         <Animated.View key="main" entering={FadeIn.duration(180)} style={styles.col}>
           <Txt variant="display" size={28} leading={1.1} accessibilityRole="header" style={styles.title}>
-            What are you cooking?
+            {t('parent.preRecord.title')}
           </Txt>
           <View style={styles.field}>
             <TextInput
               value={dishNow}
               onChangeText={setDish}
-              placeholder="The dish’s name (you can skip it)"
+              placeholder={t('parent.preRecord.dishPlaceholder')}
               placeholderTextColor={colors.muted}
               style={styles.input}
               autoCapitalize="sentences"
               returnKeyType="done"
               maxLength={MAX_DISH}
-              accessibilityLabel="The dish’s name"
+              accessibilityLabel={t('parent.dish.nameLabel')}
             />
           </View>
 
           {others.length > 0 ? (
             <View style={styles.section}>
               <Txt variant="title" size={17} weight={700} accessibilityRole="header">
-                Who is it for?
+                {t('parent.forWho.title')}
               </Txt>
               <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.peopleScroll} contentContainerStyle={styles.people}>
                 {people.map((p) => (
@@ -135,10 +138,10 @@ export function PreRecordSheet({
                   <Chip
                     size="lg"
                     selectedTone="ink"
-                    label="Everyone"
+                    label={t('parent.forWho.everyone')}
                     selected={to.everyone}
                     onPress={() => setWho(toggleEveryone(whoNow, people, others))}
-                    accessibilityLabel="Everyone in the family"
+                    accessibilityLabel={t('parent.forWho.everyoneLabel')}
                   />
                 ) : null}
               </ScrollView>
@@ -149,34 +152,34 @@ export function PreRecordSheet({
             onPress={() => setChoosingLanguage(true)}
             scaleTo={0.98}
             accessibilityRole="button"
-            accessibilityLabel={`You cook in ${languageLabel(language)}. Change`}
+            accessibilityLabel={t('parent.preRecord.languageLabel', { language: languageLabel(language) })}
             style={styles.language}>
             <View style={styles.flex}>
               <Txt variant="meta" size={13}>
-                homie talks to you in
+                {t('parent.preRecord.homieTalks')}
               </Txt>
               <Txt variant="label" size={17} weight={700} numberOfLines={1}>
                 {languageLabel(language)}
               </Txt>
             </View>
             <Txt variant="label" size={15} weight={700} color={colors.greenDeep}>
-              Change
+              {t('parent.preRecord.change')}
             </Txt>
           </PressableScale>
 
           <View style={styles.ways}>
             <ActionButton
-              label="From my glasses"
+              label={t('parent.preRecord.glasses')}
               size="xl"
               labelWeight={700}
               icon={<GlassesIcon />}
               state={busy === 'glasses' ? 'loading' : 'idle'}
               disabled={!!busy && busy !== 'glasses'}
               onPress={() => start('glasses')}
-              accessibilityHint="Films from your glasses. Keep the phone near the stove: homie listens and may ask a question."
+              accessibilityHint={t('parent.preRecord.glassesHint')}
             />
             <ActionButton
-              label="Phone camera"
+              label={t('parent.preRecord.camera')}
               variant="outline"
               size="lg"
               labelWeight={700}
@@ -184,10 +187,10 @@ export function PreRecordSheet({
               state={busy === 'camera' ? 'loading' : 'idle'}
               disabled={!!busy && busy !== 'camera'}
               onPress={() => start('camera')}
-              accessibilityHint="homie says hello first, then the camera opens."
+              accessibilityHint={t('parent.preRecord.cameraHint')}
             />
             <ActionButton
-              label="Videos I took"
+              label={t('parent.preRecord.library')}
               variant="outline"
               size="lg"
               labelWeight={700}
@@ -195,7 +198,7 @@ export function PreRecordSheet({
               state={busy === 'library' ? 'loading' : 'idle'}
               disabled={!!busy && busy !== 'library'}
               onPress={() => start('library')}
-              accessibilityHint="Opens your videos. Pick them in the order you filmed them."
+              accessibilityHint={t('parent.preRecord.libraryHint')}
             />
           </View>
         </Animated.View>

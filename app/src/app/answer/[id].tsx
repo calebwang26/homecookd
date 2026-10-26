@@ -35,6 +35,7 @@ import { answerQuestion, useCookQuestions, useMe, type CookQuestion } from '@/li
 import { speak, stopSpeaking } from '@/lib/live/speak';
 import { useNowPlaying } from '@/lib/media';
 import { useSession } from '@/lib/session';
+import { useWords } from '@/lib/words/useWords';
 import { colors, motion, space } from '@/theme/tokens';
 
 /** The × (IconButton's 48 pt): the column starts below it. */
@@ -43,7 +44,6 @@ const CLOSE_SIZE = 48;
 const LANGUAGE_WAIT_MS = 2000;
 const MISSING_MS = 5000;
 const STEPS: readonly WalkieStep[] = ['waiting', 'reading', 'listening', 'sending', 'sent', 'retry', 'nomic', 'nomicHere'];
-const TRANSLATED_LABEL = 'Translated · AI voice';
 
 const PREVIEW: CookQuestion = {
   _id: 'preview',
@@ -80,6 +80,7 @@ export default function AnswerScreen() {
   const insets = useSafeAreaInsets();
   const reduce = useReducedMotion();
   const toast = useToast();
+  const { t } = useWords();
   const { me } = useSession();
   const questions = useCookQuestions(me?.role === 'cook');
   const convexMe = useMe();
@@ -116,21 +117,25 @@ export default function AnswerScreen() {
   const herLanguage = convexMe?.language;
   const read = useCallback(async () => {
     if (!q) return { via: 'none' as const };
+    const label = t('messages.answer.aiLabel');
     // Already in her language: said in it. Unloaded people.me leaves `lang` unset: /speak then uses
     // the language the server has for her.
-    if (q.textForCook?.trim()) return speak(q.textForCook, { lang: herLanguage, label: TRANSLATED_LABEL, profileId: me?.id });
+    if (q.textForCook?.trim()) return speak(q.textForCook, { lang: herLanguage, label, profileId: me?.id });
     if (lang === 'en') return speak(q.text, { lang: 'en', profileId: me?.id });
-    const said = await speak(q.text, { lang, translate: true, label: TRANSLATED_LABEL, profileId: me?.id });
+    const said = await speak(q.text, { lang, translate: true, label, profileId: me?.id });
     if (said.via === 'homie' && said.text && said.text !== q.text) setSpoken(said.text);
     return said;
-  }, [q, lang, herLanguage, me?.id]);
+  }, [q, lang, herLanguage, me?.id, t]);
 
   const close = useCallback(
     (failed?: boolean) => {
-      if (failed) toast.show(`Couldn’t send it to ${kid ?? 'them'}. Try again from Home.`, { tone: 'error', durationMs: 3600 });
+      if (failed) {
+        const words = kid != null ? t('messages.answer.sendFailed', { name: kid }) : t('messages.answer.sendFailedThem');
+        toast.show(words, { tone: 'error', durationMs: 3600 });
+      }
       goBack();
     },
-    [toast, kid],
+    [toast, kid, t],
   );
   // Leaving by hand stops homie mid-word; the automatic close comes after it has finished.
   useEffect(() => () => stopSpeaking(), []);
@@ -172,7 +177,7 @@ export default function AnswerScreen() {
               onPress={walkie.again}
               accessibilityRole="button"
               accessibilityLabel={lines.main}
-              accessibilityHint="homie reads it again"
+              accessibilityHint={t('messages.answer.readAgain')}
               disabled={preview}>
               <Txt variant="label" size={fit.font} weight={700} leading={1.3} color={colors.ink} align="center">
                 {lines.main}
@@ -181,7 +186,7 @@ export default function AnswerScreen() {
             {/* Gemini's or homie's translation of the kid's words: AI words are always labelled. */}
             {lines.en ? (
               <Txt variant="meta" size={15} color={colors.muted} align="center">
-                Translated · “{lines.en}”
+                {t('messages.answer.translated', { text: lines.en })}
               </Txt>
             ) : null}
           </Animated.View>
@@ -199,7 +204,7 @@ export default function AnswerScreen() {
         <View style={[styles.column, styles.fill]}>{missing ? <BiLine line={w.line('answered')} size={22} /> : <ActivityIndicator color={colors.green} />}</View>
       )}
       <View style={[styles.top, { paddingTop: top }]} pointerEvents="box-none">
-        <IconButton icon={<CloseIcon size={20} color={colors.ink} />} accessibilityLabel="Close" onPress={goBack} />
+        <IconButton icon={<CloseIcon size={20} color={colors.ink} />} accessibilityLabel={t('messages.answer.close')} onPress={goBack} />
       </View>
     </View>
   );

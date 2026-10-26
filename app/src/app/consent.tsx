@@ -4,8 +4,8 @@
 //   I agree         saved on this phone, then their home (or "Who's in the kitchen?", which opens a held link)
 //   Privacy policy  homecookd.app/privacy in the app's browser sheet
 //   Not now         a sheet: homecookd can't work without this, with Sign out (to the first screen) or Go back
-// English, like the sign-in screens it follows. TODO(caleb): the cook's own language too, if a cook
-// sees this page before anyone helps her set up.
+// Read in the phone's language like the sign-in screens it follows (or a cook's own, once she's picked
+// it: lib/words/useWords).
 // Launch: under the bloom it waits hidden, then the page rises in (like "Who's in the kitchen?").
 import { LinearGradient } from 'expo-linear-gradient';
 import { useState, type ComponentType } from 'react';
@@ -33,15 +33,17 @@ import {
 import { agreeToAi } from '@/lib/aiConsent';
 import { openPage, PRIVACY_URL } from '@/lib/links';
 import { useSession } from '@/lib/session';
+import { useWords } from '@/lib/words/useWords';
+import type { WordKey } from '@/lib/words/words';
 import { colors, motion, radii, shadows, space } from '@/theme/tokens';
 
-/** Who gets what. A change here means a new AI_CONSENT_KEY version, so everyone is asked again. */
-const COMPANIES: { name: string; job: string; Icon: ComponentType<IconProps> }[] = [
-  { name: 'Google Gemini', job: 'Watches your cooking videos and hears your voice.', Icon: VideoIcon },
-  { name: 'Meta Muse Spark', job: 'Writes the recipe.', Icon: BookIcon },
-  { name: 'Anthropic Claude', job: 'Helps while you film and cook hands-free.', Icon: SpoonIcon },
-  { name: 'Cartesia', job: 'Hears your voice and reads steps aloud.', Icon: VoiceIcon },
-  { name: 'Moss', job: 'Searches what the cook said.', Icon: SearchIcon },
+/** Who gets what (`job`: its words' key). A change here means a new AI_CONSENT_KEY version, so everyone is asked again. */
+const COMPANIES: { name: string; job: WordKey; Icon: ComponentType<IconProps> }[] = [
+  { name: 'Google Gemini', job: 'signin.consent.gemini', Icon: VideoIcon },
+  { name: 'Meta Muse Spark', job: 'signin.consent.muse', Icon: BookIcon },
+  { name: 'Anthropic Claude', job: 'signin.consent.claude', Icon: SpoonIcon },
+  { name: 'Cartesia', job: 'signin.consent.cartesia', Icon: VoiceIcon },
+  { name: 'Moss', job: 'signin.consent.moss', Icon: SearchIcon },
 ];
 /** The page colour, clear: the list fades out above the button. */
 const FADE = 'rgba(247,247,242,0)';
@@ -51,6 +53,7 @@ export default function ConsentScreen() {
   const potMood = usePotMood();
   const covered = useLaunchPhase() === 'playing';
   const { me, homeFor, leaveFamily } = useSession();
+  const { t } = useWords();
   const [notNow, setNotNow] = useState(false);
 
   const agree = async () => {
@@ -75,20 +78,17 @@ export default function ConsentScreen() {
             showsVerticalScrollIndicator={false}>
             <Animated.View entering={listEnter(0)} style={styles.top}>
               <Brand mood={potMood} style={styles.brand} />
-              <Headline
-                title="Before we start"
-                line="homecookd uses AI from other companies to turn your cooking videos into recipes and to listen while you cook."
-              />
+              <Headline title={t('signin.consent.title')} line={t('signin.consent.line')} />
             </Animated.View>
             <Animated.View entering={listEnter(1)} style={styles.card}>
               {COMPANIES.map(({ name, job, Icon }) => (
-                <View key={name} style={styles.row} accessible accessibilityLabel={`${name}. ${job}`}>
+                <View key={name} style={styles.row} accessible accessibilityLabel={t('signin.consent.row', { name, job: t(job) })}>
                   <View style={styles.icon}>
                     <Icon size={22} color={colors.sageInk} />
                   </View>
                   <View style={styles.words}>
                     <Txt variant="title">{name}</Txt>
-                    <Txt variant="body">{job}</Txt>
+                    <Txt variant="body">{t(job)}</Txt>
                   </View>
                 </View>
               ))}
@@ -98,12 +98,12 @@ export default function ConsentScreen() {
           <Animated.View entering={listEnter(2)} style={[styles.foot, { paddingBottom: Math.max(16, insets.bottom + 4) }]}>
             <LinearGradient pointerEvents="none" colors={[FADE, colors.page]} style={styles.fade} />
             <Txt variant="bodyInk" size={15} align="center" style={styles.promise}>
-              They get your videos, photos and voice only to do this for you. Never for ads.
+              {t('signin.consent.promise')}
             </Txt>
-            <ActionButton label="I agree" size="xl" onPress={agree} accessibilityHint="Lets homecookd use these companies for you" />
+            <ActionButton label={t('signin.consent.agree')} size="xl" onPress={agree} accessibilityHint={t('signin.consent.agreeHint')} />
             <View style={styles.links}>
-              <SmallLink label="Privacy policy" hint="Opens homecookd.app" onPress={() => void openPage(PRIVACY_URL)} />
-              <SmallLink label="Not now" color={colors.muted} onPress={() => setNotNow(true)} />
+              <SmallLink label={t('signin.shared.privacy')} hint={t('signin.shared.opensSite')} onPress={() => void openPage(PRIVACY_URL)} />
+              <SmallLink label={t('signin.shared.notNow')} color={colors.muted} onPress={() => setNotNow(true)} />
             </View>
           </Animated.View>
         </>
@@ -112,11 +112,11 @@ export default function ConsentScreen() {
       <BottomSheet
         visible={notNow}
         onClose={() => setNotNow(false)}
-        accessibilityLabel="homecookd needs this to work"
+        accessibilityLabel={t('signin.consent.sheetLabel')}
         footer={
           <View style={styles.choices}>
             <ActionButton
-              label="Sign out"
+              label={t('signin.consent.signOut')}
               variant="outline"
               size="lg"
               fg={colors.danger}
@@ -124,18 +124,18 @@ export default function ConsentScreen() {
               labelWeight={700}
               haptics
               onPress={signOut}
-              accessibilityHint="Signs this phone out of the family"
+              accessibilityHint={t('signin.consent.signOutHint')}
               style={styles.choice}
             />
-            <ActionButton label="Go back" size="lg" onPress={() => setNotNow(false)} style={styles.choice} />
+            <ActionButton label={t('signin.consent.goBack')} size="lg" onPress={() => setNotNow(false)} style={styles.choice} />
           </View>
         }>
         <View style={styles.sheet}>
           <Txt variant="display" size={26} leading={1.2} align="center" accessibilityRole="header">
-            homecookd can’t make recipes or cook with you without this.
+            {t('signin.consent.sheetTitle')}
           </Txt>
           <Txt variant="body" align="center">
-            If you sign out, you may need a new invite to come back.
+            {t('signin.consent.sheetLine')}
           </Txt>
         </View>
       </BottomSheet>

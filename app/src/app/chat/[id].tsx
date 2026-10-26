@@ -80,6 +80,7 @@ import { useSession } from '@/lib/session';
 import { pairWith, weeksOf } from '@/lib/sundayTable';
 import { useTable } from '@/lib/tableApi';
 import type { VoiceRecording } from '@/lib/voice';
+import { useWords } from '@/lib/words/useWords';
 import { colors, space } from '@/theme/tokens';
 
 /** The log's top padding (kid / parent), where ChatLog's own positions start. */
@@ -102,6 +103,7 @@ export default function ChatScreen() {
   const threadId = typeof params.id === 'string' ? params.id : null;
   const insets = useSafeAreaInsets();
   const toast = useToast();
+  const { t } = useWords();
   const { me, owner, profiles, profileById } = useSession();
   // The phone is lent: its owner is writing as someone without a phone of their own.
   const lentTo = me && owner && me.id !== owner.id ? me : null;
@@ -232,7 +234,8 @@ export default function ChatScreen() {
   const afterDish = (dish: { id: string } | null, held: boolean) => {
     if (!dish) return;
     if (!held) return setAttached(null);
-    toast.show(`Sent as your answer. ${composerDish?.title ?? 'The dish'} is still attached.`, { tone: 'info' });
+    const title = composerDish?.title;
+    toast.show(title != null ? t('messages.chat.sentAsAnswer', { dish: title }) : t('messages.chat.sentAsAnswerNoName'), { tone: 'info' });
   };
 
   const sendText = (body: string) => {
@@ -245,9 +248,9 @@ export default function ChatScreen() {
       // A question about the attached dish, so the answer is saved into that recipe.
       msg = { kind: 'question', body, recipe_id: dish.id, step_order: dish.step };
     } else if (circle && layout === 'kid') {
-      const t = body.trim();
-      const thanks = t.length <= 40 && ACK.test(t) && !t.includes('?') ? kidCircleThanks() : null;
-      msg = thanks ? { kind: 'text', body, reply_to: thanks.id } : readsAsQuestion(t) ? { kind: 'question', body } : { kind: 'text', body };
+      const words = body.trim();
+      const thanks = words.length <= 40 && ACK.test(words) && !words.includes('?') ? kidCircleThanks() : null;
+      msg = thanks ? { kind: 'text', body, reply_to: thanks.id } : readsAsQuestion(words) ? { kind: 'question', body } : { kind: 'text', body };
     } else if (circle) {
       msg = { kind: 'text', body, ...reply.fields };
     } else if (layout === 'kid' && (askPending || (!replyTarget() && /\?\s*$/.test(body.trim())))) {
@@ -290,9 +293,9 @@ export default function ChatScreen() {
     try {
       // The recipe whose notes to refresh ('' when its question isn't loaded here).
       await removeNote({ id: m.note_id, recipe_id: m.recipe_id ?? q?.recipe_id ?? '', answer_message_id: m.id });
-      toast.show('Taken out of the recipe', { tone: 'success' });
+      toast.show(t('messages.chat.takenOut'), { tone: 'success' });
     } catch (e) {
-      toast.show(errorMessage(e, 'Couldn’t undo that. Try again.'), { tone: 'error' });
+      toast.show(errorMessage(e, t('messages.chat.undoFailed')), { tone: 'error' });
     }
   };
 
@@ -301,9 +304,9 @@ export default function ChatScreen() {
     if (!threadId) return;
     try {
       await saveToRecipe(threadId, m.id);
-      toast.show('Saved to the recipe', { tone: 'success' });
+      toast.show(t('messages.chat.saved'), { tone: 'success' });
     } catch (e) {
-      toast.show(errorMessage(e, 'Couldn’t save that. Try again.'), { tone: 'error' });
+      toast.show(errorMessage(e, t('messages.chat.saveFailed')), { tone: 'error' });
     }
   };
 
@@ -315,7 +318,7 @@ export default function ChatScreen() {
   const answering: Answering | null = answeringMsg
     ? {
         who: profileById(answeringMsg.sender_id) ?? (circle ? null : other),
-        words: questionWords(answeringMsg),
+        words: questionWords(answeringMsg, t),
         onCancel: () => {
           setChosenQ(null);
           // Pair: drop the newest one too, so the strip doesn't jump to it after cancelling an older one.
@@ -327,9 +330,9 @@ export default function ChatScreen() {
   const ctx: BubbleContext = { layout, me, other, entry, recipes, circle, members: chat.members, profile: profileById };
   // Someone the family list doesn't know yet wrote (they just joined): fetch the family once.
   useKnownSenders(circle ? chat.messages.filter((m) => !chat.members.some((p) => p.id === m.sender_id)).map((m) => m.sender_id) : []);
-  const name = circle ? 'Family' : (other?.name ?? '');
+  const name = circle ? t('messages.family') : (other?.name ?? '');
   const headerTop = Math.max(space.topDetail, insets.top + 9);
-  const composerDish = attachment ? { ...dishInfo(ctx, attachment.id, attachment.step), id: attachment.id } : null;
+  const composerDish = attachment ? { ...dishInfo(ctx, attachment.id, attachment.step, t), id: attachment.id } : null;
   const [membersOpen, setMembersOpen] = useState(false);
   const faces = circle ? <CircleFaces members={chat.members} me={me} size={40} /> : other ? <Avatar profile={other} size={40} /> : <Skeleton circle height={40} />;
   // The circle's header (faces + "Family") opens everyone in it.
@@ -339,8 +342,8 @@ export default function ChatScreen() {
         onPress={() => setMembersOpen(true)}
         scaleTo={0.97}
         accessibilityRole="button"
-        accessibilityLabel="Family"
-        accessibilityHint="Shows everyone, with a button to message each person"
+        accessibilityLabel={t('messages.family')}
+        accessibilityHint={t('messages.chat.familyHint')}
         style={style}>
         {children}
       </PressableScale>
@@ -356,7 +359,7 @@ export default function ChatScreen() {
   const log = chat.loading ? (
     <ChatSkeleton />
   ) : notFound ? (
-    <EmptyNote text="We couldn’t open this conversation." />
+    <EmptyNote text={t('messages.chat.cantOpen')} />
   ) : chat.messages.length ? (
     <ChatLog
       messages={chat.messages}
@@ -381,40 +384,64 @@ export default function ChatScreen() {
     <EmptyNote
       text={
         requestMode
-          ? `Tell ${name || 'them'} which dish you miss.`
+          ? name
+            ? t('messages.chat.tellWhichDish', { name })
+            : t('messages.chat.tellThemWhichDish')
           : circle
-            ? 'Ask the family anything.'
-            : `Ask ${name || 'them'} anything.`
+            ? t('messages.chat.askFamilyAnything')
+            : name
+              ? t('messages.chat.askAnything', { name })
+              : t('messages.chat.askThemAnything')
       }
     />
   ) : (
-    <EmptyNote text={circle ? 'Say hello to the family.' : `Say hello to ${name || 'them'}.`} />
+    <EmptyNote text={circle ? t('messages.chat.helloFamily') : name ? t('messages.chat.hello', { name }) : t('messages.chat.helloThem')} />
   );
 
+  // "Grandma: write to Priya" on a lent phone (no one named: the family in the circle, else them).
+  const writeAs = (as: string, to: string | null) =>
+    to != null
+      ? t('messages.chat.asWriteTo', { name: as, other: to })
+      : circle
+        ? t('messages.chat.asWriteToFamily', { name: as })
+        : t('messages.chat.asWriteToThem', { name: as });
   const placeholder = requestMode
-    ? `What should ${name || 'they'} teach you?`
+    ? name
+      ? t('messages.chat.whatTeach', { name })
+      : t('messages.chat.whatTeachThey')
     : attachment
       ? attachment.step
-        ? `Ask about step ${attachment.step}`
-        : 'Ask about this dish'
+        ? t('messages.chat.askAboutStep', { step: attachment.step })
+        : t('messages.chat.askAboutDish')
       : lentTo
-        ? `${lentTo.name}: write to ${circle ? 'the family' : name || 'them'}`
+        ? writeAs(lentTo.name, circle ? null : name || null)
         : circle
-          ? 'Ask the family'
-          : `Message ${name || 'them'}`;
+          ? t('messages.chat.askFamily')
+          : name
+            ? t('messages.chat.message', { name })
+            : t('messages.chat.messageThem');
   // The cook's box: who the message goes to ("Write to the family", "Write to Leo" while answering,
   // "Message Priya" in a 1:1), and on a lent phone whose name it goes out under.
-  const answerTo = circle ? (asker?.name ?? 'the family') : name || 'them';
-  const answerPrompt = lentTo ? `${lentTo.name}: write to ${answerTo}` : circle ? `Write to ${answerTo}` : `Message ${answerTo}`;
+  // null: no one named (the family in the circle, else them).
+  const answerTo = circle ? (asker?.name ?? null) : name || null;
+  const answerPrompt = lentTo
+    ? writeAs(lentTo.name, answerTo)
+    : circle
+      ? answerTo != null
+        ? t('messages.chat.writeTo', { name: answerTo })
+        : t('messages.chat.writeToFamily')
+      : answerTo != null
+        ? t('messages.chat.message', { name: answerTo })
+        : t('messages.chat.messageThem');
 
   return (
     <KeyboardAvoidingView style={styles.screen} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Stack.Screen options={{ title: name ? `${name} · homecookd` : 'Messages' }} />
+      <Stack.Screen options={{ title: name ? t('messages.chat.titleWith', { name }) : t('messages.title') }} />
 
       {layout === 'kid' ? (
         <View style={[styles.kidHeader, { paddingTop: headerTop }]}>
           <View style={styles.kidTop}>
-            <IconButton icon={<BackIcon size={22} color={colors.ink} strokeWidth={2.2} />} accessibilityLabel="Back" onPress={goBack} />
+            <IconButton icon={<BackIcon size={22} color={colors.ink} strokeWidth={2.2} />} accessibilityLabel={t('messages.chat.back')} onPress={goBack} />
             {who(
               <>
                 {faces}
@@ -471,12 +498,12 @@ export default function ChatScreen() {
 
       {notFound ? (
         <View style={[styles.composer, { paddingBottom: Math.max(28, insets.bottom + 8) }]}>
-          <ActionButton label="Back to messages" variant="ink" onPress={goBack} />
+          <ActionButton label={t('messages.chat.backToMessages')} variant="ink" onPress={goBack} />
         </View>
       ) : otherGone ? (
         <View style={[styles.composer, styles.goneLine, { paddingBottom: Math.max(28, insets.bottom + 8) }]}>
           <Txt variant="meta" align="center">
-            {other?.name ?? 'They'} isn’t in the family anymore.
+            {t('messages.chat.notInFamily', { name: other?.name })}
           </Txt>
         </View>
       ) : layout === 'kid' ? (
@@ -494,7 +521,8 @@ export default function ChatScreen() {
         </View>
       ) : (
         <AnswerPanel
-          otherName={circle ? (asker?.name ?? 'the family') : name || 'They'}
+          otherName={answerTo}
+          family={circle}
           personId={me?.id}
           prompt={answerPrompt}
           face={lentTo}
@@ -524,8 +552,9 @@ function EmptyNote({ text }: { text: string }) {
 }
 
 function ChatSkeleton() {
+  const { t } = useWords();
   return (
-    <View style={styles.skel} accessibilityLabel="Loading messages">
+    <View style={styles.skel} accessibilityLabel={t('messages.chat.loading')}>
       <Skeleton width={220} height={64} radius={20} style={styles.right} />
       <Skeleton width={250} height={64} radius={20} />
       <Skeleton width={180} height={48} radius={20} style={styles.right} />

@@ -9,8 +9,10 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { BottomSheet, CheckIcon, CloseIcon, haptic, PressableScale, SearchIcon, Txt } from '@/components/ui';
 import { LANGUAGES, matchLanguages, type Language } from '@/lib/languages';
+import { useWords } from '@/lib/words/useWords';
 import { alpha, colors, fonts, radii, shadows } from '@/theme/tokens';
 
+/** English; in the app read it as t('profiles.language.question'). */
 export const LANGUAGE_QUESTION = 'What language do you cook in?';
 
 /** "Marathi · मराठी", or "English" when the two are the same. */
@@ -21,6 +23,7 @@ export function languageLabel(code: string | null | undefined): string {
 }
 
 export function LanguagePicker({ value, onChange, onSheet = false }: { value: string; onChange: (code: string) => void; onSheet?: boolean }) {
+  const { t } = useWords();
   const [query, setQuery] = useState('');
   const found = matchLanguages(query);
   return (
@@ -30,9 +33,9 @@ export function LanguagePicker({ value, onChange, onSheet = false }: { value: st
         <TextInput
           value={query}
           onChangeText={setQuery}
-          placeholder="Search: Marathi, Hindi, Español…"
+          placeholder={t('profiles.language.search')}
           placeholderTextColor={colors.muted}
-          accessibilityLabel="Search languages"
+          accessibilityLabel={t('profiles.language.searchLabel')}
           autoCorrect={false}
           autoCapitalize="none"
           returnKeyType="search"
@@ -41,19 +44,19 @@ export function LanguagePicker({ value, onChange, onSheet = false }: { value: st
         />
         {query ? (
           <Animated.View entering={FadeIn.duration(150)} exiting={FadeOut.duration(120)}>
-            <PressableScale onPress={() => setQuery('')} haptic accessibilityLabel="Clear search" hitSlop={13} style={styles.clear}>
+            <PressableScale onPress={() => setQuery('')} haptic accessibilityLabel={t('profiles.language.clear')} hitSlop={13} style={styles.clear}>
               <CloseIcon size={14} color={colors.card} strokeWidth={2.6} />
             </PressableScale>
           </Animated.View>
         ) : null}
       </View>
-      <View style={styles.list} accessibilityRole="radiogroup" accessibilityLabel="Languages">
+      <View style={styles.list} accessibilityRole="radiogroup" accessibilityLabel={t('profiles.language.list')}>
         {found.map((l) => (
           <Row key={l.code} l={l} on={l.code === value} onPress={() => onChange(l.code)} />
         ))}
         {found.length === 0 ? (
           <Txt variant="meta" align="center" style={styles.none}>
-            No language by that name yet.
+            {t('profiles.language.none')}
           </Txt>
         ) : null}
       </View>
@@ -91,8 +94,9 @@ function Row({ l, on, onPress }: { l: Language; on: boolean; onPress: () => void
 }
 
 export function LanguageSheet({ visible, value, onPick, onClose }: { visible: boolean; value: string; onPick: (code: string) => void; onClose: () => void }) {
+  const { t } = useWords();
   return (
-    <BottomSheet visible={visible} onClose={onClose} title={LANGUAGE_QUESTION} accessibilityLabel={LANGUAGE_QUESTION} maxHeightRatio={0.85}>
+    <BottomSheet visible={visible} onClose={onClose} title={t('profiles.language.question')} accessibilityLabel={t('profiles.language.question')} maxHeightRatio={0.85}>
       <ScrollView style={styles.sheetScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
         <LanguagePicker value={value} onChange={onPick} onSheet />
       </ScrollView>

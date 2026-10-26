@@ -22,15 +22,15 @@ import { ActivityIndicator, StyleSheet, View } from 'react-native';
 import Animated, { useAnimatedStyle, useDerivedValue, withTiming } from 'react-native-reanimated';
 
 import { useVideoFrame } from '@/components/record/videoFrame';
+import { EVERYONE } from '@/components/record/who';
 import { CloseIcon, IconButton, PotMark, PressableScale, Txt } from '@/components/ui';
-import { plural } from '@/lib/format';
 import type { LiveJob } from '@/lib/live/convex';
 import { jobProgress, jobUploadLeftMs, needsPendingSend, PENDING_SEND_GIVE_UP, type JobStatus, type StoredJob } from '@/lib/uploads';
+import { useWords } from '@/lib/words/useWords';
+import { english, type T } from '@/lib/words/words';
 import { colors } from '@/theme/tokens';
 
-import { JOB_FAILED_HINT } from '@/components/record/jobRetry';
-
-import { STAGE_HINT, uploadingView } from './jobsLogic';
+import { stageHint, uploadingView } from './jobsLogic';
 import { rowStyles } from './RecipeRow';
 
 // No live upload in this app session, the server still waiting for files, and this old: the upload
@@ -45,12 +45,13 @@ const LONG_RECORDING_S = 45 * 60;
 const ALMOST_MS = 5 * 60 * 1000;
 
 /** "about 40 min left", rounded so it reads as the estimate it is. */
-function timeLeft(ms: number): string {
+function timeLeft(ms: number, t: T): string {
   const min = ms / 60_000;
-  if (min < 1) return 'less than a minute left';
-  if (min < 10) return `about ${Math.ceil(min)} min left`;
-  if (min < 55) return `about ${Math.ceil(min / 5) * 5} min left`;
-  return `about ${plural(Math.round(min / 60), 'hr')} left`;
+  if (min < 1) return t('parent.processing.lessThanMinute');
+  if (min < 10) return t('parent.processing.aboutMin', { n: Math.ceil(min) });
+  if (min < 55) return t('parent.processing.aboutMin', { n: Math.ceil(min / 5) * 5 });
+  const hours = Math.round(min / 60);
+  return t(hours === 1 ? 'parent.processing.aboutHr' : 'parent.processing.aboutHrs', { n: hours });
 }
 
 export type ProcessingView = {
@@ -67,23 +68,21 @@ export type ProcessingView = {
   recipeId: string | null;
 };
 
-const stopped = { hint: 'Stopped', problem: false, busy: false, bar: null, recipeId: null };
 /** A row just stopped: Undo while it waits, a spinner while the real stop runs. */
-export const STOPPED_VIEW: Record<'waiting' | 'stopping', ProcessingView> = {
-  waiting: { ...stopped, action: 'undo' },
-  stopping: { ...stopped, action: 'stopping' },
-};
+export function stoppedView(state: 'waiting' | 'stopping', t: T = english): ProcessingView {
+  return { hint: t('parent.processing.stopped'), problem: false, busy: false, bar: null, recipeId: null, action: state === 'waiting' ? 'undo' : 'stopping' };
+}
 
 /**
  * `libraryId`: the finished live job's recipe in the library (PendingRecipes looks it up), so the
  * row opens it.
  */
-export function describeJob(job: StoredJob, status: JobStatus | undefined, now: number, worker?: LiveJob, libraryId?: string): ProcessingView {
+export function describeJob(job: StoredJob, status: JobStatus | undefined, now: number, worker?: LiveJob, libraryId?: string, t: T = english): ProcessingView {
   const server = status?.status ?? 'uploading';
   // Convex never took this send (every jobs.create try failed) and nothing else knows of it: no recipe
   // is coming; say so.
   if (job.convex_job === 'failed' && !worker && server === 'uploading') {
-    return { hint: JOB_FAILED_HINT, problem: true, busy: false, bar: null, action: 'remove', recipeId: null };
+    return { hint: t('parent.processing.jobFailed'), problem: true, busy: false, bar: null, action: 'remove', recipeId: null };
   }
   const ok = { problem: false, busy: true, bar: null, action: null, recipeId: null };
   const problem = { problem: true, busy: false, bar: null, action: 'remove' as const, recipeId: null };
@@ -91,30 +90,33 @@ export function describeJob(job: StoredJob, status: JobStatus | undefined, now: 
   // The worker's live stage, once the videos are in (a published recipe still goes the usual way).
   const uploaded = job.local_state === 'uploaded' || server === 'processing';
   if (worker && server !== 'published' && (uploaded || worker.stage !== 'queued')) {
-    if (worker.stage === 'failed') return { ...problem, hint: worker.error || 'We couldn’t finish this one · send it again' };
-    if (worker.stage === 'done') return { ...ok, recipeId: libraryId ?? null, hint: 'Almost done', bar: { send: 1, write: 1 } };
+    if (worker.stage === 'failed') return { ...problem, hint: worker.error || t('parent.processing.failed') };
+    if (worker.stage === 'done') return { ...ok, recipeId: libraryId ?? null, hint: t('parent.processing.almostDone'), bar: { send: 1, write: 1 } };
     if (worker.stage === 'uploading') {
       // The worker looked and the video isn't all there yet: still the sending half.
-      const { hint, send } = uploadingView(jobProgress(job.job_id), status?.files_received ?? 0, status?.files_expected || job.file_count);
+      const { hint, send } = uploadingView(jobProgress(job.job_id), status?.files_received ?? 0, status?.files_expected || job.file_count, t);
       return { ...ok, hint, bar: { send, write: 0 }, action: 'cancel' };
     }
-    return { ...ok, hint: STAGE_HINT[worker.stage], bar: { send: 1, write: Math.max(0.04, Math.min(1, worker.progress)) }, action: 'cancel' };
+    return { ...ok, hint: stageHint(worker.stage, t), bar: { send: 1, write: Math.max(0.04, Math.min(1, worker.progress)) }, action: 'cancel' };
   }
 
   // The worker's reason is plain and says what to do ("That recording is over 4 hours. Try splitting it…").
-  if (server === 'failed') return { ...problem, hint: status?.message || 'We couldn’t finish this one · send it again' };
+  if (server === 'failed') return { ...problem, hint: status?.message || t('parent.processing.failed') };
   if (server === 'published') {
     const recipeId = status?.recipe_id ?? null;
     if (needsPendingSend(job)) {
-      const who = job.recipient_label || 'them';
+      // "Leo & Zoe", or who.ts's "everyone" (no name: "them").
+      const who = job.recipient_label;
       if ((job.pending_send_attempts ?? 0) >= PENDING_SEND_GIVE_UP) {
-        return { ...problem, recipeId, hint: `Ready, but it didn’t reach ${who} yet` };
+        const hint = !who ? t('parent.processing.notReachedThem') : who === EVERYONE ? t('parent.processing.notReachedEveryone') : t('parent.processing.notReached', { name: who });
+        return { ...problem, recipeId, hint };
       }
-      return { ...ok, busy: false, recipeId, hint: `Ready · sending it to ${who}` };
+      const hint = !who ? t('parent.processing.sendingToThem') : who === EVERYONE ? t('parent.processing.sendingToEveryone') : t('parent.processing.sendingTo', { name: who });
+      return { ...ok, busy: false, recipeId, hint };
     }
-    return { ...ok, recipeId, hint: 'Almost done', bar: { send: 1, write: 1 } };
+    return { ...ok, recipeId, hint: t('parent.processing.almostDone'), bar: { send: 1, write: 1 } };
   }
-  if (job.local_state === 'failed') return { ...problem, hint: 'Some videos didn’t send · send them again' };
+  if (job.local_state === 'failed') return { ...problem, hint: t('parent.processing.someFailed') };
 
   if (server === 'processing' || job.local_state === 'uploaded') {
     const long = (job.duration_s ?? 0) > LONG_RECORDING_S;
@@ -125,28 +127,28 @@ export function describeJob(job: StoredJob, status: JobStatus | undefined, now: 
     const elapsed = Number.isFinite(started) ? Math.max(0, now - started) : 0;
     const left = usual - elapsed;
     const hint = paused
-      ? 'Paused for now · it starts on its own'
+      ? t('parent.processing.paused')
       : left < 0
-        ? 'Writing it down · taking longer than usual'
-        : `Writing it down · ${left <= ALMOST_MS ? 'almost there' : timeLeft(left)}`;
+        ? t('parent.processing.writingLong')
+        : t('parent.processing.writing', { left: left <= ALMOST_MS ? t('parent.processing.almostThere') : timeLeft(left, t) });
     return { ...ok, hint, bar: { send: 1, write: Math.max(0.04, Math.min(0.9, elapsed / usual)) }, action: 'cancel' };
   }
 
   const live = jobProgress(job.job_id);
   if (live === null && now - Date.parse(job.created_at) > STALE_UPLOAD_MS) {
-    return { ...problem, hint: 'The upload stopped. Send it again.' };
+    return { ...problem, hint: t('parent.processing.uploadStopped') };
   }
   const received = status?.files_received ?? 0;
   const expected = status?.files_expected || job.file_count;
   const uploadLeft = live !== null ? jobUploadLeftMs(job.job_id, now) : null;
   const hint =
     uploadLeft !== null
-      ? `Sending your videos · ${timeLeft(uploadLeft)}`
+      ? t('parent.processing.sendingLeft', { left: timeLeft(uploadLeft, t) })
       : live !== null
-        ? `Sending your videos · ${Math.round(live * 100)}%`
+        ? t('parent.processing.sendingPct', { pct: Math.round(live * 100) })
         : received > 0
-          ? `${received} of ${expected} videos sent`
-          : 'Sending your videos';
+          ? t('parent.processing.filesSent', { received, expected })
+          : t('parent.processing.sending');
   const send = live ?? (expected > 0 ? received / expected : 0);
   return { ...ok, hint, bar: { send, write: 0 }, action: 'cancel' };
 }
@@ -166,12 +168,13 @@ export function ProcessingRow({
   /** A problem row with no recipe: send the videos again. */
   onRetry: () => void;
 }) {
+  const { t } = useWords();
   const frame = useVideoFrame(job.thumb_video_uri);
-  const title = `Your ${job.title}`;
+  const title = t('parent.processing.yourDish', { dish: job.title });
   const recipeId = view.recipeId;
   const open = recipeId ? () => onOpen(recipeId) : view.problem ? onRetry : undefined;
 
-  const label = `${title}. ${view.busy ? 'Still being made. ' : ''}${view.hint}`;
+  const label = `${title}. ${view.busy ? `${t('parent.processing.stillBeingMade')} ` : ''}${view.hint}`;
   const body = (
     <>
       <View style={rowStyles.thumb}>
@@ -210,7 +213,7 @@ export function ProcessingRow({
           pressedOpacity={0.85}
           accessibilityRole={recipeId ? 'link' : 'button'}
           accessibilityLabel={label}
-          accessibilityHint={recipeId ? undefined : 'Opens Record to send the videos again'}
+          accessibilityHint={recipeId ? undefined : t('parent.processing.retryHint')}
           style={styles.main}>
           {body}
         </PressableScale>
@@ -228,10 +231,10 @@ export function ProcessingRow({
           onPress={onAction}
           haptic
           accessibilityRole="button"
-          accessibilityLabel={`Undo: keep making your ${job.title}`}
+          accessibilityLabel={t('parent.processing.undoLabel', { dish: job.title })}
           style={styles.undo}>
           <Txt variant="label" size={17} weight={700} color={colors.greenDeep}>
-            Undo
+            {t('parent.processing.undo')}
           </Txt>
         </PressableScale>
       ) : view.action ? (
@@ -240,7 +243,7 @@ export function ProcessingRow({
           tone="clear"
           size={48}
           onPress={onAction}
-          accessibilityLabel={view.action === 'cancel' ? `Stop making your ${job.title}` : `Clear your ${job.title}`}
+          accessibilityLabel={t(view.action === 'cancel' ? 'parent.processing.stopLabel' : 'parent.processing.clearLabel', { dish: job.title })}
           style={styles.action}
         />
       ) : null}

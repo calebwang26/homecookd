@@ -50,6 +50,8 @@ import { ActionButton, type ActionState } from '@/components/ui';
 import { api, ApiError, type InviteRef } from '@/lib/api';
 import { parseInviteInput } from '@/lib/auth';
 import { useSession, type AcceptInviteResult } from '@/lib/session';
+import { useWords } from '@/lib/words/useWords';
+import type { T } from '@/lib/words/words';
 import { motion } from '@/theme/tokens';
 
 const DEV_WEB = __DEV__ && Platform.OS === 'web';
@@ -66,25 +68,29 @@ function inviteFrom(t: string | undefined, c: string | undefined): { ref: Invite
 }
 
 /** A failed peek, in people's words. Only the server's own invite sentences are shown as they are. */
-function peekFailed(e: unknown): Peeked {
-  if (!(e instanceof ApiError)) return { state: 'unreachable', sentence: OUR_SIDE, line: TRY_SOON };
+function peekFailed(e: unknown, t: T): Peeked {
+  if (!(e instanceof ApiError)) return { state: 'unreachable', sentence: t(OUR_SIDE), line: t(TRY_SOON) };
   if ((e.status === 404 || e.status === 400) && /^That invite/.test(e.message)) return { state: 'missing', sentence: e.message };
-  if (e.kind === 'network' || e.kind === 'timeout') return { state: 'unreachable', sentence: UNREACHABLE, line: CHECK_CONNECTION };
-  if (e.status === 429) return { state: 'unreachable', sentence: 'Too many tries for now.', line: TRY_SOON };
-  return { state: 'unreachable', sentence: OUR_SIDE, line: TRY_SOON };
+  if (e.kind === 'network' || e.kind === 'timeout') return { state: 'unreachable', sentence: t(UNREACHABLE), line: t(CHECK_CONNECTION) };
+  if (e.status === 429) return { state: 'unreachable', sentence: t('signin.invite.tooMany'), line: t(TRY_SOON) };
+  return { state: 'unreachable', sentence: t(OUR_SIDE), line: t(TRY_SOON) };
 }
+
+/** What the peek answered. A failure is put in words when the card draws (in this phone's language). */
+type Answer = Extract<Peeked, { state: 'ok' }> | { state: 'failed'; error: unknown };
 
 export default function InviteScreen() {
   const params = useLocalSearchParams<{ t?: string; c?: string; fixture?: string; role?: string; from?: string; to?: string }>();
   const { status, signedIn, family, profiles, acceptInvite, homeFor, refresh } = useSession();
+  const { t } = useWords();
   const [fixtureKind, fixtureRole, fixtureFrom, fixtureTo] = [one(params.fixture), one(params.role), one(params.from), one(params.to)];
   const fixture = useMemo(
     () =>
-      DEV_WEB && isInviteFixture(fixtureKind) ? inviteFixture(fixtureKind, { role: fixtureRole, from: fixtureFrom, to: fixtureTo }) : null,
-    [fixtureKind, fixtureRole, fixtureFrom, fixtureTo],
+      DEV_WEB && isInviteFixture(fixtureKind) ? inviteFixture(fixtureKind, { role: fixtureRole, from: fixtureFrom, to: fixtureTo }, t) : null,
+    [fixtureKind, fixtureRole, fixtureFrom, fixtureTo, t],
   );
-  const [t, c] = [one(params.t), one(params.c)];
-  const invite = useMemo(() => inviteFrom(t, c), [t, c]);
+  const [tokenParam, codeParam] = [one(params.t), one(params.c)];
+  const invite = useMemo(() => inviteFrom(tokenParam, codeParam), [tokenParam, codeParam]);
   const key = invite?.key ?? null;
   const typedCode = fixture ? fixtureKind === 'badcode' : !!invite?.ref.code;
 
@@ -100,16 +106,16 @@ export default function InviteScreen() {
 
   // --- Peek (no side effects). `attempt` bumps on Try again. -----------------------------------
   const [attempt, setAttempt] = useState(0);
-  const [result, setResult] = useState<{ key: string; attempt: number; peeked: Peeked } | null>(null);
+  const [result, setResult] = useState<{ key: string; attempt: number; answer: Answer } | null>(null);
   useEffect(() => {
     if (fixture || !invite) return;
     const ctrl = new AbortController();
     api
       .invitePeek(invite.ref, { signal: ctrl.signal })
-      .then((peek): Peeked => ({ state: 'ok', peek }))
-      .catch(peekFailed)
-      .then((peeked) => {
-        if (!ctrl.signal.aborted) setResult({ key: invite.key, attempt, peeked });
+      .then((peek): Answer => ({ state: 'ok', peek }))
+      .catch((error: unknown): Answer => ({ state: 'failed', error }))
+      .then((answer) => {
+        if (!ctrl.signal.aborted) setResult({ key: invite.key, attempt, answer });
       });
     return () => ctrl.abort();
   }, [invite, attempt, fixture]);
@@ -117,9 +123,11 @@ export default function InviteScreen() {
   const peeked: Peeked = fixture
     ? fixture.peeked
     : !invite
-      ? { state: 'missing', sentence: NOT_FOUND }
+      ? { state: 'missing', sentence: t(NOT_FOUND) }
       : result && result.key === key && result.attempt === attempt
-        ? result.peeked
+        ? result.answer.state === 'failed'
+          ? peekFailed(result.answer.error, t)
+          : result.answer
         : { state: 'loading' };
   const viewer: Viewer = fixture
     ? fixture.viewer
@@ -129,7 +137,7 @@ export default function InviteScreen() {
 
   // --- What the card shows. Frozen from the Join tap on, while the session switches family. ------
   const [frozen, setFrozen] = useState<InviteView | null>(null);
-  const view = frozen ?? describeInvite(peeked, viewer);
+  const view = frozen ?? describeInvite(peeked, viewer, t);
 
   const [btn, setBtn] = useState<ActionState>('idle');
   const [joinError, setJoinError] = useState<string | null>(null);
@@ -197,39 +205,43 @@ export default function InviteScreen() {
             <InviteCardSkeleton />
           ) : view.kind === 'join' ? (
             <>
-              <InviteCard face={view.peek.inviter} title={joinTitle(view.peek, view.instead)} line={joiningAs(view.peek)}>
+              <InviteCard face={view.peek.inviter} title={joinTitle(view.peek, view.instead, t)} line={joiningAs(view.peek, t)}>
                 <ActionButton
-                  label="Join"
+                  label={t('signin.invite.joinButton')}
                   size="xl"
                   onPress={() => void join()}
                   state={btn}
-                  accessibilityLabel={view.peek.invitee ? `Join as ${view.peek.invitee.name}` : `Join ${view.peek.family_name}`}
+                  accessibilityLabel={
+                    view.peek.invitee
+                      ? t('signin.invite.joinAsLabel', { name: view.peek.invitee.name })
+                      : t('signin.invite.joinFamilyLabel', { family: view.peek.family_name })
+                  }
                 />
                 <ErrorLine error={joinError} align="center" />
               </InviteCard>
               {/* Only when it would move this phone out of the family it's in. */}
-              {view.instead ? <SmallLink label="Not now" onPress={toStart} /> : null}
+              {view.instead ? <SmallLink label={t('signin.shared.notNow')} onPress={toStart} /> : null}
               <TermsLine />
             </>
           ) : view.kind === 'already' ? (
-            <InviteCard face={view.peek.inviter} title="You’re already in.">
-              <ActionButton label="Come in" size="xl" onPress={() => leaveTo('/')} />
+            <InviteCard face={view.peek.inviter} title={t('signin.invite.already')}>
+              <ActionButton label={t('signin.shared.comeIn')} size="xl" onPress={() => leaveTo('/')} />
             </InviteCard>
           ) : view.kind === 'gone' ? (
-            <InviteCard face={view.peek?.inviter ?? null} faded title={view.sentence} line={askForNew(view.peek)}>
-              <ActionButton label="Back to start" size="xl" onPress={toStart} />
+            <InviteCard face={view.peek?.inviter ?? null} faded title={view.sentence} line={askForNew(view.peek, t)}>
+              <ActionButton label={t('signin.shared.backToStart')} size="xl" onPress={toStart} />
             </InviteCard>
           ) : view.kind === 'missing' ? (
             // Asking again can't find it: the way on is a fixed code, or the start.
-            <InviteCard face={null} title={view.sentence} line={typedCode ? 'Check it, or ask for a new one.' : 'Check the link, or ask for a new one.'}>
-              <ActionButton label={typedCode ? 'Type it again' : 'Back to start'} size="xl" onPress={toStart} />
+            <InviteCard face={null} title={view.sentence} line={typedCode ? t('signin.invite.checkCode') : t('signin.invite.checkLink')}>
+              <ActionButton label={typedCode ? t('signin.invite.typeAgain') : t('signin.shared.backToStart')} size="xl" onPress={toStart} />
             </InviteCard>
           ) : (
             <>
               <InviteCard face={null} title={view.sentence} line={view.line}>
-                <ActionButton label="Try again" size="xl" onPress={retry} />
+                <ActionButton label={t('signin.invite.tryAgain')} size="xl" onPress={retry} />
               </InviteCard>
-              <SmallLink label="Back to start" onPress={toStart} />
+              <SmallLink label={t('signin.shared.backToStart')} onPress={toStart} />
             </>
           )}
         </Animated.View>

@@ -39,6 +39,8 @@ import { api, errorMessage, type Profile } from '@/lib/api';
 import { totalTimeLabel } from '@/lib/format';
 import { useRecipe } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
+import { useWords } from '@/lib/words/useWords';
+import type { T } from '@/lib/words/words';
 import { alpha, colors } from '@/theme/tokens';
 
 import { DinnerInviteBody, type DinnerInvite } from './DinnerInviteBody';
@@ -71,6 +73,7 @@ const ACTIVITY_WAIT_MS = 1200;
 const SENT_TOAST_MS = 2600;
 
 export function ShareSheet({ visible, recipeId, dinner = null, onClose, onShown }: ShareSheetProps) {
+  const { t } = useWords();
   // A fresh body (send states, link) for every open; derived during render, no effect.
   const [seq, setSeq] = useState(0);
   const [wasVisible, setWasVisible] = useState(visible);
@@ -81,7 +84,7 @@ export function ShareSheet({ visible, recipeId, dinner = null, onClose, onShown 
 
   const { recipe, entry, missing } = useRecipe(recipeId);
   const title = recipe?.title ?? entry?.title ?? '';
-  const gone: ShareCardData | null = missing && !title ? { title: 'We couldn’t find this recipe', cook: null, time: null, poster: null } : null;
+  const gone: ShareCardData | null = missing && !title ? { title: t('share.sheet.notFound'), cook: null, time: null, poster: null } : null;
 
   if (dinner) {
     return (
@@ -92,7 +95,7 @@ export function ShareSheet({ visible, recipeId, dinner = null, onClose, onShown 
         contentStyle={styles.sheetContent}
         onTrace={traceSheet}
         onShown={onShown}>
-        <BodyGuard key={seq}>
+        <BodyGuard key={seq} t={t}>
           <DinnerInviteBody dinner={dinner} />
         </BodyGuard>
       </BottomSheet>
@@ -103,12 +106,12 @@ export function ShareSheet({ visible, recipeId, dinner = null, onClose, onShown 
     <BottomSheet
       visible={visible && !!recipeId}
       onClose={onClose}
-      accessibilityLabel={title ? `Share ${title}` : 'Share this recipe'}
+      accessibilityLabel={title ? t('share.sheet.label', { title }) : t('share.sheet.labelNoTitle')}
       contentStyle={styles.sheetContent}
       onTrace={traceSheet}
       onShown={onShown}>
       {recipeId ? (
-        <BodyGuard key={seq}>
+        <BodyGuard key={seq} t={t}>
           <ShareBody
             recipeId={recipeId}
             available={!gone}
@@ -142,6 +145,7 @@ function ShareBody({
   /** The recipe is known (it has a title); the link waits for it and for the profile. */
   ready: boolean;
 }) {
+  const { t } = useWords();
   const { me, profiles } = useSession();
   const toast = useToast();
   const { height: winH } = useWindowDimensions();
@@ -227,16 +231,16 @@ function ShareBody({
       if (!failed.length) {
         setStates((s) => ({ ...s, [p.id]: 'sent' }));
         setSentTo((s) => ({ name: p.name, n: (s?.n ?? 0) + 1 }));
-        AccessibilityInfo.announceForAccessibility?.(`Sent to ${p.name}`);
+        AccessibilityInfo.announceForAccessibility?.(t('share.family.sentTo', { name: p.name }));
         haptic('success');
         trail('sent');
       } else {
         trail('send failed', errorMessage(error, 'error'));
         setStates((s) => ({ ...s, [p.id]: 'idle' }));
-        toast.show(errorMessage(error, `That didn’t reach ${p.name}. Try again.`), { tone: 'error', icon: <CloseIcon size={14} color={colors.card} /> });
+        toast.show(errorMessage(error, t('share.sheet.didntReach', { name: p.name })), { tone: 'error', icon: <CloseIcon size={14} color={colors.card} /> });
       }
     },
-    [recipeId, toast, people],
+    [recipeId, toast, people, t],
   );
 
   // Budget: the sheet may use 92% of the window minus its grabber and bottom padding. The app row
@@ -259,7 +263,7 @@ function ShareBody({
       <View style={styles.gone} accessibilityRole="summary">
         <PotMark size={64} />
         <Txt variant="display" size={24} leading={1.2} align="center">
-          We couldn’t find this recipe
+          {t('share.sheet.notFound')}
         </Txt>
       </View>
     );
@@ -291,7 +295,7 @@ function ShareBody({
                     <CheckIcon size={14} strokeWidth={3.5} color={colors.card} />
                   </View>
                   <Txt variant="label" size={15} weight={600} color={colors.card} numberOfLines={1} style={styles.sentText}>
-                    Sent to {sentTo.name}
+                    {t('share.family.sentTo', { name: sentTo.name })}
                   </Txt>
                 </Animated.View>
               ) : null}
@@ -308,7 +312,7 @@ function ShareBody({
 }
 
 /** A render error inside the sheet shows a calm line in the sheet instead of taking the app down. */
-class BodyGuard extends Component<{ children: ReactNode }, { failed: boolean }> {
+class BodyGuard extends Component<{ children: ReactNode; t: T }, { failed: boolean }> {
   state = { failed: false };
   static getDerivedStateFromError() {
     return { failed: true };
@@ -318,14 +322,15 @@ class BodyGuard extends Component<{ children: ReactNode }, { failed: boolean }> 
   }
   render() {
     if (!this.state.failed) return this.props.children;
+    const { t } = this.props;
     return (
       <View style={styles.gone} accessibilityRole="summary">
         <PotMark size={64} />
         <Txt variant="display" size={24} leading={1.2} align="center">
-          Sharing didn’t open
+          {t('share.sheet.didntOpen')}
         </Txt>
         <Txt variant="body" leading={1.45} align="center" style={styles.goneBody}>
-          Close this and try again.
+          {t('share.sheet.closeAndRetry')}
         </Txt>
       </View>
     );

@@ -7,6 +7,7 @@
 // (ShareSheet) and the person can be tapped again.
 import { Avatar } from '@/components/ui';
 import type { Profile } from '@/lib/api';
+import { useWords } from '@/lib/words/useWords';
 
 import { RoundTarget, TargetRow, useRowMetrics } from './RoundTarget';
 
@@ -38,16 +39,23 @@ export function FamilyRow({
   /** Scroll this face fully into view (a new object per tap). */
   reveal?: { index: number } | null;
 }) {
+  const { t } = useWords();
   const { circle } = useRowMetrics();
   return (
-    <TargetRow accessibilityLabel="Send to family" reveal={reveal}>
+    <TargetRow accessibilityLabel={t('share.family.label')} reveal={reveal}>
       {people.map((p) => {
         const state = states[p.id] ?? 'idle';
         return (
           <RoundTarget
             key={p.id}
             label={p.name}
-            accessibilityLabel={state === 'sent' ? `Sent to ${p.name}` : state === 'sending' ? `Sending to ${p.name}` : `Send to ${p.name}`}
+            accessibilityLabel={
+              state === 'sent'
+                ? t('share.family.sentTo', { name: p.name })
+                : state === 'sending'
+                  ? t('share.family.sendingTo', { name: p.name })
+                  : t('share.family.sendTo', { name: p.name })
+            }
             onPress={() => onSend(p)}
             busy={state === 'sending'}
             done={state === 'sent'}>

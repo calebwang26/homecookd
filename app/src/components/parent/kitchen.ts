@@ -20,6 +20,7 @@ import { isQuestion, onNoteRemoved, useThreads } from '@/lib/messaging';
 import { kitchenStamp, likedIds } from '@/lib/postcardLogic';
 import { cookProfile, getCachedEntry, getCachedRecipe } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
+import { english, type T } from '@/lib/words/words';
 
 export type KitchenItem = { threadId: string; other: Profile; message: Message };
 
@@ -266,16 +267,16 @@ const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
  * The dish without the cook's name: "Dad's Sunday Chili" -> "Sunday Chili",
  * "Dad's Grilled Fish with Ginger-Scallion Sauce" -> "Grilled Fish".
  */
-export function dishName(title: string | null | undefined, cook?: string | null): string {
-  let t = (title ?? '').trim();
-  if (!t) return 'recipe';
-  const m = /^(.+?)['’]s\s+(.+)$/.exec(t);
-  if (m && (!cook || norm(m[1]) === norm(cook) || m[1].split(/\s+/).length <= 2)) t = m[2];
-  if (t.length > 22) {
-    const short = t.split(/\s+(?:with|and|in|on)\s+/i)[0];
-    if (short.length >= 4) t = short;
+export function dishName(title: string | null | undefined, cook?: string | null, t: T = english): string {
+  let s = (title ?? '').trim();
+  if (!s) return t('parent.dish.fallback');
+  const m = /^(.+?)['’]s\s+(.+)$/.exec(s);
+  if (m && (!cook || norm(m[1]) === norm(cook) || m[1].split(/\s+/).length <= 2)) s = m[2];
+  if (s.length > 22) {
+    const short = s.split(/\s+(?:with|and|in|on)\s+/i)[0];
+    if (short.length >= 4) s = short;
   }
-  return t;
+  return s;
 }
 
 /** "Will you teach me your Sunday eggs? The ones..." -> "Sunday eggs" (or null). */
@@ -299,10 +300,10 @@ export function times(n: number): string {
 }
 
 /** A question message as one quotable line. */
-export function questionText(m: Message): string {
+export function questionText(m: Message, t: T = english): string {
   const body = (m.body ?? '').trim() || (m.transcript ?? '').trim();
   if (body) return body;
-  if (m.kind === 'question' && (m.audio_url || m.duration_s)) return 'A voice question';
-  if (m.kind === 'step' && m.step_order) return `A question about step ${m.step_order}`;
-  return 'A question for you';
+  if (m.kind === 'question' && (m.audio_url || m.duration_s)) return t('parent.question.voice');
+  if (m.kind === 'step' && m.step_order) return t('parent.question.step', { step: m.step_order });
+  return t('parent.question.forYou');
 }
