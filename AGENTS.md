@@ -95,8 +95,9 @@ and homesick college kids. It's a family product, not a tool.
 - **Off Gemini (Oct 25 on):** Gemini credits are nearly gone, so new model calls use Claude (text, images) or
   Cartesia (audio), never Gemini (`docs/agents/memory/gemini-credits-nearly-gone.md`). Existing Gemini calls move one
   PR at a time behind env flags, with Gemini as the rollback: `TEXT_PROVIDER=claude` (Convex env and the worker's
-  `.env`) moves the text calls, `COVER_PROVIDER=claude` (the worker's `.env`) the cover pick. Flipping a flag in
-  production is Caleb's call.
+  `.env`) moves the text calls, `COVER_PROVIDER=claude` (the worker's `.env`) the cover pick, `ALIGN_PROVIDER=claude`
+  the substep times. Muse Spark moves to Claude too. Pick models quality-first, then the cheapest that holds it
+  (`docs/agents/memory/claude-cartesia-quality-first.md`). Flipping a flag in production is Caleb's call.
 - **Moss (search):** filled from Convex, searched from the live voice service; one index per family
   (`family-<familyId>`). Moss only finds moments: never use Moss Inference to write answers
   (https://docs.moss.dev/llms.txt). Key check: `node scripts/check-moss.mjs`.

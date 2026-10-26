@@ -19,8 +19,9 @@ The merge (and its coverage retry) is the writing step: Muse Spark writes it by 
 RECIPE_WRITER says so, and when Muse fails twice, Claude with TEXT_PROVIDER=claude, else Gemini
 (pipeline/writer.py). Extraction always stays on Gemini.
 
-TEXT_PROVIDER=claude also moves the clip-order call and the short substeps to Claude (pipeline/claude.py), and
-COVER_PROVIDER=claude the cover pick (pipeline/cover.py); unset, they stay on Gemini.
+TEXT_PROVIDER=claude also moves the clip-order call and the short substeps to Claude (pipeline/claude.py),
+COVER_PROVIDER=claude the cover pick (pipeline/cover.py) and ALIGN_PROVIDER=claude the substep times
+(pipeline/align.py, on Cartesia's transcript); unset, they stay on Gemini.
 
 The cover (poster.jpg) is the cook's own plate photo when an in-app recording has one (the worker passes it as
 cover_photo), else the sharpest real frame of the finished dish where Gemini says it looks best, cropped to
@@ -32,8 +33,8 @@ into recipe.json, and pipeline/align.py times each substep on the recording; --n
 Env (.env; already-set variables win): GEMINI_API_KEY, GEMINI_MODEL (merge),
 GEMINI_EXTRACT_MODEL (blank = GEMINI_MODEL), GEMINI_MEDIA_RESOLUTION (default MEDIA_RESOLUTION_LOW),
 COVERAGE_GAP_S (default 120: report longer gaps between steps while the cook was still working),
-RECIPE_WRITER and MUSE_* (pipeline/writer.py), TEXT_PROVIDER, COVER_PROVIDER, ANTHROPIC_API_KEY and CLAUDE_*
-(pipeline/claude.py).
+RECIPE_WRITER and MUSE_* (pipeline/writer.py), TEXT_PROVIDER, COVER_PROVIDER, ALIGN_PROVIDER, ANTHROPIC_API_KEY,
+CLAUDE_* (pipeline/claude.py) and CARTESIA_API_KEY(S_BACKUP) (pipeline/transcribe.py).
 """
 from __future__ import annotations
 
@@ -666,6 +667,7 @@ def load_config() -> dict:
     extract_model = os.environ.get("GEMINI_EXTRACT_MODEL") or model
     try:
         text_provider, cover_provider = claude.provider(), claude.provider("COVER_PROVIDER")
+        align_provider = claude.provider("ALIGN_PROVIDER")
     except claude.ClaudeError as e:
         raise ProcessError(str(e))
     gap = os.environ.get("COVERAGE_GAP_S") or str(coverage.GAP_S)
@@ -674,7 +676,7 @@ def load_config() -> dict:
     return {"merge_model": model, "extract_model": extract_model,
             "order_model": extract_model if "flash" in extract_model.lower() else ORDER_MODEL,
             "media_resolution": media_resolution, "coverage_gap_s": int(gap), "text_provider": text_provider,
-            "cover_provider": cover_provider}
+            "cover_provider": cover_provider, "align_provider": align_provider}
 
 
 TextModel = writer.GeminiWriter | claude.ClaudeText  # .name, .model and .generate(prompt, schema, temperature)
@@ -705,6 +707,18 @@ def cover_model(cfg: dict, client: genai.Client) -> tuple[genai.Client | claude.
             raise ProcessError(str(e))
         return gen, gen.model
     return client, cfg["extract_model"]
+
+
+def align_model(cfg: dict, client: genai.Client) -> tuple[genai.Client | claude.ClaudeText, str]:
+    """Who times the substeps (pipeline/align.py): Claude on Cartesia's transcript with ALIGN_PROVIDER=claude
+    (CLAUDE_ALIGN_MODEL, default Haiku), else Gemini listening to each step (the order model, a Flash)."""
+    if cfg["align_provider"] == "claude":
+        try:
+            gen = claude.ClaudeText(os.environ.get("CLAUDE_ALIGN_MODEL") or claude.MODEL)
+        except claude.ClaudeError as e:
+            raise ProcessError(str(e))
+        return gen, gen.model
+    return client, cfg["order_model"]
 
 
 def order_asker(gen: TextModel, usage: Usage):
@@ -854,7 +868,7 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
     except writer.WriterError as e:
         raise ProcessError(str(e))
     order_gen = text_model(cfg, client, cfg["order_model"], "low")
-    cover_by = cover_model(cfg, client)
+    cover_by, align_by = cover_model(cfg, client), align_model(cfg, client)
     log(f"[process {recipe_id}] {n} AI file(s); extract with {cfg['extract_model']} "
         f"({cfg['media_resolution'].value}{', Batch API' if batch else ''}), write with {w.name} {w.model}")
     report("understanding", 0.2)
@@ -915,7 +929,7 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
                 f"recipe.json is fine without them. Retry: python pipeline/shorten.py --id {recipe_id} --force")
         else:
             try:
-                how = align_file(recipe_path, client, cfg["order_model"], usage)
+                how = align_file(recipe_path, *align_by, usage)
                 log(f"[process {recipe_id}] substep times: "
                     + ", ".join(f"step {o} {h}" for o, h in sorted(how.items())))
             except Exception as e:  # noqa: BLE001
