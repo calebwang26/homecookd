@@ -17,7 +17,9 @@ import { useSyncExternalStore } from 'react';
 
 import { kvGet, kvSet } from './storage';
 
-export const AI_CONSENT_KEY = 'aiConsent.v1';
+// v2 (Oct 26): the recipe moved to Claude (videos and photos now reach Anthropic), Muse left, and Gemini kept only
+// the glasses.
+export const AI_CONSENT_KEY = 'aiConsent.v2';
 
 export type Consent = 'loading' | 'needed' | 'given';
 

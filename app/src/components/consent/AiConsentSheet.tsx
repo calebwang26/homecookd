@@ -2,7 +2,7 @@
 // guideline 5.1.2(i); lib/aiConsent asks for it):
 //   homecookd uses AI for this
 //   Your videos, photos and voice go to AI services ... Never for ads.
-//   See who ˅            opens the five companies and what each gets, in place
+//   See who ˅            opens the four companies and what each gets, in place
 //   Privacy policy       homecookd.app/privacy in the app's browser sheet
 //   [ OK, continue ]     the yes, saved on this phone; the action goes on
 //   Not now              nothing is sent; the action doesn't start (closing the sheet is the same)
@@ -20,11 +20,10 @@ import { colors, radii } from '@/theme/tokens';
 
 /** Who gets what (`job`: its words' key). A change here means a new AI_CONSENT_KEY version, so everyone is asked again. */
 export const AI_COMPANIES: { name: string; job: WordKey }[] = [
-  { name: 'Google Gemini', job: 'common.ai.gemini' },
-  { name: 'Meta Muse Spark', job: 'common.ai.muse' },
   { name: 'Anthropic Claude', job: 'common.ai.claude' },
   { name: 'Cartesia', job: 'common.ai.cartesia' },
   { name: 'Moss', job: 'common.ai.moss' },
+  { name: 'Google Gemini', job: 'common.ai.gemini' },
 ];
 
 export function AiConsentHost() {

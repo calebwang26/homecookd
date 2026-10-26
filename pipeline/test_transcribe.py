@@ -193,24 +193,27 @@ def fake_transcribe(said: dict):
     return transcribe, calls
 
 
-def test_an_english_tag_on_marathi_is_caught_and_the_transcript_redone() -> None:
+def test_an_english_tag_on_hindi_is_caught_and_the_transcript_redone() -> None:
     said = {c: "garbled" for c in ("en", *T.COOK_LANGUAGES)}
-    said.update(en="I will put the water in the water", mr="आता मोहरी टाकते जिरे टाकते")
+    said.update(en="I will put the water in the water", hi="अब राई डालती हूँ जीरा डालती हूँ")
     transcribe, calls = fake_transcribe(said)
-    fake = FakeAnthropic({"language": "mr", "sure": True, "why": "only the Marathi reads as cooking speech"})
+    fake = FakeAnthropic({"language": "hi", "sure": True, "why": "only the Hindi reads as cooking speech"})
     with tempfile.TemporaryDirectory() as tmp, env(ANTHROPIC_API_KEY="fake", TRANSCRIPT_PROOFREAD=None), \
             patched(T, "transcribe", transcribe), patched(claude.anthropic, "Anthropic", fake):
         out_dir = Path(tmp)
         tone(out_dir / "voice.m4a", ("tone", 3))
         got = T.transcript_file(out_dir, "en")
-        again = T.transcript_file(out_dir, "en")  # the same tag again: the cached Marathi transcript
-    assert (got["language"], got["tagged_language"]) == ("mr", "en") and again == got, got
-    assert "tagged English, but" in got["language_note"] and "only the Marathi" in got["language_note"]
+        again = T.transcript_file(out_dir, "en")  # the same tag again: the cached Hindi transcript
+    assert (got["language"], got["tagged_language"]) == ("hi", "en") and again == got, got
+    assert "tagged English, but" in got["language_note"] and "only the Hindi" in got["language_note"]
     langs = [lang for name, lang in calls]
-    assert langs[0] == "en" and sorted(langs[1:15]) == sorted(("en", *T.COOK_LANGUAGES)) and langs[15:] == ["mr"]
-    assert {name for name, lang in calls[1:15]} == {"sample.flac"}
+    n = len(T.COOK_LANGUAGES) + 1
+    assert langs[0] == "en" and sorted(langs[1:n + 1]) == sorted(("en", *T.COOK_LANGUAGES)) and langs[n + 1:] == ["hi"]
+    assert {name for name, lang in calls[1:n + 1]} == {"sample.flac"}
+    assert "mr" not in T.COOK_LANGUAGES and len(T.COOK_LANGUAGES) == 12  # Marathi dropped Oct 26: 13 with English
     prompt = fake.calls[0]["messages"][0]["content"][-1]["text"]
-    assert "[mr: Marathi]\nआता मोहरी टाकते जिरे टाकते" in prompt and "never by the script alone" in prompt
+    assert "[hi: Hindi]\nअब राई डालती हूँ जीरा डालती हूँ" in prompt and "[mr:" not in prompt
+    assert "never by the script alone" in prompt
 
 
 def test_unsure_or_failing_checks_keep_english() -> None:

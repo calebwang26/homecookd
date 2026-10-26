@@ -5,7 +5,7 @@
 // (sendDraft, with the pre-record sheet's dish and kids): no Send screen to tap through. If that send
 // fails, Send opens with everything filled in, so she can try again there. If the app closes before
 // the job is made and every video is up, the next launch sends it again in the background, as her
-// (useResendUnsent).
+// (sendKept keeps a note; useResendUnsent).
 import { router } from 'expo-router';
 import { useEffect, useRef } from 'react';
 import { AccessibilityInfo, StyleSheet, View } from 'react-native';
@@ -19,7 +19,7 @@ import { colors, motion } from '@/theme/tokens';
 import { clearDraft, getDraft, useDraft } from './draft';
 import { WavingHomie } from './GlowHomie';
 import { COLUMN, WarmGlow } from './RecordWash';
-import { sendDraft } from './sendDraft';
+import { sendKept } from './sendKept';
 import { doneTo } from './who';
 import { doneLine, recordWords } from './words';
 
@@ -34,7 +34,7 @@ function goHome() {
 
 export function DoneView({ source, lang, kidName, preview = false }: { source: 'phone' | 'glasses'; lang: string; kidName: string | null; preview?: boolean }) {
   const reduce = useReducedMotion();
-  const { me, profiles, learners } = useSession();
+  const { me, family, profiles, learners } = useSession();
   const draft = useDraft();
   const toast = useToast();
 
@@ -42,16 +42,16 @@ export function DoneView({ source, lang, kidName, preview = false }: { source: '
   const line = doneLine(recordWords(lang), { kid: to.everyone ? null : (to.label ?? kidName), everyone: to.everyone, nobody: to.nobody });
 
   // The mount effect below runs once; it reads who it's for from here.
-  const latest = useRef({ me, to, toast });
+  const latest = useRef({ me, to, toast, familyId: family?.id ?? null });
   useEffect(() => {
-    latest.current = { me, to, toast };
+    latest.current = { me, to, toast, familyId: family?.id ?? null };
   });
 
   useEffect(() => {
     if (preview) return;
     let alive = true;
     const send = async (): Promise<boolean> => {
-      const { me: who, to, toast: t } = latest.current;
+      const { me: who, to, toast: t, familyId } = latest.current;
       const d = getDraft();
       const clips = d.clips.filter((c) => c.selected);
       if (source !== 'phone' || !clips.length) {
@@ -61,7 +61,19 @@ export function DoneView({ source, lang, kidName, preview = false }: { source: '
       }
       if (!who) return false;
       try {
-        await sendDraft({ me: who, draft: d, clips, kids: to.picked, recipients: to.recipients, toLabel: to.label, dish: (d.dish ?? '').trim() });
+        await sendKept({
+          me: who,
+          draft: d,
+          clips,
+          kids: to.picked,
+          recipients: to.recipients,
+          toLabel: to.label,
+          dish: (d.dish ?? '').trim(),
+          familyId,
+          forKids: d.forKids,
+          everyone: d.everyone,
+          requestFrom: d.requestFrom,
+        });
         clearDraft();
         return true;
       } catch (e) {

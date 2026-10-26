@@ -68,7 +68,8 @@ LOOP_REPEATS, LOOP_MAX_N = 3, 8  # more repeats than this of a phrase this long,
 FILE = "transcript.json"
 SILENCE_S, KEEP_S, ABOVE_FLOOR_DB = 1.5, 0.3, 3.6  # a pause this long keeps KEEP_S at each end
 # The cook languages besides English (memory cook-languages), and how a wrong-language transcript gives itself away.
-COOK_LANGUAGES = ("mr", "hi", "gu", "ta", "te", "pa", "ur", "zh", "ko", "tl", "es", "pt", "ar")
+# Marathi left them on Oct 26 (Caleb, memory marathi-dropped): a Marathi recording now reads as its nearest, Hindi.
+COOK_LANGUAGES = ("hi", "gu", "ta", "te", "pa", "ur", "zh", "ko", "tl", "es", "pt", "ar")
 SAMPLE_S, LOOP_SHARE, MIN_WORDS_A_MINUTE = 90, 0.4, 40
 PROOFREAD_BATCH = 120  # lines a call
 MIN_KEPT = 0.55  # a correction keeping less of the line's sound than this is a rewrite: the raw line stays
@@ -76,7 +77,7 @@ PROOFREAD_LINE_S = 30.0  # lines end only at pauses up to this long, so a word i
 # Poha (Oct 26), the same tightened prompt: Opus got all 7 facts we check in 2 of 3 runs (6 in the other); Sonnet 5 and
 # Haiku 6, and both wrote chili powder for her cumin powder every time. Opus: ~$0.12 for 10.5 min of Marathi.
 PROOFREAD_MODEL = "claude-opus-5-5"
-LANGUAGE_MODEL = "claude-sonnet-5-5"  # reads 14 garbled samples side by side: rare (only a doubtful English tag)
+LANGUAGE_MODEL = "claude-sonnet-5-5"  # reads 13 garbled samples side by side: rare (only a doubtful English tag)
 
 
 class TranscribeError(RuntimeError):
