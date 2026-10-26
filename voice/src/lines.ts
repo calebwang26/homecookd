@@ -1,121 +1,89 @@
-// homie's fixed lines while a cook records, in English and hand-written Marathi. Other languages get a
-// strict translation of the English (homie.ts translate). The intro here is only the fallback for when
-// Claude can't write one. homie talks like a warm older cousin: short sentences, a comma after the cook's name.
-// TODO(caleb): a native Marathi speaker still has to check these Marathi lines. Oct 24 changed only their
-// punctuation and sentence breaks (a comma after the name, long sentences split), no words. `introAgain`'s
-// "पुन्हा भेटून छान वाटलं." (good to see you again) is new; the rest of it is the intro's own sentences.
+// homie's fixed lines while a cook records, in English. Every other language gets a strict translation of the
+// English (homie.ts translate); the hand-written Marathi left with Marathi on Oct 26 (memory marathi-dropped), and a
+// cook who picked Marathi before gets Claude's Marathi like any other language. The intro here is only the fallback
+// for when Claude can't write one. homie talks like a warm older cousin: short sentences, a comma after the cook's name.
 import { translate, type AskKind, type Line, type Who } from "./homie.js";
 
-type Fixed = (w: Who) => { en: string; mr: string };
+type Fixed = (w: Who) => string;
+/** How a line reaches her language: homie.ts translate, or a test's fake. */
+type Translate = (text: string, to: string, as: "homie") => Promise<string>;
 
 /**
  * "You're making Varan Bhaat for Shreya today. How lovely." Who it's for is the kid's name, or "your family" when
  * it's for more than one person: never a guessed "your son" or "your grandchild" (Caleb, Oct 24).
- * TODO(caleb): "घरच्यांसाठी" (for your family) is new Marathi, like `introAgain`'s line below.
  */
 const forToday = (w: Who) => {
-  const en = w.kid ?? "your family";
-  const mr = w.kid ? `${w.kid} साठी` : "घरच्यांसाठी";
-  return w.dish
-    ? { en: `You're making ${w.dish} for ${en} today. How lovely. `, mr: `आज तुम्ही ${mr} ${w.dish} करताय. किती छान. ` }
-    : { en: `You're cooking for ${en} today. How lovely. `, mr: `आज तुम्ही ${mr} स्वयंपाक करताय. किती छान. ` };
+  const who = w.kid ?? "your family";
+  return w.dish ? `You're making ${w.dish} for ${who} today. How lovely. ` : `You're cooking for ${who} today. How lovely. `;
 };
 
 const FIXED = {
-  intro: (w) => ({
-    en: `Hi, ${w.call}. I'm homie. ${forToday(w).en}Being filmed while you cook can feel a little strange, I know. Now and then, I'll ask a little question. And it's okay to ignore me. Set the phone near the stove. Start whenever you're ready.`,
-    mr: `नमस्कार, ${w.call}! मी homie. ${forToday(w).mr}स्वयंपाक करताना कोणी शूट करतंय, हे जरा विचित्र वाटतं, माहितीये. मी मधूनच एखादा छोटा प्रश्न विचारेन. उत्तर नाही दिलं तरी चालेल. फोन गॅसजवळ ठेवा, आणि तयार झालात की सुरू करा.`,
-  }),
+  intro: (w) =>
+    `Hi, ${w.call}. I'm homie. ${forToday(w)}Being filmed while you cook can feel a little strange, I know. Now and then, I'll ask a little question. And it's okay to ignore me. Set the phone near the stove. Start whenever you're ready.`,
   // homie has recorded with this cook before: no introduction, no explaining (Caleb, Oct 24).
-  introAgain: (w) => ({
-    en: `Hi, ${w.call}. Good to see you again. ${forToday(w).en}Start whenever you're ready.`,
-    mr: `नमस्कार, ${w.call}! पुन्हा भेटून छान वाटलं. ${forToday(w).mr}तयार झालात की सुरू करा.`,
-  }),
+  introAgain: (w) => `Hi, ${w.call}. Good to see you again. ${forToday(w)}Start whenever you're ready.`,
   // Filmed in the app: the last thing homie asks for is a photo of the plate (the recipe's cover).
-  // TODO(caleb): native Marathi check, like the lines above.
-  plate: (w) => ({
-    en: `Last thing, ${w.call}. Hold the plate up to the camera, so ${w.kid ?? "your family"} can see how it looks.`,
-    mr: `शेवटचं, ${w.call}. ताट कॅमेऱ्यासमोर धरा, म्हणजे ${w.kid ? `${w.kid} ला` : "घरच्यांना"} दिसेल ते कसं दिसतं.`,
-  }),
-  plateThanks: () => ({ en: "Got it. Thank you!", mr: "मिळालं. धन्यवाद!" }),
-  optIn: (w) => ({
-    en: w.kid ? `Can ${w.kid} hear your stories too?` : "Can your family hear your stories too?",
-    mr: w.kid ? `${w.kid} ला तुमच्या गोष्टी पण ऐकू द्यायच्या का?` : "घरच्यांना तुमच्या गोष्टी पण ऐकू द्यायच्या का?",
-  }),
+  plate: (w) => `Last thing, ${w.call}. Hold the plate up to the camera, so ${w.kid ?? "your family"} can see how it looks.`,
+  plateThanks: () => "Got it. Thank you!",
+  optIn: (w) => (w.kid ? `Can ${w.kid} hear your stories too?` : "Can your family hear your stories too?"),
   // A wrap-up question she hasn't answered after 5 s: homie checks she's still there, with no hurry (Caleb, Oct 24:
   // "Are you still there? Can you answer the question?"). Still quiet 5 s later: homie lets her off kindly and wraps
   // up ("That's okay. It seems like you don't want to answer today. All good, we can wrap up the dish"), never a
-  // guilt trip. TODO(caleb): native Marathi check, like the lines above (both are new on Oct 24).
-  stillThere: (w) => ({
-    en: `Still there, ${w.call}? Take your time. I'm listening.`,
-    mr: `${w.call}, आहात ना? सावकाश सांगा, मी ऐकतेय.`,
-  }),
-  letOff: (w) => ({
-    en: `That's okay, ${w.call}. No need to answer today. All good, let's finish up.`,
-    mr: `काही हरकत नाही, ${w.call}. आज उत्तर नाही दिलं तरी चालेल. चला, आता आटोपूया.`,
-  }),
-  closing: (w) => ({
-    en: `That's a wrap! ${w.kid ?? "Your family"} is going to hear every bit of this. Thank you for sharing it.`,
-    mr: `झालं! ${w.kid ? `${w.kid} हे सगळं ऐकणार आहे.` : "घरचे हे सगळं ऐकणार आहेत."} हे शेअर केल्याबद्दल खूप खूप धन्यवाद.`,
-  }),
+  // guilt trip.
+  stillThere: (w) => `Still there, ${w.call}? Take your time. I'm listening.`,
+  letOff: (w) => `That's okay, ${w.call}. No need to answer today. All good, let's finish up.`,
+  closing: (w) => `That's a wrap! ${w.kid ?? "Your family"} is going to hear every bit of this. Thank you for sharing it.`,
 } satisfies Record<string, Fixed>;
 
 export type FixedLine = keyof typeof FIXED;
 
 /** A written line in the cook's language, with its English. `latin` has the names as written in English. */
-async function lineOf(line: Fixed, w: Who, latin: Who): Promise<Line> {
-  const { en } = line(latin);
+async function lineOf(line: Fixed, w: Who, latin: Who, tr: Translate): Promise<Line> {
+  const en = line(latin);
   if (w.language === "en") return { text: en, textEn: en };
-  if (w.language === "mr") return { text: line(w).mr, textEn: en };
-  const text = await translate(line(w).en, w.language, "homie").catch(() => "");
+  const text = await tr(line(w), w.language, "homie").catch(() => "");
   return { text: text || en, textEn: en };
 }
 
 /** A fixed line in the cook's language, with its English. */
-export const fixedLine = (name: FixedLine, w: Who, latin: Who = w): Promise<Line> => lineOf(FIXED[name], w, latin);
+export const fixedLine = (name: FixedLine, w: Who, latin: Who = w, tr: Translate = translate): Promise<Line> => lineOf(FIXED[name], w, latin, tr);
 
-const EN_NUMBERS = ["", "one", "two", "three"];
-const MR_NUMBERS = ["", "एक", "दोन", "तीन"];
+const NUMBERS = ["", "one", "two", "three"];
 
 /**
  * The wrap-up's first line: how many questions homie has left and whether a plate photo comes, so she knows how long
  * to stay (Caleb, Oct 25: "homie should specify the number of questions it has for the parent"). Nothing to count
  * (no question, no photo): null. Nothing homie says later may contradict it ("one more", "last question").
- * TODO(caleb): native Marathi check, like the lines above (new on Oct 25).
  */
 const COUNT: (questions: number, photo: boolean) => Fixed = (n, photo) => () => {
-  if (!n) return { en: "Before we send it, one photo of your plate.", mr: "पाठवण्याआधी तुमच्या ताटाचा एक फोटो." };
-  const en = `${EN_NUMBERS[n] ?? n} quick question${n === 1 ? "" : "s"}`;
-  const mr = `${MR_NUMBERS[n] ?? n} ${n === 1 ? "छोटा" : "छोटे"} प्रश्न`;
-  return photo
-    ? { en: `Before we send it, ${en} and a photo of your plate.`, mr: `पाठवण्याआधी ${mr}, आणि तुमच्या ताटाचा एक फोटो.` }
-    : { en: `Just ${en} before we send it.`, mr: `पाठवण्याआधी फक्त ${mr}.` };
+  if (!n) return "Before we send it, one photo of your plate.";
+  const qs = `${NUMBERS[n] ?? n} quick question${n === 1 ? "" : "s"}`;
+  return photo ? `Before we send it, ${qs} and a photo of your plate.` : `Just ${qs} before we send it.`;
 };
 
 /** The count line for `questions` spoken questions (and the plate photo, if `photo`), or null when there's neither. */
-export async function countLine(questions: number, photo: boolean, w: Who, latin: Who = w): Promise<Line | null> {
-  return questions > 0 || photo ? lineOf(COUNT(questions, photo), w, latin) : null;
+export async function countLine(questions: number, photo: boolean, w: Who, latin: Who = w, tr: Translate = translate): Promise<Line | null> {
+  return questions > 0 || photo ? lineOf(COUNT(questions, photo), w, latin, tr) : null;
 }
 
 /**
  * HOMIE_SCRIPTED=1 (the filmed demo): homie asks these in turn, one every 5 minutes, without deciding
  * anything from what it hears. Generic on purpose, so they fit any moment of any dish; the cook's answers are
  * logged like any question's and reach the recipe through homieLog.
- * TODO(caleb): a native Marathi speaker still has to check these, like the lines above.
  */
 const SCRIPTED: { kind: AskKind; line: Fixed }[] = [
-  { kind: "amount", line: (w) => ({ en: `${w.call}, what did you just add, and about how much?`, mr: `${w.call}, आत्ता काय घातलं, आणि साधारण किती?` }) },
-  { kind: "story", line: (w) => ({ en: `${w.call}, is there a story behind this dish? Who taught you?`, mr: `${w.call}, या पदार्थामागे काही गोष्ट आहे का? तुम्हाला कोणी शिकवलं?` }) },
-  { kind: "cue", line: (w) => ({ en: `${w.call}, how do you know this part is ready?`, mr: `${w.call}, हे तयार झालं हे तुम्हाला कसं कळतं?` }) },
-  { kind: "amount", line: (w) => ({ en: `${w.call}, in that last step, how much did you use?`, mr: `${w.call}, आत्ताच्या पायरीत तुम्ही किती घातलं?` }) },
-  { kind: "story", line: (w) => ({ en: `${w.call}, what's the story behind that last ingredient?`, mr: `${w.call}, त्या शेवटच्या पदार्थामागची गोष्ट काय आहे?` }) },
-  { kind: "substitution", line: (w) => ({ en: `${w.call}, if someone can't find one of these ingredients, what could they use instead?`, mr: `${w.call}, यातलं एखादं साहित्य मिळालं नाही, तर त्याऐवजी काय वापरता येईल?` }) },
+  { kind: "amount", line: (w) => `${w.call}, what did you just add, and about how much?` },
+  { kind: "story", line: (w) => `${w.call}, is there a story behind this dish? Who taught you?` },
+  { kind: "cue", line: (w) => `${w.call}, how do you know this part is ready?` },
+  { kind: "amount", line: (w) => `${w.call}, in that last step, how much did you use?` },
+  { kind: "story", line: (w) => `${w.call}, what's the story behind that last ingredient?` },
+  { kind: "substitution", line: (w) => `${w.call}, if someone can't find one of these ingredients, what could they use instead?` },
 ];
 
 /** The nth scripted question (it wraps around), in the cook's language, with its English. */
-export async function scriptedQuestion(n: number, w: Who, latin: Who = w): Promise<{ kind: AskKind; line: Line }> {
+export async function scriptedQuestion(n: number, w: Who, latin: Who = w, tr: Translate = translate): Promise<{ kind: AskKind; line: Line }> {
   const q = SCRIPTED[n % SCRIPTED.length];
-  return { kind: q.kind, line: await lineOf(q.line, w, latin) };
+  return { kind: q.kind, line: await lineOf(q.line, w, latin, tr) };
 }
 
 /**
@@ -123,6 +91,6 @@ export async function scriptedQuestion(n: number, w: Who, latin: Who = w): Promi
  * it when Claude's question guessed a family role (homie.ts guessesFamily). There's none for "show".
  */
 export async function scriptedOf(kind: AskKind, asked: readonly string[], w: Who, latin: Who = w): Promise<{ kind: AskKind; line: Line } | null> {
-  const q = SCRIPTED.find((s) => s.kind === kind && !asked.includes(s.line(latin).en));
-  return q ? { kind, line: await lineOf(q.line, w, latin) } : null;
+  const q = SCRIPTED.find((s) => s.kind === kind && !asked.includes(s.line(latin)));
+  return q ? { kind, line: await lineOf(q.line, w, latin, translate) } : null;
 }

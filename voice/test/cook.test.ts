@@ -29,7 +29,7 @@ afterEach(() => {
   mock.restoreAll();
 });
 
-const GREETING = "चला, स्वयंपाक करूया!";
+const GREETING = "चलो, खाना बनाते हैं!";
 const LINE: Record<number, string> = {
   1: "Step 1. Wash the rice three times.",
   2: "Step 2. Heat the ghee and add the cumin.",
@@ -46,7 +46,7 @@ const session = (kidId: string, stepOrder = 1): CookSession => ({
   familyId: "fam-1",
   mossIndex: "family-fam-1",
   kid: { id: kidId, name: "Shreya" },
-  cook: { name: "Grandma", language: "mr", relation: "Aaji" },
+  cook: { name: "Grandma", language: "hi", relation: "Nani" },
   recipe: {
     id: "recipe-1",
     title: "Varan Bhaat",
@@ -186,7 +186,7 @@ test("every step's line is made once the hello is playing: two at a time, from t
   assert.equal(AHEAD_AT_ONCE, 2);
   // In homie's voice for steps, exactly as a step said live goes; Sonic alone (no backup voice for a kept line).
   const step = { voice: env.homieVoice, language: undefined, kind: "step" };
-  assert.deepEqual(w.voices, [{ voice: env.homieVoice, language: "mr", kind: "greeting" }, step, step, step]);
+  assert.deepEqual(w.voices, [{ voice: env.homieVoice, language: "hi", kind: "greeting" }, step, step, step]);
   const ahead = { backup: false };
   assert.deepEqual(w.routes, [{ sonic: true }, ahead, ahead, ahead]);
   // Nothing is read until a step changes.

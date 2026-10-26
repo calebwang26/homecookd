@@ -6,10 +6,10 @@
 // between lines. Prints every event with timings and saves homie's lines to test-audio/out/. It streams the recorded
 // audio for real; FAKE=1 against `npm run dev:fake` sends the cook's lines as text instead (scripts/guard.ts).
 //   VOICE_STUB=1 HOMIE_DEMO=1 npm run dev                       (in another terminal)
-//   npm run test-record                                          Marathi (stub recording "stub-mr")
+//   npm run test-record                                          Hindi (stub recording "stub-hi")
 //   COOK_LANG=en npm run test-record                                  English ("stub-en"); ta, zh: Tamil, Mandarin
-//   RECORDING=stub-mr-again npm run test-record                       a cook homie has met (the short hello)
-//   RECORDING=stub-mr-ajoba npm run test-record                       a grandfather, for the whole family (no kid name)
+//   RECORDING=stub-hi-again npm run test-record                       a cook homie has met (the short hello)
+//   RECORDING=stub-hi-nanaji npm run test-record                      a grandfather, for the whole family (no kid name)
 //   COOK_LANG=en RECORDING=stub-en-dad npm run test-record            Vijay, whom the family calls "Dad", for Shreya
 //   SESSION=<cook's sessionToken> RECORDING=<recordings _id> npm run test-record   live Convex
 //   CAMERA=1 npm run test-record      filmed in the app: {type:"start", camera:true}, a still every 5 s
@@ -28,8 +28,8 @@ import { guard, live, wordsOf } from "./guard.js";
 const base = process.env.URL ?? "ws://localhost:8080";
 /** The phone starts playing a line about this long after its say_end (record.ts PLAYER_LOAD_MS). */
 const PLAYER_LOAD_MS = 250;
-/** mr (default), en, ta or zh: the stub recording and the cook's test lines in that language. */
-const lang = ["en", "ta", "zh"].includes(process.env.COOK_LANG ?? "") ? process.env.COOK_LANG! : "mr";
+/** hi (default), en, ta or zh: the stub recording and the cook's test lines in that language. */
+const lang = ["en", "ta", "zh"].includes(process.env.COOK_LANG ?? "") ? process.env.COOK_LANG! : "hi";
 const token = process.env.SESSION ?? "test-session";
 const recording = process.env.RECORDING ?? `stub-${lang}`;
 const camera = process.env.CAMERA === "1";

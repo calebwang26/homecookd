@@ -63,14 +63,12 @@ export const SILENT_MS = 5000;
  * depends on the engine's lag. Ink 2 (English) shows words ~0.3 s after she says them: 3.5 s ≈ 3.8 s of real quiet,
  * room for the 2–3 s an older cook stops to think mid-answer (an Oct 24 live run with 3 s cut a 3 s pause: her
  * resumed voice reached the mic 0.15 s too late). ink-whisper's pieces come up to ~1.3 s late, but its turn stays
- * open while the mic still hears her (inkWhisper.ts), so 3.5 s holds there too. Gemini Live (Marathi) shows her
+ * open while the mic still hears her (inkWhisper.ts), so 3.5 s holds there too. Gemini Live (Odia; Marathi until Oct 26) shows her
  * last words ~1.2 s after she stops (its turn ends 1.5 s after that: the 2.7 s measured end to end) and the first
  * words of a resumed sentence ~1 s late, so it gets 4 s: ~5.2 s of real quiet, room for a ~4 s pause.
  */
 export const ANSWER_GAP_MS: Record<SttEngine, number> = { "ink-2": 3500, "ink-whisper": 3500, "gemini-live": 4000 };
-/** A Marathi cook gets Gemini Live's longer wait on either engine (memory homie-waits-for-answers: 4 s Marathi). */
-export const answerGapMs = (language: string) =>
-  language === "mr" ? ANSWER_GAP_MS["gemini-live"] : ANSWER_GAP_MS[sttEngine(language)];
+export const answerGapMs = (language: string) => ANSWER_GAP_MS[sttEngine(language)];
 /** A turn the speech-to-text opened and never closed (a dropped stream) stops holding her answer after this long. */
 const STUCK_TURN_MS = 6000;
 /** Sound on the mic holds the answer (and the nudge) this long: her words may still be on their way. */
@@ -446,7 +444,7 @@ export class Recording {
       // homie has recorded with before gets a welcome back, not the introduction again.
       const again = this.s.metBefore === true;
       const written = this.homie.intro(again).catch((err) => (console.warn("intro", err.message), null));
-      line = (await Promise.race([written, sleep(INTRO_WAIT_MS).then(() => null)])) ?? (await this.names, await fixedLine(again ? "introAgain" : "intro", this.who, this.whoLatin));
+      line = (await Promise.race([written, sleep(INTRO_WAIT_MS).then(() => null)])) ?? (await this.names, await fixedLine(again ? "introAgain" : "intro", this.who, this.whoLatin, this.deps.translate));
       this.mem.intro = line;
     }
     // She may have tapped start or done while it was being written: then there's no hello.
@@ -531,16 +529,16 @@ export class Recording {
     // Made now (translated, in most languages) so homie never goes deaf to make one, and the count line for every
     // number it may come to, while Claude writes the questions.
     void this.spareLines();
-    const optInLine = fixedLine("optIn", this.who, this.whoLatin);
+    const optInLine = fixedLine("optIn", this.who, this.whoLatin, this.deps.translate);
     const { questions: most, photo } = wrapUpCount(this.pacer.rules.maxEnd - this.mem.endAsked, this.mem);
     const counts = new Map<number, Promise<Line | null>>();
-    for (let n = 1; n <= most && !this.mem.counted; n++) counts.set(n, countLine(n, photo, this.who, this.whoLatin));
+    for (let n = 1; n <= most && !this.mem.counted; n++) counts.set(n, countLine(n, photo, this.who, this.whoLatin, this.deps.translate));
     const questions = await this.endLeft();
     if (this.closed) return;
     const spoken = wrapUpCount(questions.length, this.mem).questions;
     if (spoken) this.hold(true); // already on since done (holdForQuestions)
     if (!this.mem.counted) {
-      const count = await (counts.get(spoken) ?? countLine(spoken, photo, this.who, this.whoLatin));
+      const count = await (counts.get(spoken) ?? countLine(spoken, photo, this.who, this.whoLatin, this.deps.translate));
       if (count) {
         await this.untilQuiet();
         await this.sayFixed(count);
@@ -574,7 +572,7 @@ export class Recording {
       if (this.closed) return;
     }
 
-    const closing = await fixedLine("closing", this.who, this.whoLatin);
+    const closing = await fixedLine("closing", this.who, this.whoLatin, this.deps.translate);
     await this.untilQuiet();
     if (this.closed) return;
     this.hold(false);
@@ -701,7 +699,7 @@ export class Recording {
 
   /** homie's "still there?" and let-off in her language, made once (a translation for most languages). */
   private spareLines() {
-    this.spare ??= Promise.all([fixedLine("stillThere", this.who, this.whoLatin), fixedLine("letOff", this.who, this.whoLatin)]).then(
+    this.spare ??= Promise.all([fixedLine("stillThere", this.who, this.whoLatin, this.deps.translate), fixedLine("letOff", this.who, this.whoLatin, this.deps.translate)]).then(
       ([stillThere, letOff]) => ({ stillThere, letOff }),
     );
     return this.spare;
@@ -801,7 +799,7 @@ export class Recording {
    * skip; a closed socket asks again on the reconnect; once answered it isn't asked again.
    */
   private async plate() {
-    const line = await fixedLine("plate", this.who, this.whoLatin);
+    const line = await fixedLine("plate", this.who, this.whoLatin, this.deps.translate);
     await this.untilQuiet();
     if (this.closed) return;
     const promptId = await this.log("plate", line, "spoken");
@@ -828,7 +826,7 @@ export class Recording {
     void this.deps.convex.updatePrompt(this.token, promptId, ok ? "answered" : "ignored").catch(() => {});
     // A spoken "not now" may be the start of more ("not now, I'll send one later"): the next line waits for the rest.
     if (!ok) return;
-    const thanks = await fixedLine("plateThanks", this.who, this.whoLatin);
+    const thanks = await fixedLine("plateThanks", this.who, this.whoLatin, this.deps.translate);
     await this.untilQuiet();
     if (!this.closed) await this.say(thanks, "reaction");
   }
@@ -967,7 +965,7 @@ export class Recording {
       this.deciding = true;
       this.lastDecideAt = now;
       try {
-        const q = await scriptedQuestion(this.mem.asked.length, this.who, this.whoLatin);
+        const q = await scriptedQuestion(this.mem.asked.length, this.who, this.whoLatin, this.deps.translate);
         console.log(`homie scripted at ${nowS.toFixed(0)}s: ${q.line.textEn}`);
         if (this.closed || this.phase !== "recording" || Date.now() - this.lastSpeechAt < QUIET_MS) return;
         this.flow(() => this.ask(q.kind, q.line));

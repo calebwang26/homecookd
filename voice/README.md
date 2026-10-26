@@ -5,7 +5,7 @@ Two live loops from `docs/build/STACK.md`, plus one HTTP route:
   one tool per turn: move a step, play the cook's clip (found by Moss), or send the question to the cook. Sonic
   speaks the short reply. Nothing is ever presented as the cook's words unless it is her clip.
 - `/record`: homie while a cook records. The phone by the stove streams the mic; homie hears her in her language
-  (Gemini Live for Marathi), says hello, asks a few short questions at the right moments, then says how many
+  (Ink 2 or ink-whisper), says hello, asks a few short questions at the right moments, then says how many
   questions are left, asks the last questions and the stories opt-in back to back, the plate photo (filmed in the
   app) and goodbye. Everything it says goes to Convex (`/live/*`).
 - `POST /speak`: a line in homie's voice, for the walkie-talkie and the pot's tap hints.
@@ -24,7 +24,7 @@ src/translate.ts  the cook's words from a played clip → short English, spoken 
 src/record.ts   one recording with homie: phases, listening, when to ask, the end flow, Convex logging
 src/homie.ts    Claude for homie: the hello, ask-or-stay-quiet, end questions, strict translation
 src/pacing.ts   when homie may ask (plain code: first question, gaps, limits)
-src/lines.ts    homie's fixed lines in English and hand-written Marathi
+src/lines.ts    homie's fixed lines in English (other languages: Claude's translation)
 src/stt.ts      picks live speech-to-text by language: Ink 2 (en/fr/hi/ja/es) or Gemini Live
 src/geminiLive.ts  Gemini Live transcription (gemini-3.5-transcribe-live) with session rotation
 src/ink.ts      Cartesia Ink 2 streaming STT (/stt/turns/websocket, built-in turn detection)
@@ -50,9 +50,8 @@ out of credits, `src/cartesiaKeys.ts`), `ANTHROPIC_API_KEY`, `MOSS_PROJECT_ID`, 
 accept any session token, for tests without a real sign-in), `CLAUDE_FAST=1` (Opus fast mode, premium price; off by default since Oct 26; Opus only), `CLAUDE_MODEL`, `COOK_MODEL`
 (cook mode's turn agent; default `claude-sonnet-5-5`, checked with `npx tsx scripts/try-cook-model.ts`, a Hindi and an English recipe), `HOMIE_DECIDE_MODEL`
 (the recording's "should homie speak?" check; default `claude-haiku-5-5`).
-For homie: `MARATHI_STT=cartesia` (Marathi heard by Cartesia ink-whisper, Caleb's Oct 26 choice; unset = Gemini
-Live), `GEMINI_API_KEY` (Gemini Live: Marathi until that flag, and Odia; without it those recordings get no live
-transcript), `HOMIE_VOICE` (default "Riya bilingual",
+For homie: `GEMINI_API_KEY` (Gemini Live, only for Odia, hidden from the picker; without it those recordings get no
+live transcript; a cook who picked Marathi before Oct 26 is heard like Hindi, by Ink 2), `HOMIE_VOICE` (default "Riya bilingual",
 `930eda72-c1af-4637-8d07-87d881d615fe`, Caleb's pick: native Marathi and Indian English), `HOMIE_SPEED` (default
 0.85),
 `TTS_LOG=1` (log each Sonic request's voice, locale, speed and mood), `HOMIE_DEMO=1` (first question at ~40 s),
@@ -72,7 +71,7 @@ SESSION=<kid's Convex sessionToken> RECIPE=<recipes _id> npm run test-client -- 
 URL=wss://<cloud run host> npm run test-client -- test-audio/next-step.wav   # against the deployed one
 FAKE=1 npm run test-client -- test-audio/next-step.wav       # offline, against dev:fake
 VOICE_STUB=1 HOMIE_DEMO=1 npm run dev         # then, in another terminal:
-npm run test-record                           # a whole recording with homie, in Marathi (stub "stub-mr")
+npm run test-record                           # a whole recording with homie, in Hindi (stub "stub-hi")
 COOK_LANG=en npm run test-record              # the same in English ("stub-en")
 SESSION=<cook's sessionToken> RECORDING=<recordings _id> npm run test-record   # live Convex
 npm run typecheck                             # src/ and test/
@@ -250,7 +249,7 @@ Service → app
 What happens
 1. Hello (phase `intro`): Claude writes it from fixed rules (her name the family's way, "Rajani Aaji"; the kid and
    the dish; being filmed feels strange; fine to ignore homie; phone near the stove), cached per recording. If it
-   takes over 7 s or fails, a hand-written one is said instead (`lines.ts`, Marathi or English).
+   takes over 7 s or fails, a written one is said instead (`lines.ts`, English or its translation).
 2. `start`: Convex sets `startedAt` once; every line's `atS` counts from it (the hello's is negative).
 3. While she cooks, every 2 s the code checks the pacing (`pacing.ts`): normal = first question no earlier than
    2 min, 3.5 min gaps, doubled after an ignored one, at most 8 live (so live questions are never back to back); `HOMIE_DEMO=1` = 40 s, 90 s, at most 2; `HOMIE_SCRIPTED=1` (the filmed demo) = a fixed question from `lines.ts` every 5 min, in turn, with no backing off and no Claude deciding. Never
@@ -297,8 +296,9 @@ a line only once it has all of it (it starts ~250 ms after `say_end`), so that's
 line's `said` span count from. A spoken turn ending under a wrap-up question is talk from before it: it answers
 nothing.
 
-Speech to text: Ink 2 for en/fr/hi/ja/es (it detects which). Anything else (Marathi) goes to Gemini Live,
-`gemini-3.5-transcribe-live` with `inputAudioTranscription.languageCodes: ["mr-IN"]`. A Live session lasts about
+Speech to text: Ink 2 for en/fr/hi/ja/es (it detects which), and a cook who picked Marathi before Oct 26 (heard as
+Hindi); ink-whisper for the other cook languages (`stt.ts`). Only Odia (hidden) goes to Gemini Live,
+`gemini-3.5-transcribe-live`. What follows about Gemini Live is from when it heard Marathi (until Oct 26). A Live session lasts about
 10 minutes, so a new one opens at 9 minutes (and on GoAway or a drop) with session resumption and sliding-window
 compression on, and audio queues while it connects. A turn ends when the transcript has been still for 1.5 s.
 

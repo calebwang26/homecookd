@@ -594,8 +594,7 @@ then `/speak` with `translate: true`.
 **New keys**: `GLASSES_SECRET` (Convex env, the VM, Cloud Run secret), `GEMINI_API_KEY` (Cloud Run secret, for live
 Marathi transcription), `HOMIE_VOICE` (Cloud Run env, optional: homie's Cartesia voice id; the code default is "Riya bilingual"
 `930eda72-c1af-4637-8d07-87d881d615fe`, which Sonic speaks in Marathi and Indian English), `HOMIE_SPEED` (optional,
-default 0.85), `MARATHI_STT=cartesia` (Marathi heard by Cartesia ink-whisper; unset = Gemini Live, as before),
-`GLASSES_URL` (Cloud Run env).
+default 0.85), `GLASSES_URL` (Cloud Run env).
 
 ## Keys (all server-side, never in `app/` or `web/`)
 
