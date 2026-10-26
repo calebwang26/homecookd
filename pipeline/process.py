@@ -910,7 +910,8 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
         if batch:
             log(f"[process {recipe_id}] --batch is for Gemini; extracting with Claude as usual")
         try:
-            said = transcribe.transcript_file(out_dir, manifest.get("language"), force, title=manifest["title"])
+            said = transcribe.transcript_file(out_dir, manifest.get("language"), force, title=manifest["title"],
+                                                usage=usage)
         except transcribe.TranscribeError as e:
             raise ProcessError(f"no transcript for the extraction: {e}")
         heard = transcribe.spoken_lines(said)

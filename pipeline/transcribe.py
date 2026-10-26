@@ -308,17 +308,21 @@ def kept_sounds(raw: str, fixed: str) -> float:
     return difflib.SequenceMatcher(None, raw, fixed, autojunk=False).ratio()
 
 
-def proofread(spoken: list[dict], language: str, title: str, gen: claude.ClaudeText) -> tuple[list[dict], dict]:
+def proofread(spoken: list[dict], language: str, title: str, gen: claude.ClaudeText,
+              usage=None) -> tuple[list[dict], dict]:
     """(spoken's lines with Claude's corrections, same times; the tokens it took). A line it lengthens a lot or
     rewrites (kept_sounds under MIN_KEPT) keeps its own words, one it leaves out stays as it was, and one it marks as
-    noise ("") is dropped."""
+    noise ("") is dropped. usage (process.Usage) gets each call, so the worker's spend cap counts it."""
     out: list[dict] = []
     tokens = {"in": 0, "out": 0}
     prompt = PROOFREAD_PROMPT.format(language=LANGUAGES.get(language, language), title=json.dumps(title))
     for b in range(0, len(spoken), PROOFREAD_BATCH):
         batch = spoken[b:b + PROOFREAD_BATCH]
         rows = "\n".join(f"{i} | {x['text']}" for i, x in enumerate(batch))
+        t0 = time.monotonic()
         reply = gen.generate(f"{prompt}\n{rows}", Proofread)
+        if usage is not None:
+            usage.add("proofread", gen.model, None, 1, time.monotonic() - t0, reply)
         tokens["in"] += reply.usage_metadata.prompt_token_count
         tokens["out"] += reply.usage_metadata.candidates_token_count + reply.usage_metadata.thoughts_token_count
         fixed = {f.id: f.text.strip() for f in Proofread.model_validate_json(reply.text).lines}
@@ -450,7 +454,8 @@ def lines(words: list[dict], gap_s: float = LINE_GAP_S, max_s: float = LINE_MAX_
     return out
 
 
-def transcript_file(out_dir: Path, language: str | None, force: bool = False, title: str | None = None) -> dict:
+def transcript_file(out_dir: Path, language: str | None, force: bool = False, title: str | None = None,
+                    usage=None) -> dict:
     """work/transcript.json for out_dir/voice.m4a, made once per tagged language (default English): the cleaned
     audio's words, the language check for an English tag, and the proofread copy with TRANSCRIPT_PROOFREAD=claude
     (title: the dish, its context)."""
@@ -476,7 +481,7 @@ def transcript_file(out_dir: Path, language: str | None, force: bool = False, ti
             and "proofread" not in result):
         gen = claude.ClaudeText(os.environ.get("CLAUDE_PROOFREAD_MODEL") or PROOFREAD_MODEL)
         fixed, tokens = proofread(lines(result["words"], max_s=PROOFREAD_LINE_S), result["language"],
-                                  title or "this dish", gen)
+                                  title or "this dish", gen, usage)
         result["proofread"] = {"model": gen.model, "lines": fixed, "tokens": tokens}
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(result, ensure_ascii=False, indent=1) + "\n")
