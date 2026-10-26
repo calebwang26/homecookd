@@ -16,12 +16,13 @@ import { ErrorLine, SignInField } from '@/components/signin/SignInScreen';
 import { ActionButton, type ActionState, Avatar, BottomSheet, PressableScale, SegmentedChoice, Txt } from '@/components/ui';
 import { api, errorMessage, type Profile, type Role } from '@/lib/api';
 import { useSession } from '@/lib/session';
+import { useWords } from '@/lib/words/useWords';
 import { colors, motion } from '@/theme/tokens';
 
 import { sameNameAs, SameNameAsk } from './SameName';
 
 const MAX_NAME = 40;
-const TITLE = 'Add someone without a phone';
+const TITLE = 'profiles.phoneless.title';
 
 export type AddPhonelessSheetProps = {
   visible: boolean;
@@ -39,6 +40,7 @@ export function AddPhonelessSheet(props: AddPhonelessSheetProps) {
 
 function AddPhoneless({ visible, onClose, onSwitch }: AddPhonelessSheetProps) {
   const { refresh, profiles } = useSession();
+  const { t } = useWords();
   const [name, setName] = useState('');
   const [role, setRole] = useState<Role>('cook');
   const [error, setError] = useState<string | null>(null);
@@ -61,6 +63,8 @@ function AddPhoneless({ visible, onClose, onSwitch }: AddPhonelessSheetProps) {
   }, [btn]);
 
   const clean = name.trim();
+  // Worked out here, before go(): below it, the React Compiler lint reads go()'s Date.now as run in render.
+  const addLabel = clean && clean.length <= 18 ? t('profiles.phoneless.addName', { name: clean }) : t('profiles.phoneless.addThem');
 
   /** `sure`: they said this isn't the person with the same name. */
   async function go(sure = false) {
@@ -94,21 +98,21 @@ function AddPhoneless({ visible, onClose, onSwitch }: AddPhonelessSheetProps) {
       <BottomSheet
         visible={visible}
         onClose={onClose}
-        accessibilityLabel={`${added.name} is in the family`}
-        footer={<ActionButton label="Done" size="xl" onPress={onClose} />}>
+        accessibilityLabel={t('profiles.phoneless.addedLabel', { name: added.name })}
+        footer={<ActionButton label={t('profiles.sheet.done')} size="xl" onPress={onClose} />}>
         <Animated.View entering={FadeIn.duration(180)} style={styles.added}>
           <Avatar profile={added} size={72} />
           <Txt variant="display" size={28} leading={1.15} align="center" accessibilityRole="header">
-            {added.name} is in the family.
+            {t('profiles.phoneless.added', { name: added.name })}
           </Txt>
           <PressableScale
             onPress={() => onSwitch(added)}
             accessibilityRole="button"
-            accessibilityLabel={`Switch to ${added.name}`}
-            accessibilityHint="Cook as them on this phone now"
+            accessibilityLabel={t('profiles.phoneless.switchTo', { name: added.name })}
+            accessibilityHint={t('profiles.phoneless.switchHint')}
             style={styles.switch}>
             <Txt variant="label" weight={600} color={colors.greenDeep}>
-              Switch to {added.name}
+              {t('profiles.phoneless.switchTo', { name: added.name })}
             </Txt>
           </PressableScale>
         </Animated.View>
@@ -121,51 +125,51 @@ function AddPhoneless({ visible, onClose, onSwitch }: AddPhonelessSheetProps) {
       visible={visible}
       onClose={onClose}
       dismissOnBackdrop={btn !== 'loading' && btn !== 'success'}
-      accessibilityLabel={TITLE}
+      accessibilityLabel={t(TITLE)}
       footer={
         <ActionButton
-          label={clean ? `Add ${clean.length > 18 ? 'them' : clean}` : 'Add them'}
+          label={addLabel}
           size="xl"
           onPress={() => void go()}
           state={btn}
           disabled={!clean}
-          successLabel="Added"
+          successLabel={t('profiles.phoneless.addedButton')}
         />
       }>
       <Txt variant="display" size={30} leading={1.1} accessibilityRole="header" style={styles.title}>
-        {TITLE}
+        {t(TITLE)}
       </Txt>
       <View style={styles.form}>
         <SignInField
           value={name}
-          onChangeText={(t) => {
-            setName(t);
+          onChangeText={(text) => {
+            setName(text);
             setDupe(null);
             if (error) setError(null);
             if (btn === 'error') setBtn('idle');
           }}
-          placeholder="Grandma, Auntie Lin…"
+          placeholder={t('profiles.phoneless.placeholder')}
           autoCapitalize="words"
           autoCorrect={false}
           autoFocus={Platform.OS !== 'web'}
           returnKeyType="go"
           onSubmitEditing={() => void go()}
           maxLength={MAX_NAME}
-          accessibilityLabel="Their name"
+          accessibilityLabel={t('profiles.phoneless.nameLabel')}
           invalid={!!error}
           style={styles.field}
         />
         <ErrorLine error={error} />
-        {dupe ? <SameNameAsk who={dupe} noLabel="No, add them" onYes={onClose} onNo={() => void go(true)} /> : null}
+        {dupe ? <SameNameAsk who={dupe} noLabel={t('profiles.phoneless.noAddThem')} onYes={onClose} onNo={() => void go(true)} /> : null}
         <SegmentedChoice
           options={[
-            { key: 'cook', title: 'The cooks' },
-            { key: 'learner', title: 'The ones who miss it' },
+            { key: 'cook', title: t('profiles.picker.cooks') },
+            { key: 'learner', title: t('profiles.picker.missIt') },
           ]}
           value={role}
           onChange={setRole}
           height={68}
-          accessibilityLabel="The cooks, or the ones who miss it"
+          accessibilityLabel={t('profiles.phoneless.sectionLabel')}
         />
       </View>
     </BottomSheet>

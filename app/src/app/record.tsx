@@ -29,6 +29,8 @@ import { usePickVideos, type PickContext } from '@/components/record/usePickVide
 import { ArrowRightIcon, Avatar, BackPill, listEnter, PressableScale, ScreenWash, Txt, useToast } from '@/components/ui';
 import { convexKidIds, startRecording } from '@/lib/live/convex';
 import { getCachedEntry } from '@/lib/recipes';
+import { useWords } from '@/lib/words/useWords';
+import type { T as Words, WordKey } from '@/lib/words/words';
 import { colors, radii, shadows, space } from '@/theme/tokens';
 
 /** The sheet's native Modal has to be gone before the next screen, camera or picker presents (iOS). */
@@ -48,15 +50,15 @@ function withTimeout<T>(work: Promise<T>, ms: number): Promise<T> {
 
 const tripod = require('@/components/record/tripod.jpg');
 
-const STEPS = ['Prop up your phone', 'Say the dish’s name', 'Cook like always, and explain out loud'];
+const STEPS: WordKey[] = ['parent.record.step1', 'parent.record.step2', 'parent.record.step3'];
 
 /** The dish a learner asked for: from the request's words, else the recipe it names. */
-function askedDish(item: KitchenItem | null): string | null {
+function askedDish(item: KitchenItem | null, t: Words): string | null {
   if (!item) return null;
   const fromWords = requestDish(item.message.body);
   if (fromWords) return fromWords;
   const e = item.message.recipe_id ? getCachedEntry(item.message.recipe_id) : null;
-  return e ? dishName(e.title, e.cook_name) : null;
+  return e ? dishName(e.title, e.cook_name, t) : null;
 }
 
 function goBack() {
@@ -70,11 +72,16 @@ export default function RecordScreen() {
   const draft = useDraft();
   const pick = usePickVideos();
   const toast = useToast();
+  const { t } = useWords();
   const [sheet, setSheet] = useState(false);
   const [busy, setBusy] = useState<CaptureSource | null>(null);
 
   const request = k.requests[0] ?? null;
-  const dish = askedDish(request);
+  const dish = askedDish(request, t);
+  // "Leo asked for Sunday eggs" with the dish in bold: the sentence split where the dish goes.
+  const askedFor = request ? t('parent.record.askedFor', { name: request.other.name, dish: '{dish}' }).split('{dish}') : [];
+  const askedWhat = dish ?? t('parent.record.aRecipe');
+  const steps = STEPS.map((key) => t(key));
 
 
   const start = async ({ source, dish: typed, kids, everyone, label, who, language }: PreRecordChoice) => {
@@ -103,7 +110,7 @@ export default function RecordScreen() {
     } catch (e) {
       console.warn('[record] startRecording', String(e).slice(0, 160));
       if (source === 'glasses') {
-        toast.show('homie couldn’t start. Check the connection and try again.', { tone: 'error', durationMs: 3200 });
+        toast.show(t('parent.record.homieFailed'), { tone: 'error', durationMs: 3200 });
       } else {
         // No homie today: the phone's camera still works, straight to Send.
         setSheet(false);
@@ -130,27 +137,28 @@ export default function RecordScreen() {
         <BackPill onPress={goBack} />
 
         <Txt variant="display" size={34} accessibilityRole="header">
-          What will you teach today?
+          {t('parent.record.title')}
         </Txt>
 
         {request ? (
-          <Animated.View entering={listEnter(0)} style={styles.suggest} accessible accessibilityLabel={`${request.other.name} asked for ${dish ?? 'a recipe'}`}>
+          <Animated.View entering={listEnter(0)} style={styles.suggest} accessible accessibilityLabel={askedFor.join(askedWhat)}>
             <Avatar profile={request.other} size={40} />
             <Txt variant="label" size={16} weight={600} color={colors.lavenderInk} style={styles.flex} numberOfLines={2}>
-              {request.other.name} asked for{' '}
+              {askedFor[0]}
               <Txt variant="label" size={16} weight={700} color={colors.ink}>
-                {dish ?? 'a recipe'}
+                {askedWhat}
               </Txt>
+              {askedFor.slice(1).join(askedWhat)}
             </Txt>
           </Animated.View>
         ) : null}
 
         <GlassesVideoCard />
 
-        <Animated.View entering={listEnter(1)} style={styles.how} accessible accessibilityLabel={`How it works. ${STEPS.join('. ')}.`}>
-          <Image source={tripod} style={styles.photo} contentFit="cover" accessibilityLabel="A phone propped up on a kitchen counter" />
+        <Animated.View entering={listEnter(1)} style={styles.how} accessible accessibilityLabel={`${t('parent.record.howItWorks')}. ${steps.join('. ')}.`}>
+          <Image source={tripod} style={styles.photo} contentFit="cover" accessibilityLabel={t('parent.record.photo')} />
           <View style={styles.steps}>
-            {STEPS.map((s, i) => (
+            {steps.map((s, i) => (
               <View key={s} style={styles.step}>
                 <View style={styles.num}>
                   <Txt variant="label" size={14} weight={700} color={colors.sageInk}>
@@ -170,21 +178,21 @@ export default function RecordScreen() {
             onPress={() => setSheet(true)}
             haptic
             disabled={!!pick.busy}
-            accessibilityLabel="Start recording"
-            accessibilityHint="Asks the dish, who it's for and how you film, then starts."
+            accessibilityLabel={t('parent.record.start')}
+            accessibilityHint={t('parent.record.startHint')}
             style={styles.start}>
             <View style={styles.startDot}>
               <View style={styles.redDot} />
             </View>
             <Txt variant="button" size={20} weight={700} color={colors.card} style={styles.flex} numberOfLines={1}>
-              Start recording
+              {t('parent.record.start')}
             </Txt>
           </PressableScale>
 
           {waiting > 0 ? (
-            <PressableScale onPress={() => router.push('/send')} accessibilityLabel="Continue to send" style={styles.resume}>
+            <PressableScale onPress={() => router.push('/send')} accessibilityLabel={t('parent.record.continue')} style={styles.resume}>
               <Txt variant="label" size={15} weight={700} color={colors.ink}>
-                {waiting === 1 ? '1 video ready to send' : `${waiting} videos ready to send`}
+                {waiting === 1 ? t('parent.record.readyOne') : t('parent.record.readyMany', { n: waiting })}
               </Txt>
               <ArrowRightIcon size={18} color={colors.ink} />
             </PressableScale>

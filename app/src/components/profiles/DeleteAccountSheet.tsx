@@ -22,6 +22,8 @@ import type { Profile } from '@/lib/api';
 import { appleAccountHere, asksApple, confirmToRevoke } from '@/lib/auth/apple';
 import { appleRevokeReady, deleteMyAccount, revokeAppleSignIn } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
+import { english, type T } from '@/lib/words/words';
+import { useWords } from '@/lib/words/useWords';
 import { colors, motion } from '@/theme/tokens';
 
 export type DeleteAccountSheetProps = {
@@ -42,19 +44,19 @@ export function DeleteAccountSheet(props: DeleteAccountSheetProps) {
 }
 
 /** The sheet's words, for this phone's own person or for someone else by name. */
-export function deleteAccountWords(name: string, own: boolean) {
-  const whose = own ? 'your' : `${name}’s`;
+export function deleteAccountWords(name: string, own: boolean, t: T = english) {
   return {
-    title: `Delete ${whose} account?`,
-    goes: own ? 'Your account, your messages and voice notes go for good.' : `${name}’s account, messages and voice notes go for good.`,
-    recipes: own ? 'Your recipes go too, for everyone in your family.' : `${name}’s recipes go too, for everyone in the family.`,
-    confirm: own ? 'Delete my account' : `Delete ${name}’s account`,
-    keep: own ? 'Keep my account' : `Keep ${name}’s account`,
+    title: own ? t('profiles.delete.titleOwn') : t('profiles.delete.title', { name }),
+    goes: own ? t('profiles.delete.goesOwn') : t('profiles.delete.goes', { name }),
+    recipes: own ? t('profiles.delete.recipesOwn') : t('profiles.delete.recipes', { name }),
+    confirm: own ? t('profiles.delete.confirmOwn') : t('profiles.delete.confirm', { name }),
+    keep: own ? t('profiles.delete.keepOwn') : t('profiles.delete.keep', { name }),
   };
 }
 
 function Sheet({ visible, person, own, onClose, onDeleted }: DeleteAccountSheetProps) {
   const { deleteAccount, appleProfileId } = useSession();
+  const { t } = useWords();
   const [btn, setBtn] = useState<ActionState>('idle');
   const [error, setError] = useState<string | null>(null);
   const alive = useRef(true);
@@ -76,8 +78,8 @@ function Sheet({ visible, person, own, onClose, onDeleted }: DeleteAccountSheetP
   }, [visible, appleHere, person]);
   useEffect(() => {
     if (btn !== 'error') return;
-    const t = setTimeout(() => setBtn((b) => (b === 'error' ? 'idle' : b)), 1800);
-    return () => clearTimeout(t);
+    const timer = setTimeout(() => setBtn((b) => (b === 'error' ? 'idle' : b)), 1800);
+    return () => clearTimeout(timer);
   }, [btn]);
 
   const busy = btn === 'loading' || btn === 'success';
@@ -105,7 +107,7 @@ function Sheet({ visible, person, own, onClose, onDeleted }: DeleteAccountSheetP
   }
 
   if (!person) return null;
-  const words = deleteAccountWords(person.name.trim(), own);
+  const words = deleteAccountWords(person.name.trim(), own, t);
 
   return (
     <BottomSheet
@@ -124,10 +126,10 @@ function Sheet({ visible, person, own, onClose, onDeleted }: DeleteAccountSheetP
             labelWeight={700}
             haptics
             state={btn}
-            loadingLabel="Deleting"
-            errorLabel="Not deleted"
+            loadingLabel={t('profiles.delete.deleting')}
+            errorLabel={t('profiles.delete.notDeleted')}
             onPress={() => void confirm()}
-            accessibilityHint={person.role === 'cook' ? 'Deletes the account and its recipes for good' : 'Deletes the account for good'}
+            accessibilityHint={person.role === 'cook' ? t('profiles.delete.cookHint') : t('profiles.delete.hint')}
           />
           <ActionButton label={words.keep} size="lg" disabled={busy} onPress={close} />
           <ErrorLine error={error} align="center" />
@@ -146,11 +148,11 @@ function Sheet({ visible, person, own, onClose, onDeleted }: DeleteAccountSheetP
           </Txt>
         ) : null}
         <Txt variant="body" size={16} align="center" color={colors.muted}>
-          This can’t be undone.
+          {t('profiles.delete.cantUndo')}
         </Txt>
         {asksApple({ ...apple, ready }) ? (
           <Txt variant="body" size={16} align="center" color={colors.muted}>
-            Apple will ask you to confirm.
+            {t('profiles.delete.appleConfirm')}
           </Txt>
         ) : null}
       </View>

@@ -29,6 +29,7 @@ import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 import { HeartPop } from '@/components/cooking/HeartBurst';
 import { HeartIcon, PressableScale, useToast } from '@/components/ui';
 import { useFavorites } from '@/lib/favorites';
+import { useWords } from '@/lib/words/useWords';
 import { takeHeartsNoteFor } from '@/lib/heartsNote';
 import { getCachedEntry } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
@@ -53,6 +54,7 @@ type Props = {
 export function HeartButton({ recipeId, title, tone = 'row', style }: Props) {
   const fav = useFavorites();
   const toast = useToast();
+  const { t: words } = useWords();
   const { me, profiles } = useSession();
   const on = fav.isFav(recipeId);
   const t = TONES[tone];
@@ -65,7 +67,7 @@ export function HeartButton({ recipeId, title, tone = 'row', style }: Props) {
     const meId = me?.id ?? null;
     void fav.toggle(recipeId).then(async (ok) => {
       if (!ok) {
-        toast.show(wasOn ? 'Couldn’t remove that heart. Try again.' : 'Couldn’t save that heart. Try again.', {
+        toast.show(words(wasOn ? 'parent.heart.removeFailed' : 'parent.heart.saveFailed'), {
           tone: 'error',
           icon: <HeartIcon size={14} filled color={colors.card} />,
         });
@@ -82,7 +84,7 @@ export function HeartButton({ recipeId, title, tone = 'row', style }: Props) {
       haptic={on ? 'selection' : 'light'}
       scaleTo={1}
       pressedOpacity={0.7}
-      accessibilityLabel={on ? `${title}, in your favorites. Tap to remove.` : `Add ${title} to your favorites`}
+      accessibilityLabel={words(on ? 'parent.heart.on' : 'parent.heart.off', { title })}
       accessibilityState={{ selected: on }}
       // Every heart answers to at least a 48 pt square.
       hitSlop={t.size < 48 ? (48 - t.size) / 2 : 0}

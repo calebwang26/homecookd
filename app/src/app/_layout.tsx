@@ -46,6 +46,7 @@ import { openRecipe } from '@/lib/navigation';
 import { addTapListener, initPush, pushUrl, syncRegistration, type PushData, type PushPlatform } from '@/lib/push';
 import { SessionProvider, useSession } from '@/lib/session';
 import { ShareSheetProvider } from '@/lib/share';
+import { UiLanguageProvider } from '@/lib/words/useWords';
 import { colors } from '@/theme/tokens';
 import { useAppFonts } from '@/theme/fonts';
 
@@ -100,6 +101,7 @@ export default function RootLayout() {
     <GestureHandlerRootView style={styles.root}>
       <ThemeProvider value={navTheme}>
         <SessionProvider>
+          <UiLanguageProvider>
           <ToastProvider>
             <MediaSheetProvider>
               <ShareSheetProvider>
@@ -113,6 +115,7 @@ export default function RootLayout() {
               </ShareSheetProvider>
             </MediaSheetProvider>
           </ToastProvider>
+          </UiLanguageProvider>
         </SessionProvider>
         {splash ? (
           <View style={StyleSheet.absoluteFill} pointerEvents="box-none">

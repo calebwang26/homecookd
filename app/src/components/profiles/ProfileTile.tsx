@@ -23,6 +23,7 @@ import Animated, {
 
 import { Avatar, PlusIcon, PressableScale, Skeleton, Txt } from '@/components/ui';
 import type { Profile } from '@/lib/api';
+import { useWords } from '@/lib/words/useWords';
 import { colors, motion, radii, shadows } from '@/theme/tokens';
 
 import { FlameBadge } from '@/components/table/FlameBadge';
@@ -52,6 +53,7 @@ export function ProfileTile({
   lit?: boolean;
   onPress: () => void;
 }) {
+  const { t } = useWords();
   const reduce = useReducedMotion();
   const dim = useSharedValue(1);
   const ring = useSharedValue(0);
@@ -75,7 +77,12 @@ export function ProfileTile({
   }));
 
   const line = status?.line ?? ' ';
-  const label = [profile.name, status?.line, lit ? 'at the table this week' : null].filter(Boolean).join(', ');
+  const said = status?.line;
+  const label = said
+    ? t(lit ? 'profiles.tile.withLineLit' : 'profiles.tile.withLine', { name: profile.name, line: said })
+    : lit
+      ? t('profiles.tile.withLit', { name: profile.name })
+      : profile.name;
 
   return (
     <Animated.View style={[{ width }, dimStyle]}>
@@ -87,17 +94,17 @@ export function ProfileTile({
         accessibilityLabel={label}
         accessibilityHint={
           profile.locked
-            ? 'They use their own phone'
+            ? t('profiles.tile.lockedHint')
             : profile.invited
-              ? 'They haven’t joined yet'
+              ? t('profiles.tile.invitedHint')
               : profile.role === 'cook'
-                ? 'Opens their kitchen'
-                : 'Opens their home'
+                ? t('profiles.tile.cookHint')
+                : t('profiles.tile.learnerHint')
         }
         style={styles.tile}>
         <View style={styles.face}>
           <Animated.View pointerEvents="none" style={[styles.ring, ringStyle]} />
-          <Avatar profile={profile} size={AVATAR} dot={status?.mark === 'dot'} badge={status?.mark === 'new' ? 'New' : null} />
+          <Avatar profile={profile} size={AVATAR} dot={status?.mark === 'dot'} badge={status?.mark === 'new' ? t('profiles.tile.new') : null} />
           {lit ? <FlameBadge avatarSize={AVATAR} /> : null}
         </View>
         <Txt
@@ -161,6 +168,7 @@ export function AddFamilyTile({
   compact?: boolean;
   a11y?: { label?: string; hint?: string };
 }) {
+  const { t } = useWords();
   const dim = useSharedValue(1);
   useEffect(() => {
     dim.set(withTiming(dimmed ? 0.45 : 1, { duration: 180, easing: Easing.out(Easing.cubic) }));
@@ -173,8 +181,8 @@ export function AddFamilyTile({
         scaleTo={motion.pressScaleCard}
         onPress={onPress}
         disabled={dimmed}
-        accessibilityLabel={a11y?.label ?? label ?? 'Add family'}
-        accessibilityHint={a11y?.hint ?? 'Shares a link to join this family'}
+        accessibilityLabel={a11y?.label ?? label ?? t('profiles.picker.addFamily')}
+        accessibilityHint={a11y?.hint ?? t('profiles.tile.addHint')}
         style={[styles.add, compact ? styles.addBar : null, { width }]}>
         <PlusIcon size={label ? (compact ? 24 : 28) : compact ? 28 : 40} color={colors.greenDeep} strokeWidth={2} />
         {label ? (

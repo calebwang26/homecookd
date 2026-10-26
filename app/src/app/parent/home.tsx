@@ -21,9 +21,11 @@ import { GlassesVideoCard } from '@/components/record/GlassesVideoCard';
 import { ActingAsBar, MoveRequestPrompt, ProfileButton } from '@/components/profiles';
 import { ActionButton, LargeHeader, listEnter, RecordDotIcon, ScreenWash, ScrollHold, StickyHeader, useScrollHold, useScrollY } from '@/components/ui';
 import { WEB_URL } from '@/lib/api';
-import { goodGreeting, longDate } from '@/lib/format';
+import { dayPart, longDate } from '@/lib/format';
 import { useMadeMyDish, type MadeMyDish } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
+import { useWords } from '@/lib/words/useWords';
+import type { WordKey } from '@/lib/words/words';
 import { colors, space, tabBar } from '@/theme/tokens';
 
 /**
@@ -35,14 +37,24 @@ const PREVIEW_MADE: MadeMyDish | null =
     ? { messageId: 'preview-made', fromName: 'Leo', recipeTitle: 'Poha', libraryId: 'biryani', photoUrl: `${WEB_URL}/media/stock/dish-dal.jpg`, text: 'Tasted like home.', at: Date.now() - 86_400_000 }
     : null;
 
+/** "Good morning" and the rest (the night says "Good evening", like lib/format goodGreeting). */
+const GREETING: Record<'morning' | 'afternoon' | 'evening', { alone: WordKey; name: WordKey }> = {
+  morning: { alone: 'parent.home.goodMorning', name: 'parent.home.goodMorningName' },
+  afternoon: { alone: 'parent.home.goodAfternoon', name: 'parent.home.goodAfternoonName' },
+  evening: { alone: 'parent.home.goodEvening', name: 'parent.home.goodEveningName' },
+};
+
 export default function ParentHome() {
   const { me } = useSession();
+  const { t } = useWords();
   const { scrollY, onScroll } = useScrollY();
   // A postcard's "Hold to talk" holds the page still while a finger is on it (ui/ScrollHold).
   const hold = useScrollHold();
 
   const name = me?.name ?? '';
-  const greeting = `${goodGreeting()}${name ? `, ${name}` : ''}`;
+  const part = dayPart();
+  const hello = GREETING[part === 'night' ? 'evening' : part];
+  const greeting = name ? t(hello.name, { name }) : t(hello.alone);
 
   // "Mom ▾" on the date line (tap: "Who’s in the kitchen?" with Back) keeps the greeting's full
   // width, like the bible. It also keeps homie's corner free, so the date never runs under the pot.
@@ -61,13 +73,13 @@ export default function ParentHome() {
           showsVerticalScrollIndicator={false}
           contentContainerStyle={{ paddingBottom: tabBar.clearance }}>
           <ScreenWash tone="parent" height={380} />
-          <LargeHeader eyebrow={longDate()} eyebrowTone="parent" title={greeting} size={34} eyebrowRight={avatar} scrollY={scrollY} fadeEnd={40} />
+          <LargeHeader eyebrow={longDate(undefined, t)} eyebrowTone="parent" title={greeting} size={34} eyebrowRight={avatar} scrollY={scrollY} fadeEnd={40} />
           <ActingAsBar />
 
           <View style={styles.col}>
             <Animated.View entering={listEnter(0)}>
               <ActionButton
-                label="Record a new recipe"
+                label={t('parent.home.record')}
                 size="xl"
                 icon={
                   <View style={styles.recordDot}>
@@ -75,7 +87,7 @@ export default function ParentHome() {
                   </View>
                 }
                 onPress={() => router.push('/record')}
-                accessibilityHint="Film yourself cooking, then send it to the family"
+                accessibilityHint={t('parent.home.recordHint')}
               />
             </Animated.View>
 
@@ -90,7 +102,7 @@ export default function ParentHome() {
           </View>
         </Animated.ScrollView>
       </ScrollHold>
-      <StickyHeader title="Home" scrollY={scrollY} start={40} />
+      <StickyHeader title={t('parent.tab.home')} scrollY={scrollY} start={40} />
       <MoveRequestPrompt />
     </View>
   );

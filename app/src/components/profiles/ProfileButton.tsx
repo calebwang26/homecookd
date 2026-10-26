@@ -16,6 +16,7 @@ import { Avatar, ChevronDownIcon, haptic, PressableScale, Txt } from '@/componen
 import type { Profile } from '@/lib/api';
 import { useHomieSlot } from '@/lib/homie/hooks';
 import { useSession } from '@/lib/session';
+import { useWords } from '@/lib/words/useWords';
 import { colors, shadows, space } from '@/theme/tokens';
 
 /** Back to the phone's owner, at their home (nothing of the lent person's screens left behind). */
@@ -58,12 +59,13 @@ function HomieRoom({ children }: { children: ReactNode }) {
 }
 
 function Pill({ faceOnly, me }: { faceOnly: boolean; me: Profile }) {
+  const { t } = useWords();
   return (
     <PressableScale
       onPress={openFamilyGateway}
       accessibilityRole="button"
-      accessibilityLabel={`${me.name}. Who’s in the kitchen?`}
-      accessibilityHint="Shows everyone in the family, with Switch family and Sign out"
+      accessibilityLabel={t('profiles.button.label', { name: me.name })}
+      accessibilityHint={t('profiles.button.hint')}
       hitSlop={4}
       style={[styles.pill, faceOnly ? styles.pillFace : null]}>
       <Avatar profile={me} size={36} />
@@ -83,18 +85,19 @@ function Pill({ faceOnly, me }: { faceOnly: boolean; me: Profile }) {
  */
 export function ActingAsBar({ style }: { style?: StyleProp<ViewStyle> }) {
   const { me, owner } = useSession();
+  const { t } = useWords();
   const backToOwner = useBackToOwner();
   if (!me || !owner || me.id === owner.id || !backToOwner) return null;
   return (
     <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)} style={[styles.barWrap, style]}>
-      <View style={styles.bar} accessibilityRole="summary" accessibilityLabel={`Cooking as ${me.name} on ${owner.name}’s phone`}>
+      <View style={styles.bar} accessibilityRole="summary" accessibilityLabel={t('profiles.button.actingAsLabel', { name: me.name, owner: owner.name })}>
         <Avatar profile={me} size={28} />
         <Txt variant="label" size={15} weight={600} color={colors.ink} style={styles.flex}>
-          Cooking as {me.name}
+          {t('profiles.button.actingAs', { name: me.name })}
         </Txt>
-        <PressableScale onPress={backToOwner} hitSlop={10} accessibilityRole="button" accessibilityLabel={`Back to ${owner.name}`} style={styles.barBack}>
+        <PressableScale onPress={backToOwner} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('profiles.picker.backTo', { name: owner.name })} style={styles.barBack}>
           <Txt variant="label" size={15} weight={700} color={colors.greenDeep}>
-            Back to {owner.name}
+            {t('profiles.picker.backTo', { name: owner.name })}
           </Txt>
         </PressableScale>
       </View>

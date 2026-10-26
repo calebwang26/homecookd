@@ -19,7 +19,9 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import Svg, { Path, Rect } from 'react-native-svg';
 
 import { ArrowRightIcon, ChevronRightIcon, IconButton, PressableScale, Txt } from '@/components/ui';
-import { NOT_AN_INVITE, parseInviteInput, type InviteInput } from '@/lib/auth';
+import { parseInviteInput, type InviteInput } from '@/lib/auth';
+import { useWords } from '@/lib/words/useWords';
+import type { WordKey } from '@/lib/words/words';
 import { colors, radii, shadows } from '@/theme/tokens';
 
 import { ErrorLine, SignInField } from './SignInScreen';
@@ -31,8 +33,9 @@ const NATIVE_PASTE = Platform.OS === 'ios' && safePasteAvailable();
  * on the first screen, so its one small link says "Have a code?" (family or invite code).
  */
 export const PASTE_BUTTON = NATIVE_PASTE || WEB;
-const BAD_PASTE = `${NOT_AN_INVITE} Copy the whole link, then tap Paste.`;
-const BAD_CODE = `${NOT_AN_INVITE} Check the 6 letters and try again.`;
+// NOT_AN_INVITE (lib/auth) + what to do, as one sentence each.
+const BAD_PASTE: WordKey = 'signin.paste.badPaste';
+const BAD_CODE: WordKey = 'signin.paste.badCode';
 
 function safePasteAvailable(): boolean {
   try {
@@ -83,7 +86,8 @@ export function PasteInvite({
   /** The screen's main way in: a green Paste (else a quiet one). */
   primary?: boolean;
 }) {
-  const [error, setError] = useState<string | null>(null);
+  const { t } = useWords();
+  const [error, setError] = useState<WordKey | null>(null);
   const paste = !codeOnly && PASTE_BUTTON;
   const tookAt = useRef(0);
   const badLater = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -124,18 +128,19 @@ export function PasteInvite({
       ) : (
         <CodeRow onCode={typed} onEdit={() => setError(null)} />
       )}
-      <ErrorLine error={error} />
+      <ErrorLine error={error ? t(error) : null} />
     </View>
   );
 }
 
 /** `onPaste(null)` = something that isn't text (an image). */
 function PasteRow({ onPaste, primary }: { onPaste: (text: string | null) => void; primary: boolean }) {
+  const { t } = useWords();
   const [bg, fg] = primary ? [colors.green, colors.card] : [colors.sage, colors.sageInk];
   return (
     <View style={styles.row}>
       <Txt variant="heading" style={styles.rowLabel} numberOfLines={2}>
-        Paste invite
+        {t('signin.paste.title')}
       </Txt>
       {NATIVE_PASTE ? (
         <Clipboard.ClipboardPasteButton
@@ -158,17 +163,18 @@ function PasteRow({ onPaste, primary }: { onPaste: (text: string | null) => void
 
 /** Web only: the system Paste button as iOS draws it, reading the browser clipboard. */
 function WebPaste({ onPaste, bg, fg }: { onPaste: (text: string | null) => void; bg: string; fg: string }) {
+  const { t } = useWords();
   return (
     <PressableScale
       onPress={async () => onPaste(await Clipboard.getStringAsync().catch(() => null))}
-      accessibilityLabel="Paste"
+      accessibilityLabel={t('signin.paste.paste')}
       style={[styles.paste, styles.webPaste, { backgroundColor: bg }]}>
       <Svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke={fg} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
         <Rect x={5} y={4} width={14} height={17} rx={2.5} />
         <Path d="M9 4.5V3.5h6v1M9 11h6M9 15h4" />
       </Svg>
       <Txt variant="button" size={17} weight={600} color={fg}>
-        Paste
+        {t('signin.paste.paste')}
       </Txt>
     </PressableScale>
   );
@@ -176,6 +182,7 @@ function WebPaste({ onPaste, bg, fg }: { onPaste: (text: string | null) => void;
 
 /** "Have an invite code?" -> one field for the 6 letters, with a round arrow to go. */
 function CodeRow({ onCode, onEdit }: { onCode: (text: string) => void; onEdit: () => void }) {
+  const { t } = useWords();
   const [open, setOpen] = useState(false);
   const [code, setCode] = useState('');
   const go = () => {
@@ -184,9 +191,14 @@ function CodeRow({ onCode, onEdit }: { onCode: (text: string) => void; onEdit: (
 
   if (!open) {
     return (
-      <PressableScale scaleTo={0.97} onPress={() => setOpen(true)} accessibilityLabel="Have an invite code?" accessibilityHint="Opens a field for the code" style={styles.row}>
+      <PressableScale
+        scaleTo={0.97}
+        onPress={() => setOpen(true)}
+        accessibilityLabel={t('signin.paste.haveInviteCode')}
+        accessibilityHint={t('signin.paste.haveInviteCodeHint')}
+        style={styles.row}>
         <Txt variant="heading" style={styles.rowLabel}>
-          Have an invite code?
+          {t('signin.paste.haveInviteCode')}
         </Txt>
         <View style={styles.chevron}>
           <ChevronRightIcon size={22} color={colors.greenDeep} />
@@ -200,11 +212,11 @@ function CodeRow({ onCode, onEdit }: { onCode: (text: string) => void; onEdit: (
       <SignInField
         code
         value={code}
-        onChangeText={(t) => {
-          setCode(t.toUpperCase());
+        onChangeText={(text) => {
+          setCode(text.toUpperCase());
           onEdit();
         }}
-        placeholder="6-letter code"
+        placeholder={t('signin.paste.placeholder')}
         autoCapitalize="characters"
         autoCorrect={false}
         autoComplete="off"
@@ -214,13 +226,13 @@ function CodeRow({ onCode, onEdit }: { onCode: (text: string) => void; onEdit: (
         onSubmitEditing={go}
         maxLength={300}
         padRight={64}
-        accessibilityLabel="Invite code"
+        accessibilityLabel={t('signin.paste.label')}
       />
       <IconButton
         tone="green"
         size={48}
         icon={(c) => <ArrowRightIcon size={22} color={c} />}
-        accessibilityLabel="Use this invite code"
+        accessibilityLabel={t('signin.paste.go')}
         onPress={go}
         disabled={!code.trim()}
         style={[styles.go, !code.trim() ? styles.goOff : null]}

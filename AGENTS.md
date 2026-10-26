@@ -95,7 +95,8 @@ and homesick college kids. It's a family product, not a tool.
 - **Off Gemini (Oct 25 on):** Gemini credits are nearly gone, so new model calls use Claude (text, images) or
   Cartesia (audio), never Gemini (`docs/agents/memory/gemini-credits-nearly-gone.md`). Existing Gemini calls move one
   PR at a time behind env flags, with Gemini as the rollback: `TEXT_PROVIDER=claude` (Convex env and the worker's
-  `.env`) moves the text calls. Flipping a flag in production is Caleb's call.
+  `.env`) moves the text calls, `COVER_PROVIDER=claude` (the worker's `.env`) the cover pick. Flipping a flag in
+  production is Caleb's call.
 - **Moss (search):** filled from Convex, searched from the live voice service; one index per family
   (`family-<familyId>`). Moss only finds moments: never use Moss Inference to write answers
   (https://docs.moss.dev/llms.txt). Key check: `node scripts/check-moss.mjs`.
@@ -161,7 +162,8 @@ cd app && npx eas-cli build -p ios --profile production --auto-submit   # TestFl
 cd app && npx eas-cli update --channel production -m "<what changed>"   # JS-only fix to TestFlight phones
 node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
-cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/signin/consent
+cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent
+cd app && node scripts/draft-words.mjs                             # draft the cook app's missing words in every language (Claude); then test-words
 
 # web
 cd web && npm run dev -- --port 3000
@@ -201,7 +203,9 @@ voice/deploy.sh                                                    # Cloud Run h
 .venv/bin/python pipeline/test_publish.py                           # a family recipe.json: no stories or tips, not in library.json
 .venv/bin/python pipeline/test_claude.py                            # TEXT_PROVIDER=claude: order, shorten, writer fallback (fakes)
 .venv/bin/python pipeline/scrub_family.py                          # dry run: old family recipe.json files to strip (--write: Caleb's OK)
+.venv/bin/python pipeline/test_account_purge.py                      # a deleted account's purge outside Convex (fakes)
 .venv/bin/python pipeline/worker.py [--once]                        # claim Convex jobs (--gcs: the old GCS job files)
+.venv/bin/python pipeline/worker.py --purge-dry-run                 # what each deleted account's purge would delete
 .venv/bin/python pipeline/process.py --id <id> --rewrite            # re-write recipe.json from the cached extraction
 
 # glasses VM (glasses/README.md; uses .venv + ffmpeg)

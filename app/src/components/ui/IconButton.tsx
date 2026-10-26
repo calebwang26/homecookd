@@ -7,9 +7,10 @@
 //  glassDark: rgba(255,253,247,0.3) with cream glyph (heart on a photo card)
 //  clear: transparent (heart in a list row)
 //  field: cream + 0 4px 14px 0.06 (voice search next to the search field)
-import type { ReactNode } from 'react';
+import { useContext, type ReactNode } from 'react';
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
+import { TContext } from '@/lib/words/context';
 import { alpha, colors, shadows } from '@/theme/tokens';
 
 import { BackIcon } from './icons';
@@ -65,7 +66,9 @@ export function IconButton({ icon, accessibilityLabel, onPress, tone = 'cream', 
 }
 
 /** "< Back" pill: 48 tall, padding 0 18 0 12, 16/700. `overPhoto` uses the 0.94 glass fill. */
-export function BackPill({ onPress, label = 'Back', overPhoto = false, style }: { onPress?: () => void; label?: string; overPhoto?: boolean; style?: StyleProp<ViewStyle> }) {
+export function BackPill({ onPress, label: own, overPhoto = false, style }: { onPress?: () => void; label?: string; overPhoto?: boolean; style?: StyleProp<ViewStyle> }) {
+  const words = useContext(TContext);
+  const label = own ?? words('common.back');
   return (
     <PressableScale
       onPress={onPress}
