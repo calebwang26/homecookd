@@ -351,7 +351,7 @@ export const copy = {
       },
       {
         q: "How does homecookd write the recipe?",
-        a: "Gemini, an AI from Google, watches and listens to the videos, then writes the steps. Amounts stay in the cook's own words, with an estimate like ~1 cup beside them, and their stories come along too.",
+        a: "Claude, an AI from Anthropic, watches the videos and reads what the cook said, then writes the steps. Amounts stay in the cook's own words, with an estimate like ~1 cup beside them, and their stories come along too.",
       },
       {
         q: "I've never really cooked. Can I do this?",

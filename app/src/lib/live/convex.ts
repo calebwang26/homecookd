@@ -12,7 +12,8 @@
 //   const { recordingId } = await startRecording({ dish, forKidIds, language?, source })  live.startRecording
 //   useRecording(recordingId)                            live.recording, live (the recording screen)
 //   await recordingJob(recordingId, cookId)              live.recording's job and its stage, once (a resend after a crash)
-//   await endRecording(recordingId)                      live.endRecording: the stop button with no voice line
+//   await uploadJob(uploadId, cookId)                    the same for a Send-screen upload, by its folder (jobs.forFamily)
+//   await endRecording(recordingId, as?)                 live.endRecording: the stop button with no voice line
 //   await startFilming(recordingId)                      live.startFilming: glasses, her Start button
 //   await setCover(recordingId, photoUri)                files.uploadUrl + live.setCover: the plate photo (in-app filming)
 //   useLiveLog(recordingId)                              liveEvents.forRecording, live (what the glasses' live pass saw)
@@ -51,6 +52,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 
 import { requireAiConsent } from '@/lib/aiConsent';
 import { getSession, useSession } from '@/lib/session';
+import { jobForUpload } from '@/lib/unsentLogic';
 import { secretGet } from '@/lib/storage';
 
 const URL = (process.env.EXPO_PUBLIC_CONVEX_URL ?? '').trim();
@@ -331,9 +333,9 @@ export async function startRecording(input: { dish?: string; forKidIds?: string[
  * Idempotent. True once Convex says so; false when it couldn't (offline, not deployed yet, refused).
  * A stub recording ends on the stub.
  */
-export async function endRecording(recordingId: string): Promise<boolean> {
+export async function endRecording(recordingId: string, as?: string): Promise<boolean> {
   try {
-    const sessionToken = await token();
+    const sessionToken = await token(as);
     const r = await call<{ ok: boolean }>('mutation', 'live:endRecording', { sessionToken, recordingId }, () => stub.endRecording(recordingId), { soft: true });
     return !!r?.ok;
   } catch (e) {
@@ -388,6 +390,26 @@ export async function recordingJob(recordingId: string, as?: string): Promise<Re
     return { id: row.jobId, stage: job?.stage ?? null, error: job?.error ?? null };
   } catch (e) {
     console.warn('[convex] live.recording', String(e).slice(0, 160));
+    return undefined;
+  }
+}
+
+/**
+ * The Convex job for a Send-screen upload (the folder "<uploadId>/"), asked once before a resend after a
+ * crash (lib/unsentLogic jobForUpload): stage null when this phone saw Convex take it (`convexHadIt`, its
+ * row's convex_job 'ok') but it's no longer among the family's newest, null when there's no job (or no
+ * upload was made), undefined when Convex couldn't say. `as`: the cook (a profile id).
+ */
+export async function uploadJob(uploadId: string | null, convexHadIt: boolean, as?: string): Promise<RecordingJob | null | undefined> {
+  if (stubbed || !client) return undefined;
+  try {
+    const sessionToken = await token(as);
+    const jobs = await call<LiveJob[] | undefined>('query', 'jobs:forFamily', { sessionToken }, () => undefined, { soft: true });
+    if (!jobs) return undefined;
+    const job = jobForUpload(jobs, uploadId, convexHadIt);
+    return job ? { id: job.id, stage: job.stage as JobStage | null, error: job.error } : null;
+  } catch (e) {
+    console.warn('[convex] jobs.forFamily', String(e).slice(0, 160));
     return undefined;
   }
 }

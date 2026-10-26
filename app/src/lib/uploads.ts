@@ -84,6 +84,8 @@ export type JobMeta = {
   thumb_video_uri?: string | null;
   /** homie's recording these videos are from (a resend after a crash finds its old rows by it). */
   recording_id?: string | null;
+  /** The phone's note that sends these videos again after a crash (lib/unsentRecordings), when it isn't the recording's. */
+  unsent_id?: string | null;
   /**
    * What jobs.create needs, kept so the home card can make the Convex job again until it lands
    * (components/record/jobRetry). Rows from older builds have none and aren't retried.
