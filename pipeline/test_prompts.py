@@ -244,6 +244,15 @@ def test_worker_counts_releases_only_without_signer_file():
     assert plain.released == worker.MAX_RELEASES and plain.failed == [worker.MSG_NO_UPLOAD]
 
 
+def test_claude_keeps_the_cooks_whole_words():
+    """Oct 26, Poha on Claude: quotes were a few key words ("कढई गरम तेल"); copying all her words in the extraction
+    and joining them in the writer took them from 0.54 to 0.63 of Gemini's Marathi words, three runs."""
+    from pipeline.prompts import EXTRACT_FRAMES_NOTE
+    from pipeline.writer import CLAUDE_SYSTEM
+    assert "copy ALL the cook's words" in EXTRACT_FRAMES_NOTE and "not a\nfew key words" in EXTRACT_FRAMES_NOTE
+    assert "quote is the English of that same passage" in EXTRACT_FRAMES_NOTE
+    assert "not a pick of the most useful ones" in CLAUDE_SYSTEM
+
 def main() -> None:
     tests = [(n, f) for n, f in globals().items() if n.startswith("test_") and callable(f)]
     failed = 0

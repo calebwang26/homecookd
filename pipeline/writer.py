@@ -47,7 +47,10 @@ CLAUDE_SYSTEM = MUSE_SYSTEM + """
   trimmed of filler. Never retell it as "the cook..." and never guess anyone's gender.
 - Steps are the stages a family would name: about 8 to 12 for a home dish, as the step rules say, and a long
   video stays near 12 unless its stages are clearly separate. Fold short actions (a taste, a stir, checking the
-  pan, wiping the plate) into the stage they belong to, and keep every action in a step's instruction."""
+  pan, wiping the plate) into the stage they belong to, and keep every action in a step's instruction.
+- A step's quote is all the cook's words from its step events' quotes, joined in order (minus words repeated back
+  to back), not a pick of the most useful ones, and its quote_original is those events' quote_original joined
+  the same way: the family hears her whole explanation of the stage, as she said it."""
 
 
 class WriterError(RuntimeError):
