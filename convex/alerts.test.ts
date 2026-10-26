@@ -20,6 +20,7 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   delete process.env.REPORT_ALERT_URL;
+  delete process.env.REPORT_ALERT_EMAIL;
 });
 
 const report = (t: Backend, who: Who, targetId: Id<"recipes">, reason?: "not_food" | "rude" | "other") =>
@@ -38,6 +39,22 @@ test("a report sends one ntfy push with what, why and how many are open", async 
   expect((init.headers as Record<string, string>).Title).toBe("homecookd: new Community report");
   expect(init.body).toBe("Someone reported a recipe (rude or hurtful). 1 open. Review: npx convex run reports:open");
   expect(String(init.body)).not.toContain(poha); // no ids or names leave Convex
+});
+
+test("with REPORT_ALERT_EMAIL, the ntfy push is also emailed; a bad address is left out", async () => {
+  process.env.REPORT_ALERT_URL = "https://ntfy.sh/homecookd-test";
+  process.env.REPORT_ALERT_EMAIL = "team@homecookd.app";
+  const { t, rajani, serene, caleb } = await world();
+  const poha = await recipe(t, rajani, { sharedAt: 1 });
+  await report(t, serene, poha, "rude");
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  process.env.REPORT_ALERT_EMAIL = "not an address";
+  await report(t, caleb, poha);
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+  const headers = calls.map((c) => c.init.headers as Record<string, string>);
+  expect(headers[0].Email).toBe("team@homecookd.app");
+  expect(headers[1].Email).toBeUndefined();
 });
 
 test("Slack and Discord get JSON", async () => {
