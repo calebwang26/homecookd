@@ -86,9 +86,11 @@ http.route({
       }
       language = body.language;
     }
+    const { followUps, ...fields } = parsed;
     const recipeId = await ctx.runMutation(internal.worker.published, {
       jobId: id,
-      recipe: { ...parsed, recipeJsonUrl, language },
+      recipe: { ...fields, recipeJsonUrl, language },
+      followUps,
       memoriesOptIn: body.memoriesOptIn as boolean | undefined,
     });
     if (recipeId === "cancelled") return fail(409, "cancelled");
