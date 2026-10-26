@@ -585,3 +585,21 @@ of food, with its whole rim and any garnish, and nothing else (not the hands, ot
 Return found = true and box_2d = [ymin, xmin, ymax, xmax], each a whole number from 0 to 1000 as a share of the
 image's height (y) or width (x). If no finished dish is in the frame, return found = false and box_2d = [0, 0, 0, 0].
 """
+
+# pipeline/seen.py: ingredients the frames show going in that nobody said (speech-to-text missed "कढीपत्ता" on Poha).
+SEEN_PROMPT = """\
+These are still frames from a home video of a cook making {title}, in the recipe's step order. Each step's first
+frame comes after a line "Step N: <title>. <instruction>", and every frame after its label "Frame N.k" (step N).
+The recipe was written from what she said, and it lists these ingredients:
+{ingredients}
+
+Find the ingredients you can SEE her add to the food in these frames that are NOT in that list: leaves, seeds, a
+spice from a jar or packet, oil, a garnish, a vegetable. Look closely at what goes into the pan, pot or bowl.
+Leave out tools, packaging and things on the counter she doesn't use, other dishes, water for washing, and any
+listed ingredient under another name (coriander = cilantro; chilli = green chilli; the same thing chopped or whole).
+
+For each one: name = its common English name; step = the step whose frames show it going in; frames = the labels of
+the frames where you see it ("4.2"); sure = true only when you clearly see it in at least two frames of that step and
+it can't be a listed ingredient; estimate = "~" + the amount you see (e.g. "~1 sprig", "~1 tsp"), or "unknown";
+why = one short sentence on what you see. Return an empty list when every ingredient you see is listed.
+"""
