@@ -58,6 +58,9 @@ and homesick college kids. It's a family product, not a tool.
 - **Ship via PR, never straight to main.** Branch from `origin/main`, commit, `git fetch && git merge origin/main`,
   push, `gh pr create`, then check that `gh pr view --json mergeStateStatus` is `CLEAN`. Stage files by name, never
   `git add -A`: the tree holds untracked demo PNGs and Finder " 2" duplicates.
+- **Section chats (Oct 26):** each codebase section has one permanent Claude chat that owns it (Voice & homie,
+  Pipeline & recipes, Convex & accounts, App screens & recording, App Store, web & builds). Work goes to the owner of
+  the files it touches: `docs/agents/memory/section-chats.md`.
 - **The Merge Agent approves every PR.** After `gh pr create`, send the PR (number, link, branch, files touched,
   one-line summary) to the Claude Desktop session titled **Merge Agent** (Claude Code: `ListAgents`, then
   `SendMessage`; Codex or Salik: ask Caleb to pass it on). Don't merge until it approves. When PRs conflict, the
