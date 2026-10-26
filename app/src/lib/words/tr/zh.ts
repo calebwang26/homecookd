@@ -809,6 +809,18 @@ const words: Translation = {
   'share.invite.titleNoName': '在 homecookd 上加入我们的家庭餐桌',
   'share.invite.a11yNames': '{title} {names}。',
   'share.invite.a11yNamesMore': '{title} {names}，还有另外 {count} 人。',
+  'parent.list.empty': '还没有菜谱',
+  'parent.list.emptyBody': '问问家里人，上个星期天做了什么。',
+  'parent.list.emptyAction': '问问家人',
+  'parent.list.show': '显示菜谱',
+  'parent.list.everyone': '全部',
+  'parent.list.favorites': '收藏',
+  'parent.list.noFavorites': '还没有收藏',
+  'parent.list.by': '{name}做的',
+  'parent.heart.removeFailed': '没能取消收藏，请再试一次。',
+  'parent.heart.saveFailed': '没能收藏，请再试一次。',
+  'parent.heart.on': '{title}，已收藏。点按取消。',
+  'parent.heart.off': '收藏{title}',
 };
 
 export default words;

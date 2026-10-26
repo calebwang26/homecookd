@@ -809,6 +809,18 @@ const words: Translation = {
   'share.invite.titleNoName': 'Sumali po sa hapag ng aming pamilya sa homecookd',
   'share.invite.a11yNames': '{title} {names}.',
   'share.invite.a11yNamesMore': '{title} {names} at {count} pa.',
+  'parent.list.empty': 'Wala pang recipe',
+  'parent.list.emptyBody': 'Tanungin po ang isang tao kung ano ang niluto nila noong Linggo.',
+  'parent.list.emptyAction': 'Tanungin ang pamilya',
+  'parent.list.show': 'Ipakita ang mga recipe',
+  'parent.list.everyone': 'Lahat',
+  'parent.list.favorites': 'Mga paborito',
+  'parent.list.noFavorites': 'Wala pang paborito',
+  'parent.list.by': 'ni {name}',
+  'parent.heart.removeFailed': 'Hindi naalis ang puso. Pakisubukan ulit.',
+  'parent.heart.saveFailed': 'Hindi na-save ang puso. Pakisubukan ulit.',
+  'parent.heart.on': '{title}, nasa mga paborito ninyo. I-tap para alisin.',
+  'parent.heart.off': 'Idagdag ang {title} sa mga paborito ninyo',
 };
 
 export default words;

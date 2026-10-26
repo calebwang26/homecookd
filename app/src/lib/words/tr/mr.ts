@@ -809,6 +809,18 @@ const words: Translation = {
   'share.invite.titleNoName': 'homecookd वर आमच्या कुटुंबाच्या पंगतीत सामील व्हा',
   'share.invite.a11yNames': '{title} {names}.',
   'share.invite.a11yNamesMore': '{title} {names} आणि आणखी {count}.',
+  'parent.list.empty': 'अजून एकही रेसिपी नाही',
+  'parent.list.emptyBody': 'मागच्या रविवारी काय बनवलं ते कोणाला तरी विचारा.',
+  'parent.list.emptyAction': 'घरच्यांना विचारा',
+  'parent.list.show': 'रेसिपी दाखवा',
+  'parent.list.everyone': 'सगळे',
+  'parent.list.favorites': 'आवडत्या',
+  'parent.list.noFavorites': 'अजून आवडती रेसिपी नाही',
+  'parent.list.by': '{name} यांची',
+  'parent.heart.removeFailed': 'ते हृदय काढता आलं नाही. पुन्हा प्रयत्न करा.',
+  'parent.heart.saveFailed': 'ते हृदय जतन करता आलं नाही. पुन्हा प्रयत्न करा.',
+  'parent.heart.on': '{title}, तुमच्या आवडत्यांमध्ये आहे. काढण्यासाठी टॅप करा.',
+  'parent.heart.off': '{title} तुमच्या आवडत्यांमध्ये जोडा',
 };
 
 export default words;

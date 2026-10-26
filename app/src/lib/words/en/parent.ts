@@ -221,4 +221,17 @@ export const PARENT = {
   'parent.myRecipe.share': 'Share this recipe',
   'parent.myRecipe.allSteps': 'See all {n} steps',
   'parent.myRecipe.back': 'Back',
+  // components/recipes: the family's recipe list (the cook's Recipes tab; the kid's too, in English).
+  'parent.list.empty': 'No recipes yet',
+  'parent.list.emptyBody': 'Ask someone what they made last Sunday.',
+  'parent.list.emptyAction': 'Ask the family',
+  'parent.list.show': 'Show recipes',
+  'parent.list.everyone': 'Everyone',
+  'parent.list.favorites': 'Favorites',
+  'parent.list.noFavorites': 'No favorites yet',
+  'parent.list.by': 'by {name}',
+  'parent.heart.removeFailed': 'Couldn’t remove that heart. Try again.',
+  'parent.heart.saveFailed': 'Couldn’t save that heart. Try again.',
+  'parent.heart.on': '{title}, in your favorites. Tap to remove.',
+  'parent.heart.off': 'Add {title} to your favorites',
 } as const satisfies Record<`parent.${string}`, string>;

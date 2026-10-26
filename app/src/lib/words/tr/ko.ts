@@ -809,6 +809,18 @@ const words: Translation = {
   'share.invite.titleNoName': 'homecookd에서 우리 가족 식탁에 함께해요',
   'share.invite.a11yNames': '{title} {names}.',
   'share.invite.a11yNamesMore': '{title} {names} 외 {count}명.',
+  'parent.list.empty': '아직 레시피가 없어요',
+  'parent.list.emptyBody': '지난 일요일에 무엇을 만들었는지 물어보세요.',
+  'parent.list.emptyAction': '가족에게 물어보기',
+  'parent.list.show': '레시피 보기',
+  'parent.list.everyone': '모두',
+  'parent.list.favorites': '즐겨찾기',
+  'parent.list.noFavorites': '아직 즐겨찾기가 없어요',
+  'parent.list.by': '{name} 님의 레시피',
+  'parent.heart.removeFailed': '하트를 지우지 못했어요. 다시 해 주세요.',
+  'parent.heart.saveFailed': '하트를 저장하지 못했어요. 다시 해 주세요.',
+  'parent.heart.on': '{title}, 즐겨찾기에 있어요. 누르면 지워져요.',
+  'parent.heart.off': '{title}을(를) 즐겨찾기에 추가',
 };
 
 export default words;

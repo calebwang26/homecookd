@@ -809,6 +809,18 @@ const words: Translation = {
   'share.invite.titleNoName': 'homecookd లో మా కుటుంబ భోజనానికి చేరండి',
   'share.invite.a11yNames': '{title} {names}.',
   'share.invite.a11yNamesMore': '{title} {names} మరియు ఇంకా {count} మంది.',
+  'parent.list.empty': 'ఇంకా వంటకాలు లేవు',
+  'parent.list.emptyBody': 'గత ఆదివారం ఏం వండారో ఎవరినైనా అడగండి.',
+  'parent.list.emptyAction': 'కుటుంబాన్ని అడగండి',
+  'parent.list.show': 'వంటకాలు చూపించండి',
+  'parent.list.everyone': 'అందరూ',
+  'parent.list.favorites': 'ఇష్టమైనవి',
+  'parent.list.noFavorites': 'ఇంకా ఇష్టమైనవి లేవు',
+  'parent.list.by': '{name} గారిది',
+  'parent.heart.removeFailed': 'ఆ హృదయాన్ని తీసివేయలేకపోయాం. మళ్ళీ ప్రయత్నించండి.',
+  'parent.heart.saveFailed': 'ఆ హృదయాన్ని సేవ్ చేయలేకపోయాం. మళ్ళీ ప్రయత్నించండి.',
+  'parent.heart.on': '{title}, మీ ఇష్టమైనవాటిలో ఉంది. తీసివేయడానికి నొక్కండి.',
+  'parent.heart.off': '{title} ని మీ ఇష్టమైనవాటిలో చేర్చండి',
 };
 
 export default words;

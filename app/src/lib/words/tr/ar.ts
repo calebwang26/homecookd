@@ -809,6 +809,18 @@ const words: Translation = {
   'share.invite.titleNoName': 'انضموا إلى مائدة عائلتنا على homecookd',
   'share.invite.a11yNames': '{title} {names}.',
   'share.invite.a11yNamesMore': '{title} {names} و{count} غيرهم.',
+  'parent.list.empty': 'لا توجد وصفات بعد',
+  'parent.list.emptyBody': 'اسأل أحدًا عمّا طبخه يوم الأحد الماضي.',
+  'parent.list.emptyAction': 'اسأل العائلة',
+  'parent.list.show': 'عرض الوصفات',
+  'parent.list.everyone': 'الجميع',
+  'parent.list.favorites': 'المفضلة',
+  'parent.list.noFavorites': 'لا توجد مفضلات بعد',
+  'parent.list.by': 'من {name}',
+  'parent.heart.removeFailed': 'تعذّرت إزالة ذلك القلب. حاول مرة أخرى.',
+  'parent.heart.saveFailed': 'تعذّر حفظ ذلك القلب. حاول مرة أخرى.',
+  'parent.heart.on': '{title}، في مفضلتك. اضغط للإزالة.',
+  'parent.heart.off': 'أضف {title} إلى مفضلتك',
 };
 
 export default words;
