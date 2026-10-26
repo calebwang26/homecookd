@@ -66,6 +66,12 @@ export type LargeHeaderProps = {
 };
 
 /**
+ * Under a line with "Mom ▾" and homie's pot on it, the title needs room to read as its own line, like
+ * kid Home's (Caleb, Oct 26: parent Home's greeting sat squeezed under the pill).
+ */
+const EYEBROW_RIGHT_GAP = space.xxl;
+
+/**
  * The bible's screen title block: optional eyebrow, Fraunces 500 title (-0.02em, 1.1), optional
  * subtitle (16 muted, 6 px under). Lays out from the safe area so y matches the bible on an iPhone.
  */
@@ -90,7 +96,7 @@ export function LargeHeader({
   );
   return (
     <Animated.View style={[styles.large, { paddingTop: padTop }, style, fade]}>
-      <View style={[styles.titleCol, { gap: eyebrow ? (eyebrowTone === 'parent' ? 4 : 2) : 6 }]}>
+      <View style={[styles.titleCol, { gap: eyebrow ? (eyebrowRight ? EYEBROW_RIGHT_GAP : eyebrowTone === 'parent' ? 4 : 2) : 6 }]}>
         {eyebrow ? (
           <View style={styles.eyebrowRow}>
             {eyebrowTone === 'parent' ? (
