@@ -102,7 +102,15 @@ HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-o
   `accountDeletions` keeps what Convex can't delete: `supabaseProfileId`, `recipeIds`, `jobIds` (the GCS recipe
   folders are named after them), `uploadPaths`, `mediaUrls` and `voiceCloneId` (Cartesia), for the purge of
   Supabase rows, GCS media and the voice clone; the purge adds any recipe or job that turned up late;
-  `purgedAt` once Convex is done. The app offers it for
+  `purgedAt` once Convex is done. **The purge outside Convex** (Oct 25, `pipeline/account_purge.py`) is the
+  pipeline worker's, at most every 10 min, after `purgedAt`: GCS for real (her upload folders, her recipe folders
+  in the media bucket with their `trash/` copies, the signer's `jobs/<id>.json`, the objects her `mediaUrls` name,
+  the worker's local copies), then Supabase (her voice notes and photos through the Storage API, then her rows in
+  one SQL statement through the management API: her messages and every message in her 1:1 threads go with those
+  threads, references to them are cleared, her profile and everything keyed to it is deleted or set null, skipped
+  when the profile id isn't a Supabase uuid), then her Cartesia voice clone. Each part is idempotent; a failure is
+  tried again after 10 min, doubling, and given up after 10 (`ACCOUNT PURGE GAVE UP` in the Convex logs; set
+  `externalAttempts` to 0 to retry). `externalPurgedAt` and `externalCounts` once done. The app offers it for
   whoever the phone acts as when `POST /profiles/:id/remove` allows (its own person, or someone with no phone of their
   own: a face picked on a family-code phone), runs `account.deleteMe` with a session as them, then that route; the
   phone signs out when it was its own person, else stays in without them (`session.deleteAccount`).
@@ -116,6 +124,11 @@ HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-o
   and on `/worker/published` (Oct 24): the worker stops there, saves nothing to Convex, deletes that upload's raw
   files and moves media it published a moment before to `trash/` (`pipeline/worker.py` `JobCancelled`).
   `jobs.create` refuses an upload folder another family's job already uses (`jobs.by_uploadPath`).
+- `/worker/deletions/next` `{ exclude?: deletionId[] }` → `204`, or the oldest deleted account to purge outside
+  Convex: `{ deletionId, supabaseProfileId, supabaseFamilyId, requestedAt, recipeIds, jobIds, uploadPaths,
+  mediaUrls, voiceCloneId?, attempts }` (only once its Convex purge is done; `exclude`: ones taken this pass).
+- `/worker/deletions/done` `{ deletionId, ok, error?, counts? }` → `{ status: "done" | "retry" | "gave_up" }`.
+  `counts` is `{ gcsObjects, supabaseRows, … }` (whole numbers).
 - `/worker/published` `{ jobId, recipe, recipeJsonUrl?, memoriesOptIn? }` → `{ recipeId }`.
   - `recipe` is the pipeline's `recipe.json` as is.
   - Convex keeps `title`, `id` (as `libraryId`), `media.poster_url` (https only), each step's
@@ -592,8 +605,40 @@ default 0.85), `GEMINI_TTS_MODEL` / `GEMINI_TTS_VOICE` (optional; the backup voi
 | `MUSE_API_KEY` (Meta Model API) | Worker `.env` and Convex env |
 | `GEMINI_API_KEY` | Worker `.env` and Convex env (translating voice-note answers until `TEXT_PROVIDER=claude`) |
 | `CONVEX_DEPLOY_KEY`, `CONVEX_OVERRIDE_ACCESS_TOKEN` | Root `.env` only |
+| `APPLE_TEAM_ID`, `APPLE_SIGNIN_KEY_ID`, `APPLE_SIGNIN_PRIVATE_KEY` (+ optional `APPLE_CLIENT_ID`) | Convex env only (Sign in with Apple revocation, below) |
+| `SUPABASE_ACCESS_TOKEN` (management API) | Root `.env` only: the worker's account purge runs SQL with it and borrows the service role key from it, in memory |
 
 The app needs only public values: `EXPO_PUBLIC_CONVEX_URL` and the voice service's URL.
+
+### Sign in with Apple revocation
+
+Apple asks apps with Sign in with Apple to revoke it when someone deletes their account (TN3194). In the app,
+"Delete my account" for this phone's own person, on an iPhone that signed them in with Apple, first shows
+Apple's sheet ("Apple will ask you to confirm." in the delete sheet). Its fresh authorization code goes to
+`apple.revoke` (`convex/apple.ts`), which swaps it at Apple for a refresh token and revokes that, then the
+deletion goes on as before. A cancelled sheet, or any Apple error, never blocks the deletion. Supabase's
+`POST /auth/apple` only sees the identity token, so no Apple token is stored anywhere.
+
+Until the key is in Convex env, `apple.revokeReady` is false and the app skips this step. Salik's one-time
+setup (the Apple developer account is his):
+
+1. developer.apple.com → Certificates, IDs & Profiles → Keys → **+**. Name it, tick **Sign in with Apple**,
+   **Configure**, pick the primary App ID `com.salik.homecookd`, save, then **Register**.
+2. **Download** the `.p8` (Apple lets you do this once) and note the Key ID. The Team ID is at the top right of
+   the developer site.
+3. Set it in Convex (team token, not the preview key):
+   ```bash
+   export CONVEX_OVERRIDE_ACCESS_TOKEN=…
+   npx convex env set --deployment grand-dragon-649 APPLE_TEAM_ID <team id>
+   npx convex env set --deployment grand-dragon-649 APPLE_SIGNIN_KEY_ID <key id>
+   npx convex env set --deployment grand-dragon-649 APPLE_SIGNIN_PRIVATE_KEY "$(cat AuthKey_XXXX.p8)"
+   ```
+   `APPLE_CLIENT_ID` defaults to the bundle id `com.salik.homecookd`; set it only if that changes.
+4. Check it: `npx convex run --deployment grand-dragon-649 apple:checkSetup` (same token) should say `ready`
+   (Apple answers a made-up code with `invalid_grant`, which means it took the key). Keep the `.p8` out of the repo.
+
+The phone remembers an Apple sign-in from this build on (`appleSignIn.v1`). Phones that signed in with Apple
+before it don't know, so their deletion skips the revoke; signing out and in with Apple again fixes that.
 
 ## Build order: 2 days, 4 tracks
 
@@ -634,5 +679,6 @@ npx convex deploy --preview-name hackathon -y     # push convex/ (preview deploy
 npx convex run seed:demo            # demo family + 4 recipes (team token + --deployment grand-dragon-649)
 .venv/bin/python pipeline/writer.py # Muse key: one tiny structured call
 .venv/bin/python pipeline/worker.py # the pipeline worker: claims Convex jobs (CONVEX_SITE_URL, WORKER_SECRET)
+.venv/bin/python pipeline/worker.py --purge-dry-run   # what each deleted account's outside purge would delete
 .venv/bin/python pipeline/convex_stub.py --upload <uploadPath> --port 8797   # fake /worker/* routes for a local run
 ```

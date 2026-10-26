@@ -206,7 +206,9 @@ voice/deploy.sh                                                    # Cloud Run h
 .venv/bin/python pipeline/test_transcribe.py                        # Cartesia's word-timed transcript: loops, keys, cache (fakes)
 .venv/bin/python pipeline/transcribe.py --id <id> [--language mr]   # work/transcript.json from voice.m4a (real Cartesia)
 .venv/bin/python pipeline/scrub_family.py                          # dry run: old family recipe.json files to strip (--write: Caleb's OK)
+.venv/bin/python pipeline/test_account_purge.py                      # a deleted account's purge outside Convex (fakes)
 .venv/bin/python pipeline/worker.py [--once]                        # claim Convex jobs (--gcs: the old GCS job files)
+.venv/bin/python pipeline/worker.py --purge-dry-run                 # what each deleted account's purge would delete
 .venv/bin/python pipeline/process.py --id <id> --rewrite            # re-write recipe.json from the cached extraction
 
 # glasses VM (glasses/README.md; uses .venv + ffmpeg)

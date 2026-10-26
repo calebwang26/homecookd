@@ -22,6 +22,8 @@
 //   useGlassesVideos()                                   glasses.videos, live (the laptop's saved full videos)
 //   useMe()  /  await setLanguage('mr')                  people.me (live) / people.setLanguage
 //   await deleteMyAccount(profileId)                     account.deleteMe: "Delete my account" (session.deleteAccount)
+//   await appleRevokeReady(profileId)                    apple.revokeReady: Convex can revoke a Sign in with Apple
+//   await revokeAppleSignIn(profileId, code)             apple.revoke, before deleteMyAccount (never throws)
 //   await convexPersonIdByName('Shreya')                 a family member's Convex id, from rows that name them
 //   await convexKidIds([leo, zoe])                       their Convex ids (people.family), for forKidIds
 //   await libraryIdOf(recipeId)                          a Convex recipe's library id (recipes.list)
@@ -509,6 +511,35 @@ export async function deleteMyAccount(profileId: string): Promise<'deleted' | 's
   }
   sessions.delete(`${deviceKey}:${profileId}`);
   return 'deleted';
+}
+
+/** Whether Convex has the Sign in with Apple key yet (apple.revokeReady). False on the stub or any trouble. */
+export async function appleRevokeReady(profileId: string): Promise<boolean> {
+  if (stubbed) return false;
+  try {
+    const sessionToken = await convexSession(profileId);
+    if (!sessionToken) return false;
+    return (await call<boolean>('query', 'apple:revokeReady', { sessionToken }, () => false, { soft: true })) === true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * apple.revoke with the code from Apple's sheet: true when Apple revoked this Sign in with Apple. Never
+ * throws: "Delete my account" goes on either way. Called before deleteMyAccount, which ends the session.
+ */
+export async function revokeAppleSignIn(profileId: string, authorizationCode: string): Promise<boolean> {
+  if (stubbed) return false;
+  try {
+    const sessionToken = await convexSession(profileId);
+    if (!sessionToken) return false;
+    const res = await call('action', 'apple:revoke', { sessionToken, authorizationCode }, () => ({ revoked: false }), { soft: true });
+    return res.revoked === true;
+  } catch (e) {
+    console.warn('[convex] apple.revoke failed', String(e).slice(0, 160));
+    return false;
+  }
 }
 
 /**

@@ -292,6 +292,88 @@ export const synced = internalMutation({
   },
 });
 
+// ---- Account deletions: what Convex can't delete itself (account.ts), purged by the worker ----
+
+export const MAX_PURGE_ATTEMPTS = 10;
+const PURGE_RETRY_MS = 10 * 60_000; // after a failure; doubles each time, up to a day (~3 days for all 10)
+const purgeWait = (attempts: number) => Math.min(PURGE_RETRY_MS * 2 ** Math.max(0, attempts - 1), 24 * 3_600_000);
+
+/** The oldest deletion whose Convex purge has finished (so its lists are complete) and whose outside purge
+ *  hasn't: not one given up on, nor one that failed too recently, nor one in `exclude` (seen this pass). */
+export const nextDeletion = internalQuery({
+  args: { now: v.number(), exclude: v.array(v.string()) },
+  returns: v.union(
+    v.null(),
+    v.object({
+      deletionId: v.id("accountDeletions"),
+      supabaseProfileId: v.string(),
+      supabaseFamilyId: v.string(),
+      requestedAt: v.number(),
+      recipeIds: v.array(v.id("recipes")),
+      jobIds: v.array(v.id("jobs")),
+      uploadPaths: v.array(v.string()),
+      mediaUrls: v.array(v.string()),
+      voiceCloneId: v.optional(v.string()),
+      attempts: v.number(),
+    }),
+  ),
+  handler: async (ctx, { now, exclude }) => {
+    const open = await ctx.db
+      .query("accountDeletions")
+      .withIndex("by_externalPurgedAt", (q) => q.eq("externalPurgedAt", undefined))
+      .take(200);
+    const d = open.find((d) => {
+      const attempts = d.externalAttempts ?? 0;
+      if (d.purgedAt === undefined || attempts >= MAX_PURGE_ATTEMPTS || exclude.includes(d._id)) return false;
+      return d.externalTriedAt === undefined || now - d.externalTriedAt >= purgeWait(attempts);
+    });
+    if (!d) return null;
+    const family = await ctx.db.get("families", d.familyId);
+    return {
+      deletionId: d._id,
+      supabaseProfileId: d.supabaseProfileId,
+      supabaseFamilyId: family?.supabaseFamilyId ?? "",
+      requestedAt: d.requestedAt,
+      recipeIds: d.recipeIds,
+      jobIds: d.jobIds,
+      uploadPaths: d.uploadPaths,
+      mediaUrls: d.mediaUrls,
+      voiceCloneId: d.voiceCloneId,
+      attempts: d.externalAttempts ?? 0,
+    };
+  },
+});
+
+/** The worker's report on one deletion: done (a repeat changes nothing), or a failure to try again later. */
+export const deletionDone = internalMutation({
+  args: {
+    deletionId: v.id("accountDeletions"),
+    ok: v.boolean(),
+    error: v.optional(v.string()),
+    counts: v.optional(v.record(v.string(), v.number())),
+  },
+  returns: v.union(v.literal("done"), v.literal("retry"), v.literal("gave_up"), v.literal("missing")),
+  handler: async (ctx, { deletionId, ok, error, counts }) => {
+    const d = await ctx.db.get("accountDeletions", deletionId);
+    if (!d) return "missing";
+    if (d.externalPurgedAt !== undefined) return "done";
+    const now = Date.now();
+    if (ok) {
+      await ctx.db.patch("accountDeletions", deletionId, { externalPurgedAt: now, externalTriedAt: now, externalError: undefined, externalCounts: counts });
+      return "done";
+    }
+    const attempts = (d.externalAttempts ?? 0) + 1;
+    const why = (error || "failed").slice(0, 500);
+    await ctx.db.patch("accountDeletions", deletionId, { externalAttempts: attempts, externalTriedAt: now, externalError: why });
+    if (attempts < MAX_PURGE_ATTEMPTS) return "retry";
+    console.error(
+      `ACCOUNT PURGE GAVE UP: deletion ${deletionId} failed outside Convex ${attempts} times (last: ${why}). ` +
+        "Her Supabase rows, GCS media or voice clone may still exist. Fix the cause, then set externalAttempts to 0 to try again.",
+    );
+    return "gave_up";
+  },
+});
+
 /** Re-syncs every family with a recipe Moss doesn't have yet (after a Moss outage):
  *    npx convex run worker:reindexMissing */
 export const reindexMissing = internalMutation({

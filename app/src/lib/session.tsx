@@ -105,6 +105,8 @@ const KEY_VIA = 'deviceVia';
 const KEY_ME = 'me';
 /** Who was picked on this phone last ({ familyId, id }): the default person on a shared phone. */
 const KEY_LAST = 'lastPerson';
+/** The profile id this phone signed in with Apple, so deleting that account can revoke it (auth/apple asksApple). */
+const KEY_APPLE = 'appleSignIn.v1';
 type LastPerson = { familyId: string; id: string };
 const UNREAD_POLL_MS = 15_000;
 /** Back from the background after this long = pick who's cooking again (short switches stay put). */
@@ -188,6 +190,11 @@ export type Session = {
   isLearner: boolean;
   /** Who signed in on this phone (Apple, Google or an invite); null on a family-code phone. */
   deviceProfileId: string | null;
+  /**
+   * Who signed in with Apple on this phone (from Oct 25; older sign-ins don't say), for "Delete my
+   * account" to revoke it (auth/apple asksApple). null after any other way in, and after sign-out.
+   */
+  appleProfileId: string | null;
   /**
    * This phone's own person (its `deviceProfileId`, still in the family): the app opens straight to
    * them. null on a shared family-code phone or before the phone has said who it is.
@@ -393,6 +400,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const [error, setError] = useState<string | null>(null);
   /** This phone signed in as a person (Apple, Google, an invite), not with a shared family code. */
   const [personal, setPersonal] = useState(false);
+  const [appleProfileId, setAppleProfileId] = useState<string | null>(null);
   const asParam = useRef<string | null>(webAsParam());
   const credRef = useRef<Cred>(NO_CRED);
   const dataRef = useRef<CachedFamily | null>(null);
@@ -424,6 +432,11 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const setVia = useCallback((via: Via | null) => {
     setPersonal(via === 'person');
     void kvSet(KEY_VIA, via);
+  }, []);
+
+  const rememberApple = useCallback((profileId: string | null) => {
+    setAppleProfileId(profileId);
+    void kvSet(KEY_APPLE, profileId);
   }, []);
 
   const applyFamily = useCallback((fam: CachedFamily) => {
@@ -512,8 +525,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setLast(null);
     void kvSet(KEY_LAST, null);
     setVia(null);
+    rememberApple(null);
     await Promise.all([secretSet(KEY_DEVICE, null), secretSet(KEY_CODE, null), kvSet(KEY_FAMILY, null)]);
-  }, [setCredential, setVia]);
+  }, [setCredential, setVia, rememberApple]);
 
   // Boot: storage first (instant), then the network.
   useEffect(() => {
@@ -525,14 +539,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       return;
     }
     const boot = async (): Promise<boolean> => {
-      const [savedKey, savedCode, cached, via] = await Promise.all([
+      const [savedKey, savedCode, cached, via, appleId] = await Promise.all([
         readSavedKey(),
         secretGet(KEY_CODE),
         kvGetJson<CachedFamily>(KEY_FAMILY),
         kvGet(KEY_VIA),
+        kvGet(KEY_APPLE),
       ]);
       if (!alive) return false;
       void kvSet(KEY_ME, null);
+      setAppleProfileId(appleId || null);
       // The keychain can't answer yet: never "signed out". The last family shows; the key is read again soon.
       keyUnread.current = savedKey === undefined;
       if (savedKey === undefined) {
@@ -699,6 +715,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setApiTimeZone(deviceTimeZone());
       setCredential({ deviceKey, code: null });
       setVia(via);
+      rememberApple(null); // enter() says so again for an Apple sign-in
       // The key this one replaces (another family, or this one again) should stop working too.
       if (old && old !== deviceKey) void api.revokeDevice({ deviceKey: old }).catch(() => {});
       setApiAuth({ profileId: null });
@@ -719,17 +736,21 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setStatus('loading');
       return load({ deviceKey, code: null });
     },
-    [applyFamily, load, setCredential, setVia],
+    [applyFamily, load, setCredential, setVia, rememberApple],
   );
 
   /** In with a new key from Apple or Google. */
   const enter = useCallback(
-    async (res: Extract<ProviderAuth, { needs_name: false }>): Promise<Extract<SignInResult, { status: 'signed-in' }> | { status: 'error'; error: string }> => {
+    async (
+      provider: Provider,
+      res: Extract<ProviderAuth, { needs_name: false }>,
+    ): Promise<Extract<SignInResult, { status: 'signed-in' }> | { status: 'error'; error: string }> => {
       if (!res.device_key) return { status: 'error', error: 'Something went wrong on our side. Try again.' };
       await adopt(res.device_key, 'person');
+      if (provider === 'apple') rememberApple(res.profile_id);
       return { status: 'signed-in', familyName: res.family_name, profileId: res.profile_id, existing: res.existing, joined: res.joined };
     },
-    [adopt],
+    [adopt, rememberApple],
   );
 
   const providerSignIn = useCallback(
@@ -751,7 +772,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             const suggestedName = (got.name || res.suggested_name || '').trim().slice(0, MAX_NAME);
             return { status: 'needs-name', suggestedName, needsRole: !shareToken };
           }
-          return await enter(res);
+          return await enter(provider, res);
         } catch (e) {
           return { status: 'error', error: errorMessage(e) };
         }
@@ -779,7 +800,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             device_label: deviceLabel(),
           });
           if (res.needs_name) return { status: 'error', error: 'Type your name first.' };
-          return await enter(res);
+          return await enter(p.provider, res);
         } catch (e) {
           // A refused token (Apple's last 10 minutes) can't be fixed by typing: start over.
           if (e instanceof ApiError && e.status === 401) {
@@ -976,6 +997,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       isCook: me?.role === 'cook',
       isLearner: me?.role === 'learner',
       deviceProfileId: ownerId,
+      appleProfileId,
       owner,
       defaultPerson,
       deviceNeedsProfile: !!data?.deviceNeedsProfile,
@@ -1005,6 +1027,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     profiles,
     me,
     ownerId,
+    appleProfileId,
     owner,
     defaultPerson,
     error,
@@ -1048,6 +1071,7 @@ const fallbackSession: Session = {
   isCook: false,
   isLearner: false,
   deviceProfileId: null,
+  appleProfileId: null,
   owner: null,
   defaultPerson: null,
   deviceNeedsProfile: false,

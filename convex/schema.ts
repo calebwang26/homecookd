@@ -70,7 +70,8 @@ export default defineSchema({
   /**
    * One per deleted account (account.deleteMe). Convex rows are purged right away (`purgedAt` once the
    * last batch ran); the rest is for a later purge outside Convex: their Supabase rows and their media
-   * in GCS (the privacy policy promises it within 30 days).
+   * in GCS (the privacy policy promises it within 30 days). The pipeline worker does that one
+   * (pipeline/account_purge.py, through /worker/deletions/*): `externalPurgedAt` once it's done.
    */
   accountDeletions: defineTable({
     familyId: v.id("families"),
@@ -85,7 +86,14 @@ export default defineSchema({
     purgedAt: v.optional(v.number()),
     purgeRunAt: v.optional(v.number()), // the last purge batch; the restart cron goes by it
     purgeRestarts: v.optional(v.number()),
-  }).index("by_purgedAt", ["purgedAt"]),
+    externalPurgedAt: v.optional(v.number()),
+    externalAttempts: v.optional(v.number()), // failed tries; the worker stops at worker.MAX_PURGE_ATTEMPTS
+    externalTriedAt: v.optional(v.number()),
+    externalError: v.optional(v.string()), // the last failure, short and without secrets
+    externalCounts: v.optional(v.record(v.string(), v.number())), // what the worker deleted, per kind
+  })
+    .index("by_purgedAt", ["purgedAt"])
+    .index("by_externalPurgedAt", ["externalPurgedAt"]),
 
   /** A dish being processed or ready to cook. Its recipe.json is in GCS (recipeJsonUrl), without the memories (older files still have them). */
   recipes: defineTable({

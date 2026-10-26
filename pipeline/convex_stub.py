@@ -53,6 +53,8 @@ def serve(uploads: list[str], cook: str, port: int, language: str = "en") -> Non
                 job.update(stage="preparing", claimedAt=time.monotonic())
                 print(f"[stub] claimed {job['jobId']} ({job['uploadPath']})", flush=True)
                 return self.send(200, {k: v for k, v in job.items() if k not in ("stage", "claimedAt")})
+            if self.path == "/worker/deletions/next":  # no deleted accounts to purge here
+                return self.send(204)
             job = by_id.get(body.get("jobId"))
             if job is None:
                 return self.send(404, {"error": "no such job"})
