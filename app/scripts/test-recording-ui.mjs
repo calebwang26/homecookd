@@ -482,6 +482,23 @@ test('walkie: a share ask takes a short yes or no; a cooking question still need
   assert.equal(run(quiet(20_000), 100, 'share').v, 'no_answer');
 });
 
+test('homie’s follow-up (kind followUp): a short yes or no is enough; homie asks, and her answer is saved, not sent', () => {
+  const yes = [...quiet(1000), ...loud(400), ...quiet(3000)];
+  assert.equal(run(yes, 100, 'followUp').v, 'send');
+  assert.equal(K.startListening(0, 'followUp').minSpeechMs, K.MIN_YES_NO_MS);
+  assert.deepEqual(ren.line('homieAsks'), { text: 'homie has a question about your dish', en: null });
+  assert.deepEqual(ren.line('homieThanks'), { text: 'Thank you! homie saved your answer', en: null });
+  assert.deepEqual(rhi.line('homieThanks'), { text: 'धन्यवाद! homie ने आपका जवाब सहेज लिया', en: 'Thank you! homie saved your answer' });
+  // The answer screen and Home's question row use them for a followUp, never "homie asked" / "Sent to homie".
+  const answer = readFileSync(join(root, 'src/app/answer/[id].tsx'), 'utf8');
+  assert.match(answer, /const fromHomie = q\?\.kind === 'followUp'/);
+  assert.match(answer, /fromHomie \? w\.text\('homieAsks'\)/);
+  assert.match(answer, /fromHomie \? w\.text\('homieThanks'\)/);
+  assert.match(answer, /fromHomie \? w\.line\('homieThanks'\)/);
+  const rows = readFileSync(join(root, 'src/components/parent/LiveQuestions.tsx'), 'utf8');
+  assert.match(rows, /q\.kind === 'followUp'\) return dish \? t\('parent\.questions\.homieDish', \{ dish \}\) : t\('parent\.questions\.homieAsks'\)/);
+});
+
 test('a question reads in her language first, the kid’s English small (marked translated)', () => {
   assert.deepEqual(K.questionLines({ text: 'How much ginger?', textForCook: 'आलं किती?' }), { main: 'आलं किती?', en: 'How much ginger?' });
   assert.deepEqual(K.questionLines({ text: 'How much ginger?' }), { main: 'How much ginger?', en: null });

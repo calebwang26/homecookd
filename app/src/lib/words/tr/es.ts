@@ -344,6 +344,8 @@ const words: Translation = {
   'parent.questions.labelTranslated': '{who}: {question}. Traducido de: {english}',
   'parent.questions.hint': 'Abre la pregunta. homie se la lee y usted responde en voz alta.',
   'parent.questions.translated': 'Traducido · “{text}”',
+  'parent.questions.homieDish': 'homie pregunta sobre su {dish}',
+  'parent.questions.homieAsks': 'homie tiene una pregunta',
   'parent.ask.answer': 'Responder',
   'parent.ask.askedYou': '{name} le preguntó',
   'parent.ask.chatHint': 'Abre su conversación con {name}',

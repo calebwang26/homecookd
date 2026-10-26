@@ -60,6 +60,8 @@ const stubs = {
 registerHooks({
   resolve(spec, ctx, next) {
     if (stubs[spec]) return { url: stubs[spec], shortCircuit: true };
+    // '@/lib/format' and the like (components/recipe/text.ts): src/<path>.ts.
+    if (spec.startsWith('@/') && existsSync(join(root, 'src', `${spec.slice(2)}.ts`))) return next(pathToFileURL(join(root, 'src', `${spec.slice(2)}.ts`)).href, ctx);
     if (spec.startsWith('.') && !/\.[a-z]+$/.test(spec) && ctx.parentURL) {
       const p = join(dirname(fileURLToPath(ctx.parentURL)), `${spec}.ts`);
       if (existsSync(p)) return next(pathToFileURL(p).href, ctx);
@@ -68,6 +70,7 @@ registerHooks({
   },
 });
 const F = await import(pathToFileURL(join(root, 'src/lib/familyLibrary.ts')).href);
+const X = await import(pathToFileURL(join(root, 'src/components/recipe/text.ts')).href);
 const R = await import(pathToFileURL(join(root, 'src/lib/recipes.ts')).href);
 
 let passed = 0;
@@ -705,6 +708,52 @@ await test('store: while the rows are on their way the dish has none; they come 
     globalThis.__session = null;
     R.showFamilyRecipes(null, null);
   }
+});
+
+// ---------------------------------------------------------------------------------------------
+// 5. What the cook confirmed after the video (homie's follow-up questions, recipes.addedIngredients)
+
+const CUMIN = { name: 'cumin seeds', said: 'a handful, at the start', step: 2, questionId: 'q1' };
+
+await test('withAdded: her confirmed ingredients at the end of the list, once, with her words; nothing new: the same object', () => {
+  const dal = R.normalizeRecipe(fullRecipe('dal'));
+  const shown = F.withAdded(dal, [CUMIN, { name: 'Toor dal (yellow)', said: 'yes' }, { name: ' ' }, { ...CUMIN, said: 'again' }]);
+  assert.deepEqual(shown.ingredients.map((i) => i.name), ['toor dal', 'cumin seeds'], 'a name the list has, a blank one and a repeat are not added');
+  assert.deepEqual(shown.ingredients[1].confirmed, { said: 'a handful, at the start', step: 2 });
+  assert.equal(dal.ingredients.length, 1, 'a copy: the recipe it was given is untouched');
+  assert.equal(F.withAdded(shown, [CUMIN]), shown, 'already there: the same object');
+  assert.equal(F.withAdded(dal, []), dal);
+  assert.equal(F.withAdded(dal, [{ name: 'ghee' }]).ingredients[1].confirmed.said, null, 'no words: no note');
+});
+
+await test('ingredient lines: a confirmed one reads its name with her words after it', () => {
+  const lines = X.ingredientLines(F.withAdded(R.normalizeRecipe(fullRecipe('dal')), [CUMIN]).ingredients);
+  assert.deepEqual(lines[1], { amount: null, name: 'Cumin seeds', note: 'a handful, at the start' });
+  assert.equal(X.spokenIngredient(lines[1]), 'Cumin seeds, a handful, at the start');
+  assert.equal(lines[0].amount, '~1 cup', 'the others are as before');
+});
+
+await test('sharedAdded: by library id; unchanged ones keep their array, and nothing new keeps the map', () => {
+  const first = F.sharedAdded([row('a', { addedIngredients: [CUMIN] }), row('b'), row('p', { status: 'processing', addedIngredients: [CUMIN] })]);
+  assert.deepEqual([...first.keys()], ['a']);
+  assert.equal(F.sharedAdded([row('a', { addedIngredients: [{ ...CUMIN }] })], first), first);
+  assert.notEqual(F.sharedAdded([row('a', { addedIngredients: [{ ...CUMIN, said: 'two pinches' }] })], first).get('a'), first.get('a'));
+});
+
+await test('store: her yes shows up in the ingredient list for everyone, stories kept or not; the rows again change nothing', async () => {
+  R.showFamilyRecipes('family-F:leo', [row('jeera-dal')], PEOPLE);
+  await withBucket(() => publicRecipe('jeera-dal'), async () => assert.deepEqual((await R.fetchRecipe('jeera-dal')).recipe.ingredients.map((i) => i.name), ['toor dal']));
+  R.showFamilyRecipes('family-F:leo', [row('jeera-dal', { addedIngredients: [CUMIN] })], PEOPLE);
+  assert.equal(R.getCachedRecipe('jeera-dal'), undefined, 'loads again');
+  await withBucket(() => publicRecipe('jeera-dal'), async () => {
+    const shown = (await R.fetchRecipe('jeera-dal')).recipe;
+    assert.deepEqual(shown.ingredients.map((i) => i.name), ['toor dal', 'cumin seeds']);
+    assertWithheld({ ...shown, ingredients: shown.ingredients.slice(0, 1) }); // Leo still doesn't get the stories she kept
+  });
+  const cached = R.getCachedRecipe('jeera-dal');
+  R.showFamilyRecipes('family-F:leo', [row('jeera-dal', { addedIngredients: [{ ...CUMIN }] })], PEOPLE);
+  assert.equal(R.getCachedRecipe('jeera-dal'), cached);
+  R.showFamilyRecipes(null, null);
 });
 
 console.log(`\n${passed} passed`);

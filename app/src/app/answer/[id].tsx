@@ -1,21 +1,24 @@
 // The walkie-talkie v2 (/answer/<questionId>, from a Parent Home question row): the cook answers a
 // kid's question out loud, with no buttons. The peach wash of the recording screen, a small cream ×
-// top-left, and one centred column (components/record/RecordWash COLUMN): "Shreya ने विचारलं", the
+// top-left, and one centred column (components/record/RecordWash COLUMN): "Shreya ने पूछा", the
 // question big in her language (questions.textForCook, else what homie said when it translated it),
 // the kid's English small under it marked "Translated", then homie big (HomiePot is its only glow: the
 // ring while it listens, a plain white circle once it can't hear her), then five green listening bars
-// that move with her voice and "बोला, मी ऐकतोय" / "Just answer out loud". homie reads the question when
+// that move with her voice and "बोलिए, मैं सुन रही हूँ" / "Just answer out loud". homie reads the question when
 // it opens (lib/live/speak, labelled "AI voice"; a translated question in her language even before
-// people.me has loaded); then it listens, sends her voice note when she stops, and says "Shreya ला
-// पाठवलं" while a check pops in, before the screen closes by itself (components/record/useWalkie). A
+// people.me has loaded); then it listens, sends her voice note when she stops, and says "Shreya को
+// भेजा गया" while a check pops in, before the screen closes by itself (components/record/useWalkie). A
 // tap on the question reads it again. The corner pot is hidden here: the big one is homie.
 // Her voice goes to the AI companies, so nothing starts without this phone's yes (lib/aiConsent): the
 // row that opens this asks first, and a push or link that lands here asks too ("Not now": back).
 // A share ask (questions.kind 'share': someone wants her dish on the Community map) comes the same
-// way: "Shreya ने विचारलं", the ask in her language, and her spoken yes or no (a short word is enough)
+// way: "Shreya ने पूछा", the ask in her language, and her spoken yes or no (a short word is enough)
 // goes as the voice note; the server reads it, and only a clear yes shares the dish.
-// Dev aid (web screenshots only): /answer/preview?lang=hi[&step=listening|sending|sent][&kind=share]
-// shows a made-up question from Shreya, standing still.
+// homie's own follow-up question (kind 'followUp', convex/followUps.ts: "Did you add cumin?") reads "homie
+// has a question about your dish" over it, takes a short yes or no too, and ends "Thank you! homie saved
+// your answer": nothing goes to a kid, and her yes to an ingredient adds it to the recipe.
+// Dev aid (web screenshots only): /answer/preview?lang=hi[&step=listening|sending|sent][&kind=share|followUp]
+// shows a made-up question, standing still.
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
@@ -73,7 +76,19 @@ function goBack() {
   else router.replace('/parent/home');
 }
 
+// convex/followUps.ts's kind of question, and a draft of its Hindi.
+const PREVIEW_FOLLOW_UP: CookQuestion = {
+  ...PREVIEW,
+  stepOrder: undefined,
+  kind: 'followUp',
+  askedByName: 'homie',
+  followUp: { id: 'preview', ingredient: 'cumin seeds' },
+  text: 'Did you add cumin seeds? The video showed them, but nobody said.',
+  textForCook: 'क्या आपने जीरा डाला था? वीडियो में दिखा, पर किसी ने बताया नहीं।',
+};
+
 function previewQuestion(lang?: string, kind?: string): CookQuestion {
+  if (kind === 'followUp') return lang === 'hi' ? PREVIEW_FOLLOW_UP : { ...PREVIEW_FOLLOW_UP, textForCook: undefined };
   if (kind === 'share') return lang === 'hi' ? PREVIEW_SHARE : { ...PREVIEW_SHARE, textForCook: undefined };
   return lang === 'hi' ? PREVIEW : PREVIEW_EN;
 }
@@ -118,6 +133,8 @@ export default function AnswerScreen() {
   const lang = activeLanguage((preview && previewLang) || convexMe?.language) ?? 'en';
   const w = useMemo(() => recordWords(lang), [lang]);
   const kid = q?.askedByName?.trim() || null;
+  // homie's own follow-up question about her dish: homie asks, and her answer is saved, not sent to a kid.
+  const fromHomie = q?.kind === 'followUp';
 
   const h = useHomie();
   const now = useNowPlaying();
@@ -159,15 +176,15 @@ export default function AnswerScreen() {
     read,
     send: (note) => answerQuestion(q!._id, { audioUri: note.uri, contentType: note.contentType }),
     // Her own words, said directly: no translating round trip that could arrive after the screen closed.
-    thank: () => void speak(w.text('sentTo', { kid: kid ?? undefined }), { lang, profileId: me?.id }),
+    thank: () => void speak(fromHomie ? w.text('homieThanks') : w.text('sentTo', { kid: kid ?? undefined }), { lang, profileId: me?.id }),
     close,
   });
   const step: WalkieStep = preview && STEPS.includes(previewStep as WalkieStep) ? (previewStep as WalkieStep) : preview ? 'listening' : walkie.step;
 
   const lines = q ? questionLines(q, spoken) : null;
   const fit = questionFit(lines?.main ?? '');
-  const asked = w.text('kidAsked', { kid: kid ?? undefined });
-  const label = labelFor(step, w, kid);
+  const asked = fromHomie ? w.text('homieAsks') : w.text('kidAsked', { kid: kid ?? undefined });
+  const label = labelFor(step, w, kid, fromHomie);
   const homieState = talking ? voice : step === 'sending' ? 'thinking' : step === 'listening' ? 'listening' : 'off';
   const enter = (i: number) => (reduce ? FadeIn.duration(motion.reducedFadeMs) : FadeInDown.duration(380).delay(i * 60));
   // The column clears the × (a long question would otherwise reach it) and scrolls if it must. The
@@ -238,12 +255,12 @@ function SentCheck() {
 }
 
 /** The line under homie for each step. */
-function labelFor(step: WalkieStep, w: RecordWords, kid: string | null): Line {
+function labelFor(step: WalkieStep, w: RecordWords, kid: string | null, fromHomie = false): Line {
   switch (step) {
     case 'sending':
       return w.line('sendingNow');
     case 'sent':
-      return w.line('sentTo', { kid: kid ?? undefined });
+      return fromHomie ? w.line('homieThanks') : w.line('sentTo', { kid: kid ?? undefined });
     case 'retry':
       return w.line('couldntSend');
     case 'nomic':
