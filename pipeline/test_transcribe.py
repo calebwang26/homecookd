@@ -321,7 +321,8 @@ def test_the_proofread_copy_is_made_only_with_the_flag_and_for_the_languages_it_
              "words": [{"word": "मिर", "start": 0.2, "end": 0.6}, {"word": "टाकला", "start": 0.7, "end": 1.1}]}
     spanish = {**hindi, "words": [{"word": "sal", "start": 0.2, "end": 0.6}]}
     for flag, said, lang, made in ((None, hindi, "hi", False), ("claude", ENGLISH, "en", False),
-                                   ("claude", spanish, "es", False), ("claude", hindi, "hi", True)):
+                                   ("claude", spanish, "es", False), ("claude", hindi, "hi", True),
+                                   ("claude", hindi, "mr", True)):  # Marathi: hidden, but a cook may still have it
         fake = FakeAnthropic({"lines": [{"id": 0, "text": "मीठ टाकला"}]})
         with tempfile.TemporaryDirectory() as tmp, env(CARTESIA_API_KEY="k1", ANTHROPIC_API_KEY="fake",
                                                        TRANSCRIPT_PROOFREAD=flag, CLAUDE_PROOFREAD_MODEL=None), \

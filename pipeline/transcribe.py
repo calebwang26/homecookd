@@ -87,7 +87,9 @@ PROOFREAD_LINE_S = 30.0  # lines end only at pauses up to this long, so a word i
 PROOFREAD_MODEL = "claude-opus-5-5"
 # Proofread only where it helps (the 13-language eval, Oct 26: heard words te 0.35 -> 0.79, ta 0.29 -> 0.36, pa 0.17 ->
 # 0.26, gu 0.17 -> 0.26, hi even; but zh, es, tl, ur and ar each lost 2-4 points, Cartesia already hears them well).
-PROOFREAD_LANGUAGES = ("hi", "gu", "ta", "te", "pa")
+# Marathi too: it's hidden from the picker (memory marathi-dropped), but a cook who picked it before still records as
+# "mr", and Poha (Marathi) is where the proofread was tuned (2 of 7 facts heard right without it, 7 of 7 with).
+PROOFREAD_LANGUAGES = ("hi", "gu", "ta", "te", "pa", "mr")
 LANGUAGE_MODEL = "claude-sonnet-5-5"  # reads 13 garbled samples side by side: rare (only a doubtful English tag)
 
 
