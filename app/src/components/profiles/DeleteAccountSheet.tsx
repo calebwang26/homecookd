@@ -6,17 +6,21 @@
 // (Convex's account.deleteMe, then POST /profiles/:id/remove); once both are done `onDeleted` closes the
 // sheet and either signs this phone out or lets go of that person here. A step that fails shows its
 // sentence under the buttons, and nothing says it worked.
+// Their own account, signed in with Apple on this phone (auth/apple asksApple): the sheet adds "Apple
+// will ask you to confirm.", and confirming first shows Apple's sheet so Convex can revoke the Sign in
+// with Apple (apple.revoke). Cancelled or failed, the deletion still goes on.
 //
 //   <DeleteAccountSheet visible person={leo} own={false} onClose={...} onDeleted={(who, signedOut) => ...} />
 //
 // It starts fresh on every open.
 import { useEffect, useRef, useState } from 'react';
-import { StyleSheet, View } from 'react-native';
+import { Platform, StyleSheet, View } from 'react-native';
 
 import { ErrorLine } from '@/components/signin/SignInScreen';
 import { ActionButton, type ActionState, BottomSheet, Txt } from '@/components/ui';
 import type { Profile } from '@/lib/api';
-import { deleteMyAccount } from '@/lib/live/convex';
+import { appleAccountHere, asksApple, confirmToRevoke } from '@/lib/auth/apple';
+import { appleRevokeReady, deleteMyAccount, revokeAppleSignIn } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
 import { colors, motion } from '@/theme/tokens';
 
@@ -50,7 +54,7 @@ export function deleteAccountWords(name: string, own: boolean) {
 }
 
 function Sheet({ visible, person, own, onClose, onDeleted }: DeleteAccountSheetProps) {
-  const { deleteAccount } = useSession();
+  const { deleteAccount, appleProfileId } = useSession();
   const [btn, setBtn] = useState<ActionState>('idle');
   const [error, setError] = useState<string | null>(null);
   const alive = useRef(true);
@@ -60,6 +64,16 @@ function Sheet({ visible, person, own, onClose, onDeleted }: DeleteAccountSheetP
     },
     [],
   );
+  const apple = { own, os: Platform.OS, appleProfileId, personId: person?.id };
+  const appleHere = appleAccountHere(apple);
+  // Asked once per open, only for an account signed in with Apple here: can Convex revoke it yet?
+  const appleReady = useRef<Promise<boolean>>(Promise.resolve(false));
+  const [ready, setReady] = useState(false);
+  useEffect(() => {
+    if (!visible || !appleHere || !person) return;
+    appleReady.current = appleRevokeReady(person.id);
+    void appleReady.current.then((r) => alive.current && setReady(r));
+  }, [visible, appleHere, person]);
   useEffect(() => {
     if (btn !== 'error') return;
     const t = setTimeout(() => setBtn((b) => (b === 'error' ? 'idle' : b)), 1800);
@@ -76,6 +90,10 @@ function Sheet({ visible, person, own, onClose, onDeleted }: DeleteAccountSheetP
     setError(null);
     setBtn('loading');
     const started = Date.now();
+    if (asksApple({ ...apple, ready: await appleReady.current })) {
+      const code = await confirmToRevoke();
+      if (code) await revokeAppleSignIn(person.id, code);
+    }
     const res = await deleteAccount(person, deleteMyAccount);
     const wait = motion.loadingMinMs - (Date.now() - started);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
@@ -130,6 +148,11 @@ function Sheet({ visible, person, own, onClose, onDeleted }: DeleteAccountSheetP
         <Txt variant="body" size={16} align="center" color={colors.muted}>
           This can’t be undone.
         </Txt>
+        {asksApple({ ...apple, ready }) ? (
+          <Txt variant="body" size={16} align="center" color={colors.muted}>
+            Apple will ask you to confirm.
+          </Txt>
+        ) : null}
       </View>
     </BottomSheet>
   );
