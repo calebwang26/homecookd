@@ -45,7 +45,7 @@ const test = async (name, fn) => {
     throw e;
   }
 };
-const SAVED = 'homecookd.aiConsent.v1';
+const SAVED = 'homecookd.aiConsent.v2';
 const settle = () => new Promise((r) => setTimeout(r, 0));
 /** The sheet is up (what AiConsentHost shows). */
 const asking = () => C.useAiConsentAsking();
@@ -57,8 +57,8 @@ const peek = async (p) => {
   return out;
 };
 
-await test('the key is versioned: aiConsent.v1 (people who said yes on "Before we start" are not asked again)', () => {
-  assert.equal(C.AI_CONSENT_KEY, 'aiConsent.v1');
+await test('the key is versioned: aiConsent.v2 (Claude took over the recipe, so a yes to the old list asks again)', () => {
+  assert.equal(C.AI_CONSENT_KEY, 'aiConsent.v2');
 });
 
 await test('nothing saved: loading while it reads, then needed, and no sheet until something asks', async () => {
