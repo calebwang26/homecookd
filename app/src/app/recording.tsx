@@ -21,8 +21,9 @@
 //                      while paused, after "I'm done", and while filming, where the flip ends the file,
 //                      switches the camera and starts the next file on it (a gap of about a second that
 //                      homie is told about; the mic is never touched while a file is written). It hides
-//                      under homie's questions. The front camera's preview is a mirror, its video is
-//                      not (words on a packet read the right way). A camera that stops by itself (a
+//                      under homie's questions. The front camera's preview, video and plate photo are
+//                      mirrored, like a selfie (CameraCard: VisionCamera's default; `false` stored them
+//                      upside down). A camera that stops by itself (a
 //                      flip that never comes up, a file that fails) never leaves the clock ticking:
 //                      filming pauses with "The camera stopped. Your video so far is saved." and the
 //                      button films again (components/record/filming.ts). Leaving the app (a
