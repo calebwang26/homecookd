@@ -20,6 +20,8 @@ import type { DishStat } from '@/lib/kitchenCounts';
 import { useRecipeActivity } from '@/lib/messaging';
 import { useSession } from '@/lib/session';
 import type { LibraryEntry, Recipe } from '@/lib/types';
+import { useWords } from '@/lib/words/useWords';
+import type { T } from '@/lib/words/words';
 import { colors, radii, shadows } from '@/theme/tokens';
 
 import { madeVerb, type KitchenItem } from './kitchen';
@@ -42,6 +44,7 @@ export function RecipeRow({
   onPress: () => void;
 }) {
   const { me, profiles } = useSession();
+  const { t } = useWords();
   const { activity, error } = useRecipeActivity(entry.id);
   // The faces the stat line actually drew (none until measured, none when they don't fit).
   const [faceIds, setFaceIds] = useState<string[]>([]);
@@ -54,7 +57,7 @@ export function RecipeRow({
     verb,
     statCooked: stat?.cooked?.count ?? 0,
     faceIds,
-  });
+  }, t);
   const statLabel = dishStatsLabel(stat, profiles, verb);
 
   return (
@@ -120,17 +123,18 @@ function activityLine(
   sent: KitchenItem | null,
   /** Who's looking, and what the stat line beside it already says & shows (cardActivityLine). */
   opts: { meId: string | null; verb: MadeVerb; statCooked: number; faceIds: readonly string[] },
+  t: T,
 ): { text: string; done?: boolean } | null {
   const family = a ? cardActivityLine(a, opts) : null;
   if (family) return family;
-  if (sent) return { text: `Sent to ${sent.other.name} · ${relativeDay(sent.message.created_at)}` };
+  if (sent) return { text: t('parent.row.sentTo', { name: sent.other.name, day: relativeDay(sent.message.created_at, {}, t) }) };
   if (!a && !recipe) return null;
   const facts = [
     recipe ? totalTimeLabel(recipe.total_time) : null,
-    recipe && recipe.steps.length ? `${recipe.steps.length} steps` : null,
+    recipe && recipe.steps.length ? t('parent.row.steps', { n: recipe.steps.length }) : null,
   ].filter(Boolean);
   if (facts.length) return { text: facts.join(' · ') };
-  return a ? { text: 'Not sent yet' } : null;
+  return a ? { text: t('parent.row.notSent') } : null;
 }
 
 /** The shared recipe list card: Your recipes rows and the greyed processing rows. */

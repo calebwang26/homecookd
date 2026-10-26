@@ -115,6 +115,8 @@ export function FloatingTabBar({ state, descriptors, navigation, badges }: Float
                   weight={focused ? 700 : 600}
                   color={color}
                   numberOfLines={1}
+                  adjustsFontSizeToFit
+                  minimumFontScale={0.75}
                   onLayout={(e: LayoutChangeEvent) => {
                     const lw = Math.ceil(e.nativeEvent.layout.width);
                     setLabelW((m) => (m[route.key] === lw ? m : { ...m, [route.key]: lw }));

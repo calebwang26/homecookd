@@ -1,7 +1,9 @@
 // Text with the bible's type roles. Pick a `variant`, override `size` / `weight` / `color` when a
 // screen needs the exact bible value (e.g. <Txt variant="display" size={34}>).
+import { useContext } from 'react';
 import { Text, type StyleProp, type TextProps, type TextStyle } from 'react-native';
 
+import { RtlContext } from '@/lib/words/context';
 import { colors, typography, type SansWeight, type SerifWeight } from '@/theme/tokens';
 
 export type TxtVariant =
@@ -95,12 +97,17 @@ function ratioOf(t: TextStyle) {
   return t.lineHeight && t.fontSize ? t.lineHeight / t.fontSize : undefined;
 }
 
+const RTL: TextStyle = { writingDirection: 'rtl' };
+
 export function Txt({ variant = 'body', size, weight, color, leading, align, style, ...rest }: TxtProps) {
+  // Urdu and Arabic words read right to left (lib/words); a screen's own style still wins.
+  const rtl = useContext(RtlContext);
   return (
     <Text
       {...rest}
       style={[
         txtStyle(variant, size, weight, leading),
+        rtl ? RTL : null,
         color ? { color } : null,
         align ? { textAlign: align } : null,
         style,

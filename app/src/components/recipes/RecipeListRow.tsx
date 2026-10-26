@@ -11,6 +11,7 @@ import { StyleSheet, View } from 'react-native';
 import { CookStamp } from '@/components/hearts';
 import { PotMark, PressableScale, Txt } from '@/components/ui';
 import type { LibraryEntry } from '@/lib/recipes';
+import { useWords } from '@/lib/words/useWords';
 import { colors, radii, shadows } from '@/theme/tokens';
 
 import type { Activity } from './activity';
@@ -32,6 +33,7 @@ type Props = {
 };
 
 export function RecipeListRow({ entry, activity, showCook, stamp = false, onOpen }: Props) {
+  const { t } = useWords();
   const cook = showCook ? entry.cook_name : null;
   const meta = [cook, activity?.text].filter(Boolean).join(' · ');
   return (
@@ -41,7 +43,7 @@ export function RecipeListRow({ entry, activity, showCook, stamp = false, onOpen
         scaleTo={1}
         pressedOpacity={0.85}
         accessibilityRole="link"
-        accessibilityLabel={[entry.title, `by ${entry.cook_name}`, activity?.text].filter(Boolean).join(', ')}
+        accessibilityLabel={[entry.title, t('parent.list.by', { name: entry.cook_name }), activity?.text].filter(Boolean).join(', ')}
         style={styles.card}>
         <View style={styles.thumb}>
           {entry.poster_url ? (

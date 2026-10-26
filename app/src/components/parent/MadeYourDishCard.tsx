@@ -12,11 +12,13 @@ import { dishName } from '@/components/parent/kitchen';
 import { ArrowRightIcon, listEnter, PressableScale, Txt } from '@/components/ui';
 import { relativeDay } from '@/lib/format';
 import type { MadeMyDish } from '@/lib/live/convex';
+import { useWords } from '@/lib/words/useWords';
 import { alpha, colors, radii, shadows } from '@/theme/tokens';
 
 export function MadeYourDishCard({ made, cookName, enterIndex = 0 }: { made: MadeMyDish | null; cookName?: string; enterIndex?: number }) {
+  const { t } = useWords();
   if (!made) return null;
-  const title = `${made.fromName} made your ${dishName(made.recipeTitle, cookName)}`;
+  const title = t('parent.home.madeYour', { name: made.fromName, dish: dishName(made.recipeTitle, cookName, t) });
   const note = made.text?.trim();
   const libraryId = made.libraryId;
   return (
@@ -26,13 +28,13 @@ export function MadeYourDishCard({ made, cookName, enterIndex = 0 }: { made: Mad
         scaleTo={0.98}
         accessibilityRole={libraryId ? 'button' : 'image'}
         accessibilityLabel={note ? `${title}. “${note}”` : title}
-        accessibilityHint={libraryId ? 'Opens your recipe' : undefined}
+        accessibilityHint={libraryId ? t('parent.home.opensRecipe') : undefined}
         style={styles.card}>
         <Image source={{ uri: made.photoUrl }} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} recyclingKey={made.messageId} />
         <LinearGradient pointerEvents="none" colors={[alpha.photoShadeLeft, alpha.photoShadeTop]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={StyleSheet.absoluteFill} />
         <View style={styles.words}>
           <Txt variant="label" size={15} weight={600} color={colors.card}>
-            {relativeDay(made.at)}
+            {relativeDay(made.at, {}, t)}
           </Txt>
           <Txt variant="display" size={26} leading={1.15} color={colors.card} numberOfLines={2}>
             {title}

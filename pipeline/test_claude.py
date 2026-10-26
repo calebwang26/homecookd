@@ -93,7 +93,8 @@ def test_reply_is_shaped_like_geminis():
     [call] = fake.calls
     assert call["model"] == "claude-haiku-5-5" and call["output_format"] is order.OrderAnswer, call
     assert call["output_config"] == {"effort": "low"} and call["system"] == "Be brief.", call
-    assert call["messages"] == [{"role": "user", "content": "Which first?"}] and "temperature" not in call, call
+    assert call["messages"] == [{"role": "user", "content": [{"type": "text", "text": "Which first?"}]}], call
+    assert "temperature" not in call, call
     assert "fallbacks" not in call, call  # Haiku has none
 
 
@@ -174,7 +175,7 @@ def test_shorten_on_claude_keeps_its_checks():
     short = shorten.ask(claude.ClaudeText(client=fake), recipe, shorten.MemoryUsage(), "test")
     assert short.model_dump() == shorten.normalize(shorten.ShortRecipe.model_validate(good), recipe).model_dump()
     assert fake.calls[0]["output_format"] is shorten.ShortRecipe
-    assert "17" in fake.calls[1]["messages"][0]["content"]  # the retry tells Claude what was wrong
+    assert "17" in fake.calls[1]["messages"][0]["content"][-1]["text"]  # the retry tells Claude what was wrong
 
 
 def test_run_falls_back_from_muse_to_claude_and_shortens_with_claude():

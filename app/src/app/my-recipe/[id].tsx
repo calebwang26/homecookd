@@ -40,6 +40,7 @@ import { firstQuote, hasVideo, shortestQuote, useRecipe } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
 import { useShare } from '@/lib/share';
 import { useRecipeActivity } from '@/lib/messaging';
+import { useWords } from '@/lib/words/useWords';
 import { alpha, colors, radii, space } from '@/theme/tokens';
 
 const HERO_H = 290;
@@ -57,6 +58,7 @@ export default function MyRecipe() {
   const { recipe, entry, missing } = useRecipe(id);
   const { activity, error: activityError, refresh: refreshActivity } = useRecipeActivity(id);
   const { me, learners, profiles } = useSession();
+  const { t } = useWords();
   const k = useKitchen();
   const media = useMediaSheet();
   const share = useShare();
@@ -84,8 +86,8 @@ export default function MyRecipe() {
       <View style={[styles.screen, { paddingTop: top, paddingHorizontal: space.gutter }]}>
         <BackPill onPress={goBack} />
         <EmptyState
-          title="We couldn't find this recipe"
-          actionLabel="Back to your recipes"
+          title={t('parent.myRecipe.notFound')}
+          actionLabel={t('parent.myRecipe.backToRecipes')}
           onAction={() => router.replace('/parent/recipes')}
         />
       </View>
@@ -100,11 +102,11 @@ export default function MyRecipe() {
   const quote = q && q.full.length <= 78 ? q.full : (shortestQuote(recipe, 78)?.full ?? null);
   const video = hasVideo(recipe);
   const watchLabel =
-    recipe && video && recipe.media.duration_s > 0 ? `Watch yourself · ${minutesLabel(recipe.media.duration_s)}` : 'Watch yourself';
+    recipe && video && recipe.media.duration_s > 0 ? t('parent.myRecipe.watchTime', { time: minutesLabel(recipe.media.duration_s, t) }) : t('parent.myRecipe.watch');
   // Only my own sends (activity.last_sent_at counts anyone forwarding the dish). undefined = still
   // loading (skeleton), null = not sent yet or couldn't load (nothing; "Who cooked it" has Send).
   const mySent = k.sent.find((s) => s.message.recipe_id === id)?.message.created_at ?? null;
-  const sentLine: string | null | undefined = mySent ? `Sent ${shortDate(mySent)}` : k.ready || activityError || k.error ? null : undefined;
+  const sentLine: string | null | undefined = mySent ? t('parent.myRecipe.sent', { date: shortDate(mySent, t) }) : k.ready || activityError || k.error ? null : undefined;
   const family = learners.filter((l) => l.id !== me?.id);
   const asked = k.waiting.find((w) => w.message.recipe_id === id) ?? null;
   const dockBottom = Math.max(24, insets.bottom + 8);
@@ -116,7 +118,7 @@ export default function MyRecipe() {
     <AskedCard
       docked
       who={asked.other}
-      question={questionText(asked.message)}
+      question={questionText(asked.message, t)}
       voice={asked.message.kind === 'question' && isSpoken(asked.message) ? <HearQuestion from={asked.other} question={asked.message} style={styles.hearOnLavender} /> : undefined}
       onAnswer={() => router.push({ pathname: '/chat/[id]', params: { id: asked.threadId, q: asked.message.id } })}
     />
@@ -147,7 +149,7 @@ export default function MyRecipe() {
             <IconButton
               tone="glass"
               size={48}
-              accessibilityLabel="Share this recipe"
+              accessibilityLabel={t('parent.myRecipe.share')}
               icon={<ShareIcon size={22} color={colors.ink} />}
               onPress={() => share.open({ recipeId: id })}
               style={[styles.share, { top }]}
@@ -219,10 +221,10 @@ export default function MyRecipe() {
           {recipe && recipe.steps.length ? (
             <PressableScale
               onPress={() => router.push({ pathname: '/recipe/[id]', params: { id } })}
-              accessibilityLabel={`See all ${recipe.steps.length} steps`}
+              accessibilityLabel={t('parent.myRecipe.allSteps', { n: recipe.steps.length })}
               style={styles.steps}>
               <Txt variant="title" size={16} style={{ flex: 1 }}>
-                See all {recipe.steps.length} steps
+                {t('parent.myRecipe.allSteps', { n: recipe.steps.length })}
               </Txt>
               <ChevronRightIcon size={20} strokeWidth={2.2} color={colors.muted} />
             </PressableScale>
@@ -237,7 +239,7 @@ export default function MyRecipe() {
         scrollY={scrollY}
         start={SHEET_TOP - 80}
         left={
-          <IconButton tone="clear" size={40} accessibilityLabel="Back" icon={<BackIcon size={22} color={colors.ink} />} onPress={goBack} />
+          <IconButton tone="clear" size={40} accessibilityLabel={t('parent.myRecipe.back')} icon={<BackIcon size={22} color={colors.ink} />} onPress={goBack} />
         }
       />
 

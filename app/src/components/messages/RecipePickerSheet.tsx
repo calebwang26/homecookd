@@ -23,6 +23,7 @@ import {
 } from '@/components/ui';
 import { useSession } from '@/lib/session';
 import type { LibraryEntry } from '@/lib/types';
+import { useWords } from '@/lib/words/useWords';
 import { colors, fonts } from '@/theme/tokens';
 
 import { useDishLookup } from './dishes';
@@ -102,8 +103,9 @@ function DishRow({
   last: boolean;
   onPress: () => void;
 }) {
+  const { t } = useWords();
   return (
-    <ListRow padV={8} last={last} onPress={onPress} accessibilityLabel={selected ? `${dishName(entry)}, attached` : label}>
+    <ListRow padV={8} last={last} onPress={onPress} accessibilityLabel={selected ? t('messages.picker.attached', { dish: dishName(entry) }) : label}>
       {entry.poster_url ? (
         <Image source={{ uri: entry.poster_url }} style={styles.thumb} contentFit="cover" transition={150} />
       ) : (
@@ -113,7 +115,7 @@ function DishRow({
         <Txt variant="rowTitle" numberOfLines={2}>
           {dishName(entry)}
         </Txt>
-        <Txt variant="meta">{mine ? 'Your recipe' : `by ${entry.cook_name}`}</Txt>
+        <Txt variant="meta">{mine ? t('messages.bubble.yourRecipe') : t('messages.bubble.byCook', { name: entry.cook_name })}</Txt>
       </View>
       {selected ? (
         <CheckIcon size={22} color={colors.green} strokeWidth={2.4} />
@@ -137,6 +139,7 @@ export function RecipePickerSheet({
   selectedId?: string | null;
 }) {
   const dishes = useFamilyDishes();
+  const { t } = useWords();
   const { height: winH } = useWindowDimensions();
   const kb = useKeyboardHeight(visible);
   const [query, setQuery] = useState('');
@@ -153,16 +156,16 @@ export function RecipePickerSheet({
   const listMax = Math.max(160, winH * 0.92 - (searchable ? 290 : 230) - kb);
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="Attach a recipe" accessibilityLabel="Attach a recipe">
+    <BottomSheet visible={visible} onClose={onClose} title={t('messages.picker.title')} accessibilityLabel={t('messages.picker.title')}>
       {searchable ? (
         <View style={styles.search}>
           <SearchIcon size={18} color={colors.muted} />
           <TextInput
             value={query}
             onChangeText={setQuery}
-            placeholder="Search dishes or cooks"
+            placeholder={t('messages.picker.search')}
             placeholderTextColor={colors.muted}
-            accessibilityLabel="Search recipes"
+            accessibilityLabel={t('messages.picker.searchLabel')}
             returnKeyType="search"
             autoCorrect={false}
             autoCapitalize="none"
@@ -178,10 +181,10 @@ export function RecipePickerSheet({
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}>
         {shown.length ? (
-          <DishList dishes={shown} onPick={onPick} rowLabel={(d) => `Attach ${dishName(d)}`} chevron={false} selectedId={selectedId} />
+          <DishList dishes={shown} onPick={onPick} rowLabel={(d) => t('messages.picker.attach', { dish: dishName(d) })} chevron={false} selectedId={selectedId} />
         ) : (
           <Txt variant="body" size={15} align="center" style={styles.empty}>
-            {dishes.length ? `No dish called “${query.trim()}”.` : 'No recipes yet.'}
+            {dishes.length ? t('messages.picker.noMatch', { query: query.trim() }) : t('messages.picker.none')}
           </Txt>
         )}
       </ScrollView>
@@ -199,13 +202,14 @@ export function AttachButton({
   tone?: IconButtonTone;
   size?: number;
 }) {
+  const { t } = useWords();
   return (
     <IconButton
       icon={(c) => <PlusIcon size={size >= 56 ? 26 : 24} color={c} strokeWidth={2.2} />}
       tone={tone}
       size={size}
       haptic
-      accessibilityLabel="Attach a recipe"
+      accessibilityLabel={t('messages.picker.title')}
       onPress={() => {
         Keyboard.dismiss();
         onPress();

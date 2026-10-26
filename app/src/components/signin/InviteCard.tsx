@@ -4,6 +4,7 @@
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
 import { Avatar, PotMark, Skeleton, Txt } from '@/components/ui';
+import { useWords } from '@/lib/words/useWords';
 import { colors, radii, shadows } from '@/theme/tokens';
 
 const FACE = 96;
@@ -51,8 +52,9 @@ export function InviteCard({
 }
 
 export function InviteCardSkeleton() {
+  const { t } = useWords();
   return (
-    <View style={styles.card} accessibilityLabel="Opening your invite" accessibilityState={{ busy: true }}>
+    <View style={styles.card} accessibilityLabel={t('signin.invite.opening')} accessibilityState={{ busy: true }}>
       <Skeleton circle width={FACE} height={FACE} />
       <View style={[styles.words, styles.skelWords]}>
         <Skeleton width="86%" height={30} radius={10} />
