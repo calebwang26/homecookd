@@ -13,6 +13,8 @@ process.env.ANTHROPIC_API_KEY = "test";
 const { sttEngine, INK_LANGUAGES, WHISPER_LANGUAGES } = await import("../src/stt.js");
 const { InkWhisperStream, PAUSE_MS, FLUSH_MS, MAX_HOLD_MS } = await import("../src/inkWhisper.js");
 const { languageName } = await import("../src/homie.js");
+const { env } = await import("../src/env.js");
+const { answerGapMs, ANSWER_GAP_MS } = await import("../src/record.js");
 
 beforeEach(() => mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: Date.parse("2026-10-25T17:00:00Z") }));
 afterEach(() => mock.timers.reset());
@@ -24,14 +26,27 @@ for (let i = 0; i < 1600; i++) VOICE.writeInt16LE(i % 20 < 10 ? 2000 : -2000, i 
 /** The 12 languages added Oct 24, plus Marathi and English. */
 const FIRST_SET = ["en", "mr", "hi", "gu", "ta", "te", "pa", "ur", "zh", "ko", "tl", "es", "pt", "ar"];
 
-test("each language goes to the speech-to-text that hears it; Marathi stays on Gemini Live", () => {
+test("each language goes to the speech-to-text that hears it; Marathi on Gemini Live until MARATHI_STT=cartesia", () => {
   assert.equal(sttEngine("en"), "ink-2");
   assert.equal(sttEngine("hi"), "ink-2");
   assert.equal(sttEngine("es"), "ink-2");
   assert.equal(sttEngine("mr"), "gemini-live");
   for (const l of ["gu", "ta", "te", "pa", "ur", "zh", "ko", "tl", "pt", "ar", "bn", "vi"]) assert.equal(sttEngine(l), "ink-whisper", l);
-  assert.equal(sttEngine("or"), "gemini-live", "ink-whisper doesn't know Odia");
+  assert.equal(sttEngine("or"), "gemini-live", "ink-whisper doesn't know Odia (hidden from the app's picker)");
   for (const l of FIRST_SET) assert.ok(INK_LANGUAGES.includes(l) || WHISPER_LANGUAGES.includes(l) || l === "mr", l);
+  const before = env.marathiStt;
+  try {
+    env.marathiStt = "cartesia";
+    assert.equal(sttEngine("mr"), "ink-whisper", "Caleb's Oct 26 choice: Marathi on Cartesia as it is");
+    assert.equal(sttEngine("or"), "gemini-live");
+    // A Marathi cook keeps the longer wait for her whole answer on either engine (homie-waits-for-answers).
+    assert.equal(answerGapMs("mr"), ANSWER_GAP_MS["gemini-live"]);
+    assert.equal(answerGapMs("ta"), ANSWER_GAP_MS["ink-whisper"]);
+  } finally {
+    env.marathiStt = before;
+  }
+  assert.equal(answerGapMs("mr"), 4000);
+  assert.equal(answerGapMs("en"), 3500);
 });
 
 test("every language in the first set has a name for Claude's prompts, not a bare code", () => {

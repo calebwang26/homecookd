@@ -5,6 +5,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import type { News, NewsFact } from "./convex.js";
 import { env } from "./env.js";
 import { guessesFamily } from "./family.js";
+import { logClaude } from "./claudeCost.js";
 
 const client = new Anthropic({ apiKey: env.anthropicKey });
 const MAX_WORDS = 22;
@@ -48,7 +49,7 @@ export async function tapLine(
         },
       ],
     });
-    console.log(`tap line claude ${Date.now() - t0}ms stop=${res.stop_reason}`);
+    logClaude("tap line", res, Date.now() - t0);
     const text = res.content.map((b) => (b.type === "text" ? b.text : "")).join("").trim().replace(/^["“]|["”]$/g, "");
     if (res.stop_reason === "refusal" || !text || text.split(/\s+/).length > MAX_WORDS + 4) return { text: fact.line, written: false };
     if (guessesFamily(text, { names: [fact.line, who.name] })) {

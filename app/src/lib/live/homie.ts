@@ -73,7 +73,7 @@ import { useSession } from '@/lib/session';
 import { convexSession, endRecording, stubRecordingStatus } from './convex';
 import { micStreamingSupported, useMicStream } from './mic';
 import { playSay, SAY_KEY_PREFIX } from './say';
-import { speak, stopSpeaking } from './speak';
+import { speak, speakOnPhone, stopSpeaking } from './speak';
 
 const VOICE_URL = (process.env.EXPO_PUBLIC_VOICE_URL ?? '').trim().replace(/\/$/, '');
 /** The service always ends a line with say_end; this only catches one that never came. */
@@ -94,7 +94,7 @@ type ServerMsg =
   | { type: 'phase'; phase: Exclude<RecordPhase, 'connecting'> }
   | { type: 'state'; state: ServerState }
   | { type: 'say'; text: string; textEn?: string; kind?: string; audio?: { sampleRate?: number }; stubVoice?: boolean }
-  | { type: 'say_end'; interrupted?: boolean }
+  | { type: 'say_end'; interrupted?: boolean; failed?: boolean }
   | ({ type: 'ask' } & Ask)
   | { type: 'drop' | 'answered'; promptId: string }
   | { type: 'hold'; on: boolean }
@@ -110,7 +110,7 @@ type Socket = {
   readyState: number;
 };
 
-type PendingSay = { chunks: ArrayBuffer[]; rate: number; kind?: string; drop: boolean; timer: ReturnType<typeof setTimeout> | null };
+type PendingSay = { text: string; chunks: ArrayBuffer[]; rate: number; kind?: string; drop: boolean; timer: ReturnType<typeof setTimeout> | null };
 
 /** Close codes that never get better on retry (STACK.md): signed out, no such recording, a newer socket took over. */
 const FINAL_CLOSE: Record<number, HomieError> = { 4401: 'signedOut', 4404: 'ended', 4409: 'elsewhere' };
@@ -141,6 +141,8 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
   const phaseRef = useRef<RecordPhase>('connecting');
   const phaseWaiters = useRef(new Set<() => void>());
   const say = useRef<PendingSay | null>(null);
+  /** Her language, for a line the phone has to say itself. */
+  const langRef = useRef<string | undefined>(undefined);
   const askRef = useRef<Ask | null>(null);
   const heldRef = useRef<Held>(NOT_HELD);
   const saidSeq = useRef(0);
@@ -297,6 +299,7 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
         case 'ready': {
           const r = m.recording;
           setInfo({ language: r.language, cookName: r.cookName, kidName: r.kidName, dish: r.dish });
+          langRef.current = r.language;
           // A new socket has no open question and no hold: the old one's drop, answered or hold off never comes.
           clearMoment();
           if (introHeard.current) setIntroDone(true);
@@ -328,14 +331,20 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
             }
             return;
           }
-          say.current = { chunks: [], rate: m.audio?.sampleRate ?? 24000, kind: m.kind, drop, timer: null };
+          say.current = { text: m.text, chunks: [], rate: m.audio?.sampleRate ?? 24000, kind: m.kind, drop, timer: null };
           if (!drop) pulseLit();
           return;
         }
-        case 'say_end':
-          if (!m.interrupted) return flushSay();
+        case 'say_end': {
           // She tapped start or done mid-line: never play the rest, and stop what is playing.
-          return hush();
+          if (m.interrupted) return hush();
+          // Neither of the service's voices could make it (both Cartesia models failed): the phone says it.
+          const s = say.current;
+          if (!m.failed || !s || s.drop) return flushSay();
+          say.current = null;
+          void speakOnPhone(s.text, langRef.current);
+          return;
+        }
         case 'ask':
           if (paused.current) return;
           showAsk({ promptId: m.promptId, text: m.text, textEn: m.textEn, kind: m.kind });

@@ -91,6 +91,7 @@ import { useSession } from '@/lib/session';
 import { convexRecipeId, convexSession } from './convex';
 import { useMicStream } from './mic';
 import { playSay, stopSay } from './say';
+import { speakOnPhone } from './speak';
 import {
   answersTap,
   appInForeground,
@@ -166,7 +167,7 @@ type ServerMsg =
   | { type: 'go_to_step'; stepOrder: number }
   | { type: 'play_clip'; startS: number; endS: number; quote?: string; quoteEn?: string }
   | { type: 'say'; text: string; kind?: string; textEn?: string; ai: true; translation?: boolean; audio?: { sampleRate?: number }; sampleRate?: number }
-  | { type: 'say_end'; interrupted?: boolean }
+  | { type: 'say_end'; interrupted?: boolean; failed?: boolean }
   | { type: 'asked_cook'; questionId: string }
   | { type: 'timer'; id: string; seconds: number; label?: string }
   | { type: 'timer_done'; id: string }
@@ -176,6 +177,10 @@ type ServerMsg =
 
 type PendingSay = {
   kind: SayKind;
+  /** The words in English (a greeting in the cook's language has its English too), for the phone's own voice. */
+  text: string;
+  /** The line a tap on homie asked for: the phone's own voice says it at once, over a video. */
+  tap: boolean;
   chunks: ArrayBuffer[];
   rate: number;
   translation: boolean;
@@ -635,6 +640,8 @@ export function useVoiceCooking(opts: VoiceOptions) {
         const label = sayLabel(kind, cb.current.cookName);
         say.current = {
           kind,
+          text: m.textEn ?? m.text,
+          tap,
           chunks: [],
           rate: m.audio?.sampleRate ?? m.sampleRate ?? 24000,
           translation: kind === 'translation',
@@ -651,6 +658,14 @@ export function useVoiceCooking(opts: VoiceOptions) {
         openSays.current = end.open;
         // The end of a line a newer one already replaced: the newer one keeps playing.
         if (end.stale) return;
+        // Neither of the service's voices could make it (both Cartesia models failed): the phone says it.
+        const failed = !m.interrupted && m.failed ? say.current : null;
+        if (failed && !failed.drop) {
+          say.current = null;
+          if (failed.gap) clearTimeout(failed.gap);
+          void speakOnPhone(failed.text, undefined, { label: failed.label, answer: failed.tap });
+          return;
+        }
         if (!m.interrupted) return flushSay();
         // The service cut it off (a newer line or a clip took its place): never play the rest.
         const s = say.current;

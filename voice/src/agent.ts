@@ -13,6 +13,7 @@ import { callOf } from "./family.js";
 import type { Hit } from "./moss.js";
 
 import type * as Beta from "@anthropic-ai/sdk/resources/beta/messages/messages.js";
+import { logClaude } from "./claudeCost.js";
 
 /** What the agent can make happen. The cooking session implements these. */
 export type Actions = {
@@ -252,6 +253,13 @@ export class TurnAgent {
   private fast = env.claudeFast;
 
   private async ask(): Promise<Beta.BetaMessage> {
+    const t0 = Date.now();
+    const res = await this.create();
+    logClaude("cook", res, Date.now() - t0);
+    return res;
+  }
+
+  private async create(): Promise<Beta.BetaMessage> {
     const params = {
       model: env.claudeModel,
       max_tokens: 1024,

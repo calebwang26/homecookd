@@ -86,6 +86,23 @@ export async function speak(text: string, opts: SpeakOptions = {}): Promise<Spok
   }
 }
 
+/**
+ * The phone's own voice straight away, for a live line no voice of the service's could make (its say_end
+ * `failed`): the service already tried both of Cartesia's models, so no second call. Waits for a video
+ * like speak() does, unless it's an answer.
+ */
+export async function speakOnPhone(text: string, lang?: string, opts: { label?: string; answer?: boolean } = {}): Promise<Spoken> {
+  const words = text.trim();
+  if (!words) return { text: '', via: 'none' };
+  stopSpeaking();
+  const mine = ++turn;
+  if (!opts.answer && videoPlaying()) await videoStopped();
+  if (mine !== turn) return { text: '', via: 'none' };
+  ownsBeat = true;
+  if (opts.answer) pauseAllVideos();
+  return sayOnPhone(words, lang, mine, opts.label ?? 'AI voice');
+}
+
 function end() {
   if (ownsBeat) doneSpeaking();
   ownsBeat = false;
