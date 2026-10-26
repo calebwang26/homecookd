@@ -5,6 +5,7 @@
 //   <SignInScreen onBack={...}>
 //     <Headline title="Family code" line="You're in Our family." />
 //     <SignInField ... />  <ErrorLine error={error} />  <SmallLink label="Not now" onPress={...} />
+//     <TermsLine />   ("By continuing you agree to our Terms of use and Privacy policy.", under a way in)
 //   </SignInScreen>
 //
 // Children stack with a 32 gap; give the last group `marginTop: 'auto'` to sit it at the bottom.
@@ -14,6 +15,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BackPill, Brand, PressableScale, ScreenWash, Txt, usePotMood } from '@/components/ui';
+import { openPage, PRIVACY_URL, TERMS_URL } from '@/lib/links';
 import { colors, fonts, radii, shadows } from '@/theme/tokens';
 
 export function SignInScreen({ onBack, children }: { onBack?: (() => void) | null; children?: ReactNode }) {
@@ -122,14 +124,44 @@ export function ErrorLine({ error, align }: { error: string | null | undefined; 
   );
 }
 
-/** The small green text link ("Have a family code?", "Not now"), 48 tall to tap. */
-export function SmallLink({ label, onPress, hint, style }: { label: string; onPress: () => void; hint?: string; style?: StyleProp<ViewStyle> }) {
+/** The small green text link ("Have a family code?", "Not now"), 48 tall to tap. `color`: a quieter one. */
+export function SmallLink({
+  label,
+  onPress,
+  hint,
+  color = colors.greenDeep,
+  style,
+}: {
+  label: string;
+  onPress: () => void;
+  hint?: string;
+  color?: string;
+  style?: StyleProp<ViewStyle>;
+}) {
   return (
     <PressableScale onPress={onPress} accessibilityRole="link" accessibilityLabel={label} accessibilityHint={hint} style={[styles.link, style]}>
-      <Txt variant="label" color={colors.greenDeep}>
+      <Txt variant="label" color={color}>
         {label}
       </Txt>
     </PressableScale>
+  );
+}
+
+/** The small print under a way in: the Terms of use and Privacy policy, each opening homecookd.app. */
+export function TermsLine() {
+  return (
+    <Txt variant="meta" align="center" style={styles.terms}>
+      By continuing you agree to our <TermsLink label="Terms of use" url={TERMS_URL} /> and{' '}
+      <TermsLink label="Privacy policy" url={PRIVACY_URL} />.
+    </Txt>
+  );
+}
+
+function TermsLink({ label, url }: { label: string; url: string }) {
+  return (
+    <Txt variant="meta" weight={600} color={colors.greenDeep} onPress={() => void openPage(url)} accessibilityRole="link" accessibilityHint="Opens homecookd.app">
+      {label}
+    </Txt>
   );
 }
 
@@ -159,4 +191,5 @@ const styles = StyleSheet.create({
   fieldFocused: { borderColor: colors.green },
   fieldError: { borderColor: colors.danger },
   link: { alignSelf: 'center', minHeight: 48, justifyContent: 'center', paddingHorizontal: 16 },
+  terms: { paddingHorizontal: 8, lineHeight: 21 },
 });
