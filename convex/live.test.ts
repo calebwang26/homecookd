@@ -9,6 +9,8 @@ vi.mock("@moss-js/moss", () => ({ MossClient: class {} }));
 
 beforeEach(() => {
   vi.useFakeTimers();
+  // Before the times the tests set: convex-test's clock never goes back.
+  vi.setSystemTime(new Date("2026-10-25T16:00:00Z"));
   process.env.VOICE_SECRET = "voice-secret-for-tests";
 });
 afterEach(() => {

@@ -157,7 +157,7 @@ cd app && npx eas-cli build -p ios --profile production --auto-submit   # TestFl
 cd app && npx eas-cli update --channel production -m "<what changed>"   # JS-only fix to TestFlight phones
 node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
-cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/signin
+cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/signin/consent
 
 # web
 cd web && npm run dev -- --port 3000

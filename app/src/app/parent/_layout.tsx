@@ -4,6 +4,7 @@
 import { Tabs } from 'expo-router/js-tabs';
 
 import { BookIcon, ChatIcon, FloatingTabBar, HomeIcon } from '@/components/ui';
+import { useAiConsent } from '@/lib/aiConsent';
 import { useUnread } from '@/lib/session';
 import { colors } from '@/theme';
 
@@ -13,6 +14,9 @@ function useMessagesBadge(): number | undefined {
 
 export default function ParentTabs() {
   const messages = useMessagesBadge();
+  // Nothing of home mounts before "Before we start" (the root layout sends them there).
+  const consent = useAiConsent();
+  if (consent !== 'given') return null;
   return (
     <Tabs
       tabBar={(props) => <FloatingTabBar {...props} />}

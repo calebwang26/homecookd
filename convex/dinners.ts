@@ -4,13 +4,16 @@
 // "Invite friends": the host and accepted guests share one link per dinner (inviteLink); whoever opens
 // it (homecookd.app/d or the app's /d screen, through POST /invite/open in lib/inviteRoutes.ts) sees
 // only the dish, the host's name and when, and counts once per phone or browser in "X going".
+// Reports and blocks (lib/safety.ts) hide a dinner and refuse asks the way they do for recipes.
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { action, internalMutation, mutation, query, type QueryCtx } from "./_generated/server";
-import { acceptedCount, cookingTogether, PUBLIC_COVER } from "./community";
+import { acceptedCount, cookingTogether, familyLabel, PUBLIC_COVER } from "./community";
 import { newToken, requireSession, type Signed } from "./lib/auth";
 import { distanceLabel, milesBetween, placeOf, roundToGrid } from "./lib/geo";
+import { flagged, NOT_POSTABLE } from "./lib/moderation";
+import { dinnerVisible, type Shield, seesRecipe, shieldFor } from "./lib/safety";
 import { familyRecipe } from "./recipes";
 import schema from "./schema";
 
@@ -39,6 +42,8 @@ const dinnerView = v.object({
   recipeId: v.union(v.null(), v.id("recipes")),
   coverUrl: v.union(v.null(), v.string()), // our stock photo of the dish, when the recipe opens and has one
   hostName: v.string(),
+  familyName: v.string(), // the host's family, named the way its cards name it
+  ours: v.boolean(), // my own family's dinner: nothing to report
   placeKind,
   placeName: v.string(),
   startsAt: v.number(),
@@ -56,7 +61,7 @@ const dinnerView = v.object({
   ),
 });
 
-async function view(ctx: QueryCtx, signed: Signed, d: Doc<"dinners">) {
+async function view(ctx: QueryCtx, signed: Signed, shield: Shield, d: Doc<"dinners">) {
   const all = await ctx.db
     .query("dinnerRequests")
     .withIndex("by_dinnerId", (q) => q.eq("dinnerId", d._id))
@@ -64,10 +69,12 @@ async function view(ctx: QueryCtx, signed: Signed, d: Doc<"dinners">) {
   const isHost = d.hostId === signed.person._id;
   const mine = all.find((r) => r.guestId === signed.person._id) ?? null;
   const recipe = await ctx.db.get("recipes", d.recipeId);
-  const canOpen = !!recipe && (!!recipe.sharedAt || recipe.familyId === signed.family._id);
+  const canOpen = !!recipe && (!!recipe.sharedAt || recipe.familyId === signed.family._id) && seesRecipe(shield, recipe);
+  const hostName = (await ctx.db.get("people", d.hostId))?.name ?? "";
   const requests = [];
   if (isHost) {
     for (const r of all) {
+      if (shield.blocked.has(r.guestFamilyId)) continue;
       requests.push({ requestId: r._id, guestName: (await ctx.db.get("people", r.guestId))?.name ?? "", status: r.status });
     }
   }
@@ -76,7 +83,9 @@ async function view(ctx: QueryCtx, signed: Signed, d: Doc<"dinners">) {
     dish: d.dish,
     recipeId: canOpen ? d.recipeId : null,
     coverUrl: canOpen && recipe?.coverUrl && PUBLIC_COVER.test(recipe.coverUrl) ? recipe.coverUrl : null,
-    hostName: (await ctx.db.get("people", d.hostId))?.name ?? "",
+    hostName,
+    familyName: familyLabel(await ctx.db.get("families", d.hostFamilyId), hostName),
+    ours: d.hostFamilyId === signed.family._id,
     placeKind: d.placeKind,
     placeName: d.placeName,
     startsAt: d.startsAt,
@@ -105,7 +114,8 @@ async function hostable(ctx: QueryCtx, signed: Signed, recipeId: Id<"recipes">):
     return own;
   }
   const theirs = await ctx.db.get("recipes", recipeId);
-  if (theirs?.status === "ready" && theirs.sharedAt && (await cookingTogether(ctx, signed.family._id, recipeId))) return theirs;
+  const visible = !!theirs && seesRecipe(await shieldFor(ctx, signed.family._id), theirs);
+  if (visible && theirs?.status === "ready" && theirs.sharedAt && (await cookingTogether(ctx, signed.family._id, recipeId))) return theirs;
   throw new ConvexError("Pick one of your family's recipes.");
 }
 
@@ -131,6 +141,7 @@ export const create = mutation({
     const recipe = await hostable(ctx, signed, args.recipeId);
     if (args.startsAt <= Date.now()) throw new ConvexError("Pick a time that hasn't passed.");
     if (!Number.isInteger(args.seats) || args.seats < 1 || args.seats > 20) throw new ConvexError("Seats go from 1 to 20.");
+    if (flagged(recipe.title, args.placeName, args.address)) throw new ConvexError(NOT_POSTABLE);
     return await ctx.db.insert("dinners", {
       hostId: signed.person._id,
       hostFamilyId: signed.family._id,
@@ -152,8 +163,9 @@ export const get = query({
   returns: v.union(v.null(), dinnerView),
   handler: async (ctx, { sessionToken, dinnerId }) => {
     const signed = await requireSession(ctx, sessionToken);
+    const shield = await shieldFor(ctx, signed.family._id);
     const d = await ctx.db.get("dinners", dinnerId);
-    return d ? await view(ctx, signed, d) : null;
+    return d && (await dinnerVisible(ctx, shield, d)) ? await view(ctx, signed, shield, d) : null;
   },
 });
 
@@ -163,6 +175,7 @@ export const mine = query({
   returns: v.array(dinnerView),
   handler: async (ctx, { sessionToken }) => {
     const signed = await requireSession(ctx, sessionToken);
+    const shield = await shieldFor(ctx, signed.family._id);
     const hosting = await ctx.db
       .query("dinners")
       .withIndex("by_hostId", (q) => q.eq("hostId", signed.person._id))
@@ -172,13 +185,13 @@ export const mine = query({
       .withIndex("by_guestId", (q) => q.eq("guestId", signed.person._id))
       .take(50);
     const out = [];
-    for (const d of hosting.sort((a, b) => a.startsAt - b.startsAt)) out.push(await view(ctx, signed, d));
+    for (const d of hosting.sort((a, b) => a.startsAt - b.startsAt)) out.push(await view(ctx, signed, shield, d));
     const joined = [];
     for (const r of asked) {
       const d = await ctx.db.get("dinners", r.dinnerId);
-      if (d) joined.push(d);
+      if (d && (await dinnerVisible(ctx, shield, d))) joined.push(d);
     }
-    for (const d of joined.sort((a, b) => a.startsAt - b.startsAt)) out.push(await view(ctx, signed, d));
+    for (const d of joined.sort((a, b) => a.startsAt - b.startsAt)) out.push(await view(ctx, signed, shield, d));
     return out;
   },
 });
@@ -189,7 +202,8 @@ export const requestJoin = mutation({
   handler: async (ctx, { sessionToken, dinnerId }) => {
     const signed = await requireSession(ctx, sessionToken);
     const d = await ctx.db.get("dinners", dinnerId);
-    if (!d || d.status === "cancelled" || d.startsAt <= Date.now()) throw new ConvexError("That dinner isn't happening anymore.");
+    const visible = !!d && (await dinnerVisible(ctx, await shieldFor(ctx, signed.family._id), d));
+    if (!d || !visible || d.status === "cancelled" || d.startsAt <= Date.now()) throw new ConvexError("That dinner isn't happening anymore.");
     if (d.hostFamilyId === signed.family._id) throw new ConvexError("This is your family's dinner.");
     const asked = await ctx.db
       .query("dinnerRequests")
@@ -216,6 +230,7 @@ export const respond = mutation({
     const d = r && (await ctx.db.get("dinners", r.dinnerId));
     if (!r || !d || d.hostId !== signed.person._id) throw new ConvexError("Only the host can answer.");
     if (r.status !== "pending") throw new ConvexError("You already answered.");
+    if (accept && (await shieldFor(ctx, signed.family._id)).blocked.has(r.guestFamilyId)) throw new ConvexError("That ask isn't open anymore.");
     if (!accept) {
       await ctx.db.patch("dinnerRequests", requestId, { status: "declined" });
       return null;
@@ -248,7 +263,8 @@ export const inviteToken = internalMutation({
   handler: async (ctx, { sessionToken, dinnerId, fresh }) => {
     const signed = await requireSession(ctx, sessionToken);
     const d = await ctx.db.get("dinners", dinnerId);
-    if (!d || d.status === "cancelled") throw new ConvexError("That dinner isn't happening anymore.");
+    const visible = !!d && (await dinnerVisible(ctx, await shieldFor(ctx, signed.family._id), d));
+    if (!d || !visible || d.status === "cancelled") throw new ConvexError("That dinner isn't happening anymore.");
     if (d.hostId !== signed.person._id) {
       const requests = await ctx.db
         .query("dinnerRequests")
@@ -281,7 +297,8 @@ export const openInvite = internalMutation({
       .query("dinners")
       .withIndex("by_inviteToken", (q) => q.eq("inviteToken", token))
       .unique();
-    if (!d || d.status === "cancelled") return null;
+    if (!d || d.status === "cancelled" || d.hiddenAt) return null;
+    if ((await ctx.db.get("recipes", d.recipeId))?.hiddenAt) return null; // its dish was hidden after reports
     const hostName = ((await ctx.db.get("people", d.hostId))?.name ?? "").trim();
     const reply = { dish: d.dish, hostName, startsAt: d.startsAt };
     const now = Date.now();

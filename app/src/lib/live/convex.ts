@@ -21,6 +21,7 @@
 //   await cancelLiveUpload(uploadId)                     jobs.cancelUpload: the same, by the upload's folder
 //   useGlassesVideos()                                   glasses.videos, live (the laptop's saved full videos)
 //   useMe()  /  await setLanguage('mr')                  people.me (live) / people.setLanguage
+//   await deleteMyAccount(profileId)                     account.deleteMe: "Delete my account" (session.deleteAccount)
 //   await convexPersonIdByName('Shreya')                 a family member's Convex id, from rows that name them
 //   await convexKidIds([leo, zoe])                       their Convex ids (people.family), for forKidIds
 //   await libraryIdOf(recipeId)                          a Convex recipe's library id (recipes.list)
@@ -484,6 +485,30 @@ export async function setLanguage(language: string, profileId?: string): Promise
   };
   await call('mutation', 'people:setLanguage', { sessionToken, language }, onStub, { strict: true });
   return viaStub ? 'stub' : 'saved';
+}
+
+/** convex/lib/auth.ts ACCOUNT_DELETED: sessions.start's words once account.deleteMe has run for them. */
+const accountDeleted = (e: unknown) => /this account was deleted/i.test(String(e));
+
+/**
+ * "Delete my account": account.deleteMe for `profileId`, with a fresh session (a cached one may already
+ * be gone). Resolves when Convex has deleted them, this time or on an earlier try that got this far
+ * (sessions.start then refuses them); 'stub' when the app runs on the local stub, which holds nothing.
+ * Throws when it didn't happen.
+ */
+export async function deleteMyAccount(profileId: string): Promise<'deleted' | 'stub'> {
+  if (stubbed || !client) return 'stub';
+  const deviceKey = await secretGet('deviceKey');
+  if (!deviceKey) throw new Error('Sign in first.');
+  sessions.delete(`${deviceKey}:${profileId}`);
+  try {
+    const { sessionToken } = await call<ConvexSession>('action', 'sessions:start', { deviceKey, profileId }, () => stub.session(), { strict: true });
+    await call('mutation', 'account:deleteMe', { sessionToken }, () => null, { strict: true });
+  } catch (e) {
+    if (!accountDeleted(e)) throw e;
+  }
+  sessions.delete(`${deviceKey}:${profileId}`);
+  return 'deleted';
 }
 
 /**

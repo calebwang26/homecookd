@@ -439,7 +439,7 @@ await test('half duplex: homie lit or speaking, anything on the shared player, o
 });
 
 await test('homie stays off sign-in, the gateway, links, the month story and chat', () => {
-  for (const p of ['/', '/join', '/join-code', '/i', '/r', '/recap', '/chat/abc', '/join/']) assert.equal(L.homieRoute(p).hidden, true, p);
+  for (const p of ['/', '/join', '/join-code', '/consent', '/i', '/r', '/recap', '/chat/abc', '/join/']) assert.equal(L.homieRoute(p).hidden, true, p);
   for (const p of ['/kid/home', '/parent/home', '/cook/biryani', '/recipe/biryani', '/record', '/recording', '/answer/q1', '/dev/gallery']) assert.equal(L.homieRoute(p).hidden, false, p);
 });
 

@@ -15,6 +15,9 @@
 //   await requestJoin(dinnerId)                 dinners.requestJoin
 //   await respond(requestId, accept)            dinners.respond (host only)
 //   await inviteLink(dinnerId)                  dinners.inviteLink: "Invite friends" (host and guests who are in)
+//   await report(kind, id, reason)              community.report: "Report or block" (gone from my family's map at once)
+//   await block(kind, id)                       community.block: the family behind it, both ways
+//   useBlocked() / await unblock(blockId)       community.blocked / .unblock (the list under "You")
 //
 // While Convex is stubbed (convex.ts) the feed is empty and the writes do nothing. The invite link
 // can't be made up, so it fails there. Opening an invite (POST /invite/open) is in invite.ts.
@@ -24,7 +27,8 @@
 // reaches phones before they're deployed doesn't move every Convex call to the stub: the reads and the
 // invite link are "soft" (their stub, for that call only: no dishes, no swaps, "Invite links need the
 // homecookd server"), and the asks are "strict" (they throw and the toast says so, instead of
-// pretending homie asked).
+// pretending homie asked). The Oct 26 "Report or block" calls follow the same rule: the list is soft,
+// the writes strict (a report that didn't reach the team must say so).
 import { useEffect, useState } from 'react';
 
 import { call, token, useLive } from './convex';
@@ -55,9 +59,15 @@ export type CommunityRecipe = {
   dish: string;
   familyName: string;
   cookName: string;
+  ours?: boolean; // my own family's: nothing to report (unset from a server before Oct 26)
   story: string | null;
   steps: { order: number; title: string; text: string }[];
 };
+
+/** What can be reported, and why ("Not about food", "Rude or hurtful", "Something else"). */
+export type Reportable = 'recipe' | 'dinner';
+export type ReportReason = 'not_food' | 'rude' | 'other';
+export type BlockedFamily = { blockId: string; familyName: string };
 
 /**
  * One of my family's ready dishes, for "Share your recipe". `notNowAt`: when its cook last said not
@@ -85,6 +95,8 @@ export type Dinner = {
   recipeId: string | null; // the recipe's text opens (community.recipe) when set
   coverUrl: string | null; // our stock photo of the dish
   hostName: string;
+  familyName?: string; // the host's family, as its cards name it (unset from a server before Oct 26)
+  ours?: boolean; // my own family's dinner: nothing to report
   placeKind: PlaceKind;
   placeName: string;
   startsAt: number;
@@ -112,6 +124,7 @@ const stubDinner = still<Dinner | null>(null);
 const stubDinners = still<Dinner[]>([]);
 const stubDishes = still<FamilyDish[] | null>([]);
 const stubSwaps = still<Swap[]>([]);
+const stubBlocked = still<BlockedFamily[]>([]);
 
 const QUARTER_HOUR = 15 * 60_000;
 const quarter = (ms: number) => Math.floor(ms / QUARTER_HOUR) * QUARTER_HOUR;
@@ -226,4 +239,24 @@ export async function inviteLink(dinnerId: string): Promise<InviteLink> {
     },
     { soft: true },
   );
+}
+
+export async function report(kind: Reportable, targetId: string, reason: ReportReason): Promise<void> {
+  const sessionToken = await token();
+  await call('mutation', 'community:report', { sessionToken, kind, targetId, reason }, () => null, { strict: true });
+}
+
+export async function block(kind: Reportable, targetId: string): Promise<void> {
+  const sessionToken = await token();
+  await call('mutation', 'community:block', { sessionToken, kind, targetId }, () => null, { strict: true });
+}
+
+/** The families mine blocked (never the ones that blocked us). */
+export function useBlocked(enabled = true): BlockedFamily[] {
+  return useLive<BlockedFamily[]>('community:blocked', [], stubBlocked, enabled, {}, true);
+}
+
+export async function unblock(blockId: string): Promise<void> {
+  const sessionToken = await token();
+  await call('mutation', 'community:unblock', { sessionToken, blockId }, () => null, { strict: true });
 }
