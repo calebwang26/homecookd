@@ -89,14 +89,20 @@ HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-o
 - `cooking.current` (what each kid is cooking now, for the cook's phone; idle 2 h ends it), `cooking.finish`
 - `account.deleteMe` → `null` ("Delete my account", Apple 5.1.1(v); Oct 25). At once: the person row becomes a blank
   tombstone (`people.deletedAt`, name "Deleted"), every session as them ends, `sessions.start` refuses them with
-  `"This account was deleted."` (even while Supabase still lists them), a cook's recipes are deleted (gone from the
-  family and Community) and the dinners they host are cancelled. `account.purge` then deletes, in batches of 500:
-  their messages and voice notes, the questions they asked or that were about their recipes (their answer on anyone
-  else's is taken off, so it waits for an answer again), their cooking sessions, recordings with homie's prompts and
-  the glasses' live rows and frames, jobs, hosted dinners with their asks and invite opens, their dinner and swap
-  asks, then syncs Moss (an index with nothing left is deleted). `accountDeletions` keeps what Convex can't delete:
-  `supabaseProfileId`, `recipeIds`, `jobIds` (the GCS recipe folders are named after them), `uploadPaths` and
-  `mediaUrls`, for the purge of Supabase rows and GCS media; `purgedAt` once Convex is done. The app offers it for
+  `"This account was deleted."` (even while Supabase still lists them), their unfinished jobs are cancelled (the
+  worker can't claim them; one mid-way gets `409`, or `404` once the purge deleted the job), their recordings are `abandoned` (`glasses.finished` refuses
+  them), a cook's recipes are deleted (gone from the family and Community), the dinners they host or around their
+  recipes are cancelled, and a Moss sync is asked for. `account.purge` then deletes, in batches of 500, each step
+  through a per-person or per-recipe index: their messages and voice notes, the questions they asked or that were
+  about their recipes (their answer on anyone else's is taken off, so it waits for an answer again), cooking
+  sessions (theirs, and anyone's on their recipes), recordings with homie's prompts and the glasses' live rows and
+  frames, jobs, hosted dinners with their asks and invite opens, their dinner and swap asks, then syncs Moss again
+  (an index with nothing left is deleted; a Moss error is retried after 30 s, 2 min and 5 min). A cron
+  (`account.restartPurges`, every 30 min) starts again a purge with no batch for 30 min, at most 5 times.
+  `accountDeletions` keeps what Convex can't delete: `supabaseProfileId`, `recipeIds`, `jobIds` (the GCS recipe
+  folders are named after them), `uploadPaths`, `mediaUrls` and `voiceCloneId` (Cartesia), for the purge of
+  Supabase rows, GCS media and the voice clone; the purge adds any recipe or job that turned up late;
+  `purgedAt` once Convex is done. The app offers it for
   whoever the phone acts as when `POST /profiles/:id/remove` allows (its own person, or someone with no phone of their
   own: a face picked on a family-code phone), runs `account.deleteMe` with a session as them, then that route; the
   phone signs out when it was its own person, else stays in without them (`session.deleteAccount`).
