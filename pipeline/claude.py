@@ -6,8 +6,8 @@ behind its own flag (unset or gemini keeps Gemini, so rolling back is one line i
 
 ClaudeText.generate has GeminiWriter's shape and returns a Gemini-shaped reply (.text, .usage_metadata), so
 process.response_text and process.Usage treat both the same. Claude's structured outputs hold the reply to the
-same pydantic schema Gemini gets; images go before the prompt, each after its label. Models other than Haiku opt into server-side fallbacks: a request the model
-declines is run again on Anthropic's recommended model instead of failing.
+same pydantic schema Gemini gets; images go before the prompt, each after its label. Models other than Haiku opt
+into server-side fallbacks: a request the model declines is run again on Anthropic's recommended model.
 
 Env (.env): ANTHROPIC_API_KEY, TEXT_PROVIDER and COVER_PROVIDER (gemini | claude), CLAUDE_TEXT_MODEL (default
 claude-haiku-5-5).

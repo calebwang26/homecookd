@@ -771,9 +771,9 @@ def make_cover(client: genai.Client | claude.ClaudeText, model: str, recipe: Rec
                usage: Usage) -> str:
     """poster.jpg = the cook's own plate photo (work/cover_photo.jpg) when she took one, with no frame pick.
     Else the finished dish where it looks best in the video, cropped to the dish (pipeline/cover.py); that pick
-    also saves the second where the last step shows the dish, for its still (work/still_times.json). When the model
-    (cover_model) sees no finished dish or the pick fails, the middle of the last step, which is usually plating or serving
-    (the hackathon spec's step 2 is usually raw prep). Returns where the poster came from, for the log."""
+    also saves the second where the last step shows the dish, for its still (work/still_times.json). When the
+    model (cover_model) sees no finished dish or the pick fails, the middle of the last step, which is usually
+    plating or serving (the hackathon spec's step 2 is usually raw prep). Returns where the poster came from, for the log."""
     from pipeline import cover  # here: cover.py imports this module
     photo, still_times = out_dir / "work" / COVER_PHOTO, out_dir / "work" / STILL_TIMES
     still_times.unlink(missing_ok=True)  # a --rewrite picks again
