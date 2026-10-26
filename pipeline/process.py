@@ -692,12 +692,17 @@ def text_model(cfg: dict, client: genai.Client, gemini_model: str, effort: str) 
     return writer.GeminiWriter(client, gemini_model)
 
 
+# On Poha, Haiku and Opus picked a frame with a thumb over the bowl; Sonnet picked Gemini's own frame (614.5 s) and
+# still (585 s), and the same Swordfish frame as Haiku (Oct 26). About $0.03-0.10 a cover.
+COVER_MODEL = "claude-sonnet-5-5"
+
+
 def cover_model(cfg: dict, client: genai.Client) -> tuple[genai.Client | claude.ClaudeText, str]:
     """Who picks the cover (pipeline/cover.py): Claude from still frames with COVER_PROVIDER=claude
-    (CLAUDE_COVER_MODEL, default Haiku), else Gemini watching the clip."""
+    (CLAUDE_COVER_MODEL, default Sonnet), else Gemini watching the clip."""
     if cfg["cover_provider"] == "claude":
         try:
-            gen = claude.ClaudeText(os.environ.get("CLAUDE_COVER_MODEL") or claude.MODEL)
+            gen = claude.ClaudeText(os.environ.get("CLAUDE_COVER_MODEL") or COVER_MODEL)
         except claude.ClaudeError as e:
             raise ProcessError(str(e))
         return gen, gen.model

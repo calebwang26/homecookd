@@ -216,7 +216,7 @@ def test_cover_provider_picks_the_model() -> None:
                                                                                                          "fake-pro")
     with env(ANTHROPIC_API_KEY="fake", CLAUDE_COVER_MODEL=None):
         client, model = process.cover_model({"cover_provider": "claude", "extract_model": "fake-pro"}, gemini)
-        assert isinstance(client, claude.ClaudeText) and model == client.model == "claude-haiku-5-5"
+        assert isinstance(client, claude.ClaudeText) and model == client.model == "claude-sonnet-5-5"
     with env(COVER_PROVIDER="claude"):
         assert claude.provider("COVER_PROVIDER") == "claude"
 
