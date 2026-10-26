@@ -210,7 +210,7 @@ export function ActionButton({
         ]}>
         <Animated.View style={[styles.row, labelStyle]}>
           {icon}
-          <Txt variant="button" size={sz.font} weight={v.weight} color={v.fg} numberOfLines={1}>
+          <Txt variant="button" size={sz.font} weight={v.weight} color={v.fg} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
             {label}
           </Txt>
           {iconRight}
@@ -220,7 +220,7 @@ export function ActionButton({
             loadingLabel ? (
               <View style={styles.row} accessibilityLiveRegion="polite">
                 <ActivityIndicator color={v.fg} />
-                <Txt variant="button" size={sz.font} weight={v.weight} color={v.fg} numberOfLines={1}>
+                <Txt variant="button" size={sz.font} weight={v.weight} color={v.fg} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
                   {loadingLabel}
                 </Txt>
               </View>
@@ -232,7 +232,7 @@ export function ActionButton({
             <View style={styles.row}>
               <CheckIcon size={sz.icon} color={v.fg} />
               {successLabel ? (
-                <Txt variant="button" size={sz.font} weight={v.weight} color={v.fg} numberOfLines={1}>
+                <Txt variant="button" size={sz.font} weight={v.weight} color={v.fg} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.6}>
                   {successLabel}
                 </Txt>
               ) : null}

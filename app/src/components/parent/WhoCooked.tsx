@@ -12,9 +12,17 @@ import type { Profile, RecipeActivity } from '@/lib/api';
 import { relativeDay } from '@/lib/format';
 import { sendRecipe } from '@/lib/messaging';
 import { refreshUnread } from '@/lib/session';
+import { useWords } from '@/lib/words/useWords';
+import type { T } from '@/lib/words/words';
 import { alpha, colors } from '@/theme/tokens';
 
-import { madeVerb, times } from './kitchen';
+import { madeVerb } from './kitchen';
+
+/** "Opened it once / twice / 3 times", or with "Not yet · " before it (lower case). */
+function opened(n: number, t: T, notYet = false): string {
+  if (notYet) return n === 1 ? t('parent.who.notYetOpenedOnce') : n === 2 ? t('parent.who.notYetOpenedTwice') : t('parent.who.notYetOpenedTimes', { n });
+  return n === 1 ? t('parent.who.openedOnce') : n === 2 ? t('parent.who.openedTwice') : t('parent.who.openedTimes', { n });
+}
 
 export function WhoCooked({
   recipeId,
@@ -41,6 +49,7 @@ export function WhoCooked({
   onSent?: (p: Profile) => void;
 }) {
   const [justSent, setJustSent] = useState<Record<string, true>>({});
+  const { t } = useWords();
   if (!learners.length) return null;
   const verb = madeVerb(tags, title);
 
@@ -91,7 +100,7 @@ export function WhoCooked({
               <Avatar profile={p} size={48} check />
               <View style={styles.text}>
                 <Txt variant="title" size={17}>
-                  {p.name} {verb} it
+                  {t(verb === 'baked' ? 'parent.who.baked' : 'parent.who.cooked', { name: p.name })}
                 </Txt>
                 {cooked.note ? (
                   <Txt variant="quote" size={15} leading={1.35} color={colors.text} numberOfLines={2}>
@@ -99,7 +108,7 @@ export function WhoCooked({
                   </Txt>
                 ) : (
                   <Txt variant="body" size={15}>
-                    {relativeDay(cooked.at)}
+                    {relativeDay(cooked.at, {}, t)}
                   </Txt>
                 )}
               </View>
@@ -110,12 +119,14 @@ export function WhoCooked({
         const showSend = !sent || justSent[p.id];
         // Short when the Send button shares the row; otherwise the one extra true thing we know.
         const status = justSent[p.id]
-          ? 'Not yet'
+          ? t('parent.who.notYet')
           : showSend
             ? viewed > 0
-              ? `Opened it ${times(viewed)}`
-              : 'Not yet'
-            : ['Not yet', viewed > 0 ? `opened it ${times(viewed)}` : `sent ${relativeDay(sent, { lower: true })}`].join(' · ');
+              ? opened(viewed, t)
+              : t('parent.who.notYet')
+            : viewed > 0
+              ? opened(viewed, t, true)
+              : t('parent.who.notYetSent', { day: relativeDay(sent, { lower: true }, t) });
 
         return (
           <ListRow key={p.id} last={last} padV={14}>
@@ -129,23 +140,23 @@ export function WhoCooked({
               </Txt>
             </View>
             {justSent[p.id] ? (
-              <View style={styles.sent} accessible accessibilityLabel={`Sent to ${p.name}`}>
+              <View style={styles.sent} accessible accessibilityLabel={t('parent.who.sentTo', { name: p.name })}>
                 <CheckIcon size={16} strokeWidth={3} color={colors.greenDeep} />
                 <Txt variant="label" size={15} weight={700} color={colors.greenDeep}>
-                  Sent
+                  {t('parent.who.sent')}
                 </Txt>
               </View>
             ) : showSend ? (
               <ActionButton
-                label="Send"
-                accessibilityLabel={`Send to ${p.name}`}
+                label={t('parent.who.send')}
+                accessibilityLabel={t('parent.send.toName', { name: p.name })}
                 variant="outline"
                 size="xs"
                 fg={colors.greenDeep}
                 borderColor={alpha.borderStrong}
                 padH={16}
                 labelWeight={700}
-                accessibilityHint={`Sends this recipe to ${p.name} in Messages`}
+                accessibilityHint={t('parent.who.sendHint', { name: p.name })}
                 onPress={async () => {
                   await sendRecipe(recipeId, [p.id]);
                   setJustSent((s) => ({ ...s, [p.id]: true }));

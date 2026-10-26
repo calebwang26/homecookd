@@ -3,6 +3,7 @@
 import { StyleSheet, View } from 'react-native';
 
 import { PressableScale } from '@/components/ui';
+import { useWords } from '@/lib/words/useWords';
 import { alpha, colors } from '@/theme/tokens';
 
 import { SWATCHES, type SwatchId } from './swatches';
@@ -10,8 +11,9 @@ import { SWATCHES, type SwatchId } from './swatches';
 const SIZE = 36;
 
 export function SwatchRow({ value, onChange }: { value: SwatchId; onChange: (id: SwatchId) => void }) {
+  const { t } = useWords();
   return (
-    <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel="Card colour">
+    <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel={t('share.swatch.label')}>
       {SWATCHES.map((s) => {
         const on = s.id === value;
         return (
@@ -20,7 +22,7 @@ export function SwatchRow({ value, onChange }: { value: SwatchId; onChange: (id:
             haptic
             onPress={() => onChange(s.id)}
             accessibilityRole="radio"
-            accessibilityLabel={`${s.label} card`}
+            accessibilityLabel={t(s.label)}
             accessibilityState={{ selected: on, checked: on }}
             hitSlop={6}
             style={[

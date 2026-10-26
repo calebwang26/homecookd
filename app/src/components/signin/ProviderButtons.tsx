@@ -15,6 +15,7 @@ import Svg, { Path } from 'react-native-svg';
 
 import { PressableScale } from '@/components/ui';
 import { useSignInProviders } from '@/lib/auth';
+import { useWords } from '@/lib/words/useWords';
 import { motion } from '@/theme/tokens';
 
 export type Provider = 'apple' | 'google';
@@ -31,6 +32,7 @@ export function useProviderButtons(): { apple: boolean; google: boolean } {
 }
 
 export function ProviderButtons({ busy, onPress }: { busy: Provider | null; onPress: (p: Provider) => void }) {
+  const { t } = useWords();
   const show = useProviderButtons();
   if (!show.apple && !show.google) return null;
   const tap = (p: Provider) => {
@@ -58,11 +60,11 @@ export function ProviderButtons({ busy, onPress }: { busy: Provider | null; onPr
         <View style={[styles.slot, busy && busy !== 'google' ? styles.dim : null]} pointerEvents={busy ? 'none' : 'auto'}>
           <PressableScale
             onPress={() => tap('google')}
-            accessibilityLabel="Continue with Google"
+            accessibilityLabel={t('signin.provider.google')}
             style={[styles.fill, styles.pill, styles.google]}>
             <GoogleMark size={20} />
             <Text style={[styles.systemLabel, styles.googleLabel]} numberOfLines={1}>
-              Continue with Google
+              {t('signin.provider.google')}
             </Text>
           </PressableScale>
           {busy === 'google' ? <Busy bg={GOOGLE.bg} fg={GOOGLE.ink} border /> : null}
@@ -74,11 +76,12 @@ export function ProviderButtons({ busy, onPress }: { busy: Provider | null; onPr
 
 /** The spinner that stands in for a button's label while it signs in (same as ActionButton). */
 function Busy({ bg, fg, border }: { bg: string; fg: string; border?: boolean }) {
+  const { t } = useWords();
   return (
     <Animated.View
       entering={FadeIn.duration(motion.crossfadeMs)}
       style={[StyleSheet.absoluteFill, styles.pill, styles.center, { backgroundColor: bg }, border ? styles.googleBorder : null]}
-      accessibilityLabel="Signing in"
+      accessibilityLabel={t('signin.provider.busy')}
       accessibilityState={{ busy: true }}>
       <ActivityIndicator color={fg} />
     </Animated.View>
@@ -87,8 +90,9 @@ function Busy({ bg, fg, border }: { bg: string; fg: string; border?: boolean }) 
 
 /** Web only (screenshots): the system Apple button as iOS draws it. */
 function AppleLookAlike({ onPress }: { onPress: () => void }) {
+  const { t } = useWords();
   return (
-    <PressableScale onPress={onPress} accessibilityLabel="Continue with Apple" style={[styles.fill, styles.pill, styles.appleWeb]}>
+    <PressableScale onPress={onPress} accessibilityLabel={t('signin.provider.apple')} style={[styles.fill, styles.pill, styles.appleWeb]}>
       <Svg width={20} height={24} viewBox="0 0 17 20">
         <Path
           fill="#FFFFFF"
@@ -96,7 +100,7 @@ function AppleLookAlike({ onPress }: { onPress: () => void }) {
         />
       </Svg>
       <Text style={[styles.systemLabel, styles.appleLabel]} numberOfLines={1}>
-        Continue with Apple
+        {t('signin.provider.apple')}
       </Text>
     </PressableScale>
   );

@@ -36,7 +36,9 @@ for NAME in CARTESIA_API_KEY CARTESIA_API_KEYS_BACKUP ANTHROPIC_API_KEY MOSS_PRO
   SECRETS+=("$NAME=$NAME:latest")
 done
 
-ENV_VARS="CLAUDE_FAST=1"
+# Fast mode off (Caleb, Oct 26: its premium price spent the month's Claude limit); CLAUDE_FAST=1 in .env turns it on.
+ENV_VARS="CLAUDE_FAST=$(fromenv CLAUDE_FAST)"
+[ "$ENV_VARS" = "CLAUDE_FAST=" ] && ENV_VARS="CLAUDE_FAST=0"
 CONVEX_SITE_URL=$(fromenv CONVEX_SITE_URL)
 [ -n "$CONVEX_SITE_URL" ] && ENV_VARS="$ENV_VARS,CONVEX_SITE_URL=$CONVEX_SITE_URL"
 # homie: overrides of its voice (the code defaults are Caleb's pick) and the glasses VM, when set (HOMIE_DEMO=1 only

@@ -17,6 +17,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [git-pr-workflow](memory/git-pr-workflow.md) | PR-only shipping, merge main first, stage by name, the Vercel Root Directory gotcha |
 | [merge-agent-approval](memory/merge-agent-approval.md) | Oct 24: every PR goes to the "Merge Agent" session for approval; it decides conflicts |
 | [auto-ship-merged-prs](memory/auto-ship-merged-prs.md) | Oct 25: the Merge Agent ships each merged fix/feature PR to TestFlight without asking, then tells Caleb what to test |
+| [claude-cost-settings](memory/claude-cost-settings.md) | Oct 26: homie's recording check on Haiku, Opus fast mode off, to keep Claude spend down |
 | [pr-merge-organizer](memory/pr-merge-organizer.md) | Oct 24: don't merge or ask Caleb; send ready PRs to the organizer session |
 | [api-deploy-rules](memory/api-deploy-rules.md) | Deploy from main only, all files, live tests after |
 | [api-deploy-method](memory/api-deploy-method.md) | How the multi-module api was deployed without the CLI |
@@ -25,7 +26,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [demo-family-shreya](memory/demo-family-shreya.md) | Oct 24: the demo is Shreya Pawar's family; her grandma cooks and records in Marathi |
 | [demo-test-dishes](memory/demo-test-dishes.md) | Oct 24: demos, examples and tests use Swordfish steak and Poha (real dishes, real footage) |
 | [homie-voice](memory/homie-voice.md) | Oct 24: homie is Riya bilingual, asked for as auditioned (locale, speed 0.85, moods), cousin tone; Gemini TTS backup |
-| [cook-languages](memory/cook-languages.md) | Oct 24: 12 more cook languages on Cartesia (ink-whisper) + Claude, no Gemini; Marathi stays on Gemini Live until the migration; merge after the demo |
+| [cook-languages](memory/cook-languages.md) | Oct 24: 12 more cook languages on Cartesia (ink-whisper) + Claude, no Gemini; Oct 26: the cook's whole app in her language (language screen, `lib/words`) |
 | [gemini-credits-nearly-gone](memory/gemini-credits-nearly-gone.md) | Oct 24: Gemini has ~$10 left; new model calls use Claude (text, images) or Cartesia (audio) |
 | [model-migration-after-hackathon](memory/model-migration-after-hackathon.md) | Oct 24: the move off Gemini starts after Sun Oct 25, 8pm; one PR per step, each behind an env flag with Gemini as the rollback |
 | [cartesia-credits-for-tests](memory/cartesia-credits-for-tests.md) | Oct 24: use the Cartesia credits; real Cartesia is the test default, fake speech opt-in |

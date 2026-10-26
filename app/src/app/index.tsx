@@ -70,6 +70,7 @@ import { moveApi } from '@/lib/moveRequests';
 import { useSession } from '@/lib/session';
 import { litIds } from '@/lib/sundayTable';
 import { useTable } from '@/lib/tableApi';
+import { useWords } from '@/lib/words/useWords';
 import { colors, motion, space } from '@/theme/tokens';
 
 const GAP = 12;
@@ -97,7 +98,8 @@ export default function Profiles() {
     accountRemoval,
     forgetPerson,
   } = useSession();
-  const statuses = useFamilyStatus(profiles, family?.id ?? null);
+  const { t } = useWords();
+  const statuses = useFamilyStatus(profiles, family?.id ?? null, t);
   // Tapped their own face on Home: the family gateway, with Back to them.
   const choosing = useLocalSearchParams<{ pick?: string }>().pick === '1';
   // Otherwise a phone with a default person goes straight to them (no tap, nothing to mis-tap), once
@@ -204,14 +206,14 @@ export default function Profiles() {
   const addTile = (role: Role): AddTile =>
     deviceNeedsProfile
       ? {
-          label: 'Add me',
+          label: t('profiles.picker.addMe'),
           a11y: {
-            label: role === 'cook' ? 'Add yourself to the cooks' : 'Add yourself to the ones who miss it',
-            hint: 'Asks what your family calls you',
+            label: role === 'cook' ? t('profiles.picker.addMeCook') : t('profiles.picker.addMeLearner'),
+            hint: t('profiles.picker.addMeHint'),
           },
           onPress: () => setSelf({ open: true, role }),
         }
-      : { label: 'Add', a11y: { label: role === 'cook' ? 'Add a cook' : 'Add family' }, onPress: () => setInviting(true) };
+      : { label: t('profiles.picker.add'), a11y: { label: role === 'cook' ? t('profiles.picker.addCook') : t('profiles.picker.addFamily') }, onPress: () => setInviting(true) };
 
   const loading = status === 'loading' && profiles.length === 0;
   const offline = status === 'offline' && profiles.length === 0;
@@ -238,7 +240,7 @@ export default function Profiles() {
           {backTo ? (
             <View style={styles.brandRow}>
               <Brand mood={potMood} />
-              <BackPill label={`Back to ${backTo.name}`} onPress={goBack} />
+              <BackPill label={t('profiles.picker.backTo', { name: backTo.name })} onPress={goBack} />
             </View>
           ) : (
             <Brand mood={potMood} style={styles.brand} />
@@ -247,17 +249,17 @@ export default function Profiles() {
           <View style={styles.headline}>
             {/* TODO: Fraunces opsz-40 static instance; until then tighter tracking matches the bible's line width (218.6 px). */}
             <Txt variant="display" size={40} leading={1.08} accessibilityRole="header" style={styles.title}>
-              Who’s in the kitchen?
+              {t('profiles.picker.title')}
             </Txt>
-            <Txt variant="lead">{deviceNeedsProfile ? 'Tap your face, or + if you’re new.' : 'Tap your face to come in.'}</Txt>
+            <Txt variant="lead">{deviceNeedsProfile ? t('profiles.picker.leadNew') : t('profiles.picker.lead')}</Txt>
           </View>
 
           {offline ? (
             <View style={styles.offline}>
-              <Txt variant="title">We can’t reach your kitchen</Txt>
-              <Txt variant="meta">Check your connection and try again.</Txt>
+              <Txt variant="title">{t('profiles.picker.offlineTitle')}</Txt>
+              <Txt variant="meta">{t('profiles.picker.offlineLine')}</Txt>
               <ActionButton
-                label="Try again"
+                label={t('profiles.picker.tryAgain')}
                 variant="outline"
                 size="sm"
                 onPress={async () => {
@@ -265,7 +267,7 @@ export default function Profiles() {
                   // comes back for another try (never a checkmark on a failed retry).
                   if (!(await refresh())) throw new Error('offline');
                 }}
-                errorLabel="Still offline"
+                errorLabel={t('profiles.picker.stillOffline')}
                 style={styles.retry}
               />
             </View>
@@ -274,13 +276,13 @@ export default function Profiles() {
           <View onLayout={(e) => setGridW(Math.round(e.nativeEvent.layout.width))} style={styles.groups}>
             {loading ? (
               <>
-                <SkeletonGroup title="The cooks" count={3} tileW={tileW} />
-                <SkeletonGroup title="The ones who miss it" count={2} tileW={tileW} />
+                <SkeletonGroup title={t('profiles.picker.cooks')} count={3} tileW={tileW} />
+                <SkeletonGroup title={t('profiles.picker.missIt')} count={2} tileW={tileW} />
               </>
             ) : !offline ? (
               <>
                 <Group
-                  title="The cooks"
+                  title={t('profiles.picker.cooks')}
                   people={cooks}
                   statuses={statuses}
                   lit={lit}
@@ -293,7 +295,7 @@ export default function Profiles() {
                   dimAdd={!!chosen}
                 />
                 <Group
-                  title="The ones who miss it"
+                  title={t('profiles.picker.missIt')}
                   people={learners}
                   statuses={statuses}
                   lit={lit}
@@ -316,43 +318,43 @@ export default function Profiles() {
               <PressableScale
                 onPress={() => router.push('/join-code')}
                 accessibilityRole="button"
-                accessibilityLabel="Switch family"
-                accessibilityHint="Type another family’s code"
+                accessibilityLabel={t('profiles.picker.switchFamily')}
+                accessibilityHint={t('profiles.picker.switchFamilyHint')}
                 style={styles.footLink}>
                 <Txt variant="label" weight={600} color={colors.muted}>
-                  Switch family
+                  {t('profiles.picker.switchFamily')}
                 </Txt>
               </PressableScale>
               <PressableScale
                 onPress={() => setSigningOut(true)}
                 accessibilityRole="button"
-                accessibilityLabel="Sign out of this phone"
-                accessibilityHint="Asks first"
+                accessibilityLabel={t('profiles.picker.signOutLink')}
+                accessibilityHint={t('profiles.picker.asksFirst')}
                 style={styles.footLink}>
                 <Txt variant="label" weight={600} color={colors.muted}>
-                  Sign out of this phone
+                  {t('profiles.picker.signOutLink')}
                 </Txt>
               </PressableScale>
               {deletable ? (
                 <PressableScale
                   onPress={() => setDeleting({ open: true, who: deletable, own: removal === 'own' })}
                   accessibilityRole="button"
-                  accessibilityHint="Asks first"
+                  accessibilityHint={t('profiles.picker.asksFirst')}
                   style={styles.footLink}>
                   <Txt variant="label" weight={600} color={colors.danger}>
-                    {deleteAccountWords(deletable.name.trim(), removal === 'own').confirm}
+                    {deleteAccountWords(deletable.name.trim(), removal === 'own', t).confirm}
                   </Txt>
                 </PressableScale>
               ) : null}
               <View style={styles.legal}>
                 <PressableScale onPress={() => void openPage(PRIVACY_URL)} accessibilityRole="link" style={styles.legalLink}>
                   <Txt variant="meta" color={colors.muted}>
-                    Privacy policy
+                    {t('profiles.picker.privacy')}
                   </Txt>
                 </PressableScale>
                 <PressableScale onPress={() => void openPage(TERMS_URL)} accessibilityRole="link" style={styles.legalLink}>
                   <Txt variant="meta" color={colors.muted}>
-                    Terms of use
+                    {t('profiles.picker.terms')}
                   </Txt>
                 </PressableScale>
               </View>
@@ -398,11 +400,11 @@ export default function Profiles() {
       <BottomSheet
         visible={signingOut}
         onClose={() => setSigningOut(false)}
-        accessibilityLabel="Sign out on this phone?"
+        accessibilityLabel={t('profiles.picker.signOutTitle')}
         footer={
           <View style={styles.choices}>
             <ActionButton
-              label="Sign out"
+              label={t('profiles.picker.signOut')}
               variant="outline"
               size="lg"
               fg={colors.danger}
@@ -414,18 +416,18 @@ export default function Profiles() {
                 setSigningOut(false);
                 setTimeout(() => void leaveFamily(), motion.sheetCloseMs + 40);
               }}
-              accessibilityHint="Signs this phone out of the family"
+              accessibilityHint={t('profiles.picker.signOutHint')}
               style={styles.choice}
             />
-            <ActionButton label="Keep" size="lg" onPress={() => setSigningOut(false)} accessibilityLabel="Stay signed in" style={styles.choice} />
+            <ActionButton label={t('profiles.picker.keep')} size="lg" onPress={() => setSigningOut(false)} accessibilityLabel={t('profiles.picker.staySignedIn')} style={styles.choice} />
           </View>
         }>
         <View style={styles.signOut}>
           <Txt variant="display" size={28} leading={1.15} align="center" accessibilityRole="header">
-            Sign out on this phone?
+            {t('profiles.picker.signOutTitle')}
           </Txt>
           <Txt variant="body" size={16} align="center">
-            You may need a new invite to come back.
+            {t('profiles.picker.signOutLine')}
           </Txt>
         </View>
       </BottomSheet>

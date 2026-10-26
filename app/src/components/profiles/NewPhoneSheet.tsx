@@ -20,6 +20,7 @@ import type { Profile } from '@/lib/api';
 import { listNames } from '@/lib/format';
 import { MoveError, moveApi, type MyMoveRequest } from '@/lib/moveRequests';
 import { useSession } from '@/lib/session';
+import { useWords } from '@/lib/words/useWords';
 import { colors } from '@/theme/tokens';
 
 const POLL_MS = 4000;
@@ -41,6 +42,7 @@ export function NewPhoneSheet({
   onIn: (them: Profile) => void;
 }) {
   const { family, refresh } = useSession();
+  const { t } = useWords();
   const toast = useToast();
   const [stage, setStage] = useState<Stage>(resume ? 'waiting' : 'ask');
   const [error, setError] = useState<string | null>(null);
@@ -67,12 +69,12 @@ export function NewPhoneSheet({
       if (r.status === 'approved') {
         done.current = true;
         await refresh();
-        toast.show(r.let_in_by ? `You’re back. ${r.let_in_by} let you in.` : 'You’re back.');
+        toast.show(r.let_in_by ? t('profiles.newPhone.backLetIn', { name: r.let_in_by }) : t('profiles.newPhone.back'));
         onIn(person);
       } else if (r.status === 'declined') setStage('declined');
       else if (r.status === 'expired') setStage('expired');
     },
-    [person, refresh, onIn, toast],
+    [person, refresh, onIn, toast, t],
   );
 
   useEffect(() => {
@@ -92,7 +94,7 @@ export function NewPhoneSheet({
   }, [visible, stage, settle]);
 
   if (!person) return null;
-  const familyName = family?.name ?? 'your family';
+  const familyName = family?.name;
 
   const ask = async () => {
     setError(null);
@@ -100,37 +102,41 @@ export function NewPhoneSheet({
       await moveApi.ask(person.id);
       setStage('waiting');
     } catch (e) {
-      setError(e instanceof MoveError ? e.message : 'Something went wrong. Try again.');
+      setError(e instanceof MoveError ? e.message : t('profiles.newPhone.wentWrong'));
       throw e; // the button shows its error state
     }
   };
 
   /** A nudge from their own Messages, to no one in particular: they pick who. */
   const nudge = async () => {
-    const text = `It’s ${person.name} on a new phone. Open homecookd to let me in.`;
+    const text = t('profiles.newPhone.nudge', { name: person.name });
     const res = await openMessages(text);
     if (res === 'unavailable') {
-      toast.show((await copyLink(text)) ? 'Copied. Paste it in a text.' : 'Texting doesn’t work here.');
+      toast.show((await copyLink(text)) ? t('profiles.newPhone.copied') : t('profiles.newPhone.noTexting'));
     }
   };
   const first = asked[0];
 
   const title =
     stage === 'waiting'
-      ? `Waiting for ${asked.length ? listNames(asked, 'or') : 'the family'}`
+      ? asked.length
+        ? t('profiles.newPhone.waitingFor', { names: listNames(asked, 'or', t) })
+        : t('profiles.newPhone.waitingFamily')
       : stage === 'declined'
-        ? `The family said this isn’t ${person.name}`
+        ? t('profiles.newPhone.declined', { name: person.name })
         : stage === 'expired'
-          ? 'That request ran out'
-          : 'Is this you on a new phone?';
+          ? t('profiles.newPhone.expired')
+          : t('profiles.newPhone.ask');
   const line =
     stage === 'waiting'
-      ? 'Asks last 7 days. Open homecookd again anytime.'
+      ? t('profiles.newPhone.waitingLine')
       : stage === 'declined'
-        ? 'If that’s a mistake, ask them again.'
+        ? t('profiles.newPhone.declinedLine')
         : stage === 'expired'
-          ? 'Ask the family again.'
-          : `We’ll ask ${familyName} to let you in as ${person.name}.`;
+          ? t('profiles.newPhone.expiredLine')
+          : familyName != null
+            ? t('profiles.newPhone.askLine', { family: familyName, name: person.name })
+            : t('profiles.newPhone.askLineNoFamily', { name: person.name });
 
   return (
     <BottomSheet
@@ -140,20 +146,20 @@ export function NewPhoneSheet({
       footer={
         stage === 'waiting' ? (
           <ActionButton
-            label={first ? `Text ${first}` : 'Text your family'}
+            label={first ? t('profiles.newPhone.textName', { name: first }) : t('profiles.newPhone.textFamily')}
             variant="outline"
             size="xl"
             haptics
             onPress={() => void nudge()}
-            accessibilityHint="Opens Messages with a note asking them to let you in"
+            accessibilityHint={t('profiles.newPhone.textHint')}
           />
         ) : (
           <View style={styles.footer}>
-            <ActionButton label={stage === 'ask' ? 'Ask the family' : 'Ask again'} size="xl" onPress={ask} successLabel="Asked" />
+            <ActionButton label={stage === 'ask' ? t('profiles.newPhone.askFamily') : t('profiles.newPhone.askAgain')} size="xl" onPress={ask} successLabel={t('profiles.newPhone.asked')} />
             {stage === 'ask' ? (
-              <PressableScale onPress={onClose} accessibilityRole="button" accessibilityLabel={`I’m not ${person.name}`} style={styles.notMe}>
+              <PressableScale onPress={onClose} accessibilityRole="button" accessibilityLabel={t('profiles.newPhone.notMeLabel', { name: person.name })} style={styles.notMe}>
                 <Txt variant="label" weight={600} color={colors.greenDeep}>
-                  Not me
+                  {t('profiles.newPhone.notMe')}
                 </Txt>
               </PressableScale>
             ) : null}

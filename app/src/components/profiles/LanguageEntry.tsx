@@ -7,8 +7,9 @@ import { StyleSheet } from 'react-native';
 import { LanguageSheet, languageLabel } from '@/components/record/LanguagePicker';
 import { PressableScale, Txt, useToast } from '@/components/ui';
 import { languageName } from '@/lib/languages';
-import { setLanguage, useMe } from '@/lib/live/convex';
+import { useMe } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
+import { useWords } from '@/lib/words/useWords';
 import { colors } from '@/theme/tokens';
 
 export function LanguageEntry() {
@@ -16,6 +17,7 @@ export function LanguageEntry() {
   const cook = me?.role === 'cook';
   const convexMe = useMe(cook);
   const toast = useToast();
+  const { t, choose } = useWords();
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
   if (!cook) return null;
@@ -27,10 +29,10 @@ export function LanguageEntry() {
     setPicked(code);
     try {
       // Only a save that reached Convex is worth a "done"; the local stub keeps it for this launch only.
-      if ((await setLanguage(code, me?.id)) === 'saved') toast.show(`homie will talk with you in ${languageName(code)}`);
+      if ((await choose(code)) === 'saved') toast.show(t('profiles.language.saved', { language: languageName(code) }));
     } catch (e) {
       setPicked(null);
-      toast.show('That didn’t save. Check the connection and try again.', { tone: 'error' });
+      toast.show(t('profiles.language.saveFailed'), { tone: 'error' });
       console.warn('[profiles] setLanguage', String(e));
     }
   };
@@ -40,11 +42,11 @@ export function LanguageEntry() {
       <PressableScale
         onPress={() => setOpen(true)}
         accessibilityRole="button"
-        accessibilityLabel={`Your language: ${languageLabel(current)}`}
-        accessibilityHint="Pick the language homie talks with you in"
+        accessibilityLabel={t('profiles.language.entry', { language: languageLabel(current) })}
+        accessibilityHint={t('profiles.language.entryHint')}
         style={styles.link}>
         <Txt variant="label" weight={600} color={colors.muted}>
-          Your language: {languageLabel(current)}
+          {t('profiles.language.entry', { language: languageLabel(current) })}
         </Txt>
       </PressableScale>
       <LanguageSheet visible={open} value={current} onPick={(code) => void pick(code)} onClose={() => setOpen(false)} />

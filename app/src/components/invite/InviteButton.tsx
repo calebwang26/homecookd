@@ -7,22 +7,24 @@ import type { StyleProp, ViewStyle } from 'react-native';
 
 import { AddFamilySheet } from '@/components/profiles';
 import { ActionButton, PlusIcon, type ActionVariant } from '@/components/ui';
+import { useWords } from '@/lib/words/useWords';
 import { colors } from '@/theme/tokens';
 
 export function InviteButton({ variant = 'sun', style }: { variant?: ActionVariant; style?: StyleProp<ViewStyle> }) {
   // A fresh key per open, so the sheet's form starts empty every time.
   const [sheet, setSheet] = useState({ open: false, n: 0 });
+  const { t } = useWords();
   const fg = variant === 'primary' || variant === 'ink' ? colors.card : colors.ink;
   return (
     <>
       <ActionButton
-        label="Invite family :)"
+        label={t('parent.invite.button')}
         variant={variant}
         size="xl"
         haptics
         icon={<PlusIcon size={22} color={fg} />}
         onPress={() => setSheet((s) => ({ open: true, n: s.n + 1 }))}
-        accessibilityHint="Add someone to your family on homecookd"
+        accessibilityHint={t('parent.invite.hint')}
         style={style}
       />
       <AddFamilySheet key={sheet.n} visible={sheet.open} onClose={() => setSheet((s) => ({ ...s, open: false }))} />

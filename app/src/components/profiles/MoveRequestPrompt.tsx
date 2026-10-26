@@ -18,9 +18,10 @@ import { StyleSheet, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { ActionButton, Avatar, BottomSheet, PressableScale, SuccessBurst, Txt, useToast } from '@/components/ui';
-import { possessive, timeAgo } from '@/lib/format';
+import { timeAgo } from '@/lib/format';
 import { forgetMoveRequest, MoveError, moveApi, reloadMoveRequests, useMoveRequests, type MoveRequest } from '@/lib/moveRequests';
 import { useSession } from '@/lib/session';
+import { useWords } from '@/lib/words/useWords';
 import { colors } from '@/theme/tokens';
 
 // Closed with "Not now" this visit, and one asked for by the updates card.
@@ -51,6 +52,7 @@ type Answered = { id: string; yes: boolean; hadPhone: boolean } | null;
 export function MoveRequestPrompt() {
   const requests = useMoveRequests();
   const { profiles } = useSession();
+  const { t } = useWords();
   const toast = useToast();
   useSyncExternalStore(subscribe, () => version, () => version);
   const next: MoveRequest | null = (wanted ? requests.find((r) => r.id === wanted) : null) ?? requests.find((r) => !later.has(r.id)) ?? null;
@@ -69,6 +71,8 @@ export function MoveRequestPrompt() {
   const name = shown.profile.name;
   // Letting them in signs out a phone only if one is signed in as them.
   const hasPhone = !!profiles.find((p) => p.id === shown.profile.id)?.has_phone;
+  // "Dad’s old phone", "James’ old phone" (the English possessive, as lib/format possessive).
+  const oldPhoneKey = /s$/i.test(name.trim()) ? 'profiles.move.oldPhoneStaysS' : 'profiles.move.oldPhoneStays';
 
   const close = () => {
     later.add(shown.id);
@@ -106,42 +110,42 @@ export function MoveRequestPrompt() {
   };
 
   return (
-    <BottomSheet visible={open} onClose={settled ? done : close} accessibilityLabel={`${name} is on a new phone`}>
+    <BottomSheet visible={open} onClose={settled ? done : close} accessibilityLabel={t('profiles.move.title', { name })}>
       {settled ? (
         <Animated.View entering={FadeIn.duration(180)} style={styles.result}>
           {answered.yes ? (
             <SuccessBurst
-              title={`${name}’s in.`}
-              subtitle={answered.hadPhone ? 'Their old phone is signed out.' : 'The new phone is theirs now.'}
+              title={t('profiles.move.in', { name })}
+              subtitle={answered.hadPhone ? t('profiles.move.signedOut') : t('profiles.move.theirsNow')}
             />
           ) : (
             <View style={styles.body}>
               <Avatar profile={shown.profile} size={72} />
               <Txt variant="display" size={28} leading={1.15} align="center" accessibilityRole="header">
-                Okay.
+                {t('profiles.move.okay')}
               </Txt>
               <Txt variant="body" size={16} align="center">
-                {answered.hadPhone ? `${possessive(name)} old phone stays as it is.` : `Nothing changes for ${name}.`}
+                {answered.hadPhone ? t(oldPhoneKey, { name: name.trim() }) : t('profiles.move.nothingChanges', { name })}
               </Txt>
             </View>
           )}
-          <ActionButton label="Done" size="xl" onPress={done} style={styles.done} />
+          <ActionButton label={t('profiles.sheet.done')} size="xl" onPress={done} style={styles.done} />
         </Animated.View>
       ) : (
         <>
           <View style={styles.body}>
             <Avatar profile={shown.profile} size={72} />
             <Txt variant="display" size={28} leading={1.15} align="center" accessibilityRole="header">
-              {name} is on a new phone
+              {t('profiles.move.title', { name })}
             </Txt>
             <Txt variant="body" size={16} align="center">
-              Asked {timeAgo(shown.created_at)}. {hasPhone ? 'Their old phone will be signed out.' : 'The new phone will be theirs.'}
+              {t(hasPhone ? 'profiles.move.askedSignOut' : 'profiles.move.askedNewPhone', { when: timeAgo(shown.created_at, undefined, t) })}
             </Txt>
           </View>
           <View style={styles.actions}>
-            <ActionButton label={`Let ${name} in`} size="xl" onPress={() => answer(true)} disabled={busy === 'no'} successLabel="Let in" />
+            <ActionButton label={t('profiles.move.letIn', { name })} size="xl" onPress={() => answer(true)} disabled={busy === 'no'} successLabel={t('profiles.move.letInDone')} />
             <ActionButton
-              label={`That’s not ${name}`}
+              label={t('profiles.move.notThem', { name })}
               variant="outline"
               size="lg"
               onPress={() => answer(false)}
@@ -152,11 +156,11 @@ export function MoveRequestPrompt() {
               onPress={close}
               disabled={!!busy}
               accessibilityRole="button"
-              accessibilityLabel="Not now"
+              accessibilityLabel={t('profiles.move.notNow')}
               accessibilityState={{ disabled: !!busy }}
               style={[styles.later, busy ? styles.dim : null]}>
               <Txt variant="label" weight={600} color={colors.greenDeep}>
-                Not now
+                {t('profiles.move.notNow')}
               </Txt>
             </PressableScale>
           </View>

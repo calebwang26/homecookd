@@ -36,21 +36,14 @@ import { CheckIcon, haptic, MicIcon, Txt, useHoldPage, useToast } from '@/compon
 import { errorMessage } from '@/lib/api';
 import { mmss } from '@/lib/format';
 import {
-  HOLD_CUT,
-  HOLD_CUT_SPOKEN,
-  HOLD_HINT,
-  HOLD_HINT_SPOKEN,
   HOLD_TAP_SPOKEN,
-  HOLD_UNDO,
-  HOLD_UNDONE,
-  HOLD_WAIT,
   holdEnd,
   holdPress,
   holdWait,
-  holdWaitSpoken,
   undoWindowMs,
 } from '@/lib/postcardLogic';
 import { useVoiceRecorder, type VoiceRecording } from '@/lib/voice';
+import { useWords } from '@/lib/words/useWords';
 import { alpha, colors, motion, shadows } from '@/theme/tokens';
 
 type State = 'idle' | 'waiting' | 'sending' | 'sent' | 'short' | 'cut' | 'undone' | 'error';
@@ -101,9 +94,10 @@ export function HoldToTalk({
   const waiting = useRef<VoiceRecording | null>(null);
   const waitTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   // For the unmount flush, which outlives this render.
-  const latest = useRef({ onSend, toast, toName });
+  const { t: words } = useWords();
+  const latest = useRef({ onSend, toast, toName, words });
   useEffect(() => {
-    latest.current = { onSend, toast, toName };
+    latest.current = { onSend, toast, toName, words };
   });
   useEffect(
     () => () => {
@@ -113,8 +107,8 @@ export function HoldToTalk({
       const note = waiting.current;
       waiting.current = null;
       if (note && holdWait('leave') === 'send') {
-        const { onSend: go, toast: t, toName: name } = latest.current;
-        void go(note).catch((e) => t.show(errorMessage(e, `Couldn’t send it to ${name}. Try again.`), { tone: 'error' }));
+        const { onSend: go, toast: t, toName: name, words: w } = latest.current;
+        void go(note).catch((e) => t.show(errorMessage(e, w('messages.hold.sendFailed', { name })), { tone: 'error' }));
       }
     },
     [],
@@ -122,9 +116,10 @@ export function HoldToTalk({
   const flash = useCallback((s: State) => {
     if (timer.current) clearTimeout(timer.current);
     setState(s);
-    if (s === 'short') AccessibilityInfo.announceForAccessibility?.(HOLD_HINT_SPOKEN);
-    if (s === 'cut') AccessibilityInfo.announceForAccessibility?.(HOLD_CUT_SPOKEN);
-    if (s === 'undone') AccessibilityInfo.announceForAccessibility?.(`${HOLD_UNDONE}.`);
+    const w = latest.current.words;
+    if (s === 'short') AccessibilityInfo.announceForAccessibility?.(w('messages.hold.hintSpoken'));
+    if (s === 'cut') AccessibilityInfo.announceForAccessibility?.(w('messages.hold.cutSpoken'));
+    if (s === 'undone') AccessibilityInfo.announceForAccessibility?.(w('messages.hold.undoneSpoken'));
     if (s !== 'idle' && s !== 'sending' && s !== 'waiting') timer.current = setTimeout(() => setState('idle'), FLASH_MS);
   }, []);
 
@@ -172,7 +167,7 @@ export function HoldToTalk({
     holdPage(true);
     press(1);
     if (!rec.supported) {
-      toast.show(rec.error ?? 'Recording works in the homecookd app on your phone.', { tone: 'info' });
+      toast.show(rec.error ?? words('messages.hold.appOnly'), { tone: 'info' });
       return;
     }
     if (timer.current) clearTimeout(timer.current);
@@ -204,7 +199,7 @@ export function HoldToTalk({
     waiting.current = note;
     setState('waiting');
     haptic('light');
-    AccessibilityInfo.announceForAccessibility?.(holdWaitSpoken(toName));
+    AccessibilityInfo.announceForAccessibility?.(words('messages.hold.waitSpoken', { name: toName.trim() }));
     left.value = 1;
     if (!reduce) left.value = withTiming(0, { duration: ms, easing: Easing.linear });
     waitTimer.current = setTimeout(() => {
@@ -239,11 +234,11 @@ export function HoldToTalk({
     try {
       await onSend(note);
       haptic('success');
-      AccessibilityInfo.announceForAccessibility?.('Sent');
+      AccessibilityInfo.announceForAccessibility?.(words('messages.hold.sent'));
       flash('sent');
     } catch (e) {
       haptic('error');
-      toast.show(errorMessage(e, `Couldn’t send it to ${toName}. Try again.`), { tone: 'error' });
+      toast.show(errorMessage(e, words('messages.hold.sendFailed', { name: toName })), { tone: 'error' });
       flash('error');
     }
   }
@@ -258,20 +253,20 @@ export function HoldToTalk({
   const waitingNow = state === 'waiting';
   const label =
     recording
-      ? 'Let go to send'
+      ? words('messages.hold.letGo')
       : state === 'sending'
-        ? 'Sending'
+        ? words('messages.hold.sending')
         : state === 'sent'
-          ? 'Sent'
+          ? words('messages.hold.sent')
           : state === 'short'
-            ? HOLD_HINT
+            ? words('messages.hold.hint')
             : state === 'cut'
-              ? HOLD_CUT
+              ? words('messages.hold.cut')
               : state === 'undone'
-                ? HOLD_UNDONE
+                ? words('messages.hold.undone')
                 : state === 'error'
-                  ? 'Try again'
-                  : 'Hold to talk';
+                  ? words('messages.hold.tryAgain')
+                  : words('messages.hold.idle');
   const sending = state === 'sending';
   const ink = recording ? colors.card : waitingNow ? colors.butterInk : colors.sageInk;
   return (
@@ -280,12 +275,12 @@ export function HoldToTalk({
       <Animated.View
         accessible
         accessibilityRole="button"
-        accessibilityLabel={recording ? 'Recording. Let go to send.' : waitingNow ? `Sending to ${toName}. Undo` : `Hold to talk to ${toName}`}
-        accessibilityHint={waitingNow ? 'Takes the voice note back before it goes' : 'Hold while you talk, let go to send'}
+        accessibilityLabel={recording ? words('messages.hold.recordingLabel') : waitingNow ? words('messages.hold.waitingLabel', { name: toName }) : words('messages.hold.idleLabel', { name: toName })}
+        accessibilityHint={waitingNow ? words('messages.hold.waitingHint') : words('messages.hold.idleHint')}
         accessibilityState={{ disabled: sending, busy: sending, selected: recording }}
         // VoiceOver / TalkBack double-tap: Undo while it waits, else how to hold (their double-tap-and-hold
         // is a real hold and comes in as touches below).
-        accessibilityActions={[{ name: 'activate', label: waitingNow ? HOLD_UNDO : 'How to record' }]}
+        accessibilityActions={[{ name: 'activate', label: waitingNow ? words('messages.hold.undo') : words('messages.hold.howTo') }]}
         onAccessibilityAction={(e) => {
           if (e.nativeEvent.actionName === 'activate') activate();
         }}
@@ -332,9 +327,9 @@ export function HoldToTalk({
         )}
         {waitingNow ? (
           <Txt variant="label" size={15} weight={500} color={ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={styles.words}>
-            {HOLD_WAIT}{' '}
+            {words('messages.hold.wait')}{' '}
             <Txt variant="label" size={15} weight={700} color={ink} style={styles.undo}>
-              {HOLD_UNDO}
+              {words('messages.hold.undo')}
             </Txt>
           </Txt>
         ) : (

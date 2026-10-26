@@ -14,6 +14,8 @@ import { mmss } from '@/lib/format';
 import { useKnownSenders } from '@/lib/messaging';
 import { useSession } from '@/lib/session';
 import type { LibraryEntry } from '@/lib/types';
+import { english, type T } from '@/lib/words/words';
+import { useWords } from '@/lib/words/useWords';
 import { colors, space } from '@/theme/tokens';
 
 import { dishName, inboxTime } from './helpers';
@@ -23,12 +25,18 @@ type Lookup = (id: string | null | undefined) => LibraryEntry | null;
 const AVATAR = 56;
 
 /** One line of words for a thread's newest message ("You: …", circle "Leo: …"). */
-export function previewText(m: Message, opts: { mine: boolean; entry: LibraryEntry | null; /** Circle: "Leo: …" */ senderName?: string | null }): string {
-  const who = opts.mine ? 'You' : (opts.senderName ?? null);
-  const you = who ? `${who}: ` : '';
-  const dish = opts.entry ? dishName(opts.entry) : 'a recipe';
+export function previewText(
+  m: Message,
+  opts: { mine: boolean; entry: LibraryEntry | null; /** Circle: "Leo: …" */ senderName?: string | null },
+  t: T = english,
+): string {
+  const name = opts.mine ? null : opts.senderName || null;
+  const named = opts.mine || !!name;
+  // "You: …" / "Leo: …" (no one named: the words alone).
+  const you = (text: string) => (opts.mine ? t('messages.preview.you', { text }) : name ? t('messages.preview.from', { name, text }) : text);
+  const dish = opts.entry ? dishName(opts.entry) : null;
   const body = (m.body ?? '').trim();
-  const voice = `${you}Voice message${m.duration_s ? ` · ${mmss(m.duration_s)}` : ''}`;
+  const voice = you(m.duration_s ? t('messages.preview.voiceTime', { time: mmss(m.duration_s) }) : t('messages.preview.voice'));
   switch (m.kind) {
     case 'system':
       return body;
@@ -39,18 +47,27 @@ export function previewText(m: Message, opts: { mine: boolean; entry: LibraryEnt
       return voice;
     case 'question': {
       const q = body || (m.transcript ?? '').trim();
-      return q ? `${you}${q}` : voice;
+      return q ? you(q) : voice;
     }
     case 'recipe':
-      return body ? `${you}${body}` : who ? `${who} sent ${dish}` : `Sent you ${dish}`;
+      if (body) return you(body);
+      if (opts.mine) return dish != null ? t('messages.preview.youSent', { dish }) : t('messages.preview.youSentRecipe');
+      if (named) return dish != null ? t('messages.preview.nameSent', { name, dish }) : t('messages.preview.nameSentRecipe', { name });
+      return dish != null ? t('messages.preview.sentYou', { dish }) : t('messages.preview.sentYouRecipe');
     case 'cooked':
-      return body ? `${you}${body}` : who ? `${who} made ${dish}` : `Made ${dish}`;
+      if (body) return you(body);
+      if (opts.mine) return dish != null ? t('messages.preview.youMade', { dish }) : t('messages.preview.youMadeRecipe');
+      if (named) return dish != null ? t('messages.preview.nameMade', { name, dish }) : t('messages.preview.nameMadeRecipe', { name });
+      return dish != null ? t('messages.preview.made', { dish }) : t('messages.preview.madeRecipe');
     case 'step':
-      return `${you}${body || `A question about step ${m.step_order ?? ''}`.trim()}`;
+      return you(body || (m.step_order != null ? t('messages.question.aboutStep', { step: m.step_order }) : t('messages.preview.stepNoNumber')));
     case 'request':
-      return body ? `${you}${body}` : who ? `${who} asked for ${dish}` : `Asked you for ${dish}`;
+      if (body) return you(body);
+      if (opts.mine) return dish != null ? t('messages.preview.youAskedFor', { dish }) : t('messages.preview.youAskedForRecipe');
+      if (named) return dish != null ? t('messages.preview.nameAskedFor', { name, dish }) : t('messages.preview.nameAskedForRecipe', { name });
+      return dish != null ? t('messages.preview.askedYouFor', { dish }) : t('messages.preview.askedYouForRecipe');
     default:
-      return `${you}${body || 'Sent a message'}`;
+      return you(body || t('messages.preview.sentMessage'));
   }
 }
 
@@ -69,18 +86,19 @@ export function ThreadRow({
   onPress: () => void;
 }) {
   const { profileById } = useSession();
+  const { t } = useWords();
   const m = thread.last;
   const mine = !!m && m.sender_id === me?.id;
   const circle = thread.kind === 'circle';
-  const name = circle ? 'Family' : thread.other.name;
+  const name = circle ? t('messages.family') : thread.other.name;
   const sender = circle && m && !mine && m.kind !== 'system' ? (thread.members?.find((p) => p.id === m.sender_id) ?? profileById(m.sender_id)) : null;
   useKnownSenders(circle && m && !mine && !sender ? [m.sender_id] : []);
   const senderName = sender?.name ?? null;
-  const preview = m ? previewText(m, { mine, senderName, entry: entry(m.recipe_id) ?? entry(thread.recipe_id) }) : '';
-  const time = inboxTime(m?.created_at);
-  const label = [name, unread ? 'unread' : null, preview || null, time || null].filter(Boolean).join(', ');
+  const preview = m ? previewText(m, { mine, senderName, entry: entry(m.recipe_id) ?? entry(thread.recipe_id) }, t) : '';
+  const time = inboxTime(m?.created_at, undefined, t);
+  const label = [name, unread ? t('messages.inbox.unread') : null, preview || null, time || null].filter(Boolean).join(', ');
   return (
-    <PressableScale onPress={onPress} scaleTo={0.98} pressedOpacity={0.6} accessibilityLabel={label} accessibilityHint="Opens the chat" style={styles.row}>
+    <PressableScale onPress={onPress} scaleTo={0.98} pressedOpacity={0.6} accessibilityLabel={label} accessibilityHint={t('messages.inbox.opensChat')} style={styles.row}>
       {circle ? <CircleFaces thread={thread} me={me} size={AVATAR} /> : <Avatar profile={thread.other} size={AVATAR} />}
       <View style={styles.text}>
         <Txt variant="title" weight={unread ? 700 : 400} numberOfLines={1}>
@@ -108,13 +126,20 @@ export function ThreadRow({
 
 /** "New message": the first row of both inboxes, always (opens everyone in the family). */
 export function NewMessageRow({ onPress }: { onPress: () => void }) {
+  const { t } = useWords();
   return (
-    <PressableScale onPress={onPress} scaleTo={0.98} pressedOpacity={0.6} accessibilityLabel="New message" accessibilityHint="Pick someone in the family" style={styles.row}>
+    <PressableScale
+      onPress={onPress}
+      scaleTo={0.98}
+      pressedOpacity={0.6}
+      accessibilityLabel={t('messages.inbox.newMessage')}
+      accessibilityHint={t('messages.inbox.newMessageHint')}
+      style={styles.row}>
       <View style={styles.newDisc}>
         <PlusIcon size={24} color={colors.peachInk} strokeWidth={2.2} />
       </View>
       <Txt variant="title" weight={400} style={styles.text}>
-        New message
+        {t('messages.inbox.newMessage')}
       </Txt>
     </PressableScale>
   );
@@ -143,8 +168,9 @@ export function CircleFaces({
   me: Profile | null;
   size?: number;
 }) {
+  const { t } = useWords();
   const all = circleFaces(members ?? thread?.members ?? [], me);
-  if (all.length <= 1) return <Avatar profile={all[0] ?? { name: 'Family' }} size={size} />;
+  if (all.length <= 1) return <Avatar profile={all[0] ?? { name: t('messages.family') }} size={size} />;
   // Two faces on the diagonal read better than three at this size.
   const faces = all.slice(0, 2);
   const small = Math.round(size * 0.7);
@@ -153,7 +179,7 @@ export function CircleFaces({
     { left: size - small, top: size - small },
   ];
   return (
-    <View style={{ width: size, height: size }} accessibilityLabel={`Family: ${all.map((f) => f.name).join(', ')}`}>
+    <View style={{ width: size, height: size }} accessibilityLabel={t('messages.inbox.familyFaces', { names: all.map((f) => f.name).join(', ') })}>
       {faces.map((p, i) => (
         <Avatar key={p.id} profile={p} size={small} ring style={[styles.face, spots[i]]} />
       ))}

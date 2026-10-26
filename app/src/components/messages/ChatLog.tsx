@@ -31,6 +31,7 @@ import { Avatar, bubblePop, CheckIcon, PressableScale, Txt } from '@/components/
 import type { Message } from '@/lib/api';
 import { chatDay, chatStamp, clock, differentDay, relativeDay } from '@/lib/format';
 import type { ChatMessage } from '@/lib/messaging';
+import { useWords } from '@/lib/words/useWords';
 import { colors } from '@/theme/tokens';
 
 import {
@@ -128,6 +129,7 @@ export function ChatLog({
   /** The focus message's top, in px from the top of the log (each time its layout changes). */
   onFocusLayout?: (y: number) => void;
 }) {
+  const { t } = useWords();
   const L = LAYOUT[ctx.layout];
   const meId = ctx.me?.id;
   // A reaction (a heart, "Just like mine") is never a bubble or a word in the log, and never counts
@@ -204,16 +206,16 @@ export function ChatLog({
           if (ctx.layout === 'parent') {
             if (ringId && g.messages.some((m) => m.id === ringId)) {
               const q = g.messages.find((m) => m.id === ringId)!;
-              stamp = `${relativeDay(q.created_at)} · waiting for you`;
+              stamp = t('messages.log.waiting', { when: relativeDay(q.created_at, {}, t) });
               stampStrong = true;
             } else {
               // A quiet line that opened the day passes the day down to here (chatGroups showsDay).
-              stamp = g.showsDay ? chatStamp(tail.created_at) : clock(tail.created_at);
+              stamp = g.showsDay ? chatStamp(tail.created_at, undefined, t) : clock(tail.created_at, t);
             }
           } else {
-            stamp = clock(tail.created_at);
+            stamp = clock(tail.created_at, t);
           }
-          if (isLast && g.mine) stamp += ' · Sent';
+          if (isLast && g.mine) stamp = t('messages.log.sent', { time: stamp });
         }
 
         return (
@@ -240,6 +242,9 @@ export function ChatLog({
                   : isServerQuestion(m, true) && nextOf.get(m.id)?.reply_to !== m.id
                     ? answered.get(m.id)
                     : undefined;
+                const answererName = answerer
+                  ? (ctx.profile?.(answerer)?.name ?? (ctx.circle ? null : (ctx.other?.name ?? null)))
+                  : null;
                 const openForMe = cookView && !g.mine && isServerQuestion(m, !ctx.circle) && !answered.has(m.id) && m.id !== ringId;
                 return (
                   <Animated.View
@@ -264,18 +269,22 @@ export function ChatLog({
                         done
                         text={
                           answerer === meId
-                            ? 'Answered by you'
-                            : `Answered by ${ctx.profile?.(answerer)?.name ?? (ctx.circle ? 'the family' : (ctx.other?.name ?? 'them'))}`
+                            ? t('messages.log.answeredByYou')
+                            : answererName != null
+                              ? t('messages.log.answeredBy', { name: answererName })
+                              : ctx.circle
+                                ? t('messages.log.answeredByFamily')
+                                : t('messages.log.answeredByThem')
                         }
                       />
                     ) : null}
                     {openForMe && onAnswer ? (
-                      <LinkStatus mine={false} label="Answer this" onPress={() => onAnswer(m)} />
+                      <LinkStatus mine={false} label={t('messages.log.answerThis')} onPress={() => onAnswer(m)} />
                     ) : null}
                     {m.saved_to_recipe && g.mine && m.note_id && onUndoSave ? (
                       <SavedUndo m={m} onUndo={onUndoSave} />
                     ) : m.saved_to_recipe ? (
-                      <Status mine={g.mine} done text="Saved to the recipe" />
+                      <Status mine={g.mine} done text={t('messages.log.saved')} />
                     ) : null}
                     {cookView && g.mine && onSave && savable(m, byId) ? <SaveLink m={m} onSave={onSave} /> : null}
                   </Animated.View>
@@ -301,14 +310,16 @@ export function ChatLog({
 }
 
 function DayLine({ iso }: { iso: string }) {
+  const { t } = useWords();
   return (
     <Txt variant="caption" weight={600} align="center" accessibilityRole="header">
-      {chatDay(iso)}
+      {chatDay(iso, undefined, t)}
     </Txt>
   );
 }
 
 function MessageBody({ m, ctx, mine, ring, dish }: { m: ChatMessage; ctx: BubbleContext; mine: boolean; ring: boolean; dish: boolean }) {
+  const { t } = useWords();
   const body = (m.body ?? '').trim();
   const dim = m.local === 'sending';
   const tone = toneFor(ctx, m, mine);
@@ -349,7 +360,7 @@ function MessageBody({ m, ctx, mine, ring, dish }: { m: ChatMessage; ctx: Bubble
       return (
         <>
           <KindLabel layout={ctx.layout} mine={mine}>
-            Recipe request
+            {t('messages.log.request')}
           </KindLabel>
           <TextBubble text={body} layout={ctx.layout} mine={mine} ring={ring} dim={dim} tone={tone} attachment={attachment} />
         </>
@@ -385,6 +396,7 @@ function LinkStatus({ label, mine, onPress }: { label: string; mine: boolean; on
 
 /** "✓ Saved to the recipe · Undo" under my own saved message. */
 function SavedUndo({ m, onUndo }: { m: ChatMessage; onUndo: (m: ChatMessage) => Promise<void> }) {
+  const { t } = useWords();
   const [busy, setBusy] = useState(false);
   const undo = async () => {
     if (busy) return;
@@ -399,19 +411,19 @@ function SavedUndo({ m, onUndo }: { m: ChatMessage; onUndo: (m: ChatMessage) => 
     <View style={[styles.status, { alignSelf: 'flex-end' }]}>
       <CheckIcon size={13} strokeWidth={3} color={colors.greenDeep} />
       <Txt variant="tiny" size={13} weight={700} color={colors.greenDeep}>
-        Saved to the recipe ·
+        {t('messages.log.savedDot')}
       </Txt>
       <PressableScale
         onPress={undo}
         disabled={busy}
         accessibilityRole="button"
-        accessibilityLabel="Undo"
-        accessibilityHint="Takes this back out of the recipe"
+        accessibilityLabel={t('messages.log.undo')}
+        accessibilityHint={t('messages.log.undoHint')}
         hitSlop={12}
         style={styles.undo}>
         {busy ? <ActivityIndicator size="small" color={colors.greenDeep} /> : null}
         <Txt variant="label" size={13} weight={700} color={colors.greenDeep} style={styles.underline}>
-          Undo
+          {t('messages.log.undo')}
         </Txt>
       </PressableScale>
     </View>
@@ -419,6 +431,7 @@ function SavedUndo({ m, onUndo }: { m: ChatMessage; onUndo: (m: ChatMessage) => 
 }
 
 function SaveLink({ m, onSave }: { m: ChatMessage; onSave: (m: ChatMessage) => Promise<void> }) {
+  const { t } = useWords();
   const [busy, setBusy] = useState(false);
   const save = async () => {
     if (busy) return;
@@ -434,13 +447,13 @@ function SaveLink({ m, onSave }: { m: ChatMessage; onSave: (m: ChatMessage) => P
       onPress={save}
       disabled={busy}
       accessibilityRole="button"
-      accessibilityLabel="Save to recipe"
-      accessibilityHint="Keeps this answer in the recipe for the whole family"
+      accessibilityLabel={t('messages.log.saveToRecipe')}
+      accessibilityHint={t('messages.log.saveHint')}
       hitSlop={8}
       style={[styles.link, { alignSelf: 'flex-end' }]}>
       {busy ? <ActivityIndicator size="small" color={colors.greenDeep} /> : null}
       <Txt variant="label" size={14} weight={700} color={colors.greenDeep}>
-        Save to recipe
+        {t('messages.log.saveToRecipe')}
       </Txt>
     </PressableScale>
   );
@@ -455,23 +468,24 @@ function LocalStatus({
   onRetry: (m: ChatMessage) => void;
   onDiscard: (m: ChatMessage) => void;
 }) {
+  const { t } = useWords();
   if (m.local === 'sending') {
     return (
       <Txt variant="tiny" align="right">
-        Sending…
+        {t('messages.log.sending')}
       </Txt>
     );
   }
   return (
     <View style={styles.failed}>
-      <PressableScale onPress={() => onRetry(m)} accessibilityLabel="Didn’t send. Tap to try again" hitSlop={8}>
+      <PressableScale onPress={() => onRetry(m)} accessibilityLabel={t('messages.log.didntSendLabel')} hitSlop={8}>
         <Txt variant="tiny" weight={700} color={colors.danger}>
-          Didn’t send · Tap to try again
+          {t('messages.log.didntSend')}
         </Txt>
       </PressableScale>
-      <PressableScale onPress={() => onDiscard(m)} accessibilityLabel="Remove this message" hitSlop={8}>
+      <PressableScale onPress={() => onDiscard(m)} accessibilityLabel={t('messages.log.removeLabel')} hitSlop={8}>
         <Txt variant="tiny" weight={600}>
-          Remove
+          {t('messages.log.remove')}
         </Txt>
       </PressableScale>
     </View>

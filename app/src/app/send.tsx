@@ -37,6 +37,7 @@ import { daysAgo } from '@/lib/format';
 import { useSession } from '@/lib/session';
 import { MAX_RECORDING_HOURS, uploadsConfigured } from '@/lib/uploads';
 import { uploadVoice, type VoiceRecording } from '@/lib/voice';
+import { useWords } from '@/lib/words/useWords';
 import { colors, motion, shadows, space } from '@/theme/tokens';
 
 /** After sending: the Recipes tab, where the recording shows as a greyed row until it's written. */
@@ -76,6 +77,7 @@ export default function SendScreen() {
   useDevPreview(params.preview);
   const insets = useSafeAreaInsets();
   const { me, owner, profiles, learners } = useSession();
+  const { t } = useWords();
   const draft = useDraft();
   const pick = usePickVideos();
 
@@ -94,6 +96,7 @@ export default function SendScreen() {
   const title = typed ?? draft.dish ?? '';
   const editingTitle = editRequested || !draft.dish;
   const dish = title.trim();
+  const heading = dish ? t('parent.send.heading', { dish }) : t('parent.send.headingRecipe');
 
   const [hello, setHello] = useState<VoiceRecording | null>(null);
   // The hello is only kept once it's stopped, so Send waits for that (or it would go without it).
@@ -114,24 +117,24 @@ export default function SendScreen() {
   const allToday = clips.length > 0 && clips.every((c) => c.recordedAt && daysAgo(c.recordedAt) === 0);
 
   const toLabel = to.label;
-  const sendLabel = toLabel ? `Send to ${toLabel}` : 'Send to your recipes';
+  const sendLabel = to.everyone ? t('parent.send.toEveryone') : toLabel ? t('parent.send.toName', { name: toLabel }) : t('parent.send.toRecipes');
 
   let helper = '';
   let blocked = false;
   if (!phoneOnly && !uploadsConfigured(me?.id)) {
-    helper = 'Sending isn’t set up in this build yet.';
+    helper = t('parent.send.notSetUp');
     blocked = true;
   } else if (selected.length === 0) {
-    helper = clips.length === 0 ? 'Add your videos first.' : 'Pick at least one video.';
+    helper = clips.length === 0 ? t('parent.send.addVideos') : t('parent.send.pickOne');
     blocked = true;
   } else if (tooLong) {
-    helper = `Over ${MAX_RECORDING_HOURS} hours of video. Leave a part out.`;
+    helper = t('parent.send.tooLong', { hours: MAX_RECORDING_HOURS });
     blocked = true;
   } else if (!dish) {
-    helper = 'Name the dish first.';
+    helper = t('parent.send.nameDish');
     blocked = true;
   } else if (helloRecording) {
-    helper = 'Stop your hello first.';
+    helper = t('parent.send.stopHello');
     blocked = true;
   }
   if (error) helper = error;
@@ -161,7 +164,7 @@ export default function SendScreen() {
       return;
     }
     if (!me) {
-      setError('Pick who you are first.');
+      setError(t('parent.send.pickWho'));
       return;
     }
     setError(null);
@@ -173,7 +176,7 @@ export default function SendScreen() {
         try {
           helloUp = await uploadVoice(hello);
         } catch (e) {
-          throw new Error(`Your hello didn’t upload. ${errorMessage(e, '')} Try again, or remove it.`.replace(/\s+/g, ' '));
+          throw new Error(t('parent.send.helloFailed', { reason: errorMessage(e, '') }).replace(/\s+/g, ' '));
         }
       }
       await sendDraft({ me, draft, clips: selected, kids: to.picked, recipients, toLabel, dish, hello: helloUp });
@@ -185,13 +188,14 @@ export default function SendScreen() {
       if (!mounted.current) return;
       setState('idle');
       content.set(withTiming(0, { duration: 200 }));
-      setTimeout(() => mounted.current && setDone(toLabel ? `On its way to ${toLabel}` : 'On its way'), 220);
+      const doneLabel = to.everyone ? t('parent.send.onItsWayEveryone') : toLabel ? t('parent.send.onItsWayTo', { name: toLabel }) : t('parent.send.onItsWay');
+      setTimeout(() => mounted.current && setDone(doneLabel), 220);
     } catch (e) {
       const wait = motion.loadingMinMs - (Date.now() - started);
       if (wait > 0) await new Promise((r) => setTimeout(r, wait));
       if (!mounted.current) return;
       const msg = e instanceof Error && e.message ? e.message : errorMessage(e);
-      setError(/connection|reach/i.test(msg) ? msg : `${msg.replace(/\.?$/, '.')} Check the connection and try again.`.replace(/\.\./g, '.'));
+      setError(/connection|reach/i.test(msg) ? msg : t('parent.send.checkConnection', { error: msg.replace(/\.?$/, '.') }).replace(/\.\./g, '.'));
       setState('error');
       setTimeout(() => mounted.current && setState('idle'), 1800);
     }
@@ -207,7 +211,6 @@ export default function SendScreen() {
     setTimeout(() => void (kind === 'camera' ? pick.record() : pick.library()), 600);
   };
 
-  const heading = `Send your ${dish || 'recipe'}`;
   const sending = state === 'loading';
 
   // No leaving mid-send (Back pill or the iOS swipe): the job and the draft change hands here.
@@ -246,14 +249,14 @@ export default function SendScreen() {
                       setTyped(t);
                       if (error) setError(null);
                     }}
-                    placeholder="What’s the dish?"
+                    placeholder={t('parent.send.dishPlaceholder')}
                     placeholderTextColor={colors.muted}
                     style={styles.input}
                     autoCapitalize="sentences"
                     returnKeyType="done"
                     maxLength={MAX_TITLE}
                     editable={!sending}
-                    accessibilityLabel="The dish’s name"
+                    accessibilityLabel={t('parent.dish.nameLabel')}
                   />
                 </View>
               </View>
@@ -261,7 +264,7 @@ export default function SendScreen() {
               <PressableScale
                 onPress={() => setEditRequested(true)}
                 scaleTo={0.99}
-                accessibilityLabel={`${heading}. Tap to change the dish’s name.`}>
+                accessibilityLabel={`${heading}. ${t('parent.send.tapToChange')}`}>
                 <Txt variant="display" size={34}>
                   {heading}
                 </Txt>
@@ -271,7 +274,7 @@ export default function SendScreen() {
             <View style={styles.section}>
               <View style={styles.sectionHead}>
                 <Txt variant="title" size={17} weight={700} accessibilityRole="header">
-                  {allToday ? 'Today’s videos' : 'Your videos'}
+                  {allToday ? t('parent.send.todaysVideos') : t('parent.send.yourVideos')}
                 </Txt>
                 {clips.length > 0 ? <AddMoreLink onPress={openAdd} /> : null}
               </View>
@@ -285,7 +288,7 @@ export default function SendScreen() {
             {others.length > 0 ? (
               <View style={styles.section}>
                 <Txt variant="title" size={17} weight={700} accessibilityRole="header">
-                  Who is it for?
+                  {t('parent.forWho.title')}
                 </Txt>
                 <ScrollView
                   horizontal
@@ -307,10 +310,10 @@ export default function SendScreen() {
                     <Chip
                       size="lg"
                       selectedTone="ink"
-                      label="Everyone"
+                      label={t('parent.forWho.everyone')}
                       selected={to.everyone}
                       onPress={() => !sending && setWho(toggleEveryone(picked, people, others))}
-                      accessibilityLabel="Everyone in the family"
+                      accessibilityLabel={t('parent.forWho.everyoneLabel')}
                     />
                   ) : null}
                 </ScrollView>
@@ -335,10 +338,10 @@ export default function SendScreen() {
             state={state}
             onPress={send}
             icon={<SendIcon size={22} color={colors.card} />}
-            loadingLabel="Wrapping…"
-            errorLabel="Didn’t send"
+            loadingLabel={t('parent.send.wrapping')}
+            errorLabel={t('parent.send.didntSend')}
             style={styles.stretch}
-            accessibilityHint="Sends your videos in the background. You can close the app."
+            accessibilityHint={t('parent.send.hint')}
           />
           {helper ? (
             <Txt
@@ -363,7 +366,7 @@ export default function SendScreen() {
           <SuccessBurst
             title={done}
             glyph="plane"
-            subtitle="You can close the app"
+            subtitle={t('parent.send.canClose')}
             subtitleIcon={<LidPot />}
             onDone={() => {
               clearDraft();
