@@ -1,7 +1,8 @@
 """Tests for cover.py: which part of the video Gemini watches, the frames compared around its pick, that the
 sharpest real frame wins, the 4:5 crop around the dish (black bars trimmed, the dish whole in every app slot),
-and the last step's still (fake Gemini, a generated video; no API call). Also process.make_cover's order: the
-cook's plate photo, used as it is with no frame pick; a broken photo falls back to the frame pick.
+and the last step's still (fake Gemini, a generated video; no API call). The same on Claude, which sees the window
+as labelled stills (COVER_PROVIDER=claude). Also process.make_cover's order: the cook's plate photo, used as it is
+with no frame pick; a broken photo falls back to the frame pick.
 
     .venv/bin/python pipeline/test_cover.py
 """
@@ -19,11 +20,13 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+from pipeline import claude  # noqa: E402
 from pipeline import cover as C  # noqa: E402
 from pipeline import process  # noqa: E402
 from pipeline.prep import probe  # noqa: E402
 from pipeline.schema import Recipe  # noqa: E402
 from pipeline.shorten import MemoryUsage  # noqa: E402
+from pipeline.test_claude import FakeAnthropic, env  # noqa: E402
 
 
 def steps(*spans: tuple[int, int]) -> list[dict]:
@@ -179,6 +182,43 @@ def test_cover_is_the_sharpest_frame_cropped_to_the_dish_and_the_last_step_gets_
     frame, _ = fake.sent[C.DishBox][0]
     assert frame.inline_data.mime_type == "image/jpeg"
     assert [c["kind"] for c in usage.calls] == ["cover", "cover-box"] and all(c["ok"] for c in usage.calls)
+
+
+def test_claude_frames_are_every_two_seconds_and_further_apart_for_a_long_window() -> None:
+    assert [C.frame_every(s) for s in (70, 300, 301, 450)] == [2.0, 2.0, 3.0, 3.0]
+
+
+def test_claude_picks_from_labelled_stills_then_the_same_sharpest_frame_and_crop() -> None:
+    fake = FakeAnthropic(cover_answer("00:40", "00:50"), {"found": True, "box_2d": [250, 300, 750, 700]})
+    usage = MemoryUsage()
+    with tempfile.TemporaryDirectory() as tmp:
+        play, dest = Path(tmp) / "play.mp4", Path(tmp) / "poster.jpg"
+        video(play, 70, sharp_at=(40.5, 49.5))
+        pick = C.make_cover(claude.ClaudeText(client=fake), "claude-haiku-5-5", RECIPE, play, dest, usage)
+        assert (pick.at, pick.cropped, pick.still_at) == (40.5, True, 49.5), pick
+        assert size(dest) == (150, 188), size(dest)
+    moment, box = (call["messages"][0]["content"] for call in fake.calls)
+    labels = [b["text"] for b in moment[:-1] if b["type"] == "text"]
+    assert labels[:3] == ["00:00", "00:02", "00:04"] and len(labels) in (35, 36), labels
+    assert sum(b["type"] == "image" for b in moment) == len(labels)
+    prompt = moment[-1]["text"]
+    assert prompt.startswith(f"The clip comes as {len(labels)} still frames, one every 2 seconds"), prompt
+    assert '"Poha"' in prompt and "01:10 long" in prompt, prompt
+    assert [b["type"] for b in box] == ["text", "image", "text"] and box[0]["text"] == "The frame:", box
+    assert [c["kind"] for c in usage.calls] == ["cover", "cover-box"] and all(c["ok"] for c in usage.calls)
+    assert {c["model"] for c in usage.calls} == {"claude-haiku-5-5"}
+
+
+def test_cover_provider_picks_the_model() -> None:
+    gemini = object()
+    with env(COVER_PROVIDER=None):
+        assert process.cover_model({"cover_provider": "gemini", "extract_model": "fake-pro"}, gemini) == (gemini,
+                                                                                                         "fake-pro")
+    with env(ANTHROPIC_API_KEY="fake", CLAUDE_COVER_MODEL=None):
+        client, model = process.cover_model({"cover_provider": "claude", "extract_model": "fake-pro"}, gemini)
+        assert isinstance(client, claude.ClaudeText) and model == client.model == "claude-haiku-5-5"
+    with env(COVER_PROVIDER="claude"):
+        assert claude.provider("COVER_PROVIDER") == "claude"
 
 
 def test_no_dish_box_keeps_the_whole_frame() -> None:
