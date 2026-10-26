@@ -96,7 +96,7 @@ and homesick college kids. It's a family product, not a tool.
   Cartesia (audio), never Gemini (`docs/agents/memory/gemini-credits-nearly-gone.md`). Existing Gemini calls move one
   PR at a time behind env flags, with Gemini as the rollback: `TEXT_PROVIDER=claude` (Convex env and the worker's
   `.env`) moves the text calls, `COVER_PROVIDER=claude` (the worker's `.env`) the cover pick, `ALIGN_PROVIDER=claude`
-  the substep times. Muse Spark moves to Claude too. Pick models quality-first, then the cheapest that holds it
+  the substep times, `EXTRACTOR=claude` the video extraction. Muse Spark moves to Claude too. Pick models quality-first, then the cheapest that holds it
   (`docs/agents/memory/claude-cartesia-quality-first.md`). Flipping a flag in production is Caleb's call.
 - **Moss (search):** filled from Convex, searched from the live voice service; one index per family
   (`family-<familyId>`). Moss only finds moments: never use Moss Inference to write answers
@@ -204,6 +204,7 @@ voice/deploy.sh                                                    # Cloud Run h
 .venv/bin/python pipeline/test_publish.py                           # a family recipe.json: no stories or tips, not in library.json
 .venv/bin/python pipeline/test_claude.py                            # TEXT_PROVIDER=claude: order, shorten, writer fallback (fakes)
 .venv/bin/python pipeline/test_transcribe.py                        # Cartesia's word-timed transcript: loops, keys, cache (fakes)
+.venv/bin/python pipeline/test_extract_claude.py                    # EXTRACTOR=claude: frames + transcript -> events (fakes)
 .venv/bin/python pipeline/transcribe.py --id <id> [--language mr]   # work/transcript.json from voice.m4a (real Cartesia)
 .venv/bin/python pipeline/scrub_family.py                          # dry run: old family recipe.json files to strip (--write: Caleb's OK)
 .venv/bin/python pipeline/worker.py [--once]                        # claim Convex jobs (--gcs: the old GCS job files)

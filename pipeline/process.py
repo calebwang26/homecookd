@@ -20,8 +20,9 @@ RECIPE_WRITER says so, and when Muse fails twice, Claude with TEXT_PROVIDER=clau
 (pipeline/writer.py). Extraction always stays on Gemini.
 
 TEXT_PROVIDER=claude also moves the clip-order call and the short substeps to Claude (pipeline/claude.py),
-COVER_PROVIDER=claude the cover pick (pipeline/cover.py) and ALIGN_PROVIDER=claude the substep times
-(pipeline/align.py, on Cartesia's transcript); unset, they stay on Gemini.
+COVER_PROVIDER=claude the cover pick (pipeline/cover.py), ALIGN_PROVIDER=claude the substep times
+(pipeline/align.py, on Cartesia's transcript) and EXTRACTOR=claude the extraction (pipeline/extract_claude.py:
+the AI copies' frames + Cartesia's transcript); unset, they stay on Gemini.
 
 The cover (poster.jpg) is the cook's own plate photo when an in-app recording has one (the worker passes it as
 cover_photo), else the sharpest real frame of the finished dish where Gemini says it looks best, cropped to
@@ -93,6 +94,8 @@ PRICES: dict[str, dict[str, tuple[float, float]]] = {
 TIER_AT = {"claude-haiku-5-5": 100_000}  # prompt tokens above which the second price applies; else 200k
 FALLBACK_PRICE_MODEL = "gemini-3.1-pro-preview"  # unknown models are costed at the most expensive known rate
 ORDER_MODEL = "gemini-3.8-flash"  # the clip-order call; GEMINI_EXTRACT_MODEL instead when that is a Flash model
+# EXTRACTOR=claude: who reads the frames and transcript. Haiku missed Poha's garnish and most amounts (Oct 26).
+EXTRACT_MODEL = "claude-sonnet-5-5"
 
 UPLOAD_TIMEOUT_S = 300
 REQUEST_TIMEOUT_MS = 10 * 60 * 1000
@@ -281,6 +284,7 @@ class Extraction:
     def __init__(self, cfg: dict, i: int, n: int, session: dict, ai: dict, out_dir: Path, media_dur: int,
                  usage: Usage, manifest: dict | None = None):
         self.cfg, self.i, self.session, self.ai, self.media_dur, self.usage = cfg, i, session, ai, media_dur, usage
+        self.model = cfg["extract_model"]  # who answers: extract_claude sets its Claude model
         self.work = out_dir / "work"
         self.path = out_dir / ai["path"]
         self.clip_len = ai["duration_s"]
@@ -338,7 +342,7 @@ class Extraction:
                exc: Exception | None = None, billed: bool = True) -> dict | None:
         """Validate one attempt's response (or the exception that replaced it) and record its usage.
         Returns the result, or None after logging the failure; a rejected answer is fed back in self.prompt."""
-        model = self.cfg["extract_model"]
+        model = self.model
         text = None
         try:
             if exc is not None:
@@ -362,7 +366,7 @@ class Extraction:
 
         call = self.usage.add(kind, model, self.ai["path"], attempt, seconds, resp)
         log(f"{self.tag} attempt {attempt}{' (batch)' if kind == 'extract-batch' else ''}: {describe_call(call)}")
-        if kind == "extract" and seconds > FLASH_HINT_S and "flash" not in model:
+        if kind == "extract" and seconds > FLASH_HINT_S and model.startswith("gemini") and "flash" not in model:
             log(f"{self.tag} hint: extraction took > {FLASH_HINT_S} s; set GEMINI_EXTRACT_MODEL to a Flash model "
                 "(e.g. gemini-3.8-flash) to speed it up")
         self.raw_path.write_text(json.dumps(json.loads(text), indent=2, ensure_ascii=False) + "\n")
@@ -667,7 +671,7 @@ def load_config() -> dict:
     extract_model = os.environ.get("GEMINI_EXTRACT_MODEL") or model
     try:
         text_provider, cover_provider = claude.provider(), claude.provider("COVER_PROVIDER")
-        align_provider = claude.provider("ALIGN_PROVIDER")
+        align_provider, extractor = claude.provider("ALIGN_PROVIDER"), claude.provider("EXTRACTOR")
     except claude.ClaudeError as e:
         raise ProcessError(str(e))
     gap = os.environ.get("COVERAGE_GAP_S") or str(coverage.GAP_S)
@@ -676,7 +680,7 @@ def load_config() -> dict:
     return {"merge_model": model, "extract_model": extract_model,
             "order_model": extract_model if "flash" in extract_model.lower() else ORDER_MODEL,
             "media_resolution": media_resolution, "coverage_gap_s": int(gap), "text_provider": text_provider,
-            "cover_provider": cover_provider, "align_provider": align_provider}
+            "cover_provider": cover_provider, "align_provider": align_provider, "extractor": extractor}
 
 
 TextModel = writer.GeminiWriter | claude.ClaudeText  # .name, .model and .generate(prompt, schema, temperature)
@@ -714,6 +718,17 @@ def align_model(cfg: dict, client: genai.Client) -> tuple[genai.Client | claude.
             raise ProcessError(str(e))
         return gen, gen.model
     return client, cfg["order_model"]
+
+
+def extract_model(cfg: dict) -> claude.ClaudeText | None:
+    """EXTRACTOR=claude: who extracts the events from the frames and transcript (CLAUDE_EXTRACT_MODEL, default
+    EXTRACT_MODEL); None = Gemini watches the video."""
+    if cfg["extractor"] != "claude":
+        return None
+    try:
+        return claude.ClaudeText(os.environ.get("CLAUDE_EXTRACT_MODEL") or EXTRACT_MODEL)
+    except claude.ClaudeError as e:
+        raise ProcessError(str(e))
 
 
 def order_asker(gen: TextModel, usage: Usage):
@@ -864,12 +879,30 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
         raise ProcessError(str(e))
     order_gen = text_model(cfg, client, cfg["order_model"], "low")
     cover_by, align_by = cover_model(cfg, client), align_model(cfg, client)
-    log(f"[process {recipe_id}] {n} AI file(s); extract with {cfg['extract_model']} "
-        f"({cfg['media_resolution'].value}{', Batch API' if batch else ''}), write with {w.name} {w.model}")
+    claude_extract = extract_model(cfg)
+    extract_with = (f"{claude_extract.model} (frames + Cartesia's transcript)"
+                    if claude_extract else
+                    f"{cfg['extract_model']} ({cfg['media_resolution'].value}{', Batch API' if batch else ''})")
+    log(f"[process {recipe_id}] {n} AI file(s); extract with {extract_with}, write with {w.name} {w.model}")
     report("understanding", 0.2)
     usage = Usage(work / "usage.json")
     t0 = time.monotonic()
-    if batch:
+    if claude_extract:
+        from pipeline import extract_claude, transcribe  # here: both import this module
+        if batch:
+            log(f"[process {recipe_id}] --batch is for Gemini; extracting with Claude as usual")
+        try:
+            heard = transcribe.lines(transcribe.transcript_file(out_dir, manifest.get("language"), force)["words"])
+        except transcribe.TranscribeError as e:
+            raise ProcessError(f"no transcript for the extraction: {e}")
+        with ThreadPoolExecutor(max_workers=min(n, MAX_WORKERS)) as pool:
+            futures = [pool.submit(extract_claude.extract_one,
+                                   Extraction(cfg, i, n, s, ai, out_dir, media_dur, usage, manifest), claude_extract,
+                                   heard, force) for i, (s, ai) in enumerate(jobs, 1)]
+            for done, _ in enumerate(as_completed(futures), 1):
+                report("understanding", 0.2 + 0.5 * done / n)
+            results = [f.result() for f in futures]
+    elif batch:
         results = extract_batch(client, cfg, [Extraction(cfg, i, n, s, ai, out_dir, media_dur, usage, manifest)
                                               for i, (s, ai) in enumerate(jobs, 1)],
                                 force, batch_timeout_s, f"homecookd-{recipe_id}")

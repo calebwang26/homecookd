@@ -36,6 +36,8 @@ COVER_PROMPT.format(title=<json string>, clip_mmss=..., step_span=...)
     (pipeline/cover.py: the second in the video's last minutes where the finished dish looks best, the cover photo,
     and the second inside the last step where it shows best, that step's still)
 COVER_BOX_PROMPT.format(title=<json string>)   (pipeline/cover.py: the dish's box in the cover frame, to crop to)
+EXTRACT_FRAMES_NOTE.format(n=..., every=...), EXTRACT_HEARD.format(transcript=...)   (pipeline/extract_claude.py,
+    EXTRACTOR=claude: EXTRACT_PROMPT on the clip's frames + Cartesia's transcript)
 COVER_FRAMES_NOTE.format(n=..., every=...)   (pipeline/cover.py, COVER_PROVIDER=claude: before COVER_PROMPT)
 """
 
@@ -230,6 +232,25 @@ def context(language: str | None, log: list[dict] | None, base_s: float = 0, cli
     """{context} for EXTRACT_PROMPT and MERGE_PROMPT: "" for a plain upload, so the prompts stay as before."""
     return language_line(language) + homie_block(log, base_s, clip_s) + live_block(live, base_s, clip_s)
 
+
+# EXTRACTOR=claude (pipeline/extract_claude.py): Claude takes no video or audio, so a clip goes as its frames and
+# Cartesia's transcript. EXTRACT_FRAMES_NOTE goes before EXTRACT_PROMPT, which is unchanged, and EXTRACT_HEARD after.
+EXTRACT_FRAMES_NOTE = """\
+You can't watch this clip as a video: it comes as {n} still frames, one every {every} seconds, each after a line
+with its MM:SS time in the clip, and at the end of this message the transcript of what the cook says, from
+speech-to-text, also in MM:SS from the clip's start. The transcript can have spelling slips, words in the wrong
+script, missing words and repeats, so read it as speech and go by its meaning. Most stories are only in the
+transcript. Treat the frames and the transcript together as the video and follow every rule below as if you were
+watching it. For quote_original, copy the cook's words from the transcript in her own script, fixing only clear
+speech-to-text slips; never write words she didn't say.
+
+"""
+
+EXTRACT_HEARD = """\
+
+Transcript of this clip:
+{transcript}
+"""
 
 EXTRACT_RETRY_SUFFIX = """\
 
