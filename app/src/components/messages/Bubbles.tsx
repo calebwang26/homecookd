@@ -31,6 +31,8 @@ import { ratingAsk } from '@/lib/postcardLogic';
 import { refreshThreadMedia, type ChatMessage } from '@/lib/messaging';
 import type { LibraryEntry, Recipe } from '@/lib/types';
 import { useVoicePlayback } from '@/lib/voice';
+import { english, type T } from '@/lib/words/words';
+import { useWords } from '@/lib/words/useWords';
 import { colors, shadows } from '@/theme/tokens';
 
 import { dishName, isCookOf } from './helpers';
@@ -97,11 +99,12 @@ export function toneFor(ctx: BubbleContext, m: Pick<Message, 'sender_id'>, mine:
  * own bubble.
  */
 export function StepChip({ m, ctx, mine, asBubble, ring }: { m: Message; ctx: BubbleContext; mine: boolean; asBubble?: boolean; ring?: boolean }) {
+  const { t } = useWords();
   const recipe = m.recipe_id ? ctx.recipes[m.recipe_id] : undefined;
   const step = recipe?.steps.find((s) => s.order === m.step_order);
   const entry = ctx.entry(m.recipe_id);
   const dish = entry ? dishName(entry) : (recipe?.title ?? '');
-  const label = m.step_order ? `Step ${m.step_order}${step ? ` · ${step.title}` : ''}` : dish;
+  const label = m.step_order ? stepLabel(m.step_order, step?.title, t) : dish;
   const L = LAYOUT[ctx.layout];
   const open = () => {
     if (!m.recipe_id) return;
@@ -114,7 +117,7 @@ export function StepChip({ m, ctx, mine, asBubble, ring }: { m: Message; ctx: Bu
     <PressableScale
       onPress={m.recipe_id ? open : undefined}
       accessibilityRole="link"
-      accessibilityLabel={`Open ${label}`}
+      accessibilityLabel={t('messages.bubble.open', { label })}
       hitSlop={8}
       style={[
         { alignSelf: mine ? 'flex-end' : 'flex-start' },
@@ -134,7 +137,7 @@ export function StepChip({ m, ctx, mine, asBubble, ring }: { m: Message; ctx: Bu
         color={colors.lavenderInk}
         numberOfLines={asBubble ? 2 : 1}
         align={mine && !asBubble ? 'right' : 'left'}>
-        {asBubble ? `A question about ${label}` : label}
+        {asBubble ? t('messages.bubble.questionAbout', { label }) : label}
       </Txt>
     </PressableScale>
   );
@@ -194,14 +197,14 @@ export function TextBubble({
  * What a dish card shows: title, one meta line ("by Dad", "Your recipe", "Step 3 · Boil"), photo.
  * `title` is null until the library entry or the recipe has loaded (never a made-up name).
  */
-export function dishInfo(ctx: Pick<BubbleContext, 'entry' | 'recipes' | 'me'>, id: string, step?: number | null) {
+export function dishInfo(ctx: Pick<BubbleContext, 'entry' | 'recipes' | 'me'>, id: string, step?: number | null, t: T = english) {
   const entry = ctx.entry(id);
   const recipe = ctx.recipes[id];
   const cook = entry?.cook_name ?? recipe?.cook.name ?? null;
   const mine = isCookOf(cook ? { cook_name: cook } : null, ctx.me);
   const title = entry ? dishName(entry) : recipe ? dishName({ title: recipe.title, cook_name: recipe.cook.name }) : null;
   const stepTitle = step ? recipe?.steps.find((s) => s.order === step)?.title : undefined;
-  const meta = step ? `Step ${step}${stepTitle ? ` · ${stepTitle}` : ''}` : mine ? 'Your recipe' : cook ? `by ${cook}` : null;
+  const meta = step ? stepLabel(step, stepTitle || null, t) : mine ? t('messages.bubble.yourRecipe') : cook ? t('messages.bubble.byCook', { name: cook }) : null;
   return { title, meta, poster: entry?.poster_url ?? recipe?.media.poster_url ?? null, mine };
 }
 
@@ -210,10 +213,11 @@ export function dishInfo(ctx: Pick<BubbleContext, 'entry' | 'recipes' | 'me'>, i
  * if theirs); a step question lands on that step for everyone but the dish's cook.
  */
 export function DishAttachment({ m, ctx }: { m: Pick<Message, 'recipe_id' | 'step_order'>; ctx: BubbleContext }) {
+  const { t } = useWords();
   if (!m.recipe_id) return null;
   const id = m.recipe_id;
   const step = m.step_order;
-  const dish = dishInfo(ctx, id, step);
+  const dish = dishInfo(ctx, id, step, t);
   const open = () => {
     if (step && !dish.mine) router.push({ pathname: '/cook/[id]', params: { id, step: String(step) } });
     else openDish(id, { mine: dish.mine });
@@ -223,7 +227,7 @@ export function DishAttachment({ m, ctx }: { m: Pick<Message, 'recipe_id' | 'ste
       onPress={open}
       scaleTo={0.97}
       accessibilityRole="link"
-      accessibilityLabel={`Open the recipe${dish.title ? `: ${dish.title}` : ''}`}
+      accessibilityLabel={dish.title ? t('messages.bubble.openRecipeTitle', { title: dish.title }) : t('messages.bubble.openRecipe')}
       style={styles.dish}>
       {dish.poster ? (
         <Image source={{ uri: dish.poster }} style={styles.dishThumb} contentFit="cover" transition={150} accessibilityIgnoresInvertColors />
@@ -265,6 +269,7 @@ export function VoiceBubble({
   attachment?: ReactNode;
 }) {
   const v = useVoicePlayback(m);
+  const { t } = useWords();
   // The transcript wraps at the bubble's own width, never wider: it waits for the bubble's first
   // layout, then fades in already wrapped (no wide-then-narrow jump).
   const [bubbleW, setBubbleW] = useState(0);
@@ -282,7 +287,12 @@ export function VoiceBubble({
   const playing = v.phase === 'playing' || v.phase === 'loading';
   const sender = senderOf(ctx, m, mine);
   const transcript = (m.transcript ?? '').trim();
-  const label = `${playing ? 'Pause' : 'Play'} ${mine ? 'your' : `${sender?.name ?? 'their'}’s`} voice note, ${mmss(v.total)}`;
+  const total = mmss(v.total);
+  const label = mine
+    ? t(playing ? 'messages.bubble.pauseMine' : 'messages.bubble.playMine', { time: total })
+    : sender?.name != null
+      ? t(playing ? 'messages.bubble.pauseName' : 'messages.bubble.playName', { name: sender.name, time: total })
+      : t(playing ? 'messages.bubble.pauseTheirs' : 'messages.bubble.playTheirs', { time: total });
   const side = mine ? 'flex-end' : 'flex-start';
 
   return (
@@ -308,7 +318,7 @@ export function VoiceBubble({
           </PressableScale>
           {ownCookNote ? (
             <Txt variant="label" size={16} weight={700} color={tone.ink}>
-              {`Your voice · ${time}`}
+              {t('messages.bubble.yourVoice', { time })}
             </Txt>
           ) : (
             <>
@@ -324,7 +334,7 @@ export function VoiceBubble({
       </View>
       {v.phase === 'error' ? (
         <Txt variant="tiny" color={colors.danger}>
-          This voice note won’t play right now.
+          {t('messages.bubble.wontPlay')}
         </Txt>
       ) : null}
       {transcript && bubbleW ? (
@@ -340,6 +350,7 @@ export function VoiceBubble({
 
 /** A recipe sent in the chat: photo, title, "by Dad · ~50 min", the note; opens the recipe. */
 export function RecipeBubble({ m, ctx, mine }: { m: Message; ctx: BubbleContext; mine: boolean }) {
+  const { t } = useWords();
   const entry = ctx.entry(m.recipe_id);
   const recipe = m.recipe_id ? ctx.recipes[m.recipe_id] : undefined;
   const tone = toneFor(ctx, m, mine);
@@ -347,7 +358,11 @@ export function RecipeBubble({ m, ctx, mine }: { m: Message; ctx: BubbleContext;
   const title = entry?.title ?? recipe?.title ?? null;
   const cook = entry?.cook_name ?? recipe?.cook.name ?? null;
   const time = totalTimeLabel(recipe?.total_time);
-  const meta = [cook ? `by ${cook}` : null, time].filter(Boolean).join(' · ');
+  const meta = cook
+    ? time
+      ? t('messages.bubble.byCookTime', { name: cook, time })
+      : t('messages.bubble.byCook', { name: cook })
+    : (time ?? '');
   const poster = entry?.poster_url ?? recipe?.media.poster_url ?? null;
   const note = (m.body ?? '').trim();
   const mineRecipe = isCookOf(entry ?? (recipe ? { cook_name: recipe.cook.name } : null), ctx.me);
@@ -359,7 +374,7 @@ export function RecipeBubble({ m, ctx, mine }: { m: Message; ctx: BubbleContext;
       onPress={open}
       scaleTo={0.97}
       accessibilityRole="link"
-      accessibilityLabel={title ? `Open the recipe: ${title}` : 'Open the recipe'}
+      accessibilityLabel={title ? t('messages.bubble.openRecipeTitle', { title }) : t('messages.bubble.openRecipe')}
       style={[styles.bubble, styles.recipe, corners(ctx.layout, mine), { backgroundColor: tone.bg }]}>
       {poster ? (
         <View>
@@ -394,13 +409,14 @@ export function RecipeBubble({ m, ctx, mine }: { m: Message; ctx: BubbleContext;
 
 /** "Leo made your Sunday Chili" with a green check, the dish photo (or their postcard) and their note. */
 export function CookedBubble({ m, ctx, mine }: { m: Message; ctx: BubbleContext; mine: boolean }) {
+  const { t } = useWords();
   const entry = ctx.entry(m.recipe_id);
   const tone = toneFor(ctx, m, mine);
   const L = LAYOUT[ctx.layout];
-  const dish = entry ? dishName(entry) : 'it';
+  const dish = entry ? dishName(entry) : null;
   const yours = isCookOf(entry, ctx.me);
-  const who = mine ? 'You' : (senderOf(ctx, m, mine)?.name ?? 'They');
-  const headline = mine ? `You made ${dish}` : `${who} made ${yours ? 'your ' : ''}${dish}`;
+  const name = mine ? null : (senderOf(ctx, m, mine)?.name ?? null);
+  const headline = madeHeadline(t, { mine, name, dish, yours });
   const note = (m.body ?? '').trim();
   const open = () => {
     openDish(m.recipe_id, { mine: yours });
@@ -427,7 +443,13 @@ export function CookedBubble({ m, ctx, mine }: { m: Message; ctx: BubbleContext;
           uri={m.photo_url}
           id={m.id}
           onError={photoFailed}
-          label={mine ? 'Your photo of the dish' : `${who}’s photo of the dish`}
+          label={
+            mine
+              ? t('messages.bubble.yourPhoto')
+              : name != null
+                ? t('messages.bubble.namePhoto', { name })
+                : t('messages.bubble.theyPhoto')
+          }
           style={[styles.cookedPhoto, { width: (mine ? L.maxMine : L.maxTheirs) - 2 * L.padH }]}
         />
       ) : null}
@@ -450,7 +472,7 @@ export function CookedBubble({ m, ctx, mine }: { m: Message; ctx: BubbleContext;
       </View>
       {m.photo_url ? (
         <RatingLine
-          words={yours ? 'How close to yours' : ratingAsk(entry?.cook_name || ctx.recipes[m.recipe_id ?? '']?.cook.name || 'the cook').replace(/\?$/, '')}
+          words={yours ? t('messages.bubble.howClose') : ratingAsk(entry?.cook_name || ctx.recipes[m.recipe_id ?? '']?.cook.name || 'the cook').replace(/\?$/, '')}
           value={m.rating}
           size={L.font + 1}
           textSize={L.font - 2}
@@ -463,6 +485,23 @@ export function CookedBubble({ m, ctx, mine }: { m: Message; ctx: BubbleContext;
       ) : null}
     </PressableScale>
   );
+}
+
+/** "Step 3 · Roll the wrappers", or "Step 3" when there's no title (null). */
+function stepLabel(step: number, title: string | null | undefined, t: T): string {
+  return title != null ? t('messages.bubble.stepTitle', { step, title }) : t('messages.bubble.step', { step });
+}
+
+/** "You made Sunday Chili" / "Leo made your Sunday Chili" / "They made it". */
+function madeHeadline(t: T, o: { mine: boolean; name: string | null; dish: string | null; yours: boolean }): string {
+  const { name, dish } = o;
+  if (o.mine) return dish != null ? t('messages.bubble.youMade', { dish }) : t('messages.bubble.youMadeIt');
+  if (name != null) {
+    if (dish == null) return t('messages.bubble.nameMadeIt', { name });
+    return o.yours ? t('messages.bubble.nameMadeYour', { name, dish }) : t('messages.bubble.nameMade', { name, dish });
+  }
+  if (dish == null) return t('messages.bubble.theyMadeIt');
+  return o.yours ? t('messages.bubble.theyMadeYour', { dish }) : t('messages.bubble.theyMade', { dish });
 }
 
 /** Small label above a bubble ("Recipe request"). */

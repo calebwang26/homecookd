@@ -8,6 +8,7 @@ import Svg, { Ellipse } from 'react-native-svg';
 
 import { Avatar, PlusIcon, PotMark, Txt } from '@/components/ui';
 import type { Profile } from '@/lib/api';
+import { useWords } from '@/lib/words/useWords';
 import { alpha, colors, radii } from '@/theme/tokens';
 
 const FACE = 46;
@@ -27,6 +28,7 @@ export type InviteCardProps = {
 };
 
 export function InviteCard({ familyName, people }: InviteCardProps) {
+  const { t } = useWords();
   const { width: winW } = useWindowDimensions();
   // The table's width once laid out; until then the sheet's width minus the paddings.
   const [measured, setMeasured] = useState<number | null>(null);
@@ -47,11 +49,16 @@ export function InviteCard({ familyName, people }: InviteCardProps) {
   };
 
   const family = midSentence(familyName ?? '');
-  const title = family ? `Join ${family} on homecookd` : 'Join our family table on homecookd';
+  const title = family ? t('share.invite.title', { family }) : t('share.invite.titleNoName');
   const names = faces.map((p) => p.name).join(', ');
+  const label = names
+    ? over
+      ? t('share.invite.a11yNamesMore', { title, names, count: over })
+      : t('share.invite.a11yNames', { title, names })
+    : title;
 
   return (
-    <View style={[styles.stage, { width: stageW }]} accessibilityRole="image" accessibilityLabel={`${title}${names ? ` ${names}${over ? ` and ${over} more` : ''}.` : ''}`}>
+    <View style={[styles.stage, { width: stageW }]} accessibilityRole="image" accessibilityLabel={label}>
       <View style={styles.card}>
         <View style={styles.table} onLayout={(e) => setMeasured(e.nativeEvent.layout.width)}>
           <Svg width={W} height={TABLE_H} style={StyleSheet.absoluteFill}>

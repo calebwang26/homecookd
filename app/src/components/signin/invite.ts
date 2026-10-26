@@ -17,6 +17,7 @@
 // still "invited" there (a person of that name who already joined means another family that just
 // looks the same). A family invite names nobody, so the family name and the inviter must do.
 import type { Family, InvitePeek, InviteState, Profile } from '@/lib/api';
+import { english, type T, type WordKey } from '@/lib/words/words';
 
 export type Gone = Exclude<InviteState, 'pending'>;
 
@@ -38,19 +39,20 @@ export type InviteView =
   | { kind: 'missing'; sentence: string }
   | { kind: 'unreachable'; sentence: string; line: string };
 
-/** The server's own sentences (POST /invites/accept), so the web page and the app agree. */
-export const GONE_SENTENCE: Record<Gone, string> = {
-  used: 'This invite was already used.',
-  expired: 'This invite expired.',
-  revoked: 'This invite was turned off.',
+/** The server's own sentences (POST /invites/accept), so the web page and the app agree (keys for t()). */
+export const GONE_SENTENCE: Record<Gone, WordKey> = {
+  used: 'signin.invite.used',
+  expired: 'signin.invite.expired',
+  revoked: 'signin.invite.revoked',
 };
-export const NOT_FOUND = 'That invite link doesn’t work.';
-/** The server's 404 for a typed code. */
+// Our own sentences, as keys for t().
+export const NOT_FOUND = 'signin.invite.notFound' satisfies WordKey;
+/** The server's 404 for a typed code (dev fixtures only: the real one is the server's own text). */
 export const CODE_NOT_FOUND = 'That invite code doesn’t work.';
-export const UNREACHABLE = 'We can’t reach homecookd.';
-export const CHECK_CONNECTION = 'Check your connection and try again.';
-export const OUR_SIDE = 'Something went wrong on our side.';
-export const TRY_SOON = 'Try again in a minute.';
+export const UNREACHABLE = 'signin.invite.unreachable' satisfies WordKey;
+export const CHECK_CONNECTION = 'signin.invite.checkConnection' satisfies WordKey;
+export const OUR_SIDE = 'signin.invite.ourSide' satisfies WordKey;
+export const TRY_SOON = 'signin.invite.trySoon' satisfies WordKey;
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 const byName = (people: Profile[], name: string | null | undefined) => people.find((p) => norm(p.name) === norm(name)) ?? null;
@@ -66,13 +68,13 @@ function inThatFamily(peek: InvitePeek, viewer: NonNullable<Viewer>): boolean {
   return !peek.inviter || !!byName(viewer.profiles, peek.inviter.name);
 }
 
-export function describeInvite(peeked: Peeked, viewer: Viewer): InviteView {
+export function describeInvite(peeked: Peeked, viewer: Viewer, t: T = english): InviteView {
   if (peeked.state === 'missing') return { kind: 'missing', sentence: peeked.sentence };
   if (peeked.state === 'unreachable') return { kind: 'unreachable', sentence: peeked.sentence, line: peeked.line };
   if (peeked.state === 'loading' || !viewer) return { kind: 'loading' };
   const { peek } = peeked;
   if (inThatFamily(peek, viewer)) return { kind: 'already', peek };
-  if (peek.status !== 'pending') return { kind: 'gone', peek, status: peek.status, sentence: GONE_SENTENCE[peek.status] };
+  if (peek.status !== 'pending') return { kind: 'gone', peek, status: peek.status, sentence: t(GONE_SENTENCE[peek.status]) };
   return { kind: 'join', peek, instead: viewer.signedIn && !!viewer.family };
 }
 
@@ -86,24 +88,28 @@ function midSentence(family: string): string {
  * web /i page and the share card say the same). Without "instead", the name's last two words stay on
  * one line (a no-break space), so it never ends on a lone "family?".
  */
-export function joinTitle(peek: InvitePeek, instead = false): string {
-  const name = midSentence(peek.family_name) || 'your family';
-  return `Join ${instead ? name : name.replace(/ (?=\S+$)/, '\u00A0')}${instead ? ' instead' : ''}?`;
+export function joinTitle(peek: InvitePeek, instead = false, t: T = english): string {
+  const name = midSentence(peek.family_name);
+  if (!name) return t(instead ? 'signin.invite.joinYoursInstead' : 'signin.invite.joinYours');
+  return instead ? t('signin.invite.joinInstead', { family: name }) : t('signin.invite.join', { family: name.replace(/ (?=\S+$)/, '\u00A0') });
 }
 
 /**
  * The line under the title, naming the sender beside their face: "Mom invited you as Dad." /
  * "Mom invited you." (a family invite names nobody); with no sender, "You're joining as Dad." or null.
  */
-export function joiningAs(peek: InvitePeek): string | null {
+export function joiningAs(peek: InvitePeek, t: T = english): string | null {
   const from = peek.inviter?.name?.trim();
   const as = peek.invitee?.name.trim();
-  if (from) return as ? `${from} invited you as ${as}.` : `${from} invited you.`;
-  return as ? `You’re joining as ${as}.` : null;
+  if (from) return as ? t('signin.invite.fromAs', { from, name: as }) : t('signin.invite.from', { from });
+  return as ? t('signin.invite.joiningAs', { name: as }) : null;
 }
 
 /** "Ask Mom for a new one." */
-export const askForNew = (peek: InvitePeek | null) => `Ask ${peek?.inviter?.name?.trim() || 'your family'} for a new one.`;
+export const askForNew = (peek: InvitePeek | null, t: T = english) => {
+  const name = peek?.inviter?.name?.trim();
+  return name ? t('signin.invite.askFor', { name }) : t('signin.invite.askFamily');
+};
 
 // ---------------------------------------------------------------------------------------------
 // Dev fixtures (web screenshots before the backend is live)
@@ -129,10 +135,14 @@ const person = (id: string, name: string, role: Profile['role'], extra: Partial<
  * `role=learner` invites Leo instead of Dad; `to=none` is a family invite (for nobody in
  * particular); `from=none` hides the inviter, `from=Dad` changes them.
  */
-export function inviteFixture(kind: InviteFixture, opts: { role?: string; from?: string; to?: string } = {}): { peeked: Peeked; viewer: Viewer } {
-  if (kind === 'notfound') return { peeked: { state: 'missing', sentence: NOT_FOUND }, viewer: null };
+export function inviteFixture(
+  kind: InviteFixture,
+  opts: { role?: string; from?: string; to?: string } = {},
+  t: T = english,
+): { peeked: Peeked; viewer: Viewer } {
+  if (kind === 'notfound') return { peeked: { state: 'missing', sentence: t(NOT_FOUND) }, viewer: null };
   if (kind === 'badcode') return { peeked: { state: 'missing', sentence: CODE_NOT_FOUND }, viewer: null };
-  if (kind === 'offline') return { peeked: { state: 'unreachable', sentence: UNREACHABLE, line: CHECK_CONNECTION }, viewer: null };
+  if (kind === 'offline') return { peeked: { state: 'unreachable', sentence: t(UNREACHABLE), line: t(CHECK_CONNECTION) }, viewer: null };
   const from = opts.from === 'none' ? null : opts.from?.trim() || 'Mom';
   const learner = opts.role === 'learner';
   const invitee = learner ? person('p-leo', 'Leo', 'learner') : person('p-dad', 'Dad', 'cook');

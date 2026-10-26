@@ -25,6 +25,7 @@ import Animated, {
 import Svg, { Circle } from 'react-native-svg';
 
 import { CheckIcon, PressableScale, Txt } from '@/components/ui';
+import { useWords } from '@/lib/words/useWords';
 import { colors } from '@/theme/tokens';
 
 /** The largest circle and target (from about 430 pt wide). */
@@ -130,10 +131,11 @@ export function RoundTarget({
   fill,
   busy = false,
   done = false,
-  doneLabel = 'Sent',
+  doneLabel,
   disabled = false,
   children,
 }: RoundTargetProps) {
+  const { t } = useWords();
   const idle = !busy && !done && !disabled;
   const m = useRowMetrics();
   const c = m.circle;
@@ -158,7 +160,7 @@ export function RoundTarget({
       {done ? (
         <Animated.View key="done" entering={FadeIn.duration(180)}>
           <Txt variant="label" size={m.label} weight={700} color={colors.greenDeep} numberOfLines={1} align="center" style={labelBox}>
-            {doneLabel}
+            {doneLabel ?? t('share.target.sent')}
           </Txt>
         </Animated.View>
       ) : (

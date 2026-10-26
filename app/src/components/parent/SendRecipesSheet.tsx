@@ -9,6 +9,7 @@ import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native'
 import { dishName } from '@/components/messages/helpers';
 import { ArrowRightIcon, BottomSheet, PotMark, PressableScale, Txt } from '@/components/ui';
 import type { LibraryEntry } from '@/lib/types';
+import { useWords } from '@/lib/words/useWords';
 import { colors, radii } from '@/theme/tokens';
 
 export function SendRecipesSheet({
@@ -27,11 +28,12 @@ export function SendRecipesSheet({
   onPick: (dish: LibraryEntry) => void;
 }) {
   const { height: winH } = useWindowDimensions();
+  const { t } = useWords();
   // Room for the list: the sheet's 92% minus grabber, header and the bottom inset.
   const listMax = Math.max(240, winH * 0.92 - 160);
 
   return (
-    <BottomSheet visible={visible} onClose={onClose} title="Which recipe?" accessibilityLabel="Send a recipe">
+    <BottomSheet visible={visible} onClose={onClose} title={t('parent.sendRecipe.which')} accessibilityLabel={t('parent.sendRecipe.button')}>
       <ScrollView style={{ maxHeight: listMax }} contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
         {dishes.map((d) => {
           const title = mine ? d.title : dishName(d);
@@ -42,7 +44,7 @@ export function SendRecipesSheet({
               scaleTo={0.98}
               onPress={() => onPick(d)}
               accessibilityRole="button"
-              accessibilityLabel={mine ? `Send ${title}` : `Send ${title}, by ${d.cook_name}`}
+              accessibilityLabel={mine ? t('parent.sendRecipe.send', { dish: title }) : t('parent.sendRecipe.sendBy', { dish: title, cook: d.cook_name })}
               style={styles.row}>
               <View style={styles.thumb}>
                 {d.poster_url ? (
@@ -57,7 +59,7 @@ export function SendRecipesSheet({
                 </Txt>
                 {mine ? null : (
                   <Txt variant="meta" numberOfLines={1}>
-                    by {d.cook_name}
+                    {t('parent.sendRecipe.by', { cook: d.cook_name })}
                   </Txt>
                 )}
               </View>
