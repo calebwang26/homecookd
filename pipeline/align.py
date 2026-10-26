@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import subprocess
 import sys
 import tempfile
@@ -44,8 +43,8 @@ from google.genai import types  # noqa: E402
 from pydantic import BaseModel, ValidationError  # noqa: E402
 
 from pipeline import claude, transcribe  # noqa: E402
-from pipeline.process import (HTTP_RETRY, REQUEST_TIMEOUT_MS, Usage, align_model, describe_call,  # noqa: E402
-                              load_config, log, response_text)
+from pipeline.process import (Usage, align_model, describe_call, gemini_client, load_config, log,  # noqa: E402
+                              response_text)
 from pipeline.prompts import (ALIGN_PROMPT, ALIGN_RETRY_SUFFIX, ALIGN_STEP, ALIGN_TRANSCRIPT_PROMPT,  # noqa: E402
                               ALIGN_TRANSCRIPT_STEP)
 from pipeline.schema import Recipe, parse_timestamp  # noqa: E402
@@ -282,10 +281,8 @@ def all_ids() -> list[str]:
 
 
 def make_client() -> tuple[genai.Client | claude.ClaudeText, str]:
-    cfg = load_config()  # loads .env, fails without GEMINI_API_KEY
-    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
-                          http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS, retry_options=HTTP_RETRY))
-    return align_model(cfg, client)
+    cfg = load_config()  # loads .env, fails without GEMINI_API_KEY while a step is on Gemini
+    return align_model(cfg, gemini_client())
 
 
 def signature(recipe: dict) -> str:

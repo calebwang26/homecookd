@@ -6,9 +6,12 @@ const { LANGUAGES, languageName, matchLanguages } = await import('../src/lib/lan
 
 const SONIC = 'en fr de es pt zh ja it ko nl pl ru sv tr tl bg ro ar cs el fi hr ms sk da uk hu no vi th he ka id hi mr bn gu kn ml pa ta te or ur'.split(' ');
 
-assert.equal(LANGUAGES.length, 30);
+assert.equal(LANGUAGES.length, 29);
 assert.equal(LANGUAGES[0].code, 'en');
-assert.equal(new Set(LANGUAGES.map((l) => l.code)).size, 30, 'codes are unique');
+assert.equal(new Set(LANGUAGES.map((l) => l.code)).size, 29, 'codes are unique');
+// Odia is hidden from the picker (Cartesia can't hear it), but a cook who picked it still reads as "Odia".
+assert.ok(!LANGUAGES.some((l) => l.code === 'or') && matchLanguages('odia').length === 0);
+assert.equal(languageName('or'), 'Odia');
 for (const l of LANGUAGES) {
   assert.ok(SONIC.includes(l.code), `${l.code} is a Sonic 3.6 language`);
   assert.ok(l.name && l.native, `${l.code} has both names`);
