@@ -39,6 +39,7 @@ import {
   OUR_SIDE,
   SignInScreen,
   SmallLink,
+  TermsLine,
   TRY_SOON,
   UNREACHABLE,
   type InviteView,
@@ -208,6 +209,7 @@ export default function InviteScreen() {
               </InviteCard>
               {/* Only when it would move this phone out of the family it's in. */}
               {view.instead ? <SmallLink label="Not now" onPress={toStart} /> : null}
+              <TermsLine />
             </>
           ) : view.kind === 'already' ? (
             <InviteCard face={view.peek.inviter} title="You’re already in.">

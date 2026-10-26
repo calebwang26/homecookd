@@ -3,12 +3,13 @@
 // Decline), the swaps you agreed on ("You’re swapping Kanda Poha ↔ Jollof Rice with the Okafor family", a
 // tap opens their recipe) and the dishes you're cooking together ("Cooking Jollof Rice together with the
 // Okafor family", with "Host a dinner" as the next step), or one line saying they show up here. Hosting
-// your own dinner lives only under "Share your recipe". Kept off the map until asked for.
+// your own dinner lives only under "Share your recipe". Kept off the map until asked for. Last, the
+// families yours blocked ("Report or block"), each with Unblock, only when there are any.
 import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
 import { ActionButton, ChevronRightIcon, PlusIcon, PressableScale, Txt, useToast } from '@/components/ui';
-import { respondSwap, type Swap } from '@/lib/live/community';
+import { respondSwap, unblock, useBlocked, type Swap } from '@/lib/live/community';
 import { colors, radii, shadows } from '@/theme/tokens';
 
 import { swapLine } from './choices';
@@ -60,6 +61,43 @@ export function YouCard({ next, swaps, now }: { next: DinnerPick | null; swaps: 
           </Txt>
         </View>
       ) : null}
+      <Blocked />
+    </View>
+  );
+}
+
+/** "Blocked": each family yours blocked, with Unblock. */
+function Blocked() {
+  const toast = useToast();
+  const families = useBlocked();
+  if (!families.length) return null;
+  return (
+    <View style={styles.card}>
+      <Txt variant="eyebrow" accessibilityRole="header">
+        Blocked
+      </Txt>
+      {families.map((f) => (
+        <View key={f.blockId} style={styles.row}>
+          <Txt variant="rowTitle" size={17} style={styles.flex}>
+            {f.familyName}
+          </Txt>
+          <ActionButton
+            label="Unblock"
+            variant="outline"
+            size="xs"
+            padH={16}
+            accessibilityLabel={`Unblock ${f.familyName}`}
+            onPress={async () => {
+              try {
+                await unblock(f.blockId);
+              } catch (e) {
+                toast.show(errorText(e), { tone: 'error' });
+                throw e;
+              }
+            }}
+          />
+        </View>
+      ))}
     </View>
   );
 }

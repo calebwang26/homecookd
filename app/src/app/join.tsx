@@ -41,6 +41,7 @@ import {
   SignInField,
   SignInScreen,
   SmallLink,
+  TermsLine,
   useInviteOnClipboard,
   type Provider,
 } from '@/components/signin';
@@ -244,6 +245,7 @@ export default function JoinScreen() {
               hint="Opens a field for a family code or an invite code"
               onPress={() => router.push('/join-code')}
             />
+            <TermsLine />
           </View>
         </Animated.View>
       ) : step === 'name' ? (

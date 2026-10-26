@@ -8,6 +8,7 @@
  * @module
  */
 
+import type * as account from "../account.js";
 import type * as community from "../community.js";
 import type * as cooking from "../cooking.js";
 import type * as crons from "../crons.js";
@@ -25,8 +26,10 @@ import type * as lib_glassesRoutes from "../lib/glassesRoutes.js";
 import type * as lib_http from "../lib/http.js";
 import type * as lib_inviteRoutes from "../lib/inviteRoutes.js";
 import type * as lib_liveRoutes from "../lib/liveRoutes.js";
+import type * as lib_moderation from "../lib/moderation.js";
 import type * as lib_mossDocs from "../lib/mossDocs.js";
 import type * as lib_recipeJson from "../lib/recipeJson.js";
+import type * as lib_safety from "../lib/safety.js";
 import type * as lib_storyCard from "../lib/storyCard.js";
 import type * as lib_supabase from "../lib/supabase.js";
 import type * as lib_textModel from "../lib/textModel.js";
@@ -39,6 +42,7 @@ import type * as moss from "../moss.js";
 import type * as people from "../people.js";
 import type * as questions from "../questions.js";
 import type * as recipes from "../recipes.js";
+import type * as reports from "../reports.js";
 import type * as seed from "../seed.js";
 import type * as seedCommunity from "../seedCommunity.js";
 import type * as sessions from "../sessions.js";
@@ -56,6 +60,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
+  account: typeof account;
   community: typeof community;
   cooking: typeof cooking;
   crons: typeof crons;
@@ -73,8 +78,10 @@ declare const fullApi: ApiFromModules<{
   "lib/http": typeof lib_http;
   "lib/inviteRoutes": typeof lib_inviteRoutes;
   "lib/liveRoutes": typeof lib_liveRoutes;
+  "lib/moderation": typeof lib_moderation;
   "lib/mossDocs": typeof lib_mossDocs;
   "lib/recipeJson": typeof lib_recipeJson;
+  "lib/safety": typeof lib_safety;
   "lib/storyCard": typeof lib_storyCard;
   "lib/supabase": typeof lib_supabase;
   "lib/textModel": typeof lib_textModel;
@@ -87,6 +94,7 @@ declare const fullApi: ApiFromModules<{
   people: typeof people;
   questions: typeof questions;
   recipes: typeof recipes;
+  reports: typeof reports;
   seed: typeof seed;
   seedCommunity: typeof seedCommunity;
   sessions: typeof sessions;

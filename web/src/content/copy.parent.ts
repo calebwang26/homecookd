@@ -427,6 +427,7 @@ export const copyParent: Copy = {
     linksSecondary: [
       { label: "Back to top", href: "#top" },
       { label: "Privacy", href: "/privacy" },
+      { label: "Terms", href: "/terms" },
       { label: "Contact", href: "mailto:" },
     ],
     // footer link to the kid version (/learn)

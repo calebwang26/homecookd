@@ -26,7 +26,12 @@
 // Opened from Home ("Mom ▾", `/?pick=1`), a quiet foot holds the phone's own settings: a cook's
 // "Your language" (components/profiles/LanguageEntry), "Switch family" (the code screen,
 // /join-code) and "Sign out of this phone", which asks first ("Sign out on this phone?" with Sign
-// out / Keep) and then signs this phone out (session leaveFamily).
+// out / Keep) and then signs this phone out (session leaveFamily). "Delete my account" ("Delete Leo's
+// account" when Leo isn't this phone's own person) shows for whoever this phone is acting as, when the
+// API lets it delete them (session accountRemoval: its own person, or someone with no phone of their
+// own, e.g. a face picked on a family-code phone). It asks first (components/profiles/DeleteAccountSheet);
+// then its own person's deletion signs this phone out, and anyone else's leaves this screen without
+// them. "Privacy policy" and "Terms of use" open homecookd.app in the in-app browser.
 //
 // Launch (motion spec 1): while the bloom covers the screen this page waits hidden; when the
 // overlay clears it fades in from scale 1.03 -> 1 and the tiles rise in one after another.
@@ -44,6 +49,8 @@ import {
   ADD_BAR_HEIGHT,
   AddFamilySheet,
   AddFamilyTile,
+  DeleteAccountSheet,
+  deleteAccountWords,
   LanguageEntry,
   NewPhoneSheet,
   PersonSheet,
@@ -56,7 +63,9 @@ import {
   type TileChoice,
 } from '@/components/profiles';
 import { ActionButton, BackPill, BottomSheet, Brand, listEnter, PressableScale, ScreenWash, Txt, usePotMood } from '@/components/ui';
+import { useAiConsent } from '@/lib/aiConsent';
 import type { Profile, Role } from '@/lib/api';
+import { openPage, PRIVACY_URL, TERMS_URL } from '@/lib/links';
 import { moveApi } from '@/lib/moveRequests';
 import { useSession } from '@/lib/session';
 import { litIds } from '@/lib/sundayTable';
@@ -72,15 +81,31 @@ export default function Profiles() {
   const potMood = usePotMood();
   const reduce = useReducedMotion();
   const { width: winW } = useWindowDimensions();
-  const { status, family, cooks, learners, profiles, me, setMe, homeFor, refresh, deviceNeedsProfile, defaultPerson, leaveFamily } =
-    useSession();
+  const {
+    status,
+    family,
+    cooks,
+    learners,
+    profiles,
+    me,
+    setMe,
+    homeFor,
+    refresh,
+    deviceNeedsProfile,
+    defaultPerson,
+    leaveFamily,
+    accountRemoval,
+    forgetPerson,
+  } = useSession();
   const statuses = useFamilyStatus(profiles, family?.id ?? null);
   // Tapped their own face on Home: the family gateway, with Back to them.
   const choosing = useLocalSearchParams<{ pick?: string }>().pick === '1';
-  // Otherwise a phone with a default person goes straight to them (no tap, nothing to mis-tap).
-  const autoEnter = !!defaultPerson && !choosing && !deviceNeedsProfile && (status === 'ready' || status === 'offline');
+  // Otherwise a phone with a default person goes straight to them (no tap, nothing to mis-tap), once
+  // it has said yes to the AI companies ("Before we start" comes first: the root layout's gate).
+  const consented = useAiConsent() === 'given';
+  const autoEnter = consented && !!defaultPerson && !choosing && !deviceNeedsProfile && (status === 'ready' || status === 'offline');
   // Who's at the table this week (flames on their faces); not asked for on the way straight home.
-  const { table } = useTable({ enabled: !autoEnter && status === 'ready' });
+  const { table } = useTable({ enabled: consented && !autoEnter && status === 'ready' });
   const lit = useMemo(() => litIds(table), [table]);
   const entered = useRef(false);
   useEffect(() => {
@@ -90,6 +115,9 @@ export default function Profiles() {
     router.replace(homeFor(defaultPerson));
   }, [autoEnter, defaultPerson, setMe, homeFor]);
   const backTo = choosing ? (me ?? defaultPerson) : null;
+  // Whoever this phone is acting as, if it may delete their account.
+  const removal = accountRemoval(backTo);
+  const deletable = removal ? backTo : null;
   const goBack = () => {
     if (!backTo) return;
     setMe(backTo);
@@ -152,6 +180,7 @@ export default function Profiles() {
   const [person, setPerson] = useState<{ open: boolean; who: Profile | null }>({ open: false, who: null });
   const [moving, setMoving] = useState<{ open: boolean; who: Profile | null; resume: boolean }>({ open: false, who: null, resume: false });
   const [signingOut, setSigningOut] = useState(false);
+  const [deleting, setDeleting] = useState<{ open: boolean; who: Profile | null; own: boolean }>({ open: false, who: null, own: false });
   // A phone that just joined (no person yet) never takes over a face: it asks the family.
   const pick = (p: Profile) =>
     deviceNeedsProfile && !p.invited
@@ -187,8 +216,9 @@ export default function Profiles() {
   const loading = status === 'loading' && profiles.length === 0;
   const offline = status === 'offline' && profiles.length === 0;
 
-  // Handing straight to the owner: just the wash, so the picker never flashes up.
-  if (autoEnter) {
+  // Handing straight to the owner, or on the way to "Before we start": just the wash, so the picker
+  // never flashes up.
+  if (autoEnter || (!consented && status !== 'needs-code')) {
     return (
       <View style={styles.root}>
         <ScreenWash tone="parent" height={420} />
@@ -303,6 +333,29 @@ export default function Profiles() {
                   Sign out of this phone
                 </Txt>
               </PressableScale>
+              {deletable ? (
+                <PressableScale
+                  onPress={() => setDeleting({ open: true, who: deletable, own: removal === 'own' })}
+                  accessibilityRole="button"
+                  accessibilityHint="Asks first"
+                  style={styles.footLink}>
+                  <Txt variant="label" weight={600} color={colors.danger}>
+                    {deleteAccountWords(deletable.name.trim(), removal === 'own').confirm}
+                  </Txt>
+                </PressableScale>
+              ) : null}
+              <View style={styles.legal}>
+                <PressableScale onPress={() => void openPage(PRIVACY_URL)} accessibilityRole="link" style={styles.legalLink}>
+                  <Txt variant="meta" color={colors.muted}>
+                    Privacy policy
+                  </Txt>
+                </PressableScale>
+                <PressableScale onPress={() => void openPage(TERMS_URL)} accessibilityRole="link" style={styles.legalLink}>
+                  <Txt variant="meta" color={colors.muted}>
+                    Terms of use
+                  </Txt>
+                </PressableScale>
+              </View>
             </Animated.View>
           ) : null}
         </Animated.View>
@@ -330,6 +383,17 @@ export default function Profiles() {
         onClose={() => setMoving((s) => ({ ...s, open: false }))}
         // Let in: the family reloads with this phone as theirs, and the default person takes them home.
         onIn={() => setMoving((s) => ({ ...s, open: false }))}
+      />
+      <DeleteAccountSheet
+        visible={deleting.open}
+        person={deleting.who}
+        own={deleting.own}
+        onClose={() => setDeleting((d) => ({ ...d, open: false }))}
+        // As with Sign out, the sheet goes first: then the first screen, or this one without them.
+        onDeleted={(who, signedOut) => {
+          setDeleting((d) => ({ ...d, open: false }));
+          setTimeout(() => (signedOut ? void leaveFamily() : forgetPerson(who.id)), motion.sheetCloseMs + 40);
+        }}
       />
       <BottomSheet
         visible={signingOut}
@@ -464,6 +528,8 @@ const styles = StyleSheet.create({
   // The phone's own settings, quiet at the very end (only when opened from Home).
   foot: { marginTop: 16, alignItems: 'center', gap: 4 },
   footLink: { minHeight: 48, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
+  legal: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: 8 },
+  legalLink: { minHeight: 44, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
   signOut: { alignItems: 'center', gap: 10, paddingTop: 8, paddingBottom: 4, paddingHorizontal: 8 },
   choices: { flexDirection: 'row', gap: 12 },
   choice: { flex: 1 },

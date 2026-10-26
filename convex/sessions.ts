@@ -5,7 +5,7 @@ import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { action, internalMutation, internalQuery, mutation } from "./_generated/server";
-import { findSession, hashToken, newToken, SESSION_DAYS } from "./lib/auth";
+import { ACCOUNT_DELETED, findSession, hashToken, newToken, SESSION_DAYS } from "./lib/auth";
 import { fetchFamily } from "./lib/supabase";
 
 const role = v.union(v.literal("cook"), v.literal("kid"));
@@ -72,6 +72,11 @@ export const mirror = internalMutation({
       const match =
         existing.find((e) => e.supabaseProfileId === p.supabaseProfileId) ??
         existing.find((e) => e.supabaseProfileId.startsWith("seed:") && e.name === p.name);
+      // A deleted account stays deleted, even while Supabase still lists them (its removal failed).
+      if (match?.deletedAt !== undefined) {
+        if (p.supabaseProfileId === args.profileId) throw new ConvexError(ACCOUNT_DELETED);
+        continue;
+      }
       let id: Id<"people">;
       if (match) {
         id = match._id;
