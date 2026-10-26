@@ -26,8 +26,8 @@ transcribed in each cook language, and Claude says which one reads as real speec
 recording is transcribed in that language and the transcript says so (tagged_language, language_note). On Poha
 (Marathi, tagged English, Oct 26) 85% of the English words were loops.
 
-TRANSCRIPT_PROOFREAD=claude (CLAUDE_PROOFREAD_MODEL, default Opus) adds a proofread copy of a non-English
-transcript's lines ("proofread"): Claude corrects misheard words to what she said ("मोरी" to मोहरी) and adds
+TRANSCRIPT_PROOFREAD=claude (CLAUDE_PROOFREAD_MODEL, default Opus) adds a proofread copy of the transcript's lines
+for the languages it helps (PROOFREAD_LANGUAGES) ("proofread"): Claude corrects misheard words to what she said ("मोरी" to मोहरी) and adds
 nothing. The raw words stay; spoken_lines() gives the proofread lines when there are some.
 
 Keys: CARTESIA_API_KEY, then CARTESIA_API_KEYS_BACKUP (comma-separated), each tried in turn when Cartesia says the
@@ -65,6 +65,14 @@ TIMEOUT = (30, 1800)  # (connect, read) seconds; an hour of audio takes minutes
 LINE_GAP_S = 0.8  # a pause this long starts a new line
 LINE_MAX_S = 12.0  # and no line runs longer than this
 LOOP_REPEATS, LOOP_MAX_N = 3, 8  # more repeats than this of a phrase this long, back to back, is a loop
+BABBLE_WINDOW, BABBLE_DISTINCT = 12, 3  # this many words in a row with this few different ones is a loop too
+# A stretch that looped is sent again on its own, in pieces of up to RETRY_PIECE_S, through RETRY_FILTER: on the
+# 13-language eval's Punjabi clip (music under her voice, Oct 26) a looped 40 s went from 1% of her words heard to
+# 29%; the same filter on the whole file gained 1 point. Its words replace the stretch's only when they are more
+# and mostly not loops (RETRY_MAX_LOOPS).
+RETRY_FILTER = "afftdn=nf=-25"
+RETRY_PIECE_S, RETRY_PAD_S, RETRY_MIN_S, RETRY_MAX_PIECES, RETRY_MAX_LOOPS = 30.0, 1.0, 3.0, 60, 0.5
+RETRY_GAP_S = 4.0  # a stretch this long with no word at all is sent again too
 FILE = "transcript.json"
 SILENCE_S, KEEP_S, ABOVE_FLOOR_DB = 1.5, 0.3, 3.6  # a pause this long keeps KEEP_S at each end
 # The cook languages besides English (memory cook-languages), and how a wrong-language transcript gives itself away.
@@ -77,6 +85,9 @@ PROOFREAD_LINE_S = 30.0  # lines end only at pauses up to this long, so a word i
 # Poha (Oct 26), the same tightened prompt: Opus got all 7 facts we check in 2 of 3 runs (6 in the other); Sonnet 5 and
 # Haiku 6, and both wrote chili powder for her cumin powder every time. Opus: ~$0.12 for 10.5 min of Marathi.
 PROOFREAD_MODEL = "claude-opus-5-5"
+# Proofread only where it helps (the 13-language eval, Oct 26: heard words te 0.35 -> 0.79, ta 0.29 -> 0.36, pa 0.17 ->
+# 0.26, gu 0.17 -> 0.26, hi even; but zh, es, tl, ur and ar each lost 2-4 points, Cartesia already hears them well).
+PROOFREAD_LANGUAGES = ("hi", "gu", "ta", "te", "pa")
 LANGUAGE_MODEL = "claude-sonnet-5-5"  # reads 13 garbled samples side by side: rare (only a doubtful English tag)
 
 
@@ -109,9 +120,11 @@ def transcribe(audio: Path, language: str) -> dict:
             body = res.json()
             heard = [{"word": w["word"].strip(), "start": round(float(w["start"]), 2), "end": round(float(w["end"]), 2)}
                      for w in body.get("words") or [] if str(w.get("word", "")).strip()]
-            words = drop_loops(heard)
+            words = drop_babble(drop_loops(heard))
+            kept = {id(w) for w in words}
             return {"language": language, "duration": body.get("duration"), "text": " ".join(w["word"] for w in words),
-                    "words": words, "loop_words_dropped": len(heard) - len(words)}
+                    "words": words, "loop_words_dropped": len(heard) - len(words),
+                    "loop_spans": loop_spans([w for w in heard if id(w) not in kept], words)}
         if not out_of_credits(res.status_code, res.text) or i == len(pool) - 1:
             raise TranscribeError(f"Cartesia STT HTTP {res.status_code}: {res.text[:500]}")
         print(f"[transcribe] Cartesia key {i + 1} of {len(pool)} is out of credits; trying the next", flush=True)
@@ -185,15 +198,51 @@ def clean_audio(src: Path, tmp: Path) -> tuple[Path, TimeMap]:
 
 
 def transcribe_clean(audio: Path, language: str) -> dict:
-    """transcribe() on the cleaned audio, every time back on audio's own clock."""
+    """transcribe() on the cleaned audio, every time back on audio's own clock, then each stretch that looped sent
+    again on its own (retry_loops)."""
     with tempfile.TemporaryDirectory() as tmp:
         clean, tmap = clean_audio(audio, Path(tmp))
         result = transcribe(clean, language)
     result["words"] = [{**w, "start": to_original(w["start"], tmap), "end": to_original(w["end"], tmap)}
                        for w in result["words"]]
+    spans = [(to_original(a, tmap), to_original(b, tmap)) for a, b in result.pop("loop_spans", [])]
     total = tmap[-1][1] + tmap[-1][2]
     result.update(duration=round(total, 2), cut_s=round(total - (tmap[-1][0] + tmap[-1][2]), 1))
+    spans = merge(spans + silent_spans(result["words"], total))
+    if spans:
+        retry_loops(audio, language, result, spans, total)
     return result
+
+
+def retry_loops(audio: Path, language: str, result: dict, spans: list[tuple[float, float]], total: float) -> None:
+    """Each looped stretch, padded and in pieces, transcribed again from `audio` through RETRY_FILTER; a piece's words
+    replace the stretch's when splice() finds them better. Records result["retried"]; a failed piece changes nothing."""
+    todo = pieces(spans, total)
+
+    def again(piece: Piece) -> tuple[Piece, list[dict], int] | None:
+        a, b = piece[0], piece[1]
+        try:
+            with tempfile.TemporaryDirectory() as tmp:
+                seg = Path(tmp) / "piece.flac"
+                ffmpeg("-ss", f"{a:.2f}", "-t", f"{b - a:.2f}", "-i", str(audio), "-vn", "-ac", "1", "-ar", "16000",
+                       "-af", RETRY_FILTER, "-c:a", "flac", str(seg))
+                r = transcribe(seg, language)
+        except Exception:  # noqa: BLE001 - a second try is a bonus: the first transcript stands
+            return None
+        return piece, [{**w, "start": round(w["start"] + a, 2), "end": round(w["end"] + a, 2)} for w in r["words"]], \
+            r["loop_words_dropped"]
+
+    with ThreadPoolExecutor(max_workers=4) as pool:
+        answers = [x for x in pool.map(again, todo) if x]
+    took, before = 0, len(result["words"])
+    for piece, words, dropped in answers:
+        better = splice(result["words"], piece, words, dropped)
+        if better is not None:
+            result["words"], took = better, took + 1
+    result["text"] = " ".join(w["word"] for w in result["words"])
+    result["retried"] = {"pieces": len(todo), "taken": took, "words_added": len(result["words"]) - before}
+    print(f"[transcribe] looped stretches: {len(todo)} pieces sent again, {took} better, "
+          f"{len(result['words']) - before:+d} words", flush=True)
 
 
 # ---------- the language check ----------
@@ -313,6 +362,79 @@ def drop_loops(words: list[dict], repeats: int = LOOP_REPEATS, max_n: int = LOOP
     return out
 
 
+def drop_babble(words: list[dict], window: int = BABBLE_WINDOW, distinct: int = BABBLE_DISTINCT) -> list[dict]:
+    """words without the stretches drop_loops can't see: any `window` words in a row made of `distinct` or fewer
+    different words ("ਗਾਰਾ ਤੋ ਤੋ ਗਾਰਾ ਤੋ ਗਾਰਾ …", what speech-to-text writes over music). Real speech that
+    repetitive is rare: "stir, stir, stir" is three words."""
+    junk = set()
+    for i in range(len(words) - window + 1):
+        if len({_key(w) for w in words[i:i + window]}) <= distinct:
+            junk.update(range(i, i + window))
+    return [w for i, w in enumerate(words) if i not in junk]
+
+
+def loop_spans(dropped: list[dict], kept: list[dict], min_s: float = RETRY_MIN_S) -> list[tuple[float, float]]:
+    """The stretches of audio a loop took over: from the last kept word before a run of dropped words to the first
+    kept word after it. Speech-to-text stamps a loop's copies close together (Poha: 70 copies inside 5 s), so the
+    dropped words' own times say where it started, not how much speech it swallowed. Only stretches min_s or longer."""
+    starts = sorted(w["start"] for w in kept)
+    ends = sorted(w["end"] for w in kept)
+    spans: list[list[float]] = []
+    for w in sorted(dropped, key=lambda w: w["start"]):
+        before = max((e for e in ends if e <= w["start"]), default=0.0)
+        after = min((s for s in starts if s >= w["end"]), default=w["end"])
+        if spans and before <= spans[-1][1]:
+            spans[-1][1] = max(spans[-1][1], after)
+        else:
+            spans.append([before, after])
+    return [(round(a, 2), round(b, 2)) for a, b in spans if b - a >= min_s]
+
+
+def silent_spans(words: list[dict], total: float, min_s: float = RETRY_GAP_S) -> list[tuple[float, float]]:
+    """Stretches of min_s or more with no word at all: over music speech-to-text often writes nothing instead of
+    looping (the eval's Gujarati clip: 243 words in 9 minutes of talk). A real pause sent again just stays empty."""
+    edges = [0.0] + [x for w in words for x in (w["start"], w["end"])] + [total]
+    return [(round(a, 2), round(b, 2)) for a, b in zip(edges[::2], edges[1::2]) if b - a >= min_s]
+
+
+def merge(spans: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    out: list[list[float]] = []
+    for a, b in sorted(spans):
+        if out and a <= out[-1][1]:
+            out[-1][1] = max(out[-1][1], b)
+        else:
+            out.append([a, b])
+    return [(a, b) for a, b in out]
+
+
+Piece = tuple[float, float, float, float]  # (sent from, sent to, replaced from, replaced to): the padding is context
+
+
+def pieces(spans: list[tuple[float, float]], total: float, pad: float = RETRY_PAD_S,
+           most: float = RETRY_PIECE_S) -> list[Piece]:
+    """The stretches to send again: each span cut into pieces of at most `most` seconds, each sent with `pad` seconds
+    of context on both sides; only the span itself is replaced."""
+    out = []
+    for a, b in spans:
+        n = max(1, -(-(b - a) // most))
+        step = (b - a) / n
+        for k in range(int(n)):
+            ca, cb = round(a + k * step, 2), round(a + (k + 1) * step, 2)
+            out.append((round(max(0.0, ca - pad), 2), round(min(total, cb + pad), 2), ca, cb))
+    return out[:RETRY_MAX_PIECES]
+
+
+def splice(words: list[dict], piece: Piece, again: list[dict], dropped: int) -> list[dict] | None:
+    """words with the piece's replaced stretch taken from `again` (already on the original clock), or None when
+    `again` isn't better there: no more words than were there, or mostly loops itself."""
+    a, b = piece[2], piece[3]
+    inside = [w for w in words if a <= w["start"] < b]
+    new = [w for w in again if a <= w["start"] < b]
+    if len(new) <= len(inside) or dropped > RETRY_MAX_LOOPS * (dropped + len(again)):
+        return None
+    return sorted([w for w in words if not a <= w["start"] < b] + new, key=lambda w: w["start"])
+
+
 def lines(words: list[dict], gap_s: float = LINE_GAP_S, max_s: float = LINE_MAX_S) -> list[dict]:
     """Words joined into spoken lines [{"start", "end", "text"}]: a new line at each pause of gap_s or more, and
     before a line would run past max_s."""
@@ -348,7 +470,7 @@ def transcript_file(out_dir: Path, language: str | None, force: bool = False, ti
         print(f"[transcribe] {out_dir.name}: {len(result['words'])} words ({result['language']}; "
               f"{result['loop_words_dropped']} looped words dropped, {result.get('cut_s', 0):.0f} s of pauses cut) "
               f"in {time.monotonic() - t0:.0f} s", flush=True)
-    if (claude.provider("TRANSCRIPT_PROOFREAD") == "claude" and result["language"] != "en"
+    if (claude.provider("TRANSCRIPT_PROOFREAD") == "claude" and result["language"] in PROOFREAD_LANGUAGES
             and "proofread" not in result):
         gen = claude.ClaudeText(os.environ.get("CLAUDE_PROOFREAD_MODEL") or PROOFREAD_MODEL)
         fixed, tokens = proofread(lines(result["words"], max_s=PROOFREAD_LINE_S), result["language"],

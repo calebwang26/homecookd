@@ -1,6 +1,6 @@
 """The 13-language eval: how well the pipeline hears and writes each cook language, scored against human captions.
 
-    .venv/bin/python pipeline/eval_languages.py [--only ta,hi] [--fetch-only] [--rescore]
+    .venv/bin/python pipeline/eval_languages.py [--only ta,hi] [--fetch-only] [--rescore] [--fresh]
 
 Each clip in eval_clips.json is a home-cooking video in one of the 13 cook languages (memory marathi-dropped) whose
 YouTube subtitles were written by people in that language: those captions are the ground truth. For each clip:
@@ -26,6 +26,7 @@ import difflib
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import traceback
@@ -245,6 +246,7 @@ def main() -> None:
     ap.add_argument("--only", help="comma-separated language codes")
     ap.add_argument("--fetch-only", action="store_true")
     ap.add_argument("--rescore", action="store_true", help="score the cached runs again; run nothing new")
+    ap.add_argument("--fresh", action="store_true", help="run every clip again from scratch (transcript included)")
     args = ap.parse_args()
     clips = [c for c in json.loads(CLIPS.read_text()) if not args.only or c["lang"] in args.only.split(",")]
     rows = []
@@ -254,6 +256,8 @@ def main() -> None:
             if args.fetch_only:
                 continue
             from pipeline.prep import OUT_ROOT
+            if args.fresh:
+                shutil.rmtree(OUT_ROOT / recipe_id(clip), ignore_errors=True)
             out = run(clip) if not args.rescore else OUT_ROOT / recipe_id(clip)
             rows.append(score(clip, out))
             print(f"[eval] {key(clip)}: {rows[-1]}", flush=True)
