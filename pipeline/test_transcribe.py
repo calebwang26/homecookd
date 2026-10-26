@@ -23,6 +23,7 @@ if str(ROOT) not in sys.path:
 
 from pipeline import claude  # noqa: E402
 from pipeline import transcribe as T  # noqa: E402
+from pipeline.shorten import MemoryUsage  # noqa: E402
 from pipeline.test_claude import FakeAnthropic, env  # noqa: E402
 from pipeline.test_coverage import patched  # noqa: E402
 
@@ -328,8 +329,10 @@ def test_the_proofread_copy_is_made_only_with_the_flag_and_for_the_languages_it_
                                                        TRANSCRIPT_PROOFREAD=flag, CLAUDE_PROOFREAD_MODEL=None), \
                 patched(T.requests, "post", FakePost((200, said))), patched(claude.anthropic, "Anthropic", fake):
             tone(Path(tmp) / "voice.m4a", ("tone", 3))
-            got = T.transcript_file(Path(tmp), lang)
+            usage = MemoryUsage()
+            got = T.transcript_file(Path(tmp), lang, usage=usage)
         assert ("proofread" in got) == made, (flag, got.get("proofread"))
+        assert [(c["kind"], c["model"]) for c in usage.calls] == ([("proofread", "claude-opus-5-5")] if made else [])
         if made:
             assert got["proofread"]["model"] == "claude-opus-5-5" and fake.calls[0]["model"] == "claude-opus-5-5"
             assert [x["text"] for x in T.spoken_lines(got)] == ["मीठ टाकला"]  # the copy wins; the raw words stay
