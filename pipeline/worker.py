@@ -3,6 +3,7 @@
     python pipeline/worker.py              # claim jobs from Convex forever (every 15 s)
     python pipeline/worker.py --once       # at most one Convex job, then exit
     python pipeline/worker.py --gcs [--once | --retry <job_id>]   # the pre-hackathon GCS job files (below)
+    python pipeline/worker.py --purge-dry-run   # what each deleted account's purge would delete; deletes nothing
 
 Convex (docs/build/STACK.md, "Worker -> Convex"): the app uploads to the GCS uploads bucket and calls
 jobs.create. This worker POSTs /worker/claim (204 = nothing queued), runs prep -> process (Gemini watches,
@@ -11,6 +12,8 @@ with a message the cook can read) and sends the whole recipe to /worker/publishe
 Convex index it into Moss. The recipe.json in the public media bucket has no stories or tips (publish.py). Every call carries x-worker-secret. Env: CONVEX_SITE_URL (the deployment's
 .convex.site URL; pipeline/convex_stub.py for local tests), WORKER_SECRET. Raw uploads are kept, so a failed
 job can be queued again; the uploads bucket's 14-day lifecycle rule deletes them.
+Every PURGE_EVERY_S it also purges deleted accounts outside Convex: GCS, Supabase, a Cartesia voice clone
+(account_purge.py, through /worker/deletions/*).
 The app may create the job while the signer upload is still going. A signer upload ("<job_id>/") lists its
 files in jobs/<job_id>.json, the file GCS mode waits on; the worker waits up to UPLOAD_WAIT_S for all of
 them, then hands the job back with /worker/release (Convex queues it again 30 s later) and moves on.
@@ -56,6 +59,7 @@ from google.cloud import storage
 from google.cloud.storage.retry import DEFAULT_RETRY
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import account_purge  # noqa: E402
 import prep  # noqa: E402
 import process  # noqa: E402
 import publish  # noqa: E402
@@ -351,6 +355,7 @@ RECIPE_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,99}")
 
 MSG_NO_UPLOAD = "We couldn't find the video for this recipe. Please try adding it again."
 CONVEX_INTERVAL_S = 15
+PURGE_EVERY_S = 600  # deleted accounts' purge outside Convex (the privacy policy gives it 30 days)
 UPLOAD_WAIT_S = 45  # a claimed job waits this long for the rest of its upload, then is released
 UPLOAD_POLL_S = 5
 # Without a signer file nothing says when to give up, so count releases (each ~1.5 min): about half an hour.
@@ -420,6 +425,17 @@ class Convex:
             body["memoriesOptIn"] = memories_opt_in
         res = self._post("/worker/published", body)
         return res.json().get("recipeId", "")
+
+    def next_deletion(self, exclude: list[str]) -> dict | None:
+        """The next deleted account to purge outside Convex, leaving out those already taken this pass."""
+        res = self._post("/worker/deletions/next", {"exclude": exclude})
+        return None if res.status_code == 204 else res.json()
+
+    def deletion_done(self, deletion_id: str, ok: bool, error: str | None, counts: dict[str, int]) -> str:
+        body: dict = {"deletionId": deletion_id, "ok": ok, "counts": counts}
+        if error:
+            body["error"] = error
+        return self._post("/worker/deletions/done", body).json().get("status", "")
 
 
 def _convex_recipe_id(job: dict) -> str:
@@ -577,16 +593,29 @@ def handle_convex(convex: Convex, job: dict, media: storage.Bucket, uploads: sto
           f"{(time.monotonic() - t0) / 60:.1f} min ({stages} min)", flush=True)
 
 
-def run_convex(once: bool, interval: int) -> None:
+def _convex_setup() -> tuple[Convex, storage.Bucket, storage.Bucket]:
     site, secret = os.environ.get("CONVEX_SITE_URL"), os.environ.get("WORKER_SECRET")
     if not site or not secret:
         sys.exit("worker: set CONVEX_SITE_URL and WORKER_SECRET in .env (or run with --gcs)")
-    convex = Convex(site, secret)
     client = storage.Client(project=os.environ.get("GCP_PROJECT"))
-    media = client.bucket(os.environ["GCS_MEDIA_BUCKET"])
-    uploads = client.bucket(os.environ["GCS_UPLOAD_BUCKET"])
+    return Convex(site, secret), client.bucket(os.environ["GCS_MEDIA_BUCKET"]), client.bucket(os.environ["GCS_UPLOAD_BUCKET"])
+
+
+def purge_accounts(convex: Convex, media: storage.Bucket, uploads: storage.Bucket) -> None:
+    try:
+        account_purge.run_pending(convex, media, uploads)
+    except Exception as e:  # noqa: BLE001 - e.g. Convex unreachable; the next pass tries again
+        print(f"account purge: skipped this pass: {type(e).__name__}: {str(e)[:200]}", flush=True)
+
+
+def run_convex(once: bool, interval: int) -> None:
+    convex, media, uploads = _convex_setup()
     print(f"worker: polling {convex.base} every {interval} s", flush=True)
+    purged_at = None
     while True:
+        if purged_at is None or time.monotonic() - purged_at >= PURGE_EVERY_S:
+            purged_at = time.monotonic()
+            purge_accounts(convex, media, uploads)
         try:
             job = convex.claim()
         except Exception as e:  # noqa: BLE001 - e.g. Wi-Fi drop; try again next poll
@@ -707,7 +736,12 @@ def main() -> None:
                          "inside the GCS free tier)")
     ap.add_argument("--gcs", action="store_true", help="process the pre-hackathon GCS job files instead of Convex")
     ap.add_argument("--retry", metavar="JOB_ID", help="--gcs only: restart a failed (or stuck) job now")
+    ap.add_argument("--purge-dry-run", action="store_true",
+                    help="print what each deleted account's purge (GCS, Supabase, Cartesia) would delete, then exit")
     args = ap.parse_args()
+    if args.purge_dry_run:
+        account_purge.run_pending(*_convex_setup(), dry_run=True)
+        return
     if not args.gcs:
         if args.retry:
             sys.exit("worker: --retry is for --gcs jobs; queue a Convex job again from Convex instead")
