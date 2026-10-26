@@ -5,7 +5,7 @@
 // Ink bills for the time it's fed, so a stream with no audio for IDLE_CLOSE_MS is closed and opened again with
 // the next frame (a phone that went to the background or quiet, or a screen left open).
 import WebSocket from "ws";
-import { env } from "./env.js";
+import { cartesiaKey, keyExhausted, socketOutOfCredits } from "./cartesiaKeys.js";
 import type { SttEvents } from "./stt.js";
 
 export const CARTESIA_VERSION = "2026-08-14";
@@ -55,8 +55,9 @@ export class InkStream {
       turn_end_timeout_ms: "2000",
     });
     for (const k of [...KEYTERMS, ...this.keyterms].slice(0, 100)) q.append("keyterm", k);
+    const key = cartesiaKey();
     const ws = this.connect(`wss://api.cartesia.ai/stt/turns/websocket?${q}`, {
-      "X-API-Key": env.cartesiaKey,
+      "X-API-Key": key,
       "Cartesia-Version": CARTESIA_VERSION,
     });
     ws.on("open", () => {
@@ -67,7 +68,7 @@ export class InkStream {
     });
     ws.on("message", (data, isBinary) => {
       if (isBinary) return;
-      let ev: { type: string; transcript?: string; message?: string; title?: string };
+      let ev: { type: string; transcript?: string; message?: string; title?: string; status_code?: number; error_code?: string | null };
       try {
         ev = JSON.parse(data.toString());
       } catch {
@@ -76,9 +77,20 @@ export class InkStream {
       if (ev.type === "turn.start") this.events.onTurnStart();
       else if (ev.type === "turn.update" && ev.transcript) this.events.onPartial(ev.transcript);
       else if (ev.type === "turn.end") this.events.onTurnEnd((ev.transcript ?? "").trim());
-      else if (ev.type === "error") this.events.onError(ev.message || ev.title || "ink error");
+      else if (ev.type === "error") {
+        this.events.onError(ev.message || ev.title || "ink error");
+        // Out of credits mid-session: close, and the reopen below uses the next key.
+        if (socketOutOfCredits(ev) && keyExhausted(key)) {
+          this.retryMs = RETRY_FIRST_MS;
+          ws.close();
+        }
+      }
     });
-    ws.on("error", (err) => this.events.onError(`ink socket: ${err.message}`));
+    ws.on("error", (err) => {
+      this.events.onError(`ink socket: ${err.message}`);
+      // A key out of credits is refused at the handshake (402): the reopen after this uses the next key, at once.
+      if (socketOutOfCredits(err) && keyExhausted(key)) this.retryMs = RETRY_FIRST_MS;
+    });
     ws.on("close", () => {
       if (this.closedByUs || this.idle || ws !== this.ws) return;
       // Ink can drop a long session: reopen while the kid is still cooking, backing off if it keeps failing.

@@ -4,6 +4,7 @@
 // mr-IN, English as locale en-IN with a mood for the kind of line, both at one slow pace.
 // When Sonic fails before any audio went out (an HTTP error such as 402 or 429, a network error, or no audio within
 // 4 s), Gemini says the line instead (geminiTts.ts). Once audio has started, a failure just ends the line.
+import { withCartesiaKey } from "./cartesiaKeys.js";
 import { env } from "./env.js";
 import { geminiSpeak } from "./geminiTts.js";
 import { CARTESIA_VERSION } from "./ink.js";
@@ -87,16 +88,18 @@ async function sonic(text: string, format: AudioFormat, signal: AbortSignal, onC
     console.log(`tts: sonic ${voice.kind ?? "-"} ${JSON.stringify(settings)}`);
   }
   try {
-    const res = await fetch("https://api.cartesia.ai/tts/bytes", {
-      method: "POST",
-      signal: AbortSignal.any([signal, firstAudio.signal]),
-      headers: {
-        "X-API-Key": env.cartesiaKey,
-        "Cartesia-Version": CARTESIA_VERSION,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(body),
-    });
+    const res = await withCartesiaKey((key) =>
+      fetch("https://api.cartesia.ai/tts/bytes", {
+        method: "POST",
+        signal: AbortSignal.any([signal, firstAudio.signal]),
+        headers: {
+          "X-API-Key": key,
+          "Cartesia-Version": CARTESIA_VERSION,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(body),
+      }),
+    );
     if (!res.ok || !res.body) throw new SonicFailed(String(res.status), (await res.text()).slice(0, 200));
     for await (const chunk of res.body) {
       if (!started) clearTimeout(timer);

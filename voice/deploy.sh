@@ -21,7 +21,7 @@ gcloud services enable secretmanager.googleapis.com --project "$P"
 
 # One Secret Manager secret per key, named like the env var. Adds a new version only when it changed.
 SECRETS=()
-for NAME in CARTESIA_API_KEY ANTHROPIC_API_KEY MOSS_PROJECT_ID MOSS_PROJECT_KEY VOICE_SECRET GEMINI_API_KEY GLASSES_SECRET; do
+for NAME in CARTESIA_API_KEY CARTESIA_API_KEYS_BACKUP ANTHROPIC_API_KEY MOSS_PROJECT_ID MOSS_PROJECT_KEY VOICE_SECRET GEMINI_API_KEY GLASSES_SECRET; do
   VALUE=$(fromenv $NAME)
   [ -n "$VALUE" ] || { echo "skip $NAME (not in .env)"; continue; }
   if ! gcloud secrets describe $NAME --project "$P" >/dev/null 2>&1; then

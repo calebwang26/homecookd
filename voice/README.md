@@ -44,7 +44,8 @@ test/           unit tests (node:test) with a fake socket, Claude, voice and Con
 ## Run it locally
 
 Keys come from the repo's root `.env` (found by walking up, so a worktree works too) or the process env:
-`CARTESIA_API_KEY`, `ANTHROPIC_API_KEY`, `MOSS_PROJECT_ID`, `MOSS_PROJECT_KEY`, `CONVEX_SITE_URL`
+`CARTESIA_API_KEY` (plus optional `CARTESIA_API_KEYS_BACKUP`, comma-separated: the next one is used when a key runs
+out of credits, `src/cartesiaKeys.ts`), `ANTHROPIC_API_KEY`, `MOSS_PROJECT_ID`, `MOSS_PROJECT_KEY`, `CONVEX_SITE_URL`
 (https://grand-dragon-649.convex.site) and `VOICE_SECRET`. Optional: `VOICE_STUB=1` (serve the stub recipe and
 accept any session token, for tests without a real sign-in), `CLAUDE_FAST=1` (Opus fast mode), `CLAUDE_MODEL`.
 For homie: `GEMINI_API_KEY` (hears Marathi, and is the backup voice; without it a Marathi recording gets no
