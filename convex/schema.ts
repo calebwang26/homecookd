@@ -49,6 +49,9 @@ export default defineSchema({
     // Community: where they are, rounded to about 1 km before it's stored (lib/geo.ts). Never shown.
     approx: v.optional(v.object({ lat: v.number(), lng: v.number() })),
     campus: v.optional(v.string()),
+    // They deleted their account (account.deleteMe): the row stays as a blank tombstone, since other
+    // rows may still point at it, and no session or sign-in works as them again.
+    deletedAt: v.optional(v.number()),
   })
     .index("by_familyId", ["familyId"])
     .index("by_supabaseProfileId", ["supabaseProfileId"]),
@@ -61,7 +64,25 @@ export default defineSchema({
     expiresAt: v.number(),
   })
     .index("by_tokenHash", ["tokenHash"])
-    .index("by_expiresAt", ["expiresAt"]),
+    .index("by_expiresAt", ["expiresAt"])
+    .index("by_personId", ["personId"]),
+
+  /**
+   * One per deleted account (account.deleteMe). Convex rows are purged right away (`purgedAt` once the
+   * last batch ran); the rest is for a later purge outside Convex: their Supabase rows and their media
+   * in GCS (the privacy policy promises it within 30 days).
+   */
+  accountDeletions: defineTable({
+    familyId: v.id("families"),
+    personId: v.id("people"),
+    supabaseProfileId: v.string(),
+    requestedAt: v.number(),
+    recipeIds: v.array(v.id("recipes")), // the recipes they cooked (gone from Convex)
+    jobIds: v.array(v.id("jobs")), // their uploads' jobs: the worker names each recipe's GCS folder after one
+    uploadPaths: v.array(v.string()), // their raw videos in the GCS uploads bucket
+    mediaUrls: v.array(v.string()), // recipe.json files, covers and glasses videos in GCS
+    purgedAt: v.optional(v.number()),
+  }),
 
   /** A dish being processed or ready to cook. Its recipe.json is in GCS (recipeJsonUrl), without the memories (older files still have them). */
   recipes: defineTable({

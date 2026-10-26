@@ -57,6 +57,7 @@ import {
   api,
   ApiError,
   errorMessage,
+  isSignedOutAnswer,
   setApiAuth,
   setApiTimeZone,
   setProfileRemovedHandler,
@@ -155,6 +156,9 @@ export type JoinResult = { ok: true; family: Family } | { ok: false; error: stri
 /** createSelf(): in as the new person (`me`), or a sentence to show under the name field. */
 export type CreateSelfResult = { ok: true; me: Profile } | { ok: false; error: string };
 
+/** deleteAccount(): gone (the caller then calls leaveFamily), or a sentence to show; nothing is signed out then. */
+export type DeleteAccountResult = { ok: true } | { ok: false; error: string };
+
 export type Session = {
   status: SessionStatus;
   /** This phone holds a family credential (its device key, or a family code not swapped yet). */
@@ -218,6 +222,13 @@ export type Session = {
   createSelf: (name: string, role: Role) => Promise<CreateSelfResult>;
   /** Sign this phone out (its key stops working) and forget the family: back to the first screen. */
   leaveFamily: () => Promise<void>;
+  /**
+   * "Delete my account", for this phone's own person (`owner`) only: `erase` first (Convex's
+   * account.deleteMe; lib/live imports this module, so the caller hands it in), then POST
+   * /profiles/:id/remove, which takes them out of the family and signs this phone out. On `ok` the
+   * caller closes its sheet and calls leaveFamily; until then a refused key isn't "You were signed out".
+   */
+  deleteAccount: (erase: (profileId: string) => Promise<unknown>) => Promise<DeleteAccountResult>;
   /** Someone in the family, or someone removed (only so their old messages keep a name and face). */
   profileById: (id: string | null | undefined) => Profile | null;
   profileByName: (name: string | null | undefined) => Profile | null;
@@ -876,6 +887,32 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     setStatus('needs-code');
   }, [forget]);
 
+  const deleteAccount = useCallback(
+    async (erase: (profileId: string) => Promise<unknown>): Promise<DeleteAccountResult> => {
+      const self = owner;
+      if (!self) return { ok: false, error: 'Only the person this phone belongs to can delete their account.' };
+      const failed = (e: unknown): DeleteAccountResult => {
+        leaving.current = false;
+        return { ok: false, error: errorMessage(e, 'We couldn’t delete your account. Check your connection and try again.') };
+      };
+      leaving.current = true;
+      try {
+        await erase(self.id);
+      } catch (e) {
+        console.warn('[session] account.deleteMe failed', String(e).slice(0, 160));
+        return failed(null);
+      }
+      try {
+        await api.removeProfile(self.id, { profileId: self.id });
+      } catch (e) {
+        // Signed out already: an earlier try, whose answer was lost, took them out.
+        if (!(e instanceof ApiError && isSignedOutAnswer(e.status, e.body))) return failed(e);
+      }
+      return { ok: true };
+    },
+    [owner],
+  );
+
   const value = useMemo<Session>(() => {
     const former = data?.formerProfiles ?? [];
     const byId = (id: string | null | undefined) =>
@@ -910,6 +947,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       joinFamily,
       createSelf,
       leaveFamily,
+      deleteAccount,
       profileById: byId,
       profileByName: byName,
       homeFor: (p: Profile) => (p.role === 'cook' ? '/parent/home' : '/kid/home'),
@@ -934,6 +972,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     joinFamily,
     createSelf,
     leaveFamily,
+    deleteAccount,
   ]);
 
   useEffect(() => {
@@ -977,6 +1016,7 @@ const fallbackSession: Session = {
   joinFamily: async () => ({ ok: false, error: 'Not ready yet.' }),
   createSelf: async () => ({ ok: false, error: 'Not ready yet.' }),
   leaveFamily: async () => {},
+  deleteAccount: async () => ({ ok: false, error: 'Not ready yet.' }),
   profileById: () => null,
   profileByName: () => null,
   homeFor: (p) => (p.role === 'cook' ? '/parent/home' : '/kid/home'),
