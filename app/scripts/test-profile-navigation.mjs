@@ -37,6 +37,7 @@ async function session(mode) {
   await page.addInitScript((via) => {
     localStorage.setItem('homecookd.deviceKey', 'fixture-only-not-real');
     localStorage.setItem('homecookd.deviceVia', via);
+    localStorage.setItem('homecookd.aiConsent.v1', '2026-10-25T00:00:00.000Z'); // said yes on "Before we start"
   }, m.via);
   await page.route('**/functions/v1/api/**', async (route) => {
     const req = route.request();

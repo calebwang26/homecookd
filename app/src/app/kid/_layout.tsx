@@ -12,6 +12,7 @@ import Animated, { Easing, useAnimatedStyle, useReducedMotion, useSharedValue, w
 
 import { CommunityIcon } from '@/components/community/CommunityIcon';
 import { ChatIcon, FloatingTabBar, GridIcon, HomeIcon } from '@/components/ui';
+import { useAiConsent } from '@/lib/aiConsent';
 import { useKidTabsPresence } from '@/lib/navigation';
 import { useUnread } from '@/lib/session';
 import { colors } from '@/theme';
@@ -70,6 +71,9 @@ function KidTabBar(props: TabBarProps) {
 export default function KidTabs() {
   useKidTabsPresence();
   const ask = useAskBadge();
+  // Nothing of home mounts before "Before we start" (the root layout sends them there).
+  const consent = useAiConsent();
+  if (consent !== 'given') return null;
   return (
     <Tabs
       tabBar={(props) => <KidTabBar {...props} />}

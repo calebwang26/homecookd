@@ -35,11 +35,23 @@
   color: var(--muted);
   font-size: var(--fs-ui);
 }
+.lead {
+  margin-top: 24px;
+}
 .block {
   margin-top: 40px;
 }
-.block > p + p {
+.block > * + * {
   margin-top: 12px;
+}
+.block > .h2 + * {
+  margin-top: 0;
+}
+.olist {
+  display: grid;
+  gap: 8px;
+  padding-left: 1.4em;
+  list-style: decimal;
 }
 .h2 {
   margin-bottom: 10px;

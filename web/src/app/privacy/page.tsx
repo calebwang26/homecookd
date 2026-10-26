@@ -1,18 +1,19 @@
-// /privacy: what homecookd keeps, where, who can see it and how to get it deleted, in plain words
-// (QA B19). Server component, no JS. Every line here is a fact about how homecookd works today; when
-// that changes (e.g. the recipe media turns private), change this page in the same commit.
-//   recipe videos, photos, recipe.json  a public Google Cloud bucket; anyone with a link opens them, and
-//                                       library.json at its root (read by the app) lists every recipe
-//   writing the recipe                  Google's Gemini (pipeline/)
-//   messages, voice notes, family       Supabase; voice notes in a private bucket. A cook's text or voice
-//                                       answer to a recipe question is also saved on that recipe as a note
-//                                       the whole family sees (POST /threads/:id/messages, Save to recipe)
-//   photos sent after "I made it"       Supabase, the private 'photos' bucket (1-hour signed links)
-//   sign-in email / Apple / Google, what each person opens, cooks and hearts: Supabase too (API.md)
-//   this website's visit log            POST /web-events: the page, what sent you (site, ad, or the in-app
-//                                       browser named from the user agent), button taps; no IP, no raw user
-//                                       agent (docs/build/API.md)
-// The contact lines show only once CONTACT_EMAIL is set (src/content/site.ts).
+// /privacy: what homecookd keeps, why, who receives it and how to delete it, in plain words (QA B19,
+// App Store guideline 5.1.1(i): what's collected, how, every use, retention, and how to delete or take
+// back consent). The app links here from sign-in, the AI consent screen and the profile sheet.
+// Server component, no JS. Every line is a fact about how homecookd works today; when that changes,
+// change this page in the same commit.
+//   videos, clips, recipe photos, recipe.json  Google Cloud buckets at open, unlisted links (pipeline/)
+//   recipes, family, messages, voice notes,    Convex (convex/schema.ts) and Supabase (sign-in, invites,
+//     photos sent home                         older screens; voice notes + photos in private buckets)
+//   AI                                         Gemini (watches videos, translates), Muse Spark (writes),
+//                                              Claude (the cooking agent, homie), Cartesia (Ink, Sonic,
+//                                              a cloned voice with consent), Moss (finds the moment)
+//   Community                                  place rounded to ~1 km, never shown (convex/lib/geo.ts)
+//   Delete account                             the app's profile sheet (convex/account.ts); media in GCS
+//                                              and Supabase rows are purged from accountDeletions
+//   this website's visit log                   POST /web-events: page, referrer, taps; no IP
+// TODO(caleb): the legal entity and address, and confirm the 30-day deletion windows (docs/app-store).
 // Links home are plain <a>: '/' must load in full so ROUTE_GATE (the layout's <head> script) runs.
 /* eslint-disable @next/next/no-html-link-for-pages */
 import type { Metadata } from 'next';
@@ -22,17 +23,17 @@ import s from './privacy.module.css';
 
 export const metadata: Metadata = {
   title: 'Privacy · homecookd',
-  description: 'What homecookd keeps, where it’s kept, and who can see it.',
+  description: 'What homecookd keeps, why, who gets it, and how to delete it.',
   alternates: { canonical: '/privacy' },
 };
 
-const UPDATED = 'October 17, 2026';
+const UPDATED = 'October 25, 2026';
 
-const mail = CONTACT_EMAIL ? (
+const mail = (
   <a className={s.link} href={`mailto:${CONTACT_EMAIL}`}>
     {CONTACT_EMAIL}
   </a>
-) : null;
+);
 
 export default function PrivacyPage() {
   return (
@@ -44,18 +45,91 @@ export default function PrivacyPage() {
 
       <h1 className={`t-h2 ${s.h1}`}>Privacy, in plain words.</h1>
       <p className={s.updated}>Last updated {UPDATED}.</p>
+      <p className={s.lead}>
+        homecookd helps a family member film themself cooking and turns the video into a recipe the rest of the family
+        can follow. Here’s what we keep, why, who gets it, and how to delete it.
+      </p>
 
       <section className={s.block} aria-labelledby="keep">
         <h2 id="keep" className={s.h2}>
           What we keep
         </h2>
         <ul className={s.list}>
-          <li>The cooking videos you add, the photos, and the recipe we write from them.</li>
-          <li>Photos you send of a dish you made.</li>
-          <li>Your family’s messages and voice notes, and each person’s name and place in the family.</li>
-          <li>The email, Apple or Google account you sign in with, and which recipes you open, cook and save.</li>
-          <li>Your email, if you sign up for early access.</li>
+          <li>
+            <strong>Your account:</strong> your name, what your family calls you, the email, Apple or Google account you
+            sign in with, your language, and your phone number if you add one.
+          </li>
+          <li>
+            <strong>What you make:</strong> cooking videos (filmed in the app, on glasses, or picked from your photos),
+            photos of dishes, voice notes, messages to your family, the recipes and stories we write from your videos,
+            and questions and answers about a recipe.
+          </li>
+          <li>
+            <strong>Your voice while cooking:</strong> when you cook hands-free, the app sends your microphone to our
+            voice service so it hears “next” or a question. While a cook films in the app, the helper listens and looks
+            at the camera to know when to speak.
+          </li>
+          <li>
+            <strong>A cloned voice, only if you say yes:</strong> a cook can let us copy their voice to read their
+            recipes aloud. We ask first, keep a record of the yes, and they can turn it off.
+          </li>
+          <li>
+            <strong>Community:</strong> if your family joins, your place rounded to about 1 km (never shown to anyone)
+            and the recipes the cook chooses to share.
+          </li>
+          <li>
+            <strong>How you use the app:</strong> which recipes you open, cook and save, so we can show the right ones.
+          </li>
+          <li>
+            <strong>Your phone:</strong> a sign-in key and, if you allow notifications, a push token.
+          </li>
+          <li>
+            <strong>This website:</strong> the page you opened, what sent you here, and which buttons you tapped. We
+            don’t store your IP address.
+          </li>
         </ul>
+        <p>
+          We don’t collect payment details, health data, your contacts or your browsing history. We don’t sell your
+          data, show ads, or track you across other apps and websites.
+        </p>
+      </section>
+
+      <section className={s.block} aria-labelledby="use">
+        <h2 id="use" className={s.h2}>
+          How we use it
+        </h2>
+        <p>
+          To write recipes from your videos, cook with you hands-free, send messages, questions and photos between your
+          family, send the notifications you asked for, keep homecookd safe, and fix and improve it. Never for ads.
+        </p>
+      </section>
+
+      <section className={s.block} aria-labelledby="ai">
+        <h2 id="ai" className={s.h2}>
+          The AI services we use
+        </h2>
+        <p>homecookd asks your permission in the app before sending these services anything.</p>
+        <ul className={s.list}>
+          <li>
+            <strong>Google Gemini</strong> watches and listens to cooking videos, notes what the cook did and said, and
+            translates. In some languages it also turns speech into text, and it’s the backup reading voice.
+          </li>
+          <li>
+            <strong>Meta Muse Spark</strong> writes the recipe, its stories and dish ideas, and drafts notes you can edit
+            before you send them.
+          </li>
+          <li>
+            <strong>Anthropic Claude</strong> decides how to help while you cook hands-free or film.
+          </li>
+          <li>
+            <strong>Cartesia</strong> turns speech into text, reads steps aloud, and makes a cloned voice only with the
+            cook’s yes.
+          </li>
+          <li>
+            <strong>Moss</strong> searches what the cook said, to find the moment in the video that answers a question.
+          </li>
+        </ul>
+        <p>They get only what each task needs, and we use them only to run homecookd.</p>
       </section>
 
       <section className={s.block} aria-labelledby="where">
@@ -63,23 +137,9 @@ export default function PrivacyPage() {
           Where it’s kept
         </h2>
         <p>
-          <strong>Recipe videos, recipe photos and recipes</strong> are stored with Google Cloud, at open web links. They are not
-          private: anyone who has a link can open it, and the list of recipes sits at an open link too.
-        </p>
-        <p>
-          <strong>Messages, voice notes, photos you send, family details and sign-in details</strong> are stored
-          with Supabase, a database service. Voice notes and photos you send are kept in private storage, not
-          behind open links.
-        </p>
-      </section>
-
-      <section className={s.block} aria-labelledby="ai">
-        <h2 id="ai" className={s.h2}>
-          Who writes the recipe
-        </h2>
-        <p>
-          We send your videos to Gemini, an AI from Google. It watches and listens to them and writes the steps. Your
-          own words for amounts stay in the recipe, with an estimate beside them.
+          Recipes, family details, messages, voice notes and photos are stored with Convex and Supabase, two database
+          services. Cooking videos, clips and recipe photos are stored with Google Cloud. This website runs on Vercel.
+          They store data for us and may not use it for anything else.
         </p>
       </section>
 
@@ -87,41 +147,93 @@ export default function PrivacyPage() {
         <h2 id="see" className={s.h2}>
           Who can see it
         </h2>
-        <p>
-          Your family sees your recipes in the app. Messages and voice notes go to the chat you send them in. When a
-          cook answers a question about a recipe, the answer is also saved on that recipe for the whole family.
-        </p>
-        <p>When you send someone a recipe link, anyone who has that link can open the recipe.</p>
+        <ul className={s.list}>
+          <li>
+            <strong>Your family</strong> sees your family’s recipes, videos and stories. A message goes to the people you
+            send it to.
+          </li>
+          <li>
+            <strong>Recipe videos and photos sit at unlisted web links.</strong> They aren’t listed or searchable, but
+            anyone who has the exact link can open them. When you send a recipe link, anyone with it can open the
+            recipe.
+          </li>
+          <li>
+            <strong>Community neighbors</strong> see only the recipes a cook chooses to share: the dish, the steps and a
+            short story card. Never the video, the cook’s voice, or your exact place.
+          </li>
+        </ul>
       </section>
 
-      <section className={s.block} aria-labelledby="site">
-        <h2 id="site" className={s.h2}>
-          This website
+      <section className={s.block} aria-labelledby="keep-time">
+        <h2 id="keep-time" className={s.h2}>
+          How long we keep it
         </h2>
         <p>
-          When you visit, we count the visit: which page you opened, the site, app or ad that sent you, and which of
-          our buttons you tap. We don’t store your IP address.
+          While your account is open. When you delete it, we delete your data within 30 days, and it leaves our backups
+          within 30 more. Messages you sent stay with the people you sent them to until they delete their account.
         </p>
       </section>
 
       <section className={s.block} aria-labelledby="delete">
         <h2 id="delete" className={s.h2}>
-          Deleting
+          Deleting and your choices
+        </h2>
+        <ul className={s.list}>
+          <li>
+            <strong>Delete your account</strong> in the app: tap your name at the top, then Delete my account. It
+            deletes your account, messages and voice notes, and a cook’s recipes.
+          </li>
+          <li>
+            <strong>Take back a yes</strong> at any time: turn off the cloned voice, Community sharing or notifications
+            in the app, or write to us to stop sending your data to AI services. Recipe writing and hands-free cooking
+            can’t work without them.
+          </li>
+          <li>
+            <strong>Get a copy, or fix something:</strong> write to {mail} and we’ll answer within 30 days. Depending on
+            where you live (for example California, the EU or the UK), you may have more rights over your data.
+          </li>
+        </ul>
+      </section>
+
+      <section className={s.block} aria-labelledby="kids">
+        <h2 id="kids" className={s.h2}>
+          Children
         </h2>
         <p>
-          There’s no delete button in the app yet.
-          {mail ? <> Write to us at {mail} and tell us what to delete.</> : null}
+          homecookd is for adults and families, not for children under 13. We don’t knowingly collect data from children
+          under 13. If you think a child signed up, write to us and we’ll delete it.
         </p>
       </section>
 
-      {mail ? (
-        <section className={s.block} aria-labelledby="ask">
-          <h2 id="ask" className={s.h2}>
-            Questions?
-          </h2>
-          <p>Write to us at {mail}.</p>
-        </section>
-      ) : null}
+      <section className={s.block} aria-labelledby="safe">
+        <h2 id="safe" className={s.h2}>
+          Keeping it safe
+        </h2>
+        <p>
+          Data travels over encrypted connections, and phone sign-in keys are stored only as scrambled hashes. No system
+          is perfect, so please tell us right away if you see a problem.
+        </p>
+      </section>
+
+      <section className={s.block} aria-labelledby="changes">
+        <h2 id="changes" className={s.h2}>
+          Changes
+        </h2>
+        <p>If we change this page, we’ll update the date above and tell you in the app before a big change.</p>
+      </section>
+
+      <section className={s.block} aria-labelledby="ask">
+        <h2 id="ask" className={s.h2}>
+          Questions?
+        </h2>
+        <p>
+          Write to us at {mail}. Our terms of use are{' '}
+          <a className={s.link} href="/terms">
+            here
+          </a>
+          .
+        </p>
+      </section>
 
       <p className={s.back}>
         <a className={s.link} href="/">

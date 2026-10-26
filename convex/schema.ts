@@ -49,6 +49,9 @@ export default defineSchema({
     // Community: where they are, rounded to about 1 km before it's stored (lib/geo.ts). Never shown.
     approx: v.optional(v.object({ lat: v.number(), lng: v.number() })),
     campus: v.optional(v.string()),
+    // They deleted their account (account.deleteMe): the row stays as a blank tombstone, since other
+    // rows may still point at it, and no session or sign-in works as them again.
+    deletedAt: v.optional(v.number()),
   })
     .index("by_familyId", ["familyId"])
     .index("by_supabaseProfileId", ["supabaseProfileId"]),
@@ -61,7 +64,28 @@ export default defineSchema({
     expiresAt: v.number(),
   })
     .index("by_tokenHash", ["tokenHash"])
-    .index("by_expiresAt", ["expiresAt"]),
+    .index("by_expiresAt", ["expiresAt"])
+    .index("by_personId", ["personId"]),
+
+  /**
+   * One per deleted account (account.deleteMe). Convex rows are purged right away (`purgedAt` once the
+   * last batch ran); the rest is for a later purge outside Convex: their Supabase rows and their media
+   * in GCS (the privacy policy promises it within 30 days).
+   */
+  accountDeletions: defineTable({
+    familyId: v.id("families"),
+    personId: v.id("people"),
+    supabaseProfileId: v.string(),
+    requestedAt: v.number(),
+    recipeIds: v.array(v.id("recipes")), // the recipes they cooked (gone from Convex)
+    jobIds: v.array(v.id("jobs")), // their uploads' jobs: the worker names each recipe's GCS folder after one
+    uploadPaths: v.array(v.string()), // their raw videos in the GCS uploads bucket
+    mediaUrls: v.array(v.string()), // recipe.json files, covers and glasses videos in GCS
+    voiceCloneId: v.optional(v.string()), // her Cartesia voice clone, to delete there
+    purgedAt: v.optional(v.number()),
+    purgeRunAt: v.optional(v.number()), // the last purge batch; the restart cron goes by it
+    purgeRestarts: v.optional(v.number()),
+  }).index("by_purgedAt", ["purgedAt"]),
 
   /** A dish being processed or ready to cook. Its recipe.json is in GCS (recipeJsonUrl), without the memories (older files still have them). */
   recipes: defineTable({
@@ -101,9 +125,12 @@ export default defineSchema({
         quote: v.optional(v.string()),
       }),
     ),
+    // Reports from two families hid it from every other family until the team looks (lib/safety.ts).
+    hiddenAt: v.optional(v.number()),
   })
     .index("by_familyId", ["familyId"])
-    .index("by_sharedAt", ["sharedAt"]),
+    .index("by_sharedAt", ["sharedAt"])
+    .index("by_cookId", ["cookId"]),
 
   /** One upload going through the pipeline. The worker claims it and reports each stage. */
   jobs: defineTable({
@@ -136,7 +163,8 @@ export default defineSchema({
   })
     .index("by_familyId", ["familyId"])
     .index("by_stage", ["stage"])
-    .index("by_uploadPath", ["uploadPath"]),
+    .index("by_uploadPath", ["uploadPath"])
+    .index("by_cookId", ["cookId"]),
 
   /** What the kid is cooking right now, so the cook's phone can show "Leo is on step 3". */
   cookingSessions: defineTable({
@@ -146,7 +174,10 @@ export default defineSchema({
     stepOrder: v.number(),
     updatedAt: v.number(), // so a forgotten session stops showing after a while
     endedAt: v.optional(v.number()),
-  }).index("by_familyId", ["familyId"]),
+  })
+    .index("by_familyId", ["familyId"])
+    .index("by_kidId", ["kidId"])
+    .index("by_recipeId", ["recipeId"]),
 
   /**
    * A kid's question while cooking. The video answers it when Moss finds the moment; otherwise it
@@ -181,7 +212,9 @@ export default defineSchema({
     ),
   })
     .index("by_recipeId", ["recipeId"])
-    .index("by_familyId_and_status", ["familyId", "status"]),
+    .index("by_familyId_and_status", ["familyId", "status"])
+    .index("by_askedBy", ["askedBy"])
+    .index("by_answer_by", ["answer.by"]),
 
   /**
    * homie's live session while a cook records (voice service /record). `startedAt` is t0 for every
@@ -318,10 +351,12 @@ export default defineSchema({
     // for the link (dinners.inviteLink). It opens homecookd.app/d, which shows only the dish, the
     // host's name and when.
     inviteToken: v.optional(v.string()),
+    hiddenAt: v.optional(v.number()), // as recipes.hiddenAt
   })
     .index("by_status", ["status"])
     .index("by_hostId", ["hostId"])
-    .index("by_inviteToken", ["inviteToken"]),
+    .index("by_inviteToken", ["inviteToken"])
+    .index("by_recipeId", ["recipeId"]),
 
   /** One per phone or browser that opened a dinner's invite link (POST /invite/open): "X going" counts them. */
   dinnerInviteOpens: defineTable({
@@ -353,7 +388,39 @@ export default defineSchema({
     status: v.union(v.literal("pending"), v.literal("accepted"), v.literal("declined")),
   })
     .index("by_requesterFamilyId", ["requesterFamilyId"])
-    .index("by_otherFamilyId", ["otherFamilyId"]),
+    .index("by_otherFamilyId", ["otherFamilyId"])
+    .index("by_requesterId", ["requesterId"])
+    .index("by_theirRecipeId", ["theirRecipeId"])
+    .index("by_myRecipeId", ["myRecipeId"]),
+
+  /**
+   * Community: someone reported another family's recipe or dinner ("Report or block"), or blocked that
+   * family (kind "family"). It hides the item from the reporter's family at once; open reports from two
+   * families hide it from everyone else (hiddenAt) until the team reviews it (reports.ts).
+   */
+  reports: defineTable({
+    reporterFamilyId: v.id("families"),
+    reporterPersonId: v.id("people"),
+    kind: v.union(v.literal("recipe"), v.literal("dinner"), v.literal("family")),
+    targetId: v.string(), // the recipe's, dinner's or family's id
+    targetFamilyId: v.id("families"),
+    reason: v.optional(v.union(v.literal("not_food"), v.literal("rude"), v.literal("other"))),
+    createdAt: v.number(),
+    status: v.union(v.literal("open"), v.literal("resolved")),
+  })
+    .index("by_reporterFamilyId_and_kind_and_targetId", ["reporterFamilyId", "kind", "targetId"])
+    .index("by_kind_and_targetId", ["kind", "targetId"])
+    .index("by_status", ["status"]),
+
+  /** Community: one family blocked another. Both ways: neither sees the other's dishes, dinners or asks. */
+  blocks: defineTable({
+    familyId: v.id("families"),
+    blockedFamilyId: v.id("families"),
+    label: v.string(), // how the blocked family's cards named it, for the unblock list
+    createdAt: v.number(),
+  })
+    .index("by_familyId_and_blockedFamilyId", ["familyId", "blockedFamilyId"])
+    .index("by_blockedFamilyId_and_familyId", ["blockedFamilyId", "familyId"]),
 
   /** Family messages, including the finished-dish photo and the note Muse drafted for it. */
   messages: defineTable({
@@ -365,5 +432,7 @@ export default defineSchema({
     fileId: v.optional(v.id("_storage")),
     recipeId: v.optional(v.id("recipes")),
     aiDrafted: v.boolean(), // shown with an "AI-drafted" label (PLAN principles)
-  }).index("by_familyId", ["familyId"]),
+  })
+    .index("by_familyId", ["familyId"])
+    .index("by_from", ["from"]),
 });

@@ -30,17 +30,17 @@ export async function familyKids(ctx: QueryCtx, familyId: Id<"families">, args: 
   if (ids.length > MAX_KIDS) throw new ConvexError(refusal);
   for (const id of ids) {
     const kid = await ctx.db.get("people", id);
-    if (!kid || kid.familyId !== familyId || kid.role !== "kid") throw new ConvexError(refusal);
+    if (!kid || kid.familyId !== familyId || kid.role !== "kid" || kid.deletedAt !== undefined) throw new ConvexError(refusal);
   }
   return ids;
 }
 
-/** Their names, in order (unknown ids are skipped). */
+/** Their names, in order (unknown ids and deleted accounts are skipped). */
 export async function kidNames(ctx: QueryCtx, row: ForKids): Promise<string[]> {
   const names: string[] = [];
   for (const id of forKids(row)) {
     const kid = await ctx.db.get("people", id);
-    if (kid) names.push(kid.name);
+    if (kid && kid.deletedAt === undefined) names.push(kid.name);
   }
   return names;
 }

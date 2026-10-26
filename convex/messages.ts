@@ -121,7 +121,7 @@ export const send = mutation({
     }
     if (args.to) {
       const to = await ctx.db.get("people", args.to);
-      if (!to || to.familyId !== signed.family._id) throw new ConvexError("They aren't in this family.");
+      if (!to || to.familyId !== signed.family._id || to.deletedAt !== undefined) throw new ConvexError("They aren't in this family.");
     }
     if (args.recipeId && !(await familyRecipe(ctx, signed, args.recipeId))) {
       throw new ConvexError("That recipe isn't here anymore.");
