@@ -27,6 +27,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [homie-voice](memory/homie-voice.md) | Oct 24: homie is Riya bilingual, asked for as auditioned (locale, speed 0.85, moods), cousin tone; Gemini TTS backup |
 | [cook-languages](memory/cook-languages.md) | Oct 24: 12 more cook languages on Cartesia (ink-whisper) + Claude, no Gemini; Marathi stays on Gemini Live until the migration; merge after the demo |
 | [gemini-credits-nearly-gone](memory/gemini-credits-nearly-gone.md) | Oct 24: Gemini has ~$10 left; new model calls use Claude (text, images) or Cartesia (audio) |
+| [claude-cartesia-quality-first](memory/claude-cartesia-quality-first.md) | Oct 26: Claude + Cartesia run the whole AI backend (Muse goes too); quality first, then the cheapest model that holds it |
 | [model-migration-after-hackathon](memory/model-migration-after-hackathon.md) | Oct 24: the move off Gemini starts after Sun Oct 25, 8pm; one PR per step, each behind an env flag with Gemini as the rollback |
 | [cartesia-credits-for-tests](memory/cartesia-credits-for-tests.md) | Oct 24: use the Cartesia credits; real Cartesia is the test default, fake speech opt-in |
 | [community-map](memory/community-map.md) | Oct 24: Community is one simple dish map; information appears on tap, one step and one button at a time |

@@ -181,6 +181,48 @@ def test_align_file_times_a_new_recipe() -> None:
     assert after["steps"][1]["quote_original"] == marathi  # written back as Marathi, not \u escapes
 
 
+
+def test_align_on_claude_reads_each_steps_transcript_lines() -> None:
+    from pipeline import claude
+    from pipeline import transcribe as T
+    from pipeline.test_claude import FakeAnthropic
+    r = json.loads((S.BUNDLED / "weed-steak.json").read_text())
+    for s in r["steps"]:
+        for x in s["substeps"]:
+            x.pop("start_s", None)
+    r["media"]["audio_url"] = "voice.m4a"
+    step2 = r["steps"][1]
+    heard = {"language": "en", "duration": 99.0, "text": "", "loop_words_dropped": 0,
+             "words": [{"word": w, "start": step2["start_s"] + 65 + i * 0.3, "end": step2["start_s"] + 65.2 + i * 0.3}
+                       for i, w in enumerate("now the miso glaze".split())]}
+    even = {"steps": [{"order": s["order"], "starts": [A.mmss((s["end_s"] - s["start_s"]) * i // len(s["substeps"]))
+                                                       for i in range(len(s["substeps"]))]} for s in r["steps"]]}
+    fake = FakeAnthropic(even)
+
+    def no_network(*_a, **_k):
+        raise AssertionError("the cached transcript should be used")
+
+    with tempfile.TemporaryDirectory() as tmp:
+        path = Path(tmp) / "recipe.json"
+        path.write_text(json.dumps(r, ensure_ascii=False))
+        (Path(tmp) / "voice.m4a").write_bytes(b"m4a")  # never cut: Claude gets the transcript, not clips
+        (Path(tmp) / "work").mkdir()
+        (Path(tmp) / "work" / T.FILE).write_text(json.dumps(heard))
+        old_post, T.requests.post = T.requests.post, no_network
+        try:
+            how = A.align_file(path, claude.ClaudeText(client=fake), "claude-haiku-5-5", MemoryUsage())
+        finally:
+            T.requests.post = old_post
+        after = json.loads(path.read_text())
+    assert not A.check(after), A.check(after)
+    assert all(h.startswith("claude attempt 1") for h in how.values()), how
+    [call] = fake.calls
+    prompt = call["messages"][0]["content"][-1]["text"]
+    assert call["output_format"] is A.AlignAnswer and prompt.startswith("You are timing the substeps"), prompt[:200]
+    assert f"Transcript of step 2:\n01:05 now the miso glaze\n" in prompt, prompt
+    assert "Transcript of step 1:\n(no speech)" in prompt, prompt
+
+
 if __name__ == "__main__":
     tests = [v for k, v in sorted(globals().items()) if k.startswith("test_")]
     failed = 0
