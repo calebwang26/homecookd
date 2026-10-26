@@ -16,6 +16,7 @@ import type * as cooking from "../cooking.js";
 import type * as crons from "../crons.js";
 import type * as dinners from "../dinners.js";
 import type * as files from "../files.js";
+import type * as followUps from "../followUps.js";
 import type * as glasses from "../glasses.js";
 import type * as homie from "../homie.js";
 import type * as http from "../http.js";
@@ -70,6 +71,7 @@ declare const fullApi: ApiFromModules<{
   crons: typeof crons;
   dinners: typeof dinners;
   files: typeof files;
+  followUps: typeof followUps;
   glasses: typeof glasses;
   homie: typeof homie;
   http: typeof http;

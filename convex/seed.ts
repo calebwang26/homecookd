@@ -58,8 +58,9 @@ export const demo = internalMutation({
       if (existing.some((r) => r.libraryId === parsed.libraryId)) continue;
       const cookId = ids.get(raw.cook.name);
       if (!cookId) continue;
+      const { followUps: _, ...fields } = parsed; // a seeded demo recipe asks its cook nothing
       const recipeId = await ctx.db.insert("recipes", {
-        ...parsed,
+        ...fields,
         familyId,
         cookId,
         status: "ready",

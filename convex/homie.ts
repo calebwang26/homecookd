@@ -101,8 +101,9 @@ export async function newsFor(ctx: QueryCtx, signed: Signed, now: number): Promi
     for (const q of open) {
       const r = recipe.get(q.recipeId);
       if (q.kind === "share" || !r || r.cookId !== me._id) continue;
-      const kid = await personOf(q.askedBy);
-      facts.push({ id: `asked:${q._id}`, kind: "asked", line: `${kid?.name ?? "Someone"} asked you about the ${r.title}.`, at: q._creationTime });
+      const kid = q.kind === "followUp" ? null : await personOf(q.askedBy);
+      const line = kid ? `${kid.name} asked you about the ${r.title}.` : q.kind === "followUp" ? `I have a question about your ${r.title}.` : `Someone asked you about the ${r.title}.`;
+      facts.push({ id: `asked:${q._id}`, kind: "asked", line, at: q._creationTime });
     }
     // A quiet week: she has recorded before, but nothing new for a while.
     const last = Math.max(0, ...recipes.filter((r) => r.cookId === me._id).map((r) => r._creationTime));

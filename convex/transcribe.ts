@@ -28,13 +28,17 @@ const EXT: Record<string, string> = {
 
 export const audioFor = internalQuery({
   args: { questionId: v.id("questions") },
-  returns: v.union(v.null(), v.object({ audioId: v.id("_storage"), language: v.string(), share: v.boolean() })),
+  returns: v.union(
+    v.null(),
+    v.object({ audioId: v.id("_storage"), language: v.string(), share: v.boolean(), followUp: v.boolean() }),
+  ),
   handler: async (ctx, { questionId }) => {
     const q = await ctx.db.get("questions", questionId);
     const answer = q?.answer;
     if (!q || !answer?.audioId) return null;
     const cook = await ctx.db.get("people", answer.by);
-    return { audioId: answer.audioId, language: cook?.language ?? "en", share: q.kind === "share" };
+    const followUp = q.kind === "followUp" && !!q.followUp?.ingredient;
+    return { audioId: answer.audioId, language: cook?.language ?? "en", share: q.kind === "share", followUp };
   },
 });
 
@@ -52,6 +56,7 @@ export const saveTranscript = internalMutation({
     if (q?.answer?.audioId === audioId) {
       await ctx.db.patch("questions", questionId, { answer: { ...q.answer, transcript, translation } });
       if (q.kind === "share") await ctx.scheduler.runAfter(0, internal.shareRequests.decide, { questionId });
+      if (q.followUp?.ingredient) await ctx.scheduler.runAfter(0, internal.followUps.decide, { questionId });
     }
     return null;
   },
@@ -125,6 +130,7 @@ export const questionAnswer = internalAction({
     } finally {
       // A share ask is still read when her voice note can't be written out: no words is not a yes.
       if (!saved && found.share) await ctx.scheduler.runAfter(0, internal.shareRequests.decide, { questionId });
+      if (!saved && found.followUp) await ctx.scheduler.runAfter(0, internal.followUps.decide, { questionId });
     }
     return null;
   },

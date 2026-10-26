@@ -135,6 +135,18 @@ export default defineSchema({
     ),
     // Reports from two families hid it from every other family until the team looks (lib/safety.ts).
     hiddenAt: v.optional(v.number()),
+    // Ingredients the cook confirmed after a follow-up question (convex/followUps.ts). recipe.json in GCS doesn't
+    // have them: the app shows them beside its ingredient list, with her own words for how much.
+    addedIngredients: v.optional(
+      v.array(
+        v.object({
+          name: v.string(),
+          said: v.optional(v.string()), // her answer, in English when there is one ("a handful, at the start")
+          step: v.optional(v.number()),
+          questionId: v.id("questions"),
+        }),
+      ),
+    ),
   })
     .index("by_familyId", ["familyId"])
     .index("by_sharedAt", ["sharedAt"])
@@ -200,7 +212,17 @@ export default defineSchema({
     textForCook: v.optional(v.string()), // the question in the cook's language, when it isn't English
     // "share": not about cooking. Someone in the family asked the cook to put shareRecipeId (this
     // recipe) on the Community map; only her clear yes shares it (convex/shareRequests.ts).
-    kind: v.optional(v.literal("share")),
+    // "followUp": the pipeline's own question about the recipe (recipe.json follow_up_questions, e.g. an ingredient
+    // the video's frames showed but nobody named). Asked of the recipe's cook (askedBy is the cook; the app shows
+    // "homie"), and her yes to an ingredient one adds it to recipes.addedIngredients (convex/followUps.ts).
+    kind: v.optional(v.union(v.literal("share"), v.literal("followUp"))),
+    followUp: v.optional(
+      v.object({
+        id: v.string(), // recipe.json's follow_up_questions[].id, so a re-published recipe doesn't ask twice
+        ingredient: v.optional(v.string()), // set on "did you add …?" questions
+        said: v.optional(v.union(v.literal("yes"), v.literal("no"), v.literal("unclear"))), // how her answer read
+      }),
+    ),
     shareRecipeId: v.optional(v.id("recipes")),
     // How homie read her answer to a share ask (lib/yesNo.ts), and when. After a no or an unclear
     // answer the family can't ask her again for a day.
