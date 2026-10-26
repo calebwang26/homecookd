@@ -1,11 +1,13 @@
 // "Delete my account" (App Store guideline 5.1.1(v)): the sheet behind the quiet link at the foot of
-// "Who's in the kitchen?" (app/src/app/index.tsx), only ever for this phone's own person. It says plainly
-// what goes: their account, messages and voice notes, and for a cook her recipes, for everyone in the
-// family. "Delete my account" runs session.deleteAccount (Convex's account.deleteMe, then POST
-// /profiles/:id/remove); once both are done `onDeleted` closes the sheet and signs this phone out. A step
-// that fails shows its sentence under the buttons, and nothing says it worked.
+// "Who's in the kitchen?" (app/src/app/index.tsx), for whoever this phone may delete (session
+// accountRemoval): its own person ("Delete your account?"), or someone with no phone of their own it
+// is acting as ("Delete Grandma's account?"). It says plainly what goes: the account, messages and voice
+// notes, and for a cook the recipes, for everyone in the family. Confirming runs session.deleteAccount
+// (Convex's account.deleteMe, then POST /profiles/:id/remove); once both are done `onDeleted` closes the
+// sheet and either signs this phone out or lets go of that person here. A step that fails shows its
+// sentence under the buttons, and nothing says it worked.
 //
-//   <DeleteAccountSheet visible person={owner} onClose={...} onDeleted={...} />
+//   <DeleteAccountSheet visible person={leo} own={false} onClose={...} onDeleted={(who, signedOut) => ...} />
 //
 // It starts fresh on every open.
 import { useEffect, useRef, useState } from 'react';
@@ -18,15 +20,15 @@ import { deleteMyAccount } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
 import { colors, motion } from '@/theme/tokens';
 
-const TITLE = 'Delete your account?';
-
 export type DeleteAccountSheetProps = {
   visible: boolean;
-  /** This phone's own person (session `owner`). */
+  /** Whose account: someone session.accountRemoval allows. */
   person: Profile | null;
+  /** They're this phone's own person: the words say "your", and deleting signs this phone out. */
+  own: boolean;
   onClose: () => void;
-  /** Both steps are done: close the sheet, then sign this phone out (session leaveFamily). */
-  onDeleted: () => void;
+  /** Both steps are done: close the sheet, then leaveFamily when `signedOut`, else forgetPerson. */
+  onDeleted: (person: Profile, signedOut: boolean) => void;
 };
 
 export function DeleteAccountSheet(props: DeleteAccountSheetProps) {
@@ -35,7 +37,19 @@ export function DeleteAccountSheet(props: DeleteAccountSheetProps) {
   return <Sheet key={opened.n} {...props} />;
 }
 
-function Sheet({ visible, person, onClose, onDeleted }: DeleteAccountSheetProps) {
+/** The sheet's words, for this phone's own person or for someone else by name. */
+export function deleteAccountWords(name: string, own: boolean) {
+  const whose = own ? 'your' : `${name}’s`;
+  return {
+    title: `Delete ${whose} account?`,
+    goes: own ? 'Your account, your messages and voice notes go for good.' : `${name}’s account, messages and voice notes go for good.`,
+    recipes: own ? 'Your recipes go too, for everyone in your family.' : `${name}’s recipes go too, for everyone in the family.`,
+    confirm: own ? 'Delete my account' : `Delete ${name}’s account`,
+    keep: own ? 'Keep my account' : `Keep ${name}’s account`,
+  };
+}
+
+function Sheet({ visible, person, own, onClose, onDeleted }: DeleteAccountSheetProps) {
   const { deleteAccount } = useSession();
   const [btn, setBtn] = useState<ActionState>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -58,33 +72,33 @@ function Sheet({ visible, person, onClose, onDeleted }: DeleteAccountSheetProps)
   };
 
   async function confirm() {
-    if (btn !== 'idle') return;
+    if (!person || btn !== 'idle') return;
     setError(null);
     setBtn('loading');
     const started = Date.now();
-    const res = await deleteAccount(deleteMyAccount);
+    const res = await deleteAccount(person, deleteMyAccount);
     const wait = motion.loadingMinMs - (Date.now() - started);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
-    // Gone on the server: this phone signs out even if the sheet went away meanwhile.
-    if (res.ok) return onDeleted();
+    // Gone on the server: this phone follows even if the sheet went away meanwhile.
+    if (res.ok) return onDeleted(person, res.signedOut);
     if (!alive.current) return;
     setError(res.error);
     setBtn('error');
   }
 
   if (!person) return null;
-  const cook = person.role === 'cook';
+  const words = deleteAccountWords(person.name.trim(), own);
 
   return (
     <BottomSheet
       visible={visible}
       onClose={close}
       dismissOnBackdrop={!busy}
-      accessibilityLabel={TITLE}
+      accessibilityLabel={words.title}
       footer={
         <View style={styles.choices}>
           <ActionButton
-            label="Delete my account"
+            label={words.confirm}
             variant="outline"
             size="lg"
             fg={colors.danger}
@@ -95,22 +109,22 @@ function Sheet({ visible, person, onClose, onDeleted }: DeleteAccountSheetProps)
             loadingLabel="Deleting"
             errorLabel="Not deleted"
             onPress={() => void confirm()}
-            accessibilityHint={cook ? 'Deletes your account and your recipes for good' : 'Deletes your account for good'}
+            accessibilityHint={person.role === 'cook' ? 'Deletes the account and its recipes for good' : 'Deletes the account for good'}
           />
-          <ActionButton label="Keep my account" size="lg" disabled={busy} onPress={close} />
+          <ActionButton label={words.keep} size="lg" disabled={busy} onPress={close} />
           <ErrorLine error={error} align="center" />
         </View>
       }>
       <View style={styles.body}>
         <Txt variant="display" size={28} leading={1.15} align="center" accessibilityRole="header" style={styles.title}>
-          {TITLE}
+          {words.title}
         </Txt>
         <Txt variant="body" size={18} align="center">
-          Your account, your messages and voice notes go for good.
+          {words.goes}
         </Txt>
-        {cook ? (
+        {person.role === 'cook' ? (
           <Txt variant="body" size={18} weight={700} align="center">
-            Your recipes go too, for everyone in your family.
+            {words.recipes}
           </Txt>
         ) : null}
         <Txt variant="body" size={16} align="center" color={colors.muted}>

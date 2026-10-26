@@ -96,8 +96,10 @@ HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-o
   the glasses' live rows and frames, jobs, hosted dinners with their asks and invite opens, their dinner and swap
   asks, then syncs Moss (an index with nothing left is deleted). `accountDeletions` keeps what Convex can't delete:
   `supabaseProfileId`, `recipeIds`, `jobIds` (the GCS recipe folders are named after them), `uploadPaths` and
-  `mediaUrls`, for the purge of Supabase rows and GCS media; `purgedAt` once Convex is done. The app then calls
-  Supabase `POST /profiles/:id/remove` and signs the phone out (`session.deleteAccount`).
+  `mediaUrls`, for the purge of Supabase rows and GCS media; `purgedAt` once Convex is done. The app offers it for
+  whoever the phone acts as when `POST /profiles/:id/remove` allows (its own person, or someone with no phone of their
+  own: a face picked on a family-code phone), runs `account.deleteMe` with a session as them, then that route; the
+  phone signs out when it was its own person, else stays in without them (`session.deleteAccount`).
 
 **Worker → Convex** (HTTP POST with JSON, `x-worker-secret`)
 - `/worker/claim` `{}` → `204`, or `{ jobId, recipeId, familyId, supabaseFamilyId, cookId, cookName, uploadPath,
