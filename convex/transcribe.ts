@@ -6,7 +6,8 @@ import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { type ActionCtx, internalAction, internalMutation, internalQuery } from "./_generated/server";
-import { geminiTranslate } from "./lib/translate";
+import { textKeyName, textModel } from "./lib/textModel";
+import { translate } from "./lib/translate";
 
 const STT_URL = "https://api.cartesia.ai/stt";
 const CARTESIA_VERSION = "2026-08-14";
@@ -108,13 +109,13 @@ async function writeOut(ctx: ActionCtx, questionId: Id<"questions">, audioId: Id
 
 /** The kid's English. A failed translation still keeps the cook's own words. */
 async function toEnglish(transcript: string): Promise<string | undefined> {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.warn("GEMINI_API_KEY isn't set; answer left without an English translation");
+  const model = textModel();
+  if (!model) {
+    console.warn(`${textKeyName()} isn't set; answer left without an English translation`);
     return undefined;
   }
   try {
-    return await geminiTranslate(transcript, apiKey);
+    return await translate(transcript, model);
   } catch (e) {
     console.error(e);
     return undefined;

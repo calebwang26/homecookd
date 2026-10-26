@@ -1,6 +1,8 @@
-// Gemini (generateContent) between the cook's language and the kid's English: the cook's answer into
-// English (shown labelled as a translation; her own words stay in the transcript), and the kid's question
-// into the cook's language (questions.textForCook).
+// Gemini (generateContent), or Claude with TEXT_PROVIDER=claude (lib/textModel.ts), between the cook's language
+// and the kid's English: the cook's answer into English (shown labelled as a translation; her own words stay in
+// the transcript), and the kid's question into the cook's language (questions.textForCook).
+import { claudeJson, TRANSLATE_MODEL, type TextModel } from "./textModel";
+
 const MODEL = "gemini-3.8-flash";
 export const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
@@ -24,7 +26,24 @@ const forCook = (code: string) =>
   "they would say themselves; keep ingredient names they know. Keep the meaning; add nothing. Reply with the translation only.";
 
 /** English for the kid by default; `to` translates English into that language for the cook. */
-export async function geminiTranslate(text: string, apiKey: string, to?: string): Promise<string> {
+export async function translate(text: string, model: TextModel, to?: string): Promise<string> {
+  if (model.provider === "gemini") return await geminiTranslate(text, model.apiKey, to);
+  // JSON keeps Claude's own notes ("the word is unclear to me...") out of what the family reads.
+  const raw = await claudeJson(model.apiKey, process.env.CLAUDE_TRANSLATE_MODEL || TRANSLATE_MODEL, "medium",
+    to ? forCook(to) : INSTRUCTIONS, text, TRANSLATION);
+  const out = (JSON.parse(raw) as { translation?: unknown }).translation;
+  if (typeof out !== "string" || !out.trim()) throw new Error("Claude translate gave no translation");
+  return out.trim();
+}
+
+const TRANSLATION = {
+  type: "object",
+  properties: { translation: { type: "string" } },
+  required: ["translation"],
+  additionalProperties: false,
+};
+
+async function geminiTranslate(text: string, apiKey: string, to?: string): Promise<string> {
   const res = await fetch(GEMINI_URL, {
     method: "POST",
     headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },

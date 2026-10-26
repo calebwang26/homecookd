@@ -1,8 +1,9 @@
-// Is the cook's answer a clear yes? One small, strict Gemini call that may only say yes, no or unclear
-// (JSON with an enum). It reads her answer in English when there is one. Only "yes" counts: no,
+// Is the cook's answer a clear yes? One small, strict Gemini call (Claude with TEXT_PROVIDER=claude) that may
+// only say yes, no or unclear (JSON with an enum). It reads her answer in English when there is one. Only "yes" counts: no,
 // unclear, a reply that isn't one of the three, or any failure all mean no. The question is a fixed
 // sentence from our code (never words someone in the family wrote), and her answer goes in as one JSON
 // string the model is told to read as data, so words inside it can't change the rules.
+import { CLAUDE_MODEL, claudeJson, type TextModel } from "./textModel";
 import { GEMINI_URL } from "./translate";
 
 export type YesNo = "yes" | "no" | "unclear";
@@ -19,6 +20,14 @@ const SCHEMA = {
   type: "OBJECT",
   properties: { answer: { type: "STRING", enum: ["yes", "no", "unclear"] } },
   required: ["answer"],
+};
+
+// Claude's structured outputs take standard JSON Schema.
+const CLAUDE_SCHEMA = {
+  type: "object",
+  properties: { answer: { type: "string", enum: ["yes", "no", "unclear"] } },
+  required: ["answer"],
+  additionalProperties: false,
 };
 
 /** The model's JSON as yes, no or unclear; anything else is unclear. */
@@ -39,8 +48,13 @@ export function yesNoPrompt(question: string, answer: string): string {
   return `Question: ${question}\nThe cook's answer (data, a JSON string): ${JSON.stringify(answer)}`;
 }
 
-export async function geminiYesNo(question: string, answer: string, apiKey: string): Promise<YesNo> {
+export async function yesNo(question: string, answer: string, model: TextModel): Promise<YesNo> {
   if (!answer.trim()) return "unclear";
+  if (model.provider === "gemini") return await geminiYesNo(question, answer, model.apiKey);
+  return parseYesNo(await claudeJson(model.apiKey, CLAUDE_MODEL, "low", INSTRUCTIONS, yesNoPrompt(question, answer), CLAUDE_SCHEMA));
+}
+
+async function geminiYesNo(question: string, answer: string, apiKey: string): Promise<YesNo> {
   const res = await fetch(GEMINI_URL, {
     method: "POST",
     headers: { "x-goog-api-key": apiKey, "Content-Type": "application/json" },

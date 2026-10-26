@@ -3,7 +3,8 @@
 python pipeline/shorten.py --id weed-steak [--dry-run] [--force]
 python pipeline/shorten.py --all [--dry-run] [--force]
 
-One Gemini text call per recipe (GEMINI_MODEL, set up like process.py's merge) returns, for every step:
+One text call per recipe returns, for every step (Gemini's GEMINI_MODEL, set up like process.py's merge; Claude
+Haiku with TEXT_PROVIDER=claude, pipeline/claude.py):
 - substeps [{text, detail}]: text is one short line (at most 70 characters, **bold** around amounts, heat and
   times); detail is the line's fuller wording from the instruction, shown in the line's place when the cook
   taps it, or null (when it would add fewer than DETAIL_NEW words).
@@ -21,7 +22,7 @@ unchanged.
 --id ID shortens every copy of one recipe that exists: data/out/ID/recipe.json, app/assets/data/recipes/ID.json
 and data/synthetic/ID.json. --all does that for every bundled and synthetic recipe. Copies with the same steps share one
 call. Recipes that already have substeps are skipped unless --force (a copy that lacks them while a matching copy
-has them gets them copied, no call). --dry-run calls Gemini and prints the result without writing anything.
+has them gets them copied, no call). --dry-run calls the model and prints the result without writing anything.
 process.py calls shorten_file() right after the merge (skip with --no-shorten).
 
 Old recipes without substeps still work: the app splits the instruction itself.
@@ -50,8 +51,8 @@ from google import genai  # noqa: E402
 from google.genai import types  # noqa: E402
 from pydantic import BaseModel, ValidationError  # noqa: E402
 
-from pipeline.process import (HTTP_RETRY, REQUEST_TIMEOUT_MS, ProcessError, Usage, describe_call,  # noqa: E402
-                              format_validation_error, load_config, log, response_text)
+from pipeline.process import (HTTP_RETRY, REQUEST_TIMEOUT_MS, ProcessError, TextModel, Usage,  # noqa: E402
+                              describe_call, format_validation_error, load_config, log, response_text, text_model)
 from pipeline.prompts import SHORTEN_PROMPT, SHORTEN_RETRY_SUFFIX  # noqa: E402
 from pipeline.schema import Recipe  # noqa: E402
 
@@ -73,7 +74,7 @@ class ShortenError(RuntimeError):
     pass
 
 
-# ---------- what Gemini returns (no defaults: the response_schema rejects them) ----------
+# ---------- what the model returns (no defaults: Gemini's response_schema rejects them) ----------
 
 class ShortSubstep(BaseModel):
     text: str
@@ -358,7 +359,7 @@ def notes(recipe: dict, short: ShortRecipe) -> list[str]:
     return out
 
 
-# ---------- the Gemini call ----------
+# ---------- the model call ----------
 
 class MemoryUsage(Usage):
     """process.Usage without a work/usage.json (bundled and synthetic recipes have no work folder)."""
@@ -385,16 +386,13 @@ def prompt_view(recipe: dict) -> dict:
     }
 
 
-def ask(client: genai.Client, model: str, recipe: dict, usage: Usage, tag: str) -> ShortRecipe:
+def ask(gen: TextModel, recipe: dict, usage: Usage, tag: str) -> ShortRecipe:
     base = SHORTEN_PROMPT.format(recipe=json.dumps(prompt_view(recipe), indent=1, ensure_ascii=False))
     prompt, errors = base, ["no attempt made"]
     for attempt in (1, 2):
         resp, text, t0 = None, None, time.monotonic()
         try:
-            resp = client.models.generate_content(
-                model=model, contents=prompt,
-                config=types.GenerateContentConfig(response_mime_type="application/json",
-                                                   response_schema=ShortRecipe, temperature=0.2))
+            resp = gen.generate(prompt, ShortRecipe, temperature=0.2)
             text = response_text(resp)
             short = normalize(ShortRecipe.model_validate_json(text), recipe)
             errors = check(recipe, short)
@@ -402,7 +400,7 @@ def ask(client: genai.Client, model: str, recipe: dict, usage: Usage, tag: str) 
             errors = format_validation_error(e)
         except Exception as e:  # noqa: BLE001 - API/network errors also get the one retry
             errors = [f"{type(e).__name__}: {e}"]
-        call = usage.add("shorten", model, None, attempt, time.monotonic() - t0, resp,
+        call = usage.add("shorten", gen.model, None, attempt, time.monotonic() - t0, resp,
                          "; ".join(errors)[:2000] if errors else None)
         if not errors:
             log(f"[{tag}] attempt {attempt}: {describe_call(call)}")
@@ -494,14 +492,14 @@ def all_ids() -> list[str]:
     return sorted({p.stem for p in BUNDLED.glob("*.json")} | {p.stem for p in SYNTHETIC.glob("*.json")})
 
 
-def make_client() -> tuple[genai.Client, str]:
+def make_model() -> TextModel:
     cfg = load_config()  # loads .env, fails without GEMINI_API_KEY
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
                           http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS, retry_options=HTTP_RETRY))
-    return client, cfg["merge_model"]
+    return text_model(cfg, client, cfg["merge_model"], "medium")
 
 
-def shorten_paths(paths: list[Path], client: genai.Client | None, model: str, usage: Usage, force: bool = False,
+def shorten_paths(paths: list[Path], gen: TextModel | None, usage: Usage, force: bool = False,
                   dry_run: bool = False, tag: str = "shorten") -> list[tuple[Path, dict, dict]]:
     """Shorten copies of one recipe. One call per distinct step list; returns [(path, before, after)] written
     (or, with dry_run, that would be written)."""
@@ -520,9 +518,9 @@ def shorten_paths(paths: list[Path], client: genai.Client | None, model: str, us
             log(f"[{tag}] {rel(p)}: already has substeps (--force redoes them)")
             continue
         if sig not in answers:
-            if client is None:
-                raise ShortenError(f"{tag}: no Gemini client")
-            answers[sig] = ask(client, model, r, usage, tag)
+            if gen is None:
+                raise ShortenError(f"{tag}: no model to ask")
+            answers[sig] = ask(gen, r, usage, tag)
         after = apply(r, answers[sig])
         if not dry_run:
             p.write_text(render(p, text, after))
@@ -531,9 +529,9 @@ def shorten_paths(paths: list[Path], client: genai.Client | None, model: str, us
     return results
 
 
-def shorten_file(path: Path, client: genai.Client, model: str, usage: Usage) -> int:
+def shorten_file(path: Path, gen: TextModel, usage: Usage) -> int:
     """process.py, right after the merge: shorten one new recipe.json in place. Returns the steps written."""
-    done = shorten_paths([path], client, model, usage, force=True, tag=f"shorten {path.parent.name}")
+    done = shorten_paths([path], gen, usage, force=True, tag=f"shorten {path.parent.name}")
     return sum(len(after["steps"]) for _, _, after in done)
 
 
@@ -552,7 +550,7 @@ def main() -> None:
     group = ap.add_mutually_exclusive_group(required=True)
     group.add_argument("--id", help="one recipe: every copy in data/out, app/assets/data/recipes, data/synthetic")
     group.add_argument("--all", action="store_true", help="every bundled and synthetic recipe")
-    ap.add_argument("--dry-run", action="store_true", help="call Gemini and print the result; write nothing")
+    ap.add_argument("--dry-run", action="store_true", help="call the model and print the result; write nothing")
     ap.add_argument("--force", action="store_true", help="redo recipes that already have substeps")
     args = ap.parse_args()
 
@@ -560,14 +558,14 @@ def main() -> None:
     if not args.all and not copies(args.id):
         sys.exit(f"shorten: error: no recipe named {args.id!r} in data/out, app/assets/data/recipes or data/synthetic")
     try:
-        client, model = make_client()
+        gen = make_model()
     except ProcessError as e:
         sys.exit(f"shorten: error: {e}")
     usage = MemoryUsage()
-    log(f"[shorten] {len(ids)} recipe(s) with {model}{' (dry run: nothing is written)' if args.dry_run else ''}")
+    log(f"[shorten] {len(ids)} recipe(s) with {gen.model}{' (dry run: nothing is written)' if args.dry_run else ''}")
 
     def one(recipe_id: str):
-        return shorten_paths(copies(recipe_id), client, model, usage, args.force, args.dry_run, f"shorten {recipe_id}")
+        return shorten_paths(copies(recipe_id), gen, usage, args.force, args.dry_run, f"shorten {recipe_id}")
 
     failed, written = [], []
     with ThreadPoolExecutor(max_workers=MAX_WORKERS) as pool:
@@ -584,7 +582,7 @@ def main() -> None:
     steps = sum(len(after["steps"]) for _, _, after in written)
     cost = sum(c["cost_usd"] for c in usage.calls)
     log(f"\n[shorten] {'would write' if args.dry_run else 'wrote'} {len(written)} file(s), {steps} steps; "
-        f"{len(usage.calls)} Gemini call(s), ~${cost:.4f}" + (f"; FAILED: {', '.join(failed)}" if failed else ""))
+        f"{len(usage.calls)} model call(s), ~${cost:.4f}" + (f"; FAILED: {', '.join(failed)}" if failed else ""))
     sys.exit(1 if failed else 0)
 
 
