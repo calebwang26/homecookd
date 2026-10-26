@@ -36,7 +36,7 @@ const SLOTS = 3;
 let written = 0;
 
 export type SpeakOptions = {
-  /** Ink-style code ('mr', 'en'). Unset: the person's language (the service knows it). */
+  /** Ink-style code ('hi', 'en'). Unset: the person's language (the service knows it). */
   lang?: string;
   /** `text` is English: say it in `lang` (or the person's language). */
   translate?: boolean;
