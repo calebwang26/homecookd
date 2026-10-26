@@ -7,7 +7,7 @@ import { router } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { ErrorLine, Headline, leaveTo, routeInvite, SignInField, SignInScreen } from '@/components/signin';
+import { ErrorLine, Headline, leaveTo, routeInvite, SignInField, SignInScreen, TermsLine } from '@/components/signin';
 import { ActionButton } from '@/components/ui';
 import { parseInviteInput } from '@/lib/auth';
 import { useSession } from '@/lib/session';
@@ -69,7 +69,10 @@ export default function JoinCodeScreen() {
       </View>
 
       {/* The default reset brings a wrong code's "Try again" back to a working button. */}
-      <ActionButton label={switching ? 'Switch' : 'Come in'} onPress={go} disabled={!code.trim()} successLabel="You’re in" />
+      <View style={styles.form}>
+        <ActionButton label={switching ? 'Switch' : 'Come in'} onPress={go} disabled={!code.trim()} successLabel="You’re in" />
+        <TermsLine />
+      </View>
     </SignInScreen>
   );
 }
