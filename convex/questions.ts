@@ -1,6 +1,6 @@
 // A kid's question while cooking. The voice service records it (/voice/question): the video answered
 // it (Moss found the moment) or it goes to the cook, who answers by text or voice note. A "share" ask
-// (shareRequests.ts) reaches her the same way.
+// (shareRequests.ts) and the pipeline's own follow-up questions (followUps.ts) reach her the same way.
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
@@ -26,7 +26,7 @@ async function view(ctx: QueryCtx, q: Doc<"questions">, recipeTitle?: string) {
   return {
     ...q,
     recipeTitle: recipeTitle ?? (await ctx.db.get("recipes", q.recipeId))?.title ?? "",
-    askedByName: asker?.name ?? "",
+    askedByName: q.kind === "followUp" ? "homie" : (asker?.name ?? ""),
     answerAudioUrl: audioId ? await ctx.storage.getUrl(audioId) : null,
   };
 }
@@ -84,8 +84,9 @@ export const answer = mutation({
     const question = await ctx.db.get("questions", questionId);
     if (!question || question.familyId !== signed.family._id) throw new ConvexError("That question isn't here anymore.");
     if (question.status !== "asked_cook") throw new ConvexError("That question already has an answer.");
-    // Sharing a recipe is its cook's yes alone, not any cook's in the family.
-    if (question.kind === "share" && (await ctx.db.get("recipes", question.recipeId))?.cookId !== signed.person._id) {
+    // Sharing a recipe, or saying what went into it, is its cook's answer alone, not any cook's in the family.
+    const cooksOnly = question.kind === "share" || question.kind === "followUp";
+    if (cooksOnly && (await ctx.db.get("recipes", question.recipeId))?.cookId !== signed.person._id) {
       throw new ConvexError("Only the recipe's cook can answer this.");
     }
     const words = text?.trim() || undefined;
@@ -103,6 +104,7 @@ export const answer = mutation({
     if (audioId) await ctx.scheduler.runAfter(0, internal.transcribe.questionAnswer, { questionId });
     // A typed yes is read now; a voice note once its transcript is in (transcribe.saveTranscript).
     else if (question.kind === "share") await ctx.scheduler.runAfter(0, internal.shareRequests.decide, { questionId });
+    else if (question.followUp?.ingredient) await ctx.scheduler.runAfter(0, internal.followUps.decide, { questionId });
     return null;
   },
 });
