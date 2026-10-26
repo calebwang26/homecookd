@@ -5,8 +5,9 @@
 // foot. Every launch opens straight to this
 // phone's default person (session `defaultPerson`), so the family gateway is only ever one tap
 // away, never in the way.
-// ActingAsBar is the reminder at the top of each tab while an owner's phone is lent ("Cooking as
-// Grandma · Back to Mom"): inline under the header, so it never floats over a button.
+// ActingAsBar is the reminder on Home (kid and parent) while an owner's phone is lent ("Cooking as
+// Grandma · Back to Mom"): inline under the header, so it never floats over a button. Only Home has
+// it (Caleb, Oct 26): on Recipes and Ask it was clutter.
 import { router } from 'expo-router';
 import type { ReactNode } from 'react';
 import { StyleSheet, useWindowDimensions, View, type StyleProp, type ViewStyle } from 'react-native';

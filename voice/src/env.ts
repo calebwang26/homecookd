@@ -59,13 +59,12 @@ export const env = {
   homieSpeed: get("HOMIE_SPEED"),
   /** Log each Sonic request's voice, locale, speed and mood (for live tests). */
   ttsLog: get("TTS_LOG") === "1",
-  /** Gemini Live hears the languages Ink 2 doesn't (Marathi), and Gemini TTS speaks when Sonic can't
-   *  (geminiTts.ts). Empty = those recordings get no transcript, and no backup voice. */
+  /** Gemini Live hears a cook's language only where Cartesia can't (stt.ts): Marathi until MARATHI_STT=cartesia,
+   *  and Odia, hidden from the app since Oct 26. Empty = those recordings get no live transcript. */
   geminiKey: get("GEMINI_API_KEY"),
-  geminiTtsModel: get("GEMINI_TTS_MODEL") || "gemini-3.8-flash-tts",
-  /** A prebuilt Gemini voice: warm, Indian English, "Companion & Peer" (GET /v1beta/voices). */
-  geminiTtsVoice: get("GEMINI_TTS_VOICE") || "en-in-assistant-3",
   geminiLiveModel: get("GEMINI_LIVE_MODEL") || "gemini-3.5-transcribe-live",
+  /** "cartesia" = Marathi on Cartesia ink-whisper, as it is (Caleb, Oct 26); anything else = Gemini Live, as before. */
+  marathiStt: get("MARATHI_STT").trim().toLowerCase(),
   /** The glasses VM, for homie's look at the stove. Both empty = no frames. */
   glassesUrl: get("GLASSES_URL").replace(/\/$/, ""),
   glassesSecret: get("GLASSES_SECRET"),

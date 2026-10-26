@@ -29,7 +29,7 @@ src/stt.ts      picks live speech-to-text by language: Ink 2 (en/fr/hi/ja/es) or
 src/geminiLive.ts  Gemini Live transcription (gemini-3.5-transcribe-live) with session rotation
 src/ink.ts      Cartesia Ink 2 streaming STT (/stt/turns/websocket, built-in turn detection)
 src/sonic.ts    Cartesia Sonic TTS (/tts/bytes, streamed): homie's voice, locale, speed and mood per line
-src/geminiTts.ts  Gemini TTS, the backup voice when Sonic fails before a line starts
+src/claudeCost.ts  one log line per Claude call with its cost ("claude <what> <model> ... ~$")
 src/moss.ts     Moss search over family-<familyId> (@moss-js/moss, in-memory queries)
 src/convex.ts   Convex HTTP actions (/voice/*, /live/*) + the local stub
 fixtures/       stub session (Grandma's red-braised pork) and stub recordings (Rajani Aaji, mr and en)
@@ -37,8 +37,8 @@ scripts/        test clients (/cook and /record), test-audio maker
 test/           unit tests (node:test) with a fake socket, Claude, voice and Convex: pacing, /record's phases
                 (and a recording ended underneath it), /cook's step lines (made ahead, said on every flip,
                 the cache), the story nudge and the app's moments, and
-                homie's voice (tts.test.ts: the exact Sonic requests, the moods, the Gemini fallback; fallback.test.ts: a stalled
-                Gemini still ends the line, /speak's 502; fetch stubbed)
+                homie's voice (tts.test.ts: the exact Sonic requests, the moods, the Sonic 3.5 backup; fallback.test.ts: both
+                voices failing ends the line with say_end failed, /speak's 502; fetch stubbed), claudeCost.test.ts
 ```
 
 ## Run it locally
@@ -49,10 +49,11 @@ out of credits, `src/cartesiaKeys.ts`), `ANTHROPIC_API_KEY`, `MOSS_PROJECT_ID`, 
 (https://grand-dragon-649.convex.site) and `VOICE_SECRET`. Optional: `VOICE_STUB=1` (serve the stub recipe and
 accept any session token, for tests without a real sign-in), `CLAUDE_FAST=1` (Opus fast mode, premium price; off by default since Oct 26), `CLAUDE_MODEL`, `HOMIE_DECIDE_MODEL`
 (the recording's "should homie speak?" check; default `claude-haiku-5-5`).
-For homie: `GEMINI_API_KEY` (hears Marathi, and is the backup voice; without it a Marathi recording gets no
-transcript and a failed Sonic line stays silent), `HOMIE_VOICE` (default "Riya bilingual",
+For homie: `MARATHI_STT=cartesia` (Marathi heard by Cartesia ink-whisper, Caleb's Oct 26 choice; unset = Gemini
+Live), `GEMINI_API_KEY` (Gemini Live: Marathi until that flag, and Odia; without it those recordings get no live
+transcript), `HOMIE_VOICE` (default "Riya bilingual",
 `930eda72-c1af-4637-8d07-87d881d615fe`, Caleb's pick: native Marathi and Indian English), `HOMIE_SPEED` (default
-0.85), `GEMINI_TTS_MODEL` (default `gemini-3.8-flash-tts`), `GEMINI_TTS_VOICE` (default `en-in-assistant-3`),
+0.85),
 `TTS_LOG=1` (log each Sonic request's voice, locale, speed and mood), `HOMIE_DEMO=1` (first question at ~40 s),
 `GLASSES_URL` + `GLASSES_SECRET` (frames from the glasses VM), `GEMINI_LIVE_MODEL`.
 
@@ -158,9 +159,9 @@ Service → app
     as Sonic makes it; one not started yet is made at once and streamed (and kept). A line still unfinished after
     20 s fails.
   - When Sonic can't: ahead of time it's Sonic alone, so the backup voice is never kept. A line that failed isn't
-    kept, and for a minute it isn't asked of Sonic again: the flip goes straight to Gemini, so a flip waits for at
-    most one Sonic failure. A 402 or 429 (out of credits, rate-limited) stops making lines ahead and sends every
-    step line straight to Gemini for that minute, across sessions.
+    kept, and for a minute it isn't asked of Sonic again: the flip goes straight to the backup model (Sonic 3.5), so
+    a flip waits for at most one Sonic failure. A 402 or 429 (out of credits, rate-limited) stops making lines ahead
+    and sends every step line straight to the backup for that minute, across sessions.
   - A flip cuts off the line playing (a new `say` always does), so rapid flips play only the latest step's line.
     A step line answers the kid's flip: it's spoken over a video too.
   - What it costs: about 1 Sonic credit a character, once per recipe per instance (Grandma's red-braised pork: 6
@@ -180,9 +181,9 @@ Service → app
   `audio=pcm` (default) streams raw PCM to play as it arrives. With `audio=wav`, the frames joined together are
   one WAV file. A new `say` cuts off the one before it. Every line is homie's one voice (Riya bilingual, 0.85 speed);
   an English line's `kind` sets its mood (step and hint `calm`, translation `affectionate`, the rest
-  `content`). If Sonic fails before any audio, Gemini says the line in the same format (24 kHz s16le). If Gemini
-  fails too (an error, no audio at all, nothing within 6 s, or the line not done within 10 s + 100 ms a character),
-  the line ends with no voice and `say_end` still comes.
+  `content`). If Sonic fails before any audio, Sonic's previous model (`sonic-3.5`) says the line in the same voice
+  and format (24 kHz s16le). If that fails too (an error, no audio at all, nothing within 4 s), the line ends with
+  `say_end` `failed: true`, and the app says it in the phone's own voice.
 - A `hint` is general cooking knowledge, never the cook's: "Grandma didn't say. Usually just enough water to cover
   it." It comes only when no clip answers, and `asked_cook` plus "I'll ask Grandma too" always follow. Label it as
   AI.
@@ -315,7 +316,7 @@ a whole WAV in 1.6 s (Marathi) and 2.0 s (English), and `/cook` streamed the gre
 `{ sessionToken, text, lang?, translate?: boolean, kind?: string }` → `audio/wav` (24 kHz) in homie's voice, in `lang`
 or the person's own language (`/live/person`). `translate: true` first turns English `text` into that language
 (Claude, translate only). `kind` (a `say` kind like `step`, `hint`, `reply`) picks the mood of an English line;
-without it, `content`. Gemini says it when Sonic can't. The header `x-spoken-text` (URI-encoded) is what was said. 400 bad body, 401 signed out,
+without it, `content`. Sonic 3.5 says it when Sonic 3.6 can't. The header `x-spoken-text` (URI-encoded) is what was said. 400 bad body, 401 signed out,
 502 when neither voice could say it (the app then uses the phone's own voice).
 
 ## POST /homie/line

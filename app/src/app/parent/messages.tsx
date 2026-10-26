@@ -12,7 +12,6 @@ import Animated from 'react-native-reanimated';
 
 import { MembersSheet, NewMessageRow, ThreadRow, useDishLookup } from '@/components/messages';
 import { questionFor } from '@/components/parent/kitchen';
-import { ActingAsBar } from '@/components/profiles';
 import { ActionButton, Card, LargeHeader, listEnter, ScreenWash, SkeletonRow, Txt } from '@/components/ui';
 import type { ThreadSummary } from '@/lib/api';
 import { inboxOrder, isQuestion, useOpenQuestions, useThreads } from '@/lib/messaging';
@@ -48,7 +47,6 @@ export default function ParentMessages() {
       <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
         <ScreenWash tone="parent" height={300} />
         <LargeHeader title={t('messages.title')} size={34} />
-        <ActingAsBar />
         <View style={styles.list}>
           {loading ? (
             [0, 1, 2].map((i) => (

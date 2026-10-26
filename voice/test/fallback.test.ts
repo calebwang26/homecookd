@@ -1,6 +1,7 @@
-// homie's backup voice from the outside, with fetch stubbed (Sonic out of credits): a stalled Gemini still ends the
-// kid's line (say_end, so the phone stops "speaking" and the mic opens again), and /speak answers an error status
-// (the app then uses the phone's own voice) instead of an empty 200 WAV. No network beyond localhost.
+// homie's backup voice from the outside, with fetch stubbed (Sonic 3.6 busy): when the backup model stalls too, the
+// kid's line still ends (say_end `failed`, so the phone says it in its own voice and the mic opens again after about
+// as long as that takes), and /speak answers an error status (the app then uses the phone's own voice) instead of an
+// empty 200 WAV. No network beyond localhost.
 import assert from "node:assert/strict";
 import { once } from "node:events";
 import type { AddressInfo } from "node:net";
@@ -12,26 +13,26 @@ import { advance, FakeSocket, settle } from "./helpers.js";
 
 process.env.CARTESIA_API_KEY = "test";
 process.env.ANTHROPIC_API_KEY = "test";
-process.env.GEMINI_API_KEY = "test-gemini";
 process.env.VOICE_STUB = "1";
 process.env.PORT = "0";
 const { Cooking } = await import("../src/cook.js");
-const { speak } = await import("../src/sonic.js");
-const { GEMINI_FIRST_AUDIO_MS } = await import("../src/geminiTts.js");
+const { speak, FIRST_AUDIO_MS } = await import("../src/sonic.js");
+const { speakingSeconds } = await import("../src/speech.js");
 
 const realFetch = globalThis.fetch;
-let geminiCalls = 0;
+let backupCalls = 0;
 let sonicCalls = 0;
 let warnings: string[] = [];
 
-/** Sonic answers 402; Gemini answers with `gemini`. Anything else (our own server) goes to the real fetch. */
-function stub(gemini: (signal?: AbortSignal) => Response) {
+/** Sonic 3.6 answers 503; the backup model (Sonic 3.5) answers with `backup`. Our own server gets the real fetch. */
+function stub(backup: (signal?: AbortSignal) => Response) {
   globalThis.fetch = (async (url: string | URL, init?: RequestInit) => {
     const u = String(url);
-    if (u.startsWith("https://api.cartesia.ai/")) return (sonicCalls++, new Response("insufficient credits", { status: 402 }));
-    if (u.startsWith("https://generativelanguage.googleapis.com/")) return (geminiCalls++, gemini(init?.signal ?? undefined));
     if (u.startsWith("http://127.0.0.1:")) return realFetch(url, init);
-    throw new Error(`unexpected fetch ${u}`);
+    if (!u.startsWith("https://api.cartesia.ai/tts/bytes")) throw new Error(`unexpected fetch ${u}`);
+    const model = JSON.parse(String(init?.body)).model_id;
+    if (model === "sonic-3.6") return (sonicCalls++, new Response("busy", { status: 503 }));
+    return (backupCalls++, backup(init?.signal ?? undefined));
   }) as typeof fetch;
 }
 
@@ -39,15 +40,14 @@ function stub(gemini: (signal?: AbortSignal) => Response) {
 const stalls = (signal?: AbortSignal) =>
   new Response(new ReadableStream({ start: (ctrl) => signal?.addEventListener("abort", () => ctrl.error(signal.reason)) }));
 
-/** A stream that completes with no audio at all. */
-const silent = () =>
-  new Response(`data: ${JSON.stringify({ event_type: "interaction.completed", interaction: { id: "i1", status: "completed" } })}\n\ndata: [DONE]\n\n`);
+/** A 200 with no audio at all. */
+const silent = () => new Response(new ReadableStream({ start: (ctrl) => ctrl.close() }));
 
-/** A stream whose interaction fails. */
-const failed = () => new Response(`data: ${JSON.stringify({ event_type: "interaction.failed", interaction: { id: "i1", status: "failed" } })}\n\n`);
+/** An error status. */
+const failed = () => new Response("busy too", { status: 503 });
 
 beforeEach(() => {
-  geminiCalls = 0;
+  backupCalls = 0;
   sonicCalls = 0;
   warnings = [];
   mock.method(console, "log", () => {});
@@ -74,14 +74,14 @@ const session: CookSession = {
   stepOrder: 1,
 };
 
-test("Gemini stalls after Sonic failed: each line still ends at 6 s (say_end), then the mic opens again", { timeout: 30_000 }, async () => {
+test("both voices fail: say_end says failed, and the mic stays shut about as long as the phone's own voice takes", { timeout: 30_000 }, async () => {
   mock.timers.enable({ apis: ["setTimeout", "setInterval", "Date"], now: Date.parse("2026-10-25T17:00:00Z") });
   stub(stalls);
   let inkFrames = 0;
   const deps: CookingDeps = {
     convex: { startSession: async () => session, setStep: async () => {}, logQuestion: async () => ({ status: "asked_cook", questionId: "q" }) },
     listen: () => ({ send: () => void inkFrames++, close: () => {} }),
-    speak, // the real one: Sonic, then Gemini
+    speak, // the real one: Sonic 3.6, then Sonic 3.5
     agent: () => ({ turn: async () => {} }),
     findMoments: async () => [],
     warm: async () => false,
@@ -92,52 +92,51 @@ test("Gemini stalls after Sonic failed: each line still ends at 6 s (say_end), t
   void cooking.start();
   await settle();
   await settle();
-  assert.deepEqual(ws.of("say").map((s) => s.kind), ["greeting"]);
-  assert.equal(geminiCalls, 1, "Sonic's 402 went to Gemini");
+  const [hello] = ws.of("say");
+  assert.equal(hello.kind, "greeting");
+  assert.equal(backupCalls, 1, "Sonic 3.6's 503 went to Sonic 3.5");
 
-  await advance(GEMINI_FIRST_AUDIO_MS - 50);
-  assert.deepEqual(ws.of("say_end"), [], "still waiting on Gemini");
-  cooking.onMessage(Buffer.alloc(3200), true);
-  assert.equal(inkFrames, 0, "half duplex: the mic is muted while homie speaks");
-
+  await advance(FIRST_AUDIO_MS - 50);
+  assert.deepEqual(ws.of("say_end"), [], "still waiting on the backup");
   await advance(100);
-  assert.deepEqual(ws.of("say_end"), [{ type: "say_end", interrupted: false }]);
-  // Once the hello is over, the step's line is asked for ahead, and can't be made (Sonic alone, never Gemini for a
-  // line that's kept).
-  assert.deepEqual(warnings, ["sonic 402: insufficient credits, then gemini tts: no audio in 6 s", "step 1 line not made ahead: 402: insufficient credits"]);
-  assert.equal(geminiCalls, 1);
-  const sonicBefore = sonicCalls;
-  // The session moves on: "repeat" says the step live, straight from Gemini (Sonic just said 402), which stalls on
-  // it too, and it ends the same way.
-  cooking.onMessage(Buffer.from(JSON.stringify({ type: "text", text: "repeat" })), false);
-  await settle();
-  assert.deepEqual(ws.of("say").map((s) => s.kind), ["greeting", "step"]);
-  assert.equal(geminiCalls, 2, "the step's line, said live by the backup voice");
-  assert.equal(sonicCalls, sonicBefore, "no second Sonic try");
-  await advance(GEMINI_FIRST_AUDIO_MS);
-  assert.equal(ws.of("say_end").length, 2);
+  assert.deepEqual(ws.of("say_end"), [{ type: "say_end", interrupted: false, failed: true }]);
+  // The phone says the hello in its own voice now: the mic stays shut (half duplex) about as long as that takes.
+  cooking.onMessage(Buffer.alloc(3200), true);
+  assert.equal(inkFrames, 0, "the phone's own voice is still saying the hello");
+  await advance(speakingSeconds(String(hello.text)) * 1000 + 1600);
   cooking.onMessage(Buffer.alloc(3200), true);
   assert.equal(inkFrames, 1, "the mic is open again");
+  // Once the hello is over, the step's line is asked for ahead, and can't be made (Sonic 3.6 alone for a kept line).
+  assert.deepEqual(warnings, ["sonic 503: busy, then sonic-3.5 no audio in 4 s", "step 1 line not made ahead: 503: busy"]);
+  const sonicBefore = sonicCalls;
+  // "repeat" says the step live, straight from the backup (Sonic 3.6 just failed on it), which stalls too.
+  cooking.onMessage(Buffer.from(JSON.stringify({ type: "text", text: "repeat" })), false);
+  await settle();
+  assert.deepEqual(ws.of("say").map((m) => m.kind), ["greeting", "step"]);
+  assert.equal(backupCalls, 2, "the step's line, asked of the backup");
+  assert.equal(sonicCalls, sonicBefore, "no second Sonic 3.6 try");
+  await advance(FIRST_AUDIO_MS);
+  assert.deepEqual(ws.of("say_end").at(-1), { type: "say_end", interrupted: false, failed: true });
   cooking.close();
 });
 
-test("/speak answers 502 when Gemini gives no audio or fails, never an empty 200 WAV", async () => {
+test("/speak answers 502 when the backup gives no audio or fails too, never an empty 200 WAV", async () => {
   const { server } = await import("../src/server.js");
   if (!server.listening) await once(server, "listening");
   const { port } = server.address() as AddressInfo;
   try {
-    for (const gemini of [silent, failed]) {
-      stub(gemini);
+    for (const backup of [silent, failed]) {
+      stub(backup);
       const res = await fetch(`http://127.0.0.1:${port}/speak`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ sessionToken: "test-session", text: "Hi, Rajani Aaji.", lang: "en", kind: "intro" }),
       });
-      assert.equal(res.status, 502, gemini.name);
+      assert.equal(res.status, 502, backup.name);
       assert.equal(res.headers.get("content-type"), "application/json");
       assert.deepEqual(await res.json(), { error: "couldn't speak that" });
     }
-    assert.equal(geminiCalls, 2);
+    assert.equal(backupCalls, 2);
   } finally {
     server.close();
   }
