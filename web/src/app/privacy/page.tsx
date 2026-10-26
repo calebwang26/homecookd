@@ -6,9 +6,9 @@
 //   videos, clips, recipe photos, recipe.json  Google Cloud buckets at open, unlisted links (pipeline/)
 //   recipes, family, messages, voice notes,    Convex (convex/schema.ts) and Supabase (sign-in, invites,
 //     photos sent home                         older screens; voice notes + photos in private buckets)
-//   AI                                         Gemini (watches videos, translates), Muse Spark (writes),
-//                                              Claude (the cooking agent, homie), Cartesia (Ink, Sonic,
-//                                              a cloned voice with consent), Moss (finds the moment)
+//   AI                                         Claude (watches video stills, writes, translates, homie),
+//                                              Cartesia (transcripts, Ink, Sonic, a cloned voice with
+//                                              consent), Moss (finds the moment), Gemini (glasses only)
 //   Community                                  place rounded to ~1 km, never shown (convex/lib/geo.ts)
 //   Delete account                             the app's profile sheet (convex/account.ts); media in GCS
 //                                              and Supabase rows are purged from accountDeletions
@@ -27,7 +27,7 @@ export const metadata: Metadata = {
   alternates: { canonical: '/privacy' },
 };
 
-const UPDATED = 'October 25, 2026';
+const UPDATED = 'October 26, 2026';
 
 const mail = (
   <a className={s.link} href={`mailto:${CONTACT_EMAIL}`}>
@@ -111,15 +111,9 @@ export default function PrivacyPage() {
         <p>homecookd asks your permission in the app before sending these services anything.</p>
         <ul className={s.list}>
           <li>
-            <strong>Google Gemini</strong> watches and listens to cooking videos, notes what the cook did and said, and
-            translates. In some languages it also turns speech into text, and it’s the backup reading voice.
-          </li>
-          <li>
-            <strong>Meta Muse Spark</strong> writes the recipe, its stories and dish ideas, and drafts notes you can edit
-            before you send them.
-          </li>
-          <li>
-            <strong>Anthropic Claude</strong> decides how to help while you cook hands-free or film.
+            <strong>Anthropic Claude</strong> watches cooking videos and reads what the cook said, then writes the recipe,
+            its stories and dish ideas. It also translates, drafts notes you can edit before you send them, and decides how
+            to help while you cook hands-free or film.
           </li>
           <li>
             <strong>Cartesia</strong> turns speech into text, reads steps aloud, and makes a cloned voice only with the
@@ -127,6 +121,9 @@ export default function PrivacyPage() {
           </li>
           <li>
             <strong>Moss</strong> searches what the cook said, to find the moment in the video that answers a question.
+          </li>
+          <li>
+            <strong>Google Gemini</strong> watches videos filmed with homecookd glasses.
           </li>
         </ul>
         <p>They get only what each task needs, and we use them only to run homecookd.</p>

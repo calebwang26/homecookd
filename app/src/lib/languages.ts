@@ -1,7 +1,9 @@
 // The languages a cook can pick: the most spoken that Cartesia Sonic 3.6 can speak, so homie can talk to the
 // cook in hers. Codes are ISO 639-1 (people.language, recordings.language). `inkLive` marks the five Cartesia
 // Ink 2 can hear live (en fr hi ja es); Cartesia ink-whisper hears the rest (voice/src/stt.ts). Odia is hidden
-// (Caleb, Oct 26): Cartesia can't hear it, and only Gemini could; it comes back if a family asks.
+// (Caleb, Oct 26): Cartesia can't hear it, and only Gemini could; it comes back if a family asks. Marathi is
+// hidden too (Caleb, Oct 26: "just drop Marathi as a language"; memory marathi-dropped): a cook who saved it
+// gets Hindi (activeLanguage).
 // Pure TS (no React Native), so app/scripts/test-languages.mjs can run it under Node.
 
 export type Language = { code: string; name: string; native: string; inkLive: boolean };
@@ -23,7 +25,6 @@ const LIST: [code: string, name: string, native: string][] = [
   ['id', 'Indonesian', 'Bahasa Indonesia'],
   ['de', 'German', 'Deutsch'],
   ['ja', 'Japanese', '日本語'],
-  ['mr', 'Marathi', 'मराठी'],
   ['te', 'Telugu', 'తెలుగు'],
   ['tr', 'Turkish', 'Türkçe'],
   ['ta', 'Tamil', 'தமிழ்'],
@@ -41,12 +42,28 @@ const LIST: [code: string, name: string, native: string][] = [
   ['uk', 'Ukrainian', 'Українська'],
 ];
 // Not in the picker, but a cook who picked one before still reads as its name.
-const HIDDEN: [code: string, name: string, native: string][] = [['or', 'Odia', 'ଓଡ଼ିଆ']];
+const HIDDEN: [code: string, name: string, native: string][] = [
+  ['or', 'Odia', 'ଓଡ଼ିଆ'],
+  ['mr', 'Marathi', 'मराठी'],
+];
+
+/**
+ * A dropped language and the one it's used as now. Marathi reads as Hindi: the same Devanagari letters, and the
+ * language the pipeline hears a Marathi recording as. Her saved people.language stays as it is.
+ * TODO(caleb): Hindi is the default; the phone's language is the other choice.
+ */
+const STAND_IN: Record<string, string> = { mr: 'hi' };
+
+/** The language a saved code is used as today: the app's words, the recording screen and a new recording. */
+export function activeLanguage(code: string | null | undefined): string | null {
+  if (!code) return null;
+  return STAND_IN[code.toLowerCase()] ?? code;
+}
 
 const language = ([code, name, native]: [string, string, string]): Language => ({ code, name, native, inkLive: INK_LIVE.has(code) });
 export const LANGUAGES: Language[] = LIST.map(language);
 
-/** The picker's search: names that start with the query first, then names that contain it ("mar" → Marathi). */
+/** The picker's search: names that start with the query first, then names that contain it ("guj" → Gujarati). */
 export function matchLanguages(query: string): Language[] {
   const q = query.trim().toLowerCase();
   if (!q) return LANGUAGES;

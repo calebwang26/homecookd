@@ -359,7 +359,7 @@ export const copyParent: Copy = {
       },
       {
         q: "How does homecookd write the recipe?",
-        a: "Gemini, an AI from Google, watches and listens to your videos, then writes the steps. Your words stay, with an estimate like ~1 cup beside them.",
+        a: "Claude, an AI from Anthropic, watches your videos and reads what you said, then writes the steps. Your words stay, with an estimate like ~1 cup beside them.",
       },
       {
         q: "Who can see my recipes?",

@@ -10,6 +10,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { env } from "./env.js";
 import type { CookSession } from "./convex.js";
 import { callOf } from "./family.js";
+import { languageName } from "./homie.js";
 import type { Hit } from "./moss.js";
 
 import type * as Beta from "@anthropic-ai/sdk/resources/beta/messages/messages.js";
@@ -120,17 +121,22 @@ export const cookCall = (s: CookSession) => callOf(s.cook?.name, s.cook?.relatio
 
 function systemPrompt(s: CookSession): string {
   const cook = cookCall(s);
+  const lang = s.cook?.language && s.cook.language !== "en" ? languageName(s.cook.language) : null;
+  // Without this line Sonnet asked "did you want next step or back?" when "next step" came in the cook's language.
+  const mixed = lang
+    ? ` ${s.kid.name} may say some words in ${lang}, ${cook}'s language, often spelled in English letters: understand them the same way ("next" or "back" in ${lang} is next_step or previous_step).`
+    : "";
   const steps = s.recipe.steps
     .map((st) => `${st.order}. ${st.title}: ${st.text} [video ${st.moment.startS}-${st.moment.endS}s]`)
     .join("\n");
-  return `You are homie, the hands-free helper in homecookd. ${s.kid.name} is cooking ${cook}'s "${s.recipe.title}" from ${cook}'s own video, with messy hands, talking to you out loud. Their speech reaches you as a transcript, so expect small transcription errors.
+  return `You are homie, the hands-free helper in homecookd. ${s.kid.name} is cooking ${cook}'s "${s.recipe.title}" from ${cook}'s own video, with messy hands, talking to you out loud. Their speech reaches you as a transcript, so expect small transcription errors.${mixed}
 
 How you sound, in every line you say: warm and a little playful, like an older cousin cooking alongside them. Short sentences, said the way people talk. Never robotic, never assistant-speak ("I'm your assistant", "How can I help").
 
 First, decide whether ${s.kid.name} was talking to you. The mic hears the whole kitchen: roommates, a phone call, music, the kid thinking out loud.
 - Your name (homie; the transcript may spell it homey, holmy, homi) means it's for you.
 - Without your name, it's for you only when it plainly is: a cooking command, or a question about this dish or this step asked the way you'd ask a helper.
-- Talking to someone else (another person's name, "can you pass me…", plans, gossip, a phone call), singing, reading something out, or half a sentence: not for you.
+- Talking to someone else (another person's name, "can you pass me…", plans, gossip, a phone call), singing, reading something out, or half a sentence: not for you. A call or a chat that mentions cooking ("I'm cooking right now, call you back") is still not for you.
 - Not for you: call no tool and reply with an empty message. Never say "I'm here if you need me". When in doubt, stay quiet.
 
 When it's for you, call exactly one tool:
@@ -250,7 +256,8 @@ export class TurnAgent {
     await this.actions.askCook(utterance);
   }
 
-  private fast = env.claudeFast;
+  // Fast mode exists on Opus only.
+  private fast = env.claudeFast && env.cookModel.startsWith("claude-opus");
 
   private async ask(): Promise<Beta.BetaMessage> {
     const t0 = Date.now();
@@ -261,7 +268,7 @@ export class TurnAgent {
 
   private async create(): Promise<Beta.BetaMessage> {
     const params = {
-      model: env.claudeModel,
+      model: env.cookModel,
       max_tokens: 1024,
       system: this.system,
       tools: TOOLS,
@@ -331,9 +338,14 @@ export class TurnAgent {
         await a.setTimer(seconds, String(input.label || "timer"));
         return `Timer set for ${seconds} s.`;
       }
-      case "say":
-        await a.say(String(input.text));
+      case "say": {
+        // A say with no words ("", " ", a zero-width space) means "not for me", Sonnet's way of staying quiet: nothing
+        // goes to the phone or to Sonic.
+        const text = String(input.text ?? "").trim();
+        if (!/[\p{L}\p{N}]/u.test(text)) return "Nothing said.";
+        await a.say(text);
         return "Said.";
+      }
       default:
         return `Unknown tool ${name}.`;
     }

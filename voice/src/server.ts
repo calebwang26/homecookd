@@ -164,5 +164,5 @@ server.on("upgrade", (req, socket, head) => {
 });
 
 server.listen(env.port, () => {
-  console.log(`voice service on :${env.port} (model ${env.claudeModel}, convex ${convex.usingStub ? "STUB" : "live"}, homie demo ${env.homieDemo}${fakeSpeech ? ", FAKE SPEECH: no Cartesia" : ""})`);
+  console.log(`voice service on :${env.port} (model ${env.claudeModel}, cook ${env.cookModel}, convex ${convex.usingStub ? "STUB" : "live"}, homie demo ${env.homieDemo}${fakeSpeech ? ", FAKE SPEECH: no Cartesia" : ""})`);
 });

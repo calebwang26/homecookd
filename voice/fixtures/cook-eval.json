@@ -1,0 +1,570 @@
+{
+ "_about": "Cook mode's turn agent, scripted (scripts/try-cook-model.ts): what the kid says (a Hindi-speaking Nani's Poha, some lines in Hindi; an English uncle's Swordfish), the step they're on, the steps Moss finds, and the picks that are right.",
+ "sessions": {
+  "hi": {
+   "familyId": "eval",
+   "mossIndex": "eval",
+   "kid": {
+    "id": "kid-eval",
+    "name": "Shreya"
+   },
+   "cook": {
+    "name": "Sunita",
+    "language": "hi",
+    "relation": "Nani"
+   },
+   "recipe": {
+    "id": "eval-poha",
+    "title": "Poha",
+    "steps": [
+     {
+      "order": 1,
+      "title": "Wash the poha",
+      "text": "Take about 3 cups poha, wash it well under running water, then set it aside for some time to soften.",
+      "quote": "Look, I took poha, I'll wash the poha and keep it now. I am washing the poha now. I washed the poha and kept it for some time.",
+      "moment": {
+       "startS": 10,
+       "endS": 60
+      }
+     },
+     {
+      "order": 2,
+      "title": "Chop the onion",
+      "text": "Chop the onion and keep chopped onion, chili and coriander ready for the poha.",
+      "quote": "Now I have to chop the onion. I'll chop the onion now. I'll chop the onion, then I'll chop the onion, chili, and coriander and keep it. Then I'll start with the poha. This is called Kanda Poha.",
+      "moment": {
+       "startS": 61,
+       "endS": 117
+      }
+     },
+     {
+      "order": 3,
+      "title": "Heat oil and temper mustard and cumin",
+      "text": "Set the pan on heat and turn on the gas. Add oil, then add mustard seeds and then cumin seeds to temper.",
+      "quote": "Now I'll heat the pan. First I'll chop the onion. I'll turn on the gas. Is the onion done? Then I'll put the onion in the pan. I'll put peanuts in the poha. Look, I'll put oil. Then I'll put mustard seeds, cumin seeds and temper it.",
+      "moment": {
+       "startS": 118,
+       "endS": 167
+      }
+     },
+     {
+      "order": 4,
+      "title": "Fry peanuts and onions until brown",
+      "text": "Add a bowlful of peanuts to the pan. Add the chopped onion, green chilies and curry leaves. Chop the coriander leaves. Add salt so the onions cook faster, add a little more oil, and saute and mix for about five minutes until the onions turn a little brown and reddish.",
+      "quote": "Now all this will mix together, right? The onion. Five minutes. Five minutes. The onions will have to be allowed to turn a little brown. If you put salt in it, the onions brown faster. I also put green chili. Yes. When the onions become a little reddish, then put the poha, otherwise they don't taste good.",
+      "moment": {
+       "startS": 214,
+       "endS": 326
+      }
+     },
+     {
+      "order": 5,
+      "title": "Add hing and turmeric",
+      "text": "Add a pinch of hing for taste, then add a little turmeric and stir it in.",
+      "quote": "Now put a little hing in it too. It gives a good taste then. Just a pinch. I put a pinch of hing. And this is cumin powder, turmeric, put a little of that too. Put a little turmeric.",
+      "moment": {
+       "startS": 327,
+       "endS": 352
+      }
+     },
+     {
+      "order": 6,
+      "title": "Add poha and mix",
+      "text": "Add the soaked poha to the pan and mix it well with the tempered spices so it all becomes one.",
+      "quote": "Now I'll put the poha. Did you get the smell of the poha? Now mix the poha and all this together.",
+      "moment": {
+       "startS": 384,
+       "endS": 410
+      }
+     },
+     {
+      "order": 7,
+      "title": "Season with lemon, coriander and sugar",
+      "text": "Squeeze lemon over the poha, add chopped coriander leaves, add sugar, and mix everything well until it all becomes one.",
+      "quote": "Now I'll mix all this. Like this, to mix everything. To make it all one, look, it's becoming one now. Our poha is ready. It's ready. I put coriander, put sugar, squeezed lemon. Now I'll let it stay for two minutes. For the steam to come.",
+      "moment": {
+       "startS": 441,
+       "endS": 498
+      }
+     },
+     {
+      "order": 8,
+      "title": "Cover and steam",
+      "text": "Put a lid on the pan and let the poha sit for two minutes so steam comes.",
+      "quote": "I'll put a lid on it now. Two minutes.",
+      "moment": {
+       "startS": 499,
+       "endS": 525
+      }
+     },
+     {
+      "order": 9,
+      "title": "Serve the poha",
+      "text": "Put the poha in a bowl to serve and eat.",
+      "quote": "Now I'll put the poha in the bowl. To eat, I'll serve it now in the bowl.",
+      "moment": {
+       "startS": 544,
+       "endS": 555
+      }
+     },
+     {
+      "order": 10,
+      "title": "Garnish with coconut and sev",
+      "text": "Garnish the poha with grated coconut, which tastes good on it, and add sev if you like, then eat.",
+      "quote": "Are the poha done now? The poha are ready, I'll put coconut on it now. Coconut tastes good in it. Yes. Coconut tastes good on it. Some people also like sev, they put sev. Now I'll put coconut. Look. Now you have to eat these poha.",
+      "moment": {
+       "startS": 578,
+       "endS": 603
+      }
+     }
+    ],
+    "memories": []
+   }
+  },
+  "en": {
+   "familyId": "eval",
+   "mossIndex": "eval",
+   "kid": {
+    "id": "kid-eval",
+    "name": "Maya"
+   },
+   "cook": {
+    "name": "Miles",
+    "language": "en",
+    "relation": "Uncle"
+   },
+   "recipe": {
+    "id": "eval-swordfish",
+    "title": "Swordfish Steak",
+    "steps": [
+     {
+      "order": 1,
+      "title": "Preheat the pan",
+      "text": "Heat up a pan significantly until it is very hot. To test the heat, drop a little water onto the surface; it is sufficiently heated when the water creates the Leidenfrost effect (dancing rapidly on the surface).",
+      "quote": "I'm going to heat up the pan, like a lot... we're going to just have this like preheating. And then when uh when I pour water on it and it does the Leidenfrost effect then it'll be sufficiently heated.",
+      "moment": {
+       "startS": 33,
+       "endS": 63
+      }
+     },
+     {
+      "order": 2,
+      "title": "Mix the miso glaze",
+      "text": "In a bowl, mix the miso paste, soy sauce, and mirin until the paste becomes liquid and easy to pour. Add a splash of water to help it combine, then season with a pinch of salt and some black pepper. Stir in the honey, making sure to scrape the edges of the bowl as the honey tends to stick to the bottom. Add more miso if the mixture is too salty or tart.",
+      "quote": "I'm going to start by making my miso glaze... we're going to like mix this first so it becomes liquid and like easy to pour... Might be a bit too much water but it's okay... Okay, it's a little salty, so honestly I'm going to add this much more miso... I always put too much honey. Um and then it sticks to the bottom so really like scrape the edges of the bowl when you like do this.",
+      "moment": {
+       "startS": 63,
+       "endS": 253
+      }
+     },
+     {
+      "order": 3,
+      "title": "Prepare the garlic and green onion garnish",
+      "text": "Crush a garlic clove by pressing the flat side of a knife over it, then give it a rough chop. Next, trim off the overly bendy part of a green onion stalk so only the firm, light green section remains. Cut this section in half to get long strips, then slice them lengthwise very thinly. Place these thin strips into a bowl of ice-cold water to blanch them, which will cause them to curl up elegantly for the garnish. Check your preheated pan with a few drops of water again to ensure it's hot enough.",
+      "quote": "I should mince my garlic. Um so basically I start by by just doing this, by putting the knife flat over it... we're going to cut off like the overly bendy part uh so that the light green stays... cut them lengthwise pretty thinly like this... we're going to put this in like ice water and then let it sit for a while. Ideally, this should make them curl up and then look nice",
+      "moment": {
+       "startS": 310,
+       "endS": 632
+      }
+     },
+     {
+      "order": 4,
+      "title": "Start searing the swordfish",
+      "text": "Add vegetable oil to the hot pan. Place the swordfish steak in the pan and press it down firmly to ensure it develops a good sear. Turn the heat down slightly so it doesn't char too aggressively. After a couple of minutes, flip the steak over, turn the heat down further, and aggressively deglaze the pan with a little bit of soju.",
+      "quote": "Yeah, that looks pretty good. It's a lot of steam. Um we'll start with vegetable oil. I'm not using olive oil because uh olive oil has a like a higher smoke point... We're going to press this down so it develops the sear... So now it's on the other side and then we're going to yeah we're going to deglaze with like a little bit of soju.",
+      "moment": {
+       "startS": 665,
+       "endS": 865
+      }
+     },
+     {
+      "order": 5,
+      "title": "Sear all sides and cool the pan",
+      "text": "Turn the heat back up a little bit and press the fish down again. You will know a good sear has formed when the fish can move easily in the pan. Carefully flip the steak to sear all the remaining edges so none of the outside is left unseared. Once it has developed a bit of char, remove the fish from the heat and turn the stove down completely to let the hot pan cool, which prevents the butter from burning in the next step.",
+      "quote": "I'm gonna turn the heat back up a little bit. And again I'm gonna press it down like I did before to get like a good sear... And so, we'll know that this is done kind of when it is like able to move. Uh, yeah, that means like a sear has developed... Yeah, so we're just searing every side... We're gonna actually turn the heat all the way down and kind of just let that chill out.",
+      "moment": {
+       "startS": 920,
+       "endS": 1208
+      }
+     },
+     {
+      "order": 6,
+      "title": "Check the garnish and blanch more green onions",
+      "text": "Check the green onion strips soaking in the cold water; they should have curled up and become firm. Finely chop another section of green onion and toss these newly chopped pieces into the cold water to blanch as well.",
+      "quote": "Oh, okay, so these guys have curled up, which is good. Um, we're gonna let them curl up a little bit more, they all are also pretty firm... And then also we can probably um we can cut this for for more garnish as well. Uh just like really finely. ... Let's just blanch these for fun because like why not",
+      "moment": {
+       "startS": 1208,
+       "endS": 1372
+      }
+     },
+     {
+      "order": 7,
+      "title": "Baste the swordfish with butter and herbs",
+      "text": "Cut a piece of cold unsalted butter and grab sprigs of fresh rosemary and thyme. Place the butter, the chopped garlic and the herbs into the slightly cooled pan, and turn the heat up just enough to melt the butter.",
+      "quote": "Now we're gonna get a little bit of unsalted butter, which I've kept cold... Let's get rosemary... Oh, it smells really good. And then thyme as well...",
+      "moment": {
+       "startS": 1385,
+       "endS": 1440
+      }
+     },
+     {
+      "order": 8,
+      "title": "Finish basting the swordfish",
+      "text": "Return the swordfish to the pan. Tilt the pan so the melting butter pools over the heat and spoon the frothy, herb-infused butter over the fish. Flip it to baste the other side, then let it rest and pour some of the remaining garlic butter over it.",
+      "quote": "Okay yeah, and then now we're gonna put our our our John back in there... and then we're just gonna like spoon this like over the thing right... and then pour this over a little.",
+      "moment": {
+       "startS": 1467,
+       "endS": 1735
+      }
+     },
+     {
+      "order": 9,
+      "title": "Clean the pan and heat olive oil",
+      "text": "Quickly wash the pan to remove the burnt butter and dry it completely with a paper towel so it doesn't crackle. Place the pan back on the stove, heat it up, and add a generous amount of olive oil to prepare for the apples.",
+      "quote": "Uh in the meantime, we're gonna wash this pan a bit... And then we're gonna dry this so that the water doesn't like crackle and everything... Okay so now we're gonna put our apples in here. Well first we're gonna do olive oil. Like lowkey kind of a lot.",
+      "moment": {
+       "startS": 1735,
+       "endS": 1922
+      }
+     },
+     {
+      "order": 10,
+      "title": "Cook the apples in soju and miso glaze",
+      "text": "Add the pre-sliced apples to the pan, separating the pieces nicely so they cook evenly. Pour soju over the apples and let it cook down until the smell of alcohol disappears. Pour in the prepared miso glaze and let it reduce while the apples soften in the pan. Taste an apple slice and remove any pieces that have become too mushy. Once cooked, remove all the apple slices from the pan and turn the heat up to thicken the remaining glaze.",
+      "quote": "Okay so now this is like my master prod- okay we have all these like apples... make sure that they separate nicely... And basically you know that the soju is cooked down sufficiently when you don't smell alcohol anymore. Um and I already don't, which is good... Uh I think now is a good time for our miso... Okay new plan. We're gonna take the apples out so that I can reduce the glaze... we can turn up the heat. Um because we want this to be a little bit thicker.",
+      "moment": {
+       "startS": 1922,
+       "endS": 2227
+      }
+     },
+     {
+      "order": 11,
+      "title": "Shape the apple roses and adjust the sauce",
+      "text": "Arrange the intact, cooked apple slices into a long, overlapping strip and carefully roll them up to create beautiful rose shapes for presentation. Meanwhile, keep an eye on the glaze reducing on the stove. If it becomes too thick, add a tiny splash of water and stir to incorporate. Tilt the pan so the liquid boils briefly to reach the desired consistency, then pour the finished, thickened sauce into a small bowl.",
+      "quote": "taking out all the overly like mushy ones because they won't they like they just won't hold. And then we're just gonna arrange the rest uh in this like fan layout and then we're gonna roll them up uh and then create like this like nice presentation... this is maybe a little bit too thick. Ooh that smells so good... tiny bit of water... We're just gonna tilt the pan like this and let only this part over the heat so that it boils the water... How do you know it's ready? It's just like thicker than it was before which is good.",
+      "moment": {
+       "startS": 2227,
+       "endS": 2729
+      }
+     },
+     {
+      "order": 12,
+      "title": "Plate the dish",
+      "text": "Using a small spoon, place the reduced miso sauce onto the center of a plate and spread it into a neat circle. Remove the large pieces of garlic and thyme from the rested swordfish steak, and set the fish down on top of the sauce. Carefully place the rolled apple roses next to the fish. Take the curled green onion strips out of the ice water, pat them dry with a paper towel, and arrange them elegantly on top of the swordfish. Finally, wipe the edges of the plate clean with a paper towel.",
+      "quote": "So I'm thinking we just put the sauce on the bottom... I just want to put it in like a circle in the center... I'm gonna take all of this off including the garlic actually... I'm gonna put this right here. And I'm gonna put this right here... And then we're gonna get our blanched guys um just for like visual whatever... I'm gonna get another paper towel to pat the top.",
+      "moment": {
+       "startS": 2795,
+       "endS": 3085
+      }
+     }
+    ],
+    "memories": []
+   }
+  }
+ },
+ "cases": {
+  "hi": [
+   {
+    "said": "okay homie next",
+    "step": 2,
+    "hits": [],
+    "ok": [
+     "next_step"
+    ]
+   },
+   {
+    "said": "wait go back one",
+    "step": 4,
+    "hits": [],
+    "ok": [
+     "previous_step"
+    ]
+   },
+   {
+    "said": "what? say that again",
+    "step": 3,
+    "hits": [],
+    "ok": [
+     "repeat_step"
+    ]
+   },
+   {
+    "said": "homie skip to where you put the poha in",
+    "step": 2,
+    "hits": [
+     6
+    ],
+    "ok": [
+     "go_to_step:6",
+     "play_clip:6"
+    ]
+   },
+   {
+    "said": "homie how long do I fry the onions?",
+    "step": 4,
+    "hits": [
+     4,
+     3
+    ],
+    "ok": [
+     "play_clip:4"
+    ]
+   },
+   {
+    "said": "how much hing do I add",
+    "step": 5,
+    "hits": [
+     5,
+     3
+    ],
+    "ok": [
+     "play_clip:5"
+    ]
+   },
+   {
+    "said": "homie why does Nani put salt with the onions",
+    "step": 4,
+    "hits": [
+     4
+    ],
+    "ok": [
+     "play_clip:4"
+    ]
+   },
+   {
+    "said": "homie can I use thick poha instead?",
+    "step": 1,
+    "hits": [],
+    "ok": [
+     "give_hint",
+     "ask_cook"
+    ]
+   },
+   {
+    "said": "homie I don't have curry leaves, is that okay?",
+    "step": 4,
+    "hits": [],
+    "ok": [
+     "give_hint",
+     "ask_cook"
+    ]
+   },
+   {
+    "said": "Mom can you pass me the salt",
+    "step": 4,
+    "hits": [],
+    "ok": [
+     "none"
+    ]
+   },
+   {
+    "said": "yeah I'm cooking right now, I'll call you back in ten",
+    "step": 3,
+    "hits": [],
+    "ok": [
+     "none"
+    ]
+   },
+   {
+    "said": "homie kitna namak daalna hai?",
+    "step": 4,
+    "hits": [],
+    "ok": [
+     "give_hint",
+     "ask_cook",
+     "play_clip:4"
+    ]
+   },
+   {
+    "said": "homie agla step",
+    "step": 2,
+    "hits": [],
+    "ok": [
+     "next_step"
+    ]
+   },
+   {
+    "said": "homie peeche jao",
+    "step": 5,
+    "hits": [],
+    "ok": [
+     "previous_step"
+    ]
+   },
+   {
+    "said": "homie phir se bolo",
+    "step": 3,
+    "hits": [],
+    "ok": [
+     "repeat_step"
+    ]
+   },
+   {
+    "said": "homie kitni der pakana hai?",
+    "step": 4,
+    "hits": [
+     4
+    ],
+    "ok": [
+     "play_clip:4"
+    ]
+   },
+   {
+    "said": "homie ab kya karna hai?",
+    "step": 6,
+    "hits": [],
+    "ok": [
+     "next_step",
+     "repeat_step"
+    ]
+   },
+   {
+    "said": "homie paanch minute ka timer lagao",
+    "step": 8,
+    "hits": [],
+    "ok": [
+     "set_timer:300"
+    ]
+   },
+   {
+    "said": "set a timer for two minutes",
+    "step": 8,
+    "hits": [],
+    "ok": [
+     "set_timer:120"
+    ]
+   },
+   {
+    "said": "thanks homie, it smells amazing",
+    "step": 9,
+    "hits": [],
+    "ok": [
+     "say"
+    ]
+   },
+   {
+    "said": "homie the oil caught fire!",
+    "step": 3,
+    "hits": [],
+    "ok": [
+     "say"
+    ]
+   },
+   {
+    "said": "homie dikhao Nani ne kaise mix kiya",
+    "step": 6,
+    "hits": [],
+    "ok": [
+     "play_clip:6"
+    ]
+   },
+   {
+    "said": "hey Priya, I'm making poha, want some? I'll save you a plate",
+    "step": 7,
+    "hits": [],
+    "ok": [
+     "none"
+    ]
+   },
+   {
+    "said": "no mom I'm fine, I'm literally frying the onions right now",
+    "step": 4,
+    "hits": [
+     4
+    ],
+    "ok": [
+     "none"
+    ]
+   },
+   {
+    "said": "ugh these onions are making me cry",
+    "step": 2,
+    "hits": [
+     2
+    ],
+    "ok": [
+     "none",
+     "say"
+    ]
+   }
+  ],
+  "en": [
+   {
+    "said": "homie next",
+    "step": 1,
+    "hits": [],
+    "ok": [
+     "next_step"
+    ]
+   },
+   {
+    "said": "homie how hot should the pan be?",
+    "step": 1,
+    "hits": [
+     1,
+     5
+    ],
+    "ok": [
+     "play_clip:1"
+    ]
+   },
+   {
+    "said": "how do I get the green onions to curl like that",
+    "step": 3,
+    "hits": [
+     3,
+     6
+    ],
+    "ok": [
+     "play_clip:3",
+     "play_clip:6"
+    ]
+   },
+   {
+    "said": "homie can I use salmon instead of swordfish?",
+    "step": 4,
+    "hits": [],
+    "ok": [
+     "give_hint",
+     "ask_cook"
+    ]
+   },
+   {
+    "said": "dude did you see the game last night",
+    "step": 4,
+    "hits": [],
+    "ok": [
+     "none"
+    ]
+   },
+   {
+    "said": "homie go to step 7",
+    "step": 5,
+    "hits": [],
+    "ok": [
+     "go_to_step:7"
+    ]
+   },
+   {
+    "said": "homie how long do I sear each side?",
+    "step": 5,
+    "hits": [
+     5,
+     4
+    ],
+    "ok": [
+     "play_clip:5",
+     "play_clip:4"
+    ]
+   },
+   {
+    "said": "homie set a timer for four minutes",
+    "step": 5,
+    "hits": [],
+    "ok": [
+     "set_timer:240"
+    ]
+   }
+  ]
+ }
+}

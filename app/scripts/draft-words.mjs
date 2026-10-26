@@ -25,7 +25,6 @@ const { TRANSLATIONS } = await import(pathToFileURL(join(words, 'tr/index.ts')).
 
 /** How each language is written for a grandparent (memory cook-languages; homie's own lines follow the same). */
 const LANGUAGES = {
-  mr: 'Marathi (Devanagari)',
   hi: 'Hindi (Devanagari)',
   gu: 'Gujarati (Gujarati script)',
   ta: 'Tamil (Tamil script)',
@@ -39,7 +38,7 @@ const LANGUAGES = {
   pt: 'Brazilian Portuguese',
   ar: 'Modern Standard Arabic, simple and warm',
 };
-const INDIAN = new Set(['mr', 'hi', 'gu', 'ta', 'te', 'pa', 'ur']);
+const INDIAN = new Set(['hi', 'gu', 'ta', 'te', 'pa', 'ur']);
 const BATCH = 60;
 const PARALLEL = 4; // languages at once; each sends its batches together
 

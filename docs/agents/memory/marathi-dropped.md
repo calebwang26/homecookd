@@ -20,6 +20,12 @@ rules), and its transcripts were the weakest. Fewer languages done well beats mo
   before still reads as "Marathi". It comes back only if Caleb asks.
 - Don't build or tune new work for Marathi. Pipeline: `transcribe.COOK_LANGUAGES` has no "mr", so a Marathi
   recording reads as its nearest language, usually Hindi.
+- **The app (Oct 26):** Marathi is in `HIDDEN` in `app/src/lib/languages.ts`, and its word tables are gone
+  (`tr/mr.ts`, the Marathi column of the recording screen's words). `activeLanguage()` turns a saved "mr" into
+  Hindi (the same script, and what the pipeline hears it as) for the app's words, the recording screen, "Your
+  language", and a new recording's language. Her `people.language` stays "mr", and she never sees the language
+  screen again for it. A phone set to Marathi starts in Hindi too. Hindi is the default fallback; the phone's
+  language is the other choice (`TODO(caleb)`).
 - Existing Marathi recipes (Poha) stay as they are, with their Marathi quotes.
 - New multi-language checks use the 13; [[demo-test-dishes]] keeps Swordfish steak, and Poha stays an existing
   recipe rather than the language test.

@@ -1,4 +1,4 @@
-// "Your language: Marathi · मराठी", a quiet link in the foot of "Who's in the kitchen?" (from
+// "Your language: Hindi · हिन्दी", a quiet link in the foot of "Who's in the kitchen?" (from
 // "Mom ▾"), for a cook already in: the language homie talks with her in (people.setLanguage). A new
 // cook picks it when she joins (app/join.tsx).
 import { useState } from 'react';
@@ -6,7 +6,7 @@ import { StyleSheet } from 'react-native';
 
 import { LanguageSheet, languageLabel } from '@/components/record/LanguagePicker';
 import { PressableScale, Txt, useToast } from '@/components/ui';
-import { languageName } from '@/lib/languages';
+import { activeLanguage, languageName } from '@/lib/languages';
 import { useMe } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
 import { useWords } from '@/lib/words/useWords';
@@ -21,7 +21,8 @@ export function LanguageEntry() {
   const [open, setOpen] = useState(false);
   const [picked, setPicked] = useState<string | null>(null);
   if (!cook) return null;
-  const current = picked ?? convexMe?.language ?? 'en';
+  // A dropped language (Marathi) shows as the one she reads now (Hindi).
+  const current = activeLanguage(picked ?? convexMe?.language) ?? 'en';
 
   const pick = async (code: string) => {
     setOpen(false);

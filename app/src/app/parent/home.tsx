@@ -51,7 +51,7 @@ const PREVIEW_STOPPED: Unsent | null =
         cookId: 'preview',
         clips: [0, 1, 2].map((i) => ({ path: `recordings/preview/part-0${i + 1}.mp4`, durationMs: i < 2 ? 300_000 : 120_000, width: 1080, height: 1920, startedAt: i })),
         dish: 'Poha',
-        language: 'mr',
+        language: 'hi',
         forKids: null,
         everyone: true,
         requestFrom: null,

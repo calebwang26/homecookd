@@ -35,7 +35,7 @@ const test = (name, fn) => {
 
 const holes = (s) => (s.match(/\{\w+\}/g) ?? []).sort().join(' ');
 const SCRIPTS = {
-  mr: /\p{Script=Devanagari}/u, hi: /\p{Script=Devanagari}/u, gu: /\p{Script=Gujarati}/u, ta: /\p{Script=Tamil}/u,
+  hi: /\p{Script=Devanagari}/u, gu: /\p{Script=Gujarati}/u, ta: /\p{Script=Tamil}/u,
   te: /\p{Script=Telugu}/u, pa: /\p{Script=Gurmukhi}/u, ur: /\p{Script=Arabic}/u, zh: /\p{Script=Han}/u,
   ko: /\p{Script=Hangul}/u, ar: /\p{Script=Arabic}/u, tl: /[a-z]/i, es: /[a-z]/i, pt: /[a-z]/i,
 };
@@ -90,6 +90,15 @@ test('the phone’s language: ours or null', () => {
   assert.equal(W.uiLanguageOf('fr-FR'), null, 'French is in the picker, not yet in the app’s words');
   assert.equal(W.uiLanguageOf(undefined), null);
   assert.ok(W.isRtl('ur') && W.isRtl('ar') && !W.isRtl('ta'));
+});
+
+test('Marathi was dropped (Oct 26): a cook who saved it reads Hindi; no Marathi tile or table', () => {
+  assert.ok(!W.UI_LANGUAGES.includes('mr'));
+  assert.ok(!('mr' in TRANSLATIONS));
+  for (const key of ['parent.tab.home', 'parent.home.record', 'profiles.language.entry']) assert.equal(W.wordsFor('mr')(key), W.wordsFor('hi')(key), key);
+  assert.equal(W.uiLanguageOf('mr-IN'), 'hi', 'a Marathi phone reads Hindi too');
+  assert.ok(!W.tileOrder('mr-IN').includes('mr'));
+  assert.equal(W.tileOrder('mr-IN')[0], 'hi');
 });
 
 test('the language screen: the phone’s language, then English, then the rest, each once', () => {
