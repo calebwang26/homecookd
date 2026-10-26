@@ -81,6 +81,7 @@ MSG_MISSING = "Some of the videos never finished uploading, so we couldn't write
 MSG_EMPTY = "One of the videos arrived empty. Please try adding it again."
 MSG_TOO_LONG = f"That recording is over {MAX_HOURS} hours. Try splitting it into shorter videos."
 MSG_PAUSED = "Recipe writing is paused for a little while. It will start on its own, nothing to do."
+MSG_NO_STEPS = "We couldn't find any cooking in this video. Try filming the dish from the first ingredient to the plate."
 
 
 def _now() -> str:
@@ -324,7 +325,8 @@ def _handle(job: dict, media: storage.Bucket, uploads: storage.Bucket) -> None:
         publish.rebuild_library(media)
     except (Exception, SystemExit) as e:  # noqa: BLE001 - any failure marks the job failed; the loop keeps running
         traceback.print_exc()
-        _fail(media, job, MSG_FAILED, f"{type(e).__name__}: {e}")
+        _fail(media, job, MSG_NO_STEPS if isinstance(e, process.NoStepsError) else MSG_FAILED,
+              f"{type(e).__name__}: {e}")
         return
 
     job.update(status="published", recipe_id=job["id"], message=None)
@@ -568,7 +570,7 @@ def handle_convex(convex: Convex, job: dict, media: storage.Bucket, uploads: sto
             return
         except (Exception, SystemExit) as e:  # noqa: BLE001 - any failure fails this job; the loop keeps running
             traceback.print_exc()
-            return fail(MSG_FAILED, f"{type(e).__name__}: {e}")
+            return fail(MSG_NO_STEPS if isinstance(e, process.NoStepsError) else MSG_FAILED, f"{type(e).__name__}: {e}")
     shutil.rmtree(folder, ignore_errors=True)
     stages = ", ".join(f"{k} at {v / 60:.1f}" for k, v in timings.items())
     print(f"published {job_id} as Convex recipe {convex_recipe} ({recipe_url}) in "
