@@ -2,7 +2,7 @@
 // a kid's question read to the cook in her language, "Sent to Shreya".
 //
 //   await speak('Tap Record to cook with me.', { translate: true })   in the person's language
-//   await speak(question.textForCook, { lang: 'mr' })                  already in Marathi
+//   await speak(question.textForCook, { lang: 'hi' })                  already in Hindi
 //   stopSpeaking()
 //
 // POST <voice https base>/speak -> audio/wav, played on the app's one shared player under a 'say:'

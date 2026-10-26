@@ -319,7 +319,7 @@ const words: Translation = {
   'profiles.language.saved': 'Kakausapin po kayo ni homie sa {language}',
   'profiles.language.saveFailed': 'Hindi po ito na-save. Pakitingnan ang koneksyon at subukang muli.',
   'profiles.language.question': 'Anong wika po ang gamit ninyo sa pagluluto?',
-  'profiles.language.search': 'Maghanap: Marathi, Hindi, Español…',
+  'profiles.language.search': 'Maghanap: Tamil, Hindi, Español…',
   'profiles.language.searchLabel': 'Maghanap ng wika',
   'profiles.language.clear': 'Burahin ang hinahanap',
   'profiles.language.list': 'Mga wika',

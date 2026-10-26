@@ -2,13 +2,13 @@
 //   node scripts/test-languages.mjs
 import assert from 'node:assert/strict';
 
-const { LANGUAGES, languageName, matchLanguages } = await import('../src/lib/languages.ts');
+const { LANGUAGES, activeLanguage, languageName, matchLanguages } = await import('../src/lib/languages.ts');
 
 const SONIC = 'en fr de es pt zh ja it ko nl pl ru sv tr tl bg ro ar cs el fi hr ms sk da uk hu no vi th he ka id hi mr bn gu kn ml pa ta te or ur'.split(' ');
 
-assert.equal(LANGUAGES.length, 29);
+assert.equal(LANGUAGES.length, 28);
 assert.equal(LANGUAGES[0].code, 'en');
-assert.equal(new Set(LANGUAGES.map((l) => l.code)).size, 29, 'codes are unique');
+assert.equal(new Set(LANGUAGES.map((l) => l.code)).size, 28, 'codes are unique');
 // Odia is hidden from the picker (Cartesia can't hear it), but a cook who picked it still reads as "Odia".
 assert.ok(!LANGUAGES.some((l) => l.code === 'or') && matchLanguages('odia').length === 0);
 assert.equal(languageName('or'), 'Odia');
@@ -18,11 +18,16 @@ for (const l of LANGUAGES) {
 }
 assert.deepEqual(LANGUAGES.filter((l) => l.inkLive).map((l) => l.code).sort(), ['en', 'es', 'fr', 'hi', 'ja']);
 
-const marathi = matchLanguages('mar');
-assert.equal(marathi[0].code, 'mr');
-assert.equal(`${marathi[0].name} · ${marathi[0].native}`, 'Marathi · मराठी');
-assert.equal(matchLanguages('MARATHI')[0].code, 'mr');
-assert.equal(matchLanguages('मरा')[0].code, 'mr', 'native names match too');
+// Marathi was dropped (Caleb, Oct 26): hidden like Odia, still named, and used as Hindi.
+assert.ok(!LANGUAGES.some((l) => l.code === 'mr') && matchLanguages('marathi').length === 0 && matchLanguages('मराठी').length === 0);
+assert.equal(activeLanguage('mr'), 'hi');
+assert.equal(activeLanguage('MR'), 'hi');
+assert.equal(activeLanguage('gu'), 'gu');
+assert.equal(activeLanguage(undefined), null);
+const gujarati = matchLanguages('guj');
+assert.equal(`${gujarati[0].name} · ${gujarati[0].native}`, 'Gujarati · ગુજરાતી');
+assert.equal(matchLanguages('GUJARATI')[0].code, 'gu');
+assert.equal(matchLanguages('ગુજ')[0].code, 'gu', 'native names match too');
 assert.equal(matchLanguages('español')[0].code, 'es');
 assert.deepEqual(matchLanguages('  ').map((l) => l.code), LANGUAGES.map((l) => l.code));
 // Prefix matches come before substring ones: "ta" → Tamil, Tagalog first; Gujarati / Kannada... later.

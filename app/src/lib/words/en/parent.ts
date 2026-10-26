@@ -164,7 +164,7 @@ export const PARENT = {
   'parent.record.readyMany': '{n} videos ready to send',
   'parent.record.homieFailed': 'homie couldn’t start. Check the connection and try again.',
 
-  // Before you start (components/record/PreRecordSheet); {language}: "Marathi"
+  // Before you start (components/record/PreRecordSheet); {language}: "Hindi"
   'parent.preRecord.label': 'Before you start',
   'parent.preRecord.title': 'What are you cooking?',
   'parent.preRecord.dishPlaceholder': 'The dish’s name (you can skip it)',

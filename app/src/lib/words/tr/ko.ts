@@ -319,7 +319,7 @@ const words: Translation = {
   'profiles.language.saved': 'homie가 {language}(으)로 이야기할게요',
   'profiles.language.saveFailed': '저장되지 않았어요. 연결을 확인하고 다시 해 주세요.',
   'profiles.language.question': '요리할 때 어떤 언어로 말씀하세요?',
-  'profiles.language.search': '검색: Marathi, Hindi, Español…',
+  'profiles.language.search': '검색: Tamil, Hindi, Español…',
   'profiles.language.searchLabel': '언어 검색',
   'profiles.language.clear': '검색 지우기',
   'profiles.language.list': '언어',

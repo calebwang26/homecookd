@@ -1,7 +1,7 @@
 // "What language do you cook in?": a search field (the Recipes search pill's look) over the list,
-// English first. "mar" and "मरा" both find "Marathi · मराठी" (lib/languages matchLanguages).
+// English first. "guj" and "ગુજ" both find "Gujarati · ગુજરાતી" (lib/languages matchLanguages).
 //
-//   <LanguagePicker value="mr" onChange={setLang} />            inline (join: the page scrolls)
+//   <LanguagePicker value="gu" onChange={setLang} />            inline (join: the page scrolls)
 //   <LanguageSheet visible value onPick onClose />               in a sheet (its own scroll)
 import { useState } from 'react';
 import { Platform, ScrollView, StyleSheet, TextInput, View } from 'react-native';
@@ -15,7 +15,7 @@ import { alpha, colors, fonts, radii, shadows } from '@/theme/tokens';
 /** English; in the app read it as t('profiles.language.question'). */
 export const LANGUAGE_QUESTION = 'What language do you cook in?';
 
-/** "Marathi · मराठी", or "English" when the two are the same. */
+/** "Gujarati · ગુજરાતી", or "English" when the two are the same. */
 export function languageLabel(code: string | null | undefined): string {
   const l = LANGUAGES.find((x) => x.code === (code ?? 'en').toLowerCase());
   if (!l) return code ?? 'English';

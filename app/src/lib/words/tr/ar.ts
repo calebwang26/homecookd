@@ -319,7 +319,7 @@ const words: Translation = {
   'profiles.language.saved': 'ستتحدث homie معك بـ{language}',
   'profiles.language.saveFailed': 'لم يُحفظ ذلك. يُرجى التحقق من الاتصال والمحاولة مرة أخرى.',
   'profiles.language.question': 'ما لغتك في المطبخ؟',
-  'profiles.language.search': 'بحث: الماراثية، الهندية، الإسبانية…',
+  'profiles.language.search': 'بحث: التاميلية، الهندية، الإسبانية…',
   'profiles.language.searchLabel': 'البحث عن اللغات',
   'profiles.language.clear': 'مسح البحث',
   'profiles.language.list': 'اللغات',

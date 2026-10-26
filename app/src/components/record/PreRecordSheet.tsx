@@ -12,6 +12,7 @@ import Svg, { Circle, Path } from 'react-native-svg';
 
 import { ActionButton, Avatar, BottomSheet, Chip, PressableScale, RecordDotIcon, Txt, VideoIcon } from '@/components/ui';
 import type { Profile } from '@/lib/api';
+import { activeLanguage } from '@/lib/languages';
 import { useMe } from '@/lib/live/convex';
 import { useWords } from '@/lib/words/useWords';
 import { useSession } from '@/lib/session';
@@ -68,7 +69,8 @@ export function PreRecordSheet({
   const people = learners.filter((p) => p.id !== me?.id);
   const whoNow = who ?? firstWho(people, others, { requestFrom });
   const to = whoTo(whoNow, people, others);
-  const language = picked ?? convexMe?.language ?? null;
+  // A dropped language (Marathi) records as its stand-in (Hindi), like her screens.
+  const language = activeLanguage(picked ?? convexMe?.language);
   const dishNow = dish ?? initialDish ?? '';
 
   const pickLanguage = (code: string) => {

@@ -194,7 +194,7 @@ export const PROFILES = {
   'profiles.language.saved': 'homie will talk with you in {language}',
   'profiles.language.saveFailed': 'That didn’t save. Check the connection and try again.',
   'profiles.language.question': 'What language do you cook in?',
-  'profiles.language.search': 'Search: Marathi, Hindi, Español…',
+  'profiles.language.search': 'Search: Tamil, Hindi, Español…',
   'profiles.language.searchLabel': 'Search languages',
   'profiles.language.clear': 'Clear search',
   'profiles.language.list': 'Languages',

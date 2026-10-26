@@ -60,7 +60,7 @@
 // photo (a kitchen picture stands in for the camera; the flip button only spins its icon), ?preview=wrapup
 // the stub's whole wrap-up through the real hook (homie held across two questions and the opt-in, then
 // the plate photo and the goodbye; a tap skips a question; &plate=0 without the plate photo, as filmed
-// with the system camera; &lang=mr&kid=Shreya for her words).
+// with the system camera; &lang=hi&kid=Shreya for her words).
 import { activateKeepAwakeAsync, deactivateKeepAwake } from 'expo-keep-awake';
 import { router, useLocalSearchParams, useNavigation } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';

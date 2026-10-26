@@ -1,6 +1,8 @@
 // Which language the app's own words read in, for whoever is on this phone (lib/words/words.ts):
 //   a cook       her saved language (people.language), once she picked it on the language screen
-//                (components/language/LanguageTiles) or anywhere else; until then the phone's language
+//                (components/language/LanguageTiles) or anywhere else; until then the phone's language.
+//                A dropped one reads as its stand-in (Marathi → Hindi, lib/languages activeLanguage), and
+//                counts as picked, so she never sees the language screen again for it
 //   a kid        English (the kid side stays English)
 //   nobody yet   the phone's language (sign-in, an invite, "Before we start", "Who's in the kitchen?")
 // Kept per person on this phone (kv `language.ui.<profileId>`), so her words come up at once on launch, before
@@ -9,6 +11,7 @@
 //   const { t } = useWords();   <Txt>{t('parent.tab.home')}</Txt>
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
+import { activeLanguage } from '@/lib/languages';
 import { setLanguage, useMe } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
 import { kvGet, kvSet } from '@/lib/storage';
@@ -61,13 +64,15 @@ export function UiLanguageProvider({ children }: { children: ReactNode }) {
   const saved = convexMe?.language ?? null;
   const pick = picked && picked.id === id && picked.savedThen === saved ? picked.code : null;
   const chosen = !!mine?.chosen || (!!saved && saved !== 'en') || picked?.id === id;
-  const lang = !cook || !id
-    ? (me ? 'en' : device)
-    : pick
-      ? pick
-      : saved != null
-        ? chosen ? saved : device
-        : (mine?.cached ?? device);
+  const lang = activeLanguage(
+    !cook || !id
+      ? (me ? 'en' : device)
+      : pick
+        ? pick
+        : saved != null
+          ? chosen ? saved : device
+          : (mine?.cached ?? device),
+  )!;
 
   // Remember her language on this phone for the next launch.
   useEffect(() => {
