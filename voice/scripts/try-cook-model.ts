@@ -1,9 +1,10 @@
-// Cook mode's turn agent (agent.ts) against real Claude, scripted: for each line in fixtures/cook-eval.json (a Marathi
-// grandma's Poha and an English uncle's Swordfish), a fresh agent hears it on its step, with the moments Moss would
+// Cook mode's turn agent (agent.ts) against real Claude, scripted: for each line in fixtures/cook-eval.json (a Hindi-
+// speaking Nani's Poha, some lines in Hindi, and an English uncle's Swordfish), a fresh agent hears it on its step, with the moments Moss would
 // find, and the first thing it does is checked against the picks that are right. Lines it says (say, give_hint) are
 // checked for a family role or he/she it wasn't given. Prints a score, the misses and the cost.
 //   npx tsx scripts/try-cook-model.ts                      COOK_MODEL (default Sonnet), 3 runs of each line
 //   COOK_MODEL=claude-opus-5-5 RUNS=1 npx tsx scripts/try-cook-model.ts
+//   ONLY=none RUNS=10 npx tsx scripts/try-cook-model.ts   the lines homie should stay quiet on, 10 times each
 import { readFileSync } from "node:fs";
 import type { Actions } from "../src/agent.js";
 import type { CookSession } from "../src/convex.js";
@@ -18,6 +19,8 @@ const fixture = JSON.parse(readFileSync(new URL("../fixtures/cook-eval.json", im
   cases: Record<string, Case[]>;
 };
 const RUNS = Number(process.env.RUNS) || 3;
+/** ONLY=<words>: just the lines that contain them (e.g. ONLY=call RUNS=10). */
+const ONLY = process.env.ONLY?.toLowerCase();
 
 /** Moss's answer for a case: the listed steps as moments, best first. */
 const hitsOf = (s: CookSession, orders: number[]): Hit[] =>
@@ -67,6 +70,7 @@ const misses: string[] = [];
 for (const [lang, cases] of Object.entries(fixture.cases)) {
   const s = fixture.sessions[lang];
   for (const c of cases) {
+    if (ONLY && !c.said.toLowerCase().includes(ONLY) && !c.ok.includes(ONLY)) continue;
     const runs = await Promise.all(Array.from({ length: RUNS }, () => once(s, c)));
     for (const r of runs) {
       total++;

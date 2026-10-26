@@ -47,7 +47,7 @@ export const env = {
   /** Overridable without a code change if latency needs a smaller model. */
   claudeModel: get("CLAUDE_MODEL") || "claude-opus-5-5",
   /** Cook mode's turn agent (agent.ts): one call for each thing the kid says. Sonnet by default (Oct 26: half Opus's
-   *  price, the same picks in scripts/try-cook-model.ts on a Marathi and an English recipe). COOK_MODEL overrides it. */
+   *  price, the same picks in scripts/try-cook-model.ts on a Hindi and an English recipe). COOK_MODEL overrides it. */
   cookModel: get("COOK_MODEL") || "claude-sonnet-5-5",
   /** The "should homie speak now?" check while a cook records (homie.ts decide), every 15 s or so, often with a
    *  camera still: the call that adds up. Haiku by default (Caleb, Oct 26: Opus here spent the month's limit). */

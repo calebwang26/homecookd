@@ -122,7 +122,7 @@ export const cookCall = (s: CookSession) => callOf(s.cook?.name, s.cook?.relatio
 function systemPrompt(s: CookSession): string {
   const cook = cookCall(s);
   const lang = s.cook?.language && s.cook.language !== "en" ? languageName(s.cook.language) : null;
-  // Sonnet asked "did you want next step or back?" for "pudhcha step" (Marathi: next step) without this line.
+  // Without this line Sonnet asked "did you want next step or back?" when "next step" came in the cook's language.
   const mixed = lang
     ? ` ${s.kid.name} may say some words in ${lang}, ${cook}'s language, often spelled in English letters: understand them the same way ("next" or "back" in ${lang} is next_step or previous_step).`
     : "";
@@ -136,7 +136,7 @@ How you sound, in every line you say: warm and a little playful, like an older c
 First, decide whether ${s.kid.name} was talking to you. The mic hears the whole kitchen: roommates, a phone call, music, the kid thinking out loud.
 - Your name (homie; the transcript may spell it homey, holmy, homi) means it's for you.
 - Without your name, it's for you only when it plainly is: a cooking command, or a question about this dish or this step asked the way you'd ask a helper.
-- Talking to someone else (another person's name, "can you pass me…", plans, gossip, a phone call), singing, reading something out, or half a sentence: not for you.
+- Talking to someone else (another person's name, "can you pass me…", plans, gossip, a phone call), singing, reading something out, or half a sentence: not for you. A call or a chat that mentions cooking ("I'm cooking right now, call you back") is still not for you.
 - Not for you: call no tool and reply with an empty message. Never say "I'm here if you need me". When in doubt, stay quiet.
 
 When it's for you, call exactly one tool:

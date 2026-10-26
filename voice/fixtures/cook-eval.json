@@ -1,7 +1,7 @@
 {
- "_about": "Cook mode's turn agent, scripted (scripts/try-cook-model.ts): what the kid says, the step they're on, the steps Moss finds, and the picks that are right.",
+ "_about": "Cook mode's turn agent, scripted (scripts/try-cook-model.ts): what the kid says (a Hindi-speaking Nani's Poha, some lines in Hindi; an English uncle's Swordfish), the step they're on, the steps Moss finds, and the picks that are right.",
  "sessions": {
-  "mr": {
+  "hi": {
    "familyId": "eval",
    "mossIndex": "eval",
    "kid": {
@@ -9,9 +9,9 @@
     "name": "Shreya"
    },
    "cook": {
-    "name": "Rajani",
-    "language": "mr",
-    "relation": "Aaji"
+    "name": "Sunita",
+    "language": "hi",
+    "relation": "Nani"
    },
    "recipe": {
     "id": "eval-poha",
@@ -25,8 +25,7 @@
       "moment": {
        "startS": 10,
        "endS": 60
-      },
-      "quoteOriginal": "हे बघ पोहे घेतले मी, पोहे धुवून ठेवते आता. पोहे धुते मी आता. थोडा वेळ पोहे धुवून ठेवले."
+      }
      },
      {
       "order": 2,
@@ -36,8 +35,7 @@
       "moment": {
        "startS": 61,
        "endS": 117
-      },
-      "quoteOriginal": "आता कांदा कापायचा आहे. कांदा कापते मी आता. कांदा कापते, नंतर कांदा, मिरची, कोथिंबीर कापून ठेवते. मग पोह्यांना सुरुवात करेल. कांदा पोहे म्हणतात याला."
+      }
      },
      {
       "order": 3,
@@ -47,8 +45,7 @@
       "moment": {
        "startS": 118,
        "endS": 167
-      },
-      "quoteOriginal": "आता कढई गरम ठेवते. कांदा कट करून घेते आधी. गॅस चालू करते. आता कांदा झाला का, मग कांदा टाकते कढईमध्ये. शेंगदाणे टाकते पोह्यांमध्ये. हे बघ तेल टाकते. मग जिरं टाकते, मोहरी जिरं टाकून फोडणी द्यायची."
+      }
      },
      {
       "order": 4,
@@ -58,8 +55,7 @@
       "moment": {
        "startS": 214,
        "endS": 326
-      },
-      "quoteOriginal": "आता हे सर्व एकजीव होईल ना मग कांदा. पाच मिनिटं. पाच मिनिटं. कांदे जरा ब्राऊन होऊ द्यावे लागतील. त्याच्यात मीठ टाकलं म्हणजे लवकर ब्राऊन होतात कांदे. हिरवी मिरची पण टाकली. हो. थोडे कांदे लालसर झाले का मग पोहे टाकायचे नाहीतर ते चांगले नाही लागत."
+      }
      },
      {
       "order": 5,
@@ -69,8 +65,7 @@
       "moment": {
        "startS": 327,
        "endS": 352
-      },
-      "quoteOriginal": "त्याच्यात आता थोडा हिंग पण टाकायचा. चव लागते मग. अगदी चिमूटभर. चिमूटभर हिंग टाकला. आणि ही जिऱ्याची पावडर आहे, हळद आहे, ती पण टाकायची थोडी. थोडी हळद टाकायची."
+      }
      },
      {
       "order": 6,
@@ -80,8 +75,7 @@
       "moment": {
        "startS": 384,
        "endS": 410
-      },
-      "quoteOriginal": "आता पोहे टाकते मी. पोह्यांचा वास आला का तुम्हाला? आता पोहे आणि ते एकजीव करायचे मग."
+      }
      },
      {
       "order": 7,
@@ -91,8 +85,7 @@
       "moment": {
        "startS": 441,
        "endS": 498
-      },
-      "quoteOriginal": "आता हे सर्व मिक्स करते ना. असं सगळं मिक्स करण्यासाठी. सगळं एकजीव, हे बघ हे एकजीव होतंय ना आता. पोहे तयार झाले आपले. तयार झाले. कोथिंबीर टाकली, साखर टाकली, लिंबू पिळला. आता थोडं दोन मिनिटं राहू देते त्याला. वाफ यायला."
+      }
      },
      {
       "order": 8,
@@ -102,8 +95,7 @@
       "moment": {
        "startS": 499,
        "endS": 525
-      },
-      "quoteOriginal": "झाकण ठेवते आता त्याच्यावर. दोन मिनिटं."
+      }
      },
      {
       "order": 9,
@@ -113,8 +105,7 @@
       "moment": {
        "startS": 544,
        "endS": 555
-      },
-      "quoteOriginal": "आता पोहे टाकू वाटीत. खायचं ना सर्व्ह करते आता बाऊलमध्ये."
+      }
      },
      {
       "order": 10,
@@ -124,8 +115,7 @@
       "moment": {
        "startS": 578,
        "endS": 603
-      },
-      "quoteOriginal": "मग झाले का पोहे आता? पोहे तयार झाले मी त्याच्यावर आता खोबरं टाकते. खोबरं छान लागतं त्याच्यात. हो. खोबरं छान लागतं त्याच्यावर. कोणाला शेव पण आवडते, शेव टाकतात. आता खोबरं टाकते. हे बघ. आता तुम्हाला खायचे आहेत ते पोहे."
+      }
      }
     ],
     "memories": []
@@ -273,7 +263,7 @@
   }
  },
  "cases": {
-  "mr": [
+  "hi": [
    {
     "said": "okay homie next",
     "step": 2,
@@ -332,7 +322,7 @@
     ]
    },
    {
-    "said": "homie why does Aaji put salt with the onions",
+    "said": "homie why does Nani put salt with the onions",
     "step": 4,
     "hits": [
      4
@@ -376,7 +366,7 @@
     ]
    },
    {
-    "said": "homie kiti mith ghalaycha?",
+    "said": "homie kitna namak daalna hai?",
     "step": 4,
     "hits": [],
     "ok": [
@@ -386,7 +376,7 @@
     ]
    },
    {
-    "said": "homie pudhcha step",
+    "said": "homie agla step",
     "step": 2,
     "hits": [],
     "ok": [
@@ -394,7 +384,42 @@
     ]
    },
    {
-    "said": "homie paach minute timer laav",
+    "said": "homie peeche jao",
+    "step": 5,
+    "hits": [],
+    "ok": [
+     "previous_step"
+    ]
+   },
+   {
+    "said": "homie phir se bolo",
+    "step": 3,
+    "hits": [],
+    "ok": [
+     "repeat_step"
+    ]
+   },
+   {
+    "said": "homie kitni der pakana hai?",
+    "step": 4,
+    "hits": [
+     4
+    ],
+    "ok": [
+     "play_clip:4"
+    ]
+   },
+   {
+    "said": "homie ab kya karna hai?",
+    "step": 6,
+    "hits": [],
+    "ok": [
+     "next_step",
+     "repeat_step"
+    ]
+   },
+   {
+    "said": "homie paanch minute ka timer lagao",
     "step": 8,
     "hits": [],
     "ok": [
@@ -426,7 +451,7 @@
     ]
    },
    {
-    "said": "homie show me how Aaji mixed it",
+    "said": "homie dikhao Nani ne kaise mix kiya",
     "step": 6,
     "hits": [],
     "ok": [
@@ -434,38 +459,32 @@
     ]
    },
    {
-    "said": "homie maage ja",
-    "step": 5,
+    "said": "hey Priya, I'm making poha, want some? I'll save you a plate",
+    "step": 7,
     "hits": [],
     "ok": [
-     "previous_step"
+     "none"
     ]
    },
    {
-    "said": "homie parat sang na",
-    "step": 3,
-    "hits": [],
-    "ok": [
-     "repeat_step"
-    ]
-   },
-   {
-    "said": "homie kiti vel shijavaycha?",
+    "said": "no mom I'm fine, I'm literally frying the onions right now",
     "step": 4,
     "hits": [
      4
     ],
     "ok": [
-     "play_clip:4"
+     "none"
     ]
    },
    {
-    "said": "homie ata kay karaycha?",
-    "step": 6,
-    "hits": [],
+    "said": "ugh these onions are making me cry",
+    "step": 2,
+    "hits": [
+     2
+    ],
     "ok": [
-     "next_step",
-     "repeat_step"
+     "none",
+     "say"
     ]
    }
   ],
