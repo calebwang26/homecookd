@@ -1,8 +1,14 @@
 """Turn the front-camera clips filmed in the app between #79 and #104 the right way up.
 
-    .venv/bin/python pipeline/fix_upside_down.py                 # dry run: the bad clips, their jobs and recipes, the plan
+    .venv/bin/python pipeline/fix_upside_down.py                 # dry run: the likely bad clips, their jobs and recipes, the plan
     .venv/bin/python pipeline/fix_upside_down.py --try clip.mp4  # repair a local copy only (clip.fixed.mp4 + before/after frames)
-    .venv/bin/python pipeline/fix_upside_down.py --write         # repair them in the uploads bucket (Caleb's OK first)
+    .venv/bin/python pipeline/fix_upside_down.py --write --clip family-recipe-7f1ee1/01.mp4 [--clip ...]
+    .venv/bin/python pipeline/fix_upside_down.py --write --clips list.txt   # one path per line (Caleb's OK first)
+
+--write repairs only the clips listed with --clip / --clips, never what the detection found by itself: check each
+one by eye first (download it, `--try` it, look at the before/after frames). The app films with
+outputOrientation="device" (CameraCard.tsx), so the rotation tag also depends on how the phone was held: a back
+clip filmed with the phone upside down in portrait also reads rotation 90, and a landscape front clip doesn't.
 
 From #79 (in the app Oct 25) until #104's EAS Update (Oct 26 05:12 UTC), the in-app camera passed
 isMirrored={false} to VisionCamera 4.7.3, and every front-camera clip was stored with display-matrix rotation 90
@@ -18,15 +24,16 @@ which writes the same pixels with the rotation turned 180° (CameraSession+Confi
 mirrored like a selfie (check one first; see docs/agents/memory/in-app-recording.md).
 
 A clip is flagged when it looks like an in-app VisionCamera file (mp42 brand, no Apple camera tags, no ffmpeg
-encoder tag), has rotation 90, and was created after #79 reached phones. A phone that hadn't loaded #104's
+encoder tag), its display matrix is exactly a plain 90° turn (a matrix with a flip in it also reports rotation 90,
+and the repair would drop the flip, so it is refused), and it was created after #79 reached phones. A phone that hadn't loaded #104's
 update still films bad front clips, so clips after FIXED_AT are flagged too, with a note. A repaired clip has
 rotation -90 and is never flagged again.
 
---write, per clip: copy the original to backup/<path> in the uploads bucket (kept if it's already there),
+--write, per listed clip (a failure is reported and the next clip goes on): copy the original to backup/<path> in the uploads bucket (kept if it's already there),
 download it, repair it, check the result (rotation -90, the same video and audio packets, creation_time kept),
 and upload it over the original only if the original hasn't changed meanwhile. It never touches Convex, the
 media bucket or a recipe: it prints how to redo each recipe that was published from a bad clip.
-Note: the uploads bucket's 14-day lifecycle rule deletes backups and originals alike.
+Note: the uploads bucket's 14-day lifecycle rule deletes backups and originals alike (a rewrite restarts it).
 Reads Convex with the team token (CONVEX_OVERRIDE_ACCESS_TOKEN in .env) and the Convex CLI.
 """
 from __future__ import annotations
@@ -53,6 +60,9 @@ GOOD_ROTATION = -90  # what a back clip gets, and what #104 writes for a front c
 IN_APP_FROM = datetime(2026, 10, 25, 3, 38, tzinfo=timezone.utc)  # #79 merged (the in-app camera's flip)
 FIXED_AT = datetime(2026, 10, 26, 5, 12, tzinfo=timezone.utc)  # #104's EAS Update 8cbcb886
 VIDEO_EXTS = (".mp4", ".mov")
+# ffprobe's display matrices (16.16 fixed point, last entry 2.30), as AVAssetWriter writes them for these clips.
+PURE_90 = (0, -65536, 0, 65536, 0, 0, 0, 0, 1 << 30)  # rotation 90: the bad front clips
+PURE_MINUS_90 = (0, 65536, 0, -65536, 0, 0, 0, 0, 1 << 30)  # rotation -90: back clips and repaired ones
 
 
 # ---------- detection (pure, tested in test_fix_upside_down.py) ----------
@@ -68,6 +78,18 @@ def rotation(info: dict) -> int | None:
             return int(round(float(side["rotation"])))
     rotate = video.get("tags", {}).get("rotate")  # older ffprobe builds
     return -int(rotate) if rotate else None
+
+
+def matrix(info: dict) -> tuple[int, ...] | None:
+    """The first video stream's display matrix as 9 ints, or None (no matrix, or only an old rotate tag)."""
+    video = next((s for s in info.get("streams", []) if s.get("codec_type") == "video"
+                  and not s.get("disposition", {}).get("attached_pic")), None)
+    for side in (video or {}).get("side_data_list", []):
+        if "displaymatrix" in side:
+            # "\n00000000:            0      -65536           0\n00000001: ..." -> the numbers after each row label
+            nums = [int(n) for row in side["displaymatrix"].strip().splitlines() for n in row.split(":", 1)[1].split()]
+            return tuple(nums) if len(nums) == 9 else None
+    return None
 
 
 def same_angle(a: int | None, b: int) -> bool:
@@ -101,14 +123,16 @@ def verdict(info: dict) -> tuple[bool, str]:
         return False, "upright (rotation -90)"
     if not same_angle(rot, BAD_ROTATION):
         return False, f"rotation {rot}: not the isMirrored={{false}} front-camera case"
+    if matrix(info) != PURE_90:
+        return False, f"rotation 90 but the display matrix isn't a plain turn ({matrix(info)}): not repaired"
     created = created_at(info)
     if created is None:
         return False, "rotation 90 but no creation_time: check it by eye"
     if created < IN_APP_FROM:
         return False, f"rotation 90 but filmed before #79 ({created:%b %d %H:%M} UTC)"
     if created >= FIXED_AT:
-        return True, f"front camera, filmed {created:%b %d %H:%M} UTC, after #104 (that phone hadn't loaded the update)"
-    return True, f"front camera, filmed {created:%b %d %H:%M} UTC"
+        return True, f"likely front camera, filmed {created:%b %d %H:%M} UTC, after #104 (that phone hadn't loaded the update)"
+    return True, f"likely front camera, filmed {created:%b %d %H:%M} UTC"
 
 
 # ---------- the repair ----------
@@ -132,14 +156,18 @@ def stream_hash(path: Path, which: str) -> str:
 
 
 def repair_file(src: Path, dst: Path, mirror: bool = False) -> None:
-    """Write the repaired clip and check it; raises prep.PrepError when the result isn't right."""
+    """Write the repaired clip and check it; raises prep.PrepError when the source isn't a plain 90° turn
+    (-display_rotation replaces the whole matrix, so a flip in it would be lost) or the result isn't right."""
+    before = prep.probe(src)
+    if matrix(before) != PURE_90:
+        raise prep.PrepError(f"{src}: display matrix {matrix(before)} is not the plain 90° turn; not repaired")
     prep.ffmpeg(*repair_args(src, dst, mirror))
-    before, after = prep.probe(src), prep.probe(dst)
+    after = prep.probe(dst)
     rot = rotation(after)
     if mirror and rot not in (None, 0):
         raise prep.PrepError(f"{dst}: rotation {rot} after the mirror re-encode")
-    if not mirror and not same_angle(rot, GOOD_ROTATION):
-        raise prep.PrepError(f"{dst}: rotation {rot}, expected {GOOD_ROTATION}")
+    if not mirror and matrix(after) != PURE_MINUS_90:
+        raise prep.PrepError(f"{dst}: display matrix {matrix(after)}, expected the plain -90° turn")
     if created_at(before) != created_at(after):
         raise prep.PrepError(f"{dst}: creation_time {created_at(after)} != {created_at(before)} (prep orders clips by it)")
     has_audio = any(s.get("codec_type") == "audio" for s in before.get("streams", []))
@@ -259,28 +287,55 @@ def find(uploads, media, deployment: str) -> list[Clip]:
     return clips
 
 
-def write(uploads, clips: list[Clip], mirror: bool) -> None:
-    for clip in clips:
-        blob = uploads.get_blob(clip.path)
-        backup = uploads.blob(BACKUP + clip.path)
-        if backup.exists():
-            print(f"  {clip.path}: backup already at {backup.name}; kept")
-        else:
-            uploads.copy_blob(blob, uploads, backup.name, if_generation_match=0)
-            print(f"  {clip.path}: original copied to {backup.name}")
-        with tempfile.TemporaryDirectory() as tmp:
-            src, dst = Path(tmp) / "in.mp4", Path(tmp) / "out.mp4"
-            blob.download_to_filename(str(src))
-            repair_file(src, dst, mirror)
-            out = uploads.blob(clip.path)
-            out.content_type = blob.content_type or "video/mp4"
-            out.upload_from_filename(str(dst), if_generation_match=blob.generation)  # not if it changed meanwhile
-        print(f"  {clip.path}: repaired ({'mirrored, re-encoded' if mirror else 'rotation 90 -> -90, stream copy'})")
+def write(uploads, paths: list[str], mirror: bool) -> int:
+    """Repair each listed clip; a failure is reported and the next clip goes on. Returns how many failed."""
+    failed = 0
+    for path in paths:
+        try:
+            blob = uploads.get_blob(path)
+            if blob is None:
+                raise prep.PrepError(f"gs://{uploads.name}/{path} not found")
+            with tempfile.TemporaryDirectory() as tmp:
+                src, dst = Path(tmp) / "in.mp4", Path(tmp) / "out.mp4"
+                blob.download_to_filename(str(src), if_generation_match=blob.generation)
+                bad, why = verdict(prep.probe(src))
+                if not bad:
+                    raise prep.PrepError(f"not repaired: {why}")
+                repair_file(src, dst, mirror)  # checked before anything is written
+                backup = uploads.blob(BACKUP + path)
+                if backup.exists():
+                    print(f"  {path}: backup already at {backup.name}; kept")
+                else:
+                    uploads.copy_blob(blob, uploads, backup.name, if_generation_match=0,
+                                      if_source_generation_match=blob.generation)
+                    print(f"  {path}: original copied to {backup.name}")
+                out = uploads.blob(path)
+                out.content_type = blob.content_type or "video/mp4"
+                out.cache_control = blob.cache_control
+                out.metadata = blob.metadata
+                out.upload_from_filename(str(dst), if_generation_match=blob.generation)  # not if it changed meanwhile
+            print(f"  {path}: repaired ({'mirrored, re-encoded' if mirror else 'rotation 90 -> -90, stream copy'})")
+        except Exception as e:  # noqa: BLE001 - one clip's failure must not stop the others
+            failed += 1
+            print(f"  {path}: FAILED, left as it was ({type(e).__name__}: {e})")
+    return failed
+
+
+def listed(args: argparse.Namespace) -> list[str]:
+    """The clips named with --clip and --clips FILE (one bucket path per line, # comments), in order, once each."""
+    paths = list(args.clip)
+    if args.clips:
+        paths += [line.split("#")[0].strip() for line in args.clips.read_text().splitlines()]
+    return list(dict.fromkeys(p for p in paths if p))
 
 
 def main(argv: list[str] | None = None) -> None:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--write", action="store_true", help="repair the clips in the uploads bucket (default: dry run)")
+    ap.add_argument("--write", action="store_true",
+                    help="repair the listed clips in the uploads bucket (default: dry run); needs --clip or --clips")
+    ap.add_argument("--clip", action="append", default=[], metavar="PATH",
+                    help="a clip in the uploads bucket to repair, checked by eye first (repeatable)")
+    ap.add_argument("--clips", type=Path, metavar="FILE", help="a file of clip paths, one per line")
     ap.add_argument("--mirror", action="store_true", help="also mirror left-right (re-encode); see the docstring")
     ap.add_argument("--try", dest="try_path", metavar="CLIP", type=Path,
                     help="repair a local clip into <clip>.fixed.mp4 with before/after frames; no cloud calls")
@@ -296,11 +351,19 @@ def main(argv: list[str] | None = None) -> None:
         at = min(1.0, float(prep.probe(src)["format"]["duration"]) / 2)
         before = frame(src, src.with_name(f"{src.stem}.before.jpg"), at)
         after = frame(dst, src.with_name(f"{src.stem}.after.jpg"), at)
-        print(f"repaired: {dst}\nframes: {before} {after}")
+        print(f"repaired: {dst}\nframes: {before} {after}  (check: after must be upright, text reading right)")
         return
 
+    paths = listed(args)
+    if args.write and not paths:
+        sys.exit("--write repairs only the clips you list (--clip PATH / --clips FILE), each checked with --try first")
     _env()
     uploads, media = _buckets()
+    if args.write:
+        failed = write(uploads, paths, args.mirror)
+        print(f"{len(paths) - failed} of {len(paths)} clip(s) repaired. "
+              "Convex, the media bucket and the recipes were not touched.")
+        sys.exit(1 if failed else 0)
     clips = find(uploads, media, args.deployment)
     action = ("re-encode mirrored left-right (--mirror)" if args.mirror
               else "rotation 90 -> -90, stream copy (no re-encode)")
@@ -310,11 +373,10 @@ def main(argv: list[str] | None = None) -> None:
             print(f"  job {clip.job['_id']} ({clip.job['source']}, {clip.job['stage']}), "
                   f"recording {clip.job.get('recordingId', '-')}")
         print(f"  recipe: {redo_hint(clip)}" + "".join(f"\n  note: {n}" for n in clip.notes))
-    if not args.write:
-        print(f"\ndry run: {len(clips)} clip(s) to repair, nothing written. --write repairs them (Caleb's OK first).")
-        return
-    write(uploads, clips, args.mirror)
-    print(f"{len(clips)} clip(s) repaired. Convex, the media bucket and the recipes were not touched.")
+    print(f"\ndry run: {len(clips)} likely upside-down clip(s), nothing written. Rotation 90 also fits a back clip "
+          "filmed with the phone upside down, so check each one first: download it, run --try on it and look at "
+          "the before/after frames. Then --write --clip PATH (or --clips FILE) for the ones that are really "
+          "upside down, with Caleb's OK.")
 
 
 if __name__ == "__main__":

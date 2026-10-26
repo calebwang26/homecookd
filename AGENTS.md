@@ -218,7 +218,7 @@ voice/deploy.sh                                                    # Cloud Run h
 .venv/bin/python pipeline/test_extract_claude.py                    # EXTRACTOR=claude: frames + transcript -> events (fakes)
 .venv/bin/python pipeline/transcribe.py --id <id> [--language mr]   # work/transcript.json: cleaned audio, language check, proofread (real Cartesia)
 .venv/bin/python pipeline/scrub_family.py                          # dry run: old family recipe.json files to strip (--write: Caleb's OK)
-.venv/bin/python pipeline/fix_upside_down.py                      # dry run: front clips stored upside down (#79-#104); --try CLIP local; --write: Caleb's OK
+.venv/bin/python pipeline/fix_upside_down.py                      # dry run: front clips stored upside down (#79-#104); --try CLIP local; --write --clip PATH: Caleb's OK
 .venv/bin/python pipeline/test_fix_upside_down.py                 # which clips it flags + the repair (ffmpeg, no network)
 .venv/bin/python pipeline/test_account_purge.py                      # a deleted account's purge outside Convex (fakes)
 .venv/bin/python pipeline/worker.py [--once]                        # claim Convex jobs (--gcs: the old GCS job files)

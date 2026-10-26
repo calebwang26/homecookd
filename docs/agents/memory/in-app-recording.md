@@ -36,7 +36,8 @@ time. Before, Record opened the iOS camera and homie's socket and mic closed unt
   is 180° off. #104 turns that tag 180° and sets the same mirroring, so a post-#104 front clip is most likely
   upright and **not** mirrored (text reads the right way), not "mirrored like a selfie"; confirm on one build-6
   front clip. The 6 bad clips (all from failed test jobs, no recipe) are repaired by `pipeline/fix_upside_down.py`
-  (rotation tag 90 → -90, stream copy; `--write` needs Caleb's OK).
+  (rotation tag 90 → -90, stream copy; `--write --clip PATH` only for clips checked by eye with `--try`, since
+  a back clip filmed with the phone upside down also reads 90; Caleb's OK).
   Each recording starts on the back camera again.
 - **A camera that doesn't come back never leaves the clock ticking over nothing** (`filming.ts` `stuck`): a flip whose
   fresh camera fails too, a resume whose camera isn't ready, or a file that fails by itself: no file starts,
