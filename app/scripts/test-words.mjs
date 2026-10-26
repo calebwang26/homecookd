@@ -40,6 +40,8 @@ const SCRIPTS = {
   ko: /\p{Script=Hangul}/u, ar: /\p{Script=Arabic}/u, tl: /[a-z]/i, es: /[a-z]/i, pt: /[a-z]/i,
 };
 const keys = Object.keys(EN);
+/** App names and example names, which read the same in every script. */
+const AS_IS = new Set(['share.app.messages', 'share.app.instagram', 'share.app.whatsapp', 'profiles.self.learnerPlaceholder']);
 
 test('the English words: every area keyed by its name, no empty word, holes well formed', () => {
   assert.ok(keys.length > 50, `${keys.length} words`);
@@ -61,7 +63,7 @@ test('every language has every word, in its script, with the same holes, keeping
       assert.equal(holes(t), holes(EN[k]), `${code} ${k}: holes`);
       for (const brand of ['homie', 'homecookd']) if (EN[k].includes(brand)) assert.ok(t.includes(brand), `${code} ${k}: keeps ${brand}`);
       // Words that are only holes, a brand or a number read the same everywhere.
-      if (/[a-z]{3}/i.test(EN[k].replace(/\{\w+\}|homie|homecookd/g, ''))) assert.match(t, script, `${code} ${k}: in its script: ${t}`);
+      if (!AS_IS.has(k) && /[a-z]{3}/i.test(EN[k].replace(/\{\w+\}|homie|homecookd/g, ''))) assert.match(t, script, `${code} ${k}: in its script: ${t}`);
     }
     for (const k of Object.keys(tr)) assert.ok(k in EN, `${code} has a word the app no longer has: ${k}`);
   }

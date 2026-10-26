@@ -7,7 +7,7 @@ import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Headline } from '@/components/signin';
-import { Brand, haptic, listEnter, PressableScale, ScreenWash, Txt, usePotMood, useToast } from '@/components/ui';
+import { haptic, listEnter, PressableScale, ScreenWash, Txt, useToast } from '@/components/ui';
 import { LANGUAGES } from '@/lib/languages';
 import { useWords } from '@/lib/words/useWords';
 import { tileOrder } from '@/lib/words/words';
@@ -15,7 +15,6 @@ import { alpha, colors, radii, shadows } from '@/theme/tokens';
 
 export function LanguageTiles() {
   const insets = useSafeAreaInsets();
-  const potMood = usePotMood();
   const toast = useToast();
   const { t, lang, choose } = useWords();
   const pick = (code: string) => {
@@ -26,10 +25,10 @@ export function LanguageTiles() {
     <View style={styles.root}>
       <ScreenWash tone="parent" height={420} />
       <ScrollView
-        contentContainerStyle={[styles.content, { paddingTop: Math.max(64, insets.top + 16), paddingBottom: insets.bottom + 32 }]}
+        contentContainerStyle={[styles.content, { paddingTop: Math.max(112, insets.top + 72), paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}>
+        {/* homie's own pot floats over the top of every screen, so no wordmark here. */}
         <Animated.View entering={listEnter(0)} style={styles.top}>
-          <Brand mood={potMood} style={styles.brand} />
           <Headline title={t('common.language.title')} line={t('common.language.line')} />
         </Animated.View>
         <Animated.View entering={listEnter(1)} style={styles.grid} accessibilityRole="radiogroup">
@@ -64,8 +63,7 @@ export function LanguageTiles() {
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.page },
   content: { paddingHorizontal: 20, gap: 28 },
-  top: { alignItems: 'center', gap: 18 },
-  brand: { alignSelf: 'center' },
+  top: { gap: 18 },
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: 12 },
   tile: {
     flexBasis: '47%',
