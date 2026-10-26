@@ -167,3 +167,17 @@ test("recipe.json's follow_up_questions are read: ingredient kept, steps checked
   expect(parsed.followUps[0]).toEqual({ id: "seen1", step: 2, question: SEEN.question, ingredient: "curry leaves" });
   expect(parsed.followUps[1]).toEqual({ id: "q1", step: undefined, question: "How long?", ingredient: undefined });
 });
+
+test("ingredient questions come first, so many gap questions never crowd them out of the five", async () => {
+  const { parseRecipeJson, MAX_FOLLOW_UPS } = await import("./lib/recipeJson");
+  const gaps = Array.from({ length: 6 }, (_, i) => ({ id: `q${i}`, about_step: 1, question: `Gap ${i}?` }));
+  const parsed = parseRecipeJson({
+    title: "Kanda Poha",
+    steps: [{ order: 1, title: "Rinse", instruction: "Rinse it." }, { order: 2, title: "Temper", instruction: "Temper it." }],
+    follow_up_questions: [...gaps, { id: "seen-curry-leaves", about_step: 2, question: SEEN.question, ingredient: "curry leaves" }],
+  });
+  if (typeof parsed === "string") throw new Error(parsed);
+  expect(parsed.followUps).toHaveLength(MAX_FOLLOW_UPS);
+  expect(parsed.followUps[0]).toMatchObject({ id: "seen-curry-leaves", ingredient: "curry leaves", step: 2 });
+  expect(parsed.followUps.slice(1).map((f) => f.id)).toEqual(["q0", "q1", "q2", "q3"]); // the rest keep their order
+});

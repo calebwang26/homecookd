@@ -85,14 +85,16 @@ export function parseRecipeJson(raw: unknown): ParsedRecipe | string {
     if (text) memories.push({ kind: "tip", text, moment: moment(s), step: num(s.order) ?? i + 1 });
   }
 
-  const followUps: FollowUp[] = [];
+  const all: FollowUp[] = [];
   for (const q of objects(r.follow_up_questions, 20)) {
     const id = str(q.id, 100);
     const question = str(q.question, 500);
-    if (!id || !question || followUps.some((f) => f.id === id)) continue;
-    followUps.push({ id, question, step: stepOrder(q.about_step), ingredient: str(q.ingredient, 100) });
-    if (followUps.length === MAX_FOLLOW_UPS) break;
+    if (!id || !question || all.some((f) => f.id === id)) continue;
+    all.push({ id, question, step: stepOrder(q.about_step), ingredient: str(q.ingredient, 100) });
   }
+  // Ingredient questions first: pipeline/seen.py appends them after the writer's gap questions, and only these
+  // can change the recipe, so a recipe with many gap questions must not crowd them out.
+  const followUps = [...all.filter((f) => f.ingredient), ...all.filter((f) => !f.ingredient)].slice(0, MAX_FOLLOW_UPS);
   const media = r.media && typeof r.media === "object" ? (r.media as Record<string, unknown>) : {};
   const language = str(r.language, 10)?.toLowerCase();
   return {
