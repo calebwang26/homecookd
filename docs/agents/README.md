@@ -29,6 +29,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [demo-test-dishes](memory/demo-test-dishes.md) | Oct 24: demos, examples and tests use Swordfish steak and Poha (real dishes, real footage) |
 | [homie-voice](memory/homie-voice.md) | Oct 24: homie is Riya bilingual, asked for as auditioned (locale, speed 0.85, moods), cousin tone; Gemini TTS backup |
 | [cook-languages](memory/cook-languages.md) | Oct 24: 12 more cook languages on Cartesia (ink-whisper) + Claude, no Gemini; Oct 26: the cook's whole app in her language (language screen, `lib/words`) |
+| [marathi-dropped](memory/marathi-dropped.md) | Oct 26: Marathi is no longer a cook language; 13 integrated languages (English + 12) |
 | [gemini-credits-nearly-gone](memory/gemini-credits-nearly-gone.md) | Oct 24: Gemini has ~$10 left; new model calls use Claude (text, images) or Cartesia (audio) |
 | [claude-cartesia-quality-first](memory/claude-cartesia-quality-first.md) | Oct 26: Claude + Cartesia run the whole AI backend (Muse goes too); quality first, then the cheapest model that holds it |
 | [model-migration-after-hackathon](memory/model-migration-after-hackathon.md) | Oct 24: the move off Gemini starts after Sun Oct 25, 8pm; one PR per step, each behind an env flag with Gemini as the rollback |
