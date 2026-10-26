@@ -81,8 +81,11 @@ export default defineSchema({
     jobIds: v.array(v.id("jobs")), // their uploads' jobs: the worker names each recipe's GCS folder after one
     uploadPaths: v.array(v.string()), // their raw videos in the GCS uploads bucket
     mediaUrls: v.array(v.string()), // recipe.json files, covers and glasses videos in GCS
+    voiceCloneId: v.optional(v.string()), // her Cartesia voice clone, to delete there
     purgedAt: v.optional(v.number()),
-  }),
+    purgeRunAt: v.optional(v.number()), // the last purge batch; the restart cron goes by it
+    purgeRestarts: v.optional(v.number()),
+  }).index("by_purgedAt", ["purgedAt"]),
 
   /** A dish being processed or ready to cook. Its recipe.json is in GCS (recipeJsonUrl), without the memories (older files still have them). */
   recipes: defineTable({
@@ -126,7 +129,8 @@ export default defineSchema({
     hiddenAt: v.optional(v.number()),
   })
     .index("by_familyId", ["familyId"])
-    .index("by_sharedAt", ["sharedAt"]),
+    .index("by_sharedAt", ["sharedAt"])
+    .index("by_cookId", ["cookId"]),
 
   /** One upload going through the pipeline. The worker claims it and reports each stage. */
   jobs: defineTable({
@@ -159,7 +163,8 @@ export default defineSchema({
   })
     .index("by_familyId", ["familyId"])
     .index("by_stage", ["stage"])
-    .index("by_uploadPath", ["uploadPath"]),
+    .index("by_uploadPath", ["uploadPath"])
+    .index("by_cookId", ["cookId"]),
 
   /** What the kid is cooking right now, so the cook's phone can show "Leo is on step 3". */
   cookingSessions: defineTable({
@@ -169,7 +174,10 @@ export default defineSchema({
     stepOrder: v.number(),
     updatedAt: v.number(), // so a forgotten session stops showing after a while
     endedAt: v.optional(v.number()),
-  }).index("by_familyId", ["familyId"]),
+  })
+    .index("by_familyId", ["familyId"])
+    .index("by_kidId", ["kidId"])
+    .index("by_recipeId", ["recipeId"]),
 
   /**
    * A kid's question while cooking. The video answers it when Moss finds the moment; otherwise it
@@ -204,7 +212,9 @@ export default defineSchema({
     ),
   })
     .index("by_recipeId", ["recipeId"])
-    .index("by_familyId_and_status", ["familyId", "status"]),
+    .index("by_familyId_and_status", ["familyId", "status"])
+    .index("by_askedBy", ["askedBy"])
+    .index("by_answer_by", ["answer.by"]),
 
   /**
    * homie's live session while a cook records (voice service /record). `startedAt` is t0 for every
@@ -345,7 +355,8 @@ export default defineSchema({
   })
     .index("by_status", ["status"])
     .index("by_hostId", ["hostId"])
-    .index("by_inviteToken", ["inviteToken"]),
+    .index("by_inviteToken", ["inviteToken"])
+    .index("by_recipeId", ["recipeId"]),
 
   /** One per phone or browser that opened a dinner's invite link (POST /invite/open): "X going" counts them. */
   dinnerInviteOpens: defineTable({
@@ -377,7 +388,10 @@ export default defineSchema({
     status: v.union(v.literal("pending"), v.literal("accepted"), v.literal("declined")),
   })
     .index("by_requesterFamilyId", ["requesterFamilyId"])
-    .index("by_otherFamilyId", ["otherFamilyId"]),
+    .index("by_otherFamilyId", ["otherFamilyId"])
+    .index("by_requesterId", ["requesterId"])
+    .index("by_theirRecipeId", ["theirRecipeId"])
+    .index("by_myRecipeId", ["myRecipeId"]),
 
   /**
    * Community: someone reported another family's recipe or dinner ("Report or block"), or blocked that
@@ -418,5 +432,7 @@ export default defineSchema({
     fileId: v.optional(v.id("_storage")),
     recipeId: v.optional(v.id("recipes")),
     aiDrafted: v.boolean(), // shown with an "AI-drafted" label (PLAN principles)
-  }).index("by_familyId", ["familyId"]),
+  })
+    .index("by_familyId", ["familyId"])
+    .index("by_from", ["from"]),
 });

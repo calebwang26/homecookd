@@ -160,7 +160,8 @@ export const progress = internalMutation({
       progress: Math.min(1, Math.max(0, progress)),
       error: stage === "failed" ? (error ?? "Something went wrong.").slice(0, 500) : undefined,
     });
-    if (stage === "failed" && job.recipeId) await ctx.db.patch("recipes", job.recipeId, { status: "failed" });
+    const recipe = stage === "failed" && job.recipeId && (await ctx.db.get("recipes", job.recipeId));
+    if (recipe) await ctx.db.patch("recipes", recipe._id, { status: "failed" }); // gone if its cook deleted her account
     return "ok";
   },
 });
@@ -250,11 +251,17 @@ export const syncInput = internalQuery({
 });
 
 /** After a sync: marks what was indexed, finishes the jobs waiting on it (done either way: a recipe
- *  without search still cooks), then runs again if something changed meanwhile. */
+ *  without search still cooks), then runs again if something changed meanwhile, or, after a Moss error,
+ *  tries again in `retry.inMs` (moss.ts; the family's sync stays held meanwhile). */
 export const synced = internalMutation({
-  args: { familyId: v.id("families"), recipeIds: v.array(v.id("recipes")), ok: v.boolean() },
+  args: {
+    familyId: v.id("families"),
+    recipeIds: v.array(v.id("recipes")),
+    ok: v.boolean(),
+    retry: v.optional(v.object({ attempt: v.number(), inMs: v.number() })),
+  },
   returns: v.null(),
-  handler: async (ctx, { familyId, recipeIds, ok }) => {
+  handler: async (ctx, { familyId, recipeIds, ok, retry }) => {
     const now = Date.now();
     for (const id of recipeIds) {
       if (ok && (await ctx.db.get("recipes", id))) await ctx.db.patch("recipes", id, { mossIndexedAt: now });
@@ -271,7 +278,11 @@ export const synced = internalMutation({
       }
     }
     const family = await ctx.db.get("families", familyId);
-    if (family?.mossSync?.again) {
+    if (family && retry) {
+      // The retry sends everything as it is then, so a change meanwhile needs no run of its own.
+      await ctx.db.patch("families", familyId, { mossSync: { startedAt: now, again: false } });
+      await ctx.scheduler.runAfter(retry.inMs, internal.moss.syncFamily, { familyId, attempt: retry.attempt });
+    } else if (family?.mossSync?.again) {
       await ctx.db.patch("families", familyId, { mossSync: { startedAt: now, again: false } });
       await ctx.scheduler.runAfter(0, internal.moss.syncFamily, { familyId });
     } else if (family) {

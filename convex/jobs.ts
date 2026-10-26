@@ -105,10 +105,12 @@ export const forFamily = query({
 export const CANCELLED = "Cancelled.";
 const FINISHED = new Set(["done", "failed"]);
 
-async function cancelJob(ctx: MutationCtx, job: Doc<"jobs">): Promise<boolean> {
+/** Stops an unfinished job for good (also account.deleteMe, whose recipe may be gone already). */
+export async function cancelJob(ctx: MutationCtx, job: Doc<"jobs">): Promise<boolean> {
   if (FINISHED.has(job.stage)) return false;
   await ctx.db.patch(job._id, { stage: "failed", progress: 0, error: CANCELLED, claimedAt: undefined });
-  if (job.recipeId) await ctx.db.patch(job.recipeId, { status: "failed" });
+  const recipe = job.recipeId && (await ctx.db.get(job.recipeId));
+  if (recipe) await ctx.db.patch(recipe._id, { status: "failed" });
   return true;
 }
 
