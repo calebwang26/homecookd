@@ -6,7 +6,6 @@ import es from './es';
 import gu from './gu';
 import hi from './hi';
 import ko from './ko';
-import mr from './mr';
 import pa from './pa';
 import pt from './pt';
 import ta from './ta';
@@ -17,4 +16,4 @@ import zh from './zh';
 
 export type Translation = Partial<Record<WordKey, string>>;
 
-export const TRANSLATIONS: Record<string, Translation> = { mr, hi, gu, ta, te, pa, ur, zh, ko, tl, es, pt, ar };
+export const TRANSLATIONS: Record<string, Translation> = { hi, gu, ta, te, pa, ur, zh, ko, tl, es, pt, ar };

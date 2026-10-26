@@ -318,7 +318,7 @@ const words: Translation = {
   'profiles.language.saved': 'homie તમારી સાથે {language} માં વાત કરશે',
   'profiles.language.saveFailed': 'સેવ ન થયું. કનેક્શન તપાસીને ફરી પ્રયાસ કરો.',
   'profiles.language.question': 'તમે કઈ ભાષામાં રસોઈ કરો છો?',
-  'profiles.language.search': 'શોધો: મરાઠી, હિન્દી, Español…',
+  'profiles.language.search': 'શોધો: તમિલ, હિન્દી, Español…',
   'profiles.language.searchLabel': 'ભાષાઓ શોધો',
   'profiles.language.clear': 'શોધ સાફ કરો',
   'profiles.language.list': 'ભાષાઓ',

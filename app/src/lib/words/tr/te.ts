@@ -318,7 +318,7 @@ const words: Translation = {
   'profiles.language.saved': 'homie మీతో {language} లో మాట్లాడుతుంది',
   'profiles.language.saveFailed': 'సేవ్ కాలేదు. కనెక్షన్ చూసి మళ్ళీ ప్రయత్నించండి.',
   'profiles.language.question': 'మీరు ఏ భాషలో వంట చేస్తారు?',
-  'profiles.language.search': 'వెతకండి: మరాఠీ, హిందీ, Español…',
+  'profiles.language.search': 'వెతకండి: తమిళం, హిందీ, Español…',
   'profiles.language.searchLabel': 'భాషలు వెతకండి',
   'profiles.language.clear': 'వెతుకులాట తీసివేయండి',
   'profiles.language.list': 'భాషలు',

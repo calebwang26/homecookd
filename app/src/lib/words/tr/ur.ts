@@ -318,7 +318,7 @@ const words: Translation = {
   'profiles.language.saved': 'homie آپ سے {language} میں بات کرے گی',
   'profiles.language.saveFailed': 'محفوظ نہیں ہوا۔ انٹرنیٹ دیکھ کر دوبارہ کوشش کریں۔',
   'profiles.language.question': 'آپ کس زبان میں کھانا پکاتے ہیں؟',
-  'profiles.language.search': 'تلاش کریں: مراٹھی، ہندی، Español…',
+  'profiles.language.search': 'تلاش کریں: تمل، ہندی، Español…',
   'profiles.language.searchLabel': 'زبانیں تلاش کریں',
   'profiles.language.clear': 'تلاش صاف کریں',
   'profiles.language.list': 'زبانیں',
