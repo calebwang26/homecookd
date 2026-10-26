@@ -7,6 +7,7 @@ import { CANCELLED } from "./jobs";
 import { kidNames } from "./lib/forKids";
 import { liveEvent, liveLog } from "./liveEvents";
 import schema, { memory } from "./schema";
+import { askFollowUps, followUpArg } from "./followUps";
 
 const moment = v.object({ startS: v.number(), endS: v.number() });
 const RELEASE_DELAY_MS = 30_000;
@@ -189,9 +190,10 @@ export const published = internalMutation({
       language: v.optional(v.string()),
     }),
     memoriesOptIn: v.optional(v.boolean()),
+    followUps: v.optional(v.array(followUpArg)),
   },
   returns: v.union(v.id("recipes"), v.literal("missing"), v.literal("cancelled")),
-  handler: async (ctx, { jobId, recipe, memoriesOptIn }) => {
+  handler: async (ctx, { jobId, recipe, memoriesOptIn, followUps }) => {
     const job = await ctx.db.get("jobs", jobId);
     if (!job) return "missing";
     if (job.error === CANCELLED) return "cancelled";
@@ -214,6 +216,7 @@ export const published = internalMutation({
       });
     }
     await ctx.db.patch("jobs", jobId, { recipeId, stage: "indexing", progress: 0.95, error: undefined });
+    if (followUps?.length) await askFollowUps(ctx, { recipeId, familyId: job.familyId, cookId: job.cookId }, followUps);
     await requestMossSync(ctx, job.familyId);
     return recipeId;
   },
