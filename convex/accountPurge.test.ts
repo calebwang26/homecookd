@@ -2,7 +2,7 @@
 // POST /worker/deletions/next and reports it to /worker/deletions/done, which marks it done or counts the
 // failure, waits longer after each one and gives up after MAX_PURGE_ATTEMPTS.
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { api } from "./_generated/api";
+import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { MAX_PURGE_ATTEMPTS } from "./worker";
 import { type Backend, newBackend, signIn, stubFetch } from "./test.helpers";
@@ -123,5 +123,22 @@ test("a failure is tried again later, each wait longer, and given up loudly afte
   expect((await row(t, ids[0]))?.externalError).toHaveLength(500);
   vi.advanceTimersByTime(30 * 86_400_000);
   expect(await next(t)).toBeNull();
+  loud.mockRestore();
+});
+
+test("retryDeletion: a given-up deletion is taken again on the next pass, with a fresh count", async () => {
+  const { t, ids } = await deletions("dad");
+  const loud = vi.spyOn(console, "error").mockImplementation(() => {});
+  for (let i = 1; i < MAX_PURGE_ATTEMPTS; i++) await done(t, ids[0], { ok: false, error: "Supabase SQL: HTTP 403" });
+  expect(await done(t, ids[0], { ok: false, error: "Supabase SQL: HTTP 403" })).toEqual({ status: "gave_up" });
+  expect(loud).toHaveBeenCalledWith(expect.stringContaining(`worker:retryDeletion '{"deletionId":"${ids[0]}"}'`));
+  expect(await next(t)).toBeNull();
+
+  expect(await t.mutation(internal.worker.retryDeletion, { deletionId: ids[0] })).toBe("queued");
+  expect((await next(t))?.attempts).toBe(0); // due now, not after a day's wait
+  expect(await row(t, ids[0])).toMatchObject({ externalError: "Supabase SQL: HTTP 403" }); // the last error stays for the record
+  expect(await done(t, ids[0], { ok: true, counts: { profiles: 1 } })).toEqual({ status: "done" });
+  expect(await t.mutation(internal.worker.retryDeletion, { deletionId: ids[0] })).toBe("done"); // never reopens a purged one
+  expect((await row(t, ids[0]))?.externalPurgedAt).toBeDefined();
   loud.mockRestore();
 });

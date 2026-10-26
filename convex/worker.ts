@@ -368,9 +368,25 @@ export const deletionDone = internalMutation({
     if (attempts < MAX_PURGE_ATTEMPTS) return "retry";
     console.error(
       `ACCOUNT PURGE GAVE UP: deletion ${deletionId} failed outside Convex ${attempts} times (last: ${why}). ` +
-        "Her Supabase rows, GCS media or voice clone may still exist. Fix the cause, then set externalAttempts to 0 to try again.",
+        "Her Supabase rows, GCS media or voice clone may still exist. Fix the cause, then: " +
+        `npx convex run worker:retryDeletion '{"deletionId":"${deletionId}"}'`,
     );
     return "gave_up";
+  },
+});
+
+/** After fixing why a deletion's outside purge failed (a credential, an outage): the worker takes it on its next
+ *  pass, with a fresh count of attempts, even if it had given up. One already purged is left alone.
+ *    npx convex run worker:retryDeletion '{"deletionId":"<id>"}' */
+export const retryDeletion = internalMutation({
+  args: { deletionId: v.id("accountDeletions") },
+  returns: v.union(v.literal("queued"), v.literal("done"), v.literal("missing")),
+  handler: async (ctx, { deletionId }) => {
+    const d = await ctx.db.get("accountDeletions", deletionId);
+    if (!d) return "missing";
+    if (d.externalPurgedAt !== undefined) return "done";
+    await ctx.db.patch("accountDeletions", deletionId, { externalAttempts: undefined, externalTriedAt: undefined });
+    return "queued";
   },
 });
 
