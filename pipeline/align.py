@@ -342,8 +342,8 @@ def align_paths(paths: list[Path], client: genai.Client | claude.ClaudeText | No
                 raise AlignError(f"{tag}: no model client")
             voice = voice_file(r, audio_dir, p.parent)
             if isinstance(client, claude.ClaudeText):
-                heard = transcribe.transcript_file(voice.parent, language or r.get("language"))
-                material = step_lines(r, transcribe.lines(heard["words"]))
+                heard = transcribe.transcript_file(voice.parent, language or r.get("language"), title=r["title"])
+                material = step_lines(r, transcribe.spoken_lines(heard))
                 log(f"[{tag}] transcript: {len(heard['words'])} words ({heard['language']})")
             else:
                 with tempfile.TemporaryDirectory() as tmp:
