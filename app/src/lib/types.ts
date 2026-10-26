@@ -27,6 +27,11 @@ export type Ingredient = {
   estimate: string; // starts with "~" or is "unknown"
   confidence: Confidence;
   first_seen_s: number | null;
+  /**
+   * Added after the video: the cook said yes to homie's "Did you add …?" (convex/followUps.ts,
+   * recipes.addedIngredients). `said` is her answer ("a handful, at the start"), in English when there is one.
+   */
+  confirmed?: { said: string | null; step: number | null };
 };
 
 export type Step = {

@@ -32,7 +32,10 @@ function bareName(name: string | null | undefined): string {
   return (name ?? '').replace(/\s*\(.*?\)/g, '').trim();
 }
 
-/** An ingredient as one line: `amount` (bold, null when unknown) + `name`; `note` only tells repeats apart. */
+/**
+ * An ingredient as one line: `amount` (bold, null when unknown) + `name`; `note` tells repeats apart, or is
+ * the cook's own words for one she confirmed after the video ("Cumin seeds · a handful, at the start").
+ */
 export type IngredientLine = { amount: string | null; name: string; note: string | null };
 
 const NUM = String.raw`\d+(?:\s+\d+\/\d+|[.,/]\d+)?(?:\s*(?:-|–|to)\s*\d+(?:[./]\d+)?)?`;
@@ -90,6 +93,7 @@ export function ingredientLines(ingredients: Ingredient[]): IngredientLine[] {
     count.set(k, (count.get(k) ?? 0) + 1);
   }
   return ingredients.map((ing) => {
+    if (ing.confirmed) return { amount: null, name: cap(bareName(ing.name) || ing.name), note: ing.confirmed.said };
     const paren = /\(([^)]*)\)/.exec(ing.name ?? '')?.[1]?.trim() || null;
     return { ...ingredientLine(ing), note: (count.get(norm(bareName(ing.name))) ?? 0) > 1 ? paren : null };
   });

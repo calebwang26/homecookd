@@ -344,6 +344,8 @@ const words: Translation = {
   'parent.questions.labelTranslated': '{who}：{question}。原文：{english}',
   'parent.questions.hint': '打开问题。homie会读给您听，您直接说出回答就行。',
   'parent.questions.translated': '已翻译 · “{text}”',
+  'parent.questions.homieDish': 'homie 想问问您的{dish}',
+  'parent.questions.homieAsks': 'homie 有个问题',
   'parent.ask.answer': '回答',
   'parent.ask.askedYou': '{name}问您',
   'parent.ask.chatHint': '打开您和{name}的对话',

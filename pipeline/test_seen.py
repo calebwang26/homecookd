@@ -66,7 +66,13 @@ def test_an_added_ingredient_joins_the_list_and_its_step_and_a_doubt_becomes_a_q
     assert new.first_seen_s == r.steps[1].start_s
     assert out.steps[1].instruction.endswith("Add the curry leaves too.")
     q = out.follow_up_questions[-1]
-    assert (q.id, q.about_step) == ("seen1", 3) and q.question.startswith("Step 3: we saw thyme but didn't hear it")
+    assert (q.id, q.about_step, q.ingredient) == ("seen-thyme", 3, "thyme")
+    assert q.question.startswith("Step 3: we saw thyme but didn't hear it")
+    assert out.model_dump(mode="json")["follow_up_questions"][-1]["ingredient"] == "thyme"  # what Convex reads
+    assert all(x.ingredient is None for x in out.follow_up_questions[:-1])  # the writer's own questions: none
+    again = S.apply(out.model_copy(update={"follow_up_questions": r.follow_up_questions}), [],
+                    [item("Curry Leaves", 3, ["3.2"])])
+    assert again.follow_up_questions[-1].id == "seen-curry-leaves"  # from the name: the same on every publish
     assert len(out.ingredients) == len(r.ingredients) + 1 and r.steps[1].instruction == steak().steps[1].instruction
 
 

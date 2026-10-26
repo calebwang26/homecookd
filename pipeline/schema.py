@@ -221,6 +221,13 @@ class FollowUpQuestion(BaseModel):
     question: str
 
 
+class RecipeQuestion(FollowUpQuestion):
+    """A recipe's follow-up question. pipeline/seen.py's "did you add …?" ones name the ingredient, and Convex turns
+    the cook's yes into recipes.addedIngredients (convex PR #146). The writer's questions have none. Kept off
+    FollowUpQuestion, which is the writer's response schema: Gemini's rejects defaults."""
+    ingredient: Optional[str] = None
+
+
 class RecipeDraft(BaseModel):
     """What the merge call returns. process.py adds id, cook, media, sessions, source,
     sample and each step's story_ids/special_ids (derived from story.step / special.step)."""
@@ -256,7 +263,7 @@ class Recipe(BaseModel):
     steps: list[Step]
     stories: list[Story] = []
     special: list[Special] = []
-    follow_up_questions: list[FollowUpQuestion] = []
+    follow_up_questions: list[RecipeQuestion] = []
 
     @model_validator(mode="after")
     def _check(self) -> "Recipe":

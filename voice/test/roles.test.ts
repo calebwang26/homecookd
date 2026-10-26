@@ -72,16 +72,18 @@ test("the written lines for a cook called Dad, with no kid name: 'your family', 
   assert.doesNotMatch(said, /\bson\b|\bmom\b|\bgrand/i);
 });
 
-test("the written lines with a kid name use the name; Marathi says घरच्यां without one", async () => {
-  const intro = await fixedLine("intro", aaji);
+test("the written lines use the kid's name, or 'your family' without one; her language gets the English translated", async () => {
+  const tr = async (text: string, to: string) => `[${to}] ${text}`;
+  const nani: Who = { ...aaji, language: "hi" };
+  const intro = await fixedLine("intro", nani, nani, tr);
   assert.match(intro.textEn, /You're making Varan Bhaat for Shreya today/);
-  assert.match(intro.text, /आज तुम्ही Shreya साठी Varan Bhaat करताय/);
-  const ajoba: Who = { language: "mr", call: "Ramesh Ajoba", dish: "Varan Bhaat" };
-  const forAll = await fixedLine("intro", ajoba);
-  assert.match(forAll.text, /आज तुम्ही घरच्यांसाठी Varan Bhaat करताय/);
+  assert.equal(intro.text, `[hi] ${intro.textEn}`);
+  const nanaji: Who = { language: "hi", call: "Ramesh Nanaji", dish: "Varan Bhaat" };
+  const forAll = await fixedLine("intro", nanaji, nanaji, tr);
   assert.match(forAll.textEn, /for your family today/);
-  assert.match((await fixedLine("closing", ajoba)).text, /घरचे/);
-  assert.doesNotMatch([forAll.textEn, (await fixedLine("closing", ajoba)).textEn].join(" "), GENDERED);
+  assert.doesNotMatch([forAll.textEn, (await fixedLine("closing", nanaji, nanaji, tr)).textEn].join(" "), GENDERED);
+  // A cook who picked Marathi before Oct 26 (no hand-written Marathi any more) gets the same translated line.
+  assert.match((await fixedLine("closing", aaji, aaji, tr)).text, /^\[mr\] That's a wrap!/);
 });
 
 const told = { names: ["Rajani Aaji", "Shreya", "Varan Bhaat"] };

@@ -6,9 +6,9 @@
     "name": "Leo"
   },
   "cook": {
-    "name": "Grandma",
-    "language": "mr",
-    "relation": "Aaji"
+    "name": "Sunita",
+    "language": "hi",
+    "relation": "Nani"
   },
   "recipe": {
     "id": "grandma-red-braised-pork",

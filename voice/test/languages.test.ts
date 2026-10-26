@@ -23,31 +23,21 @@ const FRAME = Buffer.alloc(3200);
 /** 100 ms of voice: a loud square wave. */
 const VOICE = Buffer.alloc(3200);
 for (let i = 0; i < 1600; i++) VOICE.writeInt16LE(i % 20 < 10 ? 2000 : -2000, i * 2);
-/** The 12 languages added Oct 24, plus Marathi and English. */
-const FIRST_SET = ["en", "mr", "hi", "gu", "ta", "te", "pa", "ur", "zh", "ko", "tl", "es", "pt", "ar"];
+/** The 13 cook languages: English plus the 12 added Oct 24 (Marathi left on Oct 26, memory marathi-dropped). */
+const FIRST_SET = ["en", "hi", "gu", "ta", "te", "pa", "ur", "zh", "ko", "tl", "es", "pt", "ar"];
 
-test("each language goes to the speech-to-text that hears it; Marathi on Gemini Live until MARATHI_STT=cartesia", () => {
-  // The flag unset, whatever the root .env says (Oct 26 it has MARATHI_STT=cartesia for live runs).
-  const before = env.marathiStt;
-  env.marathiStt = "";
+test("each language goes to the speech-to-text that hears it; a cook who picked Marathi before is heard like Hindi", () => {
   assert.equal(sttEngine("en"), "ink-2");
   assert.equal(sttEngine("hi"), "ink-2");
   assert.equal(sttEngine("es"), "ink-2");
-  assert.equal(sttEngine("mr"), "gemini-live");
+  assert.equal(sttEngine("mr"), "ink-2", "Marathi left on Oct 26: heard as Hindi");
   for (const l of ["gu", "ta", "te", "pa", "ur", "zh", "ko", "tl", "pt", "ar", "bn", "vi"]) assert.equal(sttEngine(l), "ink-whisper", l);
   assert.equal(sttEngine("or"), "gemini-live", "ink-whisper doesn't know Odia (hidden from the app's picker)");
-  for (const l of FIRST_SET) assert.ok(INK_LANGUAGES.includes(l) || WHISPER_LANGUAGES.includes(l) || l === "mr", l);
-  try {
-    env.marathiStt = "cartesia";
-    assert.equal(sttEngine("mr"), "ink-whisper", "Caleb's Oct 26 choice: Marathi on Cartesia as it is");
-    assert.equal(sttEngine("or"), "gemini-live");
-    // A Marathi cook keeps the longer wait for her whole answer on either engine (homie-waits-for-answers).
-    assert.equal(answerGapMs("mr"), ANSWER_GAP_MS["gemini-live"]);
-    assert.equal(answerGapMs("ta"), ANSWER_GAP_MS["ink-whisper"]);
-  } finally {
-    env.marathiStt = before;
-  }
-  assert.equal(answerGapMs("mr"), 4000);
+  for (const l of FIRST_SET) assert.ok(INK_LANGUAGES.includes(l) || WHISPER_LANGUAGES.includes(l), l);
+  // The wait for her whole answer follows the engine: no Marathi special case any more.
+  assert.equal(answerGapMs("mr"), ANSWER_GAP_MS["ink-2"]);
+  assert.equal(answerGapMs("ta"), ANSWER_GAP_MS["ink-whisper"]);
+  assert.equal(answerGapMs("or"), 4000);
   assert.equal(answerGapMs("en"), 3500);
 });
 

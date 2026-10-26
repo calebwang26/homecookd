@@ -26,7 +26,7 @@ from pydantic import BaseModel
 from pipeline import claude
 from pipeline.prep import ffmpeg
 from pipeline.prompts import SEEN_PROMPT
-from pipeline.schema import FollowUpQuestion, Ingredient, Recipe
+from pipeline.schema import Ingredient, Recipe, RecipeQuestion
 
 SEEN_MODEL = "claude-sonnet-5-5"
 # Poha (Oct 26): 4 frames a step found its curry leaves in 4 runs of 4; 8 found nothing in 2 of 2.
@@ -109,10 +109,12 @@ def apply(recipe: Recipe, add: list[SeenItem], ask: list[SeenItem]) -> Recipe:
         r.ingredients.append(Ingredient(name=item.name, feel="", estimate=estimate, confidence="medium",
                                         first_seen_s=step.start_s))
         step.instruction = f"{step.instruction.rstrip()} Add the {item.name} too."
-    for k, item in enumerate(ask, 1):
-        r.follow_up_questions.append(FollowUpQuestion(
-            id=f"seen{k}", about_step=item.step,
-            question=f"Step {item.step}: we saw {item.name} but didn't hear it named. Does that go in, and how much?"))
+    for item in ask:
+        # The id comes from the name, so a re-publish keeps it and Convex never asks her twice.
+        r.follow_up_questions.append(RecipeQuestion(
+            id="seen-" + re.sub(r"[^a-z0-9]+", "-", item.name.lower()).strip("-"), about_step=item.step,
+            question=f"Step {item.step}: we saw {item.name} but didn't hear it named. Does that go in, and how much?",
+            ingredient=item.name))
     return Recipe.model_validate(r.model_dump())  # never hand on a recipe the contract rejects
 
 

@@ -40,8 +40,8 @@ both of their languages.
 - Don't change the voice, the locale fields, the speed or the moods without Caleb hearing it first. Render samples
   of homie's real lines and send them.
 - New kinds of lines get a mood in `sonic.ts` `MOODS`, chosen only from Cartesia's emotion list.
-- New English lines follow the cousin tone. New Marathi lines need a native speaker's check (TODO(caleb) in
-  `voice/src/lines.ts`).
+- New English lines follow the cousin tone. Every other language gets Claude's translation of the English
+  (`homie.ts` translate); the hand-written Marathi lines left with Marathi on Oct 26 ([[marathi-dropped]]).
 - Cloud Run doesn't set `HOMIE_VOICE`, so the code default is what ships, on the next `voice/deploy.sh`.
 
 Related: [[demo-family-shreya]], [[cartesia-credits-for-tests]]

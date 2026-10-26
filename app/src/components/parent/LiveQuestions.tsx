@@ -7,7 +7,8 @@
 // Her voice goes to the AI companies (written out, translated), so the first time either way in asks
 // first (lib/aiConsent): "Answer" opens nothing, and the pill records nothing, until she says yes.
 // A share ask (questions.kind 'share', from Community: "Shreya wants to put your Poha on the map…")
-// is a row like the others, with no step; her spoken yes or no answers it.
+// is a row like the others, with no step; her spoken yes or no answers it. homie's own follow-up question
+// (kind 'followUp': "Did you add cumin?") reads "homie asks about your Poha", not as a kid's.
 // Nothing open: no card.
 import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
@@ -30,6 +31,7 @@ function who(q: CookQuestion, t: T): string {
   const name = q.askedByName?.trim() || t('parent.questions.yourFamily');
   const e = getCachedEntry(q.recipeId);
   const dish = q.recipeTitle || (e ? dishName(e.title, e.cook_name, t) : null);
+  if (q.kind === 'followUp') return dish ? t('parent.questions.homieDish', { dish }) : t('parent.questions.homieAsks');
   if (!dish) return t('parent.questions.asked', { name });
   return q.stepOrder && q.kind !== 'share' ? t('parent.questions.whoDishStep', { name, dish, step: q.stepOrder }) : `${name} · ${dish}`;
 }

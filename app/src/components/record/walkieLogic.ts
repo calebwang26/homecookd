@@ -24,9 +24,13 @@ export const ASKS = 2;
 
 export type Listen = { startedAt: number; lastAt: number; speechMs: number; lastSpeechAt: number | null; minSpeechMs: number };
 
-/** `kind`: the question's kind (unset for a kid's cooking question; 'share' for a share ask). */
+/**
+ * `kind`: the question's kind (unset for a kid's cooking question; 'share' for a share ask; 'followUp' for
+ * homie's own question, often "did you add …?"). The last two take a short yes or no.
+ */
 export function startListening(now: number, kind?: string | null): Listen {
-  return { startedAt: now, lastAt: now, speechMs: 0, lastSpeechAt: null, minSpeechMs: kind === 'share' ? MIN_YES_NO_MS : MIN_SPEECH_MS };
+  const yesNo = kind === 'share' || kind === 'followUp';
+  return { startedAt: now, lastAt: now, speechMs: 0, lastSpeechAt: null, minSpeechMs: yesNo ? MIN_YES_NO_MS : MIN_SPEECH_MS };
 }
 
 /** One meter reading. */
