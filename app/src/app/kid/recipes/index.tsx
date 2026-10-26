@@ -14,7 +14,6 @@ import { SearchBar } from '@/components/browse/SearchBar';
 import { SearchResults } from '@/components/kid-home/SearchResults';
 import { EVERYONE, RecipeList, type RecipeFilter } from '@/components/recipes/RecipeList';
 import { useRecipeStats } from '@/components/recipes/stats';
-import { ActingAsBar } from '@/components/profiles';
 import { LargeHeader, ScreenWash, StickyHeader, useScrollY } from '@/components/ui';
 import { useFavorites } from '@/lib/favorites';
 import { kitchenCounts } from '@/lib/kitchenCounts';
@@ -95,7 +94,6 @@ export default function KidRecipes() {
         contentContainerStyle={styles.content}>
         <ScreenWash tone="kid" height={300} />
         <LargeHeader title={TITLE} size={34} scrollY={scrollY} fadeEnd={40} />
-        <ActingAsBar />
         {entries.length ? (
           <View style={styles.search}>
             <SearchBar value={query} onChangeText={setQuery} />
