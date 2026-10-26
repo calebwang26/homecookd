@@ -260,7 +260,7 @@ export class HomieAgent {
         text_en: str,
         story_in_progress: { type: "boolean" },
       }),
-      env.homieDecideModel || env.claudeModel,
+      env.homieDecideModel,
       this.client,
     );
     if (!out || !out.text) return { action: "quiet", storyInProgress: !!out?.story_in_progress };

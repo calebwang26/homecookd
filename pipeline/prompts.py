@@ -29,6 +29,8 @@ ORDER_PROMPT.format(n=..., title=<json string>, dates=<text>, clips=<text>)   (p
 SHORTEN_PROMPT.format(recipe=<json>)   (pipeline/shorten.py: cook mode's short substeps, step ingredients, tips)
 SHORTEN_RETRY_SUFFIX.format(errors=..., previous=<json>)
 ALIGN_PROMPT.format(title=<json string>), ALIGN_STEP.format(...), ALIGN_RETRY_SUFFIX.format(errors=...)
+ALIGN_TRANSCRIPT_PROMPT.format(title=...), ALIGN_TRANSCRIPT_STEP.format(..., lines=...)   (ALIGNER=claude: the
+    step's transcript lines instead of its audio clip)
     (pipeline/align.py: when each substep starts in its step's audio clip; clip times are MM:SS like extraction's)
 COVER_PROMPT.format(title=<json string>, clip_mmss=..., step_span=...)
     (pipeline/cover.py: the second in the video's last minutes where the finished dish looks best, the cover photo,
@@ -457,6 +459,35 @@ Substeps:
 {substeps}
 What the cook says: {quote}
 Audio clip of step {order}:"""
+
+# ALIGNER=claude (pipeline/align.py): Claude takes no audio, so it times the substeps on the step's transcript lines.
+ALIGN_TRANSCRIPT_PROMPT = """\
+You are timing the substeps of a home recipe, {title}, on the cook's recording. The cook may speak Marathi,
+English or a mix of the two. Below, each recipe step lists its short substeps in order (in English), what the
+cook says during the step (in English, followed by the words as spoken when the cook spoke Marathi), and a
+speech-to-text transcript of the step: each line starts with its time, MM:SS from the start of THAT step. The
+transcript can have spelling slips, words in the wrong script and missing words: read it as speech.
+
+For every substep, give the time in its step (MM:SS from the start of THAT step) where the cook begins that
+substep: where they start talking about it or doing it. Go by the transcript lines' times.
+
+Rules:
+- The first substep of every step is 00:00.
+- Within a step, times strictly increase in the order the substeps are listed and stay below the step's length.
+- A "Ready when ..." line starts where the cook checks for, or describes, that cue.
+- If the transcript doesn't show where a substep starts, place it between its neighbours where it most likely
+  happens.
+- Return one entry per step listed below (by its order number) with exactly one time per substep.
+"""
+
+ALIGN_TRANSCRIPT_STEP = """\
+Step {order}: {title}. Step length {clip_mmss}.
+Substeps:
+{substeps}
+What the cook says: {quote}
+Transcript of step {order}:
+{lines}
+"""
 
 ALIGN_RETRY_SUFFIX = """\
 

@@ -14,6 +14,11 @@ MM:SS offsets inside each clip. Small slips are fixed (the first offset is 0; up
 clamped; a time up to SLIP_S before the one above it is nudged after it). Steps still wrong are asked once more
 (their clips only); after that they fall back to splitting the step range by substep text length.
 
+ALIGN_PROVIDER=claude (process.align_model; CLAUDE_ALIGN_MODEL, default Haiku) times them on Cartesia's word-timed
+transcript instead (pipeline/transcribe.py, work/transcript.json in the recording's folder, in the recipe's language
+or --language): Claude takes no audio, so each step goes as its transcript lines, timed from the step's start, in
+one text call. The checks, fixes, retry and fallback are the same.
+
 Copies with audio: data/out/ID/recipe.json and app/assets/data/recipes/ID.json (synthetic recipes have no media
 and are skipped). Recipes that already have start_s are skipped unless --force. Rerunning shorten.py replaces
 the substeps and drops their start_s: run this again after it. process.py does both for every new recipe
@@ -38,9 +43,11 @@ from google import genai  # noqa: E402
 from google.genai import types  # noqa: E402
 from pydantic import BaseModel, ValidationError  # noqa: E402
 
-from pipeline.process import (HTTP_RETRY, REQUEST_TIMEOUT_MS, Usage, describe_call, load_config, log,  # noqa: E402
-                              response_text)
-from pipeline.prompts import ALIGN_PROMPT, ALIGN_RETRY_SUFFIX, ALIGN_STEP  # noqa: E402
+from pipeline import claude, transcribe  # noqa: E402
+from pipeline.process import (HTTP_RETRY, REQUEST_TIMEOUT_MS, Usage, align_model, describe_call,  # noqa: E402
+                              load_config, log, response_text)
+from pipeline.prompts import (ALIGN_PROMPT, ALIGN_RETRY_SUFFIX, ALIGN_STEP, ALIGN_TRANSCRIPT_PROMPT,  # noqa: E402
+                              ALIGN_TRANSCRIPT_STEP)
 from pipeline.schema import Recipe, parse_timestamp  # noqa: E402
 from pipeline.shorten import BUNDLED, OUT, MemoryUsage, rel  # noqa: E402
 
@@ -150,7 +157,10 @@ def cut_clip(voice: Path, start: int, end: int, dest: Path) -> bytes:
     return dest.read_bytes()
 
 
-# ---------- the Gemini call ----------
+# ---------- the model call ----------
+
+Material = dict[int, bytes] | dict[int, str]  # per step: Gemini's audio clip, or Claude's transcript lines
+
 
 def said(step: dict) -> str:
     """The step's quote, plus the Marathi the cook actually spoke, which is what the audio has."""
@@ -158,35 +168,59 @@ def said(step: dict) -> str:
     return f'{quote} (as spoken: "{step["quote_original"]}")' if step.get("quote_original") else quote
 
 
+def substep_list(step: dict) -> str:
+    return "\n".join(f"{i}. {x['text'].replace('**', '')}" + (f" ({x['detail']})" if x.get("detail") else "")
+                     for i, x in enumerate(step["substeps"], 1))
+
+
 def step_parts(recipe: dict, steps: list[dict], clips: dict[int, bytes]) -> list:
     parts: list = []
     for s in steps:
-        subs = "\n".join(f"{i}. {x['text'].replace('**', '')}" + (f" ({x['detail']})" if x.get("detail") else "")
-                         for i, x in enumerate(s["substeps"], 1))
         parts.append(ALIGN_STEP.format(order=s["order"], title=s["title"], clip_mmss=mmss(s["end_s"] - s["start_s"]),
-                                       substeps=subs, quote=said(s)))
+                                       substeps=substep_list(s), quote=said(s)))
         parts.append(types.Part.from_bytes(data=clips[s["order"]], mime_type="audio/mpeg"))
     return parts
 
 
-def ask(client: genai.Client, model: str, recipe: dict, clips: dict[int, bytes], usage: Usage,
+def step_lines(recipe: dict, lines: list[dict]) -> dict[int, str]:
+    """Each step's transcript lines that start inside it, as "MM:SS text" from the step's start."""
+    out = {}
+    for s in recipe["steps"]:
+        own = [x for x in lines if s["start_s"] <= x["start"] < s["end_s"]]
+        out[s["order"]] = "\n".join(f"{mmss(int(x['start'] - s['start_s']))} {x['text']}" for x in own) or "(no speech)"
+    return out
+
+
+def transcript_prompt(recipe: dict, steps: list[dict], lines: dict[int, str], head: str) -> str:
+    return head + "\n" + "\n".join(
+        ALIGN_TRANSCRIPT_STEP.format(order=s["order"], title=s["title"], clip_mmss=mmss(s["end_s"] - s["start_s"]),
+                                     substeps=substep_list(s), quote=said(s), lines=lines[s["order"]]) for s in steps)
+
+
+def ask(client: genai.Client | claude.ClaudeText, model: str, recipe: dict, material: Material, usage: Usage,
         tag: str) -> tuple[dict[int, list[int]], dict[int, str]]:
-    """Returns ({step order: absolute start seconds}, {step order: how it was found})."""
+    """Returns ({step order: absolute start seconds}, {step order: how it was found}). material is each step's audio
+    clip for Gemini, or its transcript lines for Claude (client is a ClaudeText)."""
+    on_claude = isinstance(client, claude.ClaudeText)
     steps = {s["order"]: s for s in recipe["steps"]}
     found: dict[int, list[int]] = {}
     how: dict[int, str] = {}
     todo, errors_by_step = list(steps), {}
     for attempt in (1, 2):
-        head = ALIGN_PROMPT.format(title=json.dumps(recipe["title"]))
+        head = (ALIGN_TRANSCRIPT_PROMPT if on_claude else ALIGN_PROMPT).format(title=json.dumps(recipe["title"]))
         if attempt == 2:
             head += ALIGN_RETRY_SUFFIX.format(errors="\n".join(f"- step {o}: {e}" for o, es in errors_by_step.items()
                                                                for e in es))
         resp, t0, errors_by_step = None, time.monotonic(), {}
         try:
-            resp = client.models.generate_content(
-                model=model, contents=[head, *step_parts(recipe, [steps[o] for o in todo], clips)],
-                config=types.GenerateContentConfig(response_mime_type="application/json",
-                                                   response_schema=AlignAnswer, temperature=0.1))
+            todo_steps = [steps[o] for o in todo]
+            if on_claude:
+                resp = client.generate(transcript_prompt(recipe, todo_steps, material, head), AlignAnswer)
+            else:
+                resp = client.models.generate_content(
+                    model=model, contents=[head, *step_parts(recipe, todo_steps, material)],
+                    config=types.GenerateContentConfig(response_mime_type="application/json",
+                                                       response_schema=AlignAnswer, temperature=0.1))
             answer = AlignAnswer.model_validate_json(response_text(resp))
             by_order = {a.order: a for a in answer.steps}
             for o in todo:
@@ -208,7 +242,8 @@ def ask(client: genai.Client, model: str, recipe: dict, clips: dict[int, bytes],
                     errors_by_step[o] = errs
                     continue
                 found[o] = [s["start_s"] + t for t in fixed]
-                how[o] = f"gemini attempt {attempt}" + ("" if fixed == raw else f" (fixed {mmss_list(raw)})")
+                how[o] = (f"{'claude' if on_claude else 'gemini'} attempt {attempt}"
+                          + ("" if fixed == raw else f" (fixed {mmss_list(raw)})"))
         except (ValidationError, ValueError) as e:
             errors_by_step = {o: [f"{type(e).__name__}: {str(e)[:300]}"] for o in todo}
         except Exception as e:  # noqa: BLE001 - API/network errors also get the one retry
@@ -246,11 +281,11 @@ def all_ids() -> list[str]:
     return sorted(p.stem for p in BUNDLED.glob("*.json") if has_audio(p))
 
 
-def make_client() -> tuple[genai.Client, str]:
+def make_client() -> tuple[genai.Client | claude.ClaudeText, str]:
     cfg = load_config()  # loads .env, fails without GEMINI_API_KEY
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
                           http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS, retry_options=HTTP_RETRY))
-    return client, cfg["order_model"]
+    return align_model(cfg, client)
 
 
 def signature(recipe: dict) -> str:
@@ -270,12 +305,14 @@ def apply(recipe: dict, found: dict[int, list[int]]) -> dict:
     return out
 
 
-def align_id(recipe_id: str, client: genai.Client | None, model: str, usage: Usage, audio_dir: Path,
-             force: bool = False, dry_run: bool = False) -> list[tuple[Path, dict, dict[int, str]]]:
-    return align_paths(copies(recipe_id), client, model, usage, audio_dir, force, dry_run, f"align {recipe_id}")
+def align_id(recipe_id: str, client: genai.Client | claude.ClaudeText | None, model: str, usage: Usage,
+             audio_dir: Path, force: bool = False, dry_run: bool = False,
+             language: str | None = None) -> list[tuple[Path, dict, dict[int, str]]]:
+    return align_paths(copies(recipe_id), client, model, usage, audio_dir, force, dry_run, f"align {recipe_id}",
+                       language)
 
 
-def align_file(path: Path, client: genai.Client, model: str, usage: Usage) -> dict[int, str]:
+def align_file(path: Path, client: genai.Client | claude.ClaudeText, model: str, usage: Usage) -> dict[int, str]:
     """process.py, right after shorten: time one new recipe.json's substeps in place. Returns how each step was
     found (every step falls back to text length when Gemini's answers are rejected twice)."""
     with tempfile.TemporaryDirectory() as tmp:
@@ -283,8 +320,10 @@ def align_file(path: Path, client: genai.Client, model: str, usage: Usage) -> di
     return done[0][2] if done else {}
 
 
-def align_paths(paths: list[Path], client: genai.Client | None, model: str, usage: Usage, audio_dir: Path,
-                force: bool = False, dry_run: bool = False, tag: str = "align") -> list[tuple[Path, dict, dict[int, str]]]:
+def align_paths(paths: list[Path], client: genai.Client | claude.ClaudeText | None, model: str, usage: Usage,
+                audio_dir: Path, force: bool = False, dry_run: bool = False, tag: str = "align",
+                language: str | None = None) -> list[tuple[Path, dict, dict[int, str]]]:
+    """language: what the cook speaks, for Claude's transcript (default: the recipe's own language)."""
     answers: dict[str, tuple[dict[int, list[int]], dict[int, str]]] = {}
     results = []
     for p in paths:
@@ -300,13 +339,18 @@ def align_paths(paths: list[Path], client: genai.Client | None, model: str, usag
         sig = signature(r)
         if sig not in answers:
             if client is None:
-                raise AlignError(f"{tag}: no Gemini client")
+                raise AlignError(f"{tag}: no model client")
             voice = voice_file(r, audio_dir, p.parent)
-            with tempfile.TemporaryDirectory() as tmp:
-                clips = {s["order"]: cut_clip(voice, s["start_s"], s["end_s"], Path(tmp) / f"step_{s['order']:02d}.mp3")
-                         for s in r["steps"]}
-            log(f"[{tag}] {len(clips)} clips, {sum(len(c) for c in clips.values()) / 1e6:.1f} MB")
-            answers[sig] = ask(client, model, r, clips, usage, tag)
+            if isinstance(client, claude.ClaudeText):
+                heard = transcribe.transcript_file(voice.parent, language or r.get("language"))
+                material = step_lines(r, transcribe.lines(heard["words"]))
+                log(f"[{tag}] transcript: {len(heard['words'])} words ({heard['language']})")
+            else:
+                with tempfile.TemporaryDirectory() as tmp:
+                    material = {s["order"]: cut_clip(voice, s["start_s"], s["end_s"],
+                                                     Path(tmp) / f"step_{s['order']:02d}.mp3") for s in r["steps"]}
+                log(f"[{tag}] {len(material)} clips, {sum(len(c) for c in material.values()) / 1e6:.1f} MB")
+            answers[sig] = ask(client, model, r, material, usage, tag)
         found, how = answers[sig]
         after = apply(r, found)
         if not dry_run:
@@ -330,8 +374,10 @@ def main() -> None:
     group.add_argument("--all", action="store_true", help="every bundled recipe with audio")
     ap.add_argument("--audio-dir", type=Path, default=None,
                     help="where downloaded voice.m4a files go (default: a temp folder)")
-    ap.add_argument("--dry-run", action="store_true", help="call Gemini and print the result; write nothing")
+    ap.add_argument("--dry-run", action="store_true", help="call the model and print the result; write nothing")
     ap.add_argument("--force", action="store_true", help="redo recipes that already have start_s")
+    ap.add_argument("--language", help="ALIGN_PROVIDER=claude: the cook's language for the transcript "
+                                       "(default: the recipe's own)")
     args = ap.parse_args()
 
     ids = all_ids() if args.all else [args.id]
@@ -343,9 +389,10 @@ def main() -> None:
     failed = []
     for rid in ids:
         try:
-            for _, after, how in align_id(rid, client, model, usage, audio_dir, args.force, args.dry_run)[:1]:
+            for _, after, how in align_id(rid, client, model, usage, audio_dir, args.force, args.dry_run,
+                                          args.language)[:1]:
                 show(after, how)
-        except (AlignError, subprocess.CalledProcessError, OSError) as e:
+        except (AlignError, transcribe.TranscribeError, subprocess.CalledProcessError, OSError) as e:
             failed.append(rid)
             log(f"[align {rid}] FAILED: {e}")
     log(f"\nestimated spend this run: ${sum(c['cost_usd'] for c in usage.calls):.4f} over {len(usage.calls)} calls")
