@@ -564,6 +564,17 @@ def test_single_clip_is_untouched():
     assert got == (m, [], []) and not calls
 
 
+def test_hardware_decoding_only_for_codecs_the_media_engine_decodes():
+    """Oct 26: YouTube's AV1 clips stopped prep ("doesn't support hardware accelerated AV1 decoding")."""
+    with tempfile.TemporaryDirectory() as tmp:
+        h264, mpeg4 = Path(tmp) / "a.mp4", Path(tmp) / "b.mp4"
+        for out, codec in ((h264, "libx264"), (mpeg4, "mpeg4")):
+            subprocess.run(["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "testsrc2=size=160x90:d=1",
+                            "-c:v", codec, str(out)], check=True)
+        assert prep.hwdec(h264) == prep.HWDEC  # [] on a machine without VideoToolbox
+        assert prep.hwdec(mpeg4) == []
+        assert prep.hwdec(Path(tmp) / "missing.mp4") == []
+
 def main() -> None:
     tests = [(name, fn) for name, fn in globals().items() if name.startswith("test_") and callable(fn)]
     failed = 0

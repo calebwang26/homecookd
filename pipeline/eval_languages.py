@@ -11,8 +11,10 @@ YouTube subtitles were written by people in that language: those captions are th
 3. score (pure, tested in test_eval_languages.py):
    - heard_raw / heard_proofread: the share of the captions' words found in Cartesia's transcript (raw lines) and in
      the proofread copy, per minute of captions, fuzzy-matched (difflib >= 0.8); Mandarin by characters;
-   - ingredients: the share of the ingredients the captions name (one Claude call reads them) that the recipe lists;
+   - ingredients: the share of the ingredients the captions name (one Claude call reads them) that the recipe lists,
+     judged by Claude allowing synonyms and translations (ingredients_by_name: the same by seen.listed's name rules);
    - script: the share of quote_original letters in her language's script (English and Latin-script languages: 1);
+   - loops: the share of Cartesia's words dropped as repeat glitches (music or noise under her voice);
    - steps, stories and cost (work/usage.json, plus Cartesia credits not priced).
 Results: data/eval/results/<date>.json and a table on stdout. Costs about $0.3-0.5 a clip.
 """
@@ -48,6 +50,10 @@ SCRIPT_RANGES = {  # Unicode blocks of each language's own script
 
 class Ingredients(BaseModel):
     names: list[str]
+
+
+class Missing(BaseModel):
+    missing: list[str]
 
 
 # ---------- scoring (pure) ----------
@@ -140,7 +146,7 @@ def fetch(clip: dict) -> Path:
     ytdlp = [sys.executable, "-m", "yt_dlp", "--no-playlist", "--quiet", "--no-warnings"]
     span = f"*{clip.get('start_s', 0)}-{clip['end_s']}" if clip.get("end_s") else None
     if not video.exists():
-        subprocess.run(ytdlp + ["-f", "bv*[height<=720]+ba/b[height<=720]/b", "--merge-output-format", "mp4",
+        subprocess.run(ytdlp + ["-f", "bv*[height<=720][vcodec^=avc1]+ba/bv*[height<=720]+ba/b[height<=720]/b", "--merge-output-format", "mp4",
                                 *(["--download-sections", span, "--force-keyframes-at-cuts"] if span else []),
                                 "-o", str(video), url], check=True)
     if not list(folder.glob("captions*.vtt")):
@@ -171,9 +177,21 @@ def named_ingredients(reference: list[dict], lang: str, dish: str) -> list[str]:
     return Ingredients.model_validate_json(reply.text).names
 
 
+def judge_missing(named: list[str], recipe_names: list[str]) -> list[str]:
+    """Which of the ingredients the captions name the recipe leaves out, by Claude, allowing synonyms, translations
+    and forms ("agathi keerai (sesbania greens)" is "sesbania leaves"; "chilli" is "chili")."""
+    from pipeline import claude
+    prompt = ("A cook named the ingredients in list A while cooking; a recipe written from the video lists B. Return "
+              "the items of A that B does not include under any name: count synonyms, translations, spellings and "
+              "forms (whole, chopped, paste, powder of the same thing) as included, and a general item (\"oil\") as "
+              "covering a specific one (\"mustard oil\") only when it clearly is the same thing.\n\nA:\n"
+              + "\n".join(f"- {n}" for n in named) + "\n\nB:\n" + "\n".join(f"- {n}" for n in recipe_names))
+    reply = claude.ClaudeText("claude-sonnet-5-5").generate(prompt, Missing)
+    return [m for m in Missing.model_validate_json(reply.text).missing if m in named]
+
+
 def score(clip: dict, out: Path) -> dict:
     from pipeline import transcribe
-    from pipeline.seen import listed
     folder = EVAL / key(clip)
     vtt = next(folder.glob("captions*.vtt"))
     reference = parse_vtt(vtt.read_text(encoding="utf-8"), clip.get("start_s", 0) if clip.get("end_s") else 0.0)
@@ -186,14 +204,20 @@ def score(clip: dict, out: Path) -> dict:
         cache.write_text(json.dumps(named_ingredients(reference, clip["lang"], clip.get("dish", "")), ensure_ascii=False))
     named = json.loads(cache.read_text())
     names = [i["name"] for i in recipe["ingredients"]]
+    judged = out / "work" / "eval_missing.json"  # cached per recipe: a re-run of the clip writes a new recipe
+    stamp = json.dumps([named, names], ensure_ascii=False)
+    if not judged.exists() or json.loads(judged.read_text()).get("stamp") != stamp:
+        judged.write_text(json.dumps({"stamp": stamp, "missing": judge_missing(named, names)}, ensure_ascii=False))
+    missing = json.loads(judged.read_text())["missing"]
     usage = json.loads((out / "work" / "usage.json").read_text()) if (out / "work" / "usage.json").exists() else {}
     return {
         "key": key(clip), "lang": clip["lang"], "dish": clip.get("dish"), "minutes": round(reference[-1]["end"] / 60, 1),
         "transcript_language": t.get("language"), "language_note": t.get("language_note"),
+        "loops": round(t.get("loop_words_dropped", 0) / max(1, t.get("loop_words_dropped", 0) + len(t["words"])), 2),
         "heard_raw": heard(reference, transcribe.lines(t["words"]), clip["lang"]),
         "heard_proofread": heard(reference, t["proofread"]["lines"], clip["lang"]) if t.get("proofread") else None,
-        "ingredients": ingredient_recall(named, names), "named": named,
-        "missing": [n for n in named if not listed(n, names)],
+        "ingredients": round(1 - len(missing) / len(named), 3) if named else None,
+        "ingredients_by_name": ingredient_recall(named, names), "named": named, "missing": missing,
         "script": script_share([s.get("quote_original") or "" for s in recipe["steps"]], clip["lang"]),
         "steps": len(recipe["steps"]), "stories": len(recipe.get("stories", [])),
         "cost_usd": round(usage.get("estimated_cost_usd", 0.0), 3),
@@ -201,14 +225,15 @@ def score(clip: dict, out: Path) -> dict:
 
 
 def table(rows: list[dict]) -> str:
-    head = "| lang | dish | min | heard raw | heard proofread | ingredients | script | steps | $ |"
-    lines = [head, "|" + "---|" * 9]
+    head = "| lang | dish | min | loops | heard raw | heard proofread | ingredients | script | steps | $ |"
+    lines = [head, "|" + "---|" * 10]
     fmt = lambda v: "–" if v is None else (f"{v:.2f}" if isinstance(v, float) else str(v))  # noqa: E731
     for r in rows:
         if "error" in r:
             lines.append(f"| {r['lang']} | {r.get('dish', '')} | error: {r['error'][:60]} |||||||")
             continue
-        lines.append(f"| {r['lang']} | {r['dish']} | {r['minutes']} | {fmt(r['heard_raw'])} | {fmt(r['heard_proofread'])} "
+        lines.append(f"| {r['lang']} | {r['dish']} | {r['minutes']} | {fmt(r.get('loops'))} | {fmt(r['heard_raw'])} "
+                     f"| {fmt(r['heard_proofread'])} "
                      f"| {fmt(r['ingredients'])} | {fmt(r['script'])} | {r['steps']} | {r['cost_usd']:.2f} |")
     return "\n".join(lines)
 
