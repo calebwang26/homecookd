@@ -104,6 +104,10 @@ and homesick college kids. It's a family product, not a tool.
   https://grand-dragon-649.convex.cloud (HTTP routes on `.convex.site`). **Never `--preview-create`**: it deletes
   and recreates the deployment, so the URL changes and its data and env are lost. Convex env is set with the team
   token, not the preview key: `CONVEX_OVERRIDE_ACCESS_TOKEN=… npx convex env set --deployment grand-dragon-649 …`.
+  `grand-dragon-649` is a *preview* deployment, and Convex deletes previews 5 days after creation unless their
+  expiration is cleared. It was cleared on Oct 25 (`expiresAt: null`). After every deploy, check it's still `None`:
+  `curl -s https://api.convex.dev/v1/deployments/grand-dragon-649 -H "Authorization: Bearer $CONVEX_OVERRIDE_ACCESS_TOKEN"`
+  and read `expiresAt`. If it has a date again, clear it with a `PATCH` of `{"expiresAt": null}` to the same URL.
   Every public function takes the `sessionToken` from `sessions.start` and checks it with `requireSession`
   (`convex/lib/auth.ts`). Read `convex/_generated/ai/guidelines.md` before writing Convex code; the skills are in
   `.agents/skills` (Codex) and `.claude/skills` (Claude Code).
