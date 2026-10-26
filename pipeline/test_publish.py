@@ -372,6 +372,32 @@ def test_a_cancelled_glasses_job_deletes_only_its_own_video():
     assert gone == ["glasses/rec1.mp4", "folder poha-ab12cd"], gone
 
 
+def test_worker_tells_the_cook_when_a_video_has_no_cooking():
+    failures = []
+
+    class Convex:
+        def progress(self, _job_id, stage, _progress, error=None):
+            if stage == "failed":
+                failures.append(error)
+
+    def no_steps(*_a, **_kw):
+        raise worker.process.NoStepsError("no steps found in any file (0 events)")
+
+    def crash(*_a, **_kw):
+        raise worker.process.ProcessError("extraction failed for every AI file")
+
+    upload = SimpleNamespace(name="family-recipe-7f1ee1/01.mp4", size=10)
+    job = {"jobId": "job1", "uploadPath": "family-recipe-7f1ee1/", "cookName": "Salik"}
+    for run in (no_steps, crash):
+        with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()), \
+                contextlib.redirect_stderr(io.StringIO()), \
+                patched(worker, LOCKS=Path(tmp) / ".locks", INPUT=Path(tmp), _complete_upload=lambda *_a: [upload],
+                        _download=lambda *_a: None, spend_cap=lambda: 100.0, spent_usd=lambda: 0.0), \
+                patched(worker.prep, run=lambda *_a: None, probe_duration=lambda _p: 6.0), \
+                patched(worker.process, run=run):
+            worker.handle_convex(Convex(), job, FakeBucket(), FakeBucket())
+    assert failures == [worker.MSG_NO_STEPS, worker.MSG_FAILED], failures
+
 class FakeResponse:
     def __init__(self, status: int, chunks: list[bytes]):
         self.status_code, self.chunks = status, chunks
