@@ -601,7 +601,13 @@ def _convex_setup() -> tuple[Convex, storage.Bucket, storage.Bucket]:
     return Convex(site, secret), client.bucket(os.environ["GCS_MEDIA_BUCKET"]), client.bucket(os.environ["GCS_UPLOAD_BUCKET"])
 
 
+PURGE_KEYS = ("SUPABASE_ACCESS_TOKEN", "CARTESIA_API_KEY")
+
+
 def purge_accounts(convex: Convex, media: storage.Bucket, uploads: storage.Bucket) -> None:
+    # Read .env on every pass so a replaced token works without restarting the worker.
+    fresh = dotenv_values(ROOT / ".env")
+    os.environ.update({k: fresh[k] for k in PURGE_KEYS if fresh.get(k)})
     try:
         account_purge.run_pending(convex, media, uploads)
     except Exception as e:  # noqa: BLE001 - e.g. Convex unreachable; the next pass tries again

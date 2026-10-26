@@ -440,8 +440,27 @@ def test_worker_convex_client_routes():
     assert convex.deletion_done("del1", True, None, {}) == "retry" and "error" not in sent[-1][1]
 
 
+def test_each_worker_pass_reads_the_keys_from_env_again():
+    seen = []
+    saved = (dict(worker.os.environ), worker.ROOT, worker.account_purge.run_pending)
+    with tempfile.TemporaryDirectory() as tmp:
+        worker.ROOT = Path(tmp)
+        worker.account_purge.run_pending = lambda *a: seen.append(worker.os.environ.get("SUPABASE_ACCESS_TOKEN"))
+        try:
+            worker.os.environ["SUPABASE_ACCESS_TOKEN"] = "old"
+            (Path(tmp) / ".env").write_text("SUPABASE_ACCESS_TOKEN=new\n")
+            quiet(worker.purge_accounts, None, None, None)
+            (Path(tmp) / ".env").write_text("OTHER=1\n")  # a key taken out of .env: the one in memory stays
+            quiet(worker.purge_accounts, None, None, None)
+        finally:
+            worker.os.environ.clear()
+            worker.os.environ.update(saved[0])
+            worker.ROOT, worker.account_purge.run_pending = saved[1], saved[2]
+    assert seen == ["new", "new"]
+
+
 def main() -> None:
-    tests = [(n, f) for n, f in globals().items() if n.startswith("test_") and callable(f)]
+    tests =[(n, f) for n, f in globals().items() if n.startswith("test_") and callable(f)]
     failed = 0
     for name, fn in tests:
         try:
