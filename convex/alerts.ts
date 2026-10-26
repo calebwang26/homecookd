@@ -2,7 +2,9 @@
 // homecookd.app/terms ("we look at every report within a day") doesn't depend on someone remembering to
 // run `npx convex run reports:open`. REPORT_ALERT_URL (Convex env) is any webhook:
 //   ntfy (https://ntfy.sh/<topic>)               plain text with a Title header, a push on the team's phones;
-//                                                with REPORT_ALERT_EMAIL set, ntfy also emails it there (Caleb, Oct 26)
+//                                                with REPORT_ALERT_EMAIL and REPORT_ALERT_TOKEN (an ntfy.sh account's
+//                                                access token, tk_…) set, ntfy also emails it there (Caleb, Oct 26).
+//                                                ntfy.sh refuses email from anonymous senders, so no token = push only
 //   Slack (hooks.slack.com), Discord (discord.com) JSON
 // Unset means no alert (tests, dev). Nothing personal leaves Convex: what kind of thing was reported, why,
 // and how many reports are open. While any report stays open past 12 hours, a daily reminder repeats it.
@@ -58,7 +60,14 @@ export const remindOpen = internalAction({
 /** ntfy's Email header: ntfy also sends the alert to this inbox (REPORT_ALERT_EMAIL; one address, else none). */
 function emailHeader(): Record<string, string> {
   const email = process.env.REPORT_ALERT_EMAIL?.trim();
-  return email && /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(email) ? { Email: email } : {};
+  if (!ntfyToken() || !email || !/^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(email)) return {};
+  return { Email: email };
+}
+
+/** An ntfy.sh access token (REPORT_ALERT_TOKEN, "tk_…"), or undefined. It signs the push in as that account. */
+function ntfyToken(): string | undefined {
+  const token = process.env.REPORT_ALERT_TOKEN?.trim();
+  return token && /^tk_[A-Za-z0-9]{8,}$/.test(token) ? token : undefined;
 }
 
 /** Never throws: a failed alert is logged, and the report itself is already saved. */
@@ -73,12 +82,13 @@ export async function send(title: string, text: string): Promise<void> {
     return;
   }
   const push = { Title: title, Priority: "high", Tags: "rotating_light" };
-  const email = emailHeader();
-  // ntfy refuses the whole message when it won't email (e.g. "anonymous email sending is not allowed"),
-  // so a 4xx with the Email header is sent again without it: the push to the team's phones always goes.
-  const status = await post(url, { method: "POST", headers: { ...push, ...email }, body: text });
-  if (email.Email && status !== undefined && status >= 400 && status < 500) {
-    console.error(`report alert email refused (HTTP ${status}); sending the push without it`);
+  const token = ntfyToken();
+  const extra = { ...(token ? { Authorization: `Bearer ${token}` } : {}), ...emailHeader() };
+  // ntfy refuses the whole message when it won't email ("anonymous email sending is not allowed") or the token is
+  // wrong or expired (401), so a 4xx with the token or Email is sent again without both: the push always goes.
+  const status = await post(url, { method: "POST", headers: { ...push, ...extra }, body: text });
+  if (Object.keys(extra).length && status !== undefined && status >= 400 && status < 500) {
+    console.error(`report alert refused with the email or token (HTTP ${status}); sending the plain push`);
     await post(url, { method: "POST", headers: push, body: text });
   }
 }
