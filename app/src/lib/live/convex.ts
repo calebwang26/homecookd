@@ -21,7 +21,7 @@
 //   await cancelLiveJob(jobId)                           jobs.cancel: stops a job (queued or mid-way) for good
 //   await cancelLiveUpload(uploadId)                     jobs.cancelUpload: the same, by the upload's folder
 //   useGlassesVideos()                                   glasses.videos, live (the laptop's saved full videos)
-//   useMe()  /  await setLanguage('mr')                  people.me (live) / people.setLanguage
+//   useMe()  /  await setLanguage('hi')                  people.me (live) / people.setLanguage
 //   await deleteMyAccount(profileId)                     account.deleteMe: "Delete my account" (session.deleteAccount)
 //   await appleRevokeReady(profileId)                    apple.revokeReady: Convex can revoke a Sign in with Apple
 //   await revokeAppleSignIn(profileId, code)             apple.revoke, before deleteMyAccount (never throws)

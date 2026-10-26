@@ -1,5 +1,5 @@
 // Unit tests for the cook's recording and walkie-talkie screens (TS run by Node's type stripping):
-//   src/components/record/words.ts           every line in English and Marathi (the stop button, "Just
+//   src/components/record/words.ts           every line in English and Hindi (the stop button, "Just
 //                                            answer out loud", the done screen, the errors), with their
 //                                            small English, names filled in, English for other languages
 //   src/components/record/recordingLogic.ts  the line under the button in each phase, when filming
@@ -79,35 +79,39 @@ const test = (name, fn) => {
 };
 
 const DEVANAGARI = /[ऀ-ॿ]/;
-const rmr = W.recordWords('mr');
+const rhi = W.recordWords('hi');
 const ren = W.recordWords('en');
 
-test('every line has English and Marathi; Marathi is in Devanagari', () => {
+test('every line has English, with {kid} as its only hole', () => {
   const table = W.recordWordTable();
   for (const [key, w] of Object.entries(table)) {
     assert.ok(w.en.trim(), `${key} en`);
-    assert.ok(w.mr.trim(), `${key} mr`);
-    assert.match(w.mr, DEVANAGARI, `${key} mr is Marathi`);
-    for (const t of [w.en, w.mr]) for (const hole of t.match(/\{[a-z]+\}/g) ?? []) assert.equal(hole, '{kid}', `${key} ${hole}`);
+    for (const hole of w.en.match(/\{[a-z]+\}/g) ?? []) assert.equal(hole, '{kid}', `${key} ${hole}`);
   }
   assert.ok(Object.keys(table).length >= 20);
 });
 
+test('Marathi was dropped (Oct 26): a cook who saved it reads Hindi, word for word', () => {
+  const rmr = W.recordWords('mr');
+  for (const key of Object.keys(W.recordWordTable())) assert.deepEqual(rmr.line(key, { kid: 'Shreya' }), rhi.line(key, { kid: 'Shreya' }), key);
+  assert.deepEqual(W.recordWords('MR').line('stop'), rhi.line('stop'));
+});
+
 test('Caleb’s lines are the ones on screen', () => {
   // The stop button's label: her words big, "Tap when you're done" small, in every language.
-  assert.deepEqual(rmr.line('stop'), { text: 'माझं झालं', en: 'Tap when you’re done' });
+  assert.deepEqual(rhi.line('stop'), { text: 'मेरा हो गया', en: 'Tap when you’re done' });
   assert.deepEqual(ren.line('stop'), { text: 'I’m done', en: 'Tap when you’re done' });
-  assert.deepEqual(rmr.line('listening'), { text: 'बोला, मी ऐकतोय', en: 'Just answer out loud' });
+  assert.deepEqual(rhi.line('listening'), { text: 'बोलिए, मैं सुन रही हूँ', en: 'Just answer out loud' });
   assert.deepEqual(ren.line('listening'), { text: 'Go ahead, I’m listening', en: 'Just answer out loud' });
-  assert.equal(rmr.text('kidAsked', { kid: 'Shreya' }), 'Shreya ने विचारलं');
-  assert.deepEqual(rmr.line('sentTo', { kid: 'Shreya' }), { text: 'Shreya ला पाठवलं', en: 'Sent to Shreya' });
-  assert.equal(rmr.text('sayingHello'), 'homie नमस्कार करतोय');
+  assert.equal(rhi.text('kidAsked', { kid: 'Shreya' }), 'Shreya ने पूछा');
+  assert.deepEqual(rhi.line('sentTo', { kid: 'Shreya' }), { text: 'Shreya को भेजा गया', en: 'Sent to Shreya' });
+  assert.equal(rhi.text('sayingHello'), 'homie नमस्ते कह रही है');
 });
 
 test('the done screen says who it goes to', () => {
-  assert.deepEqual(W.doneLine(rmr, { kid: 'Shreya', everyone: false, nobody: false }), { text: 'झालं! Shreya ला पाठवतोय', en: 'Done! Sending it to Shreya' });
+  assert.deepEqual(W.doneLine(rhi, { kid: 'Shreya', everyone: false, nobody: false }), { text: 'हो गया! Shreya को भेजा जा रहा है', en: 'Done! Sending it to Shreya' });
   assert.deepEqual(W.doneLine(ren, { kid: 'Shreya', everyone: false, nobody: false }), { text: 'Done! Sending it to Shreya', en: null });
-  assert.equal(W.doneLine(rmr, { kid: 'Shreya', everyone: true, nobody: false }).text, 'झालं! घरच्यांना पाठवतोय');
+  assert.equal(W.doneLine(rhi, { kid: 'Shreya', everyone: true, nobody: false }).text, 'हो गया! आपके परिवार को भेजा जा रहा है');
   assert.equal(W.doneLine(ren, { kid: ' ', everyone: false, nobody: false }).text, 'Done! Sending it to your family');
   assert.equal(W.doneLine(ren, { kid: null, everyone: false, nobody: true }).text, 'Done! Saving it to your recipes');
 });
@@ -136,13 +140,13 @@ test('every line in each of the 12 other languages, in its script, with {kid} wh
     assert.equal(w.line('sentTo', { kid: 'Shreya' }).en, 'Sent to Shreya', `${code}: the English under it`);
     assert.ok(!w.text('sentTo').includes('your family'), `${code}: no kid named → her word for family`);
   }
-  assert.equal(W.recordWords('gu').text('sentTo', { kid: 'Shreya' }), 'Shreya ને મોકલ્યું', 'a space after a Latin name, as in Marathi');
+  assert.equal(W.recordWords('gu').text('sentTo', { kid: 'Shreya' }), 'Shreya ને મોકલ્યું', 'a space after a Latin name, before the ending');
   assert.deepEqual(W.recordWords('vi').line('stop'), { text: 'I’m done', en: 'Tap when you’re done' }, 'no words yet: English');
 });
 
 test('errors are in her language too, with the English under them', () => {
   for (const key of ['lostConnection', 'signedOut', 'ended', 'elsewhere', 'micOff', 'noMicHere', 'couldntSend']) {
-    const l = rmr.line(key);
+    const l = rhi.line(key);
     assert.match(l.text, DEVANAGARI, key);
     assert.ok(l.en && !DEVANAGARI.test(l.en), key);
     assert.equal(ren.line(key).en, null, `${key}: English once`);
@@ -151,7 +155,7 @@ test('errors are in her language too, with the English under them', () => {
 
 test('names are filled in; no name reads "your family"', () => {
   assert.equal(ren.text('sentTo', { kid: '' }), 'Sent to your family');
-  assert.equal(rmr.text('sentTo', { kid: ' ' }), 'घरच्यां ला पाठवलं');
+  assert.equal(rhi.text('sentTo', { kid: ' ' }), 'आपके परिवार को भेजा गया');
   assert.equal(ren.text('kidAsked', { kid: 'Shreya' }), 'Shreya asked');
 });
 
@@ -160,15 +164,15 @@ test('English, and languages these screens aren’t written in, read English', (
   assert.deepEqual(W.recordWords('fr').line('tryAgain'), { text: 'Try again', en: null });
   assert.deepEqual(W.recordWords('fr').line('leave'), { text: 'Leave', en: null });
   assert.deepEqual(W.recordWords(undefined).line('stop'), { text: 'I’m done', en: 'Tap when you’re done' });
-  assert.equal(W.recordWords('MR').line('leave').text, 'बाहेर पडा');
+  assert.equal(W.recordWords('MR').line('leave').text, 'बाहर निकलें', 'a saved Marathi reads Hindi');
 });
 
 test('the line under the button in each phase; it is the stop button only while filming', () => {
-  assert.deepEqual(R.recordingView('connecting', rmr), { line: { text: 'homie तयार होतोय', en: 'homie is getting ready' }, live: false });
-  assert.deepEqual(R.recordingView('intro', rmr), { line: { text: 'homie नमस्कार करतोय', en: 'homie is saying hello' }, live: false });
-  assert.deepEqual(R.recordingView('recording', rmr), { line: { text: 'माझं झालं', en: 'Tap when you’re done' }, live: true });
-  assert.deepEqual(R.recordingView('wrapping_up', rmr), { line: { text: 'जवळजवळ झालं', en: 'Almost done' }, live: false });
-  assert.equal(R.recordingView('ended', rmr).live, false);
+  assert.deepEqual(R.recordingView('connecting', rhi), { line: { text: 'homie तैयार हो रही है', en: 'homie is getting ready' }, live: false });
+  assert.deepEqual(R.recordingView('intro', rhi), { line: { text: 'homie नमस्ते कह रही है', en: 'homie is saying hello' }, live: false });
+  assert.deepEqual(R.recordingView('recording', rhi), { line: { text: 'मेरा हो गया', en: 'Tap when you’re done' }, live: true });
+  assert.deepEqual(R.recordingView('wrapping_up', rhi), { line: { text: 'बस, लगभग हो गया', en: 'Almost done' }, live: false });
+  assert.equal(R.recordingView('ended', rhi).live, false);
   assert.equal(R.recordingView('recording', ren).line.text, 'I’m done');
 });
 
@@ -498,16 +502,19 @@ test('a long question (a share ask) gets smaller type and a smaller homie, so it
   assert.deepEqual(share, { font: 24, homie: 150, compact: true });
 });
 
-test('languages: English first; "mar" and "मरा" find Marathi', () => {
+test('languages: English first; "guj" and "ગુજ" find Gujarati; Marathi is hidden but still has its name', () => {
   assert.equal(L.LANGUAGES[0].code, 'en');
   assert.equal(L.matchLanguages('')[0].code, 'en');
-  assert.equal(L.matchLanguages('mar')[0].code, 'mr');
-  assert.ok(L.matchLanguages('मरा').some((l) => l.code === 'mr'));
+  assert.equal(L.matchLanguages('guj')[0].code, 'gu');
+  assert.ok(L.matchLanguages('ગુજ').some((l) => l.code === 'gu'));
   assert.deepEqual(L.matchLanguages('zzzz'), []);
+  assert.ok(!L.LANGUAGES.some((l) => l.code === 'mr'), 'not in the picker');
+  assert.ok(!L.matchLanguages('mar').some((l) => l.code === 'mr'));
   assert.equal(L.languageName('mr'), 'Marathi');
   assert.equal(L.languageName(undefined), 'English');
-  const marathi = L.LANGUAGES.find((l) => l.code === 'mr');
-  assert.equal(marathi.native, 'मराठी');
+  assert.equal(L.activeLanguage('mr'), 'hi');
+  assert.equal(L.activeLanguage('ta'), 'ta');
+  assert.equal(L.activeLanguage(null), null);
 });
 
 test('in-app camera: 5-minute files named in order, and the wall time between them that the video skips', () => {
@@ -1111,7 +1118,7 @@ test('flip: beside the card it fits the space to its right, its label ending at 
 });
 
 test('flip: "Flip camera" in her language', () => {
-  assert.deepEqual(rmr.line('flipCamera'), { text: 'कॅमेरा बदला', en: 'Flip camera' });
+  assert.deepEqual(rhi.line('flipCamera'), { text: 'कैमरा बदलें', en: 'Flip camera' });
   assert.deepEqual(ren.line('flipCamera'), { text: 'Flip camera', en: null });
   assert.equal(W.recordWords('hi').text('flipCamera'), 'कैमरा बदलें');
   assert.equal(W.recordWords('es').line('flipCamera').en, 'Flip camera', 'VoiceOver reads the English');

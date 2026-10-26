@@ -318,7 +318,7 @@ const words: Translation = {
   'profiles.language.saved': 'homie会用{language}和您说话',
   'profiles.language.saveFailed': '没有保存成功。请检查网络后再试一次。',
   'profiles.language.question': '您做饭时说什么语言？',
-  'profiles.language.search': '搜索：Marathi、Hindi、Español…',
+  'profiles.language.search': '搜索：Tamil、Hindi、Español…',
   'profiles.language.searchLabel': '搜索语言',
   'profiles.language.clear': '清除搜索',
   'profiles.language.list': '语言',

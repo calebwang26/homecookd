@@ -14,7 +14,7 @@
 // A share ask (questions.kind 'share': someone wants her dish on the Community map) comes the same
 // way: "Shreya ने विचारलं", the ask in her language, and her spoken yes or no (a short word is enough)
 // goes as the voice note; the server reads it, and only a clear yes shares the dish.
-// Dev aid (web screenshots only): /answer/preview?lang=mr[&step=listening|sending|sent][&kind=share]
+// Dev aid (web screenshots only): /answer/preview?lang=hi[&step=listening|sending|sent][&kind=share]
 // shows a made-up question from Shreya, standing still.
 import { router, useLocalSearchParams } from 'expo-router';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -34,6 +34,7 @@ import { ensureAiConsent, useAiConsent } from '@/lib/aiConsent';
 import { useHomieScreen } from '@/lib/homie/hooks';
 import { potState, sayPhase, speakingLabel } from '@/lib/homie/logic';
 import { useHomie } from '@/lib/homie/store';
+import { activeLanguage } from '@/lib/languages';
 import { answerQuestion, useCookQuestions, useMe, type CookQuestion } from '@/lib/live/convex';
 import { speak, stopSpeaking } from '@/lib/live/speak';
 import { useNowPlaying } from '@/lib/media';
@@ -54,17 +55,17 @@ const PREVIEW: CookQuestion = {
   recipeId: 'preview',
   stepOrder: 3,
   text: 'How much ginger do I add?',
-  textForCook: 'आलं किती घालायचं?',
+  textForCook: 'अदरक कितना डालूँ?',
   askedByName: 'Shreya',
 };
 const PREVIEW_EN: CookQuestion = { ...PREVIEW, textForCook: undefined };
-// convex/shareRequests.ts shareQuestion's words, and a draft of their Marathi (Track F translates the real one).
+// convex/shareRequests.ts shareQuestion's words, and a draft of their Hindi (Track F translates the real one).
 const PREVIEW_SHARE: CookQuestion = {
   ...PREVIEW,
   stepOrder: undefined,
   kind: 'share',
   text: 'Shreya wants to put your Kanda Poha on the map for neighbors. They’d see the recipe and one line you said, never your video. Is that okay?',
-  textForCook: 'श्रेयाला तुमचे कांदा पोहे शेजाऱ्यांसाठी नकाशावर ठेवायचे आहेत. त्यांना रेसिपी आणि तुमचं एक वाक्य दिसेल, तुमचा व्हिडिओ कधीच नाही. चालेल का?',
+  textForCook: 'श्रेया आपके कांदा पोहे पड़ोसियों के लिए नक्शे पर रखना चाहती है। उन्हें रेसिपी और आपकी कही एक बात दिखेगी, आपका वीडियो कभी नहीं। ठीक है?',
 };
 
 function goBack() {
@@ -73,8 +74,8 @@ function goBack() {
 }
 
 function previewQuestion(lang?: string, kind?: string): CookQuestion {
-  if (kind === 'share') return lang === 'mr' ? PREVIEW_SHARE : { ...PREVIEW_SHARE, textForCook: undefined };
-  return lang === 'mr' ? PREVIEW : PREVIEW_EN;
+  if (kind === 'share') return lang === 'hi' ? PREVIEW_SHARE : { ...PREVIEW_SHARE, textForCook: undefined };
+  return lang === 'hi' ? PREVIEW : PREVIEW_EN;
 }
 
 export default function AnswerScreen() {
@@ -113,7 +114,8 @@ export default function AnswerScreen() {
     const t = setTimeout(() => setWaitedForLanguage(true), LANGUAGE_WAIT_MS);
     return () => clearTimeout(t);
   }, []);
-  const lang = (preview && previewLang) || (convexMe?.language ?? 'en');
+  // A dropped language (Marathi) is used as its stand-in (Hindi), like the screen's words.
+  const lang = activeLanguage((preview && previewLang) || convexMe?.language) ?? 'en';
   const w = useMemo(() => recordWords(lang), [lang]);
   const kid = q?.askedByName?.trim() || null;
 

@@ -646,15 +646,15 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
 // (a tap), and dropped after 14 s.
 
 const STUB_LINES = {
-  intro: { en: 'Hello! I’m homie. I may ask a small question now and then. Start whenever you’re ready.', mr: 'नमस्कार! मी homie. मी मधूनच एखादा छोटा प्रश्न विचारेन. तयार झालात की सुरू करा.' },
-  ask: { en: 'About how much ginger was that?', mr: 'आलं साधारण किती घातलं?' },
-  count: { en: 'Before we send it: two quick questions.', mr: 'पाठवण्याआधी दोन छोटे प्रश्न.' },
-  end1: { en: 'What should {kid} never skip in this dish?', mr: '{kid} ने यात काय कधीच विसरू नये?' },
+  intro: { en: 'Hello! I’m homie. I may ask a small question now and then. Start whenever you’re ready.' },
+  ask: { en: 'About how much ginger was that?' },
+  count: { en: 'Before we send it: two quick questions.' },
+  end1: { en: 'What should {kid} never skip in this dish?' },
   // Long on purpose: the moment's layout on a short phone.
-  end2: { en: 'When you make the tadka, how do you know the mustard seeds are ready, before the curry leaves go in?', mr: 'फोडणी करताना मोहरी तयार झाली हे तुम्हाला कसं कळतं, कढीपत्ता घालण्याआधी?' },
-  optin: { en: 'Can {kid} hear your stories too?', mr: '{kid} ला तुमच्या गोष्टी पण ऐकू द्यायच्या का?' },
-  plate: { en: 'Last thing: hold the plate up to the camera.', mr: 'शेवटचं: ताट कॅमेऱ्यासमोर धरा.' },
-  closing: { en: 'That’s a wrap. Thank you for sharing it.', mr: 'झालं! हे शेअर केल्याबद्दल खूप धन्यवाद.' },
+  end2: { en: 'When you make the tadka, how do you know the mustard seeds are ready, before the curry leaves go in?' },
+  optin: { en: 'Can {kid} hear your stories too?' },
+  plate: { en: 'Last thing: hold the plate up to the camera.' },
+  closing: { en: 'That’s a wrap. Thank you for sharing it.' },
 };
 const STUB_ASK_AFTER_MS = 15_000;
 const STUB_DROP_MS = 10_000;
@@ -670,9 +670,12 @@ export const STUB_WRAPUP_PREFIX = 'stub-wrapup-';
 export const STUB_NO_PLATE = 'noplate-';
 
 function stubSocket(recordingId: string, info: RecordingInfo): Socket {
-  const lang = info.language === 'mr' ? 'mr' : 'en';
-  const kid = info.kidName?.trim() || (lang === 'mr' ? 'घरच्यां' : 'your family');
-  const line = (k: keyof typeof STUB_LINES) => ({ text: STUB_LINES[k][lang].replace('{kid}', kid), textEn: STUB_LINES[k].en.replace('{kid}', info.kidName?.trim() || 'your family') });
+  // The stand-in speaks English only (it had Marathi until Marathi was dropped, Oct 26).
+  const kid = info.kidName?.trim() || 'your family';
+  const line = (k: keyof typeof STUB_LINES) => {
+    const text = STUB_LINES[k].en.replace('{kid}', kid);
+    return { text, textEn: text };
+  };
   const timers: ReturnType<typeof setTimeout>[] = [];
   const preview = recordingId.startsWith(STUB_WRAPUP_PREFIX);
   const camera = preview && !recordingId.startsWith(STUB_WRAPUP_PREFIX + STUB_NO_PLATE);
