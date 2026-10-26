@@ -96,6 +96,47 @@ http.route({
   }),
 });
 
+// A deleted account's Supabase rows, GCS media and voice clone (pipeline/account_purge.py): the worker
+// asks for the next deletion to purge (`exclude`: ones it already took this pass) and says how it went.
+http.route({
+  path: "/worker/deletions/next",
+  method: "POST",
+  handler: worker(async (ctx, body) => {
+    const exclude = body.exclude ?? [];
+    if (!Array.isArray(exclude) || exclude.length > 100 || !exclude.every((x) => isStr(x, 100))) {
+      return fail(400, "exclude must be a list of deletion ids");
+    }
+    const next = await ctx.runQuery(internal.worker.nextDeletion, { now: Date.now(), exclude });
+    return next ? json(next) : new Response(null, { status: 204 });
+  }),
+});
+
+const COUNT_NAME = /^[A-Za-z][A-Za-z0-9]{0,39}$/;
+
+/** `{ gcsObjects: 3, … }`: what the worker deleted. undefined when absent, null when malformed. */
+function purgeCounts(raw: unknown): Record<string, number> | undefined | null {
+  if (raw === undefined) return undefined;
+  if (!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+  const entries = Object.entries(raw);
+  const ok = entries.length <= 30 && entries.every(([k, n]) => COUNT_NAME.test(k) && Number.isInteger(n) && (n as number) >= 0);
+  return ok ? (Object.fromEntries(entries) as Record<string, number>) : null;
+}
+
+http.route({
+  path: "/worker/deletions/done",
+  method: "POST",
+  handler: worker(async (ctx, body) => {
+    const id = isStr(body.deletionId, 100) ? await ctx.runQuery(internal.ids.deletion, { id: body.deletionId }) : null;
+    if (!id) return fail(404, "no such deletion");
+    if (typeof body.ok !== "boolean") return fail(400, "ok must be true or false");
+    if (body.error !== undefined && typeof body.error !== "string") return fail(400, "error must be a string");
+    const counts = purgeCounts(body.counts);
+    if (counts === null) return fail(400, "counts must be { name: whole number }");
+    const status = await ctx.runMutation(internal.worker.deletionDone, { deletionId: id, ok: body.ok, error: body.error, counts });
+    return status === "missing" ? fail(404, "no such deletion") : json({ status });
+  }),
+});
+
 // ---- Voice service → Convex ----
 
 http.route({

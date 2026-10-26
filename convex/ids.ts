@@ -8,6 +8,12 @@ export const job = internalQuery({
   handler: async (ctx, { id }) => ctx.db.normalizeId("jobs", id),
 });
 
+export const deletion = internalQuery({
+  args: { id: v.string() },
+  returns: v.union(v.null(), v.id("accountDeletions")),
+  handler: async (ctx, { id }) => ctx.db.normalizeId("accountDeletions", id),
+});
+
 export const recipe = internalQuery({
   args: { id: v.string() },
   returns: v.union(v.null(), v.id("recipes")),

@@ -19,7 +19,7 @@ Crop only: never generated or edited, always her photo or a frame of her own vid
 dish, make_cover returns None and leaves the poster alone; process.py then uses the middle of the last step,
 as it does when anything here fails.
 
-COVER_PROVIDER=claude (process.cover_model) asks Claude instead (CLAUDE_COVER_MODEL, default Haiku). Claude takes no
+COVER_PROVIDER=claude (process.cover_model) asks Claude instead (CLAUDE_COVER_MODEL, default Sonnet). Claude takes no
 video, so step 1 sends the same window as still frames, one every FRAME_EVERY_S seconds (more apart for a long
 window, at most MAX_FRAMES), each labelled with its MM:SS, and Claude answers with a frame's time. Steps 2-4 are
 the same; the dish box comes from the same prompt with the frame as an image.

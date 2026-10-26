@@ -186,6 +186,7 @@ export const PROFILES = {
   'profiles.delete.cookHint': 'Deletes the account and its recipes for good',
   'profiles.delete.hint': 'Deletes the account for good',
   'profiles.delete.cantUndo': 'This can’t be undone.',
+  'profiles.delete.appleConfirm': 'Apple will ask you to confirm.',
 
   // "Your language" and the language list (LanguageEntry, record/LanguagePicker)
   'profiles.language.entry': 'Your language: {language}',
