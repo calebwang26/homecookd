@@ -106,6 +106,25 @@ test("moments found up front are in the first message, so a clip that answers is
   assert.deepEqual(calls.at(-1), ["playClip", 40, 52, { question: { text: "How dark should the sugar get?", quote: hit.quote }, stepOrder: 2 }]);
 });
 
+test("an empty say is silence: nothing is said, and the next turn still opens with its result", async () => {
+  // Sonnet stays quiet on speech that isn't for homie by calling say with "" (Opus calls no tool). Said, it would
+  // light the pot and send Sonic an empty line.
+  const claude = fakeClaude([
+    { name: "say", input: { text: " " } },
+    { name: "say", input: { text: "\u200b" } },
+    { name: "next_step", input: {} },
+  ]);
+  const { calls, actions } = fakeActions([]);
+  const agent = new TurnAgent(session, actions, claude.client);
+  await agent.turn("Mom, can you pass me the salt?");
+  await agent.turn("Dude, did you see the game?");
+  assert.deepEqual(calls.filter(([name]) => name !== "findMoment"), []);
+
+  await agent.turn("Homie, next.");
+  assert.equal(claude.requests[2].messages.at(-1)!.content[0].type, "tool_result");
+  assert.deepEqual(calls.at(-1), ["goToStep", 2]);
+});
+
 test("an action that fails still gets its tool_result, so the next turn isn't refused", async () => {
   // Convex down while sending the question: ask_cook throws. Before, the history kept a tool_use with no result, and
   // Claude refused every later call of the session (homie answered "sorry" to everything until a reconnect).
