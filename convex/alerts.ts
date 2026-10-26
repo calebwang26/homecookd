@@ -1,7 +1,8 @@
 // Tells the team when someone uses "Report or block" (lib/safety.ts fileReport), so the promise on
 // homecookd.app/terms ("we look at every report within a day") doesn't depend on someone remembering to
 // run `npx convex run reports:open`. REPORT_ALERT_URL (Convex env) is any webhook:
-//   ntfy (https://ntfy.sh/<topic>)               plain text with a Title header, a push on the team's phones
+//   ntfy (https://ntfy.sh/<topic>)               plain text with a Title header, a push on the team's phones;
+//                                                with REPORT_ALERT_EMAIL set, ntfy also emails it there (Caleb, Oct 26)
 //   Slack (hooks.slack.com), Discord (discord.com) JSON
 // Unset means no alert (tests, dev). Nothing personal leaves Convex: what kind of thing was reported, why,
 // and how many reports are open. While any report stays open past 12 hours, a daily reminder repeats it.
@@ -54,6 +55,12 @@ export const remindOpen = internalAction({
   },
 });
 
+/** ntfy's Email header: ntfy also sends the alert to this inbox (REPORT_ALERT_EMAIL; one address, else none). */
+function emailHeader(): Record<string, string> {
+  const email = process.env.REPORT_ALERT_EMAIL?.trim();
+  return email && /^[^\s@,]+@[^\s@,]+\.[^\s@,]+$/.test(email) ? { Email: email } : {};
+}
+
 /** Never throws: a failed alert is logged, and the report itself is already saved. */
 export async function send(title: string, text: string): Promise<void> {
   const url = process.env.REPORT_ALERT_URL?.trim();
@@ -67,7 +74,7 @@ export async function send(title: string, text: string): Promise<void> {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify(slack ? { text: `*${title}*\n${text}` } : { content: `**${title}**\n${text}` }),
         }
-      : { method: "POST", headers: { Title: title, Priority: "high", Tags: "rotating_light" }, body: text };
+      : { method: "POST", headers: { Title: title, Priority: "high", Tags: "rotating_light", ...emailHeader() }, body: text };
   try {
     const res = await fetch(url, init);
     if (!res.ok) console.error(`report alert failed: HTTP ${res.status}`);
