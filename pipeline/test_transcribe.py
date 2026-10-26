@@ -249,6 +249,21 @@ def test_proofread_fixes_spelling_but_a_rewrite_or_an_addition_keeps_her_words()
     assert "Amounts and numbers stay exactly as heard" in prompt
 
 
+def test_a_long_story_lines_correction_is_kept() -> None:
+    """Poha's story (Oct 26), one 290-character line: Opus's correction keeps 0.84 of its sound, but difflib's
+    autojunk scored it 0.24 and the guard threw the story's correction away. A line answered with another line's
+    words is still refused."""
+    raw = 'में खुप लहान होती ना ते वा माजा आईने पोहे केले होती ते वा मी खनले एरे काट पड़तो एगमाई इदे टाक हां मलाफारावडाई चे पोहे माजा आईने बनावली होती ना मलाफारावडाई चे ते माजा आईने बनावली होती ना मलाफारावडाई चे ते माजाले का पोहे आता है अरदाले मी ते चावराता है खूबर टाकते हां खूबर चान लगता है ते ते ते'
+    fixed = 'मी खूप लहान होते ना तेव्हा माझ्या आईने पोहे केले होते तेव्हा मी खाल्ले एरे काट पडतो एगमाई इदे टाक हां मला फार आवडायचे पोहे माझ्या आईने बनवले होते ना मला फार आवडायचे ते माझ्या आईने बनवले होते ना मला फार आवडायचे ते माझ्याले का पोहे आता हे झाले मी ते त्याच्यावर हे खोबरं टाकते हां खोबरं छान लागतं हे ते ते ते'
+    other = 'अजय पण शेव पण आवडते शेव टाकते आता खोबरं टाकते हं अजय तुम्हाला खायचेत पोहे हं मला पण खूप आवडतात पोहे अजय असं करते वाटते पोहे आता तुम्हाला खायचेत मी'
+    assert len(raw) > 200 and T.kept_sounds(raw, fixed) > 0.8
+    assert T.kept_sounds(raw, other) < T.MIN_KEPT
+    fake = FakeAnthropic({"lines": [{"id": 0, "text": fixed}, {"id": 1, "text": fixed}]})
+    spoken = [{"start": 556.0, "end": 585.0, "text": raw}, {"start": 588.0, "end": 618.0, "text": other}]
+    got, _ = T.proofread(spoken, "mr", "Kanda Poha", claude.ClaudeText("claude-opus-5-5", client=fake))
+    assert [x["text"] for x in got] == [fixed, other], got  # the story's correction kept; the swap refused
+
+
 def test_the_proofread_copy_is_made_only_with_the_flag_and_not_for_english() -> None:
     marathi = {"type": "transcript", "text": "", "duration": 3.0,
                "words": [{"word": "मिर", "start": 0.2, "end": 0.6}, {"word": "टाकला", "start": 0.7, "end": 1.1}]}
