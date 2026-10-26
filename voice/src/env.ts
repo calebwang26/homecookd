@@ -46,10 +46,14 @@ export const env = {
   voiceStub: get("VOICE_STUB") === "1",
   /** Overridable without a code change if latency needs a smaller model. */
   claudeModel: get("CLAUDE_MODEL") || "claude-opus-5-5",
+  /** Cook mode's turn agent (agent.ts): one call for each thing the kid says. Sonnet by default (Oct 26: half Opus's
+   *  price, the same picks in scripts/try-cook-model.ts on a Marathi and an English recipe). COOK_MODEL overrides it. */
+  cookModel: get("COOK_MODEL") || "claude-sonnet-5-5",
   /** The "should homie speak now?" check while a cook records (homie.ts decide), every 15 s or so, often with a
    *  camera still: the call that adds up. Haiku by default (Caleb, Oct 26: Opus here spent the month's limit). */
   homieDecideModel: get("HOMIE_DECIDE_MODEL") || "claude-haiku-5-5",
-  /** Opus fast mode (beta, premium price): up to 2.5x faster output. Off unless CLAUDE_FAST=1 (Caleb, Oct 26: cost). */
+  /** Opus fast mode (beta, premium price): up to 2.5x faster output. Off unless CLAUDE_FAST=1 (Caleb, Oct 26: cost).
+   *  Opus only: cook mode on Sonnet ignores it. */
   claudeFast: get("CLAUDE_FAST") === "1",
   /** homie's voice everywhere it talks: the kid cooking, a cook recording, and /speak. Default "Riya bilingual"
    *  (Caleb's pick, Oct 24): our private localized copy of Cartesia's "Riya, College Roommate", which speaks

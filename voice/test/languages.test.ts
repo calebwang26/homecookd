@@ -27,6 +27,9 @@ for (let i = 0; i < 1600; i++) VOICE.writeInt16LE(i % 20 < 10 ? 2000 : -2000, i 
 const FIRST_SET = ["en", "mr", "hi", "gu", "ta", "te", "pa", "ur", "zh", "ko", "tl", "es", "pt", "ar"];
 
 test("each language goes to the speech-to-text that hears it; Marathi on Gemini Live until MARATHI_STT=cartesia", () => {
+  // The flag unset, whatever the root .env says (Oct 26 it has MARATHI_STT=cartesia for live runs).
+  const before = env.marathiStt;
+  env.marathiStt = "";
   assert.equal(sttEngine("en"), "ink-2");
   assert.equal(sttEngine("hi"), "ink-2");
   assert.equal(sttEngine("es"), "ink-2");
@@ -34,7 +37,6 @@ test("each language goes to the speech-to-text that hears it; Marathi on Gemini 
   for (const l of ["gu", "ta", "te", "pa", "ur", "zh", "ko", "tl", "pt", "ar", "bn", "vi"]) assert.equal(sttEngine(l), "ink-whisper", l);
   assert.equal(sttEngine("or"), "gemini-live", "ink-whisper doesn't know Odia (hidden from the app's picker)");
   for (const l of FIRST_SET) assert.ok(INK_LANGUAGES.includes(l) || WHISPER_LANGUAGES.includes(l) || l === "mr", l);
-  const before = env.marathiStt;
   try {
     env.marathiStt = "cartesia";
     assert.equal(sttEngine("mr"), "ink-whisper", "Caleb's Oct 26 choice: Marathi on Cartesia as it is");

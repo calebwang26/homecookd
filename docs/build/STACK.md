@@ -169,7 +169,7 @@ HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-o
   `{ type: "play_clip", startS, endS }`, `{ type: "say", text, ai: true }` followed by binary audio,
   `{ type: "asked_cook", questionId }`.
 
-**Claude's tools** (one per turn): `next_step`, `previous_step`, `repeat_step`, `go_to_step(n)`,
+**Claude's tools** (one per turn; Claude Sonnet, `COOK_MODEL`, since Oct 26): `next_step`, `previous_step`, `repeat_step`, `go_to_step(n)`,
 `find_moment(query)` (Moss search over the family's index), `play_clip(startS, endS)`, `ask_cook(question)`,
 `say(text)`, plus the kid-side `give_hint(hint, question)` and `set_timer(seconds, label)`. The system prompt says:
 never state anything the cook didn't say. Answer with the cook's clip or ask the cook. A question takes one Claude

@@ -47,7 +47,8 @@ Keys come from the repo's root `.env` (found by walking up, so a worktree works 
 `CARTESIA_API_KEY` (plus optional `CARTESIA_API_KEYS_BACKUP`, comma-separated: the next one is used when a key runs
 out of credits, `src/cartesiaKeys.ts`), `ANTHROPIC_API_KEY`, `MOSS_PROJECT_ID`, `MOSS_PROJECT_KEY`, `CONVEX_SITE_URL`
 (https://grand-dragon-649.convex.site) and `VOICE_SECRET`. Optional: `VOICE_STUB=1` (serve the stub recipe and
-accept any session token, for tests without a real sign-in), `CLAUDE_FAST=1` (Opus fast mode, premium price; off by default since Oct 26), `CLAUDE_MODEL`, `HOMIE_DECIDE_MODEL`
+accept any session token, for tests without a real sign-in), `CLAUDE_FAST=1` (Opus fast mode, premium price; off by default since Oct 26; Opus only), `CLAUDE_MODEL`, `COOK_MODEL`
+(cook mode's turn agent; default `claude-sonnet-5-5`, checked with `npx tsx scripts/try-cook-model.ts`), `HOMIE_DECIDE_MODEL`
 (the recording's "should homie speak?" check; default `claude-haiku-5-5`).
 For homie: `MARATHI_STT=cartesia` (Marathi heard by Cartesia ink-whisper, Caleb's Oct 26 choice; unset = Gemini
 Live), `GEMINI_API_KEY` (Gemini Live: Marathi until that flag, and Odia; without it those recordings get no live

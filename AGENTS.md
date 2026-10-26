@@ -199,6 +199,7 @@ cd voice && npm run test-client -- test-audio/next-step.wav test-audio/question.
 cd voice && COOK_LANG=ta npm run test-record                     # a live cook recording (VOICE_STUB=1 dev server): mr (default), en, ta, zh
 cd voice && CAMERA=1 npm run test-record                           # homie while filming in the app: frames, pause, plate photo
 cd voice && npx tsx scripts/try-decide.ts photo.jpg "what she said"   # one "should homie speak?" call (HOMIE_DECIDE_MODEL=…)
+cd voice && npx tsx scripts/try-cook-model.ts                       # cook mode's picks on a Marathi + an English recipe (COOK_MODEL=…, RUNS=…)
 cd voice && npm run typecheck && npm test                          # src + tests; unit tests (pacing, /record phases; fakes only)
 voice/deploy.sh                                                    # Cloud Run homecookd-voice, us-west1
 
