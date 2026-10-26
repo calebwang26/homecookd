@@ -291,7 +291,10 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   families set `hiddenAt` on the recipe or dinner, which hides it from every other family until the team reviews
   it. `community.block({ kind, targetId })` blocks the family behind it, both ways: neither family's feed, recipe
   view, dinners, swaps or cook-together asks shows the other's, and new asks, joins and answers between them are
-  refused (with the same words as "not shared anymore"); it also files a `kind: "family"` report.
+  refused (with the same words as "not shared anymore"); it also files a `kind: "family"` report. A dinner goes
+  with its dish (`lib/safety.ts` `seesDinner`): hidden, taken down, reported by us, or from a family we blocked
+  (a "cook together" dinner), it leaves the feed, `dinners.get` / `mine`, joins and invite links. Only what my
+  family can see now can be reported or blocked ("That recipe isn't shared anymore." otherwise).
   `community.blocked` → `[{ blockId, familyName }]` (only the ones my family blocked), `community.unblock({ blockId })`.
   `community.recipe` and `dinners.get` now also return `ours` (and the dinner `familyName`), so the app shows
   "Report or block" only on other families' pages. The filter (whole words, accents folded, no food words) refuses a

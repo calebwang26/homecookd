@@ -33,7 +33,7 @@ test("a report hides the dish and its dinner from the reporter's family only, at
   const poha = await recipe(t, rajani, { sharedAt: 1 });
   const pohaNight = await host(t, rajani, poha);
   await expect(report(t, shreya, "recipe", poha)).rejects.toThrow("your family's recipe");
-  await expect(report(t, serene, "recipe", "not-an-id")).rejects.toThrow("isn't here anymore");
+  await expect(report(t, serene, "recipe", "not-an-id")).rejects.toThrow("isn't shared anymore");
 
   await report(t, serene, "recipe", poha, "rude");
   await report(t, serenesMom, "recipe", poha, "other"); // the same family again: nothing new
@@ -84,14 +84,104 @@ test("reports from two families hide a dish and a dinner from everyone else unti
   expect(await dishes(t, serene)).toEqual([]);
   expect(await t.query(internal.reports.open, {})).toEqual([]);
 
-  for (const who of [serene, caleb]) await report(t, who, "dinner", pohaNight, "other");
-  expect((await feed(t, salik)).dinners).toEqual([]);
-  expect(await dinner(t, salik, pohaNight)).toBeNull();
-  await expect(join(t, salik, pohaNight)).rejects.toThrow("isn't happening");
+  // The dinner, by two families that can still see it (the two that reported its dish can't).
+  const ngozi = await person(t, await family(t, "Okafor home", "Okafor"), "Ngozi", "cook");
+  const rey = await person(t, await family(t, "Santos home", "Santos"), "Rey", "cook");
+  for (const who of [salik, ngozi]) await report(t, who, "dinner", pohaNight, "other");
+  expect((await feed(t, rey)).dinners).toEqual([]);
+  expect(await dinner(t, rey, pohaNight)).toBeNull();
+  await expect(join(t, rey, pohaNight)).rejects.toThrow("isn't happening");
   expect(await dinner(t, shreya, pohaNight)).toMatchObject({ ours: true, familyName: "The Pawar family" });
   // The team takes it down: called off, and it stays hidden.
   await t.mutation(internal.reports.review, { kind: "dinner", targetId: pohaNight, keep: false });
   expect(await t.run((ctx) => ctx.db.get("dinners", pohaNight))).toMatchObject({ status: "cancelled", hiddenAt: expect.any(Number) });
+});
+
+/** Caleb's family cooks the Pawars' poha together with them and hosts a dinner of it. */
+async function cookTogetherNight(t: Backend, cook: Who, asker: Who, answerer: Who) {
+  const poha = await recipe(t, cook, { sharedAt: 1 });
+  const swapId = await t.mutation(api.community.cookTogether, { sessionToken: asker.sessionToken, recipeId: poha });
+  await t.mutation(api.community.respondSwap, { sessionToken: answerer.sessionToken, swapId, accept: true });
+  return { poha, night: await host(t, asker, poha) };
+}
+
+test("a dinner goes with its dish: blocked dish family, hidden by reports, taken down", async () => {
+  const { t, rajani, shreya, serene, caleb } = await world();
+  const salik = await person(t, await family(t, "Mian home"), "Salik", "kid");
+  const ngozi = await person(t, await family(t, "Okafor home", "Okafor"), "Ngozi", "cook");
+  const { poha, night } = await cookTogetherNight(t, rajani, caleb, shreya);
+  const pohaNight = await host(t, rajani, poha);
+  const feedDinners = async (who: Who) => (await feed(t, who)).dinners.map((d) => d.dinnerId).sort();
+  expect(await feedDinners(serene)).toEqual([night, pohaNight].sort());
+
+  // Serene's family blocks the Pawars: Caleb's dinner of their dish goes too, though Caleb isn't blocked.
+  await t.mutation(api.community.block, { sessionToken: serene.sessionToken, kind: "recipe", targetId: poha });
+  expect(await feedDinners(serene)).toEqual([]);
+  expect(await dinner(t, serene, night)).toBeNull();
+  await expect(join(t, serene, night)).rejects.toThrow("isn't happening");
+  await expect(report(t, serene, "dinner", night)).rejects.toThrow("isn't happening"); // can't see it, can't report it
+
+  // Two families' reports hide the dish: every dinner of it goes, for everyone but its host's family.
+  for (const who of [salik, ngozi]) expect(await feedDinners(who)).toEqual([night, pohaNight].sort());
+  await report(t, salik, "recipe", poha);
+  await report(t, ngozi, "recipe", poha);
+  expect(await feedDinners(ngozi)).toEqual([]);
+  const third = await person(t, await family(t, "Santos home", "Santos"), "Rey", "cook");
+  expect(await feedDinners(third)).toEqual([]);
+  expect(await dinner(t, third, night)).toBeNull();
+  await expect(join(t, third, night)).rejects.toThrow("isn't happening");
+  expect(await dinner(t, caleb, night)).toMatchObject({ ours: true });
+
+  // Kept after review it's back; taken down it's gone again, and so are its dinners.
+  await t.mutation(internal.reports.review, { kind: "recipe", targetId: poha, keep: true });
+  expect(await feedDinners(third)).toEqual([night, pohaNight].sort());
+  await t.mutation(internal.reports.review, { kind: "recipe", targetId: poha, keep: false });
+  expect(await feedDinners(third)).toEqual([]);
+  await expect(join(t, third, night)).rejects.toThrow("isn't happening");
+});
+
+test("an invite link is only for those who can still see the dinner, and stops once its dish is hidden", async () => {
+  const { t, rajani, serene, serenesMom, caleb } = await world();
+  const salik = await person(t, await family(t, "Mian home"), "Salik", "kid");
+  const poha = await recipe(t, rajani, { sharedAt: 1 });
+  const dumplings = await recipe(t, serenesMom, { title: "Dumplings", sharedAt: 2 });
+  const pohaNight = await host(t, rajani, poha);
+  for (const guest of [serene, caleb]) {
+    const requestId = await join(t, guest, pohaNight);
+    await t.mutation(api.dinners.respond, { sessionToken: rajani.sessionToken, requestId, accept: true });
+  }
+  const token = (who: Who) => t.mutation(internal.dinners.inviteToken, { sessionToken: who.sessionToken, dinnerId: pohaNight, fresh: "f".repeat(43) });
+  const link = await token(rajani);
+  expect(await token(serene)).toBe(link);
+
+  // The Pawars block Serene's family: her link stops; Caleb's still works.
+  await t.mutation(api.community.block, { sessionToken: rajani.sessionToken, kind: "recipe", targetId: dumplings });
+  await expect(token(serene)).rejects.toThrow("isn't happening");
+  expect(await token(caleb)).toBe(link);
+
+  // Two families' reports hide the dish: the guest's link stops, and the public page no longer opens.
+  const open = () => t.mutation(internal.dinners.openInvite, { token: link, deviceId: "device-0123456789abcdef" });
+  expect(await open()).toMatchObject({ dish: "Kanda Poha" });
+  await report(t, salik, "recipe", poha);
+  await report(t, await person(t, await family(t, "Okafor home", "Okafor"), "Ngozi", "cook"), "recipe", poha);
+  await expect(token(caleb)).rejects.toThrow("isn't happening");
+  expect(await token(rajani)).toBe(link); // the host's own family still can
+  expect(await open()).toBeNull();
+});
+
+test("only what you can see now can be reported or blocked", async () => {
+  const { t, rajani, serene, serenesMom } = await world();
+  const privateDal = await recipe(t, rajani, { title: "Private Dal" });
+  await expect(report(t, serene, "recipe", privateDal)).rejects.toThrow("isn't shared anymore");
+  await expect(t.mutation(api.community.block, { sessionToken: serene.sessionToken, kind: "recipe", targetId: privateDal })).rejects.toThrow("isn't shared anymore");
+  const poha = await recipe(t, rajani, { sharedAt: 1 });
+  const pohaNight = await host(t, rajani, poha);
+  await t.run((ctx) => ctx.db.patch("dinners", pohaNight, { status: "cancelled" }));
+  await expect(report(t, serene, "dinner", pohaNight)).rejects.toThrow("isn't happening anymore");
+  // A family that already reported it may say so again (nothing new), though it no longer sees it.
+  await report(t, serene, "recipe", poha);
+  await report(t, serenesMom, "recipe", poha);
+  expect(await reports(t)).toHaveLength(1);
 });
 
 test("a block works both ways: no dishes, dinners or asks between the two families", async () => {

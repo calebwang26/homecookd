@@ -13,7 +13,7 @@ import { acceptedCount, cookingTogether, familyLabel, PUBLIC_COVER } from "./com
 import { newToken, requireSession, type Signed } from "./lib/auth";
 import { distanceLabel, milesBetween, placeOf, roundToGrid } from "./lib/geo";
 import { flagged, NOT_POSTABLE } from "./lib/moderation";
-import { type Shield, seesDinner, seesRecipe, shieldFor } from "./lib/safety";
+import { dinnerVisible, type Shield, seesRecipe, shieldFor } from "./lib/safety";
 import { familyRecipe } from "./recipes";
 import schema from "./schema";
 
@@ -165,7 +165,7 @@ export const get = query({
     const signed = await requireSession(ctx, sessionToken);
     const shield = await shieldFor(ctx, signed.family._id);
     const d = await ctx.db.get("dinners", dinnerId);
-    return d && seesDinner(shield, d) ? await view(ctx, signed, shield, d) : null;
+    return d && (await dinnerVisible(ctx, shield, d)) ? await view(ctx, signed, shield, d) : null;
   },
 });
 
@@ -189,7 +189,7 @@ export const mine = query({
     const joined = [];
     for (const r of asked) {
       const d = await ctx.db.get("dinners", r.dinnerId);
-      if (d && seesDinner(shield, d)) joined.push(d);
+      if (d && (await dinnerVisible(ctx, shield, d))) joined.push(d);
     }
     for (const d of joined.sort((a, b) => a.startsAt - b.startsAt)) out.push(await view(ctx, signed, shield, d));
     return out;
@@ -202,7 +202,7 @@ export const requestJoin = mutation({
   handler: async (ctx, { sessionToken, dinnerId }) => {
     const signed = await requireSession(ctx, sessionToken);
     const d = await ctx.db.get("dinners", dinnerId);
-    const visible = !!d && seesDinner(await shieldFor(ctx, signed.family._id), d);
+    const visible = !!d && (await dinnerVisible(ctx, await shieldFor(ctx, signed.family._id), d));
     if (!d || !visible || d.status === "cancelled" || d.startsAt <= Date.now()) throw new ConvexError("That dinner isn't happening anymore.");
     if (d.hostFamilyId === signed.family._id) throw new ConvexError("This is your family's dinner.");
     const asked = await ctx.db
@@ -263,7 +263,8 @@ export const inviteToken = internalMutation({
   handler: async (ctx, { sessionToken, dinnerId, fresh }) => {
     const signed = await requireSession(ctx, sessionToken);
     const d = await ctx.db.get("dinners", dinnerId);
-    if (!d || d.status === "cancelled") throw new ConvexError("That dinner isn't happening anymore.");
+    const visible = !!d && (await dinnerVisible(ctx, await shieldFor(ctx, signed.family._id), d));
+    if (!d || !visible || d.status === "cancelled") throw new ConvexError("That dinner isn't happening anymore.");
     if (d.hostId !== signed.person._id) {
       const requests = await ctx.db
         .query("dinnerRequests")
@@ -297,6 +298,7 @@ export const openInvite = internalMutation({
       .withIndex("by_inviteToken", (q) => q.eq("inviteToken", token))
       .unique();
     if (!d || d.status === "cancelled" || d.hiddenAt) return null;
+    if ((await ctx.db.get("recipes", d.recipeId))?.hiddenAt) return null; // its dish was hidden after reports
     const hostName = ((await ctx.db.get("people", d.hostId))?.name ?? "").trim();
     const reply = { dish: d.dish, hostName, startsAt: d.startsAt };
     const now = Date.now();

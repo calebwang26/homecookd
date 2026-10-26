@@ -40,11 +40,24 @@ export function seesRecipe(s: Shield, r: Doc<"recipes">): boolean {
   return !r.hiddenAt && !s.blocked.has(r.familyId) && !s.reported.has(key("recipe", r._id));
 }
 
-/** A dinner around a dish we reported goes with it. */
-export function seesDinner(s: Shield, d: Doc<"dinners">): boolean {
+/**
+ * A dinner goes with its dish: one we reported, one reports hid or the team took down, or one from a
+ * family we blocked (a "cook together" dinner of another family's dish). A dinner whose dish its cook
+ * later unshared keeps going (dinners.ts), so `sharedAt` isn't asked for here.
+ */
+export function seesDinner(s: Shield, d: Doc<"dinners">, recipe: Doc<"recipes"> | null): boolean {
   if (d.hostFamilyId === s.familyId) return true;
-  return !d.hiddenAt && !s.blocked.has(d.hostFamilyId) && !s.reported.has(key("dinner", d._id)) && !s.reported.has(key("recipe", d.recipeId));
+  if (d.hiddenAt || s.blocked.has(d.hostFamilyId) || s.reported.has(key("dinner", d._id))) return false;
+  return !s.reported.has(key("recipe", d.recipeId)) && (!recipe || seesRecipe(s, recipe));
 }
+
+/** seesDinner with the dinner's recipe read. */
+export async function dinnerVisible(ctx: QueryCtx, s: Shield, d: Doc<"dinners">): Promise<boolean> {
+  return seesDinner(s, d, await ctx.db.get("recipes", d.recipeId));
+}
+
+/** Whether this family already reported it (a second report changes nothing, so it isn't refused). */
+export const reportedBy = (s: Shield, kind: Reportable, id: string) => s.reported.has(key(kind, id));
 
 /** One report per family and item; a second one from the same family changes nothing. */
 export async function fileReport(

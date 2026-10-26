@@ -12,7 +12,7 @@ import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/s
 import { requireCook, requireSession, type Signed } from "./lib/auth";
 import { distanceLabel, milesBetween, placeOf, roundToGrid } from "./lib/geo";
 import { flagged, NOT_SHAREABLE, recipeWords } from "./lib/moderation";
-import { fileReport, type Reportable, type Shield, seesDinner, seesRecipe, shieldFor } from "./lib/safety";
+import { dinnerVisible, fileReport, type Reportable, reportedBy, type Shield, seesRecipe, shieldFor } from "./lib/safety";
 import { type Card, plainStory, quoteChoices, quoteTranslated, storiesFor } from "./lib/storyCard";
 import { familyRecipe } from "./recipes";
 import schema from "./schema";
@@ -118,9 +118,9 @@ export const feed = query({
       .take(100);
     const dinners: { miles: number; recipeId: Id<"recipes">; row: FeedDinner }[] = [];
     for (const d of open) {
-      if (d.startsAt <= now || d.hostFamilyId === signed.family._id || !seesDinner(shield, d)) continue;
+      if (d.startsAt <= now || d.hostFamilyId === signed.family._id) continue;
       const miles = milesBetween(here, d.approx);
-      if (!near(miles)) continue;
+      if (!near(miles) || !(await dinnerVisible(ctx, shield, d))) continue;
       const hostName = (await ctx.db.get("people", d.hostId))?.name ?? "";
       if (flagged(d.dish, d.placeName, hostName)) continue; // the word filter's backstop
       dinners.push({
@@ -408,21 +408,33 @@ export const mySwaps = query({
 
 const reportable = v.union(v.literal("recipe"), v.literal("dinner"));
 
-/** Whose recipe or dinner it is, named the way its card names that family. Never my own family's. */
+const gone = (kind: Reportable) => new ConvexError(kind === "recipe" ? "That recipe isn't shared anymore." : "That dinner isn't happening anymore.");
+
+/**
+ * Whose recipe or dinner it is, named the way its card names that family, and whether my family can
+ * see it now (shared or happening, and not hidden from us). Never my own family's.
+ */
 async function ownerOf(ctx: QueryCtx, signed: Signed, kind: Reportable, targetId: string) {
-  let owner: { id: string; familyId: Id<"families">; name: string } | null = null;
+  const shield = await shieldFor(ctx, signed.family._id);
+  let owner: { id: string; familyId: Id<"families">; name: string; visible: boolean } | null = null;
   if (kind === "recipe") {
     const id = ctx.db.normalizeId("recipes", targetId);
     const r = id && (await ctx.db.get("recipes", id));
-    if (r) owner = { id: r._id, familyId: r.familyId, name: (await ctx.db.get("people", r.cookId))?.name ?? "" };
+    if (r) {
+      const visible = r.status === "ready" && !!r.sharedAt && seesRecipe(shield, r);
+      owner = { id: r._id, familyId: r.familyId, name: (await ctx.db.get("people", r.cookId))?.name ?? "", visible };
+    }
   } else {
     const id = ctx.db.normalizeId("dinners", targetId);
     const d = id && (await ctx.db.get("dinners", id));
-    if (d) owner = { id: d._id, familyId: d.hostFamilyId, name: (await ctx.db.get("people", d.hostId))?.name ?? "" };
+    if (d) {
+      const visible = d.status !== "cancelled" && (await dinnerVisible(ctx, shield, d));
+      owner = { id: d._id, familyId: d.hostFamilyId, name: (await ctx.db.get("people", d.hostId))?.name ?? "", visible };
+    }
   }
-  if (!owner) throw new ConvexError(`That ${kind} isn't here anymore.`);
+  if (!owner) throw gone(kind);
   if (owner.familyId === signed.family._id) throw new ConvexError(`This is your family's ${kind}.`);
-  return { ...owner, label: familyLabel(await ctx.db.get("families", owner.familyId), owner.name) };
+  return { ...owner, shield, label: familyLabel(await ctx.db.get("families", owner.familyId), owner.name) };
 }
 
 export const report = mutation({
@@ -431,6 +443,7 @@ export const report = mutation({
   handler: async (ctx, { sessionToken, kind, targetId, reason }) => {
     const signed = await requireSession(ctx, sessionToken);
     const owner = await ownerOf(ctx, signed, kind, targetId);
+    if (!owner.visible && !reportedBy(owner.shield, kind, owner.id)) throw gone(kind);
     await fileReport(ctx, { familyId: signed.family._id, personId: signed.person._id }, { kind, id: owner.id, familyId: owner.familyId }, reason);
     return null;
   },
@@ -448,6 +461,7 @@ export const block = mutation({
       .withIndex("by_familyId_and_blockedFamilyId", (q) => q.eq("familyId", signed.family._id).eq("blockedFamilyId", owner.familyId))
       .first();
     if (before) return null;
+    if (!owner.visible) throw gone(kind);
     await ctx.db.insert("blocks", { familyId: signed.family._id, blockedFamilyId: owner.familyId, label: owner.label, createdAt: Date.now() });
     await fileReport(ctx, { familyId: signed.family._id, personId: signed.person._id }, { kind: "family", id: owner.familyId, familyId: owner.familyId });
     return null;
