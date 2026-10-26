@@ -64,6 +64,7 @@ import {
   type RecordPhase,
   type ServerState,
 } from '@/components/record/recordingLogic';
+import { hasAiConsent } from '@/lib/aiConsent';
 import { markIntroduced } from '@/lib/homie/intro';
 import { doneSpeaking, getHomie, pulseLit, setHomie, setHomieLevel } from '@/lib/homie/store';
 import { stopAudio, useNowPlaying } from '@/lib/media';
@@ -386,12 +387,13 @@ export function useHomieRecording(recordingId: string | null | undefined, stubIn
     connecting.current = true;
     // While filming in the app a lost line keeps its message until a socket opens (no flicker per retry).
     if (!cameraBusy.current) setError(null);
-    const token = await convexSession(meId.current).catch(() => null);
+    const [token, agreed] = await Promise.all([convexSession(meId.current).catch(() => null), hasAiConsent()]);
     connecting.current = false;
     if (!want.current || paused.current || sock.current) return;
     const stub = !VOICE_URL || token === 'stub' || recordingId.startsWith('stub-');
-    // A live recording with no session (sessions.start failed): a failed connect, never the stub.
-    if (!stub && !token) return lost();
+    // A live recording with no session (sessions.start failed), or no yes to the AI companies on this
+    // phone (Record asks for it first): a failed connect, never the stub.
+    if (!stub && (!token || !agreed)) return lost();
     let s: Socket;
     try {
       s = stub

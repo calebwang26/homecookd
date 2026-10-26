@@ -31,6 +31,8 @@
 // the writes strict (a report that didn't reach the team must say so).
 import { useEffect, useState } from 'react';
 
+import { requireAiConsent } from '@/lib/aiConsent';
+
 import { call, token, useLive } from './convex';
 
 export type LatLng = { lat: number; lng: number };
@@ -158,7 +160,9 @@ export function useCommunityRecipe(recipeId: string): CommunityRecipe | null | u
   return value && value.recipeId !== recipeId ? undefined : value;
 }
 
+/** On the map: Muse writes the dish's story card from her recipe, so only with this phone's yes to the AI companies. */
 export async function setShare(recipeId: string, on: boolean): Promise<void> {
+  if (on) await requireAiConsent();
   const sessionToken = await token();
   await call('mutation', 'community:setShare', { sessionToken, recipeId, on }, () => null);
 }
@@ -175,6 +179,7 @@ export function useFamilyDishes(enabled = true): FamilyDish[] | null {
 
 /** "shared": it's on the map now (mine, or it already was); "asked": homie asked its cook. */
 export async function askToShare(recipeId: string): Promise<'shared' | 'asked'> {
+  await requireAiConsent();
   const sessionToken = await token();
   return call('mutation', 'shareRequests:ask', { sessionToken, recipeId }, () => 'asked' as const, { strict: true });
 }

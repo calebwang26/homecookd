@@ -7,6 +7,7 @@ import { router } from 'expo-router';
 import Animated from 'react-native-reanimated';
 
 import { haptic, useToast } from '@/components/ui';
+import { ensureAiConsent } from '@/lib/aiConsent';
 import { askToShare, type FamilyDish } from '@/lib/live/community';
 
 import { Chooser } from './Chooser';
@@ -33,6 +34,8 @@ export function ShareSteps({
   const { title, rows } = shareChoices(dishes, now);
 
   const put = async (d: FamilyDish) => {
+    // The map's story card is Muse's (and an ask is translated for the cook): asked first, once.
+    if (!(await ensureAiConsent())) return;
     try {
       const done = await askToShare(d.recipeId);
       haptic('success');

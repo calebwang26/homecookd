@@ -82,6 +82,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { AppState, Platform } from 'react-native';
 import * as Haptics from 'expo-haptics';
 
+import { hasAiConsent } from '@/lib/aiConsent';
 import { sayPhase } from '@/lib/homie/logic';
 import { doneSpeaking, getHomie, LIT_BEAT_MS, setHomie, setHomieLevel, useHomieSelect } from '@/lib/homie/store';
 import { audioFaded, audioNow, HANDOFF_FADE_MS, kidVideoPlaying, pauseAllVideos, setVideoGate, VIDEO_GATE_MAX_MS, videoPlaying } from '@/lib/media';
@@ -700,10 +701,16 @@ export function useVoiceCooking(opts: VoiceOptions) {
       const began = line.current;
       lineAuto.current = auto;
       if (!auto) setStatus('connecting');
-      const [token, recipeId] = await Promise.all([convexSession(meId.current), convexRecipeId(libraryId)]).catch(() => [null, libraryId] as const);
+      const [token, recipeId, agreed] = await Promise.all([convexSession(meId.current), convexRecipeId(libraryId), hasAiConsent()]).catch(() => [null, libraryId, false] as const);
       // Hung up (or hung up and opened again) meanwhile, or a socket is already open: this one isn't needed.
       if (!lineMayOpen({ want: want.current, line: line.current, began, open: !!sock.current })) return;
       const real = !!VOICE_URL && !!token && token !== 'stub';
+      // Never a real line without this phone's yes to the AI companies (cook mode asks for it first).
+      if (real && !agreed) {
+        want.current = false;
+        setMicHold('off');
+        return setStatus('off');
+      }
       // It only calls a service that can cook this dish (one Convex knows; a sample dish isn't), on
       // its own or on a tap; nothing to say when it can't (the phone reads instead).
       if ((auto && !real) || (real && recipeId === libraryId)) {

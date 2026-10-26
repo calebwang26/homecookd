@@ -9,6 +9,8 @@
 //   Videos I took    the camera roll, then Send (as before).
 // If homie can't start (no connection within 10 s, or live.* isn't on the server), glasses say so and
 // the phone camera opens without homie, then Send.
+// The first time, "Start recording" asks first (lib/aiConsent: the videos and her voice go to the AI
+// companies); "Not now" leaves her here with nothing open.
 // "Start recording" is the only way in: the sheet holds every way to film. Above the guide, the newest glasses
 // video the laptop saved (components/record/GlassesVideoCard): "Save to Photos", then send it from Videos I took. On the web, the camera and
 // camera roll explain that they work in the app on a phone.
@@ -27,6 +29,7 @@ import { PreRecordSheet, type CaptureSource, type PreRecordChoice } from '@/comp
 import { PhoneOnlySheet } from '@/components/record/sheets';
 import { usePickVideos, type PickContext } from '@/components/record/usePickVideos';
 import { ArrowRightIcon, Avatar, BackPill, listEnter, PressableScale, ScreenWash, Txt, useToast } from '@/components/ui';
+import { ensureAiConsent } from '@/lib/aiConsent';
 import { convexKidIds, startRecording } from '@/lib/live/convex';
 import { getCachedEntry } from '@/lib/recipes';
 import { useWords } from '@/lib/words/useWords';
@@ -84,7 +87,12 @@ export default function RecordScreen() {
   const steps = STEPS.map((key) => t(key));
 
 
+  const open = async () => {
+    if (await ensureAiConsent()) setSheet(true);
+  };
+
   const start = async ({ source, dish: typed, kids, everyone, label, who, language }: PreRecordChoice) => {
+    if (!(await ensureAiConsent())) return setSheet(false);
     const first = kids[0]?.id ?? null;
     setDraftMeta({ dish: typed || null, requestFrom: first, forKids: who, everyone, language, recordingId: null });
     const picked: PickContext = { dish: typed || null, requestFrom: first };
@@ -175,7 +183,7 @@ export default function RecordScreen() {
 
         <Animated.View entering={listEnter(2)} style={styles.ctaCol}>
           <PressableScale
-            onPress={() => setSheet(true)}
+            onPress={() => void open()}
             haptic
             disabled={!!pick.busy}
             accessibilityLabel={t('parent.record.start')}

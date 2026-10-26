@@ -68,4 +68,16 @@ export const COMMON = {
   'common.list.comma': ', ',
   'common.list.and': '{first} and {last}',
   'common.list.or': '{first} or {last}',
+  // The sheet before something goes to the AI companies the first time (components/consent/AiConsentSheet).
+  'common.ai.title': 'homecookd uses AI for this',
+  'common.ai.line': 'Your videos, photos and voice go to AI services to write the recipe and to listen while you cook. Never for ads.',
+  'common.ai.seeWho': 'See who',
+  'common.ai.gemini': 'Watches your videos and hears your voice.',
+  'common.ai.muse': 'Writes the recipe and drafts notes.',
+  'common.ai.claude': 'Helps while you film and cook.',
+  'common.ai.cartesia': 'Hears your voice and reads steps aloud.',
+  'common.ai.moss': 'Searches what the cook said.',
+  'common.ai.row': '{name}. {job}',
+  'common.ai.ok': 'OK, continue',
+  'common.ai.okHint': 'Lets homecookd send this to these AI services',
 } as const satisfies Record<`common.${string}`, string>;

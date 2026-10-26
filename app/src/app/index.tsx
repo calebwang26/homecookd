@@ -63,7 +63,6 @@ import {
   type TileChoice,
 } from '@/components/profiles';
 import { ActionButton, BackPill, BottomSheet, Brand, listEnter, PressableScale, ScreenWash, Txt, usePotMood } from '@/components/ui';
-import { useAiConsent } from '@/lib/aiConsent';
 import type { Profile, Role } from '@/lib/api';
 import { openPage, PRIVACY_URL, TERMS_URL } from '@/lib/links';
 import { moveApi } from '@/lib/moveRequests';
@@ -102,12 +101,10 @@ export default function Profiles() {
   const statuses = useFamilyStatus(profiles, family?.id ?? null, t);
   // Tapped their own face on Home: the family gateway, with Back to them.
   const choosing = useLocalSearchParams<{ pick?: string }>().pick === '1';
-  // Otherwise a phone with a default person goes straight to them (no tap, nothing to mis-tap), once
-  // it has said yes to the AI companies ("Before we start" comes first: the root layout's gate).
-  const consented = useAiConsent() === 'given';
-  const autoEnter = consented && !!defaultPerson && !choosing && !deviceNeedsProfile && (status === 'ready' || status === 'offline');
+  // Otherwise a phone with a default person goes straight to them (no tap, nothing to mis-tap).
+  const autoEnter = !!defaultPerson && !choosing && !deviceNeedsProfile && (status === 'ready' || status === 'offline');
   // Who's at the table this week (flames on their faces); not asked for on the way straight home.
-  const { table } = useTable({ enabled: consented && !autoEnter && status === 'ready' });
+  const { table } = useTable({ enabled: !autoEnter && status === 'ready' });
   const lit = useMemo(() => litIds(table), [table]);
   const entered = useRef(false);
   useEffect(() => {
@@ -218,9 +215,8 @@ export default function Profiles() {
   const loading = status === 'loading' && profiles.length === 0;
   const offline = status === 'offline' && profiles.length === 0;
 
-  // Handing straight to the owner, or on the way to "Before we start": just the wash, so the picker
-  // never flashes up.
-  if (autoEnter || (!consented && status !== 'needs-code')) {
+  // Handing straight to the owner: just the wash, so the picker never flashes up.
+  if (autoEnter) {
     return (
       <View style={styles.root}>
         <ScreenWash tone="parent" height={420} />

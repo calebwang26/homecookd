@@ -5,12 +5,14 @@
 //   video or voice.
 // (The line is the map card's quote, one of her own step quotes; the guess is Muse's culture label.)
 // A tap flips it (community.setShare; a failure flips it back with a toast). The first time it goes
-// on, Muse writes the dish's story card. Hidden unless this dish has a ready Convex row and the
+// on, Muse writes the dish's story card, so turning it on asks first the first time (lib/aiConsent;
+// "Not now" leaves it off). Hidden unless this dish has a ready Convex row and the
 // person here is its cook (the server checks that again).
 import { useState } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { haptic, PressableScale, Txt, useToast } from '@/components/ui';
+import { ensureAiConsent } from '@/lib/aiConsent';
 import { setShare } from '@/lib/live/community';
 import { colors } from '@/theme/tokens';
 
@@ -47,6 +49,7 @@ export function ShareNearbyRow({ libraryId, me, style }: ShareNearbyRowProps) {
   const flip = async () => {
     if (saving) return;
     const next = !on;
+    if (next && !(await ensureAiConsent())) return;
     setWanted(next);
     setSaving(true);
     try {

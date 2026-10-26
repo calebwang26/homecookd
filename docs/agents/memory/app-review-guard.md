@@ -21,8 +21,10 @@ The paths:
 - **Sign-in path the reviewer uses:** `app/src/app/join.tsx`, `join-code.tsx`, `i.tsx`,
   `app/src/components/signin/SignInScreen.tsx` ("Have a family code?", the terms line), `app/src/app/index.tsx`
   ("Who's in the kitchen?"), `convex/sessions.ts`, `convex/lib/auth.ts`.
-- **AI consent (5.1.2(i)):** `app/src/app/consent.tsx`, `app/src/lib/aiConsent.ts`, the consent gate in
-  `app/src/app/_layout.tsx`.
+- **AI consent (5.1.2(i)):** `app/src/lib/aiConsent.ts` (`ensureAiConsent`), the sheet
+  `app/src/components/consent/AiConsentSheet.tsx` (mounted in `app/src/app/_layout.tsx`), and every place that asks
+  before sending (listed in `app/scripts/test-consent.mjs`). Since Oct 26 it's a small sheet at first use, not a
+  screen after sign-in.
 - **Delete account (5.1.1(v)):** `app/src/components/profiles/DeleteAccountSheet.tsx`, `deleteAccount` /
   `accountRemoval` in `app/src/lib/session.tsx`, `app/src/lib/auth/apple.ts`, `convex/account.ts`, `convex/apple.ts`.
 - **Report and block (1.2):** `app/src/components/community/ReportSheet.tsx`, `report.ts`,

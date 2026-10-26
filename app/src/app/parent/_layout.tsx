@@ -6,7 +6,6 @@ import { Tabs } from 'expo-router/js-tabs';
 
 import { LanguageTiles } from '@/components/language/LanguageTiles';
 import { BookIcon, ChatIcon, FloatingTabBar, HomeIcon } from '@/components/ui';
-import { useAiConsent } from '@/lib/aiConsent';
 import { useUnread } from '@/lib/session';
 import { useWords } from '@/lib/words/useWords';
 import { colors } from '@/theme';
@@ -17,10 +16,7 @@ function useMessagesBadge(): number | undefined {
 
 export default function ParentTabs() {
   const messages = useMessagesBadge();
-  // Nothing of home mounts before "Before we start" (the root layout sends them there).
-  const consent = useAiConsent();
   const { t, needsChoice } = useWords();
-  if (consent !== 'given') return null;
   if (needsChoice) return <LanguageTiles />;
   return (
     <Tabs

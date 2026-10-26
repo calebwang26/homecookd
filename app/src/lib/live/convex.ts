@@ -28,6 +28,10 @@
 //   await convexKidIds([leo, zoe])                       their Convex ids (people.family), for forKidIds
 //   await libraryIdOf(recipeId)                          a Convex recipe's library id (recipes.list)
 //
+// The calls that send someone's videos, voice or photos on to the AI companies (createJob,
+// startRecording, answerQuestion, sharePhoto) refuse without this phone's yes (lib/aiConsent
+// requireAiConsent); the screens ask for it first (ensureAiConsent).
+//
 // The reads added for the Oct 24 tracks (live.recording, people.me) are "soft": until those functions
 // are deployed, Convex's "Could not find public function" gives their stub value without moving every
 // other call to the stub. The writes (live.startRecording, people.setLanguage) are "strict": a missing
@@ -45,6 +49,7 @@ import { makeFunctionReference, type FunctionType } from 'convex/server';
 import { File, UploadType } from 'expo-file-system';
 import { useEffect, useState, useSyncExternalStore } from 'react';
 
+import { requireAiConsent } from '@/lib/aiConsent';
 import { getSession, useSession } from '@/lib/session';
 import { secretGet } from '@/lib/storage';
 
@@ -283,6 +288,7 @@ function oneKid({ forKidIds, ...rest }: Record<string, unknown>): Record<string,
  * cook it's for (a profile id), by default whoever is in.
  */
 export async function createJob(uploadPath: string, source: JobSource, extras: JobExtras = {}, as?: string): Promise<void> {
+  await requireAiConsent();
   const sessionToken = await token(as);
   const extra = present(extras);
   const run = (more: Record<string, unknown>) => call('mutation', 'jobs:create', { sessionToken, uploadPath, source, ...more }, () => stub.createJob(uploadPath, source));
@@ -307,6 +313,7 @@ export async function createJob(uploadPath: string, source: JobSource, extras: J
  * server uses her people.language (send one only when she picked it or it loaded).
  */
 export async function startRecording(input: { dish?: string; forKidIds?: string[]; language?: string; source: RecordingSource }): Promise<{ recordingId: string }> {
+  await requireAiConsent();
   const sessionToken = await token();
   const args = { sessionToken, ...present(input) };
   const run = (a: Record<string, unknown>) => call<{ recordingId: string }>('mutation', 'live:startRecording', a, () => stub.startRecording(input), { strict: true });
@@ -597,6 +604,7 @@ async function uploadFile(uri: string, contentType: string): Promise<string> {
 
 /** The cook's answer: a voice note (push to talk), or typed words. */
 export async function answerQuestion(questionId: string, answer: { audioUri: string; contentType: string } | { text: string }): Promise<void> {
+  await requireAiConsent();
   const sessionToken = await token();
   const audioId = 'audioUri' in answer ? await uploadFile(answer.audioUri, answer.contentType) : undefined;
   const text = 'text' in answer ? answer.text : undefined;
@@ -607,6 +615,7 @@ export type SharedPhoto = { draft: string; fileId: string; recipeId: string; coo
 
 /** The kid's dish photo: stored, and Muse drafts a note to the cook. Nothing is sent yet. */
 export async function sharePhoto(libraryId: string, photoUri: string): Promise<SharedPhoto> {
+  await requireAiConsent();
   const sessionToken = await token();
   const { recipeId, cookId } = await convexRecipe(libraryId);
   const fileId = await uploadFile(photoUri, 'image/jpeg');

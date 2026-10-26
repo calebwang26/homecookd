@@ -1,19 +1,20 @@
-// The one-time "Before we start" page (app/consent.tsx): it names the AI companies that get people's
-// videos, photos and voice, and asks before anything is sent to them (App Store guideline 5.1.2(i)).
+// Asking before anything goes to the AI companies (App Store guideline 5.1.2(i)), at first use: the
+// first upload, the first filming, the first hands-free cooking, the first spoken answer or dish photo.
+// Each of those calls ensureAiConsent() before it sends; the first time, AiConsentHost
+// (components/consent) raises a small sheet that names the companies, and only "OK, continue" says yes.
 // The yes is kept on this phone only, as the time of the tap, under a versioned key: a new version
 // (another company, or another kind of data) asks everyone again. Signing out forgets it, so whoever
 // signs in next is asked too. Tested with the phone's storage faked: node scripts/test-consent.mjs.
 //
-//   const consent = useAiConsent();             'loading' | 'needed' | 'given'
-//   await agreeToAi();   await forgetAiConsent();
-//   consentFirst(consent, status, pathname)     the root layout's gate: go to /consent now
-//
-// Web dev aids that draw a screen without signing in (`?as=`, `?profiles=`, `?preview=`) skip it,
-// unless the URL also has `consent=ask`.
+//   if (!(await ensureAiConsent())) return;   true at once after a yes; else the sheet, true on its yes
+//   if (!askAiConsentNow()) return;           the same for a touch that can't wait (a hold): false
+//                                             until there's a yes, and the sheet rises meanwhile
+//   await requireAiConsent();                 the senders' own check: throws without a yes, never asks
+//   await hasAiConsent();                     a yes is saved (waits for the read)
+//   const consent = useAiConsent();           'loading' | 'needed' | 'given'
+//   await forgetAiConsent();                  signing out
 import { useSyncExternalStore } from 'react';
-import { Platform } from 'react-native';
 
-import type { SessionStatus } from './session';
 import { kvGet, kvSet } from './storage';
 
 export const AI_CONSENT_KEY = 'aiConsent.v1';
@@ -30,35 +31,91 @@ export async function readAiConsent(): Promise<'needed' | 'given'> {
 }
 
 let state: Consent = 'loading';
-let started = false;
+let read: Promise<void> | null = null;
+/** The sheet is up, and who waits on its answer. */
+let asking = false;
+let waiters: ((yes: boolean) => void)[] = [];
 const listeners = new Set<() => void>();
+
+function emit() {
+  for (const l of listeners) l();
+}
 
 function set(next: Consent) {
   if (state === next) return;
   state = next;
-  for (const l of listeners) l();
+  emit();
 }
 
 /** Read the saved yes once per run of the app. A tap or a sign-out meanwhile wins. */
-function start() {
-  if (started) return;
-  started = true;
-  void readAiConsent().then((saved) => {
+function start(): Promise<void> {
+  read ??= readAiConsent().then((saved) => {
     if (state === 'loading') set(saved);
   });
+  return read;
 }
 
 export function getAiConsent(): Consent {
-  start();
+  void start();
   return state;
 }
 
 function subscribe(l: () => void) {
-  start();
+  void start();
   listeners.add(l);
   return () => {
     listeners.delete(l);
   };
+}
+
+export function useAiConsent(): Consent {
+  return useSyncExternalStore(subscribe, getAiConsent, getAiConsent);
+}
+
+export async function hasAiConsent(): Promise<boolean> {
+  await start();
+  return state === 'given';
+}
+
+export class NoAiConsent extends Error {
+  constructor() {
+    super('homecookd needs your OK before it uses AI for this.');
+  }
+}
+
+export async function requireAiConsent(): Promise<void> {
+  if (!(await hasAiConsent())) throw new NoAiConsent();
+}
+
+export async function ensureAiConsent(): Promise<boolean> {
+  if (await hasAiConsent()) return true;
+  return new Promise((resolve) => {
+    waiters.push(resolve);
+    if (!asking) {
+      asking = true;
+      emit();
+    }
+  });
+}
+
+export function askAiConsentNow(): boolean {
+  if (getAiConsent() === 'given') return true;
+  void ensureAiConsent();
+  return false;
+}
+
+function settle(yes: boolean) {
+  const waiting = waiters;
+  waiters = [];
+  asking = false;
+  emit();
+  for (const w of waiting) w(yes);
+}
+
+/** The sheet's answer: "OK, continue" saves the yes first; "Not now" (or closing it) saves nothing. */
+export async function answerAiConsent(yes: boolean): Promise<void> {
+  if (yes) await agreeToAi();
+  settle(yes);
 }
 
 export async function agreeToAi(now: Date = new Date()): Promise<void> {
@@ -68,27 +125,10 @@ export async function agreeToAi(now: Date = new Date()): Promise<void> {
 
 export async function forgetAiConsent(): Promise<void> {
   set('needed');
+  if (asking) settle(false);
   await kvSet(AI_CONSENT_KEY, null);
 }
 
-/** A web dev aid is drawing a screen (see the top): no consent page in the way. */
-export function devSkipsConsent(search: string): boolean {
-  const q = new URLSearchParams(search);
-  return q.get('consent') !== 'ask' && ['as', 'profiles', 'preview'].some((k) => q.has(k));
-}
-
-// Read once at startup, like the session's own dev aids (the URL changes as the app navigates).
-const SKIP = __DEV__ && Platform.OS === 'web' && devSkipsConsent(globalThis.location?.search ?? '');
-
-export function useAiConsent(): Consent {
-  const consent = useSyncExternalStore(subscribe, getAiConsent, getAiConsent);
-  return SKIP ? 'given' : consent;
-}
-
-/** Screens that work before the yes: signing in, the invite, recipe and dinner links, and the page itself. */
-const BEFORE_CONSENT = new Set(['/join', '/join-code', '/i', '/r', '/d', '/consent']);
-
-/** In a family (or showing the last one offline) with no yes yet: the consent page comes first. */
-export function consentFirst(consent: Consent, status: SessionStatus, pathname: string): boolean {
-  return consent === 'needed' && (status === 'ready' || status === 'offline') && !BEFORE_CONSENT.has(pathname);
+export function useAiConsentAsking(): boolean {
+  return useSyncExternalStore(subscribe, () => asking, () => asking);
 }

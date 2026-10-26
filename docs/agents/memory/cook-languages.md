@@ -38,7 +38,7 @@ and build both parts now"):
 - Every cook-side screen reads from `app/src/lib/words` (`useWords()` → `t(key, vars)`): the English lists in `en/`,
   Claude's drafts per language in `tr/` (`node scripts/draft-words.mjs` drafts only what's missing;
   `node scripts/test-words.mjs` checks every word in every language). The kid side stays English. Before anyone is
-  picked (sign-in, an invite, "Before we start", "Who's in the kitchen?") screens read in the phone's language.
+  picked (sign-in, an invite, "Who's in the kitchen?") screens read in the phone's language.
 - Urdu and Arabic read right to left (`Txt`). Dinners and Community are still English. Text sent to other people
   (share messages, invite text) stays English: they may read another language.
 
