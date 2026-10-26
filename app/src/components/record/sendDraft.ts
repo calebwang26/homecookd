@@ -12,6 +12,9 @@
 //   await jobCreated(job.job_id)   its jobs.create is over (a stop waits for it, then stops that job)
 //   await makeJob(uploadId, as, { kids, glasses, language, recordingId, title })   jobs.create alone
 //   void ensureJob(row, liveKnown)   the home card: jobs.create again for a row Convex doesn't have yet
+// Nothing here runs without this phone's yes to the AI companies (lib/aiConsent): the screens ask
+// first, sendDraft refuses, and the home card's retries wait for it.
+import { getAiConsent, requireAiConsent } from '@/lib/aiConsent';
 import type { Profile } from '@/lib/api';
 import { convexKidIds, createJob } from '@/lib/live/convex';
 import { dropUnsent, markUnsentJob, stillUnsent } from '@/lib/unsentRecordings';
@@ -114,6 +117,7 @@ function tryJob(row: StoredJob): Promise<boolean> {
  */
 export function ensureJob(row: StoredJob, liveKnown: boolean): void {
   if (row.recording_id && !creating.has(row.job_id) && stillUnsent(row.recording_id)) return;
+  if (getAiConsent() !== 'given') return;
   const step = jobNext(row, { now: Date.now(), liveKnown, inFlight: inFlight.has(row.job_id) });
   if (step === 'mark-ok') updateJobMeta(row.job_id, { convex_job: 'ok' });
   else if (step === 'create') void tryJob(row);
@@ -121,6 +125,7 @@ export function ensureJob(row: StoredJob, liveKnown: boolean): void {
 
 /** Starts the upload and returns once the job exists (the videos keep uploading in the background). */
 export async function sendDraft({ me, draft, clips, kids, recipients, toLabel, dish, hello = null }: SendInput): Promise<StoredJob> {
+  await requireAiConsent();
   const title = dish.slice(0, MAX_TITLE);
   const totalS = clips.reduce((a, c) => a + (c.asset.duration ?? 0) / 1000, 0);
   const { glasses, language, recordingId } = draft;

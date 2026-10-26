@@ -71,12 +71,15 @@ function useScreenReader() {
 export function HoldToTalk({
   toName,
   onSend,
+  mayStart,
   style,
 }: {
   /** Who hears it ("Leo"), for VoiceOver. */
   toName: string;
   /** Uploads and sends the note; reject = "Try again". */
   onSend: (rec: VoiceRecording) => Promise<unknown>;
+  /** False: this hold records nothing (a note that goes to the AI companies asks first: lib/aiConsent askAiConsentNow). */
+  mayStart?: () => boolean;
   style?: StyleProp<ViewStyle>;
 }) {
   // The recorder's limit (lib/voice MAX_VOICE_S) stops it with the finger still down: wait to send what's there.
@@ -170,6 +173,7 @@ export function HoldToTalk({
       toast.show(rec.error ?? words('messages.hold.appOnly'), { tone: 'info' });
       return;
     }
+    if (mayStart && !mayStart()) return;
     if (timer.current) clearTimeout(timer.current);
     setState('idle');
     haptic('medium');

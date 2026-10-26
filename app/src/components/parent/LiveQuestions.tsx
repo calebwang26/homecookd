@@ -4,6 +4,8 @@
 // with the kid's own words), "Answer" (the walkie-talkie, /answer/<id>: homie reads it to her and she
 // answers out loud), and the small "Hold to talk" pill as the quick way. Her voice is the answer, sent
 // as a voice note and transcribed on the server. An answered question leaves the list by itself.
+// Her voice goes to the AI companies (written out, translated), so the first time either way in asks
+// first (lib/aiConsent): "Answer" opens nothing, and the pill records nothing, until she says yes.
 // A share ask (questions.kind 'share', from Community: "Shreya wants to put your Poha on the map…")
 // is a row like the others, with no step; her spoken yes or no answers it.
 // Nothing open: no card.
@@ -14,6 +16,7 @@ import Animated, { LinearTransition } from 'react-native-reanimated';
 import { HoldToTalk } from '@/components/postcard/HoldToTalk';
 import { questionLines } from '@/components/record/walkieLogic';
 import { ChevronRightIcon, fadeOutFast, listEnter, PressableScale, Txt } from '@/components/ui';
+import { askAiConsentNow, ensureAiConsent } from '@/lib/aiConsent';
 import { answerQuestion, useCookQuestions, type CookQuestion } from '@/lib/live/convex';
 import { getCachedEntry } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
@@ -47,7 +50,9 @@ export function LiveQuestions({ enterIndex = 0 }: { enterIndex?: number }) {
 function QuestionRow({ q }: { q: CookQuestion }) {
   const { t } = useWords();
   const lines = questionLines(q);
-  const open = () => router.push({ pathname: '/answer/[id]', params: { id: q._id } });
+  const open = async () => {
+    if (await ensureAiConsent()) router.push({ pathname: '/answer/[id]', params: { id: q._id } });
+  };
   return (
     <Animated.View exiting={fadeOutFast} layout={LinearTransition.duration(220)} style={styles.row}>
       <PressableScale
@@ -71,7 +76,11 @@ function QuestionRow({ q }: { q: CookQuestion }) {
         ) : null}
       </PressableScale>
       <View style={styles.actions}>
-        <HoldToTalk toName={q.askedByName ?? t('messages.hold.them')} onSend={(rec) => answerQuestion(q._id, { audioUri: rec.uri, contentType: rec.contentType })} />
+        <HoldToTalk
+          toName={q.askedByName ?? t('messages.hold.them')}
+          mayStart={askAiConsentNow}
+          onSend={(rec) => answerQuestion(q._id, { audioUri: rec.uri, contentType: rec.contentType })}
+        />
         <PressableScale onPress={open} accessibilityRole="button" accessibilityLabel={t('parent.ask.answer')} hitSlop={8} style={styles.answer}>
           <Txt variant="label" size={15} weight={700} color={colors.greenDeep}>
             {t('parent.ask.answer')}

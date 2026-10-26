@@ -9,6 +9,8 @@
 // people.me has loaded); then it listens, sends her voice note when she stops, and says "Shreya ला
 // पाठवलं" while a check pops in, before the screen closes by itself (components/record/useWalkie). A
 // tap on the question reads it again. The corner pot is hidden here: the big one is homie.
+// Her voice goes to the AI companies, so nothing starts without this phone's yes (lib/aiConsent): the
+// row that opens this asks first, and a push or link that lands here asks too ("Not now": back).
 // A share ask (questions.kind 'share': someone wants her dish on the Community map) comes the same
 // way: "Shreya ने विचारलं", the ask in her language, and her spoken yes or no (a short word is enough)
 // goes as the voice note; the server reads it, and only a clear yes shares the dish.
@@ -28,6 +30,7 @@ import { useWalkie, type WalkieStep } from '@/components/record/useWalkie';
 import { questionFit, questionLines } from '@/components/record/walkieLogic';
 import { recordWords, type Line, type RecordWords } from '@/components/record/words';
 import { CheckIcon, CloseIcon, IconButton, Txt, useToast } from '@/components/ui';
+import { ensureAiConsent, useAiConsent } from '@/lib/aiConsent';
 import { useHomieScreen } from '@/lib/homie/hooks';
 import { potState, sayPhase, speakingLabel } from '@/lib/homie/logic';
 import { useHomie } from '@/lib/homie/store';
@@ -85,6 +88,13 @@ export default function AnswerScreen() {
   const questions = useCookQuestions(me?.role === 'cook');
   const convexMe = useMe();
   useHomieScreen({ hidden: true });
+  const agreed = useAiConsent() === 'given';
+  useEffect(() => {
+    if (preview) return;
+    void ensureAiConsent().then((ok) => {
+      if (!ok) goBack();
+    });
+  }, [preview]);
 
   // Kept once seen: an answered question leaves the open list.
   const found = preview ? previewQuestion(previewLang, previewKind) : (questions.find((x) => x._id === id) ?? null);
@@ -141,7 +151,7 @@ export default function AnswerScreen() {
   useEffect(() => () => stopSpeaking(), []);
 
   const walkie = useWalkie({
-    ready: !preview && !!q && (!!convexMe || waitedForLanguage),
+    ready: !preview && agreed && !!q && (!!convexMe || waitedForLanguage),
     kind: q?.kind,
     talking,
     read,

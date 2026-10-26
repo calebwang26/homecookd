@@ -9,7 +9,8 @@
 // key, so useNowPlaying sees it: the pot lights, then speaks with its "AI voice" label, and the mic
 // sends silence meanwhile (half duplex, lib/live/mic). Without the service (no URL, no Convex session,
 // an error, or no audio within 8 s, session included), the phone's own voice (expo-speech) says the
-// words.
+// words. So does a phone that hasn't said yes to the AI companies yet (lib/aiConsent): nothing goes
+// to the service until it has.
 // homie never talks over a video (Caleb, Oct 24): while one plays, a line waits for it to stop, and a
 // newer line replaces it. Only `answer` (a reply to the kid's own tap) speaks at once, and the video
 // pauses for it (homie's voice pauses it on the shared player; the phone's voice pauses it first).
@@ -19,6 +20,7 @@ import { fetch } from 'expo/fetch';
 import { File, Paths } from 'expo-file-system';
 import * as Speech from 'expo-speech';
 
+import { hasAiConsent } from '@/lib/aiConsent';
 import { deviceVoiceLanguage, voiceHttpBase } from '@/lib/homie/logic';
 import { doneSpeaking, LIT_BEAT_MS, setHomie } from '@/lib/homie/store';
 import { onVideoChange, pauseAllVideos, playClip, stopAudio, videoPlaying, videoStopped } from '@/lib/media';
@@ -104,7 +106,7 @@ export function stopSpeaking() {
  * lit and the phone's own voice still gets its turn.
  */
 async function fetchSpeech(text: string, opts: SpeakOptions): Promise<{ bytes: Uint8Array; spoken: string } | null> {
-  if (!BASE) return null;
+  if (!BASE || !(await hasAiConsent())) return null;
   const deadline = Date.now() + TIMEOUT_MS;
   const sessionToken = await within(convexSession(opts.profileId).catch(() => null), TIMEOUT_MS);
   if (!sessionToken || sessionToken === 'stub') return null;

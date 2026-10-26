@@ -46,7 +46,8 @@
 // heart the cook sends from that row pops up here (HeartBurst + "Mom sent you a heart"); no push.
 // Voice cooking (docs/build/STACK.md "kid cooking additions"; lib/live/voice): in a build with the
 // native mic module (not Expo Go or web), with the voice service set and a dish Convex knows, the line
-// to homie opens by itself (once the "Let Mom see" sheet has its answer), with homie off: the mic
+// to homie opens by itself (once the "Let Mom see" sheet has its answer, and the first time once the
+// kid said "OK, continue" to "homecookd uses AI for this": lib/aiConsent), with homie off: the mic
 // streams only while homie is on (a tap; the next tap turns it off) and for 8 s after homie says a
 // step's short line or a nudge (Caleb, Oct 24). The screen follows it: go_to_step moves the step,
 // play_clip plays that moment of the cook's video in the step's own player (moving to the step that
@@ -98,6 +99,7 @@ import {
   useScrollHold,
   useToast,
 } from '@/components/ui';
+import { ensureAiConsent, useAiConsent } from '@/lib/aiConsent';
 import { errorMessage, type RecipeQuestion } from '@/lib/api';
 import { daysAgo, mmss } from '@/lib/format';
 import { barFrame, closeMoment, getHomie, HOMIE_SIZE, useHomieScreen, useHomieSelect } from '@/lib/homie';
@@ -254,13 +256,25 @@ export default function CookScreen() {
   // when there is one to wait for (not for a memorial cook: the session is off then).
   const sessionOn = cookingSessionOn({ enabled: liveOn, cookId: liveCook?.id, memorial: liveCook?.memorial, recipeId: recipe?.id, total });
   const settled = consentSettled({ askConsent: live.askConsent, liveOn: sessionOn, consent: live.consent, startFailed: live.startFailed });
-  // Voice can start on its own here (a dev build with the mic module and the voice service).
-  const voiceHere = micStreamingSupported() && VOICE_CONFIGURED;
+  // Voice can start on its own here (a dev build with the mic module and the voice service), once this
+  // phone said yes to the AI companies: asked the first time, after "Let Mom see" has its answer. Not
+  // now: no line this visit (the phone reads instead).
+  const consent = useAiConsent();
+  const [noAi, setNoAi] = useState(false);
+  const voiceHere = micStreamingSupported() && VOICE_CONFIGURED && !noAi;
+  const aiAsked = useRef(false);
+  useEffect(() => {
+    if (!voiceHere || !settled || done || consent !== 'needed' || aiAsked.current) return;
+    aiAsked.current = true;
+    void ensureAiConsent().then((ok) => {
+      if (!ok) setNoAi(true);
+    });
+  }, [voiceHere, settled, done, consent]);
   const voice = useVoiceCooking({
     libraryId: recipe?.id ?? null,
     step: n,
     cookName,
-    auto: voiceHere && settled,
+    auto: voiceHere && settled && consent === 'given',
     onGoTo: (k) => total && goTo(Math.min(Math.max(1, k), total)),
     onClip: (c) => {
       homie.onHeard();
@@ -284,6 +298,7 @@ export default function CookScreen() {
   const potTap = () => {
     const h = getHomie().state;
     const tap = cookTap({ voiceHere, status: voice.status, unavailable: voice.unavailable, talking: h === 'lit' || h === 'speaking' });
+    if (tap === 'toggle' && consent !== 'given') return void ensureAiConsent().then((ok) => (ok ? voice.toggle() : setNoAi(true)));
     if (tap === 'toggle') return voice.toggle();
     if (tap === 'stop') return stopSpeaking();
     if (!step) return;

@@ -86,7 +86,7 @@ export type HomieRoute = {
 
 // Sign-in, the launch gateway, "Before we start", invite and share links, the month story (its Close
 // is top-right), and chat (the parent's header puts the faces and name at the right).
-const HIDDEN = new Set(['/', '/join', '/join-code', '/consent', '/i', '/r', '/recap', '/_sitemap']);
+const HIDDEN = new Set(['/', '/join', '/join-code', '/i', '/r', '/recap', '/_sitemap']);
 // Pages whose Back starts the first row at max(56, inset + 9): record, send, my dish, the community
 // and dinner pages.
 const PAGES = /^\/(record|send|dinner\/[^/]+|my-recipe\/[^/]+|community\/[^/]+)$/;

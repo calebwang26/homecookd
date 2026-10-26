@@ -82,23 +82,4 @@ export const SIGNIN = {
   'signin.invite.trySoon': 'Try again in a minute.',
   'signin.invite.tooMany': 'Too many tries for now.',
   'signin.invite.tryAgain': 'Try again',
-
-  // "Before we start" (consent.tsx)
-  'signin.consent.title': 'Before we start',
-  'signin.consent.line': 'homecookd uses AI from other companies to turn your cooking videos into recipes and to listen while you cook.',
-  'signin.consent.gemini': 'Watches your cooking videos and hears your voice.',
-  'signin.consent.muse': 'Writes the recipe.',
-  'signin.consent.claude': 'Helps while you film and cook hands-free.',
-  'signin.consent.cartesia': 'Hears your voice and reads steps aloud.',
-  'signin.consent.moss': 'Searches what the cook said.',
-  'signin.consent.row': '{name}. {job}',
-  'signin.consent.promise': 'They get your videos, photos and voice only to do this for you. Never for ads.',
-  'signin.consent.agree': 'I agree',
-  'signin.consent.agreeHint': 'Lets homecookd use these companies for you',
-  'signin.consent.sheetLabel': 'homecookd needs this to work',
-  'signin.consent.sheetTitle': 'homecookd can’t make recipes or cook with you without this.',
-  'signin.consent.sheetLine': 'If you sign out, you may need a new invite to come back.',
-  'signin.consent.signOut': 'Sign out',
-  'signin.consent.signOutHint': 'Signs this phone out of the family',
-  'signin.consent.goBack': 'Go back',
 } as const satisfies Record<`signin.${string}`, string>;

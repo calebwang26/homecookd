@@ -8,7 +8,8 @@
 // Send = upload the hello (if any) -> sendDraft (components/record/sendDraft: the background video
 // upload, jobs.create, POST /pending-sends so the recipe reaches them once it's written) -> SuccessBurst "On its way to Leo"
 // -> the Recipes tab, where a greyed "still cooking" row tracks it. Videos only upload from the
-// phone app; the web explains that instead.
+// phone app; the web explains that instead. Nothing uploads without her yes to the AI companies
+// (lib/aiConsent): asked here if Record didn't already.
 // Retention PR 7 touches (RETENTION-HANDOFF 4): while it works the button says "Wrapping…" beside
 // its spinner; the burst holds a paper plane that lifts off, and under "On its way to Leo" a small
 // pot's lid settles on: "You can close the app" (the uploads are the OS's background transfers).
@@ -32,6 +33,7 @@ import { LidPot } from '@/components/record/LidPot';
 import { MAX_TITLE, sendDraft } from '@/components/record/sendDraft';
 import { firstWho, showEveryone, toggleEveryone, toggleKid, whoTo, type Who } from '@/components/record/who';
 import { ActionButton, Avatar, BackPill, Chip, PressableScale, ScreenWash, SendIcon, SuccessBurst, Txt, type ActionState } from '@/components/ui';
+import { ensureAiConsent } from '@/lib/aiConsent';
 import { WEB_URL, errorMessage, type Profile } from '@/lib/api';
 import { daysAgo } from '@/lib/format';
 import { useSession } from '@/lib/session';
@@ -167,6 +169,7 @@ export default function SendScreen() {
       setError(t('parent.send.pickWho'));
       return;
     }
+    if (!(await ensureAiConsent())) return;
     setError(null);
     setState('loading');
     const started = Date.now();

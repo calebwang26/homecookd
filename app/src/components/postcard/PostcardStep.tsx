@@ -20,11 +20,14 @@
 // (messages.sharePhoto), Muse drafts a short note to the cook, and the note takes the pots' place: the
 // kid's words to edit, labelled "AI-drafted" (Convex keeps the label even after an edit). Send sends
 // both the postcard and the photo with the note (messages.send); either one getting through counts.
+// The photo reaches Muse only with this phone's yes to the AI companies (lib/aiConsent: the sheet rises
+// over the photo the first time). "Not now": no draft and no note box; Send sends the postcard alone.
 import { useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, StyleSheet, TextInput, View, useWindowDimensions } from 'react-native';
 import Animated, { Easing, FadeIn, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
 import { ActionButton, CameraIcon, PressableScale, SendIcon, ToastViewport, Txt, txtStyle, useToast } from '@/components/ui';
+import { ensureAiConsent } from '@/lib/aiConsent';
 import { errorMessage, isApiError, type Profile } from '@/lib/api';
 import { sendPhoto, sharePhoto, type SharedPhoto } from '@/lib/live/convex';
 import { sendPostcard, type CookedRef } from '@/lib/messaging';
@@ -73,6 +76,8 @@ export function PostcardStep({
   const [shared, setShared] = useState<SharedPhoto | null>(null);
   const draft = shared?.draft ?? null;
   const [note, setNote] = useState<string | null>(null);
+  // "Not now" to the AI companies: this photo goes as a postcard only.
+  const [noAi, setNoAi] = useState(false);
   // `sending`: from the Send tap until it answers. `flying`: sent, on its way out.
   const [sending, setSending] = useState(false);
   const [flying, setFlying] = useState(false);
@@ -106,6 +111,10 @@ export function PostcardStep({
       setPhoto(r.photo);
       setShared(null);
       setNote(null);
+      const agreed = await ensureAiConsent();
+      if (!alive.current) return;
+      setNoAi(!agreed);
+      if (!agreed) return;
       sharePhoto(recipe.id, r.photo.uri).then(
         (d) => {
           if (!alive.current) return;
@@ -169,7 +178,7 @@ export function PostcardStep({
             <Txt variant="display" size={30} leading={1.15} align="center" accessibilityRole="header" style={styles.ask}>
               {ask}
             </Txt>
-            {photo ? (
+            {photo && !noAi ? (
               <Animated.View entering={FadeIn.duration(220)} style={styles.note}>
                 {note === null ? (
                   <ActivityIndicator color={colors.muted} />
