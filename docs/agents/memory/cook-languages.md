@@ -5,6 +5,8 @@ metadata:
   type: project
 ---
 
+**Oct 26: Marathi is dropped** ([[marathi-dropped]]): the cook languages are the 13 below without Marathi.
+
 On 2026-10-24 Caleb approved "the Cartesia + Claude plan for the first 12 languages, merge after the demo",
 after a written proposal and live probes. He also said not to plan new languages around Gemini: Gemini has
 about $10 left, which is kept for the demo, and a separate move off Gemini starts after Oct 25, 8pm.

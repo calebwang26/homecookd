@@ -28,8 +28,11 @@
 //                      filming pauses with "The camera stopped. Your video so far is saved." and the
 //                      button films again (components/record/filming.ts). Leaving the app (a
 //                      lock, a call) finishes the file at once: "Recording stopped while you were away",
-//                      the button films again, "I'm done" ends. The stop button finishes the last file
-//                      and homie wraps up. Older builds (no VisionCamera, or no camera permission): the
+//                      the button films again, "I'm done" ends. Each saved file updates a note on the
+//                      phone (lib/unsentRecordings saveFilming): if the app dies (or this screen closes)
+//                      before "I'm done", her Home asks "Your recording stopped early. Send what was
+//                      filmed?" (components/record/StoppedEarlyCard). The stop button finishes the last
+//                      file and homie wraps up. Older builds (no VisionCamera, or no camera permission): the
 //                      phone's own camera opens instead (homie waits, its socket closed); when the
 //                      video is back, homie wraps up. No video: back to Record.
 //   wrapping_up        homie's last questions and "Can Shreya hear your stories too?", then the plate photo
@@ -89,7 +92,7 @@ import { inAppCameraSupported } from '@/lib/live/camera';
 import { endRecording, setCover, startFilming, useLiveFrame, useLiveLog, useRecording } from '@/lib/live/convex';
 import { STUB_NO_PLATE, STUB_WRAPUP_PREFIX, useHomieRecording } from '@/lib/live/homie';
 import { useSession } from '@/lib/session';
-import { saveUnsent } from '@/lib/unsentRecordings';
+import { filmingOnScreen, saveFilming, saveUnsent } from '@/lib/unsentRecordings';
 import { colors, motion, space } from '@/theme/tokens';
 
 const AWAKE_TAG = 'homecookd-recording';
@@ -185,6 +188,13 @@ export default function RecordingScreen() {
   const [finished, setFinished] = useState(false);
   if (!finished && (preview || filmedAlone || (phoneFilmed && !!homie.error) || (ended && !aiSpeaking))) setFinished(true);
 
+  // While this screen is open, its recording's 'filming' note is not one for Home to ask about.
+  useEffect(() => {
+    if (!id) return;
+    filmingOnScreen(id, true);
+    return () => filmingOnScreen(id, false);
+  }, [id]);
+
   // Filming in the app: the camera runs from the hello to the plate photo. The mic never starts or
   // stops while a file is being written (useInAppCamera); these callbacks say when it may.
   const cam = useInAppCamera({
@@ -203,6 +213,12 @@ export default function RecordingScreen() {
       homie.cameraFilming(false);
       await homie.restartMic({ fresh: false });
       if (goesOn()) homie.cameraFilming(true);
+    },
+    // Each saved file: the note that lets Home offer it if the app dies before "I'm done".
+    onSaved: (clips) => {
+      if (!id || !session.me) return;
+      const { dish, language, forKids, everyone, requestFrom } = draft;
+      saveFilming({ recordingId: id, cookId: session.me.id, familyId: session.family?.id ?? null, clips, dish, language, forKids, everyone, requestFrom });
     },
   });
   const inApp = inAppPossible && cam.usable === true;

@@ -12,6 +12,8 @@
 //     can't start, or a file fails by itself, no file starts, filming goes to 'paused' (homie is told),
 //     `trouble` is set (the screen says so) and the <Camera> starts over again.
 //   - nothing waits forever on the camera: a file that never says it ended is let go after endWaitMs.
+//   - every saved file is reported (`onSaved`, with all the files so far), so the phone keeps a note of
+//     them while she films (lib/unsentRecordings): a crash before "I'm done" loses only the open file.
 //
 //   const f = new Filming(); f.connect(camera, events)    camera: start/stop a file, keep a finished one
 //   f.start() / f.pause() / f.resume() / f.flip() / await f.stop() -> the clips, in order
@@ -38,6 +40,8 @@ export type FilmingEvents = {
   beforeResume?: (goesOn: () => boolean) => Promise<void>;
   /** Between two files while filming: a roll, a flip (a mic that waited may start). */
   betweenFiles?: (goesOn: () => boolean) => Promise<void>;
+  /** A file was saved (kept): every file so far, in order. Must not throw or wait (it never delays filming). */
+  onSaved?: (clips: DraftClip[]) => void;
 };
 
 export type FilmingTimes = { chunkMs: number; readyWaitMs: number; flipWaitMs: number; endWaitMs: number; settleMs: number };
@@ -213,6 +217,11 @@ export class Filming {
           this.chunks.sort((a, b) => a.startedAt - b.startedAt);
           closed();
           this.clockNow();
+          try {
+            this.on.onSaved?.(this.clips());
+          } catch (e) {
+            console.warn('[camera] onSaved', String(e).slice(0, 120));
+          }
         },
         (e) => {
           console.warn('[camera] recording error', e.code, e.message);
@@ -322,6 +331,11 @@ export class Filming {
     });
   }
 
+  /** The saved files so far, in order, as draft clips. */
+  private clips(): DraftClip[] {
+    return this.chunks.map((c, i) => chunkClip(c, i + 1));
+  }
+
   /** "I'm done": the open file ends; the clips, in order (also while a flip or a roll runs). */
   async stop(): Promise<DraftClip[]> {
     this.clearRoll();
@@ -329,7 +343,7 @@ export class Filming {
       this.setPhase('done');
       await this.endFile();
     } else if (this.open) await this.settled(this.open, false);
-    return this.chunks.map((c, i) => chunkClip(c, i + 1));
+    return this.clips();
   }
 
   /**

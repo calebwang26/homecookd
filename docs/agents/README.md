@@ -29,6 +29,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [demo-test-dishes](memory/demo-test-dishes.md) | Oct 24: demos, examples and tests use Swordfish steak and Poha (real dishes, real footage) |
 | [homie-voice](memory/homie-voice.md) | Oct 24: homie is Riya bilingual, asked for as auditioned (locale, speed 0.85, moods), cousin tone; Gemini TTS backup |
 | [cook-languages](memory/cook-languages.md) | Oct 24: 12 more cook languages on Cartesia (ink-whisper) + Claude, no Gemini; Oct 26: the cook's whole app in her language (language screen, `lib/words`) |
+| [marathi-dropped](memory/marathi-dropped.md) | Oct 26: Marathi is no longer a cook language; 13 integrated languages (English + 12) |
 | [gemini-credits-nearly-gone](memory/gemini-credits-nearly-gone.md) | Oct 24: Gemini has ~$10 left; new model calls use Claude (text, images) or Cartesia (audio) |
 | [claude-cartesia-quality-first](memory/claude-cartesia-quality-first.md) | Oct 26: Claude + Cartesia run the whole AI backend (Muse goes too); quality first, then the cheapest model that holds it |
 | [model-migration-after-hackathon](memory/model-migration-after-hackathon.md) | Oct 24: the move off Gemini starts after Sun Oct 25, 8pm; one PR per step, each behind an env flag with Gemini as the rollback |
@@ -46,7 +47,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [homie-counts-end-questions](memory/homie-counts-end-questions.md) | Oct 25: after "I'm done" homie says how many questions it has (and the plate photo), asks them back to back, and the app keeps homie big in the middle until they're over (`hold`) |
 | [in-app-recording](memory/in-app-recording.md) | Oct 24: phone recording films inside the app at 1080p (VisionCamera 4) so homie stays live; the audio-session rules; the flip-camera button (a file boundary while filming, video not mirrored) |
 | [community-tab-off](memory/community-tab-off.md) | Oct 25: the kid's Community tab is hidden (hackathon only); the code stays so it can come back |
-| [never-signed-out-by-a-crash](memory/never-signed-out-by-a-crash.md) | Oct 24: a crash or a passing error never signs anyone out (only Sign out or the exact "This phone was signed out." 401 forget the key); an in-app recording the app dies on after "I'm done" is sent again |
+| [never-signed-out-by-a-crash](memory/never-signed-out-by-a-crash.md) | Oct 24: a crash or a passing error never signs anyone out (only Sign out or the exact "This phone was signed out." 401 forget the key); an in-app recording the app dies on after "I'm done" (or a Send upload) is sent again; one it dies in while filming is offered on Home (Oct 26) |
 | [homie-silent-during-video](memory/homie-silent-during-video.md) | Oct 24: while any video plays homie says nothing on its own (held for the next pause); only answers to the kid; reading steps aloud off by default |
 | [homie-tap-always-answers](memory/homie-tap-always-answers.md) | Oct 24: a tap on homie always gets a spoken answer: news first (Claude), else the screen's one line about its big button; "I'm right here." on a repeat tap |
 | [homie-judges-who-was-talking](memory/homie-judges-who-was-talking.md) | Oct 24: in cook mode Claude judges whether the kid was talking to homie (silent if not); "homie" spelled loosely is a strong yes; no wake word |
