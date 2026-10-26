@@ -72,3 +72,5 @@ earpiece).
   `File.move()` and its old tmp path uploaded. Files move with `moveSync` (#77), and a note keeps each recording
   queued until Convex has its job and every file is uploaded ([[never-signed-out-by-a-crash]]).
 - Related: [[homie-guidance-only]], [[testflight-live]].
+- Oct 26, Caleb: on Record's "Start recording" sheet, Phone camera is the top, big green button (the one people
+  should be steered to), then Videos I took, then From my glasses last (`components/record/PreRecordSheet.tsx`).
