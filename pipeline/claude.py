@@ -1,18 +1,22 @@
-"""Claude for the pipeline's text calls. Gemini credits are nearly gone (Oct 24), so the text-only calls move to
-Claude: the clip order and cook mode's short substeps on Haiku (process.order_asker, shorten.py), and the
-writer's fallback when Muse fails on Sonnet (writer.py; RECIPE_WRITER=claude also makes it the writer).
-TEXT_PROVIDER=claude turns that on; unset (or gemini) keeps Gemini, so rolling back is one line in .env.
+"""Claude for the pipeline's model calls. Gemini credits are nearly gone (Oct 24), so the calls move to Claude, each
+behind its own flag (unset or gemini keeps Gemini, so rolling back is one line in .env):
+- TEXT_PROVIDER=claude: the clip order and cook mode's short substeps on Haiku (process.order_asker, shorten.py),
+  and the writer's fallback when Muse fails on Sonnet (writer.py; RECIPE_WRITER=claude also makes it the writer).
+- COVER_PROVIDER=claude: the cover pick from still frames (cover.py).
 
 ClaudeText.generate has GeminiWriter's shape and returns a Gemini-shaped reply (.text, .usage_metadata), so
 process.response_text and process.Usage treat both the same. Claude's structured outputs hold the reply to the
-same pydantic schema Gemini gets. Models other than Haiku opt into server-side fallbacks: a request the model
-declines is run again on Anthropic's recommended model instead of failing.
+same pydantic schema Gemini gets; images go before the prompt, each after its label. Models other than Haiku opt
+into server-side fallbacks: a request the model declines is run again on Anthropic's recommended model.
 
-Env (.env): ANTHROPIC_API_KEY, TEXT_PROVIDER (gemini | claude), CLAUDE_TEXT_MODEL (default claude-haiku-5-5).
+Env (.env): ANTHROPIC_API_KEY, TEXT_PROVIDER and COVER_PROVIDER (gemini | claude), CLAUDE_TEXT_MODEL (default
+claude-haiku-5-5).
 """
 from __future__ import annotations
 
+import base64
 import os
+from collections.abc import Sequence
 from types import SimpleNamespace
 
 import anthropic
@@ -27,11 +31,11 @@ class ClaudeError(RuntimeError):
     pass
 
 
-def provider() -> str:
-    """gemini or claude, from TEXT_PROVIDER. Call after .env is loaded."""
-    want = (os.environ.get("TEXT_PROVIDER") or "gemini").strip().lower()
+def provider(flag: str = "TEXT_PROVIDER") -> str:
+    """gemini or claude, from the env var `flag`. Call after .env is loaded."""
+    want = (os.environ.get(flag) or "gemini").strip().lower()
     if want not in ("gemini", "claude"):
-        raise ClaudeError(f"TEXT_PROVIDER={want!r} must be gemini or claude")
+        raise ClaudeError(f"{flag}={want!r} must be gemini or claude")
     return want
 
 
@@ -51,14 +55,22 @@ class ClaudeText:
             client = anthropic.Anthropic(api_key=key, max_retries=RETRIES)
         self.client, self.model, self.effort, self.system = client, model or text_model(), effort, system
 
-    def generate(self, prompt: str, schema: type[BaseModel], temperature: float | None = None) -> SimpleNamespace:
-        """One structured call. temperature is ignored: current Claude models only take their default."""
+    def generate(self, prompt: str, schema: type[BaseModel], temperature: float | None = None,
+                 images: Sequence[tuple[str, bytes]] = ()) -> SimpleNamespace:
+        """One structured call; images are (label, JPEG bytes). temperature is ignored: current Claude models
+        only take their default."""
+        content: list[dict] = []
+        for label, jpeg in images:
+            content += [{"type": "text", "text": label},
+                        {"type": "image", "source": {"type": "base64", "media_type": "image/jpeg",
+                                                     "data": base64.b64encode(jpeg).decode()}}]
+        content.append({"type": "text", "text": prompt})
         extra = {"system": self.system} if self.system else {}
         if self.model != MODEL:  # Haiku has no server-side fallback
             extra.update(betas=["server-side-fallback-2026-07-01"], fallbacks="default")
         with self.client.beta.messages.stream(model=self.model, max_tokens=MAX_TOKENS, output_format=schema,
                                               output_config={"effort": self.effort},
-                                              messages=[{"role": "user", "content": prompt}], **extra) as stream:
+                                              messages=[{"role": "user", "content": content}], **extra) as stream:
             msg = stream.get_final_message()
         if msg.stop_reason == "max_tokens":
             raise ClaudeError(f"Claude stopped at its output limit ({msg.usage.output_tokens} tokens)")

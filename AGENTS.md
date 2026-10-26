@@ -95,7 +95,8 @@ and homesick college kids. It's a family product, not a tool.
 - **Off Gemini (Oct 25 on):** Gemini credits are nearly gone, so new model calls use Claude (text, images) or
   Cartesia (audio), never Gemini (`docs/agents/memory/gemini-credits-nearly-gone.md`). Existing Gemini calls move one
   PR at a time behind env flags, with Gemini as the rollback: `TEXT_PROVIDER=claude` (Convex env and the worker's
-  `.env`) moves the text calls. Flipping a flag in production is Caleb's call.
+  `.env`) moves the text calls, `COVER_PROVIDER=claude` (the worker's `.env`) the cover pick. Flipping a flag in
+  production is Caleb's call.
 - **Moss (search):** filled from Convex, searched from the live voice service; one index per family
   (`family-<familyId>`). Moss only finds moments: never use Moss Inference to write answers
   (https://docs.moss.dev/llms.txt). Key check: `node scripts/check-moss.mjs`.
@@ -104,6 +105,10 @@ and homesick college kids. It's a family product, not a tool.
   https://grand-dragon-649.convex.cloud (HTTP routes on `.convex.site`). **Never `--preview-create`**: it deletes
   and recreates the deployment, so the URL changes and its data and env are lost. Convex env is set with the team
   token, not the preview key: `CONVEX_OVERRIDE_ACCESS_TOKEN=… npx convex env set --deployment grand-dragon-649 …`.
+  `grand-dragon-649` is a *preview* deployment, and Convex deletes previews 5 days after creation unless their
+  expiration is cleared. It was cleared on Oct 25 (`expiresAt: null`). After every deploy, check it's still `None`:
+  `curl -s https://api.convex.dev/v1/deployments/grand-dragon-649 -H "Authorization: Bearer $CONVEX_OVERRIDE_ACCESS_TOKEN"`
+  and read `expiresAt`. If it has a date again, clear it with a `PATCH` of `{"expiresAt": null}` to the same URL.
   Every public function takes the `sessionToken` from `sessions.start` and checks it with `requireSession`
   (`convex/lib/auth.ts`). Read `convex/_generated/ai/guidelines.md` before writing Convex code; the skills are in
   `.agents/skills` (Codex) and `.claude/skills` (Claude Code).

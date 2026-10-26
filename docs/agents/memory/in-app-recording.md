@@ -26,8 +26,11 @@ time. Before, Record opened the iOS camera and homie's socket and mic closed unt
   for the last file to be saved; a still waits 1.2 s after a flip (VisionCamera says ready before the new format is
   committed, and a still is its last frame). If the other camera isn't ready in 5 s: a fresh `<Camera>` (key bump)
   on the one that worked (VisionCamera compares with its last good setup and may not set the old device up again).
-  The front camera's preview is a mirror (VisionCamera always mirrors it), but its video and stills are not
-  (`isMirrored={false}`): words on a packet read the right way for the kid, the plate photo shows the plate as it is.
+  The front camera's preview, video and stills are mirrored, like a selfie (VisionCamera's default; no `isMirrored`
+  prop). Oct 25: `isMirrored={false}` stored every front clip upside down (display-matrix rotation 90 where the back
+  camera's is -90): iOS mirrors front-camera frames itself, and VisionCamera only takes that over and turns its
+  rotation to match when mirroring is on. So a front clip's packet text reads reversed; if that matters, the pipeline
+  can flip front clips back (it would need to know which clips were front: not sent today).
   Each recording starts on the back camera again.
 - **A camera that doesn't come back never leaves the clock ticking over nothing** (`filming.ts` `stuck`): a flip whose
   fresh camera fails too, a resume whose camera isn't ready, or a file that fails by itself: no file starts,
@@ -64,7 +67,7 @@ earpiece).
   is never stopped. The order rules are tested in node with a fake camera (`test-recording-ui.mjs`, "filming:").
 - Not yet proven on a real iPhone (no device build yet on Oct 24): the first device test is "record 2+ minutes
   while homie talks; the video has her voice; homie's mic stream keeps going". For the flip: "flip twice while
-  filming; three files, each with sound, the front one not mirrored; homie's mic never stops".
+  filming; three files, each with sound, the front one upright (mirrored like a selfie); homie's mic never stops".
 - Oct 24, the first TestFlight try crashed at "Sending it to …": the finished file was moved with the async
   `File.move()` and its old tmp path uploaded. Files move with `moveSync` (#77), and a note keeps each recording
   queued until Convex has its job and every file is uploaded ([[never-signed-out-by-a-crash]]).
