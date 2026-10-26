@@ -6,7 +6,7 @@
 // (640 px JPEG, base64) goes to `onFrame` for homie. The files themselves (start, roll, pause, resume, stop,
 // flip, and what happens when the camera doesn't come back) are filming.ts; this wires it to VisionCamera.
 //
-//   const cam = useInAppCamera({ recordingId, on, onFrame, onPause, onResume, beforeResume, betweenFiles });
+//   const cam = useInAppCamera({ recordingId, on, onFrame, onPause, onResume, beforeResume, betweenFiles, onSaved });
 //                                     `on`: the screen still needs the camera (the hello, filming, the plate photo)
 //   <CameraCard cam={cam} />          the preview (it must be on screen for the camera to run)
 //   await cam.start()                 filming begins (waits for the camera to be ready)
@@ -16,6 +16,7 @@
 //   await cam.flip()                  the other camera (cameraLogic flipSteps); while filming, a file boundary
 //   cam.facing 'back' | 'front'    cam.canFlip (both cameras, ready, no flip running)    cam.flipping
 //   cam.phase  'idle' | 'filming' | 'paused' | 'done'    cam.filmedMs()    cam.error    cam.trouble
+//   onSaved(clips)                    each file saved in documents/: every file so far (the crash note)
 //
 // The audio session (lib/live/camera CAMERA_AUDIO_SESSION): homie's mic must already be running before a
 // file starts, and must not start or stop while one is open; `beforeResume` (after a pause) and
@@ -36,6 +37,7 @@ import type { Camera, CameraDevice, CameraDeviceFormat } from 'react-native-visi
 
 import { imageManipulator, visionCamera } from '@/lib/live/camera';
 
+import type { DraftClip } from './draft';
 import { chunkName, FRAME_EVERY_MS, FRAME_WIDTH, resumesBySelf, stopsFilming, type CameraPhase, type Facing } from './cameraLogic';
 import { Filming } from './filming';
 
@@ -60,6 +62,8 @@ type Options = {
   beforeResume?: (goesOn: () => boolean) => Promise<void>;
   /** Runs between two files while filming: a roll, a flip (a mic that waited for the camera starts here). */
   betweenFiles?: (goesOn: () => boolean) => Promise<void>;
+  /** A file was saved in documents/: every file so far (recording.tsx keeps the crash note with them). */
+  onSaved?: (clips: DraftClip[]) => void;
 };
 
 const fileUri = (path: string) => (path.startsWith('file://') ? path : `file://${path}`);
@@ -91,15 +95,15 @@ function remove(uri: string) {
   }
 }
 
-export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, beforeResume, betweenFiles }: Options) {
+export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, beforeResume, betweenFiles, onSaved }: Options) {
   const ref = useRef<Camera | null>(null);
   /** The <Camera> element's ref (CameraCard passes it on). */
   const setCamera = useCallback((c: Camera | null) => {
     ref.current = c;
   }, []);
-  const cbs = useRef({ onFrame, onPause, onResume, beforeResume, betweenFiles, recordingId });
+  const cbs = useRef({ onFrame, onPause, onResume, beforeResume, betweenFiles, onSaved, recordingId });
   useEffect(() => {
-    cbs.current = { onFrame, onPause, onResume, beforeResume, betweenFiles, recordingId };
+    cbs.current = { onFrame, onPause, onResume, beforeResume, betweenFiles, onSaved, recordingId };
   });
   // The files: one Filming for the screen's life, talking to whichever <Camera> is mounted.
   const [filming] = useState(() => new Filming());
@@ -124,6 +128,7 @@ export function useInAppCamera({ recordingId, on, onFrame, onPause, onResume, be
         onResume: (gap) => cbs.current.onResume?.(gap),
         beforeResume: (goesOn) => cbs.current.beforeResume?.(goesOn) ?? Promise.resolve(),
         betweenFiles: (goesOn) => cbs.current.betweenFiles?.(goesOn) ?? Promise.resolve(),
+        onSaved: (clips) => cbs.current.onSaved?.(clips),
       },
     );
     return () => filming.dispose(); // leaving the screen never leaves the camera recording

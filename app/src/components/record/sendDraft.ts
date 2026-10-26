@@ -1,14 +1,14 @@
 // Sends a recording: the background upload (lib/uploads.ts), the live progress card (Convex
 // jobs.create with the dish, her language, the kids and homie's recording), and who gets the recipe
 // once it's written (POST /pending-sends). Send's big button uses it, and so does Grandma's done
-// screen, which sends a phone recording by itself (components/record/DoneView). A recording filmed in
-// the app has a note on the phone (lib/unsentRecordings): the upload job goes on the note, and the note
-// goes only once Convex has the job and every file is uploaded, so if the app dies before both, the next
-// launch sends it again (components/record/useResendUnsent). Everything runs as `me` (their Convex
+// screen, which sends a phone recording by itself (components/record/DoneView). A send has a note on
+// the phone (lib/unsentRecordings; made by components/record/sendKept, or at "I'm done"): the upload job
+// goes on the note, and the note goes only once Convex has the job and every file is uploaded, so if
+// the app dies before both, the next launch sends it again (components/record/useResendUnsent). Everything runs as `me` (their Convex
 // session), so that resend can send as the cook while someone else is in. Every upload row keeps what
 // jobs.create needs, and the home card asks again until Convex has the job (ensureJob, jobRetry.ts).
 //
-//   const job = await sendDraft({ me, draft, clips, kids, recipients, toLabel, dish, hello })
+//   const job = await sendDraft({ me, draft, clips, kids, recipients, toLabel, dish, hello, note })
 //   await jobCreated(job.job_id)   its jobs.create is over (a stop waits for it, then stops that job)
 //   await makeJob(uploadId, as, { kids, glasses, language, recordingId, title })   jobs.create alone
 //   void ensureJob(row, liveKnown)   the home card: jobs.create again for a row Convex doesn't have yet
@@ -50,6 +50,8 @@ export type SendInput = {
   /** The dish's name, trimmed ('' = none). */
   dish: string;
   hello?: { path: string; duration_s: number } | null;
+  /** The phone's note for this send (lib/unsentRecordings), by default the recording's own. */
+  note?: string | null;
 };
 
 export type JobFields = Pick<Draft, 'glasses' | 'language' | 'recordingId'> & { kids: { id: string; name: string }[]; title: string };
@@ -116,7 +118,8 @@ function tryJob(row: StoredJob): Promise<boolean> {
  * (useResendUnsent), so the two never make two jobs for one recording.
  */
 export function ensureJob(row: StoredJob, liveKnown: boolean): void {
-  if (row.recording_id && !creating.has(row.job_id) && stillUnsent(row.recording_id)) return;
+  const note = row.unsent_id ?? row.recording_id;
+  if (note && !creating.has(row.job_id) && stillUnsent(note)) return;
   if (getAiConsent() !== 'given') return;
   const step = jobNext(row, { now: Date.now(), liveKnown, inFlight: inFlight.has(row.job_id) });
   if (step === 'mark-ok') updateJobMeta(row.job_id, { convex_job: 'ok' });
@@ -124,11 +127,12 @@ export function ensureJob(row: StoredJob, liveKnown: boolean): void {
 }
 
 /** Starts the upload and returns once the job exists (the videos keep uploading in the background). */
-export async function sendDraft({ me, draft, clips, kids, recipients, toLabel, dish, hello = null }: SendInput): Promise<StoredJob> {
+export async function sendDraft({ me, draft, clips, kids, recipients, toLabel, dish, hello = null, note }: SendInput): Promise<StoredJob> {
   await requireAiConsent();
   const title = dish.slice(0, MAX_TITLE);
   const totalS = clips.reduce((a, c) => a + (c.asset.duration ?? 0) / 1000, 0);
   const { glasses, language, recordingId } = draft;
+  const noteId = note ?? recordingId ?? null;
   const job = await startUpload({
     as: me.id,
     title: title || NO_DISH,
@@ -145,17 +149,18 @@ export async function sendDraft({ me, draft, clips, kids, recipients, toLabel, d
       duration_s: Math.round(totalS),
       thumb_video_uri: clips[0]?.asset.uri ?? null,
       recording_id: recordingId ?? null,
+      unsent_id: noteId !== recordingId ? noteId : null,
       job_fields: { glasses, language: language ?? null, title, kids: kids.map((k) => ({ id: k.id, name: k.name })) },
     },
   });
   // The live progress (Convex jobs, hackathon): the worker finds the videos in "<job_id>/". A failure
   // here never stops the send: the home card asks again until Convex has the job (ensureJob).
-  if (recordingId) markUnsentJob(recordingId, job.job_id);
+  if (noteId) markUnsentJob(noteId, job.job_id);
   const made = tryJob(job);
   // The note goes once the job exists and the videos are all in (a 45-minute upload takes a while).
-  if (recordingId) {
+  if (noteId) {
     void Promise.all([made, uploadFinished(job.job_id)]).then(([jobMade, uploaded]) => {
-      if (jobMade && uploaded) dropUnsent(recordingId);
+      if (jobMade && uploaded) dropUnsent(noteId);
     });
   }
   // Who gets it once it's written. If this fails, the home card keeps retrying.

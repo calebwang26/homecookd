@@ -182,7 +182,8 @@ await test('uploads and jobs: Record, Send and sendDraft ask or refuse before an
   before('record start', start, 'ensureAiConsent()', 'pick.library(');
   before('record start', start, 'ensureAiConsent()', 'startRecording(');
   assert.match(record, /onPress=\{\(\) => void open\(\)\}/);
-  before('send', body(src('app/send.tsx'), 'const send = async'), 'ensureAiConsent()', 'sendDraft(');
+  before('send', body(src('app/send.tsx'), 'const send = async'), 'ensureAiConsent()', 'sendKept(');
+  before('stopped early', body(src('components/record/StoppedEarlyCard.tsx'), 'const send = async'), 'ensureAiConsent()', 'sendDraft(');
   const draft = src('components/record/sendDraft.ts');
   before('sendDraft', body(draft, 'export async function sendDraft'), 'await requireAiConsent()', 'startUpload(');
   before('ensureJob', body(draft, 'export function ensureJob'), "getAiConsent() !== 'given'", 'tryJob(row)');

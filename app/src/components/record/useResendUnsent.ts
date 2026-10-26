@@ -1,10 +1,13 @@
-// After the app died with an in-app recording not fully sent (a crash at "Done! Sending it to Shreya",
-// a swipe-away mid-upload): sends it again in the background, as the cook who filmed it, whoever is in
-// on the phone (lib/unsentRecordings; the phone opens as usual). It runs once the family is loaded and
+// After the app died with a recording not fully sent (a crash at "Done! Sending it to Shreya", a
+// swipe-away mid-upload, also a Send-screen upload of camera-roll videos): sends it again in the
+// background, as the cook who filmed it, whoever is in on the phone (lib/unsentRecordings; the phone
+// opens as usual). A recording the app died in while she was still filming is never sent from here:
+// her Home asks her (StoppedEarlyCard). It runs once the family is loaded and
 // each time the app comes back to the front, each recording once per run of the app unless it's
 // waiting (Convex couldn't answer, or the worker hasn't said yet). Convex first says what exists
 // (lib/unsentLogic resendStep); then it makes only a missing job, or stops a job the worker says is
-// missing files (an hour on) and sends again the way the done view does (sendDraft). The recording's
+// missing files (an hour on) and sends again the way the done view does (sendDraft). A Send-screen
+// note (`local`) has no Convex recording: its job is found by its upload folder (uploadJob). The recording's
 // old rows on Home go first (found by its recording id), so one "Sending your videos" row shows. A
 // note stopped on Home while this ran is left alone (re-read before acting).
 //
@@ -13,26 +16,36 @@ import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 
 import type { Profile } from '@/lib/api';
-import { cancelLiveJob, recordingJob } from '@/lib/live/convex';
+import { cancelLiveJob, recordingJob, uploadJob } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
-import { resendStep, type Unsent } from '@/lib/unsentLogic';
+import { clipFile, resendStep, sendsBySelf, type Unsent, type UnsentClip } from '@/lib/unsentLogic';
 import { clipsHere, countResend, dropUnsent, loadUnsent, savedHere, stillUnsent, unsentUri } from '@/lib/unsentRecordings';
 import { cancelJobUploads, loadJobs, removeJob, uploadsSupportedHere } from '@/lib/uploads';
 
 import { chunkClip } from './cameraLogic';
+import type { DraftClip } from './draft';
 import { makeJob, MAX_TITLE, sendDraft } from './sendDraft';
 import { doneTo } from './who';
+
+/** A note's videos still on the phone, as the clips a send takes. */
+export function keptClips(here: UnsentClip[]): DraftClip[] {
+  return here.map((c, i) => {
+    const d = chunkClip({ uri: unsentUri(c), startedAt: c.startedAt, durationMs: c.durationMs, width: c.width, height: c.height }, i + 1);
+    return { ...d, asset: { ...d.asset, ...clipFile(c.path, i + 1) } };
+  });
+}
 
 /** Looked at in this run of the app: each one once (unless Convex couldn't answer). */
 const looked = new Set<string>();
 let running = false;
 
 /** This recording's upload rows on Home (jobs.json): the one on its note, and any found by its recording id. */
-const rowsOf = (u: Unsent) => loadJobs().filter((j) => j.job_id === u.jobId || j.recording_id === u.recordingId);
+const rowsOf = (u: Unsent) => loadJobs().filter((j) => j.job_id === u.jobId || j.recording_id === u.recordingId || j.unsent_id === u.recordingId);
 
 async function resendOne(u: Unsent, cook: Profile, profiles: Profile[], learners: Profile[]) {
   const here = clipsHere(u);
-  const job = await recordingJob(u.recordingId, cook.id);
+  const recordingId = u.local ? null : u.recordingId;
+  const job = u.local ? await uploadJob(u.jobId, cook.id) : await recordingJob(u.recordingId, cook.id);
   const row = loadJobs().find((j) => j.job_id === u.jobId);
   const step = resendStep(u, { convexJob: job, upload: row?.local_state ?? null, clipsHere: here.length, now: Date.now() });
   if (step === 'wait') return void looked.delete(u.recordingId);
@@ -47,7 +60,7 @@ async function resendOne(u: Unsent, cook: Profile, profiles: Profile[], learners
   }
   if (step === 'create') {
     countResend(u.recordingId);
-    await makeJob(u.jobId!, cook.id, { kids: to.picked, glasses: false, language: u.language, recordingId: u.recordingId, title });
+    await makeJob(u.jobId!, cook.id, { kids: to.picked, glasses: !!u.glasses, language: u.language, recordingId, title });
     return dropUnsent(u.recordingId);
   }
   // 'gone': nothing to send. A job is left alone (its files may have arrived); with none, its rows are dead.
@@ -65,12 +78,14 @@ async function resendOne(u: Unsent, cook: Profile, profiles: Profile[], learners
   if (!stillUnsent(u.recordingId)) return;
   await sendDraft({
     me: cook,
-    draft: { glasses: false, language: u.language, recordingId: u.recordingId },
-    clips: here.map((c, i) => chunkClip({ uri: unsentUri(c), startedAt: c.startedAt, durationMs: c.durationMs, width: c.width, height: c.height }, i + 1)),
+    draft: { glasses: !!u.glasses, language: u.language, recordingId },
+    clips: keptClips(here),
     kids: to.picked,
     recipients: to.recipients,
     toLabel: to.label,
     dish: title,
+    hello: u.hello ?? null,
+    note: u.recordingId,
   });
 }
 
@@ -79,7 +94,7 @@ async function resendAll(familyId: string, profiles: Profile[], learners: Profil
   running = true;
   try {
     for (const u of loadUnsent()) {
-      if (u.familyId !== familyId || looked.has(u.recordingId) || savedHere(u.recordingId)) continue;
+      if (!sendsBySelf(u) || u.familyId !== familyId || looked.has(u.recordingId) || savedHere(u.recordingId)) continue;
       const cook = profiles.find((p) => p.id === u.cookId);
       if (!cook) {
         // Not in this family any more: kept until it's too old to send.

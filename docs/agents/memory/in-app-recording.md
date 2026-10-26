@@ -37,7 +37,10 @@ time. Before, Record opened the iOS camera and homie's socket and mic closed unt
   filming goes to 'paused' (homie is told), the screen says "The camera stopped. Your video so far is saved."
   (`trouble`), and the `<Camera>` starts over. A file that never says it ended is let go after 10 s.
 - Saved in 5-minute files (`documents/recordings/<recordingId>/part-NN.mp4`), so a crash or kill loses at most one
-  file. Leaving the app (lock, call, home screen) finishes the file at once; a short trip (Control Center) films
+  file. Oct 26: each saved file updates a 'filming' note on the phone (`filming.ts` `onSaved`, `recording.tsx`
+  `saveFilming`); if the app dies (or the screen closes) before "I'm done", her Home asks "Your recording stopped
+  early. Send what was filmed?" (Send it / Delete, `StoppedEarlyCard`); it is never sent without her
+  ([[never-signed-out-by-a-crash]]). Leaving the app (lock, call, home screen) finishes the file at once; a short trip (Control Center) films
   again by itself, a real one shows "Recording stopped while you were away" with a resume button and "I'm done".
 - The screen stays awake (`expo-keep-awake`). The camera card above the record button shows the shot from the
   hello on, with "● 4:07".

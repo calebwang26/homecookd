@@ -5,7 +5,8 @@
 // recording, which go to jobs.create. (A phone recording made with homie skips this screen: its done
 // screen sends it by itself. It lands here only when that send fails.)
 //
-// Send = upload the hello (if any) -> sendDraft (components/record/sendDraft: the background video
+// Send = upload the hello (if any) -> sendKept (components/record/sendKept: a note on the phone, so a
+// send the app dies during goes again on the next launch) -> sendDraft (components/record/sendDraft: the background video
 // upload, jobs.create, POST /pending-sends so the recipe reaches them once it's written) -> SuccessBurst "On its way to Leo"
 // -> the Recipes tab, where a greyed "still cooking" row tracks it. Videos only upload from the
 // phone app; the web explains that instead. Nothing uploads without her yes to the AI companies
@@ -30,7 +31,8 @@ import { usePickVideos } from '@/components/record/usePickVideos';
 import { AddMoreLink, VideoGrid } from '@/components/record/VideoGrid';
 import { HelloCard } from '@/components/record/HelloCard';
 import { LidPot } from '@/components/record/LidPot';
-import { MAX_TITLE, sendDraft } from '@/components/record/sendDraft';
+import { MAX_TITLE } from '@/components/record/sendDraft';
+import { sendKept } from '@/components/record/sendKept';
 import { firstWho, showEveryone, toggleEveryone, toggleKid, whoTo, type Who } from '@/components/record/who';
 import { ActionButton, Avatar, BackPill, Chip, PressableScale, ScreenWash, SendIcon, SuccessBurst, Txt, type ActionState } from '@/components/ui';
 import { ensureAiConsent } from '@/lib/aiConsent';
@@ -78,7 +80,7 @@ export default function SendScreen() {
   const params = useLocalSearchParams<{ preview?: string }>();
   useDevPreview(params.preview);
   const insets = useSafeAreaInsets();
-  const { me, owner, profiles, learners } = useSession();
+  const { me, owner, family, profiles, learners } = useSession();
   const { t } = useWords();
   const draft = useDraft();
   const pick = usePickVideos();
@@ -182,7 +184,21 @@ export default function SendScreen() {
           throw new Error(t('parent.send.helloFailed', { reason: errorMessage(e, '') }).replace(/\s+/g, ' '));
         }
       }
-      await sendDraft({ me, draft, clips: selected, kids: to.picked, recipients, toLabel, dish, hello: helloUp });
+      // With a note on the phone: if the app dies mid-upload, the next launch sends it again (sendKept).
+      await sendKept({
+        me,
+        draft,
+        clips: selected,
+        kids: to.picked,
+        recipients,
+        toLabel,
+        dish,
+        hello: helloUp,
+        familyId: family?.id ?? null,
+        forKids: to.picked.map((p) => p.id),
+        everyone: to.everyone,
+        requestFrom: null,
+      });
       // The videos are a job now (the home card tracks it): the draft must not outlive this screen,
       // or Record would offer them for sending again. (Cleared on unmount; kept on screen until then.)
       sentJob.current = true;
@@ -361,11 +377,11 @@ export default function SendScreen() {
 
       {done ? (
         <Animated.View entering={FadeIn.duration(120)} style={[StyleSheet.absoluteFill, styles.done]} pointerEvents="none">
-          {/* TODO(caleb): "You can close the app" holds while the phone locks or the app goes to the
-              background (iOS background URLSession, lib/uploads.ts), but iOS cancels those uploads
-              when the app is swiped away in the app switcher, and nothing restarts them on the next
-              launch. Check a force-quit mid-upload on a phone; then add a resume-on-launch for a job
-              whose files didn't finish, or soften the line. */}
+          {/* "You can close the app" holds while the phone locks or the app goes to the background (iOS
+              background URLSession, lib/uploads.ts). A swipe-away in the app switcher cancels those
+              uploads; the send's note (sendKept) makes the next launch send it again (useResendUnsent:
+              the worker's "files missing" is believed an hour after Send).
+              TODO(caleb): check a force-quit mid-upload on a phone, then open the app again. */}
           <SuccessBurst
             title={done}
             glyph="plane"
