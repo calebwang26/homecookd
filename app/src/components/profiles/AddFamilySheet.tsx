@@ -25,7 +25,8 @@
 // signed in on this phone, else the only person here. On an older family-code phone with nobody
 // picked, a tap says "Tap your face first, then invite family."
 //
-// Reusable anywhere: <AddFamilySheet visible onClose />. `initialRole` is accepted and ignored.
+// Reusable anywhere: <AddFamilySheet visible onClose />. `initialRole` (the picker section's Add)
+// only goes to "No phone?": the link itself has no role, since whoever opens it picks their section.
 // Someone invited the old way who hasn't joined gets "Send again" elsewhere (lib/invites sendInvite).
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -46,7 +47,7 @@ import { AddPhonelessSheet } from './AddPhonelessSheet';
 export type AddFamilySheetProps = {
   visible: boolean;
   onClose: () => void;
-  /** Accepted and ignored: whoever opens the link picks their own role. */
+  /** The section its Add was in: "No phone?" then asks only the name. The link has no role. */
   initialRole?: Role;
   /**
    * "Switch to Grandpa Joe" after adding someone without a phone. Default: cook as them, from
@@ -62,7 +63,7 @@ export function AddFamilySheet(props: AddFamilySheetProps) {
   return <InviteSheet key={opened.n} {...props} />;
 }
 
-function InviteSheet({ visible, onClose, onSwitch }: AddFamilySheetProps) {
+function InviteSheet({ visible, onClose, onSwitch, initialRole }: AddFamilySheetProps) {
   const { me, profiles, family, deviceProfileId, deviceNeedsProfile, setMe, homeFor } = useSession();
   const { t } = useWords();
   // 'phoneless': this sheet slid away for "Add someone without a phone"; it opens once it's gone.
@@ -134,7 +135,7 @@ function InviteSheet({ visible, onClose, onSwitch }: AddFamilySheetProps) {
           )}
         </View>
       </BottomSheet>
-      <AddPhonelessSheet visible={visible && phonelessOpen} onClose={onClose} onSwitch={switchTo} />
+      <AddPhonelessSheet visible={visible && phonelessOpen} onClose={onClose} onSwitch={switchTo} role={initialRole} />
     </>
   );
 }
