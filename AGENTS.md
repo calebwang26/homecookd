@@ -99,6 +99,8 @@ and homesick college kids. It's a family product, not a tool.
   the substep times, `EXTRACTOR=claude` the video extraction; the pipeline needs `GEMINI_API_KEY` only while a step
   is still on Gemini. Muse Spark moves to Claude too. The glasses (`edible-glasses/`) stay on Gemini, and Odia is
   hidden from the cook language picker (Caleb, Oct 26). Pick models quality-first, then the cheapest that holds it
+  the substep times, `EXTRACTOR=claude` the video extraction, `TRANSCRIPT_PROOFREAD=claude` the proofread of a
+  non-English transcript. Muse Spark moves to Claude too. Pick models quality-first, then the cheapest that holds it
   (`docs/agents/memory/claude-cartesia-quality-first.md`). Flipping a flag in production is Caleb's call.
 - **Moss (search):** filled from Convex, searched from the live voice service; one index per family
   (`family-<familyId>`). Moss only finds moments: never use Moss Inference to write answers
@@ -211,7 +213,7 @@ voice/deploy.sh                                                    # Cloud Run h
 .venv/bin/python pipeline/test_claude.py                            # TEXT_PROVIDER=claude: order, shorten, writer fallback (fakes)
 .venv/bin/python pipeline/test_transcribe.py                        # Cartesia's word-timed transcript: loops, keys, cache (fakes)
 .venv/bin/python pipeline/test_extract_claude.py                    # EXTRACTOR=claude: frames + transcript -> events (fakes)
-.venv/bin/python pipeline/transcribe.py --id <id> [--language mr]   # work/transcript.json from voice.m4a (real Cartesia)
+.venv/bin/python pipeline/transcribe.py --id <id> [--language mr]   # work/transcript.json: cleaned audio, language check, proofread (real Cartesia)
 .venv/bin/python pipeline/scrub_family.py                          # dry run: old family recipe.json files to strip (--write: Caleb's OK)
 .venv/bin/python pipeline/test_account_purge.py                      # a deleted account's purge outside Convex (fakes)
 .venv/bin/python pipeline/worker.py [--once]                        # claim Convex jobs (--gcs: the old GCS job files)

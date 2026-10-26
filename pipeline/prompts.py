@@ -233,6 +233,40 @@ def context(language: str | None, log: list[dict] | None, base_s: float = 0, cli
     return language_line(language) + homie_block(log, base_s, clip_s) + live_block(live, base_s, clip_s)
 
 
+# pipeline/transcribe.py: which language a recording tagged English really is (only when its English transcript
+# looks wrong), and the proofreading pass on a non-English transcript (TRANSCRIPT_PROOFREAD=claude).
+LANGUAGE_PROMPT = """\
+A home cook's recording was tagged English, but its English speech-to-text looks wrong. Below, the same 90 seconds
+of it were transcribed by speech-to-text as each of these languages, one block per language code. A transcript in
+the wrong language comes out as nonsense, broken phrases, a loop of one word, or a translation; in the cook's real
+language it reads as real, connected speech about cooking, even with spelling slips. Judge by the words and what
+they mean, never by the script alone (Marathi and Hindi share one).
+
+Return language = the code whose transcript is the cook's real speech, sure = true only when one clearly reads as
+real speech and the others don't, and why in one short sentence.
+"""
+
+PROOFREAD_PROMPT = """\
+This is a speech-to-text transcript of a home cook speaking {language} while cooking {title}, one line per row as
+"id | text". Speech-to-text often mishears {language}: it misspells words, writes them as another language's
+words (for example Hindi forms for Marathi), or as a similar-sounding wrong word. Correct each line to the words the
+cook most likely said, in {language}'s usual script, using the dish and the kitchen as context: its ingredients,
+amounts, tools and actions.
+
+Rules:
+- Correct the spelling of the words she said, sound by sound. Never add a word, detail or sentence she didn't say,
+  and never drop one she did.
+- Amounts and numbers stay exactly as heard: never add "about", "half", "a little" or a number she didn't say.
+- Change a word to an ingredient only when it clearly sounds like that ingredient ("मोरी" to मोहरी, "मिर टाकला" to
+  मीठ टाकला); never swap one ingredient for another, and when it could be more than one, keep it as heard.
+- Each line is corrected from its own sounds only: never move or copy words between lines. A word can be split
+  across two lines (the end of one, the start of the next): correct each part where it is.
+- English words she says stay in English, in Latin letters.
+- When you can't tell what a word was, keep it as it is.
+- A line that is only noise or a repeated glitch becomes "".
+Return every line by its id.
+"""
+
 # EXTRACTOR=claude (pipeline/extract_claude.py): Claude takes no video or audio, so a clip goes as its frames and
 # Cartesia's transcript. EXTRACT_FRAMES_NOTE goes before EXTRACT_PROMPT, which is unchanged, and EXTRACT_HEARD after.
 EXTRACT_FRAMES_NOTE = """\

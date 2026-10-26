@@ -141,6 +141,44 @@ def test_process_run_extracts_on_claude_then_merges() -> None:
     assert fake.calls[1]["system"] == writer.CLAUDE_SYSTEM
 
 
+def test_a_recording_tagged_english_but_found_marathi_is_extracted_as_marathi() -> None:
+    """The language check's answer reaches the extraction: the manifest (and so the prompt and the recipe) say mr."""
+    from pipeline import align, cover, shorten, transcribe
+    from pipeline.test_coverage import MANIFEST, draft
+    manifest = json.loads(json.dumps(MANIFEST))
+    manifest["sessions"][0]["ai_files"] = [{"path": "work/ai_01.mp4", "start_in_file_s": 0, "duration_s": 30.0}]
+    manifest.update(duration_s=30, language="en")
+    step = "Temper the mustard seeds"
+    fake = FakeAnthropic(chunk(("00:02", "00:20", step)), draft((2, 20, step)))
+
+    def broken(*_a, **_k):
+        raise RuntimeError("not in this test")
+
+    with env(GEMINI_API_KEY="fake", GEMINI_MODEL="fake-pro", GEMINI_EXTRACT_MODEL="", GEMINI_MEDIA_RESOLUTION="LOW",
+             COVERAGE_GAP_S="", RECIPE_WRITER="claude", TEXT_PROVIDER=None, EXTRACTOR="claude",
+             TRANSCRIPT_PROOFREAD=None, ANTHROPIC_API_KEY="fake", CLAUDE_EXTRACT_MODEL=None, CLAUDE_WRITER_MODEL=None), \
+            tempfile.TemporaryDirectory() as tmp, patched(process, "OUT_ROOT", Path(tmp)), \
+            patched(process, "load_dotenv", lambda *a, **k: None), \
+            patched(process.genai, "Client", lambda **_k: None), \
+            patched(claude.anthropic, "Anthropic", fake), patched(process, "make_poster", lambda *a: None), \
+            patched(cover, "make_cover", broken), patched(shorten, "shorten_file", broken), \
+            patched(align, "align_file", broken):
+        out = Path(tmp) / "t-cover"
+        (out / "work").mkdir(parents=True)
+        (out / "work" / "manifest.json").write_text(json.dumps(manifest))
+        video(out / "work" / "ai_01.mp4", 30)
+        (out / "voice.m4a").write_bytes(b"m4a")
+        (out / "work" / transcribe.FILE).write_text(json.dumps({  # what the language check left: tagged en, found mr
+            "language": "mr", "tagged_language": "en", "language_note": "tagged English, but 85% loops: Marathi",
+            "words": [{"word": "मोहरी", "start": 3.0, "end": 3.4}, {"word": "टाकते", "start": 3.5, "end": 4.0}]}))
+        process.run("t-cover")
+        saved = json.loads((out / "work" / "manifest.json").read_text())
+        recipe = json.loads((out / "recipe.json").read_text())
+    assert saved["language"] == "mr" and recipe["language"] == "mr", (saved.get("language"), recipe.get("language"))
+    prompt = fake.calls[0]["messages"][0]["content"][-1]["text"]
+    assert "The family says the cook narrates in Marathi" in prompt and "00:03 मोहरी टाकते" in prompt
+
+
 def test_extractor_flag_picks_claude_and_sonnet() -> None:
     assert process.extract_model({"extractor": "gemini"}) is None
     with env(ANTHROPIC_API_KEY="fake", CLAUDE_EXTRACT_MODEL=None):
