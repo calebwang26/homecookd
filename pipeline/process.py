@@ -63,7 +63,7 @@ from google import genai  # noqa: E402
 from google.genai import types  # noqa: E402
 from pydantic import ValidationError  # noqa: E402
 
-from pipeline import claude, coverage, order, writer  # noqa: E402
+from pipeline import claude, coverage, order, seen, writer  # noqa: E402
 from pipeline.prep import OUT_ROOT, PrepError, make_poster  # noqa: E402
 from pipeline.prompts import (COVERAGE_RETRY_SUFFIX, EXTRACT_PROMPT, EXTRACT_RETRY_SUFFIX,  # noqa: E402
                               MERGE_PROMPT, MERGE_RETRY_SUFFIX, context)
@@ -963,6 +963,12 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
     log(f"[process {recipe_id}] writing took {time.monotonic() - t_write:.1f} s")
     report("writing", 0.85)
 
+    if seen.enabled(cfg):
+        # Ingredients she adds without saying them (speech-to-text can miss a word): added, or asked about.
+        try:
+            recipe = seen.check(recipe, out_dir / "play.mp4", work, usage, log)
+        except Exception as e:  # noqa: BLE001 - the recipe stands without it
+            log(f"[seen] WARNING: no ingredient check ({type(e).__name__}: {str(e)[:300]})")
     poster_from = make_cover(*cover_by, recipe, out_dir, usage)
     recipe_path.write_text(json.dumps(recipe.model_dump(mode="json"), indent=2, ensure_ascii=False) + "\n")
     (out_dir / "recipe.invalid.json").unlink(missing_ok=True)
