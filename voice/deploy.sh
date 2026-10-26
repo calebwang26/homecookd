@@ -43,7 +43,7 @@ CONVEX_SITE_URL=$(fromenv CONVEX_SITE_URL)
 [ -n "$CONVEX_SITE_URL" ] && ENV_VARS="$ENV_VARS,CONVEX_SITE_URL=$CONVEX_SITE_URL"
 # homie: overrides of its voice (the code defaults are Caleb's pick) and the glasses VM, when set (HOMIE_DEMO=1 only
 # for a rehearsal).
-for NAME in HOMIE_VOICE HOMIE_SPEED MARATHI_STT GLASSES_URL HOMIE_DEMO HOMIE_SCRIPTED; do
+for NAME in HOMIE_VOICE HOMIE_SPEED GLASSES_URL HOMIE_DEMO HOMIE_SCRIPTED; do
   VALUE=$(fromenv $NAME)
   [ -n "$VALUE" ] && ENV_VARS="$ENV_VARS,$NAME=$VALUE"
 done

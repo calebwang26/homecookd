@@ -130,7 +130,6 @@ function isEcho(heard: string, spoken: string): boolean {
 
 /** homie's hello in the cook's language, and its English (the pot greets the family in their own words). */
 export const GREETINGS: Record<string, [string, string]> = {
-  mr: ["चला, स्वयंपाक करूया!", "Let's cook!"],
   hi: ["चलो, खाना बनाते हैं!", "Let's cook!"],
   es: ["¿Listos? ¡A cocinar!", "Ready? Let's cook!"],
   fr: ["Prêts ? On cuisine !", "Ready? Let's cook!"],
@@ -141,7 +140,7 @@ export const GREETINGS: Record<string, [string, string]> = {
   ko: ["자, 요리해 볼까요?", "Shall we cook?"],
   vi: ["Nấu thôi nào!", "Let's cook!"],
   tl: ["Tara, luto na tayo!", "Come on, let's cook!"],
-  // Oct 24. TODO(caleb): a native speaker's check, like the Marathi lines.
+  // Oct 24. TODO(caleb): a native speaker's check.
   gu: ["ચાલો, રસોઈ બનાવીએ!", "Let's cook!"],
   ta: ["வாங்க, சமைக்கலாம்!", "Come, let's cook!"],
   te: ["రండి, వంట చేద్దాం!", "Come, let's cook!"],

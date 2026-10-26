@@ -4,7 +4,7 @@
 
 // A different voice from the service's, so it sounds like a second person.
 export const KID_VOICE = "694f9389-aac1-45b6-b726-9d9369183238";
-// The cook for /record tests: a mature Indian voice ("Kavita"), in Marathi, English, Tamil or Mandarin.
+// The cook for /record tests: a mature Indian voice ("Kavita"), in Hindi, English, Tamil or Mandarin.
 const COOK_VOICE = "56e35e2d-6eb6-4226-ab8b-9776515a7094";
 
 export type Line = { text: string; voice?: string; lang?: string };
@@ -33,9 +33,9 @@ export const LINES: Record<string, Line> = {
   "to-roommate": { text: "Maya, can you grab me a plate from the cupboard?" },
   "homie-question": { text: "Homie, how long should this simmer?" },
   // The cook while homie listens (/record): a vague amount, then her answer, then yes to the opt-in.
-  "cook-mr-cooking": { text: "हो, आधी तांदूळ तीन वेळा धुवून घे. मग थोडं मीठ टाक, अंदाजाने.", voice: COOK_VOICE, lang: "mr" },
-  "cook-mr-answer": { text: "साधारण एक छोटा चमचा मीठ. जास्त नको.", voice: COOK_VOICE, lang: "mr" },
-  "cook-mr-yes": { text: "हो, नक्की ऐकू दे.", voice: COOK_VOICE, lang: "mr" },
+  "cook-hi-cooking": { text: "हाँ, पहले चावल तीन बार धो लो. फिर थोड़ा नमक डालो, अंदाज़ से.", voice: COOK_VOICE, lang: "hi" },
+  "cook-hi-answer": { text: "लगभग एक छोटा चम्मच नमक. ज़्यादा नहीं.", voice: COOK_VOICE, lang: "hi" },
+  "cook-hi-yes": { text: "हाँ, ज़रूर सुनने दो.", voice: COOK_VOICE, lang: "hi" },
   "cook-en-cooking": { text: "Okay, now the turmeric goes in. Just a little, until it looks right.", voice: COOK_VOICE },
   "cook-en-answer": { text: "About half a teaspoon. You want it golden, not bright yellow.", voice: COOK_VOICE },
   "cook-en-yes": { text: "Yes, of course she can.", voice: COOK_VOICE },

@@ -103,7 +103,8 @@ function world(status: RecordingStatus = "intro", metBefore?: boolean, language 
   const deps: RecordingDeps = {
     rules: RULES,
     agent: () => agent,
-    translate: async (text) => text,
+    // Her language, faked: the English, marked with the language it was asked for.
+    translate: async (text, to) => (to === "en" ? text : `[${to}] ${text}`),
     createStt: (_language, events) => {
       stt = events;
       return { send: () => void heardAudioAt.push(Date.now()), close: () => {} };
@@ -827,29 +828,30 @@ test("talking after 'still there?' is waited for, and the questions go on", asyn
   c.drop();
 });
 
-test("Marathi (Gemini Live) waits longer after her last words than English (Ink 2)", async () => {
+test("Gemini Live's wait is longer than Ink 2's; English, Hindi and a cook who picked Marathi before all get Ink 2's", async () => {
   assert.ok(ANSWER_GAP_MS["gemini-live"] > ANSWER_GAP_MS["ink-2"]);
   const waits: Record<string, number> = {};
-  for (const language of ["en", "mr"]) {
+  for (const language of ["en", "hi", "mr"]) {
     const w = world("intro", undefined, language);
     const { c } = await firstEndQuestion(w, `rec-gap-${language}`);
     w.says("When it smells nutty.");
     const lastWords = Date.now();
     await waitFor("the opt-in", () => c.ws.of("ask").some((a) => a.kind === "optin"), 30_000);
     waits[language] = Date.now() - lastWords;
-    if (language === "mr") assert.match(String(c.ws.of("ask").at(-1)!.text), /ऐकू द्यायच्या का/);
+    if (language !== "en") assert.match(String(c.ws.of("ask").at(-1)!.text), new RegExp(`^\\[${language}\\] Can`));
     c.drop();
   }
-  assert.ok(waits.mr >= ANSWER_GAP_MS["gemini-live"], `Marathi waited ${waits.mr} ms`);
-  assert.ok(waits.en >= ANSWER_GAP_MS["ink-2"] && waits.en < ANSWER_GAP_MS["gemini-live"], `English waited ${waits.en} ms`);
+  for (const [language, ms] of Object.entries(waits)) {
+    assert.ok(ms >= ANSWER_GAP_MS["ink-2"] && ms < ANSWER_GAP_MS["gemini-live"], `${language} waited ${ms} ms`);
+  }
 });
 
-test("Marathi: 'still there?' and the let-off in her language", async () => {
-  const w = world("intro", undefined, "mr");
-  const { n } = await firstEndQuestion(w, "rec-silent-mr");
+test("Hindi: 'still there?' and the let-off in her language", async () => {
+  const w = world("intro", undefined, "hi");
+  const { n } = await firstEndQuestion(w, "rec-silent-hi");
   await waitFor("the let-off", () => w.spoken.length > n + 2, 60_000);
-  assert.equal(w.spoken[n + 1], "Rajani Aaji, आहात ना? सावकाश सांगा, मी ऐकतेय.");
-  assert.match(w.spoken[n + 2], /^काही हरकत नाही, Rajani Aaji\./);
+  assert.equal(w.spoken[n + 1], "[hi] Still there, [hi] Rajani Aaji? Take your time. I'm listening.");
+  assert.match(w.spoken[n + 2], /^\[hi\] That's okay, \[hi\] Rajani Aaji\./);
   // The count line, then "still there?" (saved in English).
   assert.deepEqual(w.logged.filter((p) => p.kind === "reaction").map((p) => p.textEn).slice(0, 2), ["Just two quick questions before we send it.", STILL_THERE]);
 });
@@ -1172,16 +1174,16 @@ test("family talk begun before the opt-in and ending under it doesn't decide the
   assert.deepEqual(w.named("setOptIn").map((x) => x.args), [[true]]);
 });
 
-test("Marathi: her answer starting just before 'still there?' (words a little late) gets no nudge", async () => {
-  const w = world("intro", undefined, "mr");
-  const { c, n } = await firstEndQuestion(w, "rec-mr-just-in-time");
+test("Hindi: her answer starting just before 'still there?' (words a little late) gets no nudge", async () => {
+  const w = world("intro", undefined, "hi");
+  const { c, n } = await firstEndQuestion(w, "rec-hi-just-in-time");
   await advance(4900);
   w.stt().onTurnStart();
   w.partial("जेव्हा");
   await advance(1500);
   w.stt().onTurnEnd("जेव्हा वास येतो");
   await waitFor("the opt-in", () => c.ws.of("ask").some((a) => a.kind === "optin"), 60_000);
-  assert.ok(!w.spoken.slice(n + 1).includes("Rajani Aaji, आहात ना? सावकाश सांगा, मी ऐकतेय."), "no nudge over her");
+  assert.ok(!w.spoken.slice(n + 1).some((t) => t.includes("Still there")), "no nudge over her");
   await advance(LATENCY_MS + 50);
   assert.deepEqual(w.answers.map((a) => a.transcript), ["जेव्हा वास येतो"]);
   c.drop();
@@ -1225,35 +1227,36 @@ test("'still there?' held by noise is said later, and the let-off never comes wi
 // ---- the count line and the hold (Caleb, Oct 25: "homie should specify the number of questions it has", and "homie
 // should STAY in center expanded view until all questions are finished") ----
 
-test("the count: end questions left plus the opt-in, and the plate photo when filmed in the app, in English and Marathi", async () => {
+test("the count: end questions left plus the opt-in, and the plate photo when filmed in the app, in English and translated", async () => {
   const en: Who = { language: "en", call: "Rajani Aaji", kid: "Shreya", dish: "Dal Tadka" };
-  const mr: Who = { ...en, language: "mr" };
-  // [end questions left, opt-in done, filmed in the app] → the line in English, in Marathi (null: no count line)
-  const cases: [number, boolean, boolean, string | null, string | null][] = [
-    [0, false, false, "Just one quick question before we send it.", "पाठवण्याआधी फक्त एक छोटा प्रश्न."],
-    [0, false, true, "Before we send it, one quick question and a photo of your plate.", "पाठवण्याआधी एक छोटा प्रश्न, आणि तुमच्या ताटाचा एक फोटो."],
-    [0, true, false, null, null],
-    [0, true, true, "Before we send it, one photo of your plate.", "पाठवण्याआधी तुमच्या ताटाचा एक फोटो."],
-    [1, false, false, "Just two quick questions before we send it.", "पाठवण्याआधी फक्त दोन छोटे प्रश्न."],
-    [1, false, true, "Before we send it, two quick questions and a photo of your plate.", "पाठवण्याआधी दोन छोटे प्रश्न, आणि तुमच्या ताटाचा एक फोटो."],
-    [1, true, false, "Just one quick question before we send it.", "पाठवण्याआधी फक्त एक छोटा प्रश्न."],
-    [1, true, true, "Before we send it, one quick question and a photo of your plate.", "पाठवण्याआधी एक छोटा प्रश्न, आणि तुमच्या ताटाचा एक फोटो."],
-    [2, false, false, "Just three quick questions before we send it.", "पाठवण्याआधी फक्त तीन छोटे प्रश्न."],
-    [2, false, true, "Before we send it, three quick questions and a photo of your plate.", "पाठवण्याआधी तीन छोटे प्रश्न, आणि तुमच्या ताटाचा एक फोटो."],
-    [2, true, false, "Just two quick questions before we send it.", "पाठवण्याआधी फक्त दोन छोटे प्रश्न."],
-    [2, true, true, "Before we send it, two quick questions and a photo of your plate.", "पाठवण्याआधी दोन छोटे प्रश्न, आणि तुमच्या ताटाचा एक फोटो."],
+  const hi: Who = { ...en, language: "hi" };
+  const tr = async (text: string, to: string) => `[${to}] ${text}`;
+  // [end questions left, opt-in done, filmed in the app] → the line in English (null: no count line)
+  const cases: [number, boolean, boolean, string | null][] = [
+    [0, false, false, "Just one quick question before we send it."],
+    [0, false, true, "Before we send it, one quick question and a photo of your plate."],
+    [0, true, false, null],
+    [0, true, true, "Before we send it, one photo of your plate."],
+    [1, false, false, "Just two quick questions before we send it."],
+    [1, false, true, "Before we send it, two quick questions and a photo of your plate."],
+    [1, true, false, "Just one quick question before we send it."],
+    [1, true, true, "Before we send it, one quick question and a photo of your plate."],
+    [2, false, false, "Just three quick questions before we send it."],
+    [2, false, true, "Before we send it, three quick questions and a photo of your plate."],
+    [2, true, false, "Just two quick questions before we send it."],
+    [2, true, true, "Before we send it, two quick questions and a photo of your plate."],
   ];
-  for (const [endLeft, optInDone, camera, wantEn, wantMr] of cases) {
+  for (const [endLeft, optInDone, camera, wantEn] of cases) {
     const { questions, photo } = wrapUpCount(endLeft, { optInDone, letOff: false, camera, plateDone: false });
     assert.equal(questions, endLeft + (optInDone ? 0 : 1));
     assert.equal(photo, camera);
     const said = await countLine(questions, photo, en);
-    const saidMr = await countLine(questions, photo, mr);
+    const saidHi = await countLine(questions, photo, hi, hi, tr);
     const what = `${endLeft} end, opt-in ${optInDone ? "done" : "left"}, camera ${camera}`;
     assert.equal(said?.text ?? null, wantEn, what);
     assert.equal(said?.textEn ?? null, wantEn, what);
-    assert.equal(saidMr?.text ?? null, wantMr, what);
-    assert.equal(saidMr?.textEn ?? null, wantEn, `${what}: saved in English`);
+    assert.equal(saidHi?.text ?? null, wantEn && `[hi] ${wantEn}`, what);
+    assert.equal(saidHi?.textEn ?? null, wantEn, `${what}: saved in English`);
     if (wantEn) {
       assert.ok(wantEn.split(" ").length <= 14, `${what}: short`);
       assert.doesNotMatch(wantEn, /\b(last|more|another)\b/i, `${what}: nothing a later line contradicts`);
@@ -1310,12 +1313,12 @@ test("filmed in the app: the count line, the questions back to back inside the h
   assert.ok(w.logged[1].said, "the count line's voice span is saved");
 });
 
-test("no camera, in Marathi: the count line in her language, and the hold ends right before the goodbye", async () => {
-  const w = world("intro", undefined, "mr");
-  const { c } = await firstEndQuestion(w, "rec-order-mr");
+test("no camera, in Hindi: the count line in her language, and the hold ends right before the goodbye", async () => {
+  const w = world("intro", undefined, "hi");
+  const { c } = await firstEndQuestion(w, "rec-order-hi");
   assert.deepEqual(
     w.voices.map((v, i) => [v.kind, w.spoken[i]]).filter(([kind]) => kind === "reaction"),
-    [["reaction", "पाठवण्याआधी फक्त दोन छोटे प्रश्न."]],
+    [["reaction", "[hi] Just two quick questions before we send it."]],
   );
   w.says("जेव्हा वास येतो");
   await waitFor("the opt-in played", () => c.ws.of("ask").some((a) => a.kind === "optin") && Date.now() >= w.playedAt(w.spokenAt.length - 1), 30_000);

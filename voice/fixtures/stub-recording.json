@@ -1,21 +1,21 @@
 {
-  "mr": {
+  "hi": {
     "recording": {
-      "_id": "stub-mr",
-      "language": "mr",
+      "_id": "stub-hi",
+      "language": "hi",
       "status": "intro",
       "source": "phone",
-      "dish": "Varan Bhaat"
+      "dish": "Dal Chawal"
     },
     "cook": {
-      "name": "Rajani",
-      "relation": "Aaji",
-      "language": "mr"
+      "name": "Sunita",
+      "relation": "Nani",
+      "language": "hi"
     },
     "kid": {
       "name": "Shreya"
     },
-    "dish": "Varan Bhaat"
+    "dish": "Dal Chawal"
   },
   "en": {
     "recording": {
@@ -71,20 +71,20 @@
     },
     "dish": "Tomato Egg Stir-fry"
   },
-  "mr-ajoba": {
+  "hi-nanaji": {
     "recording": {
-      "_id": "stub-mr-ajoba",
-      "language": "mr",
+      "_id": "stub-hi-nanaji",
+      "language": "hi",
       "status": "intro",
       "source": "phone",
-      "dish": "Varan Bhaat"
+      "dish": "Dal Chawal"
     },
     "cook": {
       "name": "Ramesh",
-      "relation": "Ajoba",
-      "language": "mr"
+      "relation": "Nanaji",
+      "language": "hi"
     },
-    "dish": "Varan Bhaat"
+    "dish": "Dal Chawal"
   },
   "en-dad": {
     "recording": {
