@@ -16,8 +16,8 @@ Vietnamese work but have no hand-made screen words. Cantonese isn't offered: Son
 **What each piece runs on:**
 - Hearing her live: Ink 2 for en, fr, hi, ja and es. Cartesia **ink-whisper** for the rest
   (`voice/src/inkWhisper.ts`, `stt.ts` `WHISPER_LANGUAGES`). Marathi stays on Gemini Live until the migration
-  session switches it behind a flag (Caleb's call: ink-whisper's Marathi spelling is rougher). Odia stays on Gemini
-  (ink-whisper doesn't know it).
+  moves it to ink-whisper (Caleb, Oct 26: Cartesia as it is). Odia is hidden from the picker (Oct 26): ink-whisper
+  doesn't know it ([[model-migration-after-hackathon]]).
 - homie's lines and translations: Claude. homie speaks of herself in the feminine and politely to an elder, but
   only in her own lines (`translate(…, "homie")`). A kid's words keep the speaker's own gender.
 - Her recording screen: `app/src/components/record/wordsByLanguage.ts`, Claude's drafts (TODO(caleb): native check).
