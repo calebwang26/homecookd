@@ -129,7 +129,7 @@ From `docs/build/LAUNCH-LINKS.md` and `API.md`:
   source is `docs/app-store/app-icon.svg`. Open before Apple can approve: a job (or manual run) that purges each
   `accountDeletions` row's Supabase rows and GCS media within the 30 days `/privacy` promises; Sign in with Apple
   token revocation on delete (needs the frozen Supabase api); an alert when Community reports come in (today:
-  `npx convex run reports:open`); TODO(caleb) legal owner, copyright agent, governing state, EU trader status,
+  `npx convex run reports:open`); the purge's `dropFile` can delete a storage file another member's row also points at (`messages.send`/`questions.answer` accept any `_storage` id); `glasses.saveVideo` doesn't check an abandoned recording; a cloned voice (`accountDeletions.voiceCloneId`) isn't deleted in Cartesia yet; TODO(caleb) legal owner, copyright agent, governing state, EU trader status,
   and a review family whose code goes in App Store Connect (the reviewer may delete its cook's account).
 - QA item B15 (dish card on the app's sign-in screen when a link opens it signed out). It only matters after TestFlight.
 - The worker moving off the laptop (`README.md` "Known limits", PRD roadmap).
@@ -783,4 +783,5 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - **Community report and block (1.2):** "Report or block" on another family's recipe and dinner pages; a report hides the item for that family, two families' reports hide it for everyone (`hiddenAt`) until `reports:review`; blocks work both ways across feed, pages, dinners, swaps and asks; `convex/lib/moderation.ts` word filter on sharing plus a feed backstop. New tables `reports`, `blocks`.
   - **Website:** `/privacy` rewritten for today's stack (Convex, each AI service, Community, deletion, children, retention); new `/terms` (content rules, reporting, the copyright takedown policy); footer links Terms.
   - `convex/live.test.ts`: its clock is pinned in `beforeEach` (3 tests broke on main once real time passed Oct 25 17:00Z).
-  - Tests: Convex tsc, vitest 100/100; app tsc, lint, every `test-*` script (+ new test-consent 9); web tsc/eslint; /privacy and /terms checked at 375 wide. Ship order: Convex deploy, then the EAS production build (#6) with auto-submit. Not tried on a phone.
+  - After an independent Convex review: a dinner follows its dish (hidden, reported or blocked dish hides its dinners and invite links), report/block only what the family can see; `deleteMe` resyncs Moss at once (retries 30 s/2 min/5 min, an empty family's index deleted), cancels her jobs and recordings and other hosts' dinners of her dishes, per-person indexes for the purge, and `account.restartPurges` (cron, 30 min) restarts a stalled purge.
+  - Tests: Convex tsc, vitest 114/114; app tsc, lint, every `test-*` script (+ new test-consent 9); web tsc/eslint; /privacy and /terms checked at 375 wide. Ship order: Convex deploy, then the EAS production build (#6) with auto-submit. Not tried on a phone.
