@@ -13,7 +13,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 
 | File | What it covers |
 |---|---|
-| [app-review-freeze](memory/app-review-freeze.md) | Until Apple approves 1.0: sign-in, consent, delete, report/block, legal pages, icon and the TEST family need Caleb's OK |
+| [app-review-guard](memory/app-review-guard.md) | A PR touching what App Review checks: Apple check first, then update the reviewer notes, answers and legal pages in the same PR |
 | [brand-homecookd](memory/brand-homecookd.md) | The name is always lowercase homecookd; which internal names stay "edible" |
 | [git-pr-workflow](memory/git-pr-workflow.md) | PR-only shipping, merge main first, stage by name, the Vercel Root Directory gotcha |
 | [merge-agent-approval](memory/merge-agent-approval.md) | Oct 24: every PR goes to the "Merge Agent" session for approval; it decides conflicts |
