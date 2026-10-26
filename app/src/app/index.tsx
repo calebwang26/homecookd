@@ -26,9 +26,12 @@
 // Opened from Home ("Mom ▾", `/?pick=1`), a quiet foot holds the phone's own settings: a cook's
 // "Your language" (components/profiles/LanguageEntry), "Switch family" (the code screen,
 // /join-code) and "Sign out of this phone", which asks first ("Sign out on this phone?" with Sign
-// out / Keep) and then signs this phone out (session leaveFamily). For this phone's own person only,
-// "Delete my account" asks first (components/profiles/DeleteAccountSheet), then deletes them and signs
-// this phone out. "Privacy policy" and "Terms of use" open homecookd.app in the in-app browser.
+// out / Keep) and then signs this phone out (session leaveFamily). "Delete my account" ("Delete Leo's
+// account" when Leo isn't this phone's own person) shows for whoever this phone is acting as, when the
+// API lets it delete them (session accountRemoval: its own person, or someone with no phone of their
+// own, e.g. a face picked on a family-code phone). It asks first (components/profiles/DeleteAccountSheet);
+// then its own person's deletion signs this phone out, and anyone else's leaves this screen without
+// them. "Privacy policy" and "Terms of use" open homecookd.app in the in-app browser.
 //
 // Launch (motion spec 1): while the bloom covers the screen this page waits hidden; when the
 // overlay clears it fades in from scale 1.03 -> 1 and the tiles rise in one after another.
@@ -47,6 +50,7 @@ import {
   AddFamilySheet,
   AddFamilyTile,
   DeleteAccountSheet,
+  deleteAccountWords,
   LanguageEntry,
   NewPhoneSheet,
   PersonSheet,
@@ -76,8 +80,22 @@ export default function Profiles() {
   const potMood = usePotMood();
   const reduce = useReducedMotion();
   const { width: winW } = useWindowDimensions();
-  const { status, family, cooks, learners, profiles, me, owner, setMe, homeFor, refresh, deviceNeedsProfile, defaultPerson, leaveFamily } =
-    useSession();
+  const {
+    status,
+    family,
+    cooks,
+    learners,
+    profiles,
+    me,
+    setMe,
+    homeFor,
+    refresh,
+    deviceNeedsProfile,
+    defaultPerson,
+    leaveFamily,
+    accountRemoval,
+    forgetPerson,
+  } = useSession();
   const statuses = useFamilyStatus(profiles, family?.id ?? null);
   // Tapped their own face on Home: the family gateway, with Back to them.
   const choosing = useLocalSearchParams<{ pick?: string }>().pick === '1';
@@ -94,10 +112,9 @@ export default function Profiles() {
     router.replace(homeFor(defaultPerson));
   }, [autoEnter, defaultPerson, setMe, homeFor]);
   const backTo = choosing ? (me ?? defaultPerson) : null;
-  // Only the phone's own person can delete their account, and only while it's them coming back here.
-  // TODO(caleb): someone without a phone of their own (Grandma on Mom's iPad) can't delete theirs in the
-  // app; the API would let any phone acting as them leave, but deleting takes her recipes from everyone.
-  const deletable = owner && backTo?.id === owner.id ? owner : null;
+  // Whoever this phone is acting as, if it may delete their account.
+  const removal = accountRemoval(backTo);
+  const deletable = removal ? backTo : null;
   const goBack = () => {
     if (!backTo) return;
     setMe(backTo);
@@ -160,7 +177,7 @@ export default function Profiles() {
   const [person, setPerson] = useState<{ open: boolean; who: Profile | null }>({ open: false, who: null });
   const [moving, setMoving] = useState<{ open: boolean; who: Profile | null; resume: boolean }>({ open: false, who: null, resume: false });
   const [signingOut, setSigningOut] = useState(false);
-  const [deleting, setDeleting] = useState(false);
+  const [deleting, setDeleting] = useState<{ open: boolean; who: Profile | null; own: boolean }>({ open: false, who: null, own: false });
   // A phone that just joined (no person yet) never takes over a face: it asks the family.
   const pick = (p: Profile) =>
     deviceNeedsProfile && !p.invited
@@ -314,13 +331,12 @@ export default function Profiles() {
               </PressableScale>
               {deletable ? (
                 <PressableScale
-                  onPress={() => setDeleting(true)}
+                  onPress={() => setDeleting({ open: true, who: deletable, own: removal === 'own' })}
                   accessibilityRole="button"
-                  accessibilityLabel="Delete my account"
                   accessibilityHint="Asks first"
                   style={styles.footLink}>
                   <Txt variant="label" weight={600} color={colors.danger}>
-                    Delete my account
+                    {deleteAccountWords(deletable.name.trim(), removal === 'own').confirm}
                   </Txt>
                 </PressableScale>
               ) : null}
@@ -365,13 +381,14 @@ export default function Profiles() {
         onIn={() => setMoving((s) => ({ ...s, open: false }))}
       />
       <DeleteAccountSheet
-        visible={deleting}
-        person={deletable}
-        onClose={() => setDeleting(false)}
-        // As with Sign out, the sheet goes first: the app then goes back to its first screen.
-        onDeleted={() => {
-          setDeleting(false);
-          setTimeout(() => void leaveFamily(), motion.sheetCloseMs + 40);
+        visible={deleting.open}
+        person={deleting.who}
+        own={deleting.own}
+        onClose={() => setDeleting((d) => ({ ...d, open: false }))}
+        // As with Sign out, the sheet goes first: then the first screen, or this one without them.
+        onDeleted={(who, signedOut) => {
+          setDeleting((d) => ({ ...d, open: false }));
+          setTimeout(() => (signedOut ? void leaveFamily() : forgetPerson(who.id)), motion.sheetCloseMs + 40);
         }}
       />
       <BottomSheet
