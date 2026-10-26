@@ -57,6 +57,41 @@ test("with REPORT_ALERT_EMAIL, the ntfy push is also emailed; a bad address is l
   expect(headers[1].Email).toBeUndefined();
 });
 
+test("ntfy refusing the email (4xx) still sends the push, once, without the Email header", async () => {
+  process.env.REPORT_ALERT_URL = "https://ntfy.sh/homecookd-test";
+  process.env.REPORT_ALERT_EMAIL = "team@homecookd.app";
+  vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+    calls.push({ url, init });
+    const asksEmail = "Email" in (init.headers as Record<string, string>);
+    return asksEmail ? new Response('{"error":"anonymous email sending is not allowed"}', { status: 400 }) : new Response("ok");
+  });
+  const { t, rajani, serene } = await world();
+  const poha = await recipe(t, rajani, { sharedAt: 1 });
+  await report(t, serene, poha, "rude");
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+  expect(calls).toHaveLength(2);
+  const [first, second] = calls.map((c) => c.init.headers as Record<string, string>);
+  expect(first.Email).toBe("team@homecookd.app");
+  expect(second.Email).toBeUndefined();
+  expect(second.Title).toBe("homecookd: new Community report");
+  expect(calls[1].init.body).toBe(calls[0].init.body);
+});
+
+test("a 5xx with the Email header isn't retried (the push itself is down)", async () => {
+  process.env.REPORT_ALERT_URL = "https://ntfy.sh/homecookd-test";
+  process.env.REPORT_ALERT_EMAIL = "team@homecookd.app";
+  vi.stubGlobal("fetch", async (url: string, init: RequestInit) => {
+    calls.push({ url, init });
+    return new Response("down", { status: 503 });
+  });
+  const { t, rajani, serene } = await world();
+  const poha = await recipe(t, rajani, { sharedAt: 1 });
+  await report(t, serene, poha);
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(calls).toHaveLength(1);
+});
+
 test("Slack and Discord get JSON", async () => {
   const { t, rajani, serene, caleb } = await world();
   const poha = await recipe(t, rajani, { sharedAt: 1 });
