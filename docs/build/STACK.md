@@ -82,8 +82,8 @@ HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-o
   `questions.answer({ questionId, text?, audioId? })` (cook only; a voice note gets an Ink transcript in the cook's
   `people.language`, plus `answer.translation`, Gemini's English, when that isn't English; set it with `seed:language`)
 - `messages.list` (to everyone, or to or from me), `messages.send({ kind, text?, fileId?, to?, recipeId?, aiDrafted? })`
-- `messages.sharePhoto({ recipeId, fileId })` → `{ draft, aiDrafted: true }`: Muse Spark (`muse-spark-1.3`) drafts
-  the note and **sends nothing**. The app lets the kid edit it, then calls `messages.send` with `kind: "photo"`,
+- `messages.sharePhoto({ recipeId, fileId })` → `{ draft, aiDrafted: true }`: Muse Spark (`muse-spark-1.3`), or Claude
+  Sonnet with `WRITER_PROVIDER=claude` in Convex env, drafts the note and **sends nothing**. The app lets the kid edit it, then calls `messages.send` with `kind: "photo"`,
   `to: <cookId>` and `aiDrafted: true`, which keeps the label after edits.
 - `files.uploadUrl` (POST the bytes there, get `{ storageId }`; for voice notes and photos, 20 MB max)
 - `cooking.current` (what each kid is cooking now, for the cook's phone; idle 2 h ends it), `cooking.finish`
@@ -257,7 +257,7 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   only), `community.setLocation({ lat, lng, campus? })` (snapped to the ~1 km grid before it's stored),
   `community.setShare({ recipeId, on })` (the recipe's cook only; a story card written from her stories shows as a
   plain line, with no culture, once she says no to them, and her next share rewrites it). The story card
-  (`storyCards.writeStoryCard`, Muse Spark, one JSON call) holds the sentence, `culture` and `quote`: Muse only picks a quote by
+  (`storyCards.writeStoryCard`, Muse Spark, or Claude Sonnet with `WRITER_PROVIDER=claude`, one JSON call) holds the sentence, `culture` and `quote`: Muse only picks a quote by
   its number from her step quotes (≤ 20 words; never a story, never its own words); without Muse, culture is null and
   the quote is her first step quote. A quote that stops being one of her step quotes stops showing.
 - **Share asks** ("Put it on the map", `convex/shareRequests.ts`): `shareRequests.ask({ recipeId })` → `"shared"`
@@ -601,8 +601,8 @@ default 0.85), `GEMINI_TTS_MODEL` / `GEMINI_TTS_VOICE` (optional; the backup voi
 | `CARTESIA_API_KEY` | Cloud Run secret (voice service) and Convex env (voice-note transcription) |
 | `CARTESIA_API_KEYS_BACKUP` | Same places. Comma-separated keys used in order when the one before runs out of credits (402 `quota_exceeded`) |
 | `MOSS_PROJECT_ID`, `MOSS_PROJECT_KEY` | Convex env (indexing) and Cloud Run secret (search) |
-| `ANTHROPIC_API_KEY` | Cloud Run secret, worker `.env` and Convex env (the text calls with `TEXT_PROVIDER=claude`) |
-| `MUSE_API_KEY` (Meta Model API) | Worker `.env` and Convex env |
+| `ANTHROPIC_API_KEY` | Cloud Run secret, worker `.env` and Convex env (the text calls with `TEXT_PROVIDER=claude`, story cards and photo notes with `WRITER_PROVIDER=claude`) |
+| `MUSE_API_KEY` (Meta Model API) | Worker `.env` and Convex env, until `RECIPE_WRITER=claude` and `WRITER_PROVIDER=claude` |
 | `GEMINI_API_KEY` | Worker `.env` and Convex env (translating voice-note answers until `TEXT_PROVIDER=claude`) |
 | `CONVEX_DEPLOY_KEY`, `CONVEX_OVERRIDE_ACCESS_TOKEN` | Root `.env` only |
 | `APPLE_TEAM_ID`, `APPLE_SIGNIN_KEY_ID`, `APPLE_SIGNIN_PRIVATE_KEY` (+ optional `APPLE_CLIENT_ID`) | Convex env only (Sign in with Apple revocation, below) |
