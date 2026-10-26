@@ -272,6 +272,21 @@ Caleb's updated PLAN.pdf (Oct 24) and his answers to the review questions add fi
   uncounted. "X going" on the dinner page = the host + accepted guests + `inviteOpens`. The web's static `/d` page
   (`web/src/app/d`, `NEXT_PUBLIC_CONVEX_SITE_URL`, default `https://grand-dragon-649.convex.site`) and the app's
   `/d` screen (`homecookd://d?t=…`, signed in or not) call it with a random id the browser or install keeps.
+- **Report or block** (App Review 1.2; `reports` and `blocks` tables, `convex/lib/safety.ts`, the word filter in
+  `convex/lib/moderation.ts`): `community.report({ kind: "recipe" | "dinner", targetId, reason?: "not_food" |
+  "rude" | "other" })` hides it from my family at once (one report per family and item); open reports from 2
+  families set `hiddenAt` on the recipe or dinner, which hides it from every other family until the team reviews
+  it. `community.block({ kind, targetId })` blocks the family behind it, both ways: neither family's feed, recipe
+  view, dinners, swaps or cook-together asks shows the other's, and new asks, joins and answers between them are
+  refused (with the same words as "not shared anymore"); it also files a `kind: "family"` report.
+  `community.blocked` → `[{ blockId, familyName }]` (only the ones my family blocked), `community.unblock({ blockId })`.
+  `community.recipe` and `dinners.get` now also return `ours` (and the dinner `familyName`), so the app shows
+  "Report or block" only on other families' pages. The filter (whole words, accents folded, no food words) refuses a
+  share (`community.shareOn`: "Some words in this recipe can't go on the map. It stays with your family.") and a
+  dinner's dish, place or address; the feed and `community.recipe` leave out a matching card as a backstop; a step
+  quote it catches is never a card quote, and a Muse card it catches goes plain. The team: `reports:open` lists open
+  reports by item; `reports:review({ kind, targetId, keep })` resolves them (keep: unhide; else unshare the recipe
+  or call off the dinner, and keep it hidden). New reports also log a `community report:` line.
   Community responses never include `libraryId`,
   `recipeJsonUrl`, `coverUrl` of a private recipe, moments, memories, quotes other than the card's one, original-
   language quotes, person ids of other families, or an address (except to the host and accepted guests). Distance

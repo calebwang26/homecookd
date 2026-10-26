@@ -20,6 +20,7 @@
 //                 or declined
 //   host form     day chips, time chips, the moment they make, today or tomorrow
 //   errors        a ConvexError's sentence, else the fallback
+//   report        "Report this recipe", the three reasons, "Block the Pawar family", the thank-you (report.ts)
 //   node scripts/test-community-ui.mjs
 // The labels read the phone's clock, so the zone is pinned (New York has a DST change on Nov 1 2026).
 process.env.TZ = 'America/New_York';
@@ -46,6 +47,7 @@ const L = await community('labels.ts');
 const G = await community('mapLayout.ts');
 const C = await community('choices.ts');
 const V = await community('invite.ts');
+const R = await community('report.ts');
 
 let passed = 0;
 const test = (name, fn) => {
@@ -526,6 +528,23 @@ test('error words', () => {
   assert.equal(L.errorText(new Error('[CONVEX M(dinners:requestJoin)] Server Error')), 'Couldn’t do that. Try again.');
   assert.equal(L.errorText(null, 'Nope.'), 'Nope.');
   assert.equal(L.errorText({ data: { code: 1 } }), 'Couldn’t do that. Try again.');
+});
+
+test('report or block: the sheet’s words', () => {
+  assert.equal(R.REPORT_LINK, 'Report or block');
+  assert.equal(R.reportTitle('recipe'), 'Report this recipe');
+  assert.equal(R.reportTitle('dinner'), 'Report this dinner');
+  assert.deepEqual(R.REPORT_REASONS.map((r) => r.label), ['Not about food', 'Rude or hurtful', 'Something else']);
+  assert.deepEqual(R.REPORT_REASONS.map((r) => r.key), ['not_food', 'rude', 'other']);
+  assert.equal(R.blockLabel('The Pawar family'), 'Block the Pawar family');
+  assert.equal(R.blockLabel("Mei's family"), "Block Mei's family");
+  assert.equal(R.blockLabel(' '), 'Block this family');
+  assert.equal(R.BLOCK_LINE, 'You won’t see each other in Community.');
+  assert.equal(`${R.REPORTED.title} ${R.REPORTED.subtitle}`, 'Thanks. We’ll look at it within a day.');
+  assert.equal(R.TEAM_EMAIL, 'team@homecookd.app');
+  // Plain short copy: no em dashes anywhere in it.
+  const all = [R.REPORT_LINK, R.BLOCK_LINE, R.REPORTED.title, R.REPORTED.subtitle, R.BLOCKED.title, ...R.REPORT_REASONS.map((r) => r.label)];
+  assert.ok(all.every((s) => !s.includes('—')));
 });
 
 console.log(`\n${passed} passed`);

@@ -12,6 +12,7 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { shareOn } from "./community";
 import { requireSession } from "./lib/auth";
+import { flagged, recipeWords } from "./lib/moderation";
 import { geminiYesNo, type YesNo } from "./lib/yesNo";
 import { familyRecipe } from "./recipes";
 
@@ -180,5 +181,6 @@ async function applyYes(ctx: MutationCtx, q: Doc<"questions">): Promise<void> {
   const recipe = await ctx.db.get("recipes", q.shareRecipeId);
   if (!recipe || recipe.familyId !== q.familyId || recipe.status !== "ready" || recipe.sharedAt) return;
   if (q.answer?.by !== recipe.cookId) return;
+  if (flagged(...recipeWords(recipe))) return; // the word filter keeps it in the family (shareOn would throw)
   await shareOn(ctx, recipe);
 }

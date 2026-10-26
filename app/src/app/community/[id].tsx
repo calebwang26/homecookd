@@ -1,7 +1,8 @@
 // A neighbor family's shared recipe, text only (community.recipe, live): the dish, whose it is, the
 // story card (written with AI, and labelled so) and the steps. Never /recipe/<id>: that page plays the
 // family's video, which stays with the family. The query rides on this person's session, so a cold
-// open from a link waits for sign-in instead of failing.
+// open from a link waits for sign-in instead of failing. Another family's recipe ends with a quiet
+// "Report or block" (ReportSheet).
 import { useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -9,9 +10,10 @@ import { StyleSheet, View } from 'react-native';
 import { coverFor, useWaited } from '@/components/community/data';
 import { DetailPage, goBack } from '@/components/community/DetailPage';
 import { privacyNote } from '@/components/community/labels';
+import { ReportOrBlock } from '@/components/community/ReportSheet';
 import { StepNumber } from '@/components/recipe/StepNumber';
 import { EmptyState, Skeleton, Txt } from '@/components/ui';
-import { useCommunityRecipe } from '@/lib/live/community';
+import { useCommunityRecipe, type CommunityRecipe } from '@/lib/live/community';
 import { colors, radii } from '@/theme/tokens';
 
 /** Still nothing after this long (no session, no connection): say so, with a way to try again. */
@@ -26,8 +28,11 @@ export default function CommunityRecipePage() {
 }
 
 function SharedRecipe({ id, onRetry }: { id: string; onRetry: () => void }) {
-  const recipe = useCommunityRecipe(id);
+  const live = useCommunityRecipe(id);
   const stuck = useWaited(STUCK_MS);
+  // While "Report or block" is open the page keeps what it showed: a report empties the live answer.
+  const [held, setHeld] = useState<CommunityRecipe | null>(null);
+  const recipe = held ?? live;
 
   if (!id || recipe === null) {
     return (
@@ -89,6 +94,13 @@ function SharedRecipe({ id, onRetry }: { id: string; onRetry: () => void }) {
           <Txt variant="caption" align="center">
             {privacyNote(recipe.cookName)}
           </Txt>
+
+          {recipe.ours === false ? (
+            <ReportOrBlock
+              target={{ kind: 'recipe', id: recipe.recipeId, familyName: recipe.familyName }}
+              onOpenChange={(open) => setHeld(open ? recipe : null)}
+            />
+          ) : null}
         </>
       ) : (
         <View style={styles.head}>

@@ -3,12 +3,16 @@
 // memories, library or GCS links, other families' person ids, or addresses. The only words of the
 // cook's own are the one step quote on the card. Places are the ~1 km grid cell, never finer. Only the
 // cook shares a recipe: her switch, her own tap, or her yes to a kid's ask (shareRequests.ts).
+// Every read and ask here goes through lib/safety.ts (reports and blocks) and the word filter
+// (lib/moderation.ts); "Report or block" is at the bottom.
 import { ConvexError, type Infer, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { requireCook, requireSession, type Signed } from "./lib/auth";
 import { distanceLabel, milesBetween, placeOf, roundToGrid } from "./lib/geo";
+import { flagged, NOT_SHAREABLE, recipeWords } from "./lib/moderation";
+import { fileReport, type Reportable, type Shield, seesDinner, seesRecipe, shieldFor } from "./lib/safety";
 import { type Card, plainStory, quoteChoices, quoteTranslated, storiesFor } from "./lib/storyCard";
 import { familyRecipe } from "./recipes";
 import schema from "./schema";
@@ -41,9 +45,10 @@ function publicCard(r: Doc<"recipes">, cookName: string, family: Doc<"families">
 /**
  * Puts a ready recipe on the map. One path for every way the cook says yes (her switch, her own tap,
  * her answer to a kid's ask). Muse writes the story card the first time, or again when the card no
- * longer matches her answer about her stories.
+ * longer matches her answer about her stories. Words the filter catches keep it in the family.
  */
 export async function shareOn(ctx: MutationCtx, recipe: Doc<"recipes">): Promise<void> {
+  if (flagged(...recipeWords(recipe))) throw new ConvexError(NOT_SHAREABLE);
   await ctx.db.patch("recipes", recipe._id, { sharedAt: Date.now() });
   const card = recipe.storyCard;
   const withStories = storiesFor(recipe).length > 0; // what Muse would get now
@@ -103,6 +108,7 @@ export const feed = query({
   returns: v.object({ here: latLng, recipes: v.array(feedRecipe), dinners: v.array(feedDinner) }),
   handler: async (ctx, { sessionToken, maxMiles, now }) => {
     const signed = await requireSession(ctx, sessionToken);
+    const shield = await shieldFor(ctx, signed.family._id);
     const here = roundToGrid(placeOf(signed.person));
     const near = (miles: number) => maxMiles === undefined || miles <= maxMiles;
 
@@ -112,16 +118,18 @@ export const feed = query({
       .take(100);
     const dinners: { miles: number; recipeId: Id<"recipes">; row: FeedDinner }[] = [];
     for (const d of open) {
-      if (d.startsAt <= now || d.hostFamilyId === signed.family._id) continue;
+      if (d.startsAt <= now || d.hostFamilyId === signed.family._id || !seesDinner(shield, d)) continue;
       const miles = milesBetween(here, d.approx);
       if (!near(miles)) continue;
+      const hostName = (await ctx.db.get("people", d.hostId))?.name ?? "";
+      if (flagged(d.dish, d.placeName, hostName)) continue; // the word filter's backstop
       dinners.push({
         miles,
         recipeId: d.recipeId,
         row: {
           dinnerId: d._id,
           dish: d.dish,
-          hostName: (await ctx.db.get("people", d.hostId))?.name ?? "",
+          hostName,
           placeName: d.placeName,
           startsAt: d.startsAt,
           seatsLeft: Math.max(0, d.seats - (await acceptedCount(ctx, d._id))),
@@ -142,7 +150,7 @@ export const feed = query({
       .take(200);
     const recipes = [];
     for (const r of shared) {
-      if (r.status !== "ready") continue;
+      if (r.status !== "ready" || !seesRecipe(shield, r)) continue;
       const cook = await ctx.db.get("people", r.cookId);
       const approx = roundToGrid(placeOf(cook));
       const miles = milesBetween(here, approx);
@@ -150,6 +158,8 @@ export const feed = query({
       const cookName = cook?.name ?? "";
       const family = await ctx.db.get("families", r.familyId);
       const card = publicCard(r, cookName, family);
+      const ours = r.familyId === signed.family._id;
+      if (!ours && flagged(...recipeWords(r), card.text, card.quote, cookName, family?.publicName)) continue;
       const dinner = dinnerFor.get(r._id);
       recipes.push({
         miles,
@@ -161,7 +171,7 @@ export const feed = query({
           cookName,
           distanceLabel: distanceLabel(miles),
           approx,
-          ours: r.familyId === signed.family._id,
+          ours,
           story: card.text,
           culture: card.culture,
           quote: card.quote,
@@ -180,7 +190,10 @@ export const feed = query({
   },
 });
 
-/** A shared recipe's text: the story card and the steps. Your own family's recipes always open. */
+/**
+ * A shared recipe's text: the story card and the steps. Your own family's recipes always open (`ours`:
+ * nothing to report); one we reported or blocked, or one the filter caught, doesn't.
+ */
 export const recipe = query({
   args: { sessionToken: v.string(), recipeId: v.id("recipes") },
   returns: v.union(
@@ -190,6 +203,7 @@ export const recipe = query({
       dish: v.string(),
       familyName: v.string(),
       cookName: v.string(),
+      ours: v.boolean(),
       story: v.union(v.null(), v.string()),
       steps: v.array(v.object({ order: v.number(), title: v.string(), text: v.string() })),
     }),
@@ -197,15 +211,20 @@ export const recipe = query({
   handler: async (ctx, { sessionToken, recipeId }) => {
     const signed = await requireSession(ctx, sessionToken);
     const r = await ctx.db.get("recipes", recipeId);
-    if (!r || r.status !== "ready" || (!r.sharedAt && r.familyId !== signed.family._id)) return null;
+    const ours = r?.familyId === signed.family._id;
+    if (!r || r.status !== "ready" || (!r.sharedAt && !ours)) return null;
+    if (!seesRecipe(await shieldFor(ctx, signed.family._id), r)) return null;
     const cookName = (await ctx.db.get("people", r.cookId))?.name ?? "";
     const family = await ctx.db.get("families", r.familyId);
+    const story = publicCard(r, cookName, family).text;
+    if (!ours && flagged(...recipeWords(r), story, cookName, family?.publicName)) return null;
     return {
       recipeId: r._id,
       dish: r.title,
       familyName: familyLabel(family, cookName),
       cookName,
-      story: publicCard(r, cookName, family).text,
+      ours,
+      story,
       steps: r.steps.map(({ order, title, text }) => ({ order, title, text })),
     };
   },
@@ -264,13 +283,13 @@ const swapView = v.object({
 
 const kindOf = (s: Doc<"swapRequests">): "swap" | "cook" => s.kind ?? "swap";
 
-async function viewSwap(ctx: QueryCtx, signed: Signed, s: Doc<"swapRequests">) {
+async function viewSwap(ctx: QueryCtx, signed: Signed, shield: Shield, s: Doc<"swapRequests">) {
   const incoming = s.otherFamilyId === signed.family._id;
   const theirRecipe = await ctx.db.get("recipes", s.theirRecipeId);
   const myRecipe = s.myRecipeId ? await ctx.db.get("recipes", s.myRecipeId) : null;
   const [ours, theirs] = incoming ? [theirRecipe, myRecipe] : [myRecipe, theirRecipe];
   const shown = (r: Doc<"recipes"> | null) =>
-    r && (r.familyId === signed.family._id || r.sharedAt) ? { recipeId: r._id, dish: r.title } : null;
+    r && (r.familyId === signed.family._id || (r.sharedAt && seesRecipe(shield, r))) ? { recipeId: r._id, dish: r.title } : null;
   // Named like a card: the public name, else whoever asked us, or the cook of the dish we asked for.
   const otherFamily = await ctx.db.get("families", incoming ? s.requesterFamilyId : s.otherFamilyId);
   const nameFrom = incoming ? s.requesterId : theirRecipe?.cookId;
@@ -304,7 +323,8 @@ async function familySwaps(ctx: QueryCtx, familyId: Id<"families">) {
  */
 async function askFamily(ctx: MutationCtx, signed: Signed, recipeId: Id<"recipes">, kind: "swap" | "cook", myRecipeId?: Id<"recipes">) {
   const theirs = await ctx.db.get("recipes", recipeId);
-  if (!theirs || theirs.status !== "ready" || !theirs.sharedAt) throw new ConvexError("That recipe isn't shared anymore.");
+  const visible = !!theirs && seesRecipe(await shieldFor(ctx, signed.family._id), theirs);
+  if (!theirs || !visible || theirs.status !== "ready" || !theirs.sharedAt) throw new ConvexError("That recipe isn't shared anymore.");
   if (theirs.familyId === signed.family._id) throw new ConvexError("This is your family's recipe.");
   if (myRecipeId) {
     const mine = await familyRecipe(ctx, signed, myRecipeId);
@@ -358,6 +378,7 @@ export const respondSwap = mutation({
     const s = await ctx.db.get("swapRequests", swapId);
     if (!s || s.otherFamilyId !== signed.family._id) throw new ConvexError("Only the family that was asked can answer.");
     if (s.status !== "pending") throw new ConvexError("You already answered.");
+    if ((await shieldFor(ctx, signed.family._id)).blocked.has(s.requesterFamilyId)) throw new ConvexError("That ask isn't open anymore.");
     await ctx.db.patch("swapRequests", swapId, { status: accept ? "accepted" : "declined" });
     return null;
   },
@@ -369,9 +390,91 @@ export const mySwaps = query({
   returns: v.array(swapView),
   handler: async (ctx, { sessionToken }) => {
     const signed = await requireSession(ctx, sessionToken);
+    const shield = await shieldFor(ctx, signed.family._id);
     const { asked, askedOfUs } = await familySwaps(ctx, signed.family._id);
     const out = [];
-    for (const s of [...asked, ...askedOfUs].sort((a, b) => b._creationTime - a._creationTime)) out.push(await viewSwap(ctx, signed, s));
+    for (const s of [...asked, ...askedOfUs].sort((a, b) => b._creationTime - a._creationTime)) {
+      const other = s.requesterFamilyId === signed.family._id ? s.otherFamilyId : s.requesterFamilyId;
+      if (!shield.blocked.has(other)) out.push(await viewSwap(ctx, signed, shield, s));
+    }
     return out;
+  },
+});
+
+// ---- "Report or block" ----
+// From another family's recipe or dinner page. A report hides it from my family at once, and from
+// everyone once two families reported it (lib/safety.ts). A block works both ways and tells the team
+// too (a "family" report). Anyone in a family can do either, for the whole family.
+
+const reportable = v.union(v.literal("recipe"), v.literal("dinner"));
+
+/** Whose recipe or dinner it is, named the way its card names that family. Never my own family's. */
+async function ownerOf(ctx: QueryCtx, signed: Signed, kind: Reportable, targetId: string) {
+  let owner: { id: string; familyId: Id<"families">; name: string } | null = null;
+  if (kind === "recipe") {
+    const id = ctx.db.normalizeId("recipes", targetId);
+    const r = id && (await ctx.db.get("recipes", id));
+    if (r) owner = { id: r._id, familyId: r.familyId, name: (await ctx.db.get("people", r.cookId))?.name ?? "" };
+  } else {
+    const id = ctx.db.normalizeId("dinners", targetId);
+    const d = id && (await ctx.db.get("dinners", id));
+    if (d) owner = { id: d._id, familyId: d.hostFamilyId, name: (await ctx.db.get("people", d.hostId))?.name ?? "" };
+  }
+  if (!owner) throw new ConvexError(`That ${kind} isn't here anymore.`);
+  if (owner.familyId === signed.family._id) throw new ConvexError(`This is your family's ${kind}.`);
+  return { ...owner, label: familyLabel(await ctx.db.get("families", owner.familyId), owner.name) };
+}
+
+export const report = mutation({
+  args: { sessionToken: v.string(), kind: reportable, targetId: v.string(), reason: schema.tables.reports.validator.fields.reason },
+  returns: v.null(),
+  handler: async (ctx, { sessionToken, kind, targetId, reason }) => {
+    const signed = await requireSession(ctx, sessionToken);
+    const owner = await ownerOf(ctx, signed, kind, targetId);
+    await fileReport(ctx, { familyId: signed.family._id, personId: signed.person._id }, { kind, id: owner.id, familyId: owner.familyId }, reason);
+    return null;
+  },
+});
+
+/** Block the family behind a recipe or dinner. Blocking again changes nothing. */
+export const block = mutation({
+  args: { sessionToken: v.string(), kind: reportable, targetId: v.string() },
+  returns: v.null(),
+  handler: async (ctx, { sessionToken, kind, targetId }) => {
+    const signed = await requireSession(ctx, sessionToken);
+    const owner = await ownerOf(ctx, signed, kind, targetId);
+    const before = await ctx.db
+      .query("blocks")
+      .withIndex("by_familyId_and_blockedFamilyId", (q) => q.eq("familyId", signed.family._id).eq("blockedFamilyId", owner.familyId))
+      .first();
+    if (before) return null;
+    await ctx.db.insert("blocks", { familyId: signed.family._id, blockedFamilyId: owner.familyId, label: owner.label, createdAt: Date.now() });
+    await fileReport(ctx, { familyId: signed.family._id, personId: signed.person._id }, { kind: "family", id: owner.familyId, familyId: owner.familyId });
+    return null;
+  },
+});
+
+/** The families mine blocked, for the list under "You" (never the ones that blocked us). */
+export const blocked = query({
+  args: { sessionToken: v.string() },
+  returns: v.array(v.object({ blockId: v.id("blocks"), familyName: v.string() })),
+  handler: async (ctx, { sessionToken }) => {
+    const signed = await requireSession(ctx, sessionToken);
+    const rows = await ctx.db
+      .query("blocks")
+      .withIndex("by_familyId_and_blockedFamilyId", (q) => q.eq("familyId", signed.family._id))
+      .take(100);
+    return rows.map((b) => ({ blockId: b._id, familyName: b.label }));
+  },
+});
+
+export const unblock = mutation({
+  args: { sessionToken: v.string(), blockId: v.id("blocks") },
+  returns: v.null(),
+  handler: async (ctx, { sessionToken, blockId }) => {
+    const signed = await requireSession(ctx, sessionToken);
+    const b = await ctx.db.get("blocks", blockId);
+    if (b?.familyId === signed.family._id) await ctx.db.delete("blocks", blockId);
+    return null;
   },
 });

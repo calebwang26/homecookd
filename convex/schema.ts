@@ -101,6 +101,8 @@ export default defineSchema({
         quote: v.optional(v.string()),
       }),
     ),
+    // Reports from two families hid it from every other family until the team looks (lib/safety.ts).
+    hiddenAt: v.optional(v.number()),
   })
     .index("by_familyId", ["familyId"])
     .index("by_sharedAt", ["sharedAt"]),
@@ -318,6 +320,7 @@ export default defineSchema({
     // for the link (dinners.inviteLink). It opens homecookd.app/d, which shows only the dish, the
     // host's name and when.
     inviteToken: v.optional(v.string()),
+    hiddenAt: v.optional(v.number()), // as recipes.hiddenAt
   })
     .index("by_status", ["status"])
     .index("by_hostId", ["hostId"])
@@ -354,6 +357,35 @@ export default defineSchema({
   })
     .index("by_requesterFamilyId", ["requesterFamilyId"])
     .index("by_otherFamilyId", ["otherFamilyId"]),
+
+  /**
+   * Community: someone reported another family's recipe or dinner ("Report or block"), or blocked that
+   * family (kind "family"). It hides the item from the reporter's family at once; open reports from two
+   * families hide it from everyone else (hiddenAt) until the team reviews it (reports.ts).
+   */
+  reports: defineTable({
+    reporterFamilyId: v.id("families"),
+    reporterPersonId: v.id("people"),
+    kind: v.union(v.literal("recipe"), v.literal("dinner"), v.literal("family")),
+    targetId: v.string(), // the recipe's, dinner's or family's id
+    targetFamilyId: v.id("families"),
+    reason: v.optional(v.union(v.literal("not_food"), v.literal("rude"), v.literal("other"))),
+    createdAt: v.number(),
+    status: v.union(v.literal("open"), v.literal("resolved")),
+  })
+    .index("by_reporterFamilyId_and_kind_and_targetId", ["reporterFamilyId", "kind", "targetId"])
+    .index("by_kind_and_targetId", ["kind", "targetId"])
+    .index("by_status", ["status"]),
+
+  /** Community: one family blocked another. Both ways: neither sees the other's dishes, dinners or asks. */
+  blocks: defineTable({
+    familyId: v.id("families"),
+    blockedFamilyId: v.id("families"),
+    label: v.string(), // how the blocked family's cards named it, for the unblock list
+    createdAt: v.number(),
+  })
+    .index("by_familyId_and_blockedFamilyId", ["familyId", "blockedFamilyId"])
+    .index("by_blockedFamilyId_and_familyId", ["blockedFamilyId", "familyId"]),
 
   /** Family messages, including the finished-dish photo and the note Muse drafted for it. */
   messages: defineTable({

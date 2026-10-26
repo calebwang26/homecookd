@@ -1,6 +1,7 @@
 // The Community story card's pure rules: the cook's quotes a card may show, and what a Muse answer
 // may put on the card. A quote is always one of her own step quotes (the recipe text she chose to
 // share), never a story and never written by Muse: Muse only picks one by its number.
+import { flagged } from "./moderation";
 
 export const STORY_WORDS = 25;
 export const QUOTE_WORDS = 20;
@@ -12,7 +13,10 @@ const words = (s: string) => s.split(/\s+/).filter(Boolean).length;
 /** Trimmed, without wrapping double quotation marks. */
 export const unquote = (s: string) => s.trim().replace(/^["“]+|["”]+$/g, "").trim();
 
-/** Her English step quotes, in step order, each at most 20 words (a longer one gives its sentences). */
+/**
+ * Her English step quotes, in step order, each at most 20 words (a longer one gives its sentences).
+ * One the word filter catches (lib/moderation.ts) is never a choice, so it never reaches a card.
+ */
 export function quoteChoices(steps: readonly { order: number; quote?: string }[]): string[] {
   const out: string[] = [];
   for (const s of [...steps].sort((a, b) => a.order - b.order)) {
@@ -21,7 +25,7 @@ export function quoteChoices(steps: readonly { order: number; quote?: string }[]
     const parts = words(q) <= QUOTE_WORDS ? [q] : q.split(/(?<=[.!?])\s+/).map(unquote);
     for (const p of parts) {
       const n = words(p);
-      if (n >= 2 && n <= QUOTE_WORDS && !out.includes(p)) out.push(p);
+      if (n >= 2 && n <= QUOTE_WORDS && !out.includes(p) && !flagged(p)) out.push(p);
     }
   }
   return out.slice(0, MAX_QUOTES);

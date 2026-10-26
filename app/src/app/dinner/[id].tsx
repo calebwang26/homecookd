@@ -5,8 +5,9 @@
 // and one button. Before you ask: "Ask to join"; waiting: "Asked · waiting"; in, or hosting: "Invite
 // friends", which opens the share sheet as a dinner invite. One step at a time for the host: while
 // people are waiting on an answer the button says "2 asked to join" and takes them to the requests.
+// Another family's dinner ends with a quiet "Report or block" (ReportSheet).
 import { useLocalSearchParams } from 'expo-router';
-import { useRef } from 'react';
+import { useRef, useState } from 'react';
 import { AccessibilityInfo, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,6 +16,7 @@ import { coverFor, useNow, useWaited } from '@/components/community/data';
 import { goBack } from '@/components/community/DetailPage';
 import { DinnerPhoto, GoingRow, HostPill, HostRequests, WhenWhere } from '@/components/community/DinnerParts';
 import { dinnerAction, dinnerWhen, errorText, goingFaces, nightTitle, type DinnerAction } from '@/components/community/labels';
+import { ReportOrBlock } from '@/components/community/ReportSheet';
 import { ActionButton, BackIcon, EmptyState, IconButton, ScreenWash, Skeleton, Txt, useToast } from '@/components/ui';
 import { requestJoin, useDinner, type Dinner } from '@/lib/live/community';
 import { useSession } from '@/lib/session';
@@ -31,7 +33,10 @@ const FOOTER = 56 + 30 + 16;
 export default function DinnerPage() {
   const params = useLocalSearchParams<{ id: string }>();
   const id = typeof params.id === 'string' ? params.id : '';
-  const dinner = useDinner(id || null);
+  const live = useDinner(id || null);
+  // While "Report or block" is open the page keeps what it showed: a report empties the live answer.
+  const [held, setHeld] = useState<Dinner | null>(null);
+  const dinner = held ?? live;
   const now = useNow();
   const waited = useWaited(MISSING_MS);
   const insets = useSafeAreaInsets();
@@ -51,7 +56,7 @@ export default function DinnerPage() {
         contentContainerStyle={[styles.content, { paddingTop: top + 48, paddingBottom: FOOTER + insets.bottom }]}>
         <ScreenWash tone="kid" height={360} />
         {dinner && action ? (
-          <Details dinner={dinner} action={action} now={now} photo={{ width: photoW, height: photoH }} />
+          <Details dinner={dinner} action={action} now={now} photo={{ width: photoW, height: photoH }} onReportOpen={(open) => setHeld(open ? dinner : null)} />
         ) : waited || !id ? (
           <EmptyState title="This dinner isn’t here anymore" actionLabel="Back" onAction={() => goBack()} />
         ) : (
@@ -85,7 +90,19 @@ export default function DinnerPage() {
   );
 }
 
-function Details({ dinner, action, now, photo }: { dinner: Dinner; action: DinnerAction; now: number; photo: { width: number; height: number } }) {
+function Details({
+  dinner,
+  action,
+  now,
+  photo,
+  onReportOpen,
+}: {
+  dinner: Dinner;
+  action: DinnerAction;
+  now: number;
+  photo: { width: number; height: number };
+  onReportOpen: (open: boolean) => void;
+}) {
   const { me } = useSession();
   const going = goingFaces(dinner, me?.name ?? '');
   const inIt = action.kind === 'invite' || action.kind === 'requests';
@@ -103,6 +120,9 @@ function Details({ dinner, action, now, photo }: { dinner: Dinner; action: Dinne
         <WhenWhere when={dinnerWhen(dinner.startsAt, now)} placeName={dinner.placeName} address={dinner.address} />
         <GoingRow pill={pill} faces={going.faces} count={going.count} label={going.label} />
         {dinner.isHost && inIt ? <HostRequests dinner={dinner} /> : null}
+        {dinner.ours === false ? (
+          <ReportOrBlock target={{ kind: 'dinner', id: dinner.dinnerId, familyName: dinner.familyName ?? '' }} onOpenChange={onReportOpen} />
+        ) : null}
       </View>
     </>
   );

@@ -4,6 +4,7 @@
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
+import { flagged } from "./lib/moderation";
 import { type Card, fallbackCard, parseMuseCard, plainStory, quoteChoices, STORY_WORDS, storiesFor } from "./lib/storyCard";
 
 const MUSE_URL = "https://api.meta.ai/v1/chat/completions";
@@ -112,6 +113,7 @@ export const writeStoryCard = internalAction({
         return null;
       });
     }
+    if (card && flagged(card.text, card.culture)) card = null; // the plain line instead (lib/moderation.ts)
     // The plain line never holds a story; Muse's sentence may.
     const usedStories = card !== null && facts.stories.length > 0;
     const { text, culture, quote } = card ?? fallbackCard(plainStory(facts), facts.quotes);
