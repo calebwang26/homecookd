@@ -344,6 +344,8 @@ const words: Translation = {
   'parent.questions.labelTranslated': '{who}: {question}. 원문: {english}',
   'parent.questions.hint': '질문을 열어요. homie가 읽어 드리면 소리 내어 답해 주세요.',
   'parent.questions.translated': '번역됨 · “{text}”',
+  'parent.questions.homieDish': 'homie가 {dish}에 대해 여쭤봐요',
+  'parent.questions.homieAsks': 'homie가 물어볼 게 있어요',
   'parent.ask.answer': '답하기',
   'parent.ask.askedYou': '{name} 님이 물어봤어요',
   'parent.ask.chatHint': '{name} 님과의 대화를 열어요',

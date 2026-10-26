@@ -344,6 +344,8 @@ const words: Translation = {
   'parent.questions.labelTranslated': '{who}: {question}. Isinalin mula sa: {english}',
   'parent.questions.hint': 'Bubuksan ang tanong. Babasahin ito ni homie sa inyo, at sasagot kayo nang malakas.',
   'parent.questions.translated': 'Isinalin · “{text}”',
+  'parent.questions.homieDish': 'Nagtatanong po si homie tungkol sa {dish} ninyo',
+  'parent.questions.homieAsks': 'May tanong po si homie',
   'parent.ask.answer': 'Sumagot',
   'parent.ask.askedYou': 'Nagtanong sa inyo si {name}',
   'parent.ask.chatHint': 'Bubuksan ang usapan ninyo ni {name}',

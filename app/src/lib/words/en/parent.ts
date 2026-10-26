@@ -28,6 +28,9 @@ export const PARENT = {
   'parent.questions.labelTranslated': '{who}: {question}. Translated from: {english}',
   'parent.questions.hint': 'Opens the question. homie reads it to you, and you answer out loud.',
   'parent.questions.translated': 'Translated · “{text}”',
+  // homie's own follow-up question about her dish (questions.kind 'followUp'), not a kid's
+  'parent.questions.homieDish': 'homie asks about your {dish}',
+  'parent.questions.homieAsks': 'homie has a question',
 
   // Answering (LiveQuestions, the updates card, "Leo asked you" on her recipe page)
   'parent.ask.answer': 'Answer',

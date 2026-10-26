@@ -27,7 +27,7 @@ const RETRY_PAUSE_MS = 1200;
 type Props = {
   /** The question and her language are known. */
   ready: boolean;
-  /** The question's kind: 'share' (a yes or no to the Community map) takes a short answer. */
+  /** The question's kind: 'share' (a yes or no to the Community map) and 'followUp' (homie's own) take a short answer. */
   kind?: string | null;
   /** homie is lit or speaking (the pot's state). */
   talking: boolean;

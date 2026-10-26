@@ -55,6 +55,10 @@ const WORDS = {
   cameraTrouble: { en: 'The camera stopped. Your video so far is saved.' },
   // The flip button under the icon (FlipCameraButton).
   flipCamera: { en: 'Flip camera' },
+  // homie's own follow-up question about her dish (questions.kind 'followUp', the answer screen): homie asks,
+  // not a kid, and her answer is saved, not sent to anyone.
+  homieAsks: { en: 'homie has a question about your dish' },
+  homieThanks: { en: 'Thank you! homie saved your answer' },
 } as const satisfies Record<string, Words>;
 
 export type RecordWordKey = keyof typeof WORDS;

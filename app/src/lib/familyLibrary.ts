@@ -7,9 +7,11 @@
 //   withoutStories(recipe)          a recipe without the cook's stories and tips
 //   sharedMemories(rows, prev)      the stories and tips Convex sent for each dish
 //   withMemories(recipe, memories)  those put back into a recipe.json published without them
+//   sharedAdded(rows, prev)         the ingredients each dish's cook confirmed after the video
+//   withAdded(recipe, added)        those added to its ingredient list
 //   mergeLibrary(base, family)      the family's new dishes first, then library.json's, one per id
 // Pure, so scripts/test-library.mjs runs it in Node.
-import type { LibraryEntry, Recipe, Special, Story } from './types';
+import type { Ingredient, LibraryEntry, Recipe, Special, Story } from './types';
 
 /**
  * A story or tip as Convex keeps it (convex/schema.ts `memory`). Since the pipeline stopped putting them
@@ -40,7 +42,12 @@ export type FamilyRecipe = {
   memoriesOptIn?: boolean;
   /** Those stories and tips. recipes.list sends them only to the cook, or to everyone after her yes. */
   memories?: readonly Memory[];
+  /** Ingredients the cook confirmed after the video, to homie's follow-up questions (convex/followUps.ts). */
+  addedIngredients?: readonly AddedIngredient[];
 };
+
+/** One of them (convex/schema.ts recipes.addedIngredients): `said` is her answer, in English when there is one. */
+export type AddedIngredient = { name: string; said?: string; step?: number; questionId?: string };
 
 type Person = { name: string; relation: string | null };
 
@@ -129,22 +136,54 @@ export function withoutStories(recipe: Recipe): Recipe {
 }
 
 /**
- * The stories and tips recipes.list sent for each listed dish, by library id (none: not in the map).
- * `prev` is the last result: a dish whose memories didn't change keeps its array, and when none changed
- * the result is `prev` itself, so only a changed dish loads again.
+ * One list per listed dish, by library id (none: not in the map). `prev` is the last result: a dish whose
+ * list didn't change keeps its array, and when none changed the result is `prev` itself, so only a
+ * changed dish loads again.
  */
-export function sharedMemories(
+function perDish<T>(
   rows: readonly FamilyRecipe[],
-  prev: ReadonlyMap<string, readonly Memory[]> = new Map(),
-): ReadonlyMap<string, readonly Memory[]> {
-  const next = new Map<string, readonly Memory[]>();
+  pick: (row: FamilyRecipe) => readonly T[] | undefined,
+  prev: ReadonlyMap<string, readonly T[]>,
+): ReadonlyMap<string, readonly T[]> {
+  const next = new Map<string, readonly T[]>();
   for (const { row, id } of listedRows(rows)) {
-    if (!Array.isArray(row.memories) || !row.memories.length) continue;
+    const list = pick(row);
+    if (!Array.isArray(list) || !list.length) continue;
     const was = prev.get(id);
-    next.set(id, was && JSON.stringify(was) === JSON.stringify(row.memories) ? was : row.memories);
+    next.set(id, was && JSON.stringify(was) === JSON.stringify(list) ? was : list);
   }
   const same = next.size === prev.size && [...next].every(([id, m]) => prev.get(id) === m);
   return same ? prev : next;
+}
+
+/** The stories and tips recipes.list sent for each listed dish (perDish). */
+export function sharedMemories(rows: readonly FamilyRecipe[], prev: ReadonlyMap<string, readonly Memory[]> = new Map()) {
+  return perDish(rows, (row) => row.memories, prev);
+}
+
+/** The ingredients each listed dish's cook confirmed after the video (perDish). */
+export function sharedAdded(rows: readonly FamilyRecipe[], prev: ReadonlyMap<string, readonly AddedIngredient[]> = new Map()) {
+  return perDish(rows, (row) => row.addedIngredients, prev);
+}
+
+const sameName = (a: string) => a.replace(/\s*\(.*?\)/g, '').trim().toLowerCase();
+
+/**
+ * The recipe with what the cook confirmed after the video at the end of its ingredient list (marked
+ * `confirmed`, her words as `said`), once each; a name the list already has isn't added again. The same
+ * object when there's nothing new, so it can run on a recipe that already has them.
+ */
+export function withAdded(recipe: Recipe, added: readonly AddedIngredient[]): Recipe {
+  const have = new Set((recipe.ingredients ?? []).map((i) => sameName(i.name ?? '')));
+  const extra: Ingredient[] = [];
+  for (const a of added) {
+    const name = (a.name ?? '').trim();
+    if (!name || have.has(sameName(name))) continue;
+    have.add(sameName(name));
+    const said = a.said?.trim() || null;
+    extra.push({ name, feel: said ?? '', estimate: 'unknown', confidence: 'high', first_seen_s: null, confirmed: { said, step: a.step ?? null } });
+  }
+  return extra.length ? { ...recipe, ingredients: [...(recipe.ingredients ?? []), ...extra] } : recipe;
 }
 
 /**

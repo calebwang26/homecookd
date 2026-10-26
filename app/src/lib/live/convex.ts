@@ -75,11 +75,14 @@ export type CookQuestion = {
   textForCook?: string;
   /**
    * Unset: a kid's cooking question. 'share' (Community, convex/shareRequests.ts): someone in the
-   * family asks her to put `shareRecipeId` on the map; only her clear yes shares it. Any other value
-   * from a newer server reads as a plain question.
+   * family asks her to put `shareRecipeId` on the map; only her clear yes shares it. 'followUp'
+   * (convex/followUps.ts): homie's own question about her dish (askedByName "homie"); her yes to one
+   * with `followUp.ingredient` adds it to the recipe. Any other value from a newer server reads as a
+   * plain question.
    */
   kind?: string;
   shareRecipeId?: string;
+  followUp?: { id: string; ingredient?: string; said?: 'yes' | 'no' | 'unclear' };
   answer?: { translation?: string };
 };
 
