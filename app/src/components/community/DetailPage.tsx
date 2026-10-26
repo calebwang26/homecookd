@@ -15,7 +15,7 @@ const HERO_H = 260;
 const SHEET_TOP = 228;
 
 /** Back, or to `home` when the page was opened from a link with nothing under it. */
-export function goBack(home: Href = '/kid/community') {
+export function goBack(home: Href = '/kid/home') {
   if (router.canGoBack()) router.back();
   else router.replace(home);
 }
