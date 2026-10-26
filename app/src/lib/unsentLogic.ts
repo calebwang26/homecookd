@@ -88,10 +88,38 @@ export function stoppedEarly(list: Unsent[], at: { cookId: string | null | undef
 }
 
 /** Her [Send it] on Home: the note is sent now (its clock starts again; no job yet). */
-export function asSending(u: Unsent, now: number): Unsent {
+export function asSending(u: Unsent, now: number): Unsent | null {
+  // Only once: a second tap (or another run) must never reset a send already on its way.
+  if (u.state !== 'filming') return null;
   const next: Unsent = { ...u, savedAt: new Date(now).toISOString(), jobId: null, resends: 0 };
   delete next.state;
   return next;
+}
+
+/**
+ * A Send-screen upload's Convex job, from the family's newest jobs (jobs.forFamily keeps 20): found, or
+ * `{ stage: null }` (done, long since handled, like recordingJob) when this phone saw Convex take the job
+ * (its row's convex_job 'ok') but it's no longer among the newest, or null: no job.
+ */
+export function jobForUpload(
+  jobs: { _id: string; uploadPath: string; stage: string; error?: string }[],
+  uploadId: string | null,
+  convexHadIt: boolean,
+): { id: string; stage: string | null; error: string | null } | null {
+  if (!uploadId) return null;
+  const job = jobs.find((j) => j.uploadPath === `${uploadId}/`);
+  if (job) return { id: job._id, stage: job.stage, error: job.error ?? null };
+  return convexHadIt ? { id: '', stage: null, error: null } : null;
+}
+
+/**
+ * The copies under documents/sends/ that no note lists (the app died between the copy and the note, or a
+ * note put back without them), and not part of a send being prepared right now: delete them.
+ * `paths`: "sends/<id>/<file>".
+ */
+export function orphanCopies(paths: string[], notes: Pick<Unsent, 'clips'>[], busy: (noteId: string) => boolean): string[] {
+  const listed = new Set(notes.flatMap((u) => u.clips.map((c) => c.path)));
+  return paths.filter((p) => !listed.has(p) && !busy(p.split('/')[1] ?? ''));
 }
 
 /** A launch sends it again by itself: not one she's still to be asked about. */

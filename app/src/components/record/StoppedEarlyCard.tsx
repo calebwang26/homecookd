@@ -5,9 +5,9 @@
 //   Send it   the send the done view does (sendDraft, as her, to the kids she picked before filming),
 //             and the recording ends on Convex (live.endRecording) so it isn't left "recording". If the
 //             app dies again on the way, the next launch carries on by itself (useResendUnsent).
-//   Delete    "Delete this video?" first (it's for good): then the files and the note go.
+//   Delete    "Delete this video?" first (it's for good): then the files and the note go, and the recording ends on Convex.
 // Big type, few words: her language (useWords). Dev aid (web screenshots): Home's `?preview=stopped`.
-import { useEffect, useMemo, useState, useSyncExternalStore } from 'react';
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
@@ -63,15 +63,21 @@ function Card({ note, here, preview, enterIndex }: { note: Unsent; here: Unsent[
   const { me, profiles, learners } = useSession();
   const [sure, setSure] = useState(false);
   const [sending, setSending] = useState(false);
+  // Taps while the consent sheet is up (one yes answers them all) or a send runs: only the first goes.
+  const busy = useRef(false);
   const filmed = t('parent.stopped.filmed', { time: minutesLabel(filmedLength(here) / 1000, t) });
   const dish = note.dish?.trim();
 
   const send = async () => {
-    if (preview || sending || !me) return;
-    if (!(await ensureAiConsent())) return;
+    if (preview || busy.current || !me) return;
+    busy.current = true;
+    if (!(await ensureAiConsent())) {
+      busy.current = false;
+      return;
+    }
     setSending(true);
-    const u = startSending(note.recordingId);
-    if (!u) return setSending(false);
+    const u = startSending(note.recordingId); // null unless it's still waiting for her: never twice
+    if (!u) return;
     void endRecording(u.recordingId, me.id); // not left "recording" on Convex (false when it can't: fine)
     const to = doneTo(me.id, profiles, learners, u);
     try {
@@ -89,6 +95,7 @@ function Card({ note, here, preview, enterIndex }: { note: Unsent; here: Unsent[
     } catch (e) {
       console.warn('[stopped] send failed', String(e).slice(0, 160));
       backToFilming(u.recordingId); // no upload was made: the card asks again
+      busy.current = false;
       setSending(false);
       toast.show(t('parent.stopped.didntSend'), { tone: 'error' });
     }
@@ -97,6 +104,12 @@ function Card({ note, here, preview, enterIndex }: { note: Unsent; here: Unsent[
   const remove = () => {
     if (preview) return setSure(false);
     deleteRecording(note);
+    // Ended on Convex now rather than by the idle cron; nothing here may hold up the delete.
+    try {
+      if (me && !note.local) void endRecording(note.recordingId, me.id).catch(() => {});
+    } catch {
+      // the cron ends it
+    }
     toast.show(t('parent.stopped.deleted'));
   };
 

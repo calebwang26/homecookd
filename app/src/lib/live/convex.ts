@@ -52,6 +52,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 
 import { requireAiConsent } from '@/lib/aiConsent';
 import { getSession, useSession } from '@/lib/session';
+import { jobForUpload } from '@/lib/unsentLogic';
 import { secretGet } from '@/lib/storage';
 
 const URL = (process.env.EXPO_PUBLIC_CONVEX_URL ?? '').trim();
@@ -395,17 +396,18 @@ export async function recordingJob(recordingId: string, as?: string): Promise<Re
 
 /**
  * The Convex job for a Send-screen upload (the folder "<uploadId>/"), asked once before a resend after a
- * crash: null when the family's newest jobs don't have it (or no upload was made), undefined when Convex
- * couldn't say. `as`: the cook (a profile id).
+ * crash (lib/unsentLogic jobForUpload): stage null when this phone saw Convex take it (`convexHadIt`, its
+ * row's convex_job 'ok') but it's no longer among the family's newest, null when there's no job (or no
+ * upload was made), undefined when Convex couldn't say. `as`: the cook (a profile id).
  */
-export async function uploadJob(uploadId: string | null, as?: string): Promise<RecordingJob | null | undefined> {
+export async function uploadJob(uploadId: string | null, convexHadIt: boolean, as?: string): Promise<RecordingJob | null | undefined> {
   if (stubbed || !client) return undefined;
   try {
     const sessionToken = await token(as);
     const jobs = await call<LiveJob[] | undefined>('query', 'jobs:forFamily', { sessionToken }, () => undefined, { soft: true });
     if (!jobs) return undefined;
-    const job = uploadId ? jobs.find((j) => j.uploadPath === `${uploadId}/`) : undefined;
-    return job ? { id: job._id, stage: job.stage, error: job.error ?? null } : null;
+    const job = jobForUpload(jobs, uploadId, convexHadIt);
+    return job ? { id: job.id, stage: job.stage as JobStage | null, error: job.error } : null;
   } catch (e) {
     console.warn('[convex] jobs.forFamily', String(e).slice(0, 160));
     return undefined;

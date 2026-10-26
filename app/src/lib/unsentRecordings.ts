@@ -19,6 +19,7 @@
 //   markUnsentJob(recordingId, jobId)   dropUnsent(recordingId)   dropUnsentFor(row)   countResend(recordingId)
 //   loadUnsent()   stillUnsent(recordingId)   savedHere(recordingId)   clipsHere(note)   unsentUri(clip)
 //   await keepForSend(clips, noteId)   subscribeUnsent(listener) / unsentVersion()   (Home's card)
+//   cleanOrphanCopies()   once a launch (useResendUnsent): copies under sends/ that no note lists
 import { Directory, File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 
@@ -29,6 +30,7 @@ import {
   copyPath,
   docPath,
   isFullUri,
+  orphanCopies,
   patchUnsent,
   withFilming,
   withoutUnsent,
@@ -44,6 +46,10 @@ const native = Platform.OS !== 'web'; // the web build never films in the app
 const mine = new Set<string>();
 /** Recordings this run of the app is filming right now (their recording screen is open). */
 const onScreen = new Set<string>();
+/** Deleted on Home in this run (saveFilming ignores them). */
+const deleted = new Set<string>();
+/** Sends whose videos are being copied right now, before their note is written (cleanOrphanCopies leaves them). */
+const keeping = new Set<string>();
 
 const file = () => new File(Paths.document, FILE);
 
@@ -105,6 +111,7 @@ function noteOf({ clips, copies, ...rest }: UnsentInput): Unsent {
 /** It's being sent now ("I'm done", Send): kept until Convex has the job and every file is up. */
 export function saveUnsent(input: UnsentInput) {
   mine.add(input.recordingId);
+  keeping.delete(input.recordingId);
   save(withUnsent(loadUnsent(), noteOf(input)));
 }
 
@@ -115,6 +122,8 @@ export function putUnsent(u: Unsent) {
 
 /** A file was saved while she films: the 'filming' note, with every file so far (never over a send). */
 export function saveFilming(input: UnsentInput) {
+  // Deleted on Home: a file the closed screen's camera saves late must not bring it back.
+  if (deleted.has(input.recordingId)) return;
   const list = loadUnsent();
   const next = withFilming(list, noteOf(input));
   if (next !== list) save(next);
@@ -132,8 +141,8 @@ export const filmingNow = (recordingId: string) => onScreen.has(recordingId);
 export function startSending(recordingId: string): Unsent | null {
   const list = loadUnsent();
   const u = list.find((x) => x.recordingId === recordingId);
-  if (!u) return null;
-  const next = asSending(u, Date.now());
+  const next = u ? asSending(u, Date.now()) : null;
+  if (!next) return null; // gone, or already being sent: never reset a send on its way
   mine.add(recordingId);
   save(withUnsent(list, next));
   return next;
@@ -172,6 +181,7 @@ function removeCopies(u: Unsent) {
 }
 
 export function dropUnsent(recordingId: string) {
+  keeping.delete(recordingId);
   const list = loadUnsent();
   const u = list.find((x) => x.recordingId === recordingId);
   if (!u) return;
@@ -196,7 +206,26 @@ export function deleteRecording(u: Unsent) {
   } catch (e) {
     console.warn('[unsent] could not delete the folder', String(e).slice(0, 120));
   }
+  deleted.add(u.recordingId);
   save(withoutUnsent(loadUnsent(), u.recordingId));
+}
+
+/**
+ * Once a launch: copies under documents/sends/ that no note lists (the app died between the copy and
+ * its note, or a note was put back without them) go, and so do their empty folders.
+ */
+export function cleanOrphanCopies() {
+  if (!native) return;
+  try {
+    const root = new Directory(Paths.document, 'sends');
+    if (!root.exists) return;
+    const dirs = root.list().filter((d): d is Directory => d instanceof Directory);
+    const paths = dirs.flatMap((d) => d.list().filter((f) => f instanceof File).map((f) => `sends/${d.name}/${f.name}`));
+    for (const p of orphanCopies(paths, loadUnsent(), (id) => keeping.has(id))) remove(new File(Paths.document, p).uri);
+    for (const d of dirs) if (!keeping.has(d.name) && d.exists && d.list().length === 0) d.delete();
+  } catch (e) {
+    console.warn('[unsent] could not tidy the kept copies', String(e).slice(0, 120));
+  }
 }
 
 /** Counted before a resend starts, so a send that closes the app again still counts. */
@@ -237,6 +266,7 @@ export function clipsHere(u: Unsent): UnsentClip[] {
 export async function keepForSend(clips: DraftClip[], noteId: string): Promise<{ clips: DraftClip[]; copies: Set<string> }> {
   const copies = new Set<string>();
   if (!native) return { clips, copies };
+  keeping.add(noteId); // until its note is written (saveUnsent) or dropped
   const documents = Paths.document.uri;
   const out: DraftClip[] = [];
   for (const [i, c] of clips.entries()) {

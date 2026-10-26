@@ -52,6 +52,8 @@ export type SendInput = {
   hello?: { path: string; duration_s: number } | null;
   /** The phone's note for this send (lib/unsentRecordings), by default the recording's own. */
   note?: string | null;
+  /** The card's thumbnail video, when it isn't the first clip (sendKept: the original pick, not its copy, which goes once sent). */
+  thumb?: string | null;
 };
 
 export type JobFields = Pick<Draft, 'glasses' | 'language' | 'recordingId'> & { kids: { id: string; name: string }[]; title: string };
@@ -127,7 +129,7 @@ export function ensureJob(row: StoredJob, liveKnown: boolean): void {
 }
 
 /** Starts the upload and returns once the job exists (the videos keep uploading in the background). */
-export async function sendDraft({ me, draft, clips, kids, recipients, toLabel, dish, hello = null, note }: SendInput): Promise<StoredJob> {
+export async function sendDraft({ me, draft, clips, kids, recipients, toLabel, dish, hello = null, note, thumb }: SendInput): Promise<StoredJob> {
   await requireAiConsent();
   const title = dish.slice(0, MAX_TITLE);
   const totalS = clips.reduce((a, c) => a + (c.asset.duration ?? 0) / 1000, 0);
@@ -147,7 +149,7 @@ export async function sendDraft({ me, draft, clips, kids, recipients, toLabel, d
       hello_duration_s: hello?.duration_s ?? null,
       pending_send: null,
       duration_s: Math.round(totalS),
-      thumb_video_uri: clips[0]?.asset.uri ?? null,
+      thumb_video_uri: thumb ?? clips[0]?.asset.uri ?? null,
       recording_id: recordingId ?? null,
       unsent_id: noteId !== recordingId ? noteId : null,
       job_fields: { glasses, language: language ?? null, title, kids: kids.map((k) => ({ id: k.id, name: k.name })) },

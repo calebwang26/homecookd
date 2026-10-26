@@ -45,7 +45,7 @@ export async function sendKept({ familyId, forKids, everyone, requestFrom, ...in
     hello: input.hello ?? null,
   });
   try {
-    return await sendDraft({ ...input, clips, note });
+    return await sendDraft({ ...input, clips, note, thumb: input.clips[0]?.asset.uri ?? null });
   } catch (e) {
     // No upload was made (sendDraft throws only before one exists): nothing new for a launch to resume.
     if (!loadUnsent().find((u) => u.recordingId === note)?.jobId) {

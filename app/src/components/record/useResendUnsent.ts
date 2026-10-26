@@ -19,7 +19,7 @@ import type { Profile } from '@/lib/api';
 import { cancelLiveJob, recordingJob, uploadJob } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
 import { clipFile, resendStep, sendsBySelf, type Unsent, type UnsentClip } from '@/lib/unsentLogic';
-import { clipsHere, countResend, dropUnsent, loadUnsent, savedHere, stillUnsent, unsentUri } from '@/lib/unsentRecordings';
+import { cleanOrphanCopies, clipsHere, countResend, dropUnsent, loadUnsent, savedHere, stillUnsent, unsentUri } from '@/lib/unsentRecordings';
 import { cancelJobUploads, loadJobs, removeJob, uploadsSupportedHere } from '@/lib/uploads';
 
 import { chunkClip } from './cameraLogic';
@@ -38,6 +38,8 @@ export function keptClips(here: UnsentClip[]): DraftClip[] {
 /** Looked at in this run of the app: each one once (unless Convex couldn't answer). */
 const looked = new Set<string>();
 let running = false;
+/** The kept copies no note lists were tidied in this run of the app (once). */
+let tidied = false;
 
 /** This recording's upload rows on Home (jobs.json): the one on its note, and any found by its recording id. */
 const rowsOf = (u: Unsent) => loadJobs().filter((j) => j.job_id === u.jobId || j.recording_id === u.recordingId || j.unsent_id === u.recordingId);
@@ -45,7 +47,8 @@ const rowsOf = (u: Unsent) => loadJobs().filter((j) => j.job_id === u.jobId || j
 async function resendOne(u: Unsent, cook: Profile, profiles: Profile[], learners: Profile[]) {
   const here = clipsHere(u);
   const recordingId = u.local ? null : u.recordingId;
-  const job = u.local ? await uploadJob(u.jobId, cook.id) : await recordingJob(u.recordingId, cook.id);
+  const seen = loadJobs().find((j) => j.job_id === u.jobId);
+  const job = u.local ? await uploadJob(u.jobId, seen?.convex_job === 'ok', cook.id) : await recordingJob(u.recordingId, cook.id);
   const row = loadJobs().find((j) => j.job_id === u.jobId);
   const step = resendStep(u, { convexJob: job, upload: row?.local_state ?? null, clipsHere: here.length, now: Date.now() });
   if (step === 'wait') return void looked.delete(u.recordingId);
@@ -92,6 +95,10 @@ async function resendOne(u: Unsent, cook: Profile, profiles: Profile[], learners
 async function resendAll(familyId: string, profiles: Profile[], learners: Profile[]) {
   if (running) return;
   running = true;
+  if (!tidied) {
+    tidied = true;
+    cleanOrphanCopies();
+  }
   try {
     for (const u of loadUnsent()) {
       if (!sendsBySelf(u) || u.familyId !== familyId || looked.has(u.recordingId) || savedHere(u.recordingId)) continue;

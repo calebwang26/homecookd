@@ -698,6 +698,9 @@ test('stopped early: her Send it makes it a send from now (no job, no tries yet)
   assert.equal(s.jobId, null);
   assert.equal(s.resends, 0);
   assert.equal(u.state, 'filming', 'the note itself is left alone');
+  // A second tap (one consent yes answers every waiting tap): the note is on its way, never reset.
+  assert.equal(U.asSending({ ...s, jobId: 'job-1', resends: 1 }, NOW + 1000), null);
+  assert.equal(U.asSending(note('old'), NOW), null, 'nor a note sent after "I’m done"');
   assert.equal(U.filmedLength([{ durationMs: 300_000 }, { durationMs: 300_000 }, { durationMs: 120_000 }]), 720_000);
   assert.equal(U.filmedLength([]), 0);
 });
@@ -727,6 +730,37 @@ test('library send: stopping its row on Home drops its note too (found by the ro
   const at = { convexJob: null, upload: 'uploading', clipsHere: 1, now: NOW };
   assert.equal(U.resendStep(note('send-abc', { local: true }), at), 'send');
   assert.equal(U.resendStep(note('send-abc', { local: true }), { ...at, convexJob: { stage: 'uploading' } }), 'wait', 'the hour still holds');
+});
+
+test('library send: a job Convex had that fell out of the family’s 20 newest reads as done, never sent twice', () => {
+  const jobs = [{ _id: 'j1', uploadPath: 'family-recipe-aa/', stage: 'writing' }];
+  assert.deepEqual(U.jobForUpload(jobs, 'family-recipe-aa', true), { id: 'j1', stage: 'writing', error: null });
+  // iOS finished the upload after the kill, the job was made, then 20 more jobs landed.
+  const old = U.jobForUpload(jobs, 'family-recipe-bb', true);
+  assert.equal(old.stage, null);
+  assert.equal(U.resendStep(note('send-b', { local: true, jobId: 'family-recipe-bb' }), { convexJob: old, upload: 'uploading', clipsHere: 1, now: NOW }), 'done');
+  // jobs.create never landed: no job, send again.
+  assert.equal(U.jobForUpload(jobs, 'family-recipe-bb', false), null);
+  assert.equal(U.jobForUpload(jobs, null, true), null, 'no upload was ever made');
+});
+
+test('library send: copies no note lists are tidied once a launch, never one being prepared', () => {
+  const notes = [note('send-a', { clips: [{ ...note('x').clips[0], path: 'sends/send-a/part-01.mov', copy: true }] })];
+  const paths = ['sends/send-a/part-01.mov', 'sends/send-a/part-02.mov', 'sends/send-dead/part-01.mov', 'sends/send-now/part-01.mov'];
+  assert.deepEqual(U.orphanCopies(paths, notes, (id) => id === 'send-now'), ['sends/send-a/part-02.mov', 'sends/send-dead/part-01.mov']);
+  assert.deepEqual(U.orphanCopies([], notes, () => false), []);
+});
+
+test('stopped early: one Send it, a delete that stays deleted, the row’s thumbnail kept', () => {
+  const src = (f) => readFileSync(join(root, 'src', f), 'utf8');
+  const card = src('components/record/StoppedEarlyCard.tsx');
+  assert.match(card, /if \(preview \|\| busy\.current \|\| !me\) return;\n\s*busy\.current = true;\n\s*if \(!\(await ensureAiConsent\(\)\)\)/, 'the in-flight guard comes before the consent wait');
+  assert.match(card, /deleteRecording\(note\);[\s\S]*?try \{[\s\S]*?endRecording\(note\.recordingId, me\.id\)/, 'Delete ends the Convex recording, after the files go');
+  const kept = src('lib/unsentRecordings.ts');
+  assert.match(kept, /export function saveFilming\(input: UnsentInput\) \{\n[^\n]*\n\s*if \(deleted\.has\(input\.recordingId\)\) return;/, 'a late file never brings a deleted recording back');
+  assert.match(kept, /deleted\.add\(u\.recordingId\);/);
+  assert.match(src('components/record/sendKept.ts'), /thumb: input\.clips\[0\]\?\.asset\.uri/, 'the thumbnail is the original pick, not the copy that goes once sent');
+  assert.match(src('components/record/useResendUnsent.ts'), /uploadJob\(u\.jobId, seen\?\.convex_job === 'ok', cook\.id\)/);
 });
 
 test('stopped early and library sends: the screens use the kept sends, and a resend never sends a filming note', () => {
