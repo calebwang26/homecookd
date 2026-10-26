@@ -549,6 +549,7 @@ default 0.85), `GEMINI_TTS_MODEL` / `GEMINI_TTS_VOICE` (optional; the backup voi
 | Key | Lives in |
 |---|---|
 | `CARTESIA_API_KEY` | Cloud Run secret (voice service) and Convex env (voice-note transcription) |
+| `CARTESIA_API_KEYS_BACKUP` | Same places. Comma-separated keys used in order when the one before runs out of credits (402 `quota_exceeded`) |
 | `MOSS_PROJECT_ID`, `MOSS_PROJECT_KEY` | Convex env (indexing) and Cloud Run secret (search) |
 | `ANTHROPIC_API_KEY` | Cloud Run secret, worker `.env` and Convex env (the text calls with `TEXT_PROVIDER=claude`) |
 | `MUSE_API_KEY` (Meta Model API) | Worker `.env` and Convex env |

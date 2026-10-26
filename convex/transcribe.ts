@@ -58,6 +58,38 @@ export const saveTranscript = internalMutation({
 });
 
 /** Sends audio to Ink and returns the text. Exported for the tests. */
+/** CARTESIA_API_KEY, then CARTESIA_API_KEYS_BACKUP (comma-separated): the next is tried when one is out of credits. */
+export function cartesiaKeys(): string[] {
+  return [process.env.CARTESIA_API_KEY ?? "", ...(process.env.CARTESIA_API_KEYS_BACKUP ?? "").split(",")]
+    .map((k) => k.trim())
+    .filter(Boolean);
+}
+
+class CartesiaError extends Error {
+  constructor(
+    readonly status: number,
+    readonly body: string,
+  ) {
+    super(`Cartesia STT ${status}`);
+  }
+  get outOfCredits() {
+    return this.status === 402 && /quota_exceeded|credits limit|out of credits/i.test(this.body);
+  }
+}
+
+/** Ink's transcript with the first key that still has credits (each run starts from the first key). */
+export async function inkTranscribeWithKeys(audio: Blob, keys: string[], language = "en"): Promise<string> {
+  for (const [i, key] of keys.entries()) {
+    try {
+      return await inkTranscribe(audio, key, language);
+    } catch (e) {
+      if (!(e instanceof CartesiaError) || !e.outOfCredits || i === keys.length - 1) throw e;
+      console.warn(`Cartesia key ${i + 1} of ${keys.length} is out of credits; trying the next`);
+    }
+  }
+  throw new Error("no Cartesia key");
+}
+
 export async function inkTranscribe(audio: Blob, apiKey: string, language = "en"): Promise<string> {
   const form = new FormData();
   form.append("file", audio, `answer.${EXT[audio.type] ?? "m4a"}`);
@@ -69,8 +101,15 @@ export async function inkTranscribe(audio: Blob, apiKey: string, language = "en"
     headers: { Authorization: `Bearer ${apiKey}`, "Cartesia-Version": CARTESIA_VERSION },
     body: form,
   });
-  const body = (await res.json().catch(() => null)) as { text?: unknown } | null;
-  if (!res.ok || typeof body?.text !== "string") throw new Error(`Cartesia STT ${res.status}`);
+  const raw = await res.text();
+  const body = (() => {
+    try {
+      return JSON.parse(raw) as { text?: unknown };
+    } catch {
+      return null;
+    }
+  })();
+  if (!res.ok || typeof body?.text !== "string") throw new CartesiaError(res.status, raw.slice(0, 500));
   return body.text.trim();
 }
 
@@ -93,14 +132,14 @@ export const questionAnswer = internalAction({
 
 /** Ink's transcript (and the English) saved on the answer; false when there are no words to save. */
 async function writeOut(ctx: ActionCtx, questionId: Id<"questions">, audioId: Id<"_storage">, language: string): Promise<boolean> {
-  const apiKey = process.env.CARTESIA_API_KEY;
-  if (!apiKey) {
+  const keys = cartesiaKeys();
+  if (!keys.length) {
     console.warn("CARTESIA_API_KEY isn't set; voice note left without a transcript");
     return false;
   }
   const audio = await ctx.storage.get(audioId);
   if (!audio) return false;
-  const transcript = await inkTranscribe(audio, apiKey, language);
+  const transcript = await inkTranscribeWithKeys(audio, keys, language);
   if (!transcript) return false;
   const translation = language === "en" ? undefined : await toEnglish(transcript);
   await ctx.runMutation(internal.transcribe.saveTranscript, { questionId, audioId, transcript, translation });
