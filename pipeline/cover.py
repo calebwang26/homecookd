@@ -28,7 +28,6 @@ from __future__ import annotations
 
 import argparse
 import json
-import os
 import re
 import shutil
 import sys
@@ -47,8 +46,8 @@ from pydantic import BaseModel  # noqa: E402
 
 from pipeline import claude  # noqa: E402
 from pipeline.prep import OUT_ROOT, PrepError, ffmpeg, find_tool, make_poster, probe, run_cmd  # noqa: E402
-from pipeline.process import (HTTP_RETRY, REQUEST_TIMEOUT_MS, Usage, cover_model, describe_call,  # noqa: E402
-                              load_config, log, response_text)
+from pipeline.process import (Usage, cover_model, describe_call, gemini_client, load_config, log,  # noqa: E402
+                              response_text)
 from pipeline.prompts import COVER_BOX_PROMPT, COVER_FRAMES_NOTE, COVER_PROMPT  # noqa: E402
 from pipeline.schema import parse_timestamp  # noqa: E402
 from pipeline.shorten import MemoryUsage  # noqa: E402
@@ -345,9 +344,7 @@ def main() -> None:
     args = ap.parse_args()
     folder = OUT_ROOT / args.id
     cfg = load_config()
-    gemini = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
-                          http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS, retry_options=HTTP_RETRY))
-    client, model = cover_model(cfg, gemini)
+    client, model = cover_model(cfg, gemini_client())
     usage = Usage(folder / "work" / "usage.json") if (folder / "work").is_dir() else MemoryUsage()
     recipe = json.loads((folder / "recipe.json").read_text())
     pick = make_cover(client, model, recipe, folder / "play.mp4", args.out or folder / "poster.jpg", usage)

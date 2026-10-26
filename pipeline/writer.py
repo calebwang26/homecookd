@@ -45,8 +45,9 @@ CLAUDE_WRITER_MODEL = "claude-sonnet-5-5"
 CLAUDE_SYSTEM = MUSE_SYSTEM + """
 - A story's text is the cook's own words from the input events, in the first person as they said them, only
   trimmed of filler. Never retell it as "the cook..." and never guess anyone's gender.
-- Steps are the stages a family would name. Fold short actions (a taste, a stir, wiping the plate) into the
-  stage they belong to, as the step rules say, and keep every action in a step's instruction."""
+- Steps are the stages a family would name: about 8 to 12 for a home dish, as the step rules say, and a long
+  video stays near 12 unless its stages are clearly separate. Fold short actions (a taste, a stir, checking the
+  pan, wiping the plate) into the stage they belong to, and keep every action in a step's instruction."""
 
 
 class WriterError(RuntimeError):

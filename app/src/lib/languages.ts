@@ -1,7 +1,7 @@
-// The languages a cook can pick: the 30 most spoken that Cartesia Sonic 3.6 can speak, so homie can talk
-// to the cook in hers. Codes are ISO 639-1 (people.language, recordings.language). `inkLive` marks the five
-// Cartesia Ink 2 can hear live (en fr hi ja es); Cartesia ink-whisper hears the rest, except Marathi and Odia,
-// which Gemini hears (voice/src/stt.ts).
+// The languages a cook can pick: the most spoken that Cartesia Sonic 3.6 can speak, so homie can talk to the
+// cook in hers. Codes are ISO 639-1 (people.language, recordings.language). `inkLive` marks the five Cartesia
+// Ink 2 can hear live (en fr hi ja es); Cartesia ink-whisper hears the rest (voice/src/stt.ts). Odia is hidden
+// (Caleb, Oct 26): Cartesia can't hear it, and only Gemini could; it comes back if a family asks.
 // Pure TS (no React Native), so app/scripts/test-languages.mjs can run it under Node.
 
 export type Language = { code: string; name: string; native: string; inkLive: boolean };
@@ -39,10 +39,12 @@ const LIST: [code: string, name: string, native: string][] = [
   ['ms', 'Malay', 'Bahasa Melayu'],
   ['pl', 'Polish', 'Polski'],
   ['uk', 'Ukrainian', 'Українська'],
-  ['or', 'Odia', 'ଓଡ଼ିଆ'],
 ];
+// Not in the picker, but a cook who picked one before still reads as its name.
+const HIDDEN: [code: string, name: string, native: string][] = [['or', 'Odia', 'ଓଡ଼ିଆ']];
 
-export const LANGUAGES: Language[] = LIST.map(([code, name, native]) => ({ code, name, native, inkLive: INK_LIVE.has(code) }));
+const language = ([code, name, native]: [string, string, string]): Language => ({ code, name, native, inkLive: INK_LIVE.has(code) });
+export const LANGUAGES: Language[] = LIST.map(language);
 
 /** The picker's search: names that start with the query first, then names that contain it ("mar" → Marathi). */
 export function matchLanguages(query: string): Language[] {
@@ -57,5 +59,5 @@ export function matchLanguages(query: string): Language[] {
 /** "Marathi" for "mr"; unset or unknown codes read as English or the code itself. */
 export function languageName(code?: string | null): string {
   if (!code) return 'English';
-  return LANGUAGES.find((l) => l.code === code.toLowerCase())?.name ?? code;
+  return [...LANGUAGES, ...HIDDEN.map(language)].find((l) => l.code === code.toLowerCase())?.name ?? code;
 }

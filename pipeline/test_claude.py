@@ -130,6 +130,20 @@ def test_text_provider_flag():
             raise AssertionError("no key should be refused")
 
 
+def test_gemini_key_is_needed_only_while_a_step_is_on_gemini():
+    all_claude = dict(TEXT_PROVIDER="claude", COVER_PROVIDER="claude", ALIGN_PROVIDER="claude", EXTRACTOR="claude")
+    with patched(process, "load_dotenv", lambda *a, **k: None), \
+            env(GEMINI_API_KEY=None, RECIPE_WRITER=None, GEMINI_MEDIA_RESOLUTION=None, COVERAGE_GAP_S=None, **all_claude):
+        assert process.load_config()["extractor"] == "claude" and process.gemini_client() is None
+        with env(COVER_PROVIDER=None, RECIPE_WRITER="gemini"):
+            try:
+                process.load_config()
+            except process.ProcessError as e:
+                assert "COVER_PROVIDER, RECIPE_WRITER still use Gemini" in str(e), e
+            else:
+                raise AssertionError("a step on Gemini needs the key")
+
+
 def test_writer_fallback_follows_text_provider():
     with env(TEXT_PROVIDER=None):
         assert writer.fallback(None, "fake-pro").name == "gemini"

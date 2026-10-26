@@ -17,12 +17,13 @@ the run and saved, with long suspicious gaps between steps, in work/coverage.jso
 
 The merge (and its coverage retry) is the writing step: Muse Spark writes it by default, Gemini or Claude when
 RECIPE_WRITER says so, and when Muse fails twice, Claude with TEXT_PROVIDER=claude, else Gemini
-(pipeline/writer.py). Extraction always stays on Gemini.
+(pipeline/writer.py).
 
 TEXT_PROVIDER=claude also moves the clip-order call and the short substeps to Claude (pipeline/claude.py),
 COVER_PROVIDER=claude the cover pick (pipeline/cover.py), ALIGN_PROVIDER=claude the substep times
 (pipeline/align.py, on Cartesia's transcript) and EXTRACTOR=claude the extraction (pipeline/extract_claude.py:
-the AI copies' frames + Cartesia's transcript); unset, they stay on Gemini.
+the AI copies' frames + Cartesia's transcript); unset, they stay on Gemini. GEMINI_API_KEY is needed only while
+one of them (or RECIPE_WRITER=gemini) still uses Gemini.
 
 The cover (poster.jpg) is the cook's own plate photo when an in-app recording has one (the worker passes it as
 cover_photo), else the sharpest real frame of the finished dish where Gemini says it looks best, cropped to
@@ -31,7 +32,7 @@ the dish (pipeline/cover.py; the same pick gives the last step's still), else th
 Last, one more text call (pipeline/shorten.py) writes cook mode's short substeps, step ingredients and tips
 into recipe.json, and pipeline/align.py times each substep on the recording; --no-shorten skips both.
 
-Env (.env; already-set variables win): GEMINI_API_KEY, GEMINI_MODEL (merge),
+Env (.env; already-set variables win): GEMINI_API_KEY (only for steps still on Gemini), GEMINI_MODEL (merge),
 GEMINI_EXTRACT_MODEL (blank = GEMINI_MODEL), GEMINI_MEDIA_RESOLUTION (default MEDIA_RESOLUTION_LOW),
 COVERAGE_GAP_S (default 120: report longer gaps between steps while the cook was still working),
 RECIPE_WRITER and MUSE_* (pipeline/writer.py), TEXT_PROVIDER, COVER_PROVIDER, ALIGN_PROVIDER, ANTHROPIC_API_KEY,
@@ -658,8 +659,6 @@ def ensure_coverage(w: writer.Writer, manifest: dict, events: list[dict], n_file
 
 def load_config() -> dict:
     load_dotenv(ROOT / ".env")  # does not override variables already set in the environment
-    if not os.environ.get("GEMINI_API_KEY"):
-        raise ProcessError("GEMINI_API_KEY is not set (add it to .env)")
     model = os.environ.get("GEMINI_MODEL") or "gemini-3.1-pro-preview"
     res = (os.environ.get("GEMINI_MEDIA_RESOLUTION") or "MEDIA_RESOLUTION_LOW").strip().upper()
     if not res.startswith("MEDIA_RESOLUTION_"):
@@ -674,6 +673,13 @@ def load_config() -> dict:
         align_provider, extractor = claude.provider("ALIGN_PROVIDER"), claude.provider("EXTRACTOR")
     except claude.ClaudeError as e:
         raise ProcessError(str(e))
+    on_gemini = [flag for flag, v in (("TEXT_PROVIDER", text_provider), ("COVER_PROVIDER", cover_provider),
+                                      ("ALIGN_PROVIDER", align_provider), ("EXTRACTOR", extractor)) if v == "gemini"]
+    if (os.environ.get("RECIPE_WRITER") or "").strip().lower() == "gemini":
+        on_gemini.append("RECIPE_WRITER")
+    if on_gemini and not os.environ.get("GEMINI_API_KEY"):
+        raise ProcessError(f"GEMINI_API_KEY is not set, and {', '.join(on_gemini)} still use Gemini "
+                           "(add the key to .env, or set them to claude)")
     gap = os.environ.get("COVERAGE_GAP_S") or str(coverage.GAP_S)
     if not gap.strip().isdigit() or int(gap) <= 0:
         raise ProcessError(f"COVERAGE_GAP_S={gap!r} must be a whole number of seconds above 0")
@@ -683,14 +689,22 @@ def load_config() -> dict:
             "cover_provider": cover_provider, "align_provider": align_provider, "extractor": extractor}
 
 
+def gemini_client() -> genai.Client | None:
+    """Gemini, when GEMINI_API_KEY is set; None once every step is on Claude (load_config checked which need it)."""
+    key = os.environ.get("GEMINI_API_KEY")
+    return genai.Client(api_key=key, http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS,
+                                                                    retry_options=HTTP_RETRY)) if key else None
+
+
 TextModel = writer.GeminiWriter | claude.ClaudeText  # .name, .model and .generate(prompt, schema, temperature)
 
 
-def text_model(cfg: dict, client: genai.Client, gemini_model: str, effort: str) -> TextModel:
-    """A text-only call's model: Claude (at `effort`) with TEXT_PROVIDER=claude, else `gemini_model`."""
+def text_model(cfg: dict, client: genai.Client | None, gemini_model: str, effort: str,
+               system: str | None = None) -> TextModel:
+    """A text-only call's model: Claude (at `effort`, with `system`) with TEXT_PROVIDER=claude, else `gemini_model`."""
     if cfg["text_provider"] == "claude":
         try:
-            return claude.ClaudeText(effort=effort)
+            return claude.ClaudeText(effort=effort, system=system)
         except claude.ClaudeError as e:
             raise ProcessError(str(e))
     return writer.GeminiWriter(client, gemini_model)
@@ -875,8 +889,7 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
     n = len(jobs)
     if n == 0:
         raise ProcessError(f"{manifest_path} lists no AI files")
-    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
-                          http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS, retry_options=HTTP_RETRY))
+    client = gemini_client()
     try:
         fallback = writer.fallback(client, cfg["merge_model"])
         w = writer.choose(client, cfg["merge_model"])
@@ -954,9 +967,9 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
         # tapping one jumps there). A failure only warns: the app splits the instruction itself and shows
         # untimed substeps, and `shorten.py --id` / `align.py --id` can add them later.
         from pipeline.align import align_file  # here: both import this module
-        from pipeline.shorten import shorten_file
+        from pipeline.shorten import CLAUDE_SYSTEM, shorten_file
         try:
-            shorten_file(recipe_path, text_model(cfg, client, cfg["merge_model"], "medium"), usage)
+            shorten_file(recipe_path, text_model(cfg, client, cfg["merge_model"], "medium", CLAUDE_SYSTEM), usage)
         except Exception as e:  # noqa: BLE001
             log(f"[process {recipe_id}] WARNING: no short substeps ({type(e).__name__}: {e}); "
                 f"recipe.json is fine without them. Retry: python pipeline/shorten.py --id {recipe_id} --force")

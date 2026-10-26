@@ -33,7 +33,6 @@ import argparse
 import copy
 import json
 import math
-import os
 import re
 import sys
 import threading
@@ -47,12 +46,10 @@ ROOT = Path(__file__).resolve().parent.parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
-from google import genai  # noqa: E402
-from google.genai import types  # noqa: E402
 from pydantic import BaseModel, ValidationError  # noqa: E402
 
-from pipeline.process import (HTTP_RETRY, REQUEST_TIMEOUT_MS, ProcessError, TextModel, Usage,  # noqa: E402
-                              describe_call, format_validation_error, load_config, log, response_text, text_model)
+from pipeline.process import (ProcessError, TextModel, Usage, describe_call, format_validation_error,  # noqa: E402
+                              gemini_client, load_config, log, response_text, text_model)
 from pipeline.prompts import SHORTEN_PROMPT, SHORTEN_RETRY_SUFFIX  # noqa: E402
 from pipeline.schema import Recipe  # noqa: E402
 
@@ -68,6 +65,12 @@ CUE_REPEAT = 0.6  # share of a "Ready when" cue's words in the tip that makes th
 DETAIL_NEW = 4  # a detail adding fewer new words than this is dropped: the tap would only repeat the line
 DETAIL_RESTATES = 0.6  # share of the line's words a detail holds to stand in for the line on its own
 MAX_WORKERS = 4
+
+
+# Claude, given only the prompt's "fewer is better", wrote 10 tips across the 10 bundled recipes where Gemini wrote 19
+# (Oct 25): the cook's own why or warning is the tip a beginner needs most.
+CLAUDE_SYSTEM = ("Where the cook herself says why something matters on a step, or warns about a mistake, keep that as "
+                 "the step's tip, in her words, within the prompt's limit of one step in three.")
 
 
 class ShortenError(RuntimeError):
@@ -493,10 +496,8 @@ def all_ids() -> list[str]:
 
 
 def make_model() -> TextModel:
-    cfg = load_config()  # loads .env, fails without GEMINI_API_KEY
-    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
-                          http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS, retry_options=HTTP_RETRY))
-    return text_model(cfg, client, cfg["merge_model"], "medium")
+    cfg = load_config()  # loads .env, fails without GEMINI_API_KEY while a step is on Gemini
+    return text_model(cfg, gemini_client(), cfg["merge_model"], "medium", CLAUDE_SYSTEM)
 
 
 def shorten_paths(paths: list[Path], gen: TextModel | None, usage: Usage, force: bool = False,
