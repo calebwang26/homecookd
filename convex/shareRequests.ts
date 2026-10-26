@@ -12,7 +12,8 @@ import type { Doc, Id } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, mutation, query, type MutationCtx, type QueryCtx } from "./_generated/server";
 import { shareOn } from "./community";
 import { requireSession } from "./lib/auth";
-import { geminiYesNo, type YesNo } from "./lib/yesNo";
+import { textKeyName, textModel } from "./lib/textModel";
+import { type YesNo, yesNo } from "./lib/yesNo";
 import { familyRecipe } from "./recipes";
 
 /** What the yes/no reader is told she was asked. Fixed: never the stored question, whose words come from the family. */
@@ -138,12 +139,12 @@ export const answerFor = internalQuery({
 
 async function readAnswer(answer: string): Promise<YesNo> {
   if (!answer) return "unclear";
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    console.warn("GEMINI_API_KEY isn't set; a share answer can't be read, so nothing is shared");
+  const model = textModel();
+  if (!model) {
+    console.warn(`${textKeyName()} isn't set; a share answer can't be read, so nothing is shared`);
     return "unclear";
   }
-  return await geminiYesNo(YES_NO_QUESTION, answer, apiKey).catch((e) => {
+  return await yesNo(YES_NO_QUESTION, answer, model).catch((e) => {
     console.error(e);
     return "unclear" as const;
   });

@@ -1,3 +1,4 @@
+anthropic>=2.1
 google-genai
 pydantic>=2
 python-dotenv

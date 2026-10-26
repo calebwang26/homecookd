@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import chili from "../data/synthetic/dad-sunday-chili.json";
-import { addRecipe, type Backend, newBackend, signIn, stubFetch } from "./test.helpers";
+import { addRecipe, type Backend, CLAUDE, claudeReply, newBackend, signIn, stubFetch } from "./test.helpers";
 
 type Doc = { id: string; text: string; metadata: Record<string, string> };
 // A stand-in for Moss that keeps each index's docs, so a test can check what ended up searchable.
@@ -46,6 +46,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
   delete process.env.CARTESIA_API_KEY;
   delete process.env.MUSE_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.TEXT_PROVIDER;
 });
 
 const post = (t: Backend, path: string, body: unknown, secret: Record<string, string>) =>
@@ -232,6 +234,40 @@ test("a Marathi voice-note answer keeps the cook's words and adds English", asyn
   const [q] = await t.query(api.questions.forRecipe, { sessionToken: leo.sessionToken, recipeId });
   expect(q.answer).toMatchObject({ audioId, transcript: marathi, translation: "Yes, first wash the rice three times." });
   expect(q.answerAudioUrl).toBeTypeOf("string"); // the kid still hears the cook's own voice
+});
+
+test("with TEXT_PROVIDER=claude, Claude writes the English of her Marathi voice note", async () => {
+  process.env.CARTESIA_API_KEY = "car-test";
+  process.env.TEXT_PROVIDER = "claude";
+  process.env.ANTHROPIC_API_KEY = "ant-test";
+  const marathi = "हो आधी तांदूळ तीन वेळा धुवून घे.";
+  const fetch = stubFetch(
+    undefined,
+    (url) => (url === "https://api.cartesia.ai/stt" ? Response.json({ text: ` ${marathi} ` }) : undefined),
+    (url, init) => {
+      if (url !== CLAUDE) return undefined;
+      const { messages } = JSON.parse(String(init?.body));
+      const translation = messages[0].content === marathi ? "Yes, first wash the rice three times." : "तांदूळ धुवायचे का?";
+      return claudeReply(JSON.stringify({ translation }));
+    },
+  );
+  const t = newBackend();
+  const dad = await signIn(t, "p-dad");
+  const leo = await signIn(t, "p-leo");
+  await t.mutation(internal.seed.language, { personId: dad.personId, language: "mr" });
+  const recipeId = await addRecipe(t, dad.familyId, dad.personId);
+  const asked = await (
+    await post(t, "/voice/question", { sessionToken: leo.sessionToken, recipeId, text: "Wash the rice?" }, asVoice)
+  ).json();
+  const audioId = await t.run((ctx) => ctx.storage.store(new Blob([new Uint8Array(64)], { type: "audio/mp4" })));
+  await t.mutation(api.questions.answer, { sessionToken: dad.sessionToken, questionId: asked.questionId, audioId });
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+
+  const [q] = await t.query(api.questions.forRecipe, { sessionToken: leo.sessionToken, recipeId });
+  expect(q.answer).toMatchObject({ audioId, transcript: marathi, translation: "Yes, first wash the rice three times." });
+  const toEnglish = JSON.parse(String(fetch.mock.calls.findLast(([u]) => u === CLAUDE)![1]?.body));
+  expect(toEnglish.system).toContain("into plain English");
+  expect(fetch.mock.calls.some(([u]) => String(u).startsWith("https://generativelanguage."))).toBe(false);
 });
 
 test("a failed translation still saves the cook's words", async () => {
