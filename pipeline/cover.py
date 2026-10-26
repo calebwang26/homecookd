@@ -18,6 +18,11 @@ process.py calls make_cover() below after the merge:
 Crop only: never generated or edited, always her photo or a frame of her own video. When Gemini sees no finished
 dish, make_cover returns None and leaves the poster alone; process.py then uses the middle of the last step,
 as it does when anything here fails.
+
+COVER_PROVIDER=claude (process.cover_model) asks Claude instead (CLAUDE_COVER_MODEL, default Haiku). Claude takes no
+video, so step 1 sends the same window as still frames, one every FRAME_EVERY_S seconds (more apart for a long
+window, at most MAX_FRAMES), each labelled with its MM:SS, and Claude answers with a frame's time. Steps 2-4 are
+the same; the dish box comes from the same prompt with the frame as an image.
 """
 from __future__ import annotations
 
@@ -40,16 +45,20 @@ from google import genai  # noqa: E402
 from google.genai import types  # noqa: E402
 from pydantic import BaseModel  # noqa: E402
 
+from pipeline import claude  # noqa: E402
 from pipeline.prep import OUT_ROOT, PrepError, ffmpeg, find_tool, make_poster, probe, run_cmd  # noqa: E402
-from pipeline.process import (HTTP_RETRY, REQUEST_TIMEOUT_MS, Usage, describe_call, load_config, log,  # noqa: E402
-                              response_text)
-from pipeline.prompts import COVER_BOX_PROMPT, COVER_PROMPT  # noqa: E402
+from pipeline.process import (HTTP_RETRY, REQUEST_TIMEOUT_MS, Usage, cover_model, describe_call,  # noqa: E402
+                              load_config, log, response_text)
+from pipeline.prompts import COVER_BOX_PROMPT, COVER_FRAMES_NOTE, COVER_PROMPT  # noqa: E402
 from pipeline.schema import parse_timestamp  # noqa: E402
 from pipeline.shorten import MemoryUsage  # noqa: E402
 
 MIN_WINDOW_S, MAX_WINDOW_S = 60, 300
 MIN_PHOTO_PX = 200  # a plate photo smaller than this on either side is a broken upload, not a cover
 NEAR_S = (-1.0, -0.5, 0.0, 0.5, 1.0)  # Gemini answers in whole seconds: look around its second
+# Claude's stills fit in FRAME_PX x FRAME_PX: ~300 image tokens each landscape or portrait (a 640 px wide portrait
+# frame is ~950), so at most ~45k, under Haiku's 100k-token price step.
+FRAME_EVERY_S, MAX_FRAMES, FRAME_PX = 2.0, 150, 640
 
 ASPECT = 0.8  # the cropped cover's width : height (4:5)
 # The app center-crops covers into slots from 0.78 wide (kid Home's deck card, its title over the bottom) to about
@@ -105,6 +114,11 @@ def mmss(s: float) -> str:
     return f"{int(s) // 60:02d}:{int(s) % 60:02d}"
 
 
+def frame_every(length: float) -> float:
+    """Seconds between Claude's stills: FRAME_EVERY_S, or more for a window that would need over MAX_FRAMES."""
+    return max(FRAME_EVERY_S, float(-(-int(length) // MAX_FRAMES)))
+
+
 def crop_rect(dish: Box, picture: Box) -> tuple[int, int, int, int] | None:
     """The 4:5 crop (x, y, w, h) around the dish, inside the picture (the frame without black bars), or None when
     the box can't be the dish. Every slot in SLOT_ASPECTS keeps the crop's middle strip of
@@ -130,6 +144,17 @@ def cut_clip(play: Path, start: float, end: float, dest: Path) -> bytes:
     ffmpeg("-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(play), "-an", "-vf", "scale=-2:360,fps=5",
            "-c:v", "libx264", "-preset", "veryfast", "-crf", "30", "-movflags", "+faststart", str(dest))
     return dest.read_bytes()
+
+
+def grab_frames(play: Path, start: float, end: float, tmp: Path) -> list[tuple[str, bytes]]:
+    """The window as Claude's stills: (its "MM:SS" label in the clip, JPEG), one every frame_every seconds."""
+    every = frame_every(end - start)
+    (tmp / "frames").mkdir()
+    ffmpeg("-ss", f"{start:.2f}", "-t", f"{end - start:.2f}", "-i", str(play), "-an",
+           "-vf", f"fps=1/{every:g},scale={FRAME_PX}:{FRAME_PX}:force_original_aspect_ratio=decrease",
+           "-q:v", "4", str(tmp / "frames" / "%04d.jpg"))
+    files = sorted((tmp / "frames").glob("*.jpg"))
+    return [(mmss(i * every), f.read_bytes()) for i, f in enumerate(files)]
 
 
 def _frame_metadata(frame: Path, vf: str) -> str:
@@ -189,23 +214,37 @@ def use_photo(photo: Path, dest: Path) -> None:
     log(f"[cover] {dest.name} is the cook's plate photo ({w}x{h})")
 
 
-# ---------- the Gemini calls ----------
+# ---------- the model calls ----------
 
-def ask(client: genai.Client, model: str, title: str, video: bytes, length: float, step: tuple[float, float] | None,
-        usage: Usage) -> tuple[int | None, int | None]:
-    """(the cover's second in the clip, the last step's still's second in the clip). The cover is None when Gemini
-    sees no finished dish; the still is None when the dish doesn't show inside `step` (the last step's span in the
-    clip; None = not in the clip). Raises CoverError after two failures."""
+Clip = bytes | list[tuple[str, bytes]]  # Gemini: an MP4 or a JPEG; Claude: labelled JPEG stills
+
+
+def generate(client: genai.Client | claude.ClaudeText, model: str, prompt: str, schema: type[BaseModel], clip: Clip,
+             mime: str):
+    """One structured call about `clip`: Gemini watches it (`mime`); Claude sees the stills, or the one image."""
+    if isinstance(client, claude.ClaudeText):
+        return client.generate(prompt, schema, images=clip if isinstance(clip, list) else [("The frame:", clip)])
+    return client.models.generate_content(
+        model=model, contents=[types.Part.from_bytes(data=clip, mime_type=mime), prompt],
+        config=types.GenerateContentConfig(response_mime_type="application/json", response_schema=schema,
+                                           temperature=0.1))
+
+
+def ask(client: genai.Client | claude.ClaudeText, model: str, title: str, clip: Clip, length: float,
+        step: tuple[float, float] | None, usage: Usage) -> tuple[int | None, int | None]:
+    """(the cover's second in the clip, the last step's still's second in the clip). The cover is None when the
+    model sees no finished dish; the still is None when the dish doesn't show inside `step` (the last step's span in
+    the clip; None = not in the clip). `clip` is the video, or Claude's stills. Raises CoverError after two
+    failures."""
     span = f"from {mmss(step[0])} to {mmss(step[1])} in this clip" if step else "not in this clip"
     prompt = COVER_PROMPT.format(title=json.dumps(title), clip_mmss=mmss(length), step_span=span)
+    if isinstance(clip, list):
+        prompt = COVER_FRAMES_NOTE.format(n=len(clip), every=f"{frame_every(length):g}") + prompt
     error = ""
     for attempt in (1, 2):
         resp, t0 = None, time.monotonic()
         try:
-            resp = client.models.generate_content(
-                model=model, contents=[types.Part.from_bytes(data=video, mime_type="video/mp4"), prompt],
-                config=types.GenerateContentConfig(response_mime_type="application/json",
-                                                   response_schema=CoverAnswer, temperature=0.1))
+            resp = generate(client, model, prompt, CoverAnswer, clip, "video/mp4")
             answer = CoverAnswer.model_validate_json(response_text(resp))
             at = parse_timestamp(answer.at) if answer.found else None
             if at is not None and at > length:
@@ -231,17 +270,15 @@ def ask(client: genai.Client, model: str, title: str, video: bytes, length: floa
     raise CoverError(f"{model} gave no usable answer: {error[:300]}")
 
 
-def find_dish(client: genai.Client, model: str, title: str, frame: bytes, usage: Usage) -> tuple[float, ...] | None:
-    """The finished dish's box in the frame as (x1, y1, x2, y2) shares 0-1, or None when Gemini sees none or
+def find_dish(client: genai.Client | claude.ClaudeText, model: str, title: str, frame: bytes,
+              usage: Usage) -> tuple[float, ...] | None:
+    """The finished dish's box in the frame as (x1, y1, x2, y2) shares 0-1, or None when the model sees none or
     answers badly twice (the cover is then the whole frame)."""
     for attempt in (1, 2):
         resp, t0 = None, time.monotonic()
         try:
-            resp = client.models.generate_content(
-                model=model, contents=[types.Part.from_bytes(data=frame, mime_type="image/jpeg"),
-                                       COVER_BOX_PROMPT.format(title=json.dumps(title))],
-                config=types.GenerateContentConfig(response_mime_type="application/json",
-                                                   response_schema=DishBox, temperature=0.1))
+            resp = generate(client, model, COVER_BOX_PROMPT.format(title=json.dumps(title)), DishBox, frame,
+                            "image/jpeg")
             answer = DishBox.model_validate_json(response_text(resp))
             if answer.found:
                 ymin, xmin, ymax, xmax = answer.box_2d  # ValueError unless exactly four
@@ -258,17 +295,19 @@ def find_dish(client: genai.Client, model: str, title: str, frame: bytes, usage:
     return None
 
 
-def make_cover(client: genai.Client, model: str, recipe: dict, play: Path, dest: Path, usage: Usage) -> Pick | None:
-    """Writes dest from the sharpest frame around the moment Gemini picks, cropped to the dish when it can be.
-    Returns what it picked, or None (dest untouched) when Gemini saw no finished dish. Raises on errors."""
+def make_cover(client: genai.Client | claude.ClaudeText, model: str, recipe: dict, play: Path, dest: Path,
+               usage: Usage) -> Pick | None:
+    """Writes dest from the sharpest frame around the moment the model picks, cropped to the dish when it can be.
+    Returns what it picked, or None (dest untouched) when the model saw no finished dish. Raises on errors."""
     duration = recipe["media"]["duration_s"]
     start, end = window(recipe["steps"], duration)
     last = recipe["steps"][-1]
     step = (max(last["start_s"], start) - start, last["end_s"] - start) if last["end_s"] > start else None
     with tempfile.TemporaryDirectory() as tmp:
         tmp = Path(tmp)
-        at, step_at = ask(client, model, recipe["title"], cut_clip(play, start, end, tmp / "end.mp4"), end - start,
-                          step, usage)
+        clip = (grab_frames(play, start, end, tmp) if isinstance(client, claude.ClaudeText)
+                else cut_clip(play, start, end, tmp / "end.mp4"))
+        at, step_at = ask(client, model, recipe["title"], clip, end - start, step, usage)
         if at is None:
             return None
         best, scores = sharpest(play, near(start + at, 0.0, duration), tmp)
@@ -306,14 +345,14 @@ def main() -> None:
     args = ap.parse_args()
     folder = OUT_ROOT / args.id
     cfg = load_config()
-    client = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
+    gemini = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
                           http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS, retry_options=HTTP_RETRY))
+    client, model = cover_model(cfg, gemini)
     usage = Usage(folder / "work" / "usage.json") if (folder / "work").is_dir() else MemoryUsage()
     recipe = json.loads((folder / "recipe.json").read_text())
-    pick = make_cover(client, cfg["extract_model"], recipe, folder / "play.mp4", args.out or folder / "poster.jpg",
-                      usage)
+    pick = make_cover(client, model, recipe, folder / "play.mp4", args.out or folder / "poster.jpg", usage)
     if pick is None:
-        sys.exit("cover: Gemini saw no finished dish; the poster is unchanged")
+        sys.exit(f"cover: {model} saw no finished dish; the poster is unchanged")
     print(json.dumps(pick.__dict__))
 
 

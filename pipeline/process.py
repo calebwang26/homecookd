@@ -19,8 +19,8 @@ The merge (and its coverage retry) is the writing step: Muse Spark writes it by 
 RECIPE_WRITER says so, and when Muse fails twice, Claude with TEXT_PROVIDER=claude, else Gemini
 (pipeline/writer.py). Extraction always stays on Gemini.
 
-TEXT_PROVIDER=claude also moves the clip-order call and the short substeps to Claude (pipeline/claude.py);
-unset, they stay on Gemini.
+TEXT_PROVIDER=claude also moves the clip-order call and the short substeps to Claude (pipeline/claude.py), and
+COVER_PROVIDER=claude the cover pick (pipeline/cover.py); unset, they stay on Gemini.
 
 The cover (poster.jpg) is the cook's own plate photo when an in-app recording has one (the worker passes it as
 cover_photo), else the sharpest real frame of the finished dish where Gemini says it looks best, cropped to
@@ -32,7 +32,8 @@ into recipe.json, and pipeline/align.py times each substep on the recording; --n
 Env (.env; already-set variables win): GEMINI_API_KEY, GEMINI_MODEL (merge),
 GEMINI_EXTRACT_MODEL (blank = GEMINI_MODEL), GEMINI_MEDIA_RESOLUTION (default MEDIA_RESOLUTION_LOW),
 COVERAGE_GAP_S (default 120: report longer gaps between steps while the cook was still working),
-RECIPE_WRITER and MUSE_* (pipeline/writer.py), TEXT_PROVIDER, ANTHROPIC_API_KEY and CLAUDE_* (pipeline/claude.py).
+RECIPE_WRITER and MUSE_* (pipeline/writer.py), TEXT_PROVIDER, COVER_PROVIDER, ANTHROPIC_API_KEY and CLAUDE_*
+(pipeline/claude.py).
 """
 from __future__ import annotations
 
@@ -664,7 +665,7 @@ def load_config() -> dict:
         raise ProcessError(f"GEMINI_MEDIA_RESOLUTION={res!r} is not one of {[m.value for m in types.MediaResolution]}")
     extract_model = os.environ.get("GEMINI_EXTRACT_MODEL") or model
     try:
-        text_provider = claude.provider()
+        text_provider, cover_provider = claude.provider(), claude.provider("COVER_PROVIDER")
     except claude.ClaudeError as e:
         raise ProcessError(str(e))
     gap = os.environ.get("COVERAGE_GAP_S") or str(coverage.GAP_S)
@@ -672,7 +673,8 @@ def load_config() -> dict:
         raise ProcessError(f"COVERAGE_GAP_S={gap!r} must be a whole number of seconds above 0")
     return {"merge_model": model, "extract_model": extract_model,
             "order_model": extract_model if "flash" in extract_model.lower() else ORDER_MODEL,
-            "media_resolution": media_resolution, "coverage_gap_s": int(gap), "text_provider": text_provider}
+            "media_resolution": media_resolution, "coverage_gap_s": int(gap), "text_provider": text_provider,
+            "cover_provider": cover_provider}
 
 
 TextModel = writer.GeminiWriter | claude.ClaudeText  # .name, .model and .generate(prompt, schema, temperature)
@@ -686,6 +688,18 @@ def text_model(cfg: dict, client: genai.Client, gemini_model: str, effort: str) 
         except claude.ClaudeError as e:
             raise ProcessError(str(e))
     return writer.GeminiWriter(client, gemini_model)
+
+
+def cover_model(cfg: dict, client: genai.Client) -> tuple[genai.Client | claude.ClaudeText, str]:
+    """Who picks the cover (pipeline/cover.py): Claude from still frames with COVER_PROVIDER=claude
+    (CLAUDE_COVER_MODEL, default Haiku), else Gemini watching the clip."""
+    if cfg["cover_provider"] == "claude":
+        try:
+            gen = claude.ClaudeText(os.environ.get("CLAUDE_COVER_MODEL") or claude.MODEL)
+        except claude.ClaudeError as e:
+            raise ProcessError(str(e))
+        return gen, gen.model
+    return client, cfg["extract_model"]
 
 
 def order_asker(gen: TextModel, usage: Usage):
@@ -753,11 +767,12 @@ COVER_PHOTO = "cover_photo.jpg"  # in work/: the cook's plate photo, kept for a 
 STILL_TIMES = "still_times.json"  # in work/: {step order: second} for publish.py's step stills (the last step's)
 
 
-def make_cover(client: genai.Client, model: str, recipe: Recipe, out_dir: Path, usage: Usage) -> str:
+def make_cover(client: genai.Client | claude.ClaudeText, model: str, recipe: Recipe, out_dir: Path,
+               usage: Usage) -> str:
     """poster.jpg = the cook's own plate photo (work/cover_photo.jpg) when she took one, with no frame pick.
     Else the finished dish where it looks best in the video, cropped to the dish (pipeline/cover.py); that pick
-    also saves the second where the last step shows the dish, for its still (work/still_times.json). When Gemini
-    sees no finished dish or the pick fails, the middle of the last step, which is usually plating or serving
+    also saves the second where the last step shows the dish, for its still (work/still_times.json). When the model
+    (cover_model) sees no finished dish or the pick fails, the middle of the last step, which is usually plating or serving
     (the hackathon spec's step 2 is usually raw prep). Returns where the poster came from, for the log."""
     from pipeline import cover  # here: cover.py imports this module
     photo, still_times = out_dir / "work" / COVER_PHOTO, out_dir / "work" / STILL_TIMES
@@ -834,6 +849,7 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
     except writer.WriterError as e:
         raise ProcessError(str(e))
     order_gen = text_model(cfg, client, cfg["order_model"], "low")
+    cover_by = cover_model(cfg, client)
     log(f"[process {recipe_id}] {n} AI file(s); extract with {cfg['extract_model']} "
         f"({cfg['media_resolution'].value}{', Batch API' if batch else ''}), write with {w.name} {w.model}")
     report("understanding", 0.2)
@@ -876,7 +892,7 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
     log(f"[process {recipe_id}] writing took {time.monotonic() - t_write:.1f} s")
     report("writing", 0.85)
 
-    poster_from = make_cover(client, cfg["extract_model"], recipe, out_dir, usage)
+    poster_from = make_cover(*cover_by, recipe, out_dir, usage)
     recipe_path.write_text(json.dumps(recipe.model_dump(mode="json"), indent=2, ensure_ascii=False) + "\n")
     (out_dir / "recipe.invalid.json").unlink(missing_ok=True)
     order.cleanup(out_dir)  # the recipe matches the (possibly reordered) play.mp4; drop the old copies

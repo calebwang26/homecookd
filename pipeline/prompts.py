@@ -34,6 +34,7 @@ COVER_PROMPT.format(title=<json string>, clip_mmss=..., step_span=...)
     (pipeline/cover.py: the second in the video's last minutes where the finished dish looks best, the cover photo,
     and the second inside the last step where it shows best, that step's still)
 COVER_BOX_PROMPT.format(title=<json string>)   (pipeline/cover.py: the dish's box in the cover frame, to crop to)
+COVER_FRAMES_NOTE.format(n=..., every=...)   (pipeline/cover.py, COVER_PROVIDER=claude: before COVER_PROMPT)
 """
 
 EXTRACT_PROMPT = """\
@@ -481,6 +482,13 @@ The recipe's last step is {step_span}. Its photo is shown while the family cooks
 Separately, step_at = the MM:SS time in THIS clip, inside that span only, where the finished dish shows best (the
 same rules; this one is shown uncropped, so the dish should read well in the whole frame), or "" if it isn't
 visible inside that span. at and step_at may be the same moment if that is the best one for both.
+"""
+
+# Claude takes no video (pipeline/cover.py grab_frames): this goes before COVER_PROMPT with the clip as stills.
+COVER_FRAMES_NOTE = """\
+The clip comes as {n} still frames, one every {every} seconds, each after a line giving its MM:SS time in the
+clip. Every time you return (at, step_at) must be one of those frames' times.
+
 """
 
 COVER_BOX_PROMPT = """\
