@@ -234,4 +234,17 @@ export const PARENT = {
   'parent.heart.saveFailed': 'Couldn’t save that heart. Try again.',
   'parent.heart.on': '{title}, in your favorites. Tap to remove.',
   'parent.heart.off': 'Add {title} to your favorites',
+  // components/record/StoppedEarlyCard (Home): the app closed while she was still filming. {time}: "12 min"
+  'parent.stopped.title': 'Your recording stopped early',
+  'parent.stopped.filmed': '{time} filmed',
+  'parent.stopped.ask': 'Send what was filmed?',
+  'parent.stopped.send': 'Send it',
+  'parent.stopped.sending': 'Sending…',
+  'parent.stopped.delete': 'Delete',
+  'parent.stopped.sure': 'Delete this video?',
+  'parent.stopped.gone': 'It will be gone for good.',
+  'parent.stopped.yesDelete': 'Yes, delete it',
+  'parent.stopped.keep': 'Keep it',
+  'parent.stopped.deleted': 'Deleted',
+  'parent.stopped.didntSend': 'It didn’t send. Try again.',
 } as const satisfies Record<`parent.${string}`, string>;

@@ -2,13 +2,16 @@
 // "Mom ▾" on its right (tap: "Who’s in the kitchen?", with Switch family and Sign out)
 // + "Good morning, Mom", then only:
 //  1. "Record a new recipe": the big green button, first on screen -> /record
+//     Under it, only when it happened: "Your recording stopped early. Send what was filmed?" (the app
+//     closed while she was filming, before "I'm done"; components/record/StoppedEarlyCard)
 //  2. A recording still being made: the glasses video, its live row (the newest one only; all of them
 //     are in Recipes) and the kids' live questions to answer by voice (LiveQuestions); gone when empty
 //  3. "Leo made your Poha": the newest photo a kid sent of one of her dishes (MadeYourDishCard); gone
 //     when there's none
 //  4. "Invite family :)" (Caleb, Oct 24: back on Home, right under the photo card)
 // Cut on Oct 24 (Caleb): the family faces row ("This week at the table"), the updates card and the
-// month's recap card. Their components stay for the screens that still use them. Dev aid (web screenshots): `?preview=made` shows the photo card.
+// month's recap card. Their components stay for the screens that still use them. Dev aids (web screenshots): `?preview=made` shows the photo card,
+// `?preview=stopped` the stopped-early card.
 import { router } from 'expo-router';
 import { Platform, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -18,12 +21,14 @@ import { LiveQuestions } from '@/components/parent/LiveQuestions';
 import { MadeYourDishCard } from '@/components/parent/MadeYourDishCard';
 import { PendingList, usePendingRecipes } from '@/components/parent/PendingRecipes';
 import { GlassesVideoCard } from '@/components/record/GlassesVideoCard';
+import { StoppedEarlyCard } from '@/components/record/StoppedEarlyCard';
 import { ActingAsBar, MoveRequestPrompt, ProfileButton } from '@/components/profiles';
 import { ActionButton, LargeHeader, listEnter, RecordDotIcon, ScreenWash, ScrollHold, StickyHeader, useScrollHold, useScrollY } from '@/components/ui';
 import { WEB_URL } from '@/lib/api';
 import { dayPart, longDate } from '@/lib/format';
 import { useMadeMyDish, type MadeMyDish } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
+import type { Unsent } from '@/lib/unsentLogic';
 import { useWords } from '@/lib/words/useWords';
 import type { WordKey } from '@/lib/words/words';
 import { colors, space, tabBar } from '@/theme/tokens';
@@ -35,6 +40,26 @@ import { colors, space, tabBar } from '@/theme/tokens';
 const PREVIEW_MADE: MadeMyDish | null =
   __DEV__ && Platform.OS === 'web' && /[?&]preview=made\b/.test(globalThis.location?.search ?? '')
     ? { messageId: 'preview-made', fromName: 'Leo', recipeTitle: 'Poha', libraryId: 'biryani', photoUrl: `${WEB_URL}/media/stock/dish-dal.jpg`, text: 'Tasted like home.', at: Date.now() - 86_400_000 }
+    : null;
+
+/** Dev aid (web screenshots only): `?preview=stopped`, a 12-minute Poha the app died in while she filmed. */
+const PREVIEW_STOPPED: Unsent | null =
+  __DEV__ && Platform.OS === 'web' && /[?&]preview=stopped\b/.test(globalThis.location?.search ?? '')
+    ? {
+        recordingId: 'preview-stopped',
+        familyId: null,
+        cookId: 'preview',
+        clips: [0, 1, 2].map((i) => ({ path: `recordings/preview/part-0${i + 1}.mp4`, durationMs: i < 2 ? 300_000 : 120_000, width: 1080, height: 1920, startedAt: i })),
+        dish: 'Poha',
+        language: 'mr',
+        forKids: null,
+        everyone: true,
+        requestFrom: null,
+        savedAt: new Date().toISOString(),
+        jobId: null,
+        resends: 0,
+        state: 'filming',
+      }
     : null;
 
 /** "Good morning" and the rest (the night says "Good evening", like lib/format goodGreeting). */
@@ -91,6 +116,7 @@ export default function ParentHome() {
               />
             </Animated.View>
 
+            <StoppedEarlyCard preview={PREVIEW_STOPPED} enterIndex={1} />
             <GlassesVideoCard />
             <PendingList pending={pending} jobs={pending.jobs.slice(0, 1)} startIndex={1} />
             <LiveQuestions enterIndex={1} />

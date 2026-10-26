@@ -1,6 +1,6 @@
 ---
 name: never-signed-out-by-a-crash
-description: "Oct 24: a crash, a relaunch or a passing error never signs anyone out; only Sign out or the server's exact 'This phone was signed out.' may. An in-app recording the app dies on after 'I'm done' is sent again"
+description: "Oct 24: a crash, a relaunch or a passing error never signs anyone out; only Sign out or the server's exact 'This phone was signed out.' may. An in-app recording the app dies on after 'I'm done' (or a Send upload) is sent again; Oct 26: one it dies in while filming is offered on Home"
 metadata:
   type: feedback
 ---
@@ -27,9 +27,22 @@ recording, they won't record again.
   (`components/record/useResendUnsent.ts`, mounted in `app/_layout.tsx`); the phone opens as usual. Convex's job
   decides (`lib/unsentLogic.ts` `resendStep`): a job is only stopped and sent again when the worker says files are
   missing (`uploading`) an hour after "I'm done"; `queued` and `preparing` wait (the worker sets `preparing` before
-  it checks the files). What's covered and what isn't is in `lib/unsentRecordings.ts`'s header: a recording the app
-  dies in before "I'm done" isn't resent, and after 3 tries or 7 days a resend gives up quietly (TODO(caleb): a way
-  to send one by hand). The videos stay in `documents/recordings/<id>/`, never in tmp.
+  it checks the files). What's covered and what isn't is in `lib/unsentRecordings.ts`'s header. After 3 tries or 7
+  days a resend gives up quietly (TODO(caleb): a way to send one by hand). The videos stay in
+  `documents/recordings/<id>/`, never in tmp.
+- Oct 26 (Caleb's tracker item): **a recording the app dies in before "I'm done"** (a crash, iOS killing it, the
+  battery) keeps a 'filming' note, updated as each 5-minute file is saved. It is never sent silently: on the next
+  launch the cook who filmed it (only her, in that family, on parent Home) sees "Your recording stopped early. Send
+  what was filmed?" with the length filmed (`components/record/StoppedEarlyCard`). Send it = the done view's send
+  (`sendDraft`, as her) plus `live.endRecording` as her, so Convex doesn't keep it "recording"; Delete asks "Delete this
+  video?" first, then removes the files and the note. A note from this run whose recording screen is still open is
+  never offered (`filmingOnScreen`).
+- Oct 26: **a Send-screen upload ("Videos I already took") killed mid-way** resumes the same way
+  (`components/record/sendKept`): its videos are first copied out of ImagePicker's cache (which iOS may empty) into
+  `documents/sends/<id>/`, and a note with its own id (`local`; its Convex job is found by its upload folder)
+  lets `useResendUnsent` carry on with the same rules (only the worker's 'uploading' an hour on redoes; Stop
+  wins; each person's own Convex session). A send that fails before any upload exists drops its note (she saw
+  it fail), so nothing is ever sent twice. The copies go once the note goes.
 - Never start a native upload from a file you haven't checked is there (`fileOnPhone`, or `!file.exists` then
   throw): iOS throws an exception JS can't catch and the app closes. Every expo-file-system `move()`/`copy()` is
   awaited or the `*Sync` one. `scripts/test-recording-ui.mjs` checks both across `app/src`.
