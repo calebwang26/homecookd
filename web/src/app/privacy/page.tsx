@@ -170,7 +170,8 @@ export default function PrivacyPage() {
         </h2>
         <p>
           While your account is open. When you delete it, we delete your data within 30 days, and it leaves our backups
-          within 30 more. Messages you sent stay with the people you sent them to until they delete their account.
+          within 30 more. That includes the messages and voice notes you sent. Messages other people sent you stay in
+          their chats.
         </p>
       </section>
 

@@ -3,6 +3,7 @@
 // family too (hiddenAt) until the team reviews it (reports.ts). A block works both ways: neither family
 // sees the other's dishes, dinners or asks, and new asks between them are refused. Our own family's
 // things always show to us.
+import { internal } from "../_generated/api";
 import type { Doc, Id } from "../_generated/dataModel";
 import type { MutationCtx, QueryCtx } from "../_generated/server";
 
@@ -84,6 +85,7 @@ export async function fileReport(
     status: "open",
   });
   console.log(`community report: ${target.kind} ${target.id} (${reason ?? "no reason"})`);
+  await ctx.scheduler.runAfter(0, internal.alerts.reportFiled, { kind: target.kind, reason });
   if (target.kind === "family") return;
   const all = await ctx.db
     .query("reports")

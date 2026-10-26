@@ -9,6 +9,7 @@
  */
 
 import type * as account from "../account.js";
+import type * as alerts from "../alerts.js";
 import type * as community from "../community.js";
 import type * as cooking from "../cooking.js";
 import type * as crons from "../crons.js";
@@ -61,6 +62,7 @@ import type {
 
 declare const fullApi: ApiFromModules<{
   account: typeof account;
+  alerts: typeof alerts;
   community: typeof community;
   cooking: typeof cooking;
   crons: typeof crons;
