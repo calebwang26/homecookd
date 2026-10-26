@@ -27,6 +27,7 @@ import { forgetInvite, sendInvite } from '@/lib/invites';
 import { openChatWith } from '@/lib/messaging';
 import { recipesByCook, useLibrary } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
+import { useWords } from '@/lib/words/useWords';
 import { colors, motion } from '@/theme/tokens';
 
 /** Others first (cooks, then everyone else, in family order). */
@@ -62,6 +63,7 @@ function Members({
   const { me, profiles, deviceProfileId, refresh, setMe, leaveFamily } = useSession();
   const { entries } = useLibrary();
   const toast = useToast();
+  const { t } = useWords();
   const { height: winH } = useWindowDimensions();
   const [opening, setOpening] = useState<string | null>(null);
   const [resending, setResending] = useState<string | null>(null);
@@ -92,7 +94,7 @@ function Members({
       onClose();
       router.push({ pathname: '/chat/[id]', params: { id } });
     } catch (e) {
-      toast.show(errorMessage(e, 'That didn’t open. Try again.'), { tone: 'error' });
+      toast.show(errorMessage(e, t('messages.openFailed')), { tone: 'error' });
     } finally {
       setTimeout(() => setOpening(null), 300);
     }
@@ -105,12 +107,12 @@ function Members({
     const res = await sendInvite({ profileId: p.id }, { from: me.id });
     setResending(null);
     if (res.status === 'sent' || res.status === 'shared') {
-      toast.show(res.copied ? 'Link copied' : `Invite sent to ${p.name}.`);
+      toast.show(res.copied ? t('messages.members.linkCopied') : t('messages.members.inviteSent', { name: p.name }));
     } else if (res.status === 'cancelled') {
       // Their older link stopped working when this one was made; this one is held for the next tap.
-      toast.show(`Not sent. ${p.name}’s old link is off, so tap Send again.`);
+      toast.show(t('messages.members.notSent', { name: p.name }));
     } else if (res.status === 'error') {
-      toast.show(res.error ?? 'That didn’t send. Try again.', { tone: 'error' });
+      toast.show(res.error ?? t('messages.members.sendFailed'), { tone: 'error' });
       // e.g. 409 "Dad already joined.": the family's list is behind, so catch up.
       void refresh();
     }
@@ -132,7 +134,7 @@ function Members({
     try {
       await api.removeProfile(p.id, { profileId: me.id });
     } catch (e) {
-      error = errorMessage(e, 'That didn’t work. Check your connection and try again.');
+      error = errorMessage(e, t('messages.members.leaveFailed'));
     }
     const wait = motion.loadingMinMs - (Date.now() - started);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
@@ -151,30 +153,31 @@ function Members({
     }
     // Lent: the phone stays in. The family reloads without them and nobody is picked, so "/"
     // hands the phone back to its owner (or asks who's cooking on a shared phone).
-    toast.show(`${p.name} left the family.`);
+    toast.show(t('messages.members.left', { name: p.name }));
     await refresh();
     setMe(null);
   };
 
   const line = (p: Profile) => {
-    if (isInvited(p)) return 'Hasn’t joined yet';
+    if (isInvited(p)) return t('messages.members.notJoined');
     const n = p.role === 'cook' ? recipesByCook(entries, p.name).length : 0;
     const rel = (p.relation ?? '').trim();
-    const parts = [rel && rel.toLowerCase() !== p.name.trim().toLowerCase() ? rel : null, n ? `${n} recipe${n === 1 ? '' : 's'}` : null];
+    const recipes = n === 1 ? t('messages.members.recipe', { n }) : t('messages.members.recipes', { n });
+    const parts = [rel && rel.toLowerCase() !== p.name.trim().toLowerCase() ? rel : null, n ? recipes : null];
     return parts.filter(Boolean).join(' · ');
   };
 
   // The words for leaving: my own phone signs out; a lent phone stays in.
-  const leaveLink = ownPhone ? 'Leave the family' : `Remove ${me?.name ?? ''} from the family`;
-  const confirmTitle = ownPhone ? 'Leave the family?' : `Remove ${confirm?.name ?? ''}?`;
-  const confirmLine = ownPhone ? 'You’ll be signed out on this phone. Your messages stay.' : 'They’ll leave the family list. Their messages stay.';
+  const leaveLink = ownPhone ? t('messages.members.leave') : t('messages.members.removeFrom', { name: me?.name ?? '' });
+  const confirmTitle = ownPhone ? t('messages.members.leaveTitle') : t('messages.members.removeTitle', { name: confirm?.name ?? '' });
+  const confirmLine = ownPhone ? t('messages.members.leaveLine') : t('messages.members.removeLine');
 
   return (
     <BottomSheet
       visible={visible}
       onClose={onClose}
-      title={mode === 'members' ? 'Family' : 'New message'}
-      accessibilityLabel={mode === 'members' ? 'Everyone in the family' : 'New message'}>
+      title={mode === 'members' ? t('messages.family') : t('messages.inbox.newMessage')}
+      accessibilityLabel={mode === 'members' ? t('messages.members.label') : t('messages.inbox.newMessage')}>
       {confirm ? (
         <Animated.View entering={FadeIn.duration(180)} style={[styles.confirm, { minHeight: listH }]}>
           <Avatar profile={confirm} size={72} />
@@ -193,7 +196,7 @@ function Members({
           </View>
           <View style={styles.choices}>
             <ActionButton
-              label={ownPhone ? 'Leave' : 'Remove'}
+              label={ownPhone ? t('messages.members.leaveButton') : t('messages.members.removeButton')}
               variant="outline"
               size="md"
               fg={colors.danger}
@@ -202,16 +205,16 @@ function Members({
               haptics
               state={removeBtn}
               onPress={() => void leave()}
-              accessibilityLabel={ownPhone ? 'Leave the family' : `Remove ${confirm.name}`}
-              accessibilityHint={ownPhone ? 'Signs this phone out' : 'Takes them off the family list'}
+              accessibilityLabel={ownPhone ? t('messages.members.leave') : t('messages.members.removeLabel', { name: confirm.name })}
+              accessibilityHint={ownPhone ? t('messages.members.leaveHint') : t('messages.members.removeHint')}
               style={styles.choice}
             />
             <ActionButton
-              label={ownPhone ? 'Stay' : 'Keep'}
+              label={ownPhone ? t('messages.members.stay') : t('messages.members.keep')}
               size="md"
               disabled={removeBtn === 'loading'}
               onPress={() => setConfirm(null)}
-              accessibilityLabel={ownPhone ? 'Stay in the family' : `Keep ${confirm.name}`}
+              accessibilityLabel={ownPhone ? t('messages.members.stayLabel') : t('messages.members.keepLabel', { name: confirm.name })}
               style={styles.choice}
             />
           </View>
@@ -242,7 +245,7 @@ function Members({
                     </View>
                     {manage && invited ? (
                       <ActionButton
-                        label="Send again"
+                        label={t('messages.members.sendAgain')}
                         variant="outline"
                         size="sm"
                         padH={16}
@@ -252,12 +255,12 @@ function Members({
                         state={resending === p.id ? 'loading' : 'idle'}
                         disabled={!!resending && resending !== p.id}
                         onPress={() => void sendAgain(p)}
-                        accessibilityLabel={`Send ${p.name}’s invite again`}
-                        accessibilityHint="Opens Messages with a new link"
+                        accessibilityLabel={t('messages.members.sendAgainLabel', { name: p.name })}
+                        accessibilityHint={t('messages.members.sendAgainHint')}
                       />
                     ) : (
                       <ActionButton
-                        label="Message"
+                        label={t('messages.members.message')}
                         variant="outline"
                         size="sm"
                         padH={16}
@@ -267,7 +270,7 @@ function Members({
                         state={opening === p.id ? 'loading' : 'idle'}
                         disabled={!!opening && opening !== p.id}
                         onPress={() => void message(p)}
-                        accessibilityLabel={`Message ${p.name}`}
+                        accessibilityLabel={t('messages.chat.message', { name: p.name })}
                       />
                     )}
                   </ListRow>
@@ -280,13 +283,13 @@ function Members({
                     <Txt variant="title" numberOfLines={1}>
                       {self.name}
                     </Txt>
-                    <Txt variant="meta">You</Txt>
+                    <Txt variant="meta">{t('messages.members.you')}</Txt>
                     {manage ? (
                       <PressableScale
                         onPress={askLeave}
                         accessibilityRole="button"
                         accessibilityLabel={leaveLink}
-                        accessibilityHint="Asks first"
+                        accessibilityHint={t('messages.members.asksFirst')}
                         hitSlop={{ top: 4, bottom: 4, left: 12, right: 24 }}
                         style={styles.remove}>
                         <Txt variant="meta" weight={600} color={colors.danger}>
@@ -300,7 +303,7 @@ function Members({
             </ListCard>
           ) : (
             <Txt variant="body" align="center" style={styles.empty}>
-              No one else is here yet.
+              {t('messages.members.empty')}
             </Txt>
           )}
         </ScrollView>

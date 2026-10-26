@@ -7,6 +7,7 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { ActionButton, Txt } from '@/components/ui';
 import type { Profile } from '@/lib/api';
+import { useWords } from '@/lib/words/useWords';
 import { colors } from '@/theme/tokens';
 
 const nameKey = (s: string) => s.toLowerCase().replace(/[\d\s]+/g, '');
@@ -18,13 +19,14 @@ export function sameNameAs(people: Profile[], name: string): Profile | null {
 }
 
 export function SameNameAsk({ who, noLabel, onYes, onNo }: { who: Profile; noLabel: string; onYes: () => void; onNo: () => void }) {
+  const { t } = useWords();
   return (
     <Animated.View entering={FadeIn.duration(180)} style={styles.card} accessibilityLiveRegion="polite">
       <Txt variant="body" weight={600} color={colors.ink}>
-        There’s already a {who.name}. Same person?
+        {t('profiles.sameName.ask', { name: who.name })}
       </Txt>
       <View style={styles.row}>
-        <ActionButton label="Yes" variant="outline" size="sm" onPress={onYes} accessibilityHint="Closes this without adding anyone" style={styles.flex} />
+        <ActionButton label={t('profiles.sameName.yes')} variant="outline" size="sm" onPress={onYes} accessibilityHint={t('profiles.sameName.yesHint')} style={styles.flex} />
         <ActionButton label={noLabel} variant="outline" size="sm" fg={colors.greenDeep} onPress={onNo} style={styles.flex} />
       </View>
     </Animated.View>

@@ -16,6 +16,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { BackPill, Brand, PressableScale, ScreenWash, Txt, usePotMood } from '@/components/ui';
 import { openPage, PRIVACY_URL, TERMS_URL } from '@/lib/links';
+import { useWords } from '@/lib/words/useWords';
+import { english, type T } from '@/lib/words/words';
 import { colors, fonts, radii, shadows } from '@/theme/tokens';
 
 export function SignInScreen({ onBack, children }: { onBack?: (() => void) | null; children?: ReactNode }) {
@@ -104,16 +106,17 @@ export const SignInField = forwardRef<TextInput, SignInFieldProps>(function Sign
  * Server text that isn't written for people ("No route for POST /invites/accept", "Request failed
  * (404).") reads as our trouble instead. Everything else is already a sentence that says what to do.
  */
-export function plainError(message: string | null | undefined): string | null {
+export function plainError(message: string | null | undefined, t: T = english): string | null {
   const m = (message ?? '').trim();
   if (!m) return null;
-  if (/^No route\b|^Request failed \(\d+\)|\bheader\)?\.?$/i.test(m)) return 'Something went wrong on our side. Try again in a minute.';
+  if (/^No route\b|^Request failed \(\d+\)|\bheader\)?\.?$/i.test(m)) return t('signin.error.ourSide');
   return m;
 }
 
 /** A sentence that says what went wrong and what to do (read out by screen readers), at body size. */
 export function ErrorLine({ error, align }: { error: string | null | undefined; align?: 'center' }) {
-  const text = plainError(error);
+  const { t } = useWords();
+  const text = plainError(error, t);
   if (!text) return null;
   return (
     <Animated.View entering={FadeIn.duration(180)}>
@@ -149,17 +152,29 @@ export function SmallLink({
 
 /** The small print under a way in: the Terms of use and Privacy policy, each opening homecookd.app. */
 export function TermsLine() {
+  const { t } = useWords();
+  // One sentence with the two links in its {holes}, wherever her language puts them.
   return (
     <Txt variant="meta" align="center" style={styles.terms}>
-      By continuing you agree to our <TermsLink label="Terms of use" url={TERMS_URL} /> and{' '}
-      <TermsLink label="Privacy policy" url={PRIVACY_URL} />.
+      {t('signin.terms.line')
+        .split(/\{(terms|privacy)\}/)
+        .map((part, i) =>
+          i % 2 === 0 ? (
+            part
+          ) : part === 'terms' ? (
+            <TermsLink key={i} label={t('signin.terms.terms')} url={TERMS_URL} />
+          ) : (
+            <TermsLink key={i} label={t('signin.shared.privacy')} url={PRIVACY_URL} />
+          ),
+        )}
     </Txt>
   );
 }
 
 function TermsLink({ label, url }: { label: string; url: string }) {
+  const { t } = useWords();
   return (
-    <Txt variant="meta" weight={600} color={colors.greenDeep} onPress={() => void openPage(url)} accessibilityRole="link" accessibilityHint="Opens homecookd.app">
+    <Txt variant="meta" weight={600} color={colors.greenDeep} onPress={() => void openPage(url)} accessibilityRole="link" accessibilityHint={t('signin.shared.opensSite')}>
       {label}
     </Txt>
   );

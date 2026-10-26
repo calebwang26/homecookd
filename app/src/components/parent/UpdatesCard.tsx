@@ -68,6 +68,8 @@ import { kvGetJson, kvSetJson } from '@/lib/storage';
 import type { LibraryEntry } from '@/lib/types';
 import { useLiveCooking } from '@/lib/useLiveCooking';
 import { useVoicePlayback } from '@/lib/voice';
+import { useWords } from '@/lib/words/useWords';
+import type { T } from '@/lib/words/words';
 import { colors, radii, shadows, space } from '@/theme/tokens';
 
 import { openMoveRequest } from '@/components/profiles/MoveRequestPrompt';
@@ -195,20 +197,20 @@ function useUpdates(dismissed: readonly string[]): { items: Update[]; ready: boo
  * "Leo asked about your Sunday Chili" (about another dish: "Leo asked about Sunday Chili"), "Leo
  * asked for your Sunday eggs", "Leo asked you" (1:1), or "Leo asked the family".
  */
-function askTitle(u: AskUpdate, me: Pick<Profile, 'name'> | null): string {
+function askTitle(u: AskUpdate, me: Pick<Profile, 'name'> | null, t: T): string {
   const m = u.message;
-  const who = u.who.name;
-  if (u.for === 'family') return `${who} asked the family`;
+  const name = u.who.name;
+  if (u.for === 'family') return t('parent.updates.askedFamily', { name });
   const e = m.recipe_id ? getCachedEntry(m.recipe_id) : undefined;
   // The short dish name ("Sunday Chili", not "Dad's Sunday Chili") so the row stays one line.
-  const dish = e ? dishName(e.title, e.cook_name) : null;
+  const dish = e ? dishName(e.title, e.cook_name, t) : null;
   if (m.kind === 'request') {
     const asked = requestDish(m.body) ?? dish;
-    return asked ? `${who} asked for your ${asked}` : `${who} asked you`;
+    return asked ? t('parent.updates.askedFor', { name, dish: asked }) : t('parent.ask.askedYou', { name });
   }
-  if (!e || !dish) return `${who} asked you`;
+  if (!e || !dish) return t('parent.ask.askedYou', { name });
   const yours = !!me && e.cook_name.trim().toLowerCase() === me.name.trim().toLowerCase();
-  return yours ? `${who} asked about your ${dish}` : `${who} asked about ${dish}`;
+  return t(yours ? 'parent.updates.askedAboutYour' : 'parent.updates.askedAbout', { name, dish });
 }
 
 /** How many cleared update ids we remember per profile (oldest drop off). */
@@ -245,7 +247,8 @@ function useDismissed(profileId: string | null | undefined) {
 
 export function UpdatesCard({ enterIndex = 0 }: { enterIndex?: number }) {
   const { me } = useSession();
-  const madeTitle = (u: MadeUpdate) => `${u.who.name} made your ${dishName(u.entry.title, u.entry.cook_name)}`;
+  const { t } = useWords();
+  const madeTitle = (u: MadeUpdate) => t('parent.home.madeYour', { name: u.who.name, dish: dishName(u.entry.title, u.entry.cook_name, t) });
   const dismissed = useDismissed(me?.id);
   const all = useUpdates(dismissed.ids);
   const ready = all.ready && dismissed.loaded;
@@ -256,14 +259,14 @@ export function UpdatesCard({ enterIndex = 0 }: { enterIndex?: number }) {
   // The last update went (the card goes too): the sheet mustn't pop back open with the next one.
   if (!items.length && allOpen) setAllOpen(false);
   if (!items.length) return ready ? null : <UpdatesSkeleton />;
-  const count = `${items.length} ${items.length === 1 ? 'update' : 'updates'}`;
+  const count = t(items.length === 1 ? 'parent.updates.countOne' : 'parent.updates.countMany', { n: items.length });
   // Live rows come first in `items` and are shown on top of the SHOWN others.
   const shown = items.slice(0, items.filter((u) => u.kind === 'cooking').length + SHOWN);
   const row = (u: Update, onGo?: () => void) =>
     u.kind === 'cooking' ? (
       <LiveCookingRow
         kid={u.live.profile}
-        dish={u.entry ? dishName(u.entry.title, u.entry.cook_name) : 'recipe'}
+        dish={u.entry ? dishName(u.entry.title, u.entry.cook_name, t) : t('parent.dish.fallback')}
         step={u.live.step}
         total={u.live.total}
         onHeart={() => cookingApi.sendHeart(u.live.profile.id, u.live.recipe_id)}
@@ -275,7 +278,7 @@ export function UpdatesCard({ enterIndex = 0 }: { enterIndex?: number }) {
     ) : u.kind === 'heart' ? (
       <HeartUpdateRow
         who={u.who}
-        dish={dishName(u.entry.title, u.entry.cook_name)}
+        dish={dishName(u.entry.title, u.entry.cook_name, t)}
         posterUrl={u.entry.poster_url}
         onPress={() => {
           onGo?.();
@@ -310,11 +313,11 @@ export function UpdatesCard({ enterIndex = 0 }: { enterIndex?: number }) {
             onPress={() => setAllOpen(true)}
             hitSlop={{ top: 16, bottom: 16, left: 12, right: 12 }}
             accessibilityRole="button"
-            accessibilityLabel={`See all ${count}`}
-            accessibilityHint="Shows every update"
+            accessibilityLabel={t(items.length === 1 ? 'parent.updates.seeAllOne' : 'parent.updates.seeAllMany', { n: items.length })}
+            accessibilityHint={t('parent.updates.seeAllHint')}
             style={styles.seeAll}>
             <Txt variant="label" weight={700} color={colors.greenDeep}>
-              See all
+              {t('parent.updates.seeAll')}
             </Txt>
             <ChevronRightIcon size={16} strokeWidth={2.4} color={colors.greenDeep} />
           </PressableScale>
@@ -325,7 +328,7 @@ export function UpdatesCard({ enterIndex = 0 }: { enterIndex?: number }) {
           {row(u)}
         </Animated.View>
       ))}
-      <BottomSheet visible={allOpen && items.length > 0} onClose={() => setAllOpen(false)} title="All updates" accessibilityLabel="All updates">
+      <BottomSheet visible={allOpen && items.length > 0} onClose={() => setAllOpen(false)} title={t('parent.updates.all')} accessibilityLabel={t('parent.updates.all')}>
         <ScrollHold value={sheetHold.set}>
           <ScrollView scrollEnabled={!sheetHold.held} style={styles.sheetScroll} contentContainerStyle={styles.sheetPad} showsVerticalScrollIndicator={false}>
             {items.map((u) => (
@@ -343,9 +346,10 @@ export function UpdatesCard({ enterIndex = 0 }: { enterIndex?: number }) {
 /** `onGo`: runs before a row's button leaves for another screen (the "All updates" sheet closes). */
 function AskRow({ u, onGo }: { u: AskUpdate; onGo?: () => void }) {
   const { me } = useSession();
-  const title = askTitle(u, me);
+  const { t } = useWords();
+  const title = askTitle(u, me, t);
   const spoken = u.message.kind === 'question' && isSpoken(u.message);
-  const words = u.message.kind === 'question' ? questionWords(u.message) : questionText(u.message);
+  const words = u.message.kind === 'question' ? questionWords(u.message) : questionText(u.message, t);
   const answer = () => {
     onGo?.();
     router.push({ pathname: '/chat/[id]', params: { id: u.chatId, q: u.message.id } });
@@ -378,7 +382,7 @@ function AskRow({ u, onGo }: { u: AskUpdate; onGo?: () => void }) {
             onPress={answer}
             scaleTo={0.98}
             accessibilityLabel={`${title}. ${words}`}
-            accessibilityHint="Opens the chat to answer"
+            accessibilityHint={t('parent.updates.answerHint')}
             style={styles.words}>
             {head}
           </PressableScale>
@@ -387,12 +391,12 @@ function AskRow({ u, onGo }: { u: AskUpdate; onGo?: () => void }) {
           onPress={answer}
           haptic
           hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
-          accessibilityLabel={`Answer ${u.who.name}`}
-          accessibilityHint="Opens the chat to answer"
+          accessibilityLabel={t('parent.updates.answerName', { name: u.who.name })}
+          accessibilityHint={t('parent.updates.answerHint')}
           style={styles.answer}>
           <MicIcon size={16} color={colors.sageInk} />
           <Txt variant="label" size={14} weight={700} color={colors.sageInk}>
-            Answer
+            {t('parent.ask.answer')}
           </Txt>
         </PressableScale>
       </View>
@@ -403,6 +407,7 @@ function AskRow({ u, onGo }: { u: AskUpdate; onGo?: () => void }) {
 /** A small "Hear Leo · 0:04" play pill for a question asked out loud with no words to show. */
 function HearChip({ who, message }: { who: Pick<Profile, 'name'>; message: Message }) {
   const v = useVoicePlayback(message);
+  const { t } = useWords();
   const playing = v.phase === 'playing' || v.phase === 'loading';
   const time = (playing || v.phase === 'paused') && v.elapsed > 0 ? mmss(v.elapsed) : mmss(v.total);
   return (
@@ -412,11 +417,11 @@ function HearChip({ who, message }: { who: Pick<Profile, 'name'>; message: Messa
         disabled={!v.available}
         haptic
         hitSlop={{ top: 9, bottom: 9, left: 6, right: 6 }}
-        accessibilityLabel={playing ? `Pause ${who.name}` : `Hear ${who.name}’s question`}
+        accessibilityLabel={playing ? t('parent.updates.pause', { name: who.name }) : t('parent.updates.hearQuestion', { name: who.name })}
         style={[styles.hear, !v.available ? styles.dim : null]}>
         {playing ? <PauseIcon size={12} color={colors.lavenderInk} /> : <PlayIcon size={12} color={colors.lavenderInk} />}
         <Txt variant="label" size={14} weight={700} color={colors.lavenderInk} style={styles.tnum} numberOfLines={1}>
-          {`Hear ${who.name} · ${time}`}
+          {t('parent.updates.hear', { name: who.name, time })}
         </Txt>
       </PressableScale>
     </View>
@@ -424,7 +429,8 @@ function HearChip({ who, message }: { who: Pick<Profile, 'name'>; message: Messa
 }
 
 function MadeRow({ u, onClear, onGo }: { u: MadeUpdate; onClear: () => void; onGo?: () => void }) {
-  const title = `${u.who.name} made your ${dishName(u.entry.title, u.entry.cook_name)}`;
+  const { t } = useWords();
+  const title = t('parent.home.madeYour', { name: u.who.name, dish: dishName(u.entry.title, u.entry.cook_name, t) });
   // The row and its x are siblings, never one button inside another (web forbids it).
   return (
     <View style={[styles.row, styles.madeRow]}>
@@ -435,7 +441,7 @@ function MadeRow({ u, onClear, onGo }: { u: MadeUpdate; onClear: () => void; onG
         }}
         scaleTo={0.98}
         accessibilityLabel={title}
-        accessibilityHint="Opens your recipe"
+        accessibilityHint={t('parent.home.opensRecipe')}
         style={styles.madeMain}>
         <Avatar profile={u.who} size={40} />
         <Txt variant="rowTitle" leading={1.3} numberOfLines={2} style={styles.flex}>
@@ -451,7 +457,7 @@ function MadeRow({ u, onClear, onGo }: { u: MadeUpdate; onClear: () => void; onG
           onClear();
         }}
         hitSlop={8}
-        accessibilityLabel={`Clear: ${title}`}
+        accessibilityLabel={t('parent.updates.clear', { title })}
         style={styles.clear}>
         <CloseIcon size={16} strokeWidth={2.4} color={colors.muted} />
       </PressableScale>
@@ -461,11 +467,12 @@ function MadeRow({ u, onClear, onGo }: { u: MadeUpdate; onClear: () => void; onG
 
 function MoveRow({ u, onGo }: { u: MoveUpdate; onGo?: () => void }) {
   const who = u.request.profile;
+  const { t } = useWords();
   return (
     <View style={[styles.row, styles.madeRow]}>
       <Avatar profile={who} size={40} />
       <Txt variant="rowTitle" leading={1.3} numberOfLines={2} style={styles.flex}>
-        {who.name} is on a new phone
+        {t('parent.updates.newPhone', { name: who.name })}
       </Txt>
       <PressableScale
         onPress={() => {
@@ -474,11 +481,11 @@ function MoveRow({ u, onGo }: { u: MoveUpdate; onGo?: () => void }) {
         }}
         haptic
         hitSlop={{ top: 6, bottom: 6, left: 8, right: 8 }}
-        accessibilityLabel={`Let ${who.name} in`}
-        accessibilityHint="Asks you to confirm it's them"
+        accessibilityLabel={t('parent.updates.letInLabel', { name: who.name })}
+        accessibilityHint={t('parent.updates.letInHint')}
         style={styles.answer}>
         <Txt variant="label" size={14} weight={700} color={colors.sageInk}>
-          Let in
+          {t('parent.updates.letIn')}
         </Txt>
       </PressableScale>
     </View>
@@ -486,8 +493,9 @@ function MoveRow({ u, onGo }: { u: MoveUpdate; onGo?: () => void }) {
 }
 
 function UpdatesSkeleton() {
+  const { t } = useWords();
   return (
-    <View style={styles.card} accessible accessibilityLabel="Loading updates">
+    <View style={styles.card} accessible accessibilityLabel={t('parent.updates.loading')}>
       <Skeleton width={96} height={16} style={styles.skHead} />
       <View style={[styles.row, styles.madeRow]}>
         <Skeleton circle height={40} />

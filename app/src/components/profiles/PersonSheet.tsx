@@ -29,6 +29,7 @@ import { openChatWith } from '@/lib/messaging';
 import { openRecipe } from '@/lib/navigation';
 import { recipesByCook, useLibrary, type LibraryEntry } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
+import { useWords } from '@/lib/words/useWords';
 import { colors, motion, radii } from '@/theme/tokens';
 
 /** The chat (or dish) opens on top of their home once it shows, so Back lands there (as _layout's after-pick). */
@@ -61,6 +62,7 @@ export function PersonSheet(props: PersonSheetProps) {
 function Person({ visible, person, onClose }: PersonSheetProps) {
   const { me, profiles, deviceProfileId, setMe, homeFor, refresh } = useSession();
   const { entries } = useLibrary();
+  const { t } = useWords();
   const toast = useToast();
   const [btn, setBtn] = useState<ActionState>('idle');
   const [error, setError] = useState<string | null>(null);
@@ -107,7 +109,7 @@ function Person({ visible, person, onClose }: PersonSheetProps) {
     } catch (e) {
       await settle(started);
       if (!alive.current) return;
-      setError(errorMessage(e, 'That didn’t open. Check your connection and try again.'));
+      setError(errorMessage(e, t('profiles.person.didntOpen')));
       setBtn('error');
       return;
     }
@@ -132,16 +134,18 @@ function Person({ visible, person, onClose }: PersonSheetProps) {
     const res = await sendInvite({ profileId: person.id }, { from: sender.id });
     await settle(started);
     if (!alive.current) return;
+    // `person.name.trim()`, not `name`: with `name` the React Compiler lint reads Date.now above as run in render.
+    const who = person.name.trim();
     if (res.status === 'sent' || res.status === 'shared') {
       setBtn('idle');
-      toast.show(res.copied ? 'Link copied' : `Invite sent to ${name}.`);
+      toast.show(res.copied ? t('profiles.person.linkCopied') : t('profiles.person.inviteSent', { name: who }));
       onClose();
     } else if (res.status === 'cancelled') {
       // Their older link stopped working when this one was made; this one is held for the next tap.
       setBtn('idle');
-      toast.show(`Not sent. ${name}’s old link is off, so tap Send again.`);
+      toast.show(t('profiles.person.notSent', { name: who }));
     } else {
-      setError(res.error ?? 'That didn’t send. Try again.');
+      setError(res.error ?? t('profiles.person.didntSend'));
       setBtn('error');
       // e.g. 409 "Dad already joined.": the family on screen is behind.
       void refresh();
@@ -149,7 +153,7 @@ function Person({ visible, person, onClose }: PersonSheetProps) {
   }
 
   // A no-break space keeps the last two words together (never a lone "phone." on its own line).
-  const title = invited ? `${name} hasn’t joined\u00A0yet.` : `${name} uses their own\u00A0phone.`;
+  const title = invited ? t('profiles.person.invitedTitle', { name }) : t('profiles.person.lockedTitle', { name });
 
   return (
     <BottomSheet visible={visible} onClose={onClose} accessibilityLabel={title}>
@@ -159,9 +163,9 @@ function Person({ visible, person, onClose }: PersonSheetProps) {
           {title}
         </Txt>
         {sender && !invited && dishes.length ? (
-          <View style={styles.dishes} accessibilityLabel={`${name}’s recipes`}>
+          <View style={styles.dishes} accessibilityLabel={t('profiles.person.recipes', { name })}>
             <Txt variant="heading" accessibilityRole="header">
-              {name}’s recipes
+              {t('profiles.person.recipes', { name })}
             </Txt>
             {dishes.map((d) => (
               <DishRow key={d.id} dish={d} onOpen={openDish} />
@@ -172,22 +176,22 @@ function Person({ visible, person, onClose }: PersonSheetProps) {
           <View style={styles.actions}>
             {invited ? (
               <ActionButton
-                label="Send again"
+                label={t('profiles.person.sendAgain')}
                 size="xl"
                 icon={<SendIcon size={22} color={colors.card} />}
                 state={btn}
                 onPress={() => void sendAgain()}
-                accessibilityLabel={`Send ${name} a new invite link`}
-                accessibilityHint="Opens Messages with a new link"
+                accessibilityLabel={t('profiles.person.sendAgainLabel', { name })}
+                accessibilityHint={t('profiles.person.sendAgainHint')}
               />
             ) : (
               <ActionButton
-                label={`Message ${name}`}
+                label={t('profiles.person.message', { name })}
                 size="xl"
                 icon={<ChatIcon size={22} color={colors.card} />}
                 state={btn}
                 onPress={() => void message()}
-                accessibilityHint={`Opens your chat with ${name}`}
+                accessibilityHint={t('profiles.person.messageHint', { name })}
               />
             )}
             <ErrorLine error={error} align="center" />
@@ -200,8 +204,9 @@ function Person({ visible, person, onClose }: PersonSheetProps) {
 
 /** A dish row, as in "Which recipe?" (SendRecipesSheet): thumb, title, arrow. */
 function DishRow({ dish, onOpen }: { dish: LibraryEntry; onOpen: (d: LibraryEntry) => void }) {
+  const { t } = useWords();
   return (
-    <PressableScale haptic scaleTo={0.98} onPress={() => onOpen(dish)} accessibilityRole="link" accessibilityLabel={`Open ${dish.title}`} style={styles.row}>
+    <PressableScale haptic scaleTo={0.98} onPress={() => onOpen(dish)} accessibilityRole="link" accessibilityLabel={t('profiles.person.openDish', { title: dish.title })} style={styles.row}>
       <View style={styles.thumb}>
         {dish.poster_url ? (
           <Image source={{ uri: dish.poster_url }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} recyclingKey={dish.id} />

@@ -34,6 +34,8 @@ import { Avatar, CloseIcon, MicIcon, PressableScale, SendIcon, Skeleton, StopIco
 import type { Profile } from '@/lib/api';
 import { mmss } from '@/lib/format';
 import { MAX_VOICE_S, useVoiceRecorder, type VoiceRecording } from '@/lib/voice';
+import { useWords } from '@/lib/words/useWords';
+import type { WordKey } from '@/lib/words/words';
 import { colors, fonts, shadows } from '@/theme/tokens';
 
 import { AttachButton, RecipePickerSheet } from './RecipePickerSheet';
@@ -48,8 +50,8 @@ export const FOCUS_AFTER_PICK_MS = 500;
 const LINE = 22;
 const MAX_LINES = 5;
 
-/** Said where the mic can't record (instead of a greyed-out button). */
-export const NO_MIC_NOTE = 'Talking works in the app. Type below.';
+/** Said where the mic can't record (instead of a greyed-out button): a key, read with t(). */
+export const NO_MIC_NOTE: WordKey = 'messages.composer.noMic';
 
 /**
  * The typed field, shared with the cook's AnswerPanel: grows with the words (and a wrapped
@@ -96,17 +98,18 @@ export function GrowingInput({
 
 /** The green / ink "Send" pill: its icon and the word, 56 tall. */
 export function SendPill({ onPress, disabled, tone = 'ink' }: { onPress: () => void; disabled?: boolean; tone?: 'ink' | 'green' }) {
+  const { t } = useWords();
   return (
     <PressableScale
       onPress={onPress}
       disabled={disabled}
       haptic="medium"
       accessibilityRole="button"
-      accessibilityLabel="Send"
+      accessibilityLabel={t('messages.composer.send')}
       style={[styles.sendPill, { backgroundColor: tone === 'green' ? colors.green : colors.ink }, disabled ? styles.dim : null]}>
       <SendIcon size={20} color={colors.card} />
       <Txt variant="label" size={16} weight={700} color={colors.card}>
-        Send
+        {t('messages.composer.send')}
       </Txt>
     </PressableScale>
   );
@@ -135,6 +138,7 @@ export function KidComposer({
 }) {
   const [text, setText] = useState(initialText ?? '');
   const toast = useToast();
+  const { t } = useWords();
   const input = useRef<TextInput>(null);
   const [picking, setPicking] = useState(false);
   const focusTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -182,9 +186,9 @@ export function KidComposer({
   const canTalk = rec.supported !== false;
 
   const submitText = () => {
-    const t = text.trim();
-    if (!t) return;
-    onSendText(t);
+    const words = text.trim();
+    if (!words) return;
+    onSendText(words);
     setText('');
   };
 
@@ -193,11 +197,11 @@ export function KidComposer({
     if (recording) {
       const note = await rec.stop();
       if (note) onSendVoice(note);
-      else toast.show('Too short to send. Try again.', { tone: 'info' });
+      else toast.show(t('messages.composer.tooShort'), { tone: 'info' });
       return;
     }
     const ok = await rec.start();
-    if (!ok && rec.supported === false) toast.show('Recording works in the homecookd app on your phone.', { tone: 'info' });
+    if (!ok && rec.supported === false) toast.show(t('messages.composer.appOnly'), { tone: 'info' });
   };
 
   // Surface microphone problems once.
@@ -213,7 +217,7 @@ export function KidComposer({
       {attachment ? <AttachedDish dish={attachment} onRemove={onRemoveAttachment} /> : null}
       {canTalk ? null : (
         <Txt variant="meta" size={14} align="center">
-          {NO_MIC_NOTE}
+          {t(NO_MIC_NOTE)}
         </Txt>
       )}
       <View style={styles.row}>
@@ -258,7 +262,7 @@ export function AttachedDish({
   flat?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
-  const name = dish.title ?? 'a dish';
+  const { t } = useWords();
   return (
     <Animated.View
       entering={FadeIn.duration(180)}
@@ -269,7 +273,9 @@ export function AttachedDish({
       ) : (
         <View style={[styles.attachThumb, styles.attachThumbEmpty]} />
       )}
-      <View style={styles.attachText} accessible accessibilityLabel={`Attached: ${name}`}>
+      <View style={styles.attachText} accessible accessibilityLabel={
+          dish.title != null ? t('messages.composer.attached', { dish: dish.title }) : t('messages.composer.attachedNoName')
+        }>
         {dish.title ? (
           <Txt variant="rowTitle" size={15} numberOfLines={2}>
             {dish.title}
@@ -279,7 +285,7 @@ export function AttachedDish({
         )}
       </View>
       {onRemove ? (
-        <PressableScale onPress={onRemove} haptic accessibilityLabel={`Remove ${dish.title ?? 'the dish'}`} style={styles.attachRemove}>
+        <PressableScale onPress={onRemove} haptic accessibilityLabel={dish.title != null ? t('messages.composer.remove', { dish: dish.title }) : t('messages.composer.removeNoName')} style={styles.attachRemove}>
           <View style={styles.attachX}>
             <CloseIcon size={14} color={colors.ink} strokeWidth={2.4} />
           </View>
@@ -300,6 +306,7 @@ function MicButton({ recording, busy, level, onPress }: { recording: boolean; bu
       : withTiming(0, { duration: 160 });
   }, [recording, reduce, halo]);
   const lvl = useSharedValue(0);
+  const { t } = useWords();
   useEffect(() => {
     lvl.value = withTiming(level, { duration: 120 });
   }, [level, lvl]);
@@ -307,7 +314,7 @@ function MicButton({ recording, busy, level, onPress }: { recording: boolean; bu
     opacity: halo.value,
     transform: [{ scale: 1 + halo.value * (0.2 + lvl.value * 0.12) }],
   }));
-  const label = recording ? 'Stop and send your voice note' : 'Tap to talk';
+  const label = recording ? t('messages.composer.stopAndSend') : t('messages.composer.tapToTalk');
   return (
     <View style={styles.micWrap}>
       <Animated.View pointerEvents="none" style={[styles.halo, haloStyle]} />
@@ -327,6 +334,7 @@ function MicButton({ recording, busy, level, onPress }: { recording: boolean; bu
 /** The field while recording: pulsing red dot, live bars from the mic level, time, Cancel. */
 function RecordingStrip({ elapsed, level, onCancel }: { elapsed: number; level: number; onCancel: () => void }) {
   const reduce = useReducedMotion();
+  const { t } = useWords();
   const pulse = useSharedValue(1);
   useEffect(() => {
     if (reduce) return;
@@ -342,7 +350,7 @@ function RecordingStrip({ elapsed, level, onCancel }: { elapsed: number; level: 
   }
   const nearEnd = elapsed > MAX_VOICE_S - 15;
   return (
-    <View style={[styles.field, styles.strip]} accessibilityLiveRegion="polite" accessibilityLabel={`Recording, ${mmss(elapsed)}`}>
+    <View style={[styles.field, styles.strip]} accessibilityLiveRegion="polite" accessibilityLabel={t('messages.composer.recording', { time: mmss(elapsed) })}>
       <Animated.View style={[styles.recDot, dot]} />
       <Txt variant="label" size={16} weight={700} color={colors.danger} style={styles.tnum}>
         {mmss(elapsed)}
@@ -352,9 +360,9 @@ function RecordingStrip({ elapsed, level, onCancel }: { elapsed: number; level: 
           <View key={i} style={[styles.bar, { height: 4 + Math.round(b * 20) }]} />
         ))}
       </View>
-      <PressableScale onPress={onCancel} accessibilityLabel="Cancel recording" hitSlop={10}>
+      <PressableScale onPress={onCancel} accessibilityLabel={t('messages.composer.cancelRecording')} hitSlop={10}>
         <Txt variant="label" size={15} weight={600} color={nearEnd ? colors.danger : colors.muted}>
-          Cancel
+          {t('messages.composer.cancel')}
         </Txt>
       </PressableScale>
     </View>

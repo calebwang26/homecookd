@@ -38,6 +38,7 @@ import { BottomSheet, PlusIcon, PressableScale, Txt } from '@/components/ui';
 import type { Profile, Role } from '@/lib/api';
 import { createFamilyInvite, familyInviteText } from '@/lib/invites';
 import { useSession } from '@/lib/session';
+import { useWords } from '@/lib/words/useWords';
 import { alpha, colors, motion } from '@/theme/tokens';
 
 import { AddPhonelessSheet } from './AddPhonelessSheet';
@@ -63,6 +64,7 @@ export function AddFamilySheet(props: AddFamilySheetProps) {
 
 function InviteSheet({ visible, onClose, onSwitch }: AddFamilySheetProps) {
   const { me, profiles, family, deviceProfileId, deviceNeedsProfile, setMe, homeFor } = useSession();
+  const { t } = useWords();
   // 'phoneless': this sheet slid away for "Add someone without a phone"; it opens once it's gone.
   const [step, setStep] = useState<'invite' | 'phoneless'>('invite');
   const [phonelessOpen, setPhonelessOpen] = useState(false);
@@ -105,14 +107,14 @@ function InviteSheet({ visible, onClose, onSwitch }: AddFamilySheetProps) {
 
   return (
     <>
-      <BottomSheet visible={visible && step === 'invite'} onClose={onClose} accessibilityLabel="Invite family" contentStyle={styles.sheetContent}>
+      <BottomSheet visible={visible && step === 'invite'} onClose={onClose} accessibilityLabel={t('profiles.invite.label')} contentStyle={styles.sheetContent}>
         <View style={styles.bleed}>
           <View style={styles.cardWrap}>
             <InviteCard familyName={family?.name ?? null} people={people} />
           </View>
           <View style={styles.hairline} />
           <View style={styles.row}>
-            <ExternalRow getUrl={getUrl} text={familyInviteText} title="Join our family table" sentLabel="Invite sent" />
+            <ExternalRow getUrl={getUrl} text={familyInviteText} title={t('profiles.invite.shareTitle')} sentLabel={t('profiles.invite.sent')} />
           </View>
           {deviceNeedsProfile ? null : (
             <>
@@ -120,12 +122,12 @@ function InviteSheet({ visible, onClose, onSwitch }: AddFamilySheetProps) {
               <PressableScale
                 onPress={() => setStep('phoneless')}
                 accessibilityRole="button"
-                accessibilityLabel="No phone? Add them to this phone"
-                accessibilityHint="For someone who cooks on this phone"
+                accessibilityLabel={t('profiles.invite.noPhone')}
+                accessibilityHint={t('profiles.invite.noPhoneHint')}
                 style={styles.phoneless}>
                 <PlusIcon size={18} color={colors.greenDeep} />
                 <Txt variant="label" weight={700} color={colors.greenDeep}>
-                  No phone? Add them to this phone
+                  {t('profiles.invite.noPhone')}
                 </Txt>
               </PressableScale>
             </>

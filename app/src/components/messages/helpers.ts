@@ -4,20 +4,42 @@ import type { Message, Profile } from '@/lib/api';
 import { clock, daysAgo } from '@/lib/format';
 import { isQuestion } from '@/lib/messaging';
 import type { LibraryEntry } from '@/lib/types';
+import { english, type T, type WordKey } from '@/lib/words/words';
 
-const SHORT_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-const MON = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+const SHORT_DAYS: readonly WordKey[] = [
+  'messages.time.sun',
+  'messages.time.mon',
+  'messages.time.tue',
+  'messages.time.wed',
+  'messages.time.thu',
+  'messages.time.fri',
+  'messages.time.sat',
+];
+const MON: readonly WordKey[] = [
+  'messages.time.jan',
+  'messages.time.feb',
+  'messages.time.mar',
+  'messages.time.apr',
+  'messages.time.may',
+  'messages.time.jun',
+  'messages.time.jul',
+  'messages.time.aug',
+  'messages.time.sep',
+  'messages.time.oct',
+  'messages.time.nov',
+  'messages.time.dec',
+];
 
 /** Inbox row time like the bible: "8:30 pm" today, "Yesterday", "Sat" this week, else "Sep 28". */
-export function inboxTime(iso: string | null | undefined, now: Date = new Date()): string {
+export function inboxTime(iso: string | null | undefined, now: Date = new Date(), t: T = english): string {
   if (!iso) return '';
   const d = new Date(iso);
   if (Number.isNaN(d.getTime())) return '';
   const ago = daysAgo(d, now);
-  if (ago <= 0) return clock(d);
-  if (ago === 1) return 'Yesterday';
-  if (ago < 7) return SHORT_DAYS[d.getDay()];
-  return `${MON[d.getMonth()]} ${d.getDate()}`;
+  if (ago <= 0) return clock(d, t);
+  if (ago === 1) return t('messages.time.yesterday');
+  if (ago < 7) return t(SHORT_DAYS[d.getDay()]);
+  return t('messages.time.date', { month: t(MON[d.getMonth()]), day: d.getDate() });
 }
 
 const SHE = /^(mom|mum|mother|mama|grandma|granny|nai ?nai|po ?po|ma|aunt|auntie|aunty|sister|sis|daughter|wife|grandmother|nana)\b/i;
@@ -123,10 +145,13 @@ export function readsAsQuestion(text: string | null | undefined): boolean {
 }
 
 /** The words of a question (typed, else what was said), or a stand-in. */
-export function questionWords(m: Pick<Message, 'body' | 'transcript' | 'step_order' | 'kind' | 'audio_url' | 'duration_s'>): string {
-  const t = (m.body ?? '').trim() || (m.transcript ?? '').trim();
-  if (t) return t;
-  if (m.kind === 'question' && (m.audio_url || m.duration_s)) return 'A voice question';
-  if (m.step_order) return `A question about step ${m.step_order}`;
-  return 'A question';
+export function questionWords(
+  m: Pick<Message, 'body' | 'transcript' | 'step_order' | 'kind' | 'audio_url' | 'duration_s'>,
+  t: T = english,
+): string {
+  const words = (m.body ?? '').trim() || (m.transcript ?? '').trim();
+  if (words) return words;
+  if (m.kind === 'question' && (m.audio_url || m.duration_s)) return t('messages.question.voice');
+  if (m.step_order) return t('messages.question.aboutStep', { step: m.step_order });
+  return t('messages.question.plain');
 }

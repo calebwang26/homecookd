@@ -27,8 +27,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, type Message, type Profile, type ThreadSummary } from '@/lib/api';
 import { usePolling } from '@/lib/messaging';
 import { recipesByCook, useLibrary } from '@/lib/recipes';
-import { plural } from '@/lib/format';
 import { kvGetJson, kvSetJson } from '@/lib/storage';
+import { english, type T, type WordKey } from '@/lib/words/words';
 
 export type PersonMark = 'dot' | 'new' | null;
 export type PersonStatus = { line: string; strong: boolean; mark: PersonMark };
@@ -39,8 +39,11 @@ const SHORT_NAME = 7;
 
 type ThreadMap = Record<string, ThreadSummary[] | null>; // null = could not load
 
-const INVITED: PersonStatus = { line: 'Hasn’t joined yet', strong: false, mark: null };
-const LOCKED: PersonStatus = { line: 'On their phone', strong: false, mark: null };
+const invitedStatus = (t: T): PersonStatus => ({ line: t('profiles.status.invited'), strong: false, mark: null });
+const lockedStatus = (t: T): PersonStatus => ({ line: t('profiles.status.locked'), strong: false, mark: null });
+
+/** "1 recipe" / "3 recipes": the one or many word, with its count. */
+const counted = (t: T, n: number, one: WordKey, many: WordKey) => t(n === 1 ? one : many, { count: n });
 
 /** Whose messages this phone may read: not someone only invited, not someone on their own phone. */
 const readable = (p: Profile) => !p.invited && !p.locked;
@@ -74,64 +77,70 @@ function whoIn(t: ThreadSummary, me: Profile): string | null {
 
 const short = (name: string | null): name is string => !!name && name.trim().length <= SHORT_NAME;
 
-function cookStatus(p: Profile, threads: ThreadSummary[], recipeCount: number): PersonStatus {
+function cookStatus(p: Profile, threads: ThreadSummary[], recipeCount: number, t: T = english): PersonStatus {
   // Only news that is still unread gets the green line, and every green line has its dot.
-  const unread = threads.filter((t) => t.unread > 0);
-  const fromLearner = unread.filter((t) => lastSender(t, p)?.role === 'learner');
-  const asking = fromLearner.filter((t) => isQuestion(t.last!));
-  const cooked = fromLearner.filter((t) => t.last!.kind === 'cooked');
+  const unread = threads.filter((th) => th.unread > 0);
+  const fromLearner = unread.filter((th) => lastSender(th, p)?.role === 'learner');
+  const asking = fromLearner.filter((th) => isQuestion(th.last!));
+  const cooked = fromLearner.filter((th) => th.last!.kind === 'cooked');
   if (asking.length === 1) {
     const who = whoIn(asking[0], p);
-    return { line: short(who) ? `${who} asked` : 'A new question', strong: true, mark: 'dot' };
+    return { line: short(who) ? t('profiles.status.asked', { name: who }) : t('profiles.status.newQuestion'), strong: true, mark: 'dot' };
   }
-  if (asking.length > 1) return { line: `${asking.length} people asked`, strong: true, mark: 'dot' };
+  if (asking.length > 1) return { line: t('profiles.status.peopleAsked', { count: asking.length }), strong: true, mark: 'dot' };
   if (cooked.length === 1) {
     const who = whoIn(cooked[0], p);
-    return { line: short(who) ? `${who} cooked it` : 'A dish got made', strong: true, mark: 'dot' };
+    return { line: short(who) ? t('profiles.status.cooked', { name: who }) : t('profiles.status.dishMade'), strong: true, mark: 'dot' };
   }
   if (unread.length) {
     const who = whoIn(unread[0], p);
-    return { line: unread.length === 1 && short(who) ? `New from ${who}` : plural(unread.length, 'new note'), strong: true, mark: 'dot' };
+    return {
+      line: unread.length === 1 && short(who) ? t('profiles.status.newFrom', { name: who }) : counted(t, unread.length, 'profiles.status.newNoteOne', 'profiles.status.newNoteMany'),
+      strong: true,
+      mark: 'dot',
+    };
   }
-  if (recipeCount > 0) return { line: plural(recipeCount, 'recipe'), strong: false, mark: null };
-  return { line: 'Ready to teach', strong: false, mark: null };
+  if (recipeCount > 0) return { line: counted(t, recipeCount, 'profiles.status.recipeOne', 'profiles.status.recipeMany'), strong: false, mark: null };
+  return { line: t('profiles.status.readyToTeach'), strong: false, mark: null };
 }
 
-function learnerStatus(p: Profile, threads: ThreadSummary[]): PersonStatus {
-  const waiting = threads.filter((t) => t.unread > 0);
-  const recipe = waiting.find((t) => t.last?.kind === 'recipe' && t.last.sender_id !== p.id);
+function learnerStatus(p: Profile, threads: ThreadSummary[], t: T = english): PersonStatus {
+  const waiting = threads.filter((th) => th.unread > 0);
+  const recipe = waiting.find((th) => th.last?.kind === 'recipe' && th.last.sender_id !== p.id);
   if (recipe) {
     const who = whoIn(recipe, p);
-    return { line: short(who) ? `${who} sent a dish` : 'A new dish', strong: true, mark: 'new' };
+    return { line: short(who) ? t('profiles.status.sentDish', { name: who }) : t('profiles.status.newDish'), strong: true, mark: 'new' };
   }
   // "answered" only when a cook wrote back; anything else is just a note.
-  const answered = (t: ThreadSummary) => lastSender(t, p)?.role === 'cook';
+  const answered = (th: ThreadSummary) => lastSender(th, p)?.role === 'cook';
   if (waiting.length === 1) {
-    const t = waiting[0];
-    const who = whoIn(t, p);
-    if (answered(t)) return { line: short(who) ? `${who} answered` : 'A new answer', strong: true, mark: 'dot' };
-    return { line: short(who) ? `New from ${who}` : 'A new note', strong: true, mark: 'dot' };
+    const th = waiting[0];
+    const who = whoIn(th, p);
+    if (answered(th)) return { line: short(who) ? t('profiles.status.answered', { name: who }) : t('profiles.status.newAnswer'), strong: true, mark: 'dot' };
+    return { line: short(who) ? t('profiles.status.newFrom', { name: who }) : t('profiles.status.newNote'), strong: true, mark: 'dot' };
   }
   if (waiting.length > 1) {
-    const line = waiting.every(answered) ? `${waiting.length} new answers` : plural(waiting.length, 'new note');
+    const line = waiting.every(answered)
+      ? t('profiles.status.newAnswers', { count: waiting.length })
+      : counted(t, waiting.length, 'profiles.status.newNoteOne', 'profiles.status.newNoteMany');
     return { line, strong: true, mark: 'dot' };
   }
   if (p.relation?.trim()) return { line: p.relation.trim(), strong: false, mark: null };
-  if (threads.length) return { line: 'All caught up', strong: false, mark: null };
-  return { line: 'New here', strong: false, mark: null };
+  if (threads.length) return { line: t('profiles.status.caughtUp'), strong: false, mark: null };
+  return { line: t('profiles.status.newHere'), strong: false, mark: null };
 }
 
 /** Without their messages: recipes or relation only (never "nothing new", which we can't know). */
-function quietStatus(p: Profile, recipeCount: number): PersonStatus {
-  if (p.role === 'cook' && recipeCount > 0) return { line: plural(recipeCount, 'recipe'), strong: false, mark: null };
-  return { line: p.relation?.trim() || (p.role === 'cook' ? 'Cook' : 'Learning'), strong: false, mark: null };
+function quietStatus(p: Profile, recipeCount: number, t: T = english): PersonStatus {
+  if (p.role === 'cook' && recipeCount > 0) return { line: counted(t, recipeCount, 'profiles.status.recipeOne', 'profiles.status.recipeMany'), strong: false, mark: null };
+  return { line: p.relation?.trim() || (p.role === 'cook' ? t('profiles.status.cook') : t('profiles.status.learning')), strong: false, mark: null };
 }
 
 /**
  * Status line per profile id. `undefined` for a profile means "still loading" (render a quiet
- * placeholder, never a guess that would flip a moment later).
+ * placeholder, never a guess that would flip a moment later). `t`: the lines in the phone's words.
  */
-export function useFamilyStatus(profiles: Profile[], familyKey: string | null): Record<string, PersonStatus | undefined> {
+export function useFamilyStatus(profiles: Profile[], familyKey: string | null, t: T = english): Record<string, PersonStatus | undefined> {
   const focused = useIsFocused();
   const { entries } = useLibrary();
   const key = familyKey ?? '';
@@ -206,28 +215,28 @@ export function useFamilyStatus(profiles: Profile[], familyKey: string | null): 
     const savedLine = (id: string) => (saved?.key === key ? saved.lines[id] : undefined);
     for (const p of profiles) {
       if (p.invited) {
-        out[p.id] = INVITED;
+        out[p.id] = invitedStatus(t);
         continue;
       }
       if (p.locked) {
-        out[p.id] = LOCKED;
+        out[p.id] = lockedStatus(t);
         continue;
       }
-      const t = threads[p.id];
-      if (t === undefined) {
+      const th = threads[p.id];
+      if (th === undefined) {
         // Not read yet: last launch's line, else a quiet placeholder (never a guess).
         out[p.id] = savedLine(p.id);
         continue;
       }
-      if (t === null) {
+      if (th === null) {
         // Their messages couldn't be read: last known line, else only what we know for sure.
-        out[p.id] = savedLine(p.id) ?? quietStatus(p, recipesByCook(entries, p.name).length);
+        out[p.id] = savedLine(p.id) ?? quietStatus(p, recipesByCook(entries, p.name).length, t);
         continue;
       }
-      out[p.id] = p.role === 'cook' ? cookStatus(p, t, recipesByCook(entries, p.name).length) : learnerStatus(p, t);
+      out[p.id] = p.role === 'cook' ? cookStatus(p, th, recipesByCook(entries, p.name).length, t) : learnerStatus(p, th, t);
     }
     return out;
-  }, [profiles, threads, entries, saved, key]);
+  }, [profiles, threads, entries, saved, key, t]);
 
   const allRead = profiles.length > 0 && profiles.every((p) => !readable(p) || !!threads[p.id]);
   useEffect(() => {

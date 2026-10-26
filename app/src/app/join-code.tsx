@@ -11,9 +11,11 @@ import { ErrorLine, Headline, leaveTo, routeInvite, SignInField, SignInScreen, T
 import { ActionButton } from '@/components/ui';
 import { parseInviteInput } from '@/lib/auth';
 import { useSession } from '@/lib/session';
+import { useWords } from '@/lib/words/useWords';
 
 export default function JoinCodeScreen() {
   const { joinFamily, family, status } = useSession();
+  const { t } = useWords();
   const [code, setCode] = useState('');
   const [error, setError] = useState<string | null>(null);
   const switching = status === 'ready' && !!family;
@@ -43,17 +45,20 @@ export default function JoinCodeScreen() {
 
   return (
     <SignInScreen onBack={back}>
-      <Headline title={switching ? 'Switch family' : 'Type your code'} line={switching ? `You’re in ${family!.name}.` : null} />
+      <Headline
+        title={switching ? t('signin.code.switchTitle') : t('signin.code.title')}
+        line={switching ? t('signin.code.inFamily', { family: family!.name }) : null}
+      />
 
       <View style={styles.form}>
         <SignInField
           code
           value={code}
-          onChangeText={(t) => {
-            setCode(t.toUpperCase());
+          onChangeText={(text) => {
+            setCode(text.toUpperCase());
             if (error) setError(null);
           }}
-          placeholder={switching ? 'XXXX-XXXX' : 'Family or invite code'}
+          placeholder={switching ? 'XXXX-XXXX' : t('signin.code.placeholder')}
           autoCapitalize="characters"
           autoCorrect={false}
           autoComplete="off"
@@ -62,7 +67,7 @@ export default function JoinCodeScreen() {
           returnKeyType="go"
           onSubmitEditing={() => void Promise.resolve(go()).catch(() => {})}
           maxLength={300}
-          accessibilityLabel={switching ? 'Family code' : 'Family code or invite code'}
+          accessibilityLabel={switching ? t('signin.code.familyLabel') : t('signin.code.label')}
           invalid={!!error}
         />
         <ErrorLine error={error} />
@@ -70,7 +75,12 @@ export default function JoinCodeScreen() {
 
       {/* The default reset brings a wrong code's "Try again" back to a working button. */}
       <View style={styles.form}>
-        <ActionButton label={switching ? 'Switch' : 'Come in'} onPress={go} disabled={!code.trim()} successLabel="You’re in" />
+        <ActionButton
+          label={switching ? t('signin.code.switch') : t('signin.shared.comeIn')}
+          onPress={go}
+          disabled={!code.trim()}
+          successLabel={t('signin.shared.youreIn')}
+        />
         <TermsLine />
       </View>
     </SignInScreen>

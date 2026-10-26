@@ -18,6 +18,7 @@ import type { Profile, RecipeStat } from '@/lib/api';
 import { earnsStamp, kitchenFor, type KitchenCount } from '@/lib/kitchenCounts';
 import type { LibraryEntry, Recipe } from '@/lib/recipes';
 import { cookProfile, kitchens } from '@/lib/recipes';
+import { useWords } from '@/lib/words/useWords';
 import { colors, motion, space } from '@/theme/tokens';
 
 import { activityFor } from './activity';
@@ -96,6 +97,7 @@ type Props = {
 };
 
 export function RecipeList({ entries, cooks, favorites, favoritesReady, stats, recipes, filter, onFilter, onOpen, kitchens: counts, profiles, meId }: Props) {
+  const { t } = useWords();
   const groups = useMemo(() => cookOrder(entries, cooks), [entries, cooks]);
   const byId = useMemo(() => new Map(entries.map((e) => [e.id, e])), [entries]);
 
@@ -116,9 +118,9 @@ export function RecipeList({ entries, cooks, favorites, favoritesReady, stats, r
   if (!entries.length) {
     return (
       <EmptyState
-        title="No recipes yet"
-        body="Ask someone what they made last Sunday."
-        actionLabel="Ask the family"
+        title={t('parent.list.empty')}
+        body={t('parent.list.emptyBody')}
+        actionLabel={t('parent.list.emptyAction')}
         onAction={() => router.navigate('/kid/ask')}
         style={styles.col}
       />
@@ -127,16 +129,16 @@ export function RecipeList({ entries, cooks, favorites, favoritesReady, stats, r
 
   return (
     <View style={styles.wrap}>
-      <View accessibilityRole="radiogroup" accessibilityLabel="Show recipes">
+      <View accessibilityRole="radiogroup" accessibilityLabel={t('parent.list.show')}>
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
           style={styles.chipScroll}
           contentContainerStyle={styles.chips}>
-          <Chip label="Everyone" selected={active === EVERYONE} onPress={() => onFilter(EVERYONE)} />
+          <Chip label={t('parent.list.everyone')} selected={active === EVERYONE} onPress={() => onFilter(EVERYONE)} />
           <Chip
-            label="Favorites"
+            label={t('parent.list.favorites')}
             // Wrapped: on web a bare <svg> would sit under the chip's positioned fill.
             leading={
               <View>
@@ -158,7 +160,7 @@ export function RecipeList({ entries, cooks, favorites, favoritesReady, stats, r
         {rows.length ? (
           <RecipeCards entries={rows} stats={stats} recipes={recipes} showCook={!cookChip} stampFor={stampFor} onOpen={onOpen} />
         ) : active === FAVORITES && favoritesReady ? (
-          <EmptyState icon={<HeartIcon size={28} color={colors.danger} />} title="No favorites yet" />
+          <EmptyState icon={<HeartIcon size={28} color={colors.danger} />} title={t('parent.list.noFavorites')} />
         ) : null}
       </Animated.View>
     </View>

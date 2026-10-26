@@ -19,10 +19,11 @@ import { ActionButton, type ActionState, BottomSheet, Txt } from '@/components/u
 import { sameNameAs, SameNameAsk } from './SameName';
 import type { Profile, Role } from '@/lib/api';
 import { useSession } from '@/lib/session';
+import { useWords } from '@/lib/words/useWords';
 import { colors, motion } from '@/theme/tokens';
 
 const MAX_NAME = 40;
-const TITLE = 'What does your family call you?';
+const TITLE = 'profiles.self.title';
 
 export type SelfSheetProps = {
   visible: boolean;
@@ -42,6 +43,7 @@ export function SelfSheet(props: SelfSheetProps) {
 
 function Self({ visible, role, onClose, onDone }: SelfSheetProps) {
   const { createSelf, profiles } = useSession();
+  const { t } = useWords();
   const [name, setName] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [dupe, setDupe] = useState<Profile | null>(null);
@@ -94,29 +96,29 @@ function Self({ visible, role, onClose, onDone }: SelfSheetProps) {
       visible={visible}
       onClose={onClose}
       dismissOnBackdrop={btn !== 'loading' && btn !== 'success'}
-      accessibilityLabel={TITLE}
+      accessibilityLabel={t(TITLE)}
       footer={
         <ActionButton
-          label="Continue"
+          label={t('profiles.self.continue')}
           size="xl"
           onPress={() => void go()}
           state={btn}
           disabled={!name.trim()}
-          successLabel="You’re in"
-          accessibilityHint={role === 'cook' ? 'Adds you to the cooks' : 'Adds you to the ones who miss it'}
+          successLabel={t('profiles.self.youreIn')}
+          accessibilityHint={role === 'cook' ? t('profiles.self.cookHint') : t('profiles.self.learnerHint')}
         />
       }>
       <Txt variant="display" size={30} leading={1.1} accessibilityRole="header" style={styles.title}>
-        {TITLE}
+        {t(TITLE)}
       </Txt>
       <View style={styles.form}>
         <SignInField
           value={name}
-          onChangeText={(t) => {
-            setName(t);
+          onChangeText={(text) => {
+            setName(text);
             edited();
           }}
-          placeholder={role === 'cook' ? 'Mom, Dad, Auntie Lin…' : 'Leo, Maya, Sam…'}
+          placeholder={role === 'cook' ? t('profiles.self.cookPlaceholder') : t('profiles.self.learnerPlaceholder')}
           autoCapitalize="words"
           autoCorrect={false}
           autoComplete="name"
@@ -125,12 +127,12 @@ function Self({ visible, role, onClose, onDone }: SelfSheetProps) {
           returnKeyType="go"
           onSubmitEditing={() => void go()}
           maxLength={MAX_NAME}
-          accessibilityLabel="Your name"
+          accessibilityLabel={t('profiles.self.nameLabel')}
           invalid={!!error}
           style={styles.field}
         />
         <ErrorLine error={error} />
-        {dupe ? <SameNameAsk who={dupe} noLabel="No, add me" onYes={onClose} onNo={() => void go(true)} /> : null}
+        {dupe ? <SameNameAsk who={dupe} noLabel={t('profiles.self.noAddMe')} onYes={onClose} onNo={() => void go(true)} /> : null}
       </View>
     </BottomSheet>
   );

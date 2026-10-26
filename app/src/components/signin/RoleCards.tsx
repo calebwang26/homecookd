@@ -6,17 +6,21 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { BookIcon, CheckIcon, haptic, PressableScale, Txt, VideoIcon } from '@/components/ui';
 import type { Role } from '@/lib/api';
+import { useWords } from '@/lib/words/useWords';
+import type { WordKey } from '@/lib/words/words';
 import { colors, motion, radii, shadows } from '@/theme/tokens';
 
-const CHOICES: { role: Role; label: string }[] = [
-  { role: 'cook', label: 'Record a dish' },
-  { role: 'learner', label: 'Learn a dish' },
+const CHOICES: { role: Role; label: WordKey }[] = [
+  { role: 'cook', label: 'signin.role.record' },
+  { role: 'learner', label: 'signin.role.learn' },
 ];
 
 export function RoleCards({ value, onChange }: { value: Role | null; onChange: (role: Role) => void }) {
+  const { t } = useWords();
   return (
-    <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel="What do you want to do first?">
-      {CHOICES.map(({ role, label }) => {
+    <View style={styles.row} accessibilityRole="radiogroup" accessibilityLabel={t('signin.role.title')}>
+      {CHOICES.map(({ role, label: key }) => {
+        const label = t(key);
         const on = value === role;
         const cook = role === 'cook';
         return (
