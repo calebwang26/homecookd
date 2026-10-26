@@ -897,9 +897,15 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
         if batch:
             log(f"[process {recipe_id}] --batch is for Gemini; extracting with Claude as usual")
         try:
-            heard = transcribe.lines(transcribe.transcript_file(out_dir, manifest.get("language"), force)["words"])
+            said = transcribe.transcript_file(out_dir, manifest.get("language"), force, title=manifest["title"])
         except transcribe.TranscribeError as e:
             raise ProcessError(f"no transcript for the extraction: {e}")
+        heard = transcribe.spoken_lines(said)
+        if said["language"] != (manifest.get("language") or "en"):  # the language check found what she speaks
+            log(f"[process {recipe_id}] WARNING: the recording was tagged {manifest.get('language') or 'en'}, "
+                f"but the cook speaks {said['language']} ({said.get('language_note', '')[:300]}); using that")
+            manifest["language"] = said["language"]
+            manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
         with ThreadPoolExecutor(max_workers=min(n, MAX_WORKERS)) as pool:
             futures = [pool.submit(extract_claude.extract_one,
                                    Extraction(cfg, i, n, s, ai, out_dir, media_dur, usage, manifest), claude_extract,
