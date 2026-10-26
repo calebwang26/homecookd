@@ -47,7 +47,8 @@ Keys come from the repo's root `.env` (found by walking up, so a worktree works 
 `CARTESIA_API_KEY` (plus optional `CARTESIA_API_KEYS_BACKUP`, comma-separated: the next one is used when a key runs
 out of credits, `src/cartesiaKeys.ts`), `ANTHROPIC_API_KEY`, `MOSS_PROJECT_ID`, `MOSS_PROJECT_KEY`, `CONVEX_SITE_URL`
 (https://grand-dragon-649.convex.site) and `VOICE_SECRET`. Optional: `VOICE_STUB=1` (serve the stub recipe and
-accept any session token, for tests without a real sign-in), `CLAUDE_FAST=1` (Opus fast mode), `CLAUDE_MODEL`.
+accept any session token, for tests without a real sign-in), `CLAUDE_FAST=1` (Opus fast mode, premium price; off by default since Oct 26), `CLAUDE_MODEL`, `HOMIE_DECIDE_MODEL`
+(the recording's "should homie speak?" check; default `claude-haiku-5-5`).
 For homie: `GEMINI_API_KEY` (hears Marathi, and is the backup voice; without it a Marathi recording gets no
 transcript and a failed Sonic line stays silent), `HOMIE_VOICE` (default "Riya bilingual",
 `930eda72-c1af-4637-8d07-87d881d615fe`, Caleb's pick: native Marathi and Indian English), `HOMIE_SPEED` (default
@@ -333,6 +334,6 @@ voice/deploy.sh
 ```
 It turns on Secret Manager, copies the keys from the root `.env` into secrets (never printed), and deploys
 `homecookd-voice` from source with min instances 1, a 60-minute request timeout (a cooking session is one
-long WebSocket), session affinity and `CLAUDE_FAST=1`. `GEMINI_API_KEY` and `GLASSES_SECRET` become secrets too,
+long WebSocket), session affinity and `CLAUDE_FAST=0` (`1` in `.env` turns fast mode on). `GEMINI_API_KEY` and `GLASSES_SECRET` become secrets too,
 and `HOMIE_VOICE`, `GLASSES_URL`, `HOMIE_DEMO` env vars, when they're in `.env`. It prints the `/cook`, `/record`
 and `/speak` URLs for the app.
