@@ -43,3 +43,31 @@ against run. Clips with background music (high loops) understate how a quiet hom
   dialect and two dishes in one video; the recipe lost mackerel, salt, sugar and fish sauce, and the ingredient check
   added radish and napa cabbage from the frames and asked about the mackerel).
 - The proofread helps the Indic languages and costs 2-4 points where Cartesia is already good (zh, es, tl, ur, ar).
+
+## Oct 26, later: looped and silent stretches sent again; proofread only hi, gu, ta, te, pa
+
+Each stretch that looped, and each 4 s or more with no words, is sent to Cartesia again on its own (up to 30 s
+pieces with a second of context) through ffmpeg's `afftdn` noise filter; its words replace the stretch's only when
+there are more of them and they aren't mostly loops. The proofread now runs only where it helped.
+
+| lang | dish | min | loops | heard raw | heard proofread | ingredients | script | steps | $ |
+|---|---|---|---|---|---|---|---|---|---|
+| en | Garlic chicken (crispy skin-on chicken) | 5.7 | 0.00 | 0.97 | – | 1.00 | – | 11 | 0.26 |
+| hi | Bajra (pearl millet) dish | 10.0 | 0.02 | 0.57 | 0.57 | 0.94 | 0.92 | 12 | 0.56 |
+| gu | Lapsi (cracked-wheat sweet) | 9.1 | 0.57 | 0.21 | 0.32 | 1.00 | 0.98 | 8 | 0.33 |
+| ta | Agathi keerai poriyal (sesbania leaf stir-fry) | 8.1 | 0.44 | 0.40 | 0.46 | 1.00 | 0.88 | 8 | 0.33 |
+| te | Chikkudukaya tomato curry (flat beans and tomato) | 5.0 | 0.02 | 0.36 | 0.80 | 1.00 | 1.00 | 11 | 0.37 |
+| pa | Two kaddu (pumpkin/squash) sabzis | 10.0 | 0.45 | 0.27 | 0.47 | 0.83 | 0.90 | 12 | 0.44 |
+| ur | Rose momos (dumplings) | 10.1 | 0.14 | 0.91 | – | 0.83 | 1.00 | 10 | 0.39 |
+| zh | Homestyle braised tofu (jiachang doufu) | 10.0 | 0.00 | 0.85 | – | 0.92 | 1.00 | 12 | 0.45 |
+| ko | Geotjeori (fresh kimchi) and braised mackerel | 10.0 | 0.14 | 0.44 | – | 0.60 | 1.00 | 12 | 0.37 |
+| tl | Chicken adobo | 5.8 | 0.00 | 0.96 | – | 0.92 | – | 12 | 0.32 |
+| es | Picadillo | 7.2 | 0.00 | 0.97 | – | 1.00 | – | 12 | 0.33 |
+| pt | Arroz doce (rice pudding) | 8.5 | 0.00 | 0.90 | – | 0.91 | – | 12 | 0.32 |
+| ar | Kofta (stretched with vegetables) | 8.2 | 0.14 | 0.75 | – | 0.95 | 1.00 | 12 | 0.38 |
+
+What the recipe uses (the proofread copy where there is one), before -> after: pa 0.26 -> 0.47, ta 0.36 -> 0.46,
+gu 0.26 -> 0.32, ko 0.39 -> 0.44, ar 0.69 -> 0.75, ur 0.85 -> 0.91, es 0.93 -> 0.97, zh 0.81 -> 0.85, tl 0.93 -> 0.96,
+pt 0.88 -> 0.90, hi 0.56 -> 0.57, te 0.79 -> 0.80, en 0.97 -> 0.97. Ingredients: pa 0.77 -> 0.83, ko 0.47 -> 0.60,
+ar 0.90 -> 0.95, te 0.96 -> 1.00; tl 1.00 -> 0.92 (salt, which she says clearly: run-to-run). All 13: $4.57 -> $4.84.
+Still weakest: gu (music) and ko (dialect, two dishes).

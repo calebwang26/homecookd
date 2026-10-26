@@ -228,6 +228,55 @@ def test_unsure_or_failing_checks_keep_english() -> None:
         assert [lang for _, lang in calls].count("en") == 2  # the full English one and the sample's: no redo
 
 
+# ---------- looped and silent stretches sent again ----------
+
+def test_babble_over_music_is_dropped_but_real_repeats_stay() -> None:
+    babble = said("ਗਾਰਾ ਤੋ ਤੋ ਗਾਰਾ ਤੋ ਮੇ ਗਾਰਾ ਤੋ ਤੋ ਗਾਰਾ ਤੋ ਗਾਰਾ")
+    speech = said("stir stir stir then add the salt and keep stirring until it smells nutty", at=20)
+    assert texts(T.drop_babble(babble + speech)) == texts(speech)
+
+
+def test_a_loop_takes_the_stretch_between_the_words_around_it() -> None:
+    kept = said("हे बघ", at=0.0) + said("मीठ टाकते", at=12.0)
+    dropped = [{"word": "तुका", "start": 1.2, "end": 1.3}] * 30  # all stamped at one instant
+    assert T.loop_spans(dropped, kept) == [(0.9, 12.0)]
+    assert T.loop_spans([{"word": "x", "start": 1.0, "end": 1.1}], said("a b", at=0.0) + said("c", at=2.0)) == []
+
+
+def test_silent_stretches_and_pieces() -> None:
+    words = said("a b", at=0.0) + said("c d", at=10.0)  # 0.0-0.9, then 10.0-10.9
+    assert T.silent_spans(words, 30.0) == [(0.9, 10.0), (10.9, 30.0)]
+    assert T.pieces([(0.9, 10.0)], 30.0) == [(0.0, 11.0, 0.9, 10.0)]  # sent with a second each side, for context
+    assert [p[2:] for p in T.pieces([(10.9, 75.0)], 75.0)] == [(10.9, 32.27), (32.27, 53.63), (53.63, 75.0)]
+
+
+def test_a_second_try_replaces_a_stretch_only_when_it_is_better() -> None:
+    words = said("a b", at=0.0) + said("loop", at=5.0) + said("z", at=20.0)
+    again = said("आता पोहे धुते मी", at=4.0)
+    piece = (2.0, 13.0, 3.0, 12.0)
+    got = T.splice(words, piece, again + said("extra", at=12.5), dropped=0)
+    assert texts(got) == "a b आता पोहे धुते मी z"  # only the replaced stretch: the context's words don't come in
+    assert T.splice(words, piece, said("one", at=4.0), dropped=0) is None  # no more words than before
+    assert T.splice(words, piece, again, dropped=10) is None  # the second try mostly looped too
+
+
+def test_retry_sends_the_looped_stretch_again_through_the_filter_on_the_original_clock() -> None:
+    loop = {"type": "transcript", "text": "", "duration": 12.0,
+            "words": [{"word": "हे", "start": 0.0, "end": 0.3}] + [{"word": "तुका", "start": 1.0, "end": 1.01}] * 40
+            + [{"word": "मीठ", "start": 11.0, "end": 11.3}]}
+    second = {"type": "transcript", "text": "", "duration": 11.0,
+              "words": [{"word": w, "start": 1.0 + i, "end": 1.5 + i} for i, w in enumerate("आता पोहे धुवून ठेवते".split())]}
+    post = FakePost((200, loop), (200, second))
+    with tempfile.TemporaryDirectory() as tmp, env(CARTESIA_API_KEY="k1"), patched(T.requests, "post", post), \
+            patched(T, "clean_audio", lambda src, tmp: (src, [(0.0, 0.0, 12.0)])):  # no pauses to cut here
+        voice = Path(tmp) / "voice.m4a"
+        tone(voice, ("tone", 12))
+        got = T.transcribe_clean(voice, "mr")
+    assert [c["file"] for c in post.calls] == ["voice.m4a", "piece.flac"]
+    assert texts(got["words"]) == "हे आता पोहे धुवून ठेवते मीठ", got["words"]
+    assert got["words"][1]["start"] == 1.0  # sent from 0.0 (0.3 less its second of context): 1.0 s on the original
+    assert got["retried"] == {"pieces": 1, "taken": 1, "words_added": 3}  # 4 new words in place of the loop's one
+
 # ---------- the proofread copy ----------
 
 def test_proofread_fixes_spelling_but_a_rewrite_or_an_addition_keeps_her_words() -> None:
@@ -267,16 +316,18 @@ def test_a_long_story_lines_correction_is_kept() -> None:
     assert [x["text"] for x in got] == [fixed, other], got  # the story's correction kept; the swap refused
 
 
-def test_the_proofread_copy_is_made_only_with_the_flag_and_not_for_english() -> None:
-    marathi = {"type": "transcript", "text": "", "duration": 3.0,
-               "words": [{"word": "मिर", "start": 0.2, "end": 0.6}, {"word": "टाकला", "start": 0.7, "end": 1.1}]}
-    for flag, said, made in ((None, marathi, False), ("claude", ENGLISH, False), ("claude", marathi, True)):
+def test_the_proofread_copy_is_made_only_with_the_flag_and_for_the_languages_it_helps() -> None:
+    hindi = {"type": "transcript", "text": "", "duration": 3.0,
+             "words": [{"word": "मिर", "start": 0.2, "end": 0.6}, {"word": "टाकला", "start": 0.7, "end": 1.1}]}
+    spanish = {**hindi, "words": [{"word": "sal", "start": 0.2, "end": 0.6}]}
+    for flag, said, lang, made in ((None, hindi, "hi", False), ("claude", ENGLISH, "en", False),
+                                   ("claude", spanish, "es", False), ("claude", hindi, "hi", True)):
         fake = FakeAnthropic({"lines": [{"id": 0, "text": "मीठ टाकला"}]})
         with tempfile.TemporaryDirectory() as tmp, env(CARTESIA_API_KEY="k1", ANTHROPIC_API_KEY="fake",
                                                        TRANSCRIPT_PROOFREAD=flag, CLAUDE_PROOFREAD_MODEL=None), \
                 patched(T.requests, "post", FakePost((200, said))), patched(claude.anthropic, "Anthropic", fake):
             tone(Path(tmp) / "voice.m4a", ("tone", 3))
-            got = T.transcript_file(Path(tmp), "en" if said is ENGLISH else "mr")
+            got = T.transcript_file(Path(tmp), lang)
         assert ("proofread" in got) == made, (flag, got.get("proofread"))
         if made:
             assert got["proofread"]["model"] == "claude-opus-5-5" and fake.calls[0]["model"] == "claude-opus-5-5"
