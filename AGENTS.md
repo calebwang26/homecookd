@@ -117,6 +117,9 @@ and homesick college kids. It's a family product, not a tool.
   and EAS Update for JS-only fixes. Expo Go can't load the native mic-streaming module. Filming in the app
   (VisionCamera, `docs/agents/memory/in-app-recording.md`) needs a build made after Oct 24; older builds keep the
   system camera.
+- **App Review freeze (until Apple approves 1.0):** PRs that touch sign-in, the AI consent screen, delete account,
+  report/block, /privacy and /terms, the icon or the TEST family need Caleb's OK first, and the App Store reviewer notes
+  updated to match. The exact paths: `docs/agents/memory/app-review-freeze.md`.
 - **`TODO(caleb)`** marks a decision only Caleb can make. Use the documented default and leave the marker.
 - English only.
 
