@@ -17,6 +17,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [git-pr-workflow](memory/git-pr-workflow.md) | PR-only shipping, merge main first, stage by name, the Vercel Root Directory gotcha |
 | [merge-agent-approval](memory/merge-agent-approval.md) | Oct 24: every PR goes to the "Merge Agent" session for approval; it decides conflicts |
 | [auto-ship-merged-prs](memory/auto-ship-merged-prs.md) | Oct 25: the Merge Agent ships each merged fix/feature PR to TestFlight without asking, then tells Caleb what to test |
+| [claude-cost-settings](memory/claude-cost-settings.md) | Oct 26: homie's recording check on Haiku, Opus fast mode off, to keep Claude spend down |
 | [pr-merge-organizer](memory/pr-merge-organizer.md) | Oct 24: don't merge or ask Caleb; send ready PRs to the organizer session |
 | [api-deploy-rules](memory/api-deploy-rules.md) | Deploy from main only, all files, live tests after |
 | [api-deploy-method](memory/api-deploy-method.md) | How the multi-module api was deployed without the CLI |
