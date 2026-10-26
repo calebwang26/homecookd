@@ -64,6 +64,7 @@ def parse_vtt(text: str, offset_s: float = 0.0) -> list[dict]:
             return int((h or "0:")[:-1]) * 3600 + int(mi) * 60 + int(s) + int(ms) / 1000
         start, end = secs(*m.group(1, 2, 3, 4)) - offset_s, secs(*m.group(5, 6, 7, 8)) - offset_s
         words = " ".join(re.sub(r"<[^>]+>", "", line).strip() for line in block[m.end():].strip().split("\n"))
+        words = re.sub(r"\([^)]*\)|\[[^\]]*\]|（[^）]*）|♪|&nbsp;", " ", words)  # sound tags, editors' notes
         words = re.sub(r"\s+", " ", words).strip()
         if not words or end <= 0 or (out and out[-1]["text"] == words):
             continue
@@ -175,7 +176,9 @@ def score(clip: dict, out: Path) -> dict:
     from pipeline.seen import listed
     folder = EVAL / key(clip)
     vtt = next(folder.glob("captions*.vtt"))
-    reference = parse_vtt(vtt.read_text(encoding="utf-8"), 0.0 if clip.get("end_s") is None else clip.get("start_s", 0))
+    reference = parse_vtt(vtt.read_text(encoding="utf-8"), clip.get("start_s", 0) if clip.get("end_s") else 0.0)
+    if clip.get("end_s"):  # only the captions of the span that was cut and run
+        reference = [x for x in reference if x["start"] < clip["end_s"] - clip.get("start_s", 0)]
     recipe = json.loads((out / "recipe.json").read_text())
     t = json.loads((out / "work" / "transcript.json").read_text())
     cache = folder / "named.json"

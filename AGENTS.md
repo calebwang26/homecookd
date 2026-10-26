@@ -210,6 +210,9 @@ voice/deploy.sh                                                    # Cloud Run h
 .venv/bin/python pipeline/test_order.py && .venv/bin/python pipeline/test_prompts.py
 .venv/bin/python pipeline/test_shorten.py                           # cook mode's short steps: rules + stored data
 .venv/bin/python pipeline/test_coverage.py
+.venv/bin/python pipeline/test_seen.py                              # ingredients the frames show but nobody said (fakes)
+.venv/bin/python pipeline/test_eval_languages.py                    # the language eval's scoring (pure)
+.venv/bin/python pipeline/eval_languages.py [--only ta,hi] [--rescore]   # the 13-language eval: real pipeline vs human captions (~$0.4 a clip; needs yt-dlp in .venv)
 .venv/bin/python pipeline/test_cover.py                             # the cover: Gemini's pick + the sharpest frame (fakes)
 .venv/bin/python pipeline/cover.py --id <id> [--out PATH]          # pick a recipe's cover again (real Gemini)
 .venv/bin/python pipeline/align.py --id <id> --force               # substep times again (process.py does it after shorten)
