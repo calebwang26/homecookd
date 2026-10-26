@@ -5,6 +5,7 @@ import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import { action, internalQuery, mutation, query } from "./_generated/server";
 import { findSession, requireSession, SIGNED_OUT } from "./lib/auth";
+import { claudeText, WRITER_MODEL, writerOnClaude } from "./lib/textModel";
 import { familyRecipe } from "./recipes";
 import schema from "./schema";
 
@@ -139,7 +140,8 @@ export const send = mutation({
   },
 });
 
-// ---- The finished-dish photo and Muse Spark's draft note (Meta Model API, OpenAI-compatible) ----
+// ---- The finished-dish photo and its draft note: Muse Spark (Meta Model API, OpenAI-compatible), or Claude Sonnet
+// with WRITER_PROVIDER=claude (lib/textModel.ts) ----
 
 const MUSE_URL = "https://api.meta.ai/v1/chat/completions";
 const MUSE_MODEL = "muse-spark-1.3"; // pinned; not a "-contributor" model, which may train on family data
@@ -165,9 +167,26 @@ export const photoContext = internalQuery({
   },
 });
 
+const NOTE_SYSTEM =
+  "You draft a short note a grown kid sends to the family member who taught them a dish, " +
+  "with a photo of the dish they just cooked. Write in the kid's voice: warm, casual, one or " +
+  "two sentences, no hashtags. Only mention what the photo or the facts given show; never " +
+  "invent memories, people or how it tasted. Reply with the note only.";
+
+/** Claude's draft, the photo passed by its URL; "" on a failure (the caller asks the kid to write one). */
+async function claudeNote(apiKey: string, fact: string, photoUrl: string): Promise<string> {
+  return await claudeText(apiKey, WRITER_MODEL, "low", NOTE_SYSTEM, [
+    { type: "text", text: fact },
+    { type: "image", source: { type: "url", url: photoUrl } },
+  ]).catch((e) => {
+    console.error("Claude photo note failed", String(e).slice(0, 200));
+    return "";
+  });
+}
+
 /**
- * Muse Spark drafts a short note from the kid to the cook about the photo. Nothing is sent: the app
- * shows the draft for the kid to edit, then calls messages.send with `aiDrafted: true`.
+ * Muse Spark (or Claude with WRITER_PROVIDER=claude) drafts a short note from the kid to the cook about the photo.
+ * Nothing is sent: the app shows the draft for the kid to edit, then calls messages.send with `aiDrafted: true`.
  */
 export const sharePhoto = action({
   args: { sessionToken: v.string(), recipeId: v.id("recipes"), fileId: v.id("_storage") },
@@ -175,9 +194,16 @@ export const sharePhoto = action({
   handler: async (ctx, args) => {
     const c = await ctx.runQuery(internal.messages.photoContext, args);
     if ("error" in c) throw new ConvexError(c.error ?? "Try again.");
-    const apiKey = process.env.MUSE_API_KEY;
+    const onClaude = writerOnClaude();
+    const apiKey = onClaude ? process.env.ANTHROPIC_API_KEY : process.env.MUSE_API_KEY;
     if (!apiKey) throw new ConvexError("The note writer isn't set up yet. Write your own for now.");
     const cook = c.cookName || "the cook";
+    const fact = `${c.kidName} just cooked "${c.recipeTitle}", the recipe ${cook} taught them, and is sending ${cook} this photo.`;
+    if (onClaude) {
+      const draft = await claudeNote(apiKey, fact, c.photoUrl);
+      if (!draft.trim()) throw new ConvexError("Couldn't draft a note just now. Write your own, or try again.");
+      return { draft: draft.trim().replace(/^"|"$/g, "").slice(0, MAX_TEXT), aiDrafted: true as const };
+    }
     const res = await fetch(MUSE_URL, {
       method: "POST",
       headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -186,24 +212,8 @@ export const sharePhoto = action({
         reasoning_effort: "low",
         max_completion_tokens: 1500, // reasoning shares this budget
         messages: [
-          {
-            role: "system",
-            content:
-              "You draft a short note a grown kid sends to the family member who taught them a dish, " +
-              "with a photo of the dish they just cooked. Write in the kid's voice: warm, casual, one or " +
-              "two sentences, no hashtags. Only mention what the photo or the facts given show; never " +
-              "invent memories, people or how it tasted. Reply with the note only.",
-          },
-          {
-            role: "user",
-            content: [
-              {
-                type: "text",
-                text: `${c.kidName} just cooked "${c.recipeTitle}", the recipe ${cook} taught them, and is sending ${cook} this photo.`,
-              },
-              { type: "image_url", image_url: { url: c.photoUrl } },
-            ],
-          },
+          { role: "system", content: NOTE_SYSTEM },
+          { role: "user", content: [{ type: "text", text: fact }, { type: "image_url", image_url: { url: c.photoUrl } }] },
         ],
       }),
     });

@@ -93,14 +93,14 @@ and homesick college kids. It's a family product, not a tool.
   use (a socket left open streams silence at 3 credits a second), not in testing. A PR that touches `voice/` gets a
   live run in Marathi and English before it's done (`docs/agents/memory/cartesia-credits-for-tests.md`).
 - **Off Gemini (Oct 25 on):** Gemini credits are nearly gone, so new model calls use Claude (text, images) or
-  Cartesia (audio), never Gemini (`docs/agents/memory/gemini-credits-nearly-gone.md`). Existing Gemini calls move one
-  PR at a time behind env flags, with Gemini as the rollback: `TEXT_PROVIDER=claude` (Convex env and the worker's
-  `.env`) moves the text calls, `COVER_PROVIDER=claude` (the worker's `.env`) the cover pick, `ALIGN_PROVIDER=claude`
-  the substep times, `EXTRACTOR=claude` the video extraction; the pipeline needs `GEMINI_API_KEY` only while a step
-  is still on Gemini. Muse Spark moves to Claude too. The glasses (`edible-glasses/`) stay on Gemini, and Odia is
-  hidden from the cook language picker (Caleb, Oct 26). Pick models quality-first, then the cheapest that holds it
-  the substep times, `EXTRACTOR=claude` the video extraction, `TRANSCRIPT_PROOFREAD=claude` the proofread of a
-  non-English transcript. Muse Spark moves to Claude too. Pick models quality-first, then the cheapest that holds it
+  Cartesia (audio), never Gemini (`docs/agents/memory/gemini-credits-nearly-gone.md`). Existing Gemini and Muse calls
+  move one PR at a time behind env flags, with today's model as the rollback: `TEXT_PROVIDER=claude` (Convex env and
+  the worker's `.env`) moves the text calls, `COVER_PROVIDER=claude` (the worker's `.env`) the cover pick,
+  `ALIGN_PROVIDER=claude` the substep times, `EXTRACTOR=claude` the video extraction, `TRANSCRIPT_PROOFREAD=claude`
+  the proofread of a non-English transcript, `RECIPE_WRITER=claude` (the worker) the recipe writer and
+  `WRITER_PROVIDER=claude` (Convex env) the story cards and the photo note; the pipeline needs `GEMINI_API_KEY` only
+  while a step is still on Gemini. The glasses (`edible-glasses/`) stay on Gemini, and Odia is hidden from the cook
+  language picker (Caleb, Oct 26). Pick models quality-first, then the cheapest that holds it
   (`docs/agents/memory/claude-cartesia-quality-first.md`). Flipping a flag in production is Caleb's call.
 - **Moss (search):** filled from Convex, searched from the live voice service; one index per family
   (`family-<familyId>`). Moss only finds moments: never use Moss Inference to write answers

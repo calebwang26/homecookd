@@ -48,6 +48,7 @@ afterEach(() => {
   delete process.env.MUSE_API_KEY;
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.TEXT_PROVIDER;
+  delete process.env.WRITER_PROVIDER;
 });
 
 const post = (t: Backend, path: string, body: unknown, secret: Record<string, string>) =>
@@ -340,6 +341,28 @@ test("messages: privacy, and the photo note Muse Spark drafts", async () => {
   await expect(
     t.action(api.messages.sharePhoto, { sessionToken: leo.sessionToken, recipeId, fileId: photoId }),
   ).rejects.toThrow("isn't set up");
+});
+
+test("with WRITER_PROVIDER=claude, Claude Sonnet drafts the photo note, seeing the photo by its URL", async () => {
+  process.env.WRITER_PROVIDER = "claude";
+  process.env.ANTHROPIC_API_KEY = "ant-test";
+  const fetch = stubFetch(undefined, (url) => (url === CLAUDE ? claudeReply('"Made your chili, Dad. Not as good as yours yet!"') : undefined));
+  const t = newBackend();
+  const dad = await signIn(t, "p-dad");
+  const leo = await signIn(t, "p-leo");
+  const recipeId = await addRecipe(t, dad.familyId, dad.personId);
+  const photoId = await t.run((ctx) => ctx.storage.store(new Blob([new Uint8Array(64)], { type: "image/jpeg" })));
+  const { draft, aiDrafted } = await t.action(api.messages.sharePhoto, { sessionToken: leo.sessionToken, recipeId, fileId: photoId });
+  expect({ draft, aiDrafted }).toEqual({ draft: "Made your chili, Dad. Not as good as yours yet!", aiDrafted: true });
+  const body = JSON.parse(String(fetch.mock.calls.find(([u]) => u === CLAUDE)![1]?.body));
+  expect(body.model).toBe("claude-sonnet-5-5");
+  expect(body.messages[0].content[0].text).toBe('Leo just cooked "Sunday Chili", the recipe Dad taught them, and is sending Dad this photo.');
+  expect(body.messages[0].content[1]).toMatchObject({ type: "image", source: { type: "url" } });
+  expect(fetch.mock.calls.some(([u]) => String(u).startsWith("https://api.meta.ai/"))).toBe(false);
+
+  delete process.env.ANTHROPIC_API_KEY;
+  process.env.MUSE_API_KEY = "muse-test"; // Muse's key doesn't stand in for Claude's
+  await expect(t.action(api.messages.sharePhoto, { sessionToken: leo.sessionToken, recipeId, fileId: photoId })).rejects.toThrow("isn't set up");
 });
 
 test("Moss: one sync per family at a time; a change during a sync runs one more pass", async () => {
