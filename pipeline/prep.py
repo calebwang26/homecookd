@@ -32,8 +32,23 @@ _HW = "h264_videotoolbox" in subprocess.run(
 # 1.2 Mbps keeps 720p clips sharp in the app's player box and halves the upload of long recordings.
 PLAY_VIDEO = (["-c:v", "h264_videotoolbox", "-b:v", "1200k", "-maxrate", "2000k", "-bufsize", "4000k"] if _HW
               else ["-c:v", "libx264", "-preset", "veryfast", "-crf", "23"])
-# Decode on the Mac's media engine too: software HEVC decoding of 4K iPhone video was the bottleneck.
+# Decode on the Mac's media engine too: software HEVC decoding of 4K iPhone video was the bottleneck. Only for the
+# codecs it decodes: on others (AV1 from YouTube, Oct 26) ffmpeg 9 stops with "doesn't support hardware accelerated
+# AV1 decoding" instead of falling back to software.
 HWDEC = ["-hwaccel", "videotoolbox"] if _HW else []
+HW_CODECS = {"h264", "hevc", "prores"}
+
+
+def hwdec(path: Path) -> list[str]:
+    """HWDEC when the file's first video stream is a codec the media engine decodes, else nothing (software)."""
+    if not HWDEC:
+        return []
+    try:
+        streams = probe(path).get("streams", [])
+    except PrepError:
+        return []
+    codec = next((s.get("codec_name") for s in streams if s.get("codec_type") == "video"), None)
+    return HWDEC if codec in HW_CODECS else []
 PLAY_ARGS = ["-vf", "scale=-2:720", *PLAY_VIDEO,
              "-pix_fmt", "yuv420p", "-c:a", "aac", "-ar", "48000", "-b:a", "128k"]
 # First real video stream (V skips cover art) and first audio stream.
@@ -150,7 +165,7 @@ def inventory(path: Path) -> dict:
 # ---------- steps ----------
 
 def make_ai_copy(src: Path, duration: float, nn: str, work: Path, force: bool) -> list[dict]:
-    base = [*HWDEC, "-i", str(src), *MAP_ARGS, *AI_ARGS]
+    base = [*hwdec(src), "-i", str(src), *MAP_ARGS, *AI_ARGS]
     if duration <= SEGMENT_S:
         out = work / f"ai_{nn}.mp4"
         encode(out, base, force)
@@ -310,7 +325,8 @@ def run(recipe_id: str, title: str, cook: str, relation: str, inputs: list[Path]
             print(f"[prep {recipe_id}] file {nn}: {it['path'].name}")
             ai_jobs.append((it, pool.submit(make_ai_copy, it["path"], it["duration"], nn, work, force)))
             play = work / f"play_{nn}.mp4"
-            play_jobs.append(pool.submit(encode, play, [*HWDEC, "-i", str(it["path"]), *MAP_ARGS, *PLAY_ARGS], force))
+            play_jobs.append(pool.submit(encode, play, [*hwdec(it["path"]), "-i", str(it["path"]), *MAP_ARGS, *PLAY_ARGS],
+                                         force))
             plays.append(play)
         for it, job in ai_jobs:
             it["ai_files"] = job.result()
