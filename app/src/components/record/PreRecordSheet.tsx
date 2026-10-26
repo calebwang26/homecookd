@@ -1,9 +1,10 @@
 // Before recording starts (Record's "Start recording"): the dish (typed, optional), who it's for (each
 // kid a toggle, "Everyone" ticks them all: who.ts; the kid who asked starts ticked, else the first
 // kid, else Everyone), the language she cooks in (from people.me; a
-// change also becomes her account's language), then how she films: From my glasses (homie listens on
-// the phone by the stove), Phone camera (homie says hello first, then the phone's camera), or Videos
-// I took (the camera roll, as before).
+// change also becomes her account's language), then how she films. Phone camera comes first, the one
+// big green button (Caleb, Oct 26: steer people to it; homie says hello, then the camera films in the
+// app), then Videos I took (the camera roll), then From my glasses last (homie listens on the phone by
+// the stove).
 import { useState } from 'react';
 import { ScrollView, StyleSheet, TextInput, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
@@ -169,21 +170,10 @@ export function PreRecordSheet({
 
           <View style={styles.ways}>
             <ActionButton
-              label={t('parent.preRecord.glasses')}
+              label={t('parent.preRecord.camera')}
               size="xl"
               labelWeight={700}
-              icon={<GlassesIcon />}
-              state={busy === 'glasses' ? 'loading' : 'idle'}
-              disabled={!!busy && busy !== 'glasses'}
-              onPress={() => start('glasses')}
-              accessibilityHint={t('parent.preRecord.glassesHint')}
-            />
-            <ActionButton
-              label={t('parent.preRecord.camera')}
-              variant="outline"
-              size="lg"
-              labelWeight={700}
-              icon={<RecordDotIcon size={16} color={colors.danger} />}
+              icon={<RecordDotIcon size={16} color={colors.card} />}
               state={busy === 'camera' ? 'loading' : 'idle'}
               disabled={!!busy && busy !== 'camera'}
               onPress={() => start('camera')}
@@ -199,6 +189,17 @@ export function PreRecordSheet({
               disabled={!!busy && busy !== 'library'}
               onPress={() => start('library')}
               accessibilityHint={t('parent.preRecord.libraryHint')}
+            />
+            <ActionButton
+              label={t('parent.preRecord.glasses')}
+              variant="outline"
+              size="lg"
+              labelWeight={700}
+              icon={<GlassesIcon color={colors.ink} />}
+              state={busy === 'glasses' ? 'loading' : 'idle'}
+              disabled={!!busy && busy !== 'glasses'}
+              onPress={() => start('glasses')}
+              accessibilityHint={t('parent.preRecord.glassesHint')}
             />
           </View>
         </Animated.View>
