@@ -19,15 +19,16 @@ export const syncFamily = internalAction({
     let ok = false;
     if (!projectId || !projectKey) {
       console.warn("MOSS_PROJECT_ID / MOSS_PROJECT_KEY aren't set");
-    } else if (!recipes.length) {
-      ok = true;
     } else {
       try {
         const moss = new MossClient(projectId, projectKey);
         const name = mossIndexName(familyId);
         const docs = recipes.flatMap((r) => [...stepDocs(r), ...(r.memoriesOptIn ? memoryDocs(r) : [])]);
         const existing = await moss.getDocs(name).catch(() => null);
-        if (!existing) {
+        if (!docs.length) {
+          // Nothing left to find (say the only cook deleted her account): drop the index, so none of it stays searchable.
+          if (existing) await moss.deleteIndex(name);
+        } else if (!existing) {
           await moss.createIndex(name, docs, { modelId: "moss-minilm" });
         } else {
           await moss.addDocs(name, docs, { upsert: true });

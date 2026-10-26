@@ -6,6 +6,8 @@ import type { MutationCtx, QueryCtx } from "../_generated/server";
 
 export const SESSION_DAYS = 30;
 export const SIGNED_OUT = "This phone was signed out.";
+/** sessions.start for someone who deleted their account (account.deleteMe). The app matches these words. */
+export const ACCOUNT_DELETED = "This account was deleted.";
 
 export type Signed = { session: Doc<"sessions">; person: Doc<"people">; family: Doc<"families"> };
 
@@ -32,7 +34,7 @@ export async function findSession(ctx: QueryCtx, sessionToken: string): Promise<
   if (!session) return null;
   const person = await ctx.db.get("people", session.personId);
   const family = await ctx.db.get("families", session.familyId);
-  if (!person || !family || person.familyId !== family._id) return null;
+  if (!person || !family || person.familyId !== family._id || person.deletedAt !== undefined) return null;
   return { session, person, family };
 }
 

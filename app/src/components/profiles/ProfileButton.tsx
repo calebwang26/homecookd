@@ -1,7 +1,8 @@
 // "Mom ▾" on Kid-Home / Parent-Home (top right): a 48 pt cream pill with your face and name, so it
 // reads as a button (QA: Dad found the family by poking his own face; Linda didn't know her circle
 // was a button). `faceOnly` (kid Home, whose title already says "Hi, Leo") drops the name: face + ▾. Tapping it goes back to "Who's in the kitchen?" (/?pick=1) with "Back to <you>",
-// and Switch family / Sign out of this phone at its foot. Every launch opens straight to this
+// and Switch family / Sign out of this phone / Delete my account / Privacy policy / Terms of use at its
+// foot. Every launch opens straight to this
 // phone's default person (session `defaultPerson`), so the family gateway is only ever one tap
 // away, never in the way.
 // ActingAsBar is the reminder at the top of each tab while an owner's phone is lent ("Cooking as

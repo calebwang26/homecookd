@@ -87,6 +87,17 @@ HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-o
   `to: <cookId>` and `aiDrafted: true`, which keeps the label after edits.
 - `files.uploadUrl` (POST the bytes there, get `{ storageId }`; for voice notes and photos, 20 MB max)
 - `cooking.current` (what each kid is cooking now, for the cook's phone; idle 2 h ends it), `cooking.finish`
+- `account.deleteMe` → `null` ("Delete my account", Apple 5.1.1(v); Oct 25). At once: the person row becomes a blank
+  tombstone (`people.deletedAt`, name "Deleted"), every session as them ends, `sessions.start` refuses them with
+  `"This account was deleted."` (even while Supabase still lists them), a cook's recipes are deleted (gone from the
+  family and Community) and the dinners they host are cancelled. `account.purge` then deletes, in batches of 500:
+  their messages and voice notes, the questions they asked or that were about their recipes (their answer on anyone
+  else's is taken off, so it waits for an answer again), their cooking sessions, recordings with homie's prompts and
+  the glasses' live rows and frames, jobs, hosted dinners with their asks and invite opens, their dinner and swap
+  asks, then syncs Moss (an index with nothing left is deleted). `accountDeletions` keeps what Convex can't delete:
+  `supabaseProfileId`, `recipeIds`, `jobIds` (the GCS recipe folders are named after them), `uploadPaths` and
+  `mediaUrls`, for the purge of Supabase rows and GCS media; `purgedAt` once Convex is done. The app then calls
+  Supabase `POST /profiles/:id/remove` and signs the phone out (`session.deleteAccount`).
 
 **Worker → Convex** (HTTP POST with JSON, `x-worker-secret`)
 - `/worker/claim` `{}` → `204`, or `{ jobId, recipeId, familyId, supabaseFamilyId, cookId, cookName, uploadPath,

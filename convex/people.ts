@@ -43,7 +43,9 @@ export const family = query({
       .query("people")
       .withIndex("by_familyId", (q) => q.eq("familyId", family._id))
       .take(100);
-    return people.map((p) => ({ personId: p._id, supabaseProfileId: p.supabaseProfileId, name: p.name, role: p.role }));
+    return people
+      .filter((p) => p.deletedAt === undefined)
+      .map((p) => ({ personId: p._id, supabaseProfileId: p.supabaseProfileId, name: p.name, role: p.role }));
   },
 });
 
