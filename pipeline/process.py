@@ -101,6 +101,7 @@ HTTP_RETRY = types.HttpRetryOptions(attempts=4, initial_delay=10, max_delay=120,
                                     http_status_codes=[429, 500, 502, 503, 504])
 FLASH_HINT_S = 180
 MAX_WORKERS = 4  # parallel extraction calls & uploads; smaller bursts against per-minute rate limits
+MIN_AI_S = 1.0  # a clip shorter than this is skipped: Gemini fails on it (an in-app recording can end in a 0.2 s part)
 BATCH_POLL_S = 30
 BATCH_TIMEOUT_S = 24 * 3600  # uploaded files live 48 h on the File API, so they outlast the job
 BATCH_DONE = {"JOB_STATE_SUCCEEDED", "JOB_STATE_PARTIALLY_SUCCEEDED", "JOB_STATE_FAILED",
@@ -109,6 +110,10 @@ BATCH_DONE = {"JOB_STATE_SUCCEEDED", "JOB_STATE_PARTIALLY_SUCCEEDED", "JOB_STATE
 
 class ProcessError(RuntimeError):
     pass
+
+
+class NoStepsError(ProcessError):
+    """Gemini read every file and found no cooking step: nothing to write (the worker tells the cook so)."""
 
 
 def log(msg: str) -> None:
@@ -309,6 +314,13 @@ class Extraction:
         log(f"{self.tag} {how}: {len(events)} events")
         return {"events": events, "not_processed": gaps}
 
+    def skip(self) -> dict | None:
+        """A clip under MIN_AI_S: no events and no Gemini call, and not a failure (nothing can be cooked in it)."""
+        if self.clip_len >= MIN_AI_S:
+            return None
+        log(f"{self.tag} {self.clip_len:.2f} s long: too short to send, skipped")
+        return {"events": [], "not_processed": []}
+
     def cached(self, force: bool) -> dict | None:
         """The result from work/chunk_NN.raw.json, or None after clearing stale files for a fresh extraction."""
         if self.raw_path.exists() and not force:
@@ -384,7 +396,7 @@ def extract_one(client: genai.Client, cfg: dict, i: int, n: int, session: dict, 
                 out_dir: Path, media_dur: int, usage: Usage, force: bool, manifest: dict | None = None) -> dict:
     """Returns {"events": [...], "not_processed": [...]}. Never raises."""
     job = Extraction(cfg, i, n, session, ai, out_dir, media_dur, usage, manifest)
-    result = job.cached(force)
+    result = job.skip() or job.cached(force)
     if result is not None:
         return result
     uploaded: list[str] = []
@@ -455,7 +467,7 @@ def extract_batch(client: genai.Client, cfg: dict, jobs: list[Extraction], force
     """Batch-mode extraction: upload every uncached file, run ONE batch job (attempt 1, Batch API price),
     then give each file that failed or came back invalid one synchronous retry (attempt 2), exactly like
     the sync path's retry. Uploaded files are deleted at the end."""
-    results = {job.i: r for job in jobs if (r := job.cached(force)) is not None}
+    results = {job.i: r for job in jobs if (r := job.skip() or job.cached(force)) is not None}
     todo = [job for job in jobs if job.i not in results]
     if not todo:
         return [results[job.i] for job in jobs]
@@ -843,10 +855,13 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
     events = [e for r in results for e in r["events"]]
     not_processed = [g for r in results for g in r["not_processed"]]
     (work / "not_processed.json").write_text(json.dumps(not_processed, indent=2) + "\n")
-    if not events and not_processed:
+    failed = sum(1 for r in results if not r["events"] and r["not_processed"])
+    if failed == n:
         raise ProcessError("extraction failed for every AI file; see the errors above")
     if not any(e["type"] == "step" for e in events):
-        raise ProcessError(f"no steps found in any file ({len(events)} events); see work/chunk_*.raw.json")
+        if failed:
+            raise ProcessError(f"no steps in the files Gemini read, and {failed} of {n} failed; see the errors above")
+        raise NoStepsError(f"no steps found in any file ({len(events)} events); see work/chunk_*.raw.json")
 
     # Camera-roll clips can arrive out of order: put them in cooking order before the merge.
     manifest, events, not_processed = order.order_sessions(

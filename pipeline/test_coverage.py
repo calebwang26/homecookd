@@ -285,6 +285,73 @@ def test_run_end_to_end_with_a_file_boundary():
                 os.environ[k] = v
 
 
+def step_event(start: str, end: str, action: str) -> dict:
+    return {"type": "step", "start": start, "end": end, "action": action, "ingredients": None,
+            "sensory_cue": None, "quote": None, "text": None, "why": None}
+
+
+def run_extracted(ai_files: list[dict], raws: dict[int, list[dict]], fake: FakeMerge) -> tuple[Path, Exception | None]:
+    """process.run on these AI files: those in `raws` are cached extractions; any other file is sent to the fake,
+    which has no file upload, so its extraction fails (as Gemini's did on Oct 25's 0.2 s in-app part)."""
+    manifest = json.loads(json.dumps(MANIFEST))
+    manifest["sessions"][0]["ai_files"] = ai_files
+    env = {"GEMINI_API_KEY": "fake-key-for-tests", "GEMINI_MODEL": "fake-pro", "GEMINI_EXTRACT_MODEL": "",
+           "GEMINI_MEDIA_RESOLUTION": "LOW", "COVERAGE_GAP_S": "", "RECIPE_WRITER": "gemini"}
+    saved_env = {k: os.environ.get(k) for k in env}
+    os.environ.update(env)
+    tmp = Path(tempfile.mkdtemp())
+    out, error = tmp / "t-short", None
+    try:
+        with patched(process, "OUT_ROOT", tmp), patched(process, "load_dotenv", lambda *a, **k: None), \
+                patched(process.genai, "Client", fake), patched(process, "make_poster", lambda *a: None), \
+                patched(cover, "make_cover", lambda *a, **k: None):
+            (out / "work").mkdir(parents=True)
+            (out / "work" / "manifest.json").write_text(json.dumps(manifest))
+            for i, events in raws.items():
+                (out / "work" / f"chunk_{i:02d}.raw.json").write_text(json.dumps({"chunk_index": i, "events": events}))
+            try:
+                process.run("t-short", shorten=False)
+            except process.ProcessError as e:
+                error = e
+    finally:
+        for k, v in saved_env.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+    return out, error
+
+
+def test_a_tiny_last_part_is_skipped_not_failed():
+    """An in-app recording can end in a 0.2 s part (Oct 25): it is never sent to Gemini and isn't a failure."""
+    files = [{"path": "work/ai_01.mp4", "start_in_file_s": 0, "duration_s": 150.0},
+             {"path": "work/ai_02.mp4", "start_in_file_s": 150, "duration_s": 0.23}]
+    out, error = run_extracted(files, {1: [step_event("00:10", "00:40", "Chop the onions")]},
+                               FakeMerge(draft((10, 40, "Chop the onions"))))
+    assert error is None, error
+    assert json.loads((out / "work" / "not_processed.json").read_text()) == []
+    assert [s["title"] for s in json.loads((out / "recipe.json").read_text())["steps"]] == ["Chop the onions"]
+
+
+def test_a_video_with_no_cooking_says_so():
+    """Oct 25: five short in-app test clips (selfies, a laptop) had no cooking step: NoStepsError, which the
+    worker turns into a message the cook can act on, not "we'll try again"."""
+    files = [{"path": "work/ai_01.mp4", "start_in_file_s": 0, "duration_s": 6.0},
+             {"path": "work/ai_02.mp4", "start_in_file_s": 6, "duration_s": 0.23}]
+    _, error = run_extracted(files, {1: []}, FakeMerge())
+    assert isinstance(error, process.NoStepsError), error
+
+
+def test_no_steps_with_a_failed_file_is_an_error_not_no_cooking():
+    files = [{"path": "work/ai_01.mp4", "start_in_file_s": 0, "duration_s": 150.0},
+             {"path": "work/ai_02.mp4", "start_in_file_s": 150, "duration_s": 150.0}]
+    _, error = run_extracted(files, {1: []}, FakeMerge())  # file 2 fails: it might have held the steps
+    assert isinstance(error, process.ProcessError) and not isinstance(error, process.NoStepsError), error
+    assert "1 of 2 failed" in str(error), error
+    _, error = run_extracted(files, {}, FakeMerge())  # both fail
+    assert "extraction failed for every AI file" in str(error), error
+
+
 @contextlib.contextmanager
 def patched(obj, name: str, value):
     old = getattr(obj, name)
