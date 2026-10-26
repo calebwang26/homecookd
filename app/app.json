@@ -9,7 +9,7 @@
     "userInterfaceStyle": "automatic",
     "backgroundColor": "#FBF6EE",
     "ios": {
-      "icon": "./assets/expo.icon"
+      "supportsTablet": false
     },
     "android": {
       "adaptiveIcon": {
