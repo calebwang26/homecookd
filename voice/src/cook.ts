@@ -20,7 +20,7 @@ import { env } from "./env.js";
 import { AHEAD_AT_ONCE, lineCache, lineKey, type Make } from "./lineCache.js";
 import { findMoments, warm } from "./moss.js";
 import { SONIC_SAMPLE_RATE, type AudioFormat, type Voice } from "./sonic.js";
-import { listenInk, speak } from "./speech.js";
+import { listenInk, speak, speakingSeconds } from "./speech.js";
 import { stepLine } from "./stepLine.js";
 import type { Stt, SttEvents } from "./stt.js";
 import { translateQuote } from "./translate.js";
@@ -751,22 +751,25 @@ export class Cooking {
       bytes += chunk.length;
       if (this.ws.readyState === WebSocket.OPEN) this.ws.send(chunk);
     };
+    let failed = false;
     try {
-      // A kept line Sonic couldn't make (nothing played, not cut off) has had its Sonic try: Gemini alone says it,
-      // so a flip waits for at most one Sonic failure.
+      // A kept line Sonic couldn't make (nothing played, not cut off) has had its Sonic try: the backup model alone
+      // says it, so a flip waits for at most one Sonic failure.
       const played = kept ? await this.line(text).play(ctrl.signal, onChunk) : 0;
       if (!played && !ctrl.signal.aborted) {
         await this.deps.speak(text, this.audio, ctrl.signal, onChunk, this.voiceFor(kind, language), { sonic: !kept });
       }
     } catch (err) {
       if (!ctrl.signal.aborted) console.warn("sonic", (err as Error).message);
+      failed = !firstAt && !ctrl.signal.aborted;
     }
-    // The phone plays as audio arrives, so it finishes about one audio-length after the first byte.
-    const playMs = (bytes / 2 / SONIC_SAMPLE_RATE) * 1000;
+    // The phone plays as audio arrives, so it finishes about one audio-length after the first byte. A line no
+    // voice could make, the phone says in its own voice (say_end `failed`), for about as long as it takes to say.
+    const playMs = failed ? speakingSeconds(text) * 1000 : (bytes / 2 / SONIC_SAMPLE_RATE) * 1000;
     this.playingUntil = ctrl.signal.aborted ? Date.now() : (firstAt || Date.now()) + playMs;
     // Ignore our own voice coming back until a little after that.
     this.lastSpoken = { text, until: Math.max(Date.now(), this.playingUntil) + 1500 };
-    this.send({ type: "say_end", interrupted: ctrl.signal.aborted });
+    this.send({ type: "say_end", interrupted: ctrl.signal.aborted, ...(failed ? { failed: true } : {}) });
     if (this.speaking === ctrl) this.speaking = null;
   }
 

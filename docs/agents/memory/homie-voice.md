@@ -1,6 +1,6 @@
 ---
 name: homie-voice
-description: "Oct 24: homie's voice is Riya bilingual (Cartesia), asked for exactly as auditioned, sounding like a warm older cousin; Gemini TTS is the backup voice"
+description: "Oct 24: homie's voice is Riya bilingual (Cartesia), asked for exactly as auditioned, sounding like a warm older cousin; Sonic 3.5 (same voice) is the backup, the phone's voice last"
 metadata:
   type: project
 ---
@@ -24,11 +24,12 @@ mom". After the audition he said "i like riya as well".
 - Cousin tone: short sentences, a comma after the person's name ("Hi, Rajani Aaji."), at most one soft lead-in
   before a question ("Quick one..."), end punctuation, never assistant-speak ("I'm your assistant", "How can I
   help"). homie is a young woman's voice, so in Marathi or Hindi she speaks of herself in the feminine.
-- Backup voice: when Sonic fails before any audio went out (402, 429, 5xx, 401, a network error, or nothing within
-  4 s), Gemini TTS (`gemini-3.8-flash-tts`, prebuilt voice `en-in-assistant-3`, style "warm and gentle, like a caring
-  older cousin") says the same line (`voice/src/geminiTts.ts`). Once Sonic's audio has started, a failure just ends
-  the line. If Gemini fails too (or sends nothing within 6 s), the line ends with no voice and `/speak` answers 502,
-  so the app uses the phone's voice. Fake speech never calls either.
+- Backup voice (Oct 26, off Gemini): when Sonic 3.6 fails before any audio went out (429, 5xx, 401, a network
+  error, or nothing within 4 s; 402 out of credits moves to the next Cartesia key first), Sonic's previous model
+  `sonic-3.5` says the same line in the same voice, locale, pace and mood (`voice/src/sonic.ts` BACKUP_MODEL). Once
+  audio has started, a failure just ends the line. If the backup fails too, the line ends with say_end `failed` and
+  the app says it in the phone's own voice; `/speak` answers 502, so the app uses the phone's voice there too. Fake
+  speech never calls either. (Gemini TTS was the backup until Oct 26.) Caleb hasn't heard Sonic 3.5's samples yet.
 - The backup Caleb also heard and liked: **Sindhu tuned**, `07bc462a-c644-49f1-baf7-82d5599131be` with English as
   `{ locale: "en-IN", accent: "telangana" }` (same speed and moods). It was homie's voice before Oct 24.
 
