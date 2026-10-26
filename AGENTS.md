@@ -58,6 +58,9 @@ and homesick college kids. It's a family product, not a tool.
 - **Ship via PR, never straight to main.** Branch from `origin/main`, commit, `git fetch && git merge origin/main`,
   push, `gh pr create`, then check that `gh pr view --json mergeStateStatus` is `CLEAN`. Stage files by name, never
   `git add -A`: the tree holds untracked demo PNGs and Finder " 2" duplicates.
+- **Section chats (Oct 26):** each codebase section has one permanent Claude chat that owns it (Voice & homie,
+  Pipeline & recipes, Convex & accounts, App screens & recording, App Store, web & builds). Work goes to the owner of
+  the files it touches: `docs/agents/memory/section-chats.md`.
 - **The Merge Agent approves every PR.** After `gh pr create`, send the PR (number, link, branch, files touched,
   one-line summary) to the Claude Desktop session titled **Merge Agent** (Claude Code: `ListAgents`, then
   `SendMessage`; Codex or Salik: ask Caleb to pass it on). Don't merge until it approves. When PRs conflict, the
@@ -94,14 +97,14 @@ and homesick college kids. It's a family product, not a tool.
   use (a socket left open streams silence at 3 credits a second), not in testing. A PR that touches `voice/` gets a
   live run in Marathi and English before it's done (`docs/agents/memory/cartesia-credits-for-tests.md`).
 - **Off Gemini (Oct 25 on):** Gemini credits are nearly gone, so new model calls use Claude (text, images) or
-  Cartesia (audio), never Gemini (`docs/agents/memory/gemini-credits-nearly-gone.md`). Existing Gemini calls move one
-  PR at a time behind env flags, with Gemini as the rollback: `TEXT_PROVIDER=claude` (Convex env and the worker's
-  `.env`) moves the text calls, `COVER_PROVIDER=claude` (the worker's `.env`) the cover pick, `ALIGN_PROVIDER=claude`
-  the substep times, `EXTRACTOR=claude` the video extraction; the pipeline needs `GEMINI_API_KEY` only while a step
-  is still on Gemini. Muse Spark moves to Claude too. The glasses (`edible-glasses/`) stay on Gemini, and Odia is
-  hidden from the cook language picker (Caleb, Oct 26). Pick models quality-first, then the cheapest that holds it
-  the substep times, `EXTRACTOR=claude` the video extraction, `TRANSCRIPT_PROOFREAD=claude` the proofread of a
-  non-English transcript. Muse Spark moves to Claude too. Pick models quality-first, then the cheapest that holds it
+  Cartesia (audio), never Gemini (`docs/agents/memory/gemini-credits-nearly-gone.md`). Existing Gemini and Muse calls
+  move one PR at a time behind env flags, with today's model as the rollback: `TEXT_PROVIDER=claude` (Convex env and
+  the worker's `.env`) moves the text calls, `COVER_PROVIDER=claude` (the worker's `.env`) the cover pick,
+  `ALIGN_PROVIDER=claude` the substep times, `EXTRACTOR=claude` the video extraction, `TRANSCRIPT_PROOFREAD=claude`
+  the proofread of a non-English transcript, `RECIPE_WRITER=claude` (the worker) the recipe writer and
+  `WRITER_PROVIDER=claude` (Convex env) the story cards and the photo note; the pipeline needs `GEMINI_API_KEY` only
+  while a step is still on Gemini. The glasses (`edible-glasses/`) stay on Gemini, and Odia is hidden from the cook
+  language picker (Caleb, Oct 26). Pick models quality-first, then the cheapest that holds it
   (`docs/agents/memory/claude-cartesia-quality-first.md`). Flipping a flag in production is Caleb's call.
 - **Moss (search):** filled from Convex, searched from the live voice service; one index per family
   (`family-<familyId>`). Moss only finds moments: never use Moss Inference to write answers
@@ -216,6 +219,8 @@ voice/deploy.sh                                                    # Cloud Run h
 .venv/bin/python pipeline/test_extract_claude.py                    # EXTRACTOR=claude: frames + transcript -> events (fakes)
 .venv/bin/python pipeline/transcribe.py --id <id> [--language mr]   # work/transcript.json: cleaned audio, language check, proofread (real Cartesia)
 .venv/bin/python pipeline/scrub_family.py                          # dry run: old family recipe.json files to strip (--write: Caleb's OK)
+.venv/bin/python pipeline/fix_upside_down.py                      # dry run: front clips stored upside down (#79-#104); --try CLIP local; --write --clip PATH: Caleb's OK
+.venv/bin/python pipeline/test_fix_upside_down.py                 # which clips it flags + the repair (ffmpeg, no network)
 .venv/bin/python pipeline/test_account_purge.py                      # a deleted account's purge outside Convex (fakes)
 .venv/bin/python pipeline/worker.py [--once]                        # claim Convex jobs (--gcs: the old GCS job files)
 .venv/bin/python pipeline/worker.py --purge-dry-run                 # what each deleted account's purge would delete

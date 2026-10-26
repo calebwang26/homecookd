@@ -4,13 +4,15 @@ import type { Id } from "./_generated/dataModel";
 import { DEMO_LOCATION, distanceLabel, milesBetween, roundToGrid } from "./lib/geo";
 import { cleanCulture, parseMuseCard, quoteChoices, quoteTranslated } from "./lib/storyCard";
 import { family, person, recipe, type Who, world } from "./community.helpers";
-import type { Backend } from "./test.helpers";
+import { type Backend, CLAUDE, claudeReply } from "./test.helpers";
 
 beforeEach(() => vi.useFakeTimers());
 afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   delete process.env.MUSE_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.WRITER_PROVIDER;
 });
 
 test("geo rounds to the grid and labels distances", () => {
@@ -63,6 +65,32 @@ test("Muse gets the stories only when the cook opted in", async () => {
   expect(bodies.filter((b) => b.includes("every Sunday in Pune"))).toHaveLength(1);
   const card = (recipeId: Id<"recipes">) => t.run(async (ctx) => (await ctx.db.get("recipes", recipeId))?.storyCard);
   expect(await card(closed)).toMatchObject({ text: "Rajani's poha, rinsed quick and tempered with mustard seeds.", usedStories: false });
+  expect(await card(open)).toMatchObject({ usedStories: true });
+});
+
+test("with WRITER_PROVIDER=claude, Claude Sonnet writes the card: same facts, no he or she, stories only with her yes", async () => {
+  const { t, rajani } = await world();
+  process.env.WRITER_PROVIDER = "claude";
+  process.env.ANTHROPIC_API_KEY = "ant-test";
+  process.env.MUSE_API_KEY = "muse-test"; // set, and never called
+  const bodies: { model: string; system: string; fallbacks: string; messages: { content: string }[]; output_config: { format: unknown } }[] = [];
+  vi.stubGlobal("fetch", vi.fn(async (url: string, init: RequestInit) => {
+    if (String(url) !== CLAUDE) throw new Error(`unexpected fetch ${url}`);
+    bodies.push(JSON.parse(String(init.body)));
+    return claudeReply(JSON.stringify({ story: "Rajani rinses the poha quick and tempers it with mustard seeds.", culture: "Maharashtrian", quote: 0 }));
+  }));
+  const closed = await recipe(t, rajani);
+  const open = await recipe(t, rajani, { memoriesOptIn: true });
+  for (const recipeId of [closed, open]) await t.mutation(api.community.setShare, { sessionToken: rajani.sessionToken, recipeId, on: true });
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(bodies).toHaveLength(2);
+  expect(bodies.filter((b) => b.messages[0].content.includes("every Sunday in Pune"))).toHaveLength(1);
+  expect(bodies[0]).toMatchObject({ model: "claude-sonnet-5-5", fallbacks: "default" });
+  expect(bodies[0].system).toContain("never he, she, his or her");
+  expect(bodies[0].system).toContain("at most 20 words");
+  expect(bodies[0].output_config.format).toMatchObject({ type: "json_schema" });
+  const card = (recipeId: Id<"recipes">) => t.run(async (ctx) => (await ctx.db.get("recipes", recipeId))?.storyCard);
+  expect(await card(closed)).toMatchObject({ text: "Rajani rinses the poha quick and tempers it with mustard seeds.", culture: "Maharashtrian", usedStories: false });
   expect(await card(open)).toMatchObject({ usedStories: true });
 });
 

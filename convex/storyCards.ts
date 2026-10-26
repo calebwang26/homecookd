@@ -1,11 +1,12 @@
-// The Community story card (Muse Spark, labelled AI in the app): one sentence that introduces a shared
-// recipe to neighbors, a culture label, and one of the cook's own step quotes, picked by its number.
-// community.shareOn schedules writeStoryCard; the pure rules are in lib/storyCard.ts.
+// The Community story card (Muse Spark, or Claude Sonnet with WRITER_PROVIDER=claude; labelled AI in the app): one
+// sentence that introduces a shared recipe to neighbors, a culture label, and one of the cook's own step quotes,
+// picked by its number. community.shareOn schedules writeStoryCard; the pure rules are in lib/storyCard.ts.
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import { internalAction, internalMutation, internalQuery } from "./_generated/server";
 import { flagged } from "./lib/moderation";
 import { type Card, fallbackCard, parseMuseCard, plainStory, quoteChoices, STORY_WORDS, storiesFor } from "./lib/storyCard";
+import { claudeJson, WRITER_MODEL, writerOnClaude } from "./lib/textModel";
 
 const MUSE_URL = "https://api.meta.ai/v1/chat/completions";
 const MUSE_MODEL = "muse-spark-1.3"; // pinned; not a "-contributor" model, which may train on family data
@@ -66,11 +67,30 @@ const CARD_SCHEMA = {
 
 type Facts = { cookName: string; dish: string; steps: string[]; stories: string[]; quotes: string[] };
 
-/** One Muse call: the sentence, a culture label and the number of one of her quotes (lib/storyCard.ts). */
-async function museCard(f: Facts, apiKey: string): Promise<Card | null> {
+// The model aims 5 words under the 25 cleanStory allows: Claude's first cards ran to 26-27 words, which fall back
+// to the plain line. Never a he or she: the family's names only (memory homie-no-guessed-roles).
+const CARD_SYSTEM =
+  "You write a short card that introduces a family's home recipe to neighbors, as JSON. " +
+  `story: one warm sentence of at most ${STORY_WORDS - 5} words. Call the cook by name, never he, she, his or her. ` +
+  "Use only the facts given; never invent people, places, memories, history or how it tastes. No hashtags, no emoji, " +
+  "no quotation marks. culture: the food culture the dish comes from, in one to three words (like Maharashtrian, " +
+  "Filipino or Polish American), or an empty string if you can't tell. " +
+  "quote: the number of the cook's own words that best show how they cook, or 0 if none are given.";
+
+function factLines(f: Facts): string {
   const facts = [`Cook: ${f.cookName || "a family cook"}`, `Dish: ${f.dish}`, `First steps:\n${f.steps.join("\n")}`];
   if (f.stories.length) facts.push(`What the cook said while cooking:\n${f.stories.join("\n")}`);
   if (f.quotes.length) facts.push(`The cook's own words, by number:\n${f.quotes.map((q, i) => `${i + 1}. ${q}`).join("\n")}`);
+  return facts.join("\n\n");
+}
+
+/** One Claude call: the same card, held to CARD_SCHEMA. */
+async function claudeCard(f: Facts, apiKey: string): Promise<Card | null> {
+  return parseMuseCard(await claudeJson(apiKey, WRITER_MODEL, "low", CARD_SYSTEM, factLines(f), CARD_SCHEMA), f.quotes);
+}
+
+/** One Muse call: the sentence, a culture label and the number of one of her quotes (lib/storyCard.ts). */
+async function museCard(f: Facts, apiKey: string): Promise<Card | null> {
   const res = await fetch(MUSE_URL, {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -80,17 +100,8 @@ async function museCard(f: Facts, apiKey: string): Promise<Card | null> {
       max_completion_tokens: 1200, // reasoning shares this budget
       response_format: { type: "json_schema", json_schema: { name: "StoryCard", schema: CARD_SCHEMA } },
       messages: [
-        {
-          role: "system",
-          content:
-            "You write a short card that introduces a family's home recipe to neighbors, as JSON. " +
-            `story: one warm sentence, at most ${STORY_WORDS} words. Use only the facts given; never invent people, ` +
-            "places, memories, history or how it tastes. No hashtags, no emoji, no quotation marks. " +
-            "culture: the food culture the dish comes from, in one to three words (like Maharashtrian, Filipino " +
-            "or Polish American), or an empty string if you can't tell. " +
-            "quote: the number of the cook's own words that best show how they cook, or 0 if none are given.",
-        },
-        { role: "user", content: facts.join("\n\n") },
+        { role: "system", content: CARD_SYSTEM },
+        { role: "user", content: factLines(f) },
       ],
     }),
   });
@@ -105,16 +116,17 @@ export const writeStoryCard = internalAction({
   handler: async (ctx, { recipeId }) => {
     const facts = await ctx.runQuery(internal.storyCards.storyFacts, { recipeId });
     if (!facts) return null;
-    const apiKey = process.env.MUSE_API_KEY;
+    const onClaude = writerOnClaude();
+    const apiKey = onClaude ? process.env.ANTHROPIC_API_KEY : process.env.MUSE_API_KEY;
     let card: Card | null = null;
     if (apiKey) {
-      card = await museCard(facts, apiKey).catch((e) => {
-        console.error("Muse Spark story card failed", String(e).slice(0, 200));
+      card = await (onClaude ? claudeCard : museCard)(facts, apiKey).catch((e) => {
+        console.error(`${onClaude ? "Claude" : "Muse Spark"} story card failed`, String(e).slice(0, 200));
         return null;
       });
     }
     if (card && flagged(card.text, card.culture)) card = null; // the plain line instead (lib/moderation.ts)
-    // The plain line never holds a story; Muse's sentence may.
+    // The plain line never holds a story; the model's sentence may.
     const usedStories = card !== null && facts.stories.length > 0;
     const { text, culture, quote } = card ?? fallbackCard(plainStory(facts), facts.quotes);
     await ctx.runMutation(internal.storyCards.saveStoryCard, { recipeId, text, usedStories, culture, quote });

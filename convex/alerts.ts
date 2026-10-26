@@ -67,18 +67,30 @@ export async function send(title: string, text: string): Promise<void> {
   if (!url) return;
   const slack = url.includes("hooks.slack.com");
   const discord = /discord(app)?\.com\/api\/webhooks/.test(url);
-  const init: RequestInit =
-    slack || discord
-      ? {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(slack ? { text: `*${title}*\n${text}` } : { content: `**${title}**\n${text}` }),
-        }
-      : { method: "POST", headers: { Title: title, Priority: "high", Tags: "rotating_light", ...emailHeader() }, body: text };
+  if (slack || discord) {
+    const body = JSON.stringify(slack ? { text: `*${title}*\n${text}` } : { content: `**${title}**\n${text}` });
+    await post(url, { method: "POST", headers: { "Content-Type": "application/json" }, body });
+    return;
+  }
+  const push = { Title: title, Priority: "high", Tags: "rotating_light" };
+  const email = emailHeader();
+  // ntfy refuses the whole message when it won't email (e.g. "anonymous email sending is not allowed"),
+  // so a 4xx with the Email header is sent again without it: the push to the team's phones always goes.
+  const status = await post(url, { method: "POST", headers: { ...push, ...email }, body: text });
+  if (email.Email && status !== undefined && status >= 400 && status < 500) {
+    console.error(`report alert email refused (HTTP ${status}); sending the push without it`);
+    await post(url, { method: "POST", headers: push, body: text });
+  }
+}
+
+/** One webhook call: its HTTP status, or undefined when it never got one. Logs failures, never throws. */
+async function post(url: string, init: RequestInit): Promise<number | undefined> {
   try {
     const res = await fetch(url, init);
     if (!res.ok) console.error(`report alert failed: HTTP ${res.status}`);
+    return res.status;
   } catch (e) {
     console.error(`report alert failed: ${e instanceof Error ? e.message : String(e)}`);
+    return undefined;
   }
 }

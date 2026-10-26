@@ -2,8 +2,8 @@
 // Community ("Dishes near you", the map) was a hackathon-only tab: it's off (Caleb, Oct 25). Its screen and pages
 // stay in the code; to bring it back, set `href` back to undefined below.
 // Recipes is a stack (list -> dish); on a dish the tab bar fades away so the page keeps the bible
-// layout (sticky "Start cooking"), and comes back on the list. While the phone is lent, each tab
-// shows "Cooking as Grandma" at the top of its own content (ActingAsBar).
+// layout (sticky "Start cooking"), and comes back on the list. While the phone is lent, Home shows
+// "Cooking as Grandma · Back to Mom" under its title (ActingAsBar); the other tabs don't (Caleb, Oct 26).
 import { getFocusedRouteNameFromRoute } from 'expo-router/react-navigation';
 import { Tabs } from 'expo-router/js-tabs';
 import { useEffect, useState, type ComponentProps } from 'react';
