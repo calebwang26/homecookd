@@ -1026,4 +1026,10 @@ test('expo-file-system moves and copies are never left un-awaited (an upload of 
   assert.deepEqual(offenders, []);
 });
 
+test('the in-app camera keeps VisionCamera mirroring as is: isMirrored={false} stored front clips upside down', () => {
+  const card = readFileSync(join(root, 'src/components/record/CameraCard.tsx'), 'utf8');
+  // iOS mirrors front-camera frames itself; VisionCamera only corrects the rotation when mirroring is on.
+  assert.doesNotMatch(card.replace(/^\s*\/\/.*$/gm, ''), /isMirrored\s*=/, 'CameraCard must not set isMirrored on <Camera>');
+});
+
 console.log(`\n${passed} passed`);

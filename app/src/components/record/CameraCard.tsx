@@ -5,9 +5,10 @@
 // its slot into the middle of the screen (`big`), on the UI thread (Reanimated), and shrinks back after.
 // It's positioned absolutely over the slot the screen reserves for it (CAMERA_SLOT), so the plate
 // moment's dim can sit under it. Reduce Motion: it fades between the two places instead of moving.
-// The front camera's preview is a mirror (VisionCamera always mirrors it, so she sees herself as in a
-// mirror), but its video and stills are not (`isMirrored={false}`): words on a packet read the right way
-// round for the kid, and the plate photo shows the plate as it is.
+// Mirroring is VisionCamera's own default (no `isMirrored` prop): the back camera's video isn't mirrored, the
+// front camera's preview, video and stills are, like a selfie. Never pass `isMirrored={false}` for the front
+// camera: iOS mirrors front-camera frames itself, and VisionCamera only takes that over (and turns its
+// rotation to match) when mirroring is on, so `false` stored front clips upside down (Oct 25, TestFlight).
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -95,7 +96,6 @@ export function CameraCard({
           audio
           videoBitRate={cam.bitRate}
           outputOrientation="device"
-          isMirrored={false}
           resizeMode="cover"
           onInitialized={cam.onInitialized}
           onError={cam.onError}
