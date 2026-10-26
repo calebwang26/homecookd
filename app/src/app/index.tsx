@@ -174,7 +174,7 @@ export default function Profiles() {
   // --- Sheets: invite family (+), "What does your family call you?" (+ before this phone has its
   // person), and the small sheet for a face this phone can't come in as. Each keeps its content
   // while it slides away. -------------------------------------------------------------------
-  const [inviting, setInviting] = useState(false);
+  const [inviting, setInviting] = useState<{ open: boolean; role: Role }>({ open: false, role: 'cook' });
   const [self, setSelf] = useState<{ open: boolean; role: Role }>({ open: false, role: 'cook' });
   const [person, setPerson] = useState<{ open: boolean; who: Profile | null }>({ open: false, who: null });
   const [moving, setMoving] = useState<{ open: boolean; who: Profile | null; resume: boolean }>({ open: false, who: null, resume: false });
@@ -210,7 +210,7 @@ export default function Profiles() {
           },
           onPress: () => setSelf({ open: true, role }),
         }
-      : { label: t('profiles.picker.add'), a11y: { label: role === 'cook' ? t('profiles.picker.addCook') : t('profiles.picker.addFamily') }, onPress: () => setInviting(true) };
+      : { label: t('profiles.picker.add'), a11y: { label: role === 'cook' ? t('profiles.picker.addCook') : t('profiles.picker.addFamily') }, onPress: () => setInviting({ open: true, role }) };
 
   const loading = status === 'loading' && profiles.length === 0;
   const offline = status === 'offline' && profiles.length === 0;
@@ -360,8 +360,9 @@ export default function Profiles() {
       </ScrollView>
 
       <AddFamilySheet
-        visible={inviting}
-        onClose={() => setInviting(false)}
+        visible={inviting.open}
+        initialRole={inviting.role}
+        onClose={() => setInviting((s) => ({ ...s, open: false }))}
         onSwitch={(them) => enter(them, motion.sheetCloseMs + 40)}
       />
       <SelfSheet

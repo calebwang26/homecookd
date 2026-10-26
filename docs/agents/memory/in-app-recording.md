@@ -31,6 +31,13 @@ time. Before, Record opened the iOS camera and homie's socket and mic closed unt
   camera's is -90): iOS mirrors front-camera frames itself, and VisionCamera only takes that over and turns its
   rotation to match when mirroring is on. So a front clip's packet text reads reversed; if that matters, the pipeline
   can flip front clips back (it would need to know which clips were front: not sent today).
+  **Oct 26 correction (evidence from the uploads):** the upside-down clips are the real scene turned 180°, *not*
+  mirrored (shirt and lanyard text read correctly once turned), so their pixels are fine and only the rotation tag
+  is 180° off. #104 turns that tag 180° and sets the same mirroring, so a post-#104 front clip is most likely
+  upright and **not** mirrored (text reads the right way), not "mirrored like a selfie"; confirm on one build-6
+  front clip. The 6 bad clips (all from failed test jobs, no recipe) are repaired by `pipeline/fix_upside_down.py`
+  (rotation tag 90 → -90, stream copy; `--write --clip PATH` only for clips checked by eye with `--try`, since
+  a back clip filmed with the phone upside down also reads 90; Caleb's OK).
   Each recording starts on the back camera again.
 - **A camera that doesn't come back never leaves the clock ticking over nothing** (`filming.ts` `stuck`): a flip whose
   fresh camera fails too, a resume whose camera isn't ready, or a file that fails by itself: no file starts,
@@ -72,3 +79,5 @@ earpiece).
   `File.move()` and its old tmp path uploaded. Files move with `moveSync` (#77), and a note keeps each recording
   queued until Convex has its job and every file is uploaded ([[never-signed-out-by-a-crash]]).
 - Related: [[homie-guidance-only]], [[testflight-live]].
+- Oct 26, Caleb: on Record's "Start recording" sheet, Phone camera is the top, big green button (the one people
+  should be steered to), then Videos I took, then From my glasses last (`components/record/PreRecordSheet.tsx`).
