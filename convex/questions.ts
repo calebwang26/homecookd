@@ -6,7 +6,8 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server";
 import { requireCook, requireSession } from "./lib/auth";
-import { geminiTranslate } from "./lib/translate";
+import { textKeyName, textModel } from "./lib/textModel";
+import { translate } from "./lib/translate";
 import { familyRecipe } from "./recipes";
 import schema from "./schema";
 
@@ -148,15 +149,15 @@ export const translateForCook = internalAction({
   args: { questionId: v.id("questions"), language: v.string() },
   returns: v.null(),
   handler: async (ctx, { questionId, language }) => {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      console.warn("GEMINI_API_KEY isn't set; question left in English only");
+    const model = textModel();
+    if (!model) {
+      console.warn(`${textKeyName()} isn't set; question left in English only`);
       return null;
     }
     const text = await ctx.runQuery(internal.questions.textOf, { questionId });
     if (!text) return null;
     try {
-      const textForCook = (await geminiTranslate(text, apiKey, language)).slice(0, MAX_TEXT);
+      const textForCook = (await translate(text, model, language)).slice(0, MAX_TEXT);
       await ctx.runMutation(internal.questions.saveTextForCook, { questionId, textForCook });
     } catch (e) {
       console.error(e);

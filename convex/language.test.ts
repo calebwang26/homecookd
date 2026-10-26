@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
 import chili from "../data/synthetic/dad-sunday-chili.json";
-import { addRecipe, type Backend, newBackend, signIn, stubFetch } from "./test.helpers";
+import { addRecipe, type Backend, CLAUDE, claudeReply, newBackend, signIn, stubFetch } from "./test.helpers";
 
 vi.mock("@moss-js/moss", () => ({
   MossClient: class {
@@ -29,6 +29,8 @@ afterEach(() => {
   vi.useRealTimers();
   vi.unstubAllGlobals();
   delete process.env.GEMINI_API_KEY;
+  delete process.env.ANTHROPIC_API_KEY;
+  delete process.env.TEXT_PROVIDER;
 });
 
 const post = (t: Backend, path: string, body: unknown, secret: Record<string, string>) =>
@@ -232,5 +234,42 @@ test("a question for a Marathi-speaking cook gets textForCook; English cooks and
   expect(open.textForCook).toBe("कॅन मधले बीन्स चालतील का?");
 
   geminiOk = false;
+  expect((await ask("How long?")).textForCook).toBeUndefined();
+});
+
+test("with TEXT_PROVIDER=claude, Claude Opus translates the question for her, and Gemini is never called", async () => {
+  process.env.TEXT_PROVIDER = "claude";
+  process.env.ANTHROPIC_API_KEY = "ant-test";
+  process.env.GEMINI_API_KEY = "gem-test";
+  let reply = claudeReply(JSON.stringify({ translation: " कॅन मधले बीन्स चालतील का? " }));
+  const fetch = stubFetch(undefined, (url) => (url === CLAUDE ? reply : undefined));
+  const t = newBackend();
+  const dad = await signIn(t, "p-dad");
+  const leo = await signIn(t, "p-leo");
+  const recipeId = await addRecipe(t, dad.familyId, dad.personId);
+  await t.mutation(internal.seed.language, { personId: dad.personId, language: "mr" });
+  const ask = async (text: string) => {
+    const res = await (await post(t, "/voice/question", { sessionToken: leo.sessionToken, recipeId, text }, asVoice)).json();
+    await t.finishAllScheduledFunctions(vi.runAllTimers);
+    return (await t.run((ctx) => ctx.db.get("questions", res.questionId as Id<"questions">)))!;
+  };
+
+  expect((await ask("Canned beans ok?")).textForCook).toBe("कॅन मधले बीन्स चालतील का?");
+  const [, init] = fetch.mock.calls.find(([u]) => String(u) === CLAUDE)!;
+  const headers = new Headers(init?.headers);
+  expect(headers.get("authorization")).toBe("Bearer ant-test");
+  expect(headers.get("anthropic-beta")).toBe("server-side-fallback-2026-07-01");
+  const body = JSON.parse(String(init?.body));
+  expect(body).toMatchObject({
+    model: "claude-opus-5-5",
+    fallbacks: "default",
+    output_config: { effort: "medium", format: { type: "json_schema" } },
+    messages: [{ role: "user", content: "Canned beans ok?" }],
+  });
+  expect(body.system).toContain("Marathi");
+  expect(body).not.toHaveProperty("temperature");
+  expect(fetch.mock.calls.some(([u]) => String(u).startsWith("https://generativelanguage."))).toBe(false);
+
+  reply = claudeReply("", "refusal"); // a refusal (or any failure) leaves the question in English only
   expect((await ask("How long?")).textForCook).toBeUndefined();
 });

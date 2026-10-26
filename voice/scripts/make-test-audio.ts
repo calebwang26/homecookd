@@ -4,7 +4,7 @@
 // It spends Sonic credits (1 per character, about 590 for all 23), and the WAVs are committed: re-record only
 // the lines you change.
 import { writeFileSync } from "node:fs";
-import { env } from "../src/env.js";
+import { withCartesiaKey } from "../src/cartesiaKeys.js";
 import { CARTESIA_VERSION } from "../src/ink.js";
 import { KID_VOICE, LINES } from "./testLines.js";
 
@@ -12,9 +12,9 @@ const only = process.argv.slice(2);
 for (const name of only) if (!(name in LINES)) throw new Error(`no test line called ${name}`);
 for (const [name, line] of Object.entries(LINES)) {
   if (only.length && !only.includes(name)) continue;
-  const res = await fetch("https://api.cartesia.ai/tts/bytes", {
+  const res = await withCartesiaKey((key) => fetch("https://api.cartesia.ai/tts/bytes", {
     method: "POST",
-    headers: { "X-API-Key": env.cartesiaKey, "Cartesia-Version": CARTESIA_VERSION, "Content-Type": "application/json" },
+    headers: { "X-API-Key": key, "Cartesia-Version": CARTESIA_VERSION, "Content-Type": "application/json" },
     body: JSON.stringify({
       model_id: "sonic-3.6",
       transcript: line.text,
@@ -23,7 +23,7 @@ for (const [name, line] of Object.entries(LINES)) {
       // Sonic takes Marathi as a locale, never together with `language`.
       ...(line.lang === "mr" ? { locale: "mr-IN" } : { language: line.lang ?? "en" }),
     }),
-  });
+  }));
   if (!res.ok) throw new Error(`sonic ${res.status}: ${await res.text()}`);
   writeFileSync(new URL(`../test-audio/${name}.wav`, import.meta.url), Buffer.from(await res.arrayBuffer()));
   console.log(`test-audio/${name}.wav  "${line.text}"`);

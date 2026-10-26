@@ -15,8 +15,12 @@ After the merge, pipeline/coverage.py checks that every extracted step made it i
 not, the merge is retried once with them listed; anything still missing is warned about loudly at the end of
 the run and saved, with long suspicious gaps between steps, in work/coverage.json (see ensure_coverage).
 
-The merge (and its coverage retry) is the writing step: Muse Spark writes it by default, Gemini when
-RECIPE_WRITER=gemini or when Muse fails twice (pipeline/writer.py). Extraction always stays on Gemini.
+The merge (and its coverage retry) is the writing step: Muse Spark writes it by default, Gemini or Claude when
+RECIPE_WRITER says so, and when Muse fails twice, Claude with TEXT_PROVIDER=claude, else Gemini
+(pipeline/writer.py). Extraction always stays on Gemini.
+
+TEXT_PROVIDER=claude also moves the clip-order call and the short substeps to Claude (pipeline/claude.py);
+unset, they stay on Gemini.
 
 The cover (poster.jpg) is the cook's own plate photo when an in-app recording has one (the worker passes it as
 cover_photo), else the sharpest real frame of the finished dish where Gemini says it looks best, cropped to
@@ -28,7 +32,7 @@ into recipe.json, and pipeline/align.py times each substep on the recording; --n
 Env (.env; already-set variables win): GEMINI_API_KEY, GEMINI_MODEL (merge),
 GEMINI_EXTRACT_MODEL (blank = GEMINI_MODEL), GEMINI_MEDIA_RESOLUTION (default MEDIA_RESOLUTION_LOW),
 COVERAGE_GAP_S (default 120: report longer gaps between steps while the cook was still working),
-RECIPE_WRITER and MUSE_* (pipeline/writer.py).
+RECIPE_WRITER and MUSE_* (pipeline/writer.py), TEXT_PROVIDER, ANTHROPIC_API_KEY and CLAUDE_* (pipeline/claude.py).
 """
 from __future__ import annotations
 
@@ -55,7 +59,7 @@ from google import genai  # noqa: E402
 from google.genai import types  # noqa: E402
 from pydantic import ValidationError  # noqa: E402
 
-from pipeline import coverage, order, writer  # noqa: E402
+from pipeline import claude, coverage, order, writer  # noqa: E402
 from pipeline.prep import OUT_ROOT, PrepError, make_poster  # noqa: E402
 from pipeline.prompts import (COVERAGE_RETRY_SUFFIX, EXTRACT_PROMPT, EXTRACT_RETRY_SUFFIX,  # noqa: E402
                               MERGE_PROMPT, MERGE_RETRY_SUFFIX, context)
@@ -75,7 +79,16 @@ PRICES: dict[str, dict[str, tuple[float, float]]] = {
     # https://dev.meta.ai/docs/pricing-rate-limits (fetched 2026-10-23); no batch tier, so batch = standard.
     "muse-spark-1.3": {"input": (1.25, 1.25), "output": (4.25, 4.25),
                        "batch_input": (1.25, 1.25), "batch_output": (4.25, 4.25)},
+    # Claude (the claude-api skill's model table, cached 2026-10-06); Batch API is half price. Haiku's long-prompt
+    # price starts above 100k tokens (TIER_AT); Sonnet and Opus have one price.
+    "claude-haiku-5-5": {"input": (0.10, 0.50), "output": (0.50, 2.50),
+                         "batch_input": (0.05, 0.25), "batch_output": (0.25, 1.25)},
+    "claude-sonnet-5-5": {"input": (2.00, 2.00), "output": (10.00, 10.00),
+                          "batch_input": (1.00, 1.00), "batch_output": (5.00, 5.00)},
+    "claude-opus-5-5": {"input": (4.00, 4.00), "output": (20.00, 20.00),
+                        "batch_input": (2.00, 2.00), "batch_output": (10.00, 10.00)},
 }
+TIER_AT = {"claude-haiku-5-5": 100_000}  # prompt tokens above which the second price applies; else 200k
 FALLBACK_PRICE_MODEL = "gemini-3.1-pro-preview"  # unknown models are costed at the most expensive known rate
 ORDER_MODEL = "gemini-3.8-flash"  # the clip-order call; GEMINI_EXTRACT_MODEL instead when that is a Flash model
 
@@ -120,7 +133,7 @@ def estimate_cost(model: str, prompt: int, output: int, batch: bool = False) -> 
     price = PRICES.get(model)
     known = price is not None
     price = price or PRICES[FALLBACK_PRICE_MODEL]
-    tier = 1 if prompt > 200_000 else 0
+    tier = 1 if prompt > TIER_AT.get(model, 200_000) else 0
     pre = "batch_" if batch else ""
     return (prompt * price[pre + "input"][tier] + output * price[pre + "output"][tier]) / 1_000_000, known
 
@@ -541,7 +554,7 @@ def build_recipe(draft: RecipeDraft, manifest: dict) -> dict:
 NO_TITLE = "(no title yet: name the main dish shown, in a few plain words, as the recipe's title)"
 
 
-def merge(w: writer.GeminiWriter | writer.MuseWriter, manifest: dict, events: list[dict], n_files: int,
+def merge(w: writer.Writer, manifest: dict, events: list[dict], n_files: int,
           out_dir: Path, usage: Usage, extra: str = "", tag: str = "merge") -> Recipe:
     """extra is appended to the merge prompt (ensure_coverage's retry); tag labels the log lines."""
     base_prompt = MERGE_PROMPT.format(
@@ -594,7 +607,7 @@ def merge(w: writer.GeminiWriter | writer.MuseWriter, manifest: dict, events: li
     raise ProcessError(f"merge failed twice ({hint}):\n" + "\n".join(f"  - {x}" for x in errors))
 
 
-def ensure_coverage(w: writer.GeminiWriter | writer.MuseWriter, manifest: dict, events: list[dict], n_files: int,
+def ensure_coverage(w: writer.Writer, manifest: dict, events: list[dict], n_files: int,
                     out_dir: Path, usage: Usage, recipe: Recipe, gap_s: int = coverage.GAP_S) -> tuple[Recipe, dict]:
     """No step the extraction found may vanish in the merge. If the recipe leaves some out, merge once more
     with them listed and keep the answer only if it misses fewer. Never drops silently: what is still
@@ -638,25 +651,41 @@ def load_config() -> dict:
     except ValueError:
         raise ProcessError(f"GEMINI_MEDIA_RESOLUTION={res!r} is not one of {[m.value for m in types.MediaResolution]}")
     extract_model = os.environ.get("GEMINI_EXTRACT_MODEL") or model
+    try:
+        text_provider = claude.provider()
+    except claude.ClaudeError as e:
+        raise ProcessError(str(e))
     gap = os.environ.get("COVERAGE_GAP_S") or str(coverage.GAP_S)
     if not gap.strip().isdigit() or int(gap) <= 0:
         raise ProcessError(f"COVERAGE_GAP_S={gap!r} must be a whole number of seconds above 0")
     return {"merge_model": model, "extract_model": extract_model,
             "order_model": extract_model if "flash" in extract_model.lower() else ORDER_MODEL,
-            "media_resolution": media_resolution, "coverage_gap_s": int(gap)}
+            "media_resolution": media_resolution, "coverage_gap_s": int(gap), "text_provider": text_provider}
 
 
-def order_asker(client: genai.Client, model: str, usage: Usage):
+TextModel = writer.GeminiWriter | claude.ClaudeText  # .name, .model and .generate(prompt, schema, temperature)
+
+
+def text_model(cfg: dict, client: genai.Client, gemini_model: str, effort: str) -> TextModel:
+    """A text-only call's model: Claude (at `effort`) with TEXT_PROVIDER=claude, else `gemini_model`."""
+    if cfg["text_provider"] == "claude":
+        try:
+            return claude.ClaudeText(effort=effort)
+        except claude.ClaudeError as e:
+            raise ProcessError(str(e))
+    return writer.GeminiWriter(client, gemini_model)
+
+
+def order_asker(gen: TextModel, usage: Usage):
     """The clip-order model call for order.order_sessions: text only, JSON schema, one retry.
     Returns None (no model opinion) when both attempts fail."""
+    model = gen.model
+
     def ask(prompt: str, ids: list[int]) -> order.OrderAnswer | None:
         for attempt in (1, 2):
             resp, t0 = None, time.monotonic()
             try:
-                resp = client.models.generate_content(
-                    model=model, contents=prompt,
-                    config=types.GenerateContentConfig(response_mime_type="application/json",
-                                                       response_schema=order.OrderAnswer, temperature=0))
+                resp = gen.generate(prompt, order.OrderAnswer, temperature=0)
                 answer = order.parse_answer(response_text(resp), ids)
             except Exception as e:  # noqa: BLE001 - any failure: retry once, then fall back to keywords
                 call = usage.add("order", model, None, attempt, time.monotonic() - t0, resp,
@@ -692,15 +721,15 @@ def summarize(recipe: Recipe, not_processed: list[dict], usage: Usage, cover: di
             log(line)
 
 
-def write_recipe(w: writer.GeminiWriter | writer.MuseWriter, fallback: writer.GeminiWriter, manifest: dict,
+def write_recipe(w: writer.Writer, fallback: TextModel, manifest: dict,
                  events: list[dict], n: int, out_dir: Path, usage: Usage, gap_s: int) -> tuple[Recipe, dict]:
-    """The writing step: merge + coverage retry with `w`; the whole step again with Gemini if Muse fails."""
+    """The writing step: merge + coverage retry with `w`; the whole step again with `fallback` if `w` fails."""
     try:
         recipe = merge(w, manifest, events, n, out_dir, usage)
-    except (ProcessError, writer.WriterError) as e:
-        if w.name == "gemini":
+    except (ProcessError, writer.WriterError, claude.ClaudeError) as e:
+        if w.name == fallback.name:
             raise
-        log(f"[merge] WARNING: Muse could not write the recipe ({str(e)[:300]}); falling back to Gemini")
+        log(f"[merge] WARNING: {w.name} could not write the recipe ({str(e)[:300]}); falling back to {fallback.name}")
         w = fallback
         recipe = merge(w, manifest, events, n, out_dir, usage)
     if not recipe.steps:
@@ -787,11 +816,12 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
         raise ProcessError(f"{manifest_path} lists no AI files")
     client = genai.Client(api_key=os.environ["GEMINI_API_KEY"],
                           http_options=types.HttpOptions(timeout=REQUEST_TIMEOUT_MS, retry_options=HTTP_RETRY))
-    gemini_writer = writer.GeminiWriter(client, cfg["merge_model"])
     try:
+        fallback = writer.fallback(client, cfg["merge_model"])
         w = writer.choose(client, cfg["merge_model"])
     except writer.WriterError as e:
         raise ProcessError(str(e))
+    order_gen = text_model(cfg, client, cfg["order_model"], "low")
     log(f"[process {recipe_id}] {n} AI file(s); extract with {cfg['extract_model']} "
         f"({cfg['media_resolution'].value}{', Batch API' if batch else ''}), write with {w.name} {w.model}")
     report("understanding", 0.2)
@@ -820,14 +850,14 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
 
     # Camera-roll clips can arrive out of order: put them in cooking order before the merge.
     manifest, events, not_processed = order.order_sessions(
-        out_dir, manifest, events, not_processed, order_asker(client, cfg["order_model"], usage),
-        model_name=cfg["order_model"], force=force, log=log)
+        out_dir, manifest, events, not_processed, order_asker(order_gen, usage),
+        model_name=order_gen.model, force=force, log=log)
     events.sort(key=lambda e: (e["start_s"], e["end_s"]))
     (work / "not_processed.json").write_text(json.dumps(not_processed, indent=2) + "\n")
 
     report("writing", 0.7)
     t_write = time.monotonic()
-    recipe, cover = write_recipe(w, gemini_writer, manifest, events, n, out_dir, usage, cfg["coverage_gap_s"])
+    recipe, cover = write_recipe(w, fallback, manifest, events, n, out_dir, usage, cfg["coverage_gap_s"])
     log(f"[process {recipe_id}] writing took {time.monotonic() - t_write:.1f} s")
     report("writing", 0.85)
 
@@ -843,7 +873,7 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
         from pipeline.align import align_file  # here: both import this module
         from pipeline.shorten import shorten_file
         try:
-            shorten_file(recipe_path, client, cfg["merge_model"], usage)
+            shorten_file(recipe_path, text_model(cfg, client, cfg["merge_model"], "medium"), usage)
         except Exception as e:  # noqa: BLE001
             log(f"[process {recipe_id}] WARNING: no short substeps ({type(e).__name__}: {e}); "
                 f"recipe.json is fine without them. Retry: python pipeline/shorten.py --id {recipe_id} --force")
@@ -860,7 +890,7 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
 
 
 def main() -> None:
-    ap = argparse.ArgumentParser(description="Extract with Gemini, then write the recipe with Muse (or Gemini).")
+    ap = argparse.ArgumentParser(description="Extract with Gemini, then write the recipe with Muse, Gemini or Claude.")
     ap.add_argument("--id", required=True, help="recipe id (data/out/<id>/work/manifest.json must exist)")
     ap.add_argument("--force", action="store_true", help="re-extract and re-merge even if outputs exist")
     ap.add_argument("--batch", action="store_true",
@@ -872,7 +902,7 @@ def main() -> None:
                     help="skip cook mode's short substeps and their times (add them later with shorten.py, align.py)")
     ap.add_argument("--rewrite", action="store_true",
                     help="write recipe.json again from the cached extraction (no new video calls)")
-    ap.add_argument("--writer", choices=["muse", "gemini"], help="override RECIPE_WRITER for this run")
+    ap.add_argument("--writer", choices=["muse", "gemini", "claude"], help="override RECIPE_WRITER for this run")
     args = ap.parse_args()
     if args.writer:
         os.environ["RECIPE_WRITER"] = args.writer

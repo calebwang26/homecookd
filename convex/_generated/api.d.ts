@@ -32,6 +32,7 @@ import type * as lib_recipeJson from "../lib/recipeJson.js";
 import type * as lib_safety from "../lib/safety.js";
 import type * as lib_storyCard from "../lib/storyCard.js";
 import type * as lib_supabase from "../lib/supabase.js";
+import type * as lib_textModel from "../lib/textModel.js";
 import type * as lib_translate from "../lib/translate.js";
 import type * as lib_yesNo from "../lib/yesNo.js";
 import type * as live from "../live.js";
@@ -83,6 +84,7 @@ declare const fullApi: ApiFromModules<{
   "lib/safety": typeof lib_safety;
   "lib/storyCard": typeof lib_storyCard;
   "lib/supabase": typeof lib_supabase;
+  "lib/textModel": typeof lib_textModel;
   "lib/translate": typeof lib_translate;
   "lib/yesNo": typeof lib_yesNo;
   live: typeof live;

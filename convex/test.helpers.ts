@@ -19,6 +19,21 @@ export const FAMILY = {
   ],
 };
 
+export const CLAUDE = "https://api.anthropic.com/v1/messages";
+
+/** A Claude Messages API reply holding `text` (lib/textModel.ts reads its content and stop_reason). */
+export const claudeReply = (text: string, stop_reason = "end_turn") =>
+  Response.json({
+    id: "msg_test",
+    type: "message",
+    role: "assistant",
+    model: "claude-haiku-5-5",
+    content: [{ type: "text", text }],
+    stop_reason,
+    stop_sequence: null,
+    usage: { input_tokens: 10, output_tokens: 5 },
+  });
+
 type Route = (url: string, init?: RequestInit) => Response | Promise<Response> | undefined;
 
 /** Stubs global fetch. Each route may answer; Supabase GET /family answers with `family` by default. */

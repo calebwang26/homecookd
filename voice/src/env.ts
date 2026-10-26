@@ -34,6 +34,8 @@ function required(name: string): string {
 export const env = {
   port: Number(get("PORT") || 8080),
   cartesiaKey: required("CARTESIA_API_KEY"),
+  /** Used in order when the key before runs out of credits (cartesiaKeys.ts). Comma-separated. */
+  cartesiaBackupKeys: get("CARTESIA_API_KEYS_BACKUP").split(",").map((k) => k.trim()).filter(Boolean),
   anthropicKey: required("ANTHROPIC_API_KEY"),
   mossProjectId: get("MOSS_PROJECT_ID"),
   mossProjectKey: get("MOSS_PROJECT_KEY"),

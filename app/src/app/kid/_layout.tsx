@@ -1,5 +1,6 @@
-// Kid (learner) tabs: Home | Recipes | Community | Ask, on the bible's floating pill tab bar.
-// Community ("Dishes near you", the map) is one screen; its recipe and dinner pages open on the root stack.
+// Kid (learner) tabs: Home | Recipes | Ask, on the bible's floating pill tab bar.
+// Community ("Dishes near you", the map) was a hackathon-only tab: it's off (Caleb, Oct 25). Its screen and pages
+// stay in the code; to bring it back, set `href` back to undefined below.
 // Recipes is a stack (list -> dish); on a dish the tab bar fades away so the page keeps the bible
 // layout (sticky "Start cooking"), and comes back on the list. While the phone is lent, each tab
 // shows "Cooking as Grandma" at the top of its own content (ActingAsBar).
@@ -79,7 +80,7 @@ export default function KidTabs() {
       screenOptions={{ headerShown: false, sceneStyle: { backgroundColor: colors.page } }}>
       <Tabs.Screen name="home" options={{ title: 'Home', tabBarIcon: ({ color }) => <HomeIcon color={String(color)} /> }} />
       <Tabs.Screen name="recipes" options={{ title: 'Recipes', tabBarIcon: ({ color }) => <GridIcon color={String(color)} /> }} />
-      <Tabs.Screen name="community" options={{ title: 'Community', tabBarIcon: ({ color }) => <CommunityIcon color={String(color)} /> }} />
+      <Tabs.Screen name="community" options={{ href: null, title: 'Community', tabBarIcon: ({ color }) => <CommunityIcon color={String(color)} /> }} />
       <Tabs.Screen
         name="ask"
         options={{ title: 'Ask', tabBarBadge: ask || undefined, tabBarIcon: ({ color }) => <ChatIcon color={String(color)} /> }}
