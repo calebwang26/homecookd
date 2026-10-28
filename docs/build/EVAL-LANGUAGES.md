@@ -3,13 +3,22 @@
 `pipeline/eval_languages.py` runs the real pipeline (the root `.env`'s switches) on one home-cooking video per cook
 language whose YouTube subtitles were written in that language, and scores it against those captions. Videos and
 results live in `data/eval/` (gitignored, internal testing only). The clips are in `pipeline/eval_clips.json`, each
-with a backup video. Run it after any change to the models, prompts, transcription or proofreading:
+with a backup video. Run it after any change to the models, prompts, transcription or proofreading, on the
+languages that change touches:
 
 ```bash
-.venv/bin/python pipeline/eval_languages.py            # all 13 (about $4.50 and 20 minutes in 3 parallel groups)
-.venv/bin/python pipeline/eval_languages.py --only ta,ko
-.venv/bin/python pipeline/eval_languages.py --rescore  # score the cached runs again
+.venv/bin/python pipeline/eval_languages.py --only ta,ko        # the languages your change touches
+.venv/bin/python pipeline/eval_languages.py --all               # all 13: about $2.60 and an hour (cap $3)
+.venv/bin/python pipeline/eval_languages.py --rescore           # score the cached runs again: no pipeline calls
+.venv/bin/python pipeline/eval_languages.py --only ta --rerun   # a new recipe, Cartesia's transcript kept
 ```
+
+**Cheap by default (Oct 28):** each clip runs its first 5 minutes (`--minutes 10` for the old length), every Claude
+call goes through the Batch API at half price (`CLAUDE_BATCH=1`; each answer takes a minute or two, so a clip takes
+about 15 minutes and 4 run at once; `--no-batch` for the normal API), and the run stops before it would pass `--max-usd` (default $3). A clip
+that already has a recipe is only scored again; `--fresh` (the transcript too) is only for transcription changes.
+Each row's `spent_usd` is what that clip cost in this run, the judge's calls included. Results before Oct 28 are
+10-minute runs at full price, so compare a new 5-minute run with a 5-minute run.
 
 **Columns:** loops = share of Cartesia's words dropped as repeat glitches (music or noise under her voice); heard =
 share of the captions' words found in the transcript at the same time (raw, then the proofread copy; Mandarin by

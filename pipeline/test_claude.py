@@ -154,6 +154,66 @@ def test_writer_fallback_follows_text_provider():
         assert writer.choose(None, "fake-pro").model == "claude-opus-5-5"
 
 
+class FakeBatches:
+    """Stands in for client.messages.batches: the batch ends after `polls` checks (never, with None)."""
+
+    def __init__(self, answer, polls: int | None = 1, outcome: str = "succeeded"):
+        self.answer, self.polls, self.outcome, self.created, self.cancelled = answer, polls, outcome, [], []
+
+    def create(self, requests):
+        self.created.append(requests)
+        return SimpleNamespace(id="batch_1")
+
+    def retrieve(self, batch_id):
+        if self.polls is not None:
+            self.polls -= 1
+        return SimpleNamespace(processing_status="ended" if self.polls is not None and self.polls <= 0 else "in_progress")
+
+    def cancel(self, batch_id):
+        self.cancelled.append(batch_id)
+
+    def results(self, batch_id):
+        usage = SimpleNamespace(input_tokens=1000, output_tokens=300, cache_read_input_tokens=0,
+                                cache_creation_input_tokens=None)
+        msg = SimpleNamespace(content=[SimpleNamespace(type="text", text=json.dumps(self.answer))],
+                              stop_reason="end_turn", stop_details=None, usage=usage)
+        yield SimpleNamespace(custom_id="call", result=SimpleNamespace(type=self.outcome, message=msg, error="boom"))
+
+
+def test_claude_batch_sends_one_request_at_half_price():
+    fake = FakeAnthropic(ORDER)
+    fake.messages = SimpleNamespace(batches=FakeBatches(ORDER, polls=2))
+    with env(CLAUDE_BATCH="1"), patched(claude, "BATCH_POLL_S", 0):
+        gen = claude.ClaudeText("claude-sonnet-5-5", effort="low", client=fake)
+        reply = gen.generate("Which first?", order.OrderAnswer, images=[("Frame 1", b"jpeg")])
+    assert json.loads(reply.text) == ORDER and reply.batch is True and fake.calls == []  # no streamed call
+    params = fake.messages.batches.created[0][0]["params"]
+    assert params["model"] == "claude-sonnet-5-5" and params["output_config"]["effort"] == "low"
+    assert params["output_config"]["format"]["type"] == "json_schema" and "fallbacks" not in params  # Batches refuse it
+    assert [c["type"] for c in params["messages"][0]["content"]] == ["text", "image", "text"]
+    with tempfile.TemporaryDirectory() as tmp:
+        call = process.Usage(Path(tmp) / "usage.json").add("merge", "claude-sonnet-5-5", None, 1, 1.0, reply)
+    assert call["batch"] is True and call["cost_usd"] == math_close((1000 * 1.00 + 300 * 5.00) / 1e6)
+
+
+def test_a_slow_batch_is_cancelled_and_sent_the_normal_way_and_a_failed_one_raises():
+    fake = FakeAnthropic(ORDER)
+    fake.messages = SimpleNamespace(batches=FakeBatches(ORDER, polls=None))
+    with env(CLAUDE_BATCH="1", CLAUDE_BATCH_WAIT_S="0"), patched(claude, "BATCH_POLL_S", 0):
+        reply = claude.ClaudeText("claude-sonnet-5-5", client=fake).generate("p", order.OrderAnswer)
+    assert fake.messages.batches.cancelled == ["batch_1"] and len(fake.calls) == 1 and reply.batch is False
+    fake = FakeAnthropic()
+    fake.messages = SimpleNamespace(batches=FakeBatches(ORDER, outcome="errored"))
+    with env(CLAUDE_BATCH="1"), patched(claude, "BATCH_POLL_S", 0):
+        try:
+            claude.ClaudeText("claude-sonnet-5-5", client=fake).generate("p", order.OrderAnswer)
+            raise AssertionError("an errored batch request should raise")
+        except claude.ClaudeError as e:
+            assert "errored" in str(e)
+    with env(CLAUDE_BATCH=None):
+        assert claude.ClaudeText(client=FakeAnthropic()).batch is False  # the worker never batches
+
+
 def test_haiku_costs_more_above_100k_prompt_tokens():
     cost = lambda prompt, batch=False: process.estimate_cost("claude-haiku-5-5", prompt, 1_000, batch)  # noqa: E731
     assert cost(100_000) == (math_close(0.0105), True)
