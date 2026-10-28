@@ -168,11 +168,12 @@ class Usage:
         prompt = (meta.prompt_token_count or 0) if meta else 0
         cand = (meta.candidates_token_count or 0) if meta else 0
         thoughts = (meta.thoughts_token_count or 0) if meta else 0
-        cost, known = estimate_cost(model, prompt, cand + thoughts, batch=kind.endswith("-batch"))
+        batch = kind.endswith("-batch") or getattr(resp, "batch", False) is True
+        cost, known = estimate_cost(model, prompt, cand + thoughts, batch=batch)
         call = {
             "kind": kind, "model": model, "file": file, "attempt": attempt, "seconds": round(seconds, 1),
             "prompt_token_count": prompt, "candidates_token_count": cand, "thoughts_token_count": thoughts,
-            "cost_usd": round(cost, 6), "price_known": known, "ok": error is None, "error": error,
+            "cost_usd": round(cost, 6), "price_known": known, "ok": error is None, "error": error, "batch": batch,
             "at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         }
         with self.lock:

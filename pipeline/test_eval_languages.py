@@ -67,6 +67,25 @@ def test_ingredient_recall_uses_the_same_name_rules_as_the_ingredient_check() ->
     assert E.ingredient_recall([], ["salt"]) is None
 
 
+def test_a_run_uses_the_first_minutes_and_costs_half_on_the_batch_api() -> None:
+    long = {"lang": "ko", "id": "Ex7CLlsaFjA", "start_s": 0, "end_s": 600}
+    short = {"lang": "te", "id": "JI66u87aWbg", "duration_s": 180}
+    assert E.clip_minutes(long, 5) == 5 and E.clip_minutes(long, 15) == 10 and E.clip_minutes(short, 5) == 3
+    full = E.FIXED_USD + 5 * E.USD_PER_MIN
+    assert E.estimate(long, 5, batch=False) == full and E.estimate(long, 5, batch=True) == full / 2
+    assert E.recipe_id(long) == "eval-ko-ex7cllsafja-5m" and E.recipe_id(long, 10) == "eval-ko-ex7cllsafja-10m"
+
+
+def test_the_budget_starts_a_clip_only_if_it_fits_with_the_ones_running() -> None:
+    b = E.Budget(1.0)
+    assert b.start("a", 0.4) and b.start("b", 0.4)
+    assert not b.start("c", 0.4)  # 0.8 reserved: 1.2 would pass the cap
+    b.done("a", 0.1)  # cost less than its estimate
+    assert b.start("c", 0.4) and b.spent == 0.1  # 0.1 spent + 0.4 + 0.4 running
+    b.done("b", 0.5), b.done("c", 0.3)
+    assert not b.start("d", 0.2) and round(b.spent, 2) == 0.9  # 0.9 + 0.2 > 1.0
+
+
 def test_every_clip_names_its_language_video_and_captions() -> None:
     import json
     clips = json.loads(E.CLIPS.read_text())
