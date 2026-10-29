@@ -147,10 +147,12 @@ export async function linkJoin(deps: LinkDeps, b: Record<string, unknown>, ip: s
     .eq("family_id", fam.id).is("removed_at", null).order("sort");
   if (mErr) deps.dbFail("link family profiles", mErr);
 
-  // Claim the side before making anyone, so a lost log can never leave it open. The table has no unique
-  // index on share_token, so of two joins at once the earliest row wins and the other backs out.
+  // Claim the side before making anyone, so a lost log can never leave it open. The unique index
+  // signups_link_share_token (migration 20261029090000) refuses a second claim for the side; before that
+  // migration is applied, of two joins at once the earliest row wins and the other backs out.
   const claim = await db.from("signups").insert({ name, email: "", share_token: token, family_id: fam.id })
     .select("id").single();
+  if (claim.error?.code === "23505") throw new HttpError(409, LINK_USED);
   if (claim.error) deps.dbFail("link claim", claim.error);
   const claimId = claim.data.id as string;
   const unclaim = async () => {

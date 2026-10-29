@@ -151,6 +151,7 @@ t("migrations: main + cooked_photos + retention apply in timestamp order, then a
     "20261018100100_retention_cron.sql",
     "20261018100300_retention_table.sql",
     "20261018100400_retention_postcard.sql",
+    "20261029090000_link_join_unique.sql", // not retention's, but later: POST /auth/link (V2-LINKING.md §2.4)
   ]);
   const db = await database();
   for (const table of ["push_tokens", "notification_log", "cooking_now"]) {
@@ -304,4 +305,18 @@ t("migrations: table_activity runs against the real tables (a cook, a reply, a h
     ["message", MOM, LEO], // a cook's heart counts toward the table (handoff 3.2: "any message ... reaction")
   ]);
   await db.close();
+});
+
+t("link_join_unique: one signups row per dish card side; other share tokens may repeat", async () => {
+  const db = await database();
+  await db.exec(`insert into public.families (id, name, code_hash) values ('${FAM}', 'Test family', repeat('a', 64))`);
+  const add = (token: string) =>
+    db.query(`insert into public.signups (name, email, share_token, family_id) values ('Mom', '', $1, $2)`, [token, FAM]);
+  await add("link:f25009a97fe921e7818ce826:cook");
+  await add("link:f25009a97fe921e7818ce826:kid"); // the other side is its own
+  await assertRejects(() => add("link:f25009a97fe921e7818ce826:cook"), Error, "duplicate key");
+  await add("Ab3dE5gH7j"); // a recipe link brings up to 5 people (joinByShare)
+  await add("Ab3dE5gH7j");
+  const rows = await one<{ n: number }>(db, `select count(*)::int as n from public.signups`);
+  assertEquals(rows, [{ n: 4 }]);
 });

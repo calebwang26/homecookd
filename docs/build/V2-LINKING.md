@@ -192,7 +192,12 @@ to happen there. Supabase can't look inside Convex, so Convex vouches for the jo
   3. **One join per card side, enforced here too.** The join is logged in `signups` with
      `share_token = "link:<card>:<side>"`. When a row is already there, the request is refused with `409` ("This link
      already brought someone in. Ask them for an invite."). That covers a reused `jti` and a second ticket for the same
-     side. No migration: the column is free text, and `email` is `""`.
+     side. `email` is `""`.
+     - One additive migration, `20261029090000_link_join_unique.sql`, adds a unique index on
+       `signups (share_token) where share_token like 'link:%'`. Two joins at the same instant can't both get in:
+       the second insert's unique violation is the same `409`.
+     - It's applied with the api deploy that ships `link.ts`, after Apple approves (migrations first, per
+       AGENTS.md).
   4. **Only ever a new profile in the ticket's family,** with the role from `side`. It never signs into, claims or
      changes an existing profile, not even an invited one with the same name, and it never moves anyone.
      - A name already in the family gets today's "X is already in this family" (`409`), and the app asks for another

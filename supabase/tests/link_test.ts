@@ -42,7 +42,7 @@ async function sign(secret: string, payload: unknown): Promise<string> {
 type Row = Record<string, any>;
 type Tables = Record<string, Row[]>;
 
-function fakeDb(tables: Tables, afterInsert?: (table: string, row: Row) => void) {
+function fakeDb(tables: Tables, afterInsert?: (table: string, row: Row) => void, uniqueLink = false) {
   let seq = 0;
   class Query {
     private filters: ((r: Row) => boolean)[] = [];
@@ -68,6 +68,11 @@ function fakeDb(tables: Tables, afterInsert?: (table: string, row: Row) => void)
     private run() {
       const rows = (tables[this.table] ??= []);
       if (this.mode === "insert") {
+        // migration 20261029090000: a unique index on signups.share_token where it starts with 'link:'
+        const tok = this.row?.share_token;
+        if (uniqueLink && this.table === "signups" && typeof tok === "string" && tok.startsWith("link:") && rows.some((r) => r.share_token === tok)) {
+          return { data: null, error: { code: "23505", message: "duplicate key value violates unique constraint" } };
+        }
         seq++;
         const row = { id: `${this.table}-${seq}`, created_at: new Date(Date.UTC(2026, 9, 29, 12, 0, seq)).toISOString(), ...this.row };
         rows.push(row);
@@ -128,8 +133,11 @@ function world(extraPeople: Row[] = []): Tables {
   };
 }
 
-function setup(tables: Tables, opts: { secret?: string | null; now?: number; failDevice?: boolean; afterInsert?: (table: string, row: Row) => void } = {}) {
-  const db = fakeDb(tables, opts.afterInsert);
+function setup(
+  tables: Tables,
+  opts: { secret?: string | null; now?: number; failDevice?: boolean; afterInsert?: (table: string, row: Row) => void; uniqueLink?: boolean } = {},
+) {
+  const db = fakeDb(tables, opts.afterInsert, opts.uniqueLink);
   const rate: unknown[][] = [];
   const deps: LinkDeps = {
     db,
@@ -366,6 +374,28 @@ t("two joins at once: the earlier signups row wins, the later one backs out with
     },
   });
   await refused(join({ ticket: TICKET_A }), 409, LINK_USED);
+  assertEquals(tables.signups.map((s) => s.id), ["rival"]);
+  assertEquals([tables.profiles.length, tables.devices.length], [1, 0]);
+});
+
+t("with the migration's unique index, a claim that lands second is a 409 too and makes nothing", async () => {
+  const tables = world();
+  // Another phone's claim for the same side commits between this join's check and its insert.
+  const { join, deps } = setup(tables, { uniqueLink: true });
+  const realFrom = deps.db.from.bind(deps.db);
+  let signupsCalls = 0;
+  let dupInsert = false;
+  deps.db.from = ((table: string) => {
+    // 1st signups call: the "already used?" check finds nothing. 2nd: the claim's insert; the rival lands first.
+    if (table === "signups" && ++signupsCalls === 2) {
+      tables.signups.push({ id: "rival", name: "Other", email: "", share_token: `link:${CARD}:cook`, family_id: FAM });
+      dupInsert = true;
+    }
+    return realFrom(table);
+  }) as typeof deps.db.from;
+  await refused(join({ ticket: TICKET_A }), 409, LINK_USED);
+  assert(dupInsert, "the rival landed between the check and the insert");
+  assertEquals(signupsCalls, 2); // refused at the insert (23505), before the earliest-row check
   assertEquals(tables.signups.map((s) => s.id), ["rival"]);
   assertEquals([tables.profiles.length, tables.devices.length], [1, 0]);
 });
