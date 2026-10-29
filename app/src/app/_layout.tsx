@@ -159,6 +159,10 @@ function AppStack() {
       {/* Grandma cooking while homie listens; the walkie-talkie answer to a kid's question. */}
       <Stack.Screen name="recording" options={{ title: 'Recording', animation: 'slide_from_right' }} />
       <Stack.Screen name="answer/[id]" options={{ title: 'Answer', animation: 'slide_from_bottom' }} />
+      {/* A kid's ask (Phase 5): the request, her 2-minute voice recipe, then "Sent". */}
+      <Stack.Screen name="request/[id]" options={{ title: 'Request', animation: 'slide_from_bottom' }} />
+      <Stack.Screen name="request/voice" options={{ title: 'Tell how you make it', animation: 'slide_from_right' }} />
+      <Stack.Screen name="request/sent" options={{ title: 'Sent', animation: 'fade', gestureEnabled: false }} />
       {/* Month in the kitchen (RETENTION-HANDOFF 3.7): full screen, so Home doesn't peek behind the story; Close is always on screen. */}
       <Stack.Screen name="recap" options={{ title: 'Your month in the kitchen', presentation: 'fullScreenModal', animation: 'fade' }} />
       <Stack.Screen name="+not-found" options={{ title: 'homecookd', animation: 'fade' }} />

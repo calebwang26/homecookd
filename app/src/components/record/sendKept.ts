@@ -9,6 +9,7 @@
 // never goes behind her back.
 //
 //   const job = await sendKept({ ...sendDraft's input, familyId, forKids, everyone, requestFrom })
+import { askFilmed } from '@/lib/askReminders';
 import { newNoteId, type Unsent } from '@/lib/unsentLogic';
 import { dropUnsent, keepForSend, loadUnsent, putUnsent, saveUnsent } from '@/lib/unsentRecordings';
 import type { StoredJob } from '@/lib/uploads';
@@ -45,7 +46,10 @@ export async function sendKept({ familyId, forKids, everyone, requestFrom, ...in
     hello: input.hello ?? null,
   });
   try {
-    return await sendDraft({ ...input, clips, note, thumb: input.clips[0]?.asset.uri ?? null });
+    const job = await sendDraft({ ...input, clips, note, thumb: input.clips[0]?.asset.uri ?? null });
+    // Filmed for a kid's ask (Record came from its reminder): the ask is answered and its reminder stops.
+    void askFilmed().catch(() => {});
+    return job;
   } catch (e) {
     // No upload was made (sendDraft throws only before one exists): nothing new for a launch to resume.
     if (!loadUnsent().find((u) => u.recordingId === note)?.jobId) {

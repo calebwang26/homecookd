@@ -216,7 +216,7 @@ await test('cook mode: hands-free starts only after the yes, and a tap on homie 
   assert.match(cook, /consent !== 'needed' \|\| aiAsked\.current\) return;\n\s+aiAsked\.current = true;\n\s+void ensureAiConsent\(\)/);
 });
 
-await test('answering by voice, the dish photo and the Community map ask first', () => {
+await test('answering by voice, the voice recipe for a kid’s ask, the dish photo and the Community map ask first', () => {
   const rows = src('components/parent/LiveQuestions.tsx');
   before('Answer row', rows, 'ensureAiConsent()', "pathname: '/answer/[id]'");
   assert.match(rows, /mayStart=\{askAiConsentNow\}/);
@@ -224,6 +224,9 @@ await test('answering by voice, the dish photo and the Community map ask first',
   const answer = src('app/answer/[id].tsx');
   assert.match(answer, /ready: !preview && agreed &&/);
   assert.match(answer, /ensureAiConsent\(\)\.then\(\(ok\) => \{\n\s+if \(!ok\) goBack\(\);/);
+  const voiceRecipe = src('app/request/voice.tsx');
+  before('voice recipe start', body(voiceRecipe, 'const start = async'), 'ensureAiConsent()', 'rec.start()');
+  before('voice recipe send', body(voiceRecipe, 'const send = async'), 'ensureAiConsent()', 'sendVoiceRecipe(');
   before('postcard', body(src('components/postcard/PostcardStep.tsx'), 'const pick = async'), 'await ensureAiConsent()', 'sharePhoto(');
   before('map ask', body(src('components/community/ShareSteps.tsx'), 'const put = async'), 'ensureAiConsent()', 'askToShare(');
   before('map switch', body(src('components/community/ShareNearbyRow.tsx'), 'const flip = async'), 'ensureAiConsent()', 'setShare(');
