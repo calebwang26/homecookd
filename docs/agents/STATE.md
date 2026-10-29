@@ -961,3 +961,11 @@ Before starting work, compare the last commit here with `git log origin/main` to
     - `pushEvents.requested` is a marked comment in `dishAsks.create`, to become a call at merge.
   - **Tests:** 214 pass.
 - Oct 29 · (local, push freeze) · Claude (Convex & accounts) · `dishAsks.forMe` / `dishAsks.get` (DISH-ASK-SPEC.md §9): a signed-in person's claimed cards and one card by id, the web's Card plus `side`, only for the card's kid or cook (null otherwise). This unblocks the app's `/dish/[id]`. Tests: 215 pass.
+- Oct 29 · (local branch claude/phase5-cold-parents; push freeze) · Claude (App screens & recording) · `/dish/[id]`, the kid's card in the app (mockup approved by the Merge Agent; artboards 11–13).
+  - **Data:** dishAsks.get, live and soft (lib/dishCards.ts). The view logic is in lib/dishView.ts, tested by test-dish.
+  - **The kid's side** (English): his guess with "guess" tags while he waits. Once she answers, it shows her version with "Mom" tags, her clip first and her tip under its step. "filming it Sunday" shows when it's set.
+  - **Mom's side** (`side === 'cook'`): "Surprise Caleb: film it" opens /record with the dish and ask.
+  - **No Ask button** on a draft card.
+  - **"Your kid"** shows when the kid deleted their account, on the request screens and AskCard too.
+  - **Words:** dish.* in all 13 languages.
+  - **Merged locally:** claude/dish-ask bbf90ce06.

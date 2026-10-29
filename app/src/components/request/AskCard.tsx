@@ -17,7 +17,7 @@ export function openAsk(id: string) {
 
 export function AskCard({ ask }: { ask: CravingAsk }) {
   const { t } = useWords();
-  const kid = ask.kidName.trim();
+  const kid = ask.kidName.trim() || t('dish.yourKid');
   const open = () => openAsk(ask.id);
   return (
     // One button: the green "Answer Caleb" (a pressable card around it would nest a button in a button on the web).

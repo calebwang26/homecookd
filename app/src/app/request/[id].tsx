@@ -75,7 +75,7 @@ export default function RequestScreen() {
 
 function Ask({ ask }: { ask: CravingAsk }) {
   const { t } = useWords();
-  const kid = ask.kidName.trim();
+  const kid = ask.kidName.trim() || t('dish.yourKid');
   const reminder = useAskReminder(ask.id);
   const [sheet, setSheet] = useState(false);
   const failed = ask.voiceRecipe === 'failed';

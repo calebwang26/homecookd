@@ -41,7 +41,7 @@ export default function SentScreen() {
   const { t } = useWords();
   const insets = useSafeAreaInsets();
   const [sheet, setSheet] = useState(false);
-  const kid = ask?.kidName.trim() ?? '';
+  const kid = ask?.kidName.trim() || t('dish.yourKid');
   const cook = me?.name?.trim();
   const herDish = ask ? (cook ? t('request.sent.herDish', { name: cook, dish: ask.dish }) : ask.dish) : '';
 
