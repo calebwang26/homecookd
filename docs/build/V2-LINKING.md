@@ -1,7 +1,12 @@
 # v2 linking and pushes (Phase 4)
 
 The design for `docs/PRD-V2.md` §4 Phase 4: connecting the web flows to the app. Owner: the **Notifications &
-linking** chat. Status (Oct 29): design, waiting on the Merge Agent. Built on local commits only until Apple approves.
+linking** chat. Status (Oct 29): **approved** by the head agent ("Master Agent"), with the conditions written into
+§2.3–2.5 and §6. Built on local commits only until Apple approves.
+
+**No new native build is needed.** Everything here is JS on top of today's builds: expo-clipboard's paste button,
+expo-notifications and the `applinks:homecookd.app` entitlement are all in them. v2's app side ships in the reviewed
+1.1 release anyway (Caleb, Oct 29), so a native change would be fine if one turns up, but none is planned.
 
 It builds on Phase 1's contract (`docs/build/DISH-ASK-SPEC.md`, branch `claude/dish-ask`): the `dishAsks` card, its
 kid token (`/miss?k=…`) and ask token (`/a?t=…`), and the `familyId?` / `personId?` fields reserved for this phase.
@@ -15,7 +20,8 @@ kid token (`/miss?k=…`) and ask token (`/a?t=…`), and the `familyId?` / `per
 - **A card that belongs to a family is an invite to that family.** Whoever installs second joins the first person's
   family automatically, with no Apple sign-in: Convex signs a short-lived *join ticket*, and one new Supabase route,
   `POST /auth/link`, turns it into a device key, the way a family invite does today. Whoever installs first, with no
-  family to join, signs in with Apple or Google as today, and the card joins their new family.
+  family to join, signs in with Apple or Google as today, and the card joins their new family. Like a family invite,
+  each card lets **one** person per side join (one kid, one Mom), and only within 30 days of its last activity.
 - **The link gets into the app** by the web's existing copy-then-App-Store handoff and the app's Paste button, by
   `homecookd://` links, and by a universal link for the kid's card. Mom's `/a` link stays web-only (she answers there).
 - **The only Supabase change** is the new `/auth/link` route plus a shared secret. It deploys after Apple approves.
@@ -90,14 +96,23 @@ Supabase secrets too). **No morning item for Caleb.**
 | Kind | To | When | Title / body (English for v1) | Opens | Dedupe key | Who adds the `queuePush` call |
 |---|---|---|---|---|---|---|
 | `answered` | the kid (`dishAsks.personId`) | Mom's version lands, or her clips go to the kid without one; also when her "tell him now" voice note becomes the card's version (Phase 5) | "Mom answered" / "Her tomato egg, in her words. Tap to hear her." (the relation: Grandma, Dad…) | `/dish/<id>` | `answered:<cardId>:<finishedAt>` | Convex & accounts, in the merge-done mutation (`dishAsks.ts`) |
-| `craving` | the parent who sent the craving link (`dishAsks.cookId`) | a kid makes a card from her craving link (Phase 5) | "Caleb wants your braised pork" / "Tell him how you make it." ("Your kid" when there's no name) | `/request/<id>` | `craving:<cardId>` | Convex & accounts, in the Phase 5 route that makes the card |
+| `craving` | the parent who sent the craving link (`dishAsks.requestedOf`) | a kid makes a card from her craving link (Phase 5) | "Caleb wants your braised pork" / "Tell him how you make it." ("Your kid" when there's no name) | `/request/<id>` | `craving:<cardId>` | Convex & accounts, in the Phase 5 route that makes the card |
 | `joined` | the person on the card's other side | someone claims a card in the same family (§2.5) | "Caleb is on homecookd" / "You're in the same kitchen now." (to the kid: "Mom joined your kitchen") | `/dish/<id>` | `joined:<cardId>:<side>` | Notifications & linking (`links.claim`) |
 | `filmed` | the kid | a recipe is published from a recording Mom made for that card | "Mom filmed her braised pork" / "Watch her make it." | `/recipe/<recipeId>` | `filmed:<recipeId>` | Convex & accounts, in `worker.published`, when the job carries the card (Phase 5 passes `dishAskId` from the request screen to the job) |
 
-- Words for these live in one file, `convex/lib/pushWords.ts`. A web-only kid has no person, so they get no push and
-  see Mom's answer when they reopen their link (Caleb, Oct 29).
-- Not in v1: a push when Mom opens the link, and localized push words (English only for now; the cook's language is a
-  follow-up). Convex's in-app questions (voice cooking) send no push today either; that's a separate follow-up.
+- **Words** live in one file, `convex/lib/pushWords.ts`, in the recipient's language (`people.language`, the cook
+  languages the app offers; English when unset or missing). Approved Oct 29. The kid's name and the dish stay as typed.
+  Claude drafts the translations, the same way the app's words are drafted, and they're marked for a native check.
+- A web-only kid has no person, so they get no push and see Mom's answer when they reopen their link (Caleb, Oct 29).
+- **The callers:** Convex & accounts calls `internal.pushEvents.answered({ askId })` and
+  `internal.pushEvents.requested({ askId })`, and later `filmed({ askId, recipeId })`. These are internal mutations in
+  `convex/pushEvents.ts` (mine). They read the card, pick the recipient and the words, and call `queuePush`, so no
+  caller builds a title. They replace the `internal.cravings.requested` / `answered` stubs in Convex & accounts' Phase 5
+  draft.
+- **When `answered` fires:** when the merge lands a version, for Mom's web answers and for "tell him now" alike. It
+  doesn't fire when the audio arrives.
+- Not in v1: a push when Mom opens the link. Convex's in-app questions (voice cooking) send no push today either;
+  that's a separate follow-up.
 - The weekly "I make it on Sundays" reminder is a local notification owned by App screens & recording.
 
 ## 2. Claim on install
@@ -145,27 +160,47 @@ cook. That covers every order:
 | Kid stays on the web; Mom answers and installs | Mom: Apple sign-in, new family, card joins it | kid later installs from their card → Mom's family | one family |
 | Cold parent sends the craving link; kid names a dish | parent (already in the app; the card is born in her family) | kid installs from their card → parent's family | one family |
 
-Each side of a card is claimed once: one kid, one cook. A forwarded ask link that Mom already used opens the card
-with "This one's already with Mom" and joins nobody.
+**The limits** (head agent's conditions, Oct 29). Like today's family invites, where whoever taps first joins and the
+link dies:
+- **One automatic join per side, ever:** one kid and one Mom.
+  - Once a side has been claimed, `/link/open` mints no ticket for it, even if that person later leaves. It answers
+    "This one's already with Mom. Ask her for an invite."
+  - Supabase enforces the same rule on its own (§2.4), so a forwarded `/a` link can't keep letting strangers in.
+- **A join window:** a card mints tickets only within `JOIN_WINDOW_DAYS = 30` (`TODO(caleb)`) of its last real
+  activity.
+  - Activity is the ask sent (`askedAt`, or `createdAt` for a craving card) or Mom's answer (`finishedAt`).
+  - After that the recipe still opens in the app (sign in first, then the claim), but it joins nobody to a family.
+- **Ticket minting is rate-limited:** per IP (30 in 10 minutes) and per card side (5 an hour).
 
 ### 2.4 The join ticket and Supabase `/auth/link`
 
 Membership lives in Supabase (`convex/sessions.ts` reads `GET /family` with the device key), so joining a family has
 to happen there. Supabase can't look inside Convex, so Convex vouches for the join with a signed ticket:
 
-- **Ticket:** `base64url(payload) + "." + base64url(HMAC-SHA256(LINK_JOIN_SECRET, base64url(payload)))`, with payload
-  `{ v: 1, fam: <supabaseFamilyId>, role: "learner" | "cook", name: <prefill or null>, exp: <now + 10 min>, jti: <16
-  random base62> }`. Made by `convex/lib/joinTicket.ts`, checked by `supabase/functions/api/link.ts`.
+- **Ticket:** `base64url(payload) + "." + base64url(HMAC-SHA256(LINK_JOIN_SECRET, base64url(payload)))`.
+  - Payload: `{ v: 1, fam: <supabaseFamilyId>, card: <22-char card ref>, side: "kid" | "cook", name: <prefill or
+    null>, exp: <now + 10 min>, jti: <16 random base62> }`.
+  - `card` is the first 22 base62 characters of sha256(`"card:" + dishAskId`), so no Convex id leaves Convex.
+  - The role follows from `side`: `kid` → `learner`, `cook` → `cook`.
+  - Made by `convex/lib/joinTicket.ts`, checked by `supabase/functions/api/link.ts`. Both sides test against the same
+    vectors.
 - **`POST /auth/link { ticket, name?, device_label? }`** → `{ device_key, profile_id, family_name }`, rate-limited per
   IP like `/invites/accept` (20 in 10 minutes).
-  1. The signature (constant-time compare) and `exp` must hold; the family must exist.
-  2. `jti` must be new: the join is logged in `signups` with `share_token = "link:<jti>"`, and a ticket already there
-     gives `409`. No migration (the column is free text; `email` is `""`).
-  3. `name` (the app's edit, else the ticket's) is checked like every name. If it matches an invited profile with the
-     same role, that profile is claimed (`canClaim`, as `joinByShare` does); otherwise a new profile is added with the
-     ticket's role. The ticket decides the role; the app can't change it.
-  4. A device is created (`via: "invite"`, the same kind a family invite makes, so no enum change), the profile's
-     invites are revoked, and the family gets the usual quiet note ("Mom joined from Caleb's link").
+  1. **Refused with `403`:** a bad signature (constant-time compare), an unknown `v`, or `exp` passed.
+  2. **Refused with `404`:** the ticket's family doesn't exist. A family can come only from the ticket: a `family_id`
+     or anything else in the body is ignored.
+  3. **One join per card side, enforced here too.** The join is logged in `signups` with
+     `share_token = "link:<card>:<side>"`. When a row is already there, the request is refused with `409` ("This link
+     already brought someone in. Ask them for an invite."). That covers a reused `jti` and a second ticket for the same
+     side. No migration: the column is free text, and `email` is `""`.
+  4. **Only ever a new profile in the ticket's family,** with the role from `side`. It never signs into, claims or
+     changes an existing profile, not even an invited one with the same name, and it never moves anyone.
+     - A name already in the family gets today's "X is already in this family" (`409`), and the app asks for another
+       name.
+     - `name` is the app's edit, else the ticket's, checked like every name.
+  5. **Passive safety, as today's invite joins** (FEEDBACK-OCT16c B):
+     - a device is created (`via: "invite"`, the kind a family invite makes, so no enum change);
+     - the family chat gets the quiet note ("Mom joined from Caleb's link", `quietNote`).
 - **No sign-in with Apple for the second person**, the same as accepting a family invite today. The link is the
   invite. The first person in a family still signs in with Apple or Google (`startFamily` needs an identity).
 - **Secret:** `LINK_JOIN_SECRET` (32 random bytes, base64url) in the root `.env`, Convex env and Supabase secrets.
@@ -189,13 +224,21 @@ Why not the alternatives:
 - Rate limits use Phase 1's `lib/rateLimit.ts`: 30 per IP in 10 minutes, plus its bad-token limit.
 - Finds the card by kid token, else by ask token. Returns:
   `{ side: "kid" | "cook", dish, kidName, relation, familyName | null, taken: boolean, ticket: string | null, language: string | null }`.
-- `ticket` is set only when the card has a family, that side isn't claimed yet, and `LINK_JOIN_SECRET` is set.
-  `language` is the Ink code Mom answered in, so the app can pre-pick her cook language.
-- It changes nothing, so opening the link twice is harmless.
+  It also returns `joinable: "yes" | "taken" | "window" | "no_family" | "off"`, which says why there's no ticket.
+- `ticket` is set only when all of these hold:
+  - the card has a family;
+  - that side was never claimed (`kidClaimedAt` / `cookClaimedAt` unset);
+  - the card is inside the join window;
+  - the per-side rate limit holds;
+  - `LINK_JOIN_SECRET` is set.
+- `language` is the Ink code Mom answered in, so the app can pre-pick her cook language.
+- It changes nothing but the rate-limit counters, so opening the link twice is harmless.
 
 **`links.claim({ sessionToken, token })`** (mutation, signed in) → `{ dishAskId, side, sameFamily, taken }`
-- **Kid token:** sets `personId` to the caller, unless another live person already holds it (`taken`).
-- **Ask token:** sets `cookId` to the caller, with the same check. It also fills `people.relation` ("Mom") when unset.
+- **Kid token:** sets `personId` to the caller, unless another live person already holds it (`taken`). The first claim
+  also stamps `kidClaimedAt`, which is never cleared.
+- **Ask token:** sets `requestedOf` to the caller, with the same check, and stamps `cookClaimedAt`. It also fills
+  `people.relation` ("Mom") when unset. A craving card's cook side is held from the start.
 - **The card's family:** it sets `familyId` to the caller's family when unset. A different family is left alone (§2.7).
 - **The other side:** when the other side's person is in the same family, it queues `joined` for them.
 - **Idempotent:** claiming a card you already hold returns it again.
@@ -228,7 +271,7 @@ adds (`dishAsks.forMe`, `dishAsks.get`).
 
 No one is ever moved out of a family automatically. Auto-join is for people new to homecookd.
 - A signed-in kid or Mom whose family differs from the card's still claims their side. The card shows in their app
-  and the pushes reach them (both go by `personId` / `cookId`, not by family), but the two families stay separate.
+  and the pushes reach them (both go by `personId` / `requestedOf`, not by family), but the two families stay separate.
 - `/i`'s existing "Join X instead?" move flow is the manual way to merge, unchanged.
 - Signed out with an old Apple account: the screen joins by ticket by default. An "I already have an account" link
   goes to Apple sign-in, which lands in their old family, as above.
@@ -239,9 +282,11 @@ No one is ever moved out of a family automatically. Auto-join is for people new 
 - **`dishAsks`** (Convex & accounts' table) gets the fields this phase fills:
   - `familyId?`, the join target;
   - `personId?`, the kid in the app;
-  - `cookId?`, Mom in the app, or the parent who sent the craving link;
-  - `cravingId?`, set by Phase 5.
-  - Indexes: `by_family`, `by_person` (already in the spec), plus `by_cook`.
+  - `requestedOf?`, Mom in the app, or the parent who sent the craving link;
+  - `cravingId?`, set by Phase 5;
+  - `kidClaimedAt?` and `cookClaimedAt?`, the first claim of each side. They're never cleared, which is what makes it
+    one join per side.
+  - Indexes: `by_family`, `by_person` (already in the spec), plus `by_requested_of`.
 - **`pushTokens`** and **`pushLog`**: this phase's tables (§1.1).
 - **Supabase:** only the profile, device and `signups` row a link join makes, the same rows an invite join makes
   today.
@@ -253,13 +298,13 @@ No one is ever moved out of a family automatically. Auto-join is for people new 
   push step):
   - `pushLog` rows for the person.
   - **Cards where they're the kid (`personId`):**
-    - The card is the kid's ask. When a live Mom holds it (`cookId`), it stays for her, minus the kid's own parts:
+    - The card is the kid's ask. When a live Mom holds it (`requestedOf`), it stays for her, minus the kid's own parts:
       `kidName`, the kid's voice note and photos go, and `personId` is cleared.
     - Otherwise the card is deleted with its answers and files.
-  - **Cards where they're the cook (`cookId`):**
-    - Her voice is hers: her `dishAnswers` with their clips and her `version` are deleted, and `cookId` is cleared.
+  - **Cards where they're the cook (`requestedOf`):**
+    - Her voice is hers: her `dishAnswers` with their clips and her `version` are deleted, and `requestedOf` is cleared.
     - The card goes back to `asked`, so the kid can ask again.
-  - **Their craving links:** deleted. Cards already made from them stay with the kids, with `cookId` cleared.
+  - **Their craving links:** deleted. Cards already made from them stay with the kids, with `requestedOf` cleared.
   - `familyId` alone never deletes anything. One person leaving doesn't delete a family.
 - **Supabase:** `/profiles/:id/remove` already revokes devices. Link-joined people are ordinary profiles. No change.
 - **Web-only data:** cards nobody claimed keep Phase 1's rule (kept forever for now). Covering them in /privacy is
@@ -271,11 +316,11 @@ Proposed split. Each chat edits its own section. Shared files take a small, sepa
 
 | Piece | Files | Chat |
 |---|---|---|
-| Push tables, register, sender, receipts, words, prune cron | `convex/push.ts`, `convex/lib/push.ts`, `convex/lib/pushWords.ts`, `schema.ts` (two tables, own block), `crons.ts` (one line) | **Notifications & linking** |
+| Push tables, register, sender, receipts, words, the event mutations, prune cron | `convex/push.ts`, `convex/pushEvents.ts`, `convex/lib/push.ts`, `convex/lib/pushWords.ts`, `schema.ts` (two tables, own block), `crons.ts` (one line) | **Notifications & linking** |
 | Join ticket, `/link/open`, `links.claim`, `joined` push | `convex/links.ts`, `convex/lib/joinTicket.ts`, `convex/lib/linkRoutes.ts`, `http.ts` (one line) | **Notifications & linking** |
 | Push token deletion in `deleteMe` + `pushLog` purge step | `convex/account.ts` (own lines) | **Notifications & linking** (Convex & accounts reviews) |
 | Supabase `/auth/link` + deno tests | `supabase/functions/api/link.ts` (new), one route line in `index.ts`, `supabase/tests/link_test.ts` | **Notifications & linking** writes it, Convex & accounts reviews (it owns frozen `supabase/`); deploy after Apple approves |
-| `dishAsks` link fields + `by_cook`, `dishAsks.forMe` / `get`, dish purge steps, `queuePush` calls for `answered`, `craving`, `filmed`, `cravingLinks` | `convex/schema.ts`, `convex/dishAsks.ts`, Phase 5 files, `convex/worker.ts`, `convex/account.ts` | **Convex & accounts** |
+| `dishAsks` link fields (`requestedOf`, `cravingId`, `kidClaimedAt`, `cookClaimedAt`, `by_requested_of`), `dishAsks.forMe` / `get`, dish purge steps, scheduling `pushEvents.answered` / `requested` / `filmed`, `cravingLinks` | `convex/schema.ts`, `convex/dishAsks.ts`, Phase 5 files, `convex/worker.ts`, `convex/account.ts` | **Convex & accounts** |
 | App: register with Convex, unregister, link parsing, claim client, `joinByLink`, `/miss` + `/a` route screens, `join.tsx` `claim` param, `SIGNED_OUT_ROUTES` | `app/src/lib/push.ts`, `lib/auth/links.ts`, `lib/live/links.ts` (new), `lib/session.tsx` (`joinByLink`, unregister), `lib/api.ts` (`authLink`), `app/src/app/miss.tsx`, `a.tsx`, `join.tsx`, `_layout.tsx` (one line) | **Notifications & linking** (the two route screens use existing sign-in pieces; App screens & recording may restyle them) |
 | `/dish/[id]`, `/request/[id]`, the two push-permission asks, Mom's language pre-pick, the Sunday reminder | screens, `components/` | **App screens & recording** |
 | AASA entry, the two pop-ups' copy-then-App-Store handoff and "Open homecookd" links | `web/public/.well-known/apple-app-site-association`, `web/src/components/miss/`, `mom/` | **App Store, web & builds** |
@@ -305,15 +350,22 @@ Proposed split. Each chat edits its own section. Shared files take a small, sepa
     - `profile_id` is in `data`.
   - `convex/links.test.ts`:
     - the ticket round-trips and refuses a bad signature or an old one;
+    - no ticket after the side was claimed once (even after that person leaves), outside the 30-day window, or past
+      the per-side rate limit;
     - `/link/open` gives a ticket only with a family, an open side and the secret;
     - `taken` holds;
-    - claim sets `familyId`, `personId` and `cookId` and is idempotent;
+    - claim sets `familyId`, `personId` and `requestedOf` and is idempotent;
     - a different family is left alone;
     - `joined` is queued once.
   - `account.test.ts` additions: tokens are gone right after `deleteMe`, and the purge drops the push log.
-- **Supabase (`npx --yes deno@2 test … supabase/tests/`):** `link_test.ts` covers the signature, expiry, a reused `jti`
-  (409), the role coming from the ticket, claiming an invited profile, and a missing family. The check from
-  `deno check` also covers `link.ts`. The same HMAC vectors are shared with the Convex test, so both sides agree.
+- **Supabase (`npx --yes deno@2 test … supabase/tests/`):** `link_test.ts` checks each refusal:
+  - a forged signature, or a tampered payload;
+  - an expired ticket;
+  - a reused `jti`, and a second join on the same card side;
+  - a wrong or missing family, and a body that names another family;
+  - a name already in the family.
+  It also checks that a join only ever adds a new profile with the role from `side`, and that the "joined" note is
+  written. `deno check` covers `link.ts`. The same HMAC vectors are used by the Convex test, so both sides agree.
 - **App (`npx tsc --noEmit && npx expo lint`, plus a new `node scripts/test-links.mjs`):**
   - `parseInviteInput` takes `/miss?k=` and `/a?t=` (https, www, `homecookd://`, inside pasted text) and refuses
     other hosts and bare 22-character tokens;
@@ -350,14 +402,24 @@ are the facts it rests on:
 - **5.1.2(i) (AI consent):** the claim sends nothing to an AI service. The existing consent sheet still guards the AI
   features after sign-in.
 - **2.1 (Reviewer access):** the reviewer's path (the TEST family code) is untouched.
+- **1.2 (User-generated content):** a link join is as narrow as a family invite: one person per side per card, within
+  30 days. The family chat gets a note when someone joins.
 - **Reviewer notes:** add one line saying links from homecookd.app can add someone to a family with no sign-in, like
   family invites.
 
-## 7. Open questions
+## 7. Decisions and one open point
 
-1. **Push words in the cook's language.** v1 sends English. Mom's push ("Caleb wants your braised pork") reads better
-   in Marathi or Hindi for many cooks. Is it a follow-up, or in scope now? My default is a follow-up.
-2. **`/a` as a universal link later.** That only makes sense once the app has its own "answer by voice" screen. Until
-   then, Mom always answers on the web.
-3. **Family merges** (§2.7) stay manual. Is that OK for launch? Auto-merging two existing families would need a
-   decision from Caleb about whose recipes and people go where.
+**Decided by the head agent (Oct 29):**
+- Push words follow the cook's language (§1.4).
+- `/a` stays web-only for now. It becomes a universal link only once the app has its own "answer by voice" screen.
+- Family merges stay manual (§2.7).
+
+**Open: "Remove in the members list."** The head agent asked for the Oct 16 passive safety: the "<name> joined" note
+plus Remove in the members list.
+- The note fires on this path (§2.4).
+- Remove doesn't exist for other people anymore. Caleb changed it on Oct 17, "nobody removes anyone else"
+  (`app/src/components/messages/MembersSheet.tsx`, header comment), and `/profiles/:id/remove` is self-only. You can
+  remove only yourself, or the person on a phone you lent.
+- This phase doesn't bring Remove back. The one-join-per-side rule and the 30-day window keep link joins as narrow
+  as a family invite. Bringing Remove back would be a members-list change for App screens & recording, plus a
+  Supabase route change, and it's Caleb's call (`TODO(caleb)`).
