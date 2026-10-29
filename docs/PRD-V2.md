@@ -5,8 +5,8 @@ the guideline for the next version of the app. Every new screen, flow and UI/UX 
 pathway below, from how someone first discovers homecookd to becoming a loyal user. When older docs disagree
 (`docs/PRD.md`, `docs/build/SPEC.md`, the bible's flows), this wins.
 
-**Status (Oct 29):** planning only. Section 4 is a draft build plan, and section 5 lists the decisions it waits on.
-Don't build from it until Caleb approves.
+**Status (Oct 29):** Phase 1 (the Convex backend) is approved and being built, with local commits only until Apple
+approves. The other phases wait on mockups and the decisions still open in section 5.
 
 ## 1. The user pathway, with Caleb's build notes (Oct 29)
 
@@ -183,19 +183,21 @@ already beacons to `/web-events`.
 Phases 1–3 can run side by side once the route contract is written down (one short spec file, like
 `DISH-I-MISS-SPEC.md`). Phase 4 needs 1–3. Phase 5 needs 4.
 
-## 5. Open decisions for Caleb
+## 5. Decisions
 
-1. **Backend: Convex, or ship the MVP's Supabase `miss` function?** Recommended: Convex. It's where recipes,
-   questions and sessions live, the app reads it already, and new features were meant to go there. Supabase `miss`
-   is built and tested, so it's faster to turn on, but it transcribes with Gemini and would leave pushes and app
-   linking in a second system.
-2. **One repo for the website?** homecookd.app deploys from calebwang26/homecookd, while `web/` here is a copy.
-   Recommended: point the Vercel project at this repo's `web/` so every chat works in one place. That's a Vercel
-   setting only you can change.
-3. **How does a kid without the app hear that Mom answered?** Recommended: the download ask is the answer ("know
-   when Mom answers"); a kid who stays on the web sees her answer when they reopen their link. Text or email
-   alerts would need a provider and a phone number or address.
-4. **"The web is limited to one recipe":** one answered recipe per Mom on the web, one saved card per kid, or both?
-5. **Daily budget and keeping data:** the MVP defaults to 500 cards a day and keeps cards and clips 90 days.
-6. **Privacy and App Review text:** the web flow keeps voice notes and photos from people without accounts. You
+**Decided (Caleb, Oct 29):**
+- **Backend: Convex** ("sounds good, go for it"). Phase 1 is approved: port PR #40's logic to Convex, with Cartesia for
+  voice, not Gemini.
+- **One repo:** Caleb switched the Vercel project "homecookd" to build `web/` from this repo. A push to main ships
+  homecookd.app.
+- **A kid without the app** learns Mom answered by downloading it ("know when Mom answers"). A web-only kid sees her
+  answer when they reopen their link.
+- **Until Apple approves the App Store submission:** nothing is pushed to GitHub and nothing deploys to production.
+  Work is committed locally and goes up in order after approval.
+
+**Still open:**
+
+1. **"The web is limited to one recipe":** one answered recipe per Mom on the web, one saved card per kid, or both?
+2. **Daily budget and keeping data:** the MVP defaults to 500 cards a day and keeps cards and clips 90 days.
+3. **Privacy and App Review text:** the web flow keeps voice notes and photos from people without accounts. You
    said to leave legal text alone for now; it will need an update before this launches.
