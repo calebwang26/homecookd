@@ -1,0 +1,293 @@
+# Dish ask: the v2 web backend (Phase 1)
+
+The route contract for `docs/PRD-V2.md` Phase 1. With it, the web pages (Phases 2–3) can be built in parallel.
+- **Kid:** a kid on homecookd.app, with no account, names a dish and gets tonight's version. Then they send Mom an Ask
+  Mom link.
+- **Mom:** she opens the link with no account. She hears the kid's voice note, sees the kid's guess, and answers by
+  voice. Her version replaces the guess.
+
+This ports the logic of the unshipped MVP "The dish I miss" (calebwang26/homecookd PR #40,
+`docs/build/DISH-I-MISS-SPEC.md` and `supabase/functions/miss/` on `feat/dish-i-miss`): its prompts, draft and
+merge rules, recipe shapes and limits. What changes:
+- the backend is Convex, not Supabase;
+- Cartesia Ink writes down voice, not Gemini;
+- Mom's words in another language get an English translation;
+- the kid gets an editable Ask Mom message and can send a voice note to Mom;
+- Mom sees the kid's guess;
+- both tokens are stored hashed.
+
+Code: `convex/dishAsks.ts` (data), `convex/dishAskModel.ts` (the model calls), `convex/lib/dishAsk/` (types,
+validators, prompts, ported from the MVP), `convex/lib/dishAskRoutes.ts` (HTTP), `convex/lib/rateLimit.ts`.
+
+## 1. Basics
+
+- **Base URL:** the Convex site, `https://grand-dragon-649.convex.site` (`NEXT_PUBLIC_CONVEX_SITE_URL` on the web).
+  Every path starts with `/dish/`.
+- **CORS:** the same as `/invite/open` (`lib/inviteRoutes.ts`): `https://homecookd.app`, `https://www.homecookd.app`
+  and `http://localhost|127.0.0.1|[::1]` on any port. Any other `Origin` gets `403`; a request with no `Origin`
+  is allowed. Methods `POST, OPTIONS`; allowed headers `Content-Type, X-Dish-Token`.
+- **Bodies:** JSON (`{…}`, at most 64 KB), except the two file routes, which take the raw file. A JSON body is
+  read as JSON whatever its `Content-Type`, so the web may send `text/plain` with `keepalive` (no preflight).
+- **Replies:** JSON. An error is `{"error": "<a sentence a person can read>", "code": "<code>"}`.
+
+| Status | `code` | When |
+|---|---|---|
+| 400 | `bad_request` | bad or missing input (the sentence says which) |
+| 403 | `origin` | the request came from another site |
+| 404 | `not_found` | unknown token or file ("This link doesn't work anymore.") |
+| 409 | `closed` | Mom already sent her answers, or that question was already answered (see each route) |
+| 410 | `gone` | the card expired |
+| 413 | `too_large` | body or file too big |
+| 415 | `bad_type` | a file type we don't take |
+| 422 | `not_a_dish` | the words don't name a dish |
+| 422 | `words` | a filtered word in the dish, the message, a question or the AI's output |
+| 429 | `rate` | over a limit (the sentence says try again later) |
+| 502 | `model` | a model failed; retrying is safe |
+| 503 | `not_set_up` | `ANTHROPIC_API_KEY` (or `CARTESIA_API_KEY` for a voice note) isn't set |
+
+## 2. Tokens
+
+- **Kid token:** 22 random base62 characters, made with `crypto.getRandomValues`. Only its sha256 is stored
+  (`kidTokenHash`). It reads and edits the card. The kid keeps it in the page URL (`/miss?k=…`) and in
+  localStorage.
+- **Ask token:** 22 base62 characters made from the kid token: the first 22 base62 characters of
+  sha256(`"ask:" + kidToken`). Only its own sha256 is stored (`askTokenHash`).
+  - The server can rebuild the ask link from the kid token, so the kid can always re-send it.
+  - Nobody can get the kid token from it. It only lets someone see the guess and answer the asked questions.
+- **Where tokens travel:**
+  - In JSON routes, as `kidToken` / `askToken` in the body.
+  - In the raw-file route, as the `X-Dish-Token` header. Tokens never go in a query string.
+- **File ids:** `fileId` is 22 base62 characters that name one uploaded file. Only its sha256 is stored.
+- No route takes or returns a Convex document id.
+- **Bad tokens are rate limited:** 20 unknown tokens per IP in 10 minutes, then `429`.
+
+## 3. Shapes
+
+The recipe shapes are the MVP's (`convex/lib/dishAsk/types.ts`, ported from `supabase/functions/miss/types.ts`),
+with one field added: `isGuess` on each ingredient and line.
+
+```ts
+type Relation = "mom" | "dad" | "grandma" | "grandpa" | "auntie" | "uncle";
+type QuestionId = "q1" | "q2" | "q3" | "q4" | "q5" | "q6"; // q1–q3 suggested with the card, q4–q6 the kid's own
+type Status = "stated" | "guessed" | "unknown" | "mom";   // where a value came from (see below)
+
+type Ingredient = {
+  name: string;       // "tomatoes, in wedges"
+  amount: string;     // the estimate: "4" | "~3 medium" | "" (unknown) | "two big spoons" (Mom's words)
+  status: Status;
+  isGuess: boolean;   // status is "guessed" or "unknown": show it as the kid's guess ("Caleb thinks…")
+  ask: QuestionId | null;  // the question that would settle it
+  clip: QuestionId | null; // the answer whose clip backs it (Mom's version)
+};
+type Line = { text: string; detail: string | null; status: Status; isGuess: boolean; ask: QuestionId | null; clip: QuestionId | null };
+type Step = { title: string; lines: Line[]; uses: number[]; tip: { words: string; english: string | null; clip: QuestionId } | null };
+type Question = { id: QuestionId; text: string };
+type Recipe = {
+  dish: string;            // "tomato egg"
+  servings: string | null; // always "1": tonight's version
+  time: string | null;     // "~20 min"
+  cost: string | null;     // "~$3" or null
+  ingredients: Ingredient[]; steps: Step[];
+  questions: Question[];   // exactly 3 suggestions, q1–q3
+};
+```
+
+The `Status` values:
+- `stated`: the kid's words, or a photo or voice note, gave it.
+- `guessed`: our estimate. It starts with `~`.
+- `unknown`: nobody knows it yet. `amount` is `""`.
+- `mom`: her answer settled it (only in her version).
+
+`**bold**` marks amounts, heat and times in a line, and the cue in "Ready when **…**".
+
+```ts
+type Card = {                 // what the kid's page gets
+  dish: string;               // the dish as the kid typed it, trimmed
+  relation: Relation;         // who they're asking (default "mom")
+  kidName: string | null;     // shown to Mom ("Caleb thinks…"), at most 40 characters
+  status: "draft" | "asked" | "answered";
+  guess: Recipe;              // tonight's version, the kid's guess
+  version: Recipe | null;     // Mom's version, once her answers are merged
+  answers: Answer[];          // her answers behind the version (empty until then)
+  asked: Question[];          // what Mom is asked, in order (0–6)
+  message: string;            // the Ask Mom message, in the kid's voice, editable
+  kidVoiceUrl: string | null; // the kid's voice note to Mom (a Convex storage URL)
+  photoUrls: string[];        // the photos the card was made from (0–3)
+  askUrl: string;             // https://homecookd.app/a?t=<ask token>
+  askedAt: number | null; openedAt: number | null; finishedAt: number | null; // ms since epoch
+  createdAt: number; expiresAt: number;
+};
+type Answer = { id: QuestionId; words: string; english: string | null; audioUrl: string | null; durationS: number };
+
+type Ask = {                  // what Mom's page gets; never the kid token
+  dish: string; relation: Relation; kidName: string | null;
+  message: string; kidVoiceUrl: string | null;
+  guess: Recipe;              // the kid's guess, shown as theirs
+  questions: Question[];      // asked and not answered yet, in order
+  answered: QuestionId[];
+  finished: boolean;          // she pressed Send (or every asked question is answered and merged)
+  version: Recipe | null;     // her version once merged (for the fill-in animation); null while it's being written
+  merging: boolean;           // true from Send until her version lands (about 10–20 s) or fails
+};
+```
+
+## 4. Routes
+
+### Files (kid photos and voice notes)
+
+**`POST /dish/files?kind=photo|voice`**: the raw file as the body, with its `Content-Type`.
+- Checked before anything is stored:
+  - `Content-Length` and the bytes read;
+  - the type.
+- `photo`: `image/jpeg`, `image/png` or `image/webp`, at most 5 MB. The web resizes to 1600 px JPEG first.
+- `voice`: `audio/webm`, `audio/ogg`, `audio/mp4`, `audio/m4a`, `audio/x-m4a`, `audio/aac`, `audio/mpeg`,
+  `audio/wav`, at most 3 MB. That covers Chrome's and Firefox's MediaRecorder (webm/ogg Opus) and Safari and iPhone
+  (mp4/AAC). Codec parameters after `;` are ignored.
+- Returns `201 {fileId, kind, contentType, size}`.
+- Errors: `413` too big, `415` wrong type, `429` (30 files per IP in 10 minutes).
+- A file not attached to a card within **1 hour** is deleted (a cron, `dishAsks.dropOrphanFiles`).
+- A file can be attached once.
+
+### Kid
+
+**`POST /dish/cards`** `{dish, relation?, kidName?, photos?: fileId[], voiceNote?: fileId}` → `201 {kidToken, card}`
+- `dish`: 2–200 characters, trimmed. It may be empty when there's a photo or voice note.
+- `relation` defaults to `mom`. `kidName` is at most 40 characters.
+- At most 3 `photos`, of kind `photo`. `voiceNote` must be of kind `voice`: it's what the kid says about the dish
+  ("she puts a lot of ketchup").
+- Order of work:
+  1. The word filter runs on `dish` and `kidName`.
+  2. The voice note is written down by Ink, in English.
+  3. Claude writes the guess (the MVP's draft prompt and rules: tonight's version, one serving, about 20 minutes,
+     about $N). The photos go to Claude as images.
+  4. The filter runs on the guess.
+- About 4–8 s; the web waits up to 60 s.
+- `message` starts as "<Relation>, how do you make your <dish>? I'm trying to make it here." (relation in its
+  usual form: "Mom", "Grandma"…). The kid edits it with `/dish/cards/update`.
+- Errors: `422 not_a_dish`, `422 words`, `429`, `502`, `503`.
+- **Limits per IP:** 6 cards in 10 minutes and 30 a day.
+- **Site-wide limit:** 500 cards a day (`TODO(caleb)`: the daily budget). Over it, every IP gets `429` and an
+  `ALERT dish cards` line is logged.
+
+**`POST /dish/cards/get`** `{kidToken}` → `{card}`
+- It also starts a merge that's due: a failed try is retried, at least 3 minutes after the last one.
+
+**`POST /dish/cards/update`** `{kidToken, relation?, kidName?, message?, voiceNote?: fileId | null}` → `{card}`
+- `message`: 1–500 characters after trimming, word-filtered. This is the Ask Mom text.
+- `voiceNote`: the kid's voice note *to Mom*. It is played first on her page and isn't sent to any model; `null`
+  removes it. A new one replaces and deletes the old file.
+- A voice note for Mom may be at most 60 s. The web enforces this; the server only checks the 3 MB cap.
+- Once Mom has finished, `message` and `voiceNote` give `409 closed`.
+
+**`POST /dish/cards/ask`** `{kidToken, questions: [{id?, text}]}` → `{card}`
+- What Mom is asked. These are the MVP's rules (`/cards/ask`), unchanged:
+  - her answered questions stay first;
+  - at most 3 open at a time and 6 in all;
+  - `q1`–`q3` keep their gap link even when reworded;
+  - the kid's own questions get `q4`–`q6`;
+  - text is 3–120 characters and word-filtered;
+  - `409 closed` when everything given was already answered.
+- If Mom had finished, this reopens her link on the new questions.
+- Rate: 30 per IP in 10 minutes.
+
+**`POST /dish/cards/sent`** `{kidToken, via: "copy"|"sms"|"instagram"|"whatsapp"|"more"}` → `{card}`
+- Marks the card asked: `askedAt` the first time, and `draft` → `asked`.
+- The web calls it when the share sheet opens a channel.
+- Card statuses:
+  - `draft` until sent;
+  - `asked` while Mom's link is open or her answers are being merged;
+  - `answered` once there's a version, or once no version will come (her clips are then in `answers` with
+    `words: ""`).
+
+### Mom
+
+**`POST /dish/ask/peek`** `{askToken}` → `{ask}`
+- Sets `openedAt` the first time.
+- Mom's page polls it every 2 s after Send until `version` is set or `merging` is false.
+
+**`POST /dish/ask/answer?q=<id>&lang=<code>&durationS=<n>`**: header `X-Dish-Token: <askToken>`, body: the raw
+audio. Returns `{ask}`.
+- One answer to one asked question. The same audio types as voice files, at most 5 MB and 120 s (125 s is accepted
+  and saved as 120).
+- `lang` is the language she speaks, for Ink. It defaults to `en` and is one of: `en hi mr gu ta te pa ur bn zh ko
+  es tl ar pt vi`. Mom's page asks once and remembers.
+- A re-record replaces the answer and deletes the old clip.
+- Errors:
+  - `400 "That question wasn't asked."`;
+  - `409 closed` after Send;
+  - `429` (30 per IP in 10 minutes).
+- Ink writes it down, and Claude translates it into English when `lang` isn't `en`. Both run in the background:
+  Send never waits for them.
+
+**`POST /dish/ask/finish`** `{askToken}` → `{ask}` with `finished: true, merging: true`. This is the "Sent to <kid>"
+moment.
+- The merge runs after the reply:
+  1. Ink writes down any answer it hasn't yet.
+  2. Claude translates.
+  3. Claude writes her version with the MVP's merge prompt and rules: hers only when it's in her words, removals
+     only when she says no, tips verbatim.
+  4. The word filter runs on the output.
+- About 10–20 s.
+- With nothing answered, it changes nothing (`finished: false`).
+- Tries: at most 5, at least 3 minutes apart.
+- When no version will come (no words heard, or every try failed), `merging` turns false and her clips go to the
+  kid as they are.
+
+## 5. Data (`convex/schema.ts`)
+
+**`dishAsks`**: one card.
+- **Tokens:** `kidTokenHash`, `askTokenHash`.
+- **What the kid gave:** `dish`, `relation`, `kidName?`, `photos: Id<"_storage">[]`,
+  `kidVoiceNote?: Id<"_storage">` (to Mom).
+- **The guess:** `guess` (Recipe), `message`, `asked: Question[]`.
+- **Mom's side:** `version?` (Recipe), `status`.
+- **Merge state:** `mergeTries`, `mergeStartedAt?`, `mergedAt?`.
+- **Funnel times:** `askedAt?`, `askedVia?`, `openedAt?`, `finishedAt?`, `questionsAt?`, `genMs`, `createdAt`,
+  `expiresAt`.
+- **Who:** `ipKey` (an HMAC of the IP, for the limits), plus `familyId?` and `personId?` for when someone signs in
+  (Phase 4).
+- **Indexes:** `by_kid_token`, `by_ask_token`, `by_expires`, `by_family`, `by_person`.
+
+**`dishAnswers`**: one of Mom's answers.
+- `askId`, `questionId`, `audio: Id<"_storage">`, `durationS`, `language`.
+- `words?` (Ink's transcript), `english?` (the translation), `merged`, `createdAt`.
+- Index `by_ask_question`.
+
+**`dishFiles`**: an upload.
+- `fileIdHash`, `storageId`, `kind`, `contentType`, `size`, `ipKey`, `askId?` (set once attached), `createdAt`.
+- Indexes `by_file_id`, `by_unattached_created`.
+
+**`rateHits`**: the limiter.
+- `key` (bucket + HMAC of the IP), `windowStart`, `count`.
+- Index `by_key_window`. Old rows are pruned by a cron.
+
+**Keeping data:**
+- `expiresAt` is 90 days after creation (`TODO(caleb)`: how long to keep).
+- A daily cron deletes expired cards, their answers and every file they hold.
+- Account deletion (`convex/account.ts`) deletes the cards whose `familyId` or `personId` is the deleted family or
+  person, and their answers and files.
+
+**IPs:** never stored as-is. Each is hashed as HMAC-SHA256(`DISH_IP_SALT`, ip), with the IP taken from
+`X-Forwarded-For`'s first entry.
+
+## 6. Models
+
+- **Claude** writes the guess and Mom's version, through `@anthropic-ai/sdk` with structured outputs.
+  - The model is `claude-haiku-5-5` (as the MVP), and `DISH_MODEL` overrides it.
+  - The guess runs with thinking off. The merge thinks, as the MVP found it needs to.
+  - Each answer is checked by the ported validators and retried once with the errors.
+- **Cartesia Ink** (`inkTranscribeWithKeys`) writes down the kid's voice note (English) and Mom's answers (in
+  `lang`). No Gemini.
+- **Translation:** `lib/translate.ts` (Claude) turns Mom's words into English when `lang` isn't `en`. Her own words
+  are kept and shown first.
+- **Words as data:** the dish name, the kid's words, the message and Mom's transcripts go into prompts as quoted
+  data, never as instructions (as in `lib/yesNo.ts`).
+
+## 7. Env (Convex)
+
+| Name | What | Needed for |
+|---|---|---|
+| `ANTHROPIC_API_KEY` | already set | cards, merges, translation |
+| `CARTESIA_API_KEY` (+ `CARTESIA_API_KEYS_BACKUP`) | already set | voice notes, Mom's answers |
+| `DISH_IP_SALT` | new, any long random string | the IP hash; without it the limits still work with a fixed salt, and a warning is logged |
+| `DISH_MODEL` | optional | overrides `claude-haiku-5-5` |
