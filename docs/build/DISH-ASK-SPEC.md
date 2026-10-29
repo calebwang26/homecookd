@@ -133,6 +133,13 @@ type Ask = {                  // what Mom's page gets; never the kid token
   dish: string; relation: Relation; kidName: string | null;
   message: string; kidVoiceUrl: string | null;
   guess: Recipe;              // the kid's guess, shown as theirs
+  inLang: {                   // the same in the page's language (peek's `lang`), or null
+    lang: string;
+    guess: Recipe;            // names, amounts, titles, lines, details and questions translated; ids, statuses,
+                              // `uses` and ** marks unchanged
+    questions: Question[];    // the asked questions, translated
+    message: string;          // the kid's message, translated
+  } | null;
   photoUrls: string[];        // the kid's photos (0–3)
   questions: Question[];      // asked and not answered yet, in order
   answered: QuestionId[];
@@ -216,8 +223,20 @@ type Ask = {                  // what Mom's page gets; never the kid token
 
 ### Mom
 
-**`POST /dish/ask/peek`** `{askToken}` → `{ask}`
+**`POST /dish/ask/peek`** `{askToken, lang?}` → `{ask}`
 - Sets `openedAt` the first time.
+- **`lang`** is the language Mom's page is shown in: her phone's language, which she can change (Caleb's pick).
+  It's one of the answer languages (§4 `/dish/ask/answer`).
+  - In any language but `en`, `inLang` carries the guess, the asked questions and the kid's message in that
+    language, so she can read the guess and correct it. `guess`, `questions` and `message` stay in English
+    alongside.
+  - Each card is translated once per language (Claude, `TRANSLATE_MODEL`) and cached. It's translated again only
+    when the asked questions or the message change. It counts against the daily budget like Mom's answers (§6),
+    with the same $1 overage. Past that, or when translation fails, `inLang` is null and the page shows English.
+  - The first peek in a new language takes about 5–15 s. The page shows English at once with `lang` left out, then
+    asks again with `lang`.
+  - `en`, an unknown code, or no `lang` means no translation (`inLang: null`).
+  - The kid's own card always stays in English.
 - Mom's page polls it every 2 s after Send until `version` is set or `merging` is false.
 
 **`POST /dish/ask/answer?q=<id>&lang=<code>&durationS=<n>`**: header `X-Dish-Token: <askToken>`, body: the raw
