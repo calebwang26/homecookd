@@ -136,18 +136,11 @@ function VoiceNote({ token, card, onCard }: { token: string; card: Card; onCard:
   const { t } = useLang();
   const [phase, setPhase] = useState<VoicePhase>('idle');
   const [tap, setTap] = useState(false);
-  const [duration, setDuration] = useState<number | null>(null);
   const press = useRef<{ t0: number; up: boolean } | null>(null);
   const audio = useAudio();
   const rec = useRecorder(() => void stop(), VOICE_MAX_MS);
 
-  useEffect(() => {
-    if (!card.kidVoiceUrl || duration !== null) return;
-    const a = new Audio();
-    a.preload = 'metadata';
-    a.onloadedmetadata = () => Number.isFinite(a.duration) && setDuration(a.duration);
-    a.src = card.kidVoiceUrl;
-  }, [card.kidVoiceUrl, duration]);
+  const duration = card.kidVoiceS;
 
   const start = async () => {
     setPhase('arming');
@@ -163,8 +156,9 @@ function VoiceNote({ token, card, onCard }: { token: string; card: Card; onCard:
     if (!clip || clip.durationS < 0.8) return setPhase('short');
     try {
       const fileId = await uploadFile('voice', clip.blob, clip.contentType);
-      onCard(await updateCard(token, { voiceNote: fileId }));
-      setDuration(clip.durationS);
+      // Its length as measured here: Chrome's webm often carries none (spec: over 0, at most 60 s).
+      const voiceNoteS = Math.min(60, Math.max(0.1, Math.round(clip.durationS * 10) / 10));
+      onCard(await updateCard(token, { voiceNote: fileId, voiceNoteS }));
       setPhase('idle');
     } catch {
       setPhase('failed');
@@ -213,7 +207,7 @@ function VoiceNote({ token, card, onCard }: { token: string; card: Card; onCard:
         <span className={s.voiceWave}>
           <Wave progress={playing ? audio.progress : 1} bars={20} />
         </span>
-        {duration !== null && <span className={s.voiceTime}>{clock(duration)}</span>}
+        {duration != null && <span className={s.voiceTime}>{clock(duration)}</span>}
         <button type="button" className={`${ui.press} ${s.voiceRedo}`} aria-label={t('ask.voiceRedo')} onPointerDown={onDown} onPointerUp={onUp} onPointerCancel={onUp} onKeyDown={onKey}>
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M4 12a8 8 0 1 0 2.4-5.7L4 8.5" />

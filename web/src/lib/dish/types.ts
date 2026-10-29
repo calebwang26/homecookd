@@ -71,6 +71,8 @@ export type Card = {
   asked: Question[];
   message: string;
   kidVoiceUrl: string | null;
+  /** its length in seconds, as the page measured it (cards/update `voiceNoteS`) */
+  kidVoiceS: number | null;
   photoUrls: string[];
   askUrl: string;
   askedAt: number | null;
@@ -79,7 +81,8 @@ export type Card = {
   createdAt: number;
 };
 
-export type InLang = { lang: string; guess: Recipe; questions: Question[]; message: string };
+/** Her version translated too, once merged; her quotes and tips stay as she said them. */
+export type InLang = { lang: string; guess: Recipe; questions: Question[]; message: string; version?: Recipe | null };
 
 export type Ask = {
   dish: string;
@@ -87,6 +90,7 @@ export type Ask = {
   kidName: string | null;
   message: string;
   kidVoiceUrl: string | null;
+  kidVoiceS: number | null;
   guess: Recipe;
   inLang: InLang | null;
   photoUrls: string[];

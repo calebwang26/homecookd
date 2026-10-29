@@ -47,6 +47,7 @@ function Mom() {
   const [list, setList] = useState<string[]>([]); // the question ids she's answering, fixed when she starts
   const [recordable, setRecordable] = useState(true);
   const askRef = useRef<Ask | null>(null);
+  const toSent = useCallback(() => setStage('sent'), []);
   const keep = (a: Ask) => {
     askRef.current = a;
     setAsk(a);
@@ -102,10 +103,14 @@ function Mom() {
         if (!a?.version) setStage('sent');
         return;
       }
-      peekAsk(token).then(keep, () => {});
+      // With her language, so her version comes back translated in the same answer (no English flash).
+      peekAsk(token, lang).then((a) => {
+        keep(a);
+        if (lang !== 'en') setInLangs((m) => ({ ...m, [lang]: a.inLang?.lang === lang ? a.inLang : (m[lang] ?? null) }));
+      }, () => {});
     }, POLL_MS);
     return () => window.clearInterval(timer);
-  }, [stage, token]);
+  }, [stage, token, lang]);
 
   const inLang = lang !== 'en' && !english ? (inLangs[lang] ?? null) : null;
   const kid = ask?.kidName?.trim() || t('m.family');
@@ -219,7 +224,7 @@ function Mom() {
         </>
       );
     case 'fill':
-      return <FillScreen ask={ask} onDone={() => setStage('sent')} />;
+      return <FillScreen ask={ask} guess={guess} version={inLang?.version ?? ask.version} onDone={toSent} />;
     case 'sent':
       return <SentScreen ask={ask} kid={kid} token={token!} />;
   }

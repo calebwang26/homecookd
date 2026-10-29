@@ -132,13 +132,15 @@ function Miss() {
       show({ name: 'card', token: kidToken, card });
     } catch (e) {
       if (id !== nav.current) return;
-      if (e instanceof DishError && e.kind === 'rate') setLimited(true);
+      if (e instanceof DishError && e.kind === 'budget') setLimited(true);
       setError(
         e instanceof AttachError
           ? `attach.${e.key}`
           : e instanceof DishError && e.kind === 'not-a-dish'
             ? 'k1.notADish'
-            : e instanceof DishError && e.kind === 'words'
+            : e instanceof DishError && e.kind === 'rate'
+              ? 'k1.rate'
+              : e instanceof DishError && e.kind === 'words'
               ? 'k1.words'
               : 'k1.failed',
       );

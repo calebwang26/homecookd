@@ -31,16 +31,8 @@ function EnglishToggle({ toggle }: { toggle: Toggle }) {
 export function IntroScreen({ ask, kid, message, toggle, onNext }: { ask: Ask; kid: string; message: string; toggle: Toggle; onNext: () => void }) {
   const { t } = useLang();
   const audio = useAudio();
-  const [duration, setDuration] = useState<number | null>(null);
+  const duration = ask.kidVoiceS;
   const url = ask.kidVoiceUrl;
-
-  useEffect(() => {
-    if (!url) return;
-    const a = new Audio();
-    a.preload = 'metadata';
-    a.onloadedmetadata = () => Number.isFinite(a.duration) && setDuration(a.duration);
-    a.src = url;
-  }, [url]);
 
   const playing = !!url && audio.playing === url;
   return (
@@ -59,7 +51,7 @@ export function IntroScreen({ ask, kid, message, toggle, onNext }: { ask: Ask; k
               {playing ? <IconPause size={22} /> : <IconPlay size={22} />}
             </button>
             <Wave progress={playing ? audio.progress : 0} bars={20} />
-            {duration !== null && <span className={s.voiceTime}>{clock(playing ? duration * (1 - audio.progress) : duration)}</span>}
+            {duration != null && <span className={s.voiceTime}>{clock(playing ? duration * (1 - audio.progress) : duration)}</span>}
           </div>
         )}
         {message && (
@@ -239,18 +231,20 @@ function fillRows(recipe: Recipe, answered: Set<QuestionId>, merged: boolean): F
   return [...ings, ...lines];
 }
 
-export function FillScreen({ ask, onDone }: { ask: Ask; onDone: () => void }) {
+/** `guess` and `version` in the page's language when they are translated (inLang); her quotes stay as she said them. */
+export function FillScreen({ ask, guess, version, onDone }: { ask: Ask; guess: Recipe; version: Recipe | null; onDone: () => void }) {
   const { t } = useLang();
   const rel = useRel();
   const audio = useAudio();
   const answered = new Set(ask.answered);
-  const recipe = ask.version ?? ask.guess;
-  const rows = fillRows(recipe, answered, !!ask.version);
+  const recipe = version ?? guess;
+  const merged = !!version;
+  const rows = fillRows(recipe, answered, merged);
   const targets = rows.filter((r) => r.target);
   const [filled, setFilled] = useState(0);
 
   useEffect(() => {
-    if (!ask.version) return;
+    if (!merged) return;
     const reduced = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
     const step = reduced ? 500 : FILL_STEP_MS;
     let n = 0;
@@ -263,10 +257,10 @@ export function FillScreen({ ask, onDone }: { ask: Ask; onDone: () => void }) {
       }
     }, step);
     return () => window.clearInterval(timer);
-  }, [ask.version, targets.length, onDone]);
+  }, [merged, targets.length, onDone]);
 
   const clipUrl = (id: QuestionId | null) => (id ? (ask.clips.find((c) => c.id === id)?.audioUrl ?? null) : null);
-  const total = ask.version ? targets.length : ask.answered.length;
+  const total = merged ? targets.length : ask.answered.length;
   let seen = 0;
   return (
     <>
@@ -276,7 +270,7 @@ export function FillScreen({ ask, onDone }: { ask: Ask; onDone: () => void }) {
           <PotMascot size={24} />
           {t('m4.writing')}
         </span>
-        <h1 className={s.title}>{cardTitle(ask.relation, recipe.dish || ask.dish)}</h1>
+        <h1 className={s.title}>{cardTitle(ask.relation, ask.guess.dish || ask.dish)}</h1>
         <div className={s.kitchen}>
           <span className={s.potDot} aria-hidden="true">
             <PotMascot size={20} />
@@ -286,7 +280,7 @@ export function FillScreen({ ask, onDone }: { ask: Ask; onDone: () => void }) {
         <ul className={s.list} style={{ marginTop: 18 }}>
           {rows.map((r) => {
             const order = r.target ? seen++ : -1;
-            const isIn = !!ask.version && r.target && order < filled;
+            const isIn = merged && r.target && order < filled;
             const clip = clipUrl(r.clip);
             return (
               <li key={r.key} className={s.row} data-tone={r.target ? (isIn ? 'sage' : 'butter') : undefined}>

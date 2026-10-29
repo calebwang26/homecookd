@@ -40,6 +40,7 @@ const words: Translation = {
   'k1.notADish': 'Conte um prato, como o ovo com tomate.',
   'k1.words': 'Vamos falar só de comida. Tente outras palavras.',
   'k1.failed': 'Não deu certo. Tente de novo.',
+  'k1.rate': 'Tentativas demais. Espere um minuto e tente de novo.',
   'k1.empty': 'Conte primeiro qual é o prato.',
   'k5.title': 'O homecookd já fez hoje todas as receitas que podia.',
   'k5.line': 'Tente de novo amanhã.',
