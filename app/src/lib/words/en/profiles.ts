@@ -18,6 +18,8 @@ export const PROFILES = {
   'profiles.picker.add': 'Add',
   'profiles.picker.addCook': 'Add a cook',
   'profiles.picker.addFamily': 'Add family',
+  // The family screen's foot: one line for the phone's account, sign-out and legal links (a small sheet).
+  'profiles.picker.account': 'Account & privacy',
   'profiles.picker.signOutLink': 'Sign out of this phone',
   'profiles.picker.asksFirst': 'Asks first',
   'profiles.picker.privacy': 'Privacy policy',

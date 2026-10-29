@@ -23,8 +23,9 @@
 // to cook as them, or add family with + (an invite link, or someone without a phone, like Grandma).
 // A phone that just joined with a family link can't take over a face: tapping one asks "Is this you
 // on a new phone?" (NewPhoneSheet), and the family lets them in.
-// Opened from Home ("Mom ▾", `/?pick=1`), a quiet foot holds the phone's own settings: a cook's
-// "Your language" (components/profiles/LanguageEntry) and "Sign out of this phone" (another family is
+// Opened from Home ("Mom ▾", `/?pick=1`), a quiet foot holds two lines (Caleb, Oct 29: the five were too many): a
+// cook's "Your language" (components/profiles/LanguageEntry) and "Account & privacy", a small sheet with "Sign out of
+// this phone", the red "Delete my account" and Privacy policy · Terms of use. "Sign out of this phone" (another family is
 // joined only from its link: docs/build/JOIN-SIMPLE.md), which asks first ("Sign out on this phone?" with Sign
 // out / Keep) and then signs this phone out (session leaveFamily). "Delete my account" ("Delete Leo's
 // account" when Leo isn't this phone's own person) shows for whoever this phone is acting as, when the
@@ -179,6 +180,12 @@ export default function Profiles() {
   const [person, setPerson] = useState<{ open: boolean; who: Profile | null }>({ open: false, who: null });
   const [moving, setMoving] = useState<{ open: boolean; who: Profile | null; resume: boolean }>({ open: false, who: null, resume: false });
   const [signingOut, setSigningOut] = useState(false);
+  // "Account & privacy": its rows open the sign-out and delete sheets once it has slid away.
+  const [account, setAccount] = useState(false);
+  const fromAccount = (open: () => void) => {
+    setAccount(false);
+    setTimeout(open, motion.sheetCloseMs + 40);
+  };
   const [deleting, setDeleting] = useState<{ open: boolean; who: Profile | null; own: boolean }>({ open: false, who: null, own: false });
   // A phone that just joined (no person yet) never takes over a face: it asks the family.
   const pick = (p: Profile) =>
@@ -312,38 +319,14 @@ export default function Profiles() {
             <Animated.View entering={listEnter(profiles.length + 2)} style={styles.foot}>
               <LanguageEntry />
               <PressableScale
-                onPress={() => setSigningOut(true)}
+                onPress={() => setAccount(true)}
                 accessibilityRole="button"
-                accessibilityLabel={t('profiles.picker.signOutLink')}
-                accessibilityHint={t('profiles.picker.asksFirst')}
+                accessibilityLabel={t('profiles.picker.account')}
                 style={styles.footLink}>
                 <Txt variant="label" weight={600} color={colors.muted}>
-                  {t('profiles.picker.signOutLink')}
+                  {t('profiles.picker.account')}
                 </Txt>
               </PressableScale>
-              {deletable ? (
-                <PressableScale
-                  onPress={() => setDeleting({ open: true, who: deletable, own: removal === 'own' })}
-                  accessibilityRole="button"
-                  accessibilityHint={t('profiles.picker.asksFirst')}
-                  style={styles.footLink}>
-                  <Txt variant="label" weight={600} color={colors.danger}>
-                    {deleteAccountWords(deletable.name.trim(), removal === 'own', t).confirm}
-                  </Txt>
-                </PressableScale>
-              ) : null}
-              <View style={styles.legal}>
-                <PressableScale onPress={() => void openPage(PRIVACY_URL)} accessibilityRole="link" style={styles.legalLink}>
-                  <Txt variant="meta" color={colors.muted}>
-                    {t('profiles.picker.privacy')}
-                  </Txt>
-                </PressableScale>
-                <PressableScale onPress={() => void openPage(TERMS_URL)} accessibilityRole="link" style={styles.legalLink}>
-                  <Txt variant="meta" color={colors.muted}>
-                    {t('profiles.picker.terms')}
-                  </Txt>
-                </PressableScale>
-              </View>
             </Animated.View>
           ) : null}
         </Animated.View>
@@ -384,6 +367,34 @@ export default function Profiles() {
           setTimeout(() => (signedOut ? void leaveFamily() : forgetPerson(who.id)), motion.sheetCloseMs + 40);
         }}
       />
+      <BottomSheet visible={account} onClose={() => setAccount(false)} title={t('profiles.picker.account')} accessibilityLabel={t('profiles.picker.account')}>
+        <View style={styles.accountRows}>
+          <ActionButton label={t('profiles.picker.signOutLink')} variant="outline" size="lg" labelWeight={700} onPress={() => fromAccount(() => setSigningOut(true))} accessibilityHint={t('profiles.picker.asksFirst')} />
+          {deletable ? (
+            <ActionButton
+              label={deleteAccountWords(deletable.name.trim(), removal === 'own', t).confirm}
+              variant="outline"
+              size="lg"
+              fg={colors.danger}
+              labelWeight={700}
+              onPress={() => fromAccount(() => setDeleting({ open: true, who: deletable, own: removal === 'own' }))}
+              accessibilityHint={t('profiles.picker.asksFirst')}
+            />
+          ) : null}
+          <View style={styles.legal}>
+            <PressableScale onPress={() => void openPage(PRIVACY_URL)} accessibilityRole="link" style={styles.legalLink}>
+              <Txt variant="label" weight={600} color={colors.greenDeep}>
+                {t('profiles.picker.privacy')}
+              </Txt>
+            </PressableScale>
+            <PressableScale onPress={() => void openPage(TERMS_URL)} accessibilityRole="link" style={styles.legalLink}>
+              <Txt variant="label" weight={600} color={colors.greenDeep}>
+                {t('profiles.picker.terms')}
+              </Txt>
+            </PressableScale>
+          </View>
+        </View>
+      </BottomSheet>
       <BottomSheet
         visible={signingOut}
         onClose={() => setSigningOut(false)}
@@ -518,6 +529,7 @@ const styles = StyleSheet.create({
   foot: { marginTop: 16, alignItems: 'center', gap: 4 },
   footLink: { minHeight: 48, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
   legal: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center', marginTop: 8 },
+  accountRows: { gap: 12, paddingTop: 4 },
   legalLink: { minHeight: 44, paddingHorizontal: 12, alignItems: 'center', justifyContent: 'center' },
   signOut: { alignItems: 'center', gap: 10, paddingTop: 8, paddingBottom: 4, paddingHorizontal: 8 },
   choices: { flexDirection: 'row', gap: 12 },
