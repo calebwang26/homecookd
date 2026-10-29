@@ -23,7 +23,9 @@
 // Email sign-in (POST /auth/email, old builds only) hands a known email its family code, so the code
 // is also kept AES-GCM encrypted in `families.code_enc` (key derived here from EDIBLE_CODE_KEY, else
 // the service role key; AAD = family id). Families made before that column existed get it the next
-// time any device calls with the plain code.
+// time any device calls with the plain code. A family join link's token is kept the same way in
+// `join_links.token_enc` (its own derived key; AAD = the link's id), so POST /join-links can show the
+// same link all week (joinLinks.ts).
 
 import { createClient, type SupabaseClient } from "npm:@supabase/supabase-js@2";
 import { createRemoteJWKSet, errors as joseErrors, jwtVerify, type JWTPayload } from "npm:jose@5.9.6";
@@ -45,7 +47,17 @@ import {
   STAT_EVENT_KINDS,
   syncTz,
 } from "./retention.ts";
-import { linkJoin } from "./link.ts";
+import {
+  familyJoinLink,
+  hasLink,
+  INVITE_GONE,
+  type JoinDeps,
+  JOIN_TOKEN,
+  peekJoinLink,
+  refuseJoinLinkAccept,
+  revokeJoinLinks,
+  signInByLink,
+} from "./joinLinks.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -254,41 +266,49 @@ const newInviteCode = () => randomString(CODE_ALPHABET, 6);
 const INVITE_TOKEN = /^[0-9A-Za-z]{16}$/;
 const INVITE_CODE = new RegExp(`^[${CODE_ALPHABET}]{6}$`);
 
-// Recoverable family codes (for email sign-in). 'v1:' + base64(iv) + '.' + base64(ciphertext).
-let codeKey: Promise<CryptoKey> | null = null;
-function getCodeKey(): Promise<CryptoKey> {
-  return (codeKey ??= (async () => {
-    const secret = Deno.env.get("EDIBLE_CODE_KEY") || SERVICE_KEY;
-    const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), "HKDF", false, ["deriveKey"]);
-    return crypto.subtle.deriveKey(
-      { name: "HKDF", hash: "SHA-256", salt: new TextEncoder().encode("homecookd-family-code-v1"), info: new Uint8Array() },
-      base,
-      { name: "AES-GCM", length: 256 },
-      false,
-      ["encrypt", "decrypt"],
-    );
-  })());
+// Recoverable secrets: family codes (for email sign-in) and family join links' tokens.
+// 'v1:' + base64(iv) + '.' + base64(ciphertext), AES-GCM with a key derived per purpose (`salt`).
+const CODE_SALT = "homecookd-family-code-v1";
+const JOIN_LINK_SALT = "homecookd-join-link-v1";
+const aesKeys = new Map<string, Promise<CryptoKey>>();
+function aesKey(salt: string): Promise<CryptoKey> {
+  let key = aesKeys.get(salt);
+  if (!key) {
+    key = (async () => {
+      const secret = Deno.env.get("EDIBLE_CODE_KEY") || SERVICE_KEY;
+      const base = await crypto.subtle.importKey("raw", new TextEncoder().encode(secret), "HKDF", false, ["deriveKey"]);
+      return crypto.subtle.deriveKey(
+        { name: "HKDF", hash: "SHA-256", salt: new TextEncoder().encode(salt), info: new Uint8Array() },
+        base,
+        { name: "AES-GCM", length: 256 },
+        false,
+        ["encrypt", "decrypt"],
+      );
+    })();
+    aesKeys.set(salt, key);
+  }
+  return key;
 }
 const b64 = (bytes: Uint8Array) => btoa(String.fromCharCode(...bytes));
 const unb64 = (s: string) => Uint8Array.from(atob(s), (c) => c.charCodeAt(0));
 
-async function sealCode(familyId: string, code: string): Promise<string> {
+async function seal(salt: string, aad: string, text: string): Promise<string> {
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const ct = await crypto.subtle.encrypt(
-    { name: "AES-GCM", iv, additionalData: new TextEncoder().encode(familyId) },
-    await getCodeKey(),
-    new TextEncoder().encode(normalizeCode(code)),
+    { name: "AES-GCM", iv, additionalData: new TextEncoder().encode(aad) },
+    await aesKey(salt),
+    new TextEncoder().encode(text),
   );
   return `v1:${b64(iv)}.${b64(new Uint8Array(ct))}`;
 }
 
-async function openCode(familyId: string, sealed: string | null): Promise<string | null> {
+async function unseal(salt: string, aad: string, sealed: string | null): Promise<string | null> {
   if (!sealed?.startsWith("v1:")) return null;
   try {
     const [iv, ct] = sealed.slice(3).split(".");
     const pt = await crypto.subtle.decrypt(
-      { name: "AES-GCM", iv: unb64(iv), additionalData: new TextEncoder().encode(familyId) },
-      await getCodeKey(),
+      { name: "AES-GCM", iv: unb64(iv), additionalData: new TextEncoder().encode(aad) },
+      await aesKey(salt),
       unb64(ct),
     );
     return new TextDecoder().decode(pt);
@@ -296,6 +316,9 @@ async function openCode(familyId: string, sealed: string | null): Promise<string
     return null; // wrong key (e.g. rotated) or damaged: the next call with the plain code re-seals it
   }
 }
+
+const sealCode = (familyId: string, code: string) => seal(CODE_SALT, familyId, normalizeCode(code));
+const openCode = (familyId: string, sealed: string | null) => unseal(CODE_SALT, familyId, sealed);
 
 // ---------------------------------------------------------------------------------------------
 // Rate limits, kept in Postgres (`hit_rate`, migration 20261016160000) because edge isolates don't
@@ -1542,29 +1565,38 @@ on("POST", "/profiles/:id/remove", async ({ ctx, params }) => {
   // authenticate() already refused acting as someone whose own phone this isn't.
   const self = p.id === me.id && (ctx.device?.profile_id === me.id || !ctx.phones.has(me.id));
   if (!self) throw new HttpError(403, `Only ${p.name} can remove themselves.`);
+  await removeProfile(ctx.family.id, p.id);
+  return { ok: true };
+}, { keepOwner: true });
+
+/**
+ * Someone leaves `familyId` softly: "Leave the family" above, and a move to another family by a link
+ * (joinLinks.ts). Their phones are signed out, their invites and Apple/Google link stop working, and
+ * they leave every list; their old messages and notes keep their name and face.
+ */
+async function removeProfile(familyId: string, profileId: string): Promise<void> {
   const now = new Date().toISOString();
   // Sign out first, so a failure part-way never leaves a removed person with a working phone.
-  const dev = await db.from("devices").update({ revoked_at: now }).eq("profile_id", p.id).is("revoked_at", null);
+  const dev = await db.from("devices").update({ revoked_at: now }).eq("profile_id", profileId).is("revoked_at", null);
   if (dev.error) dbFail("remove devices", dev.error);
-  await revokeInvites(p.id);
+  await revokeInvites(profileId);
   // A family invite they sent lets anyone in, them included, so those stop working too. (A link
   // they sent naming someone else stays: it can only become that person, who can use it.)
   const sent = await db.from("invites").update({ status: "revoked" })
-    .eq("inviter_id", p.id).is("profile_id", null).eq("status", "pending");
+    .eq("inviter_id", profileId).is("profile_id", null).eq("status", "pending");
   if (sent.error) dbFail("remove family invites", sent.error);
-  const idn = await db.from("identities").delete().eq("profile_id", p.id);
+  const idn = await db.from("identities").delete().eq("profile_id", profileId);
   if (idn.error) dbFail("remove identities", idn.error);
   // Their email goes too: old builds sign in with it (POST /auth/email).
   const up = await db.from("profiles").update({ removed_at: now, email: null })
-    .eq("id", p.id).eq("family_id", ctx.family.id).is("removed_at", null);
+    .eq("id", profileId).eq("family_id", familyId).is("removed_at", null);
   if (up.error) dbFail("remove profile", up.error);
   // A phone asking to move in as them stops waiting (its /move-requests/mine reads declined). Best
   // effort: the lists already leave out asks for someone removed.
   const moves = await db.from("move_requests").update({ status: "declined", decided_at: now })
-    .eq("profile_id", p.id).eq("family_id", ctx.family.id).eq("status", "pending");
+    .eq("profile_id", profileId).eq("family_id", familyId).eq("status", "pending");
   if (moves.error) console.error("remove move requests:", moves.error.message);
-  return { ok: true };
-}, { keepOwner: true });
+}
 
 // --- invites: a link texted from the sender's own Messages; one tap on Join and they're in.
 // A family invite (the usual one) names nobody: whoever opens it adds themselves (POST
@@ -1589,11 +1621,7 @@ type InviteStatus = "pending" | "used" | "expired" | "revoked";
 const inviteStatus = (r: InviteRow): InviteStatus =>
   r.status === "pending" && Date.parse(r.expires_at) <= Date.now() ? "expired" : r.status;
 
-const INVITE_GONE: Record<Exclude<InviteStatus, "pending">, string> = {
-  used: "This invite was already used.",
-  expired: "This invite expired.",
-  revoked: "This invite was turned off.",
-};
+// INVITE_GONE (the 410 sentences) is joinLinks.ts's, which also uses up an old invite at sign-in.
 
 /** Contact digits for display ("+15551234567"). Anything unreadable is dropped, never refused. */
 function phoneOf(v: unknown): string | null {
@@ -1682,6 +1710,22 @@ on("POST", "/invites", async ({ ctx, body }) => {
   return { invite, profile: { ...toProfile(p), invited: true } };
 });
 
+// --- the family's join link (joinLinks.ts, JOIN-SIMPLE.md §3): anyone may join by it for a week. It
+// replaces the invites above in 1.1; they stay for 1.0 phones.
+
+/** `{}` -> `{ url, expires_at }`: the family's live link (the same one all week), else a new one. */
+on("POST", "/join-links", async ({ ctx }) => {
+  const me = requireMe(ctx);
+  await rateLimit("joinlinks", ctx.family.id, 50, 24 * 60, "That's a lot of invites for one day. Try again tomorrow.");
+  return await familyJoinLink(joinDeps, ctx.family.id, me.id);
+});
+
+/** Turns the family's join link off (a link with no expiry, the TEST family's, is an operator's). */
+on("POST", "/join-links/revoke", async ({ ctx }) => {
+  requireMe(ctx);
+  return await revokeJoinLinks(joinDeps, ctx.family.id);
+});
+
 /** Where a `{ token }` or `{ code }` body points. `hash` is null when it can't be an invite at all. */
 async function inviteLookup(b: Record<string, unknown>) {
   const token = str(b.token, "token", { max: 100 });
@@ -1741,12 +1785,18 @@ async function sameFamily(req: Request, familyId: string): Promise<boolean | und
 
 /**
  * What the invite page shows before anyone taps Join. Reads only: opening or previewing never joins.
- * `invitee` is null for a family invite (it names nobody).
+ * `invitee` is null for a family invite (it names nobody). A family join link's 22-character token
+ * answers from join_links, with `kind: "link"` (joinLinks.ts).
  */
 onPublic("POST", "/invites/peek", async ({ req, body }) => {
   const ip = clientIp(req);
   await rateLimit("invitepeek-ip", ip, 60, 10);
-  const look = await inviteLookup(await body());
+  const b = await body();
+  const raw = typeof b.token === "string" ? b.token.trim() : "";
+  if (JOIN_TOKEN.test(raw)) {
+    return (await peekJoinLink(joinDeps, raw, (familyId) => sameFamily(req, familyId))) ?? inviteNotFound(ip, "token");
+  }
+  const look = await inviteLookup(b);
   if (look.by === "code" && look.hash) await limitCodeTries(ip);
   const inv = look.hash ? await findInvite(look.col, look.hash) : null;
   if (!inv) return inviteNotFound(ip, look.by);
@@ -1778,11 +1828,13 @@ onPublic("POST", "/invites/peek", async ({ req, body }) => {
  * The Join tap: uses the invite up and hands this phone its key. A named invite signs it in as that
  * person; a family invite makes a phone with no person yet (`profile_id: null`), which then adds
  * itself (POST /profiles/self) or asks to move in as someone already here (POST /move-requests).
+ * A 1.1 family join link (22 characters) needs 1.1's Sign in with Apple: 426.
  */
 onPublic("POST", "/invites/accept", async ({ req, body }) => {
   const ip = clientIp(req);
   await rateLimit("inviteaccept-ip", ip, 20, 10);
   const b = await body();
+  refuseJoinLinkAccept(HttpError, b.token);
   const look = await inviteLookup(b);
   const label = deviceLabel(b);
   if (!look.hash) return inviteNotFound(ip, look.by);
@@ -2879,7 +2931,8 @@ async function startFamily(who: Who, name: string, role: Role, label: string | n
 /**
  * `{ id_token, name?, role?, share_token?, device_label? }`. Known account: signs in. New account
  * without `name`: `{ needs_name: true, suggested_name }` and nothing is made; the app asks, then calls
- * again with the same token.
+ * again with the same token. With `join_token` (a family join link, or a 1.0 phone's one-use invite)
+ * or `link_ticket` (a dish card's ticket), plus `move?`, joinLinks.ts's signInByLink answers.
  */
 async function signInWith(provider: Provider, { req, body }: PublicArgs) {
   if (!PROVIDERS[provider].audience.length) throw new HttpError(503, `${PROVIDERS[provider].label} sign-in isn't set up yet.`);
@@ -2892,6 +2945,7 @@ async function signInWith(provider: Provider, { req, body }: PublicArgs) {
   const roleRaw = str(b.role, "role", { max: 10 });
   if (roleRaw !== null && roleRaw !== "cook" && roleRaw !== "learner") throw new HttpError(400, "role must be cook or learner");
   const who = await verifyIdToken(provider, idToken);
+  if (hasLink(b)) return signInByLink(joinDeps, who, b, { name, role: roleRaw as Role | null, label, ip });
 
   const known = await knownIdentity(who);
   if (known) return signInKnown(who, known, label);
@@ -2908,9 +2962,26 @@ async function signInWith(provider: Provider, { req, body }: PublicArgs) {
 onPublic("POST", "/auth/apple", (a) => signInWith("apple", a));
 onPublic("POST", "/auth/google", (a) => signInWith("google", a));
 
-// A dish card's link: a new person joins the family on Convex's join ticket (link.ts, V2-LINKING.md §2.4).
-const linkDeps = { db, HttpError, dbFail, rateLimit, str, deviceLabel, addProfile, createDevice, quietNote };
-onPublic("POST", "/auth/link", async ({ req, body }) => linkJoin(linkDeps, await body(), clientIp(req)));
+// Joining by a link at sign-in, and the family's join link (joinLinks.ts, JOIN-SIMPLE.md §3-§4).
+const joinDeps: JoinDeps = {
+  db,
+  HttpError,
+  dbFail,
+  rateLimit,
+  sha256Hex,
+  newToken: () => randomString(BASE62, 22),
+  seal: (aad, text) => seal(JOIN_LINK_SALT, aad, text),
+  open: (aad, sealed) => unseal(JOIN_LINK_SALT, aad, sealed),
+  webUrl: WEB_URL,
+  addProfile,
+  createDevice,
+  quietNote,
+  knownIdentity,
+  linkIdentity,
+  signInKnown,
+  afterLostLink,
+  removeProfile,
+};
 
 // --- recordings on their way: the app registers who gets them, the worker says when it's published
 

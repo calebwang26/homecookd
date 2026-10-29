@@ -151,7 +151,8 @@ t("migrations: main + cooked_photos + retention apply in timestamp order, then a
     "20261018100100_retention_cron.sql",
     "20261018100300_retention_table.sql",
     "20261018100400_retention_postcard.sql",
-    "20261029090000_link_join_unique.sql", // not retention's, but later: POST /auth/link (V2-LINKING.md §2.4)
+    "20261029090000_link_join_unique.sql", // not retention's, but later: one join per dish card side (V2-LINKING.md §2.4)
+    "20261029100000_join_links.sql", // not retention's either: the family's join link (JOIN-SIMPLE.md §3)
   ]);
   const db = await database();
   for (const table of ["push_tokens", "notification_log", "cooking_now"]) {
@@ -319,4 +320,29 @@ t("link_join_unique: one signups row per dish card side; other share tokens may 
   await add("Ab3dE5gH7j");
   const rows = await one<{ n: number }>(db, `select count(*)::int as n from public.signups`);
   assertEquals(rows, [{ n: 4 }]);
+});
+
+t("join_links: applies twice, the token is unique, client keys get nothing, and it goes with its family", async () => {
+  const db = await database(); // every later file runs twice
+  await db.exec(`insert into public.families (id, name, code_hash) values ('${FAM}', 'Test family', repeat('a', 64));
+    insert into public.profiles (id, family_id, name, role) values ('${MOM}', '${FAM}', 'Mom', 'cook')`);
+  const add = (hash: string, expires: string | null = "2026-11-05T00:00:00Z") =>
+    db.query(`insert into public.join_links (family_id, inviter_id, token_hash, token_enc, expires_at) values ($1, $2, $3, 'v1:x.y', $4)`,
+      [FAM, MOM, hash, expires]);
+  await add("a".repeat(64));
+  await add("b".repeat(64), null); // the operator's TEST link never expires
+  await assertRejects(() => add("a".repeat(64)), Error, "duplicate key");
+  await assertRejects(() => add("not-a-hash"), Error, "check");
+  assertEquals(await one(db, `select relrowsecurity as rls from pg_class where relname = 'join_links'`), [{ rls: true }]);
+  for (const role of ["anon", "authenticated"]) {
+    const can = await one(db, `select has_table_privilege($1, 'public.join_links', 'select') as ok`, [role]);
+    assertEquals(can, [{ ok: false }], role);
+  }
+  const [{ id }] = await one<{ id: string }>(db, `select id from public.join_links where token_hash = $1`, ["a".repeat(64)]);
+  assert(/^[0-9a-f-]{36}$/.test(id));
+  await db.query(`delete from public.profiles where id = $1`, [MOM]);
+  assertEquals(await one(db, `select count(*)::int as n from public.join_links where inviter_id is null`), [{ n: 2 }]);
+  await db.query(`delete from public.families where id = $1`, [FAM]);
+  assertEquals(await one(db, `select count(*)::int as n from public.join_links`), [{ n: 0 }]);
+  await db.close();
 });
