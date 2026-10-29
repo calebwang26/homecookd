@@ -185,7 +185,7 @@ cd app && npx eas-cli build -p ios --profile staging --auto-submit  # internal-t
 cd app && npx eas-cli update --channel staging -m "<what changed>"      # JS-only fix to testers; while 1.0 is in review never --channel production (that reaches build 6, the reviewed build)
 node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
-cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent/links
+cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent/links/doors/reminders/dish
 cd app && node scripts/draft-words.mjs                             # draft the cook app's missing words in every language (Claude); then test-words
 
 # web
@@ -247,5 +247,3 @@ voice/deploy.sh                                                    # Cloud Run h
 ```
 
 Use `npx expo install <pkg>`, never `npm install`, for app dependencies.
-cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent/doors/reminders
-cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent/doors/reminders/dish
