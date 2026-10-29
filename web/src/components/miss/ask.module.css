@@ -1,0 +1,193 @@
+/* K3, the Ask Mom sheet (v2 mockups K3-AskMom and K3b-VoiceEmpty). */
+.title {
+  margin: 8px 0 0;
+  padding-inline-end: 52px;
+  font-family: var(--ff-display);
+  font-variation-settings: 'SOFT' 100, 'WONK' 0;
+  font-weight: 500;
+  font-size: 30px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.label {
+  display: block;
+  margin: 18px 0 8px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #5f6352;
+}
+.name,
+.message {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  border: 0;
+  border-radius: 20px;
+  background: #ece6f2;
+  color: #1e2410;
+  font: 400 19px/1.4 var(--ff-text);
+}
+.name {
+  height: 52px;
+  padding: 0 16px;
+}
+.message {
+  height: 112px;
+  resize: none;
+  padding: 14px 16px;
+}
+.name:focus-visible,
+.message:focus-visible {
+  outline: 3px solid #788c15;
+  outline-offset: 1px;
+}
+.voice {
+  margin-top: 12px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 8px 10px 10px;
+  border-radius: 20px;
+  background: #ece6f2;
+  color: #3f3558;
+}
+.voicePlay {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 0;
+  background: #5b6f00;
+  color: #fffdf7;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.voiceWave {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+.voiceTime {
+  flex: none;
+  font-size: 14px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+.voiceRedo {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  border: 0;
+  background: rgba(255, 253, 247, 0.75);
+  color: #3f3558;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+  touch-action: none;
+}
+.voiceEmpty {
+  margin-top: 12px;
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px 10px 10px;
+  border-radius: 20px;
+  border: 1.5px dashed #8e80ae;
+  background: #f6f3f9;
+  color: #3f3558;
+  font-family: var(--ff-text);
+  text-align: start;
+  cursor: pointer;
+  touch-action: none;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+}
+.voiceEmpty > * {
+  pointer-events: none;
+}
+.voiceEmpty[data-rec] {
+  border-style: solid;
+  border-color: #9a4f47;
+  background: #f8e9e6;
+}
+.voiceEmpty:disabled {
+  opacity: 0.5;
+  cursor: default;
+}
+.voiceMic {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: #3f3558;
+  color: #fffdf7;
+  display: grid;
+  place-items: center;
+}
+.voiceEmpty[data-rec] .voiceMic {
+  background: #9a4f47;
+}
+.voiceTitle {
+  display: block;
+  font-size: 16px;
+  font-weight: 700;
+}
+.voiceHint {
+  display: block;
+  font-size: 14px;
+}
+.sees {
+  margin: 12px 0 0;
+  font-size: 14px;
+  color: #5f6352;
+}
+.rule {
+  height: 1px;
+  margin: 20px 0 18px;
+  background: rgba(30, 36, 16, 0.08);
+}
+.shareRow {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 4px;
+}
+.share {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: 600 13px/1.2 var(--ff-text);
+  color: #1e2410;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  cursor: pointer;
+  border-radius: 16px;
+}
+.shareDisc {
+  width: 56px;
+  height: 56px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #1e2410;
+  color: #fffdf7;
+}
+.shareDisc[data-tone='green'] {
+  background: #5b6f00;
+}
+.shareDisc[data-tone='peach'] {
+  background: #f2a98f;
+  color: #1e2410;
+}
+.shareDisc[data-tone='forest'] {
+  background: #34430c;
+}
+.shareDisc[data-tone='grey'] {
+  background: #efefe6;
+  color: #1e2410;
+}

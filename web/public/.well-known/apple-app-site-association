@@ -11,7 +11,8 @@
           { "/": "/r", "comment": "Shared recipe" },
           { "/": "/r/*" },
           { "/": "/d", "comment": "Dinner invite" },
-          { "/": "/d/*" }
+          { "/": "/d/*" },
+          { "/": "/miss", "?": { "k": "?*" }, "comment": "A kid's dish card" }
         ]
       }
     ]
