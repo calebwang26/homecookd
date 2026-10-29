@@ -23,6 +23,7 @@ import * as Speech from 'expo-speech';
 import { hasAiConsent } from '@/lib/aiConsent';
 import { deviceVoiceLanguage, voiceHttpBase } from '@/lib/homie/logic';
 import { doneSpeaking, LIT_BEAT_MS, setHomie } from '@/lib/homie/store';
+import { HOMIE_ON } from '@/lib/homie/switch';
 import { onVideoChange, pauseAllVideos, playClip, stopAudio, videoPlaying, videoStopped } from '@/lib/media';
 
 import { convexSession } from './convex';
@@ -57,7 +58,8 @@ let ownsBeat = false;
 
 export async function speak(text: string, opts: SpeakOptions = {}): Promise<Spoken> {
   const words = text.trim();
-  if (!words) return { text: '', via: 'none' };
+  // homie switched off (lib/homie/switch): nothing is said, by the service or the phone.
+  if (!words || !HOMIE_ON) return { text: '', via: 'none' };
   stopSpeaking();
   const mine = ++turn;
   const label = opts.label ?? 'AI voice';

@@ -102,7 +102,7 @@ import {
 import { ensureAiConsent, useAiConsent } from '@/lib/aiConsent';
 import { errorMessage, type RecipeQuestion } from '@/lib/api';
 import { daysAgo, mmss } from '@/lib/format';
-import { barFrame, closeMoment, getHomie, HOMIE_SIZE, useHomieScreen, useHomieSelect } from '@/lib/homie';
+import { barFrame, closeMoment, getHomie, HOMIE_ON, HOMIE_SIZE, useHomieScreen, useHomieSelect } from '@/lib/homie';
 import { madeItMilestone, madeItTitle } from '@/lib/kitchenCounts';
 import { micStreamingSupported } from '@/lib/live/mic';
 import { speak, stopSpeaking } from '@/lib/live/speak';
@@ -261,7 +261,8 @@ export default function CookScreen() {
   // now: no line this visit (the phone reads instead).
   const consent = useAiConsent();
   const [noAi, setNoAi] = useState(false);
-  const voiceHere = micStreamingSupported() && VOICE_CONFIGURED && !noAi;
+  // homie switched off (lib/homie/switch): no voice line, no AI ask for it, no mic; Back and Next by touch.
+  const voiceHere = HOMIE_ON && micStreamingSupported() && VOICE_CONFIGURED && !noAi;
   const aiAsked = useRef(false);
   useEffect(() => {
     if (!voiceHere || !settled || done || consent !== 'needed' || aiAsked.current) return;
@@ -291,7 +292,7 @@ export default function CookScreen() {
   });
   // No voice line that reads (Expo Go, web, a dish the voice service doesn't have, or it failed): this
   // phone asks "read it out loud?" and reads the steps.
-  const phoneReading = phoneReads({ voiceHere, live: voice.live, unavailable: voice.unavailable });
+  const phoneReading = HOMIE_ON && phoneReads({ voiceHere, live: voice.live, unavailable: voice.unavailable });
   // A tap on homie never navigates (Caleb, Oct 24; voiceLogic cookTap): with a voice line it turns homie
   // on or off; with none it reads this step, and a tap while homie talks stops it. One gesture only.
   // "I made it" takes the screen: no pot over the celebration.
@@ -541,9 +542,9 @@ export default function CookScreen() {
         </ScrollView>
       </ScrollHold>
 
-      <VoiceHold voice={voice} videoUrl={recipe.media.video_url} herClip={!!moment} />
-      <VoiceLine voice={voice} cookName={cookName} slot={dock} />
-      {done ? null : (
+      {HOMIE_ON ? <VoiceHold voice={voice} videoUrl={recipe.media.video_url} herClip={!!moment} /> : null}
+      {HOMIE_ON ? <VoiceLine voice={voice} cookName={cookName} slot={dock} /> : null}
+      {done || !HOMIE_ON ? null : (
         <CookAnswers libraryId={recipe.id} cookName={cookName} asked={voice.askedIds} top={headH + 8} hearing={hearing} listenFor={homie.listenFor} />
       )}
       <BottomBar>
@@ -556,8 +557,8 @@ export default function CookScreen() {
           onPress={goBack}
           style={styles.barButton}
         />
-        {/* homie's place: the overlay draws the pot here (useHomieScreen dock). */}
-        <View style={styles.dockSlot} pointerEvents="none" />
+        {/* homie's place: the overlay draws the pot here (useHomieScreen dock). Switched off: Back and Next meet. */}
+        {HOMIE_ON ? <View style={styles.dockSlot} pointerEvents="none" /> : null}
         {isLast ? (
           <ActionButton
             label={lentTo ? `${lentTo.name} made it` : 'I made it'}

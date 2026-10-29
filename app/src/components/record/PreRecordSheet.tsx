@@ -12,6 +12,7 @@ import Svg, { Circle, Path } from 'react-native-svg';
 
 import { ActionButton, Avatar, BottomSheet, Chip, PressableScale, RecordDotIcon, Txt, VideoIcon } from '@/components/ui';
 import type { Profile } from '@/lib/api';
+import { HOMIE_ON } from '@/lib/homie/switch';
 import { activeLanguage } from '@/lib/languages';
 import { useMe } from '@/lib/live/convex';
 import { useWords } from '@/lib/words/useWords';
@@ -159,7 +160,7 @@ export function PreRecordSheet({
             style={styles.language}>
             <View style={styles.flex}>
               <Txt variant="meta" size={13}>
-                {t('parent.preRecord.homieTalks')}
+                {t(HOMIE_ON ? 'parent.preRecord.homieTalks' : 'parent.preRecord.youCookIn')}
               </Txt>
               <Txt variant="label" size={17} weight={700} numberOfLines={1}>
                 {languageLabel(language)}
@@ -179,7 +180,7 @@ export function PreRecordSheet({
               state={busy === 'camera' ? 'loading' : 'idle'}
               disabled={!!busy && busy !== 'camera'}
               onPress={() => start('camera')}
-              accessibilityHint={t('parent.preRecord.cameraHint')}
+              accessibilityHint={t(HOMIE_ON ? 'parent.preRecord.cameraHint' : 'parent.preRecord.cameraHintQuiet')}
             />
             <ActionButton
               label={t('parent.preRecord.library')}
@@ -201,7 +202,7 @@ export function PreRecordSheet({
               state={busy === 'glasses' ? 'loading' : 'idle'}
               disabled={!!busy && busy !== 'glasses'}
               onPress={() => start('glasses')}
-              accessibilityHint={t('parent.preRecord.glassesHint')}
+              accessibilityHint={t(HOMIE_ON ? 'parent.preRecord.glassesHint' : 'parent.preRecord.glassesHintQuiet')}
             />
           </View>
         </Animated.View>

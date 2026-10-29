@@ -173,6 +173,12 @@ test('the line under the button in each phase; it is the stop button only while 
   assert.deepEqual(R.recordingView('recording', rhi), { line: { text: 'मेरा हो गया', en: 'Tap when you’re done' }, live: true });
   assert.deepEqual(R.recordingView('wrapping_up', rhi), { line: { text: 'बस, लगभग हो गया', en: 'Almost done' }, live: false });
   assert.equal(R.recordingView('ended', rhi).live, false);
+  // homie switched off (lib/homie/switch): no hello, the camera opens; filming and the end read the same.
+  const quiet = { homie: false };
+  assert.deepEqual(R.recordingView('connecting', rhi, quiet), { line: { text: 'कैमरा खुल रहा है', en: 'Opening the camera' }, live: false });
+  assert.deepEqual(R.recordingView('intro', rhi, quiet), R.recordingView('connecting', rhi, quiet));
+  assert.deepEqual(R.recordingView('recording', rhi, quiet), R.recordingView('recording', rhi));
+  assert.deepEqual(R.recordingView('wrapping_up', rhi, quiet), R.recordingView('wrapping_up', rhi));
   assert.equal(R.recordingView('recording', ren).line.text, 'I’m done');
 });
 

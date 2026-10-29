@@ -3,3 +3,4 @@ export * from './hooks';
 export * from './intro';
 export * from './logic';
 export * from './store';
+export * from './switch';

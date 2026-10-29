@@ -27,6 +27,10 @@ export const PARENT = {
   'parent.questions.asked': '{name} asked',
   'parent.questions.labelTranslated': '{who}: {question}. Translated from: {english}',
   'parent.questions.hint': 'Opens the question. homie reads it to you, and you answer out loud.',
+  // homie switched off (lib/homie/switch): the row's Answer opens a box to type in (TypeAnswer).
+  'parent.questions.hintType': 'Opens a box to type your answer.',
+  'parent.questions.typePlaceholder': 'Type your answer',
+  'parent.questions.notSent': 'That didn’t send. Try again.',
   'parent.questions.translated': 'Translated · “{text}”',
   // homie's own follow-up question about her dish (questions.kind 'followUp'), not a kid's
   'parent.questions.homieDish': 'homie asks about your {dish}',
@@ -166,6 +170,7 @@ export const PARENT = {
   'parent.record.readyOne': '1 video ready to send',
   'parent.record.readyMany': '{n} videos ready to send',
   'parent.record.homieFailed': 'homie couldn’t start. Check the connection and try again.',
+  'parent.record.couldntStart': 'Couldn’t start. Check the connection and try again.',
 
   // Before you start (components/record/PreRecordSheet); {language}: "Hindi"
   'parent.preRecord.label': 'Before you start',
@@ -173,11 +178,14 @@ export const PARENT = {
   'parent.preRecord.dishPlaceholder': 'The dish’s name (you can skip it)',
   'parent.preRecord.languageLabel': 'You cook in {language}. Change',
   'parent.preRecord.homieTalks': 'homie talks to you in',
+  'parent.preRecord.youCookIn': 'You cook in',
   'parent.preRecord.change': 'Change',
   'parent.preRecord.glasses': 'From my glasses',
   'parent.preRecord.glassesHint': 'Films from your glasses. Keep the phone near the stove: homie listens and may ask a question.',
+  'parent.preRecord.glassesHintQuiet': 'Films from your glasses. Keep the phone near the stove.',
   'parent.preRecord.camera': 'Phone camera',
   'parent.preRecord.cameraHint': 'homie says hello first, then the camera opens.',
+  'parent.preRecord.cameraHintQuiet': 'Opens the camera. Tap the red button again when you finish.',
   'parent.preRecord.library': 'Videos I took',
   'parent.preRecord.libraryHint': 'Opens your videos. Pick them in the order you filmed them.',
 

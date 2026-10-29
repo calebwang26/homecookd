@@ -41,6 +41,7 @@ import { holdAfterPick, holdPushAfterPick, linkSearch, openHeld, peekAfterPick, 
 import { ToastProvider } from '@/components/ui';
 import { forgetAiConsent, useAiConsent } from '@/lib/aiConsent';
 import { api } from '@/lib/api';
+import { HOMIE_ON } from '@/lib/homie/switch';
 import { registerHeardLogging } from '@/lib/listening';
 import { PLAYBACK_AUDIO_MODE } from '@/lib/media';
 import { openRecipe } from '@/lib/navigation';
@@ -113,7 +114,7 @@ export default function RootLayout() {
                 <PushBridge />
                 {aiOk ? <ResendUnsent /> : null}
                 <PushAskHost register={registerPush} />
-                <HomieOverlay />
+                {HOMIE_ON ? <HomieOverlay /> : null}
                 <AiConsentHost />
               </ShareSheetProvider>
             </MediaSheetProvider>

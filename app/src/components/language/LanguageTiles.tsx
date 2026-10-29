@@ -8,6 +8,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Headline } from '@/components/signin';
 import { haptic, listEnter, PressableScale, ScreenWash, Txt, useToast } from '@/components/ui';
+import { HOMIE_ON } from '@/lib/homie/switch';
 import { LANGUAGES } from '@/lib/languages';
 import { useWords } from '@/lib/words/useWords';
 import { tileOrder } from '@/lib/words/words';
@@ -29,7 +30,7 @@ export function LanguageTiles() {
         showsVerticalScrollIndicator={false}>
         {/* homie's own pot floats over the top of every screen, so no wordmark here. */}
         <Animated.View entering={listEnter(0)} style={styles.top}>
-          <Headline title={t('common.language.title')} line={t('common.language.line')} />
+          <Headline title={t('common.language.title')} line={t(HOMIE_ON ? 'common.language.line' : 'common.language.lineQuiet')} />
         </Animated.View>
         <Animated.View entering={listEnter(1)} style={styles.grid} accessibilityRole="radiogroup">
           {tileOrder(lang).map((code) => {

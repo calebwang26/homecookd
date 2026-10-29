@@ -90,6 +90,9 @@ and homesick college kids. It's a family product, not a tool.
   `docs/agents/memory/homie-voice.md`): change them only after he has heard samples. Sonic's previous model
   (`sonic-3.5`, same voice) is the backup when Sonic fails before a line starts, and the phone's own voice after
   that (say_end `failed`). Key check: `node scripts/check-cartesia.mjs`.
+- **homie's voice is switched off (Oct 29, for launch):** `app/src/lib/homie/switch.ts` `HOMIE_ON = false` hides the
+  pot, homie while filming and voice cook mode; no code is deleted, and turning it back on is that one line, Caleb's
+  call (`docs/agents/memory/homie-off.md`). New app code must work with the switch either way.
 - **Live Cartesia tests are encouraged.** We have the credits (1.24M on Oct 24), and Caleb wants them used to check
   voice quality, so `test-client` and `test-record` stream to real Ink 2 and Sonic by default. `FAKE=1` against
   `npm run dev:fake` (`VOICE_FAKE_SPEECH=1`: no Cartesia or Gemini Live) is an opt-in for quick offline checks. Every

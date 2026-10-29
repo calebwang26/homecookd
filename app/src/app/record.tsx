@@ -30,6 +30,7 @@ import { PhoneOnlySheet } from '@/components/record/sheets';
 import { usePickVideos, type PickContext } from '@/components/record/usePickVideos';
 import { ArrowRightIcon, Avatar, BackPill, listEnter, PressableScale, ScreenWash, Txt, useToast } from '@/components/ui';
 import { ensureAiConsent } from '@/lib/aiConsent';
+import { HOMIE_ON } from '@/lib/homie/switch';
 import { convexKidIds, startRecording } from '@/lib/live/convex';
 import { getCachedEntry } from '@/lib/recipes';
 import { useWords } from '@/lib/words/useWords';
@@ -118,7 +119,7 @@ export default function RecordScreen() {
     } catch (e) {
       console.warn('[record] startRecording', String(e).slice(0, 160));
       if (source === 'glasses') {
-        toast.show(t('parent.record.homieFailed'), { tone: 'error', durationMs: 3200 });
+        toast.show(t(HOMIE_ON ? 'parent.record.homieFailed' : 'parent.record.couldntStart'), { tone: 'error', durationMs: 3200 });
       } else {
         // No homie today: the phone's camera still works, straight to Send.
         setSheet(false);

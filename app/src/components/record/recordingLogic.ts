@@ -20,12 +20,12 @@ export type RecordingView = {
 };
 
 /** Before filming the button rests under "homie is saying hello"; while filming it is the stop button. */
-export function recordingView(phase: RecordPhase, w: RecordWords): RecordingView {
+export function recordingView(phase: RecordPhase, w: RecordWords, { homie = true }: { homie?: boolean } = {}): RecordingView {
   switch (phase) {
     case 'connecting':
-      return { line: w.line('gettingReady'), live: false };
+      return { line: w.line(homie ? 'gettingReady' : 'cameraOpening'), live: false };
     case 'intro':
-      return { line: w.line('sayingHello'), live: false };
+      return { line: w.line(homie ? 'sayingHello' : 'cameraOpening'), live: false };
     case 'recording':
       return { line: w.line('stop'), live: true };
     case 'wrapping_up':

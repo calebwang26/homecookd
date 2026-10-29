@@ -21,7 +21,7 @@ import { fadeOut, riseIn } from '@/components/community/motion';
 import { ShareSteps, type ShareStep } from '@/components/community/ShareSteps';
 import { YouCard } from '@/components/community/YouCard';
 import { ActionButton, LargeHeader, ScreenWash, StickyHeader, Txt, useScrollY } from '@/components/ui';
-import { HOMIE_SIZE } from '@/lib/homie';
+import { HOMIE_ON, HOMIE_SIZE } from '@/lib/homie';
 import { useCommunityFeed, useFamilyDishes, useMyDinners, useMySwaps } from '@/lib/live/community';
 import { colors, space, tabBar } from '@/theme/tokens';
 
@@ -93,7 +93,7 @@ export default function KidCommunity() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.content}>
         <ScreenWash tone="kid" height={300} />
-        <LargeHeader title={TITLE} subtitle={HOW} scrollY={scrollY} fadeEnd={40} style={styles.header} right={<View style={styles.homie} />} />
+        <LargeHeader title={TITLE} subtitle={HOW} scrollY={scrollY} fadeEnd={40} style={styles.header} right={HOMIE_ON ? <View style={styles.homie} /> : undefined} />
         <View style={styles.body} onLayout={onBodyLayout}>
           <DishMap
             size={size}

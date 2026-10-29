@@ -10,6 +10,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
   // Hindi
   hi: {
     gettingReady: 'homie तैयार हो रही है',
+    cameraOpening: 'कैमरा खुल रहा है',
     sayingHello: 'homie नमस्ते कह रही है',
     stop: 'मेरा हो गया',
     wrappingUp: 'बस, लगभग हो गया',
@@ -49,6 +50,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
   // Gujarati
   gu: {
     gettingReady: 'homie તૈયાર થઈ રહી છે',
+    cameraOpening: 'કૅમેરા ખૂલી રહ્યો છે',
     sayingHello: 'homie નમસ્તે કહી રહી છે',
     stop: 'મારું થઈ ગયું',
     wrappingUp: 'બસ, થવા આવ્યું',
@@ -88,6 +90,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
   // Tamil
   ta: {
     gettingReady: 'homie தயாராகிட்டு இருக்கா',
+    cameraOpening: 'கேமரா திறந்துகிட்டு இருக்கு',
     sayingHello: 'homie வணக்கம் சொல்றா',
     stop: 'முடிச்சுட்டேன்',
     wrappingUp: 'கிட்டத்தட்ட முடிஞ்சது',
@@ -127,6 +130,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
   // Telugu
   te: {
     gettingReady: 'homie సిద్ధమవుతోంది',
+    cameraOpening: 'కెమెరా తెరుచుకుంటోంది',
     sayingHello: 'homie నమస్కారం చెబుతోంది',
     stop: 'నాది అయిపోయింది',
     wrappingUp: 'దాదాపు అయిపోయింది',
@@ -166,6 +170,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
   // Punjabi
   pa: {
     gettingReady: 'homie ਤਿਆਰ ਹੋ ਰਹੀ ਹੈ',
+    cameraOpening: 'ਕੈਮਰਾ ਖੁੱਲ੍ਹ ਰਿਹਾ ਹੈ',
     sayingHello: 'homie ਹੈਲੋ ਕਹਿ ਰਹੀ ਹੈ',
     stop: 'ਬੱਸ, ਹੋ ਗਿਆ',
     wrappingUp: 'ਬੱਸ ਥੋੜ੍ਹਾ ਜਿਹਾ ਬਾਕੀ ਹੈ',
@@ -205,6 +210,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
   // Urdu
   ur: {
     gettingReady: 'homie تیار ہو رہی ہے',
+    cameraOpening: 'کیمرا کھل رہا ہے',
     sayingHello: 'homie سلام کر رہی ہے',
     stop: 'بس، ہو گیا',
     wrappingUp: 'بس، ہونے ہی والا ہے',
@@ -244,6 +250,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
   // Mandarin Chinese
   zh: {
     gettingReady: 'homie 正在准备',
+    cameraOpening: '正在打开相机',
     sayingHello: 'homie 在跟您打招呼',
     stop: '我做完了',
     wrappingUp: '快好了',
@@ -283,6 +290,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
   // Korean
   ko: {
     gettingReady: 'homie가 준비하고 있어요',
+    cameraOpening: '카메라를 켜고 있어요',
     sayingHello: 'homie가 인사드리고 있어요',
     stop: '다 했어요',
     wrappingUp: '거의 다 됐어요',
@@ -322,6 +330,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
   // Tagalog
   tl: {
     gettingReady: 'Naghahanda na si homie',
+    cameraOpening: 'Binubuksan ang camera',
     sayingHello: 'Bumabati po si homie',
     stop: 'Tapos na ako',
     wrappingUp: 'Malapit nang matapos',
@@ -361,6 +370,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
   // Spanish
   es: {
     gettingReady: 'homie se está preparando',
+    cameraOpening: 'Abriendo la cámara',
     sayingHello: 'homie está saludando',
     stop: 'Ya terminé',
     wrappingUp: 'Ya casi terminamos',
@@ -400,6 +410,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
   // Portuguese
   pt: {
     gettingReady: 'homie está se preparando',
+    cameraOpening: 'Abrindo a câmera',
     sayingHello: 'homie está dizendo olá',
     stop: 'Terminei',
     wrappingUp: 'Quase terminando',
@@ -439,6 +450,7 @@ export const OTHER_WORDS: Record<string, OwnWords> = {
   // Arabic
   ar: {
     gettingReady: 'homie تستعدّ',
+    cameraOpening: 'جارٍ فتح الكاميرا',
     sayingHello: 'homie تُلقي التحية',
     stop: 'انتهيتُ',
     wrappingUp: 'أوشكنا على الانتهاء',

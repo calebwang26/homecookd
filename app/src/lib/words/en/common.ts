@@ -2,6 +2,7 @@
 export const COMMON = {
   'common.language.title': 'Your language',
   'common.language.line': 'homie and homecookd will talk with you in it.',
+  'common.language.lineQuiet': 'homecookd will show its words in it.',
   'common.language.saveFailed': 'That didn’t save. Try again.',
   'common.back': 'Back',
   // lib/format: greetings, days, months, times and lists.
