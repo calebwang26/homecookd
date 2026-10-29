@@ -1,7 +1,7 @@
 # Joining a family: only by a join link (design)
 
 Caleb, Oct 29: "It should literally just be from clicking a join link. That should be the only mechanism that
-allows you to join a family." Owner: Notifications & linking. Status: design, waiting on the head agent. It's
+allows you to join a family." Owner: Notifications & linking. Status: **approved** by the head agent (Oct 29), with the §8 answers. Mockups: `docs/design/join-simple/join-simple.jpg`. It's
 built on `claude/join-simple`, off the local integration branch `claude/v2-batch` (60340e07c). Local commits only.
 
 ## 0. In one minute
@@ -228,10 +228,11 @@ A move happens only after "Join the <B>s" and a fresh Apple sign-in. In one serv
   - `test-consent` still passes;
   - tsc and lint.
 
-## 8. Open questions
+## 8. Decided (head agent, Oct 29)
 
-1. **Role for a family join link.** Recommended: two chips on the name screen ("I cook" / "I miss the food"; the
-   default is "I miss the food"). The alternative is to always join as "I miss the food" and change it in their
-   profile.
-2. **A solo family's recipes on a move** (§4): they come with them (recommended), or they always stay.
-3. **When to turn off the old paths** (§6): after 1.0 is retired, Caleb's call.
+1. **Role on a family join link:** two chips under the name, "I cook" / "I miss the food", with the second picked. No
+   extra step.
+2. **A solo family's recipes move with the person,** checked in Convex by the HMAC "moved" receipt (§4).
+   `TODO(caleb)`.
+3. **The old paths are turned off 30 days after 1.1 is live in the App Store** (§6). `TODO(caleb)`, with a STATE.md
+   line.
