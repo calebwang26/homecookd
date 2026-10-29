@@ -24,6 +24,7 @@ import Animated from 'react-native-reanimated';
 import { CravingAskCard } from '@/components/craving/CravingAskCard';
 import { CravingSentCard } from '@/components/craving/CravingSentCard';
 import { CravingSheet } from '@/components/craving/CravingSheet';
+import { askForPushSoon } from '@/components/push/PushAskSheet';
 import { useCravingSent } from '@/components/craving/useCravingSent';
 import { InviteButton } from '@/components/invite/InviteButton';
 import { LiveQuestions } from '@/components/parent/LiveQuestions';
@@ -156,11 +157,11 @@ export default function ParentHome() {
       </ScrollHold>
       <StickyHeader title={t('parent.tab.home')} scrollY={scrollY} start={40} />
       <MoveRequestPrompt />
-      {/* TODO(push): when claude/v2-notif-linking (7420723bf, the 'cook-craving-sent' kind) is merged, pass
-          onSent={() => me && askForPushSoon({ kind: 'cook-craving-sent', profileId: me.id, name: '' })}
-          (askForPushSoon from '@/components/push/PushAskSheet'; the host in _layout shows "Want a note when they
-          pick a dish?"). */}
-      <CravingSheet visible={craving} onClose={() => setCraving(false)} />
+      <CravingSheet
+        visible={craving}
+        onClose={() => setCraving(false)}
+        onSent={() => me && askForPushSoon({ kind: 'cook-craving-sent', profileId: me.id, name: '' })}
+      />
     </View>
   );
 }
