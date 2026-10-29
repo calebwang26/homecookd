@@ -203,3 +203,14 @@ Phases 1–3 can run side by side once the route contract is written down (one s
 - **Testing during the review:** a separate native build (build 7) on its own `staging` update channel, internal
   TestFlight testers only, not attached to the version in review. EAS Updates go to `staging`, never production,
   until Apple approves.
+- **Answered before the overnight build (Oct 29):**
+  - If Apple approves, ship homie-off and the queued fixes; v2 stays off the live site and app until Caleb tests it.
+  - Build 7 goes to App Store Connect tonight (internal testers only).
+  - The UGC link is homecookd.app/miss.
+  - Live AI test spend overnight: $25 across all chats.
+  - The Supabase sign-in function may change and deploy after Apple approves (deploy rules apply; check Salik).
+  - Installing from the other person's link joins the family automatically.
+  - Mom's answers show her own words with the English underneath, plus her clip.
+  - Download buttons point at the real App Store page (apps.apple.com/app/id6825621614).
+  - The Merge Agent approves v2 mockups against this PRD; Caleb reviews the finished flows on build 7 and the web.
+  - Phase 4 has its own section chat, "Notifications & linking".
