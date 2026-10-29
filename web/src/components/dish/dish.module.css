@@ -1,0 +1,259 @@
+/* The v2 dish pages' shared parts (the approved mockups in the v2 canvas): Hearth colors as the
+   mockups set them. Ink #1E2410, muted #5F6352, green #5B6F00, cream #FFFDF7, page #F7F7F2. */
+.langRoot {
+  min-height: 100svh;
+}
+
+/* ---------- top bar: the pot and homecookd, then the links and the language switch ---------- */
+.topBar {
+  height: 72px;
+  padding: 0 16px 0 24px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--ff-display);
+  font-variation-settings: 'SOFT' 100, 'WONK' 0;
+  font-weight: 700;
+  font-size: 24px;
+  letter-spacing: -0.02em;
+  color: #1e2410;
+}
+.topRight {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+.langSwitch {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 44px;
+  padding: 0 12px;
+  border-radius: 999px;
+  background: rgba(255, 253, 247, 0.85);
+  border: 1.5px solid rgba(30, 36, 16, 0.12);
+  color: #1e2410;
+  font: 600 15px/1 var(--ff-text);
+  white-space: nowrap;
+}
+.langSwitch select {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  font-size: 16px; /* no zoom on iOS */
+}
+.langSwitch:focus-within {
+  outline: 3px solid #788c15;
+  outline-offset: 2px;
+}
+
+/* ---------- the dish hero: the kid's photo, or the designed peach card with a big pot ---------- */
+.hero {
+  position: relative;
+  overflow: hidden;
+  display: grid;
+  place-items: center;
+  background: #f9e3cf;
+}
+.hero[data-designed] {
+  background: radial-gradient(120% 90% at 50% 35%, #fbeadb 0, #f9e3cf 55%, #f4d4ba 100%);
+}
+.heroImg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ---------- sheet ---------- */
+.sheetLayer {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(30, 36, 16, 0.35);
+  backdrop-filter: blur(10px);
+  -webkit-backdrop-filter: blur(10px);
+}
+.sheet {
+  position: relative;
+  width: 100%;
+  max-width: 430px;
+  max-height: 92svh;
+  overflow-y: auto;
+  padding: 0 24px max(20px, env(safe-area-inset-bottom));
+  border-radius: 32px 32px 0 0;
+  background: #fffdf7;
+  box-shadow: 0 -10px 30px rgba(30, 36, 16, 0.1);
+  color: #1e2410;
+  outline: none;
+}
+.grabber {
+  display: block;
+  width: 36px;
+  height: 5px;
+  margin: 8px auto 11px;
+  border-radius: 999px;
+  background: rgba(30, 36, 16, 0.18);
+}
+.sheetClose {
+  position: absolute;
+  top: 12px;
+  inset-inline-end: 12px;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  background: #efefe6;
+  color: #1e2410;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+
+/* ---------- toast ---------- */
+.toastRegion {
+  position: fixed;
+  top: calc(env(safe-area-inset-top) + 12px);
+  left: 16px;
+  right: 16px;
+  z-index: 60;
+  display: grid;
+  justify-items: center;
+  pointer-events: none;
+}
+.toast {
+  grid-area: 1 / 1;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  max-width: 340px;
+  padding: 8px 20px 8px 8px;
+  border-radius: 999px;
+  background: #1e2410;
+  color: #fffdf7;
+  font: 600 15px/1.3 var(--ff-text);
+  box-shadow: 0 10px 30px rgba(30, 36, 16, 0.22);
+}
+.toastDisc {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  background: #5b6f00;
+  color: #fffdf7;
+}
+.toastDisc[data-tone='error'] {
+  background: #9a4f47;
+}
+
+.wave {
+  display: block;
+  fill: #3f3558;
+}
+
+/* ---------- Get the app (K4, M6) ---------- */
+.appVisual {
+  position: relative;
+  margin-top: 8px;
+}
+.appTitle {
+  margin: 20px 0 0;
+  font-family: var(--ff-display);
+  font-variation-settings: 'SOFT' 100, 'WONK' 0;
+  font-weight: 500;
+  font-size: 30px;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+  text-wrap: balance;
+}
+.appSub {
+  margin: 8px 0 0;
+  font-size: 17px;
+  line-height: 1.4;
+  color: #5f6352;
+}
+.reasons {
+  list-style: none;
+  margin: 20px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.reasons li {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+.reasonIcon {
+  flex: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #e6ebcf;
+  color: #3c4a0b;
+}
+.reasonIcon[data-tone='butter'] {
+  background: #fff1c7;
+  color: #5a3a22;
+}
+.reasonIcon[data-tone='peach'] {
+  background: #f9e3cf;
+  color: #6e3f2a;
+}
+.reasonTitle {
+  display: block;
+  font-size: 17px;
+  font-weight: 700;
+}
+.reasonLine {
+  display: block;
+  font-size: 15px;
+  color: #5f6352;
+}
+.reasonOnly {
+  display: block;
+  font-size: 17px;
+  line-height: 1.35;
+}
+.appButton {
+  margin-top: 24px;
+  width: 100%;
+  text-decoration: none;
+}
+.appLinks {
+  margin-top: 4px;
+  display: flex;
+  justify-content: center;
+  gap: 16px;
+}
+.appLinks > * {
+  padding: 0 8px;
+}
+.openApp {
+  color: #5f6352;
+  font-weight: 500;
+}
