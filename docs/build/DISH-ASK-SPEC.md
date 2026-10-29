@@ -77,8 +77,18 @@ type Ingredient = {
   isGuess: boolean;   // status is "guessed" or "unknown": show it as the kid's guess ("Caleb thinks…")
   ask: QuestionId | null;  // the question that would settle it
   clip: QuestionId | null; // the answer whose clip backs it (Mom's version)
+  // Mom's version only, on what her answer changed (status "mom"); null everywhere else:
+  was: string | null;      // the guess's amount it replaced ("~1 tbsp"), to strike through; null for a new one
+  quote: Quote | null;     // her words that settled it
 };
-type Line = { text: string; detail: string | null; status: Status; isGuess: boolean; ask: QuestionId | null; clip: QuestionId | null };
+type Line = {
+  text: string; detail: string | null; status: Status; isGuess: boolean; ask: QuestionId | null; clip: QuestionId | null;
+  was: string | null;      // the guess's line text it replaced; null for a new line
+  quote: Quote | null;
+};
+/** A short piece of her answer, word for word in her language, plus its English (null when she spoke English).
+ *  "Two big spoons. Don't be shy." or "दो बड़े चम्मच केचप डालती हूँ" with "I add two big spoons of ketchup". */
+type Quote = { words: string; english: string | null };
 type Step = { title: string; lines: Line[]; uses: number[]; tip: { words: string; english: string | null; clip: QuestionId } | null };
 type Question = { id: QuestionId; text: string };
 type Recipe = {
@@ -108,6 +118,7 @@ type Card = {                 // what the kid's page gets
   guess: Recipe;              // tonight's version, the kid's guess
   version: Recipe | null;     // Mom's version, once her answers are merged
   answers: Answer[];          // her answers behind the version (empty until then)
+  merging: boolean;           // her Send is in and her version is being written ("Mom is writing it in her words")
   asked: Question[];          // what Mom is asked, in order (0–6)
   message: string;            // the Ask Mom message, in the kid's voice, editable
   kidVoiceUrl: string | null; // the kid's voice note to Mom (a Convex storage URL)
@@ -122,8 +133,10 @@ type Ask = {                  // what Mom's page gets; never the kid token
   dish: string; relation: Relation; kidName: string | null;
   message: string; kidVoiceUrl: string | null;
   guess: Recipe;              // the kid's guess, shown as theirs
+  photoUrls: string[];        // the kid's photos (0–3)
   questions: Question[];      // asked and not answered yet, in order
   answered: QuestionId[];
+  clips: { id: QuestionId; audioUrl: string | null; durationS: number }[]; // her own answers, to play back ("Hear Mom say it")
   finished: boolean;          // she pressed Send (or every asked question is answered and merged)
   version: Recipe | null;     // her version once merged (for the fill-in animation); null while it's being written
   merging: boolean;           // true from Send until her version lands (about 10–20 s) or fails
@@ -235,6 +248,13 @@ moment.
   - The merge prompt gets both. A tip is an excerpt of her original words, verbatim, with its English.
   - An amount or line she settled uses her wording: her own words when she spoke English, and the English of her
     words otherwise, so the kid can cook from it. The `clip` on that ingredient or line plays her saying it.
+  - Each ingredient or line she changed also carries:
+    - `was`, the guess's value it replaced, so the page can strike it through;
+    - `quote`, the short piece of her answer that settled it: word for word in her language, with its English.
+
+    Claude gives the quote with each change, and the server keeps it only when it is word for word in that clip's
+    words (or its English, which then becomes `english` with the original looked up). Otherwise the quote is the
+    start of that answer, up to 120 characters at a word.
 - About 10–20 s.
 - With nothing answered, it changes nothing (`finished: false`).
 - Tries: at most 5, at least 3 minutes apart.
