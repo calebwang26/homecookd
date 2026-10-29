@@ -185,6 +185,7 @@ cd app && node scripts/draft-words.mjs                             # draft the c
 # web
 cd web && npm run dev -- --port 3000
 cd web && npm ci && npm run build                                  # confirm a PR's web/ builds
+node web/scripts/qa/dish-e2e.mjs --base http://localhost:3105 --out /tmp/dish-e2e   # v2 /miss + /a vs the local /dish fake (site: cd web && NEXT_PUBLIC_DISH_URL=http://localhost:8791 npx next dev --port 3105)
 
 # convex (repo root)
 npx vitest run                                                     # convex-test suites (convex/*.test.ts)

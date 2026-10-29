@@ -256,7 +256,7 @@ try {
   const himic = hi.locator('button[data-state]');
   await himic.waitFor();
   await shot(hi, 'M7-hindi-M3');
-  for (const _ of [1, 2, 3]) {
+  for (let i = 0; i < 3; i++) {
     await hold(hi, himic, 1500);
     await hi.waitForTimeout(1300);
   }
