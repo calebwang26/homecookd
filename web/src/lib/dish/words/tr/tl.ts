@@ -162,6 +162,15 @@ const words: Translation = {
   'm.nothingLine': 'Sagutin ang isang tanong at maririnig ito ni {kid}.',
   'm.answerOne': 'Sumagot ng isang tanong',
   'm.notFound': 'Hindi na gumagana ang link na ito.',
+  'lock.open': 'Buksan ang recipe',
+  'lock.start': 'Simulan ang pagluluto',
+  'lock.ready': 'Ihanda ang mga ito',
+  'lock.step1': 'Simulan ang hakbang 1',
+  'lock.next': 'Susunod na hakbang',
+  'lock.made': 'Naluto ko na',
+  'lock.stepOf': 'Hakbang {n} / {m}',
+  'lock.allSteps': 'Lahat ng hakbang',
+  'lock.count': '{n}/{m}',
 };
 
 export default words;

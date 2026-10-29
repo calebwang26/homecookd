@@ -1,7 +1,8 @@
 'use client';
 // Mom's screens around the questions (the v2 mockups): M1 the kid's voice note, M2 the kid's guess,
-// M4 her version filling in with her own words, M5 Sent with the SuccessBurst, M6 the film ask.
-import { useEffect, useState, type CSSProperties } from 'react';
+// M4 her version filling in with her own words, M5 Sent with the SuccessBurst, M6 the film ask. The recipe
+// card on M5 and in M6 opens her version as the locked recipe view (MomRecipe).
+import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { AppSheet, DishHero, TopBar, useAudio, Wave } from '@/components/dish/parts';
 import { Rich, useLang, useRel } from '@/components/dish/lang';
 import { Highlighter } from '@/components/primitives/Highlighter';
@@ -326,14 +327,98 @@ export function FillScreen({ ask, guess, version, onDone }: { ask: Ask; guess: R
 
 const CONFETTI = ['#5B6F00', '#FEBE29', '#F2A98F', '#8E80AE', '#5B6F00', '#FEBE29', '#F2A98F', '#8E80AE', '#5B6F00', '#FEBE29'];
 
-export function SentScreen({ ask, kid, token }: { ask: Ask; kid: string; token: string }) {
+/** The dish card ("Mom's sweet tomato egg"). With `onOpen` the whole card is one tap that opens her recipe. */
+function RecipeCard({ ask, compact, onOpen }: { ask: Ask; compact?: boolean; onOpen: (() => void) | null }) {
+  const { t } = useLang();
+  const n = ask.answered.length;
+  const title = cardTitle(ask.relation, ask.guess.dish || ask.dish);
+  return (
+    <div className={s.miniCard} data-compact={compact || undefined}>
+      <span className={s.miniThumb}>
+        <DishHero photoUrl={ask.photoUrls[0] ?? null} alt="" height={60} />
+      </span>
+      <span className={s.miniText}>
+        <span className={s.miniTitle}>{title}</span>
+        <span className={s.miniLine}>{n === 1 ? t('m5.answers1') : t('m5.answers', { n })}</span>
+      </span>
+      {onOpen && (
+        <>
+          <svg className={s.miniChevron} width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M9 5l7 7-7 7" />
+          </svg>
+          <button type="button" className={s.miniHit} aria-label={`${t('lock.open')}: ${title}`} onClick={onOpen} />
+        </>
+      )}
+    </div>
+  );
+}
+
+/** M6: the film ask. Also the sheet the locked recipe view's "Get the app" opens (Mom's wording, her link). */
+export function FilmSheet({ open, onClose, kid, token, extra }: { open: boolean; onClose: () => void; kid: string; token: string; extra?: ReactNode }) {
+  const { t } = useLang();
+  return (
+    <AppSheet
+      open={open}
+      onClose={onClose}
+      visual={
+        <div className={s.frame} aria-hidden="true">
+          <span className={s.rec}>REC 0:12</span>
+          <span className={`${s.corner} ${s.cornerTR}`} />
+          <span className={`${s.corner} ${s.cornerBL}`} />
+          <span className={`${s.corner} ${s.cornerBR}`} />
+          <PotMascot size={110} mood="happy" steam />
+        </div>
+      }
+      title={t('m6.title', { kid })}
+      sub={t('m6.misses', { kid })}
+      reasons={[
+        { icon: 'bookmark', tone: 'sage', text: t('m6.save') },
+        { icon: 'heart', tone: 'peach', text: t('m6.keep', { kid }) },
+      ]}
+      extra={extra}
+      copyLink={`${WEB_ORIGIN}/a?t=${token}`}
+      schemeLink={appSchemeUrl('a', { t: token })}
+    />
+  );
+}
+
+/**
+ * `canOpen`: her version is written, so the card opens it. `filmFirst`: the film ask rises by itself, once
+ * (coming back from her recipe it doesn't rise again).
+ */
+export function SentScreen({
+  ask,
+  kid,
+  token,
+  canOpen,
+  filmFirst,
+  onFilmShown,
+  onOpenRecipe,
+}: {
+  ask: Ask;
+  kid: string;
+  token: string;
+  canOpen: boolean;
+  filmFirst: boolean;
+  onFilmShown: () => void;
+  onOpenRecipe: () => void;
+}) {
   const { t } = useLang();
   const [film, setFilm] = useState(false);
   useEffect(() => {
-    const timer = window.setTimeout(() => setFilm(true), 1800);
+    if (!filmFirst) return;
+    const timer = window.setTimeout(() => {
+      setFilm(true);
+      onFilmShown();
+    }, 1800);
     return () => window.clearTimeout(timer);
-  }, []);
-  const n = ask.answered.length;
+  }, [filmFirst, onFilmShown]);
+  const open = canOpen
+    ? () => {
+        setFilm(false);
+        onOpenRecipe();
+      }
+    : null;
   return (
     <>
       <TopBar />
@@ -352,38 +437,10 @@ export function SentScreen({ ask, kid, token }: { ask: Ask; kid: string; token: 
         <div className={s.rise}>
           <h1 className={s.sentTitle}>{t('m5.sent', { kid })}</h1>
           <p className={s.sentLine}>{t('m5.line', { kid })}</p>
-          <div className={s.miniCard}>
-            <span className={s.miniThumb}>
-              <DishHero photoUrl={ask.photoUrls[0] ?? null} alt="" height={60} />
-            </span>
-            <span>
-              <span className={s.miniTitle}>{cardTitle(ask.relation, ask.guess.dish || ask.dish)}</span>
-              <span className={s.miniLine}>{n === 1 ? t('m5.answers1') : t('m5.answers', { n })}</span>
-            </span>
-          </div>
+          <RecipeCard ask={ask} onOpen={open} />
         </div>
       </div>
-      <AppSheet
-        open={film}
-        onClose={() => setFilm(false)}
-        visual={
-          <div className={s.frame} aria-hidden="true">
-            <span className={s.rec}>REC 0:12</span>
-            <span className={`${s.corner} ${s.cornerTR}`} />
-            <span className={`${s.corner} ${s.cornerBL}`} />
-            <span className={`${s.corner} ${s.cornerBR}`} />
-            <PotMascot size={110} mood="happy" steam />
-          </div>
-        }
-        title={t('m6.title', { kid })}
-        sub={t('m6.misses', { kid })}
-        reasons={[
-          { icon: 'bookmark', tone: 'sage', text: t('m6.save') },
-          { icon: 'heart', tone: 'peach', text: t('m6.keep', { kid }) },
-        ]}
-        copyLink={`${WEB_ORIGIN}/a?t=${token}`}
-        schemeLink={appSchemeUrl('a', { t: token })}
-      />
+      <FilmSheet open={film} onClose={() => setFilm(false)} kid={kid} token={token} extra={open && <RecipeCard ask={ask} compact onOpen={open} />} />
     </>
   );
 }

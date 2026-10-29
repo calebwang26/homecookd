@@ -38,7 +38,7 @@ export function DishHero({ photoUrl, alt, height = 270, children }: { photoUrl: 
         // eslint-disable-next-line @next/next/no-img-element -- a Convex storage URL, outside the static loader
         <img src={photoUrl} alt={alt} className={s.heroImg} />
       ) : (
-        <PotMascot size={150} mood="happy" />
+        <PotMascot size={Math.min(150, Math.round(height * 0.75))} mood="happy" />
       )}
       {children}
     </div>
@@ -190,6 +190,7 @@ export function AppSheet({
   title,
   sub,
   reasons,
+  extra,
   copyLink,
   schemeLink,
 }: {
@@ -199,6 +200,8 @@ export function AppSheet({
   title: string;
   sub?: string;
   reasons: Reason[];
+  /** under the reasons, above the button: Mom's recipe card, which opens the recipe */
+  extra?: ReactNode;
   copyLink: string;
   schemeLink: string;
 }) {
@@ -231,6 +234,7 @@ export function AppSheet({
           </li>
         ))}
       </ul>
+      {extra}
       <a className={`${ui.press} ${ui.primary} ${s.appButton}`} href={STORE_URL} onClick={getApp} data-testid="get-app">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
           <rect x="7" y="2.5" width="10" height="19" rx="2.5" />

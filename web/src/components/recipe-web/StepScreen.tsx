@@ -10,6 +10,7 @@
 import { useLayoutEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Avatar } from './Avatar';
+import { Bold, Her, Was } from './DishBits';
 import { FitLabel } from './FitLabel';
 import { useRW } from './context';
 import { HearSheet } from './HearBar';
@@ -24,7 +25,7 @@ import s from './StepScreen.module.css';
 type Open = 'watch' | 'hear' | 'steps' | null;
 
 export function StepScreen({ index }: { index: number }) {
-  const { recipe: r, go, lock, hear, stopHear, reduced } = useRW();
+  const { recipe: r, go, lock, hear, stopHear, reduced, dish } = useRW();
   const step: Step = r.steps[index];
   const total = r.steps.length;
   const n = index + 1;
@@ -55,12 +56,12 @@ export function StepScreen({ index }: { index: number }) {
   return (
     <div className={s.wrap} data-open={open || undefined}>
       <div className={s.top}>
-        <button type="button" className={`${ui.press} ${ui.roundBtn}`} aria-label="Close and go back to the recipe" onClick={() => go({ name: 'recipe' })}>
+        <button type="button" className={`${ui.press} ${ui.roundBtn}`} aria-label={dish ? dish.t('common.close') : 'Close and go back to the recipe'} onClick={() => go({ name: 'recipe' })}>
           <IconClose />
         </button>
-        <button type="button" className={s.progress} aria-haspopup="dialog" aria-label={`Step ${n} of ${total}. Shows all steps`} onClick={() => setSheet('steps')}>
+        <button type="button" className={s.progress} aria-haspopup="dialog" aria-label={dish ? dish.t('lock.stepOf', { n, m: total }) : `Step ${n} of ${total}. Shows all steps`} onClick={() => setSheet('steps')}>
           <span className={s.stepOf}>
-            Step {n} of {total}
+            {dish ? dish.t('lock.stepOf', { n, m: total }) : `Step ${n} of ${total}`}
             <IconChevronDown size={16} className={s.chev} />
           </span>
           <span className={s.segments} aria-hidden="true">
@@ -71,7 +72,9 @@ export function StepScreen({ index }: { index: number }) {
         </button>
       </div>
 
-      {open ? (
+      {dish ? (
+        <DishStep index={index} />
+      ) : open ? (
         <div className={s.compact}>
           <Thumb poster={poster} hasVideo={!!video} label={`Watch ${name}: ${step.title}`} onPress={watch} />
           <h1 className={s.h1Small}>{step.title}</h1>
@@ -106,34 +109,37 @@ export function StepScreen({ index }: { index: number }) {
         </div>
       )}
 
-      <section className={s.drawer} data-open={open || undefined}>
-        <button type="button" className={s.drawerHead} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
-          <span className={s.drawerTitle}>More from {name}</span>
-          {special && !open && (
-            <span className={s.specialChip}>
-              <IconSparkle size={12} />
-              Special
-            </span>
-          )}
-          <motion.span className={s.chevron} animate={{ rotate: open ? 180 : 0 }} transition={{ duration: reduced ? 0 : 0.28, ease: [0.2, 0.8, 0.2, 1] }}>
-            <IconChevronDown />
-          </motion.span>
-        </button>
-        <AnimatePresence initial={false}>
-          {open && (
-            <motion.div
-              key="more"
-              initial={{ height: 0, opacity: 0 }}
-              animate={{ height: 'auto', opacity: 1 }}
-              exit={{ height: 0, opacity: 0 }}
-              transition={{ duration: reduced ? 0.15 : 0.28, ease: [0.2, 0.8, 0.2, 1] }}
-              style={{ overflow: 'hidden' }}
-            >
-              <StepMore recipe={r} step={step} canHear={audio} onHearStep={hearStep} onAsk={(el) => lock('askStep', el)} />
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </section>
+      {/* Her words sit in the step itself on a dish card; there is no "More from" to open. */}
+      {!dish && (
+        <section className={s.drawer} data-open={open || undefined}>
+          <button type="button" className={s.drawerHead} aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+            <span className={s.drawerTitle}>More from {name}</span>
+            {special && !open && (
+              <span className={s.specialChip}>
+                <IconSparkle size={12} />
+                Special
+              </span>
+            )}
+            <motion.span className={s.chevron} animate={{ rotate: open ? 180 : 0 }} transition={{ duration: reduced ? 0 : 0.28, ease: [0.2, 0.8, 0.2, 1] }}>
+              <IconChevronDown />
+            </motion.span>
+          </button>
+          <AnimatePresence initial={false}>
+            {open && (
+              <motion.div
+                key="more"
+                initial={{ height: 0, opacity: 0 }}
+                animate={{ height: 'auto', opacity: 1 }}
+                exit={{ height: 0, opacity: 0 }}
+                transition={{ duration: reduced ? 0.15 : 0.28, ease: [0.2, 0.8, 0.2, 1] }}
+                style={{ overflow: 'hidden' }}
+              >
+                <StepMore recipe={r} step={step} canHear={audio} onHearStep={hearStep} onAsk={(el) => lock('askStep', el)} />
+              </motion.div>
+            )}
+          </AnimatePresence>
+        </section>
+      )}
 
       <AnimatePresence>
         {sheet === 'watch' && (
@@ -164,7 +170,7 @@ export function StepScreen({ index }: { index: number }) {
             reduced={reduced}
           />
         )}
-        {sheet === 'steps' && <StepsSheet key="steps" steps={r.steps} current={n} onPick={pick} onClose={() => setSheet(null)} reduced={reduced} />}
+        {sheet === 'steps' && <StepsSheet key="steps" steps={r.steps} current={n} onPick={pick} onClose={() => setSheet(null)} reduced={reduced} title={dish?.t('lock.allSteps')} />}
       </AnimatePresence>
     </div>
   );
@@ -330,7 +336,7 @@ function StoryCallout({ story: x, cook, canHear, onHear }: { story: Story; cook:
 }
 
 /** "All steps" (the app's StepsSheet): done steps show a check, the current one sits on sage. */
-function StepsSheet({ steps, current, onPick, onClose, reduced }: { steps: Step[]; current: number; onPick: (i: number) => void; onClose: () => void; reduced: boolean }) {
+function StepsSheet({ steps, current, onPick, onClose, reduced, title = 'All steps' }: { steps: Step[]; current: number; onPick: (i: number) => void; onClose: () => void; reduced: boolean; title?: string }) {
   const list = useRef<HTMLDivElement>(null);
   const now = useRef<HTMLButtonElement>(null);
   // Long lists open near the current step.
@@ -338,7 +344,7 @@ function StepsSheet({ steps, current, onPick, onClose, reduced }: { steps: Step[
     if (list.current && now.current) list.current.scrollTop = Math.max(0, now.current.offsetTop - 120);
   }, []);
   return (
-    <Sheet title="All steps" onClose={onClose} reduced={reduced}>
+    <Sheet title={title} onClose={onClose} reduced={reduced}>
       <div ref={list} className={s.stepsList}>
         {steps.map((x, i) => {
           const k = i + 1;
@@ -353,7 +359,7 @@ function StepsSheet({ steps, current, onPick, onClose, reduced }: { steps: Step[
               data-now={isNow || undefined}
               data-done={done || undefined}
               aria-current={isNow ? 'step' : undefined}
-              aria-label={`Step ${k}: ${x.title}${isNow ? ', current step' : done ? ', done' : ''}`}
+              aria-label={`${k}. ${x.title}${isNow ? ', current step' : done ? ', done' : ''}`}
               onClick={() => onPick(i)}
             >
               <span className={s.stepCircle}>{done ? <IconCheck size={16} /> : k}</span>
@@ -363,5 +369,47 @@ function StepsSheet({ steps, current, onPick, onClose, reduced }: { steps: Step[
         })}
       </div>
     </Sheet>
+  );
+}
+
+/**
+ * A dish card's step: its title, its lines (her amount over the guess she replaced), her own words with
+ * the English under them, and her clip when she recorded one ("Hear Mom say it", the page's one Hear sheet).
+ */
+function DishStep({ index }: { index: number }) {
+  const { dish, hear } = useRW();
+  if (!dish) return null;
+  const st = dish.recipe.steps[index];
+  const hers = st.lines.filter((l) => l.status === 'mom');
+  const clipId = hers.find((l) => l.clip)?.clip ?? st.tip?.clip ?? null;
+  const clip = clipId ? dish.clips[clipId] : null;
+  const url = clip?.audioUrl ?? null;
+  const quote = hers.find((l) => l.quote)?.quote ?? st.tip;
+  return (
+    <div className={s.full}>
+      <div className={s.words}>
+        <h1 className={s.h1}>{st.title}</h1>
+        {st.lines.map((l, i) => (
+          <p key={i} className={s.body} dir="auto">
+            <Bold text={l.text} />
+            {l.status === 'mom' && l.was && <Was block text={l.was.replaceAll('**', '')} />}
+          </p>
+        ))}
+        {hers.map((l, i) => l.quote && <Her key={i} quote={l.quote} />)}
+        {st.tip && <Her quote={st.tip} />}
+      </div>
+      {url && (
+        <div className={ui.pillPair} style={{ gridTemplateColumns: '1fr' }}>
+          <button
+            type="button"
+            className={`${ui.press} ${ui.pillBtn}`}
+            onClick={() => hear({ key: `clip-${clipId}`, start: 0, end: clip?.durationS ? clip.durationS + 1 : 3600, label: st.title, words: quote?.words ?? null, url })}
+          >
+            <IconWave />
+            {dish.hear}
+          </button>
+        </div>
+      )}
+    </div>
   );
 }

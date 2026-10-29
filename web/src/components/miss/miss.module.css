@@ -442,6 +442,36 @@
   background: #f7f7f2;
   padding: 28px 24px 0;
 }
+/* The card's head (version pill, title, byline) is one tap into the locked recipe view. */
+.head {
+  position: relative;
+  padding-inline-end: 36px;
+}
+.headChevron {
+  position: absolute;
+  inset-inline-end: 0;
+  top: 50%;
+  margin-top: -11px;
+  color: #5f6352;
+}
+[dir='rtl'] .headChevron {
+  transform: scaleX(-1);
+}
+.headHit {
+  position: absolute;
+  inset: -6px -8px;
+  border-radius: 20px;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 160ms ease;
+}
+.headHit:active {
+  background: rgba(30, 36, 16, 0.05);
+}
+.headHit:focus-visible {
+  outline: 3px solid #788c15;
+  outline-offset: 2px;
+}
 .pill {
   display: inline-flex;
   align-items: center;

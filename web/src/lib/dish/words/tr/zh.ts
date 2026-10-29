@@ -162,6 +162,15 @@ const words: Translation = {
   'm.nothingLine': '回答一个问题，{kid}就能听到。',
   'm.answerOne': '回答一个问题',
   'm.notFound': '这个链接已经失效了。',
+  'lock.open': '打开食谱',
+  'lock.start': '开始做饭',
+  'lock.ready': '先把这些备好',
+  'lock.step1': '开始第 1 步',
+  'lock.next': '下一步',
+  'lock.made': '我做好了',
+  'lock.stepOf': '第 {n} / {m} 步',
+  'lock.allSteps': '全部步骤',
+  'lock.count': '{n}/{m}',
 };
 
 export default words;

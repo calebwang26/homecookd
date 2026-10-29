@@ -3,15 +3,16 @@
 // over his struck-through guesses, her own words with the English under them, and her clips. The dock
 // saves (K4, the download ask) or asks her (K3). The recipe itself stays in English: it's data.
 import { Fragment, useCallback, useEffect, useState, type MouseEvent } from 'react';
-import { AppSheet, DishHero, Toast, useAudio, useToast } from '@/components/dish/parts';
+import { DishHero, Toast, useAudio, useToast } from '@/components/dish/parts';
 import { useLang, useRel } from '@/components/dish/lang';
 import { PotMascot } from '@/components/primitives/PotMascot';
 import { IconBack, IconPause, IconPlay } from '@/components/recipe-web/icons';
-import { appSchemeUrl, WEB_ORIGIN } from '@/lib/app-links';
 import { getCard } from '@/lib/dish/api';
-import { boldRuns, cardTitle, pronounOf } from '@/lib/dish/text';
+import { boldRuns, cardTitle } from '@/lib/dish/text';
 import type { Card, Ingredient, Line, Quote, QuestionId, Recipe } from '@/lib/dish/types';
 import { AskSheet } from './AskSheet';
+import { KidRecipe } from './KidRecipe';
+import { SaveSheet } from './SaveSheet';
 import ui from '@/components/dish/ui.module.css';
 import s from './miss.module.css';
 
@@ -23,6 +24,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
   const [card, setCard] = useState(initial);
   const [asking, setAsking] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [locked, setLocked] = useState(false); // the locked recipe view over the card
   const { toast, show } = useToast();
   const audio = useAudio();
 
@@ -53,10 +55,12 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
   };
   const closeSave = useCallback(() => setSaving(false), []);
   const closeAsk = useCallback(() => setAsking(false), []);
+  const closeRecipe = useCallback(() => setLocked(false), []);
 
   const steps = recipe.steps.length;
-  const pronoun = pronounOf(card.relation);
   const photo = card.photoUrls[0] ?? null;
+
+  if (locked) return <KidRecipe card={card} token={token} version={recipe} onClose={closeRecipe} />;
 
   return (
     <main className={s.card}>
@@ -66,19 +70,26 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
         </a>
       </DishHero>
       <section className={s.sheet}>
-        <span className={s.pill} data-tone={card.version ? 'peach' : undefined}>
-          {card.version ? t('card.theirVersion', { R }) : t('card.tonight')}
-        </span>
-        <h1 className={s.title}>{cardTitle(card.relation, recipe.dish || card.dish)}</h1>
-        <div className={s.byline}>
-          {card.version ? (
-            <span className={s.avatar} aria-hidden="true">
-              <PotMascot size={22} />
-            </span>
-          ) : (
-            <span className={s.dashed} aria-hidden="true" />
-          )}
-          {card.version ? t('card.fromKitchen', { R }) : t('card.bestGuess')}
+        {/* The version is one tap: the button covers it and opens the recipe as the locked view. */}
+        <div className={s.head}>
+          <span className={s.pill} data-tone={card.version ? 'peach' : undefined}>
+            {card.version ? t('card.theirVersion', { R }) : t('card.tonight')}
+          </span>
+          <h1 className={s.title}>{cardTitle(card.relation, recipe.dish || card.dish)}</h1>
+          <div className={s.byline}>
+            {card.version ? (
+              <span className={s.avatar} aria-hidden="true">
+                <PotMascot size={22} />
+              </span>
+            ) : (
+              <span className={s.dashed} aria-hidden="true" />
+            )}
+            {card.version ? t('card.fromKitchen', { R }) : t('card.bestGuess')}
+          </div>
+          <svg className={s.headChevron} width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M9 5l7 7-7 7" />
+          </svg>
+          <button type="button" className={s.headHit} aria-label={`${t('lock.open')}: ${cardTitle(card.relation, recipe.dish || card.dish)}`} onClick={() => setLocked(true)} />
         </div>
 
         {card.merging ? (
@@ -174,18 +185,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
       </div>
 
       <AskSheet open={asking} onClose={closeAsk} token={token} card={card} onCard={setCard} toast={show} />
-      <AppSheet
-        open={saving}
-        onClose={closeSave}
-        visual={<SavedFan photo={photo} />}
-        title={t('get.title')}
-        reasons={[
-          { icon: 'bookmark', tone: 'sage', title: t('get.keep'), text: t('get.keepLine') },
-          { icon: 'bell', tone: 'butter', title: t('get.know', { R }), text: t(pronoun === 'he' ? 'get.knowLineHe' : 'get.knowLineShe') },
-        ]}
-        copyLink={`${WEB_ORIGIN}/miss?k=${token}`}
-        schemeLink={appSchemeUrl('miss', { k: token })}
-      />
+      <SaveSheet open={saving} onClose={closeSave} photo={photo} relation={card.relation} token={token} />
       <Toast toast={toast} />
     </main>
   );
@@ -260,25 +260,6 @@ function Bold({ text }: { text: Line['text'] }) {
     <>
       {boldRuns(text).map((r, i) => (r.bold ? <b key={i}>{r.text}</b> : <Fragment key={i}>{r.text}</Fragment>))}
     </>
-  );
-}
-
-function SavedFan({ photo }: { photo: string | null }) {
-  return (
-    <div className={s.fan} aria-hidden="true">
-      <span className={s.fanCard} />
-      <span className={s.fanCard} />
-      <div className={s.fanWrap}>
-        <div className={s.fanFront}>
-          <DishHero photoUrl={photo} alt="" height={134} />
-        </div>
-        <span className={s.badge}>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-            <path d="M6 4h12v17l-6-4-6 4z" />
-          </svg>
-        </span>
-      </div>
-    </div>
   );
 }
 

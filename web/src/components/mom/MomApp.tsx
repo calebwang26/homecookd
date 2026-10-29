@@ -13,12 +13,13 @@ import { DishError, finishAsk, isPlausibleToken, peekAsk, sendAnswer } from '@/l
 import { askedItems, guessOf } from '@/lib/dish/text';
 import type { Ask, InLang } from '@/lib/dish/types';
 import { spokenLang } from '@/lib/dish/words';
+import { MomRecipe } from './MomRecipe';
 import { FillScreen, GuessScreen, IntroScreen, SentScreen } from './MomScreens';
 import { QuestionScreen, type Pending, type SaveOutcome, type ShownQuestion } from './QuestionScreen';
 import ui from '@/components/dish/ui.module.css';
 import s from './mom.module.css';
 
-type Stage = 'loading' | 'error' | 'intro' | 'guess' | 'questions' | 'nothing' | 'fill' | 'sent';
+type Stage = 'loading' | 'error' | 'intro' | 'guess' | 'questions' | 'nothing' | 'fill' | 'sent' | 'recipe';
 type Failure = 'not-found' | 'offline';
 
 const POLL_MS = 2000;
@@ -48,6 +49,8 @@ function Mom() {
   const [recordable, setRecordable] = useState(true);
   const askRef = useRef<Ask | null>(null);
   const toSent = useCallback(() => setStage('sent'), []);
+  const [filmShown, setFilmShown] = useState(false); // the film ask rises once by itself; back from her recipe it stays down
+  const onFilmShown = useCallback(() => setFilmShown(true), []);
   const keep = (a: Ask) => {
     askRef.current = a;
     setAsk(a);
@@ -226,6 +229,23 @@ function Mom() {
     case 'fill':
       return <FillScreen ask={ask} guess={guess} version={inLang?.version ?? ask.version} onDone={toSent} />;
     case 'sent':
-      return <SentScreen ask={ask} kid={kid} token={token!} />;
+    case 'recipe': {
+      // Her version, in her language once it is translated (the same pick as the fill screen).
+      const version = inLang?.version ?? ask.version;
+      if (stage === 'recipe' && version) {
+        return <MomRecipe ask={ask} kid={kid} token={token!} version={version} onClose={() => setStage('sent')} />;
+      }
+      return (
+        <SentScreen
+          ask={ask}
+          kid={kid}
+          token={token!}
+          canOpen={!!version}
+          filmFirst={!filmShown}
+          onFilmShown={onFilmShown}
+          onOpenRecipe={() => setStage('recipe')}
+        />
+      );
+    }
   }
 }

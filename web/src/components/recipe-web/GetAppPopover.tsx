@@ -33,9 +33,12 @@ export function GetAppPopover({
   onClose,
   onGetApp,
   reduced,
+  labels = { notNow: 'Not now', getApp: 'Get App' },
 }: {
   anchor: DOMRect;
   copy: LockCopy;
+  /** the two buttons, in the page language on the dish pages */
+  labels?: { notNow: string; getApp: string };
   onClose: () => void;
   onGetApp: () => void;
   reduced: boolean;
@@ -87,10 +90,10 @@ export function GetAppPopover({
             <p className={s.popLine}>{copy.line}</p>
             <div className={s.popActions}>
               <button type="button" className={`${ui.press} ${s.notNow}`} onClick={onClose}>
-                Not now
+                {labels.notNow}
               </button>
               <button ref={getBtn} type="button" className={`${ui.press} ${s.getAppPill}`} onClick={onGetApp}>
-                Get App
+                {labels.getApp}
               </button>
             </div>
           </motion.div>

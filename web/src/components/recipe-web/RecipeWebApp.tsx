@@ -4,6 +4,8 @@
 // opens the "Get the app" popover, which leads to the app hand-off sheet. See docs/build/SPEC.md
 // section 6 and FEEDBACK-OCT16c section C. Like the app's recipe flow there is no tab bar here
 // (the app hides it on a dish): only the screen's pinned action, under the web's own top bar.
+// RecipeWebView is the same view with a `dish` (DishLock): the dish pages' locked look at the recipe
+// Mom just wrote or the kid's card, read from the dish card instead of recipe.json (DishRecipeView).
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { PotMascot } from '@/components/primitives/PotMascot';
@@ -12,7 +14,7 @@ import { getRecipe, getShare, isPlausibleToken, LoadError, type LoadErrorKind } 
 import { BUCKET_URL, fixtureAllowed } from '@/lib/recipe-web/config';
 import { clearProgress, readLastStep, writeLastStep } from '@/lib/recipe-web/progress';
 import type { Recipe, Share } from '@/lib/recipe-web/types';
-import { RWContext, type HearRequest, type LockKind, type RW, type Screen } from './context';
+import { RWContext, type DishLock, type HearRequest, type LockKind, type RW, type Screen } from './context';
 import { GetAppPopover, lockCopy, type LockCopy } from './GetAppPopover';
 import { GetAppSheet } from './GetAppSheet';
 import { HearBar } from './HearBar';
@@ -92,7 +94,7 @@ export function RecipeWebApp() {
     <div className={ui.page}>
       <div className={ui.column}>
         {load.state === 'ready' ? (
-          <Ready share={load.share} recipe={load.recipe} />
+          <RecipeWebView share={load.share} recipe={load.recipe} />
         ) : (
           <>
             <TopBar />
@@ -122,16 +124,31 @@ export function RecipeWebApp() {
  *  frosted and see-through while it still sits over the photo, solid once the page scrolls past.
  *  Lander links are plain <a>, never next/link: a soft navigation leaves the lander's lazily
  *  mounted sections blank (its deferred slots and head scripts only run on a full page load). */
-function TopBar({ onGetApp, overlay, clear }: { onGetApp?: (el: HTMLElement) => void; overlay?: boolean; clear?: boolean }) {
+function TopBar({ onGetApp, overlay, clear, dish }: { onGetApp?: (el: HTMLElement) => void; overlay?: boolean; clear?: boolean; dish?: DishLock | null }) {
+  // On the dish pages the bar has a way back to the page the view opened from, and the wordmark stays put.
+  const mark = (
+    <>
+      <PotMascot size={28} />
+      <span className={ui.word}>homecookd</span>
+    </>
+  );
   return (
     <header className={ui.topbar} data-overlay={overlay || undefined} data-clear={(overlay && clear) || undefined}>
-      <a className={ui.brand} href={LANDER_LINK.learner} aria-label="What’s homecookd?">
-        <PotMascot size={28} />
-        <span className={ui.word}>homecookd</span>
-      </a>
+      {dish && (
+        <button type="button" className={`${ui.press} ${ui.topBack}`} aria-label={dish.t('common.back')} onClick={dish.onClose}>
+          <IconBack size={22} />
+        </button>
+      )}
+      {dish ? (
+        <span className={ui.brand}>{mark}</span>
+      ) : (
+        <a className={ui.brand} href={LANDER_LINK.learner} aria-label="What’s homecookd?">
+          {mark}
+        </a>
+      )}
       {onGetApp ? (
         <button type="button" className={`${ui.press} ${ui.getApp}`} onClick={(e) => onGetApp(e.currentTarget)}>
-          Get the app
+          {dish ? dish.t('common.getApp') : 'Get the app'}
         </button>
       ) : (
         <a className={`${ui.press} ${ui.getApp} ${ui.getAppLink}`} href={LANDER_LINK.learner}>
@@ -142,10 +159,11 @@ function TopBar({ onGetApp, overlay, clear }: { onGetApp?: (el: HTMLElement) => 
   );
 }
 
-function Ready({ share, recipe }: { share: Share; recipe: Recipe }) {
+export function RecipeWebView({ share, recipe, dish = null }: { share: Share; recipe: Recipe; dish?: DishLock | null }) {
   const reduced = !!useReducedMotion();
   const steps = recipe.steps.length;
-  const [screen, setScreen] = useState<Screen>(() => parseHash(steps));
+  // On the dish pages the screens live in state only: the page's own address and back button stay as they are.
+  const [screen, setScreen] = useState<Screen>(() => (dish ? { name: 'recipe' } : parseHash(steps)));
   const [popover, setPopover] = useState<{ rect: DOMRect; copy: LockCopy; key: number } | null>(null);
   const [sheet, setSheet] = useState(false);
   const closeSheet = useCallback(() => setSheet(false), []);
@@ -155,28 +173,28 @@ function Ready({ share, recipe }: { share: Share; recipe: Recipe }) {
   const audioUrl = recipe.media.audio_url || recipe.media.video_url;
 
   useEffect(() => {
+    if (dish) return;
     const onPop = () => setScreen(parseHash(steps));
     window.addEventListener('popstate', onPop);
     return () => window.removeEventListener('popstate', onPop);
-  }, [steps]);
+  }, [steps, dish]);
 
   const go = useCallback(
     (s: Screen) => {
       setPopover(null);
       setScreen(s);
-      const url = `${window.location.pathname}${window.location.search}${hashOf(s)}`;
-      window.history.pushState(null, '', url);
+      if (!dish) window.history.pushState(null, '', `${window.location.pathname}${window.location.search}${hashOf(s)}`);
       window.scrollTo({ top: 0, behavior: 'auto' });
     },
-    [],
+    [dish],
   );
 
   const lock = useCallback(
     (kind: LockKind, anchor: HTMLElement | null) => {
       if (!anchor) return;
-      setPopover({ rect: anchor.getBoundingClientRect(), copy: lockCopy(kind, recipe.cook.name, recipe.title), key: Date.now() });
+      setPopover({ rect: anchor.getBoundingClientRect(), copy: dish ? dish.popover : lockCopy(kind, recipe.cook.name, recipe.title), key: Date.now() });
     },
-    [recipe],
+    [recipe, dish],
   );
 
   // The step this browser was last on, so the recipe offers "Back to step N" (as the app does).
@@ -203,9 +221,10 @@ function Ready({ share, recipe }: { share: Share; recipe: Recipe }) {
 
   const hear = useCallback(
     (h: HearRequest) => {
-      if (!audioUrl) return;
+      const url = h.url ?? audioUrl;
+      if (!url) return;
       setHearing(h);
-      play(audioUrl, h.start, h.end, h.key);
+      play(url, h.start, h.end, h.key);
     },
     [play, audioUrl],
   );
@@ -231,8 +250,9 @@ function Ready({ share, recipe }: { share: Share; recipe: Recipe }) {
         setWatching(true);
       },
       reduced,
+      dish,
     }),
-    [recipe, share, screen, go, lock, hear, audioState, toggleAudio, hearing, stopHear, reduced],
+    [recipe, share, screen, go, lock, hear, audioState, toggleAudio, hearing, stopHear, reduced, dish],
   );
 
   // Close the popover when the page scrolls: it points at something that moved.
@@ -263,7 +283,7 @@ function Ready({ share, recipe }: { share: Share; recipe: Recipe }) {
 
   return (
     <RWContext.Provider value={ctx}>
-      <TopBar onGetApp={(el) => lock('getApp', el)} overlay={screen.name === 'recipe'} clear={clear} />
+      <TopBar onGetApp={(el) => lock('getApp', el)} overlay={screen.name === 'recipe'} clear={clear} dish={dish} />
       <main className={ui.main}>
         <AnimatePresence mode="wait" initial={false}>
           <motion.div
@@ -283,7 +303,7 @@ function Ready({ share, recipe }: { share: Share; recipe: Recipe }) {
 
       <div className={ui.dock} data-rw-dock="">
         <HearBar />
-        <Cta screen={screen} recipe={recipe} lastStep={lastStep} go={go} onMadeIt={madeIt} />
+        <Cta screen={screen} recipe={recipe} lastStep={dish ? 0 : lastStep} go={go} onMadeIt={madeIt} dish={dish} />
       </div>
 
       {/* hidden player for "Hear the cook" */}
@@ -296,6 +316,7 @@ function Ready({ share, recipe }: { share: Share; recipe: Recipe }) {
             anchor={popover.rect}
             copy={popover.copy}
             reduced={reduced}
+            labels={dish ? { notNow: dish.t('common.notNow'), getApp: dish.t('common.getApp') } : undefined}
             onClose={() => setPopover(null)}
             onGetApp={() => {
               setPopover(null);
@@ -304,9 +325,11 @@ function Ready({ share, recipe }: { share: Share; recipe: Recipe }) {
           />
         )}
       </AnimatePresence>
-      <AnimatePresence>
-        {sheet && <GetAppSheet key="get-app" onClose={closeSheet} share={share} reduced={reduced} />}
-      </AnimatePresence>
+      {dish ? (
+        dish.renderSheet({ open: sheet, onClose: closeSheet })
+      ) : (
+        <AnimatePresence>{sheet && <GetAppSheet key="get-app" onClose={closeSheet} share={share} reduced={reduced} />}</AnimatePresence>
+      )}
       <AnimatePresence>
         {/* The recipe's Watch: the whole video (the app's media sheet: dish name, the cook under it). */}
         {watching && (
@@ -338,18 +361,24 @@ function Cta({
   lastStep,
   go,
   onMadeIt,
+  dish,
 }: {
   screen: Screen;
   recipe: Recipe;
   lastStep: number;
   go: (s: Screen) => void;
   onMadeIt: (anchor: HTMLElement) => void;
+  dish: DishLock | null;
 }) {
   const steps = r.steps.length;
   const resume = lastStep > 1 && lastStep <= steps;
   if (screen.name === 'recipe' || screen.name === 'ingredients') {
     if (!steps) return null;
-    const label = resume ? `Back to step ${lastStep}` : screen.name === 'recipe' ? 'Start cooking' : 'Start step 1';
+    const label = resume
+      ? `Back to step ${lastStep}`
+      : screen.name === 'recipe'
+        ? (dish?.t('lock.start') ?? 'Start cooking')
+        : (dish?.t('lock.step1') ?? 'Start step 1');
     const next: Screen = resume ? { name: 'step', i: lastStep - 1 } : screen.name === 'recipe' ? { name: 'ingredients' } : { name: 'step', i: 0 };
     return (
       <div className={ui.ctaRow} data-rw-cta="">
@@ -366,7 +395,7 @@ function Cta({
       <button
         type="button"
         className={`${ui.press} ${ui.ctaBack}`}
-        aria-label={screen.i === 0 ? 'Back to the ingredients' : 'Previous step'}
+        aria-label={dish ? dish.t('common.back') : screen.i === 0 ? 'Back to the ingredients' : 'Previous step'}
         onClick={() => go(screen.i === 0 ? (r.ingredients.length ? { name: 'ingredients' } : { name: 'recipe' }) : { name: 'step', i: screen.i - 1 })}
       >
         <IconBack />
@@ -374,11 +403,11 @@ function Cta({
       {last ? (
         <button type="button" className={`${ui.press} ${ui.cta}`} onClick={(e) => onMadeIt(e.currentTarget)}>
           <IconCheck size={20} />
-          I made it
+          {dish ? dish.t('lock.made') : 'I made it'}
         </button>
       ) : (
         <button type="button" className={`${ui.press} ${ui.cta}`} onClick={() => go({ name: 'step', i: screen.i + 1 })}>
-          Next step
+          {dish ? dish.t('lock.next') : 'Next step'}
           <IconArrow />
         </button>
       )}

@@ -162,6 +162,15 @@ const words: Translation = {
   'm.nothingLine': 'एक सवाल का जवाब दीजिए, {kid} तक आपकी आवाज़ पहुँचेगी।',
   'm.answerOne': 'एक सवाल का जवाब दें',
   'm.notFound': 'यह लिंक अब काम नहीं करता।',
+  'lock.open': 'रेसिपी खोलें',
+  'lock.start': 'खाना बनाना शुरू करें',
+  'lock.ready': 'ये तैयार रखें',
+  'lock.step1': 'चरण 1 शुरू करें',
+  'lock.next': 'अगला चरण',
+  'lock.made': 'मैंने बना लिया',
+  'lock.stepOf': 'चरण {n} / {m}',
+  'lock.allSteps': 'सभी चरण',
+  'lock.count': '{n}/{m}',
 };
 
 export default words;

@@ -9,8 +9,11 @@
 // voice note's empty and recorded states), Mom answers all 3 by voice (M1–M6), the kid reopens and sees
 // Mom's version (her amount, his struck guess, her words); the daily budget's 429 (K5); the language
 // switch; and a Hindi phone's Mom page (English first, then her language; answers sent with lang=hi;
-// her words with the English under them). Every screen is shot at 390×844 into --out. Exits 1 on a
-// failure. Flags: --base, --out, --chrome (default: /Applications/Google Chrome.app), --port (fake).
+// her words with the English under them). The recipe card on M5 and in M6, and the kid's card, open the
+// locked recipe view (the /r mechanism on the dish card's version): the recipe, ingredients and steps open;
+// any other tap says "Get the app", and the sheet copies the page's link, then opens the store. Every screen
+// is shot at 390×844 into --out. Exits 1 on a failure. Flags: --base, --out, --chrome (default:
+// /Applications/Google Chrome.app), --port (fake).
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -68,6 +71,7 @@ async function shot(page, name, { full = false } = {}) {
 
 /** Press and hold an element (the mic) for `ms`. */
 async function hold(page, locator, ms) {
+  await page.waitForTimeout(700); // a sheet's spring is still settling when its button first shows
   const box = await locator.boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
@@ -78,6 +82,63 @@ async function hold(page, locator, ms) {
 /** Stock images on the page outside the dish box's three polaroids. */
 const strayStock = (page) =>
   page.evaluate(() => [...document.querySelectorAll('img')].map((i) => i.getAttribute('src') ?? '').filter((s) => /\/media\//.test(s) && !/dish-(dal|pho|dumplings)-\d+\.webp$/.test(s)));
+
+/** The locked recipe view's three screens, then a locked tap: the popover, then the dish pages' sheet. */
+async function lockedView(page, { who, title, fromKitchen, shotName, pop, sheetTitle, sheetTexts, link, store }) {
+  const view = page.locator('main');
+  await page.getByRole('button', { name: 'Start cooking' }).waitFor();
+  const top = await page.locator('body').innerText();
+  check(`${who} locked: the dish title`, (await page.getByRole('heading', { level: 1 }).innerText()) === title, await page.getByRole('heading', { level: 1 }).innerText());
+  check(`${who} locked: from her kitchen`, top.includes(fromKitchen), top);
+  check(`${who} locked: no Watch or Hear, no "AI"`, !/\bWatch\b|\bHear\b|\bAI\b/.test(top), top);
+  check(`${who} locked: no stock photo`, (await strayStock(page)).length === 0);
+  await shot(page, `${shotName}-recipe`);
+
+  // Ingredients: her amount, the guess she replaced struck through, her own words.
+  await page.getByRole('button', { name: 'Start cooking' }).click();
+  await page.getByRole('heading', { name: 'Get these ready' }).waitFor();
+  const ing = await view.innerText();
+  check(`${who} locked: her amount`, ing.includes('2 big spoons'), ing);
+  check(`${who} locked: the struck guess`, (await page.locator('s', { hasText: '~1 tbsp' }).count()) === 1);
+  check(`${who} locked: her words`, ing.includes('Two big spoons. Don’t be shy.'));
+  check(`${who} locked: ingredients tick`, (await page.getByRole('checkbox').count()) >= 3);
+  await shot(page, `${shotName}-ingredients`);
+
+  // Steps: the title, the lines, her words; Next walks on; the last one's "I made it" is locked.
+  await page.getByRole('button', { name: 'Start step 1' }).click();
+  await page.getByText('Step 1 of 4').first().waitFor();
+  check(`${who} locked: Step 1 of 4`, true);
+  check(`${who} locked: no sideways history change`, !/#/.test(page.url()), page.url());
+  for (let i = 2; i <= 4; i++) {
+    await page.getByRole('button', { name: 'Next step' }).click();
+    await page.getByText(`Step ${i} of 4`).first().waitFor();
+  }
+  await shot(page, `${shotName}-step`);
+
+  // Any other tap: the popover (page language), then the sheet.
+  await page.getByRole('button', { name: 'I made it' }).click();
+  const popover = page.getByRole('dialog', { name: pop.title });
+  await popover.waitFor();
+  check(`${who} locked: the popover says it`, (await popover.innerText()).includes(pop.line), await popover.innerText());
+  await shot(page, `${shotName}-popover`);
+  await popover.getByRole('button', { name: 'Get the app' }).click();
+  const sheet = page.locator('[role=dialog][aria-modal=true]');
+  await sheet.waitFor();
+  const text = await sheet.innerText();
+  check(`${who} locked: the sheet’s wording`, text.includes(sheetTitle) && sheetTexts.every((x) => text.includes(x)), text);
+  check(`${who} locked: Get the app goes to the App Store`, (await sheet.getByTestId('get-app').getAttribute('href')) === 'https://apps.apple.com/app/id6825621614');
+  await shot(page, `${shotName}-sheet`);
+
+  // Get the app copies the page's own link first, then opens the store.
+  const copied = [];
+  await page.exposeFunction('__copied', (v) => copied.push(v));
+  await page.evaluate(() => {
+    const write = navigator.clipboard.writeText.bind(navigator.clipboard);
+    navigator.clipboard.writeText = (v) => (window.__copied(v), write(v));
+  });
+  await Promise.all([page.waitForURL(store), sheet.getByTestId('get-app').click()]);
+  check(`${who} locked: it copied ${link} before the store`, copied[0] === link, JSON.stringify(copied));
+}
 
 try {
   // ── Kid: K1 → K2 ────────────────────────────────────────────────────────────────────────────
@@ -199,6 +260,39 @@ try {
   check('M6: no stock photo', (await strayStock(mom)).length === 0);
   await shot(mom, 'M6-download');
 
+  // The recipe card in the film sheet opens her version as the locked recipe view.
+  await mom.route('https://apps.apple.com/**', (r) => r.fulfill({ contentType: 'text/html', body: '<title>App Store</title>' }));
+  const cardInSheet = mom.getByRole('dialog').getByRole('button', { name: /^Open the recipe: Mom’s tomato egg/ });
+  check('M6: the recipe card in the sheet is tappable', (await cardInSheet.count()) === 1);
+  await cardInSheet.click();
+  await lockedView(mom, {
+    who: 'Mom',
+    title: 'Mom’s tomato egg',
+    fromKitchen: 'From Mom’s kitchen',
+    shotName: 'L-mom-locked',
+    pop: { title: 'Surprise Caleb by filming a video.', line: 'Save this recipe so it never gets lost.' },
+    sheetTitle: 'Surprise Caleb by filming a video.',
+    sheetTexts: ['Caleb misses the sound of your voice.', 'Save this recipe so it never gets lost.', 'Keep being part of Caleb’s cooking life.'],
+    link: `https://homecookd.app/a?t=${card.askToken}`,
+    store: /apps\.apple\.com/,
+  });
+  // Back to Sent: the film ask does not rise again; the card on M5 opens it too.
+  await mom.goto(askUrl, { waitUntil: 'networkidle' });
+  await mom.getByText('Sent to Caleb.').waitFor();
+  await mom.getByRole('dialog').waitFor();
+  await mom.getByRole('button', { name: 'Not now' }).click();
+  await mom.getByRole('dialog').waitFor({ state: 'detached' });
+  const cardOnM5 = mom.getByRole('button', { name: /^Open the recipe: Mom’s tomato egg/ });
+  check('M5: the recipe card is tappable', (await cardOnM5.count()) === 1);
+  await shot(mom, 'L-mom-m5-card');
+  await cardOnM5.click();
+  await mom.getByRole('button', { name: 'Start cooking' }).waitFor();
+  check('M5: the card opens her recipe', (await mom.getByRole('heading', { level: 1 }).innerText()) === 'Mom’s tomato egg');
+  await mom.locator('header').getByRole('button', { name: 'Back' }).click();
+  await mom.getByText('Sent to Caleb.').waitFor();
+  await mom.waitForTimeout(2200);
+  check('M5: coming back from her recipe the film ask stays down', (await mom.getByRole('dialog').count()) === 0);
+
   // ── Kid reopens: Mom's version ──────────────────────────────────────────────────────────────
   await kid.goto(kidUrl, { waitUntil: 'networkidle' });
   await kid.getByText('From Mom’s kitchen').waitFor({ timeout: 10000 });
@@ -210,6 +304,24 @@ try {
   check('Kid: "Your last dish" remembered', true);
   await shot(kid, 'K6-moms-version');
   await shot(kid, 'K6-moms-version-full', { full: true });
+
+  // The version on the card opens the locked recipe view, with the kid's words on the sheet.
+  await kid.route('https://apps.apple.com/**', (r) => r.fulfill({ contentType: 'text/html', body: '<title>App Store</title>' }));
+  const kidToken = kidUrl.split('k=')[1];
+  await kid.getByRole('button', { name: /^Open the recipe: Mom’s tomato egg/ }).click();
+  await lockedView(kid, {
+    who: 'Kid',
+    title: 'Mom’s tomato egg',
+    fromKitchen: 'From Mom’s kitchen',
+    shotName: 'L-kid-locked',
+    pop: { title: 'Get it on your phone.', line: 'Every dish you save, in one place.' },
+    sheetTitle: 'Get it on your phone.',
+    sheetTexts: ['Keep it', 'Every dish you save, in one place.', 'Know when Mom answers', 'We’ll tell you the moment she does.'],
+    link: `https://homecookd.app/miss?k=${kidToken}`,
+    store: /apps\.apple\.com/,
+  });
+  await kid.goto(kidUrl, { waitUntil: 'networkidle' });
+  await kid.getByText('From Mom’s kitchen').waitFor();
 
   // ── K5: the daily budget ────────────────────────────────────────────────────────────────────
   fake.setBudget(true);
@@ -281,6 +393,25 @@ try {
   check('Hindi: her words with the English under them', (await hi.getByText('Two big spoons. Don’t skimp.').count()) === 1);
   check('Hindi: M4 uses inLang.version for the card’s own words', (await hi.getByText('2 बड़े चम्मच').count()) === 1 && (await hi.getByText('अंडे, फेंटे हुए').count()) === 1 && (await hi.getByText('2 big spoons').count()) === 0);
   await shot(hi, 'M7-hindi-fills-in');
+
+  // Her recipe in her language: her words with the English under them, the chrome and the sheet in Hindi.
+  await hi.getByRole('dialog').waitFor({ timeout: 10000 });
+  await hi.getByRole('dialog').getByRole('button', { name: /^रेसिपी खोलें/ }).click();
+  await hi.getByRole('button', { name: 'खाना बनाना शुरू करें' }).click();
+  await hi.getByRole('heading', { name: 'ये तैयार रखें' }).waitFor();
+  const hiIng = await hi.locator('main').innerText();
+  check('Hindi locked: her amount in Hindi, her guess struck, her words with the English under them', hiIng.includes('2 बड़े चम्मच') && hiIng.includes('Two big spoons. Don’t skimp.') && (await hi.locator('s').count()) >= 1, hiIng);
+  await shot(hi, 'L-hindi-locked-ingredients');
+  await hi.locator('header').getByRole('button', { name: 'ऐप पाएँ' }).click();
+  const hiPop = hi.getByRole('dialog', { name: /Caleb को चौंका दीजिए/ });
+  await hiPop.waitFor();
+  check('Hindi locked: the popover is in Hindi', (await hiPop.innerText()).includes('सेव कर लीजिए') && (await hiPop.getByRole('button', { name: 'अभी नहीं' }).count()) === 1);
+  await hiPop.getByRole('button', { name: 'ऐप पाएँ' }).click();
+  const hiSheet = hi.locator('[role=dialog][aria-modal=true]');
+  await hiSheet.waitFor();
+  const hiSheetText = await hiSheet.innerText();
+  check('Hindi locked: the sheet’s three lines in Hindi', hiSheetText.includes('चौंका दीजिए') && hiSheetText.includes('सेव कर लीजिए') && hiSheetText.includes('साथ बने रहिए'), hiSheetText);
+  await shot(hi, 'L-hindi-locked-sheet');
 } catch (e) {
   failures.push(`crashed: ${e.stack ?? e}`);
   console.log(`  ✗ crashed: ${e.message}`);

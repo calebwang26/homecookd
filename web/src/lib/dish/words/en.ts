@@ -172,6 +172,16 @@ export const EN = {
   'm.nothingLine': 'Answer one question and {kid} will hear it.',
   'm.answerOne': 'Answer a question',
   'm.notFound': 'This link doesn’t work anymore.',
+  // the locked recipe view (Mom's recipe after she answered, the kid's card): nothing here needs the app but its Get the app
+  'lock.open': 'Open the recipe',
+  'lock.start': 'Start cooking',
+  'lock.ready': 'Get these ready',
+  'lock.step1': 'Start step 1',
+  'lock.next': 'Next step',
+  'lock.made': 'I made it',
+  'lock.stepOf': 'Step {n} of {m}',
+  'lock.allSteps': 'All steps',
+  'lock.count': '{n} of {m}',
 } as const;
 
 export type WordKey = keyof typeof EN;
