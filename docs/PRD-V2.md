@@ -194,10 +194,12 @@ Phases 1–3 can run side by side once the route contract is written down (one s
   answer when they reopen their link.
 - **Until Apple approves the App Store submission:** nothing is pushed to GitHub and nothing deploys to production.
   Work is committed locally and goes up in order after approval.
-
-**Still open:**
-
-1. **"The web is limited to one recipe":** one answered recipe per Mom on the web, one saved card per kid, or both?
-2. **Daily budget and keeping data:** the MVP defaults to 500 cards a day and keeps cards and clips 90 days.
-3. **Privacy and App Review text:** the web flow keeps voice notes and photos from people without accounts. You
-   said to leave legal text alone for now; it will need an update before this launches.
+- **Unlimited recipes on the web; keeping them needs the app.** "they should be able to generate infinite recipes. but
+  in order to actually access them and save them, they need to download the app." No web recipe box: Save is the
+  download ask. A card's own link still shows that card and Mom's answer.
+- **Budget:** $10 a day of model spend for the web flow (a dollar cap, not a card count), plus the per-IP limits.
+- **Keep data forever** for now (cards, answers, photos, voice notes). Uploads never attached to a card are cleaned up.
+- **Privacy and App Review text:** updated after Apple approves the current submission, before this launches.
+- **Testing during the review:** a separate native build (build 7) on its own `staging` update channel, internal
+  TestFlight testers only, not attached to the version in review. EAS Updates go to `staging`, never production,
+  until Apple approves.
