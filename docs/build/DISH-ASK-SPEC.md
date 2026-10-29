@@ -329,8 +329,13 @@ notes have no expiry, and there's no `410`.
     - the card stays for the kid, back to `asked`.
 - Nothing else is deleted.
 
-**IPs:** never stored as-is. Each is hashed as HMAC-SHA256(`DISH_IP_SALT`, ip), with the IP taken from
-`X-Forwarded-For`'s first entry.
+**IPs:** never stored as-is. Each is hashed as HMAC-SHA256(`DISH_IP_SALT`, ip).
+- **Which IP:** `CF-Connecting-IP`, else the last `X-Forwarded-For` hop.
+- **Checked on a Convex dev deployment, Oct 29:** HTTP routes sit behind Cloudflare, so these can't be faked.
+  - Cloudflare sets `CF-Connecting-IP` itself. A request that sends its own is refused (403, Cloudflare error 1000).
+  - A caller's `X-Forwarded-For` (one IP or a list) is replaced by the real address.
+  - A fake `X-Real-IP` is dropped.
+  - `True-Client-IP` passes through as sent, so it is never used.
 
 ## 6. Models
 

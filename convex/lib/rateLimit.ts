@@ -95,9 +95,17 @@ function hmacKey(): Promise<CryptoKey> {
   return keyFor.key;
 }
 
-/** The caller's IP: X-Forwarded-For's first entry (spec §5), else "unknown". */
+/**
+ * The caller's IP. Convex's HTTP routes sit behind Cloudflare, which sets `CF-Connecting-IP` itself (a request that
+ * sends its own gets a 403 from Cloudflare) and replaces any `X-Forwarded-For` a caller sends with the real address.
+ * Checked on a dev deployment on Oct 29 (DISH-ASK-SPEC.md §5). Never trust `True-Client-IP`: it passes through as
+ * sent. The last X-Forwarded-For hop is the fallback, in case a proxy ever appends rather than replaces.
+ */
 export function clientIp(req: Request): string {
-  return (req.headers.get("X-Forwarded-For") ?? "").split(",")[0].trim() || "unknown";
+  const cf = req.headers.get("CF-Connecting-IP")?.trim();
+  if (cf) return cf;
+  const hops = (req.headers.get("X-Forwarded-For") ?? "").split(",").map((h) => h.trim()).filter(Boolean);
+  return hops.at(-1) ?? "unknown";
 }
 
 /** HMAC-SHA256(DISH_IP_SALT, ip) as hex: what rateHits keys and dishAsks.ipKey hold. */
