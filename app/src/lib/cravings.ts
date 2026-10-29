@@ -3,13 +3,19 @@
 // answers by filming it next time (a weekly reminder) or with a 2-minute voice note that becomes a recipe in her
 // words, so he can cook it tonight.
 //
-// The contract with Convex & accounts' Phase 5 routes. TODO(convex): until they land every call is a stub on this
+// The contract with Convex & accounts' Phase 5 functions (docs/build/DISH-ASK-SPEC.md §8, branch claude/dish-ask):
+//   cravings.makeLink({message?}) -> {url, token}     one reusable link per call (memoize per sheet opening)
+//   cravings.requests() -> Request[]                   {requestId, kidName, dish, createdAt, status, answered, kidVoiceUrl, message}
+//   cravings.request({requestId})                      + guess (a dish-ask Recipe), asked, version, answers
+//   cravings.tellNow({requestId, audioId, durationS, language})   after files.generateUploadUrl
+// The push "Caleb wants your braised pork" opens /request/<askId> (pushEvents.requested). The reminder and "film it
+// next time" are app-only. TODO(convex): until those functions are deployed every call here is a stub on this
 // phone: the link is the plain /miss page, no ask arrives, and a voice recipe "sends" without going anywhere.
 // Web dev aid (screenshots): `?preview=craving` adds Caleb's braised pork ask.
 //
 //   const asks = useCravingAsks();               newest first, answered ones too
 //   const ask = useCravingAsk(id);               one (the request screen)
-//   await createCravingLink()                    -> { url }  (one link per cook, reused)
+//   await createCravingLink(message)             -> { url }  (cravings.makeLink, with her line)
 //   await sendVoiceRecipe(ask.id, note)          -> { status: 'writing' }
 //   await setFilmingDay(ask.id, 0)               "Mom's filming it Sunday" for the kid (0 = Sunday … 6, null = none)
 //   await cravingSent(profileId) / noteCravingSent(profileId)   she shared the link once (Home's card)
@@ -92,18 +98,20 @@ export function getCravingAsk(id: string): CravingAsk | null {
   return asks.find((a) => a.id === id) ?? null;
 }
 
-/** The link she sends her kids (one per cook, reused). TODO(convex): cravings.createLink. */
-export async function createCravingLink(): Promise<{ url: string }> {
+/** The link she sends her kids, carrying her line. TODO(convex): cravings.makeLink({message}). */
+export async function createCravingLink(_message?: string): Promise<{ url: string }> {
   return { url: 'https://homecookd.app/miss' };
 }
 
-/** Her 2-minute voice note for an ask: the server writes it up in her words. TODO(convex): cravings.sendVoiceRecipe. */
+/** Her 2-minute voice note for an ask: the server writes it up in her words. TODO(convex): upload with
+ *  files.generateUploadUrl, then cravings.tellNow({requestId, audioId, durationS, language: her people.language}). */
 export async function sendVoiceRecipe(askId: string, _note: VoiceNote): Promise<{ status: VoiceRecipeStatus }> {
   patch(askId, { answered: true });
   return { status: 'writing' };
 }
 
-/** The day she films it, for the kid ("Mom's filming it Sunday"). TODO(convex): cravings.setFilmingDay (stretch). */
+/** The day she films it, for the kid ("Mom's filming it Sunday"). TODO(convex): a field Convex & accounts may add
+ *  (stretch); until then it's kept on this phone only. */
 export async function setFilmingDay(askId: string, day: number | null): Promise<void> {
   patch(askId, { filmingDay: day });
 }
