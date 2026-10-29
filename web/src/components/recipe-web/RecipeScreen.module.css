@@ -117,6 +117,12 @@
   color: #5f6352;
 }
 
+/* The dish pages: one line of her own words (with the English under it) where /r quotes the cook. */
+.hers {
+  padding: 14px 20px 16px;
+  border-radius: 20px;
+  background: #f9e3cf;
+}
 .quote {
   margin: 0;
   padding: 16px 20px;

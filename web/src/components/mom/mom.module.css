@@ -507,6 +507,7 @@
   color: #5f6352;
 }
 .miniCard {
+  position: relative;
   margin-top: 36px;
   display: flex;
   align-items: center;
@@ -515,6 +516,45 @@
   border-radius: 24px;
   background: #fffdf7;
   box-shadow: 0 8px 24px rgba(30, 36, 16, 0.08);
+}
+/* In the film sheet (cream on cream): a hairline instead of the shadow, and tighter. */
+.miniCard[data-compact] {
+  margin-top: 16px;
+  padding: 8px 12px 8px 8px;
+  background: #f7f7f2;
+  box-shadow: none;
+}
+.miniCard[data-compact] .miniThumb {
+  width: 48px;
+  height: 48px;
+  border-radius: 12px;
+}
+.miniText {
+  flex: 1;
+  min-width: 0;
+}
+.miniChevron {
+  flex: none;
+  color: #5f6352;
+}
+[dir='rtl'] .miniChevron {
+  transform: scaleX(-1);
+}
+/* The card is one tap: this covers it, so the thumb, the words and the chevron stay plain spans. */
+.miniHit {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  transition: background-color 160ms ease;
+}
+.miniHit:active {
+  background: rgba(30, 36, 16, 0.05);
+}
+.miniHit:focus-visible {
+  outline: 3px solid #788c15;
+  outline-offset: 3px;
 }
 .miniThumb {
   flex: none;

@@ -162,6 +162,15 @@ const words: Translation = {
   'm.nothingLine': 'ਇੱਕ ਸਵਾਲ ਦਾ ਜਵਾਬ ਦਿਓ, {kid} ਤੱਕ ਤੁਹਾਡੀ ਆਵਾਜ਼ ਪਹੁੰਚੇਗੀ।',
   'm.answerOne': 'ਇੱਕ ਸਵਾਲ ਦਾ ਜਵਾਬ ਦਿਓ',
   'm.notFound': 'ਇਹ ਲਿੰਕ ਹੁਣ ਕੰਮ ਨਹੀਂ ਕਰਦਾ।',
+  'lock.open': 'ਰੈਸਿਪੀ ਖੋਲ੍ਹੋ',
+  'lock.start': 'ਖਾਣਾ ਬਣਾਉਣਾ ਸ਼ੁਰੂ ਕਰੋ',
+  'lock.ready': 'ਇਹ ਤਿਆਰ ਰੱਖੋ',
+  'lock.step1': 'ਕਦਮ 1 ਸ਼ੁਰੂ ਕਰੋ',
+  'lock.next': 'ਅਗਲਾ ਕਦਮ',
+  'lock.made': 'ਮੈਂ ਬਣਾ ਲਿਆ',
+  'lock.stepOf': 'ਕਦਮ {n} / {m}',
+  'lock.allSteps': 'ਸਾਰੇ ਕਦਮ',
+  'lock.count': '{n}/{m}',
 };
 
 export default words;

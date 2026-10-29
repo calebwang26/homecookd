@@ -162,6 +162,15 @@ const words: Translation = {
   'm.nothingLine': 'ఒక ప్రశ్నకు జవాబు ఇవ్వండి, {kid} కి అది వినిపిస్తుంది.',
   'm.answerOne': 'ఒక ప్రశ్నకు జవాబు ఇవ్వండి',
   'm.notFound': 'ఈ లింక్ ఇప్పుడు పని చేయడం లేదు.',
+  'lock.open': 'రెసిపీ తెరవండి',
+  'lock.start': 'వంట మొదలుపెట్టండి',
+  'lock.ready': 'ఇవి సిద్ధం చేసుకోండి',
+  'lock.step1': '1వ దశ మొదలుపెట్టండి',
+  'lock.next': 'తర్వాతి దశ',
+  'lock.made': 'నేను చేశాను',
+  'lock.stepOf': 'దశ {n} / {m}',
+  'lock.allSteps': 'అన్ని దశలు',
+  'lock.count': '{n}/{m}',
 };
 
 export default words;

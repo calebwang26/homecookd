@@ -164,6 +164,15 @@ const words: Translation = {
   'm.nothingLine': '질문 하나에 답하면 {kid}에게 그대로 들려요.',
   'm.answerOne': '질문에 답하기',
   'm.notFound': '이 링크는 더 이상 쓸 수 없어요.',
+  'lock.open': '레시피 열기',
+  'lock.start': '요리 시작',
+  'lock.ready': '이것들을 준비하세요',
+  'lock.step1': '1단계 시작',
+  'lock.next': '다음 단계',
+  'lock.made': '다 만들었어요',
+  'lock.stepOf': '{n} / {m} 단계',
+  'lock.allSteps': '모든 단계',
+  'lock.count': '{n}/{m}',
 };
 
 export default words;

@@ -11,8 +11,10 @@ import { PotMascot } from '@/components/primitives/PotMascot';
 import { Avatar } from './Avatar';
 import { FitLabel } from './FitLabel';
 import { HearSheet } from './HearBar';
+import { Her } from './DishBits';
 import { useRW } from './context';
 import { IconHeart, IconPlay, IconWave } from './icons';
+import { firstQuote } from '@/lib/recipe-web/fromDish';
 import { bestQuote, hasAudio, hasVideo, hearLabel, metaLine, mmss, possessive } from '@/lib/recipe-web/recipe';
 import ui from './RecipeWeb.module.css';
 import s from './RecipeScreen.module.css';
@@ -31,8 +33,9 @@ function IconShare() {
 }
 
 export function RecipeScreen() {
-  const { recipe: r, share, lock, hear, hearing, hearState, toggleHear, watchAll, reduced } = useRW();
+  const { recipe: r, share, lock, hear, hearing, hearState, toggleHear, watchAll, reduced, dish } = useRW();
   const quote = useMemo(() => bestQuote(r), [r]);
+  const her = useMemo(() => (dish ? firstQuote(dish.recipe) : null), [dish]);
   // Hear on a recipe with no recording (samples): the app's Hear sheet with the words and no player.
   const [silentHear, setSilentHear] = useState(false);
   const sender = share.sender;
@@ -99,7 +102,7 @@ export function RecipeScreen() {
       >
         {poster ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img className={s.heroImg} src={poster} alt={`${r.title}, from ${possessive(cook)} kitchen`} />
+          <img className={s.heroImg} src={poster} alt={dish ? r.title : `${r.title}, from ${possessive(cook)} kitchen`} />
         ) : (
           <div className={s.heroEmpty} aria-hidden="true">
             <PotMascot size={72} />
@@ -118,10 +121,10 @@ export function RecipeScreen() {
             </span>
           </motion.div>
         )}
-        <button type="button" className={`${ui.press} ${s.float} ${s.share}`} aria-label={`Share ${r.title}`} onClick={(e) => lock('share', e.currentTarget)}>
+        <button type="button" className={`${ui.press} ${s.float} ${s.share}`} aria-label={dish ? dish.t('common.getApp') : `Share ${r.title}`} onClick={(e) => lock('share', e.currentTarget)}>
           <IconShare />
         </button>
-        <button type="button" className={`${ui.press} ${s.float} ${s.heart}`} aria-label={`Add ${r.title} to your favorites`} onClick={(e) => lock('heart', e.currentTarget)}>
+        <button type="button" className={`${ui.press} ${s.float} ${s.heart}`} aria-label={dish ? dish.t('common.getApp') : `Add ${r.title} to your favorites`} onClick={(e) => lock('heart', e.currentTarget)}>
           <IconHeart />
         </button>
       </motion.div>
@@ -130,8 +133,15 @@ export function RecipeScreen() {
         <motion.div className={s.titleBlock} {...rise(0)}>
           <h1 className={s.title}>{r.title}</h1>
           <div className={s.meta}>
-            <Avatar name={cook} size={24} />
-            <span>{metaLine(r)}</span>
+            {dish ? (
+              // The card's own mark, never a stock face matched to the name "Mom".
+              <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: '50%', background: '#f9e3cf', display: 'grid', placeItems: 'center', flex: 'none' }}>
+                <PotMascot size={18} />
+              </span>
+            ) : (
+              <Avatar name={cook} size={24} />
+            )}
+            <span>{dish ? dish.meta : metaLine(r)}</span>
           </div>
           {r.source && <p className={s.source}>Video: {r.source}</p>}
         </motion.div>
@@ -142,29 +152,38 @@ export function RecipeScreen() {
           </motion.p>
         )}
 
-        <motion.div ref={pillsRef} className={ui.pillPair} {...rise(2)}>
-          <button
-            type="button"
-            className={`${ui.press} ${ui.pillBtn}`}
-            onClick={onWatch}
-            aria-label={video ? `Watch ${cook} make it, ${mmss(whole)}` : `Watch ${cook}. ${r.sample ? 'Sample recipe, no video' : 'No video for this one yet'}`}
-          >
-            <IconPlay />
-            <FitLabel full={watchFull} short="Watch" />
-          </button>
-          {hearStep && (
+        {her && (
+          <motion.div className={s.hers} {...rise(1)}>
+            <Her quote={her} />
+          </motion.div>
+        )}
+
+        {/* A dish card has no video or recording, so no Watch or Hear here. */}
+        {!dish && (
+          <motion.div ref={pillsRef} className={ui.pillPair} {...rise(2)}>
             <button
               type="button"
               className={`${ui.press} ${ui.pillBtn}`}
-              aria-pressed={audio ? hearOn && hearState.status === 'playing' : undefined}
-              aria-label={`Hear ${cook}${audio && hearLen ? `, ${mmss(hearLen)}` : ''}, with the words on screen`}
-              onClick={onHear}
+              onClick={onWatch}
+              aria-label={video ? `Watch ${cook} make it, ${mmss(whole)}` : `Watch ${cook}. ${r.sample ? 'Sample recipe, no video' : 'No video for this one yet'}`}
             >
-              <IconWave />
-              <FitLabel full={hearFull} short={hearFull.startsWith(`Hear ${cook}`) ? `Hear ${cook}` : 'Hear'} />
+              <IconPlay />
+              <FitLabel full={watchFull} short="Watch" />
             </button>
-          )}
-        </motion.div>
+            {hearStep && (
+              <button
+                type="button"
+                className={`${ui.press} ${ui.pillBtn}`}
+                aria-pressed={audio ? hearOn && hearState.status === 'playing' : undefined}
+                aria-label={`Hear ${cook}${audio && hearLen ? `, ${mmss(hearLen)}` : ''}, with the words on screen`}
+                onClick={onHear}
+              >
+                <IconWave />
+                <FitLabel full={hearFull} short={hearFull.startsWith(`Hear ${cook}`) ? `Hear ${cook}` : 'Hear'} />
+              </button>
+            )}
+          </motion.div>
+        )}
       </div>
 
       <AnimatePresence>

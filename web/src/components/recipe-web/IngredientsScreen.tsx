@@ -6,6 +6,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { PotMascot } from '@/components/primitives/PotMascot';
+import { Her, Was } from './DishBits';
 import { useRW } from './context';
 import { IconBack, IconBubble, IconCheck, IconChevronDown } from './icons';
 import { estimateLine, ingredientLines, ingredientWords, unsureIngredients } from '@/lib/recipe-web/recipe';
@@ -14,9 +15,18 @@ import ui from './RecipeWeb.module.css';
 import s from './IngredientsScreen.module.css';
 
 export function IngredientsScreen() {
-  const { recipe: r, go, lock, reduced } = useRW();
-  const items = useMemo(() => r.ingredients.map(ingredientLines), [r]);
-  const unsure = useMemo(() => unsureIngredients(r), [r]);
+  const { recipe: r, go, lock, reduced, dish } = useRW();
+  // A dish card's ingredient: the name big, her amount under it (her struck-through guess beside it, her own words below).
+  const items = useMemo(
+    () =>
+      r.ingredients.map((i, k) => {
+        const d = dish?.recipe.ingredients[k];
+        return d ? { words: d.name, amount: d.amount.trim(), was: d.status === 'mom' ? d.was : null, quote: d.status === 'mom' ? d.quote : null } : { ...ingredientLines(i), was: null, quote: null };
+      }),
+    [r, dish],
+  );
+  // "Not sure how much?" leads to asking the family, which a dish card does on its own page.
+  const unsure = useMemo(() => (dish ? [] : unsureIngredients(r)), [r, dish]);
   const [done, setDone] = useState<boolean[]>(() => items.map(() => false));
   const [open, setOpen] = useState(false);
 
@@ -40,18 +50,18 @@ export function IngredientsScreen() {
   return (
     <div className={s.wrap}>
       <div className={s.top}>
-        <button type="button" className={`${ui.press} ${ui.roundBtn}`} aria-label="Back to the recipe" onClick={() => go({ name: 'recipe' })}>
+        <button type="button" className={`${ui.press} ${ui.roundBtn}`} aria-label={dish ? dish.t('common.back') : 'Back to the recipe'} onClick={() => go({ name: 'recipe' })}>
           <IconBack />
         </button>
         <span className={s.dish}>{r.title}</span>
         {items.length > 0 && (
-          <span className={s.count} aria-live="polite" aria-label={`${count} of ${items.length} set out`}>
-            {count} of {items.length}
+          <span className={s.count} aria-live="polite" aria-label={dish ? dish.t('lock.count', { n: count, m: items.length }) : `${count} of ${items.length} set out`}>
+            {dish ? dish.t('lock.count', { n: count, m: items.length }) : `${count} of ${items.length}`}
           </span>
         )}
       </div>
 
-      <h1 className={s.h1}>Get these ready</h1>
+      <h1 className={s.h1}>{dish ? dish.t('lock.ready') : 'Get these ready'}</h1>
 
       {items.length === 0 ? (
         <div className={s.empty}>
@@ -68,7 +78,7 @@ export function IngredientsScreen() {
               type="button"
               role="checkbox"
               aria-checked={!!done[i]}
-              aria-label={`${it.words}, ${it.amount}`}
+              aria-label={[it.words, it.amount].filter(Boolean).join(', ')}
               className={`${ui.press} ${s.item}`}
               onClick={() => toggle(i)}
               initial={reduced ? { opacity: 0 } : { opacity: 0, y: 12 }}
@@ -80,7 +90,13 @@ export function IngredientsScreen() {
               </span>
               <span className={s.lines}>
                 <span className={s.words}>{it.words}</span>
-                <span className={s.amount}>{it.amount}</span>
+                {(it.amount || it.was) && (
+                  <span className={s.amount}>
+                    {it.amount}
+                    {it.was && <Was text={it.was} />}
+                  </span>
+                )}
+                {it.quote && <Her quote={it.quote} />}
               </span>
             </motion.button>
           ))}

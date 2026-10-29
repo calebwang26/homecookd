@@ -82,6 +82,21 @@
   font-variation-settings: 'SOFT' 100, 'WONK' 0, 'opsz' 144;
   transform: translateY(-1px);
 }
+/* The dish pages' locked view: a way back to the page it opened from. */
+.topBack {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  margin-inline-start: -6px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #fffdf7;
+}
+[dir='rtl'] .topBack svg {
+  transform: scaleX(-1);
+}
 .getApp {
   margin-left: auto;
   display: inline-flex;

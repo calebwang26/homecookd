@@ -163,6 +163,15 @@ const words: Translation = {
   'm.nothingLine': 'أجب عن سؤال واحد وسيصل صوتك إلى {kid}.',
   'm.answerOne': 'أجب عن سؤال',
   'm.notFound': 'هذا الرابط لم يعد يعمل.',
+  'lock.open': 'افتح الوصفة',
+  'lock.start': 'ابدأ الطبخ',
+  'lock.ready': 'جهّز هذه المكوّنات',
+  'lock.step1': 'ابدأ الخطوة 1',
+  'lock.next': 'الخطوة التالية',
+  'lock.made': 'لقد صنعتها',
+  'lock.stepOf': 'الخطوة {n} / {m}',
+  'lock.allSteps': 'كل الخطوات',
+  'lock.count': '{n}/{m}',
 };
 
 export default words;

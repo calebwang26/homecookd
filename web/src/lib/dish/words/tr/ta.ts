@@ -162,6 +162,15 @@ const words: Translation = {
   'm.nothingLine': 'ஒரு கேள்விக்குப் பதில் சொல்லுங்கள், {kid} க்கு அது கேட்கும்.',
   'm.answerOne': 'ஒரு கேள்விக்குப் பதில் சொல்லுங்கள்',
   'm.notFound': 'இந்த இணைப்பு இனி வேலை செய்யாது.',
+  'lock.open': 'செய்முறையைத் திற',
+  'lock.start': 'சமைக்கத் தொடங்கு',
+  'lock.ready': 'இவற்றைத் தயாராக வைத்துக்கொள்',
+  'lock.step1': 'படி 1 தொடங்கு',
+  'lock.next': 'அடுத்த படி',
+  'lock.made': 'நான் செய்து முடித்தேன்',
+  'lock.stepOf': 'படி {n} / {m}',
+  'lock.allSteps': 'எல்லாப் படிகளும்',
+  'lock.count': '{n}/{m}',
 };
 
 export default words;

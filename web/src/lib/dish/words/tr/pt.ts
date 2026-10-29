@@ -162,6 +162,15 @@ const words: Translation = {
   'm.nothingLine': 'Responda a uma pergunta e {kid} vai ouvir.',
   'm.answerOne': 'Responder a uma pergunta',
   'm.notFound': 'Este link não funciona mais.',
+  'lock.open': 'Abrir a receita',
+  'lock.start': 'Começar a cozinhar',
+  'lock.ready': 'Deixe isto pronto',
+  'lock.step1': 'Começar o passo 1',
+  'lock.next': 'Próximo passo',
+  'lock.made': 'Eu fiz',
+  'lock.stepOf': 'Passo {n} de {m}',
+  'lock.allSteps': 'Todos os passos',
+  'lock.count': '{n}/{m}',
 };
 
 export default words;
