@@ -91,14 +91,18 @@ function Miss() {
   }, [route]);
 
   const key = view.name === 'card' ? `card-${view.token}` : view.name === 'boot' ? 'ask' : view.name;
+  // After an in-page move (not the first load), the new screen's heading takes focus.
+  const moved = useRef(false);
   useLayoutEffect(() => {
     window.scrollTo(0, 0);
     const h = screen.current?.querySelector('h1');
-    if (h && document.activeElement === document.body) {
+    const first = !moved.current;
+    if (view.name !== 'boot' && view.name !== 'loading') moved.current = true;
+    if (!first && h && document.activeElement === document.body) {
       h.setAttribute('tabindex', '-1');
       h.focus({ preventScroll: true });
     }
-  }, [key]);
+  }, [key]); // eslint-disable-line react-hooks/exhaustive-deps -- once per screen
 
   const submit = useCallback(async () => {
     const dish = draft.dish.trim();

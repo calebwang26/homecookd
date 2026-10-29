@@ -51,7 +51,7 @@ export function IntroScreen({ ask, kid, message, toggle, onNext }: { ask: Ask; k
           {initialOf(ask.kidName) || <PotMascot size={56} />}
         </div>
         <h1 className={`${s.h1} ${s.center}`}>
-          <Rich text={t('m1.title', { kid, dish: ask.dish })} />
+          <Rich text={t('m1.title', { kid, dish: ask.guess.dish || ask.dish })} />
         </h1>
         {url && (
           <div className={s.voice}>
@@ -197,22 +197,45 @@ function HerQuote({ quote }: { quote: Quote }) {
   );
 }
 
-type FillRow = { key: string; text: string; amount: string; was: string | null; quote: Quote | null; clip: QuestionId | null; target: boolean };
+/** A row of M4: what it shows before her words land (`before`: the kid's guess), and after. */
+type FillRow = {
+  key: string;
+  text: string;
+  amount: string;
+  was: string | null;
+  quote: Quote | null;
+  clip: QuestionId | null;
+  target: boolean;
+  before: { amount: string; text: string };
+};
 
 function fillRows(recipe: Recipe, answered: Set<QuestionId>, merged: boolean): FillRow[] {
-  const ings: FillRow[] = recipe.ingredients.map((ing, i) => ({
-    key: `i${i}`,
-    text: ing.name,
-    amount: ing.amount,
-    was: ing.was,
-    quote: ing.quote,
-    clip: ing.clip,
-    target: merged ? ing.status === 'mom' : !!ing.ask && answered.has(ing.ask),
-  }));
+  const ings: FillRow[] = recipe.ingredients.map((ing, i) => {
+    const target = merged ? ing.status === 'mom' : !!ing.ask && answered.has(ing.ask);
+    return {
+      key: `i${i}`,
+      text: ing.name,
+      amount: ing.amount,
+      was: ing.was,
+      quote: ing.quote,
+      clip: ing.clip,
+      target,
+      before: { amount: merged && target ? (ing.was ?? '') : ing.amount, text: ing.name },
+    };
+  });
   const lines: FillRow[] = recipe.steps
     .flatMap((st) => st.lines)
     .filter((l) => (merged ? l.status === 'mom' : !!l.ask && answered.has(l.ask)))
-    .map((l, i) => ({ key: `l${i}`, text: plain(l.text), amount: '', was: l.was ? plain(l.was) : null, quote: l.quote, clip: l.clip, target: true }));
+    .map((l, i) => ({
+      key: `l${i}`,
+      text: plain(l.text),
+      amount: '',
+      was: l.was ? plain(l.was) : null,
+      quote: l.quote,
+      clip: l.clip,
+      target: true,
+      before: { amount: '', text: plain(l.was ?? l.text) },
+    }));
   return [...ings, ...lines];
 }
 
@@ -276,7 +299,7 @@ export function FillScreen({ ask, onDone }: { ask: Ask; onDone: () => void }) {
                     </>
                   ) : (
                     <>
-                      {(r.target && r.was ? r.was : r.amount) && <b>{r.target && r.was ? r.was : r.amount}</b>} {r.text}
+                      {r.before.amount && <b>{r.before.amount}</b>} {r.before.text}
                     </>
                   )}
                 </span>
@@ -340,7 +363,7 @@ export function SentScreen({ ask, kid, token }: { ask: Ask; kid: string; token: 
               <DishHero photoUrl={ask.photoUrls[0] ?? null} alt="" height={60} />
             </span>
             <span>
-              <span className={s.miniTitle}>{cardTitle(ask.relation, ask.dish)}</span>
+              <span className={s.miniTitle}>{cardTitle(ask.relation, ask.guess.dish || ask.dish)}</span>
               <span className={s.miniLine}>{n === 1 ? t('m5.answers1') : t('m5.answers', { n })}</span>
             </span>
           </div>
@@ -352,9 +375,9 @@ export function SentScreen({ ask, kid, token }: { ask: Ask; kid: string; token: 
         visual={
           <div className={s.frame} aria-hidden="true">
             <span className={s.rec}>REC 0:12</span>
-            <span className={s.corner} />
-            <span className={s.corner} />
-            <span className={s.corner} />
+            <span className={`${s.corner} ${s.cornerTR}`} />
+            <span className={`${s.corner} ${s.cornerBL}`} />
+            <span className={`${s.corner} ${s.cornerBR}`} />
             <PotMascot size={110} mood="happy" steam />
           </div>
         }

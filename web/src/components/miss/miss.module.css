@@ -785,3 +785,8 @@
   left: 0;
   margin-left: 0;
 }
+
+/* A heading that takes focus after a screen change reads out; it needs no ring. */
+.screen h1[tabindex='-1']:focus {
+  outline: none;
+}

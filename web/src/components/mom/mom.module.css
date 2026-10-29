@@ -538,6 +538,7 @@
 /* ---------- M6: the designed film frame ---------- */
 .frame {
   position: relative;
+  margin-top: 44px; /* clear of the sheet's close button */
   height: 190px;
   border-radius: 24px;
   overflow: hidden;
@@ -573,21 +574,21 @@
   height: 22px;
   border: 3px solid #fffdf7;
 }
-.corner:nth-of-type(1) {
+.cornerTR {
   right: 14px;
   top: 14px;
   border-left: 0;
   border-bottom: 0;
   border-radius: 0 6px 0 0;
 }
-.corner:nth-of-type(2) {
+.cornerBL {
   left: 14px;
   bottom: 14px;
   border-right: 0;
   border-top: 0;
   border-radius: 0 0 0 6px;
 }
-.corner:nth-of-type(3) {
+.cornerBR {
   right: 14px;
   bottom: 14px;
   border-left: 0;

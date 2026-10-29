@@ -99,7 +99,8 @@ try {
   const k2 = await kid.locator('main').innerText();
   check('K2: facts from the data', /~20 min/.test(k2) && /Serves 1/.test(k2) && /~\$3/.test(k2));
   check('K2: guessed amounts keep their "~"', /~1 tbsp\s*ketchup/.test(k2));
-  check('K2: an unknown amount shows the name only', await kid.locator('li', { hasText: /^sugar/ }).count() > 0);
+  const rows = await kid.locator('main li').allInnerTexts();
+  check('K2: an unknown amount shows the name only', rows.some((r) => /^sugar\b/.test(r.trim())), rows.join(' | '));
   check('K2: "We guessed. Mom knows."', k2.includes('We guessed. Mom knows.'));
   check('K2: "4 steps"', k2.includes('4 steps'));
   check('K2: Ask Mom tags on the asked rows', (await kid.getByRole('button', { name: 'Ask Mom' }).count()) >= 3);
