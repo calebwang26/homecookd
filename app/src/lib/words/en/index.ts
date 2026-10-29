@@ -4,8 +4,9 @@ import { COMMON } from './common';
 import { MESSAGES } from './messages';
 import { PARENT } from './parent';
 import { PROFILES } from './profiles';
+import { REQUEST } from './request';
 import { SHARE } from './share';
 import { SIGNIN } from './signin';
 
-export const EN = { ...COMMON, ...SIGNIN, ...PROFILES, ...PARENT, ...MESSAGES, ...SHARE };
+export const EN = { ...COMMON, ...SIGNIN, ...PROFILES, ...PARENT, ...MESSAGES, ...SHARE, ...REQUEST };
 export type WordKey = keyof typeof EN;

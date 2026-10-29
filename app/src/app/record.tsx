@@ -1,5 +1,6 @@
 // Record (bible: Parent-Record), a screen pushed from parent Home: Back, "What will you teach
-// today?", a gentle suggestion when a learner asked for a dish ("Leo asked for Sunday eggs"), the
+// today?", a gentle suggestion when a learner asked for a dish ("Leo asked for Sunday eggs"; a kid's ask
+// from its reminder, /record?dish=&from=&ask=, comes first and fills the dish in), the
 // 3-step guide with the tripod photo, then "Start recording": the pre-record sheet (the dish, who it's
 // for, her language, and how she films):
 //   From my glasses  live.startRecording (source glasses) -> /recording: homie listens on the phone by
@@ -15,7 +16,7 @@
 // video the laptop saved (components/record/GlassesVideoCard): "Save to Photos", then send it from Videos I took. On the web, the camera and
 // camera roll explain that they work in the app on a phone.
 import { Image } from 'expo-image';
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -30,6 +31,8 @@ import { PhoneOnlySheet } from '@/components/record/sheets';
 import { usePickVideos, type PickContext } from '@/components/record/usePickVideos';
 import { ArrowRightIcon, Avatar, BackPill, listEnter, PressableScale, ScreenWash, Txt, useToast } from '@/components/ui';
 import { ensureAiConsent } from '@/lib/aiConsent';
+import { noteFilmingAsk } from '@/lib/askReminders';
+import { useCravingAsk } from '@/lib/cravings';
 import { convexKidIds, startRecording } from '@/lib/live/convex';
 import { getCachedEntry } from '@/lib/recipes';
 import { useWords } from '@/lib/words/useWords';
@@ -79,10 +82,19 @@ export default function RecordScreen() {
   const [sheet, setSheet] = useState(false);
   const [busy, setBusy] = useState<CaptureSource | null>(null);
 
-  const request = k.requests[0] ?? null;
-  const dish = askedDish(request, t);
+  // A kid's ask (Phase 5: its weekly reminder, or "I'm making it now") comes first: /record?dish=&from=&ask=.
+  const params = useLocalSearchParams<{ dish?: string; from?: string; ask?: string }>();
+  const askId = params.ask?.trim() || null;
+  const ask = useCravingAsk(askId);
+  const askFrom = params.from?.trim() || ask?.kidName.trim() || null;
+  const askDish = params.dish?.trim() || ask?.dish.trim() || null;
+  const fromAsk = !!askId && !!askFrom;
+
+  const request = fromAsk ? null : (k.requests[0] ?? null);
+  const dish = fromAsk ? askDish : askedDish(request, t);
+  const asker = fromAsk ? askFrom : (request?.other.name ?? null);
   // "Leo asked for Sunday eggs" with the dish in bold: the sentence split where the dish goes.
-  const askedFor = request ? t('parent.record.askedFor', { name: request.other.name, dish: '{dish}' }).split('{dish}') : [];
+  const askedFor = asker ? t('parent.record.askedFor', { name: asker, dish: '{dish}' }).split('{dish}') : [];
   const askedWhat = dish ?? t('parent.record.aRecipe');
   const steps = STEPS.map((key) => t(key));
 
@@ -93,6 +105,8 @@ export default function RecordScreen() {
 
   const start = async ({ source, dish: typed, kids, everyone, label, who, language }: PreRecordChoice) => {
     if (!(await ensureAiConsent())) return setSheet(false);
+    // Filming a kid's ask: once it's sent, the ask is filmed and its reminder stops (sendKept: askFilmed).
+    noteFilmingAsk(fromAsk ? askId : null);
     const first = kids[0]?.id ?? null;
     setDraftMeta({ dish: typed || null, requestFrom: first, forKids: who, everyone, language, recordingId: null });
     const picked: PickContext = { dish: typed || null, requestFrom: first };
@@ -148,9 +162,9 @@ export default function RecordScreen() {
           {t('parent.record.title')}
         </Txt>
 
-        {request ? (
+        {asker ? (
           <Animated.View entering={listEnter(0)} style={styles.suggest} accessible accessibilityLabel={askedFor.join(askedWhat)}>
-            <Avatar profile={request.other} size={40} />
+            {request ? <Avatar profile={request.other} size={40} /> : <Avatar name={asker} avatarKey={null} size={40} />}
             <Txt variant="label" size={16} weight={600} color={colors.lavenderInk} style={styles.flex} numberOfLines={2}>
               {askedFor[0]}
               <Txt variant="label" size={16} weight={700} color={colors.ink}>
