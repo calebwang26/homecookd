@@ -30,8 +30,6 @@ function goBack() {
   else router.replace('/parent/home');
 }
 
-/** The voice recipe's state once the Convex route lands (the contract's `voiceRecipe`). */
-const voiceRecipeOf = (ask: CravingAsk) => (ask as { voiceRecipe?: string | null }).voiceRecipe ?? null;
 
 function openVoice(askId: string) {
   router.push({ pathname: '/request/voice', params: { ask: askId } });
@@ -80,7 +78,7 @@ function Ask({ ask }: { ask: CravingAsk }) {
   const kid = ask.kidName.trim();
   const reminder = useAskReminder(ask.id);
   const [sheet, setSheet] = useState(false);
-  const failed = voiceRecipeOf(ask) === 'failed';
+  const failed = ask.voiceRecipe === 'failed';
 
   return (
     <>
