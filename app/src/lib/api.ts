@@ -242,6 +242,8 @@ export type ProviderAuthInput = {
   join_token?: string | null;
   link_ticket?: string | null;
   move?: boolean;
+  /** "Yes, that's me": a new account becomes this phone-less person (a join link only; peek's `claimable`). */
+  claim_profile_id?: string | null;
   device_label?: string | null;
 };
 
@@ -276,7 +278,15 @@ export type InvitePeek = {
   same_family?: boolean;
   /** 'link': a family join link (22 characters), for anyone, any number of times, until it expires. */
   kind?: 'link';
+  /**
+   * Peeked with a `name` (a family link or invite): the one person in that family of exactly that name
+   * who has no phone yet ("Are you Leo?"), else null.
+   */
+  claimable?: Claimable | null;
 };
+
+/** Someone added to the family before they had the app, whom a new sign-in can become. */
+export type Claimable = { id: string; name: string; avatar_key: string | null };
 
 /** POST /join-links: the family's join link to share (the same one while it has over a day left). */
 export type JoinLink = { url: string; expires_at: string | null };
@@ -649,10 +659,17 @@ export const api = {
   /**
    * POST /invites/peek (public): what an invite or a family join link (`token`, 16 or 22 characters)
    * says, without using it. 404 "That invite link doesn't work." Sends this phone's key when it has
-   * one, for `same_family`.
+   * one, for `same_family`. With `name` (the join card's, once it settles): `claimable`.
    */
-  invitePeek: (token: string, o: Pick<AuthOverride, 'signal'> = {}) =>
-    call<InvitePeek>('/invites/peek', { method: 'POST', body: { token }, authed: false, withKey: true, retry: 'safe', ...o }),
+  invitePeek: (token: string, { name, ...o }: Pick<AuthOverride, 'signal'> & { name?: string | null } = {}) =>
+    call<InvitePeek>('/invites/peek', {
+      method: 'POST',
+      body: name ? { token, name } : { token },
+      authed: false,
+      withKey: true,
+      retry: 'safe',
+      ...o,
+    }),
 
   /**
    * POST /join-links (me): the family's join link, homecookd.app/i?t=… ("Invite family" shares it). The

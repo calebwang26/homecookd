@@ -1026,7 +1026,7 @@ t("join links: one link for the family all week, peek says kind link, 1.0's acce
   const peek = await call("POST", "/invites/peek", { body: { token } });
   assertEquals(peek.data, {
     status: "pending", family_name: "Test family", inviter: { name: "Mom", relation: "Mom", avatar_key: "mom" }, invitee: null,
-    expires_at: made.data.expires_at, kind: "link",
+    expires_at: made.data.expires_at, kind: "link", claimable: null,
   });
   assertEquals((await call("POST", "/invites/peek", { headers: { "x-device-key": KEY }, body: { token } })).data.same_family, true);
   assertEquals((await call("POST", "/invites/peek", { body: { token: "Nope".padEnd(22, "0") } })).status, 404);
@@ -1104,6 +1104,32 @@ t("Apple with another family's link: asked first, then one tap moves them; a sol
   const r = await receiptOf(moved.data.moved.receipt);
   assertEquals([r.v, r.kind, r.fromProfile, r.fromFamily, r.toProfile, r.toFamily, r.solo, r.faces], [1, "moved", rae.profile_id, raes, fresh, FAM, true, [gran.id]]);
   assert(Math.abs(r.exp - (Date.now() + 3_600_000)) < 60_000);
+});
+
+t("Are you Dad? peek with a name finds phone-less Dad; Apple with claim_profile_id becomes him", async () => {
+  const token = tokenOf((await call("POST", "/join-links", { headers: asMom })).data.url);
+  const peek = (body: Row) => call("POST", "/invites/peek", { body: { token, ...body } });
+  assertEquals((await peek({ name: "  dAd " })).data.claimable, { id: DAD, name: "Dad", avatar_key: null });
+  for (const name of [undefined, "", "Da", "Mom", "Sam"]) assertEquals((await peek({ name })).data.claimable, null, String(name));
+  // An old family invite asks the same; one naming somebody doesn't.
+  const fam = (await call("POST", "/invites", { headers: asMom, body: {} })).data.invite;
+  assertEquals((await call("POST", "/invites/peek", { body: { token: tokenOf(fam.url), name: "dad" } })).data.claimable?.id, DAD);
+  const named = (await call("POST", "/invites", { headers: asMom, body: { name: "Grandpa", role: "cook" } })).data.invite;
+  assertEquals((await call("POST", "/invites/peek", { body: { token: tokenOf(named.url), name: "dad" } })).data.claimable, null);
+
+  const bad = await call("POST", "/auth/apple", { body: { id_token: await appleToken("dad"), join_token: token, claim_profile_id: "p-dad" } });
+  assertEquals([bad.status, bad.data.error], [400, "claim_profile_id is not a valid id"]);
+  const people = tables.profiles.length;
+  const res = await call("POST", "/auth/apple", { body: { id_token: await appleToken("dad"), join_token: token, claim_profile_id: DAD, name: "Papa", device_label: "iPhone" } });
+  assertEquals([res.status, res.data.profile_id, res.data.joined, res.data.existing, res.data.family_name], [200, DAD, true, false, "Test family"]);
+  assertEquals(tables.profiles.length, people, "nobody new");
+  assertEquals(tables.profiles.find((p) => p.id === DAD)!.name, "Dad");
+  assertEquals((await findDevice(res.data.device_key)).profile_id, DAD);
+  assertEquals(tables.identities.map((i) => [i.subject, i.profile_id]), [["dad", DAD]]);
+  assertEquals(notes().at(-1), ["Dad joined", DAD]);
+  assertEquals((await peek({ name: "Dad" })).data.claimable, null, "Dad is on homecookd now");
+  const again = await call("POST", "/auth/apple", { body: { id_token: await appleToken("someone"), join_token: token, claim_profile_id: DAD } });
+  assertEquals([again.status, again.data.error], [409, "That person is already on homecookd."]);
 });
 
 // --- moving to a new phone ---------------------------------------------------------------------

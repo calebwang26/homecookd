@@ -48,6 +48,7 @@ import {
   syncTz,
 } from "./retention.ts";
 import {
+  claimableIn,
   familyJoinLink,
   hasLink,
   INVITE_GONE,
@@ -1786,7 +1787,8 @@ async function sameFamily(req: Request, familyId: string): Promise<boolean | und
 /**
  * What the invite page shows before anyone taps Join. Reads only: opening or previewing never joins.
  * `invitee` is null for a family invite (it names nobody). A family join link's 22-character token
- * answers from join_links, with `kind: "link"` (joinLinks.ts).
+ * answers from join_links, with `kind: "link"` (joinLinks.ts). With a typed `name`, a family link or
+ * invite also says `claimable`: the one phone-less person of exactly that name ("Are you Leo?"), else null.
  */
 onPublic("POST", "/invites/peek", async ({ req, body }) => {
   const ip = clientIp(req);
@@ -1794,7 +1796,7 @@ onPublic("POST", "/invites/peek", async ({ req, body }) => {
   const b = await body();
   const raw = typeof b.token === "string" ? b.token.trim() : "";
   if (JOIN_TOKEN.test(raw)) {
-    return (await peekJoinLink(joinDeps, raw, (familyId) => sameFamily(req, familyId))) ?? inviteNotFound(ip, "token");
+    return (await peekJoinLink(joinDeps, raw, (familyId) => sameFamily(req, familyId), b.name)) ?? inviteNotFound(ip, "token");
   }
   const look = await inviteLookup(b);
   if (look.by === "code" && look.hash) await limitCodeTries(ip);
@@ -1821,6 +1823,7 @@ onPublic("POST", "/invites/peek", async ({ req, body }) => {
     invitee: invitee ? { name: invitee.name, role: invitee.role, avatar_key: invitee.avatar_key } : null,
     expires_at: inv.expires_at,
     same_family: await sameFamily(req, inv.family_id),
+    claimable: !invitee && status === "pending" ? await claimableIn(joinDeps, inv.family_id, b.name) : null,
   };
 });
 
@@ -2932,7 +2935,8 @@ async function startFamily(who: Who, name: string, role: Role, label: string | n
  * `{ id_token, name?, role?, share_token?, device_label? }`. Known account: signs in. New account
  * without `name`: `{ needs_name: true, suggested_name }` and nothing is made; the app asks, then calls
  * again with the same token. With `join_token` (a family join link, or a 1.0 phone's one-use invite)
- * or `link_ticket` (a dish card's ticket), plus `move?`, joinLinks.ts's signInByLink answers.
+ * or `link_ticket` (a dish card's ticket), plus `move?` and `claim_profile_id?` ("Are you Leo?", a join
+ * link only), joinLinks.ts's signInByLink answers.
  */
 async function signInWith(provider: Provider, { req, body }: PublicArgs) {
   if (!PROVIDERS[provider].audience.length) throw new HttpError(503, `${PROVIDERS[provider].label} sign-in isn't set up yet.`);
@@ -2944,6 +2948,8 @@ async function signInWith(provider: Provider, { req, body }: PublicArgs) {
   const name = str(b.name, "name", { max: MAX_NAME });
   const roleRaw = str(b.role, "role", { max: 10 });
   if (roleRaw !== null && roleRaw !== "cook" && roleRaw !== "learner") throw new HttpError(400, "role must be cook or learner");
+  const claim = typeof b.claim_profile_id === "string" ? b.claim_profile_id.trim() : "";
+  if (claim && !UUID.test(claim)) throw new HttpError(400, "claim_profile_id is not a valid id");
   const who = await verifyIdToken(provider, idToken);
   if (hasLink(b)) return signInByLink(joinDeps, who, b, { name, role: roleRaw as Role | null, label, ip });
 

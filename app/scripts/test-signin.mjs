@@ -10,7 +10,9 @@
 //                       key; a cancelled or failed Apple sheet gives no code and the deletion goes on
 // Joining only by a link (docs/build/JOIN-SIMPLE.md):
 //   src/lib/auth/join.ts   a sign-in sends one link (join_token or link_ticket), the card's role and
-//                       `move`; a refusal says which card to show (a taken name, a used card side, gone)
+//                       `move`; a refusal says which card to show (a taken name, a used card side, gone);
+//                       "Are you Leo?" (claimStep): asked only for the name the peek was for, the Apple
+//                       button and the chips wait for an answer, "that's me" sends claim_profile_id and no role
 //   src/lib/api.ts      POST /auth/apple carries them and passes needs_move back; POST /join-links
 //   src/lib/auth/pickup.ts the invisible pickup: reads the clipboard only when iOS says a link is there,
 //                       at most once per launch, and opens only a homecookd join link
@@ -241,6 +243,49 @@ await test('a sign-in from a link sends one link, the card’s role and move', (
   assert.equal(J.cleanName(null), '');
 });
 
+await test('"Are you Leo?": a claim goes only with a join token, and then without a role', () => {
+  assert.deepEqual(J.linkFields({ joinToken: JOIN, role: 'learner', claimProfileId: ' p-leo ' }), { join_token: JOIN, claim_profile_id: 'p-leo' }, 'Leo keeps his own role');
+  assert.deepEqual(J.linkFields({ joinToken: OLD, claimProfileId: 'p-leo' }), { join_token: OLD, claim_profile_id: 'p-leo' }, 'an older family invite too');
+  assert.deepEqual(J.linkFields({ linkTicket: 'tk.sig', claimProfileId: 'p-leo' }), { link_ticket: 'tk.sig' }, 'a recipe link never claims');
+  assert.deepEqual(J.linkFields({ claimProfileId: 'p-leo', role: 'cook' }), { role: 'cook' }, 'no link, no claim');
+  assert.deepEqual(J.linkFields({ joinToken: JOIN, role: 'cook', claimProfileId: '  ' }), { join_token: JOIN, role: 'cook' });
+});
+
+await test('"Are you Leo?": whether the card asks, when the Apple button shows, and what sign-in sends', () => {
+  const leo = { id: 'p-leo', name: 'Leo', avatar_key: 'leo' };
+  const found = { name: 'leo', claimable: leo };
+  assert.equal(J.nameKey('  LEO   k '), 'leo k');
+  // Nothing found yet: no question, the button shows, and a peek is owed for this name.
+  assert.deepEqual(J.claimStep('Leo', null, null), { ask: null, me: null, ready: true, showRole: true, claimProfileId: null, needsPeek: true });
+  assert.deepEqual(J.claimStep('', null, null).needsPeek, false, 'no name, nothing to ask about');
+  // Found, not answered: ask; the button and the chips wait.
+  assert.deepEqual(J.claimStep(' leo ', found, null), { ask: leo, me: null, ready: false, showRole: false, claimProfileId: null, needsPeek: false });
+  // Yes: sign in as Leo, no chips. No: someone new, with chips.
+  assert.deepEqual(J.claimStep('Leo', found, { name: 'leo', me: true }), { ask: leo, me: true, ready: true, showRole: false, claimProfileId: 'p-leo', needsPeek: false });
+  assert.deepEqual(J.claimStep('Leo', found, { name: 'leo', me: false }), { ask: leo, me: false, ready: true, showRole: true, claimProfileId: null, needsPeek: false });
+  // A new name clears the answer and the question (capitals and spaces aren't a new name).
+  assert.equal(J.claimStep('LEO ', found, { name: 'leo', me: true }).claimProfileId, 'p-leo');
+  assert.deepEqual(J.claimStep('Leon', found, { name: 'leo', me: true }), { ask: null, me: null, ready: true, showRole: true, claimProfileId: null, needsPeek: true });
+  assert.deepEqual(J.claimStep('Leon', { name: 'leon', claimable: leo }, { name: 'leo', me: true }).me, null, 'an answer for another name');
+  // The peek for this name found nobody: nothing to ask, nothing owed.
+  assert.deepEqual(J.claimStep('Asha', { name: 'asha', claimable: null }, null), { ask: null, me: null, ready: true, showRole: true, claimProfileId: null, needsPeek: false });
+});
+
+await test('POST /invites/peek sends the typed name and passes claimable back', async () => {
+  A.setApiAuth({ deviceKey: null, code: null, profileId: null });
+  const bodies = [];
+  globalThis.fetch = async (url, init) => {
+    bodies.push({ url, body: JSON.parse(init.body) });
+    return new Response(JSON.stringify({ status: 'pending', family_name: 'Test family', inviter: null, invitee: null, expires_at: null, kind: 'link', claimable: { id: 'p-leo', name: 'Leo', avatar_key: null } }), { status: 200 });
+  };
+  const peek = await A.api.invitePeek(JOIN, { name: 'leo' });
+  assert.match(bodies[0].url, /\/invites\/peek$/);
+  assert.deepEqual(bodies[0].body, { token: JOIN, name: 'leo' });
+  assert.deepEqual(peek.claimable, { id: 'p-leo', name: 'Leo', avatar_key: null });
+  await A.api.invitePeek(JOIN);
+  assert.deepEqual(bodies[1].body, { token: JOIN }, 'no name, no question');
+});
+
 await test('a refused sign-in says which card to show', () => {
   const err = (status, body) => new A.ApiError(body?.error ?? 'x', status, 'http', body);
   const LINK_USED = 'This link already brought someone in. Ask them for an invite.';
@@ -258,6 +303,9 @@ await test('a refused sign-in says which card to show', () => {
   assert.equal(J.signInFailure(err(403, { error: 'This link didn’t work. Open it again.' })).why, 'bad-ticket');
   assert.equal(J.signInFailure(err(404, { error: 'That invite link doesn’t work.' })).why, 'not-found');
   assert.equal(J.signInFailure(err(400, { error: 'Type a name first.' })).why, 'name');
+  for (const claim of ['That person is already on homecookd.', 'That person isn\'t in this family.']) {
+    assert.deepEqual(J.signInFailure(err(409, { error: claim })), { status: 'error', error: claim, why: 'name' }, 'a refused claim shows under the name');
+  }
   assert.equal(J.signInFailure(err(500, { error: 'Something went wrong on our side.' })).why, undefined);
   assert.deepEqual(J.signInFailure(new TypeError('Network request failed')), { status: 'error', error: 'Something went wrong. Try again.' });
 });
@@ -368,6 +416,18 @@ await test('no family codes, no Paste invite, no /join-code, no /auth/link; old 
   const join_ = src('app/join.tsx');
   assert.doesNotMatch(join_, /params\.s\b|peekShare|shareToken/, 'a recipe link joins nobody');
   assert.match(join_, /useLinkPickup\(status === 'needs-code' && step === 'start'/, 'the pickup runs only signed out, on the start');
+});
+
+await test('"Are you Leo?" on the card: family links only, the face, Apple only once answered', () => {
+  const card = src('components/signin/JoinCard.tsx');
+  assert.match(card, /\{answered \? <ProviderButtons /, 'the Apple button waits for an answer');
+  assert.match(card, /\(!claim \|\| claim\.me === false\) \? <RoleChips/, 'the chips wait for "someone else"');
+  assert.match(card, /<Avatar profile=\{person\}/, 'the person\u2019s face');
+  const i = src('app/i.tsx');
+  assert.match(i, /view\.kind === 'join' && !view\.peek\.invitee && !moving && !inFamily/, 'a family link, signed out');
+  assert.match(i, /claimProfileId: claimOn \? claim\.claimProfileId : null/);
+  assert.doesNotMatch(src('components/signin/ClaimLink.tsx'), /claim=\{|claimProfileId/, 'a recipe link never asks');
+  assert.match(src('components/signin/useClaimPeek.ts'), /const SETTLE_MS = 400;/);
 });
 
 await test('every Apple step is the system button; Google shows on Android only', () => {

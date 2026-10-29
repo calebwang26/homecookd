@@ -41,6 +41,9 @@ export const SIGNIN = {
   'signin.joinCard.nameFirst': 'Type your name first.',
   'signin.joinCard.codeTitle': 'Tap the link instead',
   'signin.joinCard.codeLine': 'Codes don’t work anymore. Tap the link your family sent you.',
+  'signin.joinCard.areYou': 'Are you {name}?',
+  'signin.joinCard.thatsMe': 'Yes, that’s me',
+  'signin.joinCard.someoneElse': 'No, I’m someone else',
 
   // "Join … instead?" (components/signin/MoveCard.tsx)
   'signin.move.title': 'You’re in {from}. Join {to} instead?',
