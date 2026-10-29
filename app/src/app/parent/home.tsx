@@ -123,7 +123,7 @@ export default function ParentHome() {
                 <AskCard ask={a} />
               </Animated.View>
             ))}
-            {sent === false ? <CravingAskCard onAsk={askCraving} /> : null}
+            {sent === false && !asks.length ? <CravingAskCard onAsk={askCraving} /> : null}
             <Animated.View entering={listEnter(0)}>
               <ActionButton
                 label={t('parent.home.record')}

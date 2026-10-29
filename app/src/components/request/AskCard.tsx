@@ -4,10 +4,10 @@
 import { router } from 'expo-router';
 import { StyleSheet, View } from 'react-native';
 
-import { ActionButton, Avatar, PressableScale, Txt } from '@/components/ui';
+import { ActionButton, Avatar, Txt } from '@/components/ui';
 import type { CravingAsk } from '@/lib/cravings';
 import { useWords } from '@/lib/words/useWords';
-import { colors, motion, radii, shadows } from '@/theme/tokens';
+import { colors, radii, shadows } from '@/theme/tokens';
 
 import { DishCard } from './DishCard';
 
@@ -20,7 +20,8 @@ export function AskCard({ ask }: { ask: CravingAsk }) {
   const kid = ask.kidName.trim();
   const open = () => openAsk(ask.id);
   return (
-    <PressableScale onPress={open} scaleTo={motion.pressScaleCard} accessibilityLabel={t('request.wants', { kid, dish: ask.dish })} style={styles.card}>
+    // One button: the green "Answer Caleb" (a pressable card around it would nest a button in a button on the web).
+    <View style={styles.card}>
       <DishCard dish={ask.dish} photoUrl={ask.photoUrl} height={150} radius={0} />
       <View style={styles.body}>
         <View style={styles.row}>
@@ -34,9 +35,15 @@ export function AskCard({ ask }: { ask: CravingAsk }) {
             </Txt>
           </View>
         </View>
-        <ActionButton label={t('request.answer', { kid })} onPress={open} size="lg" labelSize={19} />
+        <ActionButton
+          label={t('request.answer', { kid })}
+          onPress={open}
+          size="lg"
+          labelSize={19}
+          accessibilityHint={t('request.wants', { kid, dish: ask.dish })}
+        />
       </View>
-    </PressableScale>
+    </View>
   );
 }
 

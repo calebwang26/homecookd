@@ -16,6 +16,7 @@ import Svg, { Path } from 'react-native-svg';
 
 import { CravingSheet } from '@/components/craving/CravingSheet';
 import { ActionButton, listEnter, PressableScale, RecordDotIcon, ScreenWash, Txt } from '@/components/ui';
+import { useHomieScreen } from '@/lib/homie/hooks';
 import { useWords } from '@/lib/words/useWords';
 import { colors, motion, radii, shadows, space } from '@/theme/tokens';
 
@@ -37,6 +38,8 @@ export function TwoDoors({ onSeen, onDone, onSent }: TwoDoorsProps) {
   const { t } = useWords();
   const [asking, setAsking] = useState(false);
   const [leaving, setLeaving] = useState(false);
+  // The photo fills the top: no corner pot over it (homie's voice is off here anyway).
+  useHomieScreen({ hidden: true });
 
   // Home comes once the sheet has slid away (never pull a Modal out mid-animation).
   useEffect(() => {

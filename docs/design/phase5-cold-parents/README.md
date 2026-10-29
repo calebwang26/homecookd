@@ -1,5 +1,7 @@
 Canvas (private; the Merge Agent approves): https://claude.ai/artifact/EmDq3ZioiEUsrKkBx5H7jy
-Status (Oct 29): mockups for `docs/PRD-V2.md` Phase 5, waiting on the Merge Agent's OK. Nothing is built yet.
+Status (Oct 29): approved by the Merge Agent (with the three fixes below), and built on the local branch
+`claude/phase5-cold-parents` against stubs (`app/src/lib/cravings.ts`) until the Convex functions are deployed.
+`phase5-built.jpg` shows the built screens from the web build.
 `phase5-screens.jpg` shows the eleven screens on one sheet, and `phase5-flow.jpg` is the map. An independent critic's 8
 changes are applied (round 2).
 
