@@ -128,6 +128,7 @@ export async function peekInvite(by: { token: string } | { code: string }): Prom
       : null,
     expires_at: data.expires_at ?? null,
     code: cleanInviteCode(data.code),
+    kind: data.kind === 'link' ? 'link' : null,
   };
 }
 

@@ -38,15 +38,15 @@ const GONE_TITLE: Record<Gone, string> = {
   'not-found': 'That invite link doesn’t work.',
 };
 
-const FIXTURES = ['pending', 'family', 'used', 'expired', 'revoked', 'notfound', 'offline'] as const;
+const FIXTURES = ['pending', 'family', 'link', 'used', 'expired', 'revoked', 'notfound', 'offline'] as const;
 
 function fixtureLoad(kind: (typeof FIXTURES)[number], q: URLSearchParams): Load {
   if (kind === 'offline') return { state: 'error', kind: 'network' };
   const from = q.get('from');
   // family = a pending family invite; &for=family makes the ended states family invites too.
-  const forAnyone = kind === 'family' || q.get('for') === 'family';
+  const forAnyone = kind === 'family' || kind === 'link' || q.get('for') === 'family';
   const invite: InvitePeek = {
-    status: kind === 'notfound' || kind === 'family' ? 'pending' : kind,
+    status: kind === 'notfound' || kind === 'family' || kind === 'link' ? 'pending' : kind,
     // A real family's invite: nobody but the seeded demo family has an avatar_key (initials, no photos).
     family_name: 'Mom’s family',
     inviter: from === 'none' ? null : { name: from || 'Mom', relation: from || 'Mom', avatar_key: null },
@@ -55,10 +55,11 @@ function fixtureLoad(kind: (typeof FIXTURES)[number], q: URLSearchParams): Load 
       : q.get('role') === 'learner'
         ? { name: 'Leo', role: 'learner', avatar_key: null }
         : { name: 'Dad', role: 'cook', avatar_key: null },
-    expires_at: null,
-    code: 'K7QM2X',
+    expires_at: kind === 'link' ? new Date(Date.now() + 7 * 86_400_000).toISOString() : null,
+    code: kind === 'link' ? null : 'K7QM2X',
+    kind: kind === 'link' ? 'link' : null,
   };
-  if (kind === 'pending' || kind === 'family') {
+  if (kind === 'pending' || kind === 'family' || kind === 'link') {
     return { state: 'ready', invite, token: 'fixture', code: invite.code ?? null, phone: isPhoneOrTablet() };
   }
   return { state: 'gone', why: kind === 'notfound' ? 'not-found' : kind, invite: kind === 'notfound' ? null : invite };
@@ -192,21 +193,42 @@ export function InvitePage() {
   );
 }
 
+/**
+ * A 1.1 family join link (JOIN-SIMPLE.md): "Mom sent you this link. It works for 7 days." The days are
+ * what's left of the link's week; the TEST family's never-ending link says nothing about time.
+ */
+function joinLinkLine(invite: InvitePeek): string {
+  const from = invite.inviter?.name.trim();
+  const sent = from ? `${from} sent you this link.` : 'Your family sent you this link.';
+  const left = invite.expires_at ? Math.ceil((Date.parse(invite.expires_at) - Date.now()) / 86_400_000) : NaN;
+  if (!Number.isFinite(left) || left < 1) return sent;
+  const days = Math.min(left, 7);
+  return `${sent} It works for ${days} ${days === 1 ? 'more day' : days === 7 ? 'days' : 'more days'}.`;
+}
+
 function Pending({ invite, token, code, phone }: Extract<Load, { state: 'ready' }>) {
   const inviter = invite.inviter;
-  // The app's Paste invite reads the homecookd.app link (or, with only a code, the code itself).
+  // 1.0's Paste invite reads the homecookd.app link (or, with only a code, the code itself); a 1.1 join
+  // link is picked up by the app on its own and never shows a code.
+  const joinLink = invite.kind === 'link' && !!token;
   const link = token ? `${WEB_ORIGIN}/i?t=${encodeURIComponent(token)}` : code!;
   const openUrl = token ? appSchemeUrl('i', { t: token }) : appSchemeUrl('i', { c: code! });
   return (
     <Hero
       face={inviter ? <Face name={inviter.name} avatarKey={inviter.avatar_key} /> : <PotMascot size={96} mood="happy" />}
       title={headline(invite)}
-      line={inviteLine(invite)}
+      line={joinLink ? joinLinkLine(invite) : inviteLine(invite)}
     >
       <div className={s.actions}>
-        <Handoff link={link} openUrl={openUrl} askName={inviter?.name ?? null} phone={phone} />
+        <Handoff
+          link={link}
+          openUrl={openUrl}
+          askName={inviter?.name ?? null}
+          phone={phone}
+          copied={joinLink ? 'Copied. Open homecookd and it picks up your link.' : undefined}
+        />
       </div>
-      {code && (
+      {code && !joinLink && (
         <p className={s.code}>
           <span className={s.codeLabel}>Or type this code in the app</span>
           <span className={s.codeValue} aria-hidden="true">

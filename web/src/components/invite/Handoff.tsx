@@ -31,6 +31,7 @@ export function Handoff({
   askName,
   phone,
   hint,
+  copied = 'Copied. In the app, tap Paste invite.',
 }: {
   /** What "Get the app" copies (the invite or share link; the app's Paste invite reads it). */
   link: string;
@@ -42,6 +43,8 @@ export function Handoff({
   phone: boolean;
   /** A short line under the buttons until one is tapped. */
   hint?: string;
+  /** The note after a copy that worked. 1.1 join links: the app picks the link up by itself. */
+  copied?: string;
 }) {
   const [note, setNote] = useState<Note>(null);
   const copying = useRef(false);
@@ -103,7 +106,7 @@ export function Handoff({
     note === 'testing'
       ? `homecookd is in early testing. ${ask}`
       : note === 'copied'
-        ? 'Copied. In the app, tap Paste invite.'
+        ? copied
         : note === 'not-copied'
           ? 'Couldn’t copy the link. Get the app, then come back and tap Open homecookd.'
           : hint;
