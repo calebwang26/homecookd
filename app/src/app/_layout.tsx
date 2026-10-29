@@ -1,15 +1,17 @@
 // Root: Hearth fonts (Fraunces + DM Sans, never blocking more than 2.5 s), the app-wide providers
 // (session, toasts, Watch/Hear sheet, share sheet), the Stack, and the launch bloom once per cold start.
 // SessionGate sends a phone with no family to the first screen (join), and a family with nobody picked
-// to "Who's in the kitchen?". Invite (/i), recipe (/r) and dinner-invite (/d) links pass through either way;
-// any other link opened before anyone was picked opens on top of their home once it shows.
+// to "Who's in the kitchen?". Invite (/i), recipe (/r), dinner-invite (/d) and dish-card (/miss, /a)
+// links pass through either way; any other link opened before anyone was picked opens on top of their
+// home once it shows.
 // PushBridge (RETENTION-HANDOFF 2.3) opens the screen a tapped push points at (the same hold covers a
-// push that launched the app), files this phone's push token under its person, and starts "heard"
-// logging; PushAskHost is the one "Want a note when…?" sheet any screen can ask for. HomieOverlay is
-// homie, the pot that rests top-right on every screen (components/homie). AiConsentHost is the one
-// "homecookd uses AI for this" sheet, raised the first time something would go to the AI companies
-// (lib/aiConsent). ResendUnsent sends, in the background and as its cook, an in-app recording the app
-// died before finishing (components/record/useResendUnsent).
+// push that launched the app), files this phone's push token under its person (with the api, and with
+// Convex through lib/live/pushTokens), and starts "heard" logging; PushAskHost is the one "Want a note
+// when…?" sheet any screen can ask for. HomieOverlay is homie, the pot that rests top-right on every
+// screen (components/homie). AiConsentHost is the one "homecookd uses AI for this" sheet, raised the
+// first time something would go to the AI companies (lib/aiConsent). ResendUnsent sends, in the
+// background and as its cook, an in-app recording the app died before finishing
+// (components/record/useResendUnsent).
 //
 // Stack motion (docs/design/ANIMATIONS.md 3): detail screens use a quick fade underneath their own
 // Reanimated hero/content entrances; drill-down screens (ingredients -> steps, chat) slide.
@@ -43,9 +45,10 @@ import { forgetAiConsent, useAiConsent } from '@/lib/aiConsent';
 import { api } from '@/lib/api';
 import { HOMIE_ON } from '@/lib/homie/switch';
 import { registerHeardLogging } from '@/lib/listening';
+import { convexPush } from '@/lib/live/pushTokens';
 import { PLAYBACK_AUDIO_MODE } from '@/lib/media';
 import { openRecipe } from '@/lib/navigation';
-import { addTapListener, initPush, pushUrl, syncRegistration, type PushData, type PushPlatform } from '@/lib/push';
+import { addTapListener, initPush, pushUrl, setConvexPush, syncRegistration, type PushData, type PushPlatform } from '@/lib/push';
 import { SessionProvider, useSession } from '@/lib/session';
 import { ShareSheetProvider } from '@/lib/share';
 import { UiLanguageProvider } from '@/lib/words/useWords';
@@ -53,6 +56,7 @@ import { colors } from '@/theme/tokens';
 import { useAppFonts } from '@/theme/fonts';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
+setConvexPush(convexPush);
 
 const navTheme = {
   ...DefaultTheme,
@@ -172,8 +176,8 @@ function ResendUnsent() {
   return null;
 }
 
-/** Screens that work without a signed-in phone: the first screen, the code backup, invite, recipe and dinner-invite links. */
-const SIGNED_OUT_ROUTES = new Set(['/join', '/join-code', '/i', '/r', '/d']);
+/** Screens that work without a signed-in phone: the first screen, the code backup, invite, recipe, dinner-invite and dish-card links. */
+const SIGNED_OUT_ROUTES = new Set(['/join', '/join-code', '/i', '/r', '/d', '/miss', '/a']);
 /** Screens that work without a chosen profile. */
 const OPEN_ROUTES = new Set(['/', ...SIGNED_OUT_ROUTES]);
 /** A held link waits this long after home appears, so it opens on top of home (Back lands there). */
@@ -273,7 +277,7 @@ function PushBridge() {
   const person = owner?.id ?? me?.id ?? null;
   const signedIn = !!me;
   useEffect(() => {
-    if (person && signedIn) void syncRegistration({ register: registerPush, key: `${credentialVersion}|${person}` });
+    if (person && signedIn) void syncRegistration({ register: registerPush, key: `${credentialVersion}|${person}`, profileId: person });
   }, [person, signedIn, credentialVersion]);
   useEffect(() => {
     if (!navReady) return;

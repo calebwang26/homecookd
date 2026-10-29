@@ -17,10 +17,14 @@
 // `/join?s=<share>` (a recipe link, via /r): Apple/Google joins the sharer's family as a learner,
 // and the shared dish opens once they pick their face. A link the server says is gone is dropped
 // ("That recipe link stopped working."), so someone new is asked what they want to do first.
+// `/join?claim=<path>&name=…&role=learner|cook` (a dish card's link, /miss?k=… or /a?t=…, that has
+// no family to take them in yet: components/signin/ClaimLink, V2-LINKING.md 2.6): the name step is
+// prefilled from the card ("Caleb", "Mom"), the role step is skipped (the link says it), and once
+// they're in the link opens again, signed in, and the card becomes theirs.
 // Opened on a phone that's already in a family (an old link): a recipe link goes on to /r (the
-// dish), anything else to your home, else "Who's in the kitchen?".
+// dish), a dish card's link back to itself, anything else to your home, else "Who's in the kitchen?".
 // Dev (web only): ?fixture=name|role|share|code draws each step without signing in.
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, type Href } from 'expo-router';
 import { useEffect, useRef, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
@@ -47,6 +51,7 @@ import {
 } from '@/components/signin';
 import { ActionButton, haptic, type ActionState } from '@/components/ui';
 import type { Role } from '@/lib/api';
+import { claimFromParam, nameFromParam, roleFromParam } from '@/lib/linkClaim';
 import { useSession } from '@/lib/session';
 import { useWords } from '@/lib/words/useWords';
 import { motion } from '@/theme/tokens';
@@ -61,9 +66,13 @@ type Fixture = 'name' | 'role' | 'share' | 'code';
 const FIXTURES: readonly string[] = ['name', 'role', 'share', 'code'];
 
 export default function JoinScreen() {
-  const params = useLocalSearchParams<{ s?: string; fixture?: string }>();
+  const params = useLocalSearchParams<{ s?: string; fixture?: string; claim?: string; name?: string; role?: string }>();
   const fixture = DEV_WEB && params.fixture && FIXTURES.includes(params.fixture) ? (params.fixture as Fixture) : null;
   const linkToken = params.s && SHARE.test(params.s) ? params.s : null;
+  // A dish card's link to open again once they're in, with the card's name and side.
+  const claim = claimFromParam(params.claim);
+  const claimName = claim ? nameFromParam(params.name) : null;
+  const claimRole = claim ? roleFromParam(params.role) : null;
   const { status, signedIn, me, homeFor, error: sessionError, signInWithApple, signInWithGoogle, finishSignIn } = useSession();
   const { t } = useWords();
 
@@ -94,9 +103,10 @@ export default function JoinScreen() {
     if (settled.current || fixture || status === 'loading') return;
     settled.current = true;
     if (!signedIn || status === 'needs-code') return;
-    if (linkToken) leaveTo({ pathname: '/r', params: { s: linkToken } });
+    if (claim) leaveTo(claim as Href);
+    else if (linkToken) leaveTo({ pathname: '/r', params: { s: linkToken } });
     else leaveTo(me ? homeFor(me) : '/');
-  }, [status, signedIn, me, homeFor, fixture, linkToken]);
+  }, [status, signedIn, me, homeFor, fixture, linkToken, claim]);
 
   // Who shared the dish they came from ("Leo shared a dish with you."). Read once per link.
   useEffect(() => {
@@ -126,9 +136,10 @@ export default function JoinScreen() {
     setBtn((b) => (b === 'error' ? 'idle' : b));
   };
 
-  /** In: "Who's in the kitchen?" next (and the shared dish once they pick their face). */
+  /** In: "Who's in the kitchen?" next (and the dish card's link, or the shared dish, once they pick their face). */
   const enter = () => {
-    if (share && share.token === shareToken) openAfterPick(share.recipeId);
+    if (claim) openAfterPick(claim);
+    else if (share && share.token === shareToken) openAfterPick(share.recipeId);
     leaveTo('/');
   };
 
@@ -152,9 +163,10 @@ export default function JoinScreen() {
         setError(res.error);
         return;
       case 'needs-name':
-        setName(res.suggestedName);
-        setNeedsRole(res.needsRole);
-        setRole(null);
+        // A dish card's link already says who they are to the family and which side they're on.
+        setName(claimName ?? res.suggestedName);
+        setNeedsRole(res.needsRole && !claimRole);
+        setRole(res.needsRole ? claimRole : null);
         setStep('name');
         return;
       case 'signed-in':
@@ -169,7 +181,8 @@ export default function JoinScreen() {
     setError(null);
     setBtn('loading');
     const started = Date.now();
-    const res = fixture ? ({ status: 'error', error: t('signin.join.appOnly') } as const) : await finishSignIn({ name: clean, role: needsRole ? role : null });
+    // `role` is null unless the role step asked, or a dish card's link said it.
+    const res = fixture ? ({ status: 'error', error: t('signin.join.appOnly') } as const) : await finishSignIn({ name: clean, role });
     const wait = motion.loadingMinMs - (Date.now() - started);
     if (wait > 0) await new Promise((r) => setTimeout(r, wait));
     if (!alive.current) return;

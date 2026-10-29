@@ -45,6 +45,7 @@ import {
   STAT_EVENT_KINDS,
   syncTz,
 } from "./retention.ts";
+import { linkJoin } from "./link.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -2906,6 +2907,10 @@ async function signInWith(provider: Provider, { req, body }: PublicArgs) {
 
 onPublic("POST", "/auth/apple", (a) => signInWith("apple", a));
 onPublic("POST", "/auth/google", (a) => signInWith("google", a));
+
+// A dish card's link: a new person joins the family on Convex's join ticket (link.ts, V2-LINKING.md §2.4).
+const linkDeps = { db, HttpError, dbFail, rateLimit, str, deviceLabel, addProfile, createDevice, quietNote };
+onPublic("POST", "/auth/link", async ({ req, body }) => linkJoin(linkDeps, await body(), clientIp(req)));
 
 // --- recordings on their way: the app registers who gets them, the worker says when it's published
 

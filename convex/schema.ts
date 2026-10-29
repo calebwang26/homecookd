@@ -467,6 +467,36 @@ export default defineSchema({
     .index("by_familyId", ["familyId"])
     .index("by_from", ["from"]),
 
+  // --- Pushes from Convex (docs/build/V2-LINKING.md §1; Notifications & linking). Supabase still sends today's.
+  /** One phone's Expo push token, moved to whoever signed in on it last. */
+  pushTokens: defineTable({
+    token: v.string(),
+    personId: v.id("people"),
+    familyId: v.id("families"),
+    platform: v.union(v.literal("ios"), v.literal("android")),
+    tz: v.optional(v.string()), // IANA zone from the phone, for quiet hours
+    updatedAt: v.number(),
+  })
+    .index("by_token", ["token"])
+    .index("by_personId", ["personId"]),
+
+  /** Every push decided on, sent or not: dedupe, the daily limits, receipts. Pruned after 40 days. */
+  pushLog: defineTable({
+    personId: v.id("people"),
+    kind: v.union(v.literal("answered"), v.literal("craving"), v.literal("joined"), v.literal("filmed")),
+    dedupeKey: v.string(),
+    status: v.union(v.literal("queued"), v.literal("sent"), v.literal("failed"), v.literal("none"), v.literal("capped")),
+    title: v.string(),
+    body: v.string(),
+    url: v.string(), // an in-app path, e.g. /dish/<id>
+    sendAt: v.number(),
+    tickets: v.optional(v.array(v.object({ id: v.string(), token: v.string() }))), // for the receipts check
+    error: v.optional(v.string()),
+    createdAt: v.number(),
+  })
+    .index("by_personId_and_dedupeKey", ["personId", "dedupeKey"])
+    .index("by_personId_and_createdAt", ["personId", "createdAt"])
+    .index("by_createdAt", ["createdAt"]),
   // ---- Dish ask (docs/build/DISH-ASK-SPEC.md): the web's "what dish do you miss?" and Mom's answers ----
 
   /**

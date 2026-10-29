@@ -15,6 +15,7 @@ and ships every PR, routes new work, and keeps the "homecookd work tracker" doc 
 | Voice & homie | `voice/`; homie's logic and UI in the app (`app/src/lib/homie`, `lib/live/voice.ts`, `voiceLogic.ts`, `speak.ts`, `lib/live/homie.ts`, `components/homie`) |
 | Pipeline & recipes | `pipeline/` (worker, extraction, covers, transcripts, writer, `account_purge.py`), the pipeline's AI models, recipe data in the bucket |
 | Convex & accounts | `convex/`, `cloud/` (upload signer), the frozen `supabase/`, Apple revocation |
+| Notifications & linking (Oct 29) | v2 Phase 4 (`docs/build/V2-LINKING.md`): pushes from Convex (`convex/push.ts`, `pushEvents.ts`, `lib/push*.ts`), claim on install (`convex/links.ts`, `lib/linkRoutes.ts`, `lib/joinTicket.ts`, Supabase `functions/api/link.ts`), the app's link and push plumbing (`app/src/lib/push.ts`, `lib/auth/links.ts`, `lib/live/links.ts`, `lib/linkClaim.ts`, the `/miss` and `/a` claim screens) |
 | App screens & recording | every other app screen: filming, Record, Send, Home, Recipes, Messages, profiles, cook languages (`app/src/lib/words`) |
 | App Store, web & builds | the App Review guard, Salik's handoff doc and App Store Connect, `web/` (both repos), native TestFlight builds, icon and screenshots, the TEST family |
 

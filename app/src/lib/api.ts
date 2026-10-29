@@ -647,6 +647,16 @@ export const api = {
     call<DeviceAuth>('/invites/accept', { method: 'POST', body: input, authed: false, retry: 'none', timeoutMs: SIGN_IN_TIMEOUT_MS, ...o }),
 
   /**
+   * POST /auth/link (public): someone new joins a dish card's family on Convex's join ticket
+   * (docs/build/V2-LINKING.md 2.4), as a new person named `name` (else the ticket's name), and gets
+   * this phone's device key. No Apple sign-in, like a family invite. 404 until it's deployed (or the
+   * family is gone), 403 a bad or old ticket, 409 "This link already brought someone in." or "Mom is
+   * already in this family". Never retried, like inviteAccept.
+   */
+  authLink: (input: { ticket: string; name?: string | null; device_label?: string | null }, o: Pick<AuthOverride, 'signal'> = {}) =>
+    call<DeviceAuth>('/auth/link', { method: 'POST', body: input, authed: false, retry: 'none', timeoutMs: SIGN_IN_TIMEOUT_MS, ...o }),
+
+  /**
    * POST /auth/apple (public): Sign in with Apple. Call with the `id_token` first; a known person
    * gets a device key, someone new gets `needs_name`: call again with `name` (+ `role` when there is
    * no `share_token`). Never retried: a retry after a lost answer would sign in a second time.

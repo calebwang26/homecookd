@@ -18,6 +18,9 @@
 //                                        gets `needs-name`, then finishSignIn({ name, role })
 //                                        (role only when there was no share link)
 //   joinFamily(code)                     the "Have a family code?" backup, swapped for a key too
+//   joinByLink(ticket, name)             a dish card's link (docs/build/V2-LINKING.md 2.4): in as a new
+//                                        person in the card's family, now `me`; 'unavailable' until
+//                                        POST /auth/link is live (sign in with Apple or Google instead)
 // Phones from before device keys have a saved family code: on boot it is swapped for a key
 // (POST /devices) and then deleted. When the server refuses the key (401 "This phone was signed
 // out.": someone removed this person), the key and the cache are cleared and status goes to
@@ -155,6 +158,17 @@ export type AcceptInviteResult =
 
 export type JoinResult = { ok: true; family: Family } | { ok: false; error: string };
 
+export type JoinByLinkResult =
+  /** In as the new person (`profileId`), who is `me` now (`me` is null only when the family couldn't load yet). */
+  | { status: 'joined'; familyName: string; profileId: string; me: Profile | null }
+  /** POST /auth/link isn't live (404, 503) or refused the ticket (403): sign in first instead. */
+  | { status: 'unavailable' }
+  /** "Mom is already in this family", or a name it won't take: ask for another and send the same ticket. */
+  | { status: 'name'; error: string }
+  /** That side of the card already brought someone in. */
+  | { status: 'taken'; error: string }
+  | { status: 'error'; error: string };
+
 /** createSelf(): in as the new person (`me`), or a sentence to show under the name field. */
 export type CreateSelfResult = { ok: true; me: Profile } | { ok: false; error: string };
 
@@ -231,6 +245,8 @@ export type Session = {
   acceptInvite: (tokenOrCode: string) => Promise<AcceptInviteResult>;
   /** Check a family code, swap it for this phone's own key and switch to that family (Profiles next). */
   joinFamily: (code: string) => Promise<JoinResult>;
+  /** A dish card's join ticket (/link/open): a new person, `name` (else the card's), in its family. */
+  joinByLink: (ticket: string, name: string | null) => Promise<JoinByLinkResult>;
   /**
    * "This is me" (a phone with `deviceNeedsProfile`): adds this phone's own person to the family
    * (POST /profiles/self), reloads the family and makes them `me`. The caller goes to their home.
@@ -413,6 +429,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const finishing = useRef<Promise<FinishSignInResult> | null>(null);
   const accepting = useRef<Promise<AcceptInviteResult> | null>(null);
   const joining = useRef<Promise<JoinResult> | null>(null);
+  const linking = useRef<Promise<JoinByLinkResult> | null>(null);
   const creating = useRef<Promise<CreateSelfResult> | null>(null);
   /** Web dev only: the `?profiles=` made-up family (no API at all). */
   const fixture = useRef<CachedFamily | null>(webProfilesFixture());
@@ -817,7 +834,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     (tokenOrCode: string) =>
       singleFlight(accepting, async (): Promise<AcceptInviteResult> => {
         const parsed = parseInviteInput(tokenOrCode);
-        if (!parsed || parsed.kind === 'share') return { status: 'error', error: NOT_AN_INVITE };
+        if (!parsed || (parsed.kind !== 'token' && parsed.kind !== 'code')) return { status: 'error', error: NOT_AN_INVITE };
         try {
           const ref = parsed.kind === 'token' ? { token: parsed.token } : { code: parsed.code };
           const res = await api.inviteAccept({ ...ref, device_label: deviceLabel() });
@@ -859,6 +876,34 @@ export function SessionProvider({ children }: { children: ReactNode }) {
             return { ok: false, error: 'That code doesn’t match a family. Check it and try again.' };
           }
           return { ok: false, error: errorMessage(e) };
+        }
+      }),
+    [adopt],
+  );
+
+  const joinByLink = useCallback(
+    (ticket: string, name: string | null) =>
+      singleFlight(linking, async (): Promise<JoinByLinkResult> => {
+        const clean = (name ?? '').trim().replace(/\s+/g, ' ').slice(0, MAX_NAME) || null;
+        try {
+          const res = await api.authLink({ ticket, name: clean, device_label: deviceLabel() });
+          const pid = res.profile_id;
+          if (!res.device_key || !pid) return { status: 'error', error: 'Something went wrong on our side. Try again.' };
+          await adopt(res.device_key, 'person');
+          // The new person is the only one on this phone: they're in at once, as with an invite for one person.
+          const me = dataRef.current?.profiles.find((p) => p.id === pid && !p.locked) ?? null;
+          if (me) {
+            setApiAuth({ profileId: me.id });
+            setMeId(me.id);
+          }
+          return { status: 'joined', familyName: res.family_name, profileId: pid, me };
+        } catch (e) {
+          if (e instanceof ApiError) {
+            if (e.status === 404 || e.status === 403 || e.status === 503) return { status: 'unavailable' };
+            if (e.status === 400 || (e.status === 409 && /already in this family/i.test(e.message))) return { status: 'name', error: errorMessage(e) };
+            if (e.status === 409) return { status: 'taken', error: errorMessage(e) };
+          }
+          return { status: 'error', error: errorMessage(e) };
         }
       }),
     [adopt],
@@ -1010,6 +1055,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       finishSignIn,
       acceptInvite,
       joinFamily,
+      joinByLink,
       createSelf,
       leaveFamily,
       accountRemoval: (p: Profile | null | undefined) => removalOf(p, data),
@@ -1038,6 +1084,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     finishSignIn,
     acceptInvite,
     joinFamily,
+    joinByLink,
     createSelf,
     leaveFamily,
     deleteAccount,
@@ -1084,6 +1131,7 @@ const fallbackSession: Session = {
   finishSignIn: async () => notReady,
   acceptInvite: async () => notReady,
   joinFamily: async () => ({ ok: false, error: 'Not ready yet.' }),
+  joinByLink: async () => notReady,
   createSelf: async () => ({ ok: false, error: 'Not ready yet.' }),
   leaveFamily: async () => {},
   accountRemoval: () => null,

@@ -1,15 +1,20 @@
 // Push notifications on this phone (RETENTION-HANDOFF 2.3): ask the OS, get the Expo push token, hand
-// it to the api, drop it on sign-out, and open the screen a tapped notification points at.
+// it to the api and to Convex, drop it on sign-out, and open the screen a tapped notification points at.
 //
 //   initPush(isHere)                                   // once, from the root layout
 //   const off = addTapListener(router)                 // once navigation is ready (cold-start tap too)
 //   if (await shouldAskPush('kid-first-made', me.id))  // then our own explainer sheet first:
 //     Yes     -> await requestAndRegister({ register: (token, platform) => api.pushToken({ token, platform }), profileId: me.id })
 //     Not now -> await snoozePushAsk(me.id)                       // no ask for 30 days
-//   await syncRegistration({ register, key: `${credentialVersion}|${profileId}` })  // person or key change; never prompts
+//   await syncRegistration({ register, key: `${credentialVersion}|${profileId}`, profileId })  // person or key change; never prompts
 //   await unregister({ remove: (token) => api.removePushToken({ token }, { deviceKey }) })  // sign-out; never waits
+//   setConvexPush(convexPush)                          // once, root layout (lib/live/pushTokens)
 //
-// The api calls are injected: this module knows nothing about the api or the session.
+// The api calls are injected: this module knows nothing about the api or the session. Convex keeps a
+// copy of the token too (docs/build/V2-LINKING.md 1.2: v2's pushes come from Convex, today's from the
+// api): every registration above also goes to Convex's push.register with the phone's zone, and
+// sign-out to push.unregister, in the background (never awaited, errors swallowed). That sink is set
+// from outside, since lib/live imports the session, which imports this module.
 //
 // expo-notifications is required lazily inside try/catch, and only on iOS or on Android outside Expo
 // Go, so web and Expo Go never load it (importing it crashed Expo Go on Android before 57.0.23, and
@@ -25,6 +30,11 @@
 //   kid-first-question  after sending a question       "Want a note when Mom answers?"
 //   cook-first-send     right after a Send             "Want a note when Leo writes back?"
 //                       ("cooks it" once a cooking push exists: PushAskSheet COOK_ASK_COOKS_IT)
+//   kid-card-saved      a dish card claimed in the app  "Want a note when Mom answers?"
+//                       (v2: components/signin/ClaimLink)
+//   cook-craving-sent   right after she shares the      "Want a note when they pick a dish?"
+//                       "what are you craving?" link
+// The two v2 moments ask even on the first launch: both happen right after installing.
 // "First" means the first of these moments while asking is allowed: a moment skipped (first launch,
 // a "Not now" still inside its 30 days) asks again the next time it happens. Every moment shares one
 // 30-day snooze per profile (kv `push.askedAt.<profileId>`, ms since epoch), set by "Not now" and by
@@ -38,6 +48,7 @@ import type { Href } from 'expo-router';
 import { Platform } from 'react-native';
 
 import { kvGet, kvSet } from './storage';
+import { deviceTimeZone } from './tz';
 
 // The real module's types; the module itself is only ever required lazily (load()).
 type NotificationsModule = typeof Notifications;
@@ -46,11 +57,19 @@ type ResponseLike = Notifications.NotificationResponse;
 
 export type PushPlatform = 'ios' | 'android';
 export type PushPermission = 'granted' | 'denied' | 'undetermined' | 'unsupported';
-export type PushAskKind = 'kid-first-made' | 'kid-first-question' | 'cook-first-send';
+export type PushAskKind = 'kid-first-made' | 'kid-first-question' | 'cook-first-send' | 'kid-card-saved' | 'cook-craving-sent';
 /** What the server gets: POST /push-tokens {token, platform}. Throwing is fine (sync retries later). */
 export type RegisterPush = (token: string, platform: PushPlatform) => Promise<unknown>;
 /** POST /push-tokens/remove {token}, sent with the key that is about to go. */
 export type RemovePush = (token: string) => Promise<unknown>;
+/**
+ * Convex's copy of the token: push.register as `profileId` (null: whoever is in) with the phone's IANA
+ * zone, and push.unregister on sign-out, with the session that registered it (lib/live/pushTokens).
+ */
+export type ConvexPush = {
+  register: (token: string, platform: PushPlatform, tz: string, profileId: string | null) => Promise<unknown>;
+  unregister: (token: string) => Promise<unknown>;
+};
 /** The payload the api puts on every push (supabase/functions/api notify()). */
 export type PushData = { url?: unknown; kind?: unknown; profile_id?: unknown; thread_id?: unknown; [k: string]: unknown };
 /** Anything with expo-router's push, e.g. useRouter(). */
@@ -62,6 +81,8 @@ const SNOOZE_MS = 30 * 24 * 60 * 60 * 1000;
 const TOKEN_KEY = 'push.token'; // this phone's token, so sign-out can remove it
 const LAUNCH_KEY = 'push.firstLaunchAt';
 const askKey = (profileId: string) => `push.askedAt.${profileId}`;
+/** Moments that happen right after installing, so they may ask on the very first launch. */
+const FIRST_LAUNCH_ASKS: ReadonlySet<PushAskKind> = new Set(['kid-card-saved', 'cook-craving-sent']);
 
 let loaded: NotificationsModule | null | undefined;
 
@@ -193,9 +214,24 @@ export async function initPush(isHere?: (url: string) => boolean): Promise<void>
 
 let lastToken: string | null = null;
 let lastSynced: string | null = null;
+let convex: ConvexPush | null = null;
 
-/** Gets this phone's Expo push token and hands it to `register`. Assumes permission is granted. */
-async function registerToken(N: NotificationsModule, register: RegisterPush, key: string): Promise<boolean> {
+/** Where Convex's copy of the token goes (null: nowhere). Set once at startup. */
+export function setConvexPush(sink: ConvexPush | null): void {
+  convex = sink;
+}
+
+/** A Convex call in the background: it never holds anything up and never throws. */
+function toConvex(run: (sink: ConvexPush) => Promise<unknown>): void {
+  const sink = convex;
+  if (!sink) return;
+  void Promise.resolve()
+    .then(() => run(sink))
+    .catch(() => {});
+}
+
+/** Gets this phone's Expo push token and hands it to `register` (and Convex). Assumes permission is granted. */
+async function registerToken(N: NotificationsModule, register: RegisterPush, key: string, profileId: string | null): Promise<boolean> {
   const pid = projectId();
   const os = platform();
   if (!pid || !os) return false;
@@ -204,6 +240,7 @@ async function registerToken(N: NotificationsModule, register: RegisterPush, key
   lastToken = token;
   await kvSet(TOKEN_KEY, token);
   if (lastSynced === `${token}|${key}`) return true;
+  toConvex((sink) => sink.register(token, os, deviceTimeZone(), profileId));
   await register(token, os);
   lastSynced = `${token}|${key}`;
   return true;
@@ -221,7 +258,7 @@ export type PushAskResult = 'registered' | 'denied' | 'failed' | 'unsupported';
  *   'unsupported'  web, Expo Go on Android, a simulator, no projectId
  */
 export async function requestAndRegister({ register, profileId }: { register: RegisterPush; profileId?: string | null }): Promise<PushAskResult> {
-  const result = await askOsAndRegister(register);
+  const result = await askOsAndRegister(register, profileId ?? null);
   if (result !== 'registered' && profileId) {
     try {
       await snoozePushAsk(profileId);
@@ -232,7 +269,7 @@ export async function requestAndRegister({ register, profileId }: { register: Re
   return result;
 }
 
-async function askOsAndRegister(register: RegisterPush): Promise<PushAskResult> {
+async function askOsAndRegister(register: RegisterPush, profileId: string | null): Promise<PushAskResult> {
   const N = ready();
   if (!N) return 'unsupported';
   let p: PermissionLike;
@@ -247,7 +284,7 @@ async function askOsAndRegister(register: RegisterPush): Promise<PushAskResult> 
   }
   if (!isGranted(p)) return 'denied';
   try {
-    return (await registerToken(N, register, 'ask')) ? 'registered' : 'failed';
+    return (await registerToken(N, register, 'ask', profileId)) ? 'registered' : 'failed';
   } catch {
     return 'failed';
   }
@@ -259,13 +296,22 @@ async function askOsAndRegister(register: RegisterPush): Promise<PushAskResult> 
  * repeat of the same token for the same key in this run, so it must change with the phone's
  * credential as well as the person (session `credentialVersion` + profile id): the server's row
  * points at the device key it came with, and a new key for the same person must register again.
+ * `profileId`: who the token follows (Convex registers it as them; the api goes by the acting person).
  */
-export async function syncRegistration({ register, key = '' }: { register: RegisterPush; key?: string }): Promise<boolean> {
+export async function syncRegistration({
+  register,
+  key = '',
+  profileId = null,
+}: {
+  register: RegisterPush;
+  key?: string;
+  profileId?: string | null;
+}): Promise<boolean> {
   const N = ready();
   if (!N) return false;
   try {
     if (!isGranted(await N.getPermissionsAsync())) return false;
-    return await registerToken(N, register, key);
+    return await registerToken(N, register, key, profileId);
   } catch {
     return false;
   }
@@ -276,7 +322,8 @@ export async function syncRegistration({ register, key = '' }: { register: Regis
  * background. Resolves as soon as the local copy is gone (never waits on the network, never throws),
  * so signing out is never held up by a slow or captive connection. `remove` must carry its own auth
  * (the device key it captured), because the caller drops the key right after; the server also skips
- * tokens of revoked phones, so a removal that arrives late or never is harmless.
+ * tokens of revoked phones, so a removal that arrives late or never is harmless. Convex is told too,
+ * with the session that registered the token (still good after the key goes), in the background.
  */
 export async function unregister({ remove }: { remove: RemovePush }): Promise<void> {
   const token = lastToken ?? (await kvGet(TOKEN_KEY));
@@ -288,6 +335,7 @@ export async function unregister({ remove }: { remove: RemovePush }): Promise<vo
   void Promise.resolve()
     .then(() => remove(token))
     .catch(() => {});
+  toConvex((sink) => sink.unregister(token));
 }
 
 /**
@@ -359,17 +407,17 @@ export function noteLaunch(): Promise<boolean> {
 
 /** Whose copy the explainer uses for a moment. */
 export function pushAskWho(kind: PushAskKind): 'kid' | 'cook' {
-  return kind === 'cook-first-send' ? 'cook' : 'kid';
+  return kind === 'cook-first-send' || kind === 'cook-craving-sent' ? 'cook' : 'kid';
 }
 
 /**
- * True when a moment (`_kind`: every moment shares the rules) should show our explainer sheet:
- * pushes work in this build, it isn't the first launch, the OS has never been asked, and this
+ * True when a moment should show our explainer sheet: pushes work in this build, it isn't the first
+ * launch (the two v2 moments may ask on it: FIRST_LAUNCH_ASKS), the OS has never been asked, and this
  * profile had no ask in the last 30 days.
  */
-export async function shouldAskPush(_kind: PushAskKind, profileId: string | null | undefined, now = Date.now()): Promise<boolean> {
+export async function shouldAskPush(kind: PushAskKind, profileId: string | null | undefined, now = Date.now()): Promise<boolean> {
   if (!profileId || !pushSupported()) return false;
-  if (await noteLaunch()) return false;
+  if ((await noteLaunch()) && !FIRST_LAUNCH_ASKS.has(kind)) return false;
   if ((await getPushPermission()) !== 'undetermined') return false;
   const askedAt = Number(await kvGet(askKey(profileId)));
   return !(askedAt > 0 && now - askedAt < SNOOZE_MS);

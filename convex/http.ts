@@ -12,6 +12,7 @@ import { registerDishAskRoutes } from "./lib/dishAskRoutes";
 import { registerGlassesRoutes } from "./lib/glassesRoutes";
 import { fail, isNum, isStr, json, voice, worker } from "./lib/http";
 import { registerInviteRoutes } from "./lib/inviteRoutes";
+import { registerLinkRoutes } from "./lib/linkRoutes";
 import { registerLiveRoutes } from "./lib/liveRoutes";
 import { parseRecipeJson } from "./lib/recipeJson";
 
@@ -224,5 +225,6 @@ registerLiveRoutes(http);
 registerGlassesRoutes(http);
 registerInviteRoutes(http);
 registerDishAskRoutes(http);
+registerLinkRoutes(http);
 
 export default http;

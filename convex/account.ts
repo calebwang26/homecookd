@@ -15,6 +15,7 @@ import { internalMutation, mutation, type MutationCtx } from "./_generated/serve
 import { PUBLIC_COVER } from "./community";
 import { deleteCard, dropCook, dropKid } from "./dishAsks";
 import { cancelJob } from "./jobs";
+import { dropLogOf, dropTokensOf } from "./push";
 import { requireSession } from "./lib/auth";
 import { requestMossSync } from "./worker";
 
@@ -63,6 +64,7 @@ export const deleteMe = mutation({
     });
     const sessions = await ctx.db.query("sessions").withIndex("by_personId", (q) => q.eq("personId", person._id)).take(1000);
     for (const s of sessions) await ctx.db.delete("sessions", s._id);
+    await dropTokensOf(ctx, person._id);
 
     // Nothing of hers is worked on again: the worker can't claim (or finish) her jobs, and the glasses
     // can't make a recipe from her recordings (glasses.finished refuses an abandoned one).
@@ -328,8 +330,11 @@ const cravingLinks: Step = async (ctx, d, max) => {
   return rows.length;
 };
 
+/** The pushes decided on for them (push.ts); their tokens went in deleteMe. */
+const pushLog: Step = (ctx, d, max) => dropLogOf(ctx, d.personId, max);
+
 // Recipes first, so a late one's questions, cooking and swaps go with the rest.
 const STEPS: Step[] = [
   recipes, messages, questions, answers, cooking, recordings, jobs, hostedDinners, dinnerAsks, swaps, dishCardsAsKid, dishCardsAsCook,
-  cravingLinks,
+  cravingLinks, pushLog,
 ];
