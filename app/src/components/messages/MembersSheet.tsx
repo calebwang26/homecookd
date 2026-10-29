@@ -2,10 +2,8 @@
 // people on their own phone (`locked`, FEEDBACK-OCT16c E1): the chat is with them, never as them.
 //  mode 'members': tapped from the family circle's header ("Family" + faces); I'm listed last as "You".
 //                  Looking after the family happens here too (docs/build/FEEDBACK-OCT16c.md B3):
-//                  - someone invited who hasn't joined reads "Hasn't joined yet", and their pill is "Send again"
-//                    (a fresh link in Messages; their older links stop working, lib/invites.ts).
-//                    Backing out of Messages says so ("Not sent. Dad's old link is off, so tap Send
-//                    again."), and the next Send again re-sends that same new link;
+//                  - someone invited the old way who hasn't joined has no pill: the family's join link is the
+//                    only way in now (docs/build/JOIN-SIMPLE.md; "Invite family", AddFamilySheet);
 //                  - nobody removes anyone else (Caleb, Oct 17): only my own row ("You") has a small
 //                    red line. On my own phone it's "Leave the family", which asks first, in the
 //                    sheet: "Leave the family?" / "You'll be signed out on this phone. Your messages
@@ -23,7 +21,6 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { ActionButton, type ActionState, Avatar, BottomSheet, ListCard, ListRow, PressableScale, Txt, useToast } from '@/components/ui';
 import { api, errorMessage, type Profile } from '@/lib/api';
-import { forgetInvite, sendInvite } from '@/lib/invites';
 import { openChatWith } from '@/lib/messaging';
 import { recipesByCook, useLibrary } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
@@ -66,7 +63,6 @@ function Members({
   const { t } = useWords();
   const { height: winH } = useWindowDimensions();
   const [opening, setOpening] = useState<string | null>(null);
-  const [resending, setResending] = useState<string | null>(null);
   const [confirm, setConfirm] = useState<Profile | null>(null);
   const [removeBtn, setRemoveBtn] = useState<ActionState>('idle');
   const [removeError, setRemoveError] = useState<string | null>(null);
@@ -100,23 +96,6 @@ function Members({
     }
   };
 
-  /** A fresh invite link for someone who hasn't joined, in Messages again. */
-  const sendAgain = async (p: Profile) => {
-    if (resending || !me) return;
-    setResending(p.id);
-    const res = await sendInvite({ profileId: p.id }, { from: me.id });
-    setResending(null);
-    if (res.status === 'sent' || res.status === 'shared') {
-      toast.show(res.copied ? t('messages.members.linkCopied') : t('messages.members.inviteSent', { name: p.name }));
-    } else if (res.status === 'cancelled') {
-      // Their older link stopped working when this one was made; this one is held for the next tap.
-      toast.show(t('messages.members.notSent', { name: p.name }));
-    } else if (res.status === 'error') {
-      toast.show(res.error ?? t('messages.members.sendFailed'), { tone: 'error' });
-      // e.g. 409 "Dad already joined.": the family's list is behind, so catch up.
-      void refresh();
-    }
-  };
 
   const askLeave = () => {
     setRemoveError(null);
@@ -144,7 +123,6 @@ function Members({
       setTimeout(() => setRemoveBtn((b) => (b === 'error' ? 'idle' : b)), 1800);
       return;
     }
-    forgetInvite(p.id);
     onClose();
     if (ownPhone) {
       // This phone was signed out with them: back to the first screen (the session gate).
@@ -159,7 +137,6 @@ function Members({
   };
 
   const line = (p: Profile) => {
-    if (isInvited(p)) return t('messages.members.notJoined');
     const n = p.role === 'cook' ? recipesByCook(entries, p.name).length : 0;
     const rel = (p.relation ?? '').trim();
     const recipes = n === 1 ? t('messages.members.recipe', { n }) : t('messages.members.recipes', { n });
@@ -243,22 +220,7 @@ function Members({
                         </Txt>
                       ) : null}
                     </View>
-                    {manage && invited ? (
-                      <ActionButton
-                        label={t('messages.members.sendAgain')}
-                        variant="outline"
-                        size="sm"
-                        padH={16}
-                        fg={colors.greenDeep}
-                        labelWeight={700}
-                        haptics
-                        state={resending === p.id ? 'loading' : 'idle'}
-                        disabled={!!resending && resending !== p.id}
-                        onPress={() => void sendAgain(p)}
-                        accessibilityLabel={t('messages.members.sendAgainLabel', { name: p.name })}
-                        accessibilityHint={t('messages.members.sendAgainHint')}
-                      />
-                    ) : (
+                    {invited ? null : (
                       <ActionButton
                         label={t('messages.members.message')}
                         variant="outline"

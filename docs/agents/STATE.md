@@ -993,3 +993,8 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - **Reviewer:** `scripts/test-family-link.mjs` makes the TEST family's never-expiring link for the 1.1 notes (run its SQL at the api deploy). App Store, web & builds has the web /i page (`claude/join-simple-web`) and the 1.1 notes checklist.
   - **Tests:** deno 320, vitest 245, convex tsc, app tsc + lint, test-signin 18, links 16, consent 17, words 6, retention 41.
   - **Open:** App screens & recording removes per-person invites and switches "Invite family" to `api.joinLink()`; `index.tsx` lost "Switch family" (it opened /join-code); `lib/homie/logic.ts` still lists `/join-code` (Voice & homie, harmless).
+- Oct 29 · (local branch claude/invite-join-link, off claude/join-simple 0b7b8f32a; push freeze) · Claude (App screens & recording) · Joining a family only by its join link (docs/build/JOIN-SIMPLE.md), the app-screens side.
+  - The per-person invites are gone: sendInvite, forgetInvite and deliverInvite in lib/invites.ts, PersonSheet's "Send again", and MembersSheet's "Hasn't joined yet" / "Send again". An old-style invited person shows no button.
+  - "Invite family" (AddFamilySheet, which InviteButton and the kid Ask row open) shares the family's 7-day multi-use link from api.joinLink(), with "Join our family on homecookd: <url>".
+  - AddPhonelessSheet is unchanged.
+  - Left in place: the now-unused words keys (profiles.person.sendAgain*, messages.members.sendAgain/notJoined…). They're harmless and can be cleaned up later.

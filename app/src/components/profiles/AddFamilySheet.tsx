@@ -27,7 +27,6 @@
 //
 // Reusable anywhere: <AddFamilySheet visible onClose />. `initialRole` (the picker section's Add)
 // only goes to "No phone?": the link itself has no role, since whoever opens it picks their section.
-// Someone invited the old way who hasn't joined gets "Send again" elsewhere (lib/invites sendInvite).
 import { router } from 'expo-router';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -37,7 +36,7 @@ import { cooksFirst } from '@/components/share/FamilyRow';
 import { InviteCard } from '@/components/share/InviteCard';
 import { BottomSheet, PlusIcon, PressableScale, Txt } from '@/components/ui';
 import type { Profile, Role } from '@/lib/api';
-import { createFamilyInvite, familyInviteText } from '@/lib/invites';
+import { familyInviteText, familyJoinLink } from '@/lib/invites';
 import { useSession } from '@/lib/session';
 import { useWords } from '@/lib/words/useWords';
 import { alpha, colors, motion } from '@/theme/tokens';
@@ -95,7 +94,7 @@ function InviteSheet({ visible, onClose, onSwitch, initialRole }: AddFamilySheet
   const link = useRef<Promise<string> | null>(null);
   const getUrl = useCallback(() => {
     if (!link.current) {
-      const p = createFamilyInvite(from).then((i) => i.url);
+      const p = familyJoinLink(from);
       link.current = p;
       p.catch(() => {
         if (link.current === p) link.current = null;
