@@ -10,9 +10,10 @@
 // result to branch on (they never throw):
 //   signInWithApple / signInWithGoogle(opts)  opts: the link they came from (`joinToken`: a family join
 //                                        link or an older invite; `linkTicket`: a dish card's ticket
-//                                        from /link/open), the `name` and `role` typed on its card, and
-//                                        `move`. No link: a known person signs in, someone new starts
-//                                        a family.
+//                                        from /link/open), the `name` and `role` typed on its card,
+//                                        `move`, and `claimProfileId` ("Are you Leo?" -> yes: someone
+//                                        new becomes that phone-less person). No link: a known person
+//                                        signs in, someone new starts a family.
 //     'signed-in'                        in ("Who's in the kitchen?" next, which opens their home)
 //     'needs-name'                       someone new and no name sent: ask, then finishSignIn({ name,
 //                                        role }) (role only with no link)

@@ -2,9 +2,11 @@
 //
 //   POST /join-links (signed in)        -> { url: "<WEB_URL>/i?t=<22 characters>", expires_at }
 //   POST /join-links/revoke (signed in) -> { ok: true }
-//   POST /invites/peek { token: <22> }  -> { status, family_name, inviter, invitee: null, expires_at, same_family, kind: "link" }
+//   POST /invites/peek { token: <22>, name? } -> { status, family_name, inviter, invitee: null, expires_at, same_family,
+//                                         kind: "link", claimable }
 //   POST /invites/accept { token: <22> } -> 426 "Update homecookd to join this family." (1.0 can't join by one)
-//   POST /auth/apple|google { id_token, join_token | link_ticket, name?, role?, move?, device_label? } -> signInByLink()
+//   POST /auth/apple|google { id_token, join_token | link_ticket, name?, role?, move?, claim_profile_id?, device_label? }
+//                                       -> signInByLink()
 //
 // The family's join link works for anyone, any number of times, for JOIN_LINK_DAYS. Only sha256(token) is
 // looked up; `token_enc` keeps the token AES-GCM sealed (as families.code_enc, AAD = the link's id) so
@@ -18,8 +20,12 @@
 // - a known account in that family signs in; nothing is used up;
 // - a known account in another family gets `needs_move` and nothing changes; with `move: true` it moves;
 // - a new account: `needs_name` without a name, else a NEW profile in the family (never an existing or
-//   invited face), this account, this phone's key, a signups row and "<name> joined".
-// A ticket's card side and an old invite are used up before anyone is made, and put back when the join fails.
+//   invited face), this account, this phone's key, a signups row and "<name> joined";
+// - "Are you Leo?": a new account on a family join link (or an old invite) with `claim_profile_id` becomes
+//   that phone-less person instead (claimableIn: no account, no live phone). One claim per person, through
+//   the signups row `link:claim:<id>` and its unique index. A ticket never claims anyone.
+// A ticket's card side, a claim and an old invite are used up before anyone is attached, and put back when
+// the join fails.
 //
 // Same deps-injection style as hearts.ts: index.ts passes its helpers in, so supabase/tests/joinLinks_test.ts
 // runs with a fake db and no network.
@@ -29,7 +35,9 @@ import { BAD_TICKET, LINK_USED, roleFor, shareTokenFor, signMoved, verifyTicket 
 
 export type Role = "cook" | "learner";
 export type Who = { provider: "apple" | "google"; sub: string; email: string | null; givenName: string | null };
-type Member = { id: string; family_id: string; name: string; role: string; sort: number };
+type Member = { id: string; family_id: string; name: string; role: string; sort: number; avatar_key?: string | null };
+/** The phone-less person a typed name matches ("Are you Leo?"). */
+export type Claimable = { id: string; name: string; avatar_key: string | null };
 type Known = { profile: Member; familyName: string };
 type SignedIn = { existing: boolean; needs_name: boolean; joined: boolean; device_key: string; family_name: string; profile_id: string };
 /** signInByLink's answers: signed in (joined, or moved with Convex's receipt), or a question for the app. */
@@ -63,6 +71,8 @@ export const LINK_GONE: Record<"expired" | "revoked", string> = {
   expired: "This link expired.",
   revoked: "This link was turned off.",
 };
+export const NOT_IN_FAMILY = "That person isn't in this family.";
+export const ALREADY_ON = "That person is already on homecookd.";
 
 /** index.ts's helpers. Methods, so index.ts's wider signatures (ProfileRow, Via) fit as they are. */
 export type JoinDeps = {
@@ -95,6 +105,9 @@ export type JoinDeps = {
 const nowOf = (deps: JoinDeps) => (deps.now ?? Date.now)();
 const secretOf = (deps: JoinDeps) => (deps.secret ?? (() => Deno.env.get("LINK_JOIN_SECRET")))();
 const present = (v: unknown) => v !== undefined && v !== null && !(typeof v === "string" && v.trim() === "");
+/** A name as peek and claims compare it: trimmed, one space between words, lowercase ('' for no name). */
+export const nameKey = (raw: unknown) =>
+  typeof raw === "string" && raw.length <= 200 ? raw.trim().replace(/\s+/g, " ").toLowerCase() : "";
 
 type LinkRow = { id: string; family_id: string; inviter_id: string | null; expires_at: string | null; revoked_at: string | null };
 type LinkStatus = "pending" | "expired" | "revoked";
@@ -149,8 +162,13 @@ export async function revokeJoinLinks(deps: JoinDeps, familyId: string) {
   return { ok: true };
 }
 
-/** What the join card shows (null: no such link). Reads only. */
-export async function peekJoinLink(deps: JoinDeps, token: string, sameFamily: (familyId: string) => Promise<boolean | undefined>) {
+/** What the join card shows (null: no such link), and the person a typed `name` could be. Reads only. */
+export async function peekJoinLink(
+  deps: JoinDeps,
+  token: string,
+  sameFamily: (familyId: string) => Promise<boolean | undefined>,
+  name?: unknown,
+) {
   const { db } = deps;
   const { data, error } = await db.from("join_links").select("id, family_id, inviter_id, expires_at, revoked_at")
     .eq("token_hash", await deps.sha256Hex(token)).maybeSingle();
@@ -166,15 +184,34 @@ export async function peekJoinLink(deps: JoinDeps, token: string, sameFamily: (f
   if (fam.error) deps.dbFail("join link family", fam.error);
   if (inviter.error) deps.dbFail("join link inviter", inviter.error);
   const by = inviter.data && !inviter.data.removed_at ? inviter.data : null;
+  const status = linkStatus(link, nowOf(deps));
   return {
-    status: linkStatus(link, nowOf(deps)),
+    status,
     family_name: fam.data.name as string,
     inviter: by ? { name: by.name, relation: by.relation, avatar_key: by.avatar_key } : null,
     invitee: null,
     expires_at: link.expires_at,
     same_family: await sameFamily(link.family_id),
     kind: "link" as const,
+    claimable: status === "pending" ? await claimableIn(deps, link.family_id, name) : null,
   };
+}
+
+/**
+ * "Are you Leo?" (peek's `claimable`): the one person in this family whose name is exactly the typed one
+ * (ignoring case and extra spaces) who isn't removed and has no linked account and no live phone. Never a
+ * list, and nothing without a typed name; two of that name is null too.
+ */
+export async function claimableIn(deps: JoinDeps, familyId: string, typed: unknown): Promise<Claimable | null> {
+  const key = nameKey(typed);
+  if (!key) return null;
+  const named = (await membersOf(deps, familyId)).filter((p) => nameKey(p.name) === key);
+  if (!named.length) return null;
+  const on = await signedInIds(deps, named.map((p) => p.id));
+  const free = named.filter((p) => !on.has(p.id));
+  if (free.length !== 1) return null;
+  const [p] = free;
+  return { id: p.id, name: p.name, avatar_key: p.avatar_key ?? null };
 }
 
 /** 1.0's Join tap (POST /invites/accept) on a 1.1 join link: 426, and its page shows the sentence. */
@@ -185,8 +222,8 @@ export function refuseJoinLinkAccept(HttpError: JoinDeps["HttpError"], token: un
 // ---------------------------------------------------------------------------------------------
 // Signing in with a link
 
-/** Whether POST /auth/apple|google goes through signInByLink. */
-export const hasLink = (b: Record<string, unknown>) => present(b.join_token) || present(b.link_ticket);
+/** Whether POST /auth/apple|google goes through signInByLink (a claim with no join link is refused there). */
+export const hasLink = (b: Record<string, unknown>) => present(b.join_token) || present(b.link_ticket) || present(b.claim_profile_id);
 
 type Taken = { undo(): Promise<void>; used(deviceId: string): Promise<void> };
 type Target = {
@@ -274,18 +311,26 @@ async function inviteTarget(deps: JoinDeps, token: string, role: Role, ip: strin
 }
 
 /**
- * One join per card side: the signups row `link:<card>:<side>` is claimed before anyone is made. The unique
- * index signups_link_share_token (migration 20261029090000) refuses a second claim; before that migration
- * is applied, of two joins at once the earliest row wins and the other backs out.
+ * One join per card side (`link:<card>:<side>`), one claim per person (`link:claim:<profile id>`): the
+ * signups row is claimed before anyone is made or attached. The unique index signups_link_share_token
+ * (migration 20261029090000) refuses a second claim; before that migration is applied, of two joins at once
+ * the earliest row wins and the other backs out. `taken` is the 409's sentence.
  */
-async function claimSide(deps: JoinDeps, familyId: string, token: string, name: string, email: string | null): Promise<Taken> {
+async function claimSide(
+  deps: JoinDeps,
+  familyId: string,
+  token: string,
+  name: string,
+  email: string | null,
+  taken = LINK_USED,
+): Promise<Taken> {
   const { db, HttpError } = deps;
   const used = await db.from("signups").select("id").eq("share_token", token).limit(1);
   if (used.error) deps.dbFail("link used", used.error);
-  if (used.data?.length) throw new HttpError(409, LINK_USED);
+  if (used.data?.length) throw new HttpError(409, taken);
   const claim = await db.from("signups").insert({ name, email, share_token: token, family_id: familyId })
     .select("id").single();
-  if (claim.error?.code === "23505") throw new HttpError(409, LINK_USED);
+  if (claim.error?.code === "23505") throw new HttpError(409, taken);
   if (claim.error) deps.dbFail("link claim", claim.error);
   const claimId = claim.data.id as string;
   const undo = async () => {
@@ -297,7 +342,7 @@ async function claimSide(deps: JoinDeps, familyId: string, token: string, name: 
   if (first.error || first.data?.[0]?.id !== claimId) {
     await undo();
     if (first.error) deps.dbFail("link first", first.error);
-    throw new HttpError(409, LINK_USED);
+    throw new HttpError(409, taken);
   }
   return { undo, used: () => Promise.resolve() };
 }
@@ -358,16 +403,65 @@ async function addMember(deps: JoinDeps, who: Who, target: Target, name: string,
   return { lost: null, p, dev, members };
 }
 
-/** Of these people, does anyone sign in (a linked account or a live phone)? */
-async function anySignedIn(deps: JoinDeps, ids: string[]): Promise<boolean> {
-  if (!ids.length) return false;
+/** Of these people, the ones who sign in: a linked account or a live phone. */
+async function signedInIds(deps: JoinDeps, ids: string[]): Promise<Set<string>> {
+  if (!ids.length) return new Set();
   const [idn, dev] = await Promise.all([
-    deps.db.from("identities").select("profile_id").in("profile_id", ids).limit(1),
-    deps.db.from("devices").select("profile_id").in("profile_id", ids).is("revoked_at", null).limit(1),
+    deps.db.from("identities").select("profile_id").in("profile_id", ids),
+    deps.db.from("devices").select("profile_id").in("profile_id", ids).is("revoked_at", null),
   ]);
-  if (idn.error) deps.dbFail("move identities", idn.error);
-  if (dev.error) deps.dbFail("move devices", dev.error);
-  return !!(idn.data?.length || dev.data?.length);
+  if (idn.error) deps.dbFail("signed-in identities", idn.error);
+  if (dev.error) deps.dbFail("signed-in devices", dev.error);
+  return new Set([...(idn.data ?? []), ...(dev.data ?? [])].map((r) => r.profile_id as string));
+}
+
+const anySignedIn = async (deps: JoinDeps, ids: string[]) => (await signedInIds(deps, ids)).size > 0;
+
+/**
+ * "Yes, that's me": a new account becomes the family's phone-less `profileId` (its name, role, recipes and
+ * history stay). Everything peek showed is checked again here; the signups row `link:claim:<id>` is claimed
+ * before the account and the phone are attached, and put back (with an old invite) when that fails.
+ */
+async function claimMember(deps: JoinDeps, who: Who, target: Target, profileId: string, label: string | null): Promise<LinkSignIn> {
+  const { db, HttpError } = deps;
+  const { data, error } = await db.from("profiles").select("id, family_id, name, removed_at").eq("id", profileId).maybeSingle();
+  if (error) deps.dbFail("claim profile", error);
+  if (!data || data.family_id !== target.familyId || data.removed_at) throw new HttpError(409, NOT_IN_FAMILY);
+  const p = { id: data.id as string, name: data.name as string };
+  if (await anySignedIn(deps, [p.id])) throw new HttpError(409, ALREADY_ON);
+  const claimed = await claimSide(deps, target.familyId, `link:claim:${p.id}`, p.name, who.email, ALREADY_ON);
+  let taken: Taken | null = null;
+  const undo = async () => {
+    await taken?.undo();
+    await claimed.undo();
+  };
+  let linked: boolean;
+  try {
+    taken = target.take ? await target.take(p.name, who.email) : null;
+    linked = await deps.linkIdentity(who, p.id);
+  } catch (e) {
+    await undo();
+    throw e;
+  }
+  if (!linked) {
+    await undo();
+    return deps.afterLostLink(who, {}, label); // never deletes the person: they were here before
+  }
+  let dev: { id: string; key: string };
+  try {
+    dev = await deps.createDevice(target.familyId, p.id, who.provider, label);
+  } catch (e) {
+    const un = await db.from("identities").delete().eq("provider", who.provider).eq("subject", who.sub).eq("profile_id", p.id);
+    if (un.error) console.error("claim unlink:", un.error.message);
+    await undo();
+    throw e;
+  }
+  await taken?.used(dev.id);
+  // A 1.0 invite naming them would sign another phone in as them.
+  const inv = await db.from("invites").update({ status: "revoked" }).eq("profile_id", p.id).eq("status", "pending");
+  if (inv.error) console.error("claim invites:", inv.error.message);
+  await deps.quietNote(target.familyId, p.id, `${p.name} joined`);
+  return { existing: false, needs_name: false, joined: true, device_key: dev.key, family_name: target.familyName, profile_id: p.id };
 }
 
 /**
@@ -438,8 +532,8 @@ async function moveTo(deps: JoinDeps, who: Who, known: Known, target: Target, na
 }
 
 /**
- * POST /auth/apple|google with `join_token` or `link_ticket`, once the id token checked out. `name` and
- * `role` are index.ts's parsed body fields.
+ * POST /auth/apple|google with `join_token` or `link_ticket` (and maybe `claim_profile_id`), once the id
+ * token checked out. `name` and `role` are index.ts's parsed body fields; a claim ignores both.
  */
 export async function signInByLink(
   deps: JoinDeps,
@@ -450,6 +544,12 @@ export async function signInByLink(
   const { HttpError } = deps;
   if (present(b.join_token) && present(b.link_ticket)) throw new HttpError(400, "Send join_token or link_ticket, not both.");
   if (b.move !== undefined && b.move !== null && typeof b.move !== "boolean") throw new HttpError(400, "move must be true or false");
+  let claim: string | null = null;
+  if (present(b.claim_profile_id)) {
+    if (!present(b.join_token)) throw new HttpError(400, "claim_profile_id goes only with a family join link.");
+    if (typeof b.claim_profile_id !== "string" || b.claim_profile_id.length > 100) throw new HttpError(400, "claim_profile_id must be a profile id");
+    claim = b.claim_profile_id.trim();
+  }
   await deps.rateLimit("linkjoin-ip", opts.ip, 20, 10);
 
   let target: Target;
@@ -470,6 +570,7 @@ export async function signInByLink(
     if (b.move !== true) return { existing: true, needs_move: true, from_family: known.familyName, to_family: target.familyName };
     return moveTo(deps, who, known, target, opts.name, opts.label);
   }
+  if (claim) return claimMember(deps, who, target, claim, opts.label);
   if (!opts.name) return { existing: false, needs_name: true, suggested_name: target.suggested ?? who.givenName };
   const res = await addMember(deps, who, target, opts.name, opts.label);
   if (res.lost) return res.lost;

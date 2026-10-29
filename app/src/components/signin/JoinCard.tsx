@@ -2,15 +2,19 @@
 // system Sign in with Apple button (Google on Android), in one card:
 //   [face]  Join Test family            a family join link (/i): the family's own name
 //           Mom sent this.              who sent it, when the link says
-//   What do they call you?  [ Asha ]
+//   What do they call you?  [ Leo ]
+//   [face] Are you Leo?                 a family join link, when the family has a Leo with no phone yet:
+//   [ Yes, that's me ]                  the chips and Sign in wait for an answer; "that's me" signs in
+//   [ No, I'm someone else ]            as him (he keeps his own role), "someone else" brings the chips
 //   [ I cook ] [ I miss the food ]      chips, only on a family join link ("I miss the food" picked);
 //   [  Sign in with Apple  ]            a recipe link's side sets the role, so it shows none
 // A dish card's link (ClaimLink) puts the dish in the title ("Caleb's tomato egg") and prefills the
 // name. The terms line goes under the card (the screen adds it).
-import { StyleSheet, View } from 'react-native';
+import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
+import Animated, { FadeIn } from 'react-native-reanimated';
 
 import { Avatar, haptic, PotMark, PressableScale, Txt } from '@/components/ui';
-import type { Role } from '@/lib/api';
+import type { Claimable, Role } from '@/lib/api';
 import { useWords } from '@/lib/words/useWords';
 import type { WordKey } from '@/lib/words/words';
 import { colors, radii, shadows } from '@/theme/tokens';
@@ -45,6 +49,7 @@ export function JoinCard({
   onSignIn,
   error,
   nameError,
+  claim,
 }: {
   face: InviteFace;
   title: string;
@@ -60,8 +65,11 @@ export function JoinCard({
   error?: string | null;
   /** Under the name ("Type your name first.", "Asha is already in this family."). */
   nameError?: string | null;
+  /** "Are you Leo?" (a family join link only): `me` is null until they pick; the chips wait for "No". */
+  claim?: { person: Claimable; me: boolean | null; onAnswer: (me: boolean) => void } | null;
 }) {
   const { t } = useWords();
+  const answered = !claim || claim.me !== null;
   return (
     <View style={styles.card}>
       <CardFace face={face} />
@@ -89,11 +97,51 @@ export function JoinCard({
           invalid={!!nameError}
         />
         <ErrorLine error={nameError} />
-        {onRole && role ? <RoleChips value={role} onChange={onRole} /> : null}
+        {claim ? <ClaimQuestion person={claim.person} me={claim.me} onAnswer={claim.onAnswer} /> : null}
+        {onRole && role && (!claim || claim.me === false) ? <RoleChips value={role} onChange={onRole} /> : null}
       </View>
-      <ProviderButtons busy={busy} onPress={onSignIn} />
+      {answered ? <ProviderButtons busy={busy} onPress={onSignIn} /> : null}
       <ErrorLine error={error} />
     </View>
+  );
+}
+
+/** "Are you Leo?" with Leo's face, and "Yes, that's me" / "No, I'm someone else" (one under the other). */
+function ClaimQuestion({ person, me, onAnswer }: { person: Claimable; me: boolean | null; onAnswer: (me: boolean) => void }) {
+  const { t } = useWords();
+  const question = t('signin.joinCard.areYou', { name: person.name });
+  return (
+    <Animated.View entering={FadeIn.duration(180)} style={styles.claim}>
+      <View style={styles.claimAsk}>
+        <Avatar profile={person} size={FACE} />
+        <Txt variant="display" size={22} leading={1.15} style={styles.claimText}>
+          {question}
+        </Txt>
+      </View>
+      <View style={styles.claimChoices} accessibilityRole="radiogroup" accessibilityLabel={question}>
+        <Choice label={t('signin.joinCard.thatsMe')} on={me === true} onPress={() => onAnswer(true)} />
+        <Choice label={t('signin.joinCard.someoneElse')} on={me === false} onPress={() => onAnswer(false)} />
+      </View>
+    </Animated.View>
+  );
+}
+
+/** One pill of a pick-one row (the role chips, the claim answers). */
+function Choice({ label, on, onPress, style }: { label: string; on: boolean; onPress: () => void; style?: StyleProp<ViewStyle> }) {
+  return (
+    <PressableScale
+      onPress={() => {
+        if (!on) haptic('selection');
+        onPress();
+      }}
+      accessibilityRole="radio"
+      accessibilityState={{ selected: on }}
+      accessibilityLabel={label}
+      style={[styles.chip, on ? styles.chipOn : null, style]}>
+      <Txt variant="label" size={15} color={on ? colors.card : colors.ink} numberOfLines={2} align="center">
+        {label}
+      </Txt>
+    </PressableScale>
   );
 }
 
@@ -107,25 +155,9 @@ function RoleChips({ value, onChange }: { value: Role; onChange: (role: Role) =>
   const { t } = useWords();
   return (
     <View style={styles.chips} accessibilityRole="radiogroup" accessibilityLabel={t('signin.joinCard.roleLabel')}>
-      {CHIPS.map(({ role, label: key }) => {
-        const on = value === role;
-        return (
-          <PressableScale
-            key={role}
-            onPress={() => {
-              if (!on) haptic('selection');
-              onChange(role);
-            }}
-            accessibilityRole="radio"
-            accessibilityState={{ selected: on }}
-            accessibilityLabel={t(key)}
-            style={[styles.chip, on ? styles.chipOn : null]}>
-            <Txt variant="label" size={15} color={on ? colors.card : colors.ink} numberOfLines={1}>
-              {t(key)}
-            </Txt>
-          </PressableScale>
-        );
-      })}
+      {CHIPS.map(({ role, label: key }) => (
+        <Choice key={role} label={t(key)} on={value === role} onPress={() => onChange(role)} style={styles.chipHalf} />
+      ))}
     </View>
   );
 }
@@ -149,6 +181,11 @@ const styles = StyleSheet.create({
   pot: { width: FACE, height: FACE, borderRadius: FACE / 2, backgroundColor: colors.peach, alignItems: 'center', justifyContent: 'center' },
   form: { gap: 10 },
   chips: { flexDirection: 'row', gap: 10, marginTop: 4 },
-  chip: { flex: 1, minHeight: 48, borderRadius: 999, backgroundColor: colors.well, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12 },
+  chip: { minHeight: 48, borderRadius: 999, backgroundColor: colors.well, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 6 },
+  chipHalf: { flex: 1 },
   chipOn: { backgroundColor: colors.ink },
+  claim: { gap: 12, marginTop: 6 },
+  claimAsk: { flexDirection: 'row', alignItems: 'center', gap: 12 },
+  claimText: { flex: 1 },
+  claimChoices: { gap: 10 },
 });

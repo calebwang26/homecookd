@@ -9,4 +9,5 @@ export * from './MoveCard';
 export * from './ProviderButtons';
 export * from './RoleCards';
 export * from './SignInScreen';
+export * from './useClaimPeek';
 export * from './useLinkPickup';
