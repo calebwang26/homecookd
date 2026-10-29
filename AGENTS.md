@@ -34,6 +34,10 @@ and homesick college kids. It's a family product, not a tool.
 
 ## Where the truth lives (read in this order)
 
+**Next version (Oct 29 on):** `docs/PRD-V2.md`, the user pathway the next version of the app is built around
+(kid on the web → Ask Mom → parent answers by voice → film in the app). Every new screen, flow and piece of copy
+follows it, and it wins over the docs below on UI/UX and flows.
+
 0. `docs/build/STACK.md`: **the hackathon stack and build plan** (Convex, live voice service, Cartesia, Moss, Claude,
    Muse Spark, glasses), the contracts between the pieces, and the 2-day build order. It beats everything below
    where they conflict. The data model is `convex/schema.ts`.
