@@ -214,3 +214,9 @@ Phases 1–3 can run side by side once the route contract is written down (one s
   - Download buttons point at the real App Store page (apps.apple.com/app/id6825621614).
   - The Merge Agent approves v2 mockups against this PRD; Caleb reviews the finished flows on build 7 and the web.
   - Phase 4 has its own section chat, "Notifications & linking".
+- **How v2 ships (Oct 29):**
+  - The app side goes out as one batched, reviewed **1.1 release**, with updated reviewer notes, privacy text and
+    screenshots.
+  - The web pages go live first, once Caleb has tested them.
+  - Small JS-only fixes keep shipping by EAS Update without review.
+  - Build 7 (internal TestFlight, `staging` channel) is where 1.1 gets tested before it goes to Apple.
