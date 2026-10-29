@@ -24,8 +24,8 @@
 // A phone that just joined with a family link can't take over a face: tapping one asks "Is this you
 // on a new phone?" (NewPhoneSheet), and the family lets them in.
 // Opened from Home ("Mom ▾", `/?pick=1`), a quiet foot holds the phone's own settings: a cook's
-// "Your language" (components/profiles/LanguageEntry), "Switch family" (the code screen,
-// /join-code) and "Sign out of this phone", which asks first ("Sign out on this phone?" with Sign
+// "Your language" (components/profiles/LanguageEntry) and "Sign out of this phone" (another family is
+// joined only from its link: docs/build/JOIN-SIMPLE.md), which asks first ("Sign out on this phone?" with Sign
 // out / Keep) and then signs this phone out (session leaveFamily). "Delete my account" ("Delete Leo's
 // account" when Leo isn't this phone's own person) shows for whoever this phone is acting as, when the
 // API lets it delete them (session accountRemoval: its own person, or someone with no phone of their
@@ -311,16 +311,6 @@ export default function Profiles() {
           {choosing && !loading && !covered ? (
             <Animated.View entering={listEnter(profiles.length + 2)} style={styles.foot}>
               <LanguageEntry />
-              <PressableScale
-                onPress={() => router.push('/join-code')}
-                accessibilityRole="button"
-                accessibilityLabel={t('profiles.picker.switchFamily')}
-                accessibilityHint={t('profiles.picker.switchFamilyHint')}
-                style={styles.footLink}>
-                <Txt variant="label" weight={600} color={colors.muted}>
-                  {t('profiles.picker.switchFamily')}
-                </Txt>
-              </PressableScale>
               <PressableScale
                 onPress={() => setSigningOut(true)}
                 accessibilityRole="button"

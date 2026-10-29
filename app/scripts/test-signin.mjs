@@ -8,8 +8,17 @@
 //   src/lib/auth/apple.ts  "Delete my account" asks Apple to confirm (so Convex can revoke the Sign in
 //                       with Apple) only for this phone's own Apple account, on iOS, once Convex has the
 //                       key; a cancelled or failed Apple sheet gives no code and the deletion goes on
+// Joining only by a link (docs/build/JOIN-SIMPLE.md):
+//   src/lib/auth/join.ts   a sign-in sends one link (join_token or link_ticket), the card's role and
+//                       `move`; a refusal says which card to show (a taken name, a used card side, gone)
+//   src/lib/api.ts      POST /auth/apple carries them and passes needs_move back; POST /join-links
+//   src/lib/auth/pickup.ts the invisible pickup: reads the clipboard only when iOS says a link is there,
+//                       at most once per launch, and opens only a homecookd join link
+//   the sources         no family codes, no Paste invite, no /join-code, no /auth/link; the boot swap of
+//                       an old saved code stays; the system Apple button; Google on Android only
 //   node scripts/test-signin.mjs
 import assert from 'node:assert/strict';
+import { existsSync, readFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -47,7 +56,7 @@ const FAKES = {
 registerHooks({
   resolve(spec, ctx, next) {
     if (FAKES[spec]) return { url: FAKES[spec], shortCircuit: true };
-    if (spec.startsWith('./') && ctx.parentURL?.includes('/src/lib/') && !/\.[a-z]+$/.test(spec)) {
+    if (spec.startsWith('.') && ctx.parentURL?.includes('/src/lib/') && !/\.[a-z]+$/.test(spec)) {
       return next(pathToFileURL(join(dirname(fileURLToPath(ctx.parentURL)), `${spec}.ts`)).href, ctx);
     }
     return next(spec, ctx);
@@ -57,6 +66,10 @@ registerHooks({
 const A = await import(pathToFileURL(join(root, 'src/lib/api.ts')).href);
 const S = await import(pathToFileURL(join(root, 'src/lib/storage.ts')).href);
 const P = await import(pathToFileURL(join(root, 'src/lib/auth/apple.ts')).href);
+const J = await import(pathToFileURL(join(root, 'src/lib/auth/join.ts')).href);
+/** A fresh copy of the pickup module: its "once per launch" starts over, like a new launch. */
+let launches = 0;
+const freshPickup = () => import(`${pathToFileURL(join(root, 'src/lib/auth/pickup.ts')).href}?launch=${++launches}`);
 
 let passed = 0;
 const test = async (name, fn) => {
@@ -206,6 +219,165 @@ await test('Apple confirms with no scopes and hands back a fresh code; cancelled
   assert.equal(await P.confirmToRevoke(), null);
   assert.equal(a.asked.length, asked, 'no sheet where Apple sign-in is unavailable');
   a.available = true;
+});
+
+// ---- Joining only by a link
+
+const JOIN = 'Ab3dEf6hIj9kLm2nOp5qRs'; // a family join link's token: 22 base62
+const OLD = 'aB3dE6gH9jK2mN5p'; // an older one-use invite's: 16
+
+await test('a sign-in from a link sends one link, the card’s role and move', () => {
+  assert.deepEqual(J.linkFields(), {}, 'no link: a known person signs in, someone new starts a family');
+  assert.deepEqual(J.linkFields({ joinToken: JOIN, role: 'learner', name: 'Asha' }), { join_token: JOIN, role: 'learner' }, 'the name goes on its own');
+  assert.deepEqual(J.linkFields({ joinToken: ` ${OLD} ` }), { join_token: OLD }, 'an older invite rides the same field');
+  assert.deepEqual(J.linkFields({ linkTicket: 'tk.sig', role: 'cook' }), { link_ticket: 'tk.sig' }, 'a ticket’s side sets the role');
+  assert.deepEqual(J.linkFields({ joinToken: JOIN, linkTicket: 'tk.sig' }), { join_token: JOIN }, 'one link at most');
+  assert.deepEqual(J.linkFields({ joinToken: JOIN, move: true }), { join_token: JOIN, move: true });
+  assert.deepEqual(J.linkFields({ linkTicket: 'tk.sig', move: true }), { link_ticket: 'tk.sig', move: true });
+  assert.deepEqual(J.linkFields({ move: true }), {}, 'no link, nothing to move to');
+  assert.deepEqual(J.linkFields({ joinToken: '  ', linkTicket: '' }), {});
+  assert.equal(J.cleanName('  Auntie   Lin '), 'Auntie Lin');
+  assert.equal(J.cleanName('x'.repeat(60)).length, 40);
+  assert.equal(J.cleanName(null), '');
+});
+
+await test('a refused sign-in says which card to show', () => {
+  const err = (status, body) => new A.ApiError(body?.error ?? 'x', status, 'http', body);
+  const LINK_USED = 'This link already brought someone in. Ask them for an invite.';
+  assert.equal(J.signInFailure(err(409, { error: LINK_USED, code: 'LINK_USED' })).why, 'link-used');
+  assert.equal(J.signInFailure(err(409, { error: LINK_USED })).why, 'link-used', 'by its sentence, if the code is missing');
+  const name = J.signInFailure(err(409, { error: 'Asha is already in this family. Pick another name.' }));
+  assert.deepEqual(name, { status: 'error', error: 'Asha is already in this family. Pick another name.', why: 'name' });
+  assert.deepEqual(J.signInFailure(err(410, { error: 'This invite expired.', status: 'expired' })), {
+    status: 'error',
+    error: 'This invite expired.',
+    why: 'gone',
+    invite: 'expired',
+  });
+  assert.equal(J.signInFailure(err(410, { error: 'This invite was already used.' })).invite, 'used');
+  assert.equal(J.signInFailure(err(403, { error: 'This link didn’t work. Open it again.' })).why, 'bad-ticket');
+  assert.equal(J.signInFailure(err(404, { error: 'That invite link doesn’t work.' })).why, 'not-found');
+  assert.equal(J.signInFailure(err(400, { error: 'Type a name first.' })).why, 'name');
+  assert.equal(J.signInFailure(err(500, { error: 'Something went wrong on our side.' })).why, undefined);
+  assert.deepEqual(J.signInFailure(new TypeError('Network request failed')), { status: 'error', error: 'Something went wrong. Try again.' });
+});
+
+await test('POST /auth/apple carries the link, the name, the role and move, and passes needs_move back', async () => {
+  A.setApiAuth({ deviceKey: null, code: null, profileId: null });
+  const bodies = [];
+  globalThis.fetch = async (url, init) => {
+    bodies.push({ url, body: JSON.parse(init.body) });
+    return new Response(JSON.stringify({ existing: true, needs_move: true, from_family: 'Wang family', to_family: 'Pawar family' }), { status: 200 });
+  };
+  const res = await A.api.authApple({ id_token: 'id', name: 'Asha', device_label: 'iPhone', ...J.linkFields({ joinToken: JOIN, role: 'learner', move: true }) });
+  assert.match(bodies[0].url, /\/auth\/apple$/);
+  assert.deepEqual(bodies[0].body, { id_token: 'id', name: 'Asha', device_label: 'iPhone', join_token: JOIN, role: 'learner', move: true });
+  assert.ok(!('share_token' in bodies[0].body), 'a recipe link joins nobody now');
+  assert.deepEqual(res, { existing: true, needs_move: true, from_family: 'Wang family', to_family: 'Pawar family' });
+});
+
+await test('POST /join-links: the family’s join link, asked as the person who shares it', async () => {
+  A.setApiAuth({ deviceKey: 'k1', code: null, profileId: 'p-mom' });
+  const sent = [];
+  globalThis.fetch = async (url, init) => {
+    sent.push({ url, init });
+    return new Response(JSON.stringify({ url: `https://homecookd.app/i?t=${JOIN}`, expires_at: '2026-11-05T00:00:00Z' }), { status: 200 });
+  };
+  const link = await A.api.joinLink();
+  assert.equal(link.url, `https://homecookd.app/i?t=${JOIN}`);
+  assert.match(sent[0].url, /\/join-links$/);
+  assert.equal(sent[0].init.method, 'POST');
+  assert.equal(sent[0].init.headers['x-device-key'], 'k1');
+  assert.equal(sent[0].init.headers['x-profile-id'], 'p-mom');
+  A.setApiAuth({ deviceKey: null, code: null, profileId: null });
+});
+
+/** A clipboard that says whether it holds a link, and counts how often it was read. */
+function clipboard({ hasUrl = true, url = null, text = null } = {}) {
+  const c = { reads: 0, asks: 0 };
+  c.hasUrl = async () => {
+    c.asks += 1;
+    if (hasUrl instanceof Error) throw hasUrl;
+    return hasUrl;
+  };
+  c.readUrl = async () => {
+    c.reads += 1;
+    return url;
+  };
+  c.readText = async () => text;
+  return c;
+}
+
+await test('the invisible pickup: no link on the clipboard, nothing is read', async () => {
+  const { pickUpLink } = await freshPickup();
+  const c = clipboard({ hasUrl: false, url: `https://homecookd.app/i?t=${JOIN}` });
+  assert.equal(await pickUpLink(c), null);
+  assert.equal(c.reads, 0, 'no "Allow Paste" without a link there');
+  const failing = clipboard({ hasUrl: new Error('not on this phone') });
+  assert.equal(await pickUpLink(failing), null);
+  assert.equal(failing.reads, 0);
+});
+
+await test('the invisible pickup opens a join link, a dish card or an ask, once per launch', async () => {
+  let { pickUpLink } = await freshPickup();
+  const c = clipboard({ url: `https://homecookd.app/i?t=${JOIN}` });
+  assert.equal(await pickUpLink(c), `/i?t=${JOIN}`);
+  assert.equal(await pickUpLink(c), null, 'read once per launch');
+  assert.equal(c.reads, 1);
+  ({ pickUpLink } = await freshPickup());
+  assert.equal(await pickUpLink(clipboard({ url: `homecookd://i?t=${OLD}` })), `/i?t=${OLD}`, 'an older invite');
+  ({ pickUpLink } = await freshPickup());
+  assert.equal(await pickUpLink(clipboard({ url: `https://homecookd.app/miss?k=${JOIN}` })), `/miss?k=${JOIN}`);
+  ({ pickUpLink } = await freshPickup());
+  // iOS gave no URL object (the link came as text): the text is read instead.
+  assert.equal(await pickUpLink(clipboard({ url: null, text: `Mom wants your dal: homecookd.app/a?t=${JOIN}` })), `/a?t=${JOIN}`);
+});
+
+await test('the invisible pickup leaves anything else alone, silently, and reads it only once', async () => {
+  for (const url of ['https://example.com/recipes', `https://evil.example/i?t=${JOIN}`, 'https://homecookd.app/i?c=K7QM2X', 'https://homecookd.app/r?s=share-tok_1', JOIN]) {
+    const { pickUpLink } = await freshPickup();
+    const c = clipboard({ url });
+    assert.equal(await pickUpLink(c), null, url);
+    assert.equal(await pickUpLink(clipboard({ url: `https://homecookd.app/i?t=${JOIN}` })), null, 'no second read this launch');
+  }
+  // Mount and a return to the front at the same moment: one read.
+  const { pickUpLink } = await freshPickup();
+  const c = clipboard({ url: `https://homecookd.app/i?t=${JOIN}` });
+  const both = await Promise.all([pickUpLink(c), pickUpLink(c)]);
+  assert.deepEqual(both.sort(), [null, `/i?t=${JOIN}`].sort());
+  assert.equal(c.reads, 1);
+});
+
+const src = (p) => readFileSync(join(root, 'src', p), 'utf8');
+
+await test('no family codes, no Paste invite, no /join-code, no /auth/link; old phones stay signed in', () => {
+  assert.equal(existsSync(join(root, 'src/app/join-code.tsx')), false);
+  assert.equal(existsSync(join(root, 'src/components/signin/PasteInvite.tsx')), false);
+  const session = src('lib/session.tsx');
+  assert.doesNotMatch(session, /joinFamily|joinByLink|acceptInvite|authLink|share_token|shareToken/);
+  assert.match(session, /const swapCode = useCallback/, 'the boot swap of an old saved family code stays');
+  assert.match(session, /if \(!key && code\) await swapCode\(code\);/);
+  assert.match(session, /ENV_CODE/, 'the build’s dev-aid code stays');
+  assert.doesNotMatch(src('lib/api.ts'), /authLink|\/auth\/link|inviteAccept/);
+  const layout = src('app/_layout.tsx');
+  assert.doesNotMatch(layout, /join-code/);
+  assert.match(layout, /setLinksMoved\(linksMoved\);/, 'a move’s receipt reaches Convex');
+  for (const f of ['app/join.tsx', 'app/i.tsx', 'app/index.tsx', 'components/signin/index.ts', 'components/signin/ClaimLink.tsx', 'components/signin/handoff.ts']) {
+    assert.doesNotMatch(src(f), /join-code|PasteInvite|haveFamilyCode|signin\.paste|signin\.code\./, f);
+  }
+  const join_ = src('app/join.tsx');
+  assert.doesNotMatch(join_, /params\.s\b|peekShare|shareToken/, 'a recipe link joins nobody');
+  assert.match(join_, /useLinkPickup\(status === 'needs-code' && step === 'start'/, 'the pickup runs only signed out, on the start');
+});
+
+await test('every Apple step is the system button; Google shows on Android only', () => {
+  const buttons = src('components/signin/ProviderButtons.tsx');
+  assert.match(buttons, /AppleAuthenticationButtonType\.SIGN_IN/);
+  assert.doesNotMatch(buttons, /AppleAuthenticationButtonType\.CONTINUE/);
+  assert.match(buttons, /google: google && Platform\.OS === 'android'/);
+  for (const f of ['components/signin/JoinCard.tsx', 'components/signin/MoveCard.tsx']) assert.match(src(f), /<ProviderButtons /, f);
+  // "Join <B>" is a plain button; the sign-in shows only once they tapped it.
+  assert.match(src('components/signin/MoveCard.tsx'), /confirmed \? \(\s*<ProviderButtons[\s\S]*?\) : \(\s*<ActionButton/);
 });
 
 console.log(`\n${passed} passed`);

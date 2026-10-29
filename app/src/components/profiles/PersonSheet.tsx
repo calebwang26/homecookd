@@ -9,8 +9,8 @@
 //            (lib/messaging openChatWith). Nobody in yet and no person of its own (a cold start on a
 //            shared phone, or one that came in through a family invite and hasn't added itself):
 //            nobody to come in as, so no dishes, no button.
-//   invited  Invited the old way (one named person) and not joined yet: "Dad hasn't joined yet."
-//            with Send again, a fresh link in Messages (lib/invites sendInvite { profileId }) sent
+//   invited  Invited the old way (one named person) and not joined yet: "Dad hasn't joined yet." (no button:
+//            the family's join link is the only way in now, docs/build/JOIN-SIMPLE.md)
 //            as this phone's person, else whoever was picked last. Nobody to send as: no button.
 //
 //   <PersonSheet visible person={dad} onClose={...} />
@@ -22,9 +22,8 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ErrorLine } from '@/components/signin/SignInScreen';
-import { ActionButton, type ActionState, ArrowRightIcon, Avatar, BottomSheet, ChatIcon, PotMark, PressableScale, SendIcon, Txt, useToast } from '@/components/ui';
+import { ActionButton, type ActionState, ArrowRightIcon, Avatar, BottomSheet, ChatIcon, PotMark, PressableScale, Txt } from '@/components/ui';
 import { errorMessage, type Profile } from '@/lib/api';
-import { sendInvite } from '@/lib/invites';
 import { openChatWith } from '@/lib/messaging';
 import { openRecipe } from '@/lib/navigation';
 import { recipesByCook, useLibrary, type LibraryEntry } from '@/lib/recipes';
@@ -60,10 +59,9 @@ export function PersonSheet(props: PersonSheetProps) {
 }
 
 function Person({ visible, person, onClose }: PersonSheetProps) {
-  const { me, profiles, deviceProfileId, setMe, homeFor, refresh } = useSession();
+  const { me, profiles, deviceProfileId, setMe, homeFor } = useSession();
   const { entries } = useLibrary();
   const { t } = useWords();
-  const toast = useToast();
   const [btn, setBtn] = useState<ActionState>('idle');
   const [error, setError] = useState<string | null>(null);
   const alive = useRef(true);
@@ -126,32 +124,6 @@ function Person({ visible, person, onClose }: PersonSheetProps) {
     homeThen(homeFor(sender), () => openRecipe(router, d.id));
   }
 
-  async function sendAgain() {
-    if (!sender || !person || btn !== 'idle') return;
-    setError(null);
-    setBtn('loading');
-    const started = Date.now();
-    const res = await sendInvite({ profileId: person.id }, { from: sender.id });
-    await settle(started);
-    if (!alive.current) return;
-    // `person.name.trim()`, not `name`: with `name` the React Compiler lint reads Date.now above as run in render.
-    const who = person.name.trim();
-    if (res.status === 'sent' || res.status === 'shared') {
-      setBtn('idle');
-      toast.show(res.copied ? t('profiles.person.linkCopied') : t('profiles.person.inviteSent', { name: who }));
-      onClose();
-    } else if (res.status === 'cancelled') {
-      // Their older link stopped working when this one was made; this one is held for the next tap.
-      setBtn('idle');
-      toast.show(t('profiles.person.notSent', { name: who }));
-    } else {
-      setError(res.error ?? t('profiles.person.didntSend'));
-      setBtn('error');
-      // e.g. 409 "Dad already joined.": the family on screen is behind.
-      void refresh();
-    }
-  }
-
   // A no-break space keeps the last two words together (never a lone "phone." on its own line).
   const title = invited ? t('profiles.person.invitedTitle', { name }) : t('profiles.person.lockedTitle', { name });
 
@@ -174,17 +146,7 @@ function Person({ visible, person, onClose }: PersonSheetProps) {
         ) : null}
         {sender ? (
           <View style={styles.actions}>
-            {invited ? (
-              <ActionButton
-                label={t('profiles.person.sendAgain')}
-                size="xl"
-                icon={<SendIcon size={22} color={colors.card} />}
-                state={btn}
-                onPress={() => void sendAgain()}
-                accessibilityLabel={t('profiles.person.sendAgainLabel', { name })}
-                accessibilityHint={t('profiles.person.sendAgainHint')}
-              />
-            ) : (
+            {invited ? null : (
               <ActionButton
                 label={t('profiles.person.message', { name })}
                 size="xl"

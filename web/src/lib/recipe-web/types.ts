@@ -76,4 +76,6 @@ export type InvitePeek = {
   invitee: Invitee | null;
   expires_at: string | null;
   code?: string | null; // optional: the invite link's ?c= is the usual source
+  /** "link" = a 1.1 family join link (22-character token, docs/build/JOIN-SIMPLE.md): no code, no Paste invite. */
+  kind?: 'link' | null;
 };

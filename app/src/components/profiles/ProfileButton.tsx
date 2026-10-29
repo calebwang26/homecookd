@@ -16,6 +16,7 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { Avatar, ChevronDownIcon, haptic, PressableScale, Txt } from '@/components/ui';
 import type { Profile } from '@/lib/api';
 import { useHomieSlot } from '@/lib/homie/hooks';
+import { HOMIE_ON } from '@/lib/homie/switch';
 import { useSession } from '@/lib/session';
 import { useWords } from '@/lib/words/useWords';
 import { colors, shadows, space } from '@/theme/tokens';
@@ -48,7 +49,8 @@ export function ProfileButton({ faceOnly = false, homieRoom = false }: { faceOnl
   const { me } = useSession();
   if (!me) return null;
   const pill = <Pill faceOnly={faceOnly} me={me} />;
-  return homieRoom ? <HomieRoom>{pill}</HomieRoom> : pill;
+  // No pot to keep room for while homie is switched off (lib/homie/switch).
+  return homieRoom && HOMIE_ON ? <HomieRoom>{pill}</HomieRoom> : pill;
 }
 
 function HomieRoom({ children }: { children: ReactNode }) {

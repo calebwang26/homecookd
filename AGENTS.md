@@ -63,8 +63,8 @@ follows it, and it wins over the docs below on UI/UX and flows.
   push, `gh pr create`, then check that `gh pr view --json mergeStateStatus` is `CLEAN`. Stage files by name, never
   `git add -A`: the tree holds untracked demo PNGs and Finder " 2" duplicates.
 - **Section chats (Oct 26):** each codebase section has one permanent Claude chat that owns it (Voice & homie,
-  Pipeline & recipes, Convex & accounts, App screens & recording, App Store, web & builds). Work goes to the owner of
-  the files it touches: `docs/agents/memory/section-chats.md`.
+  Pipeline & recipes, Convex & accounts, App screens & recording, App Store, web & builds, and since Oct 29
+  Notifications & linking). Work goes to the owner of the files it touches: `docs/agents/memory/section-chats.md`.
 - **The Merge Agent approves every PR.** After `gh pr create`, send the PR (number, link, branch, files touched,
   one-line summary) to the Claude Desktop session titled **Merge Agent** (Claude Code: `ListAgents`, then
   `SendMessage`; Codex or Salik: ask Caleb to pass it on). Don't merge until it approves. When PRs conflict, the
@@ -79,8 +79,8 @@ follows it, and it wins over the docs below on UI/UX and flows.
   STATE.md. After a deploy, run:
   `node supabase/tests/two_sided_live.mjs`, `node app/scripts/api-smoke.mjs` and `node supabase/tests/retention_live.mjs`.
   They need `docs/build/.test-family-code` (gitignored). Use only the TEST family.
-- **Secrets:** never put a Gemini, Cartesia, Moss, Anthropic or Muse key, a Supabase service key or a GCP
-  credential in `app/` or `web/`, or in any tracked file. `EXPO_PUBLIC_*` and `NEXT_PUBLIC_*` values ship to users.
+- **Secrets:** never put a Gemini, Cartesia, Moss, Anthropic or Muse key, a Supabase service key, a GCP
+  credential or `LINK_JOIN_SECRET` (Convex and Supabase share it to sign join tickets) in `app/` or `web/`, or in any tracked file. `EXPO_PUBLIC_*` and `NEXT_PUBLIC_*` values ship to users.
   Never print `.env` values. Keys live only in the gitignored root `.env`, Convex env, Cloud Run secrets and
   Supabase edge-function secrets (which key goes where: `docs/build/STACK.md`, "Keys").
 - **One `.env` for every key:** `/Users/calebwang/Documents/GitHub/hackathon-homecookd/.env` (the main checkout).
@@ -94,6 +94,9 @@ follows it, and it wins over the docs below on UI/UX and flows.
   `docs/agents/memory/homie-voice.md`): change them only after he has heard samples. Sonic's previous model
   (`sonic-3.5`, same voice) is the backup when Sonic fails before a line starts, and the phone's own voice after
   that (say_end `failed`). Key check: `node scripts/check-cartesia.mjs`.
+- **homie's voice is switched off (Oct 29, for launch):** `app/src/lib/homie/switch.ts` `HOMIE_ON = false` hides the
+  pot, homie while filming and voice cook mode; no code is deleted, and turning it back on is that one line, Caleb's
+  call (`docs/agents/memory/homie-off.md`). New app code must work with the switch either way.
 - **Live Cartesia tests are encouraged.** We have the credits (1.24M on Oct 24), and Caleb wants them used to check
   voice quality, so `test-client` and `test-record` stream to real Ink 2 and Sonic by default. `FAKE=1` against
   `npm run dev:fake` (`VOICE_FAKE_SPEECH=1`: no Cartesia or Gemini Live) is an opt-in for quick offline checks. Every
@@ -123,7 +126,9 @@ follows it, and it wins over the docs below on UI/UX and flows.
   `curl -s https://api.convex.dev/v1/deployments/grand-dragon-649 -H "Authorization: Bearer $CONVEX_OVERRIDE_ACCESS_TOKEN"`
   and read `expiresAt`. If it has a date again, clear it with a `PATCH` of `{"expiresAt": null}` to the same URL.
   Every public function takes the `sessionToken` from `sessions.start` and checks it with `requireSession`
-  (`convex/lib/auth.ts`). Read `convex/_generated/ai/guidelines.md` before writing Convex code; the skills are in
+  (`convex/lib/auth.ts`). The exceptions are the HTTP routes for people without an account: `/invite/open` and the
+  v2 web flow's `/dish/*` (`docs/build/DISH-ASK-SPEC.md`). They use hashed capability tokens, per-IP limits
+  (`lib/rateLimit.ts`) and a $10 daily model budget. Tests set `DISH_FAKE_AI=1` (no model calls). Read `convex/_generated/ai/guidelines.md` before writing Convex code; the skills are in
   `.agents/skills` (Codex) and `.claude/skills` (Claude Code).
 - **TestFlight is live.** Teammates, judges and the demo use TestFlight builds; use an EAS dev build while coding
   and EAS Update for JS-only fixes. Expo Go can't load the native mic-streaming module. Filming in the app
@@ -176,15 +181,17 @@ cd app && npx expo start --web --port 8081 --clear                 # web build o
 cd app && npx expo start --dev-client                               # the EAS dev build on an iPhone (voice cooking needs it)
 cd app && npx eas-cli build -p ios --profile development           # dev build (EAS signed in as salikm1234)
 cd app && npx eas-cli build -p ios --profile production --auto-submit   # TestFlight
-cd app && npx eas-cli update --channel production -m "<what changed>"   # JS-only fix to TestFlight phones
+cd app && npx eas-cli build -p ios --profile staging --auto-submit  # internal-testers build on the staging channel (while 1.0 is in App Review)
+cd app && npx eas-cli update --channel staging -m "<what changed>"      # JS-only fix to testers; while 1.0 is in review never --channel production (that reaches build 6, the reviewed build)
 node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
-cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent
+cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent/links/doors/reminders/dish
 cd app && node scripts/draft-words.mjs                             # draft the cook app's missing words in every language (Claude); then test-words
 
 # web
 cd web && npm run dev -- --port 3000
 cd web && npm ci && npm run build                                  # confirm a PR's web/ builds
+node web/scripts/qa/dish-e2e.mjs --base http://localhost:3105 --out /tmp/dish-e2e   # v2 /miss + /a vs the local /dish fake (site: cd web && NEXT_PUBLIC_DISH_URL=http://localhost:8791 npx next dev --port 3105)
 
 # convex (repo root)
 npx vitest run                                                     # convex-test suites (convex/*.test.ts)

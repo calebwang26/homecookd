@@ -28,10 +28,19 @@
         "EXPO_PUBLIC_CONVEX_URL": "https://grand-dragon-649.convex.cloud",
         "EXPO_PUBLIC_VOICE_URL": "wss://homecookd-voice-vyatb2n6oq-uw.a.run.app"
       }
+    },
+    "staging": {
+      "extends": "production",
+      "channel": "staging"
     }
   },
   "submit": {
     "production": {
+      "ios": {
+        "ascAppId": "6825621614"
+      }
+    },
+    "staging": {
       "ios": {
         "ascAppId": "6825621614"
       }

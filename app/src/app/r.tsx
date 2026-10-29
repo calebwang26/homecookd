@@ -1,6 +1,7 @@
 // /r?s=<share>: a recipe link (https://homecookd.app/r?s=…, homecookd://r?s=…) opened on a phone
-// that has the app. Nothing to read here: it hands off at once (FEEDBACK-OCT16c B2).
-//   signed out                     -> /join?s=…  (Apple or Google there joins the sharer's family)
+// that has the app. Nothing to read here: it hands off at once (FEEDBACK-OCT16c B2). A recipe link
+// opens the dish; it joins nobody (docs/build/JOIN-SIMPLE.md §3.1: only a join link does).
+//   signed out                     -> the first screen (Sign in with Apple starts their own family)
 //   signed in, someone picked      -> that dish (a kid's opens in their Recipes tab)
 //   signed in, nobody picked yet   -> "Who's in the kitchen?", and the dish opens right after they
 //   (every cold start)                tap their face (the root layout does that)
@@ -37,7 +38,7 @@ export default function ShareLinkScreen() {
     started.current = true;
     const inFamily = signedIn && status !== 'needs-code';
     if (!inFamily) {
-      leaveTo(token ? { pathname: '/join', params: { s: token } } : '/join');
+      leaveTo('/join');
       return;
     }
     if (!token) {

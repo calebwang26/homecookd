@@ -1,4 +1,4 @@
-// English words for sign-in, invites, family codes and "Before we start" (keys signin.*). Translations: ../tr/.
+// English words for sign-in, join links and "Join … instead?" (keys signin.*). Translations: ../tr/.
 export const SIGNIN = {
   // Shared by the sign-in screens
   'signin.shared.continue': 'Continue',
@@ -12,74 +12,68 @@ export const SIGNIN = {
   'signin.terms.line': 'By continuing you agree to our {terms} and {privacy}.',
   'signin.terms.terms': 'Terms of use',
 
-  // The first screen (join.tsx)
+  // The first screen (join.tsx): starting a family, the one way in without a link
   'signin.join.appOnly': 'Sign-in works in the app.',
-  'signin.join.sharedDish': '{name} shared a dish with you.',
-  'signin.join.deadLink': 'That recipe link stopped working. Ask for a new one.',
-  'signin.join.welcome': 'Welcome to the family table.',
-  'signin.join.haveCode': 'Have a code?',
-  'signin.join.haveFamilyCode': 'Have a family code?',
-  'signin.join.codeHint': 'Opens a field for a family code or an invite code',
+  'signin.join.title': 'Cook your family’s food.',
+  'signin.join.line': 'Start your family’s kitchen. Everyone else joins from your link.',
+  'signin.join.gotLink': 'Got a link from your family?',
+  'signin.join.tapAgain': 'Tap it again.',
   'signin.name.title': 'What does your family call you?',
   'signin.name.placeholder': 'Mom, Leo, Auntie Lin…',
   'signin.name.label': 'Your name',
   'signin.role.title': 'What do you want to do first?',
   'signin.role.record': 'Record a dish',
   'signin.role.learn': 'Learn a dish',
-  'signin.role.gotInvite': 'Got an invite?',
-  'signin.role.gotInviteHint': 'Back to the start, to paste it',
 
   // Apple and Google
-  'signin.provider.apple': 'Continue with Apple',
+  'signin.provider.apple': 'Sign in with Apple',
   'signin.provider.google': 'Continue with Google',
   'signin.provider.busy': 'Signing in',
 
-  // Paste invite (PasteInvite.tsx)
-  'signin.paste.title': 'Paste invite',
-  'signin.paste.paste': 'Paste',
-  'signin.paste.badPaste': 'That doesn’t look like a homecookd invite. Copy the whole link, then tap Paste.',
-  'signin.paste.badCode': 'That doesn’t look like a homecookd invite. Check the 6 letters and try again.',
-  'signin.paste.haveInviteCode': 'Have an invite code?',
-  'signin.paste.haveInviteCodeHint': 'Opens a field for the code',
-  'signin.paste.placeholder': '6-letter code',
-  'signin.paste.label': 'Invite code',
-  'signin.paste.go': 'Use this invite code',
+  // A join link's card (components/signin/JoinCard.tsx) and an old code link (i.tsx)
+  'signin.joinCard.title': 'Join {family}',
+  'signin.joinCard.titleYours': 'Join your family',
+  'signin.joinCard.sent': '{name} sent this.',
+  'signin.joinCard.ask': 'What do they call you?',
+  'signin.joinCard.cook': 'I cook',
+  'signin.joinCard.missFood': 'I miss the food',
+  'signin.joinCard.roleLabel': 'What you do in the kitchen',
+  'signin.joinCard.nameFirst': 'Type your name first.',
+  'signin.joinCard.codeTitle': 'Tap the link instead',
+  'signin.joinCard.codeLine': 'Codes don’t work anymore. Tap the link your family sent you.',
 
-  // The code screen (join-code.tsx)
-  'signin.code.title': 'Type your code',
-  'signin.code.switchTitle': 'Switch family',
-  'signin.code.inFamily': 'You’re in {family}.',
-  'signin.code.placeholder': 'Family or invite code',
-  'signin.code.label': 'Family code or invite code',
-  'signin.code.familyLabel': 'Family code',
-  'signin.code.switch': 'Switch',
+  // "Join … instead?" (components/signin/MoveCard.tsx)
+  'signin.move.title': 'You’re in {from}. Join {to} instead?',
+  'signin.move.line': 'Your messages stay with {from}. Nothing moves until you tap.',
+  'signin.move.join': 'Join {to}',
+  'signin.move.signInApple': 'Sign in with Apple to join {to}.',
+  'signin.move.signInGoogle': 'Sign in with Google to join {to}.',
 
-  // An invite (i.tsx, components/signin/invite.ts)
+  // A join link or an older invite that doesn't work (i.tsx, components/signin/invite.ts)
   'signin.invite.opening': 'Opening your invite',
-  'signin.invite.join': 'Join {family}?',
-  'signin.invite.joinInstead': 'Join {family} instead?',
-  'signin.invite.joinYours': 'Join your family?',
-  'signin.invite.joinYoursInstead': 'Join your family instead?',
-  'signin.invite.fromAs': '{from} invited you as {name}.',
-  'signin.invite.from': '{from} invited you.',
-  'signin.invite.joiningAs': 'You’re joining as {name}.',
-  'signin.invite.joinButton': 'Join',
-  'signin.invite.joinAsLabel': 'Join as {name}',
-  'signin.invite.joinFamilyLabel': 'Join {family}',
   'signin.invite.already': 'You’re already in.',
   'signin.invite.used': 'This invite was already used.',
   'signin.invite.expired': 'This invite expired.',
   'signin.invite.revoked': 'This invite was turned off.',
+  'signin.invite.linkExpired': 'This link expired.',
+  'signin.invite.linkRevoked': 'This link was turned off.',
   'signin.invite.askFor': 'Ask {name} for a new one.',
   'signin.invite.askFamily': 'Ask your family for a new one.',
   'signin.invite.notFound': 'That invite link doesn’t work.',
-  'signin.invite.checkCode': 'Check it, or ask for a new one.',
   'signin.invite.checkLink': 'Check the link, or ask for a new one.',
-  'signin.invite.typeAgain': 'Type it again',
   'signin.invite.unreachable': 'We can’t reach homecookd.',
   'signin.invite.checkConnection': 'Check your connection and try again.',
   'signin.invite.ourSide': 'Something went wrong on our side.',
   'signin.invite.trySoon': 'Try again in a minute.',
   'signin.invite.tooMany': 'Too many tries for now.',
   'signin.invite.tryAgain': 'Try again',
+
+  // A dish card's link (/miss, /a: components/signin/ClaimLink.tsx)
+  'signin.link.dish': '{name}’s {dish}',
+  'signin.link.opening': 'Opening it for you…',
+  'signin.link.dead': 'This link doesn’t work anymore.',
+  'signin.link.taken': 'This one’s already with {name}.',
+  'signin.link.takenSomeone': 'This link already brought someone in.',
+  'signin.link.askInvite': 'Ask them for an invite.',
+  'signin.link.haveAccount': 'I already have an account',
 } as const satisfies Record<`signin.${string}`, string>;

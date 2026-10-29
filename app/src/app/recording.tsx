@@ -88,9 +88,11 @@ import { usePickVideos } from '@/components/record/usePickVideos';
 import { recordWords, type Line } from '@/components/record/words';
 import { ActionButton, CloseIcon, IconButton, useToast } from '@/components/ui';
 import { useAiSpeaking, useHomieScreen, useHomieSlot } from '@/lib/homie/hooks';
+import { HOMIE_ON } from '@/lib/homie/switch';
 import { inAppCameraSupported } from '@/lib/live/camera';
 import { endRecording, setCover, startFilming, useLiveFrame, useLiveLog, useRecording } from '@/lib/live/convex';
 import { STUB_NO_PLATE, STUB_WRAPUP_PREFIX, useHomieRecording } from '@/lib/live/homie';
+import { useQuietRecording } from '@/lib/live/quietRecording';
 import { useSession } from '@/lib/session';
 import { filmingOnScreen, saveFilming, saveUnsent } from '@/lib/unsentRecordings';
 import { colors, motion, space } from '@/theme/tokens';
@@ -106,6 +108,8 @@ const PREVIEW_ASK: Ask = {
 const PREVIEW_PLATE: Ask = { promptId: 'preview-plate', text: 'शेवटचं, आजी. ताट कॅमेऱ्यासमोर धरा, म्हणजे Shreya ला दिसेल ते कसं दिसतं.', textEn: 'Last thing, Aaji. Hold the plate up to the camera, so Shreya can see how it looks.', kind: 'plate' };
 const PREVIEWS = ['done', 'ask', 'camera', 'paused', 'plate', 'wrapup'] as const;
 const KITCHEN = require('@/components/record/tripod.jpg') as number;
+// homie live while she films, or (switched off: lib/homie/switch) the same flow with no voice, no socket, no mic.
+const useRecordingVoice = HOMIE_ON ? useHomieRecording : useQuietRecording;
 
 function useRecordingAwake() {
   useEffect(() => {
@@ -159,7 +163,7 @@ export default function RecordingScreen() {
   // Glasses: filming is exactly what Convex says, set by her two taps.
   const glassesFilming = glasses && rec?.status === 'recording';
   // homie joins a glasses recording only once she has started it: no hello before her Start.
-  const homie = useHomieRecording(
+  const homie = useRecordingVoice(
     glasses && !glassesFilming ? null : devPreview === 'wrapup' ? wrapupId : id,
     { language: params.lang || 'en', kidName: params.kid || undefined, dish: draft.dish ?? undefined },
     { camera: inAppPossible },
@@ -178,7 +182,7 @@ export default function RecordingScreen() {
         : { line: words.line(starting ? 'gettingReady' : 'tapToStart'), live: false }
       : devPreview === 'camera' || devPreview === 'ask'
         ? recordingView('recording', words)
-        : recordingView(ended ? 'ended' : phoneFilmed && homie.phase === 'recording' ? 'wrapping_up' : homie.phase, words);
+        : recordingView(ended ? 'ended' : phoneFilmed && homie.phase === 'recording' ? 'wrapping_up' : homie.phase, words, { homie: HOMIE_ON });
 
   // Filmed without homie (its connection was lost before filming): straight to the done view.
   const [filmedAlone, setFilmedAlone] = useState(false);
@@ -279,10 +283,13 @@ export default function RecordingScreen() {
   // "I'm done" while filming in the app: homie wraps up while the last file is saved. A note on the
   // phone keeps the videos queued until Convex has the job and every file is uploaded; if the app dies
   // before that, the next launch sends them again (lib/unsentRecordings).
+  // homie switched off: nothing wraps up, so the recording ends only once the last file is saved (else the
+  // done view, which sends the video, could show before its last clip is in).
   const doneInApp = async () => {
-    homie.done();
+    if (HOMIE_ON) homie.done();
     const clips = await cam.stop();
     homie.cameraFilming(false);
+    if (!HOMIE_ON) homie.done();
     if (clips.length) {
       if (id && session.me) {
         const { dish, language, forKids, everyone, requestFrom } = draft;
@@ -462,7 +469,7 @@ export default function RecordingScreen() {
                   }} />
               </View>
             ) : null}
-            {source === 'phone' && beforeFilming && !homie.error && !skipped && !camAsking ? (
+            {HOMIE_ON && source === 'phone' && beforeFilming && !homie.error && !skipped && !camAsking ? (
               <View style={styles.skip}>
                 <ActionButton label={both(words.line('skipIntro'))} variant="outline" size="sm" onPress={skipIntro} />
               </View>

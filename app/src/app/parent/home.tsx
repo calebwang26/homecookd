@@ -8,23 +8,35 @@
 //     are in Recipes) and the kids' live questions to answer by voice (LiveQuestions); gone when empty
 //  3. "Leo made your Poha": the newest photo a kid sent of one of her dishes (MadeYourDishCard); gone
 //     when there's none
-//  4. "Invite family :)" (Caleb, Oct 24: back on Home, right under the photo card)
+//  4. "Invite family :)" (Caleb, Oct 24: back on Home, right under the photo card), once a kid has joined
+// Phase 5 (docs/design/phase5-cold-parents): a kid's open ask ("Caleb wants your braised pork") goes on top and
+// Record turns to the outline style; before she has shared her craving link, "Your kids miss your cooking" with
+// "Ask what they're craving" is the first card, and after it "Sent! We'll tell you when they pick a dish." until an
+// ask comes. One CravingSheet serves both cards.
 // Cut on Oct 24 (Caleb): the family faces row ("This week at the table"), the updates card and the
 // month's recap card. Their components stay for the screens that still use them. Dev aids (web screenshots): `?preview=made` shows the photo card,
 // `?preview=stopped` the stopped-early card.
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
 
+import { CravingAskCard } from '@/components/craving/CravingAskCard';
+import { CravingSentCard } from '@/components/craving/CravingSentCard';
+import { CravingSheet } from '@/components/craving/CravingSheet';
+import { askForPushSoon } from '@/components/push/PushAskSheet';
+import { useCravingSent } from '@/components/craving/useCravingSent';
 import { InviteButton } from '@/components/invite/InviteButton';
 import { LiveQuestions } from '@/components/parent/LiveQuestions';
 import { MadeYourDishCard } from '@/components/parent/MadeYourDishCard';
 import { PendingList, usePendingRecipes } from '@/components/parent/PendingRecipes';
 import { GlassesVideoCard } from '@/components/record/GlassesVideoCard';
 import { StoppedEarlyCard } from '@/components/record/StoppedEarlyCard';
+import { AskCard } from '@/components/request/AskCard';
 import { ActingAsBar, MoveRequestPrompt, ProfileButton } from '@/components/profiles';
 import { ActionButton, LargeHeader, listEnter, RecordDotIcon, ScreenWash, ScrollHold, StickyHeader, useScrollHold, useScrollY } from '@/components/ui';
 import { WEB_URL } from '@/lib/api';
+import { useCravingAsks } from '@/lib/cravings';
 import { dayPart, longDate } from '@/lib/format';
 import { useMadeMyDish, type MadeMyDish } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
@@ -70,7 +82,7 @@ const GREETING: Record<'morning' | 'afternoon' | 'evening', { alone: WordKey; na
 };
 
 export default function ParentHome() {
-  const { me } = useSession();
+  const { me, learners } = useSession();
   const { t } = useWords();
   const { scrollY, onScroll } = useScrollY();
   // A postcard's "Hold to talk" holds the page still while a finger is on it (ui/ScrollHold).
@@ -87,6 +99,11 @@ export default function ParentHome() {
   const pending = usePendingRecipes();
   const live = useMadeMyDish();
   const made = PREVIEW_MADE ?? live;
+  const asks = useCravingAsks();
+  const open = asks.filter((a) => !a.answered);
+  const sent = useCravingSent(me?.id);
+  const [craving, setCraving] = useState(false);
+  const askCraving = () => setCraving(true);
 
   return (
     <View style={styles.screen}>
@@ -102,12 +119,19 @@ export default function ParentHome() {
           <ActingAsBar />
 
           <View style={styles.col}>
+            {open.map((a, i) => (
+              <Animated.View key={a.id} entering={listEnter(i)}>
+                <AskCard ask={a} />
+              </Animated.View>
+            ))}
+            {sent === false && !asks.length ? <CravingAskCard onAsk={askCraving} /> : null}
             <Animated.View entering={listEnter(0)}>
               <ActionButton
                 label={t('parent.home.record')}
+                variant={open.length ? 'outline' : 'primary'}
                 size="xl"
                 icon={
-                  <View style={styles.recordDot}>
+                  <View style={[styles.recordDot, open.length ? styles.recordDotQuiet : null]}>
                     <RecordDotIcon size={14} color={colors.danger} />
                   </View>
                 }
@@ -116,20 +140,28 @@ export default function ParentHome() {
               />
             </Animated.View>
 
+            {sent && !asks.length ? <CravingSentCard onSendAgain={askCraving} enterIndex={1} /> : null}
             <StoppedEarlyCard preview={PREVIEW_STOPPED} enterIndex={1} />
             <GlassesVideoCard />
             <PendingList pending={pending} jobs={pending.jobs.slice(0, 1)} startIndex={1} />
             <LiveQuestions enterIndex={1} />
             <MadeYourDishCard made={made} cookName={me?.name} enterIndex={2} />
 
-            <Animated.View entering={listEnter(3)}>
-              <InviteButton />
-            </Animated.View>
+            {learners.length ? (
+              <Animated.View entering={listEnter(3)}>
+                <InviteButton />
+              </Animated.View>
+            ) : null}
           </View>
         </Animated.ScrollView>
       </ScrollHold>
       <StickyHeader title={t('parent.tab.home')} scrollY={scrollY} start={40} />
       <MoveRequestPrompt />
+      <CravingSheet
+        visible={craving}
+        onClose={() => setCraving(false)}
+        onSent={() => me && askForPushSoon({ kind: 'cook-craving-sent', profileId: me.id, name: '' })}
+      />
     </View>
   );
 }
@@ -146,4 +178,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  // The outline Record row under a kid's ask: the peach disc of the bible's row.
+  recordDotQuiet: { backgroundColor: colors.peach },
 });

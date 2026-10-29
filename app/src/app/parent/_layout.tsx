@@ -1,9 +1,12 @@
 // Parent (cook) tabs: Home | Messages | Recipes, on the bible's floating pill tab bar. Record is a
 // pushed screen (/record), opened from Home.
 // While the phone is lent, each tab shows "Cooking as Grandma" at the top of its own content.
-// A cook who hasn't picked her language yet gets the language screen first (components/language).
+// A cook who hasn't picked her language yet gets the language screen first (components/language), then, once, a
+// cook whose family has nothing yet gets the two doors (components/doors, lib/doorsGate.ts).
 import { Tabs } from 'expo-router/js-tabs';
 
+import { TwoDoors } from '@/components/doors/TwoDoors';
+import { useDoorsGate } from '@/components/doors/useDoorsGate';
 import { LanguageTiles } from '@/components/language/LanguageTiles';
 import { BookIcon, ChatIcon, FloatingTabBar, HomeIcon } from '@/components/ui';
 import { useUnread } from '@/lib/session';
@@ -17,7 +20,9 @@ function useMessagesBadge(): number | undefined {
 export default function ParentTabs() {
   const messages = useMessagesBadge();
   const { t, needsChoice } = useWords();
+  const doors = useDoorsGate();
   if (needsChoice) return <LanguageTiles />;
+  if (doors.show) return <TwoDoors onSeen={doors.seen} onDone={doors.done} />;
   return (
     <Tabs
       tabBar={(props) => <FloatingTabBar {...props} />}

@@ -1,0 +1,110 @@
+<!doctype html>
+<!-- JOIN-SIMPLE mockups (docs/build/JOIN-SIMPLE.md §1, §6): the join card, the first screen, "Join instead?",
+     and the web /i page. App tokens from app/src/theme/tokens.ts. Render: join-simple.jpg next to this file. -->
+<html>
+<head>
+<meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:wght@500;600&family=DM+Sans:wght@400;500;700&display=swap" rel="stylesheet">
+<style>
+  :root { --page:#F7F7F2; --card:#FFFDF7; --well:#EFEFE6; --ink:#1E2410; --text:#2D3222; --muted:#5F6352; --green:#5B6F00; --greenDeep:#4C5A10; }
+  * { box-sizing:border-box; margin:0; }
+  body { background:#E6E6DC; font-family:'DM Sans',sans-serif; color:var(--text); padding:40px; }
+  h1 { font:600 28px Fraunces,serif; color:var(--ink); margin-bottom:6px; }
+  .sub { color:var(--muted); font-size:15px; margin-bottom:28px; }
+  .row { display:flex; gap:32px; align-items:flex-start; }
+  .label { font:700 13px 'DM Sans'; letter-spacing:.06em; text-transform:uppercase; color:var(--muted); margin:0 0 10px 4px; }
+  .phone { width:340px; height:700px; background:var(--page); border-radius:44px; border:10px solid #1E2410; padding:54px 24px 28px; display:flex; flex-direction:column; position:relative; overflow:hidden; }
+  .brand { font:600 20px Fraunces,serif; color:var(--ink); position:absolute; top:22px; left:24px; }
+  .mid { flex:1; display:flex; flex-direction:column; justify-content:center; gap:14px; }
+  .cardx { background:var(--card); border-radius:24px; box-shadow:0 10px 30px rgba(30,36,16,.08); padding:24px 20px; display:flex; flex-direction:column; gap:12px; }
+  .faces { display:flex; } .face { width:46px; height:46px; border-radius:50%; border:3px solid var(--card); margin-right:-10px; display:grid; place-items:center; font:600 18px Fraunces,serif; color:#3C4A0B; }
+  .t { font:600 26px/1.15 Fraunces,serif; color:var(--ink); }
+  .line { color:var(--muted); font-size:15px; }
+  .q { font:500 16px 'DM Sans'; color:var(--ink); margin-top:4px; }
+  .field { background:var(--page); border:1.5px solid #D9D9CC; border-radius:14px; padding:14px 16px; font-size:17px; color:var(--ink); }
+  .chips { display:flex; gap:8px; } .chip { flex:1; text-align:center; padding:10px 0; border-radius:999px; font:500 14px 'DM Sans'; background:var(--well); color:var(--text); }
+  .chip.on { background:var(--ink); color:#fff; }
+  .apple { background:#000; color:#fff; border-radius:14px; padding:15px; text-align:center; font:600 17px -apple-system,'DM Sans'; }
+  .apple::before { content:''; margin-right:6px; }
+  .btn { background:var(--green); color:#fff; border-radius:14px; padding:15px; text-align:center; font:700 17px 'DM Sans'; }
+  .ghost { text-align:center; color:var(--greenDeep); font:500 15px 'DM Sans'; padding:6px; }
+  .terms { color:var(--muted); font-size:12px; text-align:center; }
+  .hero { font:600 34px/1.1 Fraunces,serif; color:var(--ink); }
+  .note { width:340px; color:var(--muted); font-size:13px; margin-top:10px; line-height:1.4; }
+  .web { width:420px; height:700px; background:var(--page); border-radius:14px; border:1px solid #CFCFC2; overflow:hidden; display:flex; flex-direction:column; }
+  .bar { background:#ECECE3; padding:10px 14px; font-size:12px; color:var(--muted); border-bottom:1px solid #D9D9CC; }
+  .webin { flex:1; padding:36px 32px; display:flex; flex-direction:column; justify-content:center; gap:14px; }
+</style>
+</head>
+<body>
+<h1>Join a family: only by a join link</h1>
+<p class="sub">JOIN-SIMPLE.md, Oct 29: name, then Sign in with Apple. No codes, no Paste invite. Google shows only on Android.</p>
+<div class="row">
+  <div>
+    <p class="label">1 · A join link opens the app</p>
+    <div class="phone">
+      <div class="brand">homecookd</div>
+      <div class="mid">
+        <div class="cardx">
+          <div class="faces"><div class="face" style="background:#DCE3B8">M</div><div class="face" style="background:#F0D9B5">D</div><div class="face" style="background:#E8CFC4">A</div></div>
+          <div class="t">Join the Pawar family</div>
+          <div class="line">Mom sent this.</div>
+          <div class="q">What do they call you?</div>
+          <div class="field">Asha</div>
+          <div class="chips"><div class="chip">I cook</div><div class="chip on">I miss the food</div></div>
+          <div class="apple">Sign in with Apple</div>
+        </div>
+        <div class="terms">By joining you agree to the Terms and Privacy.</div>
+      </div>
+    </div>
+    <p class="note">Recipe links (/a, card links) show "Caleb's tomato egg" in place of the family line, prefill the name ("Mom"), and drop the chips: the link sets the role.</p>
+  </div>
+  <div>
+    <p class="label">2 · First screen, no link</p>
+    <div class="phone">
+      <div class="brand">homecookd</div>
+      <div class="mid" style="justify-content:flex-end; gap:18px;">
+        <div class="hero">Cook your family's food.</div>
+        <div class="line">Start your family's kitchen. Everyone else joins from your link.</div>
+        <div class="apple">Sign in with Apple</div>
+        <div class="line" style="text-align:center">Got a link from your family?<br><b style="color:var(--ink)">Tap it again.</b></div>
+        <div class="terms">Terms · Privacy</div>
+      </div>
+    </div>
+    <p class="note">No "Have a family code?", no Paste invite. A copied link is picked up on its own (iOS asks "Allow Paste" once).</p>
+  </div>
+  <div>
+    <p class="label">3 · Already in another family</p>
+    <div class="phone">
+      <div class="brand">homecookd</div>
+      <div class="mid">
+        <div class="cardx">
+          <div class="faces"><div class="face" style="background:#DCE3B8">M</div><div class="face" style="background:#F0D9B5">D</div></div>
+          <div class="t">You're in the Wang family. Join the Pawar family instead?</div>
+          <div class="line">Your messages stay with the Wangs. Nothing moves until you tap.</div>
+          <div class="apple">Join the Pawars</div>
+          <div class="ghost">Not now</div>
+        </div>
+      </div>
+    </div>
+    <p class="note">"Join the Pawars" is Sign in with Apple again (proof it's you), then the move. Alone in the Wang family? Your recipes come with you.</p>
+  </div>
+  <div>
+    <p class="label">4 · Web /i (no app yet)</p>
+    <div class="web">
+      <div class="bar">homecookd.app/i?t=…</div>
+      <div class="webin">
+        <div class="brand" style="position:static">homecookd</div>
+        <div class="faces"><div class="face" style="background:#DCE3B8">M</div><div class="face" style="background:#F0D9B5">D</div><div class="face" style="background:#E8CFC4">A</div></div>
+        <div class="t">Join the Pawar family</div>
+        <div class="line">Mom sent you this link. It works for 7 days.</div>
+        <div class="btn">Get the app</div>
+        <div class="ghost">Open homecookd</div>
+        <div class="terms">"Get the app" copies your link, so homecookd opens to the Pawars after you install.</div>
+      </div>
+    </div>
+    <p class="note">No code anywhere. App Store, web &amp; builds owns this page.</p>
+  </div>
+</div>
+</body>
+</html>

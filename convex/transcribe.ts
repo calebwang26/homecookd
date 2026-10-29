@@ -84,9 +84,26 @@ class CartesiaError extends Error {
 
 /** Ink's transcript with the first key that still has credits (each run starts from the first key). */
 export async function inkTranscribeWithKeys(audio: Blob, keys: string[], language = "en"): Promise<string> {
+  return (await inkTranscribeTimedWithKeys(audio, keys, language)).text;
+}
+
+export async function inkTranscribe(audio: Blob, apiKey: string, language = "en"): Promise<string> {
+  return (await inkTranscribeTimed(audio, apiKey, language)).text;
+}
+
+/** The transcript, and the audio's length in seconds as Ink reports it (null when it doesn't). */
+export type InkResult = { text: string; durationS: number | null };
+
+/** inkTranscribeWithKeys with the reported length too (the dish ask counts what each clip costs). */
+export async function inkTranscribeTimedWithKeys(
+  audio: Blob,
+  keys: string[],
+  language = "en",
+  signal?: AbortSignal,
+): Promise<InkResult> {
   for (const [i, key] of keys.entries()) {
     try {
-      return await inkTranscribe(audio, key, language);
+      return await inkTranscribeTimed(audio, key, language, signal);
     } catch (e) {
       if (!(e instanceof CartesiaError) || !e.outOfCredits || i === keys.length - 1) throw e;
       console.warn(`Cartesia key ${i + 1} of ${keys.length} is out of credits; trying the next`);
@@ -95,7 +112,12 @@ export async function inkTranscribeWithKeys(audio: Blob, keys: string[], languag
   throw new Error("no Cartesia key");
 }
 
-export async function inkTranscribe(audio: Blob, apiKey: string, language = "en"): Promise<string> {
+export async function inkTranscribeTimed(
+  audio: Blob,
+  apiKey: string,
+  language = "en",
+  signal?: AbortSignal,
+): Promise<InkResult> {
   const form = new FormData();
   form.append("file", audio, `answer.${EXT[audio.type] ?? "m4a"}`);
   form.append("model", MODEL);
@@ -105,17 +127,19 @@ export async function inkTranscribe(audio: Blob, apiKey: string, language = "en"
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Cartesia-Version": CARTESIA_VERSION },
     body: form,
+    signal,
   });
   const raw = await res.text();
   const body = (() => {
     try {
-      return JSON.parse(raw) as { text?: unknown };
+      return JSON.parse(raw) as { text?: unknown; duration?: unknown };
     } catch {
       return null;
     }
   })();
   if (!res.ok || typeof body?.text !== "string") throw new CartesiaError(res.status, raw.slice(0, 500));
-  return body.text.trim();
+  const d = body.duration;
+  return { text: body.text.trim(), durationS: typeof d === "number" && Number.isFinite(d) && d >= 0 ? d : null };
 }
 
 export const questionAnswer = internalAction({

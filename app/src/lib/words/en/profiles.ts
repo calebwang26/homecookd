@@ -18,8 +18,6 @@ export const PROFILES = {
   'profiles.picker.add': 'Add',
   'profiles.picker.addCook': 'Add a cook',
   'profiles.picker.addFamily': 'Add family',
-  'profiles.picker.switchFamily': 'Switch family',
-  'profiles.picker.switchFamilyHint': 'Type another family’s code',
   'profiles.picker.signOutLink': 'Sign out of this phone',
   'profiles.picker.asksFirst': 'Asks first',
   'profiles.picker.privacy': 'Privacy policy',
@@ -191,7 +189,9 @@ export const PROFILES = {
   // "Your language" and the language list (LanguageEntry, record/LanguagePicker)
   'profiles.language.entry': 'Your language: {language}',
   'profiles.language.entryHint': 'Pick the language homie talks with you in',
+  'profiles.language.entryHintQuiet': 'Pick the language homecookd shows its words in',
   'profiles.language.saved': 'homie will talk with you in {language}',
+  'profiles.language.savedQuiet': 'homecookd will show its words in {language}',
   'profiles.language.saveFailed': 'That didn’t save. Check the connection and try again.',
   'profiles.language.question': 'What language do you cook in?',
   'profiles.language.search': 'Search: Tamil, Hindi, Español…',

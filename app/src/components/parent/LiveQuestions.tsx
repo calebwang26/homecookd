@@ -9,8 +9,11 @@
 // A share ask (questions.kind 'share', from Community: "Shreya wants to put your Poha on the map…")
 // is a row like the others, with no step; her spoken yes or no answers it. homie's own follow-up question
 // (kind 'followUp': "Did you add cumin?") reads "homie asks about your Poha", not as a kid's.
+// homie switched off (lib/homie/switch): "Answer" opens a box to type the answer in (TypeAnswer) instead of the
+// walkie-talkie; the pill still records a voice note.
 // Nothing open: no card.
 import { router } from 'expo-router';
+import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { LinearTransition } from 'react-native-reanimated';
 
@@ -18,6 +21,7 @@ import { HoldToTalk } from '@/components/postcard/HoldToTalk';
 import { questionLines } from '@/components/record/walkieLogic';
 import { ChevronRightIcon, fadeOutFast, listEnter, PressableScale, Txt } from '@/components/ui';
 import { askAiConsentNow, ensureAiConsent } from '@/lib/aiConsent';
+import { HOMIE_ON } from '@/lib/homie/switch';
 import { answerQuestion, useCookQuestions, type CookQuestion } from '@/lib/live/convex';
 import { getCachedEntry } from '@/lib/recipes';
 import { useSession } from '@/lib/session';
@@ -26,6 +30,7 @@ import type { T } from '@/lib/words/words';
 import { colors, radii, shadows, space } from '@/theme/tokens';
 
 import { dishName } from './kitchen';
+import { TypeAnswer } from './TypeAnswer';
 
 function who(q: CookQuestion, t: T): string {
   const name = q.askedByName?.trim() || t('parent.questions.yourFamily');
@@ -52,7 +57,9 @@ export function LiveQuestions({ enterIndex = 0 }: { enterIndex?: number }) {
 function QuestionRow({ q }: { q: CookQuestion }) {
   const { t } = useWords();
   const lines = questionLines(q);
+  const [typing, setTyping] = useState(false);
   const open = async () => {
+    if (!HOMIE_ON) return setTyping((on) => !on);
     if (await ensureAiConsent()) router.push({ pathname: '/answer/[id]', params: { id: q._id } });
   };
   return (
@@ -62,7 +69,7 @@ function QuestionRow({ q }: { q: CookQuestion }) {
         scaleTo={0.98}
         accessibilityRole="button"
         accessibilityLabel={lines.en ? t('parent.questions.labelTranslated', { who: who(q, t), question: lines.main, english: lines.en }) : `${who(q, t)}: ${lines.main}`}
-        accessibilityHint={t('parent.questions.hint')}
+        accessibilityHint={t(HOMIE_ON ? 'parent.questions.hint' : 'parent.questions.hintType')}
         style={styles.open}>
         <Txt variant="label" size={15} weight={700} color={colors.greenDeep} numberOfLines={1}>
           {who(q, t)}
@@ -90,6 +97,7 @@ function QuestionRow({ q }: { q: CookQuestion }) {
           <ChevronRightIcon size={16} color={colors.greenDeep} />
         </PressableScale>
       </View>
+      {typing ? <TypeAnswer questionId={q._id} /> : null}
     </Animated.View>
   );
 }

@@ -4,16 +4,18 @@
 // on again (jobs cancelled, recordings abandoned), a cook's recipes are gone for the whole family,
 // Community included, with the dinners around them cancelled, and Moss is told. The rest is purged right
 // after, in batches, each step through an index of its own rows: their messages and voice notes, their
-// questions and answers, what they were cooking, their Community dinners and asks, and a cook's jobs and
-// recordings (homie's prompts, the glasses' live log and frames). A purge that stopped is started again
-// by a cron (restartPurges). The accountDeletions row lists what Convex can't delete itself: their
+// questions and answers, what they were cooking, their Community dinners and asks, what they put on a dish
+// ask card (as the kid or as Mom) and their craving links, and a cook's jobs and recordings (homie's prompts, the glasses' live log and
+// frames). A purge that stopped is started again by a cron (restartPurges). The accountDeletions row lists what Convex can't delete itself: their
 // Supabase rows (the app calls POST /profiles/:id/remove next), their media in GCS and a voice clone.
 import { v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Doc, Id } from "./_generated/dataModel";
 import { internalMutation, mutation, type MutationCtx } from "./_generated/server";
 import { PUBLIC_COVER } from "./community";
+import { deleteCard, dropCook, dropKid } from "./dishAsks";
 import { cancelJob } from "./jobs";
+import { dropLogOf, dropTokensOf } from "./push";
 import { requireSession } from "./lib/auth";
 import { requestMossSync } from "./worker";
 
@@ -62,6 +64,7 @@ export const deleteMe = mutation({
     });
     const sessions = await ctx.db.query("sessions").withIndex("by_personId", (q) => q.eq("personId", person._id)).take(1000);
     for (const s of sessions) await ctx.db.delete("sessions", s._id);
+    await dropTokensOf(ctx, person._id);
 
     // Nothing of hers is worked on again: the worker can't claim (or finish) her jobs, and the glasses
     // can't make a recipe from her recordings (glasses.finished refuses an abandoned one).
@@ -293,5 +296,45 @@ const swaps: Step = async (ctx, d, max) => {
   );
 };
 
+/**
+ * Dish ask cards they made as the kid (DISH-ASK-SPEC.md §5, V2-LINKING.md). One asked of a Mom who is still here
+ * stays for her, without the kid's name, photos or voice note; any other goes, with her answers and every file.
+ * A card's familyId alone deletes nothing.
+ */
+const dishCardsAsKid: Step = async (ctx, d, max) => {
+  let n = 0;
+  while (n < max) {
+    const card = await ctx.db.query("dishAsks").withIndex("by_person", (q) => q.eq("personId", d.personId)).first();
+    if (!card) break;
+    const mom = card.requestedOf && card.requestedOf !== d.personId ? await ctx.db.get("people", card.requestedOf) : null;
+    n += mom && mom.deletedAt === undefined ? await dropKid(ctx, card) : await deleteCard(ctx, card);
+  }
+  return n;
+};
+
+/** Dish ask cards asked of them as Mom: her answers, clips and version go; the card stays for the kid. */
+const dishCardsAsCook: Step = async (ctx, d, max) => {
+  let n = 0;
+  while (n < max) {
+    const card = await ctx.db.query("dishAsks").withIndex("by_requested_of", (q) => q.eq("requestedOf", d.personId)).first();
+    if (!card) break;
+    n += await dropCook(ctx, card);
+  }
+  return n;
+};
+
+/** The craving links they made (DISH-ASK-SPEC.md §8); the cards from them follow the two steps above. */
+const cravingLinks: Step = async (ctx, d, max) => {
+  const rows = await ctx.db.query("cravingLinks").withIndex("by_person", (q) => q.eq("personId", d.personId)).take(max);
+  for (const link of rows) await ctx.db.delete("cravingLinks", link._id);
+  return rows.length;
+};
+
+/** The pushes decided on for them (push.ts); their tokens went in deleteMe. */
+const pushLog: Step = (ctx, d, max) => dropLogOf(ctx, d.personId, max);
+
 // Recipes first, so a late one's questions, cooking and swaps go with the rest.
-const STEPS: Step[] = [recipes, messages, questions, answers, cooking, recordings, jobs, hostedDinners, dinnerAsks, swaps];
+const STEPS: Step[] = [
+  recipes, messages, questions, answers, cooking, recordings, jobs, hostedDinners, dinnerAsks, swaps, dishCardsAsKid, dishCardsAsCook,
+  cravingLinks, pushLog,
+];

@@ -22,6 +22,8 @@ type Words = { en: string; hint?: string };
 const WORDS = {
   gettingReady: { en: 'homie is getting ready' },
   sayingHello: { en: 'homie is saying hello' },
+  // homie switched off (lib/homie/switch): the moment before filming starts by itself.
+  cameraOpening: { en: 'Opening the camera' },
   stop: { en: 'I’m done', hint: 'Tap when you’re done' },
   wrappingUp: { en: 'Almost done' },
   listening: { en: 'Go ahead, I’m listening', hint: 'Just answer out loud' },

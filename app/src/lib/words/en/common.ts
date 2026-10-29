@@ -2,6 +2,7 @@
 export const COMMON = {
   'common.language.title': 'Your language',
   'common.language.line': 'homie and homecookd will talk with you in it.',
+  'common.language.lineQuiet': 'homecookd will show its words in it.',
   'common.language.saveFailed': 'That didn’t save. Try again.',
   'common.back': 'Back',
   // lib/format: greetings, days, months, times and lists.
@@ -79,4 +80,13 @@ export const COMMON = {
   'common.ai.row': '{name}. {job}',
   'common.ai.ok': 'OK, continue',
   'common.ai.okHint': 'Lets homecookd send this to these AI services',
+  // The "Want a note when…?" sheet before the phone's own notifications prompt (components/push/PushAskSheet).
+  'common.push.answers': 'Want a note when {name} answers?',
+  'common.push.theyAnswer': 'Want a note when they answer?',
+  'common.push.writesBack': 'Want a note when {name} writes back?',
+  'common.push.theyWriteBack': 'Want a note when they write back?',
+  'common.push.cooksIt': 'Want a note when {name} cooks it?',
+  'common.push.pickDish': 'Want a note when they pick a dish?',
+  'common.push.yes': 'Yes',
+  'common.push.notNow': 'Not now',
 } as const satisfies Record<`common.${string}`, string>;

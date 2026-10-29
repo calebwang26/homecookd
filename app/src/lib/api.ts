@@ -8,7 +8,7 @@
 // changes. The credential is this phone's own device key (`x-device-key`), or, only until an older
 // phone has swapped it for a key, the family code (`x-family-code`); the profile is `x-profile-id`.
 // Any call can override them (`{ deviceKey, code, profileId }`); overriding one credential drops
-// the other, e.g. joinFamily() checking a typed code. A 401 "This phone was signed out." on the
+// the other, e.g. the boot-time swap of an old saved family code. A 401 "This phone was signed out." on the
 // phone's own device key means it was signed out (someone removed this person): the key is dropped
 // and setSignedOutHandler() hears it once. Any other 401 is only an error (isSignedOutAnswer). A
 // 403 for the current profile because that person was removed (from another phone)
@@ -207,28 +207,41 @@ export type RecipeNote = {
 };
 
 /** A new device key: send it as `x-device-key` from now on. Shown once by the server; never log it. */
-/** `profile_id` is null after a family invite: the phone is in, and its person comes next (createSelf). */
+/** `profile_id` is null after an older family invite: the phone is in, and its person comes next (createSelf). */
 export type DeviceAuth = { device_key: string; family_name: string; profile_id: string | null };
 
 /**
- * POST /auth/apple and /auth/google. `needs_name` = someone new: ask what their family calls them
- * (and, without a share link, cook or learner), then call again with the same `id_token`.
+ * POST /auth/apple and /auth/google (docs/build/JOIN-SIMPLE.md §3). `needs_name` = someone new with
+ * no name sent: ask what their family calls them (and, with no link, cook or learner), then call again
+ * with the same `id_token`. `needs_move` = a known person in another family tapped this link: nothing
+ * changed; call again with `move: true` (a fresh sign-in) once they say yes. `moved` = they moved, and
+ * `receipt` is Convex's proof for links.moved.
  */
 export type ProviderAuth =
-  | { existing: false; needs_name: true; /** Google's given name, when there is one. */ suggested_name?: string | null }
+  | { existing: false; needs_name: true; needs_move?: never; /** Google's given name, when there is one. */ suggested_name?: string | null }
+  | { existing: true; needs_move: true; needs_name?: false; from_family: string; to_family: string }
   | (DeviceAuth & {
-      /** false = a new person (their own family, or the share link's). */
+      /** false = a new person (their own family, or the link's). */
       existing: boolean;
       needs_name: false;
-      /** true when a new person joined the family of the share link they came from. */
+      needs_move?: false;
+      /** true when a new person joined the family of the link they came from. */
       joined: boolean;
+      moved?: { receipt: string | null } | null;
     });
 
+/**
+ * One link at most: `join_token` (a family join link's /i?t=, or an older invite's) or `link_ticket`
+ * (Convex's /link/open ticket for a dish card's link). `role` only matters for a join link; a ticket's
+ * side says it.
+ */
 export type ProviderAuthInput = {
   id_token: string;
   name?: string | null;
   role?: Role | null;
-  share_token?: string | null;
+  join_token?: string | null;
+  link_ticket?: string | null;
+  move?: boolean;
   device_label?: string | null;
 };
 
@@ -251,7 +264,7 @@ export type NewInvite =
   | { name: string; role: Role; relation?: string | null; phone?: string | null }
   | { profile_id: string };
 
-/** POST /invites/peek: what an invite says, without using it. */
+/** POST /invites/peek: what an invite or a family join link says, without using it. */
 export type InvitePeek = {
   status: InviteState;
   family_name: string;
@@ -261,10 +274,12 @@ export type InvitePeek = {
   expires_at: string;
   /** Only when this phone sent its device key: true when it's already signed in to that family. */
   same_family?: boolean;
+  /** 'link': a family join link (22 characters), for anyone, any number of times, until it expires. */
+  kind?: 'link';
 };
 
-/** An invite by its link token or by its 6-letter code. */
-export type InviteRef = { token: string; code?: never } | { code: string; token?: never };
+/** POST /join-links: the family's join link to share (the same one while it has over a day left). */
+export type JoinLink = { url: string; expires_at: string | null };
 
 /** Body for POST /threads/:id/messages. Required fields depend on `kind` (see API.md). */
 export type NewMessage = (
@@ -632,24 +647,26 @@ export const api = {
     call<Profile>('/profiles/self', { method: 'POST', body: input, retry: 'gateway', ...o, profileId: null }),
 
   /**
-   * POST /invites/peek (public): what an invite says, without using it. 404 "That invite link
-   * doesn't work." Sends this phone's key when it has one, for `same_family`.
+   * POST /invites/peek (public): what an invite or a family join link (`token`, 16 or 22 characters)
+   * says, without using it. 404 "That invite link doesn't work." Sends this phone's key when it has
+   * one, for `same_family`.
    */
-  invitePeek: (ref: InviteRef, o: Pick<AuthOverride, 'signal'> = {}) =>
-    call<InvitePeek>('/invites/peek', { method: 'POST', body: ref, authed: false, withKey: true, retry: 'safe', ...o }),
+  invitePeek: (token: string, o: Pick<AuthOverride, 'signal'> = {}) =>
+    call<InvitePeek>('/invites/peek', { method: 'POST', body: { token }, authed: false, withKey: true, retry: 'safe', ...o }),
 
   /**
-   * POST /invites/accept (public): use the invite (one time only) and get this phone's device key.
-   * 410 when already used, expired or turned off: `ApiError.body.status` says which. Never retried:
-   * a retry after a lost answer would find the invite used (hence the long timeout).
+   * POST /join-links (me): the family's join link, homecookd.app/i?t=… ("Invite family" shares it). The
+   * same link comes back while it has more than a day left.
    */
-  inviteAccept: (input: InviteRef & { device_label?: string | null }, o: Pick<AuthOverride, 'signal'> = {}) =>
-    call<DeviceAuth>('/invites/accept', { method: 'POST', body: input, authed: false, retry: 'none', timeoutMs: SIGN_IN_TIMEOUT_MS, ...o }),
+  joinLink: (o: AuthOverride = {}) => call<JoinLink>('/join-links', { method: 'POST', body: {}, me: true, retry: 'gateway', ...o }),
 
   /**
-   * POST /auth/apple (public): Sign in with Apple. Call with the `id_token` first; a known person
-   * gets a device key, someone new gets `needs_name`: call again with `name` (+ `role` when there is
-   * no `share_token`). Never retried: a retry after a lost answer would sign in a second time.
+   * POST /auth/apple (public): Sign in with Apple, with the link they came from (ProviderAuthInput).
+   * A known person gets a device key (or `needs_move`); someone new joins the link's family with
+   * `name`, or gets `needs_name` without one (and, with no link, starts a family: send `role` too).
+   * 409 a name already in that family, or a card side that brought someone in (LINK_USED); 410 an
+   * expired or used invite (`ApiError.body.status`); 403 a ticket that didn't check out; 404 no such
+   * link. Never retried: a retry after a lost answer would sign in a second time.
    */
   authApple: (input: ProviderAuthInput, o: Pick<AuthOverride, 'signal'> = {}) =>
     call<ProviderAuth>('/auth/apple', { method: 'POST', body: input, authed: false, retry: 'none', timeoutMs: SIGN_IN_TIMEOUT_MS, ...o }),

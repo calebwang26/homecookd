@@ -6,6 +6,7 @@ import { StyleSheet } from 'react-native';
 
 import { LanguageSheet, languageLabel } from '@/components/record/LanguagePicker';
 import { PressableScale, Txt, useToast } from '@/components/ui';
+import { HOMIE_ON } from '@/lib/homie/switch';
 import { activeLanguage, languageName } from '@/lib/languages';
 import { useMe } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
@@ -30,7 +31,7 @@ export function LanguageEntry() {
     setPicked(code);
     try {
       // Only a save that reached Convex is worth a "done"; the local stub keeps it for this launch only.
-      if ((await choose(code)) === 'saved') toast.show(t('profiles.language.saved', { language: languageName(code) }));
+      if ((await choose(code)) === 'saved') toast.show(t(HOMIE_ON ? 'profiles.language.saved' : 'profiles.language.savedQuiet', { language: languageName(code) }));
     } catch (e) {
       setPicked(null);
       toast.show(t('profiles.language.saveFailed'), { tone: 'error' });
@@ -44,7 +45,7 @@ export function LanguageEntry() {
         onPress={() => setOpen(true)}
         accessibilityRole="button"
         accessibilityLabel={t('profiles.language.entry', { language: languageLabel(current) })}
-        accessibilityHint={t('profiles.language.entryHint')}
+        accessibilityHint={t(HOMIE_ON ? 'profiles.language.entryHint' : 'profiles.language.entryHintQuiet')}
         style={styles.link}>
         <Txt variant="label" weight={600} color={colors.muted}>
           {t('profiles.language.entry', { language: languageLabel(current) })}

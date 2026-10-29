@@ -30,7 +30,7 @@ export function storeUrlForThisDevice(): string | null {
  * homecookd://<path>?<params> (the app's scheme, app/app.json). A universal link never opens the
  * app from a page on its own domain, so "Open homecookd" on homecookd.app has to use the scheme.
  */
-export function appSchemeUrl(path: 'i' | 'r', params: Record<string, string>): string {
+export function appSchemeUrl(path: 'i' | 'r' | 'miss' | 'a', params: Record<string, string>): string {
   const q = new URLSearchParams(params).toString();
   return `homecookd://${path}${q ? `?${q}` : ''}`;
 }

@@ -29,6 +29,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [testflight-live](memory/testflight-live.md) | Oct 23: Apple account + TestFlight work; dev build while coding, TestFlight for the demo |
 | [demo-family-shreya](memory/demo-family-shreya.md) | Oct 24: the demo is Shreya Pawar's family; her grandma cooks and records in Marathi |
 | [demo-test-dishes](memory/demo-test-dishes.md) | Oct 24: demos, examples and tests use Swordfish steak and Poha (real dishes, real footage) |
+| [homie-off](memory/homie-off.md) | Oct 29: homie's voice is switched off for launch (`lib/homie/switch.ts`); no code deleted; legal text left as is |
 | [homie-voice](memory/homie-voice.md) | Oct 24: homie is Riya bilingual, asked for as auditioned (locale, speed 0.85, moods), cousin tone; Gemini TTS backup |
 | [cook-languages](memory/cook-languages.md) | Oct 24: 12 more cook languages on Cartesia (ink-whisper) + Claude, no Gemini; Oct 26: the cook's whole app in her language (language screen, `lib/words`) |
 | [marathi-dropped](memory/marathi-dropped.md) | Oct 26: Marathi is no longer a cook language; 13 integrated languages (English + 12) |

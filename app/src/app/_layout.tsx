@@ -1,15 +1,18 @@
 // Root: Hearth fonts (Fraunces + DM Sans, never blocking more than 2.5 s), the app-wide providers
 // (session, toasts, Watch/Hear sheet, share sheet), the Stack, and the launch bloom once per cold start.
 // SessionGate sends a phone with no family to the first screen (join), and a family with nobody picked
-// to "Who's in the kitchen?". Invite (/i), recipe (/r) and dinner-invite (/d) links pass through either way;
-// any other link opened before anyone was picked opens on top of their home once it shows.
+// to "Who's in the kitchen?". Join (/i), recipe (/r), dinner-invite (/d) and dish-card (/miss, /a)
+// links pass through either way; any other link opened before anyone was picked opens on top of their
+// home once it shows. setLinksMoved hands the session Convex's links.moved (lib/live imports the
+// session, so it can't import lib/live): after a move, a solo family's recipes come along.
 // PushBridge (RETENTION-HANDOFF 2.3) opens the screen a tapped push points at (the same hold covers a
-// push that launched the app), files this phone's push token under its person, and starts "heard"
-// logging; PushAskHost is the one "Want a note when…?" sheet any screen can ask for. HomieOverlay is
-// homie, the pot that rests top-right on every screen (components/homie). AiConsentHost is the one
-// "homecookd uses AI for this" sheet, raised the first time something would go to the AI companies
-// (lib/aiConsent). ResendUnsent sends, in the background and as its cook, an in-app recording the app
-// died before finishing (components/record/useResendUnsent).
+// push that launched the app), files this phone's push token under its person (with the api, and with
+// Convex through lib/live/pushTokens), and starts "heard" logging; PushAskHost is the one "Want a note
+// when…?" sheet any screen can ask for. HomieOverlay is homie, the pot that rests top-right on every
+// screen (components/homie). AiConsentHost is the one "homecookd uses AI for this" sheet, raised the
+// first time something would go to the AI companies (lib/aiConsent). ResendUnsent sends, in the
+// background and as its cook, an in-app recording the app died before finishing
+// (components/record/useResendUnsent).
 //
 // Stack motion (docs/design/ANIMATIONS.md 3): detail screens use a quick fade underneath their own
 // Reanimated hero/content entrances; drill-down screens (ingredients -> steps, chat) slide.
@@ -41,17 +44,22 @@ import { holdAfterPick, holdPushAfterPick, linkSearch, openHeld, peekAfterPick, 
 import { ToastProvider } from '@/components/ui';
 import { forgetAiConsent, useAiConsent } from '@/lib/aiConsent';
 import { api } from '@/lib/api';
+import { HOMIE_ON } from '@/lib/homie/switch';
 import { registerHeardLogging } from '@/lib/listening';
+import { linksMoved } from '@/lib/live/links';
+import { convexPush } from '@/lib/live/pushTokens';
 import { PLAYBACK_AUDIO_MODE } from '@/lib/media';
 import { openRecipe } from '@/lib/navigation';
-import { addTapListener, initPush, pushUrl, syncRegistration, type PushData, type PushPlatform } from '@/lib/push';
-import { SessionProvider, useSession } from '@/lib/session';
+import { addTapListener, initPush, pushUrl, setConvexPush, syncRegistration, type PushData, type PushPlatform } from '@/lib/push';
+import { SessionProvider, setLinksMoved, useSession } from '@/lib/session';
 import { ShareSheetProvider } from '@/lib/share';
 import { UiLanguageProvider } from '@/lib/words/useWords';
 import { colors } from '@/theme/tokens';
 import { useAppFonts } from '@/theme/fonts';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
+setConvexPush(convexPush);
+setLinksMoved(linksMoved);
 
 const navTheme = {
   ...DefaultTheme,
@@ -113,7 +121,7 @@ export default function RootLayout() {
                 <PushBridge />
                 {aiOk ? <ResendUnsent /> : null}
                 <PushAskHost register={registerPush} />
-                <HomieOverlay />
+                {HOMIE_ON ? <HomieOverlay /> : null}
                 <AiConsentHost />
               </ShareSheetProvider>
             </MediaSheetProvider>
@@ -141,7 +149,6 @@ function AppStack() {
       }}>
       <Stack.Screen name="index" options={{ title: 'Who’s in the kitchen?', animation: 'fade' }} />
       <Stack.Screen name="join" options={{ title: 'Sign in', animation: 'fade' }} />
-      <Stack.Screen name="join-code" options={{ title: 'Family code', animation: 'slide_from_right' }} />
       <Stack.Screen name="i" options={{ title: 'Invite', animation: 'fade' }} />
       <Stack.Screen name="r" options={{ title: 'homecookd', animation: 'none' }} />
       <Stack.Screen name="d" options={{ title: 'Dinner invite', animation: 'fade' }} />
@@ -159,6 +166,11 @@ function AppStack() {
       {/* Grandma cooking while homie listens; the walkie-talkie answer to a kid's question. */}
       <Stack.Screen name="recording" options={{ title: 'Recording', animation: 'slide_from_right' }} />
       <Stack.Screen name="answer/[id]" options={{ title: 'Answer', animation: 'slide_from_bottom' }} />
+      {/* A kid's ask (Phase 5): the request, her 2-minute voice recipe, then "Sent". */}
+      <Stack.Screen name="request/[id]" options={{ title: 'Request', animation: 'slide_from_bottom' }} />
+      <Stack.Screen name="request/voice" options={{ title: 'Tell how you make it', animation: 'slide_from_right' }} />
+      <Stack.Screen name="request/sent" options={{ title: 'Sent', animation: 'fade', gestureEnabled: false }} />
+      <Stack.Screen name="dish/[id]" options={{ title: 'Dish', animation: 'slide_from_right' }} />
       {/* Month in the kitchen (RETENTION-HANDOFF 3.7): full screen, so Home doesn't peek behind the story; Close is always on screen. */}
       <Stack.Screen name="recap" options={{ title: 'Your month in the kitchen', presentation: 'fullScreenModal', animation: 'fade' }} />
       <Stack.Screen name="+not-found" options={{ title: 'homecookd', animation: 'fade' }} />
@@ -171,8 +183,8 @@ function ResendUnsent() {
   return null;
 }
 
-/** Screens that work without a signed-in phone: the first screen, the code backup, invite, recipe and dinner-invite links. */
-const SIGNED_OUT_ROUTES = new Set(['/join', '/join-code', '/i', '/r', '/d']);
+/** Screens that work without a signed-in phone: the first screen, join, recipe, dinner-invite and dish-card links. */
+const SIGNED_OUT_ROUTES = new Set(['/join', '/i', '/r', '/d', '/miss', '/a']);
 /** Screens that work without a chosen profile. */
 const OPEN_ROUTES = new Set(['/', ...SIGNED_OUT_ROUTES]);
 /** A held link waits this long after home appears, so it opens on top of home (Back lands there). */
@@ -272,7 +284,7 @@ function PushBridge() {
   const person = owner?.id ?? me?.id ?? null;
   const signedIn = !!me;
   useEffect(() => {
-    if (person && signedIn) void syncRegistration({ register: registerPush, key: `${credentialVersion}|${person}` });
+    if (person && signedIn) void syncRegistration({ register: registerPush, key: `${credentialVersion}|${person}`, profileId: person });
   }, [person, signedIn, credentialVersion]);
   useEffect(() => {
     if (!navReady) return;

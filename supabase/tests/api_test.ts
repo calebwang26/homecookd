@@ -106,6 +106,7 @@ async function reset() {
     push_tokens: [],
     notification_log: [],
     cooking_now: [],
+    join_links: [],
   };
   pushed = [];
   stored = new Set();
@@ -994,6 +995,115 @@ t("email sign-in from a link (old builds) can't claim the sender or someone sign
   const r = await email("Dad", "dad@example.com");
   assertEquals([r.status, r.data.profile_id, r.data.joined], [200, DAD, true]);
   assertEquals(tables.invites.at(-1)!.status, "revoked");
+});
+
+// --- joining only by a link (joinLinks.ts, JOIN-SIMPLE.md) ---------------------------------------
+
+const LINK_SECRET = "test-link-secret-0123456789abcdef";
+
+/** A receipt's payload, once its signature checks out with LINK_SECRET. */
+async function receiptOf(receipt: string): Promise<Row> {
+  const [body, sig] = receipt.split(".");
+  const key = await crypto.subtle.importKey("raw", new TextEncoder().encode(LINK_SECRET), { name: "HMAC", hash: "SHA-256" }, false, ["sign"]);
+  const mac = new Uint8Array(await crypto.subtle.sign("HMAC", key, new TextEncoder().encode(body)));
+  assertEquals(sig, btoa(String.fromCharCode(...mac)).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, ""));
+  return JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(body.replace(/-/g, "+").replace(/_/g, "/")), (c) => c.charCodeAt(0))));
+}
+
+t("join links: one link for the family all week, peek says kind link, 1.0's accept gets 426, revoke turns it off", async () => {
+  assertEquals((await call("POST", "/join-links", { headers: { "x-device-key": KEY } })).status, 400, "x-profile-id is required");
+  const made = await call("POST", "/join-links", { headers: asMom });
+  assertEquals(made.status, 200);
+  const token = tokenOf(made.data.url);
+  assertMatch(made.data.url, /^https:\/\/homecookd\.app\/i\?t=[0-9A-Za-z]{22}$/);
+  assert(Math.abs(Date.parse(made.data.expires_at) - (Date.now() + 7 * 86_400_000)) < 60_000);
+  const row = tables.join_links[0];
+  assertEquals([row.family_id, row.inviter_id, row.token_hash, row.revoked_at ?? null], [FAM, MOM, await sha(token), null]);
+  assert(row.token_enc.startsWith("v1:") && !row.token_enc.includes(token), "sealed, not stored in the clear");
+  assert(rateHits.includes("joinlinks"));
+  assertEquals((await call("POST", "/join-links", { headers: asMom })).data, made.data, "the same link all week");
+
+  const peek = await call("POST", "/invites/peek", { body: { token } });
+  assertEquals(peek.data, {
+    status: "pending", family_name: "Test family", inviter: { name: "Mom", relation: "Mom", avatar_key: "mom" }, invitee: null,
+    expires_at: made.data.expires_at, kind: "link",
+  });
+  assertEquals((await call("POST", "/invites/peek", { headers: { "x-device-key": KEY }, body: { token } })).data.same_family, true);
+  assertEquals((await call("POST", "/invites/peek", { body: { token: "Nope".padEnd(22, "0") } })).status, 404);
+
+  const old = await call("POST", "/invites/accept", { body: { token, device_label: "iPhone" } });
+  assertEquals([old.status, old.data], [426, { error: "Update homecookd to join this family." }]);
+  assertEquals(tables.devices.length, 1, "1.0 can't join by a join link");
+
+  assertEquals((await call("POST", "/join-links/revoke", { headers: asMom })).data, { ok: true });
+  assertEquals((await call("POST", "/invites/peek", { body: { token } })).data.status, "revoked");
+  const fresh = await call("POST", "/join-links", { headers: asMom });
+  assertNotEquals(fresh.data.url, made.data.url);
+  assertEquals((await call("POST", "/auth/link", { body: { ticket: "x" } })).status, 404, "POST /auth/link is gone");
+});
+
+t("Apple with a join link: name first, a new person joins; the same account signs in again; an old invite works once", async () => {
+  const token = tokenOf((await call("POST", "/join-links", { headers: asMom })).data.url);
+  const id = await appleToken("dana", { email: "dana@example.com" });
+  assertEquals((await call("POST", "/auth/apple", { body: { id_token: id, join_token: token } })).data,
+    { existing: false, needs_name: true, suggested_name: null });
+  const joined = await call("POST", "/auth/apple", { body: { id_token: id, join_token: token, name: "Dana", role: "cook", device_label: "iPhone" } });
+  assertEquals([joined.status, joined.data.joined, joined.data.existing, joined.data.family_name], [200, true, false, "Test family"]);
+  const dana = tables.profiles.find((p) => p.id === joined.data.profile_id)!;
+  assertEquals([dana.name, dana.role, dana.family_id], ["Dana", "cook", FAM]);
+  const dev = await findDevice(joined.data.device_key);
+  assertEquals([dev.profile_id, dev.via, dev.label], [dana.id, "apple", "iPhone"]);
+  assertEquals(tables.signups.map((s) => s.share_token), [`join:${tables.join_links[0].id}`]);
+  assertEquals(notes().at(-1), ["Dana joined", dana.id]);
+  const again = await call("POST", "/auth/apple", { body: { id_token: await appleToken("dana"), join_token: token } });
+  assertEquals([again.data.existing, again.data.profile_id], [true, dana.id]);
+
+  // A 1.0 phone's one-use family invite still brings someone in, once, as a new person.
+  const inv = (await call("POST", "/invites", { headers: asMom, body: {} })).data.invite;
+  const kai = await call("POST", "/auth/apple", { body: { id_token: await appleToken("kai"), join_token: tokenOf(inv.url), name: "Kai" } });
+  assertEquals([kai.status, kai.data.joined], [200, true]);
+  assertEquals(tables.invites.at(-1)!.status, "used");
+  const late = await call("POST", "/auth/apple", { body: { id_token: await appleToken("lee"), join_token: tokenOf(inv.url), name: "Lee" } });
+  assertEquals([late.status, late.data.error, late.data.status], [410, "This invite was already used.", "used"]);
+});
+
+t("Apple with another family's link: asked first, then one tap moves them; a solo family's faces come too", async () => {
+  // Rae started her own family and added Gran (no phone).
+  const rae = (await call("POST", "/auth/apple", { body: { id_token: await appleToken("rae"), name: "Rae", role: "cook" } })).data;
+  const asRae = { "x-device-key": rae.device_key, "x-profile-id": rae.profile_id };
+  const gran = (await call("POST", "/profiles", { headers: asRae, body: { name: "Gran", role: "cook" } })).data;
+  const raes = tables.profiles.find((p) => p.id === rae.profile_id)!.family_id;
+  const token = tokenOf((await call("POST", "/join-links", { headers: asMom })).data.url);
+
+  const ask = await call("POST", "/auth/apple", { body: { id_token: await appleToken("rae"), join_token: token } });
+  assertEquals(ask.data, { existing: true, needs_move: true, from_family: "Rae's family", to_family: "Test family" });
+  assertEquals((await call("GET", "/family", { headers: asRae })).status, 200, "nothing changed");
+
+  const had = Deno.env.get("LINK_JOIN_SECRET");
+  Deno.env.set("LINK_JOIN_SECRET", LINK_SECRET);
+  let moved;
+  try {
+    moved = await call("POST", "/auth/apple", { body: { id_token: await appleToken("rae"), join_token: token, move: true } });
+  } finally {
+    if (had === undefined) Deno.env.delete("LINK_JOIN_SECRET");
+    else Deno.env.set("LINK_JOIN_SECRET", had);
+  }
+  assertEquals([moved.status, moved.data.existing, moved.data.joined, moved.data.family_name], [200, true, true, "Test family"]);
+  const fresh = moved.data.profile_id;
+  // Her old family: she left as "Leave the family" does; her old phone key is signed out.
+  assert(tables.profiles.find((p) => p.id === rae.profile_id)!.removed_at);
+  assertEquals((await call("GET", "/family", { headers: { "x-device-key": rae.device_key } })).status, 401);
+  assertEquals(tables.identities.filter((i) => i.subject === "rae").map((i) => i.profile_id), [fresh]);
+  const said = (fam: string) => tables.messages.filter((m) => m.family_id === fam && m.kind === "system").map((m) => m.body);
+  assertEquals(said(raes), ["Rae left"]);
+  assertEquals(said(FAM), ["Rae joined"]);
+  // Nobody else signed in to Rae's family, so Gran comes along; Convex gets the receipt.
+  const fam = await call("GET", "/family", { headers: { "x-device-key": moved.data.device_key } });
+  assertEquals(fam.data.profiles.map((p: Row) => p.name), ["Mom", "Dad", "Rae", "Gran"]);
+  assertEquals(fam.data.device_profile_id, fresh);
+  const r = await receiptOf(moved.data.moved.receipt);
+  assertEquals([r.v, r.kind, r.fromProfile, r.fromFamily, r.toProfile, r.toFamily, r.solo, r.faces], [1, "moved", rae.profile_id, raes, fresh, FAM, true, [gran.id]]);
+  assert(Math.abs(r.exp - (Date.now() + 3_600_000)) < 60_000);
 });
 
 // --- moving to a new phone ---------------------------------------------------------------------

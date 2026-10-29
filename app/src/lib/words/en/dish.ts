@@ -1,0 +1,28 @@
+// /dish/[id]: a dish-ask card in the app (docs/design/phase5-cold-parents, artboards 11–13). The kid's side reads in
+// English (the kid side stays English); Mom's side reads in her language. {who} is what the family calls her ("Mom").
+export const DISH = {
+  'dish.back': 'Back',
+  'dish.yourKid': 'Your kid',
+  'dish.yourDish': 'Your {dish}',
+  'dish.whosDish': '{who}’s {dish}',
+  'dish.forKid': 'Your {dish}, for {kid}',
+  'dish.cookTonight': '{kid} can cook it tonight, in your words.',
+  'dish.asked': 'Asked {who}',
+  'dish.answered': '{who} answered',
+  'dish.filming': 'filming it {day}',
+  'dish.merging': '{who}’s version is being written…',
+  'dish.hear': 'Hear {who} · {time}',
+  'dish.hearShort': 'Hear {who}',
+  'dish.pause': 'Pause',
+  'dish.servings': '{n} serving',
+  'dish.yourGuess': 'Your guess for tonight · {who} will fix it',
+  'dish.ingredients': 'Ingredients',
+  'dish.steps': 'Steps',
+  'dish.tagGuess': 'guess',
+  'dish.filmIt': 'Surprise {kid}: film it',
+  'dish.filmItLine': '{kid} misses the sound of your voice.',
+  'dish.kidSees': 'What {kid} sees',
+  'dish.seeAll': 'See all of it',
+  'dish.missing': 'This card isn’t here.',
+  'dish.home': 'Back to Home',
+} as const;
