@@ -24,6 +24,8 @@ beforeEach(() => {
   process.env.LINK_JOIN_SECRET = SECRET;
   // Supabase GET /family answers as the signed-in person's family: Zed is in another one.
   stubFetch(undefined, (url, init) => {
+    if (url.endsWith("/push/send")) return Response.json({ data: JSON.parse(String(init?.body)).map(() => ({ status: "ok", id: "ticket" })) });
+    if (url.endsWith("/push/getReceipts")) return Response.json({ data: {} });
     const who = new Headers(init?.headers).get("x-profile-id");
     return url.endsWith("/family") && who === "p-zed" ? Response.json(OTHER_FAMILY) : undefined;
   });
@@ -168,4 +170,24 @@ test("pushEvents: Mom answered goes to the kid, a craving to the parent, in thei
   await t.mutation(internal.pushEvents.answered, { askId: row!._id });
   expect(web.kidToken).toBeTruthy();
   expect(await t.run((ctx) => ctx.db.query("pushLog").collect())).toHaveLength(2);
+});
+
+test("end to end: the kid claims, Mom answers on the web, and the kid's phone hears 'Mom answered'", async () => {
+  const leo = await signIn(t, "p-leo");
+  await registerPhone(leo.sessionToken, "leo");
+  const c = await makeCard({ dish: "tomato egg", kidName: "Leo" });
+  const { dishAskId } = await claim(leo.sessionToken, c.kidToken);
+  await post("/dish/cards/ask", { kidToken: c.kidToken, questions: [{ id: "q1", text: "How much ketchup do you squeeze in?" }] });
+  await post("/dish/cards/sent", { kidToken: c.kidToken, via: "sms" });
+  // 400 bytes: the fake Ink hears words (convex/dishAskModel.ts).
+  const answered = await t.fetch("/dish/ask/answer?q=q1&durationS=4.2", {
+    method: "POST",
+    headers: { "Content-Type": "audio/mp4", "X-Dish-Token": c.askToken, "X-Forwarded-For": IP },
+    body: new Uint8Array(400).fill(1),
+  });
+  expect(answered.status).toBe(200);
+  expect((await post("/dish/ask/finish", { askToken: c.askToken })).status).toBe(200);
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  const [push] = await pushesTo(leo.personId);
+  expect(push).toMatchObject({ kind: "answered", title: "Mom answered", url: `/dish/${dishAskId}`, status: "sent" });
 });

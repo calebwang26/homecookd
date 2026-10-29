@@ -752,6 +752,8 @@ export const releaseMerge = internalMutation({
         mergeStartedAt: undefined,
         ...(giveBack ? { mergeTries: Math.max(0, row.mergeTries - 1) } : {}),
       });
+      // No version is coming: her clips go to the kid as they are (V2-LINKING.md §1.4).
+      if (!giveBack) await ctx.scheduler.runAfter(0, internal.pushEvents.answered, { askId });
     }
     return null;
   },
@@ -782,6 +784,7 @@ export const saveVersion = internalMutation({
     if (!row || row.mergeStartedAt !== claimedAt) return false;
     await ctx.db.patch("dishAsks", askId, { version, status: "answered", mergedAt: Date.now() });
     await markMergedClips(ctx, askId, audios);
+    await ctx.scheduler.runAfter(0, internal.pushEvents.answered, { askId }); // "Mom answered", to the kid in the app
     return true;
   },
 });
@@ -890,6 +893,7 @@ export const merge = internalAction({
       const spoken = claim.answers.flatMap((a) => (a.words ? [{ id: a.questionId, words: a.words, english: a.english ?? null }] : []));
       if (!spoken.length) {
         console.log(`${tag}: no speech in her clips`);
+        await ctx.scheduler.runAfter(0, internal.pushEvents.answered, { askId }); // her clips go to the kid as they are
         return null;
       }
       if (!(await momBudgetLeft(ctx))) {
