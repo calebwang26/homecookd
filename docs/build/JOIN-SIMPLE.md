@@ -236,3 +236,17 @@ A move happens only after "Join the <B>s" and a fresh Apple sign-in. In one serv
    `TODO(caleb)`.
 3. **The old paths are turned off 30 days after 1.1 is live in the App Store** (§6). `TODO(caleb)`, with a STATE.md
    line.
+
+## 9. "Are you Leo?" (added Oct 29, Caleb: "This is good")
+
+A family may already have a phone-less profile for someone (Mom added "Leo" before he had the app). On a family join
+link, the name they type is checked against the family's phone-less profiles (ignoring case and extra spaces), through
+`/invites/peek`'s optional `name`. A match shows the face and "Are you Leo?".
+- **Yes:** Sign in with Apple with `claim_profile_id`. The server re-checks:
+  - the profile is in the link's family, not removed, with no identity and no live device;
+  - one claim per profile (signups `link:claim:<id>`, under the `link:%` unique index).
+  Then the identity and this phone attach to that profile. Their name, role, recipes and history stay, and the family
+  gets "<name> joined".
+- **No:** a new profile, as before.
+
+Peek never lists names without a typed match. Recipe links and moves don't claim.

@@ -6,7 +6,10 @@
 //             chips "I cook" / "I miss the food" (a family link; an older invite for one person says
 //             who and needs none), and the system Apple button (Google on Android). Sign-in sends the
 //             name, the role and the link (`joinToken`); then "Who's in the kitchen?", which opens
-//             their home. The terms line goes under the card
+//             their home. The terms line goes under the card. On a family link, a name the family
+//             already has for someone with no phone yet asks "Are you Leo?" with his face first
+//             (useClaimPeek, lib/auth/join's claimStep): "Yes, that's me" signs in as him
+//             (`claimProfileId`, no chips), "No, I'm someone else" as someone new
 //   move      signed in to another family: "You're in Wang family. Join Test family instead?" with
 //             Join Test family and Not now. Join shows the Apple button ("Sign in with Apple to join
 //             Test family."), and that sign-in moves them (`move: true`). A signed-out sign-in can
@@ -19,7 +22,8 @@
 // The peek sends this phone's key, so the server says whether it's already in that family; a
 // signed-in phone also reloads its family first, for an older server that doesn't say.
 // Dev (web only): ?fixture=pending|used|expired|revoked|notfound|offline|already|other
-// [&to=Dad][&role=learner][&from=none|Dad] draws each card without the API (default: a family join link).
+// [&to=Dad][&role=learner][&from=none|Dad][&claim=Leo] draws each card without the API (default: a family
+// join link; `claim`: typing that name asks "Are you Leo?").
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
@@ -50,10 +54,12 @@ import {
   type Peeked,
   type Provider,
   type Viewer,
+  useClaimPeek,
 } from '@/components/signin';
 import { ActionButton, haptic } from '@/components/ui';
 import { api, ApiError, type Role } from '@/lib/api';
 import { isJoinToken } from '@/lib/auth';
+import { claimStep, nameKey, type ClaimAnswer } from '@/lib/auth/join';
 import { useSession } from '@/lib/session';
 import { useWords } from '@/lib/words/useWords';
 import type { T } from '@/lib/words/words';
@@ -76,7 +82,7 @@ function peekFailed(e: unknown, t: T): Peeked {
 type Answer = Extract<Peeked, { state: 'ok' }> | { state: 'failed'; error: unknown };
 
 export default function JoinLinkScreen() {
-  const params = useLocalSearchParams<{ t?: string; c?: string; fixture?: string; role?: string; from?: string; to?: string }>();
+  const params = useLocalSearchParams<{ t?: string; c?: string; fixture?: string; role?: string; from?: string; to?: string; claim?: string }>();
   const { status, signedIn, family, profiles, owner, me, refresh, signInWithApple, signInWithGoogle } = useSession();
   const { t } = useWords();
   const [fixtureKind, fixtureRole, fixtureFrom, fixtureTo] = [one(params.fixture), one(params.role), one(params.from), one(params.to)];
@@ -149,6 +155,15 @@ export default function JoinLinkScreen() {
   const [busy, setBusy] = useState<Provider | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
+
+  // "Are you Leo?": a family link's join card, for someone signed out (a known account's sign-in
+  // ignores a claim). An answer counts only for the name it was given for.
+  const fixtureClaim = fixture ? (one(params.claim) ?? null) : null;
+  const claimOn = (!fixture || !!fixtureClaim) && view.kind === 'join' && !view.peek.invitee && !moving && !inFamily;
+  const claimPeek = useClaimPeek(token, name, claimOn && !fixture);
+  const found = fixtureClaim ? { name: nameKey(fixtureClaim), claimable: { id: 'fixture', name: fixtureClaim, avatar_key: null } } : claimPeek.found;
+  const [answer, setAnswer] = useState<ClaimAnswer | null>(null);
+  const claim = claimStep(name, found, answer);
   const alive = useRef(true);
   useEffect(
     () => () => {
@@ -181,6 +196,14 @@ export default function JoinLinkScreen() {
       setNameError(t('signin.joinCard.nameFirst'));
       return;
     }
+    if (claimOn && claim.needsPeek) {
+      // Typed faster than the peek: ask now, and if the family has this person, ask them first.
+      setBusy(p);
+      const f = await claimPeek.settle(typed);
+      if (!alive.current) return;
+      setBusy(null);
+      if (claimStep(typed, f, null).ask) return haptic('warning');
+    }
     setHeld(card);
     setError(null);
     setNameError(null);
@@ -189,8 +212,9 @@ export default function JoinLinkScreen() {
     const res = await (p === 'apple' ? signInWithApple : signInWithGoogle)({
       joinToken: token,
       name: typed || null,
-      role: peek.invitee ? null : role,
+      role: peek.invitee || claim.claimProfileId ? null : role,
       move,
+      claimProfileId: claimOn ? claim.claimProfileId : null,
     });
     if (!alive.current) return;
     setBusy(null);
@@ -240,6 +264,7 @@ export default function JoinLinkScreen() {
                 line={sentBy(view.peek, t)}
                 name={name}
                 onName={(text) => {
+                  if (nameKey(text) !== nameKey(name)) setAnswer(null); // a new name, a new question
                   setName(text);
                   setNameError(null);
                 }}
@@ -249,6 +274,18 @@ export default function JoinLinkScreen() {
                 onSignIn={(p) => void signIn(p)}
                 error={error}
                 nameError={nameError}
+                claim={
+                  claimOn && claim.ask
+                    ? {
+                        person: claim.ask,
+                        me: claim.me,
+                        onAnswer: (me) => {
+                          setAnswer({ name: nameKey(name), me });
+                          setNameError(null);
+                        },
+                      }
+                    : null
+                }
               />
               {moving ? <SmallLink label={t('signin.shared.notNow')} onPress={toStart} /> : null}
               <TermsLine />

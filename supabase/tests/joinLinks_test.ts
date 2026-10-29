@@ -1,6 +1,7 @@
 // Offline checks for supabase/functions/api/joinLinks.ts (docs/build/JOIN-SIMPLE.md §3, §4, §6): the family's
 // join link (POST /join-links, revoke, peek), 1.0's accept of one (426), and signing in with a link: a family
-// join link, a 1.0 one-use invite or a dish card's ticket, the known account, the move and its receipt. No
+// join link, a 1.0 one-use invite or a dish card's ticket, the known account, the move and its receipt, and
+// "Are you Leo?" (peek's claimable, and claim_profile_id becoming a phone-less person). No
 // database and no network: a tiny in-memory stand-in for the Supabase client and fakes of index.ts's helpers
 // (the routes themselves, through the real index.ts, are in api_test.ts).
 //
@@ -8,11 +9,14 @@
 
 import { assert, assertEquals, assertNotEquals, assertRejects } from "jsr:@std/assert@1.0.13";
 import {
+  ALREADY_ON,
+  claimableIn,
   familyJoinLink,
   INVITE_GONE,
   JOIN_LINK_DAYS,
   type JoinDeps,
   LINK_GONE,
+  NOT_IN_FAMILY,
   peekJoinLink,
   refuseJoinLinkAccept,
   revokeJoinLinks,
@@ -594,7 +598,7 @@ t("peek: a join link's family, sender and status, kind link; an unknown one is n
   const same = (familyId: string) => Promise.resolve(familyId === OLD ? true : undefined);
   assertEquals(await peekJoinLink(deps, LIVE, same), {
     status: "pending", family_name: "Pawar", inviter: { name: "Caleb", relation: null, avatar_key: null }, invitee: null,
-    expires_at: iso(NOW + 5 * DAY), same_family: undefined, kind: "link",
+    expires_at: iso(NOW + 5 * DAY), same_family: undefined, kind: "link", claimable: null,
   });
   assertEquals((await peekJoinLink(deps, EXPIRED, same))!.status, "expired");
   assertEquals((await peekJoinLink(deps, REVOKED, same))!.status, "revoked");
@@ -614,4 +618,165 @@ t("1.0's Join tap (POST /invites/accept) on a 22-character join link: 426; old t
   }
   assertEquals([e?.status, e?.message], [426, UPDATE_TO_JOIN]);
   for (const token of [INVITE, "ABCDEF", undefined, null, 5, "x".repeat(23)]) refuseJoinLinkAccept(HttpError, token);
+});
+
+// --- "Are you Leo?": a phone-less person someone added before they had the app
+
+const peekAs = async (tables: Tables, name: unknown, token = LIVE) =>
+  (await peekJoinLink(setup(tables).deps, token, () => Promise.resolve(undefined), name))!.claimable;
+const DAD_FACE = { id: "p-dad", name: "Dad", avatar_key: null };
+
+t("peek: claimable is the one phone-less person of exactly the typed name, ignoring case and spaces", async () => {
+  const tables = await world();
+  tables.profiles.find((p) => p.id === "p-dad")!.avatar_key = "dad";
+  assertEquals(await peekAs(tables, "Dad"), { ...DAD_FACE, avatar_key: "dad" });
+  assertEquals(await peekAs(tables, "  dAD  "), { ...DAD_FACE, avatar_key: "dad" });
+  tables.profiles.push(person("p-nani", FAM, "Nani  Ma", "cook", 3));
+  assertEquals((await peekAs(tables, " nani ma"))?.id, "p-nani", "extra spaces inside the name too");
+  // No name, nothing that's only close, and nobody who signs in: never a list.
+  for (const name of [undefined, null, "", "   ", 42, "Da", "Dad Jr", "Caleb", "x".repeat(300)]) {
+    assertEquals(await peekAs(tables, name), null, JSON.stringify(name));
+  }
+  assertEquals(await peekAs(tables, "Grandma"), null, "another family's phone-less Grandma");
+  // A signed-out phone (revoked) doesn't count; a live one does.
+  tables.devices.push({ id: "d-dad-old", family_id: FAM, profile_id: "p-dad", via: "invite", revoked_at: iso(NOW - DAY) });
+  assertEquals((await peekAs(tables, "dad"))?.id, "p-dad");
+  tables.devices.push({ id: "d-dad", family_id: FAM, profile_id: "p-dad", via: "invite", revoked_at: null });
+  assertEquals(await peekAs(tables, "dad"), null, "a live phone");
+});
+
+t("peek: null for someone with an account, someone removed, two of that name, or a link that's gone", async () => {
+  const withIdentity = await world();
+  withIdentity.identities.push({ provider: "google", subject: "dad-sub", profile_id: "p-dad", email: null });
+  assertEquals(await peekAs(withIdentity, "Dad"), null, "an account");
+  const removed = await world();
+  removed.profiles.find((p) => p.id === "p-dad")!.removed_at = iso(NOW - DAY);
+  assertEquals(await peekAs(removed, "Dad"), null, "removed");
+  const two = await world();
+  two.profiles.push(person("p-dad2", FAM, "DAD ", "cook", 3));
+  assertEquals(await peekAs(two, "dad"), null, "two of that name");
+  const gone = await world();
+  assertEquals(await peekAs(gone, "Dad", EXPIRED), null, "an expired link");
+  assertEquals(await peekAs(gone, "Dad", REVOKED), null, "a turned-off link");
+  // index.ts's peek of an old family invite asks the same question.
+  assertEquals(await claimableIn(setup(gone).deps, FAM, " dad"), DAD_FACE);
+});
+
+t("a claim attaches the account and this phone to the existing person: no new profile, their name and role, the note", async () => {
+  const tables = await world();
+  const { signIn } = setup(tables);
+  const people = tables.profiles.length;
+  // The body's name and role are ignored for a claim; no name is needed at all.
+  const res = await signIn(apple("dad-sub"), { join_token: LIVE, claim_profile_id: " p-dad ", name: "Papa", role: "learner", device_label: "iPhone" });
+  assertEquals(res, { existing: false, needs_name: false, joined: true, device_key: "key-d-new-1", family_name: "Pawar", profile_id: "p-dad" });
+  assertEquals(tables.profiles.length, people, "nobody new");
+  const dad = tables.profiles.find((p) => p.id === "p-dad")!;
+  assertEquals([dad.name, dad.role, dad.family_id, dad.removed_at], ["Dad", "cook", FAM, null]);
+  assertEquals(tables.identities.at(-1), { provider: "apple", subject: "dad-sub", profile_id: "p-dad", email: "dad-sub@example.com" });
+  assertEquals(tables.devices.at(-1), { id: "d-new-1", family_id: FAM, profile_id: "p-dad", via: "apple", label: "iPhone", revoked_at: null });
+  assertEquals(tables.signups.map((s) => [s.name, s.share_token, s.family_id]), [["Dad", "link:claim:p-dad", FAM]]);
+  assertEquals(tables.messages, [{ family_id: FAM, sender_id: "p-dad", body: "Dad joined" }]);
+  assertEquals(tables.invites.find((i) => i.id === "inv-1")!.status, "revoked", "the 1.0 invite naming Dad stops working");
+  assertEquals(tables.join_links.find((l) => l.id === "jl-live")!.revoked_at, null, "a join link isn't used up");
+  // The same account again is just a sign-in as Dad.
+  const again = await signIn(apple("dad-sub"), { join_token: LIVE, claim_profile_id: "p-dad" }) as Row;
+  assertEquals([again.existing, again.profile_id], [true, "p-dad"]);
+});
+
+t("a claim through an old family invite uses the invite up, once", async () => {
+  const tables = await world();
+  const FAMILY_INVITE = "FamInvite1".padEnd(16, "0");
+  tables.invites.push({ id: "inv-4", family_id: FAM, inviter_id: "p-caleb", profile_id: null, token_hash: await sha(FAMILY_INVITE), status: "pending", expires_at: iso(NOW + DAY), used_at: null, used_device_id: null });
+  const { signIn } = setup(tables);
+  const res = await signIn(apple("dad-sub"), { join_token: FAMILY_INVITE, claim_profile_id: "p-dad" }) as Row;
+  assertEquals([res.profile_id, res.joined], ["p-dad", true]);
+  const inv = tables.invites.find((i) => i.id === "inv-4")!;
+  assertEquals([inv.status, inv.used_device_id], ["used", "d-new-1"]);
+  await refused(signIn(apple("other"), { join_token: FAMILY_INVITE, name: "Kai" }), 410, INVITE_GONE.used);
+});
+
+t("a claim is refused for someone with a live phone or an account, another family's person, or someone removed", async () => {
+  const cases: [string, (tables: Tables) => void, Record<string, unknown>, string][] = [
+    ["a live phone", (x) => x.devices.push({ id: "d-dad", family_id: FAM, profile_id: "p-dad", via: "invite", revoked_at: null }), { claim_profile_id: "p-dad" }, ALREADY_ON],
+    ["an account", (x) => x.identities.push({ provider: "google", subject: "dad-g", profile_id: "p-dad", email: null }), { claim_profile_id: "p-dad" }, ALREADY_ON],
+    ["someone signed in", () => {}, { claim_profile_id: "p-caleb" }, ALREADY_ON],
+    ["another family's", () => {}, { claim_profile_id: "p-grandma" }, NOT_IN_FAMILY],
+    ["no such person", () => {}, { claim_profile_id: "p-nobody" }, NOT_IN_FAMILY],
+    ["removed", (x) => (x.profiles.find((p) => p.id === "p-dad")!.removed_at = iso(NOW - DAY)), { claim_profile_id: "p-dad" }, NOT_IN_FAMILY],
+  ];
+  for (const [what, arrange, body, sentence] of cases) {
+    const tables = await world();
+    arrange(tables);
+    const before = snapshot(tables);
+    const e = await refused(setup(tables).signIn(apple("new"), { join_token: LIVE, name: "Dad", ...body }), 409, sentence);
+    assertEquals(e.message, sentence, what);
+    assertEquals(tables, before, `${what}: nothing changed`);
+  }
+});
+
+t("one claim per person: a second claim, a claim row already there, and the 23505 race all get 409", async () => {
+  // A second claim after the first: Dad has an account now.
+  const tables = await world();
+  const { signIn } = setup(tables);
+  await signIn(apple("dad-sub"), { join_token: LIVE, claim_profile_id: "p-dad" });
+  await refused(signIn(apple("impostor"), { join_token: LIVE, claim_profile_id: "p-dad" }), 409, ALREADY_ON);
+  assertEquals(tables.identities.filter((i) => i.profile_id === "p-dad").map((i) => i.subject), ["dad-sub"]);
+
+  // Another claim's row is there (its phone is mid-join): refused before anything is attached.
+  const mid = await world();
+  mid.signups.push({ id: "rival", share_token: "link:claim:p-dad", family_id: FAM, created_at: iso(NOW - 1) });
+  const before = snapshot(mid);
+  await refused(setup(mid).signIn(apple("new"), { join_token: LIVE, claim_profile_id: "p-dad" }), 409, ALREADY_ON);
+  assertEquals(mid, before);
+
+  // The race: another phone's claim commits between this one's check and its insert (the unique index).
+  const race = await world();
+  let inserts = 0;
+  const raced = setup(race, {
+    uniqueLink: true,
+    before: (table, mode) => {
+      if (table === "signups" && mode === "insert" && ++inserts === 1) {
+        race.signups.push({ id: "rival", share_token: "link:claim:p-dad", family_id: FAM, created_at: iso(NOW - 1) });
+      }
+    },
+  });
+  await refused(raced.signIn(apple("new"), { join_token: LIVE, claim_profile_id: "p-dad" }), 409, ALREADY_ON);
+  assertEquals(race.signups.map((s) => s.id), ["rival"]);
+  assert(!race.identities.some((i) => i.profile_id === "p-dad"), "no account attached");
+  assertEquals(race.devices.length, 3, "no phone attached");
+});
+
+t("a claim whose join fails puts the claim and the old invite back; a lost link signs in as the other tap did", async () => {
+  const tables = await world();
+  const before = snapshot(tables);
+  const { deps } = setup(tables);
+  deps.createDevice = () => Promise.reject(new HttpError(500, "db error (device)"));
+  const signIn = (b: Record<string, unknown>) => signInByLink(deps, apple("dad-sub"), b, { name: null, role: null, label: null, ip: "203.0.113.7" });
+  await refused(signIn({ join_token: INVITE, claim_profile_id: "p-dad" }), 500);
+  assertEquals(tables, before, "no claim row, no account, the invite open again");
+  // Another tap linked this Apple ID to Caleb a moment ago: Dad stays as he was.
+  const lost = await setup(tables, { lostLink: true }).signIn(apple("x"), { join_token: LIVE, claim_profile_id: "p-dad" }) as Row;
+  assertEquals([lost.existing, lost.profile_id], [true, "p-caleb"]);
+  assert(tables.profiles.some((p) => p.id === "p-dad" && !p.removed_at), "Dad isn't deleted");
+  assertEquals(tables.signups, [], "the claim is open again");
+});
+
+t("claim_profile_id goes only with a join link (a ticket or no link: 400); a known account's is ignored", async () => {
+  const tables = await world();
+  const before = snapshot(tables);
+  const { signIn } = setup(tables);
+  await refused(signIn(apple("new"), { link_ticket: TICKET_A, claim_profile_id: "p-dad", name: "Ma" }), 400, "claim_profile_id");
+  await refused(signIn(apple("new"), { claim_profile_id: "p-dad", name: "Ma" }), 400, "claim_profile_id");
+  await refused(signIn(apple("new"), { join_token: LIVE, claim_profile_id: 7 }), 400, "claim_profile_id");
+  assertEquals(tables, before);
+  // Someone already in the family just signs in as themselves.
+  const caleb = await signIn(apple("caleb-sub"), { join_token: LIVE, claim_profile_id: "p-dad" }) as Row;
+  assertEquals([caleb.existing, caleb.profile_id], [true, "p-caleb"]);
+  // Someone in another family is asked to move, and moves as a new person, not Dad.
+  assertEquals(await signIn(apple("asha-sub"), { join_token: LIVE, claim_profile_id: "p-dad" }), { existing: true, needs_move: true, from_family: "Wang", to_family: "Pawar" });
+  const moved = await signIn(apple("asha-sub"), { join_token: LIVE, claim_profile_id: "p-dad", move: true }) as Row;
+  assertNotEquals(moved.profile_id, "p-dad");
+  assertEquals(tables.profiles.find((p) => p.id === moved.profile_id)!.name, "Asha");
+  assert(!tables.identities.some((i) => i.profile_id === "p-dad"), "Dad is still phone-less");
+  assert(!tables.signups.some((s) => s.share_token === "link:claim:p-dad"));
 });
