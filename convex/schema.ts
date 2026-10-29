@@ -4,6 +4,7 @@
 // holds everything else and keeps both phones updated live.
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
+import { cardStatusV, questionIdV, questionV, recipeV, relationV, viaV } from "./lib/dishAskValues";
 
 /** A span of the cook's video, in seconds. Every step, memory and found answer points at one. */
 const moment = v.object({ startS: v.number(), endS: v.number() });
@@ -465,4 +466,123 @@ export default defineSchema({
   })
     .index("by_familyId", ["familyId"])
     .index("by_from", ["from"]),
+
+  // ---- Dish ask (docs/build/DISH-ASK-SPEC.md): the web's "what dish do you miss?" and Mom's answers ----
+
+  /**
+   * One card: a kid's guess at a dish from home (no account), and what Mom answered. Both links' tokens are
+   * stored only as sha256. Kept forever for now (Caleb, Oct 29); account deletion takes a signed-in family's.
+   */
+  dishAsks: defineTable({
+    kidTokenHash: v.string(),
+    askTokenHash: v.string(),
+    dish: v.string(), // as the kid typed it, trimmed ("" when they gave only a photo or a voice note)
+    relation: relationV,
+    kidName: v.optional(v.string()),
+    photos: v.array(v.id("_storage")), // the photos the card was made from (0–3)
+    // The kid's voice note about the dish, that the guess was written from. Private: never on Mom's page or the card.
+    dishVoiceNote: v.optional(v.id("_storage")),
+    kidVoiceNote: v.optional(v.id("_storage")), // the kid's voice note to Mom (never sent to a model)
+    guess: recipeV, // tonight's version: the kid's guess
+    message: v.string(), // the Ask Mom text, in the kid's voice
+    asked: v.array(questionV), // what Mom is asked: her answered questions first (0–6)
+    // Mom's page in her language (peek's `lang`): the guess, the asked questions and the message, one entry per
+    // language, kept while `key` (the asked questions and the message) still matches.
+    momLang: v.optional(
+      v.array(v.object({ lang: v.string(), key: v.string(), guess: recipeV, questions: v.array(questionV), message: v.string() })),
+    ),
+    version: v.optional(recipeV), // Mom's version, once her answers are merged
+    status: cardStatusV, // as stored; the pages get it worked out from the answers too (dishAsks.ts)
+    mergeTries: v.number(), // this round of new answers (a new answer starts it again at 0)
+    mergeStartedAt: v.optional(v.number()), // the last try; one started under 3 minutes ago is still running
+    mergedAt: v.optional(v.number()),
+    askedAt: v.optional(v.number()),
+    askedVia: v.optional(viaV),
+    openedAt: v.optional(v.number()),
+    finishedAt: v.optional(v.number()), // Mom pressed Send (or her answers were left 20 minutes)
+    questionsAt: v.optional(v.number()), // the kid's last /dish/cards/ask
+    genMs: v.number(),
+    createdAt: v.number(),
+    ipKey: v.string(), // HMAC of the maker's IP (lib/rateLimit.ts), never the IP
+    // Phase 4 (docs/build/V2-LINKING.md): the kid and Mom in the app, once each claims the card.
+    familyId: v.optional(v.id("families")),
+    personId: v.optional(v.id("people")), // the kid
+    requestedOf: v.optional(v.id("people")), // Mom
+    kidClaimedAt: v.optional(v.number()),
+    cookClaimedAt: v.optional(v.number()),
+    // Phase 5 (DISH-ASK-SPEC.md §8): the craving link the card was made from (familyId and requestedOf come with it),
+    // the day Mom plans to film it (0 = Sunday … 6), and the question her voice recipe from the app answers.
+    cravingId: v.optional(v.id("cravingLinks")),
+    filmingDay: v.optional(v.number()),
+    voiceRecipeQ: v.optional(questionIdV),
+  })
+    .index("by_kid_token", ["kidTokenHash"])
+    .index("by_ask_token", ["askTokenHash"])
+    .index("by_family", ["familyId"])
+    .index("by_person", ["personId"])
+    .index("by_requested_of", ["requestedOf"])
+    .index("by_craving_created", ["cravingId", "createdAt"]),
+
+  /**
+   * A parent's "what do you miss?" link (DISH-ASK-SPEC.md §8): one live link per person, reused, with caps per link
+   * (lib/cravingLinks.ts). The token is stored as-is so her own link can be shown to her again; it's never returned
+   * to anyone else. A stopped link makes no new cards; the cards it made stay.
+   */
+  cravingLinks: defineTable({
+    familyId: v.id("families"),
+    personId: v.id("people"), // who made it: the cards from it are asked of them
+    token: v.string(),
+    message: v.string(), // her line on the kid's page, in her voice
+    uses: v.number(), // cards made from it
+    createdAt: v.number(),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_token", ["token"])
+    .index("by_person", ["personId"]),
+
+  /** One of Mom's voice answers to a card's question. Re-recording replaces it (and deletes the old clip). */
+  dishAnswers: defineTable({
+    askId: v.id("dishAsks"),
+    questionId: questionIdV,
+    audio: v.id("_storage"),
+    durationS: v.number(),
+    language: v.string(), // what she speaks, for Ink ("en" by default)
+    words: v.optional(v.string()), // Ink's transcript, in her language; "" = no words; unset = not heard yet
+    english: v.optional(v.union(v.string(), v.null())), // null: English, or no translation; unset = not yet
+    merged: v.boolean(), // her version was made with this clip
+    createdAt: v.number(),
+  })
+    .index("by_ask_question", ["askId", "questionId"])
+    .index("by_audio", ["audio"]),
+
+  /** A kid's upload (POST /dish/files): a photo or a voice note, until it's on a card (else deleted after an hour). */
+  dishFiles: defineTable({
+    fileIdHash: v.string(),
+    storageId: v.id("_storage"),
+    kind: v.union(v.literal("photo"), v.literal("voice")),
+    contentType: v.string(),
+    size: v.number(),
+    ipKey: v.string(),
+    askId: v.optional(v.id("dishAsks")), // set once it's attached to a card
+    createdAt: v.number(),
+  })
+    .index("by_file_id", ["fileIdHash"])
+    .index("by_unattached_created", ["askId", "createdAt"])
+    .index("by_storage", ["storageId"]),
+
+  /** The dish ask's model spend, one row per UTC day (the $10 daily budget, lib/dishAskValues.ts). */
+  dishSpend: defineTable({
+    day: v.string(), // "2026-10-29"
+    usd: v.number(),
+    alertedAt: v.optional(v.number()), // the team was told this day reached the budget
+  }).index("by_day", ["day"]),
+
+  /** The public routes' fixed-window limiter (lib/rateLimit.ts): a bucket plus an HMAC of the IP. */
+  rateHits: defineTable({
+    key: v.string(),
+    windowStart: v.number(),
+    count: v.number(),
+  })
+    .index("by_key_window", ["key", "windowStart"])
+    .index("by_window", ["windowStart"]),
 });

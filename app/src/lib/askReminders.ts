@@ -24,6 +24,8 @@ import { kvGetJson, kvSetJson } from './storage';
 import { english, type T } from './words/words';
 
 type NotificationsModule = typeof Notifications;
+// TODO: a recording sent from the glasses doesn't go through sendKept, so it doesn't mark its ask filmed or stop that
+// reminder (a known gap; not for 1.1).
 export type ReminderPermission = 'granted' | 'undetermined' | 'denied' | 'unsupported';
 
 // lib/push.ts makes the same channel (id and name) for server pushes; Android shows nothing without one.

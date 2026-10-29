@@ -936,3 +936,27 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - **Words:** craving.* and request.* in all 13 languages (draft-words).
   - **Tests:** test-doors, test-reminders, and test-consent extended.
   - **Open:** lib/cravings.ts is a stub until Convex & accounts deploys cravings.createLink/forCook/get/sendVoiceRecipe/setFilmingDay (DISH-ASK-SPEC §8). The "Want a note when they pick a dish?" push ask waits on the Notifications & linking chat's 'cook-craving-sent' kind (a TODO on parent Home). /dish/[id], the kid's card in the app, is this section's next screen.
+- Oct 29 · (local, push freeze) · Claude (Convex & accounts) · **v2 Phase 1: the web flow's backend in Convex** (branch `claude/dish-ask`; contract `docs/build/DISH-ASK-SPEC.md`).
+  - **Ported:** the MVP "The dish I miss" (calebwang26/homecookd PR #40): prompts, draft and merge rules, validators (`convex/lib/dishAsk/`).
+  - **Models:** Claude Haiku 5.5 writes the kid's guess and Mom's version; Cartesia Ink hears voice; Claude (Opus, `TRANSLATE_MODEL`) translates her words to English and the guess into her page language. No Gemini (`convex/dishAskModel.ts`).
+  - **Routes:** `/dish/*` HTTP routes (`lib/dishAskRoutes.ts`), tables `dishAsks`, `dishAnswers`, `dishFiles`, `dishSpend`, `rateHits` (`convex/dishAsks.ts`).
+  - **Abuse limits:** per-IP limits; a $10 daily model budget with a $1 overage for Mom (both `TODO(caleb)`), and an alert through alerts.ts.
+  - **Data:** kept forever; uploads never attached to a card are deleted after an hour; account deletion goes by person (V2-LINKING.md §3).
+  - **Tests:** 201 in all (`dishAsks.test.ts` 36, `dishAskModel.test.ts` 18). Live checks about $0.13.
+  - **Open:** `DISH_IP_SALT` must be set before deploy; whether Convex passes a client-sent `X-Forwarded-For` through (per-IP limits); `_generated/api.d.ts` edited by hand (run codegen); deploy only after Apple approves 1.0 and Caleb tests the web flow.
+- Oct 29 · (local, push freeze) · Claude (Convex & accounts) · **v2 Phase 5 backend: cravings from the app** (`claude/dish-ask`, DISH-ASK-SPEC.md §8).
+  - **App functions** (`convex/cravings.ts`):
+    - `createLink` (her one reused "What do you miss from home?" link), `revokeLink`;
+    - `forCook` / `get` (`CravingAsk`, the app's shape);
+    - `sendVoiceRecipe`: an **action**, so use `useAction`; up to 2 minutes of voice that becomes her version on the kid's link; status writing / ready / failed;
+    - `setFilmingDay` ("Mom's filming it Sunday").
+  - **Web:** `POST /dish/craving/peek`; `/dish/cards` takes `cravingToken`.
+  - **Limits on a craving link:** 5 cards a day and 20 in all per link (`TODO(caleb)`), and the word filter on the kid's name and message. A craving card never joins anyone to a family.
+  - **Also in this commit:**
+    - the kid's voice note about the dish is now kept privately on the card;
+    - client IP = `CF-Connecting-IP`, checked on a dev deployment;
+    - a voice recipe refuses an old file or one a card already holds, so nobody can delete or share someone else's photo or clip.
+  - **Push calls:**
+    - Notifications & linking adds the `pushEvents.answered` calls on its branch.
+    - `pushEvents.requested` is a marked comment in `dishAsks.create`, to become a call at merge.
+  - **Tests:** 214 pass.
