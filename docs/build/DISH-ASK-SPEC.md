@@ -293,9 +293,13 @@ notes have no expiry, and there's no `410`.
 - **Mom's side:** `version?` (Recipe), `status`.
 - **Merge state:** `mergeTries`, `mergeStartedAt?`, `mergedAt?`.
 - **Funnel times:** `askedAt?`, `askedVia?`, `openedAt?`, `finishedAt?`, `questionsAt?`, `genMs`, `createdAt`.
-- **Who:** `ipKey` (an HMAC of the IP, for the limits), plus `familyId?` and `personId?` for when someone signs in
-  (Phase 4).
-- **Indexes:** `by_kid_token`, `by_ask_token`, `by_family`, `by_person`.
+- **Who:** `ipKey` (an HMAC of the IP, for the limits), plus fields the Phase 4 chat fills when someone claims a
+  card in the app (`docs/build/V2-LINKING.md`):
+  - `personId?`: the kid;
+  - `requestedOf?`: Mom (or the parent who sent a craving link);
+  - `familyId?`;
+  - `kidClaimedAt?`, `cookClaimedAt?`: the first claim of each side, never cleared.
+- **Indexes:** `by_kid_token`, `by_ask_token`, `by_family`, `by_person`, `by_requested_of`.
 
 **`dishAnswers`**: one of Mom's answers.
 - `askId`, `questionId`, `audio: Id<"_storage">`, `durationS`, `language`.
@@ -316,8 +320,13 @@ notes have no expiry, and there's no `410`.
 
 **Deleting data:**
 - Uploads never attached to a card are deleted after an hour (nobody saved them).
-- Account deletion (`convex/account.ts`) deletes the cards whose `familyId` or `personId` is the deleted family or
-  person, and their answers and files.
+- **Account deletion** (`convex/account.ts`) goes by person (V2-LINKING.md §3); `familyId` alone deletes nothing.
+  - **The kid deleted** (`personId`):
+    - when the card has a live `requestedOf`, it stays for her without the kid's name, voice note or photos;
+    - otherwise it goes, with its answers and files.
+  - **Mom deleted** (`requestedOf`):
+    - her answers, their clips and her version are deleted (her voice is hers);
+    - the card stays for the kid, back to `asked`.
 - Nothing else is deleted.
 
 **IPs:** never stored as-is. Each is hashed as HMAC-SHA256(`DISH_IP_SALT`, ip), with the IP taken from
