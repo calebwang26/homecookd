@@ -24,7 +24,7 @@ export function TopBar({ right }: { right?: ReactNode }) {
       </span>
       <span className={s.topRight}>
         {right}
-        <LangSwitch />
+        <LangSwitch compact={!!right} />
       </span>
     </header>
   );
