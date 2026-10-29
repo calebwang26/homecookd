@@ -960,3 +960,4 @@ Before starting work, compare the last commit here with `git log origin/main` to
     - Notifications & linking adds the `pushEvents.answered` calls on its branch.
     - `pushEvents.requested` is a marked comment in `dishAsks.create`, to become a call at merge.
   - **Tests:** 214 pass.
+- Oct 29 · (local, push freeze) · Claude (Convex & accounts) · `dishAsks.forMe` / `dishAsks.get` (DISH-ASK-SPEC.md §9): a signed-in person's claimed cards and one card by id, the web's Card plus `side`, only for the card's kid or cook (null otherwise). This unblocks the app's `/dish/[id]`. Tests: 215 pass.

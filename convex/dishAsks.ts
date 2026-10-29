@@ -23,8 +23,10 @@ import {
   internalMutation,
   internalQuery,
   type MutationCtx,
+  query,
   type QueryCtx,
 } from "./_generated/server";
+import { requireSession } from "./lib/auth";
 import { send } from "./alerts";
 import { DishModelError, type Spend, toEnglish, transcribe, writeVersion } from "./dishAskModel";
 import { checkLinkCaps, openLink } from "./lib/cravingLinks";
@@ -1028,5 +1030,57 @@ export const budgetAlert = internalAction({
         `until tomorrow; Mom's answers still go through, up to $${DAILY_BUDGET_USD + MOM_OVERAGE_USD}.`,
     );
     return null;
+  },
+});
+
+// ---------------------------------------------------------------------------------------------
+// Signed in: the cards someone claimed in the app (V2-LINKING.md: /dish/[id] lands here)
+
+/** The web's Card, plus which side of it the signed-in person holds. `askUrl` is null: only the kid token rebuilds it. */
+const myCardV = v.object({
+  ...cardV.fields,
+  askUrl: v.union(v.string(), v.null()),
+  id: v.id("dishAsks"),
+  side: v.union(v.literal("kid"), v.literal("cook")),
+});
+type MyCard = Infer<typeof myCardV>;
+
+async function myCard(ctx: QueryCtx, row: Row, side: MyCard["side"]): Promise<MyCard> {
+  const card = await cardJson(ctx, await stateOf(ctx, row), "");
+  return { ...card, askUrl: null, id: row._id, side };
+}
+
+/** The side this person holds: the kid (`personId`) or the one asked (`requestedOf`); null for anyone else. */
+const sideOf = (row: Row, me: Id<"people">): MyCard["side"] | null =>
+  row.personId === me ? "kid" : row.requestedOf === me ? "cook" : null;
+
+/** The signed-in person's cards, on either side, newest first (at most 50). */
+export const forMe = query({
+  args: { sessionToken: v.string() },
+  returns: v.array(myCardV),
+  handler: async (ctx, { sessionToken }) => {
+    const { person } = await requireSession(ctx, sessionToken);
+    const kid = await ctx.db.query("dishAsks").withIndex("by_person", (q) => q.eq("personId", person._id)).order("desc").take(50);
+    const cook = await ctx.db
+      .query("dishAsks")
+      .withIndex("by_requested_of", (q) => q.eq("requestedOf", person._id))
+      .order("desc")
+      .take(50);
+    const rows = new Map([...cook, ...kid].map((r) => [r._id, r]));
+    const newest = [...rows.values()].sort((a, b) => b.createdAt - a.createdAt).slice(0, 50);
+    return await Promise.all(newest.map((r) => myCard(ctx, r, sideOf(r, person._id)!)));
+  },
+});
+
+/** One card for its kid or its cook; null for anyone else, or an id that isn't a card. */
+export const get = query({
+  args: { sessionToken: v.string(), id: v.string() },
+  returns: v.union(myCardV, v.null()),
+  handler: async (ctx, { sessionToken, id }) => {
+    const { person } = await requireSession(ctx, sessionToken);
+    const askId = ctx.db.normalizeId("dishAsks", id);
+    const row = askId ? await ctx.db.get("dishAsks", askId) : null;
+    const side = row ? sideOf(row, person._id) : null;
+    return row && side ? await myCard(ctx, row, side) : null;
   },
 });

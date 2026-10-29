@@ -9,13 +9,14 @@ Nothing is pushed: the push freeze holds until Apple approves 1.0.
 - **Phase 1:** done; the Master Agent approved it with two fixes, and both are in.
   - Client IP is `CF-Connecting-IP`, proven on a dev deployment (88dfff332).
   - The kid's dish voice note is kept privately (f3aaf6442).
-- **Phase 5:** done (f3aaf6442), not yet reviewed by the Master Agent.
-- **Tests:** `npx vitest run` passes 214/214, and `npx tsc -p convex --noEmit` is clean. Real codegen reproduced
+- **Phase 5:** done and approved (f3aaf6442).
+- **`dishAsks.forMe` / `get`:** done (bbf90ce06, spec §9), for the app's `/dish/[id]`.
+- **Tests:** `npx vitest run` passes 215/215, and `npx tsc -p convex --noEmit` is clean. Real codegen reproduced
   `_generated/api.d.ts` exactly.
 - **Live model checks:** about $0.13 of the $10 test budget.
 
 ## Next
-1. Wait for the Master Agent's Phase 5 review, and fix what it asks on this branch.
+1. Wait for the Master Agent's integration ping (combining branches for the v2 batch).
 2. Merge notes for the Merge Agent:
    - `pushEvents.requested` is a marked comment in `convex/dishAsks.ts` `create`. It becomes a call once
      `claude/v2-notif-linking-e8fdb5` is merged.
