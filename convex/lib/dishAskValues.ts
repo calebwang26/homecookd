@@ -90,6 +90,7 @@ export const cardV = v.object({
   asked: v.array(questionV),
   message: v.string(),
   kidVoiceUrl: maybeText,
+  kidVoiceS: v.union(v.number(), v.null()), // its length in seconds, as the page measured it
   photoUrls: v.array(v.string()),
   askUrl: v.string(),
   askedAt: v.union(v.number(), v.null()),
@@ -107,9 +108,19 @@ export const askV = v.object({
   kidName: maybeText,
   message: v.string(),
   kidVoiceUrl: maybeText,
+  kidVoiceS: v.union(v.number(), v.null()), // its length in seconds, as the page measured it
   guess: shownRecipeV,
   /** The same in the page's language (peek's `lang`), or null: English. Ids, statuses, `uses` and ** unchanged. */
-  inLang: v.union(v.object({ lang: v.string(), guess: shownRecipeV, questions: v.array(questionV), message: v.string() }), v.null()),
+  inLang: v.union(
+    v.object({
+      lang: v.string(),
+      guess: shownRecipeV,
+      questions: v.array(questionV),
+      message: v.string(),
+      version: v.union(shownRecipeV, v.null()),
+    }),
+    v.null(),
+  ),
   photoUrls: v.array(v.string()),
   questions: v.array(questionV),
   answered: v.array(questionIdV),
@@ -234,6 +245,7 @@ export type FailCode =
   | "not_a_dish"
   | "words"
   | "rate"
+  | "budget"
   | "model"
   | "not_set_up";
 export type FailData = { status: number; code: FailCode; error: string };

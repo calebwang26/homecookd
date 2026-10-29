@@ -40,7 +40,8 @@ validators, prompts, ported from the MVP), `convex/lib/dishAskRoutes.ts` (HTTP),
 | 415 | `bad_type` | a file type we don't take |
 | 422 | `not_a_dish` | the words don't name a dish |
 | 422 | `words` | a filtered word in the dish, the message, a question or the AI's output |
-| 429 | `rate` | over a limit, or today's model budget is spent (the sentence says which, and to try again later) |
+| 429 | `rate` | over a per-IP or per-link limit ("Too many tries. Please wait a few minutes") |
+| 429 | `budget` | today's model budget is spent ("homecookd has made all the recipes it can today. Try again tomorrow.") |
 | 502 | `model` | a model failed; retrying is safe |
 | 503 | `not_set_up` | `ANTHROPIC_API_KEY` (or `CARTESIA_API_KEY` for a voice note) isn't set |
 
@@ -123,6 +124,7 @@ type Card = {                 // what the kid's page gets
   asked: Question[];          // what Mom is asked, in order (0–6)
   message: string;            // the Ask Mom message, in the kid's voice, editable
   kidVoiceUrl: string | null; // the kid's voice note to Mom (a Convex storage URL)
+  kidVoiceS: number | null;   // its length in seconds, as the page measured it (cards/update `voiceNoteS`)
   photoUrls: string[];        // the photos the card was made from (0–3)
   askUrl: string;             // https://homecookd.app/a?t=<ask token>
   askedAt: number | null; openedAt: number | null; finishedAt: number | null; // ms since epoch
@@ -133,7 +135,7 @@ type Answer = { id: QuestionId; words: string; english: string | null; audioUrl:
 
 type Ask = {                  // what Mom's page gets; never the kid token
   dish: string; relation: Relation; kidName: string | null;
-  message: string; kidVoiceUrl: string | null;
+  message: string; kidVoiceUrl: string | null; kidVoiceS: number | null;
   guess: Recipe;              // the kid's guess, shown as theirs
   inLang: {                   // the same in the page's language (peek's `lang`), or null
     lang: string;
@@ -141,6 +143,7 @@ type Ask = {                  // what Mom's page gets; never the kid token
                               // `uses` and ** marks unchanged
     questions: Question[];    // the asked questions, translated
     message: string;          // the kid's message, translated
+    version: Recipe | null;   // her version, translated (her quotes and tips stay as she said them)
   } | null;
   photoUrls: string[];        // the kid's photos (0–3)
   questions: Question[];      // asked and not answered yet, in order
@@ -198,11 +201,13 @@ type Ask = {                  // what Mom's page gets; never the kid token
 **`POST /dish/cards/get`** `{kidToken}` → `{card}`
 - It also starts a merge that's due: a failed try is retried, at least 3 minutes after the last one.
 
-**`POST /dish/cards/update`** `{kidToken, relation?, kidName?, message?, voiceNote?: fileId | null}` → `{card}`
+**`POST /dish/cards/update`** `{kidToken, relation?, kidName?, message?, voiceNote?: fileId | null, voiceNoteS?}` → `{card}`
 - `message`: 1–500 characters after trimming, word-filtered. This is the Ask Mom text.
 - `voiceNote`: the kid's voice note *to Mom*. It is played first on her page and isn't sent to any model; `null`
   removes it. A new one replaces and deletes the old file.
 - A voice note for Mom may be at most 60 s. The web enforces this; the server only checks the 3 MB cap.
+- `voiceNoteS` is its length in seconds, as the page measured it (Chrome's webm often has no duration in the file),
+  more than 0 and at most 60. It shows as `kidVoiceS` on both pages.
 - Once Mom has finished, `message` and `voiceNote` give `409 closed`.
 
 **`POST /dish/cards/ask`** `{kidToken, questions: [{id?, text}]}` → `{card}`
@@ -241,6 +246,8 @@ type Ask = {                  // what Mom's page gets; never the kid token
     asks again with `lang`.
   - `en`, an unknown code, or no `lang` means no translation (`inLang: null`).
   - The kid's own card always stays in English.
+  - **Her version** is translated in the merge, before it's saved, into the language her page last asked for. So
+    `inLang.version` lands with `version` for the fill-in. A failure leaves it English until a later peek.
 - Mom's page polls it every 2 s after Send until `version` is set or `merging` is false.
 
 **`POST /dish/ask/answer?q=<id>&lang=<code>&durationS=<n>`**: header `X-Dish-Token: <askToken>`, body: the raw

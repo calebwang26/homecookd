@@ -28,7 +28,7 @@ import {
 } from "./_generated/server";
 import { requireSession } from "./lib/auth";
 import { send } from "./alerts";
-import { DishModelError, type Spend, toEnglish, transcribe, writeVersion } from "./dishAskModel";
+import { DishModelError, type Spend, toEnglish, transcribe, translateForMom, writeVersion } from "./dishAskModel";
 import { checkLinkCaps, openLink } from "./lib/cravingLinks";
 import type { MissQuestion, QuestionId, Relation } from "./lib/dishAsk/types";
 import { askedText, isSuggestionId, LIMITS, OWN_IDS, RELATION_LABEL } from "./lib/dishAsk/validate";
@@ -189,6 +189,7 @@ async function cardJson(ctx: QueryCtx, s: State, askToken: string): Promise<Card
     asked: row.asked,
     message: row.message,
     kidVoiceUrl: await url(ctx, row.kidVoiceNote),
+    kidVoiceS: row.kidVoiceNote ? (row.kidVoiceS ?? null) : null,
     photoUrls: await photoUrls(ctx, row),
     askUrl: askUrlOf(askToken),
     askedAt: row.askedAt ?? null,
@@ -200,7 +201,8 @@ async function cardJson(ctx: QueryCtx, s: State, askToken: string): Promise<Card
 }
 
 /** What Mom's page in another language was translated from: while it matches, the translation stands. */
-const momLangKey = (row: Row) => JSON.stringify([row.asked.map((q) => [q.id, q.text]), row.message]);
+const momLangKey = (row: Pick<Row, "asked" | "message" | "version">) =>
+  JSON.stringify([row.asked.map((q) => [q.id, q.text]), row.message, row.version ?? null]);
 
 /** The card in Mom's page language, from the cache (never translated here); null for English or none yet. */
 function inLangOf(row: Row, lang: string | undefined, open: MissQuestion[]): Ask["inLang"] {
@@ -214,6 +216,7 @@ function inLangOf(row: Row, lang: string | undefined, open: MissQuestion[]): Ask
     guess: shownRecipe(hit.guess),
     questions: open.map((q) => ({ id: q.id, text: text.get(q.id) ?? q.text })),
     message: hit.message,
+    version: hit.version ? shownRecipe(hit.version) : null,
   };
 }
 
@@ -232,6 +235,7 @@ async function askJson(ctx: QueryCtx, s: State, lang?: string): Promise<Ask> {
     kidName: row.kidName ?? null,
     message: row.message,
     kidVoiceUrl: await url(ctx, row.kidVoiceNote),
+    kidVoiceS: row.kidVoiceNote ? (row.kidVoiceS ?? null) : null,
     guess: shownRecipe(row.guess),
     inLang: inLangOf(row, lang, open),
     photoUrls: await photoUrls(ctx, row),
@@ -483,6 +487,7 @@ export const kidUpdate = internalMutation({
     kidName: v.optional(v.union(v.string(), v.null())),
     message: v.optional(v.string()),
     voiceNote: v.optional(v.union(v.string(), v.null())),
+    voiceNoteS: v.optional(v.number()),
   },
   returns: cardV,
   handler: async (ctx, a) => {
@@ -490,7 +495,7 @@ export const kidUpdate = internalMutation({
     if (row.finishedAt && (a.message !== undefined || a.voiceNote !== undefined)) {
       throw fail(409, "closed", `${RELATION_LABEL[row.relation]} already sent ${theirs(row.relation)} answers.`);
     }
-    const patch: { relation?: Relation; kidName?: string; message?: string; kidVoiceNote?: Id<"_storage"> } = {};
+    const patch: { relation?: Relation; kidName?: string; message?: string; kidVoiceNote?: Id<"_storage">; kidVoiceS?: number } = {};
     if (a.relation !== undefined && a.relation !== row.relation) {
       patch.relation = a.relation;
       // A message the kid never changed follows who they're asking.
@@ -505,6 +510,7 @@ export const kidUpdate = internalMutation({
       if (next) await ctx.db.patch("dishFiles", next._id, { askId: row._id });
       if (row.kidVoiceNote) await dropCardFile(ctx, row._id, row.kidVoiceNote);
       patch.kidVoiceNote = next?.storageId;
+      patch.kidVoiceS = next ? a.voiceNoteS : undefined;
     }
     if (Object.keys(patch).length) await ctx.db.patch("dishAsks", row._id, patch);
     const now = Date.now();
@@ -591,15 +597,29 @@ export const momPeek = internalMutation({
   handler: async (ctx, { askTokenHash, lang }) => {
     let row = await byAsk(ctx, askTokenHash);
     const now = Date.now();
-    if (row.openedAt === undefined) {
-      await ctx.db.patch("dishAsks", row._id, { openedAt: now });
-      row = { ...row, openedAt: now };
+    if (row.openedAt === undefined || (lang && row.momPageLang !== lang)) {
+      const opened = { openedAt: row.openedAt ?? now, ...(lang ? { momPageLang: lang } : {}) };
+      await ctx.db.patch("dishAsks", row._id, opened);
+      row = { ...row, ...opened };
     }
     return await askJson(ctx, await stateOf(ctx, row, now), lang);
   },
 });
 
-const forMomV = v.object({ guess: recipeV, questions: v.array(questionV), message: v.string() });
+const forMomV = v.object({ guess: recipeV, questions: v.array(questionV), message: v.string(), version: v.optional(recipeV) });
+
+/** Her new version in her page's language, made before it's saved, so it lands with the version (merge). */
+export const versionLangSource = internalQuery({
+  args: { askId: v.id("dishAsks"), version: recipeV },
+  returns: v.union(v.object({ lang: v.string(), key: v.string(), english: forMomV }), v.null()),
+  handler: async (ctx, { askId, version }) => {
+    const row = await ctx.db.get("dishAsks", askId);
+    const lang = row?.momPageLang;
+    if (!row || !lang || lang === "en") return null;
+    const next = { ...row, version };
+    return { lang, key: momLangKey(next), english: { guess: row.guess, questions: row.asked, message: row.message, version } };
+  },
+});
 
 /** What peek translates for Mom's page in `lang`: null when a translation for the card as it is now is cached. */
 export const momLangSource = internalQuery({
@@ -609,7 +629,11 @@ export const momLangSource = internalQuery({
     const row = await byAsk(ctx, askTokenHash);
     const key = momLangKey(row);
     if (row.momLang?.some((m) => m.lang === lang && m.key === key)) return null;
-    return { askId: row._id, key, english: { guess: row.guess, questions: row.asked, message: row.message } };
+    return {
+      askId: row._id,
+      key,
+      english: { guess: row.guess, questions: row.asked, message: row.message, ...(row.version ? { version: row.version } : {}) },
+    };
   },
 });
 
@@ -858,6 +882,30 @@ export const saveVersion = internalMutation({
 
 const errText = (e: unknown) => (e instanceof Error ? e.message : String(e));
 
+/**
+ * Mom's page in another language: her version is translated before it's saved, so the fill-in shows it in her
+ * language from the start. Mom-side budget; a failure leaves the page's version in English (peek can try again).
+ */
+async function versionInPageLang(ctx: ActionCtx, askId: Id<"dishAsks">, version: Doc<"dishAsks">["guess"], spend: Spend) {
+  const src = await ctx.runQuery(internal.dishAsks.versionLangSource, { askId, version });
+  if (!src || !(await momBudgetLeft(ctx))) return;
+  const e = src.english;
+  const out = await translateForMom(
+    { guess: missRecipe(e.guess), questions: e.questions, message: e.message, version: missRecipe(version) },
+    src.lang,
+    spend,
+  );
+  if (!out?.version) return;
+  const translated = {
+    guess: storedRecipe(out.guess),
+    questions: out.questions.map((q) => ({ id: q.id, text: q.text })),
+    message: out.message,
+    version: storedRecipe(out.version),
+  };
+  if (flagged(...recipeTexts(translated.guess), ...recipeTexts(translated.version), translated.message)) return;
+  await ctx.runMutation(internal.dishAsks.saveMomLang, { askId, lang: src.lang, key: src.key, translated });
+}
+
 async function momBudgetLeft(ctx: ActionCtx): Promise<boolean> {
   return !momOver(await ctx.runQuery(internal.dishAsks.spentToday, { now: Date.now() }));
 }
@@ -970,6 +1018,7 @@ export const merge = internalAction({
         await writeVersion({ draft: missRecipe(claim.guess), relation: claim.relation, asked: claim.asked, answers: spoken }, spend),
       );
       if (flagged(...recipeTexts(version))) throw new Error("her version has a filtered word");
+      await versionInPageLang(ctx, askId, version, spend);
       if (!(await ctx.runMutation(internal.dishAsks.saveVersion, { askId, claimedAt: claim.claimedAt, version, audios }))) {
         console.log(`${tag}: a newer try has her later answers; this one is dropped`);
         return null;

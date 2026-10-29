@@ -952,3 +952,8 @@ Before starting work, compare the last commit here with `git log origin/main` to
     - `pushEvents.requested` is a marked comment in `dishAsks.create`, to become a call at merge.
   - **Tests:** 214 pass.
 - Oct 29 · (local, push freeze) · Claude (Convex & accounts) · `dishAsks.forMe` / `dishAsks.get` (DISH-ASK-SPEC.md §9): a signed-in person's claimed cards and one card by id, the web's Card plus `side`, only for the card's kid or cook (null otherwise). This unblocks the app's `/dish/[id]`. Tests: 215 pass.
+- Oct 29 · (local, push freeze) · Claude (Convex & accounts) · Web-port additions (spec §1, §3, §4):
+  - 429 `budget` (the $10 cap) is now separate from `rate`;
+  - `kidVoiceS`, the measured length of the kid's voice note to Mom, set through cards/update `voiceNoteS`;
+  - `inLang.version`: her version in her page language, translated in the merge before it's saved, so it lands with the version.
+  - Tests: 217 pass.
