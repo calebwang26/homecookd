@@ -6,5 +6,6 @@ crons.interval("purge expired sessions", { hours: 1 }, internal.sessions.purgeEx
 crons.interval("end idle cooking sessions", { minutes: 15 }, internal.cooking.endIdle, {});
 crons.interval("abandon idle recordings", { minutes: 15 }, internal.live.abandonIdle, {});
 crons.interval("restart stopped account purges", { minutes: 30 }, internal.account.restartPurges, {});
+crons.daily("prune the push log", { hourUTC: 11, minuteUTC: 0 }, internal.push.prune, {});
 crons.daily("remind about open reports", { hourUTC: 16, minuteUTC: 0 }, internal.alerts.remindOpen, {});
 export default crons;
