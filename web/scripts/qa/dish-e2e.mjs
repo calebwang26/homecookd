@@ -154,7 +154,7 @@ try {
   await mom.getByRole('button', { name: 'See Caleb’s guess' }).click();
   await mom.getByText('Fix it with your voice').waitFor();
   const m2 = (await mom.getByRole('heading', { level: 1 }).innerText()).replace(/\s+/g, ' ');
-  check('M2: "Caleb thinks it’s … and …."', /^Caleb thinks it’s 1 tbsp ketchup and sugar\.$/.test(m2), m2);
+  check('M2: "Caleb thinks it’s …" names only guessed amounts', /^Caleb thinks it’s 1 tbsp ketchup\.$/.test(m2), m2);
   check('M2: a "?" on each asked item', (await mom.getByRole('img', { name: 'Not sure' }).count()) === 3);
   check('M2: "3 quick questions. Just talk."', (await mom.getByText('3 quick questions. Just talk.').count()) === 1);
   check('M2: no stock photo', (await strayStock(mom)).length === 0);

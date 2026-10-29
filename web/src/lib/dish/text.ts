@@ -96,13 +96,15 @@ export function guessOf(item: Asked): string | null {
   return null;
 }
 
-/** The guessed bits Mom's headline marks: "1 tbsp ketchup", "no sugar" (no "~"). */
+/**
+ * The guessed bits Mom's headline marks: "1 tbsp ketchup", "no sugar" (no "~"). Only amounts he guessed:
+ * an empty amount ("sugar") or a step reads wrong in "Caleb thinks it's …"; the list marks those with "?".
+ */
 export function guessedBits(recipe: Recipe, ids: QuestionId[]): string[] {
   return askedItems(recipe, ids)
     .map((a) => {
-      if (a.ingredient) return [a.ingredient.amount.replace(/^~\s*/, ''), a.ingredient.name.split(',')[0]].filter(Boolean).join(' ');
-      if (a.line) return plain(a.line.text).replace(/[.!]$/, '').toLowerCase();
-      return '';
+      const amount = a.ingredient?.amount.replace(/^~\s*/, '').trim();
+      return a.ingredient && amount ? `${amount} ${a.ingredient.name.split(',')[0]}` : '';
     })
     .filter(Boolean)
     .slice(0, 2);
