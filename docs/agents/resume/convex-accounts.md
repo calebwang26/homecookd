@@ -11,7 +11,8 @@ Nothing is pushed: the push freeze holds until Apple approves 1.0.
   - The kid's dish voice note is kept privately (f3aaf6442).
 - **Phase 5:** done and approved (f3aaf6442).
 - **`dishAsks.forMe` / `get`:** done (bbf90ce06, spec §9), for the app's `/dish/[id]`.
-- **Tests:** `npx vitest run` passes 215/215, and `npx tsc -p convex --noEmit` is clean. Real codegen reproduced
+- **Web-port additions:** done (bfe525942): 429 `budget`, `kidVoiceS`, `inLang.version`.
+- **Tests:** `npx vitest run` passes 217/217, and `npx tsc -p convex --noEmit` is clean. Real codegen reproduced
   `_generated/api.d.ts` exactly.
 - **Live model checks:** about $0.13 of the $10 test budget.
 
