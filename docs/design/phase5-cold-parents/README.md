@@ -99,3 +99,20 @@ The map (`phase5-flow.jpg`) shows where each piece sits next to today's app and 
 - **Backend:** the Phase 5 routes (the craving link, the kid's ask, the 2-minute voice recipe) come from Convex &
   accounts. The screens run on stubs until then.
 - **Words:** every string is a words key, in English plus drafts in the 12 other languages.
+
+## /dish/[id]: the kid's card in the app (mockup, Oct 29; `dish-card.jpg`, canvas artboards 11–13)
+
+The screen that ClaimLink and the "Mom answered" push open (V2-LINKING.md §2.6). It runs on `dishAsks.get` and
+`dishAsks.forMe`, which Convex & accounts is adding.
+- **11, the kid, waiting:** a designed dish card (never a stock photo), "Your braised pork", and a butter pill "Asked
+  Mom · she's filming it Sunday" (the second half only when `filmingDay` is set). Then 1 serving · ~20 min · ~$3,
+  "Your guess for tonight · Mom will fix it" with every amount marked "guess", and the steps. The kid side stays
+  English.
+- **12, the kid, after Mom answers:** "Mom's braised pork", and a sage pill "Mom answered" (plus her filming day).
+  Her clip comes first, in her words ("Hear Mom · 0:12"). Ingredients she settled carry a "Mom" tag, and the
+  rest stay "guess". Her tip sits under its step, with her clip.
+- **13, Mom opens the same card** (in her language): "Your braised pork, for Caleb" / "Caleb can cook it tonight, in
+  your words." Then the big green "Surprise Caleb: film it" (→ `/record` with the dish filled in) / "Caleb misses the
+  sound of your voice.", what Caleb sees, and "See all of it".
+- **Names:** "Mom" is the word the family calls her (`people.relation`). A kid who deleted their account reads as
+  "Your kid" (a words key).
