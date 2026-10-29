@@ -66,19 +66,26 @@ export async function signTicket(secret: string, payload: JoinPayload): Promise<
   return `${body}.${await hmac(secret, body)}`;
 }
 
-/** The payload when the signature holds and it hasn't expired; null otherwise. Supabase has its own copy. */
-export async function verifyTicket(secret: string, ticket: string, now: number): Promise<JoinPayload | null> {
-  const [body, sig, extra] = ticket.split(".");
-  if (!body || !sig || extra !== undefined || ticket.length > 1000) return null;
+/** The JSON inside a signed token (ticket or receipt) when its signature holds; null otherwise. */
+async function openSigned(secret: string, token: string): Promise<Record<string, unknown> | null> {
+  const [body, sig, extra] = token.split(".");
+  if (!body || !sig || extra !== undefined || token.length > 2000) return null;
   if (!sameText(sig, await hmac(secret, body))) return null;
   const text = fromB64url(body);
   if (text === null) return null;
-  let p: Partial<JoinPayload>;
   try {
-    p = JSON.parse(text);
+    const p: unknown = JSON.parse(text);
+    return p && typeof p === "object" ? (p as Record<string, unknown>) : null;
   } catch {
     return null;
   }
+}
+
+/** The payload when the signature holds and it hasn't expired; null otherwise. Supabase has its own copy. */
+export async function verifyTicket(secret: string, ticket: string, now: number): Promise<JoinPayload | null> {
+  if (ticket.length > 1000) return null;
+  const p = (await openSigned(secret, ticket)) as Partial<JoinPayload> | null;
+  if (!p) return null;
   const ok =
     p.v === 1 &&
     typeof p.fam === "string" &&
@@ -89,4 +96,47 @@ export async function verifyTicket(secret: string, ticket: string, now: number):
     typeof p.jti === "string";
   if (!ok || p.exp! <= now) return null;
   return p as JoinPayload;
+}
+
+/**
+ * Supabase's word that someone moved from family A to family B on one Apple identity (docs/build/JOIN-SIMPLE.md
+ * §4), signed with the same secret, the other way round. `solo`: nobody else signs in to A, so their recipes (and
+ * the phone-less `faces`, Supabase profile ids) come along.
+ */
+export type MovedReceipt = {
+  v: 1;
+  kind: "moved";
+  fromProfile: string;
+  fromFamily: string;
+  toProfile: string;
+  toFamily: string;
+  solo: boolean;
+  faces: string[];
+  exp: number;
+};
+
+/** Supabase signs these (functions/api/joinLinks.ts); this twin is for the tests. */
+export async function signMoved(secret: string, r: MovedReceipt): Promise<string> {
+  const { v, kind, fromProfile, fromFamily, toProfile, toFamily, solo, faces, exp } = r;
+  const body = b64url(enc.encode(JSON.stringify({ v, kind, fromProfile, fromFamily, toProfile, toFamily, solo, faces, exp })));
+  return `${body}.${await hmac(secret, body)}`;
+}
+
+export async function verifyMoved(secret: string, receipt: string, now: number): Promise<MovedReceipt | null> {
+  const p = (await openSigned(secret, receipt)) as Partial<MovedReceipt> | null;
+  if (!p) return null;
+  const ok =
+    p.v === 1 &&
+    p.kind === "moved" &&
+    typeof p.fromProfile === "string" &&
+    typeof p.fromFamily === "string" &&
+    typeof p.toProfile === "string" &&
+    typeof p.toFamily === "string" &&
+    typeof p.solo === "boolean" &&
+    Array.isArray(p.faces) &&
+    p.faces.length <= 50 &&
+    p.faces.every((f) => typeof f === "string") &&
+    typeof p.exp === "number";
+  if (!ok || p.exp! <= now) return null;
+  return p as MovedReceipt;
 }

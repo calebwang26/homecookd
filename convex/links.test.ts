@@ -4,15 +4,18 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { api, internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { cardRef, verifyTicket } from "./lib/joinTicket";
+import { cardRef, signMoved, verifyTicket } from "./lib/joinTicket";
 import { JOIN_WINDOW_DAYS } from "./links";
-import { FAMILY, type Backend, newBackend, signIn, stubFetch } from "./test.helpers";
+import { addRecipe, FAMILY, type Backend, newBackend, signIn, stubFetch } from "./test.helpers";
 
 /** A time within a second of `ms` (each call moves the test clock on a millisecond or so). */
 const near = (ms: number) => expect.closeTo(ms, -3);
 const SECRET = "test-link-secret-0123456789abcdef";
 const IP = "203.0.113.9";
 const OTHER_FAMILY = { family: { id: "fam-2", name: "The Zeds" }, profiles: [{ id: "p-zed", name: "Zed", role: "learner" }] };
+
+/** Zed after moving: a new profile in the Wangs' family (JOIN-SIMPLE.md §4). */
+const ZED_MOVED = { ...FAMILY, profiles: [...FAMILY.profiles, { id: "p-zed-new", name: "Zed", role: "cook" }] };
 
 let t: Backend;
 
@@ -27,6 +30,7 @@ beforeEach(() => {
     if (url.endsWith("/push/send")) return Response.json({ data: JSON.parse(String(init?.body)).map(() => ({ status: "ok", id: "ticket" })) });
     if (url.endsWith("/push/getReceipts")) return Response.json({ data: {} });
     const who = new Headers(init?.headers).get("x-profile-id");
+    if (url.endsWith("/family") && who === "p-zed-new") return Response.json(ZED_MOVED);
     return url.endsWith("/family") && who === "p-zed" ? Response.json(OTHER_FAMILY) : undefined;
   });
   t = newBackend();
@@ -190,4 +194,49 @@ test("end to end: the kid claims, Mom answers on the web, and the kid's phone he
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   const [push] = await pushesTo(leo.personId);
   expect(push).toMatchObject({ kind: "answered", title: "Mom answered", url: `/dish/${dishAskId}`, status: "sent" });
+});
+
+// ---- links.moved (docs/build/JOIN-SIMPLE.md §4)
+
+const receipt = (over: Partial<Parameters<typeof signMoved>[1]> = {}) =>
+  signMoved(SECRET, {
+    v: 1,
+    kind: "moved",
+    fromProfile: "p-zed",
+    fromFamily: "fam-2",
+    toProfile: "p-zed-new",
+    toFamily: "fam-1",
+    solo: true,
+    faces: [],
+    exp: Date.now() + 3600_000,
+    ...over,
+  });
+
+test("a solo family's recipes come along when its cook moves; otherwise they stay", async () => {
+  const zed = await signIn(t, "p-zed");
+  const recipeId = await addRecipe(t, zed.familyId, zed.personId);
+  const moved = await signIn(t, "p-zed-new");
+
+  // Others still sign in to the old family: nothing moves.
+  expect(await t.mutation(api.links.moved, { sessionToken: moved.sessionToken, receipt: await receipt({ solo: false }) })).toEqual({ recipes: 0, faces: 0 });
+  expect((await t.run((ctx) => ctx.db.get("recipes", recipeId as Id<"recipes">)))!.familyId).toBe(zed.familyId);
+
+  expect(await t.mutation(api.links.moved, { sessionToken: moved.sessionToken, receipt: await receipt() })).toEqual({ recipes: 1, faces: 0 });
+  const rec = (await t.run((ctx) => ctx.db.get("recipes", recipeId as Id<"recipes">)))!;
+  expect([rec.familyId, rec.cookId]).toEqual([moved.familyId, moved.personId]);
+  // Again: nothing left to move.
+  expect(await t.mutation(api.links.moved, { sessionToken: moved.sessionToken, receipt: await receipt() })).toEqual({ recipes: 0, faces: 0 });
+});
+
+test("a receipt that isn't signed, has expired, or names someone else moves nothing", async () => {
+  const zed = await signIn(t, "p-zed");
+  await addRecipe(t, zed.familyId, zed.personId);
+  const moved = await signIn(t, "p-zed-new");
+  const leo = await signIn(t, "p-leo");
+  const forged = (await receipt()).replace(/.$/, (c) => (c === "A" ? "B" : "A"));
+  await expect(t.mutation(api.links.moved, { sessionToken: moved.sessionToken, receipt: forged })).rejects.toThrow(/can't be checked/);
+  await expect(t.mutation(api.links.moved, { sessionToken: moved.sessionToken, receipt: await receipt({ exp: Date.now() - 1 }) })).rejects.toThrow(/can't be checked/);
+  await expect(t.mutation(api.links.moved, { sessionToken: leo.sessionToken, receipt: await receipt() })).rejects.toThrow(/can't be checked/);
+  delete process.env.LINK_JOIN_SECRET;
+  await expect(t.mutation(api.links.moved, { sessionToken: moved.sessionToken, receipt: await receipt() })).rejects.toThrow(/can't be checked/);
 });
