@@ -18,8 +18,6 @@ export const PROFILES = {
   'profiles.picker.add': 'Add',
   'profiles.picker.addCook': 'Add a cook',
   'profiles.picker.addFamily': 'Add family',
-  'profiles.picker.switchFamily': 'Switch family',
-  'profiles.picker.switchFamilyHint': 'Type another family’s code',
   'profiles.picker.signOutLink': 'Sign out of this phone',
   'profiles.picker.asksFirst': 'Asks first',
   'profiles.picker.privacy': 'Privacy policy',

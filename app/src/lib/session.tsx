@@ -6,21 +6,26 @@
 //
 // Signing in (docs/build/FEEDBACK-OCT16c.md B1). Each phone holds its own device key, saved in
 // SecureStore (localStorage on the web) and sent as x-device-key; it is never logged or shown.
-// The ways in, each resolving with a result to branch on (they never throw):
-//   acceptInvite(tokenOrCode)            an invite link's token or its 6-letter code. An invite for
-//                                        one person: in as them, now `me` (go to homeFor(me)). A
-//                                        family invite (Oct 17, E3): in, with nobody picked, and
-//                                        `deviceNeedsProfile` set (go to Profiles)
-//   createSelf(name, role)               then, on Profiles, + under the cooks ('cook') or the ones
-//                                        who miss it ('learner'): this phone's own person, now `me`
-//                                        (the caller goes to homeFor(me))
-//   signInWithApple / signInWithGoogle   a known person is in at once (Profiles next); someone new
-//                                        gets `needs-name`, then finishSignIn({ name, role })
-//                                        (role only when there was no share link)
-//   joinFamily(code)                     the "Have a family code?" backup, swapped for a key too
-//   joinByLink(ticket, name)             a dish card's link (docs/build/V2-LINKING.md 2.4): in as a new
-//                                        person in the card's family, now `me`; 'unavailable' until
-//                                        POST /auth/link is live (sign in with Apple or Google instead)
+// The ways in (docs/build/JOIN-SIMPLE.md: a family is joined only by a link), each resolving with a
+// result to branch on (they never throw):
+//   signInWithApple / signInWithGoogle(opts)  opts: the link they came from (`joinToken`: a family join
+//                                        link or an older invite; `linkTicket`: a dish card's ticket
+//                                        from /link/open), the `name` and `role` typed on its card, and
+//                                        `move`. No link: a known person signs in, someone new starts
+//                                        a family.
+//     'signed-in'                        in ("Who's in the kitchen?" next, which opens their home)
+//     'needs-name'                       someone new and no name sent: ask, then finishSignIn({ name,
+//                                        role }) (role only with no link)
+//     'needs-move'                       a known person in another family (`fromFamily`) and nothing
+//                                        changed: ask "Join <toFamily> instead?", then sign in again
+//                                        with `move: true`. The server's receipt for a move goes to
+//                                        Convex's links.moved (setLinksMoved), so a solo family's
+//                                        recipes come along
+//     'error'                            `why` says which card to show: a taken name, a used card
+//                                        side, a link that's gone or unknown, a ticket that's stale
+//   createSelf(name, role)               a phone that joined through an older family invite, on
+//                                        Profiles: + under the cooks ('cook') or the ones who miss it
+//                                        ('learner'): this phone's own person, now `me`
 // Phones from before device keys have a saved family code: on boot it is swapped for a key
 // (POST /devices) and then deleted. When the server refuses the key (401 "This phone was signed
 // out.": someone removed this person), the key and the cache are cleared and status goes to
@@ -68,7 +73,6 @@ import {
   SIGNED_OUT,
   type Family,
   type FamilyInfo,
-  type InviteState,
   type Profile,
   type ProviderAuth,
   type ProviderAuthInput,
@@ -76,7 +80,7 @@ import {
 } from './api';
 import * as apple from './auth/apple';
 import * as google from './auth/google';
-import { NOT_AN_INVITE, parseInviteInput } from './auth/links';
+import { cleanName, linkFields, signInFailure, type LinkFields, type SignInOptions, type SignInRefused } from './auth/join';
 import { SignInError, type ProviderSignIn } from './auth/types';
 import { lastMessagePushAt, unregister as unregisterPush } from './push';
 import { kvGet, kvGetJson, kvSet, kvSetJson, secretGet, secretReadRetried, secretSet } from './storage';
@@ -122,52 +126,28 @@ export type SessionStatus =
   | 'needs-code' // not signed in, or the server refused this phone: show the first screen
   | 'offline'; // no cache and the server can't be reached
 
-/** `shareToken` = the `/join?s=` link they came from: someone new joins that family as a learner. */
-export type SignInOptions = { shareToken?: string | null };
+export type { SignInFailure, SignInOptions } from './auth/join';
 
 export type SignInResult =
-  /** In. "Who's in the kitchen?" comes next. */
-  | { status: 'signed-in'; familyName: string; profileId: string | null; existing: boolean; joined: boolean }
+  /** In. "Who's in the kitchen?" comes next. `moved`: they left another family for this one. */
+  | { status: 'signed-in'; familyName: string; profileId: string | null; existing: boolean; joined: boolean; moved: boolean }
   /**
    * Someone new: ask "What does your family call you?" (prefilled with `suggestedName`, maybe ''),
    * then, when `needsRole`, Record a dish (cook) / Learn a dish (learner); then finishSignIn().
    */
   | { status: 'needs-name'; suggestedName: string; needsRole: boolean }
+  /** In another family (`fromFamily`), nothing changed: ask, then sign in again with `move: true`. */
+  | { status: 'needs-move'; fromFamily: string; toFamily: string }
   /** They closed the Apple or Google sheet: show nothing. */
   | { status: 'cancelled' }
-  | { status: 'error'; error: string };
+  | SignInRefused;
 
 export type FinishSignInResult =
-  | Extract<SignInResult, { status: 'signed-in' }>
+  | Extract<SignInResult, { status: 'signed-in' | 'needs-move' }>
   /** Fixable here (a taken name, offline): show `error` and let them try again. */
-  | { status: 'error'; error: string }
+  | Extract<SignInResult, { status: 'error' }>
   /** The Apple / Google sign-in is gone (it went stale): show `error` with the sign-in buttons again. */
   | { status: 'restart'; error: string };
-
-export type AcceptInviteResult =
-  /**
-   * In. An invite for one person: they are `me` now (go to homeFor(me)). `me` is null for a family
-   * invite (they add themselves on "Who's in the kitchen?") or when the family couldn't load yet:
-   * go to "/" either way.
-   */
-  | { status: 'joined'; familyName: string; me: Profile | null }
-  /** Used, expired or turned off. `error` is the server's sentence; add "Ask <inviter> for a new one." */
-  | { status: 'gone'; error: string; invite: Exclude<InviteState, 'pending'> }
-  /** Not an invite, not found, offline or server trouble: show `error` with a way to try again. */
-  | { status: 'error'; error: string };
-
-export type JoinResult = { ok: true; family: Family } | { ok: false; error: string };
-
-export type JoinByLinkResult =
-  /** In as the new person (`profileId`), who is `me` now (`me` is null only when the family couldn't load yet). */
-  | { status: 'joined'; familyName: string; profileId: string; me: Profile | null }
-  /** POST /auth/link isn't live (404, 503) or refused the ticket (403): sign in first instead. */
-  | { status: 'unavailable' }
-  /** "Mom is already in this family", or a name it won't take: ask for another and send the same ticket. */
-  | { status: 'name'; error: string }
-  /** That side of the card already brought someone in. */
-  | { status: 'taken'; error: string }
-  | { status: 'error'; error: string };
 
 /** createSelf(): in as the new person (`me`), or a sentence to show under the name field. */
 export type CreateSelfResult = { ok: true; me: Profile } | { ok: false; error: string };
@@ -235,18 +215,12 @@ export type Session = {
   setMe: (who: Profile | string | null) => void;
   /** Re-fetch GET /family. Resolves true when the family answered. */
   refresh: () => Promise<boolean>;
-  /** Sign in with Apple (iOS). Check useSignInProviders() from '@/lib/auth' before showing the button. */
+  /** Sign in with Apple (iOS), from a link or not (SignInOptions). Check useSignInProviders() from '@/lib/auth' first. */
   signInWithApple: (opts?: SignInOptions) => Promise<SignInResult>;
-  /** Sign in with Google (dev and store builds with the client ids set). */
+  /** Sign in with Google (Android builds with the client ids set). */
   signInWithGoogle: (opts?: SignInOptions) => Promise<SignInResult>;
-  /** After `needs-name`: their name and, without a share link, cook or learner. */
+  /** After `needs-name`: their name and, without a link, cook or learner. */
   finishSignIn: (input: { name: string; role?: Role | null }) => Promise<FinishSignInResult>;
-  /** Use an invite (a link, its token or its 6-letter code). Joining another family replaces this one. */
-  acceptInvite: (tokenOrCode: string) => Promise<AcceptInviteResult>;
-  /** Check a family code, swap it for this phone's own key and switch to that family (Profiles next). */
-  joinFamily: (code: string) => Promise<JoinResult>;
-  /** A dish card's join ticket (/link/open): a new person, `name` (else the card's), in its family. */
-  joinByLink: (ticket: string, name: string | null) => Promise<JoinByLinkResult>;
   /**
    * "This is me" (a phone with `deviceNeedsProfile`): adds this phone's own person to the family
    * (POST /profiles/self), reloads the family and makes them `me`. The caller goes to their home.
@@ -285,7 +259,7 @@ type Cred = { deviceKey: string | null; code: string | null };
 type Provider = 'apple' | 'google';
 type Via = 'person' | 'code';
 /** A new person's Apple / Google sign-in, waiting for their name (memory only; never logged). */
-type Pending = { provider: Provider; idToken: string; shareToken: string | null };
+type Pending = { provider: Provider; idToken: string; link: LinkFields };
 
 const NO_CRED: Cred = { deviceKey: null, code: null };
 const credId = (c: Cred) => c.deviceKey ?? c.code;
@@ -314,6 +288,16 @@ function deviceLabel(): string {
 }
 
 const providerAuth = (p: Provider, input: ProviderAuthInput) => (p === 'apple' ? api.authApple(input) : api.authGoogle(input));
+
+/**
+ * After a move, Convex's links.moved with the server's receipt, as the new person (lib/live imports
+ * this module, so the root layout hands it in: setLinksMoved). Failures are ignored: the recipes
+ * then stay with the old family.
+ */
+let linksMoved: ((receipt: string, profileId: string) => Promise<unknown>) | null = null;
+export function setLinksMoved(fn: typeof linksMoved): void {
+  linksMoved = fn;
+}
 
 /**
  * This phone's saved key: null when none is saved, undefined when the keychain can't answer while the
@@ -427,9 +411,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const pending = useRef<Pending | null>(null);
   const signingIn = useRef<Promise<SignInResult> | null>(null);
   const finishing = useRef<Promise<FinishSignInResult> | null>(null);
-  const accepting = useRef<Promise<AcceptInviteResult> | null>(null);
-  const joining = useRef<Promise<JoinResult> | null>(null);
-  const linking = useRef<Promise<JoinByLinkResult> | null>(null);
   const creating = useRef<Promise<CreateSelfResult> | null>(null);
   /** Web dev only: the `?profiles=` made-up family (no API at all). */
   const fixture = useRef<CachedFamily | null>(webProfilesFixture());
@@ -719,19 +700,19 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   }, [refresh]);
 
   /**
-   * Save this phone's new key and switch to its family, with nobody chosen yet. `fam` skips the
-   * fetch when the family is already known. Resolves true once the family is loaded; offline, the
-   * key is still saved and refresh() finishes the job.
+   * Save this phone's new key (a person's: Apple or Google) and switch to its family, with nobody
+   * chosen yet. Resolves true once the family is loaded; offline, the key is still saved and
+   * refresh() finishes the job.
    */
   const adopt = useCallback(
-    async (deviceKey: string, via: Via, fam?: CachedFamily): Promise<boolean> => {
+    async (deviceKey: string): Promise<boolean> => {
       const old = credRef.current.deviceKey;
       pending.current = null;
       devAid.current = false;
       devAidOn = false;
       setApiTimeZone(deviceTimeZone());
       setCredential({ deviceKey, code: null });
-      setVia(via);
+      setVia('person');
       rememberApple(null); // enter() says so again for an Apple sign-in
       // The key this one replaces (another family, or this one again) should stop working too.
       if (old && old !== deviceKey) void api.revokeDevice({ deviceKey: old }).catch(() => {});
@@ -739,13 +720,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setMeId(null);
       // An old family code goes only once the new key is safely stored.
       if (await saveKey(deviceKey)) await secretSet(KEY_CODE, null);
-      if (fam) {
-        applyFamily(fam);
-        void kvSetJson(KEY_FAMILY, fam);
-        setError(null);
-        setStatus('ready');
-        return true;
-      }
       // Another family's faces must never show under this key.
       dataRef.current = null;
       setData(null);
@@ -753,21 +727,46 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       setStatus('loading');
       return load({ deviceKey, code: null });
     },
-    [applyFamily, load, setCredential, setVia, rememberApple],
+    [load, setCredential, setVia, rememberApple],
   );
 
-  /** In with a new key from Apple or Google. */
+  /** In with a new key from Apple or Google (a move's receipt goes on to Convex). */
   const enter = useCallback(
     async (
       provider: Provider,
       res: Extract<ProviderAuth, { needs_name: false }>,
     ): Promise<Extract<SignInResult, { status: 'signed-in' }> | { status: 'error'; error: string }> => {
       if (!res.device_key) return { status: 'error', error: 'Something went wrong on our side. Try again.' };
-      await adopt(res.device_key, 'person');
+      await adopt(res.device_key);
       if (provider === 'apple') rememberApple(res.profile_id);
-      return { status: 'signed-in', familyName: res.family_name, profileId: res.profile_id, existing: res.existing, joined: res.joined };
+      const receipt = res.moved?.receipt;
+      if (receipt && res.profile_id && linksMoved) {
+        void linksMoved(receipt, res.profile_id).catch((e) => console.warn('[session] links.moved failed', String(e).slice(0, 160)));
+      }
+      return {
+        status: 'signed-in',
+        familyName: res.family_name,
+        profileId: res.profile_id,
+        existing: res.existing,
+        joined: res.joined,
+        moved: !!res.moved,
+      };
     },
     [adopt, rememberApple],
+  );
+
+  /** What POST /auth/apple|google answered, as a SignInResult (`needs-name` keeps the sign-in for finishSignIn). */
+  const answer = useCallback(
+    async (provider: Provider, idToken: string, link: LinkFields, res: ProviderAuth, suggested = ''): Promise<SignInResult> => {
+      if (res.needs_move === true) return { status: 'needs-move', fromFamily: res.from_family, toFamily: res.to_family };
+      if (res.needs_name) {
+        pending.current = { provider, idToken, link };
+        const suggestedName = cleanName(suggested || res.suggested_name);
+        return { status: 'needs-name', suggestedName, needsRole: !link.join_token && !link.link_ticket };
+      }
+      return enter(provider, res);
+    },
+    [enter],
   );
 
   const providerSignIn = useCallback(
@@ -781,20 +780,16 @@ export function SessionProvider({ children }: { children: ReactNode }) {
           return { status: 'error', error: e instanceof SignInError ? e.message : 'Sign-in didn’t finish. Try again.' };
         }
         if (!got) return { status: 'cancelled' };
-        const shareToken = opts.shareToken?.trim() || null;
+        const link = linkFields(opts);
+        const name = cleanName(opts.name) || null;
         try {
-          const res = await providerAuth(provider, { id_token: got.idToken, share_token: shareToken, device_label: deviceLabel() });
-          if (res.needs_name) {
-            pending.current = { provider, idToken: got.idToken, shareToken };
-            const suggestedName = (got.name || res.suggested_name || '').trim().slice(0, MAX_NAME);
-            return { status: 'needs-name', suggestedName, needsRole: !shareToken };
-          }
-          return await enter(provider, res);
+          const res = await providerAuth(provider, { id_token: got.idToken, ...link, ...(name ? { name } : null), device_label: deviceLabel() });
+          return await answer(provider, got.idToken, link, res, got.name ?? '');
         } catch (e) {
-          return { status: 'error', error: errorMessage(e) };
+          return signInFailure(e);
         }
       }),
-    [enter],
+    [answer],
   );
 
   const signInWithApple = useCallback((opts?: SignInOptions) => providerSignIn('apple', opts), [providerSignIn]);
@@ -805,108 +800,31 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       singleFlight(finishing, async (): Promise<FinishSignInResult> => {
         const p = pending.current;
         if (!p) return { status: 'restart', error: 'Sign in again to finish.' };
-        const clean = name.trim();
-        if (!clean) return { status: 'error', error: 'Type your name first.' };
-        if (!p.shareToken && !role) return { status: 'error', error: 'Choose Record a dish or Learn a dish.' };
+        const clean = cleanName(name);
+        if (!clean) return { status: 'error', error: 'Type your name first.', why: 'name' };
+        const hasLink = !!p.link.join_token || !!p.link.link_ticket;
+        if (!hasLink && !role) return { status: 'error', error: 'Choose Record a dish or Learn a dish.' };
         try {
           const res = await providerAuth(p.provider, {
             id_token: p.idToken,
+            ...p.link,
             name: clean,
-            role: role ?? null,
-            share_token: p.shareToken,
+            ...(role && !p.link.link_ticket ? { role } : null),
             device_label: deviceLabel(),
           });
-          if (res.needs_name) return { status: 'error', error: 'Type your name first.' };
-          return await enter(p.provider, res);
+          if (res.needs_name) return { status: 'error', error: 'Type your name first.', why: 'name' };
+          const out = await answer(p.provider, p.idToken, p.link, res);
+          return out.status === 'signed-in' || out.status === 'needs-move' || out.status === 'error' ? out : { status: 'restart', error: 'Sign in again to finish.' };
         } catch (e) {
           // A refused token (Apple's last 10 minutes) can't be fixed by typing: start over.
           if (e instanceof ApiError && e.status === 401) {
             pending.current = null;
             return { status: 'restart', error: errorMessage(e, 'Sign in again to finish.') };
           }
-          return { status: 'error', error: errorMessage(e) };
+          return signInFailure(e);
         }
       }),
-    [enter],
-  );
-
-  const acceptInvite = useCallback(
-    (tokenOrCode: string) =>
-      singleFlight(accepting, async (): Promise<AcceptInviteResult> => {
-        const parsed = parseInviteInput(tokenOrCode);
-        if (!parsed || (parsed.kind !== 'token' && parsed.kind !== 'code')) return { status: 'error', error: NOT_AN_INVITE };
-        try {
-          const ref = parsed.kind === 'token' ? { token: parsed.token } : { code: parsed.code };
-          const res = await api.inviteAccept({ ...ref, device_label: deviceLabel() });
-          if (!res.device_key) return { status: 'error', error: 'Something went wrong on our side. Try again.' };
-          await adopt(res.device_key, 'person');
-          // A family invite names nobody (profile_id null): this phone's person comes next, on
-          // "Who's in the kitchen?" (deviceNeedsProfile). An invite for one person makes them `me`.
-          const pid = res.profile_id;
-          const me = pid ? (dataRef.current?.profiles.find((p) => p.id === pid && !p.locked) ?? null) : null;
-          if (me) {
-            setApiAuth({ profileId: me.id });
-            setMeId(me.id);
-          }
-          return { status: 'joined', familyName: res.family_name, me };
-        } catch (e) {
-          if (e instanceof ApiError && e.status === 410) {
-            const s = e.body?.status;
-            return { status: 'gone', error: e.message, invite: s === 'expired' || s === 'revoked' ? s : 'used' };
-          }
-          return { status: 'error', error: errorMessage(e) };
-        }
-      }),
-    [adopt],
-  );
-
-  const joinFamily = useCallback(
-    (raw: string) =>
-      singleFlight(joining, async (): Promise<JoinResult> => {
-        const next = raw.trim().toUpperCase();
-        if (!next) return { ok: false, error: 'Type your family code first.' };
-        try {
-          const res = await api.family({ code: next });
-          const { device_key } = await api.devices({ label: deviceLabel() }, { code: next });
-          if (!device_key) return { ok: false, error: 'Something went wrong on our side. Try again.' };
-          await adopt(device_key, 'code', toCached(res));
-          return { ok: true, family: res.family };
-        } catch (e) {
-          if (e instanceof ApiError && e.status === 401) {
-            return { ok: false, error: 'That code doesn’t match a family. Check it and try again.' };
-          }
-          return { ok: false, error: errorMessage(e) };
-        }
-      }),
-    [adopt],
-  );
-
-  const joinByLink = useCallback(
-    (ticket: string, name: string | null) =>
-      singleFlight(linking, async (): Promise<JoinByLinkResult> => {
-        const clean = (name ?? '').trim().replace(/\s+/g, ' ').slice(0, MAX_NAME) || null;
-        try {
-          const res = await api.authLink({ ticket, name: clean, device_label: deviceLabel() });
-          const pid = res.profile_id;
-          if (!res.device_key || !pid) return { status: 'error', error: 'Something went wrong on our side. Try again.' };
-          await adopt(res.device_key, 'person');
-          // The new person is the only one on this phone: they're in at once, as with an invite for one person.
-          const me = dataRef.current?.profiles.find((p) => p.id === pid && !p.locked) ?? null;
-          if (me) {
-            setApiAuth({ profileId: me.id });
-            setMeId(me.id);
-          }
-          return { status: 'joined', familyName: res.family_name, profileId: pid, me };
-        } catch (e) {
-          if (e instanceof ApiError) {
-            if (e.status === 404 || e.status === 403 || e.status === 503) return { status: 'unavailable' };
-            if (e.status === 400 || (e.status === 409 && /already in this family/i.test(e.message))) return { status: 'name', error: errorMessage(e) };
-            if (e.status === 409) return { status: 'taken', error: errorMessage(e) };
-          }
-          return { status: 'error', error: errorMessage(e) };
-        }
-      }),
-    [adopt],
+    [answer],
   );
 
   const createSelf = useCallback(
@@ -1053,9 +971,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       signInWithApple,
       signInWithGoogle,
       finishSignIn,
-      acceptInvite,
-      joinFamily,
-      joinByLink,
       createSelf,
       leaveFamily,
       accountRemoval: (p: Profile | null | undefined) => removalOf(p, data),
@@ -1082,9 +997,6 @@ export function SessionProvider({ children }: { children: ReactNode }) {
     signInWithApple,
     signInWithGoogle,
     finishSignIn,
-    acceptInvite,
-    joinFamily,
-    joinByLink,
     createSelf,
     leaveFamily,
     deleteAccount,
@@ -1129,9 +1041,6 @@ const fallbackSession: Session = {
   signInWithApple: async () => notReady,
   signInWithGoogle: async () => notReady,
   finishSignIn: async () => notReady,
-  acceptInvite: async () => notReady,
-  joinFamily: async () => ({ ok: false, error: 'Not ready yet.' }),
-  joinByLink: async () => notReady,
   createSelf: async () => ({ ok: false, error: 'Not ready yet.' }),
   leaveFamily: async () => {},
   accountRemoval: () => null,

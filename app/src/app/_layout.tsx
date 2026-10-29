@@ -1,9 +1,10 @@
 // Root: Hearth fonts (Fraunces + DM Sans, never blocking more than 2.5 s), the app-wide providers
 // (session, toasts, Watch/Hear sheet, share sheet), the Stack, and the launch bloom once per cold start.
 // SessionGate sends a phone with no family to the first screen (join), and a family with nobody picked
-// to "Who's in the kitchen?". Invite (/i), recipe (/r), dinner-invite (/d) and dish-card (/miss, /a)
+// to "Who's in the kitchen?". Join (/i), recipe (/r), dinner-invite (/d) and dish-card (/miss, /a)
 // links pass through either way; any other link opened before anyone was picked opens on top of their
-// home once it shows.
+// home once it shows. setLinksMoved hands the session Convex's links.moved (lib/live imports the
+// session, so it can't import lib/live): after a move, a solo family's recipes come along.
 // PushBridge (RETENTION-HANDOFF 2.3) opens the screen a tapped push points at (the same hold covers a
 // push that launched the app), files this phone's push token under its person (with the api, and with
 // Convex through lib/live/pushTokens), and starts "heard" logging; PushAskHost is the one "Want a note
@@ -45,11 +46,12 @@ import { forgetAiConsent, useAiConsent } from '@/lib/aiConsent';
 import { api } from '@/lib/api';
 import { HOMIE_ON } from '@/lib/homie/switch';
 import { registerHeardLogging } from '@/lib/listening';
+import { linksMoved } from '@/lib/live/links';
 import { convexPush } from '@/lib/live/pushTokens';
 import { PLAYBACK_AUDIO_MODE } from '@/lib/media';
 import { openRecipe } from '@/lib/navigation';
 import { addTapListener, initPush, pushUrl, setConvexPush, syncRegistration, type PushData, type PushPlatform } from '@/lib/push';
-import { SessionProvider, useSession } from '@/lib/session';
+import { SessionProvider, setLinksMoved, useSession } from '@/lib/session';
 import { ShareSheetProvider } from '@/lib/share';
 import { UiLanguageProvider } from '@/lib/words/useWords';
 import { colors } from '@/theme/tokens';
@@ -57,6 +59,7 @@ import { useAppFonts } from '@/theme/fonts';
 
 SplashScreen.preventAutoHideAsync().catch(() => {});
 setConvexPush(convexPush);
+setLinksMoved(linksMoved);
 
 const navTheme = {
   ...DefaultTheme,
@@ -146,7 +149,6 @@ function AppStack() {
       }}>
       <Stack.Screen name="index" options={{ title: 'Who’s in the kitchen?', animation: 'fade' }} />
       <Stack.Screen name="join" options={{ title: 'Sign in', animation: 'fade' }} />
-      <Stack.Screen name="join-code" options={{ title: 'Family code', animation: 'slide_from_right' }} />
       <Stack.Screen name="i" options={{ title: 'Invite', animation: 'fade' }} />
       <Stack.Screen name="r" options={{ title: 'homecookd', animation: 'none' }} />
       <Stack.Screen name="d" options={{ title: 'Dinner invite', animation: 'fade' }} />
@@ -181,8 +183,8 @@ function ResendUnsent() {
   return null;
 }
 
-/** Screens that work without a signed-in phone: the first screen, the code backup, invite, recipe, dinner-invite and dish-card links. */
-const SIGNED_OUT_ROUTES = new Set(['/join', '/join-code', '/i', '/r', '/d', '/miss', '/a']);
+/** Screens that work without a signed-in phone: the first screen, join, recipe, dinner-invite and dish-card links. */
+const SIGNED_OUT_ROUTES = new Set(['/join', '/i', '/r', '/d', '/miss', '/a']);
 /** Screens that work without a chosen profile. */
 const OPEN_ROUTES = new Set(['/', ...SIGNED_OUT_ROUTES]);
 /** A held link waits this long after home appears, so it opens on top of home (Back lands there). */

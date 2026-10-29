@@ -1,9 +1,9 @@
-// The frame and small parts every sign-in screen shares (join, join-code, i, r), in the bible's
+// The frame and small parts every sign-in screen shares (join, i, r, miss, a), in the bible's
 // Main look: the peach wash, the pot + "homecookd" row (a Back pill on the right when there's
 // somewhere to go back to), a Fraunces 40 headline and at most one short line under it.
 //
 //   <SignInScreen onBack={...}>
-//     <Headline title="Family code" line="You're in Our family." />
+//     <Headline title="What does your family call you?" />
 //     <SignInField ... />  <ErrorLine error={error} />  <SmallLink label="Not now" onPress={...} />
 //     <TermsLine />   ("By continuing you agree to our Terms of use and Privacy policy.", under a way in)
 //   </SignInScreen>
@@ -127,7 +127,7 @@ export function ErrorLine({ error, align }: { error: string | null | undefined; 
   );
 }
 
-/** The small green text link ("Have a family code?", "Not now"), 48 tall to tap. `color`: a quieter one. */
+/** The small green text link ("Not now", "Back to start"), 48 tall to tap. `color`: a quieter one. */
 export function SmallLink({
   label,
   onPress,

@@ -1,23 +1,25 @@
-// /i: an invite (homecookd://i?t=…, https://homecookd.app/i?t=…, or ?c=<6-letter code> from Paste
-// invite / a typed code). The invited person's landing page in the app (FEEDBACK-OCT16c B2, E3): peek
-// at the invite (that never uses it), then one big card: the inviter's face, "Join Test family?" (the
-// family's own name, whoever sent it: QA B28), one line naming the sender, and one big Join (nothing
-// else). Join uses the invite (once) and saves this phone's key.
-//   a family invite (the usual one: it names nobody)  "Mom invited you." After Join: "Who's in the
-//       kitchen?", which reads "Tap + to add yourself." (+ under the cooks or the ones who miss it)
-//   an invite for one person (older)  "Mom invited you as Dad." After Join, Dad is `me` and goes
-//       straight to his home
-// Later launches show "Who's in the kitchen?" as always. The other cards (components/signin/invite.ts):
-//   used / expired / turned off   the server's sentence + "Ask Mom for a new one." + Back to start
-//   no such invite                the server's sentence + Back to start ("Type it again" for a code)
-//   offline / server trouble      a plain sentence + Try again
-//   signed in to that family      "You're already in." -> Profiles (Mom opening her own link never
-//                                 uses it up)
-//   signed in to another family   "Join Test family instead?" Join / Not now
+// /i?t=<token>: a family join link (22 characters) or an older invite (16), opened in the app
+// (https://homecookd.app/i?t=…, homecookd://i?t=…, or the first screen's invisible pickup). Joining is by
+// link only, name first, then Sign in with Apple (docs/build/JOIN-SIMPLE.md §1, mockups 1 and 3). The
+// app peeks at the link (that never uses it), then shows one card (components/signin/invite.ts):
+//   join      signed out: "Join Test family", "Mom sent this.", "What do they call you?" [name], the
+//             chips "I cook" / "I miss the food" (a family link; an older invite for one person says
+//             who and needs none), and the system Apple button (Google on Android). Sign-in sends the
+//             name, the role and the link (`joinToken`); then "Who's in the kitchen?", which opens
+//             their home. The terms line goes under the card
+//   move      signed in to another family: "You're in Wang family. Join Test family instead?" with
+//             Join Test family and Not now. Join shows the Apple button ("Sign in with Apple to join
+//             Test family."), and that sign-in moves them (`move: true`). A signed-out sign-in can
+//             get the same answer (a returning Apple ID in another family): the same card shows
+//   already   signed in to that family: "You're already in." -> Profiles (Mom opening her own link)
+//   gone      used, expired or turned off: the sentence + "Ask Mom for a new one." + Back to start
+//   missing   no such link: the sentence + Back to start
+//   offline / server trouble: a plain sentence + Try again
+// An old code link (/i?c=…, 1.0's typed codes) only says to tap the link instead: there's no code entry.
 // The peek sends this phone's key, so the server says whether it's already in that family; a
 // signed-in phone also reloads its family first, for an older server that doesn't say.
-// Dev (web only): ?fixture=pending|used|expired|revoked|notfound|badcode|offline|already|other
-// [&to=none][&role=learner][&from=none|Dad] draws each card without the API (`to=none`: a family invite).
+// Dev (web only): ?fixture=pending|used|expired|revoked|notfound|offline|already|other
+// [&to=Dad][&role=learner][&from=none|Dad] draws each card without the API (default: a family join link).
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
@@ -26,14 +28,16 @@ import Animated, { FadeIn } from 'react-native-reanimated';
 import {
   askForNew,
   describeInvite,
-  ErrorLine,
+  familyName,
   InviteCard,
   InviteCardSkeleton,
   inviteFixture,
   isInviteFixture,
-  joiningAs,
+  JoinCard,
   joinTitle,
   leaveTo,
+  MoveCard,
+  sentBy,
   CHECK_CONNECTION,
   NOT_FOUND,
   OUR_SIDE,
@@ -44,28 +48,20 @@ import {
   UNREACHABLE,
   type InviteView,
   type Peeked,
+  type Provider,
   type Viewer,
 } from '@/components/signin';
-import { ActionButton, type ActionState } from '@/components/ui';
-import { api, ApiError, type InviteRef } from '@/lib/api';
-import { parseInviteInput } from '@/lib/auth';
-import { useSession, type AcceptInviteResult } from '@/lib/session';
+import { ActionButton, haptic } from '@/components/ui';
+import { api, ApiError, type Role } from '@/lib/api';
+import { isJoinToken } from '@/lib/auth';
+import { useSession } from '@/lib/session';
 import { useWords } from '@/lib/words/useWords';
 import type { T } from '@/lib/words/words';
-import { motion } from '@/theme/tokens';
 
-const DEV_WEB = __DEV__ && Platform.OS === 'web';
+const WEB = Platform.OS === 'web';
+const DEV_WEB = __DEV__ && WEB;
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
-
-/** The invite this link names (its token wins over its code), and what to hand acceptInvite. */
-function inviteFrom(t: string | undefined, c: string | undefined): { ref: InviteRef; raw: string; key: string } | null {
-  const byToken = parseInviteInput(t);
-  if (byToken?.kind === 'token') return { ref: { token: byToken.token }, raw: byToken.token, key: `t:${byToken.token}` };
-  const byCode = parseInviteInput(c);
-  if (byCode?.kind === 'code') return { ref: { code: byCode.code }, raw: byCode.code, key: `c:${byCode.code}` };
-  return null;
-}
 
 /** A failed peek, in people's words. Only the server's own invite sentences are shown as they are. */
 function peekFailed(e: unknown, t: T): Peeked {
@@ -79,9 +75,9 @@ function peekFailed(e: unknown, t: T): Peeked {
 /** What the peek answered. A failure is put in words when the card draws (in this phone's language). */
 type Answer = Extract<Peeked, { state: 'ok' }> | { state: 'failed'; error: unknown };
 
-export default function InviteScreen() {
+export default function JoinLinkScreen() {
   const params = useLocalSearchParams<{ t?: string; c?: string; fixture?: string; role?: string; from?: string; to?: string }>();
-  const { status, signedIn, family, profiles, acceptInvite, homeFor, refresh } = useSession();
+  const { status, signedIn, family, profiles, owner, me, refresh, signInWithApple, signInWithGoogle } = useSession();
   const { t } = useWords();
   const [fixtureKind, fixtureRole, fixtureFrom, fixtureTo] = [one(params.fixture), one(params.role), one(params.from), one(params.to)];
   const fixture = useMemo(
@@ -89,12 +85,12 @@ export default function InviteScreen() {
       DEV_WEB && isInviteFixture(fixtureKind) ? inviteFixture(fixtureKind, { role: fixtureRole, from: fixtureFrom, to: fixtureTo }, t) : null,
     [fixtureKind, fixtureRole, fixtureFrom, fixtureTo, t],
   );
-  const [tokenParam, codeParam] = [one(params.t), one(params.c)];
-  const invite = useMemo(() => inviteFrom(tokenParam, codeParam), [tokenParam, codeParam]);
-  const key = invite?.key ?? null;
-  const typedCode = fixture ? fixtureKind === 'badcode' : !!invite?.ref.code;
+  const tokenParam = one(params.t);
+  const token = isJoinToken(tokenParam) ? tokenParam : null;
+  // 1.0's code links: a card that says to tap the link instead.
+  const codeLink = !token && !!one(params.c);
 
-  // --- This phone's family, fresh: a cache from before the invite can't say whether it's ours. ---
+  // --- This phone's family, fresh: a cache from before the link can't say whether it's ours. ---
   const inFamily = signedIn && status !== 'needs-code';
   const [fresh, setFresh] = useState(false);
   const askedFamily = useRef(false);
@@ -106,25 +102,25 @@ export default function InviteScreen() {
 
   // --- Peek (no side effects). `attempt` bumps on Try again. -----------------------------------
   const [attempt, setAttempt] = useState(0);
-  const [result, setResult] = useState<{ key: string; attempt: number; answer: Answer } | null>(null);
+  const [result, setResult] = useState<{ token: string; attempt: number; answer: Answer } | null>(null);
   useEffect(() => {
-    if (fixture || !invite) return;
+    if (fixture || !token) return;
     const ctrl = new AbortController();
     api
-      .invitePeek(invite.ref, { signal: ctrl.signal })
+      .invitePeek(token, { signal: ctrl.signal })
       .then((peek): Answer => ({ state: 'ok', peek }))
       .catch((error: unknown): Answer => ({ state: 'failed', error }))
       .then((answer) => {
-        if (!ctrl.signal.aborted) setResult({ key: invite.key, attempt, answer });
+        if (!ctrl.signal.aborted) setResult({ token, attempt, answer });
       });
     return () => ctrl.abort();
-  }, [invite, attempt, fixture]);
+  }, [token, attempt, fixture]);
 
   const peeked: Peeked = fixture
     ? fixture.peeked
-    : !invite
+    : !token
       ? { state: 'missing', sentence: t(NOT_FOUND) }
-      : result && result.key === key && result.attempt === attempt
+      : result && result.token === token && result.attempt === attempt
         ? result.answer.state === 'failed'
           ? peekFailed(result.answer.error, t)
           : result.answer
@@ -135,12 +131,24 @@ export default function InviteScreen() {
       ? null
       : { signedIn: inFamily, family, profiles };
 
-  // --- What the card shows. Frozen from the Join tap on, while the session switches family. ------
-  const [frozen, setFrozen] = useState<InviteView | null>(null);
-  const view = frozen ?? describeInvite(peeked, viewer, t);
+  // --- What the card shows. Held from the first sign-in tap on, while the session switches family,
+  // and set by the server's answer ("Join … instead?", a link that's gone). ----------------------
+  const [held, setHeld] = useState<InviteView | null>(null);
+  const view = held ?? describeInvite(peeked, viewer, t);
+  const peek = view.kind === 'join' || view.kind === 'move' ? view.peek : null;
 
-  const [btn, setBtn] = useState<ActionState>('idle');
-  const [joinError, setJoinError] = useState<string | null>(null);
+  // The card's name and role (null: untouched). An older invite for one person says both; someone
+  // moving from another family keeps theirs (a family-code phone may know neither).
+  const [typedName, setName] = useState<string | null>(null);
+  const [pickedRole, setRole] = useState<Role | null>(null);
+  const current = inFamily ? (owner ?? me) : null;
+  const name = typedName ?? peek?.invitee?.name ?? current?.name ?? '';
+  const role = pickedRole ?? peek?.invitee?.role ?? current?.role ?? 'learner';
+
+  const [moving, setMoving] = useState(false);
+  const [busy, setBusy] = useState<Provider | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [nameError, setNameError] = useState<string | null>(null);
   const alive = useRef(true);
   useEffect(
     () => () => {
@@ -148,52 +156,69 @@ export default function InviteScreen() {
     },
     [],
   );
-  useEffect(() => {
-    if (btn !== 'error') return;
-    const t = setTimeout(() => setBtn((b) => (b === 'error' ? 'idle' : b)), 1800);
-    return () => clearTimeout(t);
-  }, [btn]);
 
   const toStart = () => {
     if (router.canGoBack()) router.back();
-    else leaveTo(signedIn ? '/' : '/join');
+    else leaveTo(inFamily ? '/' : '/join');
   };
 
   const retry = () => {
-    setFrozen(null);
+    setHeld(null);
     setAttempt((a) => a + 1);
   };
 
-  async function join() {
-    if (btn !== 'idle' || view.kind !== 'join' || (!invite && !fixture)) return;
+  async function signIn(p: Provider) {
+    if (busy || !peek || (view.kind !== 'join' && view.kind !== 'move')) return;
+    if (WEB) {
+      // The stand-in button on the web (screenshots): there's no Apple sheet here.
+      setError(t('signin.join.appOnly'));
+      return;
+    }
     const card = view;
-    setFrozen(card);
-    setJoinError(null);
-    setBtn('loading');
-    const started = Date.now();
-    const res: AcceptInviteResult = fixture
-      ? await new Promise((ok) => setTimeout(() => ok({ status: 'joined', familyName: card.peek.family_name, me: null }), 600))
-      : await acceptInvite(invite?.raw ?? '');
-    const wait = motion.loadingMinMs - (Date.now() - started);
-    if (wait > 0) await new Promise((r) => setTimeout(r, wait));
+    const typed = name.trim();
+    if (card.kind === 'join' && !typed) {
+      haptic('error');
+      setNameError(t('signin.joinCard.nameFirst'));
+      return;
+    }
+    setHeld(card);
+    setError(null);
+    setNameError(null);
+    setBusy(p);
+    const move = moving || card.kind === 'move';
+    const res = await (p === 'apple' ? signInWithApple : signInWithGoogle)({
+      joinToken: token,
+      name: typed || null,
+      role: peek.invitee ? null : role,
+      move,
+    });
     if (!alive.current) return;
-    if (res.status === 'joined') {
-      // Someone named: straight to their home, which greets them by name. A family invite: "Who's
-      // in the kitchen?", where they add themselves with +.
-      if (!fixture) return leaveTo(res.me ? homeFor(res.me) : '/');
-      setBtn('success');
-      setTimeout(() => {
-        if (!alive.current) return;
-        setFrozen(null);
-        setBtn('idle');
-      }, 1200);
-    } else if (res.status === 'gone') {
-      setBtn('idle');
-      setFrozen({ kind: 'gone', peek: card.peek, status: res.invite, sentence: res.error });
-    } else {
-      // Nothing changed: the same card stays up with the sentence under Join.
-      setJoinError(res.error);
-      setBtn('error');
+    setBusy(null);
+    switch (res.status) {
+      case 'cancelled':
+        return;
+      case 'signed-in':
+        haptic('success');
+        return leaveTo('/');
+      case 'needs-move':
+        // A returning Apple ID that's in another family: nothing changed yet.
+        setMoving(false);
+        return setHeld({ kind: 'move', peek, from: familyName(res.fromFamily), to: familyName(res.toFamily) });
+      case 'needs-name':
+        setName(typed || res.suggestedName);
+        setHeld({ kind: 'join', peek });
+        return setNameError(t('signin.joinCard.nameFirst'));
+      case 'error':
+        haptic('error');
+        if (res.why === 'gone') return setHeld({ kind: 'gone', peek, status: res.invite ?? 'expired', sentence: res.error });
+        if (res.why === 'not-found') return setHeld({ kind: 'missing', sentence: res.error });
+        if (res.why === 'name') {
+          // "Asha is already in Test family": a different name fixes it, on the join card (still a move).
+          setName(typed);
+          setHeld({ kind: 'join', peek });
+          return setNameError(res.error);
+        }
+        setError(res.error);
     }
   }
 
@@ -201,27 +226,47 @@ export default function InviteScreen() {
     <SignInScreen>
       <View style={styles.middle}>
         <Animated.View key={view.kind} entering={FadeIn.duration(220)} style={styles.stack}>
-          {view.kind === 'loading' ? (
+          {codeLink ? (
+            <InviteCard face={null} title={t('signin.joinCard.codeTitle')} line={t('signin.joinCard.codeLine')}>
+              <ActionButton label={t('signin.shared.backToStart')} size="xl" onPress={toStart} />
+            </InviteCard>
+          ) : view.kind === 'loading' ? (
             <InviteCardSkeleton />
           ) : view.kind === 'join' ? (
             <>
-              <InviteCard face={view.peek.inviter} title={joinTitle(view.peek, view.instead, t)} line={joiningAs(view.peek, t)}>
-                <ActionButton
-                  label={t('signin.invite.joinButton')}
-                  size="xl"
-                  onPress={() => void join()}
-                  state={btn}
-                  accessibilityLabel={
-                    view.peek.invitee
-                      ? t('signin.invite.joinAsLabel', { name: view.peek.invitee.name })
-                      : t('signin.invite.joinFamilyLabel', { family: view.peek.family_name })
-                  }
-                />
-                <ErrorLine error={joinError} align="center" />
-              </InviteCard>
-              {/* Only when it would move this phone out of the family it's in. */}
-              {view.instead ? <SmallLink label={t('signin.shared.notNow')} onPress={toStart} /> : null}
+              <JoinCard
+                face={view.peek.inviter}
+                title={joinTitle(view.peek, t)}
+                line={sentBy(view.peek, t)}
+                name={name}
+                onName={(text) => {
+                  setName(text);
+                  setNameError(null);
+                }}
+                role={role}
+                onRole={view.peek.invitee ? undefined : setRole}
+                busy={busy}
+                onSignIn={(p) => void signIn(p)}
+                error={error}
+                nameError={nameError}
+              />
+              {moving ? <SmallLink label={t('signin.shared.notNow')} onPress={toStart} /> : null}
               <TermsLine />
+            </>
+          ) : view.kind === 'move' ? (
+            <>
+              <MoveCard
+                face={view.peek.inviter}
+                from={view.from}
+                to={view.to}
+                confirmed={moving}
+                onConfirm={() => setMoving(true)}
+                busy={busy}
+                onSignIn={(p) => void signIn(p)}
+                error={error}
+              />
+              <SmallLink label={t('signin.shared.notNow')} onPress={toStart} />
+              {moving ? <TermsLine /> : null}
             </>
           ) : view.kind === 'already' ? (
             <InviteCard face={view.peek.inviter} title={t('signin.invite.already')}>
@@ -232,9 +277,8 @@ export default function InviteScreen() {
               <ActionButton label={t('signin.shared.backToStart')} size="xl" onPress={toStart} />
             </InviteCard>
           ) : view.kind === 'missing' ? (
-            // Asking again can't find it: the way on is a fixed code, or the start.
-            <InviteCard face={null} title={view.sentence} line={typedCode ? t('signin.invite.checkCode') : t('signin.invite.checkLink')}>
-              <ActionButton label={typedCode ? t('signin.invite.typeAgain') : t('signin.shared.backToStart')} size="xl" onPress={toStart} />
+            <InviteCard face={null} title={view.sentence} line={t('signin.invite.checkLink')}>
+              <ActionButton label={t('signin.shared.backToStart')} size="xl" onPress={toStart} />
             </InviteCard>
           ) : (
             <>

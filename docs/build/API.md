@@ -1166,3 +1166,9 @@ sticks to my hand." (`grandma-hand-pulled-noodle-soup` step 2, ~9 h ago, **open*
 Rebuild: `.venv/bin/python supabase/seed/build_seed.py <scratch>/seed.sql` (everything) or
 `… build_seed.py --circle-only <scratch>/seed.sql` (just the circles), run the SQL, delete the file
 (replaces seed messages only; real messages stay).
+
+## Join links (Oct 29, docs/build/JOIN-SIMPLE.md; deploys after Apple approves 1.0)
+- `POST /join-links` (signed in) → `{ url: "<WEB_URL>/i?t=<22 chars>", expires_at }`: the family's link, any number of joins, 7 days (the same link while it has more than a day left). `POST /join-links/revoke` → `{ ok: true }`. Table `join_links` (migration 20261029100000).
+- `POST /invites/peek` answers a 22-char token with `kind: "link"`; `POST /invites/accept` with one gives 426 "Update homecookd to join this family."
+- `POST /auth/apple|google` also take `join_token` (a 22-char link or a 1.0 16-char invite), `link_ticket` (Convex `/link/open`), `role`, `move`. A known account in another family gets `{ existing: true, needs_move: true, from_family, to_family }` and moves only with `move: true` (then `moved: { receipt }` for Convex `links.moved`). A new account joins as a new profile. `POST /auth/link` was removed before shipping.
+- The 1.1 app no longer uses codes, `/invites/accept`, `/auth/email`, `share_token` joins or `/profiles/self` after an invite; they stay for 1.0 until 30 days after 1.1 is live (TODO(caleb)).

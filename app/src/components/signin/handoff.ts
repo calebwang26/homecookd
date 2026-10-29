@@ -1,10 +1,7 @@
 // Hand-offs between the sign-in screens (join, i, r) and the rest of the app.
 //
-//   routeInvite(input)                     a pasted or typed invite -> /i?t=…, /i?c=… or /join?s=…; a
-//                                          dish card's link -> /miss?k=… or /a?t=… (the claim screens)
 //   peekShare(token)                       GET /shares/:token, at most once per link per launch (the
 //                                          server counts every call as an open)
-//   shareIsDead(token)                     after a peek: the server said that link is gone (404)
 //   openAfterPick(recipeIdOrPath)          a shared dish, or a link to open again (a dish card's
 //                                          /miss?k=…), right after someone taps their face
 //   holdAfterPick(pathname, search)        any other link (a dish, a chat, /my-recipe/<id>) the app
@@ -18,17 +15,7 @@
 import { router, type Href } from 'expo-router';
 
 import { api, ApiError, type SharePublic } from '@/lib/api';
-import type { InviteInput } from '@/lib/auth';
-import { claimHref } from '@/lib/linkClaim';
 import { openRecipe, type RouterLike } from '@/lib/navigation';
-
-/** Open what a pasted or typed invite points at. A share link stays on the first screen as `?s=`. */
-export function routeInvite(input: InviteInput): void {
-  if (input.kind === 'token') router.push({ pathname: '/i', params: { t: input.token } });
-  else if (input.kind === 'code') router.push({ pathname: '/i', params: { c: input.code } });
-  else if (input.kind === 'card' || input.kind === 'ask') router.push(claimHref(input.kind, input.token) as Href);
-  else router.replace({ pathname: '/join', params: { s: input.share } });
-}
 
 /** Replace the whole stack with `href` (after signing in or joining). */
 export function leaveTo(href: Href): void {
@@ -40,24 +27,18 @@ export function leaveTo(href: Href): void {
 // Share links
 
 const shares = new Map<string, Promise<SharePublic | null>>();
-const dead = new Set<string>();
 
 /** Who shared a link and which dish it is. null when the link is unknown or the server can't be reached. */
 export function peekShare(token: string): Promise<SharePublic | null> {
   const hit = shares.get(token);
   if (hit) return hit;
   const p = api.share(token).catch((e) => {
-    if (e instanceof ApiError && e.status === 404) dead.add(token); // gone for good: keep the answer
-    else shares.delete(token); // offline: let a later visit try again
+    // Gone for good (404): keep the answer. Offline: let a later visit try again.
+    if (!(e instanceof ApiError && e.status === 404)) shares.delete(token);
     return null;
   });
   shares.set(token, p);
   return p;
-}
-
-/** The server said this share link doesn't exist (only known once peekShare has answered). */
-export function shareIsDead(token: string): boolean {
-  return dead.has(token);
 }
 
 // ---------------------------------------------------------------------------------------------

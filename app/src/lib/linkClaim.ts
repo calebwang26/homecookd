@@ -8,8 +8,10 @@
 //     no such link (404)                    dead     "This link doesn't work anymore."
 //     in a family, someone picked           claim    links.claim, then the card (taken: who has it)
 //     in a family, nobody picked yet        pick     "Who's in the kitchen?", then this link again
-//     signed out, with a join ticket        join     a new person in the card's family, named from the
-//                                                    card (asked only when it has no name)
+//     signed out, with a join ticket        join     the join card: the name (prefilled from the card:
+//                                                    the kid's, or "Mom"), then Apple or Google with the
+//                                                    ticket (link_ticket) makes them a new person in the
+//                                                    card's family (docs/build/JOIN-SIMPLE.md §1)
 //     signed out, that side claimed before  taken    "This one's already with Mom."
 //     signed out, no ticket                 signIn   /join?claim=…: Apple or Google first (no family yet,
 //                                                    outside the 30 days, or links not set up)
@@ -36,7 +38,7 @@ export type LinkInfo = {
   familyName: string | null;
   /** Someone holds this side now. */
   taken: boolean;
-  /** A join ticket for POST /auth/link: someone new may join the card's family. */
+  /** A join ticket for POST /auth/apple|google's `link_ticket`: someone new may join the card's family. */
   ticket: string | null;
   /** The language Mom answered in (to pre-pick her cook language). */
   language: string | null;
@@ -97,7 +99,7 @@ export function parseClaimed(v: unknown): Claimed | null {
   return { dishAskId: c.dishAskId, side: c.side, sameFamily: c.sameFamily === true, taken: c.taken === true };
 }
 
-/** Who this side of the card is: the kid by name, the cook by what the kid calls her ("Mom"). */
+/** Who this side of the card is: the kid by name, the cook by what the kid calls her ("Mom"). The join card's name. */
 export function sideName(info: LinkInfo): string | null {
   return info.side === 'kid' ? info.kidName : info.relation;
 }

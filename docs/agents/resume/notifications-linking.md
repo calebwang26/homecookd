@@ -10,7 +10,9 @@ Worktree `.claude/worktrees/musing-tereshkova-544b3c`, branch `claude/join-simpl
 - Convex `links.moved` + `verifyMoved` / `signMoved` (convex/links.ts, lib/joinTicket.ts): 245 vitest pass.
 - `scripts/test-family-link.mjs`: the TEST family's never-expiring reviewer link (prints the SQL; run at deploy).
 
-## In flight when written (check `git status`; subagents leave their files uncommitted)
+## Also done (committed): the Supabase server (95fc8fe00) and the app side (see the latest commit)
+
+## Was in flight earlier (now done)
 - **Supabase (subagent):**
   - `join_links` migration 20261029100000;
   - `POST /join-links` (+ revoke);

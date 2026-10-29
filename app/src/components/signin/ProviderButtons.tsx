@@ -1,12 +1,14 @@
-// "Continue with Apple" and "Continue with Google" for the first screen, 56 tall, full width.
-//   Apple   the system button (expo-apple-authentication's AppleAuthenticationButton: CONTINUE,
+// "Sign in with Apple" (iOS) or "Continue with Google" (Android) for every sign-in step: the first
+// screen, a join link's card, a dish card's link and "Join <B> instead?" (docs/build/JOIN-SIMPLE.md),
+// 56 tall, full width.
+//   Apple   always the system button (expo-apple-authentication's AppleAuthenticationButton: SIGN_IN,
 //           BLACK), with pill corners like every big button in the app (Apple's HIG allows any
-//           corner radius). iOS only.
+//           corner radius), so guideline 4.8 and Apple's button rules hold. iOS only.
 //   Google  Google's own branding: white, the four-colour G, "Continue with Google", a 1 px
 //           #747775 border, a medium-weight label in the system font (Roboto Medium on Android).
-//           Only in builds that have it.
-// Only buttons that can work on this phone show (useSignInProviders). The web can't sign in either
-// way, so it draws look-alikes of both for screenshots; tapping one says sign-in works in the app.
+//           Android only, in builds that have it.
+// Only buttons that can work on this phone show (useSignInProviders). The web can't sign in, so it
+// draws a stand-in of the Apple button for screenshots; tapping it says sign-in works in the app.
 // While one is signing in, a spinner covers it and neither takes another tap.
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { ActivityIndicator, Platform, StyleSheet, Text, View } from 'react-native';
@@ -25,10 +27,10 @@ const WEB = Platform.OS === 'web';
 // Google's light-theme button colours (developers.google.com/identity/branding-guidelines).
 const GOOGLE = { bg: '#FFFFFF', border: '#747775', ink: '#1F1F1F' };
 
-/** Which buttons will show here (the web shows both look-alikes). */
+/** Which buttons will show here: Apple on iOS, Google on Android (the web: the Apple stand-in). */
 export function useProviderButtons(): { apple: boolean; google: boolean } {
   const { apple, google } = useSignInProviders();
-  return WEB ? { apple: true, google: true } : { apple, google };
+  return WEB ? { apple: true, google: false } : { apple, google: google && Platform.OS === 'android' };
 }
 
 export function ProviderButtons({ busy, onPress }: { busy: Provider | null; onPress: (p: Provider) => void }) {
@@ -46,7 +48,7 @@ export function ProviderButtons({ busy, onPress }: { busy: Provider | null; onPr
             <AppleLookAlike onPress={() => tap('apple')} />
           ) : (
             <AppleAuthentication.AppleAuthenticationButton
-              buttonType={AppleAuthentication.AppleAuthenticationButtonType.CONTINUE}
+              buttonType={AppleAuthentication.AppleAuthenticationButtonType.SIGN_IN}
               buttonStyle={AppleAuthentication.AppleAuthenticationButtonStyle.BLACK}
               cornerRadius={HEIGHT / 2}
               style={styles.fill}
@@ -88,7 +90,7 @@ function Busy({ bg, fg, border }: { bg: string; fg: string; border?: boolean }) 
   );
 }
 
-/** Web only (screenshots): the system Apple button as iOS draws it. */
+/** Web only (screenshots, no sign-in): the system Apple button as iOS draws it. */
 function AppleLookAlike({ onPress }: { onPress: () => void }) {
   const { t } = useWords();
   return (

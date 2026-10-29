@@ -1,11 +1,13 @@
-// Unit tests for a dish card's link in the app (docs/build/V2-LINKING.md 2.2, 2.6, 2.7). TS run by Node's
-// type stripping, no network:
+// Unit tests for the links the app opens (docs/build/V2-LINKING.md 2.2, 2.6, 2.7; JOIN-SIMPLE.md). TS run
+// by Node's type stripping, no network:
 //   src/lib/auth/links.ts  parseInviteInput takes /miss?k= and /a?t= (https, www, the build's web host,
-//                          homecookd://, edible://, homecookd.app with no scheme, inside a pasted text),
-//                          refuses other hosts, bare 22-character tokens and wrong lengths, and still
-//                          reads invites (/i), recipe links (/r) and codes as before
+//                          homecookd://, edible://, homecookd.app with no scheme, inside a copied text),
+//                          and /i?t= family join links (22 characters) and older invites (16); /i?c= is an
+//                          old code link (/i says to tap the link instead); links only: no bare tokens,
+//                          typed codes or recipe links (/r joins nobody); joinLinkHref gives the screen
 //   src/lib/linkClaim.ts   POST /link/open's answer, links.claim's answer, planClaim for every journey of
-//                          2.3 and 2.7, and the ?claim= hand-off through /join
+//                          2.3 and 2.7 (`join`: the join card, name + Apple with the ticket), and the
+//                          ?claim= hand-off through /join
 //   node scripts/test-links.mjs
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
@@ -28,7 +30,7 @@ registerHooks({
   },
 });
 
-const { parseInviteInput } = await import(pathToFileURL(join(root, 'src/lib/auth/links.ts')).href);
+const { isJoinToken, joinLinkHref, parseInviteInput } = await import(pathToFileURL(join(root, 'src/lib/auth/links.ts')).href);
 const C = await import(pathToFileURL(join(root, 'src/lib/linkClaim.ts')).href);
 
 let passed = 0;
@@ -105,24 +107,68 @@ test('never a bare 22-character token, another host, a wrong length or the wrong
     'https://homecookd.app/miss',
     `https://homecookd.app/missing?k=${K}`,
     `https://homecookd.app/about?t=${T}`,
-    `https://homecookd.app/i?t=${K}`, // a card token is no invite
   ]) {
     assert.equal(parseInviteInput(text), null, text);
   }
 });
 
-test('invites, recipe links and codes read as before', () => {
-  const tok = 'aB3dE6gH9jK2mN5p'; // 16
-  assert.deepEqual(parseInviteInput(`https://homecookd.app/i?t=${tok}`), { kind: 'token', token: tok });
-  assert.deepEqual(parseInviteInput(`homecookd://i?t=${tok}`), { kind: 'token', token: tok });
-  assert.deepEqual(parseInviteInput(`Dad, join our family table on homecookd: https://homecookd.app/i?t=${tok}&c=K7QM2X`), { kind: 'token', token: tok });
+const J = 'Qw8eRt7yUi6oPa5sDf4gHj'; // 22 base62: a family join link
+const OLD = 'aB3dE6gH9jK2mN5p'; // 16: an older one-use invite
+assert.equal(J.length, 22);
+
+test('a family join link: /i?t= with 22 characters (or an older invite’s 16), from every place', () => {
+  for (const tok of [J, OLD]) {
+    for (const text of [
+      `https://homecookd.app/i?t=${tok}`,
+      `https://www.homecookd.app/i?t=${tok}`,
+      `https://preview.homecookd.test/i?t=${tok}`,
+      `homecookd://i?t=${tok}`,
+      `edible://i?t=${tok}`,
+      `homecookd.app/i?t=${tok}`,
+      `https://homecookd.app/i/?t=${tok}`,
+      `Join our family on homecookd: https://homecookd.app/i?t=${tok} (works for 7 days)`,
+    ]) {
+      assert.deepEqual(parseInviteInput(text), { kind: 'token', token: tok }, text);
+    }
+  }
+  // An older invite's link carried its code too: the token wins.
+  assert.deepEqual(parseInviteInput(`https://homecookd.app/i?t=${OLD}&c=K7QM2X`), { kind: 'token', token: OLD });
+  assert.ok(isJoinToken(J) && isJoinToken(OLD));
+  for (const bad of [J.slice(1), `${J}x`, OLD.slice(1), `${OLD.slice(0, 15)}_`, '', null, undefined]) assert.equal(isJoinToken(bad), false, String(bad));
+});
+
+test('/i?c= is an old code link: /i says to tap the link instead (the pickup ignores it)', () => {
   assert.deepEqual(parseInviteInput('https://homecookd.app/i?c=k7qm2x'), { kind: 'code', code: 'K7QM2X' });
-  assert.deepEqual(parseInviteInput('https://homecookd.app/r?s=share-tok_1'), { kind: 'share', share: 'share-tok_1' });
-  assert.deepEqual(parseInviteInput(tok), { kind: 'token', token: tok });
-  assert.deepEqual(parseInviteInput('k7qm 2x'), { kind: 'code', code: 'K7QM2X' });
-  assert.equal(parseInviteInput('https://evil.example/i?t=' + tok), null);
-  assert.equal(parseInviteInput(''), null);
-  assert.equal(parseInviteInput(null), null);
+  assert.deepEqual(parseInviteInput(`https://homecookd.app/i?t=${J.slice(1)}&c=K7QM2X`), { kind: 'code', code: 'K7QM2X' }, 'a broken token, a code');
+  assert.equal(parseInviteInput('https://homecookd.app/i?c=K7QM0X'), null, 'not the server’s alphabet');
+  assert.equal(joinLinkHref({ kind: 'code', code: 'K7QM2X' }), null);
+});
+
+test('links only: no bare token, no typed code, no recipe link, no other host', () => {
+  for (const text of [
+    J,
+    OLD,
+    'k7qm 2x',
+    'K7QM2X',
+    'https://homecookd.app/r?s=share-tok_1',
+    'homecookd://r?s=share-tok_1',
+    `https://evil.example/i?t=${J}`,
+    `https://homecookd.app.evil.example/i?t=${J}`,
+    `https://homecookd.app/i?t=${J}x`,
+    `https://homecookd.app/i?k=${J}`,
+    '',
+    null,
+  ]) {
+    assert.equal(parseInviteInput(text), null, String(text));
+  }
+});
+
+test('joinLinkHref: the screen each join link opens', () => {
+  assert.equal(joinLinkHref(parseInviteInput(`https://homecookd.app/i?t=${J}`)), `/i?t=${J}`);
+  assert.equal(joinLinkHref(parseInviteInput(`homecookd://i?t=${OLD}`)), `/i?t=${OLD}`);
+  assert.equal(joinLinkHref(parseInviteInput(`https://homecookd.app/miss?k=${K}`)), `/miss?k=${K}`);
+  assert.equal(joinLinkHref(parseInviteInput(`https://homecookd.app/a?t=${T}`)), `/a?t=${T}`);
+  assert.equal(joinLinkHref(null), null);
 });
 
 // ---- linkClaim
@@ -194,11 +240,16 @@ test('planClaim: signed in claims whatever the card says (2.6 step 2, 2.7 anothe
   assert.deepEqual(C.planClaim(opened({ ticket: 't.s', joinable: 'yes' }), { signedIn: true, picked: false }), { kind: 'pick' });
 });
 
-test('planClaim: signed out with a ticket joins as that side, named from the card', () => {
+test('planClaim: signed out with a ticket: the join card, its name prefilled from the card, then Apple with the ticket', () => {
   assert.deepEqual(C.planClaim(opened({ ticket: 't.s', joinable: 'yes' }), OUT), { kind: 'join', ticket: 't.s', name: 'Caleb', role: 'learner' });
   assert.deepEqual(C.planClaim(opened({ side: 'cook', ticket: 't.s', joinable: 'yes' }), OUT), { kind: 'join', ticket: 't.s', name: 'Mom', role: 'cook' });
-  // No name on the card: the screen asks for one.
+  // No name on the card: the field starts empty.
   assert.deepEqual(C.planClaim(opened({ kidName: null, ticket: 't.s', joinable: 'yes' }), OUT), { kind: 'join', ticket: 't.s', name: null, role: 'learner' });
+  // Mom's ask names her by what the kid calls her, as stored ("grandma" -> "Grandma").
+  assert.equal(C.planClaim(opened({ side: 'cook', relation: 'grandma', ticket: 't.s', joinable: 'yes' }), OUT).name, 'Grandma');
+  // A ticket means "name + Apple": the sign-in, not the plan, finds a returning Apple ID in another
+  // family ("Join … instead?"), so a ticket never plans a claim while signed out.
+  for (const side of ['kid', 'cook']) assert.equal(C.planClaim(opened({ side, ticket: 't.s', joinable: 'yes' }), OUT).kind, 'join');
 });
 
 test('planClaim: signed out, that side claimed once: ask for an invite (one join per side, ever)', () => {

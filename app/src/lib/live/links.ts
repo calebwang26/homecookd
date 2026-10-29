@@ -3,7 +3,9 @@
 //   const opened = await openLink(token)         POST /link/open on the Convex HTTP host: the dish, whose,
 //                                                and a join ticket when someone new may join (lib/linkClaim)
 //   const claimed = await claimLink(token, as?)  links.claim: this person holds that side of the card now
-// openLink never throws; claimLink throws when the claim didn't happen (offline, signed out, not deployed).
+//   await linksMoved(receipt, profileId)         links.moved: after a move to another family, a solo
+//                                                family's recipes come along (docs/build/JOIN-SIMPLE.md §4)
+// openLink never throws; claimLink and linksMoved throw when nothing happened (offline, not deployed).
 import { siteUrl } from '@/components/community/invite';
 import { parseClaimed, parseLinkInfo, type Claimed, type LinkInfo } from '@/lib/linkClaim';
 
@@ -47,4 +49,14 @@ export async function claimLink(token: string, as?: string): Promise<Claimed> {
   const claimed = parseClaimed(await call<unknown>('mutation', 'links:claim', { sessionToken, token }, notYet, { strict: true }));
   if (!claimed) throw new Error('links.claim gave no card.');
   return claimed;
+}
+
+/**
+ * The server's "moved" receipt, checked by Convex as the new person, who becomes the cook of a solo
+ * family's recipes (session hands it over: setLinksMoved in the root layout). Run once per move.
+ */
+export async function linksMoved(receipt: string, profileId: string): Promise<{ recipes: number; faces: number }> {
+  const sessionToken = await sessionFor(profileId);
+  const none = { recipes: 0, faces: 0 };
+  return call('mutation', 'links:moved', { sessionToken, receipt }, () => none, { strict: true });
 }
