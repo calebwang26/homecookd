@@ -2,7 +2,8 @@
 //   src/lib/missHome.ts       "I miss home" clip pool, the no-repeat pick, the per-profile play log
 //   src/lib/kitchenCounts.ts  "Grandma's kitchen, 4 of 7", the cook's mirror line, "I made it" milestones
 //   src/lib/tz.ts             the x-tz value (read fresh: it follows a flight home)
-//   src/lib/push.ts           when the push explainer may show, the OS answer, tap routing,
+//   src/lib/push.ts           when the push explainer may show (v2's two moments even on the first
+//                             launch), the OS answer, tap routing, Convex's copy of the token,
 //                             sign-out that never waits on the network, the message push noted for
 //                             the double tap
 //   src/lib/media.ts          the 'heard' measure: once per play of a cook's voice, only from 3 s
@@ -575,6 +576,33 @@ await test('push: never on the first launch; the next launch may ask', async () 
   assert.equal(await second.shouldAskPush('kid-first-made', '', NOW), false);
 });
 
+await test('push: v2’s two moments ask even on the first launch, and keep the other rules', async () => {
+  const V2 = ['kid-card-saved', 'cook-craving-sent'];
+  kv.clear();
+  const first = await launch();
+  assert.equal(await first.shouldAskPush('kid-first-made', 'kid-a', NOW), false); // the old ones still wait
+  for (const kind of V2) assert.equal(await first.shouldAskPush(kind, 'kid-a', NOW), true, kind);
+  assert.ok(kv.has('push.firstLaunchAt'), 'the launch is still noted');
+  // The 30-day "Not now", nobody picked, and an OS that already answered still hold on the first launch.
+  await first.snoozePushAsk('kid-a', NOW);
+  for (const kind of V2) {
+    assert.equal(await first.shouldAskPush(kind, 'kid-a', NOW + DAY), false, kind);
+    assert.equal(await first.shouldAskPush(kind, 'kid-a', NOW + 30 * DAY), true, kind);
+    assert.equal(await first.shouldAskPush(kind, null, NOW), false, kind);
+  }
+  kv.clear();
+  const answered = await launch({ perm: PERM.deniedForGood });
+  for (const kind of V2) assert.equal(await answered.shouldAskPush(kind, 'kid-a', NOW), false, kind);
+  kv.clear();
+  const sim = await launch({ isDevice: false });
+  for (const kind of V2) assert.equal(await sim.shouldAskPush(kind, 'kid-a', NOW), false, kind);
+  // Whose words: the craving link is the cook's moment, the card the kid's.
+  assert.equal(first.pushAskWho('cook-craving-sent'), 'cook');
+  assert.equal(first.pushAskWho('kid-card-saved'), 'kid');
+  assert.equal(first.pushAskWho('cook-first-send'), 'cook');
+  assert.equal(first.pushAskWho('kid-first-made'), 'kid');
+});
+
 await test('push: "Not now" means no ask for this profile for 30 days', async () => {
   kv.clear();
   notFirstLaunch();
@@ -695,6 +723,57 @@ await test('push: sign-out never waits on the network (leaveFamily awaits only t
   await P.unregister({ remove: async (token) => void none.push(token) });
   await new Promise((resolve) => setImmediate(resolve));
   assert.deepEqual(none, []);
+});
+
+await test('push: Convex gets the token too (as whom, with the zone), and loses it on sign-out, never in the way', async () => {
+  kv.clear();
+  const P = await launch();
+  const sent = [];
+  const tz = T.deviceTimeZone();
+  P.setConvexPush({
+    register: async (...args) => void sent.push(['register', ...args]),
+    unregister: async (token) => void sent.push(['unregister', token]),
+  });
+  const r = registrations();
+  assert.equal(await P.requestAndRegister({ register: r.register, profileId: 'kid-a' }), 'registered');
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(sent, [['register', 'ExponentPushToken[proj-1]', 'ios', tz, 'kid-a']]);
+  assert.ok(tz.length > 0);
+  // A sync for someone new on this phone: once per token and key, like the api's.
+  assert.equal(await P.syncRegistration({ register: r.register, key: '1|cook-b', profileId: 'cook-b' }), true);
+  assert.equal(await P.syncRegistration({ register: r.register, key: '1|cook-b', profileId: 'cook-b' }), true);
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(sent.slice(1), [['register', 'ExponentPushToken[proj-1]', 'ios', tz, 'cook-b']]);
+  assert.equal(r.calls.length, 2);
+  // Sign-out: Convex is told too, in the background.
+  await P.unregister({ remove: async () => {} });
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.deepEqual(sent.at(-1), ['unregister', 'ExponentPushToken[proj-1]']);
+
+  // A Convex that hangs, fails or throws never holds up registering or signing out.
+  const late = () => new Promise((resolve) => setTimeout(() => resolve('waited'), 200));
+  for (const sink of [
+    { register: () => new Promise(() => {}), unregister: () => new Promise(() => {}) },
+    { register: async () => Promise.reject(new Error('offline')), unregister: async () => Promise.reject(new Error('offline')) },
+    {
+      register: () => {
+        throw new Error('boom');
+      },
+      unregister: () => {
+        throw new Error('boom');
+      },
+    },
+  ]) {
+    kv.clear();
+    const Q = await launch();
+    Q.setConvexPush(sink);
+    const q = registrations();
+    assert.equal(await Promise.race([Q.requestAndRegister({ register: q.register, profileId: 'kid-a' }), late()]), 'registered');
+    assert.equal(q.calls.length, 1, 'the api still got it');
+    assert.equal(await Promise.race([Q.unregister({ remove: async () => {} }).then(() => 'done'), late()]), 'done');
+    assert.equal(kv.has('push.token'), false);
+  }
+  await new Promise((resolve) => setTimeout(resolve, 10));
 });
 
 await test('pushUrl: only our own in-app routes', async () => {

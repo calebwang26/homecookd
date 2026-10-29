@@ -82,4 +82,13 @@ export const SIGNIN = {
   'signin.invite.trySoon': 'Try again in a minute.',
   'signin.invite.tooMany': 'Too many tries for now.',
   'signin.invite.tryAgain': 'Try again',
+
+  // A dish card's link (/miss, /a: components/signin/ClaimLink.tsx)
+  'signin.link.dish': '{name}’s {dish}',
+  'signin.link.opening': 'Opening it for you…',
+  'signin.link.dead': 'This link doesn’t work anymore.',
+  'signin.link.taken': 'This one’s already with {name}.',
+  'signin.link.takenSomeone': 'This link already brought someone in.',
+  'signin.link.askInvite': 'Ask them for an invite.',
+  'signin.link.haveAccount': 'I already have an account',
 } as const satisfies Record<`signin.${string}`, string>;

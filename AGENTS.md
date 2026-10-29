@@ -63,8 +63,8 @@ follows it, and it wins over the docs below on UI/UX and flows.
   push, `gh pr create`, then check that `gh pr view --json mergeStateStatus` is `CLEAN`. Stage files by name, never
   `git add -A`: the tree holds untracked demo PNGs and Finder " 2" duplicates.
 - **Section chats (Oct 26):** each codebase section has one permanent Claude chat that owns it (Voice & homie,
-  Pipeline & recipes, Convex & accounts, App screens & recording, App Store, web & builds). Work goes to the owner of
-  the files it touches: `docs/agents/memory/section-chats.md`.
+  Pipeline & recipes, Convex & accounts, App screens & recording, App Store, web & builds, and since Oct 29
+  Notifications & linking). Work goes to the owner of the files it touches: `docs/agents/memory/section-chats.md`.
 - **The Merge Agent approves every PR.** After `gh pr create`, send the PR (number, link, branch, files touched,
   one-line summary) to the Claude Desktop session titled **Merge Agent** (Claude Code: `ListAgents`, then
   `SendMessage`; Codex or Salik: ask Caleb to pass it on). Don't merge until it approves. When PRs conflict, the
@@ -79,8 +79,8 @@ follows it, and it wins over the docs below on UI/UX and flows.
   STATE.md. After a deploy, run:
   `node supabase/tests/two_sided_live.mjs`, `node app/scripts/api-smoke.mjs` and `node supabase/tests/retention_live.mjs`.
   They need `docs/build/.test-family-code` (gitignored). Use only the TEST family.
-- **Secrets:** never put a Gemini, Cartesia, Moss, Anthropic or Muse key, a Supabase service key or a GCP
-  credential in `app/` or `web/`, or in any tracked file. `EXPO_PUBLIC_*` and `NEXT_PUBLIC_*` values ship to users.
+- **Secrets:** never put a Gemini, Cartesia, Moss, Anthropic or Muse key, a Supabase service key, a GCP
+  credential or `LINK_JOIN_SECRET` (Convex and Supabase share it to sign join tickets) in `app/` or `web/`, or in any tracked file. `EXPO_PUBLIC_*` and `NEXT_PUBLIC_*` values ship to users.
   Never print `.env` values. Keys live only in the gitignored root `.env`, Convex env, Cloud Run secrets and
   Supabase edge-function secrets (which key goes where: `docs/build/STACK.md`, "Keys").
 - **One `.env` for every key:** `/Users/calebwang/Documents/GitHub/hackathon-homecookd/.env` (the main checkout).
@@ -181,7 +181,7 @@ cd app && npx eas-cli build -p ios --profile production --auto-submit   # TestFl
 cd app && npx eas-cli update --channel production -m "<what changed>"   # JS-only fix to TestFlight phones
 node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
-cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent
+cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent/links
 cd app && node scripts/draft-words.mjs                             # draft the cook app's missing words in every language (Claude); then test-words
 
 # web

@@ -3,7 +3,10 @@
 //                                        and homecookd.app/i?t=… without the https://)
 //   …/i?c=<code>                        an invite by its 6-letter code
 //   …/r?s=<share>                       a shared recipe: join that family through /join?s=
-//   a bare 16-character token, or a 6-letter code ("k7qm 2x" works too)
+//   …/miss?k=<22>                       a kid's dish card (docs/build/V2-LINKING.md 2.2): claimed on /miss
+//   …/a?t=<22>                          Mom's ask for that card: claimed on /a
+//   a bare 16-character token, or a 6-letter code ("k7qm 2x" works too). Never a bare 22-character
+//   card token: only a whole /miss or /a link is a card, so nothing is mistaken for one.
 // A whole pasted text works ("Dad, join our family table on homecookd: https://…"): the first
 // homecookd link in it is used. Anything else is null: show NOT_AN_INVITE.
 import { WEB_URL } from '../api';
@@ -11,7 +14,9 @@ import { WEB_URL } from '../api';
 export type InviteInput =
   | { kind: 'token'; token: string }
   | { kind: 'code'; code: string }
-  | { kind: 'share'; share: string };
+  | { kind: 'share'; share: string }
+  | { kind: 'card'; token: string }
+  | { kind: 'ask'; token: string };
 
 export const NOT_AN_INVITE = 'That doesn’t look like a homecookd invite.';
 
@@ -19,9 +24,12 @@ const TOKEN = /^[0-9A-Za-z]{16}$/;
 // The server's CODE_ALPHABET: no 0/O/1/I.
 const CODE = /^[A-HJ-NP-Z2-9]{6}$/;
 const SHARE = /^[0-9A-Za-z_-]{4,64}$/;
+// A dish card's kid token (/miss?k=) and its ask token (/a?t=): 22 base62 (DISH-ASK-SPEC).
+const DISH_TOKEN = /^[0-9A-Za-z]{22}$/;
 // An https link (host checked below), an app-scheme link, or homecookd.app with no scheme (copied
-// from an address bar or retyped; never a longer host that ends in it), to /i or /r, plus its query.
-const LINK = /(?:https?:\/\/([a-z0-9.-]+(?::\d+)?)|(?:homecookd|edible):\/\/|(?:^|[^a-z0-9.@/:-])(?:www\.)?homecookd\.app)\/*(i|r)\/?\?(\S*)/gi;
+// from an address bar or retyped; never a longer host that ends in it), to /i, /r, /miss or /a, plus
+// its query.
+const LINK = /(?:https?:\/\/([a-z0-9.-]+(?::\d+)?)|(?:homecookd|edible):\/\/|(?:^|[^a-z0-9.@/:-])(?:www\.)?homecookd\.app)\/*(i|r|miss|a)\/?\?(\S*)/gi;
 
 function webHosts(): Set<string> {
   const own = /^https?:\/\/([^/?#]+)/i.exec(WEB_URL)?.[1]?.toLowerCase();
@@ -36,6 +44,11 @@ function fromLink(page: string, query: string): InviteInput | null {
   if (page === 'r') {
     const share = param(query, 's');
     return share && SHARE.test(share) ? { kind: 'share', share } : null;
+  }
+  if (page === 'miss' || page === 'a') {
+    const token = param(query, page === 'miss' ? 'k' : 't');
+    if (!token || !DISH_TOKEN.test(token)) return null;
+    return page === 'miss' ? { kind: 'card', token } : { kind: 'ask', token };
   }
   const token = param(query, 't');
   if (token && TOKEN.test(token)) return { kind: 'token', token };

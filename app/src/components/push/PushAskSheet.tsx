@@ -2,6 +2,9 @@
 // "Allow notifications?" never arrives cold:
 //   kid    "Want a note when Mom answers?"      [Yes] [Not now]
 //   cook   "Want a note when Leo writes back?"  [Yes] [Not now]   (PR 1; see COOK_ASK_COOKS_IT)
+//   v2     kid-card-saved "Want a note when Mom answers?" ("…when they answer?" with no name);
+//          cook-craving-sent "Want a note when they pick a dish?"
+// Its words read in the cook's language (lib/words, common.push.*); a kid's stay English.
 // Yes asks the OS (lib/push requestAndRegister): the button shows its check only when the phone is
 // really set up for notes; an OS "no" just closes the sheet. Not now, the close button or the
 // backdrop all mean "Not now". Either way without a yes: no ask for 30 days. No line telling people
@@ -9,26 +12,37 @@
 //
 // Two ways to use it:
 //   <PushAskSheet visible who="kid" otherName="Mom" onYes={…} onNotNow={…} />   // just the sheet
+//   <PushAskSheet visible kind="kid-card-saved" otherName="Mom" onYes={…} onNotNow={…} />   // a moment's own words
 //   <PushAskHost register={(token, platform) => api.pushToken({ token, platform })} />  // once, root layout
 //   askForPush({ kind: 'kid-first-made', profileId: me.id, name: 'Mom' })  // from anywhere, even lib code
 //   askForPushSoon({ … })                    // the same, once a screen change has settled
 // Where it's asked (RETENTION-HANDOFF 2.3): kid-first-made when cook mode's "I made it" flow ends
 // (cook/[id].tsx), kid-first-question when a question reaches the server (lib/messaging deliver),
 // cook-first-send after Send's burst (send.tsx) and after a recipe card goes out (messaging
-// sendRecipe). Never on a lent phone (its notes go to the phone's own person).
-// askForPush checks shouldAskPush first (pushes work in this build, not the first launch, the OS
-// prompt can still show, no recent "Not now"), so Expo Go and web never see the sheet.
+// sendRecipe), kid-card-saved once a kid's dish card is claimed (components/signin/ClaimLink), and
+// cook-craving-sent after she shares the craving link (parent Home, App screens & recording). Never on
+// a lent phone (its notes go to the phone's own person).
+// askForPush checks shouldAskPush first (pushes work in this build, not the first launch except for
+// the two v2 moments, the OS prompt can still show, no recent "Not now"), so Expo Go and web never
+// see the sheet.
 import { useState, useSyncExternalStore } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ActionButton, Avatar, BottomSheet, PotMark, PressableScale, Txt, type ActionState, type AvatarProps } from '@/components/ui';
 import { pushAskWho, requestAndRegister, shouldAskPush, snoozePushAsk, type PushAskKind, type RegisterPush } from '@/lib/push';
+import { useWords } from '@/lib/words/useWords';
+import { english, type T } from '@/lib/words/words';
 import { colors } from '@/theme/tokens';
 
 export type PushAskSheetProps = {
   visible: boolean;
-  /** kid: a note when the cook answers; cook: a note when the kid writes back (see COOK_ASK_COOKS_IT). */
-  who: 'kid' | 'cook';
+  /** The moment asking: the v2 moments have their own question. Left out: the question goes by `who`. */
+  kind?: PushAskKind;
+  /**
+   * kid: a note when the cook answers; cook: a note when the kid writes back (see COOK_ASK_COOKS_IT).
+   * Left out: from `kind` (pushAskWho), else kid.
+   */
+  who?: 'kid' | 'cook';
   /** The other person, as the family calls them ("Mom", "Leo"). */
   otherName: string;
   /** Their face above the question; the pot when there is none. */
@@ -51,15 +65,22 @@ export type PushAskSheetProps = {
  */
 export const COOK_ASK_COOKS_IT = false;
 
-/** The question, in a few words. */
-export function pushAskQuestion(who: 'kid' | 'cook', otherName: string): string {
-  const name = otherName.trim() || 'someone';
-  if (who === 'cook') return COOK_ASK_COOKS_IT ? `Want a note when ${name} cooks it?` : `Want a note when ${name} writes back?`;
-  return `Want a note when ${name} answers?`;
+/** The question, in a few words, for a moment (or just a side). */
+export function pushAskQuestion(kindOrWho: PushAskKind | 'kid' | 'cook', otherName: string, t: T = english): string {
+  // A cold craving link: the kid hasn't said who they are yet.
+  if (kindOrWho === 'cook-craving-sent') return t('common.push.pickDish');
+  const who = kindOrWho === 'kid' || kindOrWho === 'cook' ? kindOrWho : pushAskWho(kindOrWho);
+  const name = otherName.trim();
+  if (who === 'cook') {
+    if (!name) return t('common.push.theyWriteBack');
+    return t(COOK_ASK_COOKS_IT ? 'common.push.cooksIt' : 'common.push.writesBack', { name });
+  }
+  return name ? t('common.push.answers', { name }) : t('common.push.theyAnswer');
 }
 
-export function PushAskSheet({ visible, who, otherName, profile, onYes, onNotNow }: PushAskSheetProps) {
-  const question = pushAskQuestion(who, otherName);
+export function PushAskSheet({ visible, kind, who, otherName, profile, onYes, onNotNow }: PushAskSheetProps) {
+  const { t } = useWords();
+  const question = pushAskQuestion(kind ?? who ?? 'kid', otherName, t);
   // Driven here rather than by ActionButton's own cycle, which would show a check for any answer.
   const [yesState, setYesState] = useState<ActionState>('idle');
   const pressYes = async () => {
@@ -84,10 +105,10 @@ export function PushAskSheet({ visible, who, otherName, profile, onYes, onNotNow
         </Txt>
       </View>
       <View style={styles.actions}>
-        <ActionButton label="Yes" size="xl" state={yesState} onPress={pressYes} />
-        <PressableScale onPress={onNotNow} haptic accessibilityRole="button" accessibilityLabel="Not now" style={styles.later}>
+        <ActionButton label={t('common.push.yes')} size="xl" state={yesState} onPress={pressYes} />
+        <PressableScale onPress={onNotNow} haptic accessibilityRole="button" accessibilityLabel={t('common.push.notNow')} style={styles.later}>
           <Txt variant="label" size={17} weight={600} color={colors.greenDeep}>
-            Not now
+            {t('common.push.notNow')}
           </Txt>
         </PressableScale>
       </View>
@@ -98,6 +119,7 @@ export function PushAskSheet({ visible, who, otherName, profile, onYes, onNotNow
 // ---------------------------------------------------------------------------------------------
 // Host: one sheet for the whole app, opened by askForPush from anywhere.
 
+/** `name`: the other person as the family calls them ("Mom"), '' when there's nobody to name yet. */
 export type PushAsk = { kind: PushAskKind; profileId: string; name: string; profile?: AvatarProps['profile'] };
 type Ask = PushAsk;
 
@@ -165,7 +187,7 @@ export function PushAskHost({ register }: { register: RegisterPush }) {
   return (
     <PushAskSheet
       visible={!!ask && ask === shown}
-      who={pushAskWho(shown.kind)}
+      kind={shown.kind}
       otherName={shown.name}
       profile={shown.profile}
       onYes={yes}
