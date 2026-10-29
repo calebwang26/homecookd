@@ -7,6 +7,7 @@ input/
 .DS_Store
 logs/
 docs/build/.test-family-code
+docs/build/.test-family-link
 supabase/.temp/
 node_modules/
 .env.local
