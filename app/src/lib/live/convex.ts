@@ -636,6 +636,32 @@ export async function answerQuestion(questionId: string, answer: { audioUri: str
   await call('mutation', 'questions:answer', { sessionToken, questionId, text, audioId }, () => stub.answer(questionId));
 }
 
+// ---- Phase 5 cravings (docs/build/DISH-ASK-SPEC.md §8; lib/cravings.ts is the app's side). Soft: a deployment
+// without cravings.* yet answers with lib/cravings' stub, and a real error (a ConvexError sentence) is thrown.
+
+/** cravings.createLink: her live link (reused), carrying her line; null while the deployment has none. */
+export async function cravingLink(message?: string): Promise<string | null> {
+  const sessionToken = await token();
+  const r = await call<{ url: string } | null>('mutation', 'cravings:createLink', { sessionToken, message }, () => null, { soft: true });
+  return r?.url ?? null;
+}
+
+/** cravings.sendVoiceRecipe (an action) after files.uploadUrl. False while the deployment has none. */
+export async function sendCravingVoice(id: string, note: { uri: string; contentType: string; durationS: number }): Promise<boolean> {
+  await requireAiConsent();
+  const sessionToken = await token();
+  const audioId = await uploadFile(note.uri, note.contentType);
+  const durationS = Math.min(120, Math.max(1, Math.round(note.durationS)));
+  const r = await call<null | false>('action', 'cravings:sendVoiceRecipe', { sessionToken, id, audioId, durationS }, () => false, { soft: true });
+  return r !== false;
+}
+
+/** cravings.setFilmingDay: "Mom's filming it Sunday" on the kid's card (0 = Sunday … 6, null = none). */
+export async function setCravingDay(id: string, day: number | null): Promise<void> {
+  const sessionToken = await token();
+  await call('mutation', 'cravings:setFilmingDay', { sessionToken, id, day }, () => undefined, { soft: true });
+}
+
 export type SharedPhoto = { draft: string; fileId: string; recipeId: string; cookId: string | null };
 
 /** The kid's dish photo: stored, and Muse drafts a note to the cook. Nothing is sent yet. */

@@ -11,8 +11,9 @@
 //   cravings.sendVoiceRecipe({id, audioId, durationS, language?})   after files.generateUploadUrl (≤2 min, 5 MB)
 //   cravings.setFilmingDay({id, day: 0-6 | null})      the kid's card shows "Mom's filming it Sunday"
 // The push "Caleb wants your braised pork" opens /request/<id> (the Notifications & linking chat sends it). The
-// reminder and "film it next time" are app-only. TODO(convex): until those functions are deployed every call here
-// is a stub on this phone: the link is the plain /miss page, no ask arrives, and a voice recipe "sends" nowhere.
+// reminder and "film it next time" are app-only. Until those functions are deployed every call here
+// falls back to a stub on this phone (soft calls in lib/live/convex): the link is the plain /miss page, no ask
+// arrives, and a voice recipe "sends" nowhere. The `?preview=craving` ask always stays on this phone.
 // Web dev aid (screenshots): `?preview=craving` adds Caleb's braised pork ask.
 //
 //   const asks = useCravingAsks();               newest first, answered ones too
@@ -21,9 +22,11 @@
 //   await sendVoiceRecipe(ask.id, note)          -> { status: 'writing' }
 //   await setFilmingDay(ask.id, 0)               "Mom's filming it Sunday" for the kid (0 = Sunday … 6, null = none)
 //   await cravingSent(profileId) / noteCravingSent(profileId)   she shared the link once (Home's card)
-import { useSyncExternalStore } from 'react';
+import { useEffect, useSyncExternalStore } from 'react';
 import { Platform } from 'react-native';
 
+import { cravingLink, sendCravingVoice, setCravingDay, useLive } from './live/convex';
+import { useSession } from './session';
 import { kvGet, kvSet } from './storage';
 
 /** One line of the kid's guess: "about 1 lb" + "pork belly" (amount "" when he has no idea). */
@@ -91,9 +94,21 @@ function patch(id: string, change: Partial<CravingAsk>) {
   listeners.forEach((l) => l());
 }
 
-/** Her kids' asks, newest first (answered ones too). */
+// The stub has no asks: cravings.forCook never answers there.
+const noAsks = () => () => {};
+
+/** Her kids' asks, newest first (answered ones too): cravings.forCook, live (soft: none until it's deployed). */
 export function useCravingAsks(): readonly CravingAsk[] {
-  return useSyncExternalStore(subscribe, read, read);
+  const local = useSyncExternalStore(subscribe, read, read);
+  const { me } = useSession();
+  const rows = useLive<CravingAsk[] | null>('cravings:forCook', null, noAsks, !PREVIEW && me?.role === 'cook', {}, true);
+  // Kept here too, so getCravingAsk (Record's fallback for a cut-short reminder link) finds them.
+  useEffect(() => {
+    if (!rows || rows === asks) return;
+    asks = rows;
+    listeners.forEach((l) => l());
+  }, [rows]);
+  return rows ?? local;
 }
 
 /** One ask, live (null: unknown, or not loaded yet). */
@@ -106,21 +121,23 @@ export function getCravingAsk(id: string): CravingAsk | null {
   return asks.find((a) => a.id === id) ?? null;
 }
 
-/** The link she sends her kids, carrying her line. TODO(convex): cravings.createLink({message}). */
-export async function createCravingLink(_message?: string): Promise<{ url: string }> {
-  return { url: 'https://homecookd.app/miss' };
+/** The link she sends her kids, carrying her line (cravings.createLink; the plain /miss page until it's deployed). */
+export async function createCravingLink(message?: string): Promise<{ url: string }> {
+  return { url: (await cravingLink(message?.trim() || undefined)) ?? 'https://homecookd.app/miss' };
 }
 
-/** Her 2-minute voice note for an ask: the server writes it up in her words. TODO(convex): upload with
- *  files.generateUploadUrl, then cravings.sendVoiceRecipe({id, audioId, durationS}). */
-export async function sendVoiceRecipe(askId: string, _note: VoiceNote): Promise<{ status: VoiceRecipeStatus }> {
-  patch(askId, { answered: true, voiceRecipe: 'writing' });
+/** Her 2-minute voice note for an ask: the server writes it up in her words (cravings.sendVoiceRecipe; throws its
+ *  ConvexError sentence, e.g. "The recording is empty."). Only the stub's (or the preview's) ask changes here. */
+export async function sendVoiceRecipe(askId: string, note: VoiceNote): Promise<{ status: VoiceRecipeStatus }> {
+  const sent = askId !== SAMPLE.id && (await sendCravingVoice(askId, note));
+  if (!sent) patch(askId, { answered: true, voiceRecipe: 'writing' });
   return { status: 'writing' };
 }
 
-/** The day she films it, for the kid ("Mom's filming it Sunday"). TODO(convex): cravings.setFilmingDay({id, day}). */
+/** The day she films it, for the kid ("Mom's filming it Sunday"): cravings.setFilmingDay. */
 export async function setFilmingDay(askId: string, day: number | null): Promise<void> {
   patch(askId, { filmingDay: day });
+  if (askId !== SAMPLE.id) await setCravingDay(askId, day);
 }
 
 /** She filmed it: the ask is answered (and its reminder can stop). */
