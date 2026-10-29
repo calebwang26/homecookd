@@ -119,6 +119,7 @@ type Card = {                 // what the kid's page gets
   version: Recipe | null;     // Mom's version, once her answers are merged
   answers: Answer[];          // her answers behind the version (empty until then)
   merging: boolean;           // her Send is in and her version is being written ("Mom is writing it in her words")
+  filmingDay: number | null;  // 0 (Sunday) to 6: the day Mom plans to film it (§8), else null
   asked: Question[];          // what Mom is asked, in order (0–6)
   message: string;            // the Ask Mom message, in the kid's voice, editable
   kidVoiceUrl: string | null; // the kid's voice note to Mom (a Convex storage URL)
@@ -390,28 +391,31 @@ notes have no expiry, and there's no `410`.
 PRD-V2 §4 Phase 5. A parent starts in the app and asks her kids what they're craving. A kid answers on the web with
 no install. It's the same dish-ask card as above, now tied to her family.
 
+Function names and shapes match what App screens & recording codes against (`app/src/lib/cravings.ts`).
+
 ```
-parent (app)  cravings.makeLink → shares https://homecookd.app/miss?c=<craving token>
+parent (app)  cravings.createLink → shares https://homecookd.app/miss?c=<craving token>
 kid (web)     POST /dish/craving/peek → "Mom wants to know what you miss"
-              POST /dish/cards {cravingToken, …} → tonight's version, plus a request to her family
-parent (app)  cravings.requests / cravings.request → "Caleb wants your braised pork"
-              → "Next time you make it, tap record" (app only), or
-              → "Tell him how you make it now": cravings.tellNow (≤2 min voice) → her version on the kid's link
+              POST /dish/cards {cravingToken, …} → tonight's version, plus a request to her
+parent (app)  push "Caleb wants your braised pork" → cravings.forCook / cravings.get
+              → "Next time you make it, tap record" (+ cravings.setFilmingDay: "Mom's filming it Sunday"), or
+              → "Tell him how you make it now": cravings.sendVoiceRecipe (≤2 min voice) → her version on the kid's link
 ```
 
 ### Craving links
 
-**`cravings.makeLink`** (public mutation, `{sessionToken, message?}`) → `{url, token}`.
+**`cravings.createLink`** (public mutation, `{sessionToken, message?}`) → `{url}`.
 - Any signed-in person can make one. In practice it's the cook.
+- **One live link per person, reused.** It returns her current link while it's live. A new one is made when she has
+  none, when she stopped it, or when it reached its total (`CRAVING_TOTAL`).
 - `message` is her line, in her voice: 1–300 characters, word-filtered. It defaults to "What do you miss from home?
-  Tell me and I'll make it for you."
-- The token is 22 base62 characters, stored hashed.
+  Tell me and I'll make it for you." A new `message` updates her live link's.
+- The token is 22 random base62 characters. It's stored as-is, so her own link can be shown to her again, and it's
+  never returned to anyone else.
 - The `url` is `https://homecookd.app/miss?c=<token>`.
-- One link per call, reusable: every kid she sends it to can use it, any number of times, for as long as it
-  exists. A new call makes a new link; old links keep working.
 
-**`cravings.revokeLink`** (public mutation, `{sessionToken, token}`) → `null`.
-- It stops the link from making new cards. Cards already made stay.
+**`cravings.revokeLink`** (public mutation, `{sessionToken}`) → `null`. "Stop this link".
+- It stops her live link from making new cards. Cards already made stay; her next `createLink` makes a new one.
 
 **`POST /dish/craving/peek`** `{cravingToken}` → `{parentName, relation, message}`.
 - `parentName` is her first name. `relation` is what the family calls her (`people.relation`, e.g. "Mom" or
@@ -424,7 +428,14 @@ parent (app)  cravings.requests / cravings.request → "Caleb wants your braised
   - `cookClaimedAt` is set to `createdAt`: the cook side is held from the start (V2-LINKING.md).
   - `cravingId` is set to the link.
   - `relation` defaults from her `people.relation` when it maps to one of the six relations; else `mom`.
-  - `kidName` is required (1–40 characters), so the push can say who's asking: `400` without it.
+  - `kidName` is required (1–40 characters), so the push can say who's asking: `400` without it. It's
+    word-filtered, as is the message.
+- **Limits per link**, because the link is reusable and can be forwarded or posted:
+  - at most `CRAVING_PER_DAY = 5` cards a day and `CRAVING_TOTAL = 20` in all (both `TODO(caleb)`);
+  - past either, `429 rate`: "This link has had a lot of requests. Ask for a new one.";
+  - the per-IP limits and the daily budget still apply.
+- **A craving card never joins anyone to her family.** It only ties the card to her (`familyId`, `requestedOf`).
+  Joining stays Phase 4's rule: one automatic join per side, by its ticket (V2-LINKING.md).
 - **The request event:** the route schedules `internal.pushEvents.requested({askId})`, the Notifications & linking
   chat's. It picks the recipient and writes "Caleb wants your braised pork" in her language. The push opens the app at
   `/request/<askId>`.
@@ -432,28 +443,39 @@ parent (app)  cravings.requests / cravings.request → "Caleb wants your braised
 
 ### The parent's side (app)
 
-**`cravings.requests`** (public query, `{sessionToken}`) → `Request[]`, newest first, at most 50.
-- These are the cards she was asked (`requestedOf` is her: a craving card, or a web ask she claimed in the app),
-  plus the cards from her family's other craving links.
-- Each one: `{requestId, kidName, dish, createdAt, status, answered, kidVoiceUrl, message}`.
-- `status` is the card's status, worked out as in §4.
-- `answered` is true once her version exists.
-- The ids are Convex ids: the app is signed in, so they're safe to use.
+```ts
+type CravingAsk = {
+  id: Id<"dishAsks">;            // the card; the push opens /request/<id>
+  kidName: string;
+  dish: string;                  // the guess's dish name
+  guess: { amount: string; name: string }[];   // the guess's ingredients ("~2", "eggs")
+  kidVoiceUrl: string | null;    // the kid's voice note to her
+  photoUrl: string | null;       // the kid's first photo
+  message: string;               // the kid's Ask Mom message
+  createdAt: number;
+  answered: boolean;             // her version exists
+  voiceRecipe: "writing" | "ready" | "failed" | null;  // her sendVoiceRecipe, if she sent one
+  filmingDay: number | null;     // 0 (Sunday) to 6, from setFilmingDay
+};
+```
 
-**`cravings.request`** (public query, `{sessionToken, requestId}`) → `{…Request, guess: Recipe, asked: Question[],
-version: Recipe | null, answers: Answer[]}`.
-- This is the request screen: the kid's guess (shown as their guess), their voice note and message, and her version
-  once it's made.
-- A request from another family is a `ConvexError("Not found.")`.
+**`cravings.forCook`** (public query, `{sessionToken}`) → `CravingAsk[]`, newest first, at most 50, answered and not.
+- These are the cards made of her: `requestedOf` is her, from her craving link or a web ask she claimed in the app.
 
-**"Next time you make it, tap record":** nothing new in Convex.
-- The app pre-fills `/record` with the dish and the kid, and sets a weekly local reminder ("I make it on
-  Sundays").
-- When her filmed recipe is published, linking it to the request is a later step. It isn't in this spec.
+**`cravings.get`** (public query, `{sessionToken, id}`) → `CravingAsk | null`.
+- It's `null` for a card that isn't hers or doesn't exist.
 
-**`cravings.tellNow`** (public mutation, `{sessionToken, requestId, audioId, durationS, language}`) → `null`.
-- **Who:** the person the request was made of (`requestedOf`). Anyone else in the family gets `ConvexError("Only <name> can
-  answer this one.")`.
+**"Next time you make it, tap record":** the app pre-fills `/record` with the dish and the kid, and sets a weekly
+local reminder ("I make it on Sundays").
+- **`cravings.setFilmingDay`** (public mutation, `{sessionToken, id, day: 0–6 | null}`) → `null`. It saves the day she
+  plans to film it.
+  - The kid's card shows "Mom's filming it Sunday": `Card.filmingDay`.
+  - `null` clears it.
+- When her filmed recipe is published, linking it to the card is a later step. It isn't in this spec.
+
+**`cravings.sendVoiceRecipe`** (public mutation, `{sessionToken, id, audioId, durationS, language?}`) → `null`. "Tell
+him how you make it now".
+- **Who:** only the card's `requestedOf`. Anyone else gets `ConvexError("Only <name> can answer this one.")`.
 - **The audio:** uploaded first with `files.generateUploadUrl`.
   - Up to 2 minutes: `durationS` is 1–125, saved as at most 120.
   - The same audio types and 5 MB cap as Mom's web answers.
@@ -462,25 +484,37 @@ version: Recipe | null, answers: Answer[]}`.
 - **`language`:** an Ink code from §4's list, defaulting to her `people.language` or `en`.
 - **It's one answer to one question.** It's saved as an answer to "How do you make it?":
   - That question is the next free kid's-own id (`q4`–`q6`), added to `asked`.
-  - A second `tellNow` replaces her earlier one, as a re-record does.
+  - A second send replaces her earlier one, as a re-record does.
   - With all three own ids taken by answered questions: `ConvexError("This one already has her answer.")`.
 - **Then it finishes at once,** as `/dish/ask/finish` does:
   1. Ink writes it down.
   2. Claude translates it.
   3. The same merge writes her version in her words.
-  4. Her version appears on the kid's link (`/dish/cards/get`) and in `cravings.request`.
+  4. Her version appears on the kid's link (`/dish/cards/get`).
+- **`voiceRecipe` status:**
+  - `writing` until the merge lands;
+  - then `ready`;
+  - or `failed` when no words were heard (silence, noise) or every try failed, so she can send it again.
 - The daily budget treats it like Mom's web answer: never refused, with the same $1 overage.
 - **The answer event:** nothing extra here. The merge-done step schedules `internal.pushEvents.answered({askId})`
-  for every card (Mom's web Send and tellNow alike).
+  for every card (Mom's web Send and this alike).
+
+**The push to her** when a kid names a dish (Notifications & linking sends it, from `pushEvents.requested`):
+- title: "Caleb wants your braised pork";
+- body: "Caleb sent you a voice note. Tap to hear it." when the card has a voice note to her, else "See what Caleb
+  guessed.";
+- `data.url`: `/request/<id>`.
 
 ### Data
 
-- **`cravingLinks`:** `familyId`, `personId` (who made it), `tokenHash`, `message`, `createdAt`, `revokedAt?`.
-  Indexes `by_token`, `by_family`.
+- **`cravingLinks`:** `familyId`, `personId` (who made it), `token`, `message`, `uses`, `createdAt`, `revokedAt?`.
+  Indexes `by_token`, `by_person`.
+  - `uses` counts the cards made from it. The per-day count comes from the cards, through `by_craving_created`.
 - **`dishAsks`** gets more optional fields:
   - `cravingId?` (`requestedOf?`, `kidClaimedAt?` and `cookClaimedAt?` come with Phase 1, for the Phase 4 chat);
+  - `filmingDay?` (0–6);
   - `familyId` is set for craving cards.
-  - Index `by_family_created`.
+  - Indexes `by_craving_created` and `by_requested_of`; the second already exists.
 - **Account deletion:**
   - deleting a person deletes their craving links;
   - deleting a family deletes its craving links;
