@@ -36,12 +36,11 @@ validators, prompts, ported from the MVP), `convex/lib/dishAskRoutes.ts` (HTTP),
 | 403 | `origin` | the request came from another site |
 | 404 | `not_found` | unknown token or file ("This link doesn't work anymore.") |
 | 409 | `closed` | Mom already sent her answers, or that question was already answered (see each route) |
-| 410 | `gone` | the card expired |
 | 413 | `too_large` | body or file too big |
 | 415 | `bad_type` | a file type we don't take |
 | 422 | `not_a_dish` | the words don't name a dish |
 | 422 | `words` | a filtered word in the dish, the message, a question or the AI's output |
-| 429 | `rate` | over a limit (the sentence says try again later) |
+| 429 | `rate` | over a limit, or today's model budget is spent (the sentence says which, and to try again later) |
 | 502 | `model` | a model failed; retrying is safe |
 | 503 | `not_set_up` | `ANTHROPIC_API_KEY` (or `CARTESIA_API_KEY` for a voice note) isn't set |
 
@@ -115,7 +114,7 @@ type Card = {                 // what the kid's page gets
   photoUrls: string[];        // the photos the card was made from (0–3)
   askUrl: string;             // https://homecookd.app/a?t=<ask token>
   askedAt: number | null; openedAt: number | null; finishedAt: number | null; // ms since epoch
-  createdAt: number; expiresAt: number;
+  createdAt: number;
 };
 type Answer = { id: QuestionId; words: string; english: string | null; audioUrl: string | null; durationS: number };
 
@@ -162,12 +161,15 @@ type Ask = {                  // what Mom's page gets; never the kid token
      about $N). The photos go to Claude as images.
   4. The filter runs on the guess.
 - About 4–8 s; the web waits up to 60 s.
+- There's no limit on how many cards a kid makes (Caleb, Oct 29: "they should be able to generate infinite
+  recipes"). Only the per-IP limits below and the daily budget (§6) apply. Keeping and saving them is what the app
+  is for; each card's own link keeps working.
 - `message` starts as "<Relation>, how do you make your <dish>? I'm trying to make it here." (relation in its
   usual form: "Mom", "Grandma"…). The kid edits it with `/dish/cards/update`.
 - Errors: `422 not_a_dish`, `422 words`, `429`, `502`, `503`.
 - **Limits per IP:** 6 cards in 10 minutes and 30 a day.
-- **Site-wide limit:** 500 cards a day (`TODO(caleb)`: the daily budget). Over it, every IP gets `429` and an
-  `ALERT dish cards` line is logged.
+- **Daily budget** (§6): once today's model spend reaches $10, the route answers `429 rate`: "homecookd has made
+  all the recipes it can today. Try again tomorrow." This replaces the MVP's 500-cards-a-day count.
 
 **`POST /dish/cards/get`** `{kidToken}` → `{card}`
 - It also starts a merge that's due: a failed try is retried, at least 3 minutes after the last one.
@@ -235,6 +237,9 @@ moment.
 
 ## 5. Data (`convex/schema.ts`)
 
+Everything is kept forever for now (Caleb, Oct 29: "idealy forever right now"): cards, answers, photos and voice
+notes have no expiry, and there's no `410`.
+
 **`dishAsks`**: one card.
 - **Tokens:** `kidTokenHash`, `askTokenHash`.
 - **What the kid gave:** `dish`, `relation`, `kidName?`, `photos: Id<"_storage">[]`,
@@ -242,11 +247,10 @@ moment.
 - **The guess:** `guess` (Recipe), `message`, `asked: Question[]`.
 - **Mom's side:** `version?` (Recipe), `status`.
 - **Merge state:** `mergeTries`, `mergeStartedAt?`, `mergedAt?`.
-- **Funnel times:** `askedAt?`, `askedVia?`, `openedAt?`, `finishedAt?`, `questionsAt?`, `genMs`, `createdAt`,
-  `expiresAt`.
+- **Funnel times:** `askedAt?`, `askedVia?`, `openedAt?`, `finishedAt?`, `questionsAt?`, `genMs`, `createdAt`.
 - **Who:** `ipKey` (an HMAC of the IP, for the limits), plus `familyId?` and `personId?` for when someone signs in
   (Phase 4).
-- **Indexes:** `by_kid_token`, `by_ask_token`, `by_expires`, `by_family`, `by_person`.
+- **Indexes:** `by_kid_token`, `by_ask_token`, `by_family`, `by_person`.
 
 **`dishAnswers`**: one of Mom's answers.
 - `askId`, `questionId`, `audio: Id<"_storage">`, `durationS`, `language`.
@@ -257,15 +261,19 @@ moment.
 - `fileIdHash`, `storageId`, `kind`, `contentType`, `size`, `ipKey`, `askId?` (set once attached), `createdAt`.
 - Indexes `by_file_id`, `by_unattached_created`.
 
+**`dishSpend`**: the daily budget.
+- One row per UTC day: `day` ("2026-10-29"), `usd` (the running total), `alertedAt?`.
+- Index `by_day`.
+
 **`rateHits`**: the limiter.
 - `key` (bucket + HMAC of the IP), `windowStart`, `count`.
 - Index `by_key_window`. Old rows are pruned by a cron.
 
-**Keeping data:**
-- `expiresAt` is 90 days after creation (`TODO(caleb)`: how long to keep).
-- A daily cron deletes expired cards, their answers and every file they hold.
+**Deleting data:**
+- Uploads never attached to a card are deleted after an hour (nobody saved them).
 - Account deletion (`convex/account.ts`) deletes the cards whose `familyId` or `personId` is the deleted family or
   person, and their answers and files.
+- Nothing else is deleted.
 
 **IPs:** never stored as-is. Each is hashed as HMAC-SHA256(`DISH_IP_SALT`, ip), with the IP taken from
 `X-Forwarded-For`'s first entry.
@@ -282,6 +290,32 @@ moment.
   are kept and shown first.
 - **Words as data:** the dish name, the kid's words, the message and Mom's transcripts go into prompts as quoted
   data, never as instructions (as in `lib/yesNo.ts`).
+
+**The daily budget** (Caleb, Oct 29: "keep at $10 daily budget").
+- **Every paid call is counted.** Its estimated dollar cost is added to today's `dishSpend` row (UTC day), failed
+  tries included:
+  - **Claude:** tokens times the model's price per million.
+    - `claude-haiku-5-5` costs $0.10 in and $0.50 out.
+    - `claude-sonnet-5-5` costs $2 and $10.
+    - `claude-opus-5-5` costs $4 and $20. This is the translation model.
+    - Thinking counts as output.
+  - **Cartesia Ink:** 3 credits a second, at $65 per million credits (the Pro plan's overage, the dearest rate),
+    so $0.000195 a second.
+    - Mom's clip uses its `durationS`.
+    - The kid's voice note uses Ink's reported duration, or else bytes ÷ 4000.
+- **Typical costs:** a card is about $0.001; Mom's answers cost about $0.01–0.03 with a translation.
+- **The cap:** `DAILY_BUDGET_USD = 10` (`TODO(caleb)`). Once today's total reaches it:
+  - **New cards are refused:** `POST /dish/cards` gives `429 rate` (§4).
+  - **Mom is never cut off:**
+    - `/dish/ask/answer` and `/dish/ask/finish` always take her answer.
+    - Her transcription, translation and merge keep running up to an overage of `MOM_OVERAGE_USD = 1`
+      (`TODO(caleb)`), so to $11 a day.
+    - Past $11, her clips are saved but not sent to models. `merging` turns false, and the kid's
+      `/dish/cards/get` starts the merge again the next UTC day.
+- **The alert:** the first time a day reaches $10, the team is told once, through `alerts.ts` (ntfy push and
+  email): "homecookd: dish budget reached". A `console.error("ALERT dish budget …")` line is logged too.
+- **The check runs before each paid call**, so a few calls running at the same moment can pass the cap by
+  cents.
 
 ## 7. Env (Convex)
 
