@@ -13,6 +13,10 @@
 //   Delete account                             the app's profile sheet (convex/account.ts); media in GCS
 //                                              and Supabase rows are purged from accountDeletions
 //   this website's visit log                   POST /web-events: page, referrer, taps; no IP
+//   /miss and /a (no account)                  Convex dishAsks (DISH-ASK-SPEC.md): dish, relation, name,
+//                                              photos, voice notes, message, her answers + translation;
+//                                              Claude (guess, her version, translation), Cartesia Ink;
+//                                              links stored hashed; IP as HMAC only; kept until asked to delete
 // TODO(caleb): the legal entity and address, and confirm the 30-day deletion windows (docs/app-store).
 // Links home are plain <a>: '/' must load in full so ROUTE_GATE (the layout's <head> script) runs.
 /* eslint-disable @next/next/no-html-link-for-pages */
@@ -27,7 +31,7 @@ export const metadata: Metadata = {
   alternates: { canonical: '/privacy' },
 };
 
-const UPDATED = 'October 26, 2026';
+const UPDATED = 'October 29, 2026';
 
 const mail = (
   <a className={s.link} href={`mailto:${CONTACT_EMAIL}`}>
@@ -127,6 +131,39 @@ export default function PrivacyPage() {
           </li>
         </ul>
         <p>They get only what each task needs, and we use them only to run homecookd.</p>
+      </section>
+
+      <section className={s.block} aria-labelledby="pages">
+        <h2 id="pages" className={s.h2}>
+          Recipes made on this website
+        </h2>
+        <p>
+          On homecookd.app/miss you can ask for a dish from home, and on the link you get, your family can answer by
+          voice. Neither needs an account.
+        </p>
+        <ul className={s.list}>
+          <li>
+            <strong>What we keep:</strong> the dish you typed, who makes it, the name you give, the photos and voice notes
+            you add, and the message you send. If you answer, we keep your voice answers, what they say, and their
+            English translation.
+          </li>
+          <li>
+            <strong>Who works on it:</strong> when you tap to make the recipe or send an answer, Anthropic Claude writes
+            the recipe from what you typed and your photos, and translates. Cartesia turns voice into text.
+          </li>
+          <li>
+            <strong>Who can see it:</strong> anyone who has the recipe’s link or the answer link, so share them only with
+            family. The links are long and random, and we store only a scrambled copy of them.
+          </li>
+          <li>
+            <strong>Your IP address:</strong> to stop abuse, we keep only a scrambled form of it, never the address
+            itself.
+          </li>
+          <li>
+            <strong>How long:</strong> until you ask us to delete it. Write to {mail} with the link, and we’ll delete it
+            within 30 days. If you keep the recipe in the app, Delete account deletes it too.
+          </li>
+        </ul>
       </section>
 
       <section className={s.block} aria-labelledby="where">
