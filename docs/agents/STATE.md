@@ -932,3 +932,28 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - **Ship:** JS only, EAS Update. Open: a kid can no longer ask the cook from cook mode (it was the pot's long press); the Ask tab and chat still do.
 - Oct 29 · (this PR) · Claude (Merge Agent) · `docs/PRD-V2.md` gets Caleb's build notes on each pathway step, a map of what exists (the kid's web MVP "The dish I miss" is calebwang26/homecookd PR #40, open and never deployed, on a Supabase `miss` function that transcribes with Gemini), a draft build plan in six phases with owners, and six open decisions (Convex or Supabase backend, one website repo, how web-only kids hear Mom answered, the one-recipe web limit, budget and retention, privacy text). Planning only; nothing is built until Caleb approves.
 - Oct 29 · (local branch claude/build7-staging, not pushed: push freeze) · Claude · **Build 7 on a staging channel for testers** (Caleb: "lets roll with this solution"): `app/eas.json` gains a `staging` build profile (extends production: store distribution, same Convex and voice URLs, build number auto-incremented) with `channel: "staging"`, and a `staging` submit profile (same App Store Connect app). Built from origin/main + #163 (homie off) so testers see the launch app. Build 7 goes to the internal TestFlight group only; it is never attached to the 1.0 version in review (build 6). **Rule while 1.0 is in review: EAS Updates go to `--channel staging` only, never production.** Build 7 replaces build 6 on a tester's phone (same app); the reviewer's copy is unaffected. Build 7 talks to the live Convex, so backend deploys stay frozen; backend testing uses `npx convex dev` deployments.
+- Oct 29 · (local, push freeze) · Claude (Convex & accounts) · **v2 Phase 1: the web flow's backend in Convex** (branch `claude/dish-ask`; contract `docs/build/DISH-ASK-SPEC.md`).
+  - **Ported:** the MVP "The dish I miss" (calebwang26/homecookd PR #40): prompts, draft and merge rules, validators (`convex/lib/dishAsk/`).
+  - **Models:** Claude Haiku 5.5 writes the kid's guess and Mom's version; Cartesia Ink hears voice; Claude (Opus, `TRANSLATE_MODEL`) translates her words to English and the guess into her page language. No Gemini (`convex/dishAskModel.ts`).
+  - **Routes:** `/dish/*` HTTP routes (`lib/dishAskRoutes.ts`), tables `dishAsks`, `dishAnswers`, `dishFiles`, `dishSpend`, `rateHits` (`convex/dishAsks.ts`).
+  - **Abuse limits:** per-IP limits; a $10 daily model budget with a $1 overage for Mom (both `TODO(caleb)`), and an alert through alerts.ts.
+  - **Data:** kept forever; uploads never attached to a card are deleted after an hour; account deletion goes by person (V2-LINKING.md §3).
+  - **Tests:** 201 in all (`dishAsks.test.ts` 36, `dishAskModel.test.ts` 18). Live checks about $0.13.
+  - **Open:** `DISH_IP_SALT` must be set before deploy; whether Convex passes a client-sent `X-Forwarded-For` through (per-IP limits); `_generated/api.d.ts` edited by hand (run codegen); deploy only after Apple approves 1.0 and Caleb tests the web flow.
+- Oct 29 · (local, push freeze) · Claude (Convex & accounts) · **v2 Phase 5 backend: cravings from the app** (`claude/dish-ask`, DISH-ASK-SPEC.md §8).
+  - **App functions** (`convex/cravings.ts`):
+    - `createLink` (her one reused "What do you miss from home?" link), `revokeLink`;
+    - `forCook` / `get` (`CravingAsk`, the app's shape);
+    - `sendVoiceRecipe`: an **action**, so use `useAction`; up to 2 minutes of voice that becomes her version on the kid's link; status writing / ready / failed;
+    - `setFilmingDay` ("Mom's filming it Sunday").
+  - **Web:** `POST /dish/craving/peek`; `/dish/cards` takes `cravingToken`.
+  - **Limits on a craving link:** 5 cards a day and 20 in all per link (`TODO(caleb)`), and the word filter on the kid's name and message. A craving card never joins anyone to a family.
+  - **Also in this commit:**
+    - the kid's voice note about the dish is now kept privately on the card;
+    - client IP = `CF-Connecting-IP`, checked on a dev deployment;
+    - a voice recipe refuses an old file or one a card already holds, so nobody can delete or share someone else's photo or clip.
+  - **Push calls:**
+    - Notifications & linking adds the `pushEvents.answered` calls on its branch.
+    - `pushEvents.requested` is a marked comment in `dishAsks.create`, to become a call at merge.
+  - **Tests:** 214 pass.
+- Oct 29 · (local, push freeze) · Claude (Convex & accounts) · `dishAsks.forMe` / `dishAsks.get` (DISH-ASK-SPEC.md §9): a signed-in person's claimed cards and one card by id, the web's Card plus `side`, only for the card's kid or cook (null otherwise). This unblocks the app's `/dish/[id]`. Tests: 215 pass.

@@ -6,7 +6,7 @@ import { claudeJson, TRANSLATE_MODEL, type TextModel } from "./textModel";
 const MODEL = "gemini-3.8-flash";
 export const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL}:generateContent`;
 
-const INSTRUCTIONS =
+export const INSTRUCTIONS =
   "You translate a home cook's spoken answer, transcribed by speech-to-text, into plain English for their " +
   "grandchild. The transcript may have spelling slips; read it as speech. Keep the cook's meaning, amounts and " +
   "warmth; add nothing. If it is already English, return it unchanged. Reply with the translation only.";
@@ -36,7 +36,7 @@ export async function translate(text: string, model: TextModel, to?: string): Pr
   return out.trim();
 }
 
-const TRANSLATION = {
+export const TRANSLATION = {
   type: "object",
   properties: { translation: { type: "string" } },
   required: ["translation"],
