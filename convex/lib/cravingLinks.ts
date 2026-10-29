@@ -5,8 +5,8 @@ import type { QueryCtx } from "../_generated/server";
 import type { Relation } from "./dishAsk/types";
 import { isRelation } from "./dishAsk/validate";
 import { fail, notFound } from "./dishAskValues";
+import { webOrigin } from "./webOrigin";
 
-export const CRAVING_URL = "https://homecookd.app/miss?c=";
 export const DEFAULT_CRAVING_MESSAGE = "What do you miss from home? Tell me and I'll make it for you.";
 export const CRAVING_MESSAGE_CHARS = 300;
 /** TODO(caleb): cards one link may make in 24 hours. */
@@ -17,7 +17,7 @@ export const LINK_BUSY = "This link has had a lot of requests. Ask for a new one
 
 const DAY_MS = 24 * 60 * 60_000;
 
-export const cravingUrl = (token: string) => `${CRAVING_URL}${token}`;
+export const cravingUrl = (token: string) => `${webOrigin()}/miss?c=${token}`;
 export const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
 
 /** Who the kid is asking, from what the family calls her: one of the six when it's that word ("Mom"), else mom. */

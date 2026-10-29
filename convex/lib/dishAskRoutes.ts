@@ -47,6 +47,7 @@ import {
 } from "./dishAskValues";
 import { flagged } from "./moderation";
 import { allowed, clientIp, ipKeyOf, type Limit, LIMITS as RATE } from "./rateLimit";
+import { isWebOrigin } from "./webOrigin";
 
 // ---------------------------------------------------------------------------------------------
 // Tokens
@@ -95,7 +96,7 @@ const KID_VOICE_S = 60;
 /** The CORS headers for an allowed origin (none needed without one); false for another site. */
 function corsFor(origin: string | null): Record<string, string> | false {
   if (!origin) return { Vary: "Origin" };
-  if (!ORIGINS.some((o) => o.test(origin))) return false;
+  if (!ORIGINS.some((o) => o.test(origin)) && !isWebOrigin(origin)) return false;
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",

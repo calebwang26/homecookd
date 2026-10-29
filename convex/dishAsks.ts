@@ -60,12 +60,12 @@ import {
   WORDS,
 } from "./lib/dishAskValues";
 import { flagged } from "./lib/moderation";
+import { webOrigin } from "./lib/webOrigin";
 
 type Row = Doc<"dishAsks">;
 type Answer = Doc<"dishAnswers">;
 
-const WEB = "https://homecookd.app";
-export const askUrlOf = (askToken: string) => `${WEB}/a?t=${askToken}`;
+export const askUrlOf = (askToken: string) => `${webOrigin()}/a?t=${askToken}`;
 
 /** The Ask Mom text a card starts with. */
 export const defaultMessage = (relation: Relation, dish: string) =>

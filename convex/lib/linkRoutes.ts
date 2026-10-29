@@ -12,6 +12,7 @@ import { httpAction } from "../_generated/server";
 import { sha256Hex } from "./dishAskRoutes";
 import { cardRef, newJti, signTicket, TICKET_MS } from "./joinTicket";
 import { allowed, clientIp, ipKeyOf, LIMITS, type Limit } from "./rateLimit";
+import { isWebOrigin } from "./webOrigin";
 
 const ORIGINS = [/^https:\/\/(www\.)?homecookd\.app$/, /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d{1,5})?$/];
 const TOKEN = /^[0-9A-Za-z]{22}$/;
@@ -22,7 +23,7 @@ const TICKETS: Limit = { bucket: "link-ticket", max: 5, windowMs: 60 * MINUTE };
 
 function corsFor(origin: string | null): Record<string, string> | false {
   if (!origin) return { Vary: "Origin" };
-  if (!ORIGINS.some((o) => o.test(origin))) return false;
+  if (!ORIGINS.some((o) => o.test(origin)) && !isWebOrigin(origin)) return false;
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
