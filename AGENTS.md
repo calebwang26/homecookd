@@ -246,3 +246,4 @@ voice/deploy.sh                                                    # Cloud Run h
 ```
 
 Use `npx expo install <pkg>`, never `npm install`, for app dependencies.
+cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent/doors/reminders
