@@ -15,11 +15,9 @@ Branch: `claude/phase5-cold-parents`, local only (push freeze until Apple approv
 1. The push-ask one-liner on the Merge Agent's integration branch. Don't merge notif-linking yourself. Exact call
    (also in the TODO in `app/src/app/parent/home.tsx`):
    `onSent={() => me && askForPushSoon({ kind: 'cook-craving-sent', profileId: me.id, name: '' })}` on `<CravingSheet>`.
-2. **`/dish/[id]`** (the kid's card in the app, V2-LINKING.md §2.6). The mockup is done (d6b7699ce; README section
-   "/dish/[id]", `dish-card.jpg`, canvas artboards 11–13) and waiting on the Merge Agent's OK. Build it once that OK
-   comes and Convex & accounts' `dishAsks.get` and `dishAsks.forMe` land, with the "Your kid" fallback (item 3).
-3. **A blank `kidName`:** forCook sends "" when the kid deleted their account. Show a words key ("Your kid") in
-   AskCard and on the request screens.
+2. **`/dish/[id]`**: built (0c30c7307), on dishAsks.get from claude/dish-ask bbf90ce06, merged locally. The
+   "Your kid" fallback is in. Next: Caleb's try-out on build 7 once the batch is assembled.
+3. Done: the blank `kidName` fallback ("Your kid", `dish.yourKid`).
 
 ## Known gaps (not for 1.1)
 - A recording sent from the glasses doesn't mark its ask filmed (TODO in `lib/askReminders.ts`).
