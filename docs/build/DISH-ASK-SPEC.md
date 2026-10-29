@@ -229,6 +229,12 @@ moment.
   3. Claude writes her version with the MVP's merge prompt and rules: hers only when it's in her words, removals
      only when she says no, tips verbatim.
   4. The word filter runs on the output.
+- **Her words and the English** (Caleb, Oct 29: "Her words + English"):
+  - Every answer keeps what she said in her own language (`words`) next to the English (`english`, null when she
+    spoke English), with her clip. That's `Card.answers`, and `tip.words` / `tip.english` on a step.
+  - The merge prompt gets both. A tip is an excerpt of her original words, verbatim, with its English.
+  - An amount or line she settled uses her wording: her own words when she spoke English, and the English of her
+    words otherwise, so the kid can cook from it. The `clip` on that ingredient or line plays her saying it.
 - About 10–20 s.
 - With nothing answered, it changes nothing (`finished: false`).
 - Tries: at most 5, at least 3 minutes apart.
