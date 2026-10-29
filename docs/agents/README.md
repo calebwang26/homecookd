@@ -13,6 +13,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 
 | File | What it covers |
 |---|---|
+| [v2-user-pathway](memory/v2-user-pathway.md) | Oct 29: the next version is built around one user pathway (kid on the web → Ask Mom → parent answers by voice → film in the app); docs/PRD-V2.md |
 | [app-review-guard](memory/app-review-guard.md) | A PR touching what App Review checks: Apple check first, then update the reviewer notes, answers and legal pages in the same PR |
 | [brand-homecookd](memory/brand-homecookd.md) | The name is always lowercase homecookd; which internal names stay "edible" |
 | [git-pr-workflow](memory/git-pr-workflow.md) | PR-only shipping, merge main first, stage by name, the Vercel Root Directory gotcha |
