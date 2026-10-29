@@ -13,6 +13,7 @@ import {
   type Spend,
   toEnglish,
   transcribe,
+  translateForMom,
   writeGuess,
   writeVersion,
 } from "./dishAskModel";
@@ -454,4 +455,49 @@ test("prices: per million tokens by model; a model not listed costs as Opus", ()
   expect(claudeCost("claude-sonnet-5-5", { input_tokens: 1_000_000, output_tokens: 0 })).toBeCloseTo(2, 12);
   expect(claudeCost("some-new-model", { input_tokens: 1_000_000, output_tokens: 1_000_000 })).toBeCloseTo(24, 12);
   expect(INK_USD_PER_S).toBeCloseTo(0.000195, 12);
+});
+
+// ---------------------------------------------------------------------------------------------
+// The guess in Mom's page language
+
+const forMom = () => ({ guess: draft(), questions: [{ id: "q4" as const, text: "Do you add ketchup?" }], message: "Mom, how do you make it?" });
+
+test("fake: translateForMom translates every piece and keeps the card's shape", async () => {
+  process.env.DISH_FAKE_AI = "1";
+  const spend = spent();
+  const english = forMom();
+  const t = await translateForMom(english, "hi", spend);
+  expect(spend.usd).toBe(FAKE_COST.forMom);
+  expect(t!.guess.ingredients[0].name).toBe(`[hi] ${english.guess.ingredients[0].name}`);
+  expect(t!.guess.ingredients.map((i) => [i.status, i.ask])).toEqual(english.guess.ingredients.map((i) => [i.status, i.ask]));
+  expect(t!.guess.steps.map((st) => st.uses)).toEqual(english.guess.steps.map((st) => st.uses));
+  expect(t!.questions).toEqual([{ id: "q4", text: "[hi] Do you add ketchup?" }]);
+  expect(t!.message).toBe("[hi] Mom, how do you make it?");
+});
+
+test("translateForMom: a piece that loses its ** marks or goes missing keeps its English; the call is counted", async () => {
+  process.env.ANTHROPIC_API_KEY = "sk-test";
+  const english = forMom();
+  const line = english.guess.steps[0].lines[0];
+  stubClaude(() => claudeReply(JSON.stringify({
+    items: [
+      { id: "i0.name", text: "अंडे" },
+      { id: "s0.0.text", text: line.text.replaceAll("**", "") }, // ** dropped: kept in English
+      { id: "message", text: "माँ, आप इसे कैसे बनाती हैं?" },
+    ],
+  })));
+  const spend = spent();
+  const t = await translateForMom(english, "hi", spend);
+  expect(spend.usd).toBeGreaterThan(0);
+  expect(t!.guess.ingredients[0].name).toBe("अंडे");
+  expect(t!.guess.ingredients[1].name).toBe(english.guess.ingredients[1].name);
+  expect(t!.guess.steps[0].lines[0].text).toBe(line.text);
+  expect(t!.message).toBe("माँ, आप इसे कैसे बनाती हैं?");
+});
+
+test("translateForMom: no key or a failed call gives null (her page shows English)", async () => {
+  expect(await translateForMom(forMom(), "hi", spent())).toBeNull();
+  process.env.ANTHROPIC_API_KEY = "sk-test";
+  stubClaude(() => new Response("{}", { status: 400 }));
+  expect(await translateForMom(forMom(), "hi", spent())).toBeNull();
 });
