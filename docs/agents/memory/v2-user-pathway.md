@@ -25,7 +25,8 @@ that moment.
 
 **How to apply:** design every new screen, flow and piece of copy for the next version from this pathway, and check
 it against `docs/PRD-V2.md` before building. Where older docs (PRD.md, SPEC.md, the bible's flows,
-[[dual-icp-playbook]]'s Oct 16 cut of "Ask Mom") disagree, the pathway wins. Nothing is built yet: Caleb said
-absorb it, don't build. Mockups come before big UI changes.
+[[dual-icp-playbook]]'s Oct 16 cut of "Ask Mom") disagree, the pathway wins. Section 3 of the PRD maps what exists (the kid's web MVP "The dish
+I miss" is calebwang26/homecookd PR #40, never shipped); section 4 is the draft build plan and section 5 the
+decisions it waits on. Don't build until Caleb approves the plan. Mockups come before big UI changes.
 
 Related: [[dual-icp-playbook]], [[lander-icp-problems]], [[declutter-first]]
