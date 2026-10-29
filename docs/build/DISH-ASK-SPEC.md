@@ -379,3 +379,104 @@ notes have no expiry, and there's no `410`.
 | `CARTESIA_API_KEY` (+ `CARTESIA_API_KEYS_BACKUP`) | already set | voice notes, Mom's answers |
 | `DISH_IP_SALT` | new, any long random string | the IP hash; without it the limits still work with a fixed salt, and a warning is logged |
 | `DISH_MODEL` | optional | overrides `claude-haiku-5-5` |
+
+## 8. Phase 5: cravings from the app (the backend)
+
+PRD-V2 §4 Phase 5. A parent starts in the app and asks her kids what they're craving. A kid answers on the web with
+no install. It's the same dish-ask card as above, now tied to her family.
+
+```
+parent (app)  cravings.makeLink → shares https://homecookd.app/miss?c=<craving token>
+kid (web)     POST /dish/craving/peek → "Mom wants to know what you miss"
+              POST /dish/cards {cravingToken, …} → tonight's version, plus a request to her family
+parent (app)  cravings.requests / cravings.request → "Caleb wants your braised pork"
+              → "Next time you make it, tap record" (app only), or
+              → "Tell him how you make it now": cravings.tellNow (≤2 min voice) → her version on the kid's link
+```
+
+### Craving links
+
+**`cravings.makeLink`** (public mutation, `{sessionToken, message?}`) → `{url, token}`.
+- Any signed-in person can make one. In practice it's the cook.
+- `message` is her line, in her voice: 1–300 characters, word-filtered. It defaults to "What do you miss from home?
+  Tell me and I'll make it for you."
+- The token is 22 base62 characters, stored hashed.
+- The `url` is `https://homecookd.app/miss?c=<token>`.
+- One link per call, reusable: every kid she sends it to can use it, any number of times, for as long as it
+  exists. A new call makes a new link; old links keep working.
+
+**`cravings.revokeLink`** (public mutation, `{sessionToken, token}`) → `null`.
+- It stops the link from making new cards. Cards already made stay.
+
+**`POST /dish/craving/peek`** `{cravingToken}` → `{parentName, relation, message}`.
+- `parentName` is her first name. `relation` is what the family calls her (`people.relation`, e.g. "Mom" or
+  "Aaji"), or null.
+- `404` for an unknown or revoked token, which counts toward the bad-token limit.
+
+**`POST /dish/cards` with `cravingToken`**: the §4 route with one more field.
+- The card is made exactly as before, with the same rules, limits and budget. On top of that:
+  - `familyId` is set to her family and `requestedOf` to the person who made the link.
+  - `cookClaimedAt` is set to `createdAt`: the cook side is held from the start (V2-LINKING.md).
+  - `cravingId` is set to the link.
+  - `relation` defaults from her `people.relation` when it maps to one of the six relations; else `mom`.
+  - `kidName` is required (1–40 characters), so the push can say who's asking: `400` without it.
+- **The request event:** the route schedules `internal.pushEvents.requested({askId})`, the Notifications & linking
+  chat's. It picks the recipient and writes "Caleb wants your braised pork" in her language. The push opens the app at
+  `/request/<askId>`.
+- The kid's page still gets `askUrl`. The kid can also send the web link to anyone else.
+
+### The parent's side (app)
+
+**`cravings.requests`** (public query, `{sessionToken}`) → `Request[]`, newest first, at most 50.
+- These are the cards she was asked (`requestedOf` is her: a craving card, or a web ask she claimed in the app),
+  plus the cards from her family's other craving links.
+- Each one: `{requestId, kidName, dish, createdAt, status, answered, kidVoiceUrl, message}`.
+- `status` is the card's status, worked out as in §4.
+- `answered` is true once her version exists.
+- The ids are Convex ids: the app is signed in, so they're safe to use.
+
+**`cravings.request`** (public query, `{sessionToken, requestId}`) → `{…Request, guess: Recipe, asked: Question[],
+version: Recipe | null, answers: Answer[]}`.
+- This is the request screen: the kid's guess (shown as their guess), their voice note and message, and her version
+  once it's made.
+- A request from another family is a `ConvexError("Not found.")`.
+
+**"Next time you make it, tap record":** nothing new in Convex.
+- The app pre-fills `/record` with the dish and the kid, and sets a weekly local reminder ("I make it on
+  Sundays").
+- When her filmed recipe is published, linking it to the request is a later step. It isn't in this spec.
+
+**`cravings.tellNow`** (public mutation, `{sessionToken, requestId, audioId, durationS, language}`) → `null`.
+- **Who:** the person the request was made of (`requestedOf`). Anyone else in the family gets `ConvexError("Only <name> can
+  answer this one.")`.
+- **The audio:** uploaded first with `files.generateUploadUrl`.
+  - Up to 2 minutes: `durationS` is 1–125, saved as at most 120.
+  - The same audio types and 5 MB cap as Mom's web answers.
+  - The type and size are checked from `_storage` metadata. A wrong file is deleted, and the call fails with
+    `ConvexError`.
+- **`language`:** an Ink code from §4's list, defaulting to her `people.language` or `en`.
+- **It's one answer to one question.** It's saved as an answer to "How do you make it?":
+  - That question is the next free kid's-own id (`q4`–`q6`), added to `asked`.
+  - A second `tellNow` replaces her earlier one, as a re-record does.
+  - With all three own ids taken by answered questions: `ConvexError("This one already has her answer.")`.
+- **Then it finishes at once,** as `/dish/ask/finish` does:
+  1. Ink writes it down.
+  2. Claude translates it.
+  3. The same merge writes her version in her words.
+  4. Her version appears on the kid's link (`/dish/cards/get`) and in `cravings.request`.
+- The daily budget treats it like Mom's web answer: never refused, with the same $1 overage.
+- **The answer event:** nothing extra here. The merge-done step schedules `internal.pushEvents.answered({askId})`
+  for every card (Mom's web Send and tellNow alike).
+
+### Data
+
+- **`cravingLinks`:** `familyId`, `personId` (who made it), `tokenHash`, `message`, `createdAt`, `revokedAt?`.
+  Indexes `by_token`, `by_family`.
+- **`dishAsks`** gets more optional fields:
+  - `cravingId?` (`requestedOf?`, `kidClaimedAt?` and `cookClaimedAt?` come with Phase 1, for the Phase 4 chat);
+  - `familyId` is set for craving cards.
+  - Index `by_family_created`.
+- **Account deletion:**
+  - deleting a person deletes their craving links;
+  - deleting a family deletes its craving links;
+  - for the cards, the Phase 1 purge rules apply (V2-LINKING.md §3): the kid's or `requestedOf`'s data goes, by person.
