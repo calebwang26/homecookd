@@ -252,9 +252,9 @@ moment.
     - `was`, the guess's value it replaced, so the page can strike it through;
     - `quote`, the short piece of her answer that settled it: word for word in her language, with its English.
 
-    Claude gives the quote with each change, and the server keeps it only when it is word for word in that clip's
-    words (or its English, which then becomes `english` with the original looked up). Otherwise the quote is the
-    start of that answer, up to 120 characters at a word.
+    Claude gives the quote with each change, as it gives a tip: her words, copied exactly, and their English. The
+    server keeps it only when the words are word for word in that clip's transcript.
+    - Otherwise the quote is that whole answer's words and English, each cut at a word to 120 characters.
 - About 10–20 s.
 - With nothing answered, it changes nothing (`finished: false`).
 - Tries: at most 5, at least 3 minutes apart.
