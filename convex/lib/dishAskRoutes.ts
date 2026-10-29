@@ -4,7 +4,8 @@
 // stored, and no route takes or returns a Convex id. Errors are `{error, code}` (lib/dishAskValues.ts).
 //
 //   POST /dish/files?kind=photo|voice   raw file              -> 201 {fileId, kind, contentType, size}
-//   POST /dish/cards                    {dish, relation?, kidName?, photos?, voiceNote?} -> 201 {kidToken, card}
+//   POST /dish/craving/peek             {cravingToken}        -> {parentName, relation, message}  (§8)
+//   POST /dish/cards                    {dish, relation?, kidName?, photos?, voiceNote?, cravingToken?} -> 201 {kidToken, card}
 //   POST /dish/cards/get                {kidToken}            -> {card}
 //   POST /dish/cards/update             {kidToken, relation?, kidName?, message?, voiceNote?} -> {card}
 //   POST /dish/cards/ask                {kidToken, questions} -> {card}
@@ -185,6 +186,13 @@ async function askOf(token: unknown, field = "askToken"): Promise<string> {
   return await sha256Hex(token);
 }
 
+/** A craving link's token (stored as-is, §8); a malformed one is a 404 like an unknown one. */
+function cravingOf(token: unknown): string {
+  if (typeof token !== "string" || !token) throw badRequest("cravingToken is required");
+  if (!TOKEN.test(token)) throw notFound();
+  return token;
+}
+
 async function limit(ctx: ActionCtx, ipKey: string, ...limits: Limit[]) {
   if (!(await allowed(ctx, ipKey, limits))) throw fail(429, "rate", TOO_MANY);
 }
@@ -261,13 +269,19 @@ const upload: Route = async ({ ctx, req, url, ipKey }) => {
 // ---------------------------------------------------------------------------------------------
 // The kid
 
-/** Makes a card: the word filter, Ink on the voice note, Claude's guess, the filter on the guess. */
+/**
+ * Makes a card: the word filter, Ink on the voice note, Claude's guess, the filter on the guess. With a craving
+ * token (§8), the card is a request to the parent who made the link: her link's caps and a kid's name come first.
+ */
 const createCard: Route = async ({ ctx, req, ipKey }) => {
   await limit(ctx, ipKey, RATE.cards, RATE.cardsDay);
   const b = await readJson(req);
   const dish = str(b.dish, "dish", LIMITS.dish) ?? "";
-  const relation = b.relation === undefined || b.relation === null ? "mom" : relationOf(b.relation);
   const kidName = str(b.kidName, "kidName", LIMITS.kidName);
+  const cravingToken = b.cravingToken === undefined || b.cravingToken === null ? undefined : cravingOf(b.cravingToken);
+  if (cravingToken && !kidName) throw badRequest("kidName is required");
+  const craving = cravingToken ? await ctx.runQuery(internal.cravings.linkForCard, { token: cravingToken, now: Date.now() }) : null;
+  const relation = b.relation === undefined || b.relation === null ? (craving?.relation ?? "mom") : relationOf(b.relation);
   if (b.photos !== undefined && b.photos !== null && !Array.isArray(b.photos)) throw badRequest("photos must be a list of file ids");
   const photoIds = (b.photos as unknown[] | null | undefined) ?? [];
   if (photoIds.length > MAX_PHOTOS) throw badRequest(`At most ${MAX_PHOTOS} photos`);
@@ -318,8 +332,15 @@ const createCard: Route = async ({ ctx, req, ipKey }) => {
     guess,
     genMs: Date.now() - started,
     ipKey,
+    cravingToken,
   });
   return { status: 201, body: { kidToken, card } };
+};
+
+/** The kid's page from a craving link: who's asking, and her line. */
+const cravingPeek: Route = async ({ ctx, req }) => {
+  const token = cravingOf((await readJson(req)).cravingToken);
+  return { body: await ctx.runQuery(internal.cravings.peekLink, { token }) };
 };
 
 const getCard: Route = async ({ ctx, req }) => ({
@@ -458,6 +479,7 @@ const finish: Route = async ({ ctx, req }) => {
 
 const ROUTES: Record<string, Route> = {
   "/dish/files": upload,
+  "/dish/craving/peek": cravingPeek,
   "/dish/cards": createCard,
   "/dish/cards/get": getCard,
   "/dish/cards/update": updateCard,

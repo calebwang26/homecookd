@@ -274,20 +274,28 @@ test("cards: 6 per IP in 10 minutes and 30 a day; the keys hold an HMAC of the I
   }
 });
 
-test("cards from photos and a voice note: the photos stay on the card, the voice note is heard and dropped", async () => {
+test("cards from photos and a voice note: the photos stay on the card; the voice note is heard and kept privately", async () => {
   const t = newBackend();
   const photos = [await fileId(t, "photo"), await fileId(t, "photo")];
-  const voice = await fileId(t, "voice");
-  const { card, kidToken } = await makeCard(t, { dish: "", photos, voiceNote: voice });
+  const voice = (await upload(t, "voice", "audio/webm", 2500)).data.fileId; // other bytes: its own URL
+  const { card, kidToken, askToken } = await makeCard(t, { dish: "", photos, voiceNote: voice });
   expect(card.dish).toBe("tomato egg"); // nothing typed: the guess names it
   expect(card.photoUrls).toHaveLength(2);
+  expect(card.kidVoiceUrl).toBeNull(); // it isn't the voice note to Mom
   expect(model.calls.transcribe).toBe(1);
   const row = await rowOf(t, kidToken);
   const files = await t.run((ctx) => ctx.db.query("dishFiles").collect());
   expect(files.map((f) => [f.kind, f.askId])).toEqual([
     ["photo", row._id],
     ["photo", row._id],
+    ["voice", row._id],
   ]);
+  expect(row.dishVoiceNote).toBe(files[2].storageId);
+  expect(await fileGone(t, row.dishVoiceNote!)).toBe(false);
+  // Neither page gets it.
+  const url = await t.run((ctx) => ctx.storage.getUrl(row.dishVoiceNote!));
+  expect(JSON.stringify(await getCard(t, kidToken))).not.toContain(url);
+  expect(JSON.stringify(await peek(t, askToken))).not.toContain(url);
   expect(await spent(t)).toBeCloseTo(FAKE_COST.guess + FAKE_COST.transcribe);
 
   // A file goes on one card only; an unknown one is a 404; the wrong kind is a 400.
@@ -1001,15 +1009,16 @@ test("the first time a day reaches $10 the team is told once", async () => {
 // What's deleted
 
 /**
- * Leo (the kid) and Dad (asked as Mom) in the app, on one card with a photo, the kid's voice note to him and his
- * answer merged into a version; plus a card that's only in their family, and a stranger's.
+ * Leo (the kid) and Dad (asked as Mom) in the app, on one card with a photo, the kid's voice note about the dish,
+ * his voice note to Dad and Dad's answer merged into a version; plus a card that's only in their family, and a
+ * stranger's.
  */
 async function linkedCards(t: Backend) {
   stubFetch();
   const leo = await signIn(t, "p-leo");
   const dad = await signIn(t, "p-dad");
   const photo = await fileId(t, "photo");
-  const c = await makeCard(t, { dish: "tomato egg", kidName: "Leo", photos: [photo] });
+  const c = await makeCard(t, { dish: "tomato egg", kidName: "Leo", photos: [photo], voiceNote: await fileId(t, "voice") });
   await askMom(t, c.kidToken, MOM_ASKED);
   await post(t, "/dish/cards/update", { kidToken: c.kidToken, voiceNote: await fileId(t, "voice") });
   await answer(t, c.askToken, "q1");
@@ -1041,8 +1050,9 @@ test("the kid deletes, Mom is still here: the card stays for her, without the ki
   expect(kept.personId).toBeUndefined();
   expect(kept.kidName).toBeUndefined();
   expect(kept.kidVoiceNote).toBeUndefined();
+  expect(kept.dishVoiceNote).toBeUndefined();
   expect(kept.version).toBeDefined();
-  for (const id of [...row.photos, row.kidVoiceNote!]) expect(await fileGone(t, id)).toBe(true);
+  for (const id of [...row.photos, row.kidVoiceNote!, row.dishVoiceNote!]) expect(await fileGone(t, id)).toBe(true);
   expect(await t.run((ctx) => ctx.db.query("dishFiles").collect())).toEqual([]);
   expect(await answersOf(t, row._id)).toHaveLength(1); // her answer is hers
   expect(await fileGone(t, clip.audio)).toBe(false);
@@ -1068,7 +1078,7 @@ test("the kid deletes and no Mom is left on the card: the card goes, with her an
   expect(await t.run((ctx) => ctx.db.get("dishAsks", row._id))).toBeNull();
   expect(await t.run((ctx) => ctx.db.get("dishAsks", otherRow._id))).toBeNull();
   expect(await answersOf(t, row._id)).toEqual([]);
-  for (const id of [...row.photos, row.kidVoiceNote!, clip.audio]) expect(await fileGone(t, id)).toBe(true);
+  for (const id of [...row.photos, row.kidVoiceNote!, row.dishVoiceNote!, clip.audio]) expect(await fileGone(t, id)).toBe(true);
   expect(await t.run((ctx) => ctx.db.query("dishFiles").collect())).toEqual([]);
   expect((await post(t, "/dish/cards/get", { kidToken: c.kidToken })).status).toBe(404);
   expect((await post(t, "/dish/cards/get", { kidToken: familyOnly.kidToken })).status).toBe(200);
@@ -1086,7 +1096,9 @@ test("Mom deletes: her answers, clips and version go; the card waits for an answ
   expect(kept.finishedAt).toBeUndefined();
   expect(await answersOf(t, row._id)).toEqual([]);
   expect(await fileGone(t, clip.audio)).toBe(true);
-  expect(await fileGone(t, row.photos[0])).toBe(false); // the kid's photo stays
+  expect(await fileGone(t, row.photos[0])).toBe(false); // the kid's photo and voice notes stay
+  expect(await fileGone(t, row.dishVoiceNote!)).toBe(false);
+  expect(await fileGone(t, row.kidVoiceNote!)).toBe(false);
   const card = await getCard(t, c.kidToken);
   expect(card).toMatchObject({ status: "asked", version: null, answers: [], merging: false, asked: MOM_ASKED });
   expect((await peek(t, c.askToken)).questions).toEqual(MOM_ASKED); // her link asks again

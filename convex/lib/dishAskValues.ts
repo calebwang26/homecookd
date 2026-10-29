@@ -59,6 +59,9 @@ export const shownRecipeV = v.object({
 export type StoredRecipe = Infer<typeof recipeV>;
 export type ShownRecipe = Infer<typeof shownRecipeV>;
 
+/** Her voice recipe from the app (§8 cravings.sendVoiceRecipe): being written, in her version, or no version came. */
+export const voiceRecipeV = v.union(v.literal("writing"), v.literal("ready"), v.literal("failed"));
+
 export const cardStatusV = v.union(v.literal("draft"), v.literal("asked"), v.literal("answered"));
 export const VIAS = ["copy", "sms", "instagram", "whatsapp", "more"] as const;
 export const viaV = v.union(v.literal("copy"), v.literal("sms"), v.literal("instagram"), v.literal("whatsapp"), v.literal("more"));
@@ -93,6 +96,8 @@ export const cardV = v.object({
   openedAt: v.union(v.number(), v.null()),
   finishedAt: v.union(v.number(), v.null()),
   createdAt: v.number(),
+  /** The day Mom plans to film it, 0 (Sunday) to 6 (§8 cravings.setFilmingDay), or null. */
+  filmingDay: v.union(v.number(), v.null()),
 });
 
 /** What Mom's page gets (spec §3 Ask): never the kid token. */

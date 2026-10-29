@@ -127,6 +127,7 @@ type Card = {                 // what the kid's page gets
   askUrl: string;             // https://homecookd.app/a?t=<ask token>
   askedAt: number | null; openedAt: number | null; finishedAt: number | null; // ms since epoch
   createdAt: number;
+  filmingDay: number | null;  // the day Mom plans to film it, 0 (Sunday) to 6 (§8 cravings.setFilmingDay)
 };
 type Answer = { id: QuestionId; words: string; english: string | null; audioUrl: string | null; durationS: number };
 
@@ -175,6 +176,8 @@ type Ask = {                  // what Mom's page gets; never the kid token
 - `relation` defaults to `mom`. `kidName` is at most 40 characters.
 - At most 3 `photos`, of kind `photo`. `voiceNote` must be of kind `voice`: it's what the kid says about the dish
   ("she puts a lot of ketchup").
+  - It's kept privately on the card (`dishVoiceNote`): neither the card nor Mom's page ever gets it, and only account
+    deletion removes it (§5).
 - Order of work:
   1. The word filter runs on `dish` and `kidName`.
   2. The voice note is written down by Ink, in English.
@@ -289,7 +292,7 @@ notes have no expiry, and there's no `410`.
 **`dishAsks`**: one card.
 - **Tokens:** `kidTokenHash`, `askTokenHash`.
 - **What the kid gave:** `dish`, `relation`, `kidName?`, `photos: Id<"_storage">[]`,
-  `kidVoiceNote?: Id<"_storage">` (to Mom).
+  `dishVoiceNote?: Id<"_storage">` (about the dish, private), `kidVoiceNote?: Id<"_storage">` (to Mom).
 - **The guess:** `guess` (Recipe), `message`, `asked: Question[]`.
 - **Mom's side:** `version?` (Recipe), `status`.
 - **Merge state:** `mergeTries`, `mergeStartedAt?`, `mergedAt?`.
@@ -323,7 +326,7 @@ notes have no expiry, and there's no `410`.
 - Uploads never attached to a card are deleted after an hour (nobody saved them).
 - **Account deletion** (`convex/account.ts`) goes by person (V2-LINKING.md §3); `familyId` alone deletes nothing.
   - **The kid deleted** (`personId`):
-    - when the card has a live `requestedOf`, it stays for her without the kid's name, voice note or photos;
+    - when the card has a live `requestedOf`, it stays for her without the kid's name, voice notes or photos;
     - otherwise it goes, with its answers and files.
   - **Mom deleted** (`requestedOf`):
     - her answers, their clips and her version are deleted (her voice is hers);
@@ -463,24 +466,31 @@ type CravingAsk = {
 - These are the cards made of her: `requestedOf` is her, from her craving link or a web ask she claimed in the app.
 
 **`cravings.get`** (public query, `{sessionToken, id}`) → `CravingAsk | null`.
-- It's `null` for a card that isn't hers or doesn't exist.
+- It's `null` for a card that isn't hers or doesn't exist, or an `id` that isn't a card's (a deep link).
+- `id`, here and in `setFilmingDay` and `sendVoiceRecipe`, is the card's id as a string.
 
 **"Next time you make it, tap record":** the app pre-fills `/record` with the dish and the kid, and sets a weekly
 local reminder ("I make it on Sundays").
 - **`cravings.setFilmingDay`** (public mutation, `{sessionToken, id, day: 0–6 | null}`) → `null`. It saves the day she
   plans to film it.
+  - Only `requestedOf` may set it: anyone else in her family gets "Only <name> can pick the day.", another family
+    "Not found.". A day that isn't a whole number 0–6 is "Pick a day of the week.".
   - The kid's card shows "Mom's filming it Sunday": `Card.filmingDay`.
   - `null` clears it.
 - When her filmed recipe is published, linking it to the card is a later step. It isn't in this spec.
 
-**`cravings.sendVoiceRecipe`** (public mutation, `{sessionToken, id, audioId, durationS, language?}`) → `null`. "Tell
-him how you make it now".
-- **Who:** only the card's `requestedOf`. Anyone else gets `ConvexError("Only <name> can answer this one.")`.
-- **The audio:** uploaded first with `files.generateUploadUrl`.
+**`cravings.sendVoiceRecipe`** (public **action**, `{sessionToken, id, audioId, durationS, language?}`) → `null`. "Tell
+him how you make it now". The app calls it with `useAction`.
+- It's an action, not a mutation, so a wrong file can be deleted while the call still fails: a mutation that throws
+  keeps nothing it did, a delete included. Its work is one internal mutation (`cravings.saveVoiceRecipe`).
+- **Who:** only the card's `requestedOf`. Anyone else in her family gets `ConvexError("Only <name> can answer this
+  one.")`; another family's card (or none) is `ConvexError("Not found.")`, so no name leaks.
+- **The audio:** uploaded first with `files.uploadUrl`.
   - Up to 2 minutes: `durationS` is 1–125, saved as at most 120.
   - The same audio types and 5 MB cap as Mom's web answers.
   - The type and size are checked from `_storage` metadata. A wrong file is deleted, and the call fails with
     `ConvexError`.
+  - Only a file uploaded in the last hour is deleted: an older one may be something else's.
 - **`language`:** an Ink code from §4's list, defaulting to her `people.language` or `en`.
 - **It's one answer to one question.** It's saved as an answer to "How do you make it?":
   - That question is the next free kid's-own id (`q4`–`q6`), added to `asked`.
@@ -513,9 +523,11 @@ him how you make it now".
 - **`dishAsks`** gets more optional fields:
   - `cravingId?` (`requestedOf?`, `kidClaimedAt?` and `cookClaimedAt?` come with Phase 1, for the Phase 4 chat);
   - `filmingDay?` (0–6);
+  - `voiceRecipeQ?`: the question her `sendVoiceRecipe` answers, so a second one replaces it and `voiceRecipe` can be
+    worked out (a kid may ask "How do you make it?" too);
   - `familyId` is set for craving cards.
   - Indexes `by_craving_created` and `by_requested_of`; the second already exists.
 - **Account deletion:**
   - deleting a person deletes their craving links;
-  - deleting a family deletes its craving links;
+  - deleting a family deletes its craving links (no route deletes a family yet);
   - for the cards, the Phase 1 purge rules apply (V2-LINKING.md §3): the kid's or `requestedOf`'s data goes, by person.

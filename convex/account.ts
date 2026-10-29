@@ -5,7 +5,7 @@
 // Community included, with the dinners around them cancelled, and Moss is told. The rest is purged right
 // after, in batches, each step through an index of its own rows: their messages and voice notes, their
 // questions and answers, what they were cooking, their Community dinners and asks, what they put on a dish
-// ask card (as the kid or as Mom), and a cook's jobs and recordings (homie's prompts, the glasses' live log and
+// ask card (as the kid or as Mom) and their craving links, and a cook's jobs and recordings (homie's prompts, the glasses' live log and
 // frames). A purge that stopped is started again by a cron (restartPurges). The accountDeletions row lists what Convex can't delete itself: their
 // Supabase rows (the app calls POST /profiles/:id/remove next), their media in GCS and a voice clone.
 import { v } from "convex/values";
@@ -321,7 +321,15 @@ const dishCardsAsCook: Step = async (ctx, d, max) => {
   return n;
 };
 
+/** The craving links they made (DISH-ASK-SPEC.md §8); the cards from them follow the two steps above. */
+const cravingLinks: Step = async (ctx, d, max) => {
+  const rows = await ctx.db.query("cravingLinks").withIndex("by_person", (q) => q.eq("personId", d.personId)).take(max);
+  for (const link of rows) await ctx.db.delete("cravingLinks", link._id);
+  return rows.length;
+};
+
 // Recipes first, so a late one's questions, cooking and swaps go with the rest.
 const STEPS: Step[] = [
   recipes, messages, questions, answers, cooking, recordings, jobs, hostedDinners, dinnerAsks, swaps, dishCardsAsKid, dishCardsAsCook,
+  cravingLinks,
 ];

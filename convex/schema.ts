@@ -480,6 +480,8 @@ export default defineSchema({
     relation: relationV,
     kidName: v.optional(v.string()),
     photos: v.array(v.id("_storage")), // the photos the card was made from (0–3)
+    // The kid's voice note about the dish, that the guess was written from. Private: never on Mom's page or the card.
+    dishVoiceNote: v.optional(v.id("_storage")),
     kidVoiceNote: v.optional(v.id("_storage")), // the kid's voice note to Mom (never sent to a model)
     guess: recipeV, // tonight's version: the kid's guess
     message: v.string(), // the Ask Mom text, in the kid's voice
@@ -508,12 +510,35 @@ export default defineSchema({
     requestedOf: v.optional(v.id("people")), // Mom
     kidClaimedAt: v.optional(v.number()),
     cookClaimedAt: v.optional(v.number()),
+    // Phase 5 (DISH-ASK-SPEC.md §8): the craving link the card was made from (familyId and requestedOf come with it),
+    // the day Mom plans to film it (0 = Sunday … 6), and the question her voice recipe from the app answers.
+    cravingId: v.optional(v.id("cravingLinks")),
+    filmingDay: v.optional(v.number()),
+    voiceRecipeQ: v.optional(questionIdV),
   })
     .index("by_kid_token", ["kidTokenHash"])
     .index("by_ask_token", ["askTokenHash"])
     .index("by_family", ["familyId"])
     .index("by_person", ["personId"])
-    .index("by_requested_of", ["requestedOf"]),
+    .index("by_requested_of", ["requestedOf"])
+    .index("by_craving_created", ["cravingId", "createdAt"]),
+
+  /**
+   * A parent's "what do you miss?" link (DISH-ASK-SPEC.md §8): one live link per person, reused, with caps per link
+   * (lib/cravingLinks.ts). The token is stored as-is so her own link can be shown to her again; it's never returned
+   * to anyone else. A stopped link makes no new cards; the cards it made stay.
+   */
+  cravingLinks: defineTable({
+    familyId: v.id("families"),
+    personId: v.id("people"), // who made it: the cards from it are asked of them
+    token: v.string(),
+    message: v.string(), // her line on the kid's page, in her voice
+    uses: v.number(), // cards made from it
+    createdAt: v.number(),
+    revokedAt: v.optional(v.number()),
+  })
+    .index("by_token", ["token"])
+    .index("by_person", ["personId"]),
 
   /** One of Mom's voice answers to a card's question. Re-recording replaces it (and deletes the old clip). */
   dishAnswers: defineTable({
@@ -526,7 +551,9 @@ export default defineSchema({
     english: v.optional(v.union(v.string(), v.null())), // null: English, or no translation; unset = not yet
     merged: v.boolean(), // her version was made with this clip
     createdAt: v.number(),
-  }).index("by_ask_question", ["askId", "questionId"]),
+  })
+    .index("by_ask_question", ["askId", "questionId"])
+    .index("by_audio", ["audio"]),
 
   /** A kid's upload (POST /dish/files): a photo or a voice note, until it's on a card (else deleted after an hour). */
   dishFiles: defineTable({
@@ -540,7 +567,8 @@ export default defineSchema({
     createdAt: v.number(),
   })
     .index("by_file_id", ["fileIdHash"])
-    .index("by_unattached_created", ["askId", "createdAt"]),
+    .index("by_unattached_created", ["askId", "createdAt"])
+    .index("by_storage", ["storageId"]),
 
   /** The dish ask's model spend, one row per UTC day (the $10 daily budget, lib/dishAskValues.ts). */
   dishSpend: defineTable({

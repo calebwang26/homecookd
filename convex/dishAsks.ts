@@ -1,6 +1,7 @@
 // The dish ask's data (docs/build/DISH-ASK-SPEC.md): a kid's card (their guess at a dish from home, made with no
 // account), what Mom is asked, her voice answers, and her version made from them. Only lib/dishAskRoutes.ts calls
-// in here (POST /dish/*); every function is internal. Ported from the MVP "The dish I miss"
+// in here (POST /dish/*), and cravings.ts (the parent's side in the app, §8) uses its helpers; every function is
+// internal. Ported from the MVP "The dish I miss"
 // (supabase/functions/miss/handler.ts on calebwang26/homecookd feat/dish-i-miss):
 // - Asking: her answered questions stay first, at most 3 open and 6 in all (askedOf).
 // - Her version is rebuilt from the guess with all of her answers each time. Each answer has `merged`; a new or
@@ -26,6 +27,7 @@ import {
 } from "./_generated/server";
 import { send } from "./alerts";
 import { DishModelError, type Spend, toEnglish, transcribe, writeVersion } from "./dishAskModel";
+import { checkLinkCaps, openLink } from "./lib/cravingLinks";
 import type { MissQuestion, QuestionId, Relation } from "./lib/dishAsk/types";
 import { askedText, isSuggestionId, LIMITS, OWN_IDS, RELATION_LABEL } from "./lib/dishAsk/validate";
 import {
@@ -52,6 +54,7 @@ import {
   shownRecipe,
   storedRecipe,
   viaV,
+  voiceRecipeV,
   WORDS,
 } from "./lib/dishAskValues";
 import { flagged } from "./lib/moderation";
@@ -84,7 +87,7 @@ async function byAsk(ctx: QueryCtx, askTokenHash: string): Promise<Row> {
 }
 
 /** Her answers, one per question at most (q1–q6), in question order. */
-const answersOf = (ctx: QueryCtx, askId: Id<"dishAsks">): Promise<Answer[]> =>
+export const answersOf = (ctx: QueryCtx, askId: Id<"dishAsks">): Promise<Answer[]> =>
   ctx.db.query("dishAnswers").withIndex("by_ask_question", (q) => q.eq("askId", askId)).take(LIMITS.askTotal);
 
 async function spentOn(ctx: QueryCtx, now: number): Promise<number> {
@@ -120,6 +123,22 @@ const due = (s: State) =>
 
 async function mergeLater(ctx: MutationCtx, s: State) {
   if (due(s)) await ctx.scheduler.runAfter(0, internal.dishAsks.merge, { askId: s.row._id });
+}
+
+/**
+ * Her voice recipe from the app (cravings.sendVoiceRecipe), for the parent's screen; null when she sent none.
+ * - failed: Ink heard no words in it, or the last try failed (merge releases it), so she can send it again;
+ * - ready: it's in her version;
+ * - writing: until then, also while today's budget holds it for a later day.
+ * No clock: the parent's queries read it.
+ */
+export function voiceRecipeOf(row: Row, answers: Answer[]): Infer<typeof voiceRecipeV> | null {
+  const id = row.voiceRecipeQ;
+  const a = id && answers.find((x) => x.questionId === id);
+  if (!a) return null;
+  if (a.words === "") return "failed";
+  if (a.merged) return row.version ? "ready" : "failed";
+  return row.mergeTries >= MAX_MERGES && row.mergeStartedAt === undefined ? "failed" : "writing";
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -174,6 +193,7 @@ async function cardJson(ctx: QueryCtx, s: State, askToken: string): Promise<Card
     openedAt: row.openedAt ?? null,
     finishedAt: row.finishedAt ?? null,
     createdAt: row.createdAt,
+    filmingDay: row.filmingDay ?? null,
   };
 }
 
@@ -297,13 +317,20 @@ export const dropOrphanFiles = internalMutation({
   },
 });
 
+/** The kid's own files on a card: photos, the voice note about the dish, the voice note to Mom. */
+const kidFiles = (card: Row) => [
+  ...card.photos,
+  ...(card.dishVoiceNote ? [card.dishVoiceNote] : []),
+  ...(card.kidVoiceNote ? [card.kidVoiceNote] : []),
+];
+
 /**
  * The kid deleted their account and Mom (requestedOf) is still here: the card stays for her, without the kid's
- * name, photos or voice note. Returns the rows deleted or changed (account.ts).
+ * name, photos or voice notes. Returns the rows deleted or changed (account.ts).
  */
 export async function dropKid(ctx: MutationCtx, card: Row): Promise<number> {
   let n = 1;
-  for (const id of [...card.photos, ...(card.kidVoiceNote ? [card.kidVoiceNote] : [])]) {
+  for (const id of kidFiles(card)) {
     await dropCardFile(ctx, card._id, id);
     n++;
   }
@@ -311,6 +338,7 @@ export async function dropKid(ctx: MutationCtx, card: Row): Promise<number> {
     personId: undefined,
     kidName: undefined,
     kidVoiceNote: undefined,
+    dishVoiceNote: undefined,
     photos: [],
     kidClaimedAt: undefined,
   });
@@ -318,8 +346,8 @@ export async function dropKid(ctx: MutationCtx, card: Row): Promise<number> {
 }
 
 /**
- * Mom (requestedOf) deleted her account: her answers and clips go, and so does her version; the card goes back to
- * waiting for an answer, and stays for the kid. Returns the rows deleted or changed (account.ts).
+ * Mom (requestedOf) deleted her account: her answers and clips go, and so do her version and her filming day; the
+ * card goes back to waiting for an answer, and stays for the kid. Returns the rows deleted or changed (account.ts).
  */
 export async function dropCook(ctx: MutationCtx, card: Row): Promise<number> {
   let n = 1;
@@ -339,6 +367,8 @@ export async function dropCook(ctx: MutationCtx, card: Row): Promise<number> {
     mergeStartedAt: undefined,
     mergedAt: undefined,
     momLang: undefined,
+    filmingDay: undefined,
+    voiceRecipeQ: undefined,
   });
   return n;
 }
@@ -356,7 +386,7 @@ export async function deleteCard(ctx: MutationCtx, card: Row): Promise<number> {
     await ctx.db.delete("dishFiles", f._id);
     n++;
   }
-  for (const id of [...card.photos, ...(card.kidVoiceNote ? [card.kidVoiceNote] : [])]) await dropFile(ctx, id);
+  for (const id of kidFiles(card)) await dropFile(ctx, id);
   await ctx.db.delete("dishAsks", card._id);
   return n;
 }
@@ -377,12 +407,21 @@ export const create = internalMutation({
     guess: recipeV,
     genMs: v.number(),
     ipKey: v.string(),
+    /** From a parent's craving link (§8): the card is a request to her. Its checks run again here. */
+    cravingToken: v.optional(v.string()),
   },
   returns: cardV,
   handler: async (ctx, a) => {
     const photos = await Promise.all(a.photos.map((h) => usableFile(ctx, h, "photo")));
     const voice = a.voiceNote ? await usableFile(ctx, a.voiceNote, "voice") : null;
     const now = Date.now();
+    let craving = null;
+    if (a.cravingToken !== undefined) {
+      if (!a.kidName) throw badRequest("kidName is required");
+      craving = (await openLink(ctx, a.cravingToken)).link;
+      await checkLinkCaps(ctx, craving, now);
+      await ctx.db.patch("cravingLinks", craving._id, { uses: craving.uses + 1 });
+    }
     const askId = await ctx.db.insert("dishAsks", {
       kidTokenHash: a.kidTokenHash,
       askTokenHash: a.askTokenHash,
@@ -390,6 +429,8 @@ export const create = internalMutation({
       relation: a.relation,
       ...(a.kidName ? { kidName: a.kidName } : {}),
       photos: photos.map((f) => f.storageId),
+      // The voice note about the dish stays on the card, privately: no page gets it.
+      ...(voice ? { dishVoiceNote: voice.storageId } : {}),
       guess: a.guess,
       message: defaultMessage(a.relation, a.guess.dish),
       asked: [],
@@ -398,13 +439,13 @@ export const create = internalMutation({
       genMs: a.genMs,
       createdAt: now,
       ipKey: a.ipKey,
+      // Tied to her, never joining anyone to her family; the cook side is held from the start (V2-LINKING.md).
+      ...(craving
+        ? { familyId: craving.familyId, requestedOf: craving.personId, cravingId: craving._id, cookClaimedAt: now }
+        : {}),
     });
-    for (const f of photos) await ctx.db.patch("dishFiles", f._id, { askId });
-    // The voice note about the dish was only for the guess: it isn't kept.
-    if (voice) {
-      await dropFile(ctx, voice.storageId);
-      await ctx.db.delete("dishFiles", voice._id);
-    }
+    for (const f of [...photos, ...(voice ? [voice] : [])]) await ctx.db.patch("dishFiles", f._id, { askId });
+    // Phase 4 (Notifications & linking): ctx.scheduler.runAfter(0, internal.pushEvents.requested, { askId });
     const row = (await ctx.db.get("dishAsks", askId))!;
     return await cardJson(ctx, await stateOf(ctx, row, now), a.askToken);
   },
@@ -601,6 +642,48 @@ export const answerable = internalQuery({
   },
 });
 
+type Clip = { audio: Id<"_storage">; durationS: number; language: string };
+
+/**
+ * Saves (or replaces) her answer to one question, and the card's merges start over. A replaced clip is deleted.
+ * Mom's web answer (momAnswer) and her voice recipe from the app (cravings.sendVoiceRecipe) both go through here.
+ */
+export async function putAnswer(
+  ctx: MutationCtx,
+  row: Row,
+  answers: Answer[],
+  questionId: QuestionId,
+  clip: Clip,
+  now: number,
+): Promise<Id<"dishAnswers">> {
+  const fields = { ...clip, merged: false, createdAt: now };
+  const old = answers.find((x) => x.questionId === questionId);
+  let answerId: Id<"dishAnswers">;
+  if (old) {
+    answerId = old._id;
+    await ctx.db.patch("dishAnswers", old._id, { ...fields, words: undefined, english: undefined });
+    if (old.audio !== clip.audio) await dropFile(ctx, old.audio);
+  } else {
+    answerId = await ctx.db.insert("dishAnswers", { askId: row._id, questionId, ...fields });
+  }
+  await ctx.db.patch("dishAsks", row._id, { mergeTries: 0, mergeStartedAt: undefined });
+  return answerId;
+}
+
+/**
+ * Send: her answers go to the kid, and the merge (Ink, the translation, her version) runs after the reply. Nothing
+ * answered changes nothing. Mom's web Send (momFinish) and cravings.sendVoiceRecipe both end here.
+ */
+export async function finishCard(ctx: MutationCtx, row: Row, now: number): Promise<State> {
+  if (!row.finishedAt && fresh(await answersOf(ctx, row._id)).length) {
+    await ctx.db.patch("dishAsks", row._id, { finishedAt: now });
+    row = { ...row, finishedAt: now };
+  }
+  const s = await stateOf(ctx, row, now);
+  await mergeLater(ctx, s);
+  return s;
+}
+
 /** Saves (or replaces) one answer: its words are written down after the reply, and the card's merges start over. */
 export const momAnswer = internalMutation({
   args: {
@@ -616,17 +699,8 @@ export const momAnswer = internalMutation({
     const answers = await answersOf(ctx, row._id);
     canAnswer(row, answers, a.questionId);
     const now = Date.now();
-    const clip = { audio: a.audio, durationS: a.durationS, language: a.language, merged: false, createdAt: now };
-    const old = answers.find((x) => x.questionId === a.questionId);
-    let answerId: Id<"dishAnswers">;
-    if (old) {
-      answerId = old._id;
-      await ctx.db.patch("dishAnswers", old._id, { ...clip, words: undefined, english: undefined });
-      if (old.audio !== a.audio) await dropFile(ctx, old.audio);
-    } else {
-      answerId = await ctx.db.insert("dishAnswers", { askId: row._id, questionId: a.questionId, ...clip });
-    }
-    await ctx.db.patch("dishAsks", row._id, { mergeTries: 0, mergeStartedAt: undefined });
+    const clip = { audio: a.audio, durationS: a.durationS, language: a.language };
+    const answerId = await putAnswer(ctx, row, answers, a.questionId, clip, now);
     await ctx.scheduler.runAfter(0, internal.dishAsks.hear, { answerId, audio: a.audio });
     return await askJson(ctx, await stateOf(ctx, (await ctx.db.get("dishAsks", row._id))!, now), a.language);
   },
@@ -637,15 +711,8 @@ export const momFinish = internalMutation({
   args: { askTokenHash: v.string(), lang: v.optional(v.string()) },
   returns: askV,
   handler: async (ctx, { askTokenHash, lang }) => {
-    let row = await byAsk(ctx, askTokenHash);
-    const now = Date.now();
-    if (!row.finishedAt && fresh(await answersOf(ctx, row._id)).length) {
-      await ctx.db.patch("dishAsks", row._id, { finishedAt: now });
-      row = { ...row, finishedAt: now };
-    }
-    const s = await stateOf(ctx, row, now);
-    await mergeLater(ctx, s);
-    return await askJson(ctx, s, lang);
+    const row = await byAsk(ctx, askTokenHash);
+    return await askJson(ctx, await finishCard(ctx, row, Date.now()), lang);
   },
 });
 
@@ -782,6 +849,7 @@ export const saveVersion = internalMutation({
     if (!row || row.mergeStartedAt !== claimedAt) return false;
     await ctx.db.patch("dishAsks", askId, { version, status: "answered", mergedAt: Date.now() });
     await markMergedClips(ctx, askId, audios);
+    // Phase 4 (Notifications & linking): ctx.scheduler.runAfter(0, internal.pushEvents.answered, { askId });
     return true;
   },
 });
