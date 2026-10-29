@@ -40,6 +40,7 @@ const words: Translation = {
   'k1.notADish': 'Sabihin ang isang ulam, tulad ng tomato at itlog.',
   'k1.words': 'Sa pagkain lang tayo. Subukan ang ibang salita.',
   'k1.failed': 'Hindi iyon gumana. Subukan muli.',
+  'k1.rate': 'Masyadong maraming subok. Maghintay ng isang minuto at subukan ulit.',
   'k1.empty': 'Sabihin muna sa amin ang ulam.',
   'k5.title': 'Nagawa na ng homecookd ang lahat ng recipe na kaya nitong gawin ngayon.',
   'k5.line': 'Subukan ulit bukas.',

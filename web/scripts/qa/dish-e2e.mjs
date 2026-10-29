@@ -130,7 +130,10 @@ try {
   await shot(kid, 'K3b-ask-voice-empty');
   await hold(kid, sheet.getByRole('button', { name: /Add a voice note/ }), 1800);
   await sheet.getByRole('button', { name: 'Play your voice note' }).waitFor({ timeout: 10000 });
-  check('K3: the voice note uploaded and attached', !!fake.cards.get(kidUrl.split('k=')[1]).voice);
+  const voiced = fake.cards.get(kidUrl.split('k=')[1]);
+  check('K3: the voice note uploaded and attached', !!voiced.voice);
+  check('K3: voiceNoteS sent from the recorder', voiced.voiceS > 0 && voiced.voiceS <= 60, String(voiced.voiceS));
+  check('K3: kidVoiceS shown as its time', (await sheet.getByText(/^0:0[1-9]$/).count()) === 1);
   await shot(kid, 'K3-ask-voice-recorded');
   await sheet.getByRole('button', { name: 'Copy link' }).click();
   await kid.waitForTimeout(800);
@@ -149,6 +152,7 @@ try {
   await mom.getByRole('heading', { level: 1 }).waitFor();
   check('M1: "Caleb wants to make your tomato egg."', (await mom.getByRole('heading', { level: 1 }).innerText()).replace(/\s+/g, ' ') === 'Caleb wants to make your tomato egg.');
   check('M1: the kid’s voice note plays first', (await mom.getByRole('button', { name: 'Play Caleb’s voice note' }).count()) === 1);
+  check('M1: kidVoiceS shown on the player', (await mom.getByText(/^0:0[1-9]$/).count()) === 1);
   check('M1: the button is "See Caleb’s guess"', (await mom.getByRole('button', { name: 'See Caleb’s guess' }).count()) === 1);
   await shot(mom, 'M1-voice-note');
   await mom.getByRole('button', { name: 'See Caleb’s guess' }).click();
@@ -219,6 +223,17 @@ try {
   await shot(kid, 'K5-daily-limit');
   fake.setBudget(false);
 
+  // A per-IP limit (429 rate) is gentler: try again in a minute, the button stays on.
+  fake.setRate(true);
+  await kid.reload({ waitUntil: 'networkidle' });
+  await kid.getByLabel('The dish you miss').fill('dad’s dumplings');
+  await kid.getByRole('button', { name: 'Make my recipe' }).click();
+  await kid.getByText('Too many tries. Wait a minute and try again.').waitFor({ timeout: 10000 });
+  check('Rate: not the budget words', (await kid.getByText('homecookd has made all the recipes it can today.').count()) === 0);
+  check('Rate: the button stays on', await kid.getByRole('button', { name: 'Make my recipe' }).isEnabled());
+  await shot(kid, 'K1-rate-limit');
+  fake.setRate(false);
+
   // ── Language switch on the kid's page ───────────────────────────────────────────────────────
   await kid.reload({ waitUntil: 'networkidle' });
   await kid.getByLabel('Language: English').selectOption('es');
@@ -264,6 +279,7 @@ try {
   await hi.waitForTimeout(600);
   check('Hindi: answers sent with lang=hi', fake.log.filter((l) => l.path === '/dish/ask/answer' && l.token === card2.askToken).every((l) => l.query.lang === 'hi'));
   check('Hindi: her words with the English under them', (await hi.getByText('Two big spoons. Don’t skimp.').count()) === 1);
+  check('Hindi: M4 uses inLang.version for the card’s own words', (await hi.getByText('2 बड़े चम्मच').count()) === 1 && (await hi.getByText('अंडे, फेंटे हुए').count()) === 1 && (await hi.getByText('2 big spoons').count()) === 0);
   await shot(hi, 'M7-hindi-fills-in');
 } catch (e) {
   failures.push(`crashed: ${e.stack ?? e}`);

@@ -40,6 +40,7 @@ const words: Translation = {
   'k1.notADish': '说一道菜吧，比如番茄炒蛋。',
   'k1.words': '我们只聊吃的。换个说法试试。',
   'k1.failed': '没成功，再试一次。',
+  'k1.rate': '尝试次数太多了。请等一分钟再试。',
   'k1.empty': '先告诉我们是哪道菜。',
   'k5.title': 'homecookd 今天能做的食谱都做完了。',
   'k5.line': '明天再来试试。',

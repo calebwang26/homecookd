@@ -41,6 +41,7 @@ const words: Translation = {
   'k1.notADish': 'Dinos un plato, como los huevos con tomate.',
   'k1.words': 'Hablemos solo de comida. Prueba con otras palabras.',
   'k1.failed': 'No funcionó. Inténtalo de nuevo.',
+  'k1.rate': 'Demasiados intentos. Espera un minuto y vuelve a intentarlo.',
   'k1.empty': 'Primero dinos el plato.',
   'k5.title': 'homecookd ya hizo hoy todas las recetas que puede.',
   'k5.line': 'Vuelve a intentarlo mañana.',

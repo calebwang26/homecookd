@@ -42,6 +42,7 @@ export const EN = {
   'k1.notADish': 'Tell us a dish, like {whose} tomato egg.',
   'k1.words': 'Let’s keep it to the food. Try other words.',
   'k1.failed': 'That didn’t work. Try again.',
+  'k1.rate': 'Too many tries. Wait a minute and try again.',
   'k1.empty': 'Tell us the dish first.',
   // K5: today's budget is spent
   'k5.title': 'homecookd has made all the recipes it can today.',

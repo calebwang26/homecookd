@@ -8,10 +8,10 @@ import type { Ask, Card, FileKind, QuestionId, Relation, SendVia } from './types
 export const DISH_URL = (process.env.NEXT_PUBLIC_DISH_URL || CONVEX_SITE_URL).trim().replace(/\/+$/, '');
 
 /**
- * not-found 404 · rate 429 (a limit, or today's budget) · not-a-dish 422 · words 422 (a filtered word)
+ * not-found 404 · rate 429 (a per-IP or per-link limit) · budget 429 (today's model budget is spent) · not-a-dish 422 · words 422 (a filtered word)
  * closed 409 · busy 5xx (a model failed, safe to retry) · bad other 4xx · network: no answer at all
  */
-export type DishErrorKind = 'not-found' | 'rate' | 'not-a-dish' | 'words' | 'closed' | 'busy' | 'bad' | 'network';
+export type DishErrorKind = 'not-found' | 'rate' | 'budget' | 'not-a-dish' | 'words' | 'closed' | 'busy' | 'bad' | 'network';
 
 export class DishError extends Error {
   constructor(
@@ -42,7 +42,7 @@ async function call<T>(path: string, init: RequestInit, timeoutMs = TIMEOUT_MS):
   if (res.ok && data) return data;
   const code = data?.code;
   if (res.status === 404) throw new DishError('not-found', msg);
-  if (res.status === 429) throw new DishError('rate', msg);
+  if (res.status === 429) throw new DishError(code === 'budget' ? 'budget' : 'rate', msg);
   if (res.status === 409) throw new DishError('closed', msg);
   if (res.status === 422) throw new DishError(code === 'words' ? 'words' : 'not-a-dish', msg);
   if (res.status >= 400 && res.status < 500) throw new DishError('bad', msg);
@@ -87,7 +87,7 @@ export async function getCard(kidToken: string): Promise<Card> {
 
 export async function updateCard(
   kidToken: string,
-  patch: { relation?: Relation; kidName?: string | null; message?: string; voiceNote?: string | null },
+  patch: { relation?: Relation; kidName?: string | null; message?: string; voiceNote?: string | null; voiceNoteS?: number },
 ): Promise<Card> {
   return (await post<{ card: Card }>('/dish/cards/update', { kidToken, ...patch })).card;
 }

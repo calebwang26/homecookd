@@ -6,7 +6,7 @@
 //   cd web && NEXT_PUBLIC_DISH_URL=http://localhost:8791 npx next dev --port 3105
 //
 // Test hooks (not in the spec): POST /__fake/budget {spent: true|false} makes /dish/cards answer 429
-// `rate` as the daily budget does; GET /__fake/state returns every card; GET /files/<id> serves an upload.
+// `budget` as the spent daily budget does, POST /__fake/rate {on: true|false} answers 429 `rate` (a per-IP limit); GET /__fake/state returns every card; GET /files/<id> serves an upload.
 // Import it to run it in-process: `const fake = await startFake({ port, site })`.
 import { createServer } from 'node:http';
 import { createHash, randomInt } from 'node:crypto';
@@ -69,6 +69,17 @@ function hindi(guess, card) {
     },
     questions: card.asked.map((q) => ({ ...q, text: qs[q.id] ?? q.text })),
     message: 'माँ, आप अपना टमाटर अंडा कैसे बनाती हैं? मैं यहाँ बनाने की कोशिश कर रहा हूँ।',
+    // Her version in Hindi too: names, amounts and lines; her quotes and tips stay as she said them.
+    version: card.version
+      ? {
+          ...card.version,
+          ingredients: card.version.ingredients.map((x, i) => ({ ...x, name: names[i] ?? x.name, amount: { '2 big spoons': '2 बड़े चम्मच', '1 tsp': '1 छोटा चम्मच' }[x.amount] ?? x.amount })),
+          steps: card.version.steps.map((st, i) => ({
+            ...st,
+            lines: st.lines.map((l, j) => ({ ...l, text: l.status === 'mom' ? 'अंडे **बिल्कुल आख़िर में** डालें। मिलाएँ, हरा प्याज़ डालें, चावल के साथ खाएँ।' : (lines[i]?.[j] ?? l.text) })),
+          })),
+        }
+      : null,
   };
 }
 
@@ -110,6 +121,7 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
   const files = new Map(); // fileId -> {kind, type, bytes}
   const log = [];
   let budgetSpent = false;
+  let rateLimited = false;
   let base = `http://localhost:${port}`;
   const byAsk = (t) => [...cards.values()].find((c) => c.askToken === t);
   const fileUrl = (id) => (id ? `${base}/files/${id}` : null);
@@ -126,6 +138,7 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
     asked: c.asked,
     message: c.message,
     kidVoiceUrl: fileUrl(c.voice),
+    kidVoiceS: c.voice ? c.voiceS : null,
     photoUrls: c.photos.map(fileUrl),
     askUrl: `${site}/a?t=${c.askToken}`,
     askedAt: c.askedAt,
@@ -139,6 +152,7 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
     kidName: c.kidName,
     message: c.message,
     kidVoiceUrl: fileUrl(c.voice),
+    kidVoiceS: c.voice ? c.voiceS : null,
     guess: c.guess,
     inLang,
     photoUrls: c.photos.map(fileUrl),
@@ -193,6 +207,9 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
       case '/__fake/budget':
         budgetSpent = !!b.spent;
         return send(200, { budgetSpent });
+      case '/__fake/rate':
+        rateLimited = !!b.on;
+        return send(200, { rateLimited });
       case '/dish/files': {
         const kind = url.searchParams.get('kind');
         const type = (req.headers['content-type'] ?? '').split(';')[0].trim();
@@ -204,7 +221,8 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
         return send(201, { fileId, kind, contentType: type, size: raw.length });
       }
       case '/dish/cards': {
-        if (budgetSpent) return fail(429, 'rate', 'homecookd has made all the recipes it can today. Try again tomorrow.');
+        if (budgetSpent) return fail(429, 'budget', 'homecookd has made all the recipes it can today. Try again tomorrow.');
+        if (rateLimited) return fail(429, 'rate', 'Too many tries. Please wait a few minutes.');
         const dish = String(b.dish ?? '').trim();
         if (dish.length < 2 && !b.photos?.length && !b.voiceNote) return fail(400, 'bad_request', 'Tell us the dish.');
         if (/^(asdf|hello)$/i.test(dish)) return fail(422, 'not_a_dish', 'That doesn’t sound like a dish.');
@@ -224,6 +242,7 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
           asked: [],
           message: `${RELATION_LABEL[relation]}, how do you make your ${guess.dish}? I'm trying to make it here.`,
           voice: null,
+          voiceS: null,
           photos: (b.photos ?? []).filter((id) => files.has(id)),
           askedAt: null,
           openedAt: null,
@@ -247,7 +266,11 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
           if (b.kidName !== undefined) c.kidName = b.kidName ? String(b.kidName).slice(0, 40) : null;
           if (b.relation && RELATION_LABEL[b.relation]) c.relation = b.relation;
           if (typeof b.message === 'string') c.message = b.message.trim().slice(0, 500);
-          if (b.voiceNote !== undefined) c.voice = b.voiceNote && files.has(b.voiceNote) ? b.voiceNote : null;
+          if (b.voiceNoteS !== undefined && !(b.voiceNoteS > 0 && b.voiceNoteS <= 60)) return fail(400, 'bad_request', 'voiceNoteS is over 0 and at most 60.');
+          if (b.voiceNote !== undefined) {
+            c.voice = b.voiceNote && files.has(b.voiceNote) ? b.voiceNote : null;
+            c.voiceS = c.voice ? (b.voiceNoteS ?? null) : null;
+          }
           return send(200, { card: cardOut(c) });
         case '/dish/cards/ask': {
           const qs = (b.questions ?? []).slice(0, 3).map((q, i) => ({ id: q.id ?? `q${4 + i}`, text: String(q.text) }));
@@ -311,6 +334,7 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
     cards,
     log,
     setBudget: (spent) => (budgetSpent = spent),
+    setRate: (on) => (rateLimited = on),
     close: () => new Promise((r) => server.close(r)),
   };
 }
