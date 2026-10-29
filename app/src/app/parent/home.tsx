@@ -156,8 +156,10 @@ export default function ParentHome() {
       </ScrollHold>
       <StickyHeader title={t('parent.tab.home')} scrollY={scrollY} start={40} />
       <MoveRequestPrompt />
-      {/* TODO(push): once the Notifications & linking chat's 'cook-craving-sent' kind lands, onSent opens
-          <PushAskSheet kind="cook-craving-sent"> ("Want a note when they pick a dish?"). */}
+      {/* TODO(push): when claude/v2-notif-linking (7420723bf, the 'cook-craving-sent' kind) is merged, pass
+          onSent={() => me && askForPushSoon({ kind: 'cook-craving-sent', profileId: me.id, name: '' })}
+          (askForPushSoon from '@/components/push/PushAskSheet'; the host in _layout shows "Want a note when they
+          pick a dish?"). */}
       <CravingSheet visible={craving} onClose={() => setCraving(false)} />
     </View>
   );
