@@ -178,9 +178,9 @@ Membership lives in Supabase (`convex/sessions.ts` reads `GET /family` with the 
 to happen there. Supabase can't look inside Convex, so Convex vouches for the join with a signed ticket:
 
 - **Ticket:** `base64url(payload) + "." + base64url(HMAC-SHA256(LINK_JOIN_SECRET, base64url(payload)))`.
-  - Payload: `{ v: 1, fam: <supabaseFamilyId>, card: <22-char card ref>, side: "kid" | "cook", name: <prefill or
+  - Payload: `{ v: 1, fam: <supabaseFamilyId>, card: <24 hex chars>, side: "kid" | "cook", name: <prefill or
     null>, exp: <now + 10 min>, jti: <16 random base62> }`.
-  - `card` is the first 22 base62 characters of sha256(`"card:" + dishAskId`), so no Convex id leaves Convex.
+  - `card` is the first 24 hex characters of sha256(`"card:" + dishAskId`), so no Convex id leaves Convex.
   - The role follows from `side`: `kid` → `learner`, `cook` → `cook`.
   - Made by `convex/lib/joinTicket.ts`, checked by `supabase/functions/api/link.ts`. Both sides test against the same
     vectors.
