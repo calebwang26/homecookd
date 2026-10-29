@@ -71,6 +71,21 @@ The map (`phase5-flow.jpg`) shows where each piece sits next to today's app and 
   - the voice recipe failing (silent or noisy, "Try once more");
   - a request card with no photo.
 
+## Fixes from the Merge Agent's approval (Oct 29)
+
+- **No stock photo stands in for his dish or her recipe.** The ask card (5) and her recipe (9) use the kid's own
+  photo when his ask has one. Otherwise they use a designed dish card: the dish name in Fraunces on a Hearth color,
+  with the pot. Her recipe gets a real photo only once she films it.
+- **Decoration photos are licensed, with credits on record.** All are Pexels, listed in
+  `web/public/media/stock/credits.json`:
+  - the mother and daughter (screens 1, 2): cottonbro studio;
+  - the young man cooking at night (3b): Riccardo Vespa;
+  - the steaming pot (4): Ana Zanuto;
+  - the cook filming herself (9): Ron Lach.
+  Never data/synthetic posters, and never a real family's photo.
+- **Push copy:** "Caleb sent you a voice note. Tap to hear it." only when he sent one. Otherwise "See what Caleb
+  guessed."
+
 ## Build notes
 
 - **Gate:** `app/src/app/parent/_layout.tsx`, an early return after the language gate (the LanguageTiles pattern).
