@@ -531,3 +531,23 @@ him how you make it now". The app calls it with `useAction`.
   - deleting a person deletes their craving links;
   - deleting a family deletes its craving links (no route deletes a family yet);
   - for the cards, the Phase 1 purge rules apply (V2-LINKING.md §3): the kid's or `requestedOf`'s data goes, by person.
+
+## 9. The cards in the app (for Phase 4's claimed links)
+
+V2-LINKING.md: once a kid or Mom claims a card in the app, `/dish/[id]` shows it. Both are public queries with
+`sessionToken`.
+
+**`dishAsks.forMe`** `{sessionToken}` → `MyCard[]`: her cards on either side, newest first, at most 50.
+
+**`dishAsks.get`** `{sessionToken, id}` → `MyCard | null`. It's `null` for anyone but the card's kid or cook, and for an
+`id` that isn't a card.
+
+```ts
+type MyCard = Card & {        // the web's Card (§3), plus:
+  id: Id<"dishAsks">;         // the push link is /dish/<id>
+  side: "kid" | "cook";       // kid: personId is them; cook: requestedOf is them
+  askUrl: null;               // the ask link needs the kid token, which only the web keeps
+};
+```
+- **The kid's side:** the kid (`personId`) sees the guess, and Mom's version and clips once it's written.
+- **Mom's side** (`requestedOf`): she sees the same card. Her own clips are in `answers`.

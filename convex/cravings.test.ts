@@ -486,3 +486,36 @@ test("deleting the link's maker deletes her links; the cards stay for the kid, w
   expect(await fileGone(t, clip)).toBe(true);
   expect(await kidCard(t, kidToken)).toMatchObject({ version: null, answers: [], filmingDay: null });
 });
+
+// ---------------------------------------------------------------------------------------------
+// dishAsks.forMe / get: the cards someone holds in the app (/dish/[id])
+
+test("forMe and get: only the kid or the cook of a card reads it, as the web's Card plus side; anyone else gets null", async () => {
+  const t = newBackend();
+  const { dad, leo, token } = await wangs(t);
+  const { row, kidToken } = await cravingCard(t, token);
+
+  const dads = await t.query(api.dishAsks.forMe, { sessionToken: dad.sessionToken });
+  expect(dads.map((c) => [c.id, c.side])).toEqual([[row._id, "cook"]]);
+  const web = await kidCard(t, kidToken);
+  expect({ ...dads[0], id: undefined, side: undefined, askUrl: undefined }).toEqual({ ...web, id: undefined, side: undefined, askUrl: undefined });
+  expect(dads[0].askUrl).toBeNull();
+
+  // Leo is in the family but hasn't claimed the kid side yet: nothing for him.
+  expect(await t.query(api.dishAsks.forMe, { sessionToken: leo.sessionToken })).toEqual([]);
+  expect(await t.query(api.dishAsks.get, { sessionToken: leo.sessionToken, id: row._id })).toBeNull();
+  await t.run((ctx) => ctx.db.patch("dishAsks", row._id, { personId: leo.personId, kidClaimedAt: Date.now() }));
+  expect((await t.query(api.dishAsks.get, { sessionToken: leo.sessionToken, id: row._id }))?.side).toBe("kid");
+  expect((await t.query(api.dishAsks.forMe, { sessionToken: leo.sessionToken })).map((c) => c.side)).toEqual(["kid"]);
+
+  const other = await aai(t);
+  expect(await t.query(api.dishAsks.get, { sessionToken: other.sessionToken, id: row._id })).toBeNull();
+  expect(await t.query(api.dishAsks.forMe, { sessionToken: other.sessionToken })).toEqual([]);
+  expect(await t.query(api.dishAsks.get, { sessionToken: dad.sessionToken, id: "not-an-id" })).toBeNull();
+  await expect(t.query(api.dishAsks.forMe, { sessionToken: "x".repeat(40) })).rejects.toThrow();
+
+  // Her version shows on her side too once it's written.
+  await send(t, dad.sessionToken, row._id, await audio(t));
+  await settle(t);
+  expect((await t.query(api.dishAsks.get, { sessionToken: dad.sessionToken, id: row._id }))?.version).not.toBeNull();
+});
