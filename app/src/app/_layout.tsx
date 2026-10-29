@@ -168,6 +168,7 @@ function AppStack() {
       <Stack.Screen name="request/[id]" options={{ title: 'Request', animation: 'slide_from_bottom' }} />
       <Stack.Screen name="request/voice" options={{ title: 'Tell how you make it', animation: 'slide_from_right' }} />
       <Stack.Screen name="request/sent" options={{ title: 'Sent', animation: 'fade', gestureEnabled: false }} />
+      <Stack.Screen name="dish/[id]" options={{ title: 'Dish', animation: 'slide_from_right' }} />
       {/* Month in the kitchen (RETENTION-HANDOFF 3.7): full screen, so Home doesn't peek behind the story; Close is always on screen. */}
       <Stack.Screen name="recap" options={{ title: 'Your month in the kitchen', presentation: 'fullScreenModal', animation: 'fade' }} />
       <Stack.Screen name="+not-found" options={{ title: 'homecookd', animation: 'fade' }} />

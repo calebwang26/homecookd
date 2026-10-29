@@ -42,7 +42,7 @@ export default function VoiceRecipeScreen() {
   const [sending, setSending] = useState(false);
   const rec = useVoiceRecorder({ maxSeconds: MAX_S, onAutoStop: (r) => r && setNote(r) });
   const play = useClipAudio(note ? { url: note.uri, key: `recipe-note:${note.uri}`, start_s: 0, end_s: null } : null);
-  const kid = ask?.kidName.trim() ?? '';
+  const kid = ask?.kidName.trim() || t('dish.yourKid');
   const dish = ask?.dish ?? '';
 
   const busy = useRef(false);

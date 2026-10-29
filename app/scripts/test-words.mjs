@@ -46,7 +46,7 @@ const AS_IS = new Set(['share.app.messages', 'share.app.instagram', 'share.app.w
 test('the English words: every area keyed by its name, no empty word, holes well formed', () => {
   assert.ok(keys.length > 50, `${keys.length} words`);
   for (const k of keys) {
-    assert.match(k, /^(common|signin|profiles|parent|messages|share|craving|request)\.[\w.]+$/, k);
+    assert.match(k, /^(common|signin|profiles|parent|messages|share|craving|request|dish)\.[\w.]+$/, k);
     assert.ok(EN[k].trim(), `${k} is empty`);
     assert.doesNotMatch(EN[k].replace(/\{\w+\}/g, ''), /[{}]/, `${k}: a broken hole`);
   }
