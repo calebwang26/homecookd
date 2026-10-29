@@ -9,9 +9,9 @@
 //  3. "Leo made your Poha": the newest photo a kid sent of one of her dishes (MadeYourDishCard); gone
 //     when there's none
 //  4. "Invite family :)" (Caleb, Oct 24: back on Home, right under the photo card), once a kid has joined
-// Phase 5 (docs/design/phase5-cold-parents): a kid's open ask ("Caleb wants your braised pork") goes on top and
-// Record turns to the outline style; before she has shared her craving link, "Your kids miss your cooking" with
-// "Ask what they're craving" is the first card, and after it "Sent! We'll tell you when they pick a dish." until an
+// Phase 5 (docs/design/phase5-cold-parents): "Record a new recipe" is always first, the one big button (Caleb, Oct 29:
+// keep it simple). Under it a kid's open ask ("Caleb wants your braised pork"), and before she has shared her
+// craving link a quiet card, "Your loved ones miss your cooking." / "Ask what they're craving →" (no photo, no button), and after it "Sent! We'll tell you when they pick a dish." until an
 // ask comes. One CravingSheet serves both cards.
 // Cut on Oct 24 (Caleb): the family faces row ("This week at the table"), the updates card and the
 // month's recap card. Their components stay for the screens that still use them. Dev aids (web screenshots): `?preview=made` shows the photo card,
@@ -119,19 +119,12 @@ export default function ParentHome() {
           <ActingAsBar />
 
           <View style={styles.col}>
-            {open.map((a, i) => (
-              <Animated.View key={a.id} entering={listEnter(i)}>
-                <AskCard ask={a} />
-              </Animated.View>
-            ))}
-            {sent === false && !asks.length ? <CravingAskCard onAsk={askCraving} /> : null}
             <Animated.View entering={listEnter(0)}>
               <ActionButton
                 label={t('parent.home.record')}
-                variant={open.length ? 'outline' : 'primary'}
                 size="xl"
                 icon={
-                  <View style={[styles.recordDot, open.length ? styles.recordDotQuiet : null]}>
+                  <View style={styles.recordDot}>
                     <RecordDotIcon size={14} color={colors.danger} />
                   </View>
                 }
@@ -139,6 +132,12 @@ export default function ParentHome() {
                 accessibilityHint={t('parent.home.recordHint')}
               />
             </Animated.View>
+            {open.map((a, i) => (
+              <Animated.View key={a.id} entering={listEnter(i + 1)}>
+                <AskCard ask={a} />
+              </Animated.View>
+            ))}
+            {sent === false && !asks.length ? <CravingAskCard onAsk={askCraving} enterIndex={1} /> : null}
 
             {sent && !asks.length ? <CravingSentCard onSendAgain={askCraving} enterIndex={1} /> : null}
             <StoppedEarlyCard preview={PREVIEW_STOPPED} enterIndex={1} />
@@ -178,6 +177,4 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  // The outline Record row under a kid's ask: the peach disc of the bible's row.
-  recordDotQuiet: { backgroundColor: colors.peach },
 });
