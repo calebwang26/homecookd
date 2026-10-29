@@ -361,7 +361,7 @@ export async function toEnglish(text: string, spend: Spend): Promise<string | nu
   }
 }
 
-export type ForMom = { guess: MissRecipe; questions: MissQuestion[]; message: string };
+export type ForMom = { guess: MissRecipe; questions: MissQuestion[]; message: string; version?: MissRecipe };
 
 const FOR_MOM = obj({ items: arr(obj({ id: S, text: S })) });
 
@@ -373,12 +373,16 @@ const FOR_MOM = obj({ items: arr(obj({ id: S, text: S })) });
 export async function translateForMom(english: ForMom, lang: string, spend: Spend): Promise<ForMom | null> {
   const pieces = new Map<string, string>();
   const put = (id: string, t: string | null) => { if (t && t.trim()) pieces.set(id, t); };
-  put("dish", english.guess.dish);
-  english.guess.ingredients.forEach((i, n) => { put(`i${n}.name`, i.name); put(`i${n}.amount`, i.amount); });
-  english.guess.steps.forEach((st, n) => {
-    put(`s${n}.title`, st.title);
-    st.lines.forEach((l, m) => { put(`s${n}.${m}.text`, l.text); put(`s${n}.${m}.detail`, l.detail); });
-  });
+  const putRecipe = (p: string, r: MissRecipe) => {
+    put(`${p}dish`, r.dish);
+    r.ingredients.forEach((i, n) => { put(`${p}i${n}.name`, i.name); put(`${p}i${n}.amount`, i.amount); });
+    r.steps.forEach((st, n) => {
+      put(`${p}s${n}.title`, st.title);
+      st.lines.forEach((l, m) => { put(`${p}s${n}.${m}.text`, l.text); put(`${p}s${n}.${m}.detail`, l.detail); });
+    });
+  };
+  putRecipe("", english.guess);
+  if (english.version) putRecipe("v.", english.version);
   english.guess.questions.forEach((q) => put(`g.${q.id}`, q.text));
   english.questions.forEach((q) => put(`q.${q.id}`, q.text));
   put("message", english.message);
@@ -422,19 +426,21 @@ export async function translateForMom(english: ForMom, lang: string, spend: Spen
     return got && bolds(got) === bolds(t) ? got : t;
   };
   const trOrNull = (id: string, t: string | null) => (t === null ? null : tr(id, t));
+  // Her quotes and tips stay as she said them: only the card's own words are translated.
+  const recipe = (p: string, r: MissRecipe): MissRecipe => ({
+    ...r,
+    dish: tr(`${p}dish`, r.dish),
+    ingredients: r.ingredients.map((i, n) => ({ ...i, name: tr(`${p}i${n}.name`, i.name), amount: tr(`${p}i${n}.amount`, i.amount) })),
+    steps: r.steps.map((st, n) => ({
+      ...st,
+      title: tr(`${p}s${n}.title`, st.title),
+      lines: st.lines.map((l, m) => ({ ...l, text: tr(`${p}s${n}.${m}.text`, l.text), detail: trOrNull(`${p}s${n}.${m}.detail`, l.detail) })),
+    })),
+  });
   const g = english.guess;
   return {
-    guess: {
-      ...g,
-      dish: tr("dish", g.dish),
-      ingredients: g.ingredients.map((i, n) => ({ ...i, name: tr(`i${n}.name`, i.name), amount: tr(`i${n}.amount`, i.amount) })),
-      steps: g.steps.map((st, n) => ({
-        ...st,
-        title: tr(`s${n}.title`, st.title),
-        lines: st.lines.map((l, m) => ({ ...l, text: tr(`s${n}.${m}.text`, l.text), detail: trOrNull(`s${n}.${m}.detail`, l.detail) })),
-      })),
-      questions: g.questions.map((q) => ({ ...q, text: tr(`g.${q.id}`, q.text) })),
-    },
+    ...(english.version ? { version: recipe("v.", english.version) } : {}),
+    guess: { ...recipe("", g), questions: g.questions.map((q) => ({ ...q, text: tr(`g.${q.id}`, q.text) })) },
     questions: english.questions.map((q) => ({ ...q, text: tr(`q.${q.id}`, q.text) })),
     message: tr("message", english.message),
   };

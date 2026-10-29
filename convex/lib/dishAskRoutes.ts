@@ -89,6 +89,8 @@ const ORIGINS = [/^https:\/\/(www\.)?homecookd\.app$/, /^http:\/\/(localhost|127
 const SORRY = "Something went wrong on our side. Please try again.";
 const TOO_MANY = "Too many tries. Please wait a few minutes and try again.";
 const BUDGET = "homecookd has made all the recipes it can today. Try again tomorrow.";
+/** The kid's voice note to Mom is at most a minute (the page stops recording there). */
+const KID_VOICE_S = 60;
 
 /** The CORS headers for an allowed origin (none needed without one); false for another site. */
 function corsFor(origin: string | null): Record<string, string> | false {
@@ -290,7 +292,7 @@ const createCard: Route = async ({ ctx, req, ipKey }) => {
   const voiceNote = b.voiceNote === undefined || b.voiceNote === null ? null : await fileHash(b.voiceNote, "voiceNote");
   if (dish.length < 2 && !photos.length && !voiceNote) throw badRequest("dish must be 2 to 200 characters");
   if (flagged(dish, kidName)) throw fail(422, "words", WORDS);
-  if ((await spentToday(ctx)) >= DAILY_BUDGET_USD) throw fail(429, "rate", BUDGET);
+  if ((await spentToday(ctx)) >= DAILY_BUDGET_USD) throw fail(429, "budget", BUDGET);
 
   const files = await ctx.runQuery(internal.dishAsks.filesToUse, { photos, voiceNote });
   const started = Date.now();
@@ -302,7 +304,7 @@ const createCard: Route = async ({ ctx, req, ipKey }) => {
       const blob = await ctx.storage.get(files.voiceNote.storageId);
       if (!blob) throw notFound("That file doesn't work anymore. Add it again.");
       voiceWords = (await transcribe(blob, "en", undefined, spend)).trim();
-      if ((await spentToday(ctx)) >= DAILY_BUDGET_USD) throw fail(429, "rate", BUDGET);
+      if ((await spentToday(ctx)) >= DAILY_BUDGET_USD) throw fail(429, "budget", BUDGET);
     }
     const images: Photo[] = [];
     for (const p of files.photos) {
@@ -359,8 +361,17 @@ const updateCard: Route = async ({ ctx, req }) => {
     if (!message || message.length > MESSAGE_CHARS) throw badRequest(`message must be 1 to ${MESSAGE_CHARS} characters`);
   }
   const voiceNote = b.voiceNote === undefined ? undefined : b.voiceNote === null ? null : await fileHash(b.voiceNote, "voiceNote");
+  // The page measures its own recording: Chrome's webm often carries no duration for anyone to read.
+  let voiceNoteS: number | undefined;
+  if (b.voiceNoteS !== undefined && b.voiceNoteS !== null) {
+    const s = Number(b.voiceNoteS);
+    if (typeof b.voiceNoteS !== "number" || !Number.isFinite(s) || s <= 0 || s > KID_VOICE_S + 5) {
+      throw badRequest(`voiceNoteS must be more than 0 and at most ${KID_VOICE_S}`);
+    }
+    voiceNoteS = Math.min(KID_VOICE_S, Math.round(s * 100) / 100);
+  }
   if (flagged(kidName, message)) throw fail(422, "words", WORDS);
-  const card = await ctx.runMutation(internal.dishAsks.kidUpdate, { ...kid, relation, kidName, message, voiceNote });
+  const card = await ctx.runMutation(internal.dishAsks.kidUpdate, { ...kid, relation, kidName, message, voiceNote, voiceNoteS });
   return { body: { card } };
 };
 
@@ -408,12 +419,18 @@ async function translateForPage(ctx: ActionCtx, askTokenHash: string, lang: stri
   if (!(await allowed(ctx, `${src.askId}:${lang}`, [RATE.momLang]))) return;
   const spend: Spend = { usd: 0 };
   try {
-    const out = await translateForMom({ ...src.english, guess: missRecipe(src.english.guess) }, lang, spend);
+    const e = src.english;
+    const out = await translateForMom(
+      { guess: missRecipe(e.guess), questions: e.questions, message: e.message, ...(e.version ? { version: missRecipe(e.version) } : {}) },
+      lang,
+      spend,
+    );
     if (!out) return;
     const translated = {
       guess: storedRecipe(out.guess),
       questions: out.questions.map((q) => ({ id: q.id, text: q.text })),
       message: out.message,
+      ...(out.version ? { version: storedRecipe(out.version) } : {}),
     };
     if (flagged(...recipeTexts(translated.guess), ...translated.questions.map((q) => q.text), translated.message)) {
       console.warn(`dish ask: the ${lang} translation has a filtered word; her page stays in English`);

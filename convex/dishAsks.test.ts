@@ -944,7 +944,7 @@ test("at $10 new cards are refused, but Mom's answer and Send still work and her
   const r = await post(t, "/dish/cards", { dish: "dal" }, { ip: "192.0.2.30" });
   expect(r).toMatchObject({
     status: 429,
-    data: { code: "rate", error: "homecookd has made all the recipes it can today. Try again tomorrow." },
+    data: { code: "budget", error: "homecookd has made all the recipes it can today. Try again tomorrow." },
   });
   expect((await answer(t, askToken, "q1", { lang: "hi" })).status).toBe(200);
   expect((await finish(t, askToken)).data.ask).toMatchObject({ finished: true, merging: true });
@@ -1115,4 +1115,32 @@ test("the limiter's old windows are pruned; this window's stay", async () => {
   vi.advanceTimersByTime(24 * 60 * MIN + 1);
   await t.mutation(internal.lib.rateLimit.prune, {});
   expect(await count()).toBe(2);
+});
+
+test("the kid's voice note to Mom carries the length the page measured, on both pages; a bad length is a 400", async () => {
+  const t = newBackend();
+  const { kidToken, askToken } = await askedCard(t);
+  const note = await fileId(t, "voice");
+  const bad = await post(t, "/dish/cards/update", { kidToken, voiceNote: note, voiceNoteS: 0 });
+  expect(bad).toMatchObject({ status: 400 });
+  const r = await post(t, "/dish/cards/update", { kidToken, voiceNote: note, voiceNoteS: 12.345 });
+  expect(r.data.card.kidVoiceS).toBe(12.35);
+  expect((await peek(t, askToken)).kidVoiceS).toBe(12.35);
+  const gone = await post(t, "/dish/cards/update", { kidToken, voiceNote: null });
+  expect(gone.data.card.kidVoiceS).toBeNull();
+});
+
+test("Mom's version is translated into her page's language before it's saved, so it lands with her version", async () => {
+  const t = newBackend();
+  const { askToken } = await askedCard(t);
+  expect((await peek(t, askToken, "hi")).inLang.version).toBeNull();
+  expect((await answer(t, askToken, "q1", { lang: "hi" })).status).toBe(200);
+  expect((await finish(t, askToken)).status).toBe(200);
+  await settle(t);
+  const calls = model.calls.forMom;
+  const ask = await peek(t, askToken, "hi");
+  expect(model.calls.forMom, "already cached by the merge").toBe(calls);
+  expect(ask.version).not.toBeNull();
+  expect(ask.inLang.version.ingredients[0].name).toBe(`[hi] ${ask.version.ingredients[0].name}`);
+  expect(ask.inLang.guess.ingredients[0].name).toBe(`[hi] ${ask.guess.ingredients[0].name}`);
 });

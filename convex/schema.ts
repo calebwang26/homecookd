@@ -519,8 +519,19 @@ export default defineSchema({
     // Mom's page in her language (peek's `lang`): the guess, the asked questions and the message, one entry per
     // language, kept while `key` (the asked questions and the message) still matches.
     momLang: v.optional(
-      v.array(v.object({ lang: v.string(), key: v.string(), guess: recipeV, questions: v.array(questionV), message: v.string() })),
+      v.array(
+        v.object({
+          lang: v.string(),
+          key: v.string(),
+          guess: recipeV,
+          questions: v.array(questionV),
+          message: v.string(),
+          version: v.optional(recipeV), // her version in that language, once it's written
+        }),
+      ),
     ),
+    momPageLang: v.optional(v.string()), // the language Mom's page last asked for: her version is translated into it
+    kidVoiceS: v.optional(v.number()), // the kid's voice note to Mom, in seconds (the page measures it)
     version: v.optional(recipeV), // Mom's version, once her answers are merged
     status: cardStatusV, // as stored; the pages get it worked out from the answers too (dishAsks.ts)
     mergeTries: v.number(), // this round of new answers (a new answer starts it again at 0)
