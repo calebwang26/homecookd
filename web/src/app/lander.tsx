@@ -40,7 +40,6 @@ export function Lander({ audience }: { audience: Audience }) {
         <Section id="every-family" /> {/* #every-family */}
         <Section id="in-their-words" /> {/* #in-their-words */}
         {parent ? null : <Section id="far-apart" />} {/* #far-apart (/learn) */}
-        <Section id="measures" /> {/* #measures */}
         <Section id="questions" /> {/* #questions */}
         <Section id="final-cta" /> {/* #early-access */}
       </main>

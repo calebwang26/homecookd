@@ -310,27 +310,6 @@ export const copyParent: Copy = {
     srStory: "In the illustration, {title} travels from {cook}'s kitchen to the one far from home. A first-try photo comes back: “{reply}” {cook} answers: “{answer}.”",
   },
 
-  measures: {
-    marqueeLabel: "Things families say instead of measurements",
-    marquee: [
-      { text: "a handful, only the green part", caption: "~3 scallions" },
-      { text: "warm like a baby's bath", caption: "~1 cup water" },
-      { text: "three coins, this thick", caption: "~3 thin slices ginger" },
-      { text: "un puñito", lang: "es", caption: "a little handful" },
-      { text: "the color of tea or honey", caption: "the sugar's ready" },
-      { text: "you'll know", caption: "we'll ask for you" },
-      { text: "适量", lang: "zh-Hans", caption: "as much as feels right" },
-      { text: "quanto basta", lang: "it", caption: "as much as it needs" },
-    ],
-    h2: "Your handful. Their ~½ cup.",
-    accent: ["~½", "cup."],
-    // say the feature plainly (Caleb, Oct 17): your rough amounts become real measurements
-    body: "homecookd turns your “a handful” into a real measurement like ~½ cup, right beside your own words.",
-    mascotChip: "",
-    pause: "Pause moving words",
-    play: "Play moving words",
-  },
-
   questions: {
     h2: "Good questions.",
     accent: ["questions."],
