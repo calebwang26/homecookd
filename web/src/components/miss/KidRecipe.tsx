@@ -13,15 +13,16 @@ export function KidRecipe({ card, token, version, onClose }: { card: Card; token
   const R = useRel()(card.relation);
   const clips = useMemo(() => Object.fromEntries(card.answers.map((a) => [a.id, { audioUrl: a.audioUrl, durationS: a.durationS }])), [card.answers]);
   const photo = card.photoUrls[0] ?? null;
+  const title = cardTitle(card.relation, version.dish || card.dish);
   const meta = [card.version ? t('card.fromKitchen', { R }) : t('card.guessMeta'), version.time, version.servings && t('card.serves', { n: version.servings })].filter(Boolean).join(' · ');
   const sheet = useCallback(
-    ({ open, onClose: close }: { open: boolean; onClose: () => void }) => <SaveSheet open={open} onClose={close} photo={photo} relation={card.relation} token={token} dish={card.dish} />,
-    [photo, card.relation, card.dish, token],
+    ({ open, onClose: close }: { open: boolean; onClose: () => void }) => <SaveSheet open={open} onClose={close} photo={photo} relation={card.relation} token={token} title={title} />,
+    [photo, card.relation, title, token],
   );
   return (
     <DishRecipeView
       id={token}
-      title={cardTitle(card.relation, version.dish || card.dish)}
+      title={title}
       photo={photo}
       version={version}
       R={R}

@@ -118,7 +118,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
 
   return (
     <main className={s.card}>
-      <DishHero photoUrl={photo} alt={t('card.dishPhoto', { dish: card.dish })} title={card.dish}>
+      <DishHero photoUrl={photo} alt={t('card.dishPhoto', { dish: card.dish })} title={title}>
         <a className={`${ui.press} ${ui.round} ${s.back}`} href="/miss" aria-label={t('card.newDish')} onClick={(e) => onNewDish(e)}>
           <IconBack size={22} />
         </a>
@@ -301,7 +301,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
 
       <WhoSheet open={who} onClose={closeWho} token={token} onPicked={pickedWho} toast={show} />
       <AskSheet key={card.relation} open={asking} onClose={closeAsk} token={token} card={card} onCard={setCard} toast={show} items={askItems(card, guess, chosen)} />
-      <SaveSheet open={saving} onClose={closeSave} photo={photo} relation={card.relation} token={token} dish={card.dish} />
+      <SaveSheet open={saving} onClose={closeSave} photo={photo} relation={card.relation} token={token} title={title} />
       <Toast toast={toast} />
     </main>
   );

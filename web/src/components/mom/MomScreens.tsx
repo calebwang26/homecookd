@@ -94,7 +94,7 @@ export function GuessScreen({ ask, kid, guess, toggle, onBack, onNext }: { ask: 
   const n = ask.questions.length;
   return (
     <>
-      <DishHero photoUrl={ask.photoUrls[0] ?? null} alt={t('m2.photo', { kid })} height={200} title={ask.guess.dish || ask.dish}>
+      <DishHero photoUrl={ask.photoUrls[0] ?? null} alt={t('m2.photo', { kid })} height={200} title={cardTitle(ask.relation, ask.guess.dish || ask.dish)}>
         <button type="button" className={`${ui.press} ${ui.round} ${s.back}`} aria-label={t('common.back')} onClick={onBack}>
           <IconBack size={22} />
         </button>
@@ -343,7 +343,7 @@ function RecipeCard({ ask, compact, onOpen }: { ask: Ask; compact?: boolean; onO
   return (
     <div className={s.miniCard} data-compact={compact || undefined}>
       <span className={s.miniThumb}>
-        <DishHero photoUrl={ask.photoUrls[0] ?? null} alt="" height={60} title={ask.guess.dish || ask.dish} />
+        <DishHero photoUrl={ask.photoUrls[0] ?? null} alt="" height={60} title={title} />
       </span>
       <span className={s.miniText}>
         <span className={s.miniTitle}>{title}</span>
