@@ -44,12 +44,12 @@ const HIGHLIGHT = {
   marginRight: 18,
 } as const;
 
-type FontSpec = { name: string; data: ArrayBuffer; weight: 600 | 650; style: 'normal' | 'italic' };
+type FontSpec = { name: string; data: ArrayBuffer; weight: 600; style: 'normal' | 'italic' };
 
 async function loadFraunces(chars: string): Promise<FontSpec[]> {
   const text = Array.from(new Set(chars)).join('');
   // axes in Google's order: ital, opsz, wght, SOFT, WONK
-  const tuples = ['0,144,600,100,0', '0,144,650,100,0', '1,144,600,100,1', '1,144,650,100,1'].join(';');
+  const tuples = ['0,144,600,100,0', '1,144,600,100,1'].join(';');
   const url = `https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@${tuples}&text=${encodeURIComponent(text)}`;
   const css = await (await fetch(url)).text();
   const faces = [...css.matchAll(/font-style:\s*(normal|italic);\s*font-weight:\s*(\d+);[\s\S]*?src:\s*url\(([^)]+)\)/g)];
@@ -57,7 +57,7 @@ async function loadFraunces(chars: string): Promise<FontSpec[]> {
     faces.map(async ([, style, weight, src]) => ({
       name: 'Fraunces',
       data: await (await fetch(src)).arrayBuffer(),
-      weight: Number(weight) as 600 | 650,
+      weight: Number(weight) as 600,
       style: style as 'normal' | 'italic',
     })),
   );
@@ -121,7 +121,7 @@ async function render(audience: Audience): Promise<ImageResponse> {
               display: 'flex',
               flexDirection: 'column',
               fontFamily: serif,
-              fontWeight: 650,
+              fontWeight: 600,
               fontSize: 92,
               lineHeight: 0.98,
               letterSpacing: '-0.02em',
