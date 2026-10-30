@@ -300,6 +300,7 @@
   .nav::before,
   .bg,
   .logo,
+  .logo::before,
   .link,
   .bar [data-nav-item] {
     transition: none;
@@ -317,6 +318,27 @@
 }
 
 /* ---------- the lockup: ink on the canvas, the reversed lockup over the dark hero ---------- */
+/* Over the hero video the reversed lockup (or, under 400px, the mark alone) sits on a soft ink tile, so
+   it reads on any frame, bright ones too. A tile only: the logo gets no shadow or glow. The tile reaches
+   past the link's box, so nothing moves between tones. */
+.logo {
+  position: relative;
+  isolation: isolate;
+}
+.logo::before {
+  content: '';
+  position: absolute;
+  z-index: -1;
+  inset: 2px -8px;
+  border-radius: var(--r-pill);
+  background: rgba(31, 36, 48, 0.66);
+  opacity: 0;
+  transition: opacity 360ms var(--ease-soft);
+  pointer-events: none;
+}
+.nav[data-tone='hero'] .logo::before {
+  opacity: 1;
+}
 .logo .lockupHero {
   display: none;
 }
@@ -339,5 +361,8 @@
     min-width: 48px;
     justify-content: center;
     padding-right: 0;
+  }
+  .logo::before {
+    inset: 2px;
   }
 }
