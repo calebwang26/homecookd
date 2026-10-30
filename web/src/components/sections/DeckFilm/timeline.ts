@@ -1,21 +1,20 @@
 'use client';
 // The DeckFilm GSAP builder (brief 8.1–8.3). Pure: it takes the elements, measures the stage, builds
-// ONE pinned, scrubbed timeline (A: the hero becomes a recipe card; B: the deck drops into How it
-// works) and returns a
-// cleanup. Geometry lives in stage px computed from vw/vh-style ratios on every refresh (never per
+// ONE pinned, scrubbed timeline (A: the hero becomes a recipe card; B: the fan closes into a stack) and
+// returns a cleanup. Geometry lives in stage px computed from vw/vh-style ratios on every refresh (never per
 // frame). Only transform, opacity/visibility, color, clip-path and one CSS variable are animated.
 //
 // Timeline units: A spans 130 units (desktop) / 80 (mobile), B spans 60 / 45, and one unit is one
 // hundredth of the stage height of scroll. a(p) and b(p) convert the brief's local percentages.
-// The pin is 190vh on desktop. On phones and tablets it lets go at b50 (~103vh), once the fan has
-// closed into its stack: the stack then scrolls away with the stage while How it works rises under
-// it. (Mobile How it works has no stack to catch a drop, so dropping it out of the stage there left
-// a full screen of empty cream before How it works: QA B20.)
-// (The call, the kid page's old third scene, is cut (Caleb, Oct 17): on desktop the fan now closes
-// back into its stack and drops straight into StepsToBox, the same hand-off the call's stack made.)
+// The pin lets go at b50, once the fan has closed into its stack, and the stack scrolls up with the
+// stage while How it works rises under it. Desktop: StepsToBox takes the stack over right there, in
+// the same place (lib/motion/deckHandoff.ts), so the cards go middle → up with the page → into the
+// stairs, never down and back up (Caleb, Oct 30; the old drop out of the stage's bottom is gone).
+// Phones: the stack scrolls away (mobile How it works has no deck: QA B20).
 import { gsap, ScrollTrigger } from '@/lib/motion/gsap';
 import { addWordFill } from '@/lib/motion/wordFill';
 import { HEX, SCRUB } from '@/lib/motion/tokens';
+import { deckHandoff } from '@/lib/motion/deckHandoff';
 import { cardPhotoRect } from '@/components/primitives/RecipeCard';
 import type { FilmFlags, FilmStore } from './store';
 
@@ -44,8 +43,6 @@ export interface FilmEls {
 const SHEET_R = 40;
 /** RecipeCard's photo-only tier (<140px): the photo fills the whole panel */
 const PHOTO_ONLY_BELOW = 140;
-/** the stack's tilt as it drops (StepsToBox catches it at the same +12°) */
-const DROP_TILT = 12;
 
 export function collect(root: HTMLElement, mobile: boolean): FilmEls | null {
   const q = <T extends Element = HTMLElement>(f: string) => root.querySelector<T>(`[data-f="${f}"]`);
@@ -99,8 +96,6 @@ interface Geo {
   sCard: number;
   fan: Pose[];
   stackA: Pose[];
-  /** how far (px) the stack falls to clear the stage's bottom edge */
-  dropY: number;
   passChip: { x: number; y: number }[];
 }
 
@@ -196,6 +191,8 @@ function measure(els: FilmEls, mobile: boolean): Geo {
     return { x: cx - 0.6 * k * unit * sc, y: cy, r: -k, s: (1 - 0.02 * k) * sc };
   };
   const base = stackP(n - 1, W / 2, fanCy, 1);
+  // pinned, the stage sits at the viewport top
+  if (!mobile) Object.assign(deckHandoff, { root: els.root, x: sb.left + base.x, y: base.y, cw });
 
   // RecipeCard's <140px tier fills the panel with the photo (phones): the video window must too
   const pr0 = cardPhotoRect(cw, ch);
@@ -229,8 +226,6 @@ function measure(els: FilmEls, mobile: boolean): Geo {
     sCard,
     fan,
     stackA: els.cards.map((_, i) => stackP(i, W / 2, fanCy, 1)),
-    // from the stack's centre to fully below the stage, tilted card and all
-    dropY: H - fanCy + ch * 1.1,
     // (bottom-anchored; a lifted fan never pushes a chip up into the brand line: it rides lower,
     // over its card's top edge, instead)
     passChip: [
@@ -250,8 +245,8 @@ export function buildFilm(els: FilmEls, { mobile, store }: BuildOpts): () => voi
   const B = mobile ? 45 : 60;
   const a = (p: number) => (p / 100) * A;
   const b = (p: number) => A + (p / 100) * B;
-  /** where the pin lets go: phones stop at b50, right after the fan has closed (no drop) */
-  const END = mobile ? b(50) : A + B;
+  /** where the pin lets go: b50, right after the fan has closed */
+  const END = b(50);
   const da = (p: number) => (p / 100) * A; // duration in A-percent
   const db = (p: number) => (p / 100) * B;
 
@@ -365,8 +360,8 @@ export function buildFilm(els: FilmEls, { mobile, store }: BuildOpts): () => voi
   const flags = (t: number) => {
     const patch: Partial<FilmFlags> = {
       passChips: t >= a(68),
-      // the video plays in the front card until the stack has dropped out of sight (phones never
-      // reach b90: HeroVideo pauses itself once the stage has scrolled away)
+      // (the pin ends at b50, so this stays false: HeroVideo pauses itself once the stage has
+      // scrolled away)
       suspended: t >= b(90),
     };
     store.set(patch);
@@ -417,17 +412,26 @@ export function buildFilm(els: FilmEls, { mobile, store }: BuildOpts): () => voi
       scrub: SCRUB,
       anticipatePin: 1,
       invalidateOnRefresh: true,
-      onRefresh: () => {
+      onRefresh: (self) => {
         placeStatic();
         render();
         flags(tl.time());
+        handOff(self);
       },
+      onUpdate: (self) => handOff(self),
     },
     onUpdate: () => {
       render();
       flags(tl.time());
     },
   });
+
+  // desktop: once the pin has let go, StepsToBox shows the same stack in the same place, so this one hides
+  // (by the raw scroll, not the scrubbed time, so the two swap on the same frame; >=, since progress stops
+  // changing, and onUpdate firing, once it reaches 1)
+  const handOff = (st: ScrollTrigger) => {
+    if (!mobile) els.root.toggleAttribute('data-handed', st.scroll() >= st.end);
+  };
 
   const move = (el: HTMLElement, from: P, to: P, at: number, dur: number, ease: string) =>
     tl.fromTo(el, card(from), { ...card(to), duration: dur, ease }, at);
@@ -481,13 +485,10 @@ export function buildFilm(els: FilmEls, { mobile, store }: BuildOpts): () => voi
   tl.fromTo(els.passFoot, { opacity: 0, y: 24 }, { opacity: 1, y: 0, duration: da(12), ease: 'power3.out' }, a(mobile ? 62 : 70));
   tl.set({}, {}, a(100)); // hold
 
-  // ================= B: the deck drops into How it works =================
+  // ================= B: the fan closes into a stack =================
   // The pass-down text and chips clear out first (b0–b20), while the fan closes back into the stack
   // it opened from (b6–b46), the video still playing in the front card, so the moving cards never
-  // cross text or the CTA. Desktop: a beat to settle, then the stack tilts and drops out of the
-  // stage's bottom at x = 50% (b56–b96): StepsToBox catches it there, tilted the same +12°, rising
-  // in from the bottom just after this one leaves. Phones: the pin ends at b50 and the stack rides
-  // the stage up and away (see END).
+  // cross text or the CTA. The pin lets go at b50 (see END).
   tl.fromTo(els.brand, { y: 0, opacity: 1 }, { y: () => -0.6 * G.H, opacity: 0, duration: db(30), ease: 'power1.in' }, b(0));
   tl.fromTo(els.passFoot, { y: 0, opacity: 1 }, { y: () => -0.3 * G.H, opacity: 0, duration: db(14), ease: 'power2.in' }, b(mobile ? 6 : 0));
   tl.fromTo(
@@ -499,19 +500,6 @@ export function buildFilm(els: FilmEls, { mobile, store }: BuildOpts): () => voi
   tl.fromTo(els.floor, { opacity: 1 }, { opacity: 0, duration: db(10) }, b(0));
   els.cards.forEach((c, i) => move(c, () => G.fan[i], () => G.stackA[i], b(6), db(40), 'power2.inOut'));
   moveRig(() => G.fan[n - 1], () => G.stackA[n - 1], b(6), db(40), 'power2.inOut');
-  // the drop (desktop): every card (and the video window riding the front one) turns +12° and falls
-  // together
-  if (!mobile) {
-    const dropped = [...els.cards, els.rig];
-    dropped.forEach((c) => {
-      const r0 = () => (c === els.rig ? G.stackA[n - 1].r : G.stackA[cardIndex(c)].r);
-      const y0 = () => (c === els.rig ? 0 : G.stackA[cardIndex(c)].y - G.ch / 2);
-      tl.fromTo(c, { rotation: r0 }, { rotation: () => r0() + DROP_TILT, duration: db(14), ease: 'power2.inOut' }, b(56));
-      tl.fromTo(c, { y: y0 }, { y: () => y0() + G.dropY, duration: db(34), ease: 'power2.in' }, b(62));
-    });
-    // once it's below the stage, hide it so its float shadow never peeks over the seam after the unpin
-    tl.fromTo(dropped, { autoAlpha: 1 }, { autoAlpha: 0, duration: db(2) }, b(97));
-  }
   tl.set({}, {}, END);
 
   placeStatic();
@@ -540,6 +528,7 @@ export function buildFilm(els: FilmEls, { mobile, store }: BuildOpts): () => voi
     els.overlay.removeEventListener('focusin', onHeroFocus);
     els.passFoot.removeEventListener('focusin', onFootFocus);
     els.overlay.removeAttribute('data-off');
+    els.root.removeAttribute('data-handed');
     els.passFoot.removeAttribute('data-off');
     els.hero.setAttribute('data-nav-tone', 'hero');
     els.clip.style.clipPath = '';

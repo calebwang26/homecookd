@@ -12,6 +12,7 @@ import Animated, { FadeIn, ZoomIn, useReducedMotion } from 'react-native-reanima
 
 import { HeartIcon, Txt } from '@/components/ui';
 import { postcardTilt } from '@/lib/postcardLogic';
+import { useWords } from '@/lib/words/useWords';
 import { alpha, colors, fonts } from '@/theme/tokens';
 
 export function PostcardPhoto({
@@ -57,13 +58,14 @@ export function PostcardPhoto({
  * Motion); without it, it is simply there (sent earlier).
  */
 export function LikeStamp({ animate = false }: { animate?: boolean }) {
+  const { t } = useWords();
   const reduce = useReducedMotion();
   const entering = !animate ? undefined : reduce ? FadeIn.duration(150) : ZoomIn.duration(260);
   return (
-    <Animated.View entering={entering} style={[styles.likeStamp, reduce ? null : styles.likeTurn]} accessible accessibilityLabel="Stamped: Just like mine">
+    <Animated.View entering={entering} style={[styles.likeStamp, reduce ? null : styles.likeTurn]} accessible accessibilityLabel={t('parent.postcard.stamped')}>
       <HeartIcon size={13} filled color={colors.danger} strokeWidth={1.5} />
       <Txt variant="label" size={15} weight={600} color={colors.danger} style={styles.likeWords} numberOfLines={1}>
-        Just like mine
+        {t('parent.postcard.like')}
       </Txt>
     </Animated.View>
   );

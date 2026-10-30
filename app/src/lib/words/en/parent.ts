@@ -138,6 +138,16 @@ export const PARENT = {
   'parent.updates.letIn': 'Let in',
   'parent.updates.loading': 'Loading updates',
 
+  // A kid's postcard on the updates card (components/postcard/PostcardRow, LikeStamp): her answers to the photo.
+  'parent.postcard.like': 'Just like mine',
+  'parent.postcard.sent': 'Sent',
+  'parent.postcard.tryAgain': 'Try again',
+  'parent.postcard.likeLabel': 'Tell {name}: Just like mine',
+  'parent.postcard.likeSentLabel': 'Sent to {name}: Just like mine',
+  'parent.postcard.sentTo': 'Sent to {name}',
+  'parent.postcard.sendFailed': 'Couldn’t send it to {name}. Try again.',
+  'parent.postcard.stamped': 'Stamped: Just like mine',
+
   // Who cooked it (components/parent/WhoCooked); {day}: "Monday", "yesterday"…
   'parent.who.cooked': '{name} cooked it',
   'parent.who.baked': '{name} baked it',
