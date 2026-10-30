@@ -48,12 +48,12 @@
 }
 @media (hover: hover) {
   .link:hover {
-    color: var(--green);
+    color: var(--yolk-deep);
     background-size: 100% 1.5px;
   }
 }
 .link:focus-visible {
-  color: var(--green);
+  color: var(--yolk-deep);
   background-size: 100% 1.5px;
 }
 
@@ -127,7 +127,7 @@
 }
 @media (hover: hover) {
   .summary:hover {
-    color: var(--green);
+    color: var(--yolk-deep);
   }
 }
 /* Opens as a small card above the row, so the page length never jumps. */
@@ -165,10 +165,10 @@
   align-items: center;
   min-height: 48px;
   color: var(--ink);
-  text-decoration-color: rgba(30, 36, 16, 0.3);
+  text-decoration-color: rgba(31, 36, 48, 0.3);
 }
 .authors a:hover {
-  color: var(--green);
+  color: var(--yolk-deep);
   text-decoration-color: currentColor;
 }
 
@@ -178,7 +178,7 @@
   right: 0;
   bottom: 0;
   height: 14px;
-  background: var(--chartreuse);
+  background: var(--yolk);
 }
 
 /* ---------- short desktop viewports (laptops: 1280×720 … 1512×860) ----------

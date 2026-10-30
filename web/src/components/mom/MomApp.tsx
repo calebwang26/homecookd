@@ -8,7 +8,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DishLangProvider, useLang } from '@/components/dish/lang';
 import { TopBar } from '@/components/dish/parts';
 import { canRecord as browserCanRecord } from '@/components/dish/useRecorder';
-import { PotMascot } from '@/components/primitives/PotMascot';
+import { EggMascot } from '@/components/primitives/EggMascot';
 import { DishError, finishAsk, isPlausibleToken, peekAsk, sendAnswer } from '@/lib/dish/api';
 import { askedItems, guessOf } from '@/lib/dish/text';
 import type { Ask, InLang } from '@/lib/dish/types';
@@ -176,7 +176,7 @@ function Mom() {
       <>
         <TopBar />
         <div className={s.notice} aria-busy="true">
-          <PotMascot size={96} mood="happy" steam />
+          <EggMascot size={96} mood="hello" />
         </div>
       </>
     );
@@ -186,7 +186,7 @@ function Mom() {
       <>
         <TopBar />
         <div className={`${s.body} ${s.notice}`}>
-          <PotMascot size={88} mood="talk" />
+          <EggMascot size={88} mood="oops" />
           <h1 className={s.h1}>{failure === 'not-found' ? t('m.notFound') : t('common.offline')}</h1>
           {failure === 'offline' && (
             <button type="button" className={`${ui.press} ${ui.primary}`} onClick={load}>
@@ -217,7 +217,7 @@ function Mom() {
         <>
           <TopBar />
           <div className={`${s.body} ${s.notice}`}>
-            <PotMascot size={88} mood="talk" />
+            <EggMascot size={88} mood="sleepy" />
             <h1 className={s.h1}>{t('m.nothing')}</h1>
             <p className={s.sentLine}>{t('m.nothingLine', { kid })}</p>
             <button type="button" className={`${ui.press} ${ui.primary}`} onClick={startQuestions}>

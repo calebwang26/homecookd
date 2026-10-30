@@ -10,7 +10,7 @@
 // (inline-block, never broken), accent words carry [data-accent] and wrap their text in <em>
 // (accentStyle="italic", default) or <span class="accentColor"> (accentStyle="color").
 // "\n" starts a new line: each line is <span class="line" data-line={i}> (display block).
-// Final colors come from CSS: words inherit `color`; accent words use var(--accent, var(--green)).
+// Final colors come from CSS: words inherit `color`; accent words use var(--accent, var(--yolk-deep)).
 // Scrubbed scenes animate `.w` with addWordFill(); WordReveal animates them on enter.
 import type { CSSProperties, ElementType, ReactNode } from 'react';
 import styles from './SplitWords.module.css';

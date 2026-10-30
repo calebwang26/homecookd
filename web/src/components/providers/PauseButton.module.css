@@ -23,7 +23,7 @@
 }
 .cream {
   color: var(--cream);
-  background: rgba(30, 36, 16, 0.18);
+  background: rgba(31, 36, 48, 0.18);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
 }
@@ -31,7 +31,7 @@
   background: rgba(255, 253, 247, 0.16);
 }
 .cream:focus-visible {
-  outline-color: var(--chartreuse);
+  outline-color: var(--yolk);
 }
 .ink {
   color: var(--ink);
@@ -56,6 +56,6 @@
   .cream {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
-    background: rgba(30, 36, 16, 0.4);
+    background: rgba(31, 36, 48, 0.4);
   }
 }

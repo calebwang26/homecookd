@@ -12,7 +12,8 @@
 // Dev only: /i?fixture=pending|family|used|expired|revoked|notfound|offline[&role=learner]
 // [&from=Dad|none][&for=family] on localhost shows each state without the API.
 import { useEffect, useState, type ReactNode } from 'react';
-import { PotMascot } from '@/components/primitives/PotMascot';
+import { EggMascot } from '@/components/primitives/EggMascot';
+import { Logo } from '@/components/primitives/Logo';
 import { Avatar } from '@/components/recipe-web/Avatar';
 import { appSchemeUrl, isPhoneOrTablet, LANDER_LINK, WEB_ORIGIN } from '@/lib/app-links';
 import { cleanInviteCode, InviteError, isPlausibleInviteToken, peekInvite } from '@/lib/recipe-web/api';
@@ -160,8 +161,7 @@ export function InvitePage() {
     <div className={s.page}>
       <div className={s.column}>
         <header className={s.brand}>
-          <PotMascot size={30} />
-          <span className={s.word}>homecookd</span>
+          <Logo height={30} />
         </header>
         <main className={s.main} aria-busy={load.state === 'loading' || undefined}>
           {load.state === 'loading' && <Skeleton />}
@@ -169,7 +169,7 @@ export function InvitePage() {
           {load.state === 'gone' && <Ended {...load} />}
           {load.state === 'error' && (
             <Hero
-              face={<PotMascot size={88} mood="talk" />}
+              face={<EggMascot size={88} mood="oops" />}
               title={load.kind === 'rate' ? 'Too many tries for now.' : 'We couldn’t reach homecookd.'}
               line={load.kind === 'rate' ? 'Wait a few minutes, then try again.' : 'Check your connection, then try again.'}
             >
@@ -215,7 +215,7 @@ function Pending({ invite, token, code, phone }: Extract<Load, { state: 'ready' 
   const openUrl = token ? appSchemeUrl('i', { t: token }) : appSchemeUrl('i', { c: code! });
   return (
     <Hero
-      face={inviter ? <Face name={inviter.name} avatarKey={inviter.avatar_key} /> : <PotMascot size={96} mood="happy" />}
+      face={inviter ? <Face name={inviter.name} avatarKey={inviter.avatar_key} /> : <EggMascot size={96} mood="hello" />}
       title={headline(invite)}
       line={joinLink ? joinLinkLine(invite) : inviteLine(invite)}
     >
@@ -248,7 +248,7 @@ function Ended({ why, invite }: Extract<Load, { state: 'gone' }>) {
   const inviter = invite?.inviter ?? null;
   return (
     <Hero
-      face={inviter ? <Face name={inviter.name} avatarKey={inviter.avatar_key} /> : <PotMascot size={88} mood="talk" />}
+      face={inviter ? <Face name={inviter.name} avatarKey={inviter.avatar_key} /> : <EggMascot size={88} mood="oops" />}
       title={GONE_TITLE[why]}
       line={`Ask ${inviter?.name ?? 'whoever sent it'} for a new one.`}
     >

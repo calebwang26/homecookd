@@ -10,7 +10,7 @@ import { animate, inView } from 'motion';
 import { useEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { useCopy } from '@/components/providers/CopyProvider';
 import { Chip } from '@/components/primitives/Chip';
-import { PotMascot } from '@/components/primitives/PotMascot';
+import { EggMascot } from '@/components/primitives/EggMascot';
 import { EASE } from '@/lib/motion/tokens';
 import { Ingredient } from './stickers/Ingredients';
 import { PILE_DESKTOP, PILE_MOBILE, type PileItem } from './pileData';
@@ -186,7 +186,7 @@ export function Pile({ spawnFrom, still = false }: { spawnFrom: RefObject<HTMLEl
 
       <div ref={mascotRef} className={s.mascot} data-r="0" data-drift="2">
         <div ref={squashRef} className={s.squash}>
-          <PotMascot size={120} mood="happy" steam={landed} className={s.mascotSvg} />
+          <EggMascot size={120} mood={landed ? 'made-it' : 'hello'} className={s.mascotSvg} />
         </div>
       </div>
       {copy.measures.mascotChip ? (

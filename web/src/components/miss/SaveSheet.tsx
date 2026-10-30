@@ -8,7 +8,7 @@ import { pronounOf } from '@/lib/dish/text';
 import type { Relation } from '@/lib/dish/types';
 import s from './miss.module.css';
 
-export function SaveSheet({ open, onClose, photo, relation, token }: { open: boolean; onClose: () => void; photo: string | null; relation: Relation; token: string }) {
+export function SaveSheet({ open, onClose, photo, relation, token, title }: { open: boolean; onClose: () => void; photo: string | null; relation: Relation; token: string; title?: string }) {
   const { t } = useLang();
   const R = t(`rel.${relation}`);
   const pronoun = pronounOf(relation);
@@ -16,7 +16,7 @@ export function SaveSheet({ open, onClose, photo, relation, token }: { open: boo
     <AppSheet
       open={open}
       onClose={onClose}
-      visual={<SavedFan photo={photo} />}
+      visual={<SavedFan photo={photo} title={title} />}
       title={t('get.title')}
       reasons={[
         { icon: 'bookmark', tone: 'sage', title: t('get.keep'), text: t('get.keepLine') },
@@ -28,14 +28,14 @@ export function SaveSheet({ open, onClose, photo, relation, token }: { open: boo
   );
 }
 
-function SavedFan({ photo }: { photo: string | null }) {
+function SavedFan({ photo, title }: { photo: string | null; title?: string }) {
   return (
     <div className={s.fan} aria-hidden="true">
       <span className={s.fanCard} />
       <span className={s.fanCard} />
       <div className={s.fanWrap}>
         <div className={s.fanFront}>
-          <DishHero photoUrl={photo} alt="" height={134} />
+          <DishHero photoUrl={photo} alt="" height={134} title={title} />
         </div>
         <span className={s.badge}>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">

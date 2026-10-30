@@ -4,8 +4,8 @@
   --pad-x: 28px;
   --bg: var(--btn-primary-bg);
   --fg: var(--btn-primary-fg);
-  --circle-bg: var(--cream);
-  --circle-fg: var(--green);
+  --circle-bg: var(--ink);
+  --circle-fg: var(--yolk);
   --border: transparent;
   position: relative;
   display: inline-flex;
@@ -44,7 +44,7 @@
   outline-offset: 3px;
 }
 .btn[data-theme='dark']:focus-visible {
-  outline-color: var(--chartreuse);
+  outline-color: var(--yolk);
 }
 
 /* sizes */
@@ -124,17 +124,17 @@
 .hero {
   --bg: var(--btn-hero-bg);
   --fg: var(--btn-hero-fg);
-  --circle-bg: var(--forest);
-  --circle-fg: var(--chartreuse);
+  --circle-bg: var(--ink);
+  --circle-fg: var(--yolk);
 }
 .hero:hover {
-  --bg: var(--chartreuse-swirl);
+  --bg: var(--yolk-hover);
 }
 .primary {
   --bg: var(--btn-primary-bg);
   --fg: var(--btn-primary-fg);
-  --circle-bg: var(--cream);
-  --circle-fg: var(--green);
+  --circle-bg: var(--ink);
+  --circle-fg: var(--yolk);
 }
 .primary:hover {
   --bg: var(--btn-primary-hover);
@@ -146,34 +146,34 @@
   --circle-fg: var(--cream);
 }
 .soft:hover {
-  --bg: var(--lime-wash);
+  --bg: var(--sage-hover);
 }
 .outlineCream {
   --bg: transparent;
   --fg: var(--cream);
-  --border: rgba(255, 253, 247, 0.7);
+  --border: rgba(251, 245, 234, 0.7);
   --circle-bg: var(--cream);
   --circle-fg: var(--forest);
 }
 .outlineCream:hover {
-  --bg: rgba(255, 253, 247, 0.12);
+  --bg: rgba(251, 245, 234, 0.12);
   --border: var(--cream);
 }
 .outlineInk {
   --bg: transparent;
   --fg: var(--ink);
-  --border: rgba(30, 36, 16, 0.35);
+  --border: rgba(31, 36, 48, 0.35);
   --circle-bg: var(--ink);
   --circle-fg: var(--cream);
 }
 .outlineInk:hover {
-  --bg: rgba(30, 36, 16, 0.05);
+  --bg: rgba(31, 36, 48, 0.05);
   --border: var(--ink);
 }
 .black {
   --bg: var(--black);
   --fg: var(--canvas);
-  --circle-bg: var(--chartreuse);
+  --circle-bg: var(--yolk);
   --circle-fg: var(--ink);
 }
 .black:hover {

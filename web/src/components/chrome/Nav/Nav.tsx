@@ -15,7 +15,7 @@
 // Intro (a7 M1): logo first, then the items blur in left → right, 50ms apart, once.
 import { useEffect, useRef, type CSSProperties } from 'react';
 import { useCopy } from '@/components/providers/CopyProvider';
-import { PotMascot } from '@/components/primitives/PotMascot';
+import { Logo } from '@/components/primitives/Logo';
 import { Button } from '@/components/primitives/Button';
 import { RelationPicker } from '@/components/chrome/RelationPicker/RelationPicker';
 import s from './Nav.module.css';
@@ -80,8 +80,8 @@ export function Nav() {
           <span className={`${s.bg} ${s.pillBg}`} aria-hidden="true" />
           <span className={s.item} {...item(0)}>
             <a className={s.logo} href="#top" aria-label={`${copy.meta.siteName}, back to top`}>
-              <PotMascot size={32} className={s.mascot} />
-              <span className={s.word}>{n.logo}</span>
+              <Logo height={30} className={s.lockupNormal} />
+              <Logo height={30} reversed className={s.lockupHero} />
             </a>
           </span>
         </div>

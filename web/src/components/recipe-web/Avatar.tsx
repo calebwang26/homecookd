@@ -1,5 +1,5 @@
 // A family member's face: the seeded demo family's photos (same files as app/assets/avatars), else
-// the bible's initial tile (lime-wash #EDF2BE, olive ink, Fraunces 600). Never invent a face: a
+// the bible's initial tile (lime-wash #E6EBCF, olive ink, Fraunces 600). Never invent a face: a
 // person (a sender, an inviter) passes their `avatar_key`, and null means no photo, whatever their
 // name. Only a recipe's cook with no key at all (undefined) is matched by name to the demo cooks.
 import dad from './avatars/dad.jpg';
@@ -27,8 +27,8 @@ export function Avatar({ name, avatarKey, size }: { name: string; avatarKey?: st
       aria-hidden="true"
       style={{
         ...base,
-        background: '#EDF2BE',
-        color: '#3C4A0B',
+        background: '#E6EBCF',
+        color: '#34430C',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

@@ -21,7 +21,7 @@
 // Links home are plain <a>: '/' must load in full so ROUTE_GATE (the layout's <head> script) runs.
 /* eslint-disable @next/next/no-html-link-for-pages */
 import type { Metadata } from 'next';
-import { PotMascot } from '@/components/primitives/PotMascot';
+import { Logo } from '@/components/primitives/Logo';
 import { CONTACT_EMAIL } from '@/content/site';
 import s from './privacy.module.css';
 
@@ -43,8 +43,7 @@ export default function PrivacyPage() {
   return (
     <main id="main" className={s.page}>
       <a className={s.home} href="/" aria-label="homecookd, home">
-        <PotMascot size={32} />
-        <span className={s.word}>homecookd</span>
+        <Logo height={32} />
       </a>
 
       <h1 className={`t-h2 ${s.h1}`}>Privacy, in plain words.</h1>

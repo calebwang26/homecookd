@@ -9,7 +9,7 @@
   display: grid;
   align-items: center;
   padding: calc(var(--nav-h, 72px) + 24px) var(--gutter) 44px;
-  background: var(--sun) var(--swirl) center / cover no-repeat;
+  background: var(--yolk) var(--swirl) center / cover no-repeat;
   color: var(--ink);
   overflow: clip;
 }

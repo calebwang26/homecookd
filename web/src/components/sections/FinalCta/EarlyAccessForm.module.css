@@ -53,11 +53,11 @@
   opacity: 1;
 }
 .input:focus-visible {
-  outline: 3px solid var(--chartreuse);
+  outline: 3px solid var(--yolk);
   outline-offset: 3px;
 }
 .input[aria-invalid='true'] {
-  border-color: var(--sun);
+  border-color: var(--yolk);
 }
 .submit {
   flex: none;
@@ -85,7 +85,7 @@
   height: 22px;
   margin-top: 1px;
   fill: none;
-  stroke: var(--sun);
+  stroke: var(--yolk);
   stroke-width: 2.2;
   stroke-linecap: round;
 }
@@ -121,7 +121,7 @@
   outline: none;
 }
 .success:focus-visible {
-  outline: 3px solid var(--chartreuse);
+  outline: 3px solid var(--yolk);
   outline-offset: 3px;
 }
 .pot {
@@ -139,7 +139,7 @@
 .successText {
   font-family: var(--ff-display);
   font-weight: 600;
-  font-variation-settings: 'SOFT' 100, 'WONK' 0;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
   font-size: clamp(1.375rem, 1.05rem + 0.9vw, 1.875rem);
   line-height: 1.18;
   letter-spacing: -0.015em;
@@ -149,8 +149,8 @@
 .successText em {
   font-style: italic;
   font-weight: 500;
-  font-variation-settings: 'SOFT' 100, 'WONK' 1;
-  color: var(--chartreuse);
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
+  color: var(--yolk);
 }
 
 /* ---------- share ---------- */
@@ -221,7 +221,7 @@
   min-height: 48px;
   padding: 0 12px;
   border-radius: var(--r-pill);
-  color: var(--chartreuse);
+  color: var(--yolk);
   font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 0.22em;

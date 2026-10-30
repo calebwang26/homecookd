@@ -17,7 +17,7 @@ export function CtaHeading({ id, className }: { id: string; className?: string }
   // break before the accent phrase when it ends the heading: "Ask Grandma to / teach you."
   const acc = T.accent.join(' ');
   const lines = text.endsWith(` ${acc}`) ? `${text.slice(0, -acc.length - 1)}\n${acc}` : text;
-  if (parent) return <PlainHeading id={id} className={className} text={lines} accent={T.accent} accentColor="var(--chartreuse)" />;
+  if (parent) return <PlainHeading id={id} className={className} text={lines} accent={T.accent} accentColor="var(--yolk)" />;
   return (
     <LetterArc
       key={lines}
@@ -26,7 +26,7 @@ export function CtaHeading({ id, className }: { id: string; className?: string }
       className={className}
       text={lines}
       accent={T.accent}
-      style={{ ['--accent' as string]: 'var(--chartreuse)' } as CSSProperties}
+      style={{ ['--accent' as string]: 'var(--yolk)' } as CSSProperties}
     />
   );
 }

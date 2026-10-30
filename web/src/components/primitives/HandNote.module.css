@@ -58,10 +58,10 @@
   color: var(--cream);
 }
 .chartreuse {
-  --hand-color: var(--chartreuse);
-  color: var(--chartreuse);
+  --hand-color: var(--yolk);
+  color: var(--yolk);
 }
 .green {
-  --hand-color: var(--green);
-  color: var(--green);
+  --hand-color: var(--yolk-deep);
+  color: var(--yolk-deep);
 }

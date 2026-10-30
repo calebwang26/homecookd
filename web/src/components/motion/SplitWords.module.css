@@ -1,6 +1,6 @@
 .root {
   /* the accent color for [data-accent] words; override per heading with style={{ '--accent': ... }} */
-  --accent: var(--green);
+  --accent: var(--yolk-deep);
 }
 .w {
   display: inline-block;

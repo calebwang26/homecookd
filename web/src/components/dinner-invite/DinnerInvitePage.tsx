@@ -7,7 +7,8 @@
 //
 // Dev only: /d?fixture=going|past|gone|offline on localhost shows each state without the server.
 import { useEffect, useState } from 'react';
-import { PotMascot } from '@/components/primitives/PotMascot';
+import { EggMascot } from '@/components/primitives/EggMascot';
+import { Logo } from '@/components/primitives/Logo';
 import { LANDER_LINK } from '@/lib/app-links';
 import { isInviteToken, nightTitle, openInvite, whenLabel, type Opened } from '@/lib/dinner-invite';
 import { fixtureAllowed } from '@/lib/recipe-web/config';
@@ -66,8 +67,7 @@ export function DinnerInvitePage() {
     <div className={s.page}>
       <div className={s.column}>
         <header className={s.brand}>
-          <PotMascot size={30} />
-          <span className={s.word}>homecookd</span>
+          <Logo height={30} />
         </header>
         <main className={s.main} aria-busy={loading || undefined}>
           {loading ? <Skeleton /> : load.ok ? <Going {...load.dinner} now={load.now} /> : <NotOpened why={load.why} retry={retry} />}
@@ -89,7 +89,7 @@ function Going({ dish, hostName, startsAt, now }: { dish: string; hostName: stri
   return (
     <section className={s.hero} aria-labelledby="dinner-title">
       <div className={s.glow}>
-        <PotMascot size={92} mood="happy" />
+        <EggMascot size={92} mood="hello" />
       </div>
       <h1 id="dinner-title" className={s.title}>
         {ahead ? `You’re going to ${nightTitle(dish)}` : `${nightTitle(dish)} already happened`}
@@ -119,7 +119,7 @@ function NotOpened({ why, retry }: { why: 'gone' | 'offline'; retry: () => void 
   return (
     <section className={s.hero} aria-labelledby="dinner-title">
       <div className={s.face}>
-        <PotMascot size={88} mood="talk" />
+        <EggMascot size={88} mood="oops" />
       </div>
       <h1 id="dinner-title" className={s.title}>
         {why === 'gone' ? 'This invite doesn’t work anymore.' : 'We couldn’t reach homecookd.'}
@@ -137,8 +137,8 @@ function NotOpened({ why, retry }: { why: 'gone' | 'offline'; retry: () => void 
 function CalendarIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <rect x="3.5" y="5" width="17" height="15" rx="3" fill="none" stroke="#5B6F00" strokeWidth="2" />
-      <path d="M3.5 10h17M8 3v4M16 3v4" stroke="#5B6F00" strokeWidth="2" strokeLinecap="round" />
+      <rect x="3.5" y="5" width="17" height="15" rx="3" fill="none" stroke="#34430C" strokeWidth="2" />
+      <path d="M3.5 10h17M8 3v4M16 3v4" stroke="#34430C" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }
