@@ -16,11 +16,13 @@ Last updated Oct 30, 12:05 UTC, right after the weekly limit reset. The pause li
   `DISH_MODEL` is unset, so the default is Haiku 5.5.
 - All the Phase 4 push calls are wired: `pushEvents.requested` from craving cards, and `pushEvents.answered` at
   the three merge-done spots.
+- The live budget-alert test ran on Oct 30 at 17:59 UTC with Caleb's OK (`dishAsks:budgetAlert`, day "TEST, please
+  ignore"). The push reached the ntfy topic, and Caleb confirmed the email reached team@homecookd.app. Don't send it again.
 
 ## Open
-- **Live budget-alert test:** `npx convex run --deployment grand-dragon-649 dishAsks:budgetAlert
-  '{"day":"TEST, please ignore","usd":0}'`. It sends one ntfy push and email to the team. The auto-mode safety
-  check refused it on Oct 30 as a change to a shared resource, so it needs Caleb's OK or his own run.
+- **ntfy email limit:** the free ntfy account sends at most 5 emails a day, counted per sending IP, and Convex's
+  servers may share theirs with other customers. If an alert email goes missing, check that first; a paid ntfy
+  plan counts per account.
 - **Stretch, only if asked:** `pushEvents.filmed({askId, recipeId})` from `worker.published` when a filmed
   recipe answers a craving card. That needs the job to carry `dishAskId`.
 - **Caleb's numbers** (`TODO(caleb)`):
