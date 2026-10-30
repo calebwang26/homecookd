@@ -609,3 +609,22 @@ The rules:
   translation is redone, because the translation key now includes the guess.
 - **Locked after Send:** once Mom has sent her answers, edits are `409 closed` (her version is built from the guess
   as it was).
+
+### Shorter steps on the card (`short`)
+Caleb: the card reads too recipe-like and wordy.
+- **What:** every step line (`Line`) in the guess, Mom's version and `inLang` carries
+  `short: string | null`. It's at most about 6 words (at most 40 characters as read), e.g.
+  "Scramble eggs **soft**. Set aside."
+- **What stays:** the full `text`, shown when the kid taps the step; and `detail`, shown for a line under it.
+- **Rules,** after the app's cook-mode short steps (`pipeline/shorten.py`'s rules):
+  - one action, plain words, no filler;
+  - `**bold**` only around amounts, heat and times, and only ones the line's `text` gives;
+  - no number, heat or time the line doesn't have.
+- **Where it's written:**
+  - in the same structured call as the guess and the merge, so there's no extra model call;
+  - the server checks it against the line's `text` (bold and numbers), and sets it to null when it fails;
+  - a line Mom changed gets her short line, checked against her words like the line itself;
+  - a line the kid edits (`edits`) has its `short` cleared to null.
+- **Translation:** `short` is translated with the rest of the card for her page language (`inLang`).
+- **On the page:** `short` is optional; show `text` when it's null or missing.
+- **Status (Oct 29):** specced, not built yet. It's next on Convex & accounts' list after the usage reset.
