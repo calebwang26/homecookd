@@ -107,6 +107,9 @@ export const HEX = {
   black: '#15181f',
   /** pale tint of green, the starting color for accent words (a7: accents start pale) */
   greenPale: '#C9D29A',
+  /** yolk-deep (accent text) and its pale tint, where an accent word ends in yolk-deep */
+  yolkDeep: '#A3580C',
+  yolkPale: '#EBCB9F',
   /** pale tint of chartreuse on dark blocks */
   chartreusePale: '#7E8A3A',
 } as const;
