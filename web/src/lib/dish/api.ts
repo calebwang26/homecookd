@@ -3,7 +3,7 @@
 // so tokens never land in a URL the server logs. NEXT_PUBLIC_DISH_URL overrides the base (the local
 // fake in scripts/qa/dish-fake-server.mjs).
 import { CONVEX_SITE_URL } from '@/lib/recipe-web/config';
-import type { Ask, Card, FileKind, QuestionId, Relation, SendVia } from './types';
+import type { Ask, AskItem, Card, Edit, FileKind, QuestionId, Relation, SendVia } from './types';
 
 export const DISH_URL = (process.env.NEXT_PUBLIC_DISH_URL || CONVEX_SITE_URL).trim().replace(/\/+$/, '');
 
@@ -87,12 +87,12 @@ export async function getCard(kidToken: string): Promise<Card> {
 
 export async function updateCard(
   kidToken: string,
-  patch: { relation?: Relation; kidName?: string | null; message?: string; voiceNote?: string | null; voiceNoteS?: number },
+  patch: { relation?: Relation; kidName?: string | null; message?: string; voiceNote?: string | null; voiceNoteS?: number; edits?: Edit[] },
 ): Promise<Card> {
   return (await post<{ card: Card }>('/dish/cards/update', { kidToken, ...patch })).card;
 }
 
-export async function askQuestions(kidToken: string, questions: { id?: QuestionId; text: string }[]): Promise<Card> {
+export async function askQuestions(kidToken: string, questions: AskItem[]): Promise<Card> {
   return (await post<{ card: Card }>('/dish/cards/ask', { kidToken, questions }, { keepalive: true })).card;
 }
 

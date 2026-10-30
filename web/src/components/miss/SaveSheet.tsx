@@ -20,7 +20,7 @@ export function SaveSheet({ open, onClose, photo, relation, token }: { open: boo
       title={t('get.title')}
       reasons={[
         { icon: 'bookmark', tone: 'sage', title: t('get.keep'), text: t('get.keepLine') },
-        { icon: 'bell', tone: 'butter', title: t('get.know', { R }), text: t(pronoun === 'he' ? 'get.knowLineHe' : 'get.knowLineShe') },
+        ...(relation === 'none' ? [] : [{ icon: 'bell' as const, tone: 'butter' as const, title: t('get.know', { R }), text: t(pronoun === 'he' ? 'get.knowLineHe' : 'get.knowLineShe') }]),
       ]}
       copyLink={`${WEB_ORIGIN}/miss?k=${token}`}
       schemeLink={appSchemeUrl('miss', { k: token })}

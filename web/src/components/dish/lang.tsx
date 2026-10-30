@@ -5,7 +5,7 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { saveLang, savedLang } from '@/lib/dish/saved';
 import { isLang, isRtl, LANGS, nativeName, phoneLang, rich, wordsFor, type Lang, type T } from '@/lib/dish/words';
-import type { Relation } from '@/lib/relation';
+import type { Relation } from '@/lib/dish/types';
 import s from './dish.module.css';
 
 type LangState = { lang: Lang; t: T; setLang: (l: Lang) => void; tags: readonly string[] };

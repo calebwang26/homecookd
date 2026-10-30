@@ -191,3 +191,23 @@
   background: #efefe6;
   color: #1e2410;
 }
+
+/* "Ask someone": who to ask, for a card made for no one in particular */
+.whoGrid {
+  margin-top: 16px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+.whoChip {
+  min-height: 56px;
+  border-radius: 20px;
+  border: 1.5px solid rgba(30, 36, 16, 0.12);
+  background: #fffdf7;
+  color: #1e2410;
+  font: 700 18px/1 var(--ff-text);
+  cursor: pointer;
+}
+.whoChip:disabled {
+  opacity: 0.6;
+}

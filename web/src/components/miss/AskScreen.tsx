@@ -183,6 +183,9 @@ export function AskScreen({ draft, onDraft, error, limited, lastToken, onOpenLas
               {rel(r)}
             </button>
           ))}
+          <button type="button" className={`${ui.press} ${s.chip}`} aria-pressed={draft.other === null && draft.relation === 'none'} onClick={() => set({ relation: 'none', other: null })}>
+            {t('rel.none')}
+          </button>
           <button type="button" className={`${ui.press} ${s.chip}`} aria-pressed={draft.other !== null} aria-expanded={draft.other !== null} onClick={() => set({ other: draft.other ?? '' })}>
             {draft.other !== null && otherRel ? rel(otherRel) : t('rel.other')}
           </button>
@@ -212,7 +215,8 @@ export function AskScreen({ draft, onDraft, error, limited, lastToken, onOpenLas
 
       {!limited && (
         <div className={s.group}>
-          <p className={s.overline}>{t('k1.add')}</p>
+          <p className={s.label}>{t('k1.add')}</p>
+          <p className={s.addLine}>{t('k1.addLine')}</p>
           <div className={s.addGrid}>
             <button type="button" className={`${ui.press} ${s.addButton}`} onClick={() => photoInput.current?.click()} disabled={draft.picked.photos.length >= MAX_PHOTOS}>
               <span className={s.addIcon}>

@@ -22,9 +22,9 @@ import s from './ask.module.css';
 const VOICE_MAX_MS = 60_000; // DISH-ASK-SPEC §4 /cards/update: a voice note for Mom is at most 60 s
 const HOLD_MS = 300;
 
-type Props = { open: boolean; onClose: () => void; token: string; card: Card; onCard: (c: Card) => void; toast: (m: string, tone?: 'success' | 'error') => void };
+type Props = { open: boolean; onClose: () => void; token: string; card: Card; onCard: (c: Card) => void; toast: (m: string, tone?: 'success' | 'error') => void; count?: number };
 
-export function AskSheet({ open, onClose, token, card, onCard, toast }: Props) {
+export function AskSheet({ open, onClose, token, card, onCard, toast, count }: Props) {
   const { t } = useLang();
   const rel = useRel();
   const id = useId();
@@ -39,7 +39,7 @@ export function AskSheet({ open, onClose, token, card, onCard, toast }: Props) {
   }, [card.kidName]);
 
   const open3 = openQuestions(card);
-  const n = open3.length || card.guess.questions.length;
+  const n = count ?? (open3.length || card.guess.questions.length);
   const pronoun = pronounOf(card.relation);
   const sees = pronoun === 'she' ? t('ask.seesShe', { n }) : pronoun === 'he' ? t('ask.seesHe', { n }) : t('ask.seesName', { R, n });
 
@@ -57,24 +57,25 @@ export function AskSheet({ open, onClose, token, card, onCard, toast }: Props) {
   };
 
   const share = (via: SendVia) => {
-    if (busy) return;
-    const text = `${message.trim() || card.message} ${card.askUrl}`;
+    const url = card.askUrl; // null while the card has no one to ask (WhoSheet picks first)
+    if (busy || !url) return;
+    const text = `${message.trim() || card.message} ${url}`;
     saveEdits();
     if (!card.asked.length || !open3.length) void askQuestions(token, askList(card.guess.questions)).then(onCard, () => {});
     void markSent(token, via).then(onCard, () => {});
     if (via === 'copy') {
-      void copyText(card.askUrl).then((ok) => toast(ok ? t('share.copied') : t('share.noCopy'), ok ? 'success' : 'error'));
+      void copyText(url).then((ok) => toast(ok ? t('share.copied') : t('share.noCopy'), ok ? 'success' : 'error'));
     } else if (via === 'sms') {
       window.location.href = smsHref(text);
     } else if (via === 'whatsapp') {
       window.open(whatsAppHref(text), '_blank', 'noopener');
     } else if (via === 'instagram') {
-      void copyText(card.askUrl).then((ok) => ok && toast(t('share.igCopied')));
+      void copyText(url).then((ok) => ok && toast(t('share.igCopied')));
       openInstagram();
     } else {
       const sheet = shareSheet(card.dish, text);
       if (!sheet) {
-        void copyText(card.askUrl).then((ok) => toast(ok ? t('share.copied') : t('share.noCopy'), ok ? 'success' : 'error'));
+        void copyText(url).then((ok) => toast(ok ? t('share.copied') : t('share.noCopy'), ok ? 'success' : 'error'));
         return;
       }
       setBusy(true);

@@ -606,13 +606,6 @@
 .row:last-child {
   border-bottom: 0;
 }
-.row[data-tone='butter'] {
-  margin: 2px 0;
-  padding: 0 10px 0 12px;
-  background: #fff1c7;
-  border-radius: 20px;
-  border-bottom: 0;
-}
 .row[data-tone='sage'] {
   margin: 2px 0;
   padding: 12px 10px 12px 12px;
@@ -656,17 +649,6 @@
   line-height: 1.3;
   color: #5f6352;
 }
-.tag {
-  flex: none;
-  min-height: 32px;
-  padding: 3px 10px;
-  border-radius: 999px;
-  border: 0;
-  background: rgba(255, 253, 247, 0.75);
-  color: #5a3a22;
-  font: 700 13px/1 var(--ff-text);
-  cursor: pointer;
-}
 .play {
   flex: none;
   width: 44px;
@@ -696,7 +678,6 @@
   font-size: 17px;
   line-height: 1.45;
 }
-.step[data-tone='butter'],
 .step[data-tone='sage'] {
   margin-inline-start: -10px;
   padding: 10px;
@@ -824,4 +805,228 @@
 /* A heading that takes focus after a screen change reads out; it needs no ring. */
 .screen h1[tabindex='-1']:focus {
   outline: none;
+}
+
+/* K1: "Help us get it right" and its one line */
+.addLine {
+  margin: -6px 0 12px;
+  font-size: 15px;
+  line-height: 1.35;
+  color: #5f6352;
+}
+
+/* K2: a line the kid can shape. Tap the words to fix them; the round button adds or takes out the question. */
+.rowEdit {
+  flex: 1;
+  min-width: 0;
+  display: block;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: text;
+  -webkit-tap-highlight-color: transparent;
+}
+.rowEdit:focus-visible,
+.stepHit:focus-visible {
+  outline: 3px solid #788c15;
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.amt {
+  text-decoration: underline dotted rgba(30, 36, 16, 0.35);
+  text-underline-offset: 4px;
+}
+.you {
+  margin-inline-start: 6px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #5b6f00;
+}
+.toggle {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 1.5px solid rgba(30, 36, 16, 0.14);
+  background: transparent;
+  color: #5f6352;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.toggle[aria-pressed='true'] {
+  border-color: #f0c64a;
+  background: #fff1c7;
+  color: #5a3a22;
+}
+.toggle[aria-disabled='true'] {
+  opacity: 0.35;
+}
+.editForm {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 0;
+}
+.editForm input {
+  min-width: 0;
+  height: 44px;
+  padding: 0 12px;
+  border-radius: 14px;
+  border: 1.5px solid #788c15;
+  background: #fffdf7;
+  font: 400 17px var(--ff-text);
+  color: #1e2410;
+}
+.editAmount {
+  flex: 0 0 34%;
+}
+.editName {
+  flex: 1;
+}
+.editOk,
+.editNo {
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.editOk {
+  background: #5b6f00;
+  color: #fffdf7;
+}
+.editOk:disabled {
+  opacity: 0.4;
+}
+.editNo {
+  background: rgba(30, 36, 16, 0.07);
+  color: #5f6352;
+}
+
+/* K2: "Only Mom knows", the questions that will be asked, above the steps */
+.knows {
+  margin-top: 28px;
+  padding: 20px 18px 18px;
+  border-radius: 28px;
+  background: #fff1c7;
+}
+.knowsTitle {
+  margin: 0;
+  font-family: var(--ff-display);
+  font-variation-settings: 'SOFT' 100, 'WONK' 0;
+  font-weight: 500;
+  font-size: 24px;
+  line-height: 1.15;
+  color: #4a3016;
+}
+.knowsList {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.knowsList li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 8px 8px 14px;
+  border-radius: 16px;
+  background: rgba(255, 253, 247, 0.75);
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.3;
+  color: #4a3016;
+}
+.knowsX {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: 999px;
+  border: 0;
+  background: transparent;
+  color: #6e3f2a;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.knowsEmpty {
+  margin: 10px 0 0;
+  font-size: 15px;
+  color: #6e3f2a;
+}
+.knowsCap {
+  margin: 10px 0 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: #6e3f2a;
+  opacity: 0.8;
+}
+.knowsCap[data-hit] {
+  opacity: 1;
+  color: #9a4f47;
+}
+.knows > button:last-child {
+  margin-top: 16px;
+}
+
+/* K2: a step shows its short form; a tap shows the full sentences, each one fixable and askable */
+.stepHit {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: start;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+.stepLine {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 2px 0 8px;
+}
+.stepLine .toggle {
+  margin-top: 0;
+}
+.stepDot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-inline-start: 8px;
+  border-radius: 999px;
+  background: #f0c64a;
+}
+.stepChevron {
+  flex: none;
+  width: 32px;
+  height: 32px;
+  margin-top: 0;
+  border: 0;
+  background: transparent;
+  color: #5f6352;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.stepChevron svg {
+  transition: transform 160ms ease;
+}
+.stepChevron[data-open] svg {
+  transform: rotate(180deg);
 }
