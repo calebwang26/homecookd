@@ -8,7 +8,7 @@ import { useLang, useRel } from '@/components/dish/lang';
 import { PotMascot } from '@/components/primitives/PotMascot';
 import { IconBack, IconClose, IconPause, IconPlay } from '@/components/recipe-web/icons';
 import { DishError, getCard, updateCard } from '@/lib/dish/api';
-import { applyEdits, askItems, EDIT_LIMITS, initialPicked, ingredientRef, keyOf, lineRef, openCap, partOf, questionText, refOf, withEdit } from '@/lib/dish/shape';
+import { applyEdits, askItems, cleanPicked, EDIT_LIMITS, initialPicked, ingredientRef, lineRef, openCap, unitOf, unitText, withEdit } from '@/lib/dish/shape';
 import { boldRuns, cardTitle, plain } from '@/lib/dish/text';
 import type { Card, Edit, Ingredient, Line, PartRef, Quote, Recipe } from '@/lib/dish/types';
 import { AskSheet } from './AskSheet';
@@ -50,33 +50,25 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
     return () => window.clearInterval(timer);
   }, [waiting, card.merging, token]);
 
-  useEffect(() => {
-    document.title = cardTitle(card.relation, card.dish);
-  }, [card.relation, card.dish]);
-
   const recipe: Recipe = card.version ?? guess;
   const none = card.relation === 'none';
   const R = rel(card.relation);
   const askLabel = none ? t('card.askSomeone') : t('card.askTag', { R });
   const cap = openCap(card);
-  const answered = new Set(card.answers.map((a) => a.id));
-  const chosen = picked.filter((k) => {
-    const ref = refOf(k);
-    const part = ref && partOf(guess, ref);
-    return !!part && !(part.ask && answered.has(part.ask));
-  });
+  const chosen = cleanPicked(card, guess, picked); // unique units: a question's id, or a part with none
   const full = chosen.length >= cap;
   const clipUrl = (id: Ingredient['clip']) => (id ? (card.answers.find((a) => a.id === id)?.audioUrl ?? null) : null);
 
-  const toggle = (ref: PartRef) => {
-    const k = keyOf(ref);
-    if (chosen.includes(k)) return setPicked(chosen.filter((x) => x !== k));
+  const toggleUnit = (unit: string) => {
+    if (chosen.includes(unit)) return setPicked(chosen.filter((x) => x !== unit));
     if (full) {
       setCapHit(true);
       return void window.setTimeout(() => setCapHit(false), 2200);
     }
-    setPicked([...chosen, k]);
+    setPicked([...chosen, unit]);
   };
+  const toggle = (ref: PartRef) => toggleUnit(unitOf(card, guess, ref));
+  const isOn = (ref: PartRef) => chosen.includes(unitOf(card, guess, ref));
   /** Fixing a line: shown at once, sent to the server, whose guess replaces it (a 422 or 409 undoes it, with a toast). */
   const edit = (e: Edit) => {
     setEdits((all) => withEdit(all, e));
@@ -110,12 +102,15 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
   const steps = recipe.steps.length;
   const photo = card.photoUrls[0] ?? null;
   const title = cardTitle(card.relation, recipe.dish || card.dish);
+  useEffect(() => {
+    document.title = title;
+  }, [title]);
 
   if (locked) return <KidRecipe card={card} token={token} version={recipe} onClose={closeRecipe} />;
 
   const ingProps = (i: number) => ({
     part: ingredientRef(i),
-    on: chosen.includes(keyOf(ingredientRef(i))),
+    on: isOn(ingredientRef(i)),
     toggle,
     label: t('card.askToggle', { who: none ? t('card.someone') : R }),
     full,
@@ -185,7 +180,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
         <ul className={s.list}>
           {recipe.ingredients.map((ing, i) =>
             shaping ? (
-              <ShapeRow key={i} ing={ing} editing={editing === keyOf(ingredientRef(i))} onEdit={() => setEditing(keyOf(ingredientRef(i)))} onCancel={() => setEditing(null)} onSave={(e) => edit({ kind: 'ingredient', index: i, ...e })} {...ingProps(i)} />
+              <ShapeRow key={i} ing={ing} editing={editing === `i${i}`} onEdit={() => setEditing(`i${i}`)} onCancel={() => setEditing(null)} onSave={(e) => edit({ kind: 'ingredient', index: i, ...e })} {...ingProps(i)} />
             ) : (
               <IngredientRow key={i} ing={ing} clip={clipUrl(ing.clip)} audio={audio} hear={t('card.hear', { R })} stop={t('card.stop')} />
             ),
@@ -199,17 +194,14 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
             </h2>
             {chosen.length > 0 ? (
               <ul className={s.knowsList}>
-                {chosen.map((k) => {
-                  const ref = refOf(k)!;
-                  return (
-                    <li key={k}>
-                      <span dir="auto">{questionText(card, guess, ref)}</span>
-                      <button type="button" className={s.knowsX} aria-label={t('card.askRemove')} onClick={() => toggle(ref)}>
-                        <IconClose size={14} />
-                      </button>
-                    </li>
-                  );
-                })}
+                {chosen.map((unit) => (
+                  <li key={unit}>
+                    <span dir="auto">{unitText(card, guess, unit)}</span>
+                    <button type="button" className={s.knowsX} aria-label={t('card.askRemove')} onClick={() => toggleUnit(unit)}>
+                      <IconClose size={14} />
+                    </button>
+                  </li>
+                ))}
               </ul>
             ) : (
               <p className={s.knowsEmpty}>{t('card.knowsEmpty')}</p>
@@ -230,7 +222,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
           {recipe.steps.map((step, i) => {
             const hers = step.lines.filter((l) => l.status === 'mom');
             const clip = clipUrl(hers.find((l) => l.clip)?.clip ?? step.tip?.clip ?? null);
-            const asked = step.lines.some((_, j) => chosen.includes(keyOf(lineRef(i, j))));
+            const asked = step.lines.some((_, j) => isOn(lineRef(i, j)));
             const more = open === i;
             return (
               <li key={i} className={s.step} data-tone={!shaping && (hers.length || step.tip) ? 'sage' : undefined}>
@@ -240,13 +232,13 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
                     more ? (
                       step.lines.map((l, j) => {
                         const ref = lineRef(i, j);
-                        const k = keyOf(ref);
+                        const k = `l${i}.${j}`;
                         return (
                           <StepLine
                             key={j}
                             line={l}
                             editing={editing === k}
-                            on={chosen.includes(k)}
+                            on={isOn(ref)}
                             full={full}
                             label={t('card.askToggle', { who: none ? t('card.someone') : R })}
                             onEdit={() => setEditing(k)}

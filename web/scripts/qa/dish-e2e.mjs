@@ -405,6 +405,37 @@ try {
   check('Shape: his own question points at the eggs', shaped.asked[2].text === 'How much eggs do you use?' && shaped.guess.ingredients[0].ask === 'q4');
   await kid.keyboard.press('Escape');
 
+  // A card as the live server writes it (the fake's "live" dish): two parts point at one question. A question counts once.
+  await kid.goto(`${BASE}/miss`, { waitUntil: 'networkidle' });
+  await kid.getByLabel('The dish you miss').fill('mom’s tomato egg live');
+  await kid.getByRole('button', { name: 'Make my recipe' }).click();
+  await kid.getByText('Our guess. Mom knows the rest.').waitFor({ timeout: 15000 });
+  const liveToken = kid.url().split('k=')[1];
+  const liveBlock = kid.locator('section[aria-labelledby="knows"]');
+  const liveRows = () => liveBlock.locator('li').allInnerTexts();
+  const liveTog = kid.getByRole('button', { name: 'Ask Mom about this' });
+  const liveTitle = await kid.title();
+  check('Live: the tab title has "Mom’s" once', (liveTitle.match(/mom.s/gi) ?? []).length === 1, liveTitle);
+  let rows3 = await liveRows();
+  check('Live: exactly 3 unique questions', rows3.length === 3 && new Set(rows3.map((r) => r.trim())).size === 3, rows3.join(' | '));
+  check('Live: the cap counts unique questions', (await liveBlock.innerText()).includes('Up to 3 questions'));
+  check('Live: the linked ingredients show as chosen', (await liveTog.nth(1).getAttribute('aria-pressed')) === 'true' && (await liveTog.nth(3).getAttribute('aria-pressed')) === 'true' && (await liveTog.nth(0).getAttribute('aria-pressed')) === 'false');
+  await liveTog.nth(1).click(); // the tomatoes: takes out q1, once
+  rows3 = await liveRows();
+  check('Live: toggling a linked ingredient removes that one question', rows3.length === 2 && !rows3.some((r) => /tomatoes before the eggs/.test(r)) && (await liveTog.nth(1).getAttribute('aria-pressed')) === 'false');
+  await liveTog.nth(1).click(); // and puts the same question back
+  rows3 = await liveRows();
+  check('Live: toggling it again restores that same question, once', rows3.length === 3 && rows3.filter((r) => /tomatoes before the eggs/.test(r)).length === 1);
+  await liveTog.nth(0).click({ force: true }); // the eggs, at the cap
+  check('Live: at the cap, another part does not join', (await liveRows()).length === 3);
+  await kid.getByRole('button', { name: 'Ask Mom', exact: true }).click();
+  check('Live: "She’ll see your guess and 3 questions."', (await kid.getByRole('dialog').innerText()).includes('She’ll see your guess and 3 questions.'));
+  await kid.getByRole('dialog').getByRole('button', { name: 'Copy link' }).click();
+  await kid.waitForTimeout(800);
+  const liveAsked = fake.cards.get(liveToken).asked;
+  check('Live: the ask has no duplicates (q1, q2, q3 once each)', liveAsked.map((q) => q.id).sort().join() === 'q1,q2,q3', JSON.stringify(liveAsked));
+  await kid.keyboard.press('Escape');
+
   // No one in particular: a plain title, asking off until someone is picked.
   await kid.goto(`${BASE}/miss`, { waitUntil: 'networkidle' });
   await kid.getByRole('button', { name: 'No one in particular' }).click();

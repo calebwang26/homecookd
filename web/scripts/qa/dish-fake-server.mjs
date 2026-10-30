@@ -41,7 +41,7 @@ const ing = (name, amount, status, ask = null) => ({ name, amount, status, isGue
 const line = (text, short, ask = null) => ({ text, short, detail: null, status: 'guessed', isGuess: true, ask, clip: null, was: null, quote: null });
 
 function guessFor(dish) {
-  return {
+  const g = {
     dish: dish.replace(/^\s*(my\s+)?(mom|dad|grandma|grandpa|auntie|uncle)['’]?s\s+/i, '').trim() || 'tomato egg',
     servings: '1',
     time: '~20 min',
@@ -66,6 +66,22 @@ function guessFor(dish) {
       { id: 'q3', text: 'When do the eggs go back in?' },
     ],
   };
+  // A card as the live server writes them: two parts point at one question (ingredient and line), so a question
+  // must count once. Triggered by "live" in the dish name.
+  if (/\blive\b/i.test(dish)) {
+    g.ingredients[2].ask = null;
+    g.ingredients[1].ask = 'q1';
+    g.steps[1].lines[0].ask = 'q1';
+    g.ingredients[3].ask = 'q2';
+    g.steps[2].lines[0].ask = 'q2';
+    g.steps[3].lines[0].ask = 'q3';
+    g.questions = [
+      { id: 'q1', text: 'How do you cook the tomatoes before the eggs go in?' },
+      { id: 'q2', text: 'How much sugar do you add to the tomatoes?' },
+      { id: 'q3', text: 'How do you know when the eggs are done?' },
+    ];
+  }
+  return g;
 }
 
 /** The guess in Hindi, as the server's translation would give it: ids, statuses and ** kept. */

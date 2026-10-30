@@ -31,40 +31,66 @@ export function openCap(card: Pick<Card, 'answers'>): number {
   return Math.max(0, Math.min(ASK_OPEN_MAX, ASK_TOTAL_MAX - card.answers.length));
 }
 
-/** What starts chosen: the questions already asked and not answered yet, else the 3 suggested gaps. */
-export function initialPicked(card: Pick<Card, 'guess' | 'asked' | 'answers'>): string[] {
-  const answered = new Set(card.answers.map((a) => a.id));
-  const ids = new Set((card.asked.length ? card.asked : card.guess.questions).filter((q) => !answered.has(q.id)).map((q) => q.id));
-  const out: string[] = [];
-  card.guess.ingredients.forEach((ing, i) => ing.ask && ids.has(ing.ask) && out.push(keyOf(ingredientRef(i))));
-  card.guess.steps.forEach((st, si) => st.lines.forEach((l, li) => l.ask && ids.has(l.ask) && out.push(keyOf(lineRef(si, li)))));
-  return out;
+/**
+ * What the kid chooses to ask is a list of units, never a part counted twice: a question's id ("q1"), or a part's key
+ * ("i0", "l2.1") for a part with no question (the server writes one, `about`). Several parts can point at the same
+ * question (`ask`): they all stand for that one question.
+ */
+export function knownQuestions(card: Pick<Card, 'guess' | 'asked'>): Question[] {
+  const seen = new Set<string>();
+  return [...card.asked, ...card.guess.questions].filter((q) => !seen.has(q.id) && !!seen.add(q.id));
 }
 
 /** The question a part carries (a suggestion or one asked before), else null. */
 function questionOf(card: Pick<Card, 'guess' | 'asked'>, part: Ingredient | Line): Question | null {
-  if (!part.ask) return null;
-  return card.asked.find((q) => q.id === part.ask) ?? card.guess.questions.find((q) => q.id === part.ask) ?? null;
+  return part.ask ? (knownQuestions(card).find((q) => q.id === part.ask) ?? null) : null;
 }
 
-/** The question as it would be asked: the part's own question, else the server's template (§10). */
-export function questionText(card: Pick<Card, 'guess' | 'asked'>, guess: Recipe, ref: PartRef): string {
+/** What a part stands for when chosen: the question it carries, else the part itself. */
+export function unitOf(card: Pick<Card, 'guess' | 'asked'>, guess: Recipe, ref: PartRef): string {
   const part = partOf(guess, ref);
-  if (!part) return '';
-  const own = questionOf(card, part);
+  return (part && questionOf(card, part)?.id) || keyOf(ref);
+}
+
+/** What starts chosen: the questions already asked and not answered yet, else the 3 suggested ones. */
+export function initialPicked(card: Pick<Card, 'guess' | 'asked' | 'answers'>): string[] {
+  const answered = new Set(card.answers.map((a) => a.id));
+  return (card.asked.length ? card.asked : card.guess.questions).filter((q) => !answered.has(q.id)).map((q) => q.id);
+}
+
+/** The chosen units as they stand now: a part that has gained a question becomes that question, no repeats, none answered or gone. */
+export function cleanPicked(card: Pick<Card, 'guess' | 'asked' | 'answers'>, guess: Recipe, picked: string[]): string[] {
+  const known = new Set<string>(knownQuestions(card).map((q) => q.id));
+  const answered = new Set<string>(card.answers.map((a) => a.id));
+  const out: string[] = [];
+  for (const key of picked) {
+    const ref = refOf(key);
+    if (ref ? !partOf(guess, ref) : !known.has(key)) continue;
+    const unit = ref ? unitOf(card, guess, ref) : key;
+    if (!answered.has(unit) && !out.includes(unit)) out.push(unit);
+  }
+  return out;
+}
+
+/** The question as it would be asked: the question's own words, else the server's template for the part (§10). */
+export function unitText(card: Pick<Card, 'guess' | 'asked'>, guess: Recipe, unit: string): string {
+  const own = knownQuestions(card).find((q) => q.id === unit);
   if (own) return own.text;
+  const ref = refOf(unit);
+  const part = ref && partOf(guess, ref);
+  if (!ref || !part) return '';
   if (ref.kind === 'ingredient') return `How much ${(part as Ingredient).name.split(',')[0].trim()} do you use?`;
   return `How do you do this part: ${plain((part as Line).text).slice(0, 60)}?`;
 }
 
-/** As POST /dish/cards/ask takes them: a part that has a question keeps its id and words, any other goes as `about`. */
-export function askItems(card: Pick<Card, 'guess' | 'asked'>, guess: Recipe, picked: string[]): AskItem[] {
-  return picked.flatMap((key): AskItem[] => {
-    const ref = refOf(key);
-    const part = ref && partOf(guess, ref);
-    if (!ref || !part) return [];
-    const q = questionOf(card, part);
-    return [q ? { id: q.id, text: q.text } : { about: ref }];
+/** As POST /dish/cards/ask takes them, one per unit: a question keeps its id and words, a part goes as `about`. */
+export function askItems(card: Pick<Card, 'guess' | 'asked'>, guess: Recipe, units: string[]): AskItem[] {
+  const known = knownQuestions(card);
+  return units.flatMap((unit): AskItem[] => {
+    const q = known.find((k) => k.id === unit);
+    if (q) return [{ id: q.id, text: q.text }];
+    const ref = refOf(unit);
+    return ref && partOf(guess, ref) ? [{ about: ref }] : [];
   });
 }
 
