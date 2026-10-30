@@ -716,6 +716,7 @@ const words: Translation = {
   'messages.bubble.namePhoto': '{name} 님이 찍은 요리 사진',
   'messages.bubble.theyPhoto': '상대방이 찍은 요리 사진',
   'messages.bubble.howClose': '내 요리와 얼마나 비슷한가요',
+  'messages.bubble.rating': '노른자 {max}개 중 {n}개',
   'messages.log.waiting': '{when} · 답을 기다리고 있어요',
   'messages.log.sent': '{time} · 보냄',
   'messages.log.answeredByYou': '내가 답했어요',

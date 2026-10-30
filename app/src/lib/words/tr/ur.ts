@@ -716,6 +716,7 @@ const words: Translation = {
   'messages.bubble.namePhoto': 'ڈش کی {name} کی تصویر',
   'messages.bubble.theyPhoto': 'ڈش کی ان کی تصویر',
   'messages.bubble.howClose': 'آپ والے سے کتنا ملتا ہے',
+  'messages.bubble.rating': '{max} میں سے {n} زردیاں',
   'messages.log.waiting': '{when} · آپ کا انتظار ہے',
   'messages.log.sent': '{time} · بھیج دیا',
   'messages.log.answeredByYou': 'آپ نے جواب دیا',

@@ -716,6 +716,7 @@ const words: Translation = {
   'messages.bubble.namePhoto': '{name}拍的菜',
   'messages.bubble.theyPhoto': '对方拍的菜',
   'messages.bubble.howClose': '和您做的有多像',
+  'messages.bubble.rating': '{max} 个蛋黄中的 {n} 个',
   'messages.log.waiting': '{when} · 等您回复',
   'messages.log.sent': '{time} · 已发送',
   'messages.log.answeredByYou': '您已回答',

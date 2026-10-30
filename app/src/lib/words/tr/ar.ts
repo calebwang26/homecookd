@@ -716,6 +716,7 @@ const words: Translation = {
   'messages.bubble.namePhoto': 'صورة {name} للطبق',
   'messages.bubble.theyPhoto': 'صورتهم للطبق',
   'messages.bubble.howClose': 'ما مدى قربه من طبقك',
+  'messages.bubble.rating': '{n} من {max} صفار بيض',
   'messages.log.waiting': '{when} · بانتظارك',
   'messages.log.sent': '{time} · أُرسلت',
   'messages.log.answeredByYou': 'الإجابة منك',

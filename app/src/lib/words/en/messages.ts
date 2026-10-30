@@ -195,6 +195,8 @@ export const MESSAGES = {
   'messages.bubble.namePhoto': '{name}’s photo of the dish',
   'messages.bubble.theyPhoto': 'Their photo of the dish',
   'messages.bubble.howClose': 'How close to yours',
+  // What a screen reader says for the rating's little yolks (TODO(caleb): the rating's shape).
+  'messages.bubble.rating': '{n} of {max} yolks',
 
   // The conversation's status lines (ChatLog.tsx).
   'messages.log.waiting': '{when} · waiting for you',
