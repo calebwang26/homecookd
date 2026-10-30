@@ -1144,3 +1144,71 @@ test("Mom's version is translated into her page's language before it's saved, so
   expect(ask.inLang.version.ingredients[0].name).toBe(`[hi] ${ask.version.ingredients[0].name}`);
   expect(ask.inLang.guess.ingredients[0].name).toBe(`[hi] ${ask.guess.ingredients[0].name}`);
 });
+
+// ---------------------------------------------------------------------------------------------
+// §10: the kid shapes the card
+
+test("no one in particular: asking is off (no link, no message) until the kid picks someone; then it's on", async () => {
+  const t = newBackend();
+  const r = await post(t, "/dish/cards", { dish: "tomato egg", kidName: "Caleb", relation: "none" });
+  expect(r.status).toBe(201);
+  const { kidToken } = r.data;
+  expect(r.data.card).toMatchObject({ relation: "none", askUrl: null, message: "" });
+  expect(await askMom(t, kidToken, MOM_ASKED)).toMatchObject({ status: 400, data: { error: "Pick who you're asking first." } });
+  expect(await post(t, "/dish/cards/sent", { kidToken, via: "sms" })).toMatchObject({ status: 400 });
+  const picked = (await post(t, "/dish/cards/update", { kidToken, relation: "grandma" })).data.card;
+  expect(picked.askUrl).toMatch(/\/a\?t=/);
+  expect(picked.message).toMatch(/^Grandma, how do you make your/);
+  expect((await post(t, "/dish/cards/sent", { kidToken, via: "sms" })).status).toBe(200);
+  expect(await post(t, "/dish/cards/update", { kidToken, relation: "none" })).toMatchObject({ status: 409 });
+});
+
+test("the kid asks about any part of the guess: a template question (or their words) linked to that part", async () => {
+  const t = newBackend();
+  const { kidToken, card } = await makeCard(t);
+  const name = card.guess.ingredients[1].name.split(",")[0].trim();
+  const r = await askMom(t, kidToken, [
+    { about: { kind: "ingredient", index: 1 } },
+    { about: { kind: "line", step: 0, line: 0 }, text: "Do you stir it the whole time?" },
+  ]);
+  expect(r.status, JSON.stringify(r.data)).toBe(200);
+  expect(r.data.card.asked).toEqual([
+    { id: "q4", text: `How much ${name} do you use?` },
+    { id: "q5", text: "Do you stir it the whole time?" },
+  ]);
+  expect(r.data.card.guess.ingredients[1].ask).toBe("q4");
+  expect(r.data.card.guess.steps[0].lines[0].ask).toBe("q5");
+  expect(await askMom(t, kidToken, [{ about: { kind: "ingredient", index: 99 } }])).toMatchObject({ status: 400 });
+  expect(await askMom(t, kidToken, [{ about: { kind: "line", step: 0, line: 0 }, text: "fuck this" }])).toMatchObject({ status: 422 });
+  expect(await askMom(t, kidToken, [{ id: "q1", about: { kind: "ingredient", index: 0 }, text: "How much?" }])).toMatchObject({ status: 400 });
+});
+
+test("the kid edits the guess: their fixes are stated, word-filtered and size-capped; closed after Send; strangers refused", async () => {
+  const t = newBackend();
+  const { kidToken, askToken, card } = await askedCard(t);
+  const r = await post(t, "/dish/cards/update", {
+    kidToken,
+    edits: [
+      { kind: "ingredient", index: 0, amount: "3" },
+      { kind: "line", step: 0, line: 0, text: "Beat **3** eggs with a fork" },
+    ],
+  });
+  expect(r.status, JSON.stringify(r.data)).toBe(200);
+  expect(r.data.card.guess.ingredients[0]).toMatchObject({ name: card.guess.ingredients[0].name, amount: "3", status: "stated", isGuess: false });
+  expect(r.data.card.guess.steps[0].lines[0]).toMatchObject({ text: "Beat **3** eggs with a fork", detail: null, status: "stated", isGuess: false });
+  expect((await peek(t, askToken)).guess.ingredients[0]).toMatchObject({ amount: "3", isGuess: false });
+
+  const bad = (edits: unknown) => post(t, "/dish/cards/update", { kidToken, edits });
+  expect(await bad([{ kind: "ingredient", index: 0, name: "fucking salt" }])).toMatchObject({ status: 422 });
+  expect(await bad([{ kind: "ingredient", index: 0, amount: "x".repeat(41) }])).toMatchObject({ status: 400 });
+  expect(await bad([{ kind: "line", step: 0, line: 0, text: "x".repeat(81) }])).toMatchObject({ status: 400 });
+  expect(await bad([{ kind: "ingredient", index: 99, amount: "2" }])).toMatchObject({ status: 400 });
+  expect(await bad([{ kind: "ingredient", index: 0 }])).toMatchObject({ status: 400 });
+  expect(await bad(Array.from({ length: 21 }, () => ({ kind: "ingredient", index: 0, amount: "2" })))).toMatchObject({ status: 400 });
+  expect(await post(t, "/dish/cards/update", { kidToken: "A".repeat(22), edits: [{ kind: "ingredient", index: 0, amount: "2" }] }))
+    .toMatchObject({ status: 404 });
+
+  expect((await answer(t, askToken, "q1")).status).toBe(200);
+  expect((await finish(t, askToken)).status).toBe(200);
+  expect(await bad([{ kind: "ingredient", index: 0, amount: "4" }])).toMatchObject({ status: 409 });
+});

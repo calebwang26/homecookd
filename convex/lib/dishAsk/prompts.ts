@@ -85,6 +85,9 @@ recipe:
       **medium-high**", "Simmer **5 min**, until saucy". The ** hold the amount and its unit alone,
       never the ingredient: "**2** eggs", "**1/2 cup** rice", "**1 tbsp** ketchup", never "**2 eggs**",
       "**1/2 cup rice**" or "**salt**".
+    - short: the same substep for the card, at most about 6 words (40 characters), one action, plain words
+      and no filler: "Scramble eggs **soft**", "Simmer **10 min** covered". ** only around amounts, heat and times
+      the text has, and no number, heat or time the text doesn't have.
     - detail: the same substep in fuller words (at most ${LIMITS.lineDetail} characters, ** the same way), where
       a new cook would ask "how?": it adds the how-to the text leaves out (the heat, the timing, the
       technique, what to watch for), never another action or ingredient: "Heat **1 tbsp** oil on
@@ -193,6 +196,7 @@ Return JSON matching the schema:
   a line with one that isn't stays the draft's. detail: the same line in fuller words (at most ${LIMITS.lineDetail}
   characters, ** the same way), in ${cook}'s words, keeping every amount, heat and time of text word for
   word, only when the answer adds a real how-to (heat, timing, technique, what to watch for); else null.
+  short: the line for the card, at most about 6 words (40 characters), ** only where text has it.
   clip. quote and quote_english: as for ingredients.
   A step holds at most 3 lines, plus its "Ready when" line: when it is full, fold what ${cook} said
   into the line it belongs with, or make it the step's tip.

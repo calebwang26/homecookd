@@ -501,3 +501,28 @@ test("translateForMom: no key or a failed call gives null (her page shows Englis
   stubClaude(() => new Response("{}", { status: 400 }));
   expect(await translateForMom(forMom(), "hi", spent())).toBeNull();
 });
+
+// ---------------------------------------------------------------------------------------------
+// The card's short lines (DISH-ASK-SPEC.md §10)
+
+test("cleanShort: about 6 words, bold and numbers only from the line itself, else null", async () => {
+  const { cleanShort } = await import("./lib/dishAsk/validate");
+  const line = "Stir-fry **2** tomatoes with **1 tsp** sugar on **medium-high**";
+  expect(cleanShort("Fry **2** tomatoes, **1 tsp** sugar", line)).toBe("Fry **2** tomatoes, **1 tsp** sugar");
+  expect(cleanShort("Fry **3** tomatoes", line), "a number the line doesn't have").toBeNull();
+  expect(cleanShort("Fry on **low**", line), "bold the line doesn't have").toBeNull();
+  expect(cleanShort("Fry the tomatoes with the sugar until it all turns saucy", line), "too long").toBeNull();
+  expect(cleanShort("", line)).toBeNull();
+  expect(cleanShort(undefined, line)).toBeNull();
+});
+
+test("the guess keeps a short line that checks out, and drops one that doesn't", () => {
+  const raw = fakeGuessAnswer() as any;
+  const first = raw.recipe.steps[0].lines[0];
+  first.short = "Quick version";
+  raw.recipe.steps[0].lines[1].short = "Add **999** eggs";
+  const r = checkDraft(raw, DISH);
+  if (!r.ok || r.notADish) throw new Error("the canned guess should pass");
+  expect(r.recipe.steps[0].lines[0].short).toBe("Quick version");
+  expect(r.recipe.steps[0].lines[1].short).toBeNull();
+});

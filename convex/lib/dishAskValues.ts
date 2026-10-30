@@ -11,6 +11,7 @@ export const relationV = v.union(
   v.literal("grandpa"),
   v.literal("auntie"),
   v.literal("uncle"),
+  v.literal("none"),
 );
 export const questionIdV = v.union(v.literal("q1"), v.literal("q2"), v.literal("q3"), v.literal("q4"), v.literal("q5"), v.literal("q6"));
 const statusV = v.union(v.literal("stated"), v.literal("guessed"), v.literal("unknown"), v.literal("mom"));
@@ -22,7 +23,7 @@ const tipV = v.object({ words: v.string(), english: maybeText, clip: questionIdV
 /** A short piece of her answer, word for word in her language, and its English (null when she spoke English). */
 const quoteV = v.object({ words: v.string(), english: maybeText });
 const ingredientFields = { name: v.string(), amount: v.string(), status: statusV, ask: linkV, clip: linkV };
-const lineFields = { text: v.string(), detail: maybeText, status: statusV, ask: linkV, clip: linkV };
+const lineFields = { text: v.string(), detail: maybeText, short: v.optional(maybeText), status: statusV, ask: linkV, clip: linkV };
 /** Mom's version only, on what her answer changed: the guess's value it replaced, and her words that settled it. */
 const changeFields = { was: v.optional(maybeText), quote: v.optional(v.union(quoteV, v.null())) };
 const shownChangeFields = { was: maybeText, quote: v.union(quoteV, v.null()), isGuess: v.boolean() };
@@ -92,7 +93,7 @@ export const cardV = v.object({
   kidVoiceUrl: maybeText,
   kidVoiceS: v.union(v.number(), v.null()), // its length in seconds, as the page measured it
   photoUrls: v.array(v.string()),
-  askUrl: v.string(),
+  askUrl: v.union(v.string(), v.null()), // null while relation is "none"
   askedAt: v.union(v.number(), v.null()),
   openedAt: v.union(v.number(), v.null()),
   finishedAt: v.union(v.number(), v.null()),
@@ -152,7 +153,7 @@ export function storedRecipe(r: MissRecipe): StoredRecipe {
     ingredients: r.ingredients.map((i) => ({ name: i.name, amount: i.amount, status: i.status, ask: i.ask, clip: i.clip, ...changeOf(i) })),
     steps: r.steps.map((s) => ({
       title: s.title,
-      lines: s.lines.map((l) => ({ text: l.text, detail: l.detail, status: l.status, ask: l.ask, clip: l.clip, ...changeOf(l) })),
+      lines: s.lines.map((l) => ({ text: l.text, detail: l.detail, short: l.short ?? null, status: l.status, ask: l.ask, clip: l.clip, ...changeOf(l) })),
       uses: [...s.uses],
       tip: s.tip ? { words: s.tip.words, english: s.tip.english, clip: s.tip.clip } : null,
     })),

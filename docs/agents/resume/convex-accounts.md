@@ -17,6 +17,14 @@ Nothing is pushed: the push freeze holds until Apple approves 1.0.
 - **Live model checks:** about $0.13 of the $10 test budget.
 
 ## Next
+0. **First after the reset** (Oct 30, 12:00 UTC):
+   - **`short` on each step line:** about 6 words at most, for the guess, Mom's version and `inLang`. The ask
+     came from App Store, web & builds, from Caleb's "the page feels very recipe-y, unpersonalized and wordy".
+     - Model it on `pipeline/shorten.py`'s rules, inside the same structured guess and merge calls.
+     - Translate it in `translateForMom`.
+     - The web treats it as optional.
+     - Spec it in §10 first, then send that chat the commit.
+   - **PR #171** (§10: relation none, `about`, `edits`): wait for the Master Agent's review.
 1. Wait for the Master Agent's integration ping (combining branches for the v2 batch).
 2. Merge notes for the Merge Agent:
    - `pushEvents.requested` is a marked comment in `convex/dishAsks.ts` `create`. It becomes a call once
