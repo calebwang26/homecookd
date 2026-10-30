@@ -154,7 +154,7 @@ try {
 
   await kid.getByLabel('The dish you miss').fill('mom’s tomato egg');
   await kid.getByRole('button', { name: 'Make my recipe' }).click();
-  await kid.getByText('Tonight’s version').waitFor({ timeout: 15000 });
+  await kid.getByText('Our guess. Mom knows the rest.').waitFor({ timeout: 15000 });
   check('K2: the address carries the kid token', /\/miss\?k=[A-Za-z0-9]{22}$/.test(kid.url()), kid.url());
   const kidUrl = kid.url();
   const k2 = await kid.locator('main').innerText();
@@ -162,12 +162,21 @@ try {
   check('K2: guessed amounts keep their "~"', /~1 tbsp\s*ketchup/.test(k2));
   const rows = await kid.locator('main li').allInnerTexts();
   check('K2: an unknown amount shows the name only', rows.some((r) => /^sugar\b/.test(r.trim())), rows.join(' | '));
-  check('K2: "We guessed. Mom knows."', k2.includes('We guessed. Mom knows.'));
+  check('K2: one label, "Our guess. Mom knows the rest."', k2.includes('Our guess. Mom knows the rest.') && !/Tonight’s version|best guess|We guessed/.test(k2));
+  check('K2: a short step, "Scramble eggs soft. Set aside.", with its bold piece set in bold and no raw asterisks', k2.includes('Scramble eggs soft. Set aside.') && !k2.includes('**') && (await kid.locator('main ol b', { hasText: 'soft' }).count()) >= 1);
   check('K2: "4 steps"', k2.includes('4 steps'));
-  check('K2: Ask Mom tags on the asked rows', (await kid.getByRole('button', { name: 'Ask Mom' }).count()) >= 3);
+  check('K2: "Only Mom knows" lists the 3 suggested questions', k2.includes('Only Mom knows') && k2.includes('Do you add sugar?') && k2.includes('How much ketchup do you put in?'));
+  check('K2: a toggle on every ingredient', (await kid.getByRole('button', { name: 'Ask Mom about this' }).count()) === 6);
   check('K2: no stock photo stands in for their dish', (await strayStock(kid)).length === 0 && (await kid.locator('main img').count()) === 0);
   await shot(kid, 'K2-tonight');
   await shot(kid, 'K2-tonight-full', { full: true });
+
+  // The kid fixes the salt: it is his own now (no "~", a small "you"), and Mom sees it under "Caleb thinks…".
+  await kid.getByRole('button', { name: /^Fix: .*salt/ }).click();
+  await kid.getByLabel('Amount').fill('1 tsp');
+  await kid.keyboard.press('Enter');
+  await kid.locator('main li[class*="row"]', { hasText: 'salt' }).getByText('you', { exact: true }).waitFor({ timeout: 5000 });
+  check('K2: the fixed line is his own: "1 tsp salt", no "~"', /1 tsp\s*salt/.test(await kid.locator('main li[class*="row"]', { hasText: 'salt' }).innerText()) && !/~1 tsp/.test(await kid.locator('main').innerText()));
 
   // K4: Save
   await kid.getByRole('button', { name: 'Save', exact: true }).click();
@@ -219,7 +228,8 @@ try {
   await mom.getByRole('button', { name: 'See Caleb’s guess' }).click();
   await mom.getByText('Fix it with your voice').waitFor();
   const m2 = (await mom.getByRole('heading', { level: 1 }).innerText()).replace(/\s+/g, ' ');
-  check('M2: "Caleb thinks it’s …" names only guessed amounts', /^Caleb thinks it’s 1 tbsp ketchup\.$/.test(m2), m2);
+  check('M2: "Caleb thinks it’s …" names what he fixed, then what he is asked', /^Caleb thinks it’s 1 tsp salt and 1 tbsp ketchup\.$/.test(m2), m2);
+  check('M2: a check on what he fixed himself', (await mom.getByRole('img', { name: 'Caleb is sure' }).count()) === 1);
   check('M2: a "?" on each asked item', (await mom.getByRole('img', { name: 'Not sure' }).count()) === 3);
   check('M2: "3 quick questions. Just talk."', (await mom.getByText('3 quick questions. Just talk.').count()) === 1);
   check('M2: no stock photo', (await strayStock(mom)).length === 0);
@@ -355,12 +365,77 @@ try {
   await shot(kid, 'K1-spanish');
   await kid.getByLabel(/Idioma|Language/).selectOption('en');
 
+  // ── The kid shapes the card: what to ask, what to fix, and no one in particular ─────────────
+  console.log('Kid shapes the card');
+  await kid.goto(`${BASE}/miss`, { waitUntil: 'networkidle' });
+  await kid.getByLabel('The dish you miss').fill('mom’s tomato egg');
+  await kid.getByRole('button', { name: 'Make my recipe' }).click();
+  await kid.getByText('Our guess. Mom knows the rest.').waitFor({ timeout: 15000 });
+  const shapeToken = kid.url().split('k=')[1];
+  const block = kid.locator('section[aria-labelledby="knows"]');
+  const toggles = kid.getByRole('button', { name: 'Ask Mom about this' });
+  check('Shape: 3 suggested questions to start', (await block.locator('li').count()) === 3);
+  await toggles.nth(0).click({ force: true }); // the eggs, with 3 chosen already
+  check('Shape: at the cap, "Up to 3 questions" and still 3', (await block.innerText()).includes('Up to 3 questions') && (await block.locator('li').count()) === 3);
+  await block.getByRole('button', { name: 'Take this question out' }).nth(1).click(); // the sugar out
+  await toggles.nth(0).click(); // the eggs in
+  check('Shape: a tapped line joins the block, worded by the template', (await block.innerText()).includes('How much eggs do you use?') && (await block.locator('li').count()) === 3);
+  await shot(kid, 'S-only-mom-knows');
+  // A filtered word is refused with a toast, the line goes back; a real fix goes through.
+  await kid.getByRole('button', { name: /^Fix: .*salt/ }).click();
+  await kid.getByLabel('Amount').fill('shit');
+  await kid.keyboard.press('Enter');
+  await kid.getByText('Let’s keep it to the food.').first().waitFor({ timeout: 5000 });
+  check('Shape: a filtered word is refused, the line stays a guess', fake.cards.get(shapeToken).guess.ingredients[4].status === 'guessed');
+  await kid.getByRole('button', { name: /^Fix: .*salt/ }).click();
+  await kid.getByLabel('Amount').fill('1 tsp');
+  await kid.keyboard.press('Enter');
+  await kid.locator('main li[class*="row"]', { hasText: 'salt' }).getByText('you', { exact: true }).waitFor({ timeout: 5000 });
+  const salt = fake.cards.get(shapeToken).guess.ingredients[4];
+  check('Shape: the fix reached the server as his own', salt.status === 'stated' && salt.amount === '1 tsp' && !salt.isGuess, JSON.stringify(salt));
+  // A step shows its short form; a tap shows the full sentences.
+  check('Shape: a collapsed step is short', !(await kid.locator('main').innerText()).includes('Take them out.'));
+  await kid.getByRole('button', { name: /^Show the full step/ }).first().click();
+  check('Shape: a tap shows the full step', (await kid.locator('main').innerText()).includes('Take them out.'));
+  await kid.getByRole('button', { name: 'Ask Mom', exact: true }).click();
+  await kid.getByRole('dialog').getByRole('button', { name: 'Copy link' }).click();
+  await kid.waitForTimeout(800);
+  const shaped = fake.cards.get(shapeToken);
+  check('Shape: the share asked what he chose (q1, q3, then his own q4)', shaped.asked.map((q) => q.id).join() === 'q1,q3,q4', JSON.stringify(shaped.asked));
+  check('Shape: his own question points at the eggs', shaped.asked[2].text === 'How much eggs do you use?' && shaped.guess.ingredients[0].ask === 'q4');
+  await kid.keyboard.press('Escape');
+
+  // No one in particular: a plain title, asking off until someone is picked.
+  await kid.goto(`${BASE}/miss`, { waitUntil: 'networkidle' });
+  await kid.getByRole('button', { name: 'No one in particular' }).click();
+  await kid.getByLabel('The dish you miss').fill('tomato egg');
+  await kid.getByRole('button', { name: 'Make my recipe' }).click();
+  await kid.getByText('Our guess. The cook knows the rest.').waitFor({ timeout: 15000 });
+  const noneToken = kid.url().split('k=')[1];
+  const noneBlock = kid.locator('section[aria-labelledby="knows"]');
+  check('None: the title is just the dish', (await kid.getByRole('heading', { level: 1 }).innerText()).trim() === 'Tomato egg');
+  check('None: "Only the cook knows" and "Ask someone"', (await noneBlock.innerText()).includes('Only the cook knows') && (await kid.getByRole('button', { name: 'Ask someone', exact: true }).count()) === 1);
+  check('None: no ask link and no message yet', fake.cards.get(noneToken).relation === 'none' && fake.cards.get(noneToken).message === '');
+  await shot(kid, 'N-none-card');
+  for (let i = 0; i < 3; i++) await noneBlock.getByRole('button', { name: 'Take this question out' }).first().click();
+  check('None: nothing chosen turns Ask off and says what to do', (await kid.getByRole('button', { name: 'Ask someone', exact: true }).isDisabled()) && (await noneBlock.innerText()).includes('Tap + on anything to ask.'));
+  await kid.getByRole('button', { name: 'Ask someone about this' }).nth(0).click();
+  await kid.getByRole('button', { name: 'Ask someone', exact: true }).click();
+  await kid.getByText('Who do you want to ask?').waitFor();
+  await shot(kid, 'N-who');
+  await kid.getByRole('button', { name: 'Dad', exact: true }).click();
+  await kid.getByRole('dialog').getByRole('heading', { name: 'Ask Dad' }).waitFor({ timeout: 5000 });
+  const dad = fake.cards.get(noneToken);
+  check('None: picking Dad turns asking on and writes the message', dad.relation === 'dad' && dad.message.startsWith('Dad, how do you make your tomato egg?'), dad.message);
+  check('None: the Ask sheet shows that message', (await kid.getByRole('dialog').getByLabel('Your message').inputValue()).startsWith('Dad, how do you make'));
+  await kid.keyboard.press('Escape');
+
   // ── A Hindi phone: Mom's page in Hindi ──────────────────────────────────────────────────────
   console.log('Mom in Hindi');
   await kid.goto(`${BASE}/miss`, { waitUntil: 'networkidle' });
   await kid.getByLabel('The dish you miss').fill('mom’s tomato egg');
   await kid.getByRole('button', { name: 'Make my recipe' }).click();
-  await kid.getByText('Tonight’s version').waitFor({ timeout: 15000 });
+  await kid.getByText('Our guess. Mom knows the rest.').waitFor({ timeout: 15000 });
   await kid.locator('div').filter({ hasText: /^SaveAsk Mom$/ }).getByRole('button', { name: 'Ask Mom' }).click();
   await kid.getByRole('dialog').getByRole('button', { name: 'Copy link' }).click();
   await kid.waitForTimeout(600);
