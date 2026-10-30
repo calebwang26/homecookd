@@ -69,6 +69,8 @@ export const LIMITS = {
   name: 80,
   amount: 40,
   tip: 200,
+  /** a line's short version on the card, as read (about 6 words) */
+  short: 40,
   /** a change's quote (her words that settled it), as read */
   quote: 120,
   fact: 30,
@@ -306,6 +308,17 @@ export function readyLast(lines: MissLine[]): MissLine[] {
  * heat or times: it replaces the line on a tap, so the kid would lose them. (A "Ready when" line's
  * bold is its cue, which the fuller wording may say in other words.)
  */
+export function cleanShort(v: unknown, lineText: string): string | null {
+  const s = cleanBold(text(v));
+  if (!plain(s) || plain(s).length > LIMITS.short) return null;
+  const said = norm(lineText);
+  const bold = [...s.matchAll(/\*\*(.+?)\*\*/g)].map((m) => norm(m[1]));
+  const lineNumbers = new Set(numbersOf(lineText));
+  return bold.every((b) => said.includes(b)) && numbersOf(s).every((n) => lineNumbers.has(n)) ? s : null;
+}
+
+/** The short version of a line on the card (DISH-ASK-SPEC.md §10): at most LIMITS.short characters as read, with no
+ *  bold, number, heat or time the line itself doesn't have; else null (the card shows the line). Never a retry. */
 export function cleanDetail(v: unknown, lineText: string): string | null {
   let d = cleanBold(text(v));
   if (plain(d).length > LIMITS.lineDetail) {
@@ -478,7 +491,7 @@ export function checkDraft(raw: unknown, said: string): DraftCheck {
       if (!length || length > LIMITS.lineText) {
         errors.push(`steps[${i}].lines[${j}].text must be 1 to ${LIMITS.lineText} characters (got ${length}).`);
       }
-      return { text: t, detail: cleanDetail(l.detail, t), status: lineStatus(l.status), ask: ask(l.ask), clip: null };
+      return { text: t, detail: cleanDetail(l.detail, t), short: cleanShort(l.short, t), status: lineStatus(l.status), ask: ask(l.ask), clip: null };
     });
     if (lines.filter((l) => isReady(l.text)).length > 1) {
       errors.push(`steps[${i}]: at most one "Ready when" line, the last one.`);
@@ -702,7 +715,7 @@ export function applyMerge(
       detail = null;
     }
     const was = at >= 0 ? (draft.steps[s]?.lines[at]?.text ?? null) : null;
-    const mine: MissLine = { text: t, detail, status: "mom", ask: null, clip, was, quote: quoteOf(o, clip) };
+    const mine: MissLine = { text: t, detail, short: cleanShort(o.short, t), status: "mom", ask: null, clip, was, quote: quoteOf(o, clip) };
     if (step && at < 0 && m?.[2] === "new" && linesFit([...step.lines, mine])) {
       step.lines.push(mine);
     } else if (step && step.lines[at] && !touched.has(lineRef(s, at))) {
