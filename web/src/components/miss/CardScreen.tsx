@@ -106,6 +106,12 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
     document.title = title;
   }, [title]);
 
+  const back = (
+    <a className={`${ui.press} ${ui.round} ${s.back}`} href="/miss" aria-label={t('card.newDish')} onClick={(e) => onNewDish(e)}>
+      <IconBack size={22} />
+    </a>
+  );
+
   if (locked) return <KidRecipe card={card} token={token} version={recipe} onClose={closeRecipe} />;
 
   const ingProps = (i: number) => ({
@@ -118,12 +124,16 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
 
   return (
     <main className={s.card}>
-      <DishHero photoUrl={photo} alt={t('card.dishPhoto', { dish: card.dish })} title={title}>
-        <a className={`${ui.press} ${ui.round} ${s.back}`} href="/miss" aria-label={t('card.newDish')} onClick={(e) => onNewDish(e)}>
-          <IconBack size={22} />
-        </a>
-      </DishHero>
-      <section className={s.sheet}>
+      {/* A photo gets the hero. Without one, the dish name shows once, as the title (Caleb, Oct 30: the
+          name-on-white hero above it was redundant), and Back sits in a plain top row. */}
+      {photo ? (
+        <DishHero photoUrl={photo} alt={t('card.dishPhoto', { dish: card.dish })} title={title}>
+          {back}
+        </DishHero>
+      ) : (
+        <div className={s.topRow}>{back}</div>
+      )}
+      <section className={s.sheet} data-flat={photo ? undefined : ''}>
         {/* The version is one tap: the button covers it and opens the recipe as the locked view. */}
         <div className={s.head}>
           {card.version && (

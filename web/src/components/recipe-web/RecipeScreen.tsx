@@ -21,6 +21,10 @@ import s from './RecipeScreen.module.css';
 
 const HERO = 380;
 const HERO_MIN = 316;
+// No photo: no hero, only a short top row for Share and Heart (and the "sent you" chip), so the dish name
+// shows once, as the title (Caleb, Oct 30: the name on a big white card above it was redundant).
+const FLAT = 128;
+const FLAT_SENT = 176;
 
 /** The app's ShareIcon (Hearth bible stroke, 24 viewBox). */
 function IconShare() {
@@ -95,18 +99,15 @@ export function RecipeScreen() {
       <motion.div
         ref={heroRef}
         className={s.hero}
-        style={{ height: heroH }}
+        data-flat={poster ? undefined : ''}
+        style={{ height: poster ? heroH : sender ? FLAT_SENT : FLAT }}
         initial={reduced ? { opacity: 0 } : { opacity: 0.6, scale: 0.96, y: 16 }}
         animate={{ opacity: 1, scale: 1, y: 0 }}
         transition={reduced ? { duration: 0.15 } : { type: 'spring', damping: 18, stiffness: 180 }}
       >
-        {poster ? (
+        {poster && (
           // eslint-disable-next-line @next/next/no-img-element
           <img className={s.heroImg} src={poster} alt={dish ? r.title : `${r.title}, from ${possessive(cook)} kitchen`} />
-        ) : (
-          <div className={s.heroEmpty} aria-hidden="true">
-            <span className={s.heroEmptyName}>{r.title}</span>
-          </div>
         )}
         {sender && (
           <motion.div
@@ -129,7 +130,7 @@ export function RecipeScreen() {
         </button>
       </motion.div>
 
-      <div className={s.sheet}>
+      <div className={s.sheet} data-flat={poster ? undefined : ''}>
         <motion.div className={s.titleBlock} {...rise(0)}>
           <h1 className={s.title}>{r.title}</h1>
           <div className={s.meta}>

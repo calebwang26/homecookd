@@ -442,6 +442,16 @@
   background: #fbf5ea;
   padding: 28px 24px 0;
 }
+/* No photo: no hero to overlap, so the sheet starts under the top row. */
+.sheet[data-flat] {
+  margin-top: 0;
+  border-radius: 0;
+  padding-top: 4px;
+}
+.topRow {
+  position: relative;
+  height: 76px;
+}
 /* The card's head (version pill, title, byline) is one tap into the locked recipe view. */
 .head {
   position: relative;
@@ -500,7 +510,7 @@
   overflow-wrap: anywhere;
 }
 .byline {
-  margin-top: 10px;
+  margin-top: 18px;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -1026,4 +1036,25 @@
 }
 .stepChevron[data-open] svg {
   transform: rotate(180deg);
+}
+
+/* ---------- Making: the egg fills with yolk (EggFill) ---------- */
+.eggFillLevel {
+  transition: transform 500ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.eggFillWave {
+  animation: eggWave 2.4s linear infinite;
+}
+@keyframes eggWave {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    transform: translateX(-100px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .eggFillWave {
+    animation: none;
+  }
 }

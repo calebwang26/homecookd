@@ -16,6 +16,7 @@ import type { Card } from '@/lib/dish/types';
 import type { WordKey } from '@/lib/dish/words';
 import { AskScreen, type AskDraft } from './AskScreen';
 import { CardScreen } from './CardScreen';
+import { EggFill } from './EggFill';
 import ui from '@/components/dish/ui.module.css';
 import s from './miss.module.css';
 
@@ -24,7 +25,7 @@ type Failure = 'not-found' | 'offline' | 'rate';
 type View =
   | { name: 'boot' }
   | { name: 'ask' }
-  | { name: 'making' }
+  | { name: 'making'; done?: boolean }
   | { name: 'loading' }
   | { name: 'card'; token: string; card: Card }
   | { name: 'error'; failure: Failure; token: string | null };
@@ -129,6 +130,10 @@ function Miss() {
       if (id !== nav.current) return;
       window.history.replaceState(null, '', `${window.location.pathname}?k=${kidToken}`);
       setDraft(EMPTY);
+      // The egg fills to the top and grins, then the card.
+      show({ name: 'making', done: true });
+      await new Promise((r) => setTimeout(r, FILL_DONE_MS));
+      if (id !== nav.current) return;
       show({ name: 'card', token: kidToken, card });
     } catch (e) {
       if (id !== nav.current) return;
@@ -168,7 +173,7 @@ function Miss() {
           onSubmit={() => void submit()}
         />
       ) : view.name === 'making' ? (
-        <Making />
+        <Making done={!!view.done} />
       ) : view.name === 'loading' ? (
         <Skeleton />
       ) : view.name === 'card' ? (
@@ -180,11 +185,14 @@ function Miss() {
   );
 }
 
-function Making() {
+// How long the full egg shows before the card (its last rise is 500 ms).
+const FILL_DONE_MS = 700;
+
+function Making({ done }: { done: boolean }) {
   const { t } = useLang();
   return (
-    <main className={s.center} aria-busy="true">
-      <EggMascot size={120} mood="hello" />
+    <main className={s.center} aria-busy={!done}>
+      <EggFill size={140} done={done} label={t('making.title')} />
       <h1 className={s.centerTitle}>{t('making.title')}</h1>
     </main>
   );
