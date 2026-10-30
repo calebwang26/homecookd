@@ -2,7 +2,7 @@
 // English (the kid side stays English); Mom's side reads in her language. {who} is what the family calls her ("Mom").
 export const DISH = {
   'dish.back': 'Back',
-  'dish.yourKid': 'Your kid',
+  'dish.yourKid': 'Your loved one', // when the ask has no name: never a role (the cook may be a grandparent)
   'dish.yourDish': 'Your {dish}',
   'dish.whosDish': '{who}’s {dish}',
   'dish.forKid': 'Your {dish}, for {kid}',
