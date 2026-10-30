@@ -38,7 +38,7 @@ export function DishHero({ photoUrl, alt, height = 270, title, children }: { pho
         <img src={photoUrl} alt={alt} className={s.heroImg} />
       ) : (
         <span className={s.heroName} style={{ fontSize: Math.max(18, Math.min(40, Math.round(height * 0.15))) }} aria-hidden="true">
-          {height < 100 ? Array.from(title ?? '')[0] : title}
+          {height < 100 ? Array.from(title ?? '')[0]?.toUpperCase() : title}
         </span>
       )}
       {children}

@@ -326,8 +326,18 @@
 .nav[data-tone='hero'] .logo .lockupNormal {
   display: none;
 }
-@media (max-width: 479px) {
+/* Narrow phones: the mark alone (the kit allows it under ~360px; the nav also needs the room for the
+   "with Mom" picker and the CTA, so it steps aside under 400px) in a 48px target. */
+@media (max-width: 399.98px) {
+  .logo > span > img:first-child {
+    display: none;
+  }
+  .logo > span > img:last-child {
+    display: block;
+  }
   .logo {
-    padding-right: 2px;
+    min-width: 48px;
+    justify-content: center;
+    padding-right: 0;
   }
 }
