@@ -7,8 +7,8 @@ import { DishHero, Toast, useAudio, useToast } from '@/components/dish/parts';
 import { useLang, useRel } from '@/components/dish/lang';
 import { PotMascot } from '@/components/primitives/PotMascot';
 import { IconBack, IconClose, IconPause, IconPlay } from '@/components/recipe-web/icons';
-import { getCard } from '@/lib/dish/api';
-import { applyEdits, EDIT_LIMITS, initialPicked, ingredientRef, keyOf, lineRef, openCap, partOf, questionText, refOf, withEdit } from '@/lib/dish/shape';
+import { DishError, getCard, updateCard } from '@/lib/dish/api';
+import { applyEdits, askItems, EDIT_LIMITS, initialPicked, ingredientRef, keyOf, lineRef, openCap, partOf, questionText, refOf, withEdit } from '@/lib/dish/shape';
 import { boldRuns, cardTitle, plain } from '@/lib/dish/text';
 import type { Card, Edit, Ingredient, Line, PartRef, Quote, Recipe } from '@/lib/dish/types';
 import { AskSheet } from './AskSheet';
@@ -77,9 +77,19 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
     }
     setPicked([...chosen, k]);
   };
+  /** Fixing a line: shown at once, sent to the server, whose guess replaces it (a 422 or 409 undoes it, with a toast). */
   const edit = (e: Edit) => {
     setEdits((all) => withEdit(all, e));
     setEditing(null);
+    updateCard(token, { edits: [e] }).then(
+      (c) => (setCard(c), setEdits((all) => all.filter((x) => x !== e))),
+      (err: unknown) => {
+        setEdits((all) => all.filter((x) => x !== e));
+        const kind = err instanceof DishError ? err.kind : 'network';
+        show(kind === 'words' ? t('k1.words') : kind === 'closed' ? t('edit.closed', { R }) : t('share.failed'), 'error');
+        if (kind === 'closed') getCard(token).then(setCard, () => {});
+      },
+    );
   };
 
   const onSave = () => {
@@ -209,9 +219,6 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
                 {t('ask.cap', { n: cap })}
               </p>
             )}
-            <button type="button" className={`${ui.press} ${ui.primary}`} disabled={!chosen.length} onClick={onAsk}>
-              {askLabel}
-            </button>
           </section>
         )}
 
@@ -295,13 +302,13 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
           </svg>
           {t('card.save')}
         </button>
-        <button type="button" className={`${ui.press} ${ui.primary}`} onClick={onAsk}>
+        <button type="button" className={`${ui.press} ${ui.primary}`} disabled={!chosen.length} onClick={onAsk}>
           {askLabel}
         </button>
       </div>
 
       <WhoSheet open={who} onClose={closeWho} token={token} onPicked={pickedWho} toast={show} />
-      <AskSheet key={card.relation} open={asking} onClose={closeAsk} token={token} card={card} onCard={setCard} toast={show} count={chosen.length} />
+      <AskSheet key={card.relation} open={asking} onClose={closeAsk} token={token} card={card} onCard={setCard} toast={show} items={askItems(card, guess, chosen)} />
       <SaveSheet open={saving} onClose={closeSave} photo={photo} relation={card.relation} token={token} />
       <Toast toast={toast} />
     </main>

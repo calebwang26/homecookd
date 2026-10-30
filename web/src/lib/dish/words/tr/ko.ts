@@ -107,6 +107,7 @@ const words: Translation = {
   'edit.fix': '고치기',
   'edit.done': '완료',
   'edit.cancel': '취소',
+  'edit.closed': '{R}이(가) 이미 답을 보냈어요. 이제 바꿀 수 없어요.',
   'ask.name': '내 이름',
   'ask.namePlaceholder': '{R}에게 보일 이름',
   'ask.message': '보낼 메시지',

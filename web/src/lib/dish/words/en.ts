@@ -111,6 +111,7 @@ export const EN = {
   'edit.fix': 'Fix',
   'edit.done': 'Done',
   'edit.cancel': 'Cancel',
+  'edit.closed': '{R} already sent the answers. This can’t change now.',
   'ask.name': 'Your name',
   'ask.namePlaceholder': 'So {R} knows it’s you',
   'ask.message': 'Your message',

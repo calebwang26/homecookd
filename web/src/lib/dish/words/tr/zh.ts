@@ -105,6 +105,7 @@ const words: Translation = {
   'edit.fix': '修改',
   'edit.done': '完成',
   'edit.cancel': '取消',
+  'edit.closed': '{R}已经发来了回答，现在不能再改了。',
   'ask.name': '你的名字',
   'ask.namePlaceholder': '让{R}知道是你',
   'ask.message': '你的留言',

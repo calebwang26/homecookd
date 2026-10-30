@@ -105,6 +105,7 @@ const words: Translation = {
   'edit.fix': 'ਠੀਕ ਕਰੋ',
   'edit.done': 'ਹੋ ਗਿਆ',
   'edit.cancel': 'ਰੱਦ ਕਰੋ',
+  'edit.closed': '{R} ਨੇ ਜਵਾਬ ਭੇਜ ਦਿੱਤੇ ਹਨ। ਹੁਣ ਇਹ ਬਦਲ ਨਹੀਂ ਸਕਦਾ।',
   'ask.name': 'ਤੁਹਾਡਾ ਨਾਮ',
   'ask.namePlaceholder': 'ਤਾਂ ਜੋ {R} ਜਾਣ ਲੈਣ ਕਿ ਇਹ ਤੁਸੀਂ ਹੋ',
   'ask.message': 'ਤੁਹਾਡਾ ਸੁਨੇਹਾ',

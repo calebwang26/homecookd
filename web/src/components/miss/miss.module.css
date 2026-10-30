@@ -978,10 +978,6 @@
   opacity: 1;
   color: #9a4f47;
 }
-.knows > button:last-child {
-  margin-top: 16px;
-  width: 100%;
-}
 
 /* K2: a step shows its short form; a tap shows the full sentences, each one fixable and askable */
 .stepHit {

@@ -105,6 +105,7 @@ const words: Translation = {
   'edit.fix': 'Ayusin',
   'edit.done': 'Tapos na',
   'edit.cancel': 'Kanselahin',
+  'edit.closed': 'Naipadala na ni {R} ang mga sagot. Hindi na ito mababago.',
   'ask.name': 'Pangalan mo',
   'ask.namePlaceholder': 'Para malaman ni {R} na ikaw ito',
   'ask.message': 'Mensahe mo',

@@ -106,6 +106,7 @@ const words: Translation = {
   'edit.fix': 'صحّح',
   'edit.done': 'تم',
   'edit.cancel': 'إلغاء',
+  'edit.closed': '{R} أرسل الإجابات بالفعل. لا يمكن تغيير هذا الآن.',
   'ask.name': 'اسمك',
   'ask.namePlaceholder': 'ليظهر اسمك لدى {R}',
   'ask.message': 'رسالتك',

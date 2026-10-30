@@ -2,7 +2,7 @@
 // Ported from the MVP's lib/miss/text.ts (calebwang26/homecookd PR #40).
 import { possessive } from '@/lib/recipe-web/recipe';
 import { labelOf, type Relation as KinRelation } from '@/lib/relation';
-import type { AskItem, Card, Ingredient, Line, Question, QuestionId, Recipe, Relation } from './types';
+import type { Card, Ingredient, Line, Question, QuestionId, Recipe, Relation } from './types';
 
 export { labelOf, possessive };
 
@@ -71,13 +71,6 @@ export function clock(seconds: number): string {
 export function openQuestions(card: Pick<Card, 'asked' | 'answers'>): Question[] {
   const answered = new Set(card.answers.map((a) => a.id));
   return card.asked.filter((q) => !answered.has(q.id));
-}
-
-const SUGGESTION_IDS: QuestionId[] = ['q1', 'q2', 'q3'];
-
-/** As POST /dish/cards/ask takes them: a suggestion keeps its id, the kid's own goes without. */
-export function askList(list: Question[]): AskItem[] {
-  return list.map((o) => (SUGGESTION_IDS.includes(o.id) ? { id: o.id, text: o.text } : { text: o.text }));
 }
 
 /** What the asked questions would settle on the guess: the ingredient or line each one points at. */

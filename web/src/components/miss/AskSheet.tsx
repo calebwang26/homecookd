@@ -11,10 +11,10 @@ import { InstagramIcon, LinkIcon, MessageIcon, MoreIcon, WhatsAppIcon } from '@/
 import { useRecorder, canRecord } from '@/components/dish/useRecorder';
 import { IconPause, IconPlay } from '@/components/recipe-web/icons';
 import { copyText } from '@/lib/app-links';
-import { askQuestions, markSent, updateCard, uploadFile } from '@/lib/dish/api';
+import { askQuestions, getCard, markSent, updateCard, uploadFile } from '@/lib/dish/api';
 import { saveName, savedName } from '@/lib/dish/saved';
-import { askList, clock, openQuestions, pronounOf } from '@/lib/dish/text';
-import type { Card, SendVia } from '@/lib/dish/types';
+import { clock, openQuestions, pronounOf } from '@/lib/dish/text';
+import type { AskItem, Card, SendVia } from '@/lib/dish/types';
 import { MicIcon } from './AskScreen';
 import ui from '@/components/dish/ui.module.css';
 import s from './ask.module.css';
@@ -22,9 +22,9 @@ import s from './ask.module.css';
 const VOICE_MAX_MS = 60_000; // DISH-ASK-SPEC §4 /cards/update: a voice note for Mom is at most 60 s
 const HOLD_MS = 300;
 
-type Props = { open: boolean; onClose: () => void; token: string; card: Card; onCard: (c: Card) => void; toast: (m: string, tone?: 'success' | 'error') => void; count?: number };
+type Props = { open: boolean; onClose: () => void; token: string; card: Card; onCard: (c: Card) => void; toast: (m: string, tone?: 'success' | 'error') => void; /** what the kid chose to ask (shape.askItems), sent with the share */ items: AskItem[] };
 
-export function AskSheet({ open, onClose, token, card, onCard, toast, count }: Props) {
+export function AskSheet({ open, onClose, token, card, onCard, toast, items }: Props) {
   const { t } = useLang();
   const rel = useRel();
   const id = useId();
@@ -39,7 +39,7 @@ export function AskSheet({ open, onClose, token, card, onCard, toast, count }: P
   }, [card.kidName]);
 
   const open3 = openQuestions(card);
-  const n = count ?? (open3.length || card.guess.questions.length);
+  const n = items.length || open3.length;
   const pronoun = pronounOf(card.relation);
   const sees = pronoun === 'she' ? t('ask.seesShe', { n }) : pronoun === 'he' ? t('ask.seesHe', { n }) : t('ask.seesName', { R, n });
 
@@ -61,8 +61,9 @@ export function AskSheet({ open, onClose, token, card, onCard, toast, count }: P
     if (busy || !url) return;
     const text = `${message.trim() || card.message} ${url}`;
     saveEdits();
-    if (!card.asked.length || !open3.length) void askQuestions(token, askList(card.guess.questions)).then(onCard, () => {});
-    void markSent(token, via).then(onCard, () => {});
+    // The chosen questions go first, then the send is marked; once both are in, the card is read again (they race).
+    const asked = items.length ? askQuestions(token, items).then(onCard, () => {}) : Promise.resolve();
+    void Promise.all([asked, markSent(token, via).then(onCard, () => {})]).then(() => getCard(token).then(onCard, () => {}));
     if (via === 'copy') {
       void copyText(url).then((ok) => toast(ok ? t('share.copied') : t('share.noCopy'), ok ? 'success' : 'error'));
     } else if (via === 'sms') {
