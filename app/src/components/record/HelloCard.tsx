@@ -120,11 +120,11 @@ export function HelloCard({
             icon={<CloseIcon size={18} color={colors.muted} />}
           />
           <IconButton
-            tone="yolkTint"
+            tone="ink"
             size={52}
             accessibilityLabel={play.playing ? 'Pause your hello' : 'Hear your hello'}
             onPress={play.toggle}
-            icon={play.playing ? <PauseIcon size={20} color={colors.ink} /> : <PlayIcon size={20} color={colors.ink} />}
+            icon={play.playing ? <PauseIcon size={20} color={colors.page} /> : <PlayIcon size={20} color={colors.page} />}
           />
         </>
       ) : (
@@ -137,10 +137,10 @@ export function HelloCard({
             accessibilityLabel={recording ? 'Stop and keep your hello' : 'Tap to talk. Tap again to stop.'}
             style={[
               styles.mic,
-              recording ? { backgroundColor: colors.danger } : { backgroundColor: colors.yolkTint },
+              recording ? { backgroundColor: colors.danger } : { backgroundColor: colors.ink },
               rec.phase === 'unsupported' ? { opacity: 0.5 } : null,
             ]}>
-            {recording ? <StopIcon size={22} color={colors.card} /> : <MicIcon size={24} color={colors.ink} />}
+            {recording ? <StopIcon size={22} color={colors.card} /> : <MicIcon size={24} color={colors.page} />}
           </PressableScale>
         </View>
       )}

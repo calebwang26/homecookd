@@ -91,7 +91,7 @@ function InviteRow() {
         accessibilityHint="Add someone to your family on homecookd"
         style={styles.row}>
         <View style={styles.disc}>
-          <ShareIcon size={22} color={colors.ink} strokeWidth={2.2} />
+          <ShareIcon size={22} color={colors.page} strokeWidth={2.2} />
         </View>
         <Txt variant="title" weight={400} style={styles.rowText}>
           Invite family
@@ -111,6 +111,6 @@ const styles = StyleSheet.create({
   gutter: { marginHorizontal: space.gutter },
   // The inbox row's shape (ThreadRows: 80 tall, 56 disc, 14 gap).
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 80, paddingVertical: 12, paddingHorizontal: space.gutter },
-  disc: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.yolkTint },
+  disc: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.ink },
   rowText: { flex: 1, minWidth: 0 },
 });

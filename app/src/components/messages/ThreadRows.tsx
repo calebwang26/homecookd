@@ -5,7 +5,7 @@
 // always the newest message and its time (mine too: "You: …"), so a sent hello shows at once.
 // Circle senders come from the thread's members, then the family (former people included); an
 // unknown one fetches the family once and shows no name meanwhile, never "Family".
-// "New message" is the same shape: a tinted plus disc and its label.
+// "New message" is the same shape: an ink plus disc (a tint vanished into the cream page) and its label.
 import { StyleSheet, View } from 'react-native';
 
 import { Avatar, PlusIcon, PressableScale, Txt } from '@/components/ui';
@@ -136,7 +136,7 @@ export function NewMessageRow({ onPress }: { onPress: () => void }) {
       accessibilityHint={t('messages.inbox.newMessageHint')}
       style={styles.row}>
       <View style={styles.newDisc}>
-        <PlusIcon size={24} color={colors.ink} strokeWidth={2.2} />
+        <PlusIcon size={24} color={colors.page} strokeWidth={2.2} />
       </View>
       <Txt variant="title" weight={400} style={styles.text}>
         {t('messages.inbox.newMessage')}
@@ -194,6 +194,6 @@ const styles = StyleSheet.create({
   shrink: { flexShrink: 1 },
   time: { flexShrink: 0 },
   dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.yolk, marginLeft: 4 },
-  newDisc: { width: AVATAR, height: AVATAR, borderRadius: AVATAR / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.yolkTint },
+  newDisc: { width: AVATAR, height: AVATAR, borderRadius: AVATAR / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.ink },
   face: { position: 'absolute' },
 });

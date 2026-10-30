@@ -97,6 +97,8 @@ const styles = StyleSheet.create({
     paddingRight: 12,
     borderRadius: 20,
     backgroundColor: colors.yolkTint,
+    borderWidth: 1.5,
+    borderColor: colors.yolk, // a tint alone vanishes into cream and white
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,

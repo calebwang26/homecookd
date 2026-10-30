@@ -1,5 +1,6 @@
-// Home after she sent the craving link (docs/design/phase5-cold-parents, screen 3): a yolk-tint card, "Sent!" /
-// "We'll tell you when they pick a dish.", and a green "Send to someone else" that opens the sheet again.
+// Home after she sent the craving link (docs/design/phase5-cold-parents, screen 3): an ink card like the ask card it
+// replaces, "Sent!" / "We'll tell you when they pick a dish." in cream, and a yolk "Send to someone else" that opens
+// the sheet again.
 // Mounting it with CravingAskCard: see that file.
 import { StyleSheet, View } from 'react-native';
 import Animated from 'react-native-reanimated';
@@ -17,16 +18,16 @@ export function CravingSentCard({ onSendAgain, enterIndex = 0 }: { onSendAgain: 
           <CheckIcon size={24} strokeWidth={2.4} color={colors.ink} />
         </View>
         <View style={styles.words}>
-          <Txt size={20} weight={700} color={colors.ink}>
+          <Txt size={20} weight={700} color={colors.page}>
             {t('craving.sent.title')}
           </Txt>
-          <Txt size={18} leading={1.35} color={colors.ink}>
+          <Txt size={18} leading={1.35} color={colors.page}>
             {t('craving.sent.line')}
           </Txt>
         </View>
       </View>
       <PressableScale onPress={onSendAgain} accessibilityRole="button" style={styles.again}>
-        <Txt size={18} weight={700} color={colors.yolkDeep}>
+        <Txt size={18} weight={700} color={colors.yolk}>
           {t('craving.sent.again')}
         </Txt>
       </PressableScale>
@@ -35,7 +36,7 @@ export function CravingSentCard({ onSendAgain, enterIndex = 0 }: { onSendAgain: 
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: colors.yolkTint, borderRadius: radii.panel, padding: 22, gap: 14, boxShadow: shadows.cardRaised },
+  card: { backgroundColor: colors.ink, borderRadius: radii.panel, padding: 22, gap: 14, boxShadow: shadows.cardRaised },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   // The bible's waiting ring: a white disc in a yolk ring.
   check: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.card, boxShadow: shadows.ringYolk, alignItems: 'center', justifyContent: 'center' },

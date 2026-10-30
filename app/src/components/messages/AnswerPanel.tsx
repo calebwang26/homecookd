@@ -252,7 +252,7 @@ export function AnswerPanel({
         <View style={styles.typeRow}>
           {onAttach ? (
             <View style={styles.rowSlot}>
-              <AttachButton tone="well" onPress={() => setPicking(true)} />
+              <AttachButton tone="ink" onPress={() => setPicking(true)} />
             </View>
           ) : null}
           <View style={styles.field}>
@@ -280,7 +280,7 @@ export function AnswerPanel({
       <View style={styles.micRow}>
         {onAttach && !recording ? (
           <View style={styles.plus}>
-            <AttachButton tone="well" size={56} onPress={() => setPicking(true)} />
+            <AttachButton tone="ink" size={56} onPress={() => setPicking(true)} />
           </View>
         ) : null}
         <View>
