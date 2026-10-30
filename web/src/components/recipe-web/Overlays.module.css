@@ -52,13 +52,13 @@
   font-size: 22px;
   line-height: 1.2;
   letter-spacing: -0.01em;
-  color: #ffffff;
+  color: var(--ink);
 }
 .popLine {
   margin: 8px 0 0;
   font-size: 16px;
   line-height: 1.45;
-  color: rgba(255, 253, 247, 0.86);
+  color: var(--ink);
 }
 .popActions {
   margin-top: 16px;
@@ -71,7 +71,7 @@
   height: 48px;
   padding: 0 16px;
   border-radius: 999px;
-  color: #ffffff;
+  color: var(--ink);
   font-size: 16px;
   font-weight: 700;
 }
