@@ -7,8 +7,8 @@
   max-width: 430px;
   min-height: 100svh;
   margin: 0 auto;
-  background: #f7f7f2;
-  color: #2d3222;
+  background: #fbf5ea;
+  color: #1f2430;
   font-family: var(--ff-text);
   font-size: 16px;
   line-height: 1.35;
@@ -16,7 +16,7 @@
 
 @media (min-width: 600px) {
   .column {
-    box-shadow: 0 0 0 1px rgba(30, 36, 16, 0.04), 0 30px 80px rgba(30, 36, 16, 0.14);
+    box-shadow: 0 0 0 1px rgba(31, 36, 48, 0.04), 0 30px 80px rgba(31, 36, 48, 0.14);
   }
 }
 
@@ -32,7 +32,7 @@
 }
 
 .press:focus-visible {
-  outline: 3px solid #788c15;
+  outline: 3px solid #a3580c;
   outline-offset: 3px;
 }
 
@@ -45,8 +45,8 @@
   min-height: 60px;
   padding: 0 24px;
   border-radius: 999px;
-  background: #5b6f00;
-  color: #fffdf7;
+  background: var(--yolk);
+  color: var(--ink);
   font: 700 18px/1.2 var(--ff-text);
   box-shadow: 0 10px 24px rgba(52, 67, 12, 0.25);
   cursor: pointer;
@@ -67,10 +67,10 @@
   min-width: 92px;
   min-height: 60px;
   padding: 0 20px;
-  border: 1.5px solid rgba(30, 36, 16, 0.12);
+  border: 1.5px solid rgba(31, 36, 48, 0.12);
   border-radius: 999px;
-  background: #fffdf7;
-  color: #1e2410;
+  background: #ffffff;
+  color: #1f2430;
   font: 700 17px/1.2 var(--ff-text);
   cursor: pointer;
 }
@@ -88,8 +88,8 @@
   height: 48px;
   border-radius: 50%;
   background: rgba(255, 253, 247, 0.92);
-  color: #1e2410;
-  box-shadow: 0 4px 14px rgba(30, 36, 16, 0.08);
+  color: #1f2430;
+  box-shadow: 0 4px 14px rgba(31, 36, 48, 0.08);
   cursor: pointer;
 }
 
@@ -116,7 +116,7 @@
   height: 22px;
   margin: auto;
   border: 2.5px solid rgba(255, 253, 247, 0.35);
-  border-top-color: #fffdf7;
+  border-top-color: #ffffff;
   border-radius: 50%;
   animation: turn 800ms linear infinite;
 }

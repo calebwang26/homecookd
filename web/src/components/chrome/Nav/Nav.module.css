@@ -7,11 +7,11 @@
   --pill-h: 58px;
   /* float tone (default; also the server render) */
   --nav-fg: var(--ink);
-  --nav-hover: rgba(30, 36, 16, 0.06);
+  --nav-hover: rgba(31, 36, 48, 0.06);
   --picker-fg: var(--ink);
   --picker-label: var(--olive-ink);
   --picker-bg: var(--sage);
-  --picker-bg-hover: var(--lime-wash);
+  --picker-bg-hover: var(--sage-hover);
   --picker-border: transparent;
   --picker-focus: var(--focus-ring);
   position: fixed;
@@ -30,17 +30,17 @@
   --nav-hover: rgba(255, 253, 247, 0.14);
   --picker-fg: var(--cream);
   --picker-label: rgba(255, 253, 247, 0.86);
-  --picker-bg: rgba(20, 22, 12, 0.18);
+  --picker-bg: rgba(31, 36, 48, 0.18);
   --picker-bg-hover: rgba(255, 253, 247, 0.14);
   --picker-border: rgba(255, 253, 247, 0.62);
-  --picker-focus: var(--chartreuse);
+  --picker-focus: var(--yolk);
 }
 /* A soft olive veil behind the hero-tone nav keeps cream text AA on the brightest video frames. */
 .nav::before {
   content: '';
   position: absolute;
   inset: 0 0 -48px;
-  background: linear-gradient(180deg, rgba(20, 22, 12, 0.44) 0%, rgba(20, 22, 12, 0.3) 45%, rgba(20, 22, 12, 0) 100%);
+  background: linear-gradient(180deg, rgba(31, 36, 48, 0.44) 0%, rgba(31, 36, 48, 0.3) 45%, rgba(31, 36, 48, 0) 100%);
   opacity: 0;
   transition: opacity 360ms var(--ease-soft);
   pointer-events: none;
@@ -95,7 +95,7 @@
   backdrop-filter: blur(12px) saturate(1.15);
   box-shadow:
     0 0 0 1px var(--hairline),
-    0 14px 34px -22px rgba(30, 36, 16, 0.3);
+    0 14px 34px -22px rgba(31, 36, 48, 0.3);
   pointer-events: none;
   transition:
     opacity 360ms var(--ease-soft),
@@ -126,19 +126,6 @@
   border-radius: var(--r-sm);
   transition: color 300ms var(--ease-soft);
 }
-.mascot {
-  flex: none;
-  margin-top: -3px; /* optical: the steam curls make the pot look low */
-}
-.word {
-  font-family: var(--ff-display);
-  font-weight: 700;
-  font-size: 28px;
-  line-height: 1;
-  letter-spacing: -0.02em;
-  font-variation-settings: 'SOFT' 100, 'WONK' 0, 'opsz' 144;
-  transform: translateY(-1px);
-}
 
 /* ---------- links ---------- */
 .links ul {
@@ -164,9 +151,8 @@
     color 300ms var(--ease-soft),
     background-color 200ms var(--ease-soft);
 }
-.nav[data-tone='hero'] .link,
-.nav[data-tone='hero'] .logo {
-  text-shadow: 0 1px 14px rgba(20, 22, 12, 0.35);
+.nav[data-tone='hero'] .link {
+  text-shadow: 0 1px 14px rgba(31, 36, 48, 0.35);
 }
 @media (hover: hover) {
   .link:hover {
@@ -198,7 +184,7 @@
 
 /* Focus: chartreuse on the dark hero, leaf on the canvas pill (3px, 3px offset). */
 .nav[data-tone='hero'] .bar :focus-visible {
-  outline-color: var(--chartreuse);
+  outline-color: var(--yolk);
 }
 
 /* ---------- intro (a7 M1): items blur in left → right, once ---------- */
@@ -260,20 +246,8 @@
     display: inline-flex;
     padding: 0 18px;
   }
-  .word {
-    font-size: 26px;
-  }
 }
-/* "homecookd" is wide, so the mascot steps aside where "with Grandma ▾" would otherwise be cut (the
-   picker keeps its "with" / "as" at every width, QA B22). Widths are measured with "Grandma", the
-   longest default, with a few px to spare: 520+: mascot + word; 480–519: word alone; 428–479: mascot
-   + a smaller word; 375–427: the word alone, smaller still, beside a tighter "Early access";
-   <375: the mascot alone in a 48px round target. */
-@media (min-width: 480px) and (max-width: 519px) {
-  .mascot {
-    display: none;
-  }
-}
+
 @media (max-width: 479px) {
   .nav {
     padding-inline: 8px;
@@ -281,13 +255,6 @@
   .logo {
     gap: 6px;
     padding-right: 2px;
-  }
-  .mascot {
-    width: 28px;
-    height: auto;
-  }
-  .word {
-    font-size: 20px;
   }
   .actions {
     gap: 6px;
@@ -300,12 +267,6 @@
   .bar {
     gap: 6px;
   }
-  .mascot {
-    display: none;
-  }
-  .word {
-    font-size: 17px;
-  }
   .actions {
     gap: 4px;
   }
@@ -315,9 +276,6 @@
   }
 }
 @media (max-width: 388px) {
-  .word {
-    font-size: 16px;
-  }
 }
 @media (max-width: 374px) {
   .nav {
@@ -326,13 +284,6 @@
   }
   .bar {
     gap: 6px;
-  }
-  .mascot {
-    display: block;
-    width: 32px;
-  }
-  .word {
-    display: none;
   }
   .logo {
     justify-content: center;
@@ -362,5 +313,31 @@
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     background: color-mix(in srgb, var(--canvas) 94%, transparent);
+  }
+}
+
+/* ---------- the lockup: ink on the canvas, the reversed lockup over the dark hero ---------- */
+.logo .lockupHero {
+  display: none;
+}
+.nav[data-tone='hero'] .logo .lockupHero {
+  display: inline-flex;
+}
+.nav[data-tone='hero'] .logo .lockupNormal {
+  display: none;
+}
+/* Narrow phones: the mark alone (the kit allows it under ~360px; the nav also needs the room for the
+   "with Mom" picker and the CTA, so it steps aside under 400px) in a 48px target. */
+@media (max-width: 399.98px) {
+  .logo > span > img:first-child {
+    display: none;
+  }
+  .logo > span > img:last-child {
+    display: block;
+  }
+  .logo {
+    min-width: 48px;
+    justify-content: center;
+    padding-right: 0;
   }
 }

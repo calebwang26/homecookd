@@ -5,8 +5,8 @@
 
 .page {
   min-height: 100svh;
-  background: #f7f7f2;
-  color: #2d3222;
+  background: #fbf5ea;
+  color: #1f2430;
   font-family: var(--ff-text);
   font-size: 16px;
   line-height: 1.3;
@@ -21,7 +21,7 @@
   max-width: 430px;
   min-height: 100svh;
   margin: 0 auto;
-  background: #f7f7f2;
+  background: #fbf5ea;
   display: flex;
   flex-direction: column;
 }
@@ -29,8 +29,8 @@
 @media (min-width: 600px) {
   .column {
     box-shadow:
-      0 0 0 1px rgba(30, 36, 16, 0.04),
-      0 30px 80px rgba(30, 36, 16, 0.14);
+      0 0 0 1px rgba(31, 36, 48, 0.04),
+      0 30px 80px rgba(31, 36, 48, 0.14);
   }
 }
 
@@ -50,8 +50,8 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  background: #1e2410;
-  color: #fffdf7;
+  background: #1f2430;
+  color: #ffffff;
   transition:
     background-color 240ms ease,
     box-shadow 240ms ease;
@@ -61,7 +61,7 @@
   margin-bottom: -52px;
 }
 .topbar[data-clear] {
-  background: rgba(30, 36, 16, 0.38);
+  background: rgba(31, 36, 48, 0.38);
   -webkit-backdrop-filter: blur(16px) saturate(1.3);
   backdrop-filter: blur(16px) saturate(1.3);
 }
@@ -69,17 +69,17 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #fffdf7;
+  color: #ffffff;
   text-decoration: none;
   min-height: 48px;
 }
 .word {
   font-family: var(--ff-display);
-  font-weight: 700;
+  font-weight: 650;
   font-size: 23px;
   line-height: 1;
   letter-spacing: -0.02em;
-  font-variation-settings: 'SOFT' 100, 'WONK' 0, 'opsz' 144;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
   transform: translateY(-1px);
 }
 /* The dish pages' locked view: a way back to the page it opened from. */
@@ -92,7 +92,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #fffdf7;
+  color: #ffffff;
 }
 [dir='rtl'] .topBack svg {
   transform: scaleX(-1);
@@ -101,11 +101,11 @@
   margin-left: auto;
   display: inline-flex;
   align-items: center;
-  height: 36px;
-  padding: 0 16px;
+  height: 48px;
+  padding: 0 20px;
   border-radius: 999px;
-  background: #fffdf7;
-  color: #1e2410;
+  background: var(--yolk);
+  color: var(--ink);
   font-size: 15px;
   font-weight: 700;
   white-space: nowrap;
@@ -130,7 +130,7 @@ a.getAppLink {
   transition-duration: 90ms;
 }
 .press:focus-visible {
-  outline: 3px solid #788c15;
+  outline: 3px solid #a3580c;
   outline-offset: 3px;
 }
 
@@ -139,9 +139,9 @@ a.getAppLink {
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: #fffdf7;
-  box-shadow: 0 4px 14px rgba(30, 36, 16, 0.08);
-  color: #1e2410;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(31, 36, 48, 0.08);
+  color: #1f2430;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -155,9 +155,9 @@ a.getAppLink {
 .pillBtn {
   position: relative;
   height: 52px;
-  border: 1.5px solid rgba(30, 36, 16, 0.12);
+  border: 1.5px solid rgba(31, 36, 48, 0.12);
   border-radius: 999px;
-  background: #fffdf7;
+  background: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -165,7 +165,7 @@ a.getAppLink {
   padding: 0 4px; /* the app's MediaPill: "Hear Miles · 4:50" fits at 390 px */
   font-size: 15px;
   font-weight: 600;
-  color: #1e2410;
+  color: #1f2430;
   white-space: nowrap;
   min-width: 0;
   overflow: hidden;
@@ -201,9 +201,9 @@ a.getAppLink {
   white-space: nowrap;
 }
 .pillBtn[aria-pressed='true'] {
-  background: #1e2410;
-  border-color: #1e2410;
-  color: #fffdf7;
+  background: #1f2430;
+  border-color: #1f2430;
+  color: #ffffff;
 }
 /* ---------- dock: the app's BottomBar (the screen's action, pinned 28 px from the bottom) ---------- */
 .dock {
@@ -222,7 +222,7 @@ a.getAppLink {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(247, 247, 242, 0) 0%, rgba(247, 247, 242, 0.94) 45%, #f7f7f2 100%);
+  background: linear-gradient(180deg, rgba(247, 247, 242, 0) 0%, rgba(247, 247, 242, 0.94) 45%, #fbf5ea 100%);
   pointer-events: none;
 }
 .dock > * {
@@ -238,8 +238,8 @@ a.getAppLink {
   flex: 1;
   height: 60px;
   border-radius: 999px;
-  background: #5b6f00;
-  color: #fffdf7;
+  background: var(--yolk);
+  color: var(--ink);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -252,9 +252,9 @@ a.getAppLink {
   width: 60px;
   height: 60px;
   border-radius: 50%;
-  background: #fffdf7;
-  box-shadow: 0 4px 14px rgba(30, 36, 16, 0.08);
-  color: #1e2410;
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(31, 36, 48, 0.08);
+  color: #1f2430;
   display: flex;
   align-items: center;
   justify-content: center;

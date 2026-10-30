@@ -18,6 +18,6 @@
 .skip:focus,
 .skip:focus-visible {
   transform: translateY(0);
-  outline: 3px solid var(--chartreuse);
+  outline: 3px solid var(--yolk);
   outline-offset: 3px;
 }

@@ -24,7 +24,7 @@
   align-items: baseline;
   gap: 0.5em;
   font-family: var(--ff-display);
-  font-weight: 560;
+  font-weight: 600;
   font-size: var(--fs-h3);
   line-height: 1.05;
   letter-spacing: -0.02em;
@@ -58,7 +58,7 @@
   color: var(--cream);
 }
 .sun {
-  background: var(--sun);
+  background: var(--yolk);
   color: var(--ink);
 }
 .forest {
@@ -79,7 +79,7 @@
   min-height: calc(var(--h-m) - 2 * var(--section-pad-y));
   padding: var(--s-8);
   border-radius: var(--r-big);
-  background: var(--chartreuse);
+  background: var(--yolk);
 }
 .green .label,
 .forest .label,

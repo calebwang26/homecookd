@@ -5,7 +5,7 @@
 // the cook only hinted at and "Ask the family" (which needs the app). Ticks stay in this browser.
 import { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { PotMascot } from '@/components/primitives/PotMascot';
+import { EggMascot } from '@/components/primitives/EggMascot';
 import { Her, Was } from './DishBits';
 import { useRW } from './context';
 import { IconBack, IconBubble, IconCheck, IconChevronDown } from './icons';
@@ -66,7 +66,7 @@ export function IngredientsScreen() {
       {items.length === 0 ? (
         <div className={s.empty}>
           <span className={s.emptyDisc} aria-hidden="true">
-            <PotMascot size={40} />
+            <EggMascot size={40} mood="sleepy" />
           </span>
           <p className={s.emptyTitle}>Nothing to set out</p>
         </div>

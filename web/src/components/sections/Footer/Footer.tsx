@@ -1,7 +1,7 @@
 // Footer (brief 8.13, a3 Savor). Owner: B7.
 // Top row: two link columns + the prompt and the "Get early access" pill with its arrow (from col 8).
-// Then the giant "homecookd" wordmark, pushed to the bottom and fit edge to edge, which grows out of
-// its thickest strokes once (FooterWordmark); no tagline above it (Oct 16 feedback C2.6, C3).
+// Then the giant "homecookd" wordmark in ink, pushed to the bottom and fit edge to edge, which grows out of
+// its thickest strokes once (FooterWordmark); no logo, no tagline above it (Oct 16 feedback C2.6, C3; Caleb Oct 30).
 // Legal row underneath, and a 14px chartreuse strip at the very bottom.
 // Privacy opens /privacy; Contact (a mailto:) and the "Made by …" line show only once Caleb fills
 // CONTACT_EMAIL and MADE_BY in src/content/site.ts (QA B19).
@@ -66,7 +66,7 @@ export function Footer() {
         </div>
       </div>
 
-      <FooterWordmark className={s.wordmark} label={copy.meta.siteName} />
+      <FooterWordmark className={s.wordmark} label={copy.meta.siteName} ink="var(--ink)" />
 
       <div className={s.legal}>
         <Credits />

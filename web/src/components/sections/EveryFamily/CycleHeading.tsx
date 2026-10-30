@@ -58,7 +58,7 @@ export function CycleHeading({ id }: { id: string }) {
           w.style.opacity = '0';
           w.style.transform = `translateY(${0.3 * fs}px)`;
           if (blurOn) w.style.filter = 'blur(8px)';
-          w.style.color = acc ? HEX.greenPale : HEX.ghost;
+          w.style.color = acc ? HEX.yolkPale : HEX.ghost;
         }
         el.dataset.revealed = '';
         let last: Promise<unknown> = Promise.resolve();
@@ -66,7 +66,7 @@ export function CycleHeading({ id }: { id: string }) {
           const acc = w.hasAttribute('data-accent');
           const d = i * 0.08;
           animate(w, { opacity: [0, 1], y: [0.3 * fs, 0], ...(blurOn ? { filter: ['blur(8px)', 'blur(0px)'] } : {}) }, { duration: 0.55, ease: EASE.quart, delay: d });
-          last = animate(w, { color: [acc ? HEX.greenPale : HEX.ghost, acc ? HEX.green : HEX.ink] }, { duration: 0.6, ease: EASE.quart, delay: d + 0.12 }).finished;
+          last = animate(w, { color: [acc ? HEX.yolkPale : HEX.ghost, acc ? HEX.yolkDeep : HEX.ink] }, { duration: 0.6, ease: EASE.quart, delay: d + 0.12 }).finished;
         });
         last.then(() => {
           for (const w of words) {

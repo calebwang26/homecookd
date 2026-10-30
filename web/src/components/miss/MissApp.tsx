@@ -7,7 +7,7 @@
 // MVP's MissApp (calebwang26/homecookd PR #40) onto the Convex /dish/* routes (DISH-ASK-SPEC).
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { DishLangProvider, useLang } from '@/components/dish/lang';
-import { PotMascot } from '@/components/primitives/PotMascot';
+import { EggMascot } from '@/components/primitives/EggMascot';
 import { createCard, DishError, getCard, isPlausibleToken, uploadFile } from '@/lib/dish/api';
 import { AttachError, photoToJpeg, voiceType } from '@/lib/dish/attach';
 import { lastKidToken, saveLastKidToken, savedName } from '@/lib/dish/saved';
@@ -184,7 +184,7 @@ function Making() {
   const { t } = useLang();
   return (
     <main className={s.center} aria-busy="true">
-      <PotMascot size={120} mood="happy" steam />
+      <EggMascot size={120} mood="hello" />
       <h1 className={s.centerTitle}>{t('making.title')}</h1>
     </main>
   );
@@ -195,7 +195,7 @@ function Skeleton() {
   return (
     <main aria-busy="true" aria-label={t('card.opening')}>
       <div className={s.skHero}>
-        <PotMascot size={112} />
+        <EggMascot size={112} mood="hello" />
       </div>
       <div className={s.skSheet}>
         <span className={s.skLine} style={{ width: '40%', height: 30 }} />
@@ -212,7 +212,7 @@ function FailureScreen({ failure, onRetry, onNewDish }: { failure: Failure; onRe
   const title: Record<Failure, WordKey> = { 'not-found': 'err.notFound', offline: 'common.offline', rate: 'err.rate' };
   return (
     <main className={s.center}>
-      <PotMascot size={88} mood="talk" />
+      <EggMascot size={88} mood="oops" />
       <h1 className={s.centerTitle}>{t(title[failure])}</h1>
       {failure === 'not-found' ? (
         <a className={`${ui.press} ${ui.primary}`} href="/miss" onClick={(e) => onNewDish(e)}>

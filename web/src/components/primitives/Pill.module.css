@@ -29,7 +29,7 @@
 .white85 {
   background: rgba(255, 253, 247, 0.92);
   color: var(--ink);
-  box-shadow: 0 1px 2px rgba(30, 36, 16, 0.1);
+  box-shadow: 0 1px 2px rgba(31, 36, 48, 0.1);
 }
 .sage {
   background: var(--sage);
@@ -40,11 +40,11 @@
   color: var(--ink);
 }
 .lavender {
-  background: var(--lavender);
-  color: var(--ube-ink);
+  background: var(--surface);
+  color: var(--ink);
 }
 .chartreuse {
-  background: var(--chartreuse);
+  background: var(--yolk);
   color: var(--ink);
 }
 .rec {

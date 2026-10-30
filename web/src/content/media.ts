@@ -221,7 +221,7 @@ export function imageSize(src: string): { width: number; height: number } {
 }
 
 /** VERO topographic swirl patterns (scripts/swirls.mjs), in the *-swirl token color on transparent.
- *  Use as `background: var(--sun) url(SWIRLS.sun) center / cover`. Never behind the footer wordmark. */
+ *  Use as `background: var(--yolk) url(SWIRLS.sun) center / cover`. Never behind the footer wordmark. */
 export const SWIRLS = {
   green: '/patterns/swirl-green.svg',
   forest: '/patterns/swirl-forest.svg',

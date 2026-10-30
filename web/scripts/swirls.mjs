@@ -22,10 +22,10 @@ const GW = Math.ceil(W / STEP) + 1;
 const GH = Math.ceil(H / STEP) + 1;
 
 const COLORS = {
-  green: '#64790A',
+  green: '#425512',
   forest: '#3D4E10',
-  sun: '#FFCB4F',
-  chartreuse: '#D9E65A',
+  sun: '#F6AE48',
+  chartreuse: '#F6AE48',
 };
 const SEEDS = { green: 7, forest: 21, sun: 3, chartreuse: 11 };
 

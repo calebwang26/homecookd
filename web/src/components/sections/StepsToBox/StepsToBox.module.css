@@ -99,7 +99,7 @@
   display: none;
 }
 .noteWrap .noteDown {
-  --hand-color: var(--green);
+  --hand-color: var(--yolk-deep);
 }
 
 /* icon cluster (a7 M14) */
@@ -231,7 +231,7 @@
   }
   .noteWrap .noteRight {
     display: inline-flex;
-    --hand-color: var(--green);
+    --hand-color: var(--yolk-deep);
   }
   .noteWrap .noteDown {
     display: none;
@@ -443,7 +443,7 @@
     width: 64px;
     margin-bottom: -7px;
     visibility: hidden;
-    filter: drop-shadow(0 6px 8px rgba(30, 36, 16, 0.18));
+    filter: drop-shadow(0 6px 8px rgba(31, 36, 48, 0.18));
   }
   .mascot > svg {
     display: block;

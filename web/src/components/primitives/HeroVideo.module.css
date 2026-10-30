@@ -42,7 +42,7 @@
   min-height: 60px;
   padding: 6px 22px 6px 6px;
   border-radius: var(--r-pill);
-  background: rgba(30, 36, 16, 0.42);
+  background: rgba(31, 36, 48, 0.42);
   color: var(--cream);
   font-family: var(--ff-text);
   font-weight: 600;
@@ -52,7 +52,7 @@
   border: 1.5px solid rgba(255, 253, 247, 0.55);
 }
 .play:focus-visible {
-  outline-color: var(--chartreuse);
+  outline-color: var(--yolk);
 }
 .playDisc {
   display: grid;
@@ -69,6 +69,6 @@
   .play {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
-    background: rgba(30, 36, 16, 0.6);
+    background: rgba(31, 36, 48, 0.6);
   }
 }

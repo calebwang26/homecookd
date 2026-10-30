@@ -33,7 +33,7 @@ import { Chip } from '@/components/primitives/Chip';
 import { Img } from '@/components/primitives/Img';
 import { KitchenClock } from '@/components/primitives/KitchenClock';
 import { Pill } from '@/components/primitives/Pill';
-import { PotMascot } from '@/components/primitives/PotMascot';
+import { EggMascot } from '@/components/primitives/EggMascot';
 import { RecipeCard } from '@/components/primitives/RecipeCard';
 import { CameraIcon } from '@/components/icons/Icons';
 import { along, beatAt, FILM, FINAL_BEAT, inOut, lerp, measureFlight, span, type Beat, type Flight } from './scene';
@@ -369,7 +369,7 @@ export function FarApart() {
                     <span className={s.scrim} aria-hidden="true" />
                   </div>
                   <span className={s.mascot} aria-hidden="true" data-mascot="">
-                    <PotMascot size={88} mood={beat >= 3 ? 'happy' : 'smile'} steam className={s.mascotSvg} />
+                    <EggMascot size={88} mood={beat >= 3 ? 'made-it' : 'hello'} className={s.mascotSvg} />
                   </span>
                 </div>
                 <div className={`${s.caption} ${s.captionRight}`} data-side="right">

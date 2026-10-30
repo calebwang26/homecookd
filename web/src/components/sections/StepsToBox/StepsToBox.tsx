@@ -23,7 +23,7 @@ import { HandNote } from '@/components/primitives/HandNote';
 import { KitchenClock } from '@/components/primitives/KitchenClock';
 import { Handset } from '@/components/primitives/Handset';
 import { Img } from '@/components/primitives/Img';
-import { PotMascot } from '@/components/primitives/PotMascot';
+import { EggMascot } from '@/components/primitives/EggMascot';
 import { Steam } from '@/components/primitives/Steam';
 import { useLenis } from '@/components/providers/LenisProvider';
 import { gsap, ScrollTrigger, useGSAP } from '@/lib/motion/gsap';
@@ -110,11 +110,11 @@ function StepsToBoxKid() {
         const words = root.querySelectorAll<HTMLElement>('[data-steps-h2] .w');
         gsap.fromTo(
           words,
-          { autoAlpha: 0, y: '0.3em', color: '#CDD0BC' },
+          { autoAlpha: 0, y: '0.3em', color: '#D8CEBD' },
           {
             autoAlpha: 1,
             y: 0,
-            color: (_i: number, el: HTMLElement) => (el.hasAttribute('data-accent') ? '#5B6F00' : '#1E2410'),
+            color: (_i: number, el: HTMLElement) => (el.hasAttribute('data-accent') ? '#A3580C' : '#1F2430'),
             duration: 0.6,
             ease: 'power4.out',
             stagger: 0.09,
@@ -202,7 +202,7 @@ function StepsToBoxKid() {
             <StepCard index={i} layout="row" decorative={false} />
             {i === 2 ? (
               <span className={s.rowMascot} aria-hidden="true">
-                <PotMascot size={48} mood="happy" />
+                <EggMascot size={48} mood="hello" />
               </span>
             ) : null}
           </li>
@@ -268,7 +268,7 @@ function StepsToBoxKid() {
               </div>
             ))}
             <span className={s.mascot} data-mascot="">
-              <PotMascot size={64} mood="happy" />
+              <EggMascot size={64} mood="hello" />
             </span>
             <span className={s.puff} data-puff="">
               <Steam size={44} color="cocoa" still />
