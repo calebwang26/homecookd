@@ -543,6 +543,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     borderRadius: 999,
     backgroundColor: colors.yolkTint,
+    borderWidth: 1.5,
+    borderColor: colors.yolk, // a tint alone vanishes into cream and white
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,

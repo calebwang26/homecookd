@@ -2,7 +2,7 @@
 // Steps done (before the furthest reached) are a dark green circle with a light green check; steps not
 // done yet a light green circle with a dark green number. The one on screen sits on a green-tint row marked
 // "You're here", its number on solid dark green so it stands out on that row (one place label only:
-// the checks and "Continue at step N" already show the furthest).
+// the checks already show the furthest).
 // Tap a step to jump there. Long lists scroll, starting near the current step.
 import { useRef } from 'react';
 import { ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';

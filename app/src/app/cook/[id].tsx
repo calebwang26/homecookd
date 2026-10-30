@@ -24,9 +24,9 @@
 // and the same gap either side of homie, who docks there (the overlay draws the egg; this screen holds
 // its place). A tap on homie turns it on, the next tap off (it never opens a chat); a long press asks. No
 // chips: saying "back" or "repeat" does those, and the video replays
-// itself. Looking back at an earlier step the right button is "Continue" (back to the furthest); on the
-// last step "I made it".
-// The furthest step is what's saved as the last step, so the recipe and the next visit come back to it.
+// itself. The right button is always "Next step" (Caleb, Oct 30: back to step 1, then Next, is step 2,
+// never a jump to the furthest); on the last step "I made it".
+// The step on screen when she leaves is saved as the last step, so the recipe and the next visit come back to it.
 // Param `step` is 1-based; without it the screen resumes the last step this profile was on.
 // Last step: "I made it" -> `cooked` event + message to the cook -> SuccessBurst ("You made it" /
 // "We told Dad.": a fact, never words for Dad) -> when Dad is someone else in the family, the postcard
@@ -192,9 +192,8 @@ export default function CookScreen() {
   const fallback = last.loaded ? last.step || 1 : 1;
   const n = total ? Math.min(Math.max(1, chosen ?? fallback), total) : 1;
   const step: Step | null = recipe?.steps[n - 1] ?? null;
-  // The furthest step reached (saved below as the last step): looking back never lowers it.
+  // The furthest step reached, for the steps sheet's checks only.
   const furthest = total ? Math.min(total, Math.max(n, last.loaded ? last.step : 0)) : 0;
-  const reviewing = n < furthest;
 
   // Leo is cooking (PR 2): only another family cook's dish (cookProfile matches any name, so check
   // the role). A family cook's sample dishes count (every family dish is a sample today; see PR 2
@@ -219,13 +218,20 @@ export default function CookScreen() {
   // (or a story's voice) must not keep playing under it.
   useFocusEffect(useCallback(() => () => stopAllMedia(), []));
 
-  // Remember the furthest step, so the recipe can offer "Back to step N" (only once the saved one
-  // has loaded: an earlier write would replace it).
+  // Save the step on screen once she leaves, so the recipe can offer "Back to step N" (only once the
+  // saved one has loaded: an earlier write would replace it; not after "I made it").
   const setLast = last.setStep;
-  const lastLoaded = last.loaded;
+  const leaving = useRef({ n, save: false, setLast });
   useEffect(() => {
-    if (total && !done && lastLoaded) setLast(furthest);
-  }, [furthest, total, done, lastLoaded, setLast]);
+    leaving.current = { n, save: !!total && !done && last.loaded, setLast };
+  });
+  useEffect(
+    () => () => {
+      const at = leaving.current;
+      if (at.save) at.setLast(at.n);
+    },
+    [],
+  );
 
   const toRecipe = () => {
     if (!id) return router.replace('/');
@@ -570,10 +576,10 @@ export default function CookScreen() {
           />
         ) : (
           <ActionButton
-            label={reviewing ? 'Continue' : 'Next step'}
+            label="Next step"
             padH={12}
-            accessibilityLabel={reviewing ? `Continue at step ${furthest}` : `Next step, step ${n + 1}`}
-            onPress={() => goTo(reviewing ? furthest : n + 1)}
+            accessibilityLabel={`Next step, step ${n + 1}`}
+            onPress={() => goTo(n + 1)}
             style={styles.barButton}
           />
         )}
