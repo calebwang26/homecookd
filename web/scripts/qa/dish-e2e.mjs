@@ -147,7 +147,8 @@ try {
   await kid.goto(`${BASE}/miss`, { waitUntil: 'networkidle' });
   await kid.getByRole('heading', { level: 1 }).waitFor();
   check('K1: the headline', /What do you miss\s*from home\?/.test(await kid.getByRole('heading', { level: 1 }).innerText()));
-  const polaroids = await kid.evaluate(() => [...document.querySelectorAll('img')].map((i) => i.getAttribute('src')));
+  // the brand kit's logo files (/brand/) are not photos; everything else on K1 is one of the three polaroids
+  const polaroids = await kid.evaluate(() => [...document.querySelectorAll('img')].map((i) => i.getAttribute('src')).filter((s) => !s.startsWith('/brand/')));
   check('K1: only the three Pexels polaroids', polaroids.length === 3 && polaroids.every((s) => /dish-(dal|pho|dumplings)/.test(s)), polaroids.join(', '));
   check('K1: no "Your last dish" before any dish', (await kid.getByText('Your last dish').count()) === 0);
   await shot(kid, 'K1-dish-box');
