@@ -36,7 +36,6 @@ import { CheckIcon, haptic, MicIcon, Txt, useHoldPage, useToast } from '@/compon
 import { errorMessage } from '@/lib/api';
 import { mmss } from '@/lib/format';
 import {
-  HOLD_TAP_SPOKEN,
   holdEnd,
   holdPress,
   holdWait,
@@ -219,7 +218,7 @@ export function HoldToTalk({
     if (waiting.current) return undo();
     if (state === 'sending' || recording) return;
     haptic('light');
-    AccessibilityInfo.announceForAccessibility?.(HOLD_TAP_SPOKEN);
+    AccessibilityInfo.announceForAccessibility?.(words('messages.hold.tapSpoken'));
   }
 
   // A touch while it waits: take it back. Nothing has left the phone.

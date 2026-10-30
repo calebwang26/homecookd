@@ -83,10 +83,10 @@ export function PostcardRow({
       haptic('success');
       setLanded(true);
       setLike('sent');
-      AccessibilityInfo.announceForAccessibility?.(`Sent to ${who.name}`);
+      AccessibilityInfo.announceForAccessibility?.(t('parent.postcard.sentTo', { name: who.name }));
     } catch (e) {
       haptic('error');
-      toast.show(errorMessage(e, `Couldn’t send it to ${who.name}. Try again.`), { tone: 'error' });
+      toast.show(errorMessage(e, t('parent.postcard.sendFailed', { name: who.name })), { tone: 'error' });
       setLike('error');
       errTimer.current = setTimeout(() => setLike('idle'), 2400);
     }
@@ -116,7 +116,7 @@ export function PostcardRow({
           }}
           scaleTo={0.98}
           accessibilityLabel={title}
-          accessibilityHint="Opens your recipe"
+          accessibilityHint={t('parent.home.opensRecipe')}
           style={styles.main}>
           <Avatar profile={who} size={40} />
           <Txt variant="rowTitle" leading={1.3} numberOfLines={2} style={styles.flex}>
@@ -129,7 +129,7 @@ export function PostcardRow({
             onClear();
           }}
           hitSlop={8}
-          accessibilityLabel={`Clear: ${title}`}
+          accessibilityLabel={t('parent.updates.clear', { title })}
           style={styles.clear}>
           <CloseIcon size={16} strokeWidth={2.4} color={colors.muted} />
         </PressableScale>
@@ -138,7 +138,7 @@ export function PostcardRow({
       <PostcardPhoto
         uri={message.photo_url}
         id={message.id}
-        label={`${who.name}’s photo of the dish`}
+        label={t('messages.bubble.namePhoto', { name: who.name })}
         onError={photoFailed}
         stamp={sent ? <LikeStamp animate={landed} /> : null}
         style={styles.photo}
@@ -152,12 +152,12 @@ export function PostcardRow({
             onPress={() => void sendLike()}
             haptic="medium"
             disabled={like === 'sending' || sent}
-            accessibilityLabel={sent ? `Sent to ${who.name}: Just like mine` : `Tell ${who.name}: Just like mine`}
+            accessibilityLabel={t(sent ? 'parent.postcard.likeSentLabel' : 'parent.postcard.likeLabel', { name: who.name })}
             accessibilityState={{ busy: like === 'sending', disabled: sent }}
             style={[styles.like, sent ? styles.likeSent : like === 'error' ? styles.likeError : null, like === 'sending' ? styles.dim : null]}>
             {sent ? <CheckIcon size={16} color={colors.muted} /> : null}
             <Txt variant="label" size={15} weight={700} color={sent ? colors.muted : colors.ink} numberOfLines={1} adjustsFontSizeToFit minimumFontScale={0.8} style={styles.words}>
-              {sent ? 'Sent' : like === 'error' ? 'Try again' : 'Just like mine'}
+              {t(sent ? 'parent.postcard.sent' : like === 'error' ? 'parent.postcard.tryAgain' : 'parent.postcard.like')}
             </Txt>
           </PressableScale>
         </View>

@@ -282,6 +282,7 @@ export const MESSAGES = {
   'messages.hold.waitingLabel': 'Sending to {name}. Undo',
   'messages.hold.idleLabel': 'Hold to talk to {name}',
   'messages.hold.waitingHint': 'Takes the voice note back before it goes',
+  'messages.hold.tapSpoken': 'To record, double-tap and hold while you talk, then let go.',
   'messages.hold.idleHint': 'Hold while you talk, let go to send',
   'messages.hold.howTo': 'How to record',
   'messages.hold.them': 'them',
