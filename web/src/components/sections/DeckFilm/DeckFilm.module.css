@@ -1003,3 +1003,10 @@
     background: rgb(20 22 12 / 0.4);
   }
 }
+
+/* desktop: once StepsToBox has picked the stack up (lib/motion/deckHandoff.ts), this one hides
+   (!important: GSAP leaves an inline visibility: inherit on the rig) */
+.root[data-handed] .deck,
+.root[data-handed] .rig {
+  visibility: hidden !important;
+}

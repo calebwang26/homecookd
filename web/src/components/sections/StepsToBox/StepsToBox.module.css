@@ -346,13 +346,13 @@
     height: 100svh;
     overflow: clip;
   }
-  /* while the stack falls in and the deck is lifted (timeline 0 → P.stick), the clip reaches above the
-     stage's top edge so a card is never sliced there (and never faded: it stays opaque throughout),
+  /* while the stack is picked up from DeckFilm and the deck is lifted (timeline 0 → P.stick), the clip
+     reaches a screen above the stage's top edge so a card is never sliced there (and never faded: it stays opaque throughout),
      and past its left edge, where the tilted stack's lower corner swings over the text column (the
      text stays above it) */
   :global(html[data-motion='on']) .stage[data-falling] {
     overflow: visible;
-    clip-path: inset(-45vh 0 0 -30vw);
+    clip-path: inset(-100vh 0 0 -30vw);
   }
 
   :global(html[data-motion='on']) .deck {
