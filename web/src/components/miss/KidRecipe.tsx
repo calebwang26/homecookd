@@ -13,7 +13,7 @@ export function KidRecipe({ card, token, version, onClose }: { card: Card; token
   const R = useRel()(card.relation);
   const clips = useMemo(() => Object.fromEntries(card.answers.map((a) => [a.id, { audioUrl: a.audioUrl, durationS: a.durationS }])), [card.answers]);
   const photo = card.photoUrls[0] ?? null;
-  const meta = [card.version ? t('card.fromKitchen', { R }) : t('card.bestGuess'), version.time, version.servings && t('card.serves', { n: version.servings })].filter(Boolean).join(' · ');
+  const meta = [card.version ? t('card.fromKitchen', { R }) : t('card.guessMeta'), version.time, version.servings && t('card.serves', { n: version.servings })].filter(Boolean).join(' · ');
   const sheet = useCallback(
     ({ open, onClose: close }: { open: boolean; onClose: () => void }) => <SaveSheet open={open} onClose={close} photo={photo} relation={card.relation} token={token} />,
     [photo, card.relation, token],

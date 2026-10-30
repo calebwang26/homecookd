@@ -75,13 +75,13 @@ export function IntroScreen({ ask, kid, message, toggle, onNext }: { ask: Ask; k
 
 // ── M2 ────────────────────────────────────────────────────────────────────────────────────────
 
-/** What the kid's guess lists: every ingredient, and the step lines a question points at. */
-function guessRows(recipe: Recipe, asked: Set<QuestionId>): { key: string; ing: Ingredient | null; line: Line | null; asked: boolean }[] {
-  const ings = recipe.ingredients.map((ing, i) => ({ key: `i${i}`, ing, line: null, asked: !!ing.ask && asked.has(ing.ask) }));
+/** What the kid's guess lists: every ingredient, and the step lines a question points at or that he stated himself. */
+function guessRows(recipe: Recipe, asked: Set<QuestionId>): { key: string; ing: Ingredient | null; line: Line | null; asked: boolean; sure: boolean }[] {
+  const ings = recipe.ingredients.map((ing, i) => ({ key: `i${i}`, ing, line: null, asked: !!ing.ask && asked.has(ing.ask) && ing.status !== 'stated', sure: ing.status === 'stated' }));
   const lines = recipe.steps
     .flatMap((st) => st.lines)
-    .filter((l) => l.ask && asked.has(l.ask))
-    .map((line, i) => ({ key: `l${i}`, ing: null, line, asked: true }));
+    .filter((l) => (l.ask && asked.has(l.ask)) || l.status === 'stated')
+    .map((line, i) => ({ key: `l${i}`, ing: null, line, asked: line.status !== 'stated', sure: line.status === 'stated' }));
   return [...ings, ...lines];
 }
 
@@ -136,6 +136,13 @@ export function GuessScreen({ ask, kid, guess, toggle, onBack, onNext }: { ask: 
               {r.asked && (
                 <span className={s.unsure} role="img" aria-label={t('m2.notSure')}>
                   ?
+                </span>
+              )}
+              {r.sure && (
+                <span className={s.sure} role="img" aria-label={t('m2.sure', { kid })}>
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                    <path d="M5 12.5l4.5 4.5L19 7.5" />
+                  </svg>
                 </span>
               )}
             </li>

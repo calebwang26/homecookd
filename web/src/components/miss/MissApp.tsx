@@ -109,7 +109,7 @@ function Miss() {
     const { photos, voice } = draft.picked;
     if (dish.length < 2 && !photos.length && !voice) return setError('k1.empty');
     const id = ++nav.current;
-    const relation = draft.other === null && relationFromText(dish) ? relationFromText(dish)! : draft.relation;
+    const relation = draft.other === null && draft.relation !== 'none' && relationFromText(dish) ? relationFromText(dish)! : draft.relation;
     setError(null);
     show({ name: 'making' });
     try {

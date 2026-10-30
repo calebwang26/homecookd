@@ -2,15 +2,17 @@
 // K2, tonight's version (the v2 "K2-Tonight" mockup), and Mom's version once she answered: her amounts
 // over his struck-through guesses, her own words with the English under them, and her clips. The dock
 // saves (K4, the download ask) or asks her (K3). The recipe itself stays in English: it's data.
-import { Fragment, useCallback, useEffect, useState, type MouseEvent } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { DishHero, Toast, useAudio, useToast } from '@/components/dish/parts';
 import { useLang, useRel } from '@/components/dish/lang';
 import { PotMascot } from '@/components/primitives/PotMascot';
-import { IconBack, IconPause, IconPlay } from '@/components/recipe-web/icons';
-import { getCard } from '@/lib/dish/api';
-import { boldRuns, cardTitle } from '@/lib/dish/text';
-import type { Card, Ingredient, Line, Quote, QuestionId, Recipe } from '@/lib/dish/types';
+import { IconBack, IconClose, IconPause, IconPlay } from '@/components/recipe-web/icons';
+import { DishError, getCard, updateCard } from '@/lib/dish/api';
+import { applyEdits, askItems, cleanPicked, EDIT_LIMITS, initialPicked, ingredientRef, lineRef, openCap, unitOf, unitText, withEdit } from '@/lib/dish/shape';
+import { boldRuns, cardTitle, plain } from '@/lib/dish/text';
+import type { Card, Edit, Ingredient, Line, PartRef, Quote, Recipe } from '@/lib/dish/types';
 import { AskSheet } from './AskSheet';
+import { WhoSheet } from './WhoSheet';
 import { KidRecipe } from './KidRecipe';
 import { SaveSheet } from './SaveSheet';
 import ui from '@/components/dish/ui.module.css';
@@ -23,10 +25,20 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
   const rel = useRel();
   const [card, setCard] = useState(initial);
   const [asking, setAsking] = useState(false);
+  const [who, setWho] = useState(false); // "Ask someone": who to ask, when the card has no one yet
   const [saving, setSaving] = useState(false);
   const [locked, setLocked] = useState(false); // the locked recipe view over the card
   const { toast, show } = useToast();
   const audio = useAudio();
+
+  // The kid shapes the guess until Mom has sent her answers: what to ask (picked) and what to fix (edits).
+  const shaping = !card.finishedAt && !card.version;
+  const [picked, setPicked] = useState<string[]>(() => initialPicked(initial));
+  const [edits, setEdits] = useState<Edit[]>([]);
+  const [capHit, setCapHit] = useState(false);
+  const [editing, setEditing] = useState<string | null>(null);
+  const [open, setOpen] = useState<number | null>(null); // the step shown in full
+  const guess = useMemo(() => applyEdits(card.guess, edits), [card.guess, edits]);
 
   // Her answers come in while the page is open: every 3 s while it's being written, every 15 s while asked.
   const waiting = card.merging || (card.status === 'asked' && !card.version);
@@ -38,16 +50,39 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
     return () => window.clearInterval(timer);
   }, [waiting, card.merging, token]);
 
-  useEffect(() => {
-    document.title = cardTitle(card.relation, card.dish);
-  }, [card.relation, card.dish]);
-
-  const recipe: Recipe = card.version ?? card.guess;
+  const recipe: Recipe = card.version ?? guess;
+  const none = card.relation === 'none';
   const R = rel(card.relation);
-  const answered = new Set(card.answers.map((a) => a.id));
-  const askable = new Set(card.guess.questions.map((q) => q.id));
-  const tagFor = (id: QuestionId | null) => !!id && askable.has(id) && !answered.has(id);
-  const clipUrl = (id: QuestionId | null) => (id ? (card.answers.find((a) => a.id === id)?.audioUrl ?? null) : null);
+  const askLabel = none ? t('card.askSomeone') : t('card.askTag', { R });
+  const cap = openCap(card);
+  const chosen = cleanPicked(card, guess, picked); // unique units: a question's id, or a part with none
+  const full = chosen.length >= cap;
+  const clipUrl = (id: Ingredient['clip']) => (id ? (card.answers.find((a) => a.id === id)?.audioUrl ?? null) : null);
+
+  const toggleUnit = (unit: string) => {
+    if (chosen.includes(unit)) return setPicked(chosen.filter((x) => x !== unit));
+    if (full) {
+      setCapHit(true);
+      return void window.setTimeout(() => setCapHit(false), 2200);
+    }
+    setPicked([...chosen, unit]);
+  };
+  const toggle = (ref: PartRef) => toggleUnit(unitOf(card, guess, ref));
+  const isOn = (ref: PartRef) => chosen.includes(unitOf(card, guess, ref));
+  /** Fixing a line: shown at once, sent to the server, whose guess replaces it (a 422 or 409 undoes it, with a toast). */
+  const edit = (e: Edit) => {
+    setEdits((all) => withEdit(all, e));
+    setEditing(null);
+    updateCard(token, { edits: [e] }).then(
+      (c) => (setCard(c), setEdits((all) => all.filter((x) => x !== e))),
+      (err: unknown) => {
+        setEdits((all) => all.filter((x) => x !== e));
+        const kind = err instanceof DishError ? err.kind : 'network';
+        show(kind === 'words' ? t('k1.words') : kind === 'closed' ? t('edit.closed', { R }) : t('share.failed'), 'error');
+        if (kind === 'closed') getCard(token).then(setCard, () => {});
+      },
+    );
+  };
 
   const onSave = () => {
     show(t('saved.toast'));
@@ -55,12 +90,31 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
   };
   const closeSave = useCallback(() => setSaving(false), []);
   const closeAsk = useCallback(() => setAsking(false), []);
+  const closeWho = useCallback(() => setWho(false), []);
   const closeRecipe = useCallback(() => setLocked(false), []);
+  const onAsk = () => (none ? setWho(true) : setAsking(true));
+  const pickedWho = (c: Card) => {
+    setCard(c);
+    setWho(false);
+    setAsking(true);
+  };
 
   const steps = recipe.steps.length;
   const photo = card.photoUrls[0] ?? null;
+  const title = cardTitle(card.relation, recipe.dish || card.dish);
+  useEffect(() => {
+    document.title = title;
+  }, [title]);
 
   if (locked) return <KidRecipe card={card} token={token} version={recipe} onClose={closeRecipe} />;
+
+  const ingProps = (i: number) => ({
+    part: ingredientRef(i),
+    on: isOn(ingredientRef(i)),
+    toggle,
+    label: t('card.askToggle', { who: none ? t('card.someone') : R }),
+    full,
+  });
 
   return (
     <main className={s.card}>
@@ -72,10 +126,12 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
       <section className={s.sheet}>
         {/* The version is one tap: the button covers it and opens the recipe as the locked view. */}
         <div className={s.head}>
-          <span className={s.pill} data-tone={card.version ? 'peach' : undefined}>
-            {card.version ? t('card.theirVersion', { R }) : t('card.tonight')}
-          </span>
-          <h1 className={s.title}>{cardTitle(card.relation, recipe.dish || card.dish)}</h1>
+          {card.version && (
+            <span className={s.pill} data-tone="peach">
+              {t('card.theirVersion', { R })}
+            </span>
+          )}
+          <h1 className={s.title}>{title}</h1>
           <div className={s.byline}>
             {card.version ? (
               <span className={s.avatar} aria-hidden="true">
@@ -84,12 +140,12 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
             ) : (
               <span className={s.dashed} aria-hidden="true" />
             )}
-            {card.version ? t('card.fromKitchen', { R }) : t('card.bestGuess')}
+            {card.version ? t('card.fromKitchen', { R }) : none ? t('card.ourGuessNone') : t('card.ourGuess', { R })}
           </div>
           <svg className={s.headChevron} width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M9 5l7 7-7 7" />
           </svg>
-          <button type="button" className={s.headHit} aria-label={`${t('lock.open')}: ${cardTitle(card.relation, recipe.dish || card.dish)}`} onClick={() => setLocked(true)} />
+          <button type="button" className={s.headHit} aria-label={`${t('lock.open')}: ${title}`} onClick={() => setLocked(true)} />
         </div>
 
         {card.merging ? (
@@ -120,21 +176,43 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
         )}
 
         <h2 className={s.h2}>{t('card.need')}</h2>
-        <p className={s.sub}>{card.version ? t('card.needMom', { R }) : t('card.needGuess', { R })}</p>
+        {card.version ? <p className={s.sub}>{t('card.needMom', { R })}</p> : shaping && <p className={s.sub}>{t('card.fixHint')}</p>}
         <ul className={s.list}>
-          {recipe.ingredients.map((ing, i) => (
-            <IngredientRow
-              key={i}
-              ing={ing}
-              ask={tagFor(ing.ask) ? () => setAsking(true) : null}
-              askLabel={t('card.askTag', { R })}
-              clip={clipUrl(ing.clip)}
-              audio={audio}
-              hear={t('card.hear', { R })}
-              stop={t('card.stop')}
-            />
-          ))}
+          {recipe.ingredients.map((ing, i) =>
+            shaping ? (
+              <ShapeRow key={i} ing={ing} editing={editing === `i${i}`} onEdit={() => setEditing(`i${i}`)} onCancel={() => setEditing(null)} onSave={(e) => edit({ kind: 'ingredient', index: i, ...e })} {...ingProps(i)} />
+            ) : (
+              <IngredientRow key={i} ing={ing} clip={clipUrl(ing.clip)} audio={audio} hear={t('card.hear', { R })} stop={t('card.stop')} />
+            ),
+          )}
         </ul>
+
+        {shaping && (
+          <section className={s.knows} aria-labelledby="knows">
+            <h2 id="knows" className={s.knowsTitle}>
+              {none ? t('card.onlyNone') : t('card.only', { R })}
+            </h2>
+            {chosen.length > 0 ? (
+              <ul className={s.knowsList}>
+                {chosen.map((unit) => (
+                  <li key={unit}>
+                    <span dir="auto">{unitText(card, guess, unit)}</span>
+                    <button type="button" className={s.knowsX} aria-label={t('card.askRemove')} onClick={() => toggleUnit(unit)}>
+                      <IconClose size={14} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className={s.knowsEmpty}>{t('card.knowsEmpty')}</p>
+            )}
+            {full && chosen.length > 0 && (
+              <p className={s.knowsCap} role="status" data-hit={capHit || undefined}>
+                {t('ask.cap', { n: cap })}
+              </p>
+            )}
+          </section>
+        )}
 
         <div className={s.h2Row}>
           <h2 className={s.h2}>{t('card.how')}</h2>
@@ -142,26 +220,63 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
         </div>
         <ol className={s.steps}>
           {recipe.steps.map((step, i) => {
-            const asked = step.lines.find((l) => tagFor(l.ask));
             const hers = step.lines.filter((l) => l.status === 'mom');
-            const tone = asked ? 'butter' : hers.length || step.tip ? 'sage' : undefined;
             const clip = clipUrl(hers.find((l) => l.clip)?.clip ?? step.tip?.clip ?? null);
+            const asked = step.lines.some((_, j) => isOn(lineRef(i, j)));
+            const more = open === i;
             return (
-              <li key={i} className={s.step} data-tone={tone}>
+              <li key={i} className={s.step} data-tone={!shaping && (hers.length || step.tip) ? 'sage' : undefined}>
                 <span className={s.num}>{i + 1}</span>
                 <span className={s.stepText} dir="auto">
-                  {step.lines.map((l, j) => (
-                    <Fragment key={j}>
-                      {j > 0 && ' '}
-                      <Bold text={l.text} />
-                    </Fragment>
-                  ))}
-                  {hers.map((l, j) => l.quote && <QuoteLines key={`q${j}`} quote={l.quote} />)}
-                  {step.tip && <QuoteLines quote={step.tip} />}
+                  {shaping ? (
+                    more ? (
+                      step.lines.map((l, j) => {
+                        const ref = lineRef(i, j);
+                        const k = `l${i}.${j}`;
+                        return (
+                          <StepLine
+                            key={j}
+                            line={l}
+                            editing={editing === k}
+                            on={isOn(ref)}
+                            full={full}
+                            label={t('card.askToggle', { who: none ? t('card.someone') : R })}
+                            onEdit={() => setEditing(k)}
+                            onCancel={() => setEditing(null)}
+                            onSave={(text) => edit({ kind: 'line', step: i, line: j, text })}
+                            onToggle={() => toggle(ref)}
+                          />
+                        );
+                      })
+                    ) : (
+                      <button type="button" className={s.stepHit} aria-expanded="false" aria-label={`${t('card.stepMore')}: ${step.lines.map((l) => plain(l.short || l.text)).join(' ')}`} onClick={() => setOpen(i)}>
+                        {step.lines.map((l, j) => (
+                          <Fragment key={j}>
+                            {j > 0 && ' '}
+                            <Bold text={l.short || l.text} />
+                          </Fragment>
+                        ))}
+                        {asked && <span className={s.stepDot} aria-hidden="true" />}
+                      </button>
+                    )
+                  ) : (
+                    <>
+                      {step.lines.map((l, j) => (
+                        <Fragment key={j}>
+                          {j > 0 && ' '}
+                          <Bold text={l.text} />
+                        </Fragment>
+                      ))}
+                      {hers.map((l, j) => l.quote && <QuoteLines key={`q${j}`} quote={l.quote} />)}
+                      {step.tip && <QuoteLines quote={step.tip} />}
+                    </>
+                  )}
                 </span>
-                {asked ? (
-                  <button type="button" className={`${ui.press} ${s.tag}`} onClick={() => setAsking(true)}>
-                    {t('card.askTag', { R })}
+                {shaping ? (
+                  <button type="button" className={s.stepChevron} data-open={more || undefined} aria-label={more ? t('card.stepLess') : t('card.stepMore')} onClick={() => setOpen(more ? null : i)}>
+                    <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
                   </button>
                 ) : (
                   clip && <PlayButton url={clip} audio={audio} label={t('card.hear', { R })} stop={t('card.stop')} />
@@ -179,15 +294,121 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
           </svg>
           {t('card.save')}
         </button>
-        <button type="button" className={`${ui.press} ${ui.primary}`} onClick={() => setAsking(true)}>
-          {t('ask.title', { R })}
+        <button type="button" className={`${ui.press} ${ui.primary}`} disabled={!chosen.length} onClick={onAsk}>
+          {askLabel}
         </button>
       </div>
 
-      <AskSheet open={asking} onClose={closeAsk} token={token} card={card} onCard={setCard} toast={show} />
+      <WhoSheet open={who} onClose={closeWho} token={token} onPicked={pickedWho} toast={show} />
+      <AskSheet key={card.relation} open={asking} onClose={closeAsk} token={token} card={card} onCard={setCard} toast={show} items={askItems(card, guess, chosen)} />
       <SaveSheet open={saving} onClose={closeSave} photo={photo} relation={card.relation} token={token} />
       <Toast toast={toast} />
     </main>
+  );
+}
+
+type Pair = { amount?: string; name?: string };
+
+function IngredientEdit({ ing, onCancel, onSave }: { ing: Ingredient; onCancel: () => void; onSave: (e: Pair) => void }) {
+  const { t } = useLang();
+  const [amount, setAmount] = useState(ing.amount);
+  const [name, setName] = useState(ing.name);
+  const ok = name.trim().length >= 1 && name.trim().length <= EDIT_LIMITS.name && amount.trim().length <= EDIT_LIMITS.amount;
+  const save = () => {
+    if (!ok) return;
+    const next: Pair = {};
+    if (name.trim() !== ing.name) next.name = name.trim();
+    if (amount.trim() !== ing.amount && amount.trim()) next.amount = amount.trim();
+    if (next.name === undefined && next.amount === undefined) return onCancel();
+    onSave(next);
+  };
+  return (
+    <li className={s.row} data-editing="true">
+      <form className={s.editForm} onSubmit={(e) => (e.preventDefault(), save())} onKeyDown={(e) => e.key === 'Escape' && onCancel()}>
+        <input className={s.editAmount} aria-label={t('edit.amount')} value={amount} maxLength={EDIT_LIMITS.amount} autoFocus dir="auto" onChange={(e) => setAmount(e.target.value)} />
+        <input className={s.editName} aria-label={t('edit.name')} value={name} maxLength={EDIT_LIMITS.name} dir="auto" onChange={(e) => setName(e.target.value)} />
+        <EditButtons ok={ok} onCancel={onCancel} />
+      </form>
+    </li>
+  );
+}
+
+/** A line of "What you need" the kid can shape: tap the words to fix them, the round button to ask about it. */
+function ShapeRow({ ing, part, on, toggle, label, full, editing, onEdit, onCancel, onSave }: { ing: Ingredient; part: PartRef; on: boolean; toggle: (r: PartRef) => void; label: string; full: boolean; editing: boolean; onEdit: () => void; onCancel: () => void; onSave: (e: Pair) => void }) {
+  const { t } = useLang();
+  const own = ing.status === 'stated';
+  if (editing) return <IngredientEdit ing={ing} onCancel={onCancel} onSave={onSave} />;
+  const amt = ing.amount.trim();
+  return (
+    <li className={s.row}>
+      <button type="button" className={s.rowEdit} onClick={onEdit} aria-label={`${t('edit.fix')}: ${amt} ${ing.name}`}>
+        <span className={s.rowText} dir="auto">
+          {amt && <b className={s.amt}>{amt}</b>} {ing.name}
+          {own && <small className={s.you}>{t('card.you')}</small>}
+        </span>
+      </button>
+      <AskToggle on={on} full={full} label={label} onClick={() => toggle(part)} />
+    </li>
+  );
+}
+
+function StepLine({ line, editing, on, full, label, onEdit, onCancel, onSave, onToggle }: { line: Line; editing: boolean; on: boolean; full: boolean; label: string; onEdit: () => void; onCancel: () => void; onSave: (text: string) => void; onToggle: () => void }) {
+  const { t } = useLang();
+  if (editing) return <LineEdit line={line} onCancel={onCancel} onSave={onSave} />;
+  return (
+    <span className={s.stepLine}>
+      <button type="button" className={s.rowEdit} onClick={onEdit} aria-label={`${t('edit.fix')}: ${plain(line.text)}`}>
+        <Bold text={line.text} />
+        {line.status === 'stated' && <small className={s.you}>{t('card.you')}</small>}
+      </button>
+      <AskToggle on={on} full={full} label={label} onClick={onToggle} />
+    </span>
+  );
+}
+
+function LineEdit({ line, onCancel, onSave }: { line: Line; onCancel: () => void; onSave: (text: string) => void }) {
+  const { t } = useLang();
+  const [text, setText] = useState(plain(line.text));
+  const ok = text.trim().length >= 1 && text.trim().length <= EDIT_LIMITS.line;
+  const save = () => {
+    if (!ok) return;
+    if (text.trim() === plain(line.text)) return onCancel();
+    onSave(text.trim());
+  };
+  return (
+    <span className={s.stepLine}>
+      <form className={s.editForm} onSubmit={(e) => (e.preventDefault(), save())} onKeyDown={(e) => e.key === 'Escape' && onCancel()}>
+        <input className={s.editName} aria-label={t('edit.line')} value={text} maxLength={EDIT_LIMITS.line} autoFocus dir="auto" onChange={(e) => setText(e.target.value)} />
+        <EditButtons ok={ok} onCancel={onCancel} />
+      </form>
+    </span>
+  );
+}
+
+function EditButtons({ ok, onCancel }: { ok: boolean; onCancel: () => void }) {
+  const { t } = useLang();
+  return (
+    <>
+      <button type="submit" className={`${ui.press} ${s.editOk}`} disabled={!ok} aria-label={t('edit.done')}>
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M5 12.5l4.5 4.5L19 7.5" />
+        </svg>
+      </button>
+      <button type="button" className={`${ui.press} ${s.editNo}`} aria-label={t('edit.cancel')} onClick={onCancel}>
+        <IconClose size={16} />
+      </button>
+    </>
+  );
+}
+
+/** The subtle round control on a line: + adds it to what the kid asks, the check takes it out again. */
+function AskToggle({ on, full, label, onClick }: { on: boolean; full: boolean; label: string; onClick: () => void }) {
+  return (
+    <button type="button" className={`${ui.press} ${s.toggle}`} aria-pressed={on} aria-disabled={(!on && full) || undefined} aria-label={label} onClick={onClick}>
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+        {on ? <path d="M5 12.5l4.5 4.5L19 7.5" /> : <path d="M12 5v14M5 12h14" />}
+      </svg>
+    </button>
   );
 }
 
@@ -213,23 +434,17 @@ function Facts({ recipe }: { recipe: Recipe }) {
 
 type Audio = ReturnType<typeof useAudio>;
 
-function IngredientRow({ ing, ask, askLabel, clip, audio, hear, stop }: { ing: Ingredient; ask: (() => void) | null; askLabel: string; clip: string | null; audio: Audio; hear: string; stop: string }) {
+function IngredientRow({ ing, clip, audio, hear, stop }: { ing: Ingredient; clip: string | null; audio: Audio; hear: string; stop: string }) {
   const hers = ing.status === 'mom';
   const amount = ing.amount.trim();
   return (
-    <li className={s.row} data-tone={ask ? 'butter' : hers ? 'sage' : undefined}>
+    <li className={s.row} data-tone={hers ? 'sage' : undefined}>
       <span className={s.rowText} dir="auto">
         {amount && <b>{amount}</b>} {ing.name}
         {hers && ing.was && <s className={s.was}>{ing.was}</s>}
         {hers && ing.quote && <QuoteLines quote={ing.quote} />}
       </span>
-      {ask ? (
-        <button type="button" className={`${ui.press} ${s.tag}`} onClick={ask}>
-          {askLabel}
-        </button>
-      ) : (
-        clip && <PlayButton url={clip} audio={audio} label={hear} stop={stop} />
-      )}
+      {clip && <PlayButton url={clip} audio={audio} label={hear} stop={stop} />}
     </li>
   );
 }

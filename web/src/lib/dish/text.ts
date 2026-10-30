@@ -1,13 +1,13 @@
 // Words both dish pages build from a card or an ask. Pure, so pages and tests can share them.
 // Ported from the MVP's lib/miss/text.ts (calebwang26/homecookd PR #40).
 import { possessive } from '@/lib/recipe-web/recipe';
-import { labelOf, type Relation } from '@/lib/relation';
-import type { Card, Ingredient, Line, Question, QuestionId, Recipe } from './types';
+import { labelOf, type Relation as KinRelation } from '@/lib/relation';
+import type { Card, Ingredient, Line, Question, QuestionId, Recipe, Relation } from './types';
 
 export { labelOf, possessive };
 
 const WHOSE = /^\s*(?:my\s+|our\s+)?(mom|mum|mommy|mama|mother|dad|daddy|papa|father|grandma|granny|nana|grandmother|grandpa|grandfather|auntie|aunt|uncle)['’]?s\b/i;
-const RELATION_OF: Record<string, Relation> = {
+const RELATION_OF: Record<string, KinRelation> = {
   mom: 'mom', mum: 'mom', mommy: 'mom', mama: 'mom', mother: 'mom',
   dad: 'dad', daddy: 'dad', papa: 'dad', father: 'dad',
   grandma: 'grandma', granny: 'grandma', nana: 'grandma', grandmother: 'grandma',
@@ -17,24 +17,25 @@ const RELATION_OF: Record<string, Relation> = {
 };
 
 /** "dad's beef stew" → 'dad', "beef stew" → null. */
-export function relationFromText(text: string): Relation | null {
+export function relationFromText(text: string): KinRelation | null {
   const m = WHOSE.exec(text);
   return m ? (RELATION_OF[m[1].toLowerCase()] ?? null) : null;
 }
 
 /** What the kid typed in the Other field: "grandpa", "my aunt" → a relation, else null. */
-export function relationFromWord(word: string): Relation | null {
+export function relationFromWord(word: string): KinRelation | null {
   const w = word.trim().toLowerCase().replace(/^(my|our)\s+/, '');
   return RELATION_OF[w] ?? null;
 }
 
-/** "Mom's tomato egg" */
+/** "Mom's tomato egg"; with no one in particular, just the dish: "Tomato egg" */
 export function cardTitle(rel: Relation, dish: string): string {
-  return `${possessive(labelOf(rel))} ${dish.trim() || 'dish'}`;
+  const name = dish.trim() || 'dish';
+  return rel === 'none' ? name.charAt(0).toUpperCase() + name.slice(1) : `${possessive(labelOf(rel))} ${name}`;
 }
 
 /** "Mom, how do you make your tomato egg? I'm trying to make it here." (the server's default too) */
-export function defaultMessage(rel: Relation, dish: string): string {
+export function defaultMessage(rel: KinRelation, dish: string): string {
   return `${labelOf(rel)}, how do you make your ${dish.trim() || 'dish'}? I'm trying to make it here.`;
 }
 
@@ -72,13 +73,6 @@ export function openQuestions(card: Pick<Card, 'asked' | 'answers'>): Question[]
   return card.asked.filter((q) => !answered.has(q.id));
 }
 
-const SUGGESTION_IDS: QuestionId[] = ['q1', 'q2', 'q3'];
-
-/** As POST /dish/cards/ask takes them: a suggestion keeps its id, the kid's own goes without. */
-export function askList(list: Question[]): { id?: QuestionId; text: string }[] {
-  return list.map((o) => (SUGGESTION_IDS.includes(o.id) ? { id: o.id, text: o.text } : { text: o.text }));
-}
-
 /** What the asked questions would settle on the guess: the ingredient or line each one points at. */
 export type Asked = { id: QuestionId; ingredient: Ingredient | null; line: Line | null };
 
@@ -97,16 +91,21 @@ export function guessOf(item: Asked): string | null {
 }
 
 /**
- * The guessed bits Mom's headline marks: "1 tbsp ketchup", "no sugar" (no "~"). Only amounts he guessed:
- * an empty amount ("sugar") or a step reads wrong in "Caleb thinks it's …"; the list marks those with "?".
+ * The bits Mom's headline marks: "1 tbsp ketchup", "no sugar" (no "~"). The amounts he is asked about, and the ones he
+ * stated himself (`stated`: what he fixed or knew), so "Caleb thinks it's 2 tsp sugar and 1 tbsp ketchup." An empty
+ * amount ("sugar") or a step reads wrong in "Caleb thinks it's …"; the list marks those with "?".
  */
 export function guessedBits(recipe: Recipe, ids: QuestionId[]): string[] {
-  return askedItems(recipe, ids)
-    .map((a) => {
-      const amount = a.ingredient?.amount.replace(/^~\s*/, '').trim();
-      return a.ingredient && amount ? `${amount} ${a.ingredient.name.split(',')[0]}` : '';
+  const asked = new Set(ids);
+  return recipe.ingredients
+    .filter((i) => (i.ask && asked.has(i.ask)) || i.status === 'stated')
+    .map((i) => {
+      const amount = i.amount.replace(/^~\s*/, '').trim();
+      return { bit: amount ? `${amount} ${i.name.split(',')[0]}` : '', stated: i.status === 'stated' };
     })
-    .filter(Boolean)
+    .filter((b) => b.bit)
+    .sort((a, b) => Number(b.stated) - Number(a.stated)) // what he stated first, then what he is asked
+    .map((b) => b.bit)
     .slice(0, 2);
 }
 

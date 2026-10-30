@@ -674,3 +674,15 @@
     opacity: 0;
   }
 }
+
+/* The kid stated this himself (he fixed it or knew it): the counterpart of the "?". */
+.sure {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 999px;
+  background: #e6ebcf;
+  color: #3c4a0b;
+  display: grid;
+  place-items: center;
+}
