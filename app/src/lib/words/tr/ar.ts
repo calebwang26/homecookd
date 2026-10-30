@@ -101,6 +101,7 @@ const words: Translation = {
   'signin.join.appOnly': 'تسجيل الدخول يتم من خلال التطبيق.',
   'signin.join.title': 'اطبخوا أكل عائلتكم.',
   'signin.join.line': 'ابدؤوا مطبخ عائلتكم. ينضم الباقون من رابطكم.',
+  'signin.join.keep': 'سجّل الدخول لتحتفظ بـ {dish}.',
   'signin.join.gotLink': 'وصلكم رابط من العائلة؟',
   'signin.join.tapAgain': 'اضغطوا عليه مرة أخرى.',
   'signin.name.title': 'بماذا تناديكم عائلتكم؟',

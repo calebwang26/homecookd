@@ -259,8 +259,8 @@ test('planClaim: signed out, that side claimed once: ask for an invite (one join
 
 test('planClaim: signed out, no ticket: sign in first (no family yet, past 30 days, links off)', () => {
   for (const joinable of ['no_family', 'window', 'off', 'yes']) {
-    assert.deepEqual(C.planClaim(opened({ joinable }), OUT), { kind: 'signIn', name: 'Caleb', role: 'learner' }, joinable);
-    assert.deepEqual(C.planClaim(opened({ side: 'cook', joinable }), OUT), { kind: 'signIn', name: 'Mom', role: 'cook' }, joinable);
+    assert.deepEqual(C.planClaim(opened({ joinable }), OUT), { kind: 'signIn', name: 'Caleb', role: 'learner', dish: 'Mom’s tomato egg' }, joinable);
+    assert.deepEqual(C.planClaim(opened({ side: 'cook', joinable }), OUT), { kind: 'signIn', name: 'Mom', role: 'cook', dish: 'Caleb’s tomato egg' }, joinable);
   }
 });
 
@@ -270,7 +270,7 @@ test('planClaim: the journeys of 2.3 end in one family', () => {
   // ...then Mom answers on the web and installs from /a: a ticket into the kid's family, as a cook.
   assert.deepEqual(C.planClaim(opened({ side: 'cook', ticket: 'tk', joinable: 'yes' }), OUT), { kind: 'join', ticket: 'tk', name: 'Mom', role: 'cook' });
   // Kid stays on the web; Mom installs first: she signs in and starts the family...
-  assert.deepEqual(C.planClaim(opened({ side: 'cook', joinable: 'no_family' }), OUT), { kind: 'signIn', name: 'Mom', role: 'cook' });
+  assert.deepEqual(C.planClaim(opened({ side: 'cook', joinable: 'no_family' }), OUT), { kind: 'signIn', name: 'Mom', role: 'cook', dish: 'Caleb’s tomato egg' });
   // ...and the kid later installs from their card into hers. A craving card (born in her family) too.
   assert.deepEqual(C.planClaim(opened({ ticket: 'tk', joinable: 'yes' }), OUT), { kind: 'join', ticket: 'tk', name: 'Caleb', role: 'learner' });
 });
@@ -296,6 +296,26 @@ test('claim links through /join: only /miss?k= and /a?t= come back, with a check
   assert.equal(C.nameFromParam('  Auntie   Lin '), 'Auntie Lin');
   assert.equal(C.nameFromParam('x'.repeat(60)), 'x'.repeat(40));
   assert.equal(C.nameFromParam('   '), null);
+});
+
+
+test('cardTitle: the sign-in line names the card, never doubling a name the kid already typed', () => {
+  assert.equal(C.cardTitle(opened()), 'Mom’s tomato egg');
+  assert.equal(C.cardTitle(opened({ side: 'cook' })), 'Caleb’s tomato egg');
+  assert.equal(C.cardTitle(opened({ dish: "mom's tomato egg" })), "mom's tomato egg");
+  assert.equal(C.cardTitle(opened({ dish: 'Mom’s Tomato Egg' })), 'Mom’s Tomato Egg');
+  assert.equal(C.cardTitle(opened({ relation: null })), 'tomato egg');
+  assert.equal(C.cardTitle(opened({ side: 'cook', kidName: null })), 'tomato egg');
+  assert.equal(C.cardTitle(opened({ relation: 'grandma' })), 'Grandma’s tomato egg');
+});
+
+test('signInHref carries the card title to /join, and dishFromParam reads it back cleaned', () => {
+  const href = C.signInHref('/miss?k=' + 'A'.repeat(22), { name: 'Caleb', role: 'learner', dish: 'Mom’s tomato egg' });
+  assert.deepEqual(href.params, { claim: '/miss?k=' + 'A'.repeat(22), role: 'learner', name: 'Caleb', dish: 'Mom’s tomato egg' });
+  assert.equal(C.signInHref('/a?t=' + 'B'.repeat(22), { name: null, role: 'cook' }).params.dish, undefined);
+  assert.equal(C.dishFromParam('  Mom’s   tomato egg '), 'Mom’s tomato egg');
+  assert.equal(C.dishFromParam(['x'.repeat(200)])?.length, 80);
+  assert.equal(C.dishFromParam(undefined), null);
 });
 
 console.log(`\n${passed} passed`);

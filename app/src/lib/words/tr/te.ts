@@ -101,6 +101,7 @@ const words: Translation = {
   'signin.join.appOnly': 'సైన్ ఇన్ యాప్‌లో మాత్రమే పనిచేస్తుంది.',
   'signin.join.title': 'మీ కుటుంబం వంటలు వండండి.',
   'signin.join.line': 'మీ కుటుంబ వంటగదిని మొదలుపెట్టండి. మిగతా అందరూ మీ లింక్ ద్వారా చేరతారు.',
+  'signin.join.keep': 'సైన్ ఇన్ చేసి {dish} ని దాచుకోండి.',
   'signin.join.gotLink': 'మీ కుటుంబం నుండి లింక్ వచ్చిందా?',
   'signin.join.tapAgain': 'దాన్ని మళ్ళీ నొక్కండి.',
   'signin.name.title': 'మీ కుటుంబం మిమ్మల్ని ఏమని పిలుస్తారు?',

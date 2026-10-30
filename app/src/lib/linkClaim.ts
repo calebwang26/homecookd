@@ -54,7 +54,7 @@ export type ClaimPlan =
   | { kind: 'pick' }
   | { kind: 'join'; ticket: string; name: string | null; role: Role }
   | { kind: 'taken'; name: string | null }
-  | { kind: 'signIn'; name: string | null; role: Role };
+  | { kind: 'signIn'; name: string | null; role: Role; dish: string | null };
 
 const MAX_NAME = 40;
 const MAX_DISH = 80;
@@ -106,6 +106,19 @@ export function sideName(info: LinkInfo): string | null {
 
 export const roleFor = (side: LinkSide): Role => (side === 'kid' ? 'learner' : 'cook');
 
+/**
+ * What the card is called on the sign-in screen ("Sign in to keep Mom's tomato egg."): the kid's card by the cook
+ * it's from ("Mom's tomato egg"), Mom's ask by the kid ("Caleb's tomato egg"). A dish typed with that name already
+ * ("mom's tomato egg") isn't doubled.
+ */
+export function cardTitle(info: LinkInfo): string {
+  const whose = info.side === 'kid' ? info.relation : info.kidName;
+  if (!whose) return info.dish;
+  const plain = (x: string) => x.toLowerCase().replace(/’/g, "'");
+  if (plain(info.dish).startsWith(`${plain(whose)}'s `)) return info.dish;
+  return clean(`${whose}’s ${info.dish}`, MAX_DISH) ?? info.dish;
+}
+
 /** `signedIn`: this phone is in a family. `picked`: someone is in (`me`). */
 export function planClaim(info: LinkInfo | null, who: { signedIn: boolean; picked: boolean }): ClaimPlan {
   if (!info) return { kind: 'dead' };
@@ -115,15 +128,19 @@ export function planClaim(info: LinkInfo | null, who: { signedIn: boolean; picke
   if (info.ticket) return { kind: 'join', ticket: info.ticket, name, role };
   // One automatic join per side, ever (2.3): once claimed, the link asks for an invite instead.
   if (info.joinable === 'taken') return { kind: 'taken', name };
-  return { kind: 'signIn', name, role };
+  return { kind: 'signIn', name, role, dish: cardTitle(info) };
 }
 
 export function claimHref(kind: LinkKind, token: string): string {
   return kind === 'card' ? `/miss?k=${token}` : `/a?t=${token}`;
 }
 
-export function signInHref(href: string, who: { name: string | null; role: Role }) {
-  return { pathname: '/join' as const, params: { claim: href, role: who.role, ...(who.name ? { name: who.name } : {}) } };
+/** /join with the link to open again, the name and role, and what the card is called (its "keep" line). */
+export function signInHref(href: string, who: { name: string | null; role: Role; dish?: string | null }) {
+  return {
+    pathname: '/join' as const,
+    params: { claim: href, role: who.role, ...(who.name ? { name: who.name } : {}), ...(who.dish ? { dish: who.dish } : {}) },
+  };
 }
 
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v);
@@ -136,6 +153,10 @@ export function claimFromParam(v: string | string[] | undefined): string | null 
 
 export function nameFromParam(v: string | string[] | undefined): string | null {
   return clean(one(v));
+}
+
+export function dishFromParam(v: string | string[] | undefined): string | null {
+  return clean(one(v), MAX_DISH);
 }
 
 export function roleFromParam(v: string | string[] | undefined): Role | null {
