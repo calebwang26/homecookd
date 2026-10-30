@@ -1,68 +1,42 @@
-# Resume: Convex & accounts (v2 Phases 1 and 5)
+# Resume: Convex & accounts
 
-Last updated Oct 29, about 09:30 UTC, at 90% of the weekly limit. Everything is committed locally on the branch below.
-Nothing is pushed: the push freeze holds until Apple approves 1.0.
+Last updated Oct 30, 12:05 UTC, right after the weekly limit reset. The pause line is now 99% weekly
+(Caleb, Oct 30).
 
 ## Where it is
-- **Branch:** `claude/dish-ask`, worktree `.claude/worktrees/dish-ask`, off `origin/main` ba889173b.
-- **Contract:** `docs/build/DISH-ASK-SPEC.md`. §1–§7 cover Phase 1, the web flow; §8 covers Phase 5, cravings from the app.
-- **Phase 1:** done; the Master Agent approved it with two fixes, and both are in.
-  - Client IP is `CF-Connecting-IP`, proven on a dev deployment (88dfff332).
-  - The kid's dish voice note is kept privately (f3aaf6442).
-- **Phase 5:** done and approved (f3aaf6442).
-- **`dishAsks.forMe` / `get`:** done (bbf90ce06, spec §9), for the app's `/dish/[id]`.
-- **Web-port additions:** done (bfe525942): 429 `budget`, `kidVoiceS`, `inLang.version`.
-- **Tests:** `npx vitest run` passes 217/217, and `npx tsc -p convex --noEmit` is clean. Real codegen reproduced
-  `_generated/api.d.ts` exactly.
-- **Live model checks:** about $0.13 of the $10 test budget.
+- All v2 backend work is merged on `main` and deployed to grand-dragon-649:
+  - Phase 1, the web flow;
+  - Phase 5, cravings;
+  - `forMe` / `get`;
+  - the web-port additions;
+  - §10, the kid shapes the card (#171);
+  - `short` step lines (#172).
+- The contract is `docs/build/DISH-ASK-SPEC.md` §1–§10.
+- Live env, checked by name only on Oct 30: `DISH_IP_SALT`, `ANTHROPIC_API_KEY` and `CARTESIA_API_KEY` are set.
+  `DISH_MODEL` is unset, so the default is Haiku 5.5.
+- All the Phase 4 push calls are wired: `pushEvents.requested` from craving cards, and `pushEvents.answered` at
+  the three merge-done spots.
 
-## Next
-0. **First after the reset** (Oct 30, 12:00 UTC):
-   - **`short` on each step line:** about 6 words at most, for the guess, Mom's version and `inLang`. The ask
-     came from App Store, web & builds, from Caleb's "the page feels very recipe-y, unpersonalized and wordy".
-     - Model it on `pipeline/shorten.py`'s rules, inside the same structured guess and merge calls.
-     - Translate it in `translateForMom`.
-     - The web treats it as optional.
-     - Spec it in §10 first, then send that chat the commit.
-   - **PR #171** (§10: relation none, `about`, `edits`): wait for the Master Agent's review.
-1. Wait for the Master Agent's integration ping (combining branches for the v2 batch).
-2. Merge notes for the Merge Agent:
-   - `pushEvents.requested` is a marked comment in `convex/dishAsks.ts` `create`. It becomes a call once
-     `claude/v2-notif-linking-e8fdb5` is merged.
-   - That branch already adds the `pushEvents.answered` calls in `dishAsks.ts`; take its version of those spots.
-3. After Apple approves 1.0 and Caleb tests the web flow (the deploy checklist):
-   - set `DISH_IP_SALT` in Convex env;
-   - run a live alert test;
-   - deploy with `npx convex deploy --preview-name hackathon -y`, then check `expiresAt` is still null.
-4. Stretch work only if asked: linking a filmed recipe back to its craving card (`pushEvents.filmed` from
-   `worker.published`).
-
-## Open questions
-- These are Caleb's numbers to tune, all marked `TODO(caleb)`:
+## Open
+- **Live budget-alert test:** `npx convex run --deployment grand-dragon-649 dishAsks:budgetAlert
+  '{"day":"TEST, please ignore","usd":0}'`. It sends one ntfy push and email to the team. The auto-mode safety
+  check refused it on Oct 30 as a change to a shared resource, so it needs Caleb's OK or his own run.
+- **Stretch, only if asked:** `pushEvents.filmed({askId, recipeId})` from `worker.published` when a filmed
+  recipe answers a craving card. That needs the job to carry `dishAskId`.
+- **Caleb's numbers** (`TODO(caleb)`):
   - `DAILY_BUDGET_USD = 10` and `MOM_OVERAGE_USD = 1` in `convex/lib/dishAskValues.ts`;
   - `CRAVING_PER_DAY = 5` and `CRAVING_TOTAL = 20` in `convex/lib/cravingLinks.ts`.
-- When a kid deletes their account, the card stays for Mom and keeps the kid's Ask Mom `message`, which may name them.
 
-## Commands to pick up
+## Commands
 ```bash
-cd /Users/calebwang/Documents/GitHub/hackathon-homecookd/.claude/worktrees/dish-ask
-git log --oneline origin/main..HEAD          # this branch's commits
 npx vitest run && npx tsc -p convex --noEmit
 ```
 
-Live model checks run the model layer directly, never a deployment (scripts are in this session's scratchpad):
-```bash
-npx --yes tsx@4.19.2 --env-file=.env <script>.ts
-```
-
-Real codegen runs against the separate dev deployment `dutiful-mockingbird-919`, never grand-dragon-649. Move
-`.env` aside first, because the CLI trips on the preview key in it, and put it back after:
+Real codegen runs against the separate dev deployment `dutiful-mockingbird-919`, with `.env` moved aside so
+the preview key doesn't trip the CLI:
 ```bash
 mv .env .env.off
 T=$(grep '^CONVEX_OVERRIDE_ACCESS_TOKEN=' /Users/calebwang/Documents/GitHub/hackathon-homecookd/.env | cut -d= -f2- | tr -d "\"'")
 CONVEX_OVERRIDE_ACCESS_TOKEN="$T" CONVEX_DEPLOYMENT=dev:dutiful-mockingbird-919 npx convex codegen
 mv .env.off .env
 ```
-
-The end-of-turn hook's `convex codegen` check always fails in this worktree, because the shared `.env` holds the
-preview deploy key. It's harmless.
