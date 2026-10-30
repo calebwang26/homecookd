@@ -101,6 +101,7 @@ const words: Translation = {
   'signin.join.appOnly': '로그인은 앱에서 하실 수 있어요.',
   'signin.join.title': '우리 집 음식을 만들어요.',
   'signin.join.line': '우리 가족 부엌을 시작하세요. 다른 가족은 모두 보내주신 링크로 들어와요.',
+  'signin.join.keep': '로그인하고 {dish}을(를) 간직하세요.',
   'signin.join.gotLink': '가족에게서 링크를 받으셨나요?',
   'signin.join.tapAgain': '그 링크를 다시 눌러주세요.',
   'signin.name.title': '가족들이 뭐라고 부르세요?',

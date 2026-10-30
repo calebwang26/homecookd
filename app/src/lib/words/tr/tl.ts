@@ -101,6 +101,7 @@ const words: Translation = {
   'signin.join.appOnly': 'Sa app po gumagana ang pag-sign in.',
   'signin.join.title': 'Lutuin po ang pagkain ng pamilya ninyo.',
   'signin.join.line': 'Simulan po ang kusina ng pamilya ninyo. Sasali ang iba gamit ang link ninyo.',
+  'signin.join.keep': 'Mag-sign in para maitabi ang {dish}.',
   'signin.join.gotLink': 'May link po ba mula sa pamilya ninyo?',
   'signin.join.tapAgain': 'I-tap po ulit iyon.',
   'signin.name.title': 'Ano po ang tawag sa inyo ng pamilya ninyo?',

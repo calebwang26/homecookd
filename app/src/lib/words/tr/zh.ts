@@ -101,6 +101,7 @@ const words: Translation = {
   'signin.join.appOnly': '请在应用里登录。',
   'signin.join.title': '做您家里的味道。',
   'signin.join.line': '开一个您家的厨房。其他家人都从您的链接加入。',
+  'signin.join.keep': '登录后就能保存{dish}。',
   'signin.join.gotLink': '家人给您发了链接？',
   'signin.join.tapAgain': '再点一下那个链接。',
   'signin.name.title': '家里人怎么称呼您？',

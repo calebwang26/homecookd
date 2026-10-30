@@ -101,6 +101,7 @@ const words: Translation = {
   'signin.join.appOnly': 'سائن اِن ایپ میں ہوتا ہے۔',
   'signin.join.title': 'اپنے خاندان کا کھانا پکائیں۔',
   'signin.join.line': 'اپنے خاندان کا باورچی خانہ شروع کریں۔ باقی سب آپ کے لنک سے شامل ہوں گے۔',
+  'signin.join.keep': 'سائن ان کریں اور {dish} محفوظ رکھیں۔',
   'signin.join.gotLink': 'گھر والوں سے لنک ملا ہے؟',
   'signin.join.tapAgain': 'اسے دوبارہ دبائیں۔',
   'signin.name.title': 'آپ کے گھر والے آپ کو کیا کہتے ہیں؟',

@@ -101,6 +101,7 @@ const words: Translation = {
   'signin.join.appOnly': 'Para iniciar sesión, use la app.',
   'signin.join.title': 'Cocine la comida de su familia.',
   'signin.join.line': 'Abra la cocina de su familia. Los demás se unen con su enlace.',
+  'signin.join.keep': 'Inicia sesión para guardar {dish}.',
   'signin.join.gotLink': '¿Su familia le mandó un enlace?',
   'signin.join.tapAgain': 'Tóquelo otra vez.',
   'signin.name.title': '¿Cómo le dice su familia?',
