@@ -88,7 +88,7 @@ function editedGuess(before: Row["guess"], edits: Infer<typeof editV>[]): Row["g
       Object.assign(part, { ...(e.name ? { name: e.name } : {}), ...(e.amount ? { amount: e.amount } : {}), status: "stated" });
     } else {
       const part = partOf(guess, e, `edits[${i}]`) as Row["guess"]["steps"][number]["lines"][number];
-      if (e.text && e.text !== part.text) Object.assign(part, { text: e.text, detail: null });
+      if (e.text && e.text !== part.text) Object.assign(part, { text: e.text, detail: null, short: null });
       part.status = "stated";
     }
   });

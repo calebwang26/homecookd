@@ -1014,3 +1014,4 @@ Before starting work, compare the last commit here with `git log origin/main` to
   - cards/ask `about`: the kid asks about any ingredient or line, as a template question or in their own words, linked to that part for the merge.
   - cards/update `edits`: the kid fixes amounts, names and lines; the fix is `stated`, word-filtered, size-capped, and closed after Mom's Send.
   - No model calls. Tests: 248 pass.
+- Oct 29 · (this PR) · Claude (Convex & accounts) · `short` on every step line (spec §10): about 6 words for the card, written in the same guess and merge calls (no extra model call). It's checked against its line (no bold, number, heat or time the line lacks; null when it fails), translated in `inLang`, and cleared by a kid's edit. Tests: 250 pass.

@@ -44,6 +44,8 @@ export type MissLine = {
    * text; null when it would add nothing
    */
   detail: string | null; // "Fry on **medium-high**, pressing the wedges, until they break down into a sauce"
+  /** the card's short version: about 6 words, bold only where the text has it; null when it didn't check out */
+  short?: string | null; // "Fry tomatoes on **medium-high**"
   status: Status;
   ask: QuestionId | null;
   clip: QuestionId | null;

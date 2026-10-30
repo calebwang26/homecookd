@@ -627,4 +627,5 @@ Caleb: the card reads too recipe-like and wordy.
   - a line the kid edits (`edits`) has its `short` cleared to null.
 - **Translation:** `short` is translated with the rest of the card for her page language (`inLang`).
 - **On the page:** `short` is optional; show `text` when it's null or missing.
-- **Status (Oct 29):** specced, not built yet. It's next on Convex & accounts' list after the usage reset.
+- **Built (Oct 29).** Live, braised pork belly gave "Sear pork **medium-high**", "Simmer **15 min** covered" and
+  "Ready when fork slides" for about $0.001 a card. A short line that fails the check is null; there's no retry.

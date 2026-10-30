@@ -171,7 +171,7 @@ export const GUESS_SCHEMA = obj({
         })),
         steps: arr(obj({
           title: S,
-          lines: arr(obj({ text: S, detail: NS, status: { type: "string", enum: ["stated", "guessed"] }, ask: ASK })),
+          lines: arr(obj({ text: S, short: S, detail: NS, status: { type: "string", enum: ["stated", "guessed"] }, ask: ASK })),
           uses: arr(INT),
         })),
         time: NS,
@@ -185,7 +185,7 @@ export const GUESS_SCHEMA = obj({
 /** The same for every merge (so it compiles once); a clip she didn't answer is dropped by applyMerge. */
 export const VERSION_SCHEMA = obj({
   ingredients: arr(obj({ ref: S, name: S, amount: S, step: { anyOf: [INT, { type: "null" }] }, clip: QID, quote: S, quote_english: NS })),
-  lines: arr(obj({ ref: S, text: S, detail: NS, clip: QID, quote: S, quote_english: NS })),
+  lines: arr(obj({ ref: S, text: S, short: S, detail: NS, clip: QID, quote: S, quote_english: NS })),
   remove: arr(obj({ ref: S, words: S, clip: QID })),
   tips: arr(obj({ step: INT, words: S, english: NS, clip: QID })),
   time: NS,
@@ -378,7 +378,11 @@ export async function translateForMom(english: ForMom, lang: string, spend: Spen
     r.ingredients.forEach((i, n) => { put(`${p}i${n}.name`, i.name); put(`${p}i${n}.amount`, i.amount); });
     r.steps.forEach((st, n) => {
       put(`${p}s${n}.title`, st.title);
-      st.lines.forEach((l, m) => { put(`${p}s${n}.${m}.text`, l.text); put(`${p}s${n}.${m}.detail`, l.detail); });
+      st.lines.forEach((l, m) => {
+        put(`${p}s${n}.${m}.text`, l.text);
+        put(`${p}s${n}.${m}.detail`, l.detail);
+        put(`${p}s${n}.${m}.short`, l.short ?? null);
+      });
     });
   };
   putRecipe("", english.guess);
@@ -434,7 +438,12 @@ export async function translateForMom(english: ForMom, lang: string, spend: Spen
     steps: r.steps.map((st, n) => ({
       ...st,
       title: tr(`${p}s${n}.title`, st.title),
-      lines: st.lines.map((l, m) => ({ ...l, text: tr(`${p}s${n}.${m}.text`, l.text), detail: trOrNull(`${p}s${n}.${m}.detail`, l.detail) })),
+      lines: st.lines.map((l, m) => ({
+        ...l,
+        text: tr(`${p}s${n}.${m}.text`, l.text),
+        detail: trOrNull(`${p}s${n}.${m}.detail`, l.detail),
+        short: trOrNull(`${p}s${n}.${m}.short`, l.short ?? null),
+      })),
     })),
   });
   const g = english.guess;
