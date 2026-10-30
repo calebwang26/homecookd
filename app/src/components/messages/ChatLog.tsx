@@ -1,7 +1,7 @@
 // The conversation: messages grouped by sender (same day, within 10 minutes), one time under each
 // group, a day line between days (Kid-Chat), and the bible's status lines:
 //   "11:52 pm · Sent" under my newest message, in every chat, until someone writes after it
-//   parent "Last night · waiting for you" (13/700 #5A3A22) + sun ring on the question being answered
+//   parent "Last night · waiting for you" (13/700 ink) + yolk ring on the question being answered
 // The family circle adds: the sender's face + name over each group, quiet centred system notes,
 // "Answered by Dad" under answered questions, "Answer this" under other open ones (cooks), and
 // "Saved to the recipe" / "Save to recipe" under a cook's answers ("Saved to the recipe · Undo" under
@@ -116,7 +116,7 @@ export function ChatLog({
   animateAfter: string | null;
   onRetry: (m: ChatMessage) => void;
   onDiscard: (m: ChatMessage) => void;
-  /** Cook: the question my next message answers (sun ring + "waiting for you"); null = none. */
+  /** Cook: the question my next message answers (yolk ring + "waiting for you"); null = none. */
   target?: string | null;
   /** Cook: answer this other open question instead. */
   onAnswer?: (m: ChatMessage) => void;
@@ -295,7 +295,7 @@ export function ChatLog({
                   variant="tiny"
                   size={L.time}
                   weight={stampStrong ? 700 : 400}
-                  color={stampStrong ? colors.butterInk : colors.muted}
+                  color={stampStrong ? colors.ink : colors.muted}
                   align={g.mine ? 'right' : 'left'}
                   style={g.mine ? null : styles.intrinsic}>
                   {stamp}
@@ -376,8 +376,8 @@ function MessageBody({ m, ctx, mine, ring, dish }: { m: ChatMessage; ctx: Bubble
 function Status({ text, mine, done }: { text: string; mine: boolean; done?: boolean }) {
   return (
     <View style={[styles.status, { alignSelf: mine ? 'flex-end' : 'flex-start' }]}>
-      {done ? <CheckIcon size={13} strokeWidth={3} color={colors.greenDeep} /> : null}
-      <Txt variant="tiny" size={13} weight={700} color={colors.greenDeep}>
+      {done ? <CheckIcon size={13} strokeWidth={3} color={colors.green} /> : null}
+      <Txt variant="tiny" size={13} weight={700} color={colors.green}>
         {text}
       </Txt>
     </View>
@@ -387,7 +387,7 @@ function Status({ text, mine, done }: { text: string; mine: boolean; done?: bool
 function LinkStatus({ label, mine, onPress }: { label: string; mine: boolean; onPress: () => void }) {
   return (
     <PressableScale onPress={onPress} accessibilityRole="button" accessibilityLabel={label} hitSlop={8} style={[styles.link, { alignSelf: mine ? 'flex-end' : 'flex-start' }]}>
-      <Txt variant="label" size={14} weight={700} color={colors.greenDeep}>
+      <Txt variant="label" size={14} weight={700} color={colors.yolkDeep}>
         {label}
       </Txt>
     </PressableScale>
@@ -409,8 +409,8 @@ function SavedUndo({ m, onUndo }: { m: ChatMessage; onUndo: (m: ChatMessage) => 
   };
   return (
     <View style={[styles.status, { alignSelf: 'flex-end' }]}>
-      <CheckIcon size={13} strokeWidth={3} color={colors.greenDeep} />
-      <Txt variant="tiny" size={13} weight={700} color={colors.greenDeep}>
+      <CheckIcon size={13} strokeWidth={3} color={colors.green} />
+      <Txt variant="tiny" size={13} weight={700} color={colors.green}>
         {t('messages.log.savedDot')}
       </Txt>
       <PressableScale
@@ -421,8 +421,8 @@ function SavedUndo({ m, onUndo }: { m: ChatMessage; onUndo: (m: ChatMessage) => 
         accessibilityHint={t('messages.log.undoHint')}
         hitSlop={12}
         style={styles.undo}>
-        {busy ? <ActivityIndicator size="small" color={colors.greenDeep} /> : null}
-        <Txt variant="label" size={13} weight={700} color={colors.greenDeep} style={styles.underline}>
+        {busy ? <ActivityIndicator size="small" color={colors.yolkDeep} /> : null}
+        <Txt variant="label" size={13} weight={700} color={colors.yolkDeep} style={styles.underline}>
           {t('messages.log.undo')}
         </Txt>
       </PressableScale>
@@ -451,8 +451,8 @@ function SaveLink({ m, onSave }: { m: ChatMessage; onSave: (m: ChatMessage) => P
       accessibilityHint={t('messages.log.saveHint')}
       hitSlop={8}
       style={[styles.link, { alignSelf: 'flex-end' }]}>
-      {busy ? <ActivityIndicator size="small" color={colors.greenDeep} /> : null}
-      <Txt variant="label" size={14} weight={700} color={colors.greenDeep}>
+      {busy ? <ActivityIndicator size="small" color={colors.yolkDeep} /> : null}
+      <Txt variant="label" size={14} weight={700} color={colors.yolkDeep}>
         {t('messages.log.saveToRecipe')}
       </Txt>
     </PressableScale>

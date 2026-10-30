@@ -119,10 +119,10 @@ export default function NewDinner() {
             </View>
           ) : (
             <View style={styles.share}>
-              <Txt variant="title" color={colors.lavenderInk}>
+              <Txt variant="title" color={colors.ink}>
                 Share a recipe first
               </Txt>
-              <Txt variant="body" leading={1.4} color={colors.lavenderInk}>
+              <Txt variant="body" leading={1.4} color={colors.ink}>
                 Your family’s cook turns on “Share with people nearby” on one of their recipes.
               </Txt>
             </View>
@@ -166,7 +166,7 @@ export default function NewDinner() {
             <Txt variant="label" size={16}>
               Exact address
             </Txt>
-            <Pill tone="butter" size="xs" label="Private" />
+            <Pill tone="yolkTint" size="xs" label="Private" />
           </View>
           <SignInField
             value={address}
@@ -240,7 +240,7 @@ const styles = StyleSheet.create({
   },
   dishOn: { backgroundColor: colors.ink },
   flex: { flex: 1, minWidth: 0 },
-  share: { gap: 6, padding: 20, borderRadius: radii.card, backgroundColor: colors.lavender },
+  share: { gap: 6, padding: 20, borderRadius: radii.card, backgroundColor: colors.yolkTint },
   label: { marginTop: 4 },
   private: { flexDirection: 'row', alignItems: 'center', gap: space.sm, marginTop: 4 },
   stepper: { flexDirection: 'row', alignItems: 'center', gap: 20 },

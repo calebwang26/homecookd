@@ -1,7 +1,7 @@
 // The two doors (docs/design/phase5-cold-parents, screen 1): once, after the language screen, for a cook whose
 // family has nothing yet (who sees it: lib/doorsGate.ts; the gate: parent/_layout + useDoorsGate).
 //   1. A big photo and "Your kids miss your cooking."
-//   2. The main door, a green card: "Ask your kids what they're craving" opens the craving sheet. Closing the sheet
+//   2. The main door, a yolk card: "Ask your kids what they're craving" opens the craving sheet. Closing the sheet
 //      goes to Home, where "Sent!" or "Ask what they're craving" waits (components/craving).
 //   3. "Start recording now" opens Record, which asks for AI consent itself.
 //   4. A quiet "Not now" goes to Home.
@@ -38,7 +38,7 @@ export function TwoDoors({ onSeen, onDone, onSent }: TwoDoorsProps) {
   const { t } = useWords();
   const [asking, setAsking] = useState(false);
   const [leaving, setLeaving] = useState(false);
-  // The photo fills the top: no corner pot over it (homie's voice is off here anyway).
+  // The photo fills the top: no corner egg over it (homie's voice is off here anyway).
   useHomieScreen({ hidden: true });
 
   // Home comes once the sheet has slid away (never pull a Modal out mid-animation).
@@ -82,7 +82,7 @@ export function TwoDoors({ onSeen, onDone, onSent }: TwoDoorsProps) {
             <View style={styles.doorIcon}>
               <AskIcon />
             </View>
-            <Txt size={24} weight={700} leading={1.2} color={colors.card} style={styles.doorWords}>
+            <Txt size={24} weight={700} leading={1.2} color={colors.ink} style={styles.doorWords}>
               {t('craving.doors.ask')}
             </Txt>
           </PressableScale>
@@ -124,7 +124,7 @@ export function TwoDoors({ onSeen, onDone, onSent }: TwoDoorsProps) {
 /** A chat bubble with a heart in it (the bible's chat path). */
 function AskIcon() {
   return (
-    <Svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke={colors.green} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke={colors.ink} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M21 12a8 8 0 0 1-11.8 7L4 20l1.1-4.6A8 8 0 1 1 21 12z" />
       <Path d="M12 15.5s-3.2-1.9-3.2-4a1.7 1.7 0 0 1 3.2-.8 1.7 1.7 0 0 1 3.2.8c0 2.1-3.2 4-3.2 4z" />
     </Svg>
@@ -143,13 +143,13 @@ const styles = StyleSheet.create({
     marginTop: space.xs,
     padding: 22,
     borderRadius: radii.panel,
-    backgroundColor: colors.green,
+    backgroundColor: colors.yolk,
     boxShadow: shadows.cta,
   },
   doorIcon: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   doorWords: { flex: 1 },
-  // Record's red dot on a peach disc, like Home's "Record a new recipe".
-  recordDot: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.peach, alignItems: 'center', justifyContent: 'center' },
+  // Record's red dot on a yolk-tint disc, like Home's "Record a new recipe".
+  recordDot: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.yolkTint, alignItems: 'center', justifyContent: 'center' },
   notNowRow: { alignItems: 'center' },
   notNow: { paddingVertical: 10, paddingHorizontal: space.lg },
 });

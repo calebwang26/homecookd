@@ -6,7 +6,7 @@
 //   cookLine        "Mama Ngozi · Nigerian"
 //   spotLabel       "Jollof Rice by Mama Ngozi, under a mile away"   a map circle, for VoiceOver
 //   clusterTitle    "3 dishes in your building"
-//   newRequests, youLabel   the sun dot on "You" and "You, 1 new request"
+//   newRequests, youLabel   the yolk dot on "You" and "You, 1 new request"
 //   whose           "Rajani’s", "James’"
 //   privacyNote     "Rajani’s video and voice stay in the family. Neighbors see the recipe text and …"
 //   nightTitle, goingCount, goingFaces, dinnerAction   the dinner page: "Jollof Rice Night", "4 going",
@@ -109,7 +109,7 @@ export function spotLabel(members: readonly SpotDish[]): string {
   return `${plural(members.length, 'dish', 'dishes')}${where ? `, ${where}` : ''}: ${list}`;
 }
 
-/** Open requests to join the dinners I host that are still ahead: the sun dot on "You". */
+/** Open requests to join the dinners I host that are still ahead: the yolk dot on "You". */
 export function newRequests(mine: readonly Pick<Dinner, 'isHost' | 'startsAt' | 'status' | 'requests'>[], now: number): number {
   return mine
     .filter((d) => d.isHost && d.startsAt > now && d.status !== 'cancelled')

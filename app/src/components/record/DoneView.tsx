@@ -18,7 +18,7 @@ import { colors, motion } from '@/theme/tokens';
 
 import { clearDraft, getDraft, useDraft } from './draft';
 import { WavingHomie } from './GlowHomie';
-import { COLUMN, WarmGlow } from './RecordWash';
+import { COLUMN } from './RecordWash';
 import { sendKept } from './sendKept';
 import { doneTo } from './who';
 import { doneLine, recordWords } from './words';
@@ -98,7 +98,6 @@ export function DoneView({ source, lang, kidName, preview = false }: { source: '
   return (
     <View style={styles.column}>
       <Animated.View entering={reduce ? FadeIn.duration(motion.reducedFadeMs) : FadeIn.duration(320)} style={styles.hero}>
-        <WarmGlow box={DONE_HOMIE_SIZE} />
         <WavingHomie size={DONE_HOMIE_SIZE} />
       </Animated.View>
       <Animated.View

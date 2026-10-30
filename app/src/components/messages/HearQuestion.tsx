@@ -1,5 +1,5 @@
 // A question asked out loud with no words to show: `isSpoken` tells, and <HearQuestion/> is the
-// lavender "Hear Maya · 0:04" play pill shown in place of its quote.
+// yolk-tint "Hear Maya · 0:04" play pill shown in place of its quote.
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { PauseIcon, PlayIcon, PressableScale, Txt } from '@/components/ui';
@@ -29,7 +29,7 @@ export function HearQuestion({ from, question, style }: { from: Pick<Profile, 'n
       accessibilityLabel={playing ? t('messages.hear.pause', { name: from.name }) : t('messages.hear.label', { name: from.name })}
       style={[styles.hear, style, !v.available ? { opacity: 0.5 } : null]}>
       <View style={styles.hearDisc}>{playing ? <PauseIcon size={16} color={colors.card} /> : <PlayIcon size={16} color={colors.card} />}</View>
-      <Txt variant="label" size={17} weight={700} color={colors.lavenderInk} style={styles.tnum}>
+      <Txt variant="label" size={17} weight={700} color={colors.ink} style={styles.tnum}>
         {t('messages.hear.pill', { name: from.name, time })}
       </Txt>
     </PressableScale>
@@ -43,7 +43,7 @@ const styles = StyleSheet.create({
     paddingLeft: 8,
     paddingRight: 20,
     borderRadius: 999,
-    backgroundColor: colors.lavender,
+    backgroundColor: colors.yolkTint,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,

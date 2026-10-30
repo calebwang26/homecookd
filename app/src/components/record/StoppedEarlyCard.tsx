@@ -151,7 +151,7 @@ function Card({ note, here, preview, enterIndex }: { note: Unsent; here: Unsent[
               flat
               state={sending ? 'loading' : 'idle'}
               loadingLabel={t('parent.stopped.sending')}
-              icon={<SendIcon size={22} color={colors.card} />}
+              icon={<SendIcon size={22} color={colors.ink} />}
               onPress={() => void send()}
             />
             <ActionButton label={t('parent.stopped.delete')} size="lg" variant="outline" disabled={sending} onPress={() => setSure(true)} />
@@ -165,7 +165,7 @@ function Card({ note, here, preview, enterIndex }: { note: Unsent; here: Unsent[
 const styles = StyleSheet.create({
   card: { backgroundColor: colors.card, borderRadius: radii.panel, padding: 22, gap: 14, boxShadow: shadows.card },
   top: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  dot: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.peach, alignItems: 'center', justifyContent: 'center' },
+  dot: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.yolkTint, alignItems: 'center', justifyContent: 'center' },
   flex: { flex: 1 },
   buttons: { gap: 12, marginTop: 6 },
 });

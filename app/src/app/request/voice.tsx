@@ -106,7 +106,7 @@ export default function VoiceRecipeScreen() {
 
         <View style={styles.head}>
           {ask ? (
-            <Txt variant="heading" size={17} weight={600} color={colors.peachInk} numberOfLines={1}>
+            <Txt variant="heading" size={17} weight={600} color={colors.ink} numberOfLines={1}>
               {t('request.voice.for', { kid, dish })}
             </Txt>
           ) : null}
@@ -119,7 +119,7 @@ export default function VoiceRecipeScreen() {
           {PROMPTS.map((key, i) => (
             <View key={key} style={styles.prompt}>
               <View style={styles.num}>
-                <Txt variant="label" size={16} weight={700} color={colors.sageInk}>
+                <Txt variant="label" size={16} weight={700} color={colors.green}>
                   {i + 1}
                 </Txt>
               </View>
@@ -152,7 +152,7 @@ export default function VoiceRecipeScreen() {
               onPress={play.toggle}
               accessibilityLabel={play.playing ? t('request.voice.pause', { time: mmss(note.duration_s) }) : t('request.voice.listen', { time: mmss(note.duration_s) })}
               style={styles.listen}>
-              <View style={styles.listenDisc}>{play.playing ? <PauseIcon size={20} color={colors.sageInk} /> : <PlayIcon size={20} color={colors.sageInk} />}</View>
+              <View style={styles.listenDisc}>{play.playing ? <PauseIcon size={20} color={colors.green} /> : <PlayIcon size={20} color={colors.green} />}</View>
               <Txt variant="title" size={19}>
                 {play.playing ? t('request.voice.pause', { time: mmss(play.elapsed) }) : t('request.voice.listen', { time: mmss(note.duration_s) })}
               </Txt>
@@ -176,7 +176,7 @@ export default function VoiceRecipeScreen() {
           <View style={styles.foot}>
             <ActionButton label={t('request.voice.send', { kid })} loadingLabel={t('request.voice.sending')} onPress={() => void send()} state={sending ? 'loading' : 'idle'} size="xl" labelSize={20} disabled={!ask} />
             <PressableScale onPress={startOver} disabled={sending} accessibilityLabel={t('request.voice.startOver')} style={styles.over}>
-              <Txt variant="label" size={18} weight={700} color={colors.greenDeep}>
+              <Txt variant="label" size={18} weight={700} color={colors.yolkDeep}>
                 {t('request.voice.startOver')}
               </Txt>
             </PressableScale>
@@ -224,7 +224,7 @@ const styles = StyleSheet.create({
   head: { gap: 6 },
   prompts: { backgroundColor: colors.card, borderRadius: radii.card, paddingVertical: 18, paddingHorizontal: 20, gap: 12, boxShadow: shadows.card },
   prompt: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  num: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.sage, alignItems: 'center', justifyContent: 'center' },
+  num: { width: 34, height: 34, borderRadius: 17, backgroundColor: colors.greenTint, alignItems: 'center', justifyContent: 'center' },
   middle: { flexGrow: 1, minHeight: 280, alignItems: 'center', justifyContent: 'center', gap: 14 },
   clock: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
   tight: { letterSpacing: -0.88 },
@@ -244,7 +244,7 @@ const styles = StyleSheet.create({
     borderColor: alpha.border,
     backgroundColor: colors.card,
   },
-  listenDisc: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.sage, alignItems: 'center', justifyContent: 'center' },
+  listenDisc: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.greenTint, alignItems: 'center', justifyContent: 'center' },
   foot: { gap: 6 },
   over: { height: 52, alignItems: 'center', justifyContent: 'center' },
 });

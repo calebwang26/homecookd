@@ -22,7 +22,7 @@ import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { ErrorLine } from '@/components/signin/SignInScreen';
-import { ActionButton, type ActionState, ArrowRightIcon, Avatar, BottomSheet, ChatIcon, PotMark, PressableScale, Txt } from '@/components/ui';
+import { ActionButton, type ActionState, ArrowRightIcon, Avatar, BottomSheet, ChatIcon, NoPhoto, PressableScale, Txt } from '@/components/ui';
 import { errorMessage, type Profile } from '@/lib/api';
 import { openChatWith } from '@/lib/messaging';
 import { openRecipe } from '@/lib/navigation';
@@ -150,7 +150,7 @@ function Person({ visible, person, onClose }: PersonSheetProps) {
               <ActionButton
                 label={t('profiles.person.message', { name })}
                 size="xl"
-                icon={<ChatIcon size={22} color={colors.card} />}
+                icon={<ChatIcon size={22} color={colors.ink} />}
                 state={btn}
                 onPress={() => void message()}
                 accessibilityHint={t('profiles.person.messageHint', { name })}
@@ -173,7 +173,7 @@ function DishRow({ dish, onOpen }: { dish: LibraryEntry; onOpen: (d: LibraryEntr
         {dish.poster_url ? (
           <Image source={{ uri: dish.poster_url }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} recyclingKey={dish.id} />
         ) : (
-          <PotMark size={30} />
+          <NoPhoto title={dish.title} size={56} />
         )}
       </View>
       <Txt variant="rowTitle" size={17} numberOfLines={2} style={styles.rowText}>
@@ -194,7 +194,7 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: radii.tile,
     overflow: 'hidden',
-    backgroundColor: colors.peach,
+    backgroundColor: colors.well,
     alignItems: 'center',
     justifyContent: 'center',
   },

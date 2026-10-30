@@ -4,8 +4,8 @@
 //   canPostcard(cook, meId)         the postcard step only for another family member's dish
 //   madeItWords(told, cookName)     the burst: "You made it" + "We told Dad." (never speaks for the cook)
 //   postcardAsk / ratingAsk         "Show Dad how it came out" / "How close to Dad’s?"
-//   nextRating(current, tapped)     tap a pot to rate, the same pot again to take it back (optional)
-//   ratingWords(n)                  "4 of 5 pots" (screen readers)
+//   nextRating(current, tapped)     tap a yolk to rate, the same yolk again to take it back (optional)
+//   ratingWords(n)                  "4 of 5" (screen readers; the yolks were pots)
 //   isPostcard(m)                   a `cooked` message that carries a photo
 //   postcardTilt(id)                one steady 1-1.5° tilt per card (callers drop it under Reduce Motion)
 //   likedIds(messages, meId)        cooked messages I already answered "Just like mine"
@@ -22,7 +22,7 @@
 // Copy rules (handoff section 5): the app never speaks for the cook (no "Dad will love this"), no
 // gendered pronouns, no guilt words.
 
-/** At most this many pots (the server's check: 1-5). TODO(caleb): pots vs dumplings (handoff 8.3). */
+/** At most this many yolks (the server's check: 1-5). TODO(caleb): the rating's shape (was pots vs dumplings, handoff 8.3). */
 export const RATING_MAX = 5;
 
 /** Shown in place of "Hold to talk" after a hold too short to be a voice note (lib/voice MIN_VOICE_S). */
@@ -106,7 +106,7 @@ const possessive = (name: string) => `${name.trim()}’s`;
 export const postcardAsk = (cookName: string) => `Show ${cookName.trim()} how it came out`;
 export const ratingAsk = (cookName: string) => `How close to ${possessive(cookName)}?`;
 
-/** Tapping pot `tapped` (1-5): rates it, or takes the rating back when it's the one already chosen. */
+/** Tapping yolk `tapped` (1-5): rates it, or takes the rating back when it's the one already chosen. */
 export function nextRating(current: number | null, tapped: number): number | null {
   const n = Math.min(RATING_MAX, Math.max(1, Math.round(tapped)));
   return current === n ? null : n;
@@ -117,7 +117,7 @@ export function cleanRating(v: unknown): number | null {
   return typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= RATING_MAX ? v : null;
 }
 
-export const ratingWords = (n: number) => `${n} of ${RATING_MAX} pots`;
+export const ratingWords = (n: number) => `${n} of ${RATING_MAX}`;
 
 /** A `cooked` message with a photo: drawn as a postcard (cook's Home, the chat). */
 export const isPostcard = (m: { kind?: string | null; photo_url?: string | null } | null | undefined) =>

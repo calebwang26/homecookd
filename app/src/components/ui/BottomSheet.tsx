@@ -1,6 +1,6 @@
 // Motion spec 4 bottom sheet (Share sheet, Ask sheet, sign-up, record confirm).
-//  - Backdrop: blur 30 + rgba(30,36,16,0.35), fades in over 220 ms. Tap it to dismiss.
-//  - Sheet: cream #FFFDF7, top corners 32, grabber 36x5 rgba(30,36,16,0.18); slides up from its
+//  - Backdrop: blur 30 + rgba(31,36,48,0.35), fades in over 220 ms. Tap it to dismiss.
+//  - Sheet: white #FFFFFF, top corners 32, grabber 36x5 rgba(31,36,48,0.18); slides up from its
 //    height on a spring (damping 20, stiffness 220, mass 0.9); closes in 240 ms Easing.in(cubic).
 //  - Optional round close button top-right and a pinned `footer` (one big pill button).
 //  - Drag the top of the sheet down to dismiss (bonus; tap and close always work). `dismissOnDrag={false}`
@@ -47,7 +47,7 @@ export type BottomSheetProps = {
   /** When set, plays the success choreography in place of the content. */
   success?: { title: string; subtitle?: string } | null;
   onSuccessDone?: () => void;
-  /** Sheet background (default cream #FFFDF7). */
+  /** Sheet background (default white #FFFFFF). */
   background?: string;
   /** Max height as a fraction of the window (default 0.92). */
   maxHeightRatio?: number;
@@ -303,7 +303,7 @@ const styles = StyleSheet.create({
     borderTopLeftRadius: radii.sheet,
     borderTopRightRadius: radii.sheet,
     overflow: 'hidden',
-    boxShadow: '0 -10px 30px rgba(30,36,16,0.10)',
+    boxShadow: '0 -10px 30px rgba(31,36,48,0.10)',
   },
   handleZone: { height: 24, alignItems: 'center', justifyContent: 'flex-start', paddingTop: 8 },
   grabber: { width: 36, height: 5, borderRadius: 2.5, backgroundColor: alpha.grabber },

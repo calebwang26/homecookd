@@ -1,9 +1,9 @@
-// The big card on /i: a face (whoever sent the invite, else the pot), one Fraunces question or
+// The big card on /i: a face (whoever sent the invite, else the egg), one Fraunces question or
 // sentence, at most one short line, and the card's actions as children. InviteCardSkeleton draws
 // it while the invite loads.
 import type { ReactNode } from 'react';
 import { StyleSheet, View } from 'react-native';
-import { Avatar, PotMark, Skeleton, Txt } from '@/components/ui';
+import { Avatar, EggMark, Skeleton, Txt } from '@/components/ui';
 import { useWords } from '@/lib/words/useWords';
 import { colors, radii, shadows } from '@/theme/tokens';
 
@@ -32,7 +32,7 @@ export function InviteCard({
           <Avatar profile={face} size={FACE} />
         ) : (
           <View style={styles.pot}>
-            <PotMark size={52} />
+            <EggMark size={52} />
           </View>
         )}
       </View>
@@ -80,7 +80,7 @@ const styles = StyleSheet.create({
   },
   face: { width: FACE, height: FACE },
   faded: { opacity: 0.5 },
-  pot: { width: FACE, height: FACE, borderRadius: FACE / 2, backgroundColor: colors.peach, alignItems: 'center', justifyContent: 'center' },
+  pot: { width: FACE, height: FACE, borderRadius: FACE / 2, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   words: { gap: 10, alignSelf: 'stretch' },
   skelWords: { alignItems: 'center' },
   skelLine: { marginTop: 6 },

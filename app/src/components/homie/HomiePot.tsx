@@ -1,18 +1,17 @@
-// homie: the launch screen's pot (ui/icons PotMark, same face) in a round button that lights up like
-// Siri. The face, body and lid never change; what's around the circle says what homie is doing, the
-// same on every screen:
-//   off        a plain white circle: no glow, no steam, no ring (homie isn't listening)
-//   lit        it lights up: the circle warms and a sun halo glows around it (the beat before it speaks)
-//   listening  the mic is on: the halo, and a yellow ring on the circle's edge with a bright arc that
-//              orbits it while the ring pulses; both grow a little with the mic level (`level` 0..1)
-//   thinking   the same ring in a quicker rhythm: three short arcs spinning fast while the answer comes
-//   speaking   the halo pulses with the words and the lid lifts, again and again
+// homie: the egg mascot (the kit's mood SVGs, ui/Egg) in a round button that lights up like Siri. It was
+// the pot until the egg brand (Oct 30); the API is the same. The egg's mood follows the state, and what's
+// around the circle says what homie is doing, the same on every screen:
+//   off        a plain white circle with the logo egg (made-it): no glow, no ring (homie isn't listening)
+//   lit        it lights up (hello): the circle warms and a yolk halo glows around it (the beat before it speaks)
+//   listening  the mic is on (listening): the halo, and a yolk ring on the circle's edge with a bright arc
+//              that orbits it while the ring pulses; both grow a little with the mic level (`level` 0..1)
+//   thinking   the same ring in a quicker rhythm (hello): three short arcs spinning fast while the answer comes
+//   speaking   a voice plays (listening): the halo pulses with the words
 //   timer      a green clock ring around the circle empties (`timerProgress` 1 -> 0); it shows with any
-//              state, and steps out to sit just outside the yellow ring while that one shows
-// Steam rises in every state but off (with the mic level while listening, in slow curls while thinking).
+//              state, and steps out to sit just outside the yolk ring while that one shows
 // It draws a little past its `size` box: the rings by about a fifth of it, the halo by about a third.
-// Reduce Motion: no loops. Each state is a still picture (the arcs rest, speaking's lid sits a little
-// open) and a change cross-fades in 150 ms. A picture only: whoever renders it gives it a label.
+// Reduce Motion: no loops. Each state is a still picture (the arcs rest) and a change cross-fades in
+// 150 ms. A picture only: whoever renders it gives it a label.
 import { useEffect, useId } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
@@ -27,17 +26,16 @@ import Animated, {
   withTiming,
   type SharedValue,
 } from 'react-native-reanimated';
-import Svg, { Circle, Defs, Ellipse, LinearGradient, Path, RadialGradient, Stop } from 'react-native-svg';
+import Svg, { Circle, Defs, LinearGradient, Path, RadialGradient, Stop } from 'react-native-svg';
 
+import { EggMascot, type EggMood } from '@/components/ui/Egg';
 import type { HomieState } from '@/lib/homie/store';
 import { alpha, colors, motion, shadows } from '@/theme/tokens';
 
 const AnimatedPath = Animated.createAnimatedComponent(Path);
 
-const STEAM_LEN = 34;
-const CURLS = [40, 50, 60];
-/** Steam in each still state; listening adds the mic level, thinking loops. */
-const STEAM: Record<HomieState, number> = { off: 0, listening: 0.3, thinking: 0.7, lit: 0.6, speaking: 1, timer: 0.35 };
+/** The egg's mood in each state (ui/eggFiles): a voice playing or the mic on is "listening". */
+const MOOD: Record<HomieState, EggMood> = { off: 'made-it', lit: 'hello', listening: 'listening', thinking: 'hello', speaking: 'listening', timer: 'made-it' };
 /** How bright the halo is in each state (the ring's states keep it softer, so the ring stands out). */
 const HALO: Record<HomieState, number> = { off: 0, lit: 1, listening: 0.7, thinking: 0.7, speaking: 1, timer: 0 };
 /** One lap of the listening arc, and of the thinking arcs. */
@@ -82,10 +80,6 @@ export function HomiePot({ state, level = 0, size = 56, timerProgress = null, sh
   const speaking = state === 'speaking';
   const awake = state !== 'off' && state !== 'timer';
 
-  const steam = useSharedValue(STEAM[state]);
-  const drift = useSharedValue(0);
-  const lift = useSharedValue(0);
-  const lidOpacity = useSharedValue(1);
   const warm = useSharedValue(awake ? 1 : 0);
   const halo = useSharedValue(HALO[state]);
   const pulse = useSharedValue(0);
@@ -99,43 +93,6 @@ export function HomiePot({ state, level = 0, size = 56, timerProgress = null, sh
   const clock = useSharedValue(timerProgress ?? 0);
   const clockOn = useSharedValue(timerProgress == null ? 0 : 1);
 
-  // Steam: a still amount per state, the mic level while listening, slow curls while thinking.
-  useEffect(() => {
-    if (thinking && !reduce) {
-      steam.set(withRepeat(withSequence(withTiming(1, { duration: 1400, easing: inOut }), withTiming(0.25, { duration: 1400, easing: inOut })), -1, false));
-    } else if (!listening) {
-      steam.set(withTiming(STEAM[state], reduce ? fade : { duration: 260, easing: Easing.out(Easing.cubic) }));
-    }
-  }, [state, listening, thinking, reduce, steam]);
-  useEffect(() => {
-    if (listening) steam.set(withTiming(STEAM.listening + 0.7 * level, reduce ? fade : { duration: 120 }));
-  }, [listening, level, reduce, steam]);
-
-  // Steam drifts up and back while there is any.
-  const steamy = state !== 'off';
-  useEffect(() => {
-    if (steamy && !reduce) drift.set(withRepeat(withTiming(1, { duration: 1800, easing: Easing.inOut(Easing.sin) }), -1, true));
-    else {
-      cancelAnimation(drift);
-      drift.set(withTiming(0, fade));
-    }
-  }, [steamy, reduce, drift]);
-
-  useEffect(() => {
-    if (reduce) {
-      // A still lid: it fades in where it now sits.
-      const at = speaking ? 0.6 : 0;
-      if (lift.get() === at) return;
-      cancelAnimation(lift);
-      lift.set(at);
-      lidOpacity.set(0);
-      lidOpacity.set(withTiming(1, fade));
-      return;
-    }
-    lidOpacity.set(1);
-    const talk = withSequence(withTiming(1, { duration: 200, easing: Easing.out(Easing.quad) }), withTiming(0.2, { duration: 260, easing: Easing.inOut(Easing.quad) }));
-    lift.set(speaking ? withRepeat(talk, -1, false) : withTiming(0, { duration: 200, easing: Easing.out(Easing.cubic) }));
-  }, [speaking, reduce, lift, lidOpacity]);
 
   // Lighting up: the warm disc, the halo blooming open, the ring and its arcs fading in (or out).
   useEffect(() => {
@@ -223,15 +180,6 @@ export function HomiePot({ state, level = 0, size = 56, timerProgress = null, sh
   // From 12 o'clock, clockwise (two half arcs), so the remaining time ends at the top like a clock.
   const clockPath = `M${clockBox / 2} ${clockBox / 2 - clockR}a${clockR} ${clockR} 0 1 1 0 ${2 * clockR}a${clockR} ${clockR} 0 1 1 0 ${-2 * clockR}`;
 
-  const steamProps = useAnimatedProps(() => ({
-    strokeDashoffset: reduce ? 0 : STEAM_LEN * (1 - steam.value),
-    strokeOpacity: 0.6 * Math.min(1, steam.value * 1.5),
-  }));
-  const steamStyle = useAnimatedStyle(() => ({ transform: [{ translateY: -drift.value * size * 0.04 }] }));
-  const lidStyle = useAnimatedStyle(() => ({
-    opacity: lidOpacity.value,
-    transform: [{ translateY: -lift.value * size * 0.06 }, { rotate: `${-lift.value * 7}deg` }],
-  }));
   const warmStyle = useAnimatedStyle(() => ({ opacity: warm.value }));
   // Lit, the glow takes over from the shadow (which would muddy the ring).
   const shadowStyle = useAnimatedStyle(() => ({ opacity: 1 - warm.value }));
@@ -249,8 +197,8 @@ export function HomiePot({ state, level = 0, size = 56, timerProgress = null, sh
   const clockProps = useAnimatedProps(() => ({ strokeDashoffset: clockC * (1 - clock.value) }));
   const clockStyle = useAnimatedStyle(() => ({ opacity: clockOn.value, transform: [{ scale: reduce ? 1 : clockIn + (1 - clockIn) * ringOn.value }] }));
 
-  const potW = size * 0.62;
-  const potBox = { left: size * 0.19, top: size * 0.29, width: potW, height: potW * 0.92 };
+  // The egg fills most of the disc (the kit's clear space: about 15% of the disc on each side).
+  const egg = Math.round(size * 0.72);
   const disc = { borderRadius: size / 2 };
   const around = (box: number) => ({ left: (size - box) / 2, top: (size - box) / 2, width: box, height: box });
 
@@ -260,9 +208,9 @@ export function HomiePot({ state, level = 0, size = 56, timerProgress = null, sh
         <Svg width={haloBox} height={haloBox} viewBox="0 0 100 100">
           <Defs>
             <RadialGradient id={`${id}halo`} cx="50%" cy="50%" r="50%">
-              <Stop offset="0.6" stopColor={colors.sun} stopOpacity={0.7} />
-              <Stop offset="0.8" stopColor={colors.sun} stopOpacity={0.25} />
-              <Stop offset="1" stopColor={colors.sun} stopOpacity={0} />
+              <Stop offset="0.6" stopColor={colors.yolk} stopOpacity={0.7} />
+              <Stop offset="0.8" stopColor={colors.yolk} stopOpacity={0.25} />
+              <Stop offset="1" stopColor={colors.yolk} stopOpacity={0} />
             </RadialGradient>
           </Defs>
           <Circle cx={50} cy={50} r={50} fill={`url(#${id}halo)`} />
@@ -270,55 +218,26 @@ export function HomiePot({ state, level = 0, size = 56, timerProgress = null, sh
       </Animated.View>
       {shadow ? <Animated.View style={[StyleSheet.absoluteFill, disc, styles.disc, styles.shadow, shadowStyle]} /> : null}
       <View style={[StyleSheet.absoluteFill, disc, styles.disc]} />
-      <Animated.View style={[StyleSheet.absoluteFill, disc, styles.butter, warmStyle]} />
+      <Animated.View style={[StyleSheet.absoluteFill, disc, styles.warm, warmStyle]} />
 
-      <Animated.View style={[StyleSheet.absoluteFill, steamStyle]}>
-        <Svg width={size} height={size} viewBox="0 0 100 100">
-          {CURLS.map((x, i) => (
-            <AnimatedPath
-              key={x}
-              d={`M${x} 47c-4-4 4-7 0-12.5s4-8.5 0-14.5`}
-              transform={i === 1 ? 'translate(0 -3)' : undefined}
-              stroke={colors.potLine}
-              strokeWidth={3}
-              strokeLinecap="round"
-              fill="none"
-              strokeDasharray={`${STEAM_LEN} ${STEAM_LEN}`}
-              animatedProps={steamProps}
-            />
-          ))}
-        </Svg>
-      </Animated.View>
 
-      {/* PotMark's body, handles and face: never animated. */}
-      <Svg style={[styles.abs, potBox]} width={potBox.width} height={potBox.height} viewBox="0 0 100 92">
-        <Path d="M22 44h56v18a20 20 0 0 1-20 20H42a20 20 0 0 1-20-20z" fill={colors.potBody} stroke={colors.potLine} strokeWidth={4} strokeLinejoin="round" />
-        <Path d="M22 52h-8M78 52h8" stroke={colors.potLine} strokeWidth={5} strokeLinecap="round" />
-        <Circle cx={40} cy={59} r={3.6} fill={colors.potFace} />
-        <Circle cx={60} cy={59} r={3.6} fill={colors.potFace} />
-        <Path d="M45 65q5 5 10 0" fill="none" stroke={colors.potFace} strokeWidth={3} strokeLinecap="round" />
-      </Svg>
-      <Animated.View style={[styles.abs, potBox, styles.lidOrigin, lidStyle]}>
-        <Svg width={potBox.width} height={potBox.height} viewBox="0 0 100 92">
-          <Ellipse cx={50} cy={42} rx={31} ry={7} fill={colors.potLid} stroke={colors.potLine} strokeWidth={4} />
-          <Circle cx={50} cy={33} r={4.5} fill={colors.potLine} />
-        </Svg>
-      </Animated.View>
+      {/* The egg in its mood for the state: the kit's file, never animated or recolored. */}
+      <EggMascot mood={MOOD[state]} size={egg} style={[styles.abs, { left: (size - egg) / 2, top: (size - egg) / 2 }]} />
 
-      {/* The activity ring: a pulsing yellow track, the orbiting comet (listening), the spinning arcs (thinking). */}
+      {/* The activity ring: a pulsing yolk track, the orbiting comet (listening), the spinning arcs (thinking). */}
       <Animated.View style={[styles.abs, around(ringBox), ringStyle]}>
         <Animated.View style={[StyleSheet.absoluteFill, trackStyle]}>
           <Svg width={ringBox} height={ringBox}>
-            <Circle cx={c} cy={c} r={ringR} stroke={colors.sun} strokeWidth={lineW * 0.6} fill="none" />
+            <Circle cx={c} cy={c} r={ringR} stroke={colors.yolk} strokeWidth={lineW * 0.6} fill="none" />
           </Svg>
         </Animated.View>
         <Animated.View style={[StyleSheet.absoluteFill, orbitStyle]}>
           <Svg width={ringBox} height={ringBox}>
             <Defs>
               <LinearGradient id={`${id}comet`} gradientUnits="userSpaceOnUse" x1={tail.x} y1={tail.y} x2={head.x} y2={head.y}>
-                <Stop offset="0" stopColor={colors.sun} stopOpacity={0} />
-                <Stop offset="0.45" stopColor={colors.sun} stopOpacity={0.6} />
-                <Stop offset="1" stopColor={colors.sun} stopOpacity={1} />
+                <Stop offset="0" stopColor={colors.yolk} stopOpacity={0} />
+                <Stop offset="0.45" stopColor={colors.yolk} stopOpacity={0.6} />
+                <Stop offset="1" stopColor={colors.yolk} stopOpacity={1} />
               </LinearGradient>
             </Defs>
             <Path d={comet} stroke={`url(#${id}comet)`} strokeOpacity={0.35} strokeWidth={glowW} strokeLinecap="round" fill="none" />
@@ -328,10 +247,10 @@ export function HomiePot({ state, level = 0, size = 56, timerProgress = null, sh
         <Animated.View style={[StyleSheet.absoluteFill, spinStyle]}>
           <Svg width={ringBox} height={ringBox}>
             {SEGMENTS.map((mid) => (
-              <Path key={`glow${mid}`} d={arc(mid - SEGMENT_DEG / 2, mid + SEGMENT_DEG / 2)} stroke={colors.sun} strokeOpacity={0.3} strokeWidth={glowW} strokeLinecap="round" fill="none" />
+              <Path key={`glow${mid}`} d={arc(mid - SEGMENT_DEG / 2, mid + SEGMENT_DEG / 2)} stroke={colors.yolk} strokeOpacity={0.3} strokeWidth={glowW} strokeLinecap="round" fill="none" />
             ))}
             {SEGMENTS.map((mid) => (
-              <Path key={mid} d={arc(mid - SEGMENT_DEG / 2, mid + SEGMENT_DEG / 2)} stroke={colors.sun} strokeWidth={lineW} strokeLinecap="round" fill="none" />
+              <Path key={mid} d={arc(mid - SEGMENT_DEG / 2, mid + SEGMENT_DEG / 2)} stroke={colors.yolk} strokeWidth={lineW} strokeLinecap="round" fill="none" />
             ))}
           </Svg>
         </Animated.View>
@@ -351,7 +270,5 @@ const styles = StyleSheet.create({
   abs: { position: 'absolute' },
   disc: { backgroundColor: colors.card },
   shadow: { boxShadow: shadows.button },
-  butter: { backgroundColor: colors.butter },
-  // The lid tips up from its left rim.
-  lidOrigin: { transformOrigin: '19% 46%' },
+  warm: { backgroundColor: colors.yolkTint },
 });

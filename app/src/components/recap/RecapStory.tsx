@@ -35,7 +35,7 @@ import {
   MessageIcon,
   PauseIcon,
   PlayIcon,
-  PotMark,
+  EggMascot,
   ShareIcon,
   SpoonIcon,
   ToastViewport,
@@ -218,7 +218,7 @@ export function RecapStory({ recap, person, dish, voice, onClose, shareSlide, in
             <View style={styles.body}>
               <SlideBody slide={slide} tone={tone} person={person} dish={dish} voice={voice} onImage={(key) => settle(index, key)} />
             </View>
-            <Brand size={16} color={tone.fg} style={styles.mark} />
+            <Brand size={16} reversed={tone.dark} style={styles.mark} />
           </View>
         </Animated.View>
       </Pressable>
@@ -281,7 +281,7 @@ function SlideBody({ slide, tone, person, dish, voice, onImage }: BodyProps) {
     case 'most_loved':
       return <DishSlide title={slide.title} tone={tone} poster={dish?.(slide.recipe_id)?.poster_url ?? null} cook={null} heart onImage={onImage} />;
     case 'postcards':
-      return <PhotosSlide title={slide.title} tone={tone} photos={slide.photos} onImage={onImage} empty={<PotMark size={64} />} />;
+      return <PhotosSlide title={slide.title} tone={tone} photos={slide.photos} onImage={onImage} empty={<EggMascot mood="sleepy" size={64} />} />;
     case 'answered':
       return <IconSlide title={slide.title} tone={tone} icon={<MessageIcon size={52} color={tone.accent} />} />;
     case 'close':
@@ -310,8 +310,8 @@ function Headline({ title, tone, size = 36 }: { title: string; tone: SlideTone; 
 function CoverSlide({ title, tone, closing }: { title: string; tone: SlideTone; closing?: boolean }) {
   return (
     <View style={styles.center}>
-      <View style={[styles.disc, { backgroundColor: closing ? alpha.glassOnDark : colors.peach }]}>
-        <PotMark size={64} />
+      <View style={[styles.disc, { backgroundColor: colors.card }]}>
+        <EggMascot mood={closing ? 'made-it' : 'hello'} size={64} />
       </View>
       <Headline title={title} tone={tone} size={closing ? 34 : 40} />
     </View>

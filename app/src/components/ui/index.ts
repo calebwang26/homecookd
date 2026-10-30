@@ -1,4 +1,4 @@
-// homecookd Hearth UI kit. Import from '@/components/ui'. See /dev/gallery for every piece on screen.
+// homecookd UI kit (Hearth layout, the egg brand's colors and mark). Import from '@/components/ui'. See /dev/gallery for every piece on screen.
 export * from './ActionButton';
 export * from './Avatar';
 export * from './BottomSheet';
@@ -10,11 +10,12 @@ export * from './EmptyState';
 export * from './FloatingTabBar';
 export * from './haptics';
 export * from './Header';
+export * from './NoPhoto';
 export * from './IconButton';
 export * from './icons';
 export * from './motion';
 export * from './Pill';
-export * from './PotMood';
+export * from './Egg';
 export * from './PressableScale';
 export * from './ScrollHold';
 export * from './SegmentedChoice';

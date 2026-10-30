@@ -1,7 +1,7 @@
 // The background of the cook's centred screens (recording, the walkie-talkie, done; Caleb's v3b): the
-// parent peach wash over the whole height (#F9E3CF at the top, #FBEEE2, then the page #F7F7F2), and a
-// soft warm glow (WarmGlow: the sun at 16%, fading out over ~230 pt) centred behind the big button or
-// homie. All of them, and homie's questions while she records, use one centred column with the same
+// yolk-tint wash over the whole height (#FCEBD0 at the top, #FDF1DE, then the cream page #FBF5EA), and a
+// soft warm glow (WarmGlow: the yolk at 16%, fading out over ~230 pt) centred behind the big button (never
+// behind the egg: the kit has no glows on it). All of them, and homie's questions while she records, use one centred column with the same
 // rhythm (COLUMN): 32 pt at the sides, 56 pt from the words to homie or the button, 48 pt from there
 // to the line under it.
 import { LinearGradient } from 'expo-linear-gradient';
@@ -10,7 +10,7 @@ import Svg, { Circle, Defs, RadialGradient, Stop } from 'react-native-svg';
 
 import { colors } from '@/theme/tokens';
 
-const WASH = [colors.peach, '#FBEEE2', colors.page] as const;
+const WASH = [colors.yolkTint, '#FDF1DE', colors.page] as const;
 export const GLOW_RADIUS = 230;
 export const COLUMN = { side: 32, toHero: 56, toLabel: 48 } as const;
 
@@ -26,8 +26,8 @@ export function WarmGlow({ box, radius = GLOW_RADIUS }: { box: number; radius?: 
       <Svg width={d} height={d} viewBox="0 0 100 100">
         <Defs>
           <RadialGradient id="cookWarmGlow" cx="50%" cy="50%" r="50%">
-            <Stop offset="0" stopColor={colors.sun} stopOpacity={0.16} />
-            <Stop offset="1" stopColor={colors.sun} stopOpacity={0} />
+            <Stop offset="0" stopColor={colors.yolk} stopOpacity={0.16} />
+            <Stop offset="1" stopColor={colors.yolk} stopOpacity={0} />
           </RadialGradient>
         </Defs>
         <Circle cx={50} cy={50} r={50} fill="url(#cookWarmGlow)" />

@@ -316,10 +316,10 @@ export function UpdatesCard({ enterIndex = 0 }: { enterIndex?: number }) {
             accessibilityLabel={t(items.length === 1 ? 'parent.updates.seeAllOne' : 'parent.updates.seeAllMany', { n: items.length })}
             accessibilityHint={t('parent.updates.seeAllHint')}
             style={styles.seeAll}>
-            <Txt variant="label" weight={700} color={colors.greenDeep}>
+            <Txt variant="label" weight={700} color={colors.yolkDeep}>
               {t('parent.updates.seeAll')}
             </Txt>
-            <ChevronRightIcon size={16} strokeWidth={2.4} color={colors.greenDeep} />
+            <ChevronRightIcon size={16} strokeWidth={2.4} color={colors.yolkDeep} />
           </PressableScale>
         ) : null}
       </View>
@@ -394,8 +394,8 @@ function AskRow({ u, onGo }: { u: AskUpdate; onGo?: () => void }) {
           accessibilityLabel={t('parent.updates.answerName', { name: u.who.name })}
           accessibilityHint={t('parent.updates.answerHint')}
           style={styles.answer}>
-          <MicIcon size={16} color={colors.sageInk} />
-          <Txt variant="label" size={14} weight={700} color={colors.sageInk}>
+          <MicIcon size={16} color={colors.green} />
+          <Txt variant="label" size={14} weight={700} color={colors.green}>
             {t('parent.ask.answer')}
           </Txt>
         </PressableScale>
@@ -419,8 +419,8 @@ function HearChip({ who, message }: { who: Pick<Profile, 'name'>; message: Messa
         hitSlop={{ top: 9, bottom: 9, left: 6, right: 6 }}
         accessibilityLabel={playing ? t('parent.updates.pause', { name: who.name }) : t('parent.updates.hearQuestion', { name: who.name })}
         style={[styles.hear, !v.available ? styles.dim : null]}>
-        {playing ? <PauseIcon size={12} color={colors.lavenderInk} /> : <PlayIcon size={12} color={colors.lavenderInk} />}
-        <Txt variant="label" size={14} weight={700} color={colors.lavenderInk} style={styles.tnum} numberOfLines={1}>
+        {playing ? <PauseIcon size={12} color={colors.ink} /> : <PlayIcon size={12} color={colors.ink} />}
+        <Txt variant="label" size={14} weight={700} color={colors.ink} style={styles.tnum} numberOfLines={1}>
           {t('parent.updates.hear', { name: who.name, time })}
         </Txt>
       </PressableScale>
@@ -484,7 +484,7 @@ function MoveRow({ u, onGo }: { u: MoveUpdate; onGo?: () => void }) {
         accessibilityLabel={t('parent.updates.letInLabel', { name: who.name })}
         accessibilityHint={t('parent.updates.letInHint')}
         style={styles.answer}>
-        <Txt variant="label" size={14} weight={700} color={colors.sageInk}>
+        <Txt variant="label" size={14} weight={700} color={colors.green}>
           {t('parent.updates.letIn')}
         </Txt>
       </PressableScale>
@@ -532,7 +532,7 @@ const styles = StyleSheet.create({
     paddingLeft: 10,
     paddingRight: 12,
     borderRadius: 999,
-    backgroundColor: colors.sage,
+    backgroundColor: colors.greenTint,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
@@ -542,7 +542,7 @@ const styles = StyleSheet.create({
     height: 30,
     paddingHorizontal: 12,
     borderRadius: 999,
-    backgroundColor: colors.lavender,
+    backgroundColor: colors.yolkTint,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,

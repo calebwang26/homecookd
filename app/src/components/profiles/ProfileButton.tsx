@@ -42,21 +42,21 @@ export function openFamilyGateway() {
 
 /**
  * `homieRoom` (Parent Home's date line, Kid Home's "Hi, Leo"): the pill also keeps the room to its left
- * where homie's pot rests (lib/homie restFrame puts it just left of the pill), so the words beside it
- * never run under the pot; a long date or name wraps instead.
+ * where homie's egg rests (lib/homie restFrame puts it just left of the pill), so the words beside it
+ * never run under the egg; a long date or name wraps instead.
  */
 export function ProfileButton({ faceOnly = false, homieRoom = false }: { faceOnly?: boolean; homieRoom?: boolean }) {
   const { me } = useSession();
   if (!me) return null;
   const pill = <Pill faceOnly={faceOnly} me={me} />;
-  // No pot to keep room for while homie is switched off (lib/homie/switch).
+  // No egg to keep room for while homie is switched off (lib/homie/switch).
   return homieRoom && HOMIE_ON ? <HomieRoom>{pill}</HomieRoom> : pill;
 }
 
 function HomieRoom({ children }: { children: ReactNode }) {
   const slot = useHomieSlot();
   const { width } = useWindowDimensions();
-  // From the pot's left edge to the header's right padding (the row ends there).
+  // From the egg's left edge to the header's right padding (the row ends there).
   const room = Math.max(0, width - space.gutter - slot.x);
   return <View style={[styles.room, { minWidth: room }]}>{children}</View>;
 }
@@ -99,7 +99,7 @@ export function ActingAsBar({ style }: { style?: StyleProp<ViewStyle> }) {
           {t('profiles.button.actingAs', { name: me.name })}
         </Txt>
         <PressableScale onPress={backToOwner} hitSlop={10} accessibilityRole="button" accessibilityLabel={t('profiles.picker.backTo', { name: owner.name })} style={styles.barBack}>
-          <Txt variant="label" size={15} weight={700} color={colors.greenDeep}>
+          <Txt variant="label" size={15} weight={700} color={colors.yolkDeep}>
             {t('profiles.picker.backTo', { name: owner.name })}
           </Txt>
         </PressableScale>

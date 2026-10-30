@@ -1,6 +1,6 @@
-// One circle on the Community map: the dish's photo (our stock photo, or the pot) in a cream rim, and a
+// One circle on the Community map: the dish's photo (our stock photo, or the egg) in a cream rim, and a
 // count when several families share the ~1 km cell. It pops in after the circles before it (`index`).
-// Picked, it springs bigger (54 -> 70 pt, the canvas) with a warm sun ring; with Reduce Motion it only
+// Picked, it springs bigger (54 -> 70 pt, the canvas) with a warm yolk ring; with Reduce Motion it only
 // gets the ring, and the pop is a fade.
 import { useEffect } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -16,9 +16,9 @@ import { popIn, SPRING_UP } from './motion';
 const PICKED = 70;
 const GROW = PICKED / PHOTO;
 const RIM = 3;
-// From the Community canvas: a circle lifts off the map, and the picked one wears a sun ring.
-const LIFT = '0 4px 12px rgba(30,36,16,0.22)';
-const RING = '0 0 0 5px rgba(254,190,41,0.55), 0 6px 18px rgba(30,36,16,0.25)';
+// From the Community canvas: a circle lifts off the map, and the picked one wears a yolk ring.
+const LIFT = '0 4px 12px rgba(31,36,48,0.22)';
+const RING = '0 0 0 5px rgba(242,162,58,0.55), 0 6px 18px rgba(31,36,48,0.25)';
 
 export type MapSpotProps = {
   x: number;
@@ -53,7 +53,7 @@ export function MapSpot({ x, y, index, photo, count, picked, label, onPress }: M
           accessibilityHint={picked ? 'Closes the card' : 'Shows whose it is'}
           accessibilityState={{ selected: picked }}
           style={[styles.circle, { boxShadow: picked ? RING : LIFT }]}>
-          <DishPhoto uri={photo} label="" pot={26} style={styles.photo} />
+          <DishPhoto uri={photo} label="" size={48} style={styles.photo} />
           {count > 1 ? (
             <View style={styles.badge}>
               <Txt variant="label" size={13} weight={700} color={colors.card}>

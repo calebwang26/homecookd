@@ -3,11 +3,11 @@
 //
 //   ┌──────────── grabber ──────── (x) ┐
 //   │  Ask what they're craving         │
-//   │  ┌ peach bubble ───────────────┐  │  her message, in her language, editable
+//   │  ┌ green bubble ───────────────┐  │  her message, in her language, editable
 //   │  │ What do you miss from home?…│  │
 //   │  │            ✎ Tap to change it│  │
 //   │  └─────────────────────────────┘  │
-//   │  [pot] Pick a dish, Shreya will…  │  the link's preview: the pot, never a stock photo
+//   │  [egg] Pick a dish, Shreya will…  │  the link's preview: the egg, never a stock photo
 //   │        homecookd.app              │
 //   │  (⛓) (✉) (✆) (…)                 │
 //   └───────────────────────────────────┘
@@ -23,7 +23,7 @@ import { StyleSheet, TextInput, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 
 import { ExternalRow } from '@/components/share/ExternalRow';
-import { BottomSheet, PotMark, PressableScale, Txt } from '@/components/ui';
+import { BottomSheet, EggMark, PressableScale, Txt } from '@/components/ui';
 import { createCravingLink } from '@/lib/cravings';
 import { useSession } from '@/lib/session';
 import { useWords } from '@/lib/words/useWords';
@@ -99,14 +99,14 @@ function Sheet({ visible, onClose, onSent }: CravingSheetProps) {
           />
           <PressableScale onPress={() => input.current?.focus()} accessibilityRole="button" style={styles.change}>
             <PencilIcon />
-            <Txt size={17} weight={700} color={colors.peachInk}>
+            <Txt size={17} weight={700} color={colors.ink}>
               {t('craving.sheet.change')}
             </Txt>
           </PressableScale>
         </View>
         <View style={styles.preview}>
           <View style={styles.mark}>
-            <PotMark size={36} />
+            <EggMark size={36} />
           </View>
           <View style={styles.previewWords}>
             <Txt variant="title" numberOfLines={2}>
@@ -123,7 +123,7 @@ function Sheet({ visible, onClose, onSent }: CravingSheetProps) {
 
 function PencilIcon() {
   return (
-    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={colors.peachInk} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+    <Svg width={16} height={16} viewBox="0 0 24 24" fill="none" stroke={colors.ink} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M4 20h4L19 9l-4-4L4 16v4z" />
     </Svg>
   );
@@ -133,9 +133,9 @@ const styles = StyleSheet.create({
   content: { gap: 18 },
   title: { paddingRight: 48, paddingTop: 4 },
   group: { gap: 8 },
-  // Her words as a chat bubble of hers (peach, the tail corner low on the left).
+  // Her words as a chat bubble of hers (the green tint, the tail corner low on the left).
   bubble: {
-    backgroundColor: colors.peach,
+    backgroundColor: colors.yolkTint,
     borderTopLeftRadius: 22,
     borderTopRightRadius: 22,
     borderBottomRightRadius: 22,
@@ -159,6 +159,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     backgroundColor: colors.page,
   },
-  mark: { width: 48, height: 48, borderRadius: 12, backgroundColor: colors.peach, alignItems: 'center', justifyContent: 'center' },
+  mark: { width: 48, height: 48, borderRadius: 12, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   previewWords: { flex: 1, gap: 2 },
 });

@@ -48,7 +48,7 @@ export type ExternalRowProps = {
 /** label, a11y and hint are word keys, read with t() as the row draws. */
 type Item = { id: ExternalAction; label: WordKey; a11y: WordKey; hint?: WordKey; fill: string; icon: () => ReactNode };
 
-// Hearth tints in place of Spotify's brand colours.
+// The egg palette in place of Spotify's brand colours.
 const ITEMS: Item[] = [
   { id: 'copy', label: 'share.app.copy', a11y: 'share.app.copy', fill: colors.ink, icon: () => <LinkIcon size={26} color={colors.card} /> },
   { id: 'sms', label: 'share.app.messages', a11y: 'share.app.messagesA11y', fill: colors.green, icon: () => <MessageIcon size={26} color={colors.card} /> },
@@ -57,10 +57,10 @@ const ITEMS: Item[] = [
     label: 'share.app.instagram',
     a11y: 'share.app.instagramA11y',
     hint: 'share.app.instagramHint',
-    fill: colors.potLid,
+    fill: colors.yolk,
     icon: () => <InstagramIcon size={26} color={colors.ink} />,
   },
-  { id: 'whatsapp', label: 'share.app.whatsapp', a11y: 'share.app.whatsappA11y', fill: colors.olive, icon: () => <WhatsAppIcon size={27} color={colors.card} /> },
+  { id: 'whatsapp', label: 'share.app.whatsapp', a11y: 'share.app.whatsappA11y', fill: colors.green, icon: () => <WhatsAppIcon size={27} color={colors.card} /> },
   { id: 'more', label: 'share.app.more', a11y: 'share.app.moreA11y', fill: colors.well, icon: () => <MoreIcon size={26} color={colors.ink} /> },
 ];
 

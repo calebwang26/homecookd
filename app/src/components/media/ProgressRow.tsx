@@ -26,8 +26,8 @@ export function ProgressRow({ elapsed, duration, progress, tone = 'page', onSeek
   elapsed: number;
   duration: number;
   progress: number;
-  /** 'peach' on the Hear card, 'video' over a clip, 'page' on cream. */
-  tone?: 'page' | 'peach' | 'video';
+  /** 'tint' on the Hear card (the green tint), 'video' over a clip, 'page' on cream. */
+  tone?: 'page' | 'tint' | 'video';
   onSeek?: (elapsed: number) => void;
   disabled?: boolean;
   /** Back / forward 10 s buttons at the ends (default true when seekable). */
@@ -43,7 +43,7 @@ export function ProgressRow({ elapsed, duration, progress, tone = 'page', onSeek
   // Where the finger came down, and what it turned out to be.
   const touch = useRef<{ x: number; y: number; kind: 'tap' | 'drag' | 'scroll' } | null>(null);
   const p = Math.max(0, Math.min(1, preview ?? (progress || 0)));
-  const ink = tone === 'video' ? colors.card : tone === 'peach' ? colors.peachInk : colors.muted;
+  const ink = tone === 'video' ? colors.card : tone === 'tint' ? colors.ink : colors.muted;
   const seekable = !!onSeek;
   const enabled = seekable && !disabled && duration > 0;
   const fraction = (x: number) => Math.max(0, Math.min(1, width > 0 ? x / width : 0));
@@ -70,7 +70,7 @@ export function ProgressRow({ elapsed, duration, progress, tone = 'page', onSeek
       adjust(target);
     },
   } : {};
-  const fill = tone === 'page' ? colors.green : ink;
+  const fill = tone === 'page' ? colors.yolk : ink;
   /** Tells a tap, a sideways drag and an up-or-down scroll apart; holds the page once it is a drag. */
   const follow = (event: GestureResponderEvent) => {
     const t = touch.current;
@@ -137,7 +137,7 @@ export function ProgressRow({ elapsed, duration, progress, tone = 'page', onSeek
         onResponderTerminate={letGo}>
         <View pointerEvents="none" style={styles.chapters}>
           {chapters(marks).map(([a, b]) => (
-            <View key={a} style={[styles.track, { flex: b - a, backgroundColor: tone === 'peach' ? 'rgba(110,74,51,0.18)' : tone === 'video' ? 'rgba(255,253,247,0.35)' : colors.track }]}>
+            <View key={a} style={[styles.track, { flex: b - a, backgroundColor: tone === 'tint' ? 'rgba(52,67,12,0.18)' : tone === 'video' ? 'rgba(255,255,255,0.35)' : colors.track }]}>
               <View style={[styles.fill, { width: `${Math.max(0, Math.min(1, (p - a) / (b - a))) * 100}%`, backgroundColor: fill }]} />
             </View>
           ))}

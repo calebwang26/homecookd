@@ -31,7 +31,7 @@ const HOW = 'Tap a photo to learn about a dish and cook together.';
 const GUTTER = 16;
 const MAP_GUTTER = 30;
 const MAX_MAP = 420;
-/** Room homie takes at the top right (its resting pot, lib/homie HOMIE_SIZE.header). */
+/** Room homie takes at the top right (its resting egg, lib/homie HOMIE_SIZE.header). */
 const HOMIE_ROOM = HOMIE_SIZE.header;
 /** The feed starts empty; give it this long before "nothing nearby" (it's usually back sooner). */
 const SETTLE_MS = 1500;

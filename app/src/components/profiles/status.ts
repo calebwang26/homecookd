@@ -1,11 +1,11 @@
 // The line under each face on "Who's in the kitchen?", from real data. Only unread news is green,
-// and every green line comes with its unread dot (or the sun "New" badge). A line is about the face
+// and every accent line comes with its unread dot (or the yolk "New" badge). A line is about the face
 // it sits under and names only the other person (never "you", never "Someone"):
 //   cook     an unread question from a learner -> "Leo asked"   (request, step, or words with "?")
 //            an unread "I cooked it"           -> "Leo cooked it"
 //            any other unread message          -> "New from Dad" / "2 new notes"
 //            else                              -> "2 recipes" / "Ready to teach"   (muted)
-//   learner  an unread recipe sent to them     -> "Grandma sent a dish"    (sun "New" badge)
+//   learner  an unread recipe sent to them     -> "Grandma sent a dish"    (yolk "New" badge)
 //            an unread reply from a cook       -> "Dad answered"
 //            any other unread message          -> "New from Leo" / "2 new notes"
 //            else                              -> relation / "All caught up" / "New here"   (muted)

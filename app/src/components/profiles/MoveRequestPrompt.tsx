@@ -159,7 +159,7 @@ export function MoveRequestPrompt() {
               accessibilityLabel={t('profiles.move.notNow')}
               accessibilityState={{ disabled: !!busy }}
               style={[styles.later, busy ? styles.dim : null]}>
-              <Txt variant="label" weight={600} color={colors.greenDeep}>
+              <Txt variant="label" weight={600} color={colors.yolkDeep}>
                 {t('profiles.move.notNow')}
               </Txt>
             </PressableScale>

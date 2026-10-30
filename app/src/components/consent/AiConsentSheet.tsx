@@ -57,10 +57,10 @@ export function AiConsentSheet({ visible, onYes, onNotNow }: { visible: boolean;
             accessibilityLabel={t('common.ai.seeWho')}
             accessibilityState={{ expanded: open }}
             style={styles.link}>
-            <Txt variant="label" size={16} weight={700} color={colors.greenDeep}>
+            <Txt variant="label" size={16} weight={700} color={colors.yolkDeep}>
               {t('common.ai.seeWho')}
             </Txt>
-            <Chevron size={18} color={colors.greenDeep} />
+            <Chevron size={18} color={colors.yolkDeep} />
           </PressableScale>
           <PressableScale
             onPress={() => void openPage(PRIVACY_URL)}
@@ -68,7 +68,7 @@ export function AiConsentSheet({ visible, onYes, onNotNow }: { visible: boolean;
             accessibilityLabel={t('signin.shared.privacy')}
             accessibilityHint={t('signin.shared.opensSite')}
             style={styles.link}>
-            <Txt variant="label" size={16} weight={600} color={colors.greenDeep}>
+            <Txt variant="label" size={16} weight={600} color={colors.yolkDeep}>
               {t('signin.shared.privacy')}
             </Txt>
           </PressableScale>

@@ -1,5 +1,5 @@
 // Small pieces shared by the recipe flow screens, sized exactly as the bible draws them.
-//  AskStepPill "Ask Dad" on a cook-mode step (52 tall, cream, 1.5px rgba(30,36,16,0.12) outline,
+//  AskStepPill "Ask Dad" on a cook-mode step (52 tall, cream, 1.5px rgba(31,36,48,0.12) outline,
 //              15/600 ink, a chat glyph): opens my 1:1 with the dish's cook, the dish and step
 //              in the box (ask=1), so the next message is a question about that step; a dish with no
 //              cook in the family reads "Ask the family" (the circle, any cook can answer). ask=1
@@ -168,8 +168,8 @@ function CheckRow({ line, seed, done, settled, onToggle }: { line: IngredientLin
   const on = useDerivedValue(() => withTiming(done ? 1 : 0, { duration: 180 }), [done]);
   const pop = useDerivedValue(() => (done ? withSpring(1, { damping: 14, stiffness: 320, mass: 1 }) : withTiming(0, { duration: 120 })), [done]);
   const disc = useAnimatedStyle(() => ({
-    backgroundColor: interpolateColor(on.value, [0, 1], ['rgba(91,111,0,0)', colors.green]),
-    borderColor: interpolateColor(on.value, [0, 1], [alpha.checkRing, 'rgba(91,111,0,0)']),
+    backgroundColor: interpolateColor(on.value, [0, 1], ['rgba(52,67,12,0)', colors.green]),
+    borderColor: interpolateColor(on.value, [0, 1], [alpha.checkRing, 'rgba(52,67,12,0)']),
   }));
   const tick = useAnimatedStyle(() => ({ opacity: pop.value, transform: [{ scale: 0.6 + 0.4 * pop.value }] }));
   const color = done ? colors.muted : colors.ink;
@@ -218,7 +218,7 @@ export function BottomBar({ children, fade = true }: { children: ReactNode; fade
       {fade ? (
         <LinearGradient
           pointerEvents="none"
-          colors={['rgba(247,247,242,0)', 'rgba(247,247,242,0.94)', colors.page]}
+          colors={['rgba(251,245,234,0)', 'rgba(251,245,234,0.94)', colors.page]}
           locations={[0, 0.45, 1]}
           style={StyleSheet.absoluteFill}
         />

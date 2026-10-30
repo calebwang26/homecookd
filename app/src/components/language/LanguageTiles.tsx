@@ -7,7 +7,7 @@ import Animated from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { Headline } from '@/components/signin';
-import { haptic, listEnter, PressableScale, ScreenWash, Txt, useToast } from '@/components/ui';
+import { EggMascot, haptic, listEnter, PressableScale, ScreenWash, Txt, useToast } from '@/components/ui';
 import { HOMIE_ON } from '@/lib/homie/switch';
 import { LANGUAGES } from '@/lib/languages';
 import { useWords } from '@/lib/words/useWords';
@@ -28,8 +28,9 @@ export function LanguageTiles() {
       <ScrollView
         contentContainerStyle={[styles.content, { paddingTop: Math.max(112, insets.top + 72), paddingBottom: insets.bottom + 32 }]}
         showsVerticalScrollIndicator={false}>
-        {/* homie's own pot floats over the top of every screen, so no wordmark here. */}
+        {/* Onboarding's one egg says hello (homie's voice is off, so nothing floats over this screen). */}
         <Animated.View entering={listEnter(0)} style={styles.top}>
+          {HOMIE_ON ? null : <EggMascot mood="hello" size={72} />}
           <Headline title={t('common.language.title')} line={t(HOMIE_ON ? 'common.language.line' : 'common.language.lineQuiet')} />
         </Animated.View>
         <Animated.View entering={listEnter(1)} style={styles.grid} accessibilityRole="radiogroup">

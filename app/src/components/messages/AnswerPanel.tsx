@@ -1,6 +1,6 @@
-// Parent-Chat bottom panel: cream, top corners 32, 0 -10px 30px shadow, padding 28 24 24, 230 tall.
-// One huge 92 px mic (green #5B6F00 + 0 12px 28px glow) over "Tap to talk" (18/700) and a quiet
-// "Type instead" (15/600 #4C5A10). Recording (bible Parent-Chat--recording): the button turns
+// Parent-Chat bottom panel: white, top corners 32, 0 -10px 30px shadow, padding 28 24 24, 230 tall.
+// One huge 92 px mic (yolk #F2A23A with an ink glyph + 0 12px 28px shadow) over "Tap to talk" (18/700) and a quiet
+// "Type instead" (15/600 yolk-deep #A3580C). Recording (bible Parent-Chat--recording): the button turns
 // #9A4F47 with a stop square and a 10 px rgba(154,79,71,0.18) ring, label "Tap again to send".
 // "Type instead" swaps the panel to a text field + a "Send" pill for people who'd rather write; the
 // choice is remembered per person on this phone (kv composer.mode.<id>), so a typer opens on the
@@ -49,11 +49,11 @@ export function AnsweringStrip({ answering, style }: { answering: Answering; sty
         variant="label"
         size={15}
         leading={1.3}
-        color={colors.butterInk}
+        color={colors.ink}
         numberOfLines={2}
         style={styles.stripText}
         accessibilityLabel={name != null ? t('messages.strip.label', { name, words }) : t('messages.strip.labelThem', { words })}>
-        <Txt variant="label" size={15} weight={700} color={colors.butterInk}>
+        <Txt variant="label" size={15} weight={700} color={colors.ink}>
           {name != null ? t('messages.strip.answering', { name }) : t('messages.strip.answeringThem')}{' '}
         </Txt>
         {answering.words}
@@ -66,7 +66,7 @@ export function AnsweringStrip({ answering, style }: { answering: Answering; sty
         accessibilityHint={t('messages.strip.cancelHint')}
         style={styles.stripX}>
         <View style={styles.stripXDisc}>
-          <CloseIcon size={14} color={colors.butterInk} strokeWidth={2.4} />
+          <CloseIcon size={14} color={colors.ink} strokeWidth={2.4} />
         </View>
       </PressableScale>
     </Animated.View>
@@ -259,11 +259,11 @@ export function AnswerPanel({
             {face ? <Avatar profile={face} size={28} style={styles.fieldFace} /> : null}
             <GrowingInput ref={input} value={text} onChangeText={setText} placeholder={writePrompt} autoFocus={focusField} />
           </View>
-          <SendPill tone="green" onPress={submit} disabled={!text.trim()} />
+          <SendPill tone="yolk" onPress={submit} disabled={!text.trim()} />
         </View>
         {canTalk ? (
           <PressableScale onPress={() => setMode('voice')} style={[styles.linkBtn, styles.center]} accessibilityLabel={t('messages.panel.useVoice')}>
-            <Txt variant="label" size={15} weight={600} color={colors.greenDeep}>
+            <Txt variant="label" size={15} weight={600} color={colors.yolkDeep}>
               {t('messages.panel.useVoice')}
             </Txt>
           </PressableScale>
@@ -315,7 +315,7 @@ export function AnswerPanel({
         }}
         style={styles.linkBtn}
         accessibilityLabel={t('messages.panel.typeInstead')}>
-        <Txt variant="label" size={15} weight={600} color={colors.greenDeep}>
+        <Txt variant="label" size={15} weight={600} color={colors.yolkDeep}>
           {t('messages.panel.typeInstead')}
         </Txt>
       </PressableScale>
@@ -352,12 +352,12 @@ function BigMic({ recording, busy, level, onPress }: { recording: boolean; busy:
         style={[
           styles.mic,
           {
-            backgroundColor: recording ? colors.danger : colors.green,
+            backgroundColor: recording ? colors.danger : colors.yolk,
             boxShadow: recording ? undefined : shadows.mic,
             opacity: busy ? 0.75 : 1,
           },
         ]}>
-        {recording ? <StopIcon size={30} color={colors.card} /> : <MicIcon size={36} color={colors.card} />}
+        {recording ? <StopIcon size={30} color={colors.card} /> : <MicIcon size={36} color={colors.ink} />}
       </PressableScale>
     </View>
   );
@@ -391,7 +391,7 @@ const styles = StyleSheet.create({
     minHeight: 48,
     paddingLeft: 10,
     borderRadius: 18,
-    backgroundColor: colors.butter,
+    backgroundColor: colors.yolkTint,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,

@@ -35,7 +35,7 @@ export function ClusterRow({ members, picked, onPick, width }: { members: FeedRe
               accessibilityLabel={spotLabel([r])}
               accessibilityState={{ selected: on }}
               style={[styles.small, { width: cardW }, on ? styles.on : null]}>
-              <DishPhoto uri={r.coverUrl} label="" pot={28} style={styles.photo} />
+              <DishPhoto uri={r.coverUrl} label="" title={r.dish} size={64} style={styles.photo} />
               <Txt variant="rowTitle" size={14} numberOfLines={2}>
                 {r.dish}
               </Txt>
@@ -53,6 +53,6 @@ const styles = StyleSheet.create({
   scroll: { marginVertical: -4, flexGrow: 0 },
   row: { gap: GAP, paddingVertical: 4 },
   small: { gap: 6, padding: 6, borderRadius: radii.thumb, borderWidth: 2, borderColor: 'transparent', backgroundColor: colors.card },
-  on: { borderColor: colors.sun },
+  on: { borderColor: colors.yolk },
   photo: { height: 64, borderRadius: radii.tile - 4 },
 });

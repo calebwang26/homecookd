@@ -2,7 +2,7 @@
 //   1. the SuccessBurst ("You made it" / "We told Dad."; a milestone title for a learner), held 1.8 s
 //   2. when the dish's cook is someone else in the family (not a memorial profile), the postcard
 //      (retention PR 3, components/postcard/PostcardStep): "Show Dad how it came out", one big shutter,
-//      an optional "How close to Dad’s?" in pots, Send -> the photo lands on the `cooked` card "I made
+//      an optional "How close to Dad’s?" in yolks, Send -> the photo lands on the `cooked` card "I made
 //      it" already sent; a quiet "Share with someone else" keeps the share sheet, and "Not now"
 //   3. otherwise (my own dish, a cook outside the family) the calm share prompt as before: the dish
 //      photo, "Want to share the love?", a big "Send to someone" (the share sheet: family in the app,
@@ -17,7 +17,7 @@ import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 
 import { PostcardStep } from '@/components/postcard';
-import { ActionButton, PotMark, PressableScale, SendIcon, SuccessBurst, Txt } from '@/components/ui';
+import { ActionButton, EggMascot, PressableScale, SendIcon, SuccessBurst, Txt } from '@/components/ui';
 import type { Profile } from '@/lib/api';
 import type { CookedRef } from '@/lib/messaging';
 import { canPostcard } from '@/lib/postcardLogic';
@@ -120,7 +120,7 @@ function ShareLove({ recipe, poster, onLeave }: { recipe: Recipe; poster: string
             {poster ? (
               <Image source={{ uri: poster }} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} accessibilityLabel={dish || 'The dish'} />
             ) : (
-              <PotMark size={72} />
+              <EggMascot mood="made-it" size={88} />
             )}
           </View>
         </View>
@@ -132,7 +132,7 @@ function ShareLove({ recipe, poster, onLeave }: { recipe: Recipe; poster: string
       <View style={styles.actions}>
         <ActionButton
           label="Send to someone"
-          icon={<SendIcon size={20} color={colors.card} />}
+          icon={<SendIcon size={20} color={colors.ink} />}
           onPress={() => {
             setAsked(true);
             share.open({ recipeId: recipe.id });
@@ -155,7 +155,7 @@ const styles = StyleSheet.create({
   ask: { paddingHorizontal: space.gutter },
   // The shadow sits on an outer view: overflow hidden would clip it.
   photoShadow: { borderRadius: radii.panel, boxShadow: shadows.card },
-  photo: { flex: 1, borderRadius: radii.panel, overflow: 'hidden', backgroundColor: colors.peach, alignItems: 'center', justifyContent: 'center' },
+  photo: { flex: 1, borderRadius: radii.panel, overflow: 'hidden', backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   words: { maxWidth: 340 },
   actions: { gap: space.sm },
   quiet: { height: 52, alignItems: 'center', justifyContent: 'center' },

@@ -65,7 +65,7 @@ export function GlassesView({ frame, filming, lastStep, steps }: { frame: LiveFr
       </View>
       <View style={styles.statusRow} accessible accessibilityLabel={seen ? `${status}. ${seen}` : status}>
         <View style={[styles.dot, { backgroundColor: state === 'live' ? colors.green : colors.danger }]} />
-        <Txt variant="meta" size={14} weight={600} color={state === 'live' ? colors.greenDeep : colors.danger}>
+        <Txt variant="meta" size={14} weight={600} color={state === 'live' ? colors.green : colors.danger}>
           {status}
         </Txt>
       </View>
@@ -81,7 +81,7 @@ export function GlassesView({ frame, filming, lastStep, steps }: { frame: LiveFr
 const styles = StyleSheet.create({
   col: { alignItems: 'center', marginBottom: 20 },
   card: { borderRadius: radii.card, overflow: 'hidden', backgroundColor: colors.ink },
-  dim: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(30,36,16,0.45)' },
+  dim: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, backgroundColor: 'rgba(31,36,48,0.45)' },
   statusRow: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 10 },
   dot: { width: 8, height: 8, borderRadius: 4 },
   seen: { marginTop: 4, maxWidth: MAX_WIDTH },

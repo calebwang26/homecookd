@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     borderWidth: 1,
     borderColor: alpha.hairline,
-    boxShadow: '0 6px 18px rgba(30,36,16,0.12)',
+    boxShadow: '0 6px 18px rgba(31,36,48,0.12)',
   },
   photo: { flex: 1, borderRadius: 11, overflow: 'hidden', backgroundColor: colors.well },
   stamp: { position: 'absolute', top: 14, right: 14 },

@@ -97,7 +97,7 @@ export function LiveCookingRow({ kid, dish, step, total, onHeart, onPress, style
         <View style={styles.live}>
           <LiveDot />
           <Animated.View key={`${step}/${total}`} entering={reduce ? undefined : FadeIn.duration(220)} style={styles.stepWrap}>
-            <Txt variant="meta" size={15} weight={600} color={colors.greenDeep} numberOfLines={1} style={styles.tnum}>
+            <Txt variant="meta" size={15} weight={600} color={colors.green} numberOfLines={1} style={styles.tnum}>
               {steps}
             </Txt>
           </Animated.View>
@@ -173,8 +173,8 @@ const styles = StyleSheet.create({
   stepWrap: { flexShrink: 1, minWidth: 0 },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.green },
   tnum: { fontVariant: ['tabular-nums'] },
-  heart: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.peach, alignItems: 'center', justifyContent: 'center' },
-  heartError: { backgroundColor: colors.butter },
+  heart: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.yolkTint, alignItems: 'center', justifyContent: 'center' },
+  heartError: { backgroundColor: colors.yolkTint },
   dim: { opacity: 0.5 },
   // Pushed to the end of the step line (right next to the heart); it never wraps.
   tag: { marginLeft: 'auto', flexShrink: 0, height: 24, paddingHorizontal: 10, borderRadius: 12, backgroundColor: colors.ink, justifyContent: 'center' },

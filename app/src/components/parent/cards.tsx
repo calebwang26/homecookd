@@ -1,4 +1,4 @@
-// AskedCard (bible Parent-Recipe): lavender "Leo asked you" + the question + a mic "Answer",
+// AskedCard (bible Parent-Recipe): yolk-tint "Leo asked you" + the question + a mic "Answer",
 // docked at the bottom of the cook's recipe page.
 import type { ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -20,7 +20,7 @@ export function AskedCard({
   onAnswer: () => void;
   /** Shown in place of the quote, e.g. a play button for a spoken question. */
   voice?: ReactNode;
-  /** Kept for callers; the card is always the docked lavender one now. */
+  /** Kept for callers; the card is always the docked yolk-tint one now. */
   docked?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -30,7 +30,7 @@ export function AskedCard({
       <View style={styles.dockedRow}>
         <Avatar profile={who} size={40} />
         <View style={styles.flex}>
-          <Txt variant="label" size={14} weight={700} color={colors.lavenderInk}>
+          <Txt variant="label" size={14} weight={700} color={colors.ink}>
             {t('parent.ask.askedYou', { name: who.name })}
           </Txt>
           {voice ?? (
@@ -44,7 +44,7 @@ export function AskedCard({
         label={t('parent.ask.answer')}
         size="md"
         flat
-        icon={<MicIcon size={22} color={colors.card} />}
+        icon={<MicIcon size={22} color={colors.ink} />}
         onPress={onAnswer}
         accessibilityHint={t('parent.ask.chatHint', { name: who.name })}
       />
@@ -56,7 +56,7 @@ const styles = StyleSheet.create({
   flex: { flex: 1 },
   docked: {
     borderRadius: radii.panel,
-    backgroundColor: colors.lavender,
+    backgroundColor: colors.yolkTint,
     padding: 20,
     gap: 14,
   },

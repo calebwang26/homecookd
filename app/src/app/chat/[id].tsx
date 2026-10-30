@@ -1,10 +1,10 @@
 // One conversation, about anything. Layout follows who is reading:
-//  learner -> bible Kid-Chat: round back + 40 avatar + name (Fraunces 24), lavender/peach bubbles,
+//  learner -> bible Kid-Chat: round back + 40 avatar + name (Fraunces 24), yolk-tint/green-tint bubbles,
 //             composer (field + round ink mic). A dish picked on the way in (Ask sheet, a step, the
 //             ingredients) waits in the composer as a removable attachment; the next message goes
 //             out as a question carrying it (recipe_id) and shows it as a card in the chat.
 //  cook    -> bible Parent-Chat: "< Back" pill, avatar + name on the right, the question being
-//             answered ringed in sun, and the big "Tap to talk" panel.
+//             answered ringed in yolk, and the big "Tap to talk" panel.
 // The family circle (kind 'circle'): stacked faces + "Family" (tap: everyone, with a "Message" pill
 // each); a learner's message is a question when it carries a dish or reads as one ("?", or
 // "how…", "can…"; a "hello" or a voice note without a dish is a plain message); a cook's message
@@ -492,8 +492,8 @@ export default function ChatScreen() {
           {log}
         </ScrollView>
         {/* Messages fade softly under the header and the composer. */}
-        <LinearGradient pointerEvents="none" colors={[colors.page, 'rgba(247,247,242,0)']} style={[styles.fade, styles.fadeTop]} />
-        <LinearGradient pointerEvents="none" colors={['rgba(247,247,242,0)', colors.page]} style={[styles.fade, styles.fadeBottom]} />
+        <LinearGradient pointerEvents="none" colors={[colors.page, 'rgba(251,245,234,0)']} style={[styles.fade, styles.fadeTop]} />
+        <LinearGradient pointerEvents="none" colors={['rgba(251,245,234,0)', colors.page]} style={[styles.fade, styles.fadeBottom]} />
       </View>
 
       {notFound ? (

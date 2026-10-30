@@ -216,7 +216,7 @@ export function ClaimLink({ kind, token }: { kind: LinkKind; token: string | nul
             step.info ? (
               <InviteCard face={null} title={dishTitle(step.info, t)} line={t('signin.link.opening')}>
                 <View accessibilityLabel={t('signin.link.opening')} accessibilityState={{ busy: true }}>
-                  <ActivityIndicator color={colors.green} size="large" />
+                  <ActivityIndicator color={colors.yolkDeep} size="large" />
                 </View>
               </InviteCard>
             ) : (

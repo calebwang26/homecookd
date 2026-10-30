@@ -114,7 +114,7 @@ function CookingTogether({ swap, line }: { swap: Swap; line: string }) {
         <ActionButton
           label="Host a dinner"
           size="sm"
-          icon={<PlusIcon size={20} color={colors.card} strokeWidth={2.2} />}
+          icon={<PlusIcon size={20} color={colors.ink} strokeWidth={2.2} />}
           accessibilityHint={`Pick a time and place for ${dish.dish}`}
           onPress={() => router.push({ pathname: '/dinner/new', params: { recipeId: dish.recipeId } })}
         />

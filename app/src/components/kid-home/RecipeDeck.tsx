@@ -7,8 +7,8 @@
 //   tap a peeking card    brings it to the middle
 // Under the row, a quiet position: "3/10 recipes" (iPhone feedback Oct 22: no dots); one dish is
 // "1 recipe". The row takes the height its parent gives it (flex: 1); each card's size comes from that
-// height and the screen width, never from how many dishes there are. Missing photos show the pot on
-// sage, as on the Recipes list.
+// height and the screen width, never from how many dishes there are. Missing photos show the dish's first letter in
+// Fraunces on the sunken cream (ui/NoPhoto; never the egg), as on the Recipes list.
 // Reduce Motion: the side cards are only dimmed (no shrinking as you swipe), and a tap jumps.
 import { Image } from 'expo-image';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -27,7 +27,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { scheduleOnRN } from 'react-native-worklets';
 
-import { PotMark, PressableScale, Txt } from '@/components/ui';
+import { NoPhoto, PressableScale, Txt } from '@/components/ui';
 import type { LibraryEntry } from '@/lib/types';
 import { alpha, colors, radii, shadows, space } from '@/theme/tokens';
 
@@ -193,7 +193,7 @@ function DeckCard({
           {entry.poster_url ? (
             <Image source={{ uri: entry.poster_url }} style={StyleSheet.absoluteFill} contentFit="cover" transition={200} recyclingKey={entry.id} />
           ) : (
-            <PotMark size={Math.round(width * 0.32)} />
+            <NoPhoto title={entry.title} size={Math.round(width * 0.5)} initial />
           )}
           <LinearGradient pointerEvents="none" colors={[alpha.photoShadeTop, alpha.photoShadeCard]} style={styles.shade} />
           <Animated.View pointerEvents="none" style={[styles.title, titleStyle]}>
@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
     flex: 1,
     borderRadius: radii.card - RIM,
     overflow: 'hidden',
-    backgroundColor: colors.sage,
+    backgroundColor: colors.well,
     alignItems: 'center',
     justifyContent: 'center',
   },

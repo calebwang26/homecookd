@@ -1,11 +1,11 @@
-// Chat bubbles for every message kind, in the two bible layouts.
+// Chat bubbles for every message kind, in the two bible layouts (egg colours: the kid's asks in the yolk tint, the cook's answers in the green tint).
 //
-// Kid-Chat (learner):   my bubbles lavender #ECE6F2 (radius 20 20 6 20, right, max 270), the cook's
-//                       peach #F9E3CF (20 20 20 6, left, max 290); 16/1.4 text, padding 12 16;
-//                       step chip 13/700 #3F3558 above; times 12 muted.
-// Parent-Chat (cook):   the learner's bubbles lavender on the left (22 22 22 6, max 280), mine peach on
+// Kid-Chat (learner):   my bubbles yolk tint #FCEBD0 (radius 20 20 6 20, right, max 270), the cook's
+//                       green tint #E6EBCF (20 20 20 6, left, max 290); 16/1.4 text, padding 12 16;
+//                       step chip 13/700 ink above; times 12 muted.
+// Parent-Chat (cook):   the learner's bubbles yolk tint on the left (22 22 22 6, max 280), mine green tint on
 //                       the right (22 22 6 22, max 290); 17/1.4, padding 14 18; step chip 14/700;
-//                       times 13 muted; the open question ringed in sun (0 0 0 2px #FEBE29).
+//                       times 13 muted; the open question ringed in yolk (0 0 0 2px #F2A23A).
 // Voice: a 44 ink play disc + 16-bar waveform (130 x 28) + duration 14/700, padding 10 16 10 10
 // ("Your voice · 0:38" 16/700 without bars for the cook's own notes). Its transcript always shows
 // right under the bubble (muted, no wider than the bubble), like iMessage.
@@ -15,7 +15,7 @@
 // Until the dish's name loads, a skeleton line stands in for it.
 // "Made it" (cooked): the dish's thumb with a green check and "Leo made your chili", or, once a
 // photo of their own bowl is on it (the postcard, retention PR 3), that photo big at the top as a
-// postcard (a cream frame, a slight tilt, none under Reduce Motion) and the pots they rated it.
+// postcard (a cream frame, a slight tilt, none under Reduce Motion) and the yolks they rated it.
 // "Just like mine" shows as a small stamp under it (ChatLog's ReactionStamp).
 import { Image } from 'expo-image';
 import { router } from 'expo-router';
@@ -45,10 +45,10 @@ export const LAYOUT = {
   parent: { font: 17, padV: 14, padH: 18, radius: 22, maxMine: 290, maxTheirs: 280, chip: 14, time: 13, gap: 18 },
 } as const;
 
-/** Bubble fill + ink for a side: learners are lavender, cooks peach (by layout). */
+/** Bubble fill + ink for a side: learners are the yolk tint, cooks the green tint (by layout). */
 export function bubbleTone(layout: ChatLayout, mine: boolean) {
-  const lavender = layout === 'kid' ? mine : !mine;
-  return lavender ? { bg: colors.lavender, ink: colors.lavenderInk } : { bg: colors.peach, ink: colors.peachInk };
+  const asks = layout === 'kid' ? mine : !mine;
+  return asks ? { bg: colors.yolkTint, ink: colors.ink } : { bg: colors.greenTint, ink: colors.ink };
 }
 
 function corners(layout: ChatLayout, mine: boolean): ViewStyle {
@@ -84,11 +84,11 @@ export function senderOf(ctx: BubbleContext, m: Pick<Message, 'sender_id'>, mine
   return ctx.circle ? null : ctx.other;
 }
 
-/** Bubble tone for a message. In the circle: learners lavender, cooks peach (whoever reads). */
+/** Bubble tone for a message. In the circle: learners the yolk tint, cooks the green tint (whoever reads). */
 export function toneFor(ctx: BubbleContext, m: Pick<Message, 'sender_id'>, mine: boolean) {
   if (ctx.circle) {
     const who = senderOf(ctx, m, mine);
-    if (who) return who.role === 'learner' ? { bg: colors.lavender, ink: colors.lavenderInk } : { bg: colors.peach, ink: colors.peachInk };
+    if (who) return who.role === 'learner' ? { bg: colors.yolkTint, ink: colors.ink } : { bg: colors.greenTint, ink: colors.ink };
   }
   return bubbleTone(ctx.layout, mine);
 }
@@ -126,7 +126,7 @@ export function StepChip({ m, ctx, mine, asBubble, ring }: { m: Message; ctx: Bu
               styles.bubble,
               corners(ctx.layout, mine),
               { backgroundColor: tone.bg, paddingVertical: L.padV, paddingHorizontal: L.padH },
-              ring ? { boxShadow: '0 0 0 2px #FEBE29' } : null,
+              ring ? { boxShadow: '0 0 0 2px #F2A23A' } : null,
             ]
           : null,
       ]}>
@@ -134,7 +134,7 @@ export function StepChip({ m, ctx, mine, asBubble, ring }: { m: Message; ctx: Bu
         variant="label"
         size={asBubble ? L.font - 1 : L.chip}
         weight={700}
-        color={colors.lavenderInk}
+        color={colors.ink}
         numberOfLines={asBubble ? 2 : 1}
         align={mine && !asBubble ? 'right' : 'left'}>
         {asBubble ? t('messages.bubble.questionAbout', { label }) : label}
@@ -157,7 +157,7 @@ export function TextBubble({
   text: string;
   layout: ChatLayout;
   mine: boolean;
-  /** The open question (sun ring). */
+  /** The open question (yolk ring). */
   ring?: boolean;
   /** Sending: slightly faded. */
   dim?: boolean;
@@ -175,7 +175,7 @@ export function TextBubble({
         corners(layout, mine),
         { backgroundColor: tone.bg, opacity: dim ? 0.75 : 1 },
         attachment ? styles.withAttachment : { paddingVertical: L.padV, paddingHorizontal: L.padH },
-        ring ? { boxShadow: shadows.ringSun } : null,
+        ring ? { boxShadow: shadows.ringYolk } : null,
         style,
       ]}>
       {attachment}
@@ -263,7 +263,7 @@ export function VoiceBubble({
   m: ChatMessage;
   ctx: BubbleContext;
   mine: boolean;
-  /** The open question (sun ring), for a spoken question. */
+  /** The open question (yolk ring), for a spoken question. */
   ring?: boolean;
   /** A dish card inside the top of the bubble. */
   attachment?: ReactNode;
@@ -304,7 +304,7 @@ export function VoiceBubble({
           corners(ctx.layout, mine),
           { backgroundColor: tone.bg, opacity: m.local === 'sending' ? 0.75 : 1 },
           attachment ? styles.withAttachment : null,
-          ring ? { boxShadow: shadows.ringSun } : null,
+          ring ? { boxShadow: shadows.ringYolk } : null,
         ]}>
         {attachment}
         <View style={[styles.voice, { paddingRight: ownCookNote ? 18 : 16 }, attachment ? styles.voiceInset : null]}>
@@ -511,7 +511,7 @@ export function KindLabel({ children, layout, mine }: { children: ReactNode; lay
       variant="label"
       size={LAYOUT[layout].chip}
       weight={700}
-      color={colors.lavenderInk}
+      color={colors.ink}
       align={mine ? 'right' : 'left'}
       style={{ alignSelf: mine ? 'flex-end' : 'flex-start' }}>
       {children}
@@ -534,7 +534,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
   },
   dishThumb: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.well },
-  dishThumbEmpty: { backgroundColor: colors.peach },
+  dishThumbEmpty: { backgroundColor: colors.well },
   dishText: { flex: 1, minWidth: 0, gap: 2 },
   voiceCol: { gap: 6 },
   voice: { flexDirection: 'row', alignItems: 'center', gap: 12, paddingVertical: 10, paddingLeft: 10 },
@@ -562,7 +562,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: 18,
-    backgroundColor: 'rgba(255,253,247,0.92)',
+    backgroundColor: 'rgba(255,255,255,0.92)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -579,7 +579,7 @@ const styles = StyleSheet.create({
     backgroundColor: colors.green,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 0 0 2px #FFFDF7',
+    boxShadow: '0 0 0 2px #FFFFFF',
   },
   cookedCheckBig: { position: 'relative', right: 0, bottom: 0, width: 28, height: 28, borderRadius: 14 },
   flex: { flex: 1 },

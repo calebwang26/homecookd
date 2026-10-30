@@ -3,7 +3,7 @@
 //  AddVideosSheet  Send's "Add more" tile: record another part, or pick from the camera roll
 import { StyleSheet, View } from 'react-native';
 
-import { ActionButton, BottomSheet, PotMark, RecordDotIcon, Txt, VideoIcon } from '@/components/ui';
+import { ActionButton, BottomSheet, EggMark, RecordDotIcon, Txt, VideoIcon } from '@/components/ui';
 import { colors } from '@/theme/tokens';
 
 export function PhoneOnlySheet({ visible, onClose }: { visible: boolean; onClose: () => void }) {
@@ -15,7 +15,7 @@ export function PhoneOnlySheet({ visible, onClose }: { visible: boolean; onClose
       footer={<ActionButton label="Got it" size="lg" flat onPress={onClose} />}>
       <View style={styles.center}>
         <View style={styles.disc}>
-          <PotMark size={44} />
+          <EggMark size={44} />
         </View>
         <Txt variant="display" size={26} leading={1.15} align="center">
           Open homecookd on your phone
@@ -54,9 +54,9 @@ export function AddVideosSheet({
           label="Use videos I already took"
           size="lg"
           variant="outline"
-          fg={colors.greenDeep}
+          fg={colors.yolkDeep}
           labelWeight={700}
-          icon={<VideoIcon size={20} color={colors.greenDeep} />}
+          icon={<VideoIcon size={20} color={colors.yolkDeep} />}
           onPress={onLibrary}
         />
       </View>
@@ -70,7 +70,7 @@ const styles = StyleSheet.create({
     width: 88,
     height: 88,
     borderRadius: 44,
-    backgroundColor: colors.peach,
+    backgroundColor: colors.card,
     alignItems: 'center',
     justifyContent: 'center',
     marginBottom: 4,

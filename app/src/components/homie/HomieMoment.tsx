@@ -1,13 +1,13 @@
-// homie needs something from you (store.showMoment): the pot leaves its corner (or cook mode's bottom
+// homie needs something from you (store.showMoment): the egg leaves its corner (or cook mode's bottom
 // bar) for the centre and grows, lit (with its ring while it listens or thinks); the screen behind dims
 // and blurs a little (Caleb, Oct 24: less than the canvas, so the page still shows through). Motion, all
 // on the UI thread: the glide, the growth and the blur run together as one move (420 ms, easing out, no
-// overshoot), from exactly where and how big the resting pot is; from 300 ms the words and buttons rise.
-// Answering or "Not now" plays it backwards in one move, and the pot lands back where it rests. Reduce
-// Motion: the dim, pot and words fade in place (150 ms).
+// overshoot), from exactly where and how big the resting egg is; from 300 ms the words and buttons rise.
+// Answering or "Not now" plays it backwards in one move, and the egg lands back where it rests. Reduce
+// Motion: the dim, egg and words fade in place (150 ms).
 // The option with id 'not_now' (else 'ok') is also VoiceOver's escape gesture.
 // When homie asks out loud (a moment with bars, a prompt or tapToClose; lib/homie isCentredMoment):
-// no buttons, one centred column like Grandma's screens. The pot (176; its own halo and ring are its
+// no buttons, one centred column like Grandma's screens. The egg (176; its own halo and ring are its
 // only glow), 56 pt, the question (Fraunces 32), the five listening bars and "Say “yes” or “no”", then
 // the small "Tap anywhere to close". A tap anywhere is "not now" (dismissMoment). At most one button,
 // for a phone that can't hear the answer.
@@ -44,9 +44,9 @@ const CLOSE_AT = 80;
 const CLOSE_MOVE_MS = 300;
 const CLOSE_MS = CLOSE_AT + CLOSE_MOVE_MS + 20;
 const BLUR = 30;
-const TINT = 'rgba(30,36,16,0.5)';
+const TINT = 'rgba(31,36,48,0.5)';
 const WHITE = colors.card;
-const WHITE_SOFT = 'rgba(255,253,247,0.78)';
+const WHITE_SOFT = 'rgba(255,255,255,0.78)';
 const out = Easing.out(Easing.cubic);
 /** Fast out of the corner, settling softly into the centre (one curve for the move, the size and the blur). */
 const move = Easing.bezier(0.2, 0.8, 0.2, 1);
@@ -55,13 +55,13 @@ const inOut = Easing.inOut(Easing.cubic);
 const WORDS_GUESS = 240;
 
 type Props = {
-  /** The resting pot's frame: where the glide starts and ends. */
+  /** The resting egg's frame: where the glide starts and ends. */
   from: HomieFrame;
   state: HomieState;
   level: number;
   /** "AI voice" while homie says the question. */
   label: string | null;
-  /** True from the first frame of opening to the last of closing (the resting pot hides meanwhile). */
+  /** True from the first frame of opening to the last of closing (the resting egg hides meanwhile). */
   onActive: (on: boolean) => void;
 };
 
@@ -168,7 +168,7 @@ export function HomieMoment({ from, state, level, label, onActive }: Props) {
   };
   const escape = shown.options.find((o) => o.id === 'not_now') ?? shown.options.find((o) => o.id === 'ok');
   const speaking = state === 'speaking';
-  // The pot is lit while it's up, and shows the ring whenever homie hears you.
+  // The egg is lit while it's up, and shows the ring whenever homie hears you.
   const pot: HomieState = speaking || state === 'listening' || state === 'thinking' ? state : 'lit';
 
   if (centred) {
@@ -190,7 +190,7 @@ export function HomieMoment({ from, state, level, label, onActive }: Props) {
           <HomiePot state={pot} level={level} size={to.size} shadow={false} />
           {speaking && label ? (
             <View style={styles.labelWrap}>
-              <Txt variant="label" size={13} weight={700} color={colors.butterInk} style={styles.label}>
+              <Txt variant="label" size={13} weight={700} color={colors.ink} style={styles.label}>
                 {label}
               </Txt>
             </View>
@@ -255,7 +255,7 @@ export function HomieMoment({ from, state, level, label, onActive }: Props) {
         <HomiePot state={pot} level={level} size={to.size} shadow={false} />
         {speaking && label ? (
           <View style={styles.labelWrap}>
-            <Txt variant="label" size={13} weight={700} color={colors.butterInk} style={styles.label}>
+            <Txt variant="label" size={13} weight={700} color={colors.ink} style={styles.label}>
               {label}
             </Txt>
           </View>
@@ -311,11 +311,11 @@ function MomentButton({ option, onPress }: { option: HomieOption; onPress: () =>
       accessibilityRole="button"
       accessibilityLabel={option.sublabel ? `${option.label}. ${option.sublabel}` : option.label}
       style={[styles.button, primary ? styles.primary : styles.secondary]}>
-      <Txt variant="button" size={19} color={WHITE} align="center">
+      <Txt variant="button" size={19} color={primary ? colors.ink : WHITE} align="center">
         {option.label}
       </Txt>
       {option.sublabel ? (
-        <Txt variant="meta" size={14} color={WHITE_SOFT} align="center">
+        <Txt variant="meta" size={14} color={primary ? colors.ink : WHITE_SOFT} align="center">
           {option.sublabel}
         </Txt>
       ) : null}
@@ -327,7 +327,7 @@ const styles = StyleSheet.create({
   tint: { backgroundColor: TINT },
   pot: { position: 'absolute', alignItems: 'center' },
   labelWrap: { position: 'absolute', bottom: -14, alignSelf: 'center' },
-  label: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, backgroundColor: colors.butter, overflow: 'hidden' },
+  label: { paddingHorizontal: 10, paddingVertical: 3, borderRadius: 999, backgroundColor: colors.yolkTint, overflow: 'hidden' },
   content: { position: 'absolute', left: 0, right: 0 },
   scroll: { paddingHorizontal: 24, gap: 12, flexGrow: 1 },
   options: { gap: 12, marginTop: 12 },
@@ -344,7 +344,7 @@ const styles = StyleSheet.create({
   },
   flex: { flex: 1 },
   button: { minHeight: 64, paddingHorizontal: 20, paddingVertical: 10, borderRadius: 999, alignItems: 'center', justifyContent: 'center', gap: 2 },
-  primary: { backgroundColor: colors.green },
+  primary: { backgroundColor: colors.yolk },
   secondary: { backgroundColor: alpha.glassOnDark },
   askScroll: { paddingHorizontal: ASK_SIDE },
   askEn: { marginTop: 8 },

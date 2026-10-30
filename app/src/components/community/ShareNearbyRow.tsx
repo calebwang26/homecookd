@@ -75,7 +75,7 @@ export function ShareNearbyRow({ libraryId, me, style }: ShareNearbyRowProps) {
         style={styles.row}>
         <Txt variant="label" weight={600} color={colors.muted}>
           Share with people nearby ·{' '}
-          <Txt variant="label" weight={700} color={on ? colors.greenDeep : colors.muted}>
+          <Txt variant="label" weight={700} color={on ? colors.green : colors.muted}>
             {on ? 'On' : 'Off'}
           </Txt>
         </Txt>

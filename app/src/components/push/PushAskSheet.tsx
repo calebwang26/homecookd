@@ -28,7 +28,7 @@
 import { useState, useSyncExternalStore } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { ActionButton, Avatar, BottomSheet, PotMark, PressableScale, Txt, type ActionState, type AvatarProps } from '@/components/ui';
+import { ActionButton, Avatar, BottomSheet, EggMark, PressableScale, Txt, type ActionState, type AvatarProps } from '@/components/ui';
 import { pushAskWho, requestAndRegister, shouldAskPush, snoozePushAsk, type PushAskKind, type RegisterPush } from '@/lib/push';
 import { useWords } from '@/lib/words/useWords';
 import { english, type T } from '@/lib/words/words';
@@ -45,7 +45,7 @@ export type PushAskSheetProps = {
   who?: 'kid' | 'cook';
   /** The other person, as the family calls them ("Mom", "Leo"). */
   otherName: string;
-  /** Their face above the question; the pot when there is none. */
+  /** Their face above the question; the egg mark when there is none. */
   profile?: AvatarProps['profile'];
   /**
    * Return a promise to keep the button loading while the OS prompt is up. It resolves true when the
@@ -99,7 +99,7 @@ export function PushAskSheet({ visible, kind, who, otherName, profile, onYes, on
   return (
     <BottomSheet visible={visible} onClose={onNotNow} accessibilityLabel={question}>
       <View style={styles.body}>
-        {profile ? <Avatar profile={profile} size={72} /> : <PotMark size={64} />}
+        {profile ? <Avatar profile={profile} size={72} /> : <EggMark size={64} />}
         <Txt variant="display" size={28} leading={1.15} align="center" accessibilityRole="header">
           {question}
         </Txt>
@@ -107,7 +107,7 @@ export function PushAskSheet({ visible, kind, who, otherName, profile, onYes, on
       <View style={styles.actions}>
         <ActionButton label={t('common.push.yes')} size="xl" state={yesState} onPress={pressYes} />
         <PressableScale onPress={onNotNow} haptic accessibilityRole="button" accessibilityLabel={t('common.push.notNow')} style={styles.later}>
-          <Txt variant="label" size={17} weight={600} color={colors.greenDeep}>
+          <Txt variant="label" size={17} weight={600} color={colors.yolkDeep}>
             {t('common.push.notNow')}
           </Txt>
         </PressableScale>

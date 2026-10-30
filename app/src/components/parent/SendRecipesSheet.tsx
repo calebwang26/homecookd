@@ -7,7 +7,7 @@ import { Image } from 'expo-image';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 
 import { dishName } from '@/components/messages/helpers';
-import { ArrowRightIcon, BottomSheet, PotMark, PressableScale, Txt } from '@/components/ui';
+import { ArrowRightIcon, BottomSheet, NoPhoto, PressableScale, Txt } from '@/components/ui';
 import type { LibraryEntry } from '@/lib/types';
 import { useWords } from '@/lib/words/useWords';
 import { colors, radii } from '@/theme/tokens';
@@ -50,7 +50,7 @@ export function SendRecipesSheet({
                 {d.poster_url ? (
                   <Image source={{ uri: d.poster_url }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} recyclingKey={d.id} />
                 ) : (
-                  <PotMark size={30} />
+                  <NoPhoto title={title} size={56} />
                 )}
               </View>
               <View style={styles.rowText}>
@@ -81,7 +81,7 @@ const styles = StyleSheet.create({
     height: 56,
     borderRadius: radii.tile,
     overflow: 'hidden',
-    backgroundColor: colors.peach,
+    backgroundColor: colors.well,
     alignItems: 'center',
     justifyContent: 'center',
   },

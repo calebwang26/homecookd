@@ -6,15 +6,17 @@ import { Text, type StyleProp, type TextProps, type TextStyle } from 'react-nati
 import { RtlContext } from '@/lib/words/context';
 import { colors, typography, type SansWeight, type SerifWeight } from '@/theme/tokens';
 
+// Headings are Fraunces 600 (the brand kit: 600-650). The "homecookd" wordmark is never typed: it's the
+// kit's SVG (ui/Brand).
 export type TxtVariant =
-  | 'display' // Fraunces 500, -0.02em. Default 32 (kid titles); 34 parent, 40 Main, 30 recipe
-  | 'section' // Fraunces 500 22 (empty-state titles, sheet headings)
-  | 'kitchen' // Fraunces 500 20 ("Mom's kitchen")
+  | 'display' // Fraunces 600, -0.02em. Default 32 (kid titles); 34 parent, 40 Main, 30 recipe
+  | 'section' // Fraunces 600 22 (empty-state titles, sheet headings)
+  | 'kitchen' // Fraunces 600 20 ("Mom's kitchen")
   | 'name' // Fraunces 600 20 (profile tile names)
-  | 'brand' // Fraunces 600 22 ("homecookd")
-  | 'chatName' // Fraunces 500 24 (chat header)
+  | 'chatName' // Fraunces 600 24 (chat header)
   | 'quote' // Fraunces italic 17/1.4 (quote cards)
   | 'quoteLg' // Fraunces italic 24/1.25 ("How long for a soft egg?")
+  | 'hand' // Caveat 500 22/1.2: only what the cook "wrote" (the kit), never UI
   | 'lead' // DM Sans 17/1.45 muted ("Tap your face to come in.")
   | 'body' // DM Sans 16 muted (subtitles under titles)
   | 'bodyInk' // DM Sans 16 ink
@@ -26,17 +28,17 @@ export type TxtVariant =
   | 'caption' // DM Sans 13 muted (times, tab labels)
   | 'tiny' // DM Sans 12 muted (bubble times)
   | 'eyebrow' // DM Sans 13/700 uppercase +0.04em muted ("IN THIS STEP")
-  | 'button'; // DM Sans 18/700 cream (big pill buttons)
+  | 'button'; // DM Sans 18/700 ink (big pill buttons: ink on yolk)
 
 const roles: Record<TxtVariant, TextStyle> = {
   display: typography.display(32),
-  section: typography.serif(22, 500),
-  kitchen: typography.serif(20, 500),
+  section: typography.serif(22, 600),
+  kitchen: typography.serif(20, 600),
   name: typography.serif(20, 600),
-  brand: typography.serif(22, 600),
-  chatName: typography.serif(24, 500),
+  chatName: typography.serif(24, 600),
   quote: typography.quote(17, 1.4),
   quoteLg: typography.quote(24, 1.25),
+  hand: typography.hand(22, 1.2),
   lead: typography.sans(17, 400, colors.muted, 1.45),
   body: typography.sans(16, 400, colors.muted),
   bodyInk: typography.sans(16, 400, colors.ink),
@@ -48,10 +50,10 @@ const roles: Record<TxtVariant, TextStyle> = {
   caption: typography.sans(13, 400, colors.muted),
   tiny: typography.sans(12, 400, colors.muted),
   eyebrow: typography.eyebrow(13),
-  button: typography.sans(18, 700, colors.card),
+  button: typography.sans(18, 700, colors.ink),
 };
 
-const serifVariants = new Set<TxtVariant>(['display', 'section', 'kitchen', 'name', 'brand', 'chatName']);
+const serifVariants = new Set<TxtVariant>(['display', 'section', 'kitchen', 'name', 'chatName']);
 const italicVariants = new Set<TxtVariant>(['quote', 'quoteLg']);
 
 export type TxtProps = TextProps & {
@@ -76,9 +78,11 @@ export function txtStyle(variant: TxtVariant, size?: number, weight?: number, le
     style = { ...typography.display(s, leading ?? 1.1) };
     if (weight) style.fontFamily = typography.serif(s, weight as SerifWeight).fontFamily;
   } else if (serifVariants.has(variant)) {
-    style = { ...base, ...typography.serif(s, (weight ?? (variant === 'name' || variant === 'brand' ? 600 : 500)) as SerifWeight, leading) };
+    style = { ...base, ...typography.serif(s, (weight ?? 600) as SerifWeight, leading) };
   } else if (italicVariants.has(variant)) {
     style = { ...base, ...typography.quote(s, leading ?? (variant === 'quoteLg' ? 1.25 : 1.4)) };
+  } else if (variant === 'hand') {
+    style = { ...base, ...typography.hand(s, leading ?? 1.2) };
   } else {
     const w = (weight ?? weightOf(base)) as SansWeight;
     style = { ...base, ...typography.sans(s, w, base.color as string, leading ?? ratioOf(base)) };

@@ -1,5 +1,5 @@
 // Parent-Send "Add a hello": a cream card (radius 24, padding 14 14 14 20) with the
-// round peach mic (52). Tap to talk, tap again to stop; then it plays back, and a small x removes it.
+// round yolk-tint mic (52). Tap to talk, tap again to stop; then it plays back, and a small x removes it.
 // Recording turns the mic red (#9A4F47) with a soft halo, like Parent-Chat's recording state.
 import { useEffect, useRef } from 'react';
 import { StyleSheet, View } from 'react-native';
@@ -120,11 +120,11 @@ export function HelloCard({
             icon={<CloseIcon size={18} color={colors.muted} />}
           />
           <IconButton
-            tone="peach"
+            tone="yolkTint"
             size={52}
             accessibilityLabel={play.playing ? 'Pause your hello' : 'Hear your hello'}
             onPress={play.toggle}
-            icon={play.playing ? <PauseIcon size={20} color={colors.peachInk} /> : <PlayIcon size={20} color={colors.peachInk} />}
+            icon={play.playing ? <PauseIcon size={20} color={colors.ink} /> : <PlayIcon size={20} color={colors.ink} />}
           />
         </>
       ) : (
@@ -137,10 +137,10 @@ export function HelloCard({
             accessibilityLabel={recording ? 'Stop and keep your hello' : 'Tap to talk. Tap again to stop.'}
             style={[
               styles.mic,
-              recording ? { backgroundColor: colors.danger } : { backgroundColor: colors.peach },
+              recording ? { backgroundColor: colors.danger } : { backgroundColor: colors.yolkTint },
               rec.phase === 'unsupported' ? { opacity: 0.5 } : null,
             ]}>
-            {recording ? <StopIcon size={22} color={colors.card} /> : <MicIcon size={24} color={colors.peachInk} />}
+            {recording ? <StopIcon size={22} color={colors.card} /> : <MicIcon size={24} color={colors.ink} />}
           </PressableScale>
         </View>
       )}

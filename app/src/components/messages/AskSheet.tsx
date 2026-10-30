@@ -92,7 +92,7 @@ export function AskSheet({ visible, onClose }: { visible: boolean; onClose: () =
           <Animated.View key="dishes" entering={FadeIn.duration(180)}>
             <DishList dishes={dishes} onPick={(d) => setPick({ dish: d })} rowLabel={(d) => t('messages.ask.aboutDish', { dish: d.title })}>
               <OptionRow
-                icon={<ChatIcon size={24} color={colors.lavenderInk} />}
+                icon={<ChatIcon size={24} color={colors.ink} />}
                 title={t('messages.ask.somethingElse')}
                 last
                 onPress={() => setPick({ dish: null })}
@@ -123,7 +123,7 @@ export function AskSheet({ visible, onClose }: { visible: boolean; onClose: () =
               ) : (
                 <View style={styles.dishPill}>
                   <View style={[styles.pillThumb, styles.optionThumb]}>
-                    <ChatIcon size={18} color={colors.lavenderInk} />
+                    <ChatIcon size={18} color={colors.ink} />
                   </View>
                   <Txt variant="meta" weight={700} color={colors.ink}>
                     {t('messages.ask.somethingElse')}
@@ -212,8 +212,8 @@ const styles = StyleSheet.create({
   scroll: { marginHorizontal: -4 },
   scrollPad: { paddingHorizontal: 4, paddingBottom: 12, paddingTop: 2 },
   thumb: { width: 64, height: 64, borderRadius: 18, backgroundColor: colors.well },
-  thumbEmpty: { backgroundColor: colors.peach },
-  optionThumb: { backgroundColor: colors.lavender, alignItems: 'center', justifyContent: 'center' },
+  thumbEmpty: { backgroundColor: colors.well },
+  optionThumb: { backgroundColor: colors.yolkTint, alignItems: 'center', justifyContent: 'center' },
   rowText: { flex: 1, minWidth: 0, gap: 3, justifyContent: 'center' },
   who: { gap: 14 },
   context: { flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48 },

@@ -1,4 +1,4 @@
-// "Dad’s tip ⌄" on a cook-mode step (kid QA round 2, note 12): a small peach pill, closed at first so
+// "Dad’s tip ⌄" on a cook-mode step (kid QA round 2, note 12): a small green-tint pill, closed at first so
 // it never crowds the step. Tap it and the tip drops down under it; tap the top again to fold it. Plain
 // body text, no quote marks: the tip is shortened from what the cook said, and the label already says
 // whose it is. Only for a step whose recipe gives it a `tip`.
@@ -27,10 +27,10 @@ export function TipPill({ cookName, tip }: { cookName: string; tip: string | nul
         accessibilityLabel={title}
         accessibilityHint={open ? 'Hides the tip' : 'Shows the tip'}
         style={styles.head}>
-        <Txt variant="label" size={16} weight={700} color={colors.peachInk}>
+        <Txt variant="label" size={16} weight={700} color={colors.ink}>
           {title}
         </Txt>
-        <Chevron size={18} color={colors.peachInk} />
+        <Chevron size={18} color={colors.ink} />
       </PressableScale>
       {open ? (
         <Animated.View entering={FadeIn.duration(200)}>
@@ -46,7 +46,7 @@ export function TipPill({ cookName, tip }: { cookName: string; tip: string | nul
 }
 
 const styles = StyleSheet.create({
-  box: { alignSelf: 'flex-start', backgroundColor: colors.peach, borderRadius: 24 },
+  box: { alignSelf: 'flex-start', backgroundColor: colors.greenTint, borderRadius: 24 },
   open: { alignSelf: 'stretch', borderRadius: 20 },
   head: { minHeight: 48, paddingHorizontal: 18, flexDirection: 'row', alignItems: 'center', gap: 8 },
   body: { paddingHorizontal: 18, paddingBottom: 16 },

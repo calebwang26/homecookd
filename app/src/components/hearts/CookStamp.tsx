@@ -7,7 +7,7 @@
 // cooked it") already say it, so screen readers skip it.
 //
 //   <CookStamp />              // 18 pt, green ink
-//   <CookStamp size={22} color={colors.sageInk} />
+//   <CookStamp size={22} color={colors.green} />
 import Svg, { Circle, Path } from 'react-native-svg';
 import { View, type StyleProp, type ViewStyle } from 'react-native';
 
@@ -19,7 +19,7 @@ const RING =
 // Leans a few degrees clockwise: the short stroke sits low, the long one reaches up and right.
 const CHECK = 'M8.2 12.9l2.6 2.1 4.6-5.9';
 
-export function CookStamp({ size = 18, color = colors.greenDeep, style }: { size?: number; color?: string; style?: StyleProp<ViewStyle> }) {
+export function CookStamp({ size = 18, color = colors.green, style }: { size?: number; color?: string; style?: StyleProp<ViewStyle> }) {
   return (
     <View style={[{ width: size, height: size }, style]} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
       <Svg width={size} height={size} viewBox="0 0 24 24" fill="none">

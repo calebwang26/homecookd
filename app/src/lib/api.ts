@@ -118,7 +118,7 @@ export type Message = {
   note_id?: string | null;
   /** `cooked`: a photo of the dish they made (fresh signed URL, 1 h), else null. */
   photo_url?: string | null;
-  /** `cooked` with a postcard: "How close to Dad's?" in pots, 1-5; null = not rated (retention PR 3). */
+  /** `cooked` with a postcard: "How close to Dad's?" in yolks, 1-5; null = not rated (retention PR 3). */
   rating?: number | null;
 };
 

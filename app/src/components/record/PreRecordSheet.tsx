@@ -166,7 +166,7 @@ export function PreRecordSheet({
                 {languageLabel(language)}
               </Txt>
             </View>
-            <Txt variant="label" size={15} weight={700} color={colors.greenDeep}>
+            <Txt variant="label" size={15} weight={700} color={colors.yolkDeep}>
               {t('parent.preRecord.change')}
             </Txt>
           </PressableScale>
@@ -176,7 +176,7 @@ export function PreRecordSheet({
               label={t('parent.preRecord.camera')}
               size="xl"
               labelWeight={700}
-              icon={<RecordDotIcon size={16} color={colors.card} />}
+              icon={<RecordDotIcon size={16} color={colors.ink} />}
               state={busy === 'camera' ? 'loading' : 'idle'}
               disabled={!!busy && busy !== 'camera'}
               onPress={() => start('camera')}

@@ -60,7 +60,7 @@ export default function ShareLinkScreen() {
   return (
     <SignInScreen>
       <View style={styles.middle} accessibilityLabel="Opening the dish" accessibilityState={{ busy: true }}>
-        <ActivityIndicator color={colors.green} size="large" />
+        <ActivityIndicator color={colors.yolkDeep} size="large" />
       </View>
     </SignInScreen>
   );

@@ -12,7 +12,7 @@
 // Presentational: lib/useCookingSession.ts owns the answer (askConsent / answerConsent / dismissConsent).
 import { StyleSheet, View } from 'react-native';
 
-import { ActionButton, Avatar, BottomSheet, PotMark, PressableScale, Txt, type AvatarProps } from '@/components/ui';
+import { ActionButton, Avatar, BottomSheet, EggMark, PressableScale, Txt, type AvatarProps } from '@/components/ui';
 import { consentDetail, consentQuestion } from '@/lib/cookingLogic';
 import { colors } from '@/theme/tokens';
 
@@ -20,7 +20,7 @@ export type ConsentSheetProps = {
   visible: boolean;
   /** The dish's cook, as the family calls them ("Mom"). */
   cookName: string | null | undefined;
-  /** Their face above the question; the pot when there is none. */
+  /** Their face above the question; the egg mark when there is none. */
   profile?: AvatarProps['profile'];
   /** Yes. Return a promise: the button shows loading, then the sheet closes (or "Try again"). */
   onYes: () => void | Promise<unknown>;
@@ -41,7 +41,7 @@ export function ConsentSheet({ visible, cookName, profile, onYes, onNotNow, onDi
       dismissOnDrag={false}
       accessibilityLabel={question}>
       <View style={styles.body}>
-        {profile ? <Avatar profile={profile} size={72} /> : <PotMark size={64} />}
+        {profile ? <Avatar profile={profile} size={72} /> : <EggMark size={64} />}
         <Txt variant="display" size={28} leading={1.15} align="center" accessibilityRole="header">
           {question}
         </Txt>
@@ -52,7 +52,7 @@ export function ConsentSheet({ visible, cookName, profile, onYes, onNotNow, onDi
       <View style={styles.actions}>
         <ActionButton label="Yes" size="xl" onPress={onYes} />
         <PressableScale onPress={onNotNow} haptic accessibilityRole="button" accessibilityLabel="Not now" style={styles.later}>
-          <Txt variant="label" size={17} weight={600} color={colors.greenDeep}>
+          <Txt variant="label" size={17} weight={600} color={colors.yolkDeep}>
             Not now
           </Txt>
         </PressableScale>

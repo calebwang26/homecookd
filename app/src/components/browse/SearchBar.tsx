@@ -37,7 +37,7 @@ export const SearchBar = forwardRef<TextInput, Props>(function SearchBar(
           autoCorrect={false}
           autoCapitalize="none"
           clearButtonMode="never"
-          selectionColor={colors.green}
+          selectionColor={colors.yolkDeep}
           style={styles.input}
         />
         {value ? (
@@ -83,7 +83,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: 'rgba(30,36,16,0.28)',
+    backgroundColor: 'rgba(31,36,48,0.28)',
     alignItems: 'center',
     justifyContent: 'center',
   },

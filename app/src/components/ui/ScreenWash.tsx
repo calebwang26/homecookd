@@ -1,5 +1,5 @@
-// The bible's top-of-screen wash: a linear gradient from lavender #ECE6F2 (kid) or peach #F9E3CF
-// (parent) at the top to the page #F7F7F2. Heights in the bible: 300 (most tabs), 360 Kid-Home,
+// The bible's top-of-screen wash: a linear gradient from the yolk tint #FCEBD0 (kid and parent alike now; lavender
+// and peach are gone) at the top to the cream page #FBF5EA. Heights in the bible: 300 (most tabs), 360 Kid-Home,
 // 380 Parent-Home, 420 Main. Place it as the first child of the screen (or of the scroll content to
 // let it scroll away with the title).
 import { LinearGradient } from 'expo-linear-gradient';

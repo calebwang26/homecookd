@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 4,
     borderRadius: 999,
-    backgroundColor: 'rgba(30,36,16,0.55)',
+    backgroundColor: 'rgba(31,36,48,0.55)',
   },
   dot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.danger },
   dotOff: { backgroundColor: colors.card, opacity: 0.6 },

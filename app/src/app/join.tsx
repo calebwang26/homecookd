@@ -1,6 +1,6 @@
 // The first screen, with no link (docs/build/JOIN-SIMPLE.md §1.4, mockup 2): starting a family is the
 // one way in without a link; everyone else joins from one (/i, or a dish card's /miss and /a). Bible
-// Main look: the peach wash, the pot + "homecookd" row, then at thumb height:
+// Main look: the yolk-tint wash, the egg lockup, then at thumb height:
 //   "Cook your family's food."  "Start your family's kitchen. Everyone else joins from your link."
 //   [ Sign in with Apple ]       the system button (Google on Android only). Someone the server
 //                                already knows is in at once and goes to "Who's in the kitchen?"

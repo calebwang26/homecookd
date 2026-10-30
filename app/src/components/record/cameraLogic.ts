@@ -100,12 +100,12 @@ export function flipPlace(s: { camera: boolean; twoCameras: boolean; asking: boo
 
 /** Room under the flip button for one line of its label. */
 export const FLIP_LABEL_ROOM = 27;
-/** At least this much between homie's corner pot and the flip button under it. */
+/** At least this much between homie's corner egg and the flip button under it. */
 export const FLIP_POT_GAP = 56;
 
 /**
  * The flip button and its label beside the card: centred in the space to its right, at the card's bottom
- * (a camera's controls sit low), and at least FLIP_POT_GAP under homie's corner pot when it's on that
+ * (a camera's controls sit low), and at least FLIP_POT_GAP under homie's corner egg when it's on that
  * side too: on a small phone two round buttons stacked close would read as a pair.
  */
 export function flipBeside(

@@ -14,7 +14,7 @@ import { CalendarIcon, HostPill } from '@/components/community/DinnerParts';
 import { openedWords } from '@/components/community/invite';
 import { useNow } from '@/components/community/data';
 import { riseIn } from '@/components/community/motion';
-import { ActionButton, EmptyState, PotMark, ScreenWash, Skeleton, Txt } from '@/components/ui';
+import { ActionButton, EggMascot, EmptyState, ScreenWash, Skeleton, Txt } from '@/components/ui';
 import { useHomieScreen } from '@/lib/homie';
 import { openInvite, type Opened } from '@/lib/live/invite';
 import { useSession } from '@/lib/session';
@@ -42,7 +42,7 @@ export default function DinnerInviteScreen() {
   const token = one(params.t);
   const fixture = DEV_WEB ? FIXTURES[one(params.fixture) ?? ''] : undefined;
   const { me, homeFor } = useSession();
-  // A link screen, like /i and /r: no pot in the corner.
+  // A link screen, like /i and /r: no egg in the corner.
   useHomieScreen({ hidden: true });
   const insets = useSafeAreaInsets();
   const now = useNow();
@@ -78,9 +78,10 @@ export default function DinnerInviteScreen() {
   } else if (!opened.ok) {
     body =
       opened.why === 'gone' ? (
-        <EmptyState title="This invite doesn’t work anymore" body="Ask whoever sent it for a new link." actionLabel="Done" onAction={done} />
+        <EmptyState mood="oops" title="This invite doesn’t work anymore" body="Ask whoever sent it for a new link." actionLabel="Done" onAction={done} />
       ) : (
         <EmptyState
+          mood="oops"
           title="We couldn’t reach homecookd"
           body="Check your connection, then try again."
           actionLabel="Try again"
@@ -94,9 +95,7 @@ export default function DinnerInviteScreen() {
     const words = openedWords(opened.dinner, now);
     body = (
       <Animated.View entering={riseIn(reduce)} style={styles.center}>
-        <View style={styles.glow}>
-          <PotMark size={96} mood="waving" />
-        </View>
+        <EggMascot mood="hello" size={112} />
         <Txt variant="display" size={32} align="center" accessibilityRole="header">
           {words.title}
         </Txt>
@@ -124,16 +123,6 @@ const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.page },
   middle: { flex: 1, justifyContent: 'center', paddingHorizontal: 20 },
   center: { alignItems: 'center', gap: 18 },
-  // The dinner photo's warm sun glow, round.
-  glow: {
-    width: 136,
-    height: 136,
-    borderRadius: 68,
-    backgroundColor: colors.card,
-    alignItems: 'center',
-    justifyContent: 'center',
-    boxShadow: '0 0 0 10px rgba(254,190,41,0.14), 0 0 70px rgba(254,190,41,0.35), 0 18px 44px rgba(30,36,16,0.12)',
-  },
   when: {
     flexDirection: 'row',
     alignItems: 'center',
