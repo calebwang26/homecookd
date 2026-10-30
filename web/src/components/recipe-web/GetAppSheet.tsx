@@ -6,7 +6,7 @@
 import { useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Handoff } from '@/components/invite/Handoff';
-import { PotMascot } from '@/components/primitives/PotMascot';
+import { EggMascot } from '@/components/primitives/EggMascot';
 import { appSchemeUrl, isPhoneOrTablet, WEB_ORIGIN } from '@/lib/app-links';
 import { midSentence, possessive } from '@/lib/recipe-web/recipe';
 import type { Share } from '@/lib/recipe-web/types';
@@ -71,7 +71,7 @@ export function GetAppSheet({ onClose, share, reduced }: { onClose: () => void; 
             <IconClose size={18} />
           </button>
           <div className={s.handoff}>
-            {sender ? <Avatar name={sender.name} avatarKey={sender.avatar_key} size={64} /> : <PotMascot size={56} mood="happy" />}
+            {sender ? <Avatar name={sender.name} avatarKey={sender.avatar_key} size={64} /> : <EggMascot size={56} mood="hello" />}
             <h2 ref={titleRef} id="rw-sheet-title" className={s.sheetTitle} tabIndex={-1}>
               {joinTitle(share.family_name, sender?.name ?? null)}
             </h2>

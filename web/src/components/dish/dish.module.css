@@ -58,7 +58,7 @@
   outline-offset: 2px;
 }
 
-/* ---------- the dish hero: the kid's photo, or the designed peach card with a big pot ---------- */
+/* ---------- the dish hero: the kid's photo, or the designed dish card (white, the dish name in Fraunces) ---------- */
 .hero {
   position: relative;
   overflow: hidden;
@@ -67,7 +67,21 @@
   background: #fcebd0;
 }
 .hero[data-designed] {
-  background: radial-gradient(120% 90% at 50% 35%, #fdf1de 0, #fcebd0 55%, #fbdeba 100%);
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--hc-line);
+}
+/* the designed card's dish name: big Fraunces on white */
+.heroName {
+  max-width: 82%;
+  padding: 0 12px;
+  font-family: var(--ff-display);
+  font-weight: 650;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
+  letter-spacing: -0.02em;
+  line-height: 1.04;
+  text-align: center;
+  text-wrap: balance;
+  color: var(--ink);
 }
 .heroImg {
   position: absolute;

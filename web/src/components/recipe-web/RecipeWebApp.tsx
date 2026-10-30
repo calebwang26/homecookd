@@ -8,7 +8,7 @@
 // Mom just wrote or the kid's card, read from the dish card instead of recipe.json (DishRecipeView).
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { PotMascot } from '@/components/primitives/PotMascot';
+import { Logo } from '@/components/primitives/Logo';
 import { LANDER_LINK } from '@/lib/app-links';
 import { getRecipe, getShare, isPlausibleToken, LoadError, type LoadErrorKind } from '@/lib/recipe-web/api';
 import { BUCKET_URL, fixtureAllowed } from '@/lib/recipe-web/config';
@@ -128,8 +128,7 @@ function TopBar({ onGetApp, overlay, clear, dish }: { onGetApp?: (el: HTMLElemen
   // On the dish pages the bar has a way back to the page the view opened from, and the wordmark stays put.
   const mark = (
     <>
-      <PotMascot size={28} />
-      <span className={ui.word}>homecookd</span>
+      <Logo height={28} />
     </>
   );
   return (

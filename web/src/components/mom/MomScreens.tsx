@@ -6,7 +6,8 @@ import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
 import { AppSheet, DishHero, TopBar, useAudio, Wave } from '@/components/dish/parts';
 import { Rich, useLang, useRel } from '@/components/dish/lang';
 import { Highlighter } from '@/components/primitives/Highlighter';
-import { PotMascot } from '@/components/primitives/PotMascot';
+import { EggMascot } from '@/components/primitives/EggMascot';
+import { Logo } from '@/components/primitives/Logo';
 import { IconBack, IconPause, IconPlay } from '@/components/recipe-web/icons';
 import { appSchemeUrl, WEB_ORIGIN } from '@/lib/app-links';
 import { cardTitle, clock, guessedBits, initialOf, plain } from '@/lib/dish/text';
@@ -41,7 +42,7 @@ export function IntroScreen({ ask, kid, message, toggle, onNext }: { ask: Ask; k
       <TopBar />
       <div className={s.body}>
         <div className={s.avatar} aria-hidden="true">
-          {initialOf(ask.kidName) || <PotMascot size={56} />}
+          {initialOf(ask.kidName) || <Logo variant="mark" size={56} />}
         </div>
         <h1 className={`${s.h1} ${s.center}`}>
           <Rich text={t('m1.title', { kid, dish: ask.guess.dish || ask.dish })} />
@@ -93,7 +94,7 @@ export function GuessScreen({ ask, kid, guess, toggle, onBack, onNext }: { ask: 
   const n = ask.questions.length;
   return (
     <>
-      <DishHero photoUrl={ask.photoUrls[0] ?? null} alt={t('m2.photo', { kid })} height={200}>
+      <DishHero photoUrl={ask.photoUrls[0] ?? null} alt={t('m2.photo', { kid })} height={200} title={ask.guess.dish || ask.dish}>
         <button type="button" className={`${ui.press} ${ui.round} ${s.back}`} aria-label={t('common.back')} onClick={onBack}>
           <IconBack size={22} />
         </button>
@@ -275,13 +276,13 @@ export function FillScreen({ ask, guess, version, onDone }: { ask: Ask; guess: R
       <TopBar />
       <div className={s.body}>
         <span className={s.writing} role="status">
-          <PotMascot size={24} />
+          <Logo variant="mark" size={24} />
           {t('m4.writing')}
         </span>
         <h1 className={s.title}>{cardTitle(ask.relation, ask.guess.dish || ask.dish)}</h1>
         <div className={s.kitchen}>
           <span className={s.potDot} aria-hidden="true">
-            <PotMascot size={20} />
+            <Logo variant="mark" size={20} />
           </span>
           {t('m4.fromKitchen', { R: rel(ask.relation) })}
         </div>
@@ -342,7 +343,7 @@ function RecipeCard({ ask, compact, onOpen }: { ask: Ask; compact?: boolean; onO
   return (
     <div className={s.miniCard} data-compact={compact || undefined}>
       <span className={s.miniThumb}>
-        <DishHero photoUrl={ask.photoUrls[0] ?? null} alt="" height={60} />
+        <DishHero photoUrl={ask.photoUrls[0] ?? null} alt="" height={60} title={ask.guess.dish || ask.dish} />
       </span>
       <span className={s.miniText}>
         <span className={s.miniTitle}>{title}</span>
@@ -373,7 +374,7 @@ export function FilmSheet({ open, onClose, kid, token, extra }: { open: boolean;
           <span className={`${s.corner} ${s.cornerTR}`} />
           <span className={`${s.corner} ${s.cornerBL}`} />
           <span className={`${s.corner} ${s.cornerBR}`} />
-          <PotMascot size={110} mood="happy" steam />
+          <EggMascot size={110} mood="hello" />
         </div>
       }
       title={t('m6.title', { kid })}
@@ -436,9 +437,7 @@ export function SentScreen({
             <span key={i} className={s.confetti} style={{ background: c, '--a': `${i * 36}deg`, '--d': `${28 + (i % 3) * 8}px` } as CSSProperties} />
           ))}
           <span className={s.disc}>
-            <svg className={s.check} viewBox="0 0 24 24">
-              <path d="M5 12.5l4.5 4.5L19 7.5" pathLength={20} />
-            </svg>
+            <EggMascot size={104} mood="made-it" />
           </span>
         </div>
         <div className={s.rise}>

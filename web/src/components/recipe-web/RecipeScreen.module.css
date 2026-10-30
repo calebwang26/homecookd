@@ -21,11 +21,12 @@
   height: 100%;
   object-fit: cover;
 }
-/* No photo: the app's peach with the pot. */
+/* No photo: a white card with the dish name in big Fraunces (not the egg). */
 .heroEmpty {
   position: absolute;
   inset: 0;
-  background: #fcebd0;
+  background: var(--surface);
+  box-shadow: inset 0 0 0 1px var(--hc-line);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -133,4 +134,17 @@
   font-size: 17px;
   line-height: 1.4;
   color: #1f2430;
+}
+
+.heroEmptyName {
+  max-width: 82%;
+  font-family: var(--ff-display);
+  font-weight: 650;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
+  font-size: clamp(28px, 9vw, 40px);
+  letter-spacing: -0.02em;
+  line-height: 1.04;
+  text-align: center;
+  text-wrap: balance;
+  color: var(--ink);
 }

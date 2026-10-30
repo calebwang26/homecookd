@@ -126,19 +126,6 @@
   border-radius: var(--r-sm);
   transition: color 300ms var(--ease-soft);
 }
-.mascot {
-  flex: none;
-  margin-top: -3px; /* optical: the steam curls make the pot look low */
-}
-.word {
-  font-family: var(--ff-display);
-  font-weight: 700;
-  font-size: 28px;
-  line-height: 1;
-  letter-spacing: -0.02em;
-  font-variation-settings: 'SOFT' 100, 'WONK' 0, 'opsz' 144;
-  transform: translateY(-1px);
-}
 
 /* ---------- links ---------- */
 .links ul {
@@ -164,8 +151,7 @@
     color 300ms var(--ease-soft),
     background-color 200ms var(--ease-soft);
 }
-.nav[data-tone='hero'] .link,
-.nav[data-tone='hero'] .logo {
+.nav[data-tone='hero'] .link {
   text-shadow: 0 1px 14px rgba(31, 36, 48, 0.35);
 }
 @media (hover: hover) {
@@ -260,20 +246,8 @@
     display: inline-flex;
     padding: 0 18px;
   }
-  .word {
-    font-size: 26px;
-  }
 }
-/* "homecookd" is wide, so the mascot steps aside where "with Grandma ▾" would otherwise be cut (the
-   picker keeps its "with" / "as" at every width, QA B22). Widths are measured with "Grandma", the
-   longest default, with a few px to spare: 520+: mascot + word; 480–519: word alone; 428–479: mascot
-   + a smaller word; 375–427: the word alone, smaller still, beside a tighter "Early access";
-   <375: the mascot alone in a 48px round target. */
-@media (min-width: 480px) and (max-width: 519px) {
-  .mascot {
-    display: none;
-  }
-}
+
 @media (max-width: 479px) {
   .nav {
     padding-inline: 8px;
@@ -281,13 +255,6 @@
   .logo {
     gap: 6px;
     padding-right: 2px;
-  }
-  .mascot {
-    width: 28px;
-    height: auto;
-  }
-  .word {
-    font-size: 20px;
   }
   .actions {
     gap: 6px;
@@ -300,12 +267,6 @@
   .bar {
     gap: 6px;
   }
-  .mascot {
-    display: none;
-  }
-  .word {
-    font-size: 17px;
-  }
   .actions {
     gap: 4px;
   }
@@ -315,9 +276,6 @@
   }
 }
 @media (max-width: 388px) {
-  .word {
-    font-size: 16px;
-  }
 }
 @media (max-width: 374px) {
   .nav {
@@ -326,13 +284,6 @@
   }
   .bar {
     gap: 6px;
-  }
-  .mascot {
-    display: block;
-    width: 32px;
-  }
-  .word {
-    display: none;
   }
   .logo {
     justify-content: center;
@@ -362,5 +313,21 @@
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
     background: color-mix(in srgb, var(--canvas) 94%, transparent);
+  }
+}
+
+/* ---------- the lockup: ink on the canvas, the reversed lockup over the dark hero ---------- */
+.logo .lockupHero {
+  display: none;
+}
+.nav[data-tone='hero'] .logo .lockupHero {
+  display: inline-flex;
+}
+.nav[data-tone='hero'] .logo .lockupNormal {
+  display: none;
+}
+@media (max-width: 479px) {
+  .logo {
+    padding-right: 2px;
   }
 }

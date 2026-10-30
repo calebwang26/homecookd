@@ -6,7 +6,7 @@
 // short body, one sentence per line. Everything moving is decorative; the hidden list carries the same recipes.
 import { useAudience, useCopy } from '@/components/providers/CopyProvider';
 import { possessive } from '@/components/primitives/RecipeCard';
-import { PotMascot } from '@/components/primitives/PotMascot';
+import { EggMascot } from '@/components/primitives/EggMascot';
 import { Reveal } from '@/components/motion/Reveal';
 import { WordReveal } from '@/components/motion/WordReveal';
 import { PauseButton } from '@/components/providers/PauseProvider';
@@ -27,7 +27,7 @@ export function EveryFamily() {
     <section id="every-family" className={s.section} aria-labelledby="every-family-h2" data-still={parent ? '' : undefined}>
       <div className={s.center}>
         <Reveal y={14} className={s.mascot}>
-          <PotMascot size={44} />
+          <EggMascot size={64} mood="hello" />
         </Reveal>
         {/* both versions: the cycling word alone on line 2, so its width never reflows line 1 */}
         <CycleHeading id="every-family-h2" />

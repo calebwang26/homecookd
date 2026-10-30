@@ -1,0 +1,28 @@
+/* The lockup everywhere; the mark alone on phones under 360px wide (brand kit, section 7). */
+.logo {
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  max-width: 100%;
+}
+.lockup {
+  display: block;
+  max-width: 100%;
+  height: auto;
+}
+.mark {
+  display: block;
+  flex: none;
+}
+.markOnly {
+  display: none;
+  flex: none;
+}
+@media (max-width: 359.98px) {
+  .lockup {
+    display: none;
+  }
+  .markOnly {
+    display: block;
+  }
+}

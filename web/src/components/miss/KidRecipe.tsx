@@ -15,8 +15,8 @@ export function KidRecipe({ card, token, version, onClose }: { card: Card; token
   const photo = card.photoUrls[0] ?? null;
   const meta = [card.version ? t('card.fromKitchen', { R }) : t('card.guessMeta'), version.time, version.servings && t('card.serves', { n: version.servings })].filter(Boolean).join(' · ');
   const sheet = useCallback(
-    ({ open, onClose: close }: { open: boolean; onClose: () => void }) => <SaveSheet open={open} onClose={close} photo={photo} relation={card.relation} token={token} />,
-    [photo, card.relation, token],
+    ({ open, onClose: close }: { open: boolean; onClose: () => void }) => <SaveSheet open={open} onClose={close} photo={photo} relation={card.relation} token={token} dish={card.dish} />,
+    [photo, card.relation, card.dish, token],
   );
   return (
     <DishRecipeView

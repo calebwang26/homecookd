@@ -1,7 +1,7 @@
 'use client';
 // While the recipe loads (a skeleton in the Kid-Recipe shape) and when a link can't open one.
 // "Visit homecookd" is a plain <a>, never next/link: the lander only renders fully on a page load.
-import { PotMascot } from '@/components/primitives/PotMascot';
+import { EggMascot } from '@/components/primitives/EggMascot';
 import { LANDER_LINK } from '@/lib/app-links';
 import type { LoadErrorKind } from '@/lib/recipe-web/api';
 import ui from './RecipeWeb.module.css';
@@ -40,7 +40,7 @@ export function ErrorScreen({ kind, onRetry }: { kind: LoadErrorKind; onRetry?: 
   const c = COPY[kind];
   return (
     <div className={s.error}>
-      <PotMascot size={88} mood="talk" />
+      <EggMascot size={88} mood="oops" />
       <h1 className={s.title}>{c.title}</h1>
       <p className={s.line}>{c.line}</p>
       <div className={s.actions}>

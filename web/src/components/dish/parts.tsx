@@ -4,7 +4,7 @@
 // "Get the app" sheet (K4 for the kid, M6 for Mom).
 import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
-import { PotMascot } from '@/components/primitives/PotMascot';
+import { Logo } from '@/components/primitives/Logo';
 import { IconClose } from '@/components/recipe-web/icons';
 import { APP_STORE_URL, copyText } from '@/lib/app-links';
 import { CheckIcon } from './shareIcons';
@@ -19,8 +19,7 @@ export function TopBar({ right }: { right?: ReactNode }) {
   return (
     <header className={s.topBar}>
       <span className={s.brand}>
-        <PotMascot size={30} />
-        <span>homecookd</span>
+        <Logo height={30} />
       </span>
       <span className={s.topRight}>
         {right}
@@ -30,15 +29,17 @@ export function TopBar({ right }: { right?: ReactNode }) {
   );
 }
 
-/** The kid's own first photo, else the designed dish card: Hearth peach and a big pot. */
-export function DishHero({ photoUrl, alt, height = 270, children }: { photoUrl: string | null; alt: string; height?: number; children?: ReactNode }) {
+/** The kid's own first photo, else the designed dish card: white, with the dish name in big Fraunces (never the egg). */
+export function DishHero({ photoUrl, alt, height = 270, title, children }: { photoUrl: string | null; alt: string; height?: number; title?: string; children?: ReactNode }) {
   return (
     <div className={s.hero} style={{ height }} data-designed={photoUrl ? undefined : ''}>
       {photoUrl ? (
         // eslint-disable-next-line @next/next/no-img-element -- a Convex storage URL, outside the static loader
         <img src={photoUrl} alt={alt} className={s.heroImg} />
       ) : (
-        <PotMascot size={Math.min(150, Math.round(height * 0.75))} mood="happy" />
+        <span className={s.heroName} style={{ fontSize: Math.max(18, Math.min(40, Math.round(height * 0.15))) }} aria-hidden="true">
+          {height < 100 ? Array.from(title ?? '')[0] : title}
+        </span>
       )}
       {children}
     </div>

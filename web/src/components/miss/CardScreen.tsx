@@ -5,7 +5,7 @@
 import { Fragment, useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
 import { DishHero, Toast, useAudio, useToast } from '@/components/dish/parts';
 import { useLang, useRel } from '@/components/dish/lang';
-import { PotMascot } from '@/components/primitives/PotMascot';
+import { Logo } from '@/components/primitives/Logo';
 import { IconBack, IconClose, IconPause, IconPlay } from '@/components/recipe-web/icons';
 import { DishError, getCard, updateCard } from '@/lib/dish/api';
 import { applyEdits, askItems, cleanPicked, EDIT_LIMITS, initialPicked, ingredientRef, lineRef, openCap, unitOf, unitText, withEdit } from '@/lib/dish/shape';
@@ -118,7 +118,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
 
   return (
     <main className={s.card}>
-      <DishHero photoUrl={photo} alt={t('card.dishPhoto', { dish: card.dish })}>
+      <DishHero photoUrl={photo} alt={t('card.dishPhoto', { dish: card.dish })} title={card.dish}>
         <a className={`${ui.press} ${ui.round} ${s.back}`} href="/miss" aria-label={t('card.newDish')} onClick={(e) => onNewDish(e)}>
           <IconBack size={22} />
         </a>
@@ -135,7 +135,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
           <div className={s.byline}>
             {card.version ? (
               <span className={s.avatar} aria-hidden="true">
-                <PotMascot size={22} />
+                <Logo variant="mark" size={22} />
               </span>
             ) : (
               <span className={s.dashed} aria-hidden="true" />
@@ -150,7 +150,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
 
         {card.merging ? (
           <p className={s.status} role="status">
-            <PotMascot size={28} mood="happy" />
+            <Logo variant="mark" size={28} />
             {t('card.merging', { R })}
           </p>
         ) : card.status === 'asked' && !card.version ? (
@@ -301,7 +301,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
 
       <WhoSheet open={who} onClose={closeWho} token={token} onPicked={pickedWho} toast={show} />
       <AskSheet key={card.relation} open={asking} onClose={closeAsk} token={token} card={card} onCard={setCard} toast={show} items={askItems(card, guess, chosen)} />
-      <SaveSheet open={saving} onClose={closeSave} photo={photo} relation={card.relation} token={token} />
+      <SaveSheet open={saving} onClose={closeSave} photo={photo} relation={card.relation} token={token} dish={card.dish} />
       <Toast toast={toast} />
     </main>
   );
