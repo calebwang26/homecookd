@@ -3,8 +3,8 @@
 // track (start 'top 85%', end 'bottom bottom' ≈ 215vh of scroll at 230vh).
 //
 // The stage is CSS-sticky from ~39.5% on, so the beats are placed where the visitor can see them:
-//   0–20   the stack DeckFilm drops falls onto the first stair (tilt 12° → 0) while the deck lifts
-//          ~14vh, so the stairs fill the band under the pass-down instead of leaving it empty
+//   0–20   DeckFilm's closed stack, picked up where it was, holds still on screen while How it works
+//          rises beside it; the deck lifts ~14vh, so the stairs fill the band under the pass-down
 //   20–38  the recipe cards on top slide off to the tail, then the step cards deal into the stairs;
 //          H2 line i fills ghost → ink as card i lands; the lift eases out by the time the stage sticks
 //   38–54  hold: the pot mascot hops card 1 → 2 → 3, the REC timer runs 0:00 → 0:42, slow drift
@@ -14,17 +14,18 @@
 //   74–92  the phone (real app-library recording) rises to rest in front of the folder's bottom-right corner
 //   80     the deck copy hands over to the interactive FolderGrid (and back below 76)
 //
-// Hand-off from DeckFilm (for B1 / B7): the pass-down fan closes and drops its stack out of
-// the viewport's bottom at x ≈ 50vw; this stack (tilted the same +12°) starts
-// just inside this section's top edge at the same x, so it rises in from the bottom right after the
-// other one leaves and straightens onto the first stair. It is never clipped by the stage's top edge
-// (no slice line, no fade) and never on screen at the same time as DeckFilm's stack.
+// Hand-off from DeckFilm (lib/motion/deckHandoff.ts): the pass-down fan closes into a stack and the pin
+// lets go. From that moment this deck shows and DeckFilm's stack hides: this stack starts exactly where
+// that one is (same place, same size), rides up with the page until the timeline starts, holds still
+// through 0–20, then deals into the stairs. The cards never leave the screen or drop and come back up
+// (Caleb, Oct 30). It is never clipped by the stage's top edge (no slice line, no fade).
 //
 // Geometry is measured on every ScrollTrigger refresh (never per frame): viewport units, the deck
 // card box (CSS vars --gw/--gh), and the real FolderGrid's grid rect (so the hand-over is exact).
 import { gsap, ScrollTrigger } from '@/lib/motion/gsap';
 import { SCRUB } from '@/lib/motion/tokens';
 import { addWordFill } from '@/lib/motion/wordFill';
+import { deckHandoff } from '@/lib/motion/deckHandoff';
 
 /** Stair top-left corners, stage-relative (x vw, y vh; this stage starts at 40vw). Down ~8vh so the
  *  mascot on the first card clears the nav; each step is 14vw so the previous card's title stays
@@ -101,7 +102,6 @@ interface Geo {
   vh: number;
   gw: number;
   gh: number;
-  fall: Pose[];
   stack: Pose[];
   stairs: Pose[];
   grid: Pose[];
@@ -173,19 +173,6 @@ function measure(els: FilmEls): Geo {
     const base = i < 3 ? 1 : (STEP_CARD.w * vw) / gw;
     return { x: c0.x - 0.6 * vw * k, y: c0.y + 0.3 * vw * k, r: -1.2 * k, s: base * (1 - 0.02 * k) };
   });
-  // It falls in where DeckFilm drops its stack (viewport x ≈ 50vw = stage x 10vw) and drifts onto
-  // the first stair as it lands. It starts as high as it can while its tilted front card stays inside
-  // the stage's top edge, so it is never sliced by that edge and never visible before DeckFilm's
-  // stack has left the screen.
-  const fallDx = 10 * vw + ox - c0.x;
-  const front = stack[5];
-  const fw = gw * front.s;
-  const fh = gh * front.s;
-  const tilt = ((Math.abs(front.r) + 12) * Math.PI) / 180;
-  const halfBox = (fh * Math.cos(tilt) + fw * Math.sin(tilt)) / 2;
-  const fallDy = Math.min(0, halfBox + 6 - front.y);
-  const fall: Pose[] = stack.map((p) => ({ ...p, x: p.x + fallDx, y: p.y + fallDy, r: p.r + 12 }));
-
   // the real grid, measured (identical positions for the hand-over)
   const g = els.grid.getBoundingClientRect();
   const cs = getComputedStyle(els.grid);
@@ -201,7 +188,33 @@ function measure(els: FilmEls): Geo {
 
   const mascot = STAIRS_TL.slice(0, 3).map(([x, y]) => ({ x: (x + MASCOT_FROM_LEFT) * vw + ox, y: y * vh }));
 
-  return { vw, vh, gw, gh, fall, stack, stairs, grid, frontToGrid: gw / (STEP_CARD.w * vw), mascot };
+  return { vw, vh, gw, gh, stack, stairs, grid, frontToGrid: gw / (STEP_CARD.w * vw), mascot };
+}
+
+/** DeckFilm's closed stack as this deck, stage px (same place and size, this stack's own spread):
+ *  held = false at the hand-off (DeckFilm's pin letting go), true at P.fallEnd, where it holds still on
+ *  screen at the place it reached when the timeline started. */
+function pickUp(els: FilmEls, G: Geo, held: boolean): Pose[] {
+  const H = window.innerHeight;
+  const has = deckHandoff.cw > 0;
+  const cw = has ? deckHandoff.cw : Math.min(16 * G.vw, 0.3 * H);
+  const vx = has ? deckHandoff.x : 50 * G.vw;
+  const vy = has ? deckHandoff.y : 0.575 * H;
+  const root = deckHandoff.root;
+  // as DeckFilm lets go its root's bottom is at the viewport bottom and the track's top `gap` below it;
+  // the hand-off waits until the track's top is there too, by when the stack has ridden up `gap`
+  const gap = root ? els.track.getBoundingClientRect().top - root.getBoundingClientRect().bottom : 0;
+  let y = vy - gap - H;
+  if (held) {
+    // the stack rode up (15vh + gap) to the timeline's start (track top at 85%); at P.fallEnd the stage's
+    // top has risen by fallEnd% of the scroll (track height − 15vh) and the deck is lifted LIFT_VH
+    const top = 0.85 * H - (P.fallEnd / 100) * (els.track.offsetHeight - 0.15 * H);
+    y = vy - 0.15 * H - gap - top + LIFT_VH * G.vh;
+  }
+  const x = vx - els.stage.getBoundingClientRect().left;
+  const f = G.stack[5];
+  const k = cw / (G.gw * f.s);
+  return G.stack.map((p) => ({ x: x + (p.x - f.x) * k, y: y + (p.y - f.y) * k, r: p.r, s: p.s * k }));
 }
 
 export interface FilmOptions {
@@ -212,8 +225,12 @@ export interface FilmOptions {
 /** Build the desktop film. Returns a cleanup (gsap.matchMedia reverts the tweens themselves). */
 export function buildFilm(els: FilmEls, opts: FilmOptions): { st: ScrollTrigger; cleanup: () => void } {
   let G = measure(els);
+  // read lazily (after every refreshInit, so DeckFilm has measured too)
+  let picked: { from: Pose[]; held: Pose[] } | null = null;
+  const pick = () => (picked ??= { from: pickUp(els, G, false), held: pickUp(els, G, true) });
   const remeasure = () => {
     G = measure(els);
+    picked = null;
   };
   ScrollTrigger.addEventListener('refreshInit', remeasure);
 
@@ -250,13 +267,14 @@ export function buildFilm(els: FilmEls, opts: FilmOptions): { st: ScrollTrigger;
   gsap.set(els.mascot, { xPercent: -50, yPercent: -100, left: 0, top: 0, transformOrigin: '50% 100%' });
   gsap.set(els.puff, { xPercent: -50, left: 0, top: 0 });
 
-  // ---- cards: fall → stack → stairs → grid ----
+  // ---- cards: DeckFilm's stack (held still on screen) → stairs → grid ----
   els.cards.forEach((card, i) => {
     const step = i < 3;
+    // linear, like the page and the lift under it, so on screen it stays put
     tl.fromTo(
       card,
-      { x: () => G.fall[i].x, y: () => G.fall[i].y, rotation: () => G.fall[i].r, scale: () => G.fall[i].s, rotationY: 0 },
-      { x: () => G.stack[i].x, y: () => G.stack[i].y, rotation: () => G.stack[i].r, scale: () => G.stack[i].s, ease: 'power1.in', duration: P.fallEnd },
+      { x: () => pick().from[i].x, y: () => pick().from[i].y, rotation: () => pick().from[i].r, scale: () => pick().from[i].s, rotationY: 0 },
+      { x: () => pick().held[i].x, y: () => pick().held[i].y, rotation: () => pick().held[i].r, scale: () => pick().held[i].s, ease: 'none', duration: P.fallEnd },
       0,
     );
     // deal, from the top of the pile: the three photo cards on top slide off to the tail first
@@ -281,7 +299,7 @@ export function buildFilm(els: FilmEls, opts: FilmOptions): { st: ScrollTrigger;
       if (front) tl.to(front, { scale: () => G.frontToGrid, ease: 'power2.inOut', duration: 12 }, P.foldStart);
     }
   });
-  // the trailing cards fall in as full recipe cards (the front one stands in for the card DeckFilm dropped),
+  // the trailing cards fall in as full recipe cards (the front one stands in for the card DeckFilm handed over),
   // turn photo-only as they slide off to the tail (a7 M13), and back into full cards in the fold
   if (els.photos.length) {
     tl.fromTo(els.photos, { autoAlpha: 0 }, { autoAlpha: 1, ease: 'power1.inOut', duration: 5, stagger: 0.6 }, P.dealStart + 1);
@@ -301,7 +319,7 @@ export function buildFilm(els: FilmEls, opts: FilmOptions): { st: ScrollTrigger;
 
   // ---- lift: before the stage sticks the stairs would sit low in the viewport under an empty band;
   // the deck rises while it falls and deals, then settles to its sticky pose exactly at P.stick ----
-  tl.fromTo(els.drift, { y: 0 }, { y: () => -LIFT_VH * G.vh, ease: 'sine.out', duration: P.fallEnd }, 0);
+  tl.fromTo(els.drift, { y: 0 }, { y: () => -LIFT_VH * G.vh, ease: 'none', duration: P.fallEnd }, 0);
   tl.to(els.drift, { y: 0, ease: 'sine.inOut', duration: P.stick - P.fallEnd }, P.fallEnd);
 
   // ---- hold: drift, mascot hops, REC timer ----
@@ -386,6 +404,24 @@ export function buildFilm(els: FilmEls, opts: FilmOptions): { st: ScrollTrigger;
     P.phoneIn,
   );
 
+  // ---- the hand-off: this deck shows from the moment this track's top reaches the viewport bottom (DeckFilm
+  // has just let go and hidden its stack: its root ends right above); before that it waits, hidden, below
+  // the screen ----
+  const setHanded = (on: boolean) => {
+    els.drift.style.visibility = on ? '' : 'hidden';
+  };
+  const handoff = deckHandoff.root
+    ? ScrollTrigger.create({
+        trigger: els.track,
+        // a pixel early, so it is already on as DeckFilm hides its stack (at its pin's end, inclusive)
+        start: 'top bottom+=1',
+        end: 'max',
+        onToggle: (self) => setHanded(self.isActive),
+        onRefresh: (self) => setHanded(self.isActive),
+      })
+    : null;
+  setHanded(handoff ? handoff.isActive : true);
+
   const st = tl.scrollTrigger!;
   syncLive(st.progress);
 
@@ -395,6 +431,8 @@ export function buildFilm(els: FilmEls, opts: FilmOptions): { st: ScrollTrigger;
       ScrollTrigger.removeEventListener('refreshInit', remeasure);
       els.deck.classList.remove('is-active');
       els.stage.removeAttribute('data-falling');
+      handoff?.kill();
+      els.drift.style.visibility = '';
     },
   };
 }
