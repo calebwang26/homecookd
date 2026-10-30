@@ -1,5 +1,5 @@
 // "Hear Miles · 0:30": the cook's voice, played in place (kid QA round 2: no sheet, so the step stays
-// in view). One compact peach row: a round ink play button and the label; tap anywhere on it. Once it
+// in view). One compact green-tint row: a round ink play button and the label; tap anywhere on it. Once it
 // plays, the row opens under it: the sentence she is roughly saying (Fraunces italic) and the bar with
 // back / forward 10 (ProgressRow). Pausing keeps it open; the × at its right stops her and folds it
 // back to the bubble, and so does the video or another voice taking over (one voice at a time,
@@ -66,7 +66,7 @@ export function HearRow({
           <IconButton
             tone="clear"
             size={44}
-            icon={<CloseIcon size={18} color={colors.peachInk} />}
+            icon={<CloseIcon size={18} color={colors.ink} />}
             accessibilityLabel={`Stop ${cookName} and close`}
             onPress={hear.stop}
           />
@@ -85,7 +85,7 @@ export function HearRow({
             progress={hear.progress}
             onSeek={hear.seek}
             disabled={hear.phase === 'loading' || hear.phase === 'error'}
-            tone="peach"
+            tone="tint"
           />
           {hear.phase === 'error' ? (
             <Txt variant="caption" color={colors.danger} style={styles.line}>
@@ -99,7 +99,7 @@ export function HearRow({
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: colors.peach, borderRadius: 20, padding: 8 },
+  card: { backgroundColor: colors.greenTint, borderRadius: 20, padding: 8 },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: 4 },
   head: { flex: 1, minHeight: 48, flexDirection: 'row', alignItems: 'center', gap: 12 },
   button: { width: 40, height: 40, borderRadius: 20, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },

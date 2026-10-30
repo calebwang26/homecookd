@@ -1,8 +1,8 @@
 // The "More from Mom" accordion from Kid-Step / Kid-Step-Open.
-//  closed: peach #F9E3CF row, 56 tall, radius 20, padding 0 20, 16/700 title + chevron-down
-//  open:   cream #FFFDF7 panel, radius 28, card shadow, padding 8 20 20, 48 px header row with
+//  closed: yolk-tint #FCEBD0 row, 56 tall, radius 20, padding 0 20, 16/700 title + chevron-down
+//  open:   white #FFFFFF panel, radius 28, card shadow, padding 8 20 20, 48 px header row with
 //          chevron-up, content 18 px below the header
-// The panel grows with an animated height; the peach fill crossfades to cream with the shadow.
+// The panel grows with an animated height; the yolk-tint fill crossfades to white with the shadow.
 // `variant="link"` is Kid-Ingredients' centred green "Swaps and shopping tips" text toggle.
 import { useState, type ReactNode } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
@@ -31,9 +31,9 @@ export type DropdownProps = {
   onToggle?: (open: boolean) => void;
   /** 'panel' (default) = More from Mom; 'link' = centred green text toggle. */
   variant?: 'panel' | 'link';
-  /** Fill while closed (default peach). */
+  /** Fill while closed (default yolk tint). */
   closedBg?: string;
-  /** Something next to the title (e.g. a sun "Special" chip). */
+  /** Something next to the title (e.g. a yolk "Special" chip). */
   accessory?: ReactNode;
   /** Read after the title by screen readers (e.g. "Has something special" for the Special chip). */
   accessibilityHint?: string;
@@ -42,7 +42,7 @@ export type DropdownProps = {
 
 const DURATION = 280;
 
-export function Dropdown({ title, children, open: controlled, defaultOpen = false, onToggle, variant = 'panel', closedBg = colors.peach, accessory, accessibilityHint, style }: DropdownProps) {
+export function Dropdown({ title, children, open: controlled, defaultOpen = false, onToggle, variant = 'panel', closedBg = colors.yolkTint, accessory, accessibilityHint, style }: DropdownProps) {
   const [own, setOwn] = useState(defaultOpen);
   const open = controlled ?? own;
   const reduce = useReducedMotion();
@@ -105,11 +105,11 @@ export function Dropdown({ title, children, open: controlled, defaultOpen = fals
           accessibilityRole="button"
           accessibilityState={{ expanded: open }}
           style={styles.link}>
-          <Txt variant="label" weight={600} color={colors.greenDeep}>
+          <Txt variant="label" weight={600} color={colors.yolkDeep}>
             {title}
           </Txt>
           <Animated.View style={chevron}>
-            <ChevronDownIcon size={18} color={colors.greenDeep} />
+            <ChevronDownIcon size={18} color={colors.yolkDeep} />
           </Animated.View>
         </PressableScale>
         <Animated.View {...hidden} style={[styles.clip, bodyStyle]}>

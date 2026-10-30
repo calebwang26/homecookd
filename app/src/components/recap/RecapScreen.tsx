@@ -153,12 +153,13 @@ function Waiting({ state, month, onClose, onRetry }: { state: WaitingState; mont
         {loading ? (
           <ActivityIndicator color={tone.fg} size="large" accessibilityLabel="Loading your month" />
         ) : state === 'noone' ? (
-          <EmptyState title="Pick who you are first" body="Then your month will be here." actionLabel="Done" onAction={onClose} />
+          <EmptyState mood="hello" title="Pick who you are first" body="Then your month will be here." actionLabel="Done" onAction={onClose} />
         ) : state === 'empty' ? (
           // A month that's over: quiet and timeless, never "yet" (nothing more is coming) or a guilt word.
           <EmptyState title={`A quiet ${monthName(month) || 'month'} in the kitchen`} actionLabel="Done" onAction={onClose} />
         ) : (
           <EmptyState
+            mood="oops"
             title="Couldn’t load your month"
             body="Check your connection and try again."
             actionLabel="Try again"

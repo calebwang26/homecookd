@@ -13,7 +13,7 @@ import { useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 
 import { DishStatsLine } from '@/components/hearts';
-import { CheckIcon, ChevronRightIcon, PotMark, PressableScale, Skeleton, Txt } from '@/components/ui';
+import { CheckIcon, ChevronRightIcon, NoPhoto, PressableScale, Skeleton, Txt } from '@/components/ui';
 import { relativeDay, totalTimeLabel } from '@/lib/format';
 import { cardActivityLine, dishStatsLabel, type MadeVerb } from '@/lib/heartsCopy';
 import type { DishStat } from '@/lib/kitchenCounts';
@@ -72,7 +72,7 @@ export function RecipeRow({
         {entry.poster_url ? (
           <Image source={{ uri: entry.poster_url }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} recyclingKey={entry.id} />
         ) : (
-          <PotMark size={38} />
+          <NoPhoto title={entry.title} size={THUMB} />
         )}
       </View>
       <View style={rowStyles.text}>
@@ -82,8 +82,8 @@ export function RecipeRow({
         {line ? (
           line.done ? (
             <View style={styles.done}>
-              <CheckIcon size={15} strokeWidth={3} color={colors.greenDeep} />
-              <Txt variant="label" size={15} weight={700} color={colors.greenDeep} numberOfLines={1} style={styles.shrink}>
+              <CheckIcon size={15} strokeWidth={3} color={colors.green} />
+              <Txt variant="label" size={15} weight={700} color={colors.green} numberOfLines={1} style={styles.shrink}>
                 {line.text}
               </Txt>
             </View>
@@ -153,7 +153,7 @@ export const rowStyles = StyleSheet.create({
     height: THUMB,
     borderRadius: radii.thumb,
     overflow: 'hidden',
-    backgroundColor: colors.peach,
+    backgroundColor: colors.well,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,

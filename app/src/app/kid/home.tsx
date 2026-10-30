@@ -1,4 +1,4 @@
-// Kid Home (round-2 note 1): a portal and nothing else. Top to bottom: lavender wash -> "Hi, Leo" +
+// Kid Home (round-2 note 1): a portal and nothing else. Top to bottom: yolk-tint wash -> "Hi, Leo" +
 // Leo's face ▾ (tap = "Who’s in the kitchen?", to switch people; no second "Leo") -> a swipeable row of every dish
 // (RecipeDeck, in the Recipes tab's Everyone order; tap a dish = open it in the Recipes tab) -> green "Start cooking"
 // (the Recipes tab) -> outline "Have a question about a dish?" (the Ask sheet: dish -> person -> that

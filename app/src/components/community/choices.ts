@@ -167,7 +167,7 @@ export function swapLine(s: Swap): string {
   return theirs ? `${s.familyName} would swap their ${theirs} for your ${ours}.` : `${s.familyName} would like to swap for your ${ours}.`;
 }
 
-/** Swaps the other family asked us for, still unanswered: part of the sun dot on "You". */
+/** Swaps the other family asked us for, still unanswered: part of the yolk dot on "You". */
 export function newSwaps(swaps: readonly Pick<Swap, 'incoming' | 'status'>[]): number {
   return swaps.filter((s) => s.incoming && s.status === 'pending').length;
 }

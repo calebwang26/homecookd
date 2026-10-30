@@ -1,6 +1,6 @@
 // Cook mode's "All steps" sheet (mockup A-AllSteps): every step as a circle + its title (2 lines max).
 // Steps done (before the furthest reached) are a dark green circle with a light green check; steps not
-// done yet a light green circle with a dark green number. The one on screen sits on a sage row marked
+// done yet a light green circle with a dark green number. The one on screen sits on a green-tint row marked
 // "You're here", its number on solid dark green so it stands out on that row (one place label only:
 // the checks and "Continue at step N" already show the furthest).
 // Tap a step to jump there. Long lists scroll, starting near the current step.
@@ -57,7 +57,7 @@ export function StepsSheet({
               style={[styles.row, here ? styles.rowHere : null]}>
               {done ? (
                 <View style={styles.check}>
-                  <CheckIcon size={16} strokeWidth={3} color={colors.sage} />
+                  <CheckIcon size={16} strokeWidth={3} color={colors.greenTint} />
                 </View>
               ) : (
                 <StepNumber n={n} size={32} soft={!here} />
@@ -66,7 +66,7 @@ export function StepsSheet({
                 {s.title}
               </Txt>
               {here ? (
-                <Txt variant="label" size={13} weight={700} color={colors.sageInk} style={styles.tag}>
+                <Txt variant="label" size={13} weight={700} color={colors.green} style={styles.tag}>
                   You’re here
                 </Txt>
               ) : null}
@@ -81,7 +81,7 @@ export function StepsSheet({
 const styles = StyleSheet.create({
   list: { gap: 4, paddingBottom: 8 },
   row: { minHeight: 56, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 20, flexDirection: 'row', alignItems: 'center', gap: 14 },
-  rowHere: { backgroundColor: colors.sage },
+  rowHere: { backgroundColor: colors.greenTint },
   check: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.green },
   title: { flex: 1 },
   tag: { flexShrink: 0 },

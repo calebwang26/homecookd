@@ -1,19 +1,19 @@
 // Voice cooking on the cook screen (docs/build/STACK.md "kid cooking additions"), around homie, who
-// docks in the middle of the bottom bar (components/homie draws the pot; the screen holds its place):
+// docks in the middle of the bottom bar (components/homie draws the egg; the screen holds its place):
 //   <TimerPill/>    beside the step title while homie's timer runs: "Timer 4:32", then "Done"
-//   <VoiceLine/>    one tiny label by the pot when it isn't speaking (above it when it sits low): "I
+//   <VoiceLine/>    one tiny label by the egg when it isn't speaking (above it when it sits low): "I
 //                   asked Grandma" for a few seconds after a question went to her, "Connecting…", "Mic
 //                   off". While homie speaks, the overlay's own label says "AI voice" (or "Translated
 //                   from Grandma").
 //   <ClipCaption/>  under the step video while it plays the moment homie found: her words, and the English
 //   <VoiceHold/>    no picture (its own component, so playback ticks re-render only it): while the cook's
-//                   own voice plays (any video, her voice note) the pot shrinks a little and homie says
+//                   own voice plays (any video, her voice note) the egg shrinks a little and homie says
 //                   nothing on its own (the service is told); while her clip or her voice note answers
 //                   the kid, homie's next line waits for her too, and a video the kid starts turns homie
 //                   off (it has the sound). Half duplex (none of the app's own sound reaches the voice
 //                   service as the kid's voice) is lib/live/mic's, on every frame.
 // The cook's own clips are never labelled: only the AI's voice is. Motion: the pill counts down each
-// half second while the pot's ring empties (HomiePot), and the pill and the line fade in and out (a
+// half second while the egg's ring empties (HomiePot), and the pill and the line fade in and out (a
 // fade is all Reduce Motion needs here).
 import { useEffect, useState } from 'react';
 import { StyleSheet, useWindowDimensions } from 'react-native';
@@ -55,7 +55,7 @@ export function TimerPill({ timers }: { timers: readonly CookTimer[] }) {
       accessible
       accessibilityRole="timer"
       accessibilityLabel={timerA11y(t, now)}>
-      <Txt variant="label" size={14} weight={700} color={left ? colors.card : colors.butterInk} style={styles.digits}>
+      <Txt variant="label" size={14} weight={700} color={left ? colors.card : colors.ink} style={styles.digits}>
         {left ? `Timer ${clockText(left)}` : 'Done'}
       </Txt>
     </Animated.View>
@@ -85,14 +85,14 @@ export function VoiceLine({ voice, cookName, slot }: { voice: Pick<VoiceCooking,
           ? 'Mic off'
           : null;
   if (!text) return null;
-  // Low on the screen (the bottom bar): centred above the pot. Else under it, its right edge a little
-  // past the pot's, so a long name grows left and stays on screen.
+  // Low on the screen (the bottom bar): centred above the egg. Else under it, its right edge a little
+  // past the egg's, so a long name grows left and stays on screen.
   const place = labelAbove(slot, windowH)
     ? [styles.lineAbove, { top: slot.y - 26, left: slot.x + slot.size / 2 - LINE_W / 2 }]
     : [styles.lineWrap, { top: slot.y + slot.size - 2, left: 0, width: slot.x + slot.size + 8 }];
   return (
     <Animated.View key={text} entering={FadeIn.duration(180)} exiting={FadeOut.duration(150)} pointerEvents="none" style={place} accessibilityLiveRegion="polite">
-      <Txt variant="caption" size={11} weight={700} color={asked ? colors.butterInk : colors.muted} numberOfLines={1} style={[styles.line, asked && styles.lineAsked]}>
+      <Txt variant="caption" size={11} weight={700} color={asked ? colors.ink : colors.muted} numberOfLines={1} style={[styles.line, asked && styles.lineAsked]}>
         {text}
       </Txt>
     </Animated.View>
@@ -114,7 +114,7 @@ export function ClipCaption({ quote, quoteEn }: { quote: string; quoteEn?: strin
 }
 
 /**
- * The cook's own voice is playing: the resting pot steps back (shrinks) and homie says nothing on its
+ * The cook's own voice is playing: the resting egg steps back (shrinks) and homie says nothing on its
  * own until it stops (setVideo); while her clip or her voice note answers the kid, homie's next line
  * waits for her too. `herClip`: the moment homie asked for is on screen (play_clip), so the step video
  * playing is her answer. A play the kid started (lib/media kidVideoPlaying: a tap, never her clip) has
@@ -154,11 +154,11 @@ const styles = StyleSheet.create({
     backgroundColor: colors.ink,
     flexShrink: 0,
   },
-  timerDone: { backgroundColor: colors.butter },
+  timerDone: { backgroundColor: colors.yolkTint },
   digits: { fontVariant: ['tabular-nums'] },
   lineWrap: { position: 'absolute', zIndex: 3, alignItems: 'flex-end' },
   lineAbove: { position: 'absolute', zIndex: 3, alignItems: 'center', width: LINE_W },
   line: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: radii.pill, backgroundColor: colors.card, overflow: 'hidden', boxShadow: shadows.chip },
-  lineAsked: { backgroundColor: colors.butter },
+  lineAsked: { backgroundColor: colors.yolkTint },
   caption: { gap: 4, paddingHorizontal: 4 },
 });

@@ -27,7 +27,7 @@ export function SameNameAsk({ who, noLabel, onYes, onNo }: { who: Profile; noLab
       </Txt>
       <View style={styles.row}>
         <ActionButton label={t('profiles.sameName.yes')} variant="outline" size="sm" onPress={onYes} accessibilityHint={t('profiles.sameName.yesHint')} style={styles.flex} />
-        <ActionButton label={noLabel} variant="outline" size="sm" fg={colors.greenDeep} onPress={onNo} style={styles.flex} />
+        <ActionButton label={noLabel} variant="outline" size="sm" fg={colors.yolkDeep} onPress={onNo} style={styles.flex} />
       </View>
     </Animated.View>
   );

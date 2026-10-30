@@ -12,14 +12,14 @@ import { cardWhen, plural, seatLine } from './labels';
 
 export type DinnerPick = { mine: Dinner } | { feed: FeedDinner };
 
-function badgeFor(d: Dinner | null): { label: string; tone: 'sage' | 'butter' } | null {
+function badgeFor(d: Dinner | null): { label: string; tone: 'greenTint' | 'yolkTint' } | null {
   if (!d) return null;
   if (d.isHost) {
     const asked = d.requests?.filter((r) => r.status === 'pending').length ?? 0;
-    return asked ? { label: plural(asked, 'new request'), tone: 'butter' } : null;
+    return asked ? { label: plural(asked, 'new request'), tone: 'yolkTint' } : null;
   }
-  if (d.myRequest?.status === 'accepted') return { label: 'You’re in', tone: 'sage' };
-  if (d.myRequest?.status === 'pending') return { label: 'You asked to join', tone: 'butter' };
+  if (d.myRequest?.status === 'accepted') return { label: 'You’re in', tone: 'greenTint' };
+  if (d.myRequest?.status === 'pending') return { label: 'You asked to join', tone: 'yolkTint' };
   return null;
 }
 
@@ -45,7 +45,7 @@ export function DinnerCard({ pick, now, onOpen }: { pick: DinnerPick; now: numbe
       style={styles.card}>
       <View style={styles.top}>
         <View style={styles.text}>
-          <Txt variant="label" weight={700} color={colors.sun}>
+          <Txt variant="label" weight={700} color={colors.yolk}>
             {when}
           </Txt>
           <Txt variant="display" size={30} color={colors.card} numberOfLines={2}>

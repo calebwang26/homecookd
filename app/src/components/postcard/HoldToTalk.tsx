@@ -272,7 +272,7 @@ export function HoldToTalk({
                   ? words('messages.hold.tryAgain')
                   : words('messages.hold.idle');
   const sending = state === 'sending';
-  const ink = recording ? colors.card : waitingNow ? colors.butterInk : colors.sageInk;
+  const ink = recording ? colors.card : waitingNow ? colors.ink : colors.green;
   return (
     <View style={[styles.wrap, style]}>
       <Animated.View pointerEvents="none" style={[styles.ring, ringStyle]} />
@@ -321,7 +321,7 @@ export function HoldToTalk({
         style={[styles.pill, recording ? styles.pillRec : waitingNow ? styles.pillWait : null, pressStyle]}>
         {waitingNow && !reduce ? <Animated.View pointerEvents="none" style={[styles.left, leftStyle]} /> : null}
         {sending ? (
-          <ActivityIndicator size="small" color={colors.sageInk} />
+          <ActivityIndicator size="small" color={colors.green} />
         ) : state === 'sent' ? (
           <CheckIcon size={16} color={ink} />
         ) : recording ? (
@@ -378,7 +378,7 @@ const styles = StyleSheet.create({
     height: 52,
     paddingHorizontal: 12,
     borderRadius: 999,
-    backgroundColor: colors.sage,
+    backgroundColor: colors.greenTint,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
@@ -386,9 +386,9 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   pillRec: { backgroundColor: colors.danger },
-  pillWait: { backgroundColor: colors.butter },
+  pillWait: { backgroundColor: colors.yolkTint },
   // The Undo time left, shrinking from the full width to nothing along the foot of the pill.
-  left: { position: 'absolute', left: 0, bottom: 0, height: 4, backgroundColor: colors.sun },
+  left: { position: 'absolute', left: 0, bottom: 0, height: 4, backgroundColor: colors.yolk },
   recDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: colors.card },
   words: { flexShrink: 1 },
   undo: { textDecorationLine: 'underline' },

@@ -33,7 +33,7 @@ export function DetailPage({ title, photo, children }: { title: string; photo: s
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={styles.grow}>
         <Animated.View entering={heroEnter} style={styles.hero}>
-          <DishPhoto uri={photo} label={title} pot={72} style={StyleSheet.absoluteFill} />
+          <DishPhoto uri={photo} label={title} size={HERO_H} style={StyleSheet.absoluteFill} />
           <BackPill overPhoto onPress={() => goBack()} style={[styles.back, { top }]} />
         </Animated.View>
         <Animated.View entering={detailContentEnter} style={[styles.sheet, { paddingBottom: Math.max(40, insets.bottom + 24) }]}>
@@ -53,7 +53,7 @@ export function DetailPage({ title, photo, children }: { title: string; photo: s
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: colors.page },
   grow: { flexGrow: 1 },
-  hero: { height: HERO_H, backgroundColor: colors.peach },
+  hero: { height: HERO_H, backgroundColor: colors.well },
   back: { position: 'absolute', left: space.gutter },
   sheet: {
     flexGrow: 1,

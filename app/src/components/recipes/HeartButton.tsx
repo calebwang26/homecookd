@@ -4,7 +4,7 @@
 //  glass:     48 px cream glass circle over a photo; ink outline (Kid-Recipe hero)
 //  glassDark: 40 px dark glass circle on a photo card; cream outline
 //  hearted on a photo (glass, glassDark): a solid cream circle, so the red heart reads on any photo
-//  (bible Kid-Home-Scrolled: #FFFDF7 circle, #9A4F47 heart)
+//  (bible Kid-Home-Scrolled: white circle, #9A4F47 heart)
 //
 // Crisp by construction: no transform ever touches the glyph. The tap answers with the press
 // opacity, a haptic and the fill; there is no scale pop. Each state mounts its own Svg (key), so

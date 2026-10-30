@@ -14,10 +14,10 @@
 //
 // Send: upload -> POST /messages/:id/postcard -> the postcard flies up and away (a fade under Reduce
 // Motion) with "Sent to Dad" -> back to the recipe. "Not now" goes back without one. While it sends,
-// the quiet links and the pots wait (the photo shown is the one that goes, and nothing can leave twice).
+// the quiet links and the rating yolks wait (the photo shown is the one that goes, and nothing can leave twice).
 // A failed send says why at the top of the screen, clear of the button's "Try again".
 // Hackathon (docs/build/STACK.md "Close the loop"): the photo also goes to Convex
-// (messages.sharePhoto), Muse drafts a short note to the cook, and the note takes the pots' place: the
+// (messages.sharePhoto), Muse drafts a short note to the cook, and the note takes the yolks' place: the
 // kid's words to edit, labelled "AI-drafted" (Convex keeps the label even after an edit). Send sends
 // both the postcard and the photo with the note (messages.send); either one getting through counts.
 // The photo reaches Muse only with this phone's yes to the AI companies (lib/aiConsent: the sheet rises
@@ -170,7 +170,7 @@ export function PostcardStep({
               <PostcardPhoto uri={photo.uri} id={recipe.id} tilt={false} label="Your dish" style={StyleSheet.absoluteFill} />
             ) : (
               <View style={styles.shutter} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-                <CameraIcon size={56} color={colors.peachInk} />
+                <CameraIcon size={56} color={colors.ink} />
               </View>
             )}
           </Animated.View>
@@ -196,7 +196,7 @@ export function PostcardStep({
                       style={[txtStyle('body', 17), styles.noteInput]}
                     />
                     {draft && note.trim() === draft.trim() ? (
-                      <Txt variant="meta" size={13} color={colors.lavenderInk} align="center">
+                      <Txt variant="meta" size={13} color={colors.ink} align="center">
                         AI-drafted · tap to change it
                       </Txt>
                     ) : null}
@@ -209,12 +209,12 @@ export function PostcardStep({
 
         <Animated.View style={[styles.actions, restStyle]} pointerEvents={flying ? 'none' : 'auto'}>
           {photo ? (
-            <ActionButton label={`Send to ${cook.name}`} icon={<SendIcon size={20} color={colors.card} />} successLabel="Sent" onPress={send} disabled={flying} />
+            <ActionButton label={`Send to ${cook.name}`} icon={<SendIcon size={20} color={colors.ink} />} successLabel="Sent" onPress={send} disabled={flying} />
           ) : (
-            <ActionButton label="Take a photo" icon={<CameraIcon size={20} color={colors.card} />} onPress={() => void pick(takePhoto)} />
+            <ActionButton label="Take a photo" icon={<CameraIcon size={20} color={colors.ink} />} onPress={() => void pick(takePhoto)} />
           )}
           <View style={styles.row}>
-            <Quiet label={photo ? 'Take another' : 'Choose a photo'} color={colors.greenDeep} disabled={busy} onPress={() => void pick(photo ? takePhoto : choosePhoto)} />
+            <Quiet label={photo ? 'Take another' : 'Choose a photo'} color={colors.yolkDeep} disabled={busy} onPress={() => void pick(photo ? takePhoto : choosePhoto)} />
             <Quiet label="Not now" hint="Goes back to the recipe" color={colors.muted} disabled={busy} onPress={onDone} />
           </View>
           <Quiet label="Share with someone else" hint="Family in the app, or anyone by a link" color={colors.muted} disabled={busy} onPress={() => share.open({ recipeId: recipe.id })} />
@@ -245,7 +245,7 @@ const styles = StyleSheet.create({
   shutter: {
     flex: 1,
     borderRadius: radii.panel,
-    backgroundColor: colors.peach,
+    backgroundColor: colors.well,
     alignItems: 'center',
     justifyContent: 'center',
   },

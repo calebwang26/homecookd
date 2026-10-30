@@ -64,7 +64,7 @@ export default function RequestScreen() {
                 {t('request.missing')}
               </Txt>
             ) : (
-              <ActivityIndicator color={colors.green} />
+              <ActivityIndicator color={colors.yolkDeep} />
             )}
           </View>
         )}
@@ -85,7 +85,7 @@ function Ask({ ask }: { ask: CravingAsk }) {
       <Animated.View entering={listEnter(0)} style={styles.head} accessible accessibilityRole="header" accessibilityLabel={t('request.wants', { kid, dish: ask.dish })}>
         <Avatar name={kid} avatarKey={null} size={56} ring />
         <View style={styles.flex}>
-          <Txt variant="label" size={18} weight={600} color={colors.greenDeep} numberOfLines={1}>
+          <Txt variant="label" size={18} weight={600} color={colors.yolkDeep} numberOfLines={1}>
             {t('request.wantsYour', { kid })}
           </Txt>
           <Txt variant="display" size={40} leading={1.05}>
@@ -98,7 +98,7 @@ function Ask({ ask }: { ask: CravingAsk }) {
 
       {ask.guess.length ? (
         <Animated.View entering={listEnter(1)} style={styles.guess}>
-          <Txt variant="heading" size={17} weight={600} color={colors.peachInk}>
+          <Txt variant="heading" size={17} weight={600} color={colors.ink}>
             {t('request.guess.title', { kid })}
           </Txt>
           <View style={styles.lines}>
@@ -113,7 +113,7 @@ function Ask({ ask }: { ask: CravingAsk }) {
               </Txt>
             ))}
           </View>
-          <Txt variant="quote" size={20} leading={1.3} color={colors.peachInk}>
+          <Txt variant="quote" size={20} leading={1.3} color={colors.ink}>
             {t('request.guess.close', { kid })}
           </Txt>
         </Animated.View>
@@ -131,10 +131,10 @@ function Ask({ ask }: { ask: CravingAsk }) {
               <CheckIcon size={22} color={colors.card} />
             </View>
             <View style={styles.doorText}>
-              <Txt variant="title" size={20} leading={1.2} color={colors.butterInk}>
+              <Txt variant="title" size={20} leading={1.2} color={colors.ink}>
                 {t('request.reminded', { day: dayName(reminder.day, t) })}
               </Txt>
-              <Txt variant="lead" size={17} color={colors.butterInk}>
+              <Txt variant="lead" size={17} color={colors.ink}>
                 {everyLine(reminder.day, reminder.part, t)}
               </Txt>
             </View>
@@ -145,10 +145,10 @@ function Ask({ ask }: { ask: CravingAsk }) {
               <View style={styles.redDot} />
             </View>
             <View style={styles.doorText}>
-              <Txt variant="title" size={20} leading={1.2} color={colors.card}>
+              <Txt variant="title" size={20} leading={1.2} color={colors.ink}>
                 {t('request.film.title')}
               </Txt>
-              <Txt variant="lead" size={17} weight={500} color={colors.card} style={styles.soft}>
+              <Txt variant="lead" size={17} weight={500} color={colors.ink} style={styles.soft}>
                 {t('request.film.line')}
               </Txt>
             </View>
@@ -171,8 +171,8 @@ function Ask({ ask }: { ask: CravingAsk }) {
 function TellDoor({ title, line, warn, onPress }: { title: string; line: string; warn: boolean; onPress: () => void }) {
   return (
     <PressableScale onPress={onPress} scaleTo={0.97} accessibilityLabel={`${title}. ${line}`} style={[styles.door, styles.tell]}>
-      <View style={[styles.disc, { backgroundColor: colors.sage }]}>
-        <MicIcon size={22} color={colors.sageInk} />
+      <View style={[styles.disc, { backgroundColor: colors.greenTint }]}>
+        <MicIcon size={22} color={colors.green} />
       </View>
       <View style={styles.doorText}>
         <Txt variant="title" size={20} leading={1.2}>
@@ -186,7 +186,7 @@ function TellDoor({ title, line, warn, onPress }: { title: string; line: string;
   );
 }
 
-/** His voice note: the lavender pill, played on the app's shared player. */
+/** His voice note: the yolk-tint pill, played on the app's shared player. */
 function KidVoice({ askId, url, kid }: { askId: string; url: string; kid: string }) {
   const { t } = useWords();
   const play = useClipAudio({ url, key: `ask:${askId}`, start_s: 0, end_s: null });
@@ -198,7 +198,7 @@ function KidVoice({ askId, url, kid }: { askId: string; url: string; kid: string
         accessibilityLabel={play.playing ? t('request.voiceNotePause', { kid }) : t('request.voiceNotePlay', { kid })}
         style={styles.voice}>
         <View style={styles.play}>{play.playing ? <PauseIcon size={18} color={colors.card} /> : <PlayIcon size={18} color={colors.card} />}</View>
-        <Txt variant="title" size={18} color={colors.lavenderInk} style={styles.flex} numberOfLines={1}>
+        <Txt variant="title" size={18} color={colors.ink} style={styles.flex} numberOfLines={1}>
           {length ? t('request.voiceNoteLength', { kid, time: length }) : t('request.voiceNote', { kid })}
         </Txt>
       </PressableScale>
@@ -216,19 +216,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    backgroundColor: colors.lavender,
+    backgroundColor: colors.yolkTint,
     borderRadius: 22,
     paddingVertical: 12,
     paddingLeft: 12,
     paddingRight: 16,
   },
-  play: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.lavenderInk, alignItems: 'center', justifyContent: 'center' },
-  guess: { backgroundColor: colors.card, borderRadius: radii.panel, paddingVertical: 20, paddingHorizontal: 22, gap: 12, boxShadow: shadows.card },
+  play: { width: 44, height: 44, borderRadius: 22, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
+  // His guesses: the yolk tint (the brand's colour for guesses and asks).
+  guess: { backgroundColor: colors.yolkTint, borderRadius: radii.panel, paddingVertical: 20, paddingHorizontal: 22, gap: 12 },
   lines: { gap: 10 },
   doors: { gap: 12, marginTop: 'auto', paddingTop: 6 },
   door: { flexDirection: 'row', alignItems: 'center', gap: 16, borderRadius: radii.panel, paddingVertical: 18, paddingHorizontal: 20 },
-  film: { backgroundColor: colors.green, boxShadow: shadows.cta },
-  reminded: { backgroundColor: colors.butter },
+  film: { backgroundColor: colors.yolk, boxShadow: shadows.cta },
+  reminded: { backgroundColor: colors.yolkTint },
   tell: { backgroundColor: colors.card, borderWidth: 1.5, borderColor: alpha.border },
   disc: { width: 48, height: 48, borderRadius: 24, alignItems: 'center', justifyContent: 'center' },
   redDot: { width: 15, height: 15, borderRadius: 8, backgroundColor: colors.danger },

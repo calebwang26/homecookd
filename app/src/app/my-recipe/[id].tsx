@@ -86,6 +86,7 @@ export default function MyRecipe() {
       <View style={[styles.screen, { paddingTop: top, paddingHorizontal: space.gutter }]}>
         <BackPill onPress={goBack} />
         <EmptyState
+          mood="oops"
           title={t('parent.myRecipe.notFound')}
           actionLabel={t('parent.myRecipe.backToRecipes')}
           onAction={() => router.replace('/parent/recipes')}
@@ -97,7 +98,7 @@ export default function MyRecipe() {
   // Someone else's dish: the redirect above is on its way.
   if (entry && me && !mine) return <View style={styles.screen} />;
 
-  // Two lines in the peach card, as in the bible (about 40 italic characters a line).
+  // Two lines in the card, as in the bible (about 40 italic characters a line).
   const q = firstQuote(recipe);
   const quote = q && q.full.length <= 78 ? q.full : (shortestQuote(recipe, 78)?.full ?? null);
   const video = hasVideo(recipe);
@@ -142,7 +143,7 @@ export default function MyRecipe() {
               accessibilityLabel={title}
             />
           ) : (
-            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.peach }]} />
+            <View style={[StyleSheet.absoluteFill, { backgroundColor: colors.well }]} />
           )}
           <BackPill overPhoto onPress={goBack} style={[styles.back, { top }]} />
           {recipe ? (
@@ -258,7 +259,7 @@ export default function MyRecipe() {
 const styles = StyleSheet.create({
   hearOnLavender: { backgroundColor: colors.card, height: 52 },
   screen: { flex: 1, backgroundColor: colors.page },
-  hero: { height: HERO_H, backgroundColor: colors.peach },
+  hero: { height: HERO_H, backgroundColor: colors.well },
   back: { position: 'absolute', left: space.gutter },
   share: { position: 'absolute', right: space.gutter },
   watch: {
@@ -295,7 +296,7 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 20,
     borderRadius: radii.quote,
-    backgroundColor: colors.peach,
+    backgroundColor: colors.yolkTint,
   },
   steps: {
     height: 56,

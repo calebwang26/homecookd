@@ -114,7 +114,7 @@ function AddPhoneless({ visible, onClose, onSwitch, role: fixedRole }: AddPhonel
             accessibilityLabel={t('profiles.phoneless.switchTo', { name: added.name })}
             accessibilityHint={t('profiles.phoneless.switchHint')}
             style={styles.switch}>
-            <Txt variant="label" weight={600} color={colors.greenDeep}>
+            <Txt variant="label" weight={600} color={colors.yolkDeep}>
               {t('profiles.phoneless.switchTo', { name: added.name })}
             </Txt>
           </PressableScale>

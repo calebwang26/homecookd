@@ -1,7 +1,7 @@
 // Cards from the bible.
-//  default: #FFFDF7, radius 28, 0 8px 24px rgba(30,36,16,0.06) (list cards, panels)
-//  raised:  same with 0 10px 30px rgba(30,36,16,0.08) ("Leo asked you", "Waiting for your answer")
-//  tinted:  lavender / peach / butter / sage fills, no shadow (request card, give-back card)
+//  default: white #FFFFFF, radius 28, 0 8px 24px rgba(31,36,48,0.06) (list cards, panels)
+//  raised:  same with 0 10px 30px rgba(31,36,48,0.08) ("Leo asked you", "Waiting for your answer")
+//  tinted:  yolkTint (asks: request card, give-back card) / greenTint (the cook's answers) fills, no shadow
 // `ListCard` + `ListRow` are the bible's rows-with-hairlines pattern (Browse, Messages, Your recipes).
 import type { ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -10,13 +10,11 @@ import { colors, radii, shadows } from '@/theme/tokens';
 
 import { PressableScale } from './PressableScale';
 
-export type CardTone = 'card' | 'lavender' | 'peach' | 'butter' | 'sage';
+export type CardTone = 'card' | 'yolkTint' | 'greenTint';
 const toneBg: Record<CardTone, string> = {
   card: colors.card,
-  lavender: colors.lavender,
-  peach: colors.peach,
-  butter: colors.butter,
-  sage: colors.sage,
+  yolkTint: colors.yolkTint,
+  greenTint: colors.greenTint,
 };
 
 export type CardProps = {
@@ -60,7 +58,7 @@ export function ListCard({ children, padH = 16, padV = 6, style }: { children?: 
   return <Card padding={0} style={[{ paddingHorizontal: padH, paddingVertical: padV }, style]}>{children}</Card>;
 }
 
-/** One row in a ListCard: horizontal, gap 14, a #EFEFE6 hairline below unless `last`. */
+/** One row in a ListCard: horizontal, gap 14, a #E6DDCF hairline below unless `last`. */
 export function ListRow({
   children,
   last,

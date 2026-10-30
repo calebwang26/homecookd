@@ -1,6 +1,6 @@
-// A cook-mode step's story (kid QA round 2): "Story from Dad ›", a lavender row with the story's
+// A cook-mode step's story (kid QA round 2): "Story from Dad ›", a green-tint row with the story's
 // title, only on a step that has one. It opens a sheet with the story whole: its title, "Hear Dad tell
-// it · 0:32" playing right there when there is a recording (HearRow), and the cook's words (lavender,
+// it · 0:32" playing right there when there is a recording (HearRow), and the cook's words (ink,
 // Fraunces italic). Several stories on one step share the row and the sheet.
 // Round 2 cut the rest of the old "More from Dad" drawer to declutter the step: the quote bubble,
 // "Look for" (now the last substep, "Ready when …"), "In this step" (now StepIngredients), the
@@ -36,18 +36,18 @@ export function StepStory({ recipe, step }: { recipe: Recipe; step: Step }) {
         accessibilityLabel={titles.length ? `${title}: ${titles.join(', ')}` : title}
         accessibilityHint="Opens the story"
         style={styles.row}>
-        <BookIcon size={22} color={colors.lavenderInk} />
+        <BookIcon size={22} color={colors.ink} />
         <View style={styles.rowWords}>
-          <Txt variant="label" size={16} weight={700} color={colors.lavenderInk} numberOfLines={1}>
+          <Txt variant="label" size={16} weight={700} color={colors.ink} numberOfLines={1}>
             {title}
           </Txt>
           {titles.length ? (
-            <Txt variant="meta" size={15} color={colors.lavenderInk} numberOfLines={1}>
+            <Txt variant="meta" size={15} color={colors.ink} numberOfLines={1}>
               {titles.join(' · ')}
             </Txt>
           ) : null}
         </View>
-        <ChevronRightIcon size={20} color={colors.lavenderInk} />
+        <ChevronRightIcon size={20} color={colors.ink} />
       </PressableScale>
       <BottomSheet visible={open} onClose={() => setOpen(false)} title={title}>
         {/* Mounted only while open: closing the sheet stops her voice. */}
@@ -78,7 +78,7 @@ function Stories({ recipe, stories }: { recipe: Recipe; stories: Story[] }) {
               <HearRow clip={{ url, start_s: s.start_s, end_s: s.end_s, heard }} cookName={name} label={`Hear ${name} tell it`} />
             ) : null}
             <View style={styles.words}>
-              <Txt variant="quote" size={16} leading={1.45} color={colors.lavenderInk} selectable>
+              <Txt variant="quote" size={16} leading={1.45} color={colors.ink} selectable>
                 {`“${s.text.trim()}”`}
               </Txt>
             </View>
@@ -96,7 +96,7 @@ const styles = StyleSheet.create({
     paddingLeft: 16,
     paddingRight: 12,
     borderRadius: 20,
-    backgroundColor: colors.lavender,
+    backgroundColor: colors.yolkTint,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
@@ -104,5 +104,5 @@ const styles = StyleSheet.create({
   rowWords: { flex: 1, gap: 2 },
   list: { gap: 24, paddingBottom: 8 },
   story: { gap: 14 },
-  words: { padding: 16, borderRadius: radii.tile, backgroundColor: colors.lavender },
+  words: { padding: 16, borderRadius: radii.tile, backgroundColor: colors.yolkTint },
 });

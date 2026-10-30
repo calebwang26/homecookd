@@ -1,9 +1,9 @@
 // Profile avatars. The seeded demo family's photos (app/assets/avatars/{mom,dad,grandma,leo}.jpg) for
-// a profile whose avatar_key names one, else the bible's initial tile (lime-wash #EDF2BE, #3C4A0B
+// a profile whose avatar_key names one, else the bible's initial tile (green-tint #E6EBCF, green #34430C
 // Fraunces 600). Never a photo guessed from a real person's name. Extras from the bible:
-//  ring  - 0 0 0 3px #FFFDF7 (Kid-Home header avatar)
+//  ring  - 0 0 0 3px #FFFFFF (Kid-Home header avatar)
 //  dot   - green unread dot top-right with a cream ring (Main "Mom", Kid-Messages "Mom")
-//  badge - sun "New" pill at right -6 / top -4 (Main "Leo")
+//  badge - yolk "New" pill at right -6 / top -4 (Main "Leo")
 //  check - green check disc bottom-right (Parent-Recipe "Leo cooked it")
 import { Image } from 'expo-image';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -62,7 +62,7 @@ export type AvatarProps = {
   ring?: boolean;
   /** Green unread dot. */
   dot?: boolean;
-  /** Sun badge text, e.g. "New". */
+  /** Yolk badge text, e.g. "New". */
   badge?: string | null;
   /** Green check disc (cooked it). */
   check?: boolean;
@@ -72,7 +72,7 @@ export type AvatarProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-export function Avatar({ profile, name, avatarKey, size = 48, ring, dot, badge, check, tileBg = colors.limeWash, tileFg = colors.sageInk, style }: AvatarProps) {
+export function Avatar({ profile, name, avatarKey, size = 48, ring, dot, badge, check, tileBg = colors.greenTint, tileFg = colors.green, style }: AvatarProps) {
   const who = profile?.name ?? name ?? '';
   const src = avatarSource(profile ? (profile.avatar_key ?? null) : avatarKey, who);
   const initial = who.trim().charAt(0).toUpperCase() || '?';
@@ -119,7 +119,7 @@ export function Avatar({ profile, name, avatarKey, size = 48, ring, dot, badge, 
 
 const styles = StyleSheet.create({
   circle: { overflow: 'hidden', alignItems: 'center', justifyContent: 'center' },
-  dot: { position: 'absolute', right: 0, top: 0, backgroundColor: colors.green, boxShadow: shadows.ringCard },
+  dot: { position: 'absolute', right: 0, top: 0, backgroundColor: colors.yolk, boxShadow: shadows.ringCard },
   badge: {
     position: 'absolute',
     right: -6,
@@ -127,7 +127,7 @@ const styles = StyleSheet.create({
     height: 22,
     paddingHorizontal: 8,
     borderRadius: 999,
-    backgroundColor: colors.sun,
+    backgroundColor: colors.yolk,
     justifyContent: 'center',
     boxShadow: shadows.ringCard,
   },

@@ -97,7 +97,7 @@ export function GrowingInput({
 }
 
 /** The green / ink "Send" pill: its icon and the word, 56 tall. */
-export function SendPill({ onPress, disabled, tone = 'ink' }: { onPress: () => void; disabled?: boolean; tone?: 'ink' | 'green' }) {
+export function SendPill({ onPress, disabled, tone = 'ink' }: { onPress: () => void; disabled?: boolean; tone?: 'ink' | 'yolk' }) {
   const { t } = useWords();
   return (
     <PressableScale
@@ -106,9 +106,9 @@ export function SendPill({ onPress, disabled, tone = 'ink' }: { onPress: () => v
       haptic="medium"
       accessibilityRole="button"
       accessibilityLabel={t('messages.composer.send')}
-      style={[styles.sendPill, { backgroundColor: tone === 'green' ? colors.green : colors.ink }, disabled ? styles.dim : null]}>
-      <SendIcon size={20} color={colors.card} />
-      <Txt variant="label" size={16} weight={700} color={colors.card}>
+      style={[styles.sendPill, { backgroundColor: tone === 'yolk' ? colors.yolk : colors.ink }, disabled ? styles.dim : null]}>
+      <SendIcon size={20} color={tone === 'yolk' ? colors.ink : colors.card} />
+      <Txt variant="label" size={16} weight={700} color={tone === 'yolk' ? colors.ink : colors.card}>
         {t('messages.composer.send')}
       </Txt>
     </PressableScale>
@@ -388,7 +388,7 @@ const styles = StyleSheet.create({
   attachFlat: { backgroundColor: colors.page },
   attachBare: { paddingRight: 14 },
   attachThumb: { width: 44, height: 44, borderRadius: 12, backgroundColor: colors.well },
-  attachThumbEmpty: { backgroundColor: colors.peach },
+  attachThumbEmpty: { backgroundColor: colors.well },
   attachText: { flexShrink: 1, minWidth: 0, gap: 2, paddingVertical: 6 },
   // 48 pt to tap, a small 28 pt × to see.
   attachRemove: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center' },

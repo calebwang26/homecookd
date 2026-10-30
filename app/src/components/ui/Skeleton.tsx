@@ -1,4 +1,4 @@
-// Loading placeholders: #EFEFE6 blocks that breathe (opacity 0.55 <-> 1, 900 ms). Static under
+// Loading placeholders: #F3EAD9 blocks that breathe (opacity 0.55 <-> 1, 900 ms). Static under
 // Reduce Motion.
 import { useEffect } from 'react';
 import { StyleSheet, View, type DimensionValue, type StyleProp, type ViewStyle } from 'react-native';

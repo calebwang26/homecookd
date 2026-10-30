@@ -1,4 +1,4 @@
-// The small flame on a lit face (RETENTION-HANDOFF 3.2): a white disc with the sun-yellow flame,
+// The small flame on a lit face (RETENTION-HANDOFF 3.2): a white disc with the yolk flame,
 // at the avatar's bottom-right, popping in gently (Reduce Motion: no pop). One look everywhere a lit
 // face shows: "This week at the table" (TableRow) and the "Who's in the kitchen?" tiles.
 //

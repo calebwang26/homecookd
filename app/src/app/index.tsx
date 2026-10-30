@@ -63,7 +63,7 @@ import {
   type PersonStatus,
   type TileChoice,
 } from '@/components/profiles';
-import { ActionButton, BackPill, BottomSheet, Brand, listEnter, PressableScale, ScreenWash, Txt, usePotMood } from '@/components/ui';
+import { ActionButton, BackPill, BottomSheet, Brand, listEnter, PressableScale, ScreenWash, Txt } from '@/components/ui';
 import type { Profile, Role } from '@/lib/api';
 import { openPage, PRIVACY_URL, TERMS_URL } from '@/lib/links';
 import { moveApi } from '@/lib/moveRequests';
@@ -78,8 +78,6 @@ const COLS = 3;
 
 export default function Profiles() {
   const insets = useSafeAreaInsets();
-  // The pot by the brand: sleepy late at night, waving on Sunday (retention PR 7).
-  const potMood = usePotMood();
   const reduce = useReducedMotion();
   const { width: winW } = useWindowDimensions();
   const {
@@ -239,14 +237,14 @@ export default function Profiles() {
         showsVerticalScrollIndicator={false}>
         <ScreenWash tone="parent" height={420} />
         <Animated.View style={[styles.page, revealStyle]}>
-          {/* Bible: the 34x32 pot box sets the row height (32). */}
+          {/* The 34 pt lockup sets the row height. */}
           {backTo ? (
             <View style={styles.brandRow}>
-              <Brand mood={potMood} />
+              <Brand />
               <BackPill label={t('profiles.picker.backTo', { name: backTo.name })} onPress={goBack} />
             </View>
           ) : (
-            <Brand mood={potMood} style={styles.brand} />
+            <Brand style={styles.brand} />
           )}
 
           <View style={styles.headline}>
@@ -383,12 +381,12 @@ export default function Profiles() {
           ) : null}
           <View style={styles.legal}>
             <PressableScale onPress={() => void openPage(PRIVACY_URL)} accessibilityRole="link" style={styles.legalLink}>
-              <Txt variant="label" weight={600} color={colors.greenDeep}>
+              <Txt variant="label" weight={600} color={colors.yolkDeep}>
                 {t('profiles.picker.privacy')}
               </Txt>
             </PressableScale>
             <PressableScale onPress={() => void openPage(TERMS_URL)} accessibilityRole="link" style={styles.legalLink}>
-              <Txt variant="label" weight={600} color={colors.greenDeep}>
+              <Txt variant="label" weight={600} color={colors.yolkDeep}>
                 {t('profiles.picker.terms')}
               </Txt>
             </PressableScale>
@@ -523,8 +521,8 @@ const styles = StyleSheet.create({
   fill: { flex: 1 },
   content: { flexGrow: 1, paddingHorizontal: space.gutter },
   page: { flex: 1, gap: 32 },
-  brand: { height: 32 },
-  brandRow: { minHeight: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
+  brand: { alignSelf: 'flex-start' },
+  brandRow: { minHeight: 34, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   // The phone's own settings, quiet at the very end (only when opened from Home).
   foot: { marginTop: 16, alignItems: 'center', gap: 4 },
   footLink: { minHeight: 48, paddingHorizontal: 16, alignItems: 'center', justifyContent: 'center' },
@@ -545,7 +543,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 24,
     backgroundColor: colors.card,
-    boxShadow: '0 8px 24px rgba(30,36,16,0.06)',
+    boxShadow: '0 8px 24px rgba(31,36,48,0.06)',
   },
   retry: { alignSelf: 'flex-start', marginTop: 8 },
 });

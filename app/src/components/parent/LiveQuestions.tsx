@@ -71,7 +71,7 @@ function QuestionRow({ q }: { q: CookQuestion }) {
         accessibilityLabel={lines.en ? t('parent.questions.labelTranslated', { who: who(q, t), question: lines.main, english: lines.en }) : `${who(q, t)}: ${lines.main}`}
         accessibilityHint={t(HOMIE_ON ? 'parent.questions.hint' : 'parent.questions.hintType')}
         style={styles.open}>
-        <Txt variant="label" size={15} weight={700} color={colors.greenDeep} numberOfLines={1}>
+        <Txt variant="label" size={15} weight={700} color={colors.yolkDeep} numberOfLines={1}>
           {who(q, t)}
         </Txt>
         <Txt variant="title" size={20} leading={1.25} color={colors.ink}>
@@ -91,10 +91,10 @@ function QuestionRow({ q }: { q: CookQuestion }) {
           onSend={(rec) => answerQuestion(q._id, { audioUri: rec.uri, contentType: rec.contentType })}
         />
         <PressableScale onPress={open} accessibilityRole="button" accessibilityLabel={t('parent.ask.answer')} hitSlop={8} style={styles.answer}>
-          <Txt variant="label" size={15} weight={700} color={colors.greenDeep}>
+          <Txt variant="label" size={15} weight={700} color={colors.yolkDeep}>
             {t('parent.ask.answer')}
           </Txt>
-          <ChevronRightIcon size={16} color={colors.greenDeep} />
+          <ChevronRightIcon size={16} color={colors.yolkDeep} />
         </PressableScale>
       </View>
       {typing ? <TypeAnswer questionId={q._id} /> : null}

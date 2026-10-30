@@ -33,7 +33,7 @@ import {
   heroEnter,
   IconButton,
   PlayIcon,
-  PotMark,
+  NoPhoto,
   PressableScale,
   ShareIcon,
   Skeleton,
@@ -112,7 +112,7 @@ export function RecipeScreen({ id }: { id: string }) {
         </View>
         <View style={[styles.sheet, { top: sheetTop, position: 'absolute', left: 0, right: 0, bottom: 0 }]}>
           {missing || (!loading && !recipe) ? (
-            <EmptyState title="We couldn’t find this recipe" actionLabel="Back" onAction={back} />
+            <EmptyState mood="oops" title="We couldn’t find this recipe" actionLabel="Back" onAction={back} />
           ) : (
             <View style={{ gap: 12 }}>
               {title ? (
@@ -166,7 +166,7 @@ export function RecipeScreen({ id }: { id: string }) {
               <CookAvatar recipe={recipe} size={24} />
               <Txt variant="body" size={15} color={colors.muted} style={styles.flex}>
                 by {cook}
-                {madeIt ? <Txt variant="body" size={15} weight={600} color={colors.greenDeep}>{' · You made this'}</Txt> : null}
+                {madeIt ? <Txt variant="body" size={15} weight={600} color={colors.green}>{' · You made this'}</Txt> : null}
               </Txt>
             </View>
             {recipe.source ? (
@@ -188,7 +188,7 @@ export function RecipeScreen({ id }: { id: string }) {
         <BottomBar>
           <ActionButton
             label={resume ? `Back to step ${start}` : 'Start cooking'}
-            iconRight={<ArrowRightIcon size={22} color={colors.card} />}
+            iconRight={<ArrowRightIcon size={22} color={colors.ink} />}
             onPress={() => router.push({ pathname: '/cook/[id]', params: { id, step: String(start) } })}
             style={styles.flex}
           />
@@ -215,8 +215,8 @@ function Hero({ recipe, poster, height, below, onWatch }: { recipe: Recipe; post
       accessibilityLabel={hasVideo ? undefined : `${recipe.title}, from ${recipe.cook.name}’s kitchen`}
     />
   ) : (
-    <View style={[StyleSheet.absoluteFill, styles.noPoster]}>
-      <PotMark size={72} />
+    <View style={[StyleSheet.absoluteFill, styles.noPoster, { bottom: below }]}>
+      <NoPhoto title={recipe.title} size={height - below} />
     </View>
   );
   return (
@@ -244,7 +244,7 @@ function Hero({ recipe, poster, height, below, onWatch }: { recipe: Recipe; post
 const styles = StyleSheet.create({
   page: { flex: 1, backgroundColor: colors.page, overflow: 'hidden' },
   hero: { width: '100%', backgroundColor: colors.well, overflow: 'hidden' },
-  noPoster: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.peach },
+  noPoster: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.well },
   // Centred in the photo above the sheet's overlap, a little low for the buttons (A-Overview-Steak).
   playWrap: { position: 'absolute', left: 0, right: 0, alignItems: 'center' },
   playPill: {

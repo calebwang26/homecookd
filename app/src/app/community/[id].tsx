@@ -45,7 +45,7 @@ function SharedRecipe({ id, onRetry }: { id: string; onRetry: () => void }) {
   if (recipe === undefined && stuck) {
     return (
       <DetailPage title="" photo={coverFor(id)}>
-        <EmptyState title="Couldn’t open this recipe" actionLabel="Try again" onAction={onRetry} />
+        <EmptyState mood="oops" title="Couldn’t open this recipe" actionLabel="Try again" onAction={onRetry} />
       </DetailPage>
     );
   }
@@ -66,10 +66,10 @@ function SharedRecipe({ id, onRetry }: { id: string; onRetry: () => void }) {
 
           {recipe.story ? (
             <View style={styles.story}>
-              <Txt variant="bodyInk" size={17} leading={1.4} color={colors.lavenderInk}>
+              <Txt variant="bodyInk" size={17} leading={1.4} color={colors.ink}>
                 {recipe.story}
               </Txt>
-              <Txt variant="caption" color={colors.lavenderInk}>
+              <Txt variant="caption" color={colors.ink}>
                 Story written with AI from their recipe
               </Txt>
             </View>
@@ -117,7 +117,7 @@ function SharedRecipe({ id, onRetry }: { id: string; onRetry: () => void }) {
 const styles = StyleSheet.create({
   head: { gap: 6 },
   gap: { marginTop: 16 },
-  story: { gap: 8, paddingVertical: 16, paddingHorizontal: 20, borderRadius: radii.quote, backgroundColor: colors.lavender },
+  story: { gap: 8, paddingVertical: 16, paddingHorizontal: 20, borderRadius: radii.quote, backgroundColor: colors.yolkTint },
   steps: { gap: 20 },
   step: { flexDirection: 'row', gap: 14, alignItems: 'flex-start' },
   stepText: { flex: 1, minWidth: 0, gap: 4 },

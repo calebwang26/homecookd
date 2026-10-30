@@ -9,7 +9,7 @@
 //
 // The sheet: title (step title, Fraunces 24), a line that says what plays ("Step 2 of 6 · Dad",
 // "Full video · Dad", "A story · Dad"), then the player. Watch = the clip video sized to the video's
-// shape, its controls inside; Hear = the peach HearCard. The cook's words (the quote) always show
+// shape, its controls inside; Hear = the green-tint HearCard. The cook's words (the quote) always show
 // under Watch. With no recording, Hear is "Dad's words": the whole quote as text. With no video, a
 // warm "Dad hasn't filmed this one yet" (never the word "sample").
 // The title and the video stay put; only the words under them scroll (a long quote on a small
@@ -203,6 +203,6 @@ const styles = StyleSheet.create({
   body: { flexShrink: 1, gap: 16, paddingBottom: 8 },
   head: { gap: 4, paddingRight: 48 },
   words: { flexGrow: 0 },
-  quote: { backgroundColor: colors.peach, borderRadius: radii.quote, padding: 18, gap: 8 },
+  quote: { backgroundColor: colors.greenTint, borderRadius: radii.quote, padding: 18, gap: 8 },
   noVideo: { backgroundColor: colors.well, borderRadius: radii.panel, paddingVertical: 36, paddingHorizontal: 20, gap: 8, alignItems: 'center' },
 });

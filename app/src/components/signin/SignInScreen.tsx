@@ -1,5 +1,5 @@
 // The frame and small parts every sign-in screen shares (join, i, r, miss, a), in the bible's
-// Main look: the peach wash, the pot + "homecookd" row (a Back pill on the right when there's
+// Main look: the yolk-tint wash, the egg lockup (a Back pill on the right when there's
 // somewhere to go back to), a Fraunces 40 headline and at most one short line under it.
 //
 //   <SignInScreen onBack={...}>
@@ -14,7 +14,7 @@ import { KeyboardAvoidingView, Platform, ScrollView, StyleSheet, TextInput, View
 import Animated, { FadeIn } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { BackPill, Brand, PressableScale, ScreenWash, Txt, usePotMood } from '@/components/ui';
+import { BackPill, Brand, PressableScale, ScreenWash, Txt } from '@/components/ui';
 import { openPage, PRIVACY_URL, TERMS_URL } from '@/lib/links';
 import { useWords } from '@/lib/words/useWords';
 import { english, type T } from '@/lib/words/words';
@@ -22,7 +22,6 @@ import { colors, fonts, radii, shadows } from '@/theme/tokens';
 
 export function SignInScreen({ onBack, children }: { onBack?: (() => void) | null; children?: ReactNode }) {
   const insets = useSafeAreaInsets();
-  const potMood = usePotMood();
   return (
     <KeyboardAvoidingView style={styles.root} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       <ScreenWash tone="parent" height={420} />
@@ -31,7 +30,7 @@ export function SignInScreen({ onBack, children }: { onBack?: (() => void) | nul
         keyboardShouldPersistTaps="handled"
         showsVerticalScrollIndicator={false}>
         <View style={styles.topRow}>
-          <Brand mood={potMood} style={styles.brand} />
+          <Brand style={styles.brand} />
           {onBack ? (
             <Animated.View entering={FadeIn.duration(180)}>
               <BackPill onPress={onBack} style={styles.back} />
@@ -132,7 +131,7 @@ export function SmallLink({
   label,
   onPress,
   hint,
-  color = colors.greenDeep,
+  color = colors.yolkDeep,
   style,
 }: {
   label: string;
@@ -174,7 +173,7 @@ export function TermsLine() {
 function TermsLink({ label, url }: { label: string; url: string }) {
   const { t } = useWords();
   return (
-    <Txt variant="meta" weight={600} color={colors.greenDeep} onPress={() => void openPage(url)} accessibilityRole="link" accessibilityHint={t('signin.shared.opensSite')}>
+    <Txt variant="meta" weight={600} color={colors.yolkDeep} onPress={() => void openPage(url)} accessibilityRole="link" accessibilityHint={t('signin.shared.opensSite')}>
       {label}
     </Txt>
   );
@@ -184,7 +183,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.page },
   content: { paddingHorizontal: 24, gap: 32, flexGrow: 1 },
   topRow: { height: 32, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  brand: { height: 32 },
+  brand: { alignSelf: 'flex-start' },
   back: { alignSelf: 'auto' },
   headline: { gap: 10 },
   // Matches "Who's in the kitchen?" (static Fraunces 500 is a touch wide at 40).
@@ -203,7 +202,7 @@ const styles = StyleSheet.create({
     outlineWidth: 0,
   },
   fieldCode: { fontFamily: fonts.sansSemi, fontSize: 22, letterSpacing: 2, textAlign: 'center' },
-  fieldFocused: { borderColor: colors.green },
+  fieldFocused: { borderColor: colors.yolkDeep },
   fieldError: { borderColor: colors.danger },
   link: { alignSelf: 'center', minHeight: 48, justifyContent: 'center', paddingHorizontal: 16 },
   terms: { paddingHorizontal: 8, lineHeight: 21 },

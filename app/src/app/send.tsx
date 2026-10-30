@@ -12,8 +12,8 @@
 // phone app; the web explains that instead. Nothing uploads without her yes to the AI companies
 // (lib/aiConsent): asked here if Record didn't already.
 // Retention PR 7 touches (RETENTION-HANDOFF 4): while it works the button says "Wrapping…" beside
-// its spinner; the burst holds a paper plane that lifts off, and under "On its way to Leo" a small
-// pot's lid settles on: "You can close the app" (the uploads are the OS's background transfers).
+// its spinner; the burst holds a paper plane that lifts off, and under "On its way to Leo" the
+// little egg settles in: "You can close the app" (the uploads are the OS's background transfers).
 // Dev aids (web screenshots): `?preview=1|dish` (stills), `?preview=done` (the burst),
 // `?preview=wrapping` (the button mid-send).
 import { LinearGradient } from 'expo-linear-gradient';
@@ -30,7 +30,7 @@ import { AddVideosSheet, PhoneOnlySheet } from '@/components/record/sheets';
 import { usePickVideos } from '@/components/record/usePickVideos';
 import { AddMoreLink, VideoGrid } from '@/components/record/VideoGrid';
 import { HelloCard } from '@/components/record/HelloCard';
-import { LidPot } from '@/components/record/LidPot';
+import { SettleEgg } from '@/components/record/SettleEgg';
 import { MAX_TITLE } from '@/components/record/sendDraft';
 import { sendKept } from '@/components/record/sendKept';
 import { firstWho, showEveryone, toggleEveryone, toggleKid, whoTo, type Who } from '@/components/record/who';
@@ -346,7 +346,7 @@ export default function SendScreen() {
         {/* Content scrolls under the pinned button; fade it into the page. */}
         <LinearGradient
           pointerEvents="none"
-          colors={['rgba(247,247,242,0)', colors.page]}
+          colors={['rgba(251,245,234,0)', colors.page]}
           locations={[0, 0.45]}
           style={styles.fade}
         />
@@ -356,7 +356,7 @@ export default function SendScreen() {
             size="xl"
             state={state}
             onPress={send}
-            icon={<SendIcon size={22} color={colors.card} />}
+            icon={<SendIcon size={22} color={colors.ink} />}
             loadingLabel={t('parent.send.wrapping')}
             errorLabel={t('parent.send.didntSend')}
             style={styles.stretch}
@@ -386,7 +386,7 @@ export default function SendScreen() {
             title={done}
             glyph="plane"
             subtitle={t('parent.send.canClose')}
-            subtitleIcon={<LidPot />}
+            subtitleIcon={<SettleEgg />}
             onDone={() => {
               clearDraft();
               goToRecipes();

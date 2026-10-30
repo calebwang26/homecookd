@@ -23,7 +23,7 @@ import Animated, { useAnimatedStyle, useDerivedValue, withTiming } from 'react-n
 
 import { useVideoFrame } from '@/components/record/videoFrame';
 import { EVERYONE } from '@/components/record/who';
-import { CloseIcon, IconButton, PotMark, PressableScale, Txt } from '@/components/ui';
+import { CloseIcon, EggMascot, IconButton, NoPhoto, PressableScale, Txt } from '@/components/ui';
 import type { LiveJob } from '@/lib/live/convex';
 import { jobProgress, jobUploadLeftMs, needsPendingSend, PENDING_SEND_GIVE_UP, type JobStatus, type StoredJob } from '@/lib/uploads';
 import { useWords } from '@/lib/words/useWords';
@@ -31,7 +31,7 @@ import { english, type T } from '@/lib/words/words';
 import { colors } from '@/theme/tokens';
 
 import { stageHint, uploadingView } from './jobsLogic';
-import { rowStyles } from './RecipeRow';
+import { rowStyles, THUMB } from './RecipeRow';
 
 // No live upload in this app session, the server still waiting for files, and this old: the upload
 // stopped (a force-quit stops iOS background uploads and we can't tell from here).
@@ -180,10 +180,10 @@ export function ProcessingRow({
       <View style={rowStyles.thumb}>
         {frame ? (
           <Image source={frame} style={[StyleSheet.absoluteFill, styles.dim]} contentFit="cover" transition={200} />
-        ) : view.busy ? null : (
-          <View style={styles.dim}>
-            <PotMark size={38} />
-          </View>
+        ) : view.busy ? null : view.problem ? (
+          <EggMascot mood="oops" size={48} />
+        ) : (
+          <NoPhoto title={job.title} size={THUMB} />
         )}
         {view.busy ? <ActivityIndicator color={colors.ink} /> : null}
       </View>
@@ -233,7 +233,7 @@ export function ProcessingRow({
           accessibilityRole="button"
           accessibilityLabel={t('parent.processing.undoLabel', { dish: job.title })}
           style={styles.undo}>
-          <Txt variant="label" size={17} weight={700} color={colors.greenDeep}>
+          <Txt variant="label" size={17} weight={700} color={colors.yolkDeep}>
             {t('parent.processing.undo')}
           </Txt>
         </PressableScale>
@@ -278,7 +278,7 @@ const styles = StyleSheet.create({
   dim: { opacity: 0.4 },
   bar: { flexDirection: 'row', gap: 4, marginTop: 6 },
   track: { flex: 1, height: 4, borderRadius: 2, backgroundColor: colors.track, overflow: 'hidden' },
-  fill: { height: 4, borderRadius: 2, backgroundColor: colors.green },
+  fill: { height: 4, borderRadius: 2, backgroundColor: colors.yolk },
   action: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', marginVertical: -8, marginRight: -8 },
   undo: { minWidth: 64, height: 48, paddingHorizontal: 8, alignItems: 'center', justifyContent: 'center', marginVertical: -8, marginRight: -8 },
 });

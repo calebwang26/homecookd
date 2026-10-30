@@ -1,12 +1,12 @@
 // Round icon buttons and the "< Back" pill.
-//  cream: #FFFDF7 + 0 4px 14px shadow (back / close on the page, Kid-Ingredients, Kid-Step)
-//  glass: rgba(255,253,247,0.92), no shadow (back / heart / share over a photo)
-//  ink: #1E2410 with cream glyph (play in a voice row, composer mic)
-//  peach: #F9E3CF with peach-ink glyph ("Add a hello" mic, record dot)
-//  well: #EFEFE6 (quiet secondary buttons: a sheet's close, a hello's play)
-//  glassDark: rgba(255,253,247,0.3) with cream glyph (heart on a photo card)
+//  cream: white #FFFFFF + 0 4px 14px shadow (back / close on the page, Kid-Ingredients, Kid-Step)
+//  glass: rgba(255,255,255,0.92), no shadow (back / heart / share over a photo)
+//  ink: #1F2430 with a white glyph (play in a voice row, composer mic)
+//  yolkTint: #FCEBD0 with an ink glyph ("Add a hello" mic, the cook's voice play)
+//  well: #F3EAD9 (quiet secondary buttons: a sheet's close, a hello's play)
+//  glassDark: rgba(255,255,255,0.3) with a white glyph (heart on a photo card)
 //  clear: transparent (heart in a list row)
-//  field: cream + 0 4px 14px 0.06 (voice search next to the search field)
+//  field: white + 0 4px 14px 0.06 (voice search next to the search field)
 import { useContext, type ReactNode } from 'react';
 import { StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
 
@@ -17,13 +17,14 @@ import { BackIcon } from './icons';
 import { PressableScale } from './PressableScale';
 import { Txt } from './Txt';
 
-export type IconButtonTone = 'cream' | 'glass' | 'ink' | 'peach' | 'well' | 'glassDark' | 'clear' | 'field' | 'green';
+export type IconButtonTone = 'cream' | 'glass' | 'ink' | 'yolkTint' | 'yolk' | 'well' | 'glassDark' | 'clear' | 'field' | 'green';
 
 const tones: Record<IconButtonTone, { bg: string; fg: string; shadow?: string }> = {
   cream: { bg: colors.card, fg: colors.ink, shadow: shadows.button },
   glass: { bg: alpha.glassButton, fg: colors.ink },
   ink: { bg: colors.ink, fg: colors.card },
-  peach: { bg: colors.peach, fg: colors.peachInk },
+  yolkTint: { bg: colors.yolkTint, fg: colors.ink },
+  yolk: { bg: colors.yolk, fg: colors.ink },
   well: { bg: colors.well, fg: colors.ink },
   glassDark: { bg: alpha.glassHeart, fg: colors.card },
   clear: { bg: 'transparent', fg: colors.muted },

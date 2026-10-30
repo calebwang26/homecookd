@@ -60,7 +60,7 @@ const styles = StyleSheet.create({
     minHeight: 150,
     borderRadius: radii.panel,
     overflow: 'hidden',
-    backgroundColor: colors.olive,
+    backgroundColor: colors.green,
     boxShadow: shadows.card,
     flexDirection: 'row',
     alignItems: 'center',

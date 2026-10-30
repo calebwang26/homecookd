@@ -1,8 +1,8 @@
 // Motion spec 5 success moment (Luma's "You're In", in homecookd colours):
-//   0 ms     green #5B6F00 badge grows 0 -> 1 on a spring
+//   0 ms     green #34430C badge (success) grows 0 -> 1 on a spring
 //   120 ms   cream check stroke draws on (220 ms)
-//   250 ms   sun #FEBE29 ring scales 1 -> 1.8 while fading; 10 confetti dots (green, sun, peach,
-//            lavender) fly 28-44 px outward and fade
+//   250 ms   yolk #F2A23A ring scales 1 -> 1.8 while fading; 10 confetti dots (yolk, green, yolk-deep,
+//            yolk tint) fly 28-44 px outward and fade
 //   500 ms   title (Fraunces 26) + subtitle fade up 8 px
 //   then holds `holdMs` (1.4 s) and calls onDone.
 // Reduce Motion: everything fades in over 150 ms, same hold.
@@ -11,7 +11,7 @@
 //             last step, "I made it"). Reduce Motion: they fade in with the badge and stay.
 //   glyph     'plane': a paper plane in the badge instead of the check, lifting off up and to the
 //             right as the ring goes (Send, "On its way to Leo"). Reduce Motion: it just fades in.
-//   subtitleIcon  a small picture before the subtitle (Send: a pot with its lid on, "You can close the app").
+//   subtitleIcon  a small picture before the subtitle (Send: the small egg settling in, "You can close the app").
 import { useEffect, useMemo, type ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, {
@@ -37,7 +37,7 @@ const CHECK_LEN = 20;
 const STEAM_LEN = 40;
 /** A paper plane with its centre fold (24 box): SendIcon's outline alone reads as a map arrow at badge size. */
 const PLANE = 'M21 3l-6.5 18-4-7.5L3 9.5zM21 3l-10.5 10.5';
-const DOT_COLORS = [colors.green, colors.sun, colors.peach, colors.lavender];
+const DOT_COLORS = [colors.yolk, colors.green, colors.yolkDeep, colors.yolkTint];
 
 export type SuccessBurstProps = {
   title?: string;
@@ -272,7 +272,7 @@ function Dot({
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center', gap: 16 },
   badge: { backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
-  ring: { position: 'absolute', borderColor: colors.sun },
+  ring: { position: 'absolute', borderColor: colors.yolk },
   dot: { position: 'absolute', left: '50%', top: '50%' },
   text: { alignItems: 'center', gap: 6, maxWidth: 300 },
   steam: { position: 'absolute', alignSelf: 'center' },

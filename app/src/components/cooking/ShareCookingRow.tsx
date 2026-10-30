@@ -75,7 +75,7 @@ export function ShareCookingRow({ profileId, style }: ShareCookingRowProps) {
       style={[styles.row, style]}>
       <Txt variant="label" weight={600} color={colors.muted}>
         Show cooks when I cook ·{' '}
-        <Txt variant="label" weight={700} color={share ? colors.greenDeep : colors.muted}>
+        <Txt variant="label" weight={700} color={share ? colors.green : colors.muted}>
           {share ? 'On' : 'Off'}
         </Txt>
       </Txt>

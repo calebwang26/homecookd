@@ -1,7 +1,7 @@
 // The bible's floating tab bar: a cream pill (left/right 20, bottom 24, height 76, padding 8,
-// gap 4) with 0 10px 30px rgba(30,36,16,0.14) + a 1px 0.04 ring. Tabs are equal columns: 24 px stroke
-// icon over a 13 px label; the active tab is a dark ink #1E2410 bubble with cream icon + 700 label,
-// inactive tabs are #2D3222 with a 600 label. Frosted (blur + 0.88 cream) so content passes under it
+// gap 4) with 0 10px 30px rgba(31,36,48,0.14) + a 1px 0.04 ring. Tabs are equal columns: 24 px stroke
+// icon over a 13 px label; the active tab is a dark ink #1F2430 bubble with a white icon + 700 label,
+// inactive tabs are ink #1F2430 with a 600 label. Frosted (blur + 0.88 cream) so content passes under it
 // (motion spec 2). The ink bubble slides between tabs on a spring, and grows past its column when the
 // label needs it ("Community" on a 390 pt phone), so a label never runs off its round ends. Numeric badge per tab from the
 // screen option `tabBarBadge` or the `badges` prop ({ routeName: count }). A short cream fade rises
@@ -104,7 +104,7 @@ export function FloatingTabBar({ state, descriptors, navigation, badges }: Float
                   {options.tabBarIcon?.({ focused, color, size: 24 })}
                   {badge ? (
                     <View style={styles.badge}>
-                      <Txt variant="tiny" size={11} weight={700} color={colors.card} leading={1.2}>
+                      <Txt variant="tiny" size={11} weight={700} color={colors.ink} leading={1.2}>
                         {badge}
                       </Txt>
                     </View>
@@ -135,8 +135,8 @@ export function FloatingTabBar({ state, descriptors, navigation, badges }: Float
 /** Room each side of a label inside the bubble, past the round ends' curve (60 pt tall, so 30 pt radius). */
 const LABEL_AIR = 12;
 
-/** The page tone (#F7F7F2), clear above the bar to nearly solid behind it. */
-const PAGE_FADE = ['rgba(247,247,242,0)', 'rgba(247,247,242,0.92)'] as const;
+/** The page tone (cream #FBF5EA), clear above the bar to nearly solid behind it. */
+const PAGE_FADE = ['rgba(251,245,234,0)', 'rgba(251,245,234,0.92)'] as const;
 
 const styles = StyleSheet.create({
   anchor: { position: 'absolute', left: 0, right: 0, bottom: 0 },
@@ -170,9 +170,9 @@ const styles = StyleSheet.create({
     height: 18,
     paddingHorizontal: 5,
     borderRadius: 9,
-    backgroundColor: colors.green,
+    backgroundColor: colors.yolk,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 0 0 2px #FFFDF7',
+    boxShadow: '0 0 0 2px #FFFFFF',
   },
 });

@@ -23,7 +23,7 @@ export function DishCard({ recipe, onConnect, onHost }: { recipe: FeedRecipe; on
   return (
     <View style={styles.card}>
       <View style={styles.top} accessible accessibilityLabel={heard.filter(Boolean).join(', ')}>
-        <DishPhoto uri={recipe.coverUrl} label="" pot={40} style={styles.photo} />
+        <DishPhoto uri={recipe.coverUrl} label="" title={recipe.dish} size={PHOTO} style={styles.photo} />
         <View style={styles.text}>
           <Txt variant="display" size={24} numberOfLines={2}>
             {recipe.dish}
@@ -33,7 +33,7 @@ export function DishCard({ recipe, onConnect, onHost }: { recipe: FeedRecipe; on
               <Txt variant="body" size={15} numberOfLines={1} style={styles.shrink}>
                 {who}
               </Txt>
-              {culture ? <Pill tone="lavender" size="xs" label="AI" /> : null}
+              {culture ? <Pill tone="yolkTint" size="xs" label="AI" /> : null}
             </View>
           ) : null}
           <Txt variant="meta" numberOfLines={1}>
@@ -43,7 +43,7 @@ export function DishCard({ recipe, onConnect, onHost }: { recipe: FeedRecipe; on
       </View>
       {recipe.quote ? (
         <View style={styles.quote} accessible accessibilityLabel={`${cook} says${recipe.quoteTranslated ? ', translated' : ''}: ${recipe.quote}`}>
-          <Txt variant="quote" color={colors.peachInk} leading={1.35}>
+          <Txt variant="quote" color={colors.ink} leading={1.35}>
             “{recipe.quote}”
           </Txt>
           {recipe.quoteTranslated ? <Txt variant="caption">Translated</Txt> : null}
@@ -53,7 +53,7 @@ export function DishCard({ recipe, onConnect, onHost }: { recipe: FeedRecipe; on
         <ActionButton
           label="Host a dinner"
           size="sm"
-          icon={<PlusIcon size={20} color={colors.card} strokeWidth={2.2} />}
+          icon={<PlusIcon size={20} color={colors.ink} strokeWidth={2.2} />}
           accessibilityHint="Pick a time and place for this dish"
           onPress={onHost}
         />

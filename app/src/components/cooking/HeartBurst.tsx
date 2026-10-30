@@ -8,7 +8,7 @@
 //       and any heart that goes on (HeartButton, retention PR 7: `size` 0.7 for tinier particles).
 //
 // Motion: the heart grows 0 -> 1.15 -> 1 on a soft spring, holds ~0.9 s, fades out; 8 particles (the
-// heart's red, sun, peach) fly out past the ring (26-44 pt by default, `reach` scales it) and fade.
+// heart's red, yolk, yolk-deep) fly out past the ring (26-44 pt by default, `reach` scales it) and fade.
 // Reduce Motion: the heart fades in and out in place, no particles, no scale.
 import { useEffect, useMemo } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
@@ -28,7 +28,7 @@ import { haptic, HeartIcon, useToast } from '@/components/ui';
 import { heartToast } from '@/lib/cookingLogic';
 import { colors, motion } from '@/theme/tokens';
 
-const PARTICLE_COLORS = [colors.danger, colors.sun, colors.peach, colors.sun];
+const PARTICLE_COLORS = [colors.danger, colors.yolk, colors.yolkDeep, colors.yolk];
 
 export type HeartPopProps = {
   /** Plays each time this goes up (0 = never played). */
@@ -184,6 +184,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 10px 30px rgba(30,36,16,0.14)',
+    boxShadow: '0 10px 30px rgba(31,36,48,0.14)',
   },
 });

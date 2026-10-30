@@ -43,10 +43,12 @@ import {
   MicIcon,
   MoreIcon,
   PauseIcon,
+  NoPhoto,
   Pill,
   PlayIcon,
   PlusIcon,
-  PotMark,
+  EggMark,
+  EggMascot,
   PressableScale,
   RecordDotIcon,
   ScreenWash,
@@ -103,7 +105,12 @@ function Gallery() {
           <Txt variant="display" size={40}>
             Hearth gallery
           </Txt>
-          <Txt variant="lead">Every primitive from the design bible, on one page.</Txt>
+          <Txt variant="lead">Every primitive from the design bible, in the egg brand, on one page.</Txt>
+          <View style={styles.row14}>
+            {(['hello', 'listening', 'made-it', 'sleepy', 'oops'] as const).map((m) => (
+              <EggMascot key={m} mood={m} size={56} />
+            ))}
+          </View>
         </View>
 
         <Section title="homie">
@@ -147,7 +154,7 @@ function Gallery() {
               <MessageIcon key="w" />, <WhatsAppIcon key="x" />, <MoreIcon key="y" />, <HeartIcon key="z" />,
               <HeartIcon key="z2" filled color={colors.danger} />, <PlayIcon key="pl" size={22} />, <PauseIcon key="pa" size={22} />,
               <StopIcon key="st" size={22} color={colors.danger} />, <RecordDotIcon key="rd" />, <SpoonIcon key="sp" />,
-              <SparkleIcon key="sk" gradient />, <PotMark key="pot" size={34} />,
+              <SparkleIcon key="sk" gradient />, <EggMark key="egg" size={34} />, <EggMark key="egg-tiny" size={20} />,
             ].map((icon, i) => (
               <View key={i} style={styles.iconCell}>{icon}</View>
             ))}
@@ -155,12 +162,12 @@ function Gallery() {
         </Section>
 
         <Section title="Action buttons">
-          <ActionButton label="Start cooking" iconRight={<ArrowRightIcon color={colors.card} />} onPress={() => {}} />
+          <ActionButton label="Start cooking" iconRight={<ArrowRightIcon color={colors.ink} />} onPress={() => {}} />
           <ActionButton
             label="Send to Leo"
             size="xl"
             successLabel="Sent to Leo"
-            icon={<SendIcon color={colors.card} />}
+            icon={<SendIcon color={colors.ink} />}
             onPress={() => new Promise((r) => setTimeout(r, 900))}
           />
           <ActionButton
@@ -173,7 +180,7 @@ function Gallery() {
             <ActionButton label="Watch · 0:48" variant="outline" size="sm" icon={<PlayIcon color={colors.ink} />} onPress={() => {}} style={styles.flex} />
             <ActionButton label="Hear Dad · 0:24" variant="outline" size="sm" icon={<VoiceIcon size={18} color={colors.ink} />} onPress={() => {}} style={styles.flex} />
           </View>
-          <ActionButton label="Answer with your voice" icon={<MicIcon color={colors.card} />} onPress={() => {}} />
+          <ActionButton label="Answer with your voice" icon={<MicIcon color={colors.ink} />} onPress={() => {}} />
           <PhotoBlock height={140} radius={32}>
             <View style={styles.heroRow}>
               <ActionButton label="Hear Dad · 0:24" variant="glass" size="sm" labelSize={16} icon={<PlayIcon size={18} color={colors.card} />} onPress={() => {}} style={styles.flex} />
@@ -185,16 +192,16 @@ function Gallery() {
         <Section title="Pills">
           <View style={styles.wrapGap}>
             <Pill label="2 of 6" />
-            <Pill tone="butter" size="sm" label="Waiting for your answer" />
-            <Pill tone="butter" size="xs" label="Waiting" />
-            <Pill tone="sun" size="xs" label="New" />
+            <Pill tone="yolkTint" size="sm" label="Waiting for your answer" />
+            <Pill tone="yolkTint" size="xs" label="Waiting" />
+            <Pill tone="yolk" size="xs" label="New" />
             <Pill
-              tone="peach"
+              tone="yolkTint"
               size="lg"
               label="New voice note · 0:38"
               leading={
                 <View style={styles.playDisc}>
-                  <PlayIcon size={11} color={colors.peachInk} />
+                  <PlayIcon size={11} color={colors.ink} />
                 </View>
               }
             />
@@ -232,7 +239,7 @@ function Gallery() {
             <IconButton accessibilityLabel="Close" icon={(c) => <CloseIcon size={20} color={c} />} />
             <IconButton accessibilityLabel="Play" tone="ink" size={44} icon={(c) => <PlayIcon color={c} />} />
             <IconButton accessibilityLabel="Play" tone="well" size={44} icon={(c) => <PlayIcon color={c} />} />
-            <IconButton accessibilityLabel="Add a hello" tone="peach" size={52} icon={(c) => <MicIcon color={c} />} />
+            <IconButton accessibilityLabel="Add a hello" tone="yolkTint" size={52} icon={(c) => <MicIcon color={c} />} />
             <IconButton accessibilityLabel="Search by voice" tone="field" size={52} icon={(c) => <MicIcon size={22} color={c} />} />
             <IconButton
               accessibilityLabel="Save"
@@ -280,7 +287,7 @@ function Gallery() {
               </View>
             </View>
             <Txt variant="quoteLg">“How spicy should it be?”</Txt>
-            <ActionButton label="Answer with your voice" flat icon={<MicIcon color={colors.card} />} onPress={() => {}} />
+            <ActionButton label="Answer with your voice" flat icon={<MicIcon color={colors.ink} />} onPress={() => {}} />
           </Card>
           <ListCard>
             {[
@@ -298,11 +305,11 @@ function Gallery() {
               </ListRow>
             ))}
           </ListCard>
-          <Card tone="butter" padding={12} style={styles.row14}>
-            <View style={[styles.thumb, { backgroundColor: colors.peach }]} />
+          <Card tone="yolkTint" padding={12} style={styles.row14}>
+            <View style={[styles.thumb, { backgroundColor: colors.well }]} />
             <View style={styles.flex}>
-              <Txt variant="rowTitle">A butter tinted card</Txt>
-              <Txt variant="meta" color={colors.butterInk}>Hidden when there is no real data</Txt>
+              <Txt variant="rowTitle">A yolk-tint card</Txt>
+              <Txt variant="meta" color={colors.ink}>Hidden when there is no real data</Txt>
             </View>
             <ChevronRightIcon size={20} />
           </Card>
@@ -341,8 +348,8 @@ function Gallery() {
                 </View>
               </View>
               <View style={styles.lookFor}>
-                <EyeIcon size={20} color={colors.olive} />
-                <Txt variant="label" color={colors.olive} leading={1.35} style={styles.flex}>
+                <EyeIcon size={20} color={colors.green} />
+                <Txt variant="label" color={colors.green} leading={1.35} style={styles.flex}>
                   Look for a thick stew that coats the spoon.
                 </Txt>
               </View>
@@ -357,12 +364,12 @@ function Gallery() {
           <View style={styles.voiceBubble}>
             <IconButton tone="ink" size={44} accessibilityLabel="Play" icon={(c) => <PlayIcon color={c} />} />
             <Waveform />
-            <Txt variant="label" size={14} weight={700} color={colors.peachInk}>0:38</Txt>
+            <Txt variant="label" size={14} weight={700} color={colors.ink}>0:38</Txt>
           </View>
           <View style={styles.voiceBubble}>
             <IconButton tone="ink" size={44} accessibilityLabel="Pause" icon={(c) => <PauseIcon color={c} />} />
             <Waveform seed="msg-42" progress={0.4} />
-            <Txt variant="label" size={14} weight={700} color={colors.peachInk}>0:15</Txt>
+            <Txt variant="label" size={14} weight={700} color={colors.ink}>0:15</Txt>
           </View>
         </Section>
 
@@ -410,7 +417,7 @@ function Gallery() {
           <ActionButton
             label="Send to Leo"
             size="xl"
-            icon={<SendIcon color={colors.card} />}
+            icon={<SendIcon color={colors.ink} />}
             onPress={() =>
               new Promise<void>((r) => setTimeout(r, 700)).then(() => setSent({ title: 'Sent to Leo', subtitle: 'He can cook it tonight.' }))
             }
@@ -418,7 +425,7 @@ function Gallery() {
         }>
         <View style={styles.sheetHead}>
           <View style={styles.sheetThumb}>
-            <PotMark size={64} />
+            <NoPhoto title="Sunday Chili" size={120} initial />
           </View>
           <Txt variant="display" size={24} align="center">Sunday Chili</Txt>
           <Txt variant="meta" align="center">by Dad · 50 min</Txt>
@@ -435,7 +442,7 @@ const HOMIE_STATES: HomieState[] = ['off', 'lit', 'listening', 'thinking', 'spea
 // TODO(caleb): native check of the Marathi sample.
 const QUESTION = 'कांदे झाले हे कसं ओळखायचं?';
 
-/** One pot with its state under it: listening at a mid mic level, a timer 60% left. The cell leaves room for the halo. */
+/** One egg with its state under it: listening at a mid mic level, a timer 60% left. The cell leaves room for the halo. */
 function PotCell({ state, size, timer = state === 'timer', label = state }: { state: HomieState; size: number; timer?: boolean; label?: string }) {
   return (
     <View style={[styles.homieCell, { width: Math.round(size * 1.6) }]}>
@@ -447,8 +454,8 @@ function PotCell({ state, size, timer = state === 'timer', label = state }: { st
   );
 }
 
-/** Every pot state at the header's 48, cook mode's bar 60 and the centred moment's 176, plus the moments:
- *  Grandma's live question (Marathi) and the corner pot's states. */
+/** Every egg state at the header's 48, cook mode's bar 60 and the centred moment's 176, plus the moments:
+ *  Grandma's live question (Marathi) and the corner egg's states. */
 function HomieStates() {
   const [corner, setCorner] = useState<HomieState>('off');
   const ask = () => void speak(QUESTION, { lang: 'mr' });
@@ -504,11 +511,11 @@ function Section({ title, children }: { title: string; children: ReactNode }) {
   );
 }
 
-/** A stand-in for a photo: the hero's olive base with the bible's bottom shade. */
+/** A stand-in for a photo: the hero's dark green base with the bible's bottom shade. */
 function PhotoBlock({ height, radius, children }: { height: number; radius: number; children?: ReactNode }) {
   return (
     <View style={[styles.photo, { height, borderRadius: radius }]}>
-      <LinearGradient colors={[colors.olive, '#7A5A3A']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
+      <LinearGradient colors={[colors.green, colors.yolkDeep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={StyleSheet.absoluteFill} />
       <LinearGradient colors={[alpha.photoShadeTop, alpha.photoShade]} style={StyleSheet.absoluteFill} />
       <View style={styles.photoInner}>{children}</View>
     </View>
@@ -562,7 +569,7 @@ const styles = StyleSheet.create({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   wrapGap: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'center' },
   swatchItem: { width: 72, gap: 4 },
-  swatch: { height: 40, borderRadius: 12, boxShadow: '0 0 0 1px rgba(30,36,16,0.08)' },
+  swatch: { height: 40, borderRadius: 12, boxShadow: '0 0 0 1px rgba(31,36,48,0.08)' },
   iconCell: { width: 48, height: 48, borderRadius: 14, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', boxShadow: shadows.chip },
   grid2: { flexDirection: 'row', gap: 12 },
   flex: { flex: 1 },
@@ -577,10 +584,10 @@ const styles = StyleSheet.create({
   row12top: { flexDirection: 'row', alignItems: 'flex-start', gap: 12 },
   row14: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   thumb: { width: 64, height: 64, borderRadius: 16 },
-  bubbleQuote: { flex: 1, paddingVertical: 12, paddingHorizontal: 16, backgroundColor: colors.peach, borderTopLeftRadius: 4, borderTopRightRadius: 18, borderBottomLeftRadius: 18, borderBottomRightRadius: 18 },
+  bubbleQuote: { flex: 1, paddingVertical: 12, paddingHorizontal: 16, backgroundColor: colors.greenTint, borderTopLeftRadius: 4, borderTopRightRadius: 18, borderBottomLeftRadius: 18, borderBottomRightRadius: 18 },
   ingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'baseline', paddingVertical: 10, gap: 12 },
   hair: { borderBottomWidth: 1, borderBottomColor: colors.well },
-  lookFor: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 16, backgroundColor: colors.sage },
+  lookFor: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 12, paddingHorizontal: 14, borderRadius: 16, backgroundColor: colors.greenTint },
   voiceBubble: {
     alignSelf: 'flex-start',
     flexDirection: 'row',
@@ -589,7 +596,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     paddingLeft: 10,
     paddingRight: 16,
-    backgroundColor: colors.peach,
+    backgroundColor: colors.yolkTint,
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
     borderBottomRightRadius: 20,
@@ -600,5 +607,5 @@ const styles = StyleSheet.create({
   sheetHead: { alignItems: 'center', gap: 6, paddingTop: 8 },
   homieRow: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'center' },
   homieCell: { alignItems: 'center' },
-  sheetThumb: { width: 120, height: 120, borderRadius: 20, backgroundColor: colors.peach, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
+  sheetThumb: { width: 120, height: 120, borderRadius: 20, backgroundColor: colors.well, alignItems: 'center', justifyContent: 'center', marginBottom: 10 },
 });

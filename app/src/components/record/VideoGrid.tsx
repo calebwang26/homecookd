@@ -82,7 +82,7 @@ function VideoTile({ clip, index, onPress }: { clip: DraftClip; index: number; o
       accessibilityLabel={`Your ${time} video${len ? `, ${len}` : ''}${clip.selected ? ', picked' : ''}`}
       accessibilityHint={clip.selected ? 'Leaves this video out' : 'Sends this video too'}
       style={styles.tileCol}>
-      <View style={[styles.ring, clip.selected ? { boxShadow: shadows.ringGreen } : null]}>
+      <View style={[styles.ring, clip.selected ? { boxShadow: shadows.ringSelected } : null]}>
         <View style={styles.thumb}>
           {source ? (
             <Animated.View style={[StyleSheet.absoluteFill, imgStyle]}>
@@ -90,17 +90,17 @@ function VideoTile({ clip, index, onPress }: { clip: DraftClip; index: number; o
             </Animated.View>
           ) : (
             <Animated.View style={[StyleSheet.absoluteFill, styles.noFrame, imgStyle]}>
-              <VideoIcon size={28} color={colors.peachInk} />
+              <VideoIcon size={28} color={colors.ink} />
             </Animated.View>
           )}
           <View
             style={[
               styles.check,
               clip.selected
-                ? { backgroundColor: colors.green }
-                : { backgroundColor: 'rgba(30,36,16,0.25)', borderWidth: 2, borderColor: colors.card },
+                ? { backgroundColor: colors.yolk }
+                : { backgroundColor: 'rgba(31,36,48,0.25)', borderWidth: 2, borderColor: colors.card },
             ]}>
-            <CheckIcon size={14} strokeWidth={3.5} color={colors.card} />
+            <CheckIcon size={14} strokeWidth={3.5} color={clip.selected ? colors.ink : colors.card} />
           </View>
         </View>
       </View>
@@ -118,8 +118,8 @@ function VideoTile({ clip, index, onPress }: { clip: DraftClip; index: number; o
 function AddTile({ onPress }: { onPress: () => void }) {
   return (
     <PressableScale onPress={onPress} haptic scaleTo={0.97} accessibilityLabel="Add your videos" style={styles.add}>
-      <PlusIcon size={28} color={colors.greenDeep} />
-      <Txt variant="label" size={15} weight={700} color={colors.greenDeep} align="center">
+      <PlusIcon size={28} color={colors.yolkDeep} />
+      <Txt variant="label" size={15} weight={700} color={colors.yolkDeep} align="center">
         Add your videos
       </Txt>
     </PressableScale>
@@ -130,8 +130,8 @@ function AddTile({ onPress }: { onPress: () => void }) {
 export function AddMoreLink({ onPress }: { onPress: () => void }) {
   return (
     <PressableScale onPress={onPress} haptic accessibilityLabel="Add another video" hitSlop={8} style={styles.more}>
-      <PlusIcon size={18} strokeWidth={2.2} color={colors.greenDeep} />
-      <Txt variant="label" size={15} weight={700} color={colors.greenDeep}>
+      <PlusIcon size={18} strokeWidth={2.2} color={colors.yolkDeep} />
+      <Txt variant="label" size={15} weight={700} color={colors.yolkDeep}>
         Add more
       </Txt>
     </PressableScale>
@@ -142,8 +142,8 @@ const styles = StyleSheet.create({
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GAP },
   tileCol: { gap: 6 },
   ring: { height: TILE_H, borderRadius: radii.quote },
-  thumb: { flex: 1, borderRadius: radii.quote, overflow: 'hidden', backgroundColor: colors.peach },
-  noFrame: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.peach },
+  thumb: { flex: 1, borderRadius: radii.quote, overflow: 'hidden', backgroundColor: colors.well },
+  noFrame: { alignItems: 'center', justifyContent: 'center', backgroundColor: colors.well },
   check: {
     position: 'absolute',
     right: 8,

@@ -8,7 +8,7 @@
 // PushBridge (RETENTION-HANDOFF 2.3) opens the screen a tapped push points at (the same hold covers a
 // push that launched the app), files this phone's push token under its person (with the api, and with
 // Convex through lib/live/pushTokens), and starts "heard" logging; PushAskHost is the one "Want a note
-// when…?" sheet any screen can ask for. HomieOverlay is homie, the pot that rests top-right on every
+// when…?" sheet any screen can ask for. HomieOverlay is homie, the egg that rests top-right on every
 // screen (components/homie). AiConsentHost is the one "homecookd uses AI for this" sheet, raised the
 // first time something would go to the AI companies (lib/aiConsent). ResendUnsent sends, in the
 // background and as its cook, an in-app recording the app died before finishing
@@ -65,7 +65,7 @@ const navTheme = {
   ...DefaultTheme,
   colors: {
     ...DefaultTheme.colors,
-    primary: colors.green,
+    primary: colors.yolkDeep,
     background: colors.page,
     card: colors.page,
     text: colors.ink,

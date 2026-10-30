@@ -17,10 +17,10 @@
 // smaller (28 pt), and if the words still wouldn't fit above the bottom, homie and its words go up just
 // enough, once and only up, for the rest of the moment (recordingLogic liftToFit).
 // Motion (Caleb, Oct 24: smooth, and less blur than the canvas's frames 2 and 4), all on the UI thread:
-// homie leaves its corner from the resting pot's exact spot and size, and the glide, the growth and the
+// homie leaves its corner from the resting egg's exact spot and size, and the glide, the growth and the
 // light blur run together as one move (420 ms, easing out, no overshoot), like cook mode's HomieMoment;
 // from 300 ms the words rise under it. Closing plays it backwards in one move and lands homie back on its
-// corner, where the resting pot fades in under it before this one goes (no blink); a hold that comes back
+// corner, where the resting egg fades in under it before this one goes (no blink); a hold that comes back
 // meanwhile turns it round from where it is. Reduce Motion: everything fades in place (150 ms), the
 // words too, and nothing moves or loops.
 // The shared HomieMoment (components/homie) has big buttons and a green listening pill; this screen
@@ -59,18 +59,18 @@ export const ASK_HOMIE_SIZE = 176;
 const TOP = 0.42;
 /** expo-blur intensity: light, so the kitchen still reads behind homie (was 70). */
 const BLUR = 30;
-const TINT = 'rgba(30,36,16,0.5)';
-const WHITE_SOFT = 'rgba(255,253,247,0.8)';
+const TINT = 'rgba(31,36,48,0.5)';
+const WHITE_SOFT = 'rgba(255,255,255,0.8)';
 const OPEN_MS = 420;
 const RISE_AT = 300;
 const CLOSE_AT = 80;
 const CLOSE_MOVE_MS = 300;
 const CLOSE_MS = CLOSE_AT + CLOSE_MOVE_MS + 20;
-/** Landed back on the corner: both pots there this long, so the resting one fades in under this one. */
+/** Landed back on the corner: both eggs there this long, so the resting one fades in under this one. */
 const HANDOFF_MS = 200;
 /** Below this height (an iPhone SE is 667) the words are a little smaller. */
 const SHORT_SCREEN = 700;
-/** The sun ring round homie's disc (GlowHomie's glow: 10% of its size). */
+/** The yolk ring round homie's disc (GlowHomie's glow: 10% of its size). */
 const RING = 18;
 /** The words end at least this far above the bottom; homie stays this far below the top when it goes up. */
 const BOTTOM_ROOM = 16;
@@ -102,7 +102,7 @@ export function AskMoment({ view, words, micOn, onNotNow, onActive }: { view: Mo
   const [mounted, setMounted] = useState(open);
   if (open && !mounted) setMounted(true);
   const closing = !open && mounted;
-  // The corner pot stays hidden from the first frame until this one has landed back on it.
+  // The corner egg stays hidden from the first frame until this one has landed back on it.
   const [landed, setLanded] = useState(!open);
   if (open && landed) setLanded(false);
 
@@ -151,7 +151,7 @@ export function AskMoment({ view, words, micOn, onNotNow, onActive }: { view: Mo
     lift.set(reduce ? up : withTiming(up, { duration: LIFT_MS, easing: inOut }));
   }, [open, area, wordsH, insets.top, insets.bottom, reduce, lift]);
 
-  // Where the big pot sits (measured), so the move ends exactly there.
+  // Where the big egg sits (measured), so the move ends exactly there.
   const [to, setTo] = useState<{ x: number; y: number } | null>(null);
   const measured = !!to;
 
@@ -216,8 +216,8 @@ export function AskMoment({ view, words, micOn, onNotNow, onActive }: { view: Mo
 
   const blurProps = useAnimatedProps(() => ({ intensity: BLUR * dim.value }));
   const dimStyle = useAnimatedStyle(() => ({ opacity: dim.value }));
-  // One value moves it: from the corner pot's centre and size to its place in the column.
-  // Its place is `lift` above the measured one; at t = 0 it is still exactly on the corner pot.
+  // One value moves it: from the corner egg's centre and size to its place in the column.
+  // Its place is `lift` above the measured one; at t = 0 it is still exactly on the corner egg.
   const potStyle = useAnimatedStyle(() => {
     if (!to) return { opacity: 0 };
     const up = lift.value;
@@ -338,7 +338,7 @@ function WordsLayer({ slot, on, reduce, short, hint, micOn, level, onHeight }: L
       </View>
       {asking ? (
         <View style={styles.label} accessible accessibilityLabel={hint.en ? `${hint.text}. ${hint.en}` : hint.text}>
-          {micOn ? <ListeningBars level={level} color={colors.limeWash} /> : null}
+          {micOn ? <ListeningBars level={level} color={colors.greenTint} /> : null}
           <Txt variant="label" size={short ? 22 : 24} weight={700} color={colors.card} align="center" maxFontSizeMultiplier={MAX_TYPE_SCALE}>
             {hint.text}
           </Txt>
@@ -359,7 +359,7 @@ const styles = StyleSheet.create({
   // homie at the bottom of the top part, whatever the words under it: it never moves while held.
   top: { flex: TOP, alignItems: 'center', justifyContent: 'flex-end' },
   below: { flex: 1 - TOP },
-  // Below the sun ring (18 pt round the disc), as far as the label is below the words.
+  // Below the yolk ring (18 pt round the disc), as far as the label is below the words.
   layer: { position: 'absolute', top: COLUMN.toLabel, left: COLUMN.side, right: COLUMN.side, alignItems: 'center' },
   words: { alignItems: 'center', gap: 8 },
   label: { marginTop: COLUMN.toLabel, alignItems: 'center', gap: 10 },

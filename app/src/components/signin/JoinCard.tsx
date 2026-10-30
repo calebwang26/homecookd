@@ -13,7 +13,7 @@
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
-import { Avatar, haptic, PotMark, PressableScale, Txt } from '@/components/ui';
+import { Avatar, haptic, EggMark, PressableScale, Txt } from '@/components/ui';
 import type { Claimable, Role } from '@/lib/api';
 import { useWords } from '@/lib/words/useWords';
 import type { WordKey } from '@/lib/words/words';
@@ -26,13 +26,13 @@ import { ErrorLine, SignInField } from './SignInScreen';
 const FACE = 48;
 const MAX_NAME = 40;
 
-/** The small face at the top of the join and move cards: whoever sent the link, else the pot. */
+/** The small face at the top of the join and move cards: whoever sent the link, else the egg. */
 export function CardFace({ face }: { face: InviteFace }) {
   return face ? (
     <Avatar profile={face} size={FACE} />
   ) : (
     <View style={styles.pot}>
-      <PotMark size={28} />
+      <EggMark size={28} />
     </View>
   );
 }
@@ -178,7 +178,7 @@ export const cardStyles = StyleSheet.create({
 
 const styles = StyleSheet.create({
   ...cardStyles,
-  pot: { width: FACE, height: FACE, borderRadius: FACE / 2, backgroundColor: colors.peach, alignItems: 'center', justifyContent: 'center' },
+  pot: { width: FACE, height: FACE, borderRadius: FACE / 2, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   form: { gap: 10 },
   chips: { flexDirection: 'row', gap: 10, marginTop: 4 },
   chip: { minHeight: 48, borderRadius: 999, backgroundColor: colors.well, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 12, paddingVertical: 6 },

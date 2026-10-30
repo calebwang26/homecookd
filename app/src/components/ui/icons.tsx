@@ -162,22 +162,16 @@ export const CheckIcon = (p: IconProps) => (
   </Stroke>
 );
 /**
- * A little pot, the postcard's rating ("How close to Dad’s?", retention PR 3): filled in the pot
- * mascot's colours when chosen, an outline in `muted` when not (about 6:1 on the page and on cards, so
- * the five empty pots read as buttons, not as disabled). Not in the bible (drawn to match PotMark).
- * TODO(caleb): pots vs dumplings (RETENTION-HANDOFF 8.3).
+ * A yolk, the postcard's rating ("How close to Dad’s?", retention PR 3): a yolk with an ink rim when
+ * chosen, a ring in `muted` when not (about 6:1 on the page and on cards, so the five empty ones read
+ * as buttons, not as disabled). It replaced the little pots with the egg brand. Not in the bible.
+ * TODO(caleb): the rating's shape (was "pots vs dumplings", RETENTION-HANDOFF 8.3).
  */
-export const PotIcon = ({ size = 24, filled = false, strokeWidth = 1.8 }: Omit<IconProps, 'color'> & { filled?: boolean }) => {
-  const line = filled ? colors.potLine : colors.muted;
-  return (
-    <Svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={line} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
-      <Path d="M5 11h14v4a5 5 0 0 1-5 5h-4a5 5 0 0 1-5-5z" fill={filled ? colors.potBody : 'none'} />
-      <Path d="M5 13H3M19 13h2" />
-      <Ellipse cx={12} cy={10.4} rx={7.6} ry={1.9} fill={filled ? colors.potLid : 'none'} />
-      <Circle cx={12} cy={7} r={1.1} fill={line} />
-    </Svg>
-  );
-};
+export const YolkIcon = ({ size = 24, filled = false, strokeWidth = 1.8 }: Omit<IconProps, 'color'> & { filled?: boolean }) => (
+  <Svg width={size} height={size} viewBox="0 0 24 24">
+    <Circle cx={12} cy={12} r={8} fill={filled ? colors.yolk : 'none'} stroke={filled ? colors.ink : colors.muted} strokeWidth={strokeWidth} />
+  </Svg>
+);
 export const ClockIcon = (p: IconProps) => (
   <Stroke {...p}>
     <Circle cx={12} cy={12} r={8.5} />
@@ -240,14 +234,14 @@ export const SpoonIcon = ({ size = 22, color = colors.ink, strokeWidth = 2 }: Ic
   </Svg>
 );
 
-/** Four-point sparkle, filled. Pass `gradient` for the green-to-sun launch sparkle. */
-export const SparkleIcon = ({ size = 24, color = colors.sun, gradient = false }: IconProps & { gradient?: boolean }) => (
+/** Four-point sparkle, filled. Pass `gradient` for the green-to-yolk launch sparkle. */
+export const SparkleIcon = ({ size = 24, color = colors.yolk, gradient = false }: IconProps & { gradient?: boolean }) => (
   <Svg width={size} height={size} viewBox="0 0 24 24">
     {gradient ? (
       <Defs>
         <LinearGradient id="sparkle" x1="0" y1="0" x2="1" y2="1">
           <Stop offset="0" stopColor={colors.green} />
-          <Stop offset="1" stopColor={colors.sun} />
+          <Stop offset="1" stopColor={colors.yolk} />
         </LinearGradient>
       </Defs>
     ) : null}
@@ -257,43 +251,3 @@ export const SparkleIcon = ({ size = 24, color = colors.sun, gradient = false }:
     />
   </Svg>
 );
-
-/**
- * homecookd's pot mascot, exactly as drawn in the bible's Main brand row (viewBox 0 0 100 92).
- * Width:height is 34:32 at the bible's size.
- * `mood` (retention PR 7, lib/touches potMoodAt; only where the brand row shows): 'sleepy' closes
- * its eyes, softens the smile and floats two small z's over the lid; 'waving' raises the right
- * handle as a little arm (BrandPot rocks it). Not in the bible.
- */
-export function PotMark({ size = 34, mood = null }: { size?: number; mood?: 'sleepy' | 'waving' | null }) {
-  const h = (size * 92) / 100;
-  return (
-    <Svg width={size} height={h} viewBox="0 0 100 92">
-      <Path d="M22 44h56v18a20 20 0 0 1-20 20H42a20 20 0 0 1-20-20z" fill={colors.potBody} stroke={colors.potLine} strokeWidth={4} strokeLinejoin="round" />
-      <Path d={mood === 'waving' ? 'M22 52h-8' : 'M22 52h-8M78 52h8'} stroke={colors.potLine} strokeWidth={5} strokeLinecap="round" />
-      {mood === 'waving' ? (
-        <>
-          <Path d="M78 52q9-1 11-13" fill="none" stroke={colors.potLine} strokeWidth={5} strokeLinecap="round" />
-          <Circle cx={89.5} cy={35} r={5} fill={colors.potBody} stroke={colors.potLine} strokeWidth={3.5} />
-        </>
-      ) : null}
-      <Ellipse cx={50} cy={42} rx={31} ry={7} fill={colors.potLid} stroke={colors.potLine} strokeWidth={4} />
-      <Circle cx={50} cy={33} r={4.5} fill={colors.potLine} />
-      {mood === 'sleepy' ? (
-        <>
-          <Path d="M35 59q5 4.5 10 0M55 59q5 4.5 10 0" fill="none" stroke={colors.potFace} strokeWidth={3} strokeLinecap="round" />
-          <Path d="M47 67q3 2.4 6 0" fill="none" stroke={colors.potFace} strokeWidth={3} strokeLinecap="round" />
-          <Path d="M66 16h8l-8 9h8M80 4h6l-6 7h6" fill="none" stroke={colors.potLine} strokeOpacity={0.7} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round" />
-        </>
-      ) : (
-        <>
-          <Circle cx={40} cy={59} r={3.6} fill={colors.potFace} />
-          <Circle cx={60} cy={59} r={3.6} fill={colors.potFace} />
-          <Path d="M45 65q5 5 10 0" fill="none" stroke={colors.potFace} strokeWidth={3} strokeLinecap="round" />
-        </>
-      )}
-    </Svg>
-  );
-}
-
-/** Brand row: pot + "homecookd" wordmark is composed in components (needs Txt); see Brand in ui. */

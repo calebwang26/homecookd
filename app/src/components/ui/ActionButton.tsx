@@ -26,12 +26,12 @@ import { Txt } from './Txt';
 export type ActionState = 'idle' | 'loading' | 'success' | 'error';
 
 export type ActionVariant =
-  | 'primary' // green #5B6F00, cream label, cta shadow
-  | 'ink' // dark #1E2410 ("Ask about a dish")
-  | 'outline' // cream with 1.5px hairline border (Watch / Hear)
-  | 'cream' // solid cream on photos / dark cards
-  | 'glass' // translucent cream on the dark hero ("Hear Mom · 0:24")
-  | 'sun'; // sun yellow #FEBE29, ink label: a warm second action next to a green one ("Invite family")
+  | 'primary' // yolk #F2A23A, INK label (never white), cta shadow: the main action
+  | 'ink' // ink #1F2430, white label ("Ask about a dish")
+  | 'outline' // white with 1.5px hairline border (Watch / Hear)
+  | 'cream' // solid white on photos / dark cards
+  | 'glass' // translucent white on the dark hero ("Hear Mom · 0:24")
+  | 'secondary'; // dark green #34430C, white label: the second action next to a yolk one ("Invite family")
 
 /** Heights and label sizes from the bible: lg 60/18 (default), xl 64/19, md 56/17, sm 52/16, xs 44/15. */
 export type ActionSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
@@ -45,12 +45,12 @@ const sizes: Record<ActionSize, { h: number; font: number; icon: number }> = {
 };
 
 const look: Record<ActionVariant, { bg: string; fg: string; border?: string; shadow?: string; weight: 600 | 700 }> = {
-  primary: { bg: colors.green, fg: colors.card, shadow: shadows.cta, weight: 700 },
+  primary: { bg: colors.yolk, fg: colors.ink, shadow: shadows.cta, weight: 700 },
   ink: { bg: colors.ink, fg: colors.card, weight: 700 },
   outline: { bg: colors.card, fg: colors.ink, border: alpha.border, weight: 600 },
   cream: { bg: colors.card, fg: colors.ink, weight: 700 },
   glass: { bg: alpha.glassOnDark, fg: colors.card, weight: 600 },
-  sun: { bg: colors.sun, fg: colors.ink, shadow: shadows.cta, weight: 700 },
+  secondary: { bg: colors.green, fg: colors.card, weight: 700 },
 };
 
 export type ActionButtonProps = {
@@ -59,9 +59,9 @@ export type ActionButtonProps = {
   onPress?: () => void | Promise<unknown>;
   variant?: ActionVariant;
   size?: ActionSize;
-  /** Left icon (receives nothing; color it with the variant's fg, e.g. colors.card). */
+  /** Left icon (receives nothing; color it with the variant's fg, e.g. colors.ink on primary). */
   icon?: ReactNode;
-  /** Right icon (e.g. <ArrowRightIcon color={colors.card} />). */
+  /** Right icon (e.g. <ArrowRightIcon color={colors.ink} />). */
   iconRight?: ReactNode;
   /** Controlled state. When set, the button does not manage its own state. */
   state?: ActionState;
@@ -80,9 +80,9 @@ export type ActionButtonProps = {
   labelSize?: number;
   /** Primary actions get a selection haptic on press (default true for primary/ink). */
   haptics?: boolean;
-  /** Label / icon colour override (e.g. green-deep #4C5A10 on the outline "Send to Maya"). */
+  /** Label / icon colour override (e.g. yolk-deep #A3580C on the outline "Send to Maya"). */
   fg?: string;
-  /** Border colour override for the outline variant (e.g. rgba(30,36,16,0.14)). */
+  /** Border colour override for the outline variant (e.g. rgba(31,36,48,0.14)). */
   borderColor?: string;
   /** Horizontal padding override (default 20; the bible's small outline pills use 16). */
   padH?: number;

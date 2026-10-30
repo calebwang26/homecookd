@@ -1,4 +1,4 @@
-// Selectable chips. Filter chips (Kid-Browse cook row): 40 tall, cream, selected = sun #FEBE29.
+// Selectable chips. Filter chips (Kid-Browse cook row): 40 tall, cream, selected = yolk #F2A23A with an ink label.
 // Person chips (Parent-Send "Who is it for?"): 52 tall with a 40 px avatar, selected = ink.
 import type { ReactNode } from 'react';
 import { StyleSheet } from 'react-native';
@@ -13,8 +13,8 @@ export type ChipProps = {
   label: string;
   selected?: boolean;
   onPress?: () => void;
-  /** 'sun' (filters, default) or 'ink' (people picker). */
-  selectedTone?: 'sun' | 'ink';
+  /** 'yolk' (filters, default) or 'ink' (people picker). */
+  selectedTone?: 'yolk' | 'ink';
   /** 'md' 40 px filter chip (15/600), 'lg' 52 px person chip (16/700). */
   size?: 'md' | 'lg';
   /** Leading avatar or icon (person chips). */
@@ -22,10 +22,10 @@ export type ChipProps = {
   accessibilityLabel?: string;
 };
 
-export function Chip({ label, selected = false, onPress, selectedTone = 'sun', size = 'md', leading, accessibilityLabel }: ChipProps) {
+export function Chip({ label, selected = false, onPress, selectedTone = 'yolk', size = 'md', leading, accessibilityLabel }: ChipProps) {
   const on = useDerivedValue(() => withTiming(selected ? 1 : 0, { duration: 180 }), [selected]);
-  const selBg = selectedTone === 'sun' ? colors.sun : colors.ink;
-  const selFg = selectedTone === 'sun' ? colors.ink : colors.card;
+  const selBg = selectedTone === 'yolk' ? colors.yolk : colors.ink;
+  const selFg = selectedTone === 'yolk' ? colors.ink : colors.card;
   const bgStyle = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(on.value, [0, 1], [colors.card, selBg]),
   }));

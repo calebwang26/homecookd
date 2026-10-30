@@ -1,6 +1,9 @@
-// Loads the bible's two families: Fraunces 400/500/600 (+ italics) and DM Sans 400/500/600/700.
+// Loads the brand kit's three families: Fraunces 400/500/600 (+ italics), DM Sans 400/500/600/700 and
+// Caveat 500/700 (only for what the cook "wrote").
 // Never blocks longer than 2.5 s: after that (or on an error) `ready` is true and text falls back
 // to the system font until the files arrive.
+import { Caveat_500Medium } from '@expo-google-fonts/caveat/500Medium';
+import { Caveat_700Bold } from '@expo-google-fonts/caveat/700Bold';
 import { DMSans_400Regular } from '@expo-google-fonts/dm-sans/400Regular';
 import { DMSans_500Medium } from '@expo-google-fonts/dm-sans/500Medium';
 import { DMSans_600SemiBold } from '@expo-google-fonts/dm-sans/600SemiBold';
@@ -23,6 +26,8 @@ export const appFonts = {
   DMSans_500Medium,
   DMSans_600SemiBold,
   DMSans_700Bold,
+  Caveat_500Medium,
+  Caveat_700Bold,
 };
 
 export const FONT_TIMEOUT_MS = 2500;

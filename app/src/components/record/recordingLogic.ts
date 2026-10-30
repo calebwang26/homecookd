@@ -1,5 +1,5 @@
 // The recording screen's rules, pure (node scripts/test-recording-ui.mjs): the line under the big
-// button in each of homie's phases, when filming starts by itself, the pot for the voice service's
+// button in each of homie's phases, when filming starts by itself, the egg for the voice service's
 // state, what "not now" sends, when homie's centred moment is up and what it shows (a question, or
 // held between the wrap-up's questions), what the mic sends while the phone plays sound (half
 // duplex), and how long the wrap-up may sit still before the app ends the recording without homie.
@@ -43,7 +43,7 @@ export function shouldAutoStart(s: { phase: RecordPhase; introDone: boolean; aiS
   return s.phase === 'intro' && s.introDone && !s.aiSpeaking && !s.error;
 }
 
-/** The pot for the voice service's `state` ('speaking' comes from the say itself: pulseLit). */
+/** The egg for the voice service's `state` ('speaking' comes from the say itself: pulseLit). */
 export function potFor(state: ServerState, micOn: boolean): HomieState | null {
   if (state === 'speaking') return null;
   if (state === 'thinking') return 'thinking';

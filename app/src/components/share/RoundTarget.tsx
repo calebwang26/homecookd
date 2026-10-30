@@ -159,7 +159,7 @@ export function RoundTarget({
       </View>
       {done ? (
         <Animated.View key="done" entering={FadeIn.duration(180)}>
-          <Txt variant="label" size={m.label} weight={700} color={colors.greenDeep} numberOfLines={1} align="center" style={labelBox}>
+          <Txt variant="label" size={m.label} weight={700} color={colors.yolkDeep} numberOfLines={1} align="center" style={labelBox}>
             {doneLabel ?? t('share.target.sent')}
           </Txt>
         </Animated.View>
@@ -197,7 +197,7 @@ function SpinnerRing({ circle }: { circle: number }) {
       <View style={[styles.veil, { width: circle, height: circle, borderRadius: circle / 2 }]} />
       <Animated.View style={[{ width: S, height: S }, spin]}>
         <Svg width={S} height={S}>
-          <Circle cx={S / 2} cy={S / 2} r={r} stroke={colors.green} strokeWidth={3} strokeLinecap="round" fill="none" strokeDasharray={`${c * 0.28} ${c}`} />
+          <Circle cx={S / 2} cy={S / 2} r={r} stroke={colors.yolk} strokeWidth={3} strokeLinecap="round" fill="none" strokeDasharray={`${c * 0.28} ${c}`} />
         </Svg>
       </Animated.View>
     </Animated.View>
@@ -210,7 +210,7 @@ const styles = StyleSheet.create({
   item: { alignItems: 'center', gap: 8 },
   circle: { alignItems: 'center', justifyContent: 'center' },
   spinnerWrap: { position: 'absolute', left: -5, top: -5, right: -5, bottom: -5, alignItems: 'center', justifyContent: 'center' },
-  veil: { position: 'absolute', left: 5, top: 5, backgroundColor: 'rgba(255,253,247,0.35)' },
+  veil: { position: 'absolute', left: 5, top: 5, backgroundColor: 'rgba(255,255,255,0.35)' },
   check: {
     position: 'absolute',
     right: -2,

@@ -4,7 +4,7 @@
 // lines opens to the whole line the same way. Amounts, heat and times in **bold**. The recipe's own
 // substeps (pipeline/shorten.py), else the instruction split into lines (steps.ts).
 // Following along: while the step's video plays, the line being said (its `start_s`, steps.ts
-// activeLine) sits on a soft sage wash in ink; the others stay as they are. Nothing lit otherwise.
+// activeLine) sits on a soft green-tint wash in ink; the others stay as they are. Nothing lit otherwise.
 // A line with a `start_s` and `onSeek` is a tap target too: the tap plays the video from that line
 // (and, on a line with more to it, opens it at the same time).
 import { useState, type ReactNode } from 'react';
@@ -137,7 +137,7 @@ const styles = StyleSheet.create({
     marginHorizontal: -PAD_H,
     borderRadius: radii.tile,
   },
-  lit: { backgroundColor: colors.sage },
+  lit: { backgroundColor: colors.greenTint },
   // Centred on the first line (25.5 tall).
   num: { marginTop: -1 },
   // overflow hidden: the unseen copy is measured, never drawn past the row.
