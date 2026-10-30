@@ -1,0 +1,49 @@
+/* homecookd brand tokens — v1 (Oct 29 2026) */
+:root {
+  /* Core palette */
+  --hc-yolk: #F2A23A;        /* brand accent: yolk, primary fills, app icon ground */
+  --hc-yolk-deep: #A3580C;   /* accent for TEXT/links on light grounds (4.9:1 on cream) */
+  --hc-ink: #1F2430;         /* outlines, primary text, primary buttons */
+  --hc-cream: #FBF5EA;       /* page background */
+  --hc-white: #FFFFFF;       /* cards, egg white */
+  --hc-muted: #5B554E;       /* secondary text (6.8:1 on cream) */
+  --hc-line: #E6DDCF;        /* hairlines, card borders */
+
+  /* Semantic (light) */
+  --hc-bg: var(--hc-cream);
+  --hc-surface: var(--hc-white);
+  --hc-text: var(--hc-ink);
+  --hc-text-muted: var(--hc-muted);
+  --hc-accent: var(--hc-yolk);
+  --hc-accent-text: var(--hc-yolk-deep);
+  --hc-border: var(--hc-line);
+  --hc-button-bg: var(--hc-ink);
+  --hc-button-text: var(--hc-cream);
+
+  /* Type */
+  --hc-font-display: "Fraunces", Georgia, serif;   /* variation: "SOFT" 100, "opsz" 144; weight 600–650 */
+  --hc-font-body: "DM Sans", system-ui, sans-serif; /* 400 body, 500–600 UI labels */
+  --hc-font-hand: "Caveat", cursive;                /* the cook's handwritten notes only */
+
+  /* Shape */
+  --hc-radius-sm: 12px;
+  --hc-radius-md: 20px;
+  --hc-radius-lg: 28px;
+  --hc-radius-pill: 999px;
+  --hc-outline: 3px;          /* illustration outline weight at ~100px */
+  --hc-tap: 48px;             /* minimum touch target */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --hc-bg: #15181F;
+    --hc-surface: #1F2430;
+    --hc-text: #FBF5EA;
+    --hc-text-muted: #C9C1B4;
+    --hc-accent: #F2A23A;
+    --hc-accent-text: #F2A23A;   /* yolk passes as text on dark (8.5:1 on #15181F) */
+    --hc-border: #343A48;
+    --hc-button-bg: #F2A23A;
+    --hc-button-text: #1F2430;
+  }
+}
