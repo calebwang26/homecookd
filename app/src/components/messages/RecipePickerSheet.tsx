@@ -170,7 +170,7 @@ export function RecipePickerSheet({
             autoCorrect={false}
             autoCapitalize="none"
             clearButtonMode="while-editing"
-            selectionColor={colors.green}
+            selectionColor={colors.yolkDeep}
             style={styles.searchInput}
           />
         </View>
@@ -238,7 +238,7 @@ const styles = StyleSheet.create({
   scroll: { marginHorizontal: -4 },
   scrollPad: { paddingHorizontal: 4, paddingBottom: 12, paddingTop: 2 },
   thumb: { width: 64, height: 64, borderRadius: 18, backgroundColor: colors.well },
-  thumbEmpty: { backgroundColor: colors.peach },
+  thumbEmpty: { backgroundColor: colors.well },
   rowText: { flex: 1, minWidth: 0, gap: 3, justifyContent: 'center' },
   search: {
     height: 44,

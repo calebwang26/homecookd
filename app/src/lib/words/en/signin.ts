@@ -16,6 +16,7 @@ export const SIGNIN = {
   'signin.join.appOnly': 'Sign-in works in the app.',
   'signin.join.title': 'Cook your family’s food.',
   'signin.join.line': 'Start your family’s kitchen. Everyone else joins from your link.',
+  'signin.join.keep': 'Sign in to keep {dish}.',
   'signin.join.gotLink': 'Got a link from your family?',
   'signin.join.tapAgain': 'Tap it again.',
   'signin.name.title': 'What does your family call you?',

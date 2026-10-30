@@ -45,31 +45,31 @@ const light = (bg: string, soft: string, accent: string = colors.green): SlideTo
   soft,
   accent,
   barOn: colors.ink,
-  barOff: 'rgba(30,36,16,0.14)',
+  barOff: 'rgba(31,36,48,0.14)',
   dark: false,
 });
 const dark: SlideTone = {
-  bg: colors.olive,
+  bg: colors.green,
   fg: colors.card,
-  soft: 'rgba(255,253,247,0.78)',
-  accent: colors.sun,
+  soft: 'rgba(255,255,255,0.78)',
+  accent: colors.yolk,
   barOn: colors.card,
-  barOff: 'rgba(255,253,247,0.28)',
+  barOff: 'rgba(255,255,255,0.28)',
   dark: true,
 };
 
-/** Hearth colours, one per slide type: the olive hero tone opens & closes, warm washes between. */
+/** One colour per slide type (the egg palette): dark green opens & closes, yolk and green tints and white between. */
 export const SLIDE_TONES: Record<RecapSlideType, SlideTone> = {
   cover: dark,
-  cooked: light(colors.peach, colors.peachInk),
-  most_made: light(colors.butter, colors.butterInk),
-  voices: light(colors.lavender, colors.lavenderInk),
-  hearts_left: light(colors.rose, colors.peachInk, colors.danger),
+  cooked: light(colors.yolkTint, colors.ink),
+  most_made: light(colors.card, colors.muted),
+  voices: light(colors.greenTint, colors.green),
+  hearts_left: light(colors.yolkTint, colors.ink, colors.danger),
   then_now: light(colors.page, colors.muted),
-  dishes_cooked: light(colors.sage, colors.sageInk),
-  most_loved: light(colors.butter, colors.butterInk, colors.danger),
-  postcards: light(colors.peach, colors.peachInk),
-  answered: light(colors.lavender, colors.lavenderInk),
+  dishes_cooked: light(colors.greenTint, colors.green),
+  most_loved: light(colors.card, colors.muted, colors.danger),
+  postcards: light(colors.yolkTint, colors.ink),
+  answered: light(colors.greenTint, colors.green),
   close: dark,
 };
 

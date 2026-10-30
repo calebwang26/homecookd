@@ -9,7 +9,7 @@ import { Image } from 'expo-image';
 import { StyleSheet, View } from 'react-native';
 
 import { CookStamp } from '@/components/hearts';
-import { PotMark, PressableScale, Txt } from '@/components/ui';
+import { NoPhoto, PressableScale, Txt } from '@/components/ui';
 import type { LibraryEntry } from '@/lib/recipes';
 import { useWords } from '@/lib/words/useWords';
 import { colors, radii, shadows } from '@/theme/tokens';
@@ -49,7 +49,7 @@ export function RecipeListRow({ entry, activity, showCook, stamp = false, onOpen
           {entry.poster_url ? (
             <Image source={{ uri: entry.poster_url }} style={StyleSheet.absoluteFill} contentFit="cover" transition={150} recyclingKey={entry.id} />
           ) : (
-            <PotMark size={38} />
+            <NoPhoto title={entry.title} size={THUMB} />
           )}
         </View>
         <View style={styles.text}>
@@ -64,7 +64,7 @@ export function RecipeListRow({ entry, activity, showCook, stamp = false, onOpen
                   activity.tone === 'plain' ? (
                     activity.text
                   ) : (
-                    <Txt variant="label" size={15} color={colors.greenDeep}>
+                    <Txt variant="label" size={15} color={colors.yolkDeep}>
                       {activity.text}
                     </Txt>
                   )
@@ -99,7 +99,7 @@ const styles = StyleSheet.create({
     height: THUMB,
     borderRadius: radii.thumb,
     overflow: 'hidden',
-    backgroundColor: colors.sage,
+    backgroundColor: colors.well,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,

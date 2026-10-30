@@ -38,5 +38,5 @@
   transform: translate3d(0, var(--reveal-y, 24px), 0);
 }
 .letterArc :global(.w[data-accent]) {
-  color: var(--accent, var(--green));
+  color: var(--accent, var(--yolk-deep));
 }

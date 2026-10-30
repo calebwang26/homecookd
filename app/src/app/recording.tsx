@@ -1,5 +1,5 @@
 // Grandma's recording screen (Caleb's v3): /recording?id=<recordingId>&source=glasses|phone[&kid&lang]
-// (from Record's pre-record sheet). One big red record button in the middle of a warm peach screen,
+// (from Record's pre-record sheet). One big red record button in the middle of a warm yolk-tint screen,
 // one line under it, and homie resting top-right, talking with her over the /record socket
 // (lib/live/homie). Her language big, small English under it. Nothing else.
 //   connecting, intro  homie says hello while the button rests ("homie is saying hello"). Then filming
@@ -269,7 +269,7 @@ export default function RecordingScreen() {
     navigation.setOptions({ gestureEnabled: !filming && !finished });
   }, [navigation, filming, finished]);
 
-  // The corner pot hides while homie asks (it comes to the centre), for the plate photo (homie's words
+  // The corner egg hides while homie asks (it comes to the centre), for the plate photo (homie's words
   // fill the top) and on the done view.
   const [asking, setAsking] = useState(false);
   useHomieScreen({ hidden: asking || !!plateAsk || finished });
@@ -424,7 +424,7 @@ export default function RecordingScreen() {
       width={width}
     />
   );
-  // Beside the card, and clear of homie's corner pot (on a small phone the two would read as a pair).
+  // Beside the card, and clear of homie's corner egg (on a small phone the two would read as a pair).
   const beside = slot ? flipBeside(slot, screenW, FLIP_SIZE, potSlot) : null;
 
   const error = homie.error ? words.line(homie.error) : null;

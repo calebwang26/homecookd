@@ -144,10 +144,10 @@
 }
 @media (hover: hover) {
   .q:hover .qText {
-    color: var(--green);
+    color: var(--yolk-deep);
   }
   .q:hover .chev {
-    background: var(--lime-wash);
+    background: var(--sage-hover);
   }
 }
 .item[open] .chev {

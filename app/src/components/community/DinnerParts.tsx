@@ -1,5 +1,5 @@
 // The dinner page's parts (Caleb's final Hearth Dinner mockup, Oct 24):
-//   DinnerPhoto    the dish photo, 326x300 with a warm sun glow and a small "DINNER" tag
+//   DinnerPhoto    the dish photo, 326x300 with a warm yolk glow and a small "DINNER" tag
 //   HostPill       a cream pill: the host's initial, "Hosted by", the name
 //   WhenWhere      one cream card: "Friday · 7 pm" | the place, and its address once it's yours to see
 //   GoingRow       "You're in" (or "You're hosting") and a few faces, "4 going" (rolls up as it grows)
@@ -18,14 +18,14 @@ import { DishPhoto } from './DishPhoto';
 import { errorText } from './labels';
 import { fadeIn } from './motion';
 
-// From the mockup: a sun ring at 14%, a soft sun glow, and the usual drop shadow.
-const GLOW = '0 0 0 10px rgba(254,190,41,0.14), 0 0 70px rgba(254,190,41,0.35), 0 18px 44px rgba(30,36,16,0.18)';
+// From the mockup: a yolk ring at 14%, a soft yolk glow, and the usual drop shadow.
+const GLOW = '0 0 0 10px rgba(242,162,58,0.14), 0 0 70px rgba(242,162,58,0.35), 0 18px 44px rgba(31,36,48,0.18)';
 const PHOTO_RADIUS = 32;
 
 export function DinnerPhoto({ uri, dish, width, height }: { uri: string | null; dish: string; width: number; height: number }) {
   return (
     <View style={[styles.photoWrap, { width, height }]}>
-      <DishPhoto uri={uri} label={dish} pot={72} style={styles.photo} />
+      <DishPhoto uri={uri} label={dish} size={200} style={styles.photo} />
       <View style={styles.tag}>
         <Txt variant="eyebrow" color={colors.ink}>
           Dinner
@@ -39,7 +39,7 @@ export function HostPill({ name }: { name: string }) {
   const who = name.trim() || 'A neighbor';
   return (
     <View style={styles.host} accessible accessibilityLabel={`Hosted by ${who}`}>
-      <Avatar name={who} avatarKey={null} size={44} tileBg={colors.butter} tileFg={colors.butterInk} />
+      <Avatar name={who} avatarKey={null} size={44} tileBg={colors.yolkTint} tileFg={colors.ink} />
       <View>
         <Txt variant="tiny" weight={600}>
           Hosted by
@@ -87,16 +87,16 @@ export function WhenWhere({ when, placeName, address }: { when: string; placeNam
 }
 
 const FACE_TONES = [
-  { bg: colors.butter, fg: colors.butterInk },
-  { bg: colors.lavender, fg: colors.lavenderInk },
-  { bg: colors.limeWash, fg: colors.sageInk },
+  { bg: colors.yolkTint, fg: colors.ink },
+  { bg: colors.yolkTint, fg: colors.ink },
+  { bg: colors.greenTint, fg: colors.green },
 ];
 
 export function GoingRow({ pill, faces, count, label }: { pill: string | null; faces: string[]; count: number; label: string }) {
   return (
     <View style={styles.going}>
       {pill ? (
-        <Pill tone="sage" size="lg" fontSize={16} label={pill} leading={<CheckIcon size={18} strokeWidth={3} color={colors.sageInk} />} />
+        <Pill tone="greenTint" size="lg" fontSize={16} label={pill} leading={<CheckIcon size={18} strokeWidth={3} color={colors.green} />} />
       ) : (
         <View />
       )}
@@ -159,7 +159,7 @@ export function HostRequests({ dinner }: { dinner: Dinner }) {
         const name = r.guestName.trim() || 'A neighbor';
         return (
           <View key={r.requestId} style={[styles.request, i < requests.length - 1 ? styles.divider : null]}>
-            <Avatar name={name} avatarKey={null} size={36} tileBg={colors.lavender} tileFg={colors.lavenderInk} />
+            <Avatar name={name} avatarKey={null} size={36} tileBg={colors.yolkTint} tileFg={colors.ink} />
             <Txt variant="heading" numberOfLines={1} style={styles.flex}>
               {name}
             </Txt>
@@ -183,7 +183,7 @@ export function HostRequests({ dinner }: { dinner: Dinner }) {
 const styles = StyleSheet.create({
   photoWrap: { borderRadius: PHOTO_RADIUS, boxShadow: GLOW, alignSelf: 'center' },
   photo: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, borderRadius: PHOTO_RADIUS },
-  tag: { position: 'absolute', left: 14, top: 14, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 14, backgroundColor: colors.sun },
+  tag: { position: 'absolute', left: 14, top: 14, paddingVertical: 6, paddingHorizontal: 12, borderRadius: 14, backgroundColor: colors.yolk },
   host: {
     flexDirection: 'row',
     alignItems: 'center',

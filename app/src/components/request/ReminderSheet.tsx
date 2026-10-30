@@ -141,7 +141,7 @@ export function ReminderSheet({ ask, visible, onClose }: { ask: CravingAsk; visi
         </Txt>
         <PressableScale onPress={makingNow} accessibilityLabel={t('request.reminder.makingNow')} style={styles.now}>
           <View style={styles.dot} />
-          <Txt variant="label" size={17} weight={700} color={colors.greenDeep}>
+          <Txt variant="label" size={17} weight={700} color={colors.yolkDeep}>
             {t('request.reminder.makingNow')}
           </Txt>
         </PressableScale>

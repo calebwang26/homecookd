@@ -19,9 +19,9 @@
 // and leaving the screen silences them. Family never sees the word "sample".
 // Header (it stays put while the step scrolls under it): close, "Step 3 of 8", "All steps" (the sheet:
 // tap a step to jump; "You're here"; the steps before the furthest one reached are checked) and one
-// small pot per step, filled up to the step on screen (retention PR 7, components/recipe/PotDots).
+// little yolk per step, filled up to the step on screen (retention PR 7, components/recipe/PotDots).
 // Bottom (Caleb, Oct 24: like Siri, centred): Back · homie · Next step, the two buttons the same width
-// and the same gap either side of homie, who docks there (the overlay draws the pot; this screen holds
+// and the same gap either side of homie, who docks there (the overlay draws the egg; this screen holds
 // its place). A tap on homie turns it on, the next tap off (it never opens a chat); a long press asks. No
 // chips: saying "back" or "repeat" does those, and the video replays
 // itself. Looking back at an earlier step the right button is "Continue" (back to the furthest); on the
@@ -51,12 +51,12 @@
 // streams only while homie is on (a tap; the next tap turns it off) and for 8 s after homie says a
 // step's short line or a nudge (Caleb, Oct 24). The screen follows it: go_to_step moves the step,
 // play_clip plays that moment of the cook's video in the step's own player (moving to the step that
-// holds it, unread: no step line over her; her words under it), homie's replies are only spoken (the pot lights and its lid lifts, labelled "AI
+// holds it, unread: no step line over her; her words under it), homie's replies are only spoken (the egg lights up, labelled "AI
 // voice"), a timer counts down beside the step title, and a question the video can't answer shows "I
-// asked Grandma" above the pot. When the cook answers one of my questions by voice note, homie offers to play it
+// asked Grandma" above the egg. When the cook answers one of my questions by voice note, homie offers to play it
 // (CookAnswers). While that moment is up, the service is told (an app-only moment: its own offer
 // never takes that yes or no). Without a voice line (Expo Go, web, no service, or the line gave up),
-// a tap on the pot reads the step in homie's voice and a tap while it talks stops it, and a kid who
+// a tap on the egg reads the step in homie's voice and a tap while it talks stops it, and a kid who
 // said yes to reading before hears each step (useReadSteps). homie never talks over a video
 // (VoiceHold, lib/live/speak): a tap on homie takes the sound from it (the video fades out and pauses),
 // and a video the kid plays takes it back (homie fades out and turns off; lib/live/voice). "I made it"
@@ -295,7 +295,7 @@ export default function CookScreen() {
   const phoneReading = HOMIE_ON && phoneReads({ voiceHere, live: voice.live, unavailable: voice.unavailable });
   // A tap on homie never navigates (Caleb, Oct 24; voiceLogic cookTap): with a voice line it turns homie
   // on or off; with none it reads this step, and a tap while homie talks stops it. One gesture only.
-  // "I made it" takes the screen: no pot over the celebration.
+  // "I made it" takes the screen: no egg over the celebration.
   const potTap = () => {
     const h = getHomie().state;
     const tap = cookTap({ voiceHere, status: voice.status, unavailable: voice.unavailable, talking: h === 'lit' || h === 'speaking' });
@@ -439,7 +439,7 @@ export default function CookScreen() {
           <PotDots total={total} reached={n} />
         </View>
       </View>
-      <LinearGradient pointerEvents="none" colors={[colors.page, 'rgba(247,247,242,0)']} style={styles.headFade} />
+      <LinearGradient pointerEvents="none" colors={[colors.page, 'rgba(251,245,234,0)']} style={styles.headFade} />
     </View>
   );
 
@@ -451,6 +451,7 @@ export default function CookScreen() {
         <View style={[styles.content, { paddingTop: headH + 4 }]}>
           {gone ? (
             <EmptyState
+              mood={recipe ? 'sleepy' : 'oops'}
               title={recipe ? 'The steps are still being written' : 'We couldn’t find this recipe'}
               actionLabel="Back"
               onAction={toRecipe}
@@ -557,7 +558,7 @@ export default function CookScreen() {
           onPress={goBack}
           style={styles.barButton}
         />
-        {/* homie's place: the overlay draws the pot here (useHomieScreen dock). Switched off: Back and Next meet. */}
+        {/* homie's place: the overlay draws the egg here (useHomieScreen dock). Switched off: Back and Next meet. */}
         {HOMIE_ON ? <View style={styles.dockSlot} pointerEvents="none" /> : null}
         {isLast ? (
           <ActionButton

@@ -10,7 +10,6 @@
     "typecheck": "tsc --noEmit",
     "media": "node scripts/media.mjs",
     "swirls": "node scripts/swirls.mjs",
-    "wordmark": "node scripts/wordmark.gen.ts",
     "perf": "node scripts/perf-check.mjs"
   },
   "dependencies": {

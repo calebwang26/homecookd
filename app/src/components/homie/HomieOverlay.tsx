@@ -1,20 +1,20 @@
-// homie on every screen: mounted once in app/_layout, above the navigator. The pot rests top-right
+// homie on every screen: mounted once in app/_layout, above the navigator. The egg rests top-right
 // (just left of the profile face or Share where a screen has one), or in the middle of an even header
 // row (a dish: Back and the heart); a screen can dock it elsewhere with useHomieScreen. Not on sign-in,
 // the launch gateway or link screens, and not before someone is in.
 // Native Modals (sheets, the full-screen step player) cover it on their own. When homie needs you
-// (store.moment), HomieMoment takes the pot to the centre, and VoiceOver keeps to the moment (the
+// (store.moment), HomieMoment takes the egg to the centre, and VoiceOver keeps to the moment (the
 // overlay is modal then: the screen behind it is out of reach).
-// A tap on the resting pot always says something (lib/homie/tap): what's new for this person, once
+// A tap on the resting egg always says something (lib/homie/tap): what's new for this person, once
 // (lib/homie/news keeps it ready; never while she films), else this screen's one line about its big
 // button, and "I’m right here." on a second tap in a row, with "Hi, I’m homie." before the very first one (lib/homie/intro); unless the screen
-// gave the pot its own onPress (cook mode: on or off) and long press (cook mode: "Ask Grandma
-// anything"). It's an answer to the tap, so it pauses a playing video. A screen can dock the pot
-// somewhere else (cook mode: the middle of the bottom bar); low on the screen its label sits above it. The pot shows the same Siri-like states everywhere (HomiePot).
+// gave the egg its own onPress (cook mode: on or off) and long press (cook mode: "Ask Grandma
+// anything"). It's an answer to the tap, so it pauses a playing video. A screen can dock the egg
+// somewhere else (cook mode: the middle of the bottom bar); low on the screen its label sits above it. The egg shows the same Siri-like states everywhere (HomiePot).
 // Talking only
-// (Caleb): no words on screen, the pot lights, its lid lifts and "AI voice" shows under it. While the
-// cook's own voice plays (store `shrunk`) the resting pot shrinks a little about its centre.
-// The pot is drawn at its real size (lib/homie HOMIE_SIZE: 48 in a header, 60 in cook mode's bar) and
+// (Caleb): no words on screen, the egg lights, its lid lifts and "AI voice" shows under it. While the
+// cook's own voice plays (store `shrunk`) the resting egg shrinks a little about its centre.
+// The egg is drawn at its real size (lib/homie HOMIE_SIZE: 48 in a header, 60 in cook mode's bar) and
 // only ever scaled down, so it stays sharp when held.
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -57,7 +57,7 @@ export function HomieOverlay() {
     wasOn.current = sayOn;
   }, [sayOn]);
 
-  // The tap line homie is saying (from the tap until the pot is quiet again): a tap meanwhile stops it,
+  // The tap line homie is saying (from the tap until the egg is quiet again): a tap meanwhile stops it,
   // instead of starting another.
   const tapLine = useRef(false);
   const voiced = state === 'lit' || state === 'speaking';
@@ -85,7 +85,7 @@ export function HomieOverlay() {
   return (
     <View style={StyleSheet.absoluteFill} pointerEvents="box-none" accessibilityViewIsModal={inMoment} aria-modal={inMoment}>
       {me ? <RestingPot frame={frame} shown={resting} inMoment={inMoment} h={h} state={state} label={label} progress={progress} onPress={onPress} /> : null}
-      {/* From where the pot really is (shrunk while her voice plays), so the moment never jumps. */}
+      {/* From where the egg really is (shrunk while her voice plays), so the moment never jumps. */}
       <HomieMoment from={shownFrame(frame, !!h.shrunk)} state={state} level={h.level} label={label} onActive={setInMoment} />
     </View>
   );
@@ -103,7 +103,7 @@ function RestingPot({
 }: {
   frame: { x: number; y: number; size: number };
   shown: boolean;
-  /** A moment has the pot (it lands back here when the moment closes). */
+  /** A moment has the egg (it lands back here when the moment closes). */
   inMoment: boolean;
   h: Homie;
   state: Homie['state'];
@@ -130,7 +130,7 @@ function RestingPot({
   }, [frame.x, frame.y, reduce, x, y]);
 
   // Back from a moment it lands exactly here, so it shows at once (no blink); a screen that hides or
-  // shows the pot fades it.
+  // shows the egg fades it.
   const wasInMoment = useRef(inMoment);
   useEffect(() => {
     if (shown && wasInMoment.current) opacity.set(1);
@@ -151,7 +151,7 @@ function RestingPot({
   const box = { width: frame.size, height: frame.size };
   const a11y = state === 'speaking' ? 'homie, speaking' : state === 'listening' ? 'homie, listening' : 'homie';
   // A long press never fires the tap too (Pressable skips onPress after onLongPress), buzzes once when it
-  // takes, and the press only scales the pot down (0.96): it stays drawn at its real size.
+  // takes, and the press only scales the egg down (0.96): it stays drawn at its real size.
   const onHold = h.onLongPress;
   const hold = onHold
     ? () => {
@@ -187,7 +187,7 @@ function RestingPot({
                 : [styles.labelWrap, { top: frame.size - 6 }]
           }
           pointerEvents="none">
-          <Txt variant="caption" size={11} weight={700} color={colors.lavenderInk} numberOfLines={1} style={styles.label}>
+          <Txt variant="caption" size={11} weight={700} color={colors.ink} numberOfLines={1} style={styles.label}>
             {label}
           </Txt>
         </View>
@@ -216,10 +216,10 @@ const LABEL_W = 220;
 
 const styles = StyleSheet.create({
   rest: { position: 'absolute', left: 0, top: 0 },
-  // Its right edge a little past the pot's, so "Translated from Grandma" grows left and stays on screen.
+  // Its right edge a little past the egg's, so "Translated from Grandma" grows left and stays on screen.
   labelWrap: { position: 'absolute', right: -8, alignItems: 'flex-end', width: LABEL_W },
-  // Docked low (the bottom bar): centred above the pot; in the middle of a header: centred under it,
+  // Docked low (the bottom bar): centred above the egg; in the middle of a header: centred under it,
   // clear of the row's 48 pt buttons (Share sits close by on a dish).
   labelMid: { position: 'absolute', alignItems: 'center', width: LABEL_W },
-  label: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: colors.lavender, overflow: 'hidden' },
+  label: { paddingHorizontal: 8, paddingVertical: 2, borderRadius: 999, backgroundColor: colors.yolkTint, overflow: 'hidden' },
 });

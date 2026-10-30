@@ -26,7 +26,7 @@ export function Intro({ arrow, className }: { arrow: 'left' | 'right' | 'down'; 
           className={[`t-h2`, styles.h2, styles.h2Plain, c.eyebrow ? '' : styles.h2Top].filter(Boolean).join(' ')}
           text={c.h2}
           accent={c.accent}
-          accentColor="var(--chartreuse)"
+          accentColor="var(--yolk)"
         />
       ) : (
         <WordReveal as="h2" id="see-it-work-title" className={`t-h2 ${styles.h2}`} tone="cream" text={c.h2} accent={c.accent} />

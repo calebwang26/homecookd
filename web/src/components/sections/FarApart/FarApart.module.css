@@ -87,7 +87,7 @@
   z-index: 2;
   width: 88px;
   translate: 0 -56%;
-  filter: drop-shadow(0 8px 14px rgba(30, 36, 16, 0.18));
+  filter: drop-shadow(0 8px 14px rgba(31, 36, 48, 0.18));
 }
 .mascotSvg {
   width: 100%;
@@ -115,7 +115,7 @@
   color: var(--cocoa);
 }
 .caption .capPill {
-  border-color: rgba(71, 67, 42, 0.28);
+  border-color: rgba(31, 36, 48, 0.28);
   color: var(--ink);
   white-space: normal;
   border-radius: 1.2em;
@@ -163,13 +163,13 @@
   position: absolute;
   inset: 6% 4% 0;
   border-radius: 24px;
-  box-shadow: 0 20px 40px -18px rgba(30, 36, 16, 0.45);
+  box-shadow: 0 20px 40px -18px rgba(31, 36, 48, 0.45);
   opacity: 0.8;
   transition: opacity 300ms var(--ease-soft);
 }
 .arc[data-flying] .arcInner::before {
   opacity: 1;
-  box-shadow: 0 34px 60px -22px rgba(30, 36, 16, 0.5);
+  box-shadow: 0 34px 60px -22px rgba(31, 36, 48, 0.5);
 }
 .arcCard {
   position: relative;

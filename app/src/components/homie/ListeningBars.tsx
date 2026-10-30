@@ -11,7 +11,7 @@ const LOW = barHeights(0);
 const HIGH = barHeights(1);
 
 /** `level`: the mic level 0..1 (store `level`). `color`: the bars (default lime, for a dark backdrop). */
-export function ListeningBars({ level, color = colors.limeWash }: { level: number; color?: string }) {
+export function ListeningBars({ level, color = colors.greenTint }: { level: number; color?: string }) {
   const reduce = useReducedMotion();
   const lv = useSharedValue(level);
   useEffect(() => {

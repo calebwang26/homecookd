@@ -1,5 +1,5 @@
 // A small drawn flame for the Sunday table (RETENTION-HANDOFF 3.2): the badge on a lit face, and the
-// "6 weeks" line in a 1:1 chat header. Sun yellow by default, never an emoji. Same conventions as
+// "6 weeks" line in a 1:1 chat header. Yolk by default, never an emoji. Same conventions as
 // icons.tsx (24x24 viewBox, `size` / `color` / `strokeWidth`, round joins).
 //
 //   <FlameIcon size={14} />            // filled, for badges on faces
@@ -18,7 +18,7 @@ const INNER = 'M12 13.2c1.6 1.5 3 2.9 3 4.8a3 3 0 0 1-6 0c0-1.3.6-2.3 1.4-3 .1.7
 
 export function FlameIcon({
   size = 16,
-  color = colors.sun,
+  color = colors.yolk,
   strokeWidth = 1.5,
   filled = true,
 }: IconProps & {
@@ -30,7 +30,7 @@ export function FlameIcon({
       <Path d={OUTER} fill={filled ? color : 'none'} stroke={color} strokeWidth={strokeWidth} strokeLinejoin="round" strokeLinecap="round" />
       <Path
         d={INNER}
-        fill={filled ? colors.butter : 'none'}
+        fill={filled ? colors.yolkTint : 'none'}
         stroke={filled ? 'none' : color}
         strokeWidth={strokeWidth}
         strokeLinejoin="round"

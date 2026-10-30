@@ -1,27 +1,16 @@
 // Retention PR 7, the little touches (RETENTION-HANDOFF 4): the pure parts, so they're tested in
 // scripts/test-retention.mjs. Every touch is polish only: no new action, no new words, and Reduce
 // Motion gets a fade or nothing.
-//   potMoodAt       the pot mascot's mood where the brand row shows: sleepy 22:00-06:00, waving on Sunday
-//   potDotLayout    cook mode's step pots: how big they can be in the header, or null (too many: bars)
+//   potDotLayout    cook mode's step dots (little yolks; they were pots): how big they can be in the
+//                   header, or null (too many: bars)
 //   strikeStrokes   the ingredient checklist's hand-drawn strike-through, one wobbly stroke per line
 //   buzzForUnread   the double tap for a new family message while the app is open
 //   unreadSeenAfter its baseline, forgotten when the app leaves the foreground (no tap on coming back)
 //   tapStillDue     a beat later: still play it? (not when a message push already said it, nor in a chat)
+// (The brand row's clock moods, sleepy at night and waving on Sunday, went with the pot: the egg logo
+// never changes its face.)
 
-export type PotMood = 'sleepy' | 'waving' | null;
-
-/**
- * The pot's mood by the phone's own clock: sleepy from 22:00 until 06:00, waving all Sunday (sleepy
- * wins on a Sunday night). No birthdays: there's no birthday data yet (RETENTION-HANDOFF 4).
- */
-export function potMoodAt(d: Date): PotMood {
-  const h = d.getHours();
-  if (h >= 22 || h < 6) return 'sleepy';
-  if (d.getDay() === 0) return 'waving';
-  return null;
-}
-
-/** The step pots' sizes: as big as POT_MAX, never below POT_MIN (under that they stop reading as pots). */
+/** The step dots' sizes: as big as POT_MAX, never below POT_MIN (under that they stop reading as steps). */
 export const POT_MAX = 16;
 export const POT_MIN = 10;
 const POT_GAP = 6;

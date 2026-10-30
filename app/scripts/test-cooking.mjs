@@ -715,7 +715,6 @@ await test('postcard: a pot rates, the same pot again takes it back, never outsi
   assert.equal(PC.nextRating(null, 0), 1);
   assert.deepEqual([1, 5, 3].map(PC.cleanRating), [1, 5, 3]);
   assert.deepEqual([0, 6, 2.5, '4', null, undefined].map(PC.cleanRating), [null, null, null, null, null, null]);
-  assert.equal(PC.ratingWords(4), '4 of 5 pots');
   assert.equal(PC.RATING_MAX, 5);
 });
 

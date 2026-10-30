@@ -136,7 +136,7 @@ export function NewMessageRow({ onPress }: { onPress: () => void }) {
       accessibilityHint={t('messages.inbox.newMessageHint')}
       style={styles.row}>
       <View style={styles.newDisc}>
-        <PlusIcon size={24} color={colors.peachInk} strokeWidth={2.2} />
+        <PlusIcon size={24} color={colors.ink} strokeWidth={2.2} />
       </View>
       <Txt variant="title" weight={400} style={styles.text}>
         {t('messages.inbox.newMessage')}
@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
   line: { flexDirection: 'row', alignItems: 'baseline' },
   shrink: { flexShrink: 1 },
   time: { flexShrink: 0 },
-  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.green, marginLeft: 4 },
-  newDisc: { width: AVATAR, height: AVATAR, borderRadius: AVATAR / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.peach },
+  dot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.yolk, marginLeft: 4 },
+  newDisc: { width: AVATAR, height: AVATAR, borderRadius: AVATAR / 2, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.yolkTint },
   face: { position: 'absolute' },
 });

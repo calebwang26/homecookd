@@ -67,7 +67,7 @@ const styles = StyleSheet.create({
   stamp: { marginTop: -2 },
   dots: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
   dot: { width: DOT, height: DOT, borderRadius: DOT / 2 },
-  on: { backgroundColor: colors.green },
+  on: { backgroundColor: colors.yolk },
   // An empty dish is an outline, not a grey fill: quiet, never a "missing" mark.
   off: { borderWidth: 1.5, borderColor: alpha.checkRing },
 });

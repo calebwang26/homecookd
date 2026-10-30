@@ -7,7 +7,7 @@
 // app's "<N> family answers" row needs the family's sign-in, so the web has no data for it.
 import { useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { PotMascot } from '@/components/primitives/PotMascot';
+import { Logo } from '@/components/primitives/Logo';
 import { Avatar } from './Avatar';
 import { FitLabel } from './FitLabel';
 import { HearSheet } from './HearBar';
@@ -105,7 +105,7 @@ export function RecipeScreen() {
           <img className={s.heroImg} src={poster} alt={dish ? r.title : `${r.title}, from ${possessive(cook)} kitchen`} />
         ) : (
           <div className={s.heroEmpty} aria-hidden="true">
-            <PotMascot size={72} />
+            <span className={s.heroEmptyName}>{r.title}</span>
           </div>
         )}
         {sender && (
@@ -135,8 +135,8 @@ export function RecipeScreen() {
           <div className={s.meta}>
             {dish ? (
               // The card's own mark, never a stock face matched to the name "Mom".
-              <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: '50%', background: '#f9e3cf', display: 'grid', placeItems: 'center', flex: 'none' }}>
-                <PotMascot size={18} />
+              <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: '50%', background: '#fcebd0', display: 'grid', placeItems: 'center', flex: 'none' }}>
+                <Logo variant="mark" size={18} />
               </span>
             ) : (
               <Avatar name={cook} size={24} />

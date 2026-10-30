@@ -1,5 +1,5 @@
 // One face on "Who's in the kitchen?" (bible Main): a 156 px cream tile, radius 24, the card shadow;
-// 68 px avatar (+ green unread dot or sun "New" badge), name in Fraunces 600 20, a 13 px line
+// 68 px avatar (+ yolk unread dot or yolk "New" badge), name in Fraunces 600 20, a 13 px line
 // (700 green-deep when it's news, else 400 muted).
 //
 // Choosing: press-in scales the tile to 0.97 (motion spec 3). Once chosen, a green ring draws
@@ -7,7 +7,7 @@
 // Someone invited ("Hasn't joined yet") or on their own phone ("On their phone") looks the same, but their
 // tile never enters: the screen opens a small sheet about them instead (PersonSheet).
 // `lit`: they did their part at the Sunday table this week (RETENTION-HANDOFF 3.2): the same small
-// sun-yellow flame as on the Homes, at the face's bottom-right (clear of the dot & "New", top-right).
+// yolk flame as on the Homes, at the face's bottom-right (clear of the dot & "New", top-right).
 // Unlit faces get nothing.
 import { useEffect } from 'react';
 import { Platform, StyleSheet, View } from 'react-native';
@@ -120,7 +120,7 @@ export function ProfileTile({
           <Txt
             variant="caption"
             weight={status?.strong ? 700 : 400}
-            color={status?.strong ? colors.greenDeep : colors.muted}
+            color={status?.strong ? colors.yolkDeep : colors.muted}
             numberOfLines={1}
             adjustsFontSizeToFit={Platform.OS !== 'web'}
             minimumFontScale={0.85}
@@ -184,9 +184,9 @@ export function AddFamilyTile({
         accessibilityLabel={a11y?.label ?? label ?? t('profiles.picker.addFamily')}
         accessibilityHint={a11y?.hint ?? t('profiles.tile.addHint')}
         style={[styles.add, compact ? styles.addBar : null, { width }]}>
-        <PlusIcon size={label ? (compact ? 24 : 28) : compact ? 28 : 40} color={colors.greenDeep} strokeWidth={2} />
+        <PlusIcon size={label ? (compact ? 24 : 28) : compact ? 28 : 40} color={colors.yolkDeep} strokeWidth={2} />
         {label ? (
-          <Txt variant="label" weight={700} color={colors.greenDeep} numberOfLines={1}>
+          <Txt variant="label" weight={700} color={colors.yolkDeep} numberOfLines={1}>
             {label}
           </Txt>
         ) : null}
@@ -225,7 +225,7 @@ const styles = StyleSheet.create({
     height: AVATAR + RING_GAP * 2,
     borderRadius: (AVATAR + RING_GAP * 2) / 2,
     borderWidth: 2.5,
-    borderColor: colors.green,
+    borderColor: colors.yolk,
   },
   name: { maxWidth: '100%' },
   line: { maxWidth: '100%' },
@@ -242,6 +242,6 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   addBar: { height: ADD_BAR_HEIGHT, flexDirection: 'row', gap: 8, borderRadius: 20 },
-  skeleton: { boxShadow: undefined, backgroundColor: 'rgba(255,253,247,0.6)' },
+  skeleton: { boxShadow: undefined, backgroundColor: 'rgba(255,255,255,0.6)' },
   skelFace: { marginBottom: 6 },
 });

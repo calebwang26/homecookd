@@ -1,13 +1,13 @@
 // The big card at the top of the share sheet (Spotify's story card, in Hearth clothes):
 //   a swatch-coloured stage (radius 28) holding a cream card: the dish photo (square, radius 20),
 //   the dish name (Fraunces 500, -0.02em), "by Dad · ~50 min" with the cook's 20 px avatar, and the
-//   homecookd pot + wordmark. The stage colour crossfades when a swatch is picked.
+//   homecookd egg + wordmark. The stage colour crossfades when a swatch is picked.
 import { Image } from 'expo-image';
 import { useEffect, useState } from 'react';
 import { StyleSheet, View } from 'react-native';
 import Animated, { interpolateColor, useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 
-import { Avatar, Brand, PotMark, Skeleton, Txt } from '@/components/ui';
+import { Avatar, Brand, NoPhoto, Skeleton, Txt } from '@/components/ui';
 import { useWords } from '@/lib/words/useWords';
 import { colors, radii } from '@/theme/tokens';
 
@@ -119,7 +119,7 @@ export function ShareCard({ data, swatch, photo, stageHeight, compact = false }:
   const stageStyle = useAnimatedStyle(() => ({
     backgroundColor: interpolateColor(idx.value, STOPS, STAGE_COLORS),
   }));
-  // A photo that fails to load falls back to the pot, like a dish with no photo.
+  // A photo that fails to load falls back to the egg, like a dish with no photo.
   const [failedPoster, setFailedPoster] = useState<string | null>(null);
   const poster = data?.poster && data.poster !== failedPoster ? data.poster : null;
   const dark = SWATCHES.find((s) => s.id === swatch)?.dark ?? false;
@@ -150,7 +150,7 @@ export function ShareCard({ data, swatch, photo, stageHeight, compact = false }:
               : t('share.card.a11y', { title })
           : t('share.card.a11yLoading')
       }>
-      <View style={[styles.card, { width: cardW, boxShadow: dark ? '0 16px 40px rgba(0,0,0,0.32)' : '0 10px 30px rgba(30,36,16,0.10)' }]}>
+      <View style={[styles.card, { width: cardW, boxShadow: dark ? '0 16px 40px rgba(0,0,0,0.32)' : '0 10px 30px rgba(31,36,48,0.10)' }]}>
         {photo > 0 ? (
           <View style={[styles.photo, { width: inner, height: photo }]}>
             {poster ? (
@@ -160,13 +160,13 @@ export function ShareCard({ data, swatch, photo, stageHeight, compact = false }:
                 contentFit="cover"
                 transition={200}
                 onError={() => {
-                  trail('card photo failed, showing the pot');
+                  trail('card photo failed, showing the dish name');
                   setFailedPoster(poster);
                 }}
               />
             ) : data ? (
               <View style={styles.noPhoto}>
-                <PotMark size={Math.round(photo * 0.36)} />
+                <NoPhoto title={title} size={photo} />
               </View>
             ) : (
               <Skeleton width={inner} height={photo} radius={radii.quote} />
@@ -217,7 +217,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   photo: { borderRadius: radii.quote, overflow: 'hidden', backgroundColor: colors.well },
-  noPhoto: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.peach },
+  noPhoto: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.well },
   words: { gap: 6, paddingHorizontal: 2 },
   meta: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   metaText: { flexShrink: 1 },

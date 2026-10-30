@@ -141,8 +141,8 @@ export function WhoCooked({
             </View>
             {justSent[p.id] ? (
               <View style={styles.sent} accessible accessibilityLabel={t('parent.who.sentTo', { name: p.name })}>
-                <CheckIcon size={16} strokeWidth={3} color={colors.greenDeep} />
-                <Txt variant="label" size={15} weight={700} color={colors.greenDeep}>
+                <CheckIcon size={16} strokeWidth={3} color={colors.green} />
+                <Txt variant="label" size={15} weight={700} color={colors.green}>
                   {t('parent.who.sent')}
                 </Txt>
               </View>
@@ -152,7 +152,7 @@ export function WhoCooked({
                 accessibilityLabel={t('parent.send.toName', { name: p.name })}
                 variant="outline"
                 size="xs"
-                fg={colors.greenDeep}
+                fg={colors.yolkDeep}
                 borderColor={alpha.borderStrong}
                 padH={16}
                 labelWeight={700}

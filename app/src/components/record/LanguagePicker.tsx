@@ -39,7 +39,7 @@ export function LanguagePicker({ value, onChange, onSheet = false }: { value: st
           autoCorrect={false}
           autoCapitalize="none"
           returnKeyType="search"
-          selectionColor={colors.green}
+          selectionColor={colors.yolkDeep}
           style={styles.input}
         />
         {query ? (
@@ -133,7 +133,7 @@ const styles = StyleSheet.create({
     width: 22,
     height: 22,
     borderRadius: 11,
-    backgroundColor: 'rgba(30,36,16,0.28)',
+    backgroundColor: 'rgba(31,36,48,0.28)',
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -148,7 +148,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: alpha.hairline,
   },
-  rowOn: { backgroundColor: colors.sage, borderColor: 'transparent' },
+  rowOn: { backgroundColor: colors.greenTint, borderColor: 'transparent' },
   check: { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
   none: { paddingVertical: 16 },
   sheetScroll: { maxHeight: 460 },

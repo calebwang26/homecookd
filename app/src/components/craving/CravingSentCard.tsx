@@ -1,4 +1,4 @@
-// Home after she sent the craving link (docs/design/phase5-cold-parents, screen 3): a butter card, "Sent!" /
+// Home after she sent the craving link (docs/design/phase5-cold-parents, screen 3): a yolk-tint card, "Sent!" /
 // "We'll tell you when they pick a dish.", and a green "Send to someone else" that opens the sheet again.
 // Mounting it with CravingAskCard: see that file.
 import { StyleSheet, View } from 'react-native';
@@ -14,19 +14,19 @@ export function CravingSentCard({ onSendAgain, enterIndex = 0 }: { onSendAgain: 
     <Animated.View entering={listEnter(enterIndex)} style={styles.card}>
       <View style={styles.row} accessible accessibilityLabel={`${t('craving.sent.title')} ${t('craving.sent.line')}`}>
         <View style={styles.check}>
-          <CheckIcon size={24} strokeWidth={2.4} color={colors.butterInk} />
+          <CheckIcon size={24} strokeWidth={2.4} color={colors.ink} />
         </View>
         <View style={styles.words}>
-          <Txt size={20} weight={700} color={colors.butterInk}>
+          <Txt size={20} weight={700} color={colors.ink}>
             {t('craving.sent.title')}
           </Txt>
-          <Txt size={18} leading={1.35} color={colors.butterInk}>
+          <Txt size={18} leading={1.35} color={colors.ink}>
             {t('craving.sent.line')}
           </Txt>
         </View>
       </View>
       <PressableScale onPress={onSendAgain} accessibilityRole="button" style={styles.again}>
-        <Txt size={18} weight={700} color={colors.greenDeep}>
+        <Txt size={18} weight={700} color={colors.yolkDeep}>
           {t('craving.sent.again')}
         </Txt>
       </PressableScale>
@@ -35,10 +35,10 @@ export function CravingSentCard({ onSendAgain, enterIndex = 0 }: { onSendAgain: 
 }
 
 const styles = StyleSheet.create({
-  card: { backgroundColor: colors.butter, borderRadius: radii.panel, padding: 22, gap: 14, boxShadow: shadows.cardRaised },
+  card: { backgroundColor: colors.yolkTint, borderRadius: radii.panel, padding: 22, gap: 14, boxShadow: shadows.cardRaised },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14 },
-  // The bible's waiting ring: a cream disc in a sun ring.
-  check: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.card, boxShadow: shadows.ringSun, alignItems: 'center', justifyContent: 'center' },
+  // The bible's waiting ring: a white disc in a yolk ring.
+  check: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.card, boxShadow: shadows.ringYolk, alignItems: 'center', justifyContent: 'center' },
   words: { flex: 1, gap: 2 },
   again: { alignSelf: 'flex-start', paddingVertical: 4 },
 });

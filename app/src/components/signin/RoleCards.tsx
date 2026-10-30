@@ -35,15 +35,15 @@ export function RoleCards({ value, onChange }: { value: Role | null; onChange: (
             accessibilityState={{ selected: on }}
             accessibilityLabel={label}
             style={[styles.card, on && styles.cardOn]}>
-            <View style={[styles.icon, { backgroundColor: cook ? colors.peach : colors.lavender }]}>
-              {cook ? <VideoIcon size={28} color={colors.peachInk} /> : <BookIcon size={28} color={colors.lavenderInk} />}
+            <View style={[styles.icon, { backgroundColor: cook ? colors.yolkTint : colors.yolkTint }]}>
+              {cook ? <VideoIcon size={28} color={colors.ink} /> : <BookIcon size={28} color={colors.ink} />}
             </View>
             <Txt variant="title" size={18} align="center">
               {label}
             </Txt>
             {on ? (
               <Animated.View entering={FadeIn.duration(160)} style={styles.check}>
-                <CheckIcon size={16} color={colors.card} strokeWidth={3} />
+                <CheckIcon size={16} color={colors.ink} strokeWidth={3} />
               </Animated.View>
             ) : null}
           </PressableScale>
@@ -68,7 +68,7 @@ const styles = StyleSheet.create({
     gap: 14,
     paddingHorizontal: 12,
   },
-  cardOn: { borderColor: colors.green },
+  cardOn: { borderColor: colors.yolk },
   icon: { width: 64, height: 64, borderRadius: 32, alignItems: 'center', justifyContent: 'center' },
   check: {
     position: 'absolute',
@@ -77,7 +77,7 @@ const styles = StyleSheet.create({
     width: 26,
     height: 26,
     borderRadius: 13,
-    backgroundColor: colors.green,
+    backgroundColor: colors.yolk,
     alignItems: 'center',
     justifyContent: 'center',
   },

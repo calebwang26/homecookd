@@ -1,6 +1,6 @@
 // "This week at the table" (RETENTION-HANDOFF 3.2): one compact row under the greeting on the cook
 // Home (kid Home dropped it in round 2, Oct 22: a portal only).
-// Up to 8 family faces, cooks first (lib/sundayTable.ts tableFaces), each with a small sun-yellow
+// Up to 8 family faces, cooks first (lib/sundayTable.ts tableFaces), each with a small yolk
 // flame once that person has done their part this week. Unlit faces get nothing: no grey flame, no
 // sad state, no copy about what didn't happen. Tap a face -> `onPressFace` (their chat, or PersonSheet
 // for someone without a phone; the screen decides). While that chat opens, `busyId` names the face:

@@ -47,6 +47,9 @@ follows it, and it wins over the docs below on UI/UX and flows.
 4. `docs/build/RETENTION-HANDOFF.md` and `RETENTION-WIRING.md`: the retention features (shipped Oct 18).
 5. `docs/build/FEEDBACK-OCT16c.md`: sign-in and invites. It beats SPEC.md where they conflict.
 6. `docs/design/hearth-bible/`: "the bible". Match the app UI almost 1 to 1. Motion: `docs/design/ANIMATIONS.md`.
+   **`docs/brand/` (the egg kit, Oct 30) wins over the bible for the logo, the mascot and the colors**: tokens in
+   `docs/brand/tokens/`, rules in `docs/brand/BRAND-HANDOFF.md`, and Caleb's palette rule in
+   `docs/agents/memory/brand-egg.md` (yolk main, dark green second, cream, ink; no lavender or peach).
 7. `docs/agents/memory/`: Caleb's preferences and decisions (index in `docs/agents/README.md`).
 8. `docs/HACKATHON-SPEC.md`: the **original hackathon spec** (Oct 11), which used to be `CLAUDE.md`. Older docs and comments
    that cite "CLAUDE.md" mean this file. The data contract (section 4), the pipeline (section 5) and the design rules
@@ -185,8 +188,9 @@ cd app && npx eas-cli build -p ios --profile staging --auto-submit  # internal-t
 cd app && npx eas-cli update --channel staging -m "<what changed>"      # JS-only fix to testers; while 1.0 is in review never --channel production (that reaches build 6, the reviewed build)
 node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
-cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent/links/doors/reminders/dish
+cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent/links/doors/reminders/dish/brand
 cd app && node scripts/draft-words.mjs                             # draft the cook app's missing words in every language (Claude); then test-words
+cd app && node scripts/sync-brand.mjs                             # the brand kit SVGs in assets/brand -> ui/brandSvgs.ts (test-brand checks them)
 
 # web
 cd web && npm run dev -- --port 3000

@@ -77,7 +77,7 @@
 }
 @media (hover: hover) {
   .picker:hover {
-    background: var(--picker-bg-hover, var(--lime-wash));
+    background: var(--picker-bg-hover, var(--sage-hover));
   }
   .picker:hover .chev {
     transform: translateY(1px);

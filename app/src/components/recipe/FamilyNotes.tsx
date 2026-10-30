@@ -4,7 +4,7 @@
 // still offers "Save to recipe" (they are still saved on the server). Default kept: nothing shown,
 // nothing deleted. Either cut "Save to recipe" from chat and delete this file and useRecipeNotes, or
 // bring the answers back as one quiet row on the step they belong to.
-// Each question shows once: who asked + their words (lavender, Fraunces italic), then every answer
+// Each question shows once: who asked + their words (the yolk tint, Fraunces italic), then every answer
 // saved for it, each with who answered (avatar + name) and their words, or a "Hear Dad · 0:12"
 // button for a voice answer. The answer's author, the asker and the dish's cook see a small "Remove"
 // under an answer (one saved by mistake): it asks once, then takes it out of the recipe.
@@ -40,16 +40,16 @@ export function NoteQA({ notes, onExpired }: { notes: RecipeNote[]; onExpired?: 
   return (
     <View style={styles.qa}>
       {!q && first.asker && first.question_message_id ? (
-        <Txt variant="label" size={13} weight={700} color={colors.lavenderInk}>
+        <Txt variant="label" size={13} weight={700} color={colors.ink}>
           {first.asker.name} asked by voice
         </Txt>
       ) : null}
       {q ? (
         <View style={styles.question}>
-          <Txt variant="label" size={13} weight={700} color={colors.lavenderInk}>
+          <Txt variant="label" size={13} weight={700} color={colors.ink}>
             {first.asker ? `${first.asker.name} asked` : 'Asked'}
           </Txt>
-          <Txt variant="quote" size={16} leading={1.4} color={colors.lavenderInk}>
+          <Txt variant="quote" size={16} leading={1.4} color={colors.ink}>
             “{q}”
           </Txt>
         </View>
@@ -74,7 +74,7 @@ function NoteAnswer({ note, onExpired }: { note: RecipeNote; onExpired?: () => v
       <View style={styles.answerRow}>
         <Avatar profile={note.author} size={28} />
         <View style={styles.answer}>
-          <Txt variant="label" size={13} weight={700} color={colors.peachInk}>
+          <Txt variant="label" size={13} weight={700} color={colors.ink}>
             {note.author.name}
           </Txt>
           {note.answer_audio_url ? <HearNote note={note} onExpired={onExpired} /> : null}
@@ -131,7 +131,7 @@ function RemoveNote({ note }: { note: RecipeNote }) {
         </Txt>
       </PressableScale>
       <PressableScale onPress={() => setStep('idle')} disabled={step === 'busy'} accessibilityRole="button" accessibilityLabel="Keep it" hitSlop={8} style={styles.removeBtn}>
-        <Txt variant="label" size={14} weight={700} color={colors.greenDeep}>
+        <Txt variant="label" size={14} weight={700} color={colors.ink}>
           Keep
         </Txt>
       </PressableScale>
@@ -167,7 +167,7 @@ function HearNote({ note, onExpired }: { note: RecipeNote; onExpired?: () => voi
       hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
       style={[styles.hear, !v.available ? { opacity: 0.5 } : null]}>
       <View style={styles.hearDisc}>{playing ? <PauseIcon size={12} color={colors.card} /> : <PlayIcon size={12} color={colors.card} />}</View>
-      <Txt variant="label" size={14} weight={700} color={colors.peachInk} style={styles.tnum}>
+      <Txt variant="label" size={14} weight={700} color={colors.ink} style={styles.tnum}>
         {label}
       </Txt>
     </PressableScale>
@@ -190,7 +190,7 @@ export function FromTheFamily({ notes, onExpired }: { notes: RecipeNote[]; onExp
 const styles = StyleSheet.create({
   block: { gap: 12 },
   qa: { gap: 10 },
-  question: { gap: 4, paddingVertical: 12, paddingHorizontal: 14, borderRadius: radii.tile, backgroundColor: colors.lavender },
+  question: { gap: 4, paddingVertical: 12, paddingHorizontal: 14, borderRadius: radii.tile, backgroundColor: colors.yolkTint },
   answerWrap: { gap: 4 },
   answerRow: { flexDirection: 'row', gap: 10, alignItems: 'flex-start' },
   // Under the answer bubble (past the 28 avatar and its 10 gap).
@@ -212,7 +212,7 @@ const styles = StyleSheet.create({
     gap: 6,
     paddingVertical: 10,
     paddingHorizontal: 14,
-    backgroundColor: colors.peach,
+    backgroundColor: colors.greenTint,
     borderTopLeftRadius: 4,
     borderTopRightRadius: 18,
     borderBottomRightRadius: 18,

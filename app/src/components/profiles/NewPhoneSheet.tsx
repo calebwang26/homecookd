@@ -158,7 +158,7 @@ export function NewPhoneSheet({
             <ActionButton label={stage === 'ask' ? t('profiles.newPhone.askFamily') : t('profiles.newPhone.askAgain')} size="xl" onPress={ask} successLabel={t('profiles.newPhone.asked')} />
             {stage === 'ask' ? (
               <PressableScale onPress={onClose} accessibilityRole="button" accessibilityLabel={t('profiles.newPhone.notMeLabel', { name: person.name })} style={styles.notMe}>
-                <Txt variant="label" weight={600} color={colors.greenDeep}>
+                <Txt variant="label" weight={600} color={colors.yolkDeep}>
                   {t('profiles.newPhone.notMe')}
                 </Txt>
               </PressableScale>
@@ -174,7 +174,7 @@ export function NewPhoneSheet({
         <Txt variant="body" size={16} align="center">
           {line}
         </Txt>
-        {stage === 'waiting' ? <ActivityIndicator color={colors.greenDeep} style={styles.spinner} /> : null}
+        {stage === 'waiting' ? <ActivityIndicator color={colors.yolkDeep} style={styles.spinner} /> : null}
         {error ? (
           <Txt variant="meta" color={colors.danger} align="center" accessibilityRole="alert">
             {error}

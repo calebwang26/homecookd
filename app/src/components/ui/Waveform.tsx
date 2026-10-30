@@ -1,5 +1,5 @@
 // Voice-note bars from Kid-Chat: 16 bars, 3 px wide, 8 px apart, rounded, centred in a 28 px row,
-// peach-ink. Pass `progress` (0..1) while playing: played bars stay full ink, the rest dim.
+// ink. Pass `progress` (0..1) while playing: played bars stay full ink, the rest dim.
 // Pass `seed` (e.g. the message id) to get a stable, different shape per note.
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
@@ -25,7 +25,7 @@ export function Waveform({
   seed,
   bars = 16,
   height = 28,
-  color = colors.peachInk,
+  color = colors.ink,
   progress,
   style,
 }: {

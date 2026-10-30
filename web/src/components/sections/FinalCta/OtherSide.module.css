@@ -27,7 +27,7 @@
   border: 0;
   border-radius: var(--r-pill);
   background: none;
-  color: var(--chartreuse);
+  color: var(--yolk);
   font: inherit;
   font-weight: 600;
   text-decoration: underline;
@@ -40,6 +40,6 @@
   background: rgba(255, 253, 247, 0.08);
 }
 .link:focus-visible {
-  outline: 3px solid var(--chartreuse);
+  outline: 3px solid var(--yolk);
   outline-offset: 2px;
 }

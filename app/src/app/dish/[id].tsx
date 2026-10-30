@@ -42,7 +42,7 @@ export default function DishScreen() {
       <ScrollView contentContainerStyle={[styles.col, { paddingTop: Math.max(space.topDetail, insets.top + 8), paddingBottom: Math.max(40, insets.bottom + 24) }]} showsVerticalScrollIndicator={false}>
         <IconButton icon={<CloseIcon size={20} color={colors.ink} />} accessibilityLabel={t('dish.back')} onPress={close} />
         {card === undefined ? (
-          <ActivityIndicator color={colors.green} style={styles.wait} />
+          <ActivityIndicator color={colors.yolkDeep} style={styles.wait} />
         ) : card === null ? (
           <View style={styles.missing}>
             <Txt variant="title" size={20} align="center">
@@ -77,8 +77,8 @@ function KidSide({ card }: { card: MyCard }) {
       </Txt>
       {card.status !== 'draft' ? (
         <View style={[styles.pill, answered ? styles.pillDone : styles.pillWait]}>
-          {answered ? <CheckIcon size={18} color={colors.sageInk} /> : null}
-          <Txt variant="label" size={17} weight={700} color={answered ? colors.sageInk : colors.butterInk} style={styles.shrink}>
+          {answered ? <CheckIcon size={18} color={colors.green} /> : null}
+          <Txt variant="label" size={17} weight={700} color={answered ? colors.green : colors.ink} style={styles.shrink}>
             {(answered ? t('dish.answered', { who }) : t('dish.asked', { who })) + day}
           </Txt>
         </View>
@@ -117,10 +117,10 @@ function CookSide({ card }: { card: MyCard }) {
           <RecordDotIcon size={16} color={colors.danger} />
         </View>
         <View style={styles.shrink}>
-          <Txt variant="title" size={22} weight={700} color={colors.card}>
+          <Txt variant="title" size={22} weight={700} color={colors.ink}>
             {t('dish.filmIt', { kid })}
           </Txt>
-          <Txt variant="body" size={17} color={colors.card}>
+          <Txt variant="body" size={17} color={colors.ink}>
             {t('dish.filmItLine', { kid })}
           </Txt>
         </View>
@@ -130,7 +130,7 @@ function CookSide({ card }: { card: MyCard }) {
         <Steps card={card} recipe={recipe} />
       ) : (
         <PressableScale onPress={() => setAll(true)} accessibilityRole="button" hitSlop={8} style={styles.seeAll}>
-          <Txt variant="label" size={18} weight={700} color={colors.greenDeep}>
+          <Txt variant="label" size={18} weight={700} color={colors.yolkDeep}>
             {t('dish.seeAll')}
           </Txt>
         </PressableScale>
@@ -162,14 +162,14 @@ function Ingredients({ card, recipe, label, who, max }: { card: MyCard; recipe: 
   if (!rows.length) return null;
   return (
     <View style={styles.box}>
-      <Txt variant="label" size={17} weight={600} color={colors.peachInk}>
+      <Txt variant="label" size={17} weight={600} color={colors.ink}>
         {label}
       </Txt>
       {rows.map((ing, i) => {
         const tag = ingredientTag(ing);
         const amount = amountText(ing);
         return (
-          <View key={`${card.id}:${i}`} style={styles.ingredient}>
+          <View key={`${card.id}:${i}`} style={[styles.ingredient, tag === 'mom' ? styles.momRow : tag === 'guess' ? styles.guessRow : null]}>
             <Txt variant="bodyInk" size={18} leading={1.3} style={styles.shrink}>
               {amount ? (
                 <Txt variant="bodyInk" size={18} weight={700} leading={1.3}>
@@ -180,7 +180,7 @@ function Ingredients({ card, recipe, label, who, max }: { card: MyCard; recipe: 
             </Txt>
             {tag === 'mom' ? (
               <View style={styles.momTag}>
-                <Txt variant="label" size={14} weight={700} color={colors.sageInk}>
+                <Txt variant="label" size={14} weight={700} color={colors.green}>
                   {who}
                 </Txt>
               </View>
@@ -208,7 +208,7 @@ function Steps({ card, recipe }: { card: MyCard; recipe: DishRecipe }) {
         <View key={`${card.id}:step:${i}`} style={styles.stepBlock}>
           <View style={styles.step}>
             <View style={styles.num}>
-              <Txt variant="label" size={16} weight={700} color={colors.sageInk}>
+              <Txt variant="label" size={16} weight={700} color={colors.green}>
                 {i + 1}
               </Txt>
             </View>
@@ -243,10 +243,10 @@ function MomClip({ cardId, answer, who }: { cardId: string; answer: DishAnswer; 
     <PressableScale onPress={play.toggle} scaleTo={0.98} accessibilityRole="button" accessibilityLabel={play.playing ? t('dish.pause') : t('dish.hearShort', { who })} style={styles.clip}>
       <View style={styles.clipPlay}>{play.playing ? <PauseIcon size={18} color={colors.card} /> : <PlayIcon size={18} color={colors.card} />}</View>
       <View style={styles.shrink}>
-        <Txt variant="quote" size={19} leading={1.3} color={colors.peachInk}>
+        <Txt variant="quote" size={19} leading={1.3} color={colors.ink}>
           “{answer.words}”
         </Txt>
-        <Txt variant="label" size={16} weight={700} color={colors.peachInk}>
+        <Txt variant="label" size={16} weight={700} color={colors.ink}>
           {length > 0 ? t('dish.hear', { who, time: mmss(play.playing ? play.elapsed : length) }) : t('dish.hearShort', { who })}
         </Txt>
       </View>
@@ -260,7 +260,7 @@ function Tip({ cardId, words, answer }: { cardId: string; words: string; answer:
   return (
     <PressableScale onPress={answer ? play.toggle : undefined} disabled={!answer} scaleTo={0.98} accessibilityRole={answer ? 'button' : undefined} style={styles.tip}>
       {answer ? <View style={styles.tipPlay}>{play.playing ? <PauseIcon size={14} color={colors.card} /> : <PlayIcon size={14} color={colors.card} />}</View> : null}
-      <Txt variant="quote" size={17} leading={1.3} color={colors.peachInk} style={styles.shrink}>
+      <Txt variant="quote" size={17} leading={1.3} color={colors.ink} style={styles.shrink}>
         “{words}”
       </Txt>
     </PressableScale>
@@ -276,22 +276,25 @@ const styles = StyleSheet.create({
   italic: { fontStyle: 'italic' },
   titles: { gap: 6 },
   pill: { alignSelf: 'flex-start', flexDirection: 'row', alignItems: 'center', gap: 10, borderRadius: 999, paddingVertical: 10, paddingHorizontal: 16, maxWidth: '100%' },
-  pillWait: { backgroundColor: colors.butter },
-  pillDone: { backgroundColor: colors.sage },
+  pillWait: { backgroundColor: colors.yolkTint },
+  pillDone: { backgroundColor: colors.greenTint },
   facts: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
   fact: { backgroundColor: colors.card, borderRadius: 999, paddingVertical: 8, paddingHorizontal: 14, boxShadow: shadows.chip },
   box: { backgroundColor: colors.card, borderRadius: radii.panel, paddingVertical: 20, paddingHorizontal: 22, gap: 12, boxShadow: shadows.card },
   ingredient: { flexDirection: 'row', alignItems: 'baseline', gap: 8 },
-  momTag: { backgroundColor: colors.sage, borderRadius: 999, paddingVertical: 3, paddingHorizontal: 10 },
+  // The brand's row colours: his guesses in the yolk tint, her answers in the green tint.
+  guessRow: { backgroundColor: colors.yolkTint, borderRadius: 12, marginHorizontal: -10, paddingHorizontal: 10, paddingVertical: 6 },
+  momRow: { backgroundColor: colors.greenTint, borderRadius: 12, marginHorizontal: -10, paddingHorizontal: 10, paddingVertical: 6 },
+  momTag: { backgroundColor: colors.card, borderRadius: 999, paddingVertical: 3, paddingHorizontal: 10 },
   steps: { gap: 14 },
   stepBlock: { gap: 10 },
   step: { flexDirection: 'row', gap: 14, alignItems: 'flex-start' },
-  num: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.sage, alignItems: 'center', justifyContent: 'center' },
-  clip: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: colors.peach, borderRadius: 24, paddingVertical: 16, paddingHorizontal: 18 },
-  clipPlay: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.peachInk, alignItems: 'center', justifyContent: 'center' },
-  tip: { marginLeft: 46, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.peach, borderRadius: 18, paddingVertical: 12, paddingHorizontal: 14 },
-  tipPlay: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.peachInk, alignItems: 'center', justifyContent: 'center' },
-  film: { flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: colors.green, borderRadius: radii.panel, paddingVertical: 20, paddingHorizontal: 22, boxShadow: shadows.cta },
+  num: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.greenTint, alignItems: 'center', justifyContent: 'center' },
+  clip: { flexDirection: 'row', alignItems: 'center', gap: 14, backgroundColor: colors.greenTint, borderRadius: 24, paddingVertical: 16, paddingHorizontal: 18 },
+  clipPlay: { width: 48, height: 48, borderRadius: 24, backgroundColor: colors.ink, alignItems: 'center', justifyContent: 'center' },
+  tip: { marginLeft: 46, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: colors.greenTint, borderRadius: 18, paddingVertical: 12, paddingHorizontal: 14 },
+  tipPlay: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
+  film: { flexDirection: 'row', alignItems: 'center', gap: 16, backgroundColor: colors.yolk, borderRadius: radii.panel, paddingVertical: 20, paddingHorizontal: 22, boxShadow: shadows.cta },
   filmDot: { width: 52, height: 52, borderRadius: 26, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   seeAll: { alignSelf: 'center', paddingVertical: 8, paddingHorizontal: 12 },
 });

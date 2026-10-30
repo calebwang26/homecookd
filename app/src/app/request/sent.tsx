@@ -1,6 +1,6 @@
-// Sent to Caleb (/request/sent?ask=<askId>, Phase 5 screen 9, mockup Sent): the check, "Sent to Caleb" and
+// Sent to Caleb (/request/sent?ask=<askId>, Phase 5 screen 9, mockup Sent): the egg's made-it face, "Sent to Caleb" and
 // "Caleb can cook it tonight, in your words.", her dish ("Mom's braised pork": his photo, else the designed
-// card; never a stock photo), then the peach nudge to film it next time with "Remind me" (the reminder
+// card; never a stock photo), then the yolk-tint nudge to film it next time with "Remind me" (the reminder
 // sheet; hidden once a reminder is set). Done goes to parent Home.
 import { router, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
@@ -11,7 +11,7 @@ import Svg, { Path } from 'react-native-svg';
 
 import { DishCard } from '@/components/request/DishCard';
 import { ReminderSheet } from '@/components/request/ReminderSheet';
-import { ActionButton, CheckIcon, listEnter, PressableScale, ScreenWash, Txt, VideoIcon } from '@/components/ui';
+import { ActionButton, EggMascot, listEnter, PressableScale, ScreenWash, Txt, VideoIcon } from '@/components/ui';
 import { useAskReminder } from '@/lib/askReminders';
 import { useCravingAsk } from '@/lib/cravings';
 import { useSession } from '@/lib/session';
@@ -53,9 +53,7 @@ export default function SentScreen() {
         showsVerticalScrollIndicator={false}
         contentContainerStyle={[styles.col, { paddingTop: Math.max(96, insets.top + 40), paddingBottom: Math.max(space.xxxl, insets.bottom + 16) }]}>
         <Animated.View entering={listEnter(0)} style={styles.top} accessible accessibilityLabel={`${t('request.sent.title', { kid })}. ${t('request.sent.line', { kid })}`}>
-          <View style={styles.check}>
-            <CheckIcon size={34} color={colors.card} strokeWidth={2.8} />
-          </View>
+          <EggMascot mood="made-it" size={88} />
           <Txt variant="display" size={40} leading={1.05} align="center" accessibilityRole="header">
             {t('request.sent.title', { kid })}
           </Txt>
@@ -74,9 +72,9 @@ export default function SentScreen() {
           <Animated.View entering={listEnter(2)} style={styles.upgrade}>
             <View style={styles.row}>
               <View style={styles.disc}>
-                <VideoIcon size={26} color={colors.peachInk} />
+                <VideoIcon size={26} color={colors.ink} />
               </View>
-              <Txt variant="title" size={19} leading={1.3} color={colors.peachInk} style={styles.flex}>
+              <Txt variant="title" size={19} leading={1.3} color={colors.ink} style={styles.flex}>
                 {t('request.sent.upgrade', { kid })}
               </Txt>
             </View>
@@ -101,9 +99,8 @@ const styles = StyleSheet.create({
   col: { flexGrow: 1, paddingHorizontal: space.gutter, gap: 20 },
   flex: { flex: 1 },
   top: { alignItems: 'center', gap: 14 },
-  check: { width: 72, height: 72, borderRadius: 36, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center', boxShadow: shadows.cta },
   dish: { boxShadow: shadows.card },
-  upgrade: { backgroundColor: colors.peach, borderRadius: radii.panel, paddingVertical: 20, paddingHorizontal: 22, gap: 14, marginTop: 4 },
+  upgrade: { backgroundColor: colors.yolkTint, borderRadius: radii.panel, paddingVertical: 20, paddingHorizontal: 22, gap: 14, marginTop: 4 },
   row: { flexDirection: 'row', alignItems: 'center', gap: 14 },
   disc: { width: 56, height: 56, borderRadius: radii.tile, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center' },
   remind: { height: 56, borderRadius: radii.pill, backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },

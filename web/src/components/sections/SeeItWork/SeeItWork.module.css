@@ -30,7 +30,7 @@
   margin-left: 0.15em;
   padding: 0.28em 0.6em 0.22em;
   border-radius: var(--r-pill);
-  background: var(--chartreuse);
+  background: var(--yolk);
   color: var(--ink);
 }
 .h2 {
@@ -55,7 +55,7 @@
   width: calc(var(--phone-w) * 1.9);
   aspect-ratio: 1;
   border-radius: 50%;
-  background: var(--chartreuse);
+  background: var(--yolk);
   opacity: 0.3;
   filter: blur(60px);
   pointer-events: none;
@@ -134,7 +134,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: var(--chartreuse);
+  background: var(--yolk);
 }
 .bubble {
   position: relative;
@@ -328,7 +328,7 @@
 }
 .dot[data-on] {
   width: 28px;
-  background: var(--chartreuse);
+  background: var(--yolk);
 }
 
 .flow {
@@ -372,7 +372,7 @@
   bottom: 2px;
   width: 2px;
   border-radius: 2px;
-  background: var(--chartreuse);
+  background: var(--yolk);
   transform: scaleY(0);
   transform-origin: 50% 0%;
   transition: transform 450ms var(--ease-soft);
@@ -388,8 +388,8 @@
   opacity: 1;
 }
 .l_desktop .row[data-active] .num {
-  background: var(--chartreuse);
-  border-color: var(--chartreuse);
+  background: var(--yolk);
+  border-color: var(--yolk);
   color: var(--ink);
 }
 .tail {
@@ -481,12 +481,12 @@
     color 300ms var(--ease-soft);
 }
 .tab[aria-selected='true'] {
-  background: var(--chartreuse);
-  border-color: var(--chartreuse);
+  background: var(--yolk);
+  border-color: var(--yolk);
   color: var(--ink);
 }
 .tab:focus-visible {
-  outline: 3px solid var(--chartreuse);
+  outline: 3px solid var(--yolk);
   outline-offset: 3px;
 }
 .tab[aria-selected='true']:focus-visible {
@@ -604,7 +604,7 @@
 
 /* static rows have no "active" one: every number pill is filled */
 .l_static .num {
-  background: var(--chartreuse);
-  border-color: var(--chartreuse);
+  background: var(--yolk);
+  border-color: var(--yolk);
   color: var(--ink);
 }

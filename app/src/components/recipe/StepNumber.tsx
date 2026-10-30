@@ -9,7 +9,7 @@ import { colors } from '@/theme/tokens';
 export function StepNumber({ n, size = 32, soft = false, style }: { n: number; size?: number; soft?: boolean; style?: StyleProp<ViewStyle> }) {
   return (
     <View style={[styles.circle, soft ? styles.soft : null, { width: size, height: size, borderRadius: size / 2 }, style]} accessible={false}>
-      <Txt variant="label" size={Math.round(size * 0.47)} weight={700} color={soft ? colors.sageInk : colors.sage}>
+      <Txt variant="label" size={Math.round(size * 0.47)} weight={700} color={soft ? colors.green : colors.ink}>
         {n}
       </Txt>
     </View>
@@ -17,6 +17,6 @@ export function StepNumber({ n, size = 32, soft = false, style }: { n: number; s
 }
 
 const styles = StyleSheet.create({
-  circle: { backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
-  soft: { backgroundColor: colors.sage },
+  circle: { backgroundColor: colors.yolk, alignItems: 'center', justifyContent: 'center' },
+  soft: { backgroundColor: colors.greenTint },
 });

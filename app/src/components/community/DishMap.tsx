@@ -57,7 +57,7 @@ export function DishMap<R extends Dish>({ size, spots, areas, pickedKey, onPick,
           {you.news ? <View style={styles.news} /> : null}
         </View>
         <View style={styles.youTag}>
-          <Txt variant="label" size={12} weight={700} color={colors.sageInk}>
+          <Txt variant="label" size={12} weight={700} color={colors.green}>
             You
           </Txt>
         </View>
@@ -86,9 +86,9 @@ function Streets({ size }: { size: number }) {
   const minor = { stroke: colors.card, strokeWidth: 6, strokeLinecap: 'round' as const };
   return (
     <Svg width={size} height={size} viewBox={`0 0 ${GRID} ${GRID}`}>
-      <Rect x={34} y={28} width={70} height={50} rx={14} fill={colors.sage} />
-      <Rect x={258} y={262} width={64} height={62} rx={14} fill={colors.sage} />
-      <Rect x={140} y={300} width={50} height={36} rx={12} fill={colors.sage} />
+      <Rect x={34} y={28} width={70} height={50} rx={14} fill={colors.greenTint} />
+      <Rect x={258} y={262} width={64} height={62} rx={14} fill={colors.greenTint} />
+      <Rect x={140} y={300} width={50} height={36} rx={12} fill={colors.greenTint} />
       <Path d="M-10 122 L368 94" {...main} />
       <Path d="M-10 268 L368 238" {...main} />
       <Path d="M92 -10 L150 368" {...main} />
@@ -106,9 +106,9 @@ const styles = StyleSheet.create({
   map: { overflow: 'hidden', borderRadius: radii.card, borderWidth: 1.5, borderColor: alpha.border, backgroundColor: colors.well },
   area: { position: 'absolute', width: AREA_W, opacity: 0.8 },
   you: { position: 'absolute', width: YOU_HALO, alignItems: 'center' },
-  halo: { width: YOU_HALO, height: YOU_HALO, borderRadius: YOU_HALO / 2, backgroundColor: 'rgba(91,111,0,0.14)', alignItems: 'center', justifyContent: 'center' },
-  haloOn: { backgroundColor: 'rgba(254,190,41,0.4)' },
-  dot: { width: YOU_DOT, height: YOU_DOT, borderRadius: YOU_DOT / 2, borderWidth: 3, borderColor: colors.card, backgroundColor: colors.green, boxShadow: '0 2px 8px rgba(30,36,16,0.2)' },
-  news: { position: 'absolute', top: 6, right: 6, width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: colors.card, backgroundColor: colors.sun },
+  halo: { width: YOU_HALO, height: YOU_HALO, borderRadius: YOU_HALO / 2, backgroundColor: 'rgba(242,162,58,0.2)', alignItems: 'center', justifyContent: 'center' },
+  haloOn: { backgroundColor: 'rgba(242,162,58,0.4)' },
+  dot: { width: YOU_DOT, height: YOU_DOT, borderRadius: YOU_DOT / 2, borderWidth: 3, borderColor: colors.card, backgroundColor: colors.yolk, boxShadow: '0 2px 8px rgba(31,36,48,0.2)' },
+  news: { position: 'absolute', top: 6, right: 6, width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: colors.card, backgroundColor: colors.yolk },
   youTag: { marginTop: -6, paddingHorizontal: 8, paddingVertical: 2, borderRadius: radii.pill, backgroundColor: colors.card },
 });

@@ -27,7 +27,7 @@ export function AskCard({ ask }: { ask: CravingAsk }) {
         <View style={styles.row}>
           <Avatar name={kid} avatarKey={null} size={44} />
           <View style={styles.flex}>
-            <Txt variant="label" size={16} weight={600} color={colors.greenDeep} numberOfLines={1}>
+            <Txt variant="label" size={16} weight={600} color={colors.yolkDeep} numberOfLines={1}>
               {t('request.wantsYour', { kid })}
             </Txt>
             <Txt variant="display" size={28} weight={500} leading={1.1} numberOfLines={2}>

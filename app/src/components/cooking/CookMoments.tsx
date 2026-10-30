@@ -1,4 +1,4 @@
-// homie's moments in cook mode (lib/homie showMoment: the pot to the centre, the screen blurred). When
+// homie's moments in cook mode (lib/homie showMoment: the egg to the centre, the screen blurred). When
 // homie needs a yes or no, there are no buttons (Caleb, Oct 24): the question, the listening bars, "Say
 // “yes” or “no”" and "Tap anywhere to close" (lib/live/voiceLogic yesNoMoment). A spoken yes does it,
 // a spoken no or a tap anywhere closes it, and the mic keeps listening for commands. Only a phone that
@@ -414,7 +414,7 @@ export function CookAnswers({
   if (!english) return null;
   return (
     <Animated.View entering={FadeIn.duration(200)} exiting={FadeOut.duration(150)} pointerEvents="none" style={[styles.caption, { top }]} accessibilityLiveRegion="polite">
-      <Txt variant="caption" size={11} weight={700} color={colors.lavenderInk} style={styles.captionLabel}>
+      <Txt variant="caption" size={11} weight={700} color={colors.ink} style={styles.captionLabel}>
         {`Translated from ${cookName}`}
       </Txt>
       <Txt variant="bodyInk" size={15} leading={1.35}>
@@ -437,5 +437,5 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     boxShadow: shadows.cardRaised,
   },
-  captionLabel: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: radii.pill, backgroundColor: colors.lavender, overflow: 'hidden' },
+  captionLabel: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 2, borderRadius: radii.pill, backgroundColor: colors.yolkTint, overflow: 'hidden' },
 });

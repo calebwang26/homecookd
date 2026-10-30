@@ -1,14 +1,14 @@
 // The walkie-talkie v2 (/answer/<questionId>, from a Parent Home question row): the cook answers a
-// kid's question out loud, with no buttons. The peach wash of the recording screen, a small cream ×
+// kid's question out loud, with no buttons. The yolk-tint wash of the recording screen, a small white ×
 // top-left, and one centred column (components/record/RecordWash COLUMN): "Shreya ने पूछा", the
 // question big in her language (questions.textForCook, else what homie said when it translated it),
-// the kid's English small under it marked "Translated", then homie big (HomiePot is its only glow: the
+// the kid's English small under it marked "Translated", then homie big (HomiePot, the egg, is its only glow: the
 // ring while it listens, a plain white circle once it can't hear her), then five green listening bars
 // that move with her voice and "बोलिए, मैं सुन रही हूँ" / "Just answer out loud". homie reads the question when
 // it opens (lib/live/speak, labelled "AI voice"; a translated question in her language even before
 // people.me has loaded); then it listens, sends her voice note when she stops, and says "Shreya को
 // भेजा गया" while a check pops in, before the screen closes by itself (components/record/useWalkie). A
-// tap on the question reads it again. The corner pot is hidden here: the big one is homie.
+// tap on the question reads it again. The corner egg is hidden here: the big one is homie.
 // Her voice goes to the AI companies, so nothing starts without this phone's yes (lib/aiConsent): the
 // row that opens this asks first, and a push or link that lands here asks too ("Not now": back).
 // A share ask (questions.kind 'share': someone wants her dish on the Community map) comes the same
@@ -199,7 +199,7 @@ export default function AnswerScreen() {
       {q && lines ? (
         <ScrollView contentContainerStyle={[styles.column, room]} bounces={false} showsVerticalScrollIndicator={false}>
           <Animated.View entering={enter(0)} style={styles.words}>
-            <Txt variant="label" size={18} weight={600} color={colors.peachInk} align="center">
+            <Txt variant="label" size={18} weight={600} color={colors.ink} align="center">
               {asked}
             </Txt>
             <Pressable
@@ -224,13 +224,13 @@ export default function AnswerScreen() {
           </Animated.View>
           <Animated.View key={step === 'sent' ? 'sent' : 'ask'} entering={enter(2)} style={[styles.label, (step === 'reading' || step === 'waiting') && styles.soft]} accessibilityLiveRegion="polite">
             {step === 'sent' ? <SentCheck /> : null}
-            {step === 'listening' ? <ListeningBars level={walkie.level} color={colors.green} /> : null}
-            {step === 'sending' ? <ActivityIndicator color={colors.green} /> : null}
+            {step === 'listening' ? <ListeningBars level={walkie.level} color={colors.yolkDeep} /> : null}
+            {step === 'sending' ? <ActivityIndicator color={colors.yolkDeep} /> : null}
             <BiLine line={label} size={26} weight={700} enSize={15} enColor={colors.muted} color={step === 'nomic' || step === 'nomicHere' || step === 'retry' ? colors.danger : colors.ink} />
           </Animated.View>
         </ScrollView>
       ) : (
-        <View style={[styles.column, styles.fill]}>{missing ? <BiLine line={w.line('answered')} size={22} /> : <ActivityIndicator color={colors.green} />}</View>
+        <View style={[styles.column, styles.fill]}>{missing ? <BiLine line={w.line('answered')} size={22} /> : <ActivityIndicator color={colors.yolkDeep} />}</View>
       )}
       <View style={[styles.top, { paddingTop: top }]} pointerEvents="box-none">
         <IconButton icon={<CloseIcon size={20} color={colors.ink} />} accessibilityLabel={t('messages.answer.close')} onPress={goBack} />

@@ -1,4 +1,4 @@
-// Parent "Messages" tab: peach wash, "Messages" (34), then the inbox as a DM list: the family
+// Parent "Messages" tab: yolk-tint wash, "Messages" (34), then the inbox as a DM list: the family
 // "New message" first, always (anyone in the family), then the circle, then every 1:1 chat (newest first).
 // A chat is unread (bold + green dot) when it has new messages or a question for me still waiting
 // for my answer (GET /questions/open through kitchen's questionFor: a 1:1 question, or a family

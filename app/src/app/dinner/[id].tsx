@@ -1,4 +1,4 @@
-// One Community dinner (dinners.get, live), Caleb's final Dinner canvas (Oct 24): the kid's lavender
+// One Community dinner (dinners.get, live), Caleb's final Dinner canvas (Oct 24): the kid's yolk-tint
 // wash and a cream back button; centred, the dish photo with a warm glow and a "DINNER" tag, "Jollof
 // Rice Night" and "Hosted by Mom"; one card with when and where (the address only once the host said
 // yes); "You're in" with a few faces and "4 going" (live: it rolls up when someone opens the invite);
@@ -166,8 +166,8 @@ function Footer({ dinner, action, bottom, showRequests }: { dinner: Dinner; acti
   } else {
     const waiting = action.kind === 'waiting';
     body = (
-      <View style={[styles.status, { backgroundColor: waiting ? colors.butter : colors.well }]} accessibilityLiveRegion="polite">
-        <Txt variant="title" size={18} color={waiting ? colors.butterInk : colors.ink} align="center">
+      <View style={[styles.status, { backgroundColor: waiting ? colors.yolkTint : colors.well }]} accessibilityLiveRegion="polite">
+        <Txt variant="title" size={18} color={waiting ? colors.ink : colors.ink} align="center">
           {waiting ? action.label : action.text}
         </Txt>
       </View>

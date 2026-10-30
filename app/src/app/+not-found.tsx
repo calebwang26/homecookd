@@ -1,5 +1,5 @@
-// Any path the app doesn't have (a mistyped or old link). The first screen's look (the peach wash,
-// the pot + "homecookd" row), one Fraunces line, "This page isn't here.", and one way out: Go home,
+// Any path the app doesn't have (a mistyped or old link). The first screen's look (the yolk-tint wash,
+// the egg lockup), one Fraunces line, "This page isn't here.", and one way out: Go home,
 // to your home, else "Who's in the kitchen?". Replaces Expo Router's black "Unmatched Route" page,
 // whose Sitemap link listed every screen.
 import { StyleSheet, View } from 'react-native';

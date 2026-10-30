@@ -6,7 +6,7 @@ import { useEffect, useId, useRef, useState, type MouseEvent } from 'react';
 import { TopBar } from '@/components/dish/parts';
 import { Rich, useLang, useRel } from '@/components/dish/lang';
 import { canRecord, useRecorder } from '@/components/dish/useRecorder';
-import { PotMascot } from '@/components/primitives/PotMascot';
+import { EggMascot } from '@/components/primitives/EggMascot';
 import { IconClose } from '@/components/recipe-web/icons';
 import { clock, relationFromWord } from '@/lib/dish/text';
 import type { Relation } from '@/lib/dish/types';
@@ -165,7 +165,7 @@ export function AskScreen({ draft, onDraft, error, limited, lastToken, onOpenLas
 
       {limited && (
         <div className={s.limit} role="status">
-          <PotMascot size={40} />
+          <EggMascot size={48} mood="sleepy" />
           <div>
             <p className={s.limitTitle}>{t('k5.title')}</p>
             <p className={s.limitLine}>{t('k5.line')}</p>

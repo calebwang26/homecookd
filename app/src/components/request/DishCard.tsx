@@ -1,23 +1,12 @@
-// A kid's ask, as a picture: his own photo of the dish when he added one; otherwise a designed card, the
-// dish name in Fraunces on a Hearth color (peach or sage, picked by the name) with the pot. Never a stock
-// photo in his dish's place, or in hers (docs/design/phase5-cold-parents, "Fixes from the Merge Agent").
+// A kid's ask, as a picture: his own photo of the dish when he added one; otherwise a designed card, white
+// with the dish name in big Fraunces (the egg brand's no-photo card, the same as the web's DishHero; never
+// the egg). Never a stock photo in his dish's place, or in hers (docs/design/phase5-cold-parents, "Fixes
+// from the Merge Agent").
 import { Image } from 'expo-image';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
-import { PotMark, Txt } from '@/components/ui';
+import { Txt } from '@/components/ui';
 import { alpha, colors, radii } from '@/theme/tokens';
-
-const TONES = {
-  peach: { bg: colors.peach, fg: colors.peachInk },
-  sage: { bg: colors.sage, fg: colors.sageInk },
-} as const;
-
-/** The same dish always gets the same color. */
-function toneFor(dish: string): keyof typeof TONES {
-  let h = 0;
-  for (const ch of dish.trim().toLowerCase()) h = (h * 31 + ch.charCodeAt(0)) | 0;
-  return Math.abs(h) % 2 ? 'sage' : 'peach';
-}
 
 export function DishCard({
   dish,
@@ -34,7 +23,7 @@ export function DishCard({
   photoUrl?: string | null;
   height?: number;
   radius?: number;
-  /** Also show `label` over his photo, in a cream chip (when nothing under the card names the dish). */
+  /** Also show `label` over his photo, in a white chip (when nothing under the card names the dish). */
   photoChip?: boolean;
   style?: StyleProp<ViewStyle>;
 }) {
@@ -53,16 +42,14 @@ export function DishCard({
       </View>
     );
   }
-  const tone = TONES[toneFor(dish)];
   const big = height >= 130;
   return (
-    <View style={[styles.box, styles.designed, { height, borderRadius: radius, backgroundColor: tone.bg }, style]} accessible accessibilityLabel={words}>
-      <PotMark size={big ? 44 : 34} />
+    <View style={[styles.box, styles.designed, { height, borderRadius: radius }, style]} accessible accessibilityLabel={words}>
       <Txt
         variant="display"
-        size={big ? 30 : 24}
+        size={big ? 32 : 24}
         leading={1.1}
-        color={tone.fg}
+        color={colors.ink}
         align="center"
         numberOfLines={2}
         adjustsFontSizeToFit
@@ -76,7 +63,7 @@ export function DishCard({
 
 const styles = StyleSheet.create({
   box: { overflow: 'hidden', backgroundColor: colors.well },
-  designed: { alignItems: 'center', justifyContent: 'center', gap: 8, paddingHorizontal: 24 },
+  designed: { alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.line },
   words: { alignSelf: 'stretch' },
   chip: {
     position: 'absolute',

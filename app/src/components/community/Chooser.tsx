@@ -6,7 +6,7 @@ import { useState } from 'react';
 import { ActivityIndicator, StyleSheet, View } from 'react-native';
 
 import { BackIcon, ChevronRightIcon, IconButton, PressableScale, Txt } from '@/components/ui';
-import { alpha, colors, radii, shadows } from '@/theme/tokens';
+import { colors, radii, shadows } from '@/theme/tokens';
 
 import type { ChoiceRow } from './choices';
 
@@ -42,9 +42,9 @@ export function Chooser({
         </Txt>
       </View>
       {rows.map((r) => {
-        const green = r.primary && !r.disabled;
-        const ink = green ? colors.card : colors.ink;
-        const sub = green ? alpha.glassChip : colors.muted;
+        const main = r.primary && !r.disabled;
+        const ink = colors.ink;
+        const sub = main ? colors.ink : colors.muted;
         const body = (
           <>
             <View style={styles.text}>
@@ -60,7 +60,7 @@ export function Chooser({
             {busy === r.key ? <ActivityIndicator color={ink} /> : r.disabled ? null : <ChevronRightIcon size={22} strokeWidth={2.2} color={ink} />}
           </>
         );
-        const look = [styles.row, { backgroundColor: green ? colors.green : colors.page }];
+        const look = [styles.row, { backgroundColor: main ? colors.yolk : colors.page }];
         if (r.disabled) {
           return (
             <View key={r.key} style={look} accessible accessibilityLabel={[r.title, r.line].filter(Boolean).join('. ')} accessibilityState={{ disabled: true }}>

@@ -29,7 +29,7 @@ type Props = {
   ready: boolean;
   /** The question's kind: 'share' (a yes or no to the Community map) and 'followUp' (homie's own) take a short answer. */
   kind?: string | null;
-  /** homie is lit or speaking (the pot's state). */
+  /** homie is lit or speaking (the egg's state). */
   talking: boolean;
   /** homie reads the question; resolves once its voice starts (or didn't: 'none'). */
   read: () => Promise<{ via: 'homie' | 'phone' | 'none' }>;

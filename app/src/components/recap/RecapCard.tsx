@@ -274,7 +274,7 @@ const SLOT_HEIGHT = 64;
 
 const styles = StyleSheet.create({
   held: { opacity: 0, pointerEvents: 'none' },
-  card: { backgroundColor: colors.olive, boxShadow: shadows.cardRaised },
+  card: { backgroundColor: colors.green, boxShadow: shadows.cardRaised },
   full: { borderRadius: radii.panel, padding: space.xxl, gap: space.lg },
   slot: {
     minHeight: SLOT_HEIGHT,
@@ -285,8 +285,8 @@ const styles = StyleSheet.create({
     paddingVertical: space.sm,
   },
   bars: { flexDirection: 'row', gap: 4 },
-  bar: { flex: 1, height: 4, borderRadius: radii.step, backgroundColor: 'rgba(255,253,247,0.28)' },
-  barOn: { backgroundColor: colors.sun },
+  bar: { flex: 1, height: 4, borderRadius: radii.step, backgroundColor: 'rgba(255,255,255,0.28)' },
+  barOn: { backgroundColor: colors.yolk },
   row: { flexDirection: 'row', alignItems: 'center', gap: space.lg },
   rowSlot: { gap: space.md },
   text: { flex: 1, gap: space.sm },

@@ -36,7 +36,7 @@
   font-family: var(--ff-display);
   font-weight: 600;
   font-optical-sizing: auto;
-  font-variation-settings: 'SOFT' 100, 'WONK' 0;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
   font-size: clamp(1.25rem, 1.05rem + 0.6vw, 1.625rem);
   line-height: 1.1;
   letter-spacing: -0.01em;
@@ -45,8 +45,8 @@
 }
 .title em {
   font-style: italic;
-  font-variation-settings: 'SOFT' 100, 'WONK' 1;
-  color: var(--green);
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
+  color: var(--yolk-deep);
 }
 .addWrap {
   display: flex;
@@ -71,7 +71,7 @@
   transition: background-color 200ms var(--ease-soft);
 }
 .addLink:hover {
-  background: var(--lime-wash);
+  background: var(--sage-hover);
 }
 .addLink:focus-visible {
   outline-offset: 2px;

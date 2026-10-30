@@ -28,7 +28,7 @@ import { useRelation } from '@/components/providers/RelationProvider';
 import { useMotionOK } from '@/components/providers/MotionProvider';
 import { Button } from '@/components/primitives/Button';
 import { HandNote } from '@/components/primitives/HandNote';
-import { PotMascot } from '@/components/primitives/PotMascot';
+import { EggMascot } from '@/components/primitives/EggMascot';
 import { Sticker } from '@/components/primitives/Sticker';
 import { ShareGlyph } from '@/components/icons/Icons';
 import { PopIn } from '../InTheirWords/PopIn';
@@ -190,7 +190,7 @@ export function EarlyAccessForm() {
           {status === 'done' ? (
             <div ref={successRef} className={s.success} tabIndex={-1}>
               <span data-pot="" className={s.pot}>
-                <PotMascot size={64} mood="happy" steam />
+                <EggMascot size={64} mood="made-it" />
               </span>
               <p className={s.successText}>
                 {successA} <em>{successB}</em>

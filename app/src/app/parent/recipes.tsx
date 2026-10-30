@@ -211,12 +211,12 @@ const styles = StyleSheet.create({
   noMatch: { paddingTop: space.sm },
   family: { marginTop: space.xxxl + space.lg, gap: space.lg },
   familyHeading: { paddingHorizontal: space.gutter },
-  // The Record screen's red dot on a peach disc (56 pt, a little smaller than a recipe row's 72 pt thumb).
+  // The Record screen's red dot on a yolk-tint disc (56 pt, a little smaller than a recipe row's 72 pt thumb).
   recordDisc: {
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: colors.peach,
+    backgroundColor: colors.yolkTint,
     alignItems: 'center',
     justifyContent: 'center',
   },

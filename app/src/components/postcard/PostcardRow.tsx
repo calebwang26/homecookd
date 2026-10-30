@@ -23,6 +23,7 @@ import { Avatar, CheckIcon, CloseIcon, haptic, PressableScale, Txt, useToast } f
 import { errorMessage, type Message, type Profile } from '@/lib/api';
 import { openChatWith, sendJustLikeMine, sendVoiceReply } from '@/lib/messaging';
 import type { VoiceRecording } from '@/lib/voice';
+import { useWords } from '@/lib/words/useWords';
 import { colors, space } from '@/theme/tokens';
 
 import { keepSent, refetchKitchenThread } from '../parent/kitchen';
@@ -61,6 +62,7 @@ export function PostcardRow({
   onGo?: () => void;
 }) {
   const toast = useToast();
+  const { t } = useWords();
   const [like, setLike] = useState<LikeState>(liked ? 'sent' : 'idle');
   const [landed, setLanded] = useState(false);
   if (liked && like === 'idle') setLike('sent');
@@ -142,7 +144,7 @@ export function PostcardRow({
         style={styles.photo}
       />
 
-      <RatingLine words="How close to yours" value={message.rating} size={20} style={styles.rating} />
+      <RatingLine words={t('messages.bubble.howClose')} value={message.rating} size={20} style={styles.rating} />
 
       <View style={styles.actions}>
         <View style={styles.grow}>
@@ -183,14 +185,14 @@ const styles = StyleSheet.create({
     height: 52,
     paddingHorizontal: 12,
     borderRadius: 999,
-    backgroundColor: colors.sun,
+    backgroundColor: colors.yolk,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
   },
   likeSent: { backgroundColor: colors.well },
-  likeError: { backgroundColor: colors.butter },
+  likeError: { backgroundColor: colors.yolkTint },
   dim: { opacity: 0.6 },
   words: { flexShrink: 1 },
 });

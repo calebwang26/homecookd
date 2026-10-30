@@ -1,6 +1,6 @@
 // The first screen, with no link (docs/build/JOIN-SIMPLE.md §1.4, mockup 2): starting a family is the
 // one way in without a link; everyone else joins from one (/i, or a dish card's /miss and /a). Bible
-// Main look: the peach wash, the pot + "homecookd" row, then at thumb height:
+// Main look: the yolk-tint wash, the egg lockup, then at thumb height:
 //   "Cook your family's food."  "Start your family's kitchen. Everyone else joins from your link."
 //   [ Sign in with Apple ]       the system button (Google on Android only). Someone the server
 //                                already knows is in at once and goes to "Who's in the kitchen?"
@@ -40,7 +40,7 @@ import {
 } from '@/components/signin';
 import { ActionButton, haptic, Txt, type ActionState } from '@/components/ui';
 import type { Role } from '@/lib/api';
-import { claimFromParam, nameFromParam, roleFromParam } from '@/lib/linkClaim';
+import { claimFromParam, dishFromParam, nameFromParam, roleFromParam } from '@/lib/linkClaim';
 import { useSession } from '@/lib/session';
 import { useWords } from '@/lib/words/useWords';
 import { colors, motion } from '@/theme/tokens';
@@ -68,12 +68,13 @@ function TapAgain() {
 }
 
 export default function JoinScreen() {
-  const params = useLocalSearchParams<{ fixture?: string; claim?: string; name?: string; role?: string }>();
+  const params = useLocalSearchParams<{ fixture?: string; claim?: string; name?: string; role?: string; dish?: string }>();
   const fixture = DEV_WEB && params.fixture && FIXTURES.includes(params.fixture) ? (params.fixture as Fixture) : null;
   // A dish card's link to open again once they're in, with the card's name and side.
   const claim = claimFromParam(params.claim);
   const claimName = claim ? nameFromParam(params.name) : null;
   const claimRole = claim ? roleFromParam(params.role) : null;
+  const claimDish = claim ? dishFromParam(params.dish) : null;
   const { status, signedIn, me, homeFor, error: sessionError, signInWithApple, signInWithGoogle, finishSignIn } = useSession();
   const { t } = useWords();
 
@@ -196,8 +197,10 @@ export default function JoinScreen() {
     setStep(step === 'role' ? 'name' : 'start');
   };
 
-  // Why they're here again ("You were signed out of Our family."), else what this screen is for.
-  const line = (status === 'needs-code' && plainError(sessionError, t)) || t('signin.join.line');
+  // Why they're here again ("You were signed out of Our family."), the card they came to keep ("Sign in to keep
+  // Mom's tomato egg."), else what this screen is for.
+  const line =
+    (status === 'needs-code' && plainError(sessionError, t)) || (claimDish ? t('signin.join.keep', { dish: claimDish }) : t('signin.join.line'));
 
   return (
     <SignInScreen onBack={step === 'start' ? null : back}>
@@ -209,7 +212,8 @@ export default function JoinScreen() {
               <ProviderButtons busy={busy} onPress={(p) => void signIn(p)} />
               <ErrorLine error={error} />
             </View>
-            <TapAgain />
+            {/* Someone arriving from their card is holding the link already. */}
+            {claim ? null : <TapAgain />}
             <TermsLine />
           </View>
         </Animated.View>

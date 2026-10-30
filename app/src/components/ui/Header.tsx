@@ -1,6 +1,6 @@
 // Motion spec 2: the large title scrolls away with the content, and a compact sticky header
 // (17 px DM Sans 600, centred) fades in over the first 48 px of scroll on a frosted background
-// (BlurView 40, light, + rgba(247,247,242,0.72)).
+// (BlurView 40, light, + rgba(251,245,234,0.72)).
 //
 //   const { scrollY, onScroll } = useScrollY();
 //   <View style={{ flex: 1 }}>
@@ -41,7 +41,7 @@ export type LargeHeaderProps = {
   title: string;
   /** Line above the title ("Sunday evening", "Monday, October 13"). */
   eyebrow?: string;
-  /** Eyebrow colour: muted 15/400 for kid (default), peach-ink 16/600 for parent. */
+  /** Eyebrow colour: muted 15/400 for kid (default), ink 16/600 for parent. */
   eyebrowTone?: 'kid' | 'parent';
   /** Line under the title ("They answer in their own voice."). */
   subtitle?: string;
@@ -54,6 +54,8 @@ export type LargeHeaderProps = {
    * line; the line grows to fit it, so it never sits over the title, which keeps the full width.
    */
   eyebrowRight?: ReactNode;
+  /** Beside the title, centred on it (parent Home's hello egg). */
+  titleRight?: ReactNode;
   /** Top inset under the status bar. The bible puts the first line at y=60 on an 844 frame. */
   top?: number;
   /**
@@ -66,7 +68,7 @@ export type LargeHeaderProps = {
 };
 
 /**
- * Under a line with "Mom ▾" and homie's pot on it, the title needs room to read as its own line, like
+ * Under a line with "Mom ▾" and homie's egg on it, the title needs room to read as its own line, like
  * kid Home's (Caleb, Oct 26: parent Home's greeting sat squeezed under the pill).
  */
 const EYEBROW_RIGHT_GAP = space.xxl;
@@ -84,6 +86,7 @@ export function LargeHeader({
   right,
   top,
   eyebrowRight,
+  titleRight,
   scrollY,
   fadeEnd = motion.stickyFadeDistance,
   style,
@@ -100,7 +103,7 @@ export function LargeHeader({
         {eyebrow ? (
           <View style={styles.eyebrowRow}>
             {eyebrowTone === 'parent' ? (
-              <Txt variant="label" size={16} weight={600} color={colors.peachInk} style={styles.shrink}>
+              <Txt variant="label" size={16} weight={600} color={colors.ink} style={styles.shrink}>
                 {eyebrow}
               </Txt>
             ) : (
@@ -111,9 +114,18 @@ export function LargeHeader({
             {eyebrowRight ? <View style={styles.eyebrowRight}>{eyebrowRight}</View> : null}
           </View>
         ) : null}
-        <Txt variant="display" size={size} accessibilityRole="header">
-          {title}
-        </Txt>
+        {titleRight ? (
+          <View style={styles.titleRow}>
+            <Txt variant="display" size={size} accessibilityRole="header" style={styles.shrink}>
+              {title}
+            </Txt>
+            {titleRight}
+          </View>
+        ) : (
+          <Txt variant="display" size={size} accessibilityRole="header">
+            {title}
+          </Txt>
+        )}
         {subtitle ? (
           <Txt variant="body" leading={1.4}>
             {subtitle}
@@ -174,13 +186,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   titleCol: { flex: 1 },
+  titleRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   rightTop: { alignSelf: 'flex-start' },
   eyebrowRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 12 },
   shrink: { flexShrink: 1 },
   eyebrowRight: { justifyContent: 'center', alignItems: 'flex-end' },
   sticky: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10 },
   // Barely there: the bible's scrolled frames show no rule under the header.
-  hairline: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(30,36,16,0.04)' },
+  hairline: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(31,36,48,0.04)' },
   bar: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 },
   side: { width: 64, flexDirection: 'row', alignItems: 'center' },
   sideRight: { justifyContent: 'flex-end' },

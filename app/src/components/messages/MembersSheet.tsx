@@ -13,7 +13,7 @@
 //                    in and goes back to its owner. POST /profiles/:id/remove; old messages keep
 //                    their name and face.
 //  mode 'new':     "New message" from an inbox; only the others ("Hasn't joined yet" still shows).
-// Rows follow the inbox rows (52 avatar, 17/700 name, 14 muted line, #EFEFE6 hairlines); cooks first.
+// Rows follow the inbox rows (52 avatar, 17/700 name, 14 muted line, hairlines); cooks first.
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
@@ -226,7 +226,7 @@ function Members({
                         variant="outline"
                         size="sm"
                         padH={16}
-                        fg={colors.greenDeep}
+                        fg={colors.yolkDeep}
                         labelWeight={700}
                         haptics
                         state={opening === p.id ? 'loading' : 'idle'}

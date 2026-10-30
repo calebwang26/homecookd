@@ -1,6 +1,6 @@
-// Small rounded labels from the bible: "2 of 6" (sage), "Waiting for your answer" (butter),
-// "New voice note · 0:38" (peach, with a leading play disc), "Just in from Mom" (glass, with avatar),
-// "About Pork & Chive Dumplings" (cream + chip shadow), "New" (sun).
+// Small rounded labels from the bible, in the egg palette: "2 of 6" (greenTint), "Waiting for your answer" (yolkTint),
+// "New voice note · 0:38" (yolkTint, with a leading play disc), "Just in from Mom" (glass, with avatar),
+// "About Pork & Chive Dumplings" (cream: white + chip shadow), "New" (yolk), "Sent" (green).
 import type { ReactNode } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
@@ -9,14 +9,12 @@ import { alpha, colors, shadows } from '@/theme/tokens';
 import { PressableScale } from './PressableScale';
 import { Txt } from './Txt';
 
-export type PillTone = 'sage' | 'butter' | 'peach' | 'lavender' | 'sun' | 'cream' | 'glass' | 'ink' | 'green';
+export type PillTone = 'greenTint' | 'yolkTint' | 'yolk' | 'cream' | 'glass' | 'ink' | 'green';
 
 const tones: Record<PillTone, { bg: string; fg: string; shadow?: string }> = {
-  sage: { bg: colors.sage, fg: colors.sageInk },
-  butter: { bg: colors.butter, fg: colors.butterInk },
-  peach: { bg: colors.peach, fg: colors.peachInk },
-  lavender: { bg: colors.lavender, fg: colors.lavenderInk },
-  sun: { bg: colors.sun, fg: colors.ink },
+  greenTint: { bg: colors.greenTint, fg: colors.green },
+  yolkTint: { bg: colors.yolkTint, fg: colors.ink },
+  yolk: { bg: colors.yolk, fg: colors.ink },
   cream: { bg: colors.card, fg: colors.ink, shadow: shadows.chip },
   glass: { bg: alpha.glassChip, fg: colors.ink },
   ink: { bg: colors.ink, fg: colors.card },
@@ -51,7 +49,7 @@ export type PillProps = {
   style?: StyleProp<ViewStyle>;
 };
 
-export function Pill({ children, label, tone = 'sage', size = 'md', leading, color, fontSize, onPress, accessibilityLabel, style }: PillProps) {
+export function Pill({ children, label, tone = 'greenTint', size = 'md', leading, color, fontSize, onPress, accessibilityLabel, style }: PillProps) {
   const t = tones[tone];
   const s = sizes[size];
   const leadPad = size === 'lg' ? 6 : 4;

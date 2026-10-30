@@ -6,7 +6,7 @@
 //   │        │  ┌─ cream card ┐ │       │  "by Dad · ~50 min", homecookd mark
 //   │        │  └─────────────┘ │       │
 //   │        └──────────────────┘       │
-//   │          ( ) ( ) ( )              │  swatches: peach, sage, ink
+//   │          ( ) ( ) ( )              │  swatches: yolk tint, green tint, ink
 //   │     [ ✓ Sent to Leo ]             │  after a send: a toast above the rows, ~2.5 s
 //   │  (Leo) (Maya) (Dad) (Grandma) (…  │  everyone else in the family, the ones who miss it first
 //   │   Leo  Maya   Dad   Grandma       │  (QA B09; FamilyRow kidsFirst), scrolling: tap -> the
@@ -34,7 +34,7 @@ import Animated, { FadeIn, FadeOut } from 'react-native-reanimated';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { nightTitle } from '@/components/community/labels';
-import { BottomSheet, CheckIcon, CloseIcon, PotMark, Txt, haptic, useToast } from '@/components/ui';
+import { BottomSheet, CheckIcon, CloseIcon, EggMascot, Txt, haptic, useToast } from '@/components/ui';
 import { api, errorMessage, type Profile } from '@/lib/api';
 import { totalTimeLabel } from '@/lib/format';
 import { useRecipe } from '@/lib/recipes';
@@ -261,7 +261,7 @@ function ShareBody({
   if (!available) {
     return (
       <View style={styles.gone} accessibilityRole="summary">
-        <PotMark size={64} />
+        <EggMascot mood="oops" size={88} />
         <Txt variant="display" size={24} leading={1.2} align="center">
           {t('share.sheet.notFound')}
         </Txt>
@@ -325,7 +325,7 @@ class BodyGuard extends Component<{ children: ReactNode; t: T }, { failed: boole
     const { t } = this.props;
     return (
       <View style={styles.gone} accessibilityRole="summary">
-        <PotMark size={64} />
+        <EggMascot mood="oops" size={88} />
         <Txt variant="display" size={24} leading={1.2} align="center">
           {t('share.sheet.didntOpen')}
         </Txt>
@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    boxShadow: '0 10px 30px rgba(30,36,16,0.22)',
+    boxShadow: '0 10px 30px rgba(31,36,48,0.22)',
   },
   sentDisc: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
   sentText: { flexShrink: 1 },

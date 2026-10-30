@@ -1,12 +1,12 @@
-// The big card at the top of the invite sheet (FEEDBACK-OCT16c E2), in ShareCard's clothes: a peach
-// stage (radius 28) holding a cream card with the family seated round a table (the pot in the
+// The big card at the top of the invite sheet (FEEDBACK-OCT16c E2), in ShareCard's clothes: a yolk-tint
+// stage (radius 28) holding a white card with the family seated round a white table (the egg mark in the
 // middle, their faces round it and one open seat at the front for whoever opens the link), then
 // "Join <Family> on homecookd" in Fraunces.
 import { useState } from 'react';
 import { StyleSheet, View, useWindowDimensions } from 'react-native';
 import Svg, { Ellipse } from 'react-native-svg';
 
-import { Avatar, PlusIcon, PotMark, Txt } from '@/components/ui';
+import { Avatar, PlusIcon, EggMark, Txt } from '@/components/ui';
 import type { Profile } from '@/lib/api';
 import { useWords } from '@/lib/words/useWords';
 import { alpha, colors, radii } from '@/theme/tokens';
@@ -62,10 +62,10 @@ export function InviteCard({ familyName, people }: InviteCardProps) {
       <View style={styles.card}>
         <View style={styles.table} onLayout={(e) => setMeasured(e.nativeEvent.layout.width)}>
           <Svg width={W} height={TABLE_H} style={StyleSheet.absoluteFill}>
-            <Ellipse cx={cx} cy={cy} rx={Math.max(40, seatRx - FACE / 2 - 12)} ry={seatRy - FACE / 2 - 8} fill={colors.peach} />
+            <Ellipse cx={cx} cy={cy} rx={Math.max(40, seatRx - FACE / 2 - 12)} ry={seatRy - FACE / 2 - 8} fill={colors.card} />
           </Svg>
           <View style={[styles.pot, { left: cx - 24, top: cy - 22 }]}>
-            <PotMark size={48} />
+            <EggMark size={48} />
           </View>
           {faces.map((p, i) => (
             <View key={p.id} style={[styles.seat, at(i + 1)]}>
@@ -74,13 +74,13 @@ export function InviteCard({ familyName, people }: InviteCardProps) {
           ))}
           {over ? (
             <View style={[styles.seat, styles.more, at(n - 1)]}>
-              <Txt variant="label" weight={700} color={colors.sageInk}>
+              <Txt variant="label" weight={700} color={colors.green}>
                 +{over}
               </Txt>
             </View>
           ) : null}
           <View style={[styles.seat, styles.open, at(0)]}>
-            <PlusIcon size={20} color={colors.greenDeep} />
+            <PlusIcon size={20} color={colors.yolkDeep} />
           </View>
         </View>
         <Txt variant="display" size={22} leading={1.15} align="center" numberOfLines={2} style={styles.title}>
@@ -98,19 +98,19 @@ function midSentence(name: string): string {
 }
 
 const styles = StyleSheet.create({
-  stage: { alignSelf: 'center', borderRadius: radii.panel, backgroundColor: colors.peach, padding: STAGE_PAD },
+  stage: { alignSelf: 'center', borderRadius: radii.panel, backgroundColor: colors.yolkTint, padding: STAGE_PAD },
   card: {
     borderRadius: radii.card,
     backgroundColor: colors.card,
     padding: CARD_PAD,
     paddingBottom: 20,
     gap: 10,
-    boxShadow: '0 10px 30px rgba(30,36,16,0.10)',
+    boxShadow: '0 10px 30px rgba(31,36,48,0.10)',
   },
   table: { height: TABLE_H },
   pot: { position: 'absolute', width: 48, alignItems: 'center' },
   seat: { position: 'absolute', width: FACE, height: FACE, borderRadius: FACE / 2, alignItems: 'center', justifyContent: 'center' },
-  more: { backgroundColor: colors.sage, boxShadow: `0 0 0 3px ${colors.card}` },
+  more: { backgroundColor: colors.greenTint, boxShadow: `0 0 0 3px ${colors.card}` },
   open: { borderWidth: 1.5, borderStyle: 'dashed', borderColor: alpha.dashed, backgroundColor: colors.card },
   title: { paddingHorizontal: 4 },
 });

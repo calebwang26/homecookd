@@ -7,7 +7,7 @@
 //                             sign-out that never waits on the network, the message push noted for
 //                             the double tap
 //   src/lib/media.ts          the 'heard' measure: once per play of a cook's voice, only from 3 s
-//   src/lib/touches.ts        PR 7's little touches: the pot's mood by the clock, cook mode's step pots,
+//   src/lib/touches.ts        PR 7's little touches: cook mode's step dots,
 //                             the hand-drawn strike, the new-message double tap, its baseline and
 //                             when it stays quiet (a message push said it, a chat is open)
 //   node scripts/test-retention.mjs
@@ -867,21 +867,7 @@ await test("media: a cook's voice logs 'heard' once per play from 3 s; voice not
   }
 });
 
-// ---- touches (PR 7)
-await test('potMoodAt: sleepy 22:00-06:00, waving all Sunday, sleepy wins on a Sunday night, else none', () => {
-  const at = (iso) => U.potMoodAt(new Date(iso)); // local time (no zone in the string)
-  assert.equal(at('2026-10-14T21:59:00'), null, 'a Wednesday at 21:59');
-  assert.equal(at('2026-10-14T22:00:00'), 'sleepy');
-  assert.equal(at('2026-10-15T03:30:00'), 'sleepy');
-  assert.equal(at('2026-10-15T05:59:00'), 'sleepy');
-  assert.equal(at('2026-10-15T06:00:00'), null, 'awake at 6');
-  assert.equal(at('2026-10-18T06:00:00'), 'waving', 'Sunday morning');
-  assert.equal(at('2026-10-18T14:00:00'), 'waving');
-  assert.equal(at('2026-10-18T23:15:00'), 'sleepy', 'Sunday night: asleep');
-  assert.equal(at('2026-10-18T05:00:00'), 'sleepy', 'before 6 on Sunday');
-  assert.equal(at('2026-10-17T12:00:00'), null, 'Saturday noon');
-});
-
+// ---- touches (PR 7; the brand row's clock moods went with the pot, Oct 30: the egg logo keeps one face)
 await test('potDotLayout: pots as big as 16 pt, never under 10; too many steps keep the bars', () => {
   assert.deepEqual(U.potDotLayout(263, 8), { size: 16, gap: 6 }, '375 pt phone, 8 steps');
   const thirteen = U.potDotLayout(263, 13);

@@ -74,7 +74,7 @@
   list-style: none;
 }
 .pills :global(svg) {
-  color: var(--chartreuse);
+  color: var(--yolk);
 }
 .parentWrap {
   width: 100%;

@@ -1,4 +1,4 @@
-// Kid "Ask" tab: lavender wash, "Ask your family" (32), the big dark "+ Ask about a dish" button
+// Kid "Ask" tab: yolk-tint wash, "Ask your family" (32), the big dark "+ Ask about a dish" button
 // (opens the Ask sheet: pick a dish or "Something else", then who: the one way to start a chat, so
 // there is a single "+" on the screen), then the inbox as a DM list: the family circle, then every
 // 1:1 chat (newest first), then one quiet "Invite family" row last (moved here from kid Home in round
@@ -66,7 +66,7 @@ export default function KidAsk() {
               <ActionButton label="Try again" variant="outline" size="sm" onPress={() => refresh()} />
             </Card>
           ) : (
-            <EmptyState tone="lavender" title="No questions yet" />
+            <EmptyState title="No questions yet" />
           )}
           {loading ? null : <InviteRow />}
         </View>
@@ -91,7 +91,7 @@ function InviteRow() {
         accessibilityHint="Add someone to your family on homecookd"
         style={styles.row}>
         <View style={styles.disc}>
-          <ShareIcon size={22} color={colors.butterInk} strokeWidth={2.2} />
+          <ShareIcon size={22} color={colors.ink} strokeWidth={2.2} />
         </View>
         <Txt variant="title" weight={400} style={styles.rowText}>
           Invite family
@@ -111,6 +111,6 @@ const styles = StyleSheet.create({
   gutter: { marginHorizontal: space.gutter },
   // The inbox row's shape (ThreadRows: 80 tall, 56 disc, 14 gap).
   row: { flexDirection: 'row', alignItems: 'center', gap: 14, minHeight: 80, paddingVertical: 12, paddingHorizontal: space.gutter },
-  disc: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.butter },
+  disc: { width: 56, height: 56, borderRadius: 28, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.yolkTint },
   rowText: { flex: 1, minWidth: 0 },
 });

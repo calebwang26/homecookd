@@ -55,7 +55,7 @@ export function SendRecipeButton({
       <ActionButton
         label={t('parent.sendRecipe.button')}
         size="xl"
-        icon={<SendIcon size={22} color={colors.card} />}
+        icon={<SendIcon size={22} color={colors.ink} />}
         onPress={start}
         accessibilityHint={t(dishes.length === 1 ? 'parent.sendRecipe.hintOne' : 'parent.sendRecipe.hintMany')}
         style={style}

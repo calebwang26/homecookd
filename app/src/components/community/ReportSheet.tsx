@@ -105,7 +105,7 @@ export function ReportSheet({ target, visible, onClose, onDone }: { target: Repo
         style={styles.email}>
         <Txt variant="caption" align="center">
           Or write to{' '}
-          <Txt variant="caption" weight={600} color={colors.greenDeep}>
+          <Txt variant="caption" weight={600} color={colors.yolkDeep}>
             {TEAM_EMAIL}
           </Txt>
         </Txt>
@@ -129,7 +129,7 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: alpha.hairline,
   },
-  reasonOn: { backgroundColor: colors.sage, borderColor: 'transparent' },
+  reasonOn: { backgroundColor: colors.greenTint, borderColor: 'transparent' },
   check: { width: 26, height: 26, borderRadius: 13, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
   rule: { height: 1, backgroundColor: alpha.hairline, marginVertical: 4 },
   block: { gap: 8 },

@@ -1,91 +1,97 @@
-// homecookd "Hearth" design tokens, read 1:1 from the design bible
-// (docs/design/hearth-bible/source/*.dc.html, 390x844). Every value here appears in the bible;
-// comments name where. Light only: the bible has no dark mode.
+// homecookd design tokens. Layout, radii, type roles and motion come from the "Hearth" design bible
+// (docs/design/hearth-bible/source/*.dc.html, 390x844). The COLORS are the egg brand kit's
+// (docs/brand/tokens/tokens.json, Oct 30), which wins over the bible: cream, ink, yolk (the main color)
+// and dark green (the second). No peach, lavender or butter. Light only: the app has no dark mode yet
+// (the kit's dark values are in `darkColors`, unused until it does).
 import type { TextStyle } from 'react-native';
 
 export const colors = {
   // Surfaces
-  page: '#F7F7F2', // every screen background
-  card: '#FFFDF7', // cards, round buttons, tab bar, sheets
-  well: '#EFEFE6', // segmented track, list dividers, quiet play buttons
-  track: '#E3E3D8', // unfilled step progress
+  page: '#FBF5EA', // cream: every screen background
+  card: '#FFFFFF', // white: cards, round buttons, tab bar, sheets
+  well: '#F3EAD9', // sunken cream (the web's --sunken): segmented track, quiet buttons
+  line: '#E6DDCF', // hairlines and card borders
+  track: '#E6DDCF', // unfilled step progress (the line color)
   // Text
-  ink: '#1E2410', // titles, strong labels, dark pills, active tab
-  text: '#2D3222', // body text, inactive tab
-  muted: '#5F6352', // secondary lines
-  // Greens
-  green: '#5B6F00', // primary buttons, progress, unread dot, checks
-  greenDeep: '#4C5A10', // green text links ("See all", "Leo asked you")
-  olive: '#34430C', // hero card base, "Look for" text on sage
-  sageInk: '#3C4A0B', // text on sage / lime-wash (count pill, step numbers, initial tiles)
-  sage: '#E6EBCF', // count pill, numbered dots, "Look for" box
-  limeWash: '#EDF2BE', // initial avatar tile (Maya)
-  // Warm accents
-  sun: '#FEBE29', // selected filter chip, "New" badge, waiting ring
-  butter: '#FFF1C7', // "Waiting for your answer" pill, give-back card
-  butterInk: '#5A3A22', // text on butter
-  peach: '#F9E3CF', // quote cards, cook's chat bubbles, "More from Mom", parent wash
-  peachInk: '#6E4A33', // text on peach, voice note ink, parent date line
-  lavender: '#ECE6F2', // kid wash, learner's chat bubbles, request cards
-  lavenderInk: '#3F3558', // text on lavender, step chip on a message
-  rose: '#F6D5CC', // spare warm tint (spec)
-  danger: '#9A4F47', // saved heart, record dot, recording mic
-  // Pot mascot (Main brand mark)
-  potBody: '#F6BFA8',
-  potLid: '#F2A98F',
-  potLine: '#6E5A4C',
-  potFace: '#4A3B30',
+  ink: '#1F2430', // titles, body text, ink on yolk, dark pills, active tab
+  text: '#1F2430', // body text (ink: the kit has one text color)
+  muted: '#5B554E', // secondary lines (6.8:1 on cream)
+  // Yolk, the main color
+  yolk: '#F2A23A', // FILLS only: primary buttons (ink label, never white), selected chips, badges, progress
+  yolkDeep: '#A3580C', // links and accent text on cream, white or yolkTint (never yolk text on light)
+  yolkTint: '#FCEBD0', // guesses and asks: the kid's asks, waiting pills, request cards, the top wash
+  // Dark green, the second color
+  green: '#34430C', // secondary and success: checks, "Sent", secondary fills (white label), text on greenTint
+  greenTint: '#E6EBCF', // the cook's answers: her bubbles, her quote cards, "Look for"
+  danger: '#9A4F47', // the kit's "record": record dot, recording mic, saved heart, errors
+} as const;
+
+/** The kit's dark palette (docs/brand/tokens/tokens.json "semantic.dark"), for when the app gets a dark mode. */
+export const darkColors = {
+  page: '#15181F',
+  card: '#1F2430',
+  ink: '#FBF5EA',
+  muted: '#C9C1B4',
+  line: '#343A48',
+  yolk: '#F2A23A',
+  yolkDeep: '#F2A23A',
+  yolkTint: '#3A2E1A',
+  green: '#B7C48A',
+  greenTint: '#27301C',
+  danger: '#E07A6F',
 } as const;
 
 /** Translucent values used on photos and overlays. */
 export const alpha = {
-  glassChip: 'rgba(255,253,247,0.88)', // "Just in from Mom" chip on the hero
-  glassButton: 'rgba(255,253,247,0.92)', // round back / heart / play over photos
-  glassPill: 'rgba(255,253,247,0.94)', // "Back" and "Watch yourself" pills over photos
-  glassOnDark: 'rgba(255,253,247,0.22)', // "Hear Mom" button inside the dark hero
-  glassHeart: 'rgba(255,253,247,0.3)', // unsaved heart on a photo card
-  tabBar: 'rgba(255,253,247,0.96)',
-  tabBarFrosted: 'rgba(255,253,247,0.88)', // with blur (motion spec 2)
-  headerFrosted: 'rgba(247,247,242,0.72)', // sticky header over blur (motion spec 2)
-  hairline: 'rgba(30,36,16,0.08)',
-  border: 'rgba(30,36,16,0.12)', // 1.5px outline buttons (Watch / Hear, Record row)
-  borderStrong: 'rgba(30,36,16,0.14)', // "Send to Maya"
-  checkRing: 'rgba(30,36,16,0.2)', // empty ingredient check
-  dashed: 'rgba(71,67,42,0.28)', // "Add family" dashed tile
-  grabber: 'rgba(30,36,16,0.18)',
-  backdrop: 'rgba(30,36,16,0.35)', // sheet backdrop (motion spec 4)
+  glassChip: 'rgba(255,255,255,0.88)', // "Just in from Mom" chip on the hero
+  glassButton: 'rgba(255,255,255,0.92)', // round back / heart / play over photos
+  glassPill: 'rgba(255,255,255,0.94)', // "Back" and "Watch yourself" pills over photos
+  glassOnDark: 'rgba(255,255,255,0.22)', // "Hear Mom" button inside the dark hero
+  glassHeart: 'rgba(255,255,255,0.3)', // unsaved heart on a photo card
+  tabBar: 'rgba(255,255,255,0.96)',
+  tabBarFrosted: 'rgba(255,255,255,0.88)', // with blur (motion spec 2)
+  headerFrosted: 'rgba(251,245,234,0.72)', // sticky header over blur (motion spec 2)
+  pageClear: 'rgba(251,245,234,0)', // the page color, see-through (top and bottom fades)
+  hairline: 'rgba(31,36,48,0.08)',
+  border: 'rgba(31,36,48,0.12)', // 1.5px outline buttons (Watch / Hear, Record row)
+  borderStrong: 'rgba(31,36,48,0.14)', // "Send to Maya"
+  checkRing: 'rgba(31,36,48,0.2)', // empty ingredient check
+  dashed: 'rgba(31,36,48,0.28)', // "Add family" dashed tile
+  grabber: 'rgba(31,36,48,0.18)',
+  backdrop: 'rgba(31,36,48,0.35)', // sheet backdrop (motion spec 4)
   recordHalo: 'rgba(154,79,71,0.18)',
-  photoShadeTop: 'rgba(18,20,16,0)',
-  photoShade: 'rgba(18,20,16,0.82)', // hero card bottom
-  photoShadeCard: 'rgba(18,20,16,0.75)', // "Picked for you" cards
-  photoShadeLeft: 'rgba(18,20,16,0.8)', // "Leo made your ramen" (left to right)
+  yolkGlow: 'rgba(242,162,58,0.28)', // a soft yolk ring or halo (homie lit, the "you" dot)
+  photoShadeTop: 'rgba(21,24,31,0)',
+  photoShade: 'rgba(21,24,31,0.82)', // hero card bottom
+  photoShadeCard: 'rgba(21,24,31,0.75)', // "Picked for you" cards
+  photoShadeLeft: 'rgba(21,24,31,0.8)', // "Leo made your ramen" (left to right)
 } as const;
 
-/** Top-of-screen washes: [from, to], over `height` px. Kid = lavender, parent = peach. */
+/** Top-of-screen washes: [from, to], over `height` px. Both are the yolk tint into cream (no lavender or peach). */
 export const washes = {
-  kid: ['#ECE6F2', '#F7F7F2'],
-  parent: ['#F9E3CF', '#F7F7F2'],
+  kid: ['#FCEBD0', '#FBF5EA'],
+  parent: ['#FCEBD0', '#FBF5EA'],
 } as const;
 
-/** Box shadows exactly as the bible writes them (RN 0.86 renders CSS `boxShadow` strings). */
+/** Box shadows (RN 0.86 renders CSS `boxShadow` strings): the bible's, in the kit's ink. */
 export const shadows = {
-  card: '0 8px 24px rgba(30,36,16,0.06)', // list cards, panels
-  cardRaised: '0 10px 30px rgba(30,36,16,0.08)', // "Leo asked you" / "Waiting for your answer"
-  hero: '0 16px 40px rgba(30,36,16,0.16)', // Kid-Home hero card
-  button: '0 4px 14px rgba(30,36,16,0.08)', // round cream back / close buttons
-  field: '0 4px 14px rgba(30,36,16,0.06)', // search field, voice search button
-  chip: '0 2px 8px rgba(30,36,16,0.05)', // filter chips, "About ..." pill
-  person: '0 2px 8px rgba(30,36,16,0.06)', // "Who is it for?" chips
-  segment: '0 2px 8px rgba(30,36,16,0.08)', // selected segment
-  composer: '0 6px 20px rgba(30,36,16,0.08)', // chat text field
-  cta: '0 10px 24px rgba(52,67,12,0.25)', // big green buttons
-  mic: '0 12px 28px rgba(52,67,12,0.3)', // "Tap to talk"
+  card: '0 8px 24px rgba(31,36,48,0.06)', // list cards, panels
+  cardRaised: '0 10px 30px rgba(31,36,48,0.08)', // "Leo asked you" / "Waiting for your answer"
+  hero: '0 16px 40px rgba(31,36,48,0.16)', // Kid-Home hero card
+  button: '0 4px 14px rgba(31,36,48,0.08)', // round white back / close buttons
+  field: '0 4px 14px rgba(31,36,48,0.06)', // search field, voice search button
+  chip: '0 2px 8px rgba(31,36,48,0.05)', // filter chips, "About ..." pill
+  person: '0 2px 8px rgba(31,36,48,0.06)', // "Who is it for?" chips
+  segment: '0 2px 8px rgba(31,36,48,0.08)', // selected segment
+  composer: '0 6px 20px rgba(31,36,48,0.08)', // chat text field
+  cta: '0 10px 24px rgba(163,88,12,0.22)', // big yolk buttons (a warm yolk-deep shadow)
+  mic: '0 12px 28px rgba(163,88,12,0.28)', // "Tap to talk"
   micRecording: '0 0 0 10px rgba(154,79,71,0.18)',
-  tabBar: '0 10px 30px rgba(30,36,16,0.14), 0 0 0 1px rgba(30,36,16,0.04)',
-  panelUp: '0 -10px 30px rgba(30,36,16,0.06)', // Parent-Chat answer panel
-  ringCard: '0 0 0 3px #FFFDF7', // avatar ring, dot ring
-  ringSun: '0 0 0 2px #FEBE29', // waiting question bubble
-  ringGreen: '0 0 0 3px #5B6F00', // selected video thumb
+  tabBar: '0 10px 30px rgba(31,36,48,0.14), 0 0 0 1px rgba(31,36,48,0.04)',
+  panelUp: '0 -10px 30px rgba(31,36,48,0.06)', // Parent-Chat answer panel
+  ringCard: '0 0 0 3px #FFFFFF', // avatar ring, dot ring
+  ringYolk: '0 0 0 2px #F2A23A', // the question waiting for an answer
+  ringSelected: '0 0 0 3px #F2A23A', // selected video thumb
 } as const;
 
 export const radii = {
@@ -135,6 +141,9 @@ export const fonts = {
   sansMedium: 'DMSans_500Medium',
   sansSemi: 'DMSans_600SemiBold',
   sansBold: 'DMSans_700Bold',
+  /** Caveat: only for what the cook "wrote" (the kit's handwriting face), never for UI. */
+  hand: 'Caveat_500Medium',
+  handBold: 'Caveat_700Bold',
 } as const;
 
 export type SansWeight = 400 | 500 | 600 | 700;
@@ -160,16 +169,16 @@ const lh = (size: number, ratio?: number) => (ratio ? Math.round(size * ratio * 
  * which is what CSS `normal` renders).
  */
 export const typography = {
-  /** Fraunces 500 titles with -0.02em tracking. Bible: 40 Main, 34 parent, 32 kid, 30 recipe. */
+  /** Fraunces 600 titles (the kit's headings: 600-650) with -0.02em tracking. Bible: 40 Main, 34 parent, 32 kid, 30 recipe. */
   display: (size = 32, lineHeight = 1.1): TextStyle => ({
-    fontFamily: fonts.serifMedium,
+    fontFamily: fonts.serifSemi,
     fontSize: size,
     lineHeight: lh(size, lineHeight),
     letterSpacing: -0.02 * size,
     color: colors.ink,
   }),
-  /** Fraunces at a weight, no tracking. Section titles (500, 22/20), names (600, 20), brand (600, 22). */
-  serif: (size = 22, weight: SerifWeight = 500, lineHeight?: number): TextStyle => ({
+  /** Fraunces at a weight, no tracking. Headings are 600 (the kit): section titles 22/20, names 20. */
+  serif: (size = 22, weight: SerifWeight = 600, lineHeight?: number): TextStyle => ({
     fontFamily: serifFamily[weight],
     fontSize: size,
     lineHeight: lh(size, lineHeight),
@@ -178,6 +187,13 @@ export const typography = {
   /** Fraunces italic: the cook's words. Bible: 17/1.4 quote cards, 19/1.35, 24/1.25 big asks. */
   quote: (size = 17, lineHeight = 1.4): TextStyle => ({
     fontFamily: fonts.serifItalic,
+    fontSize: size,
+    lineHeight: lh(size, lineHeight),
+    color: colors.ink,
+  }),
+  /** Caveat: words the cook "wrote" by hand (the kit). Never UI. Caveat runs small, so give it ~1.3x the size. */
+  hand: (size = 22, lineHeight = 1.2): TextStyle => ({
+    fontFamily: fonts.hand,
     fontSize: size,
     lineHeight: lh(size, lineHeight),
     color: colors.ink,

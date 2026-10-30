@@ -2,8 +2,8 @@
 // (docs/build/FEEDBACK-OCT16c.md E2; the logic is lib/invites.ts).
 //
 //   ┌──────────── grabber ──────── (x) ┐
-//   │  ┌──────── peach stage ───────┐  │  InviteCard: the family round a table with the pot in
-//   │  │   (Mom)  (pot)  (Dad)      │  │  the middle and one open seat at the front,
+//   │  ┌──── yolk-tint stage ───────┐  │  InviteCard: the family round a table with the egg in
+//   │  │   (Mom)  (egg)  (Dad)      │  │  the middle and one open seat at the front,
 //   │  │  Join The Wangs on homecookd │  "Join <Family> on homecookd"
 //   │  └────────────────────────────┘  │
 //   ├──────────────────────────────────┤
@@ -125,8 +125,8 @@ function InviteSheet({ visible, onClose, onSwitch, initialRole }: AddFamilySheet
                 accessibilityLabel={t('profiles.invite.noPhone')}
                 accessibilityHint={t('profiles.invite.noPhoneHint')}
                 style={styles.phoneless}>
-                <PlusIcon size={18} color={colors.greenDeep} />
-                <Txt variant="label" weight={700} color={colors.greenDeep}>
+                <PlusIcon size={18} color={colors.yolkDeep} />
+                <Txt variant="label" weight={700} color={colors.yolkDeep}>
                   {t('profiles.invite.noPhone')}
                 </Txt>
               </PressableScale>

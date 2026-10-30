@@ -166,7 +166,7 @@ export default function RecordScreen() {
         {asker ? (
           <Animated.View entering={listEnter(0)} style={styles.suggest} accessible accessibilityLabel={askedFor.join(askedWhat)}>
             {request ? <Avatar profile={request.other} size={40} /> : <Avatar name={asker} avatarKey={null} size={40} />}
-            <Txt variant="label" size={16} weight={600} color={colors.lavenderInk} style={styles.flex} numberOfLines={2}>
+            <Txt variant="label" size={16} weight={600} color={colors.ink} style={styles.flex} numberOfLines={2}>
               {askedFor[0]}
               <Txt variant="label" size={16} weight={700} color={colors.ink}>
                 {askedWhat}
@@ -184,7 +184,7 @@ export default function RecordScreen() {
             {steps.map((s, i) => (
               <View key={s} style={styles.step}>
                 <View style={styles.num}>
-                  <Txt variant="label" size={14} weight={700} color={colors.sageInk}>
+                  <Txt variant="label" size={14} weight={700} color={colors.green}>
                     {i + 1}
                   </Txt>
                 </View>
@@ -207,7 +207,7 @@ export default function RecordScreen() {
             <View style={styles.startDot}>
               <View style={styles.redDot} />
             </View>
-            <Txt variant="button" size={20} weight={700} color={colors.card} style={styles.flex} numberOfLines={1}>
+            <Txt variant="button" size={20} weight={700} color={colors.ink} style={styles.flex} numberOfLines={1}>
               {t('parent.record.start')}
             </Txt>
           </PressableScale>
@@ -247,7 +247,7 @@ const styles = StyleSheet.create({
     paddingLeft: 12,
     paddingRight: 16,
     borderRadius: radii.quote,
-    backgroundColor: colors.lavender,
+    backgroundColor: colors.yolkTint,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
@@ -269,7 +269,7 @@ const styles = StyleSheet.create({
     width: 28,
     height: 28,
     borderRadius: 14,
-    backgroundColor: colors.sage,
+    backgroundColor: colors.greenTint,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -279,7 +279,7 @@ const styles = StyleSheet.create({
     paddingLeft: 10,
     paddingRight: 24,
     borderRadius: 999,
-    backgroundColor: colors.green,
+    backgroundColor: colors.yolk,
     boxShadow: shadows.cta,
     flexDirection: 'row',
     alignItems: 'center',
