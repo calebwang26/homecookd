@@ -60,7 +60,7 @@
 .title {
   font-family: var(--ff-display);
   font-weight: 600;
-  font-variation-settings: 'SOFT' 100, 'WONK' 0;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
   font-size: max(1.25rem, 9.6cqw);
   line-height: 1.04;
   letter-spacing: -0.015em;

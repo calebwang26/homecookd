@@ -1,4 +1,4 @@
-/* Type roles (brief section 3.2). Global classes; use them on any element.
+/* Type roles (brief section 3.2; the weights and axes follow the brand kit: Fraunces 600-650, SOFT 100, opsz 144, -0.02em). Global classes; use them on any element.
    Rules: one italic phrase and one accent color per heading. Fraunces never below 20px. */
 
 @layer tokens, reset, type, base;
@@ -14,23 +14,23 @@
 .t-card-title,
 .t-cook {
   font-family: var(--ff-display);
-  font-optical-sizing: auto;
-  font-variation-settings: 'SOFT' 100, 'WONK' 0;
+  font-optical-sizing: none;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
   text-wrap: balance;
 }
 
 /* Italic words: SOFT 100, WONK 1 (the VERO warm italic). */
 :is(.t-hero, .t-block, .t-statement, .t-manifesto, .t-h2, .t-h3, .t-card-title) :is(em, i) {
   font-style: italic;
-  font-variation-settings: 'SOFT' 100, 'WONK' 1;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
 }
 
 .t-hero {
-  font-weight: 700;
+  font-weight: 650;
   font-size: var(--fs-hero);
   line-height: 0.9;
-  letter-spacing: -0.03em;
-  font-variation-settings: 'SOFT' 100, 'WONK' 0, 'opsz' 144;
+  letter-spacing: -0.02em;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
 }
 @media (max-width: 767px) {
   .t-hero {
@@ -40,37 +40,37 @@
 }
 
 .t-block {
-  font-weight: 700;
+  font-weight: 650;
   font-size: var(--fs-block);
   line-height: 1;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
 }
 .t-block :is(em, i) {
   font-weight: 500;
 }
 
 .t-statement {
-  font-weight: 500;
+  font-weight: 600;
   font-size: var(--fs-statement);
   line-height: 0.98;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.02em;
 }
 
 .t-manifesto {
-  font-weight: 500;
+  font-weight: 600;
   font-size: var(--fs-manifesto);
   line-height: 1.08;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
 }
 .t-manifesto :is(em, i, q) {
   font-weight: 450;
 }
 
 .t-h2 {
-  font-weight: 560;
+  font-weight: 650;
   font-size: var(--fs-h2);
   line-height: 0.96;
-  letter-spacing: -0.025em;
+  letter-spacing: -0.02em;
 }
 
 .t-h3 {
@@ -81,10 +81,10 @@
 }
 
 .t-numeral {
-  font-weight: 800;
+  font-weight: 650;
   font-size: var(--fs-numeral);
   line-height: 0.8;
-  letter-spacing: -0.04em;
+  letter-spacing: -0.02em;
   font-variant-numeric: lining-nums;
 }
 
@@ -101,7 +101,7 @@
   font-size: var(--fs-cook);
   line-height: 1.3;
   letter-spacing: 0;
-  font-variation-settings: 'SOFT' 100, 'WONK' 1;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
   text-wrap: pretty;
 }
 

@@ -29,8 +29,8 @@
 .h1 {
   margin: 0;
   font-family: var(--ff-display);
-  font-variation-settings: 'SOFT' 100, 'WONK' 0;
-  font-weight: 500;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
+  font-weight: 600;
   font-size: 34px;
   line-height: 1.1;
   letter-spacing: -0.02em;
@@ -39,7 +39,7 @@
 }
 .h1 em {
   font-style: italic;
-  font-variation-settings: 'SOFT' 100, 'WONK' 1;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
 }
 .center {
   text-align: center;
@@ -261,8 +261,8 @@
 .title {
   margin: 16px 0 0;
   font-family: var(--ff-display);
-  font-variation-settings: 'SOFT' 100, 'WONK' 0;
-  font-weight: 500;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
+  font-weight: 600;
   font-size: 30px;
   line-height: 1.1;
   letter-spacing: -0.02em;
@@ -316,7 +316,7 @@
   margin-top: 4px;
   font-family: var(--ff-display);
   font-style: italic;
-  font-variation-settings: 'SOFT' 100, 'WONK' 1;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
   font-size: 17px;
   line-height: 1.3;
   color: #34430c;
@@ -490,7 +490,7 @@
 .sentTitle {
   margin: 20px 0 0;
   font-family: var(--ff-display);
-  font-weight: 500;
+  font-weight: 600;
   font-size: 34px;
   letter-spacing: -0.02em;
   text-align: center;

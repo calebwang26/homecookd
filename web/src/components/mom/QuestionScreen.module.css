@@ -87,7 +87,7 @@
 .question {
   margin: 0;
   font-family: var(--ff-display);
-  font-weight: 500;
+  font-weight: 600;
   font-size: var(--fs, 30px);
   font-size: clamp(22px, 3.6svh, var(--fs, 30px));
   line-height: 1.2;

@@ -42,11 +42,11 @@
 }
 .word {
   font-family: var(--ff-display);
-  font-weight: 700;
+  font-weight: 650;
   font-size: 24px;
   line-height: 1;
   letter-spacing: -0.02em;
-  font-variation-settings: 'SOFT' 100, 'WONK' 0, 'opsz' 144;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
   transform: translateY(-1px);
 }
 
@@ -101,7 +101,7 @@
   max-width: 340px;
   text-wrap: balance;
   font-family: var(--ff-display);
-  font-weight: 500;
+  font-weight: 600;
   font-size: 34px;
   line-height: 1.08;
   letter-spacing: -0.02em;

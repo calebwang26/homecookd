@@ -75,11 +75,11 @@
 }
 .word {
   font-family: var(--ff-display);
-  font-weight: 700;
+  font-weight: 650;
   font-size: 23px;
   line-height: 1;
   letter-spacing: -0.02em;
-  font-variation-settings: 'SOFT' 100, 'WONK' 0, 'opsz' 144;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
   transform: translateY(-1px);
 }
 /* The dish pages' locked view: a way back to the page it opened from. */

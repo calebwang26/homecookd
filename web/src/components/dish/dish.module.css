@@ -18,8 +18,8 @@
   align-items: center;
   gap: 8px;
   font-family: var(--ff-display);
-  font-variation-settings: 'SOFT' 100, 'WONK' 0;
-  font-weight: 700;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
+  font-weight: 650;
   font-size: 24px;
   letter-spacing: -0.02em;
   color: #1f2430;
@@ -194,8 +194,8 @@
 .appTitle {
   margin: 20px 0 0;
   font-family: var(--ff-display);
-  font-variation-settings: 'SOFT' 100, 'WONK' 0;
-  font-weight: 500;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
+  font-weight: 600;
   font-size: 30px;
   line-height: 1.1;
   letter-spacing: -0.02em;

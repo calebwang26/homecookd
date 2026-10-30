@@ -15,7 +15,7 @@
   margin-top: 4px;
   font-family: var(--ff-display);
   font-style: italic;
-  font-variation-settings: 'SOFT' 100, 'WONK' 1;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
   font-size: 17px;
   font-weight: 400;
   line-height: 1.3;

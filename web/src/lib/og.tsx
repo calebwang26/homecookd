@@ -2,7 +2,7 @@
 // /og.jpg for the home page (the parent one). 1200×630, generated once at build (static export).
 // Left 60%: the hero poster (a mom laughing with her adult son and daughter over a salad) under the
 // olive scrim, with the version's hero line ("Cook it like Mom does." / "Record it once. They'll cook
-// it forever.", the accent in italic on the highlighter, as on the page). Right 40%: canvas with the brand line, and the pot mascot + "homecookd" bottom-right.
+// it forever.", the accent in italic on the highlighter, as on the page). Right 40%: cream with the brand line and the kit's lockup bottom-right.
 // Fraunces is fetched from Google Fonts at build as static TTF subsets (Satori can't read woff2);
 // if that fails the image still renders with the built-in sans.
 //
@@ -21,14 +21,15 @@ import { DEFAULT_RELATION, fillPerson } from '@/lib/relation';
 
 const size = { width: 1200, height: 630 };
 
+// The brand kit's colors (docs/brand/tokens): cream, ink, yolk, yolk-deep.
 const C = {
-  canvas: '#F7F7F2',
-  cream: '#FFFDF7',
-  ink: '#1E2410',
-  green: '#5B6F00',
-  highlighter: '#FFD24D',
-  chartreuse: '#D1E043',
-  muted: '#5F6352',
+  canvas: '#FBF5EA',
+  cream: '#FBF5EA',
+  ink: '#1F2430',
+  accent: '#A3580C',
+  highlighter: '#F6BE75',
+  yolk: '#F2A23A',
+  muted: '#5B554E',
 };
 
 /** the italic word on the highlighter, as on the page */
@@ -43,12 +44,12 @@ const HIGHLIGHT = {
   marginRight: 18,
 } as const;
 
-type FontSpec = { name: string; data: ArrayBuffer; weight: 500 | 700; style: 'normal' | 'italic' };
+type FontSpec = { name: string; data: ArrayBuffer; weight: 600 | 650; style: 'normal' | 'italic' };
 
 async function loadFraunces(chars: string): Promise<FontSpec[]> {
   const text = Array.from(new Set(chars)).join('');
   // axes in Google's order: ital, opsz, wght, SOFT, WONK
-  const tuples = ['0,144,500,100,0', '0,144,700,100,0', '1,144,500,100,1', '1,144,700,100,1'].join(';');
+  const tuples = ['0,144,600,100,0', '0,144,650,100,0', '1,144,600,100,1', '1,144,650,100,1'].join(';');
   const url = `https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght,SOFT,WONK@${tuples}&text=${encodeURIComponent(text)}`;
   const css = await (await fetch(url)).text();
   const faces = [...css.matchAll(/font-style:\s*(normal|italic);\s*font-weight:\s*(\d+);[\s\S]*?src:\s*url\(([^)]+)\)/g)];
@@ -56,7 +57,7 @@ async function loadFraunces(chars: string): Promise<FontSpec[]> {
     faces.map(async ([, style, weight, src]) => ({
       name: 'Fraunces',
       data: await (await fetch(src)).arrayBuffer(),
-      weight: Number(weight) as 500 | 700,
+      weight: Number(weight) as 600 | 650,
       style: style as 'normal' | 'italic',
     })),
   );
@@ -77,12 +78,13 @@ async function render(audience: Audience): Promise<ImageResponse> {
   const BRAND = fillPerson(parent ? copy.recipeBox.h2 : copy.passDown.h2, DEFAULT_RELATION);
   const BRAND_ACCENT = (parent ? copy.recipeBox.accent : copy.passDown.accent).join(' '); // "Let's fix that." / "homemade recipe."
   const BRAND_LEAD = BRAND.slice(0, BRAND.length - BRAND_ACCENT.length).trim();
-  const WORDMARK = copy.nav.logo; // "homecookd"
-  const [poster, fonts] = await Promise.all([
+    const [poster, lockup, fonts] = await Promise.all([
     readFile(join(process.cwd(), 'public', HERO.poster)),
-    loadFraunces(`${HERO_BEFORE}${HERO_REL}${HERO_AFTER}${copy.hero.h1Fixed}${BRAND}${WORDMARK}`).catch(() => [] as FontSpec[]),
+    readFile(join(process.cwd(), 'public', 'brand', 'lockup-horizontal.svg')),
+    loadFraunces(`${HERO_BEFORE}${HERO_REL}${HERO_AFTER}${copy.hero.h1Fixed}${BRAND}`).catch(() => [] as FontSpec[]),
   ]);
   const posterSrc = `data:image/jpeg;base64,${poster.toString('base64')}`;
+  const lockupSrc = `data:image/svg+xml;base64,${lockup.toString('base64')}`;
   const serif = fonts.length ? 'Fraunces' : undefined;
 
   return new ImageResponse(
@@ -107,7 +109,7 @@ async function render(audience: Audience): Promise<ImageResponse> {
               height: 630,
               display: 'flex',
               backgroundImage:
-                'linear-gradient(to top, rgba(20,22,12,0.86) 0%, rgba(20,22,12,0.62) 30%, rgba(20,22,12,0.18) 58%, rgba(20,22,12,0) 76%)',
+                'linear-gradient(to top, rgba(31,36,48,0.86) 0%, rgba(31,36,48,0.62) 30%, rgba(31,36,48,0.18) 58%, rgba(31,36,48,0) 76%)',
             }}
           />
           <div
@@ -119,10 +121,10 @@ async function render(audience: Audience): Promise<ImageResponse> {
               display: 'flex',
               flexDirection: 'column',
               fontFamily: serif,
-              fontWeight: 700,
+              fontWeight: 650,
               fontSize: 92,
               lineHeight: 0.98,
-              letterSpacing: '-0.03em',
+              letterSpacing: '-0.02em',
               color: C.cream,
             }}
           >
@@ -167,47 +169,23 @@ async function render(audience: Audience): Promise<ImageResponse> {
               display: 'flex',
               flexWrap: 'wrap',
               fontFamily: serif,
-              fontWeight: 500,
+              fontWeight: 600,
               fontSize: 50,
               lineHeight: 1.04,
-              letterSpacing: '-0.025em',
+              letterSpacing: '-0.02em',
               color: C.ink,
             }}
           >
             <span style={{ display: 'flex' }}>{BRAND_LEAD}&nbsp;</span>
-            <span style={{ display: 'flex', fontStyle: 'italic', color: C.green }}>{BRAND_ACCENT}</span>
+            <span style={{ display: 'flex', fontStyle: 'italic', color: C.accent }}>{BRAND_ACCENT}</span>
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 12 }}>
-            <svg width="64" height="59" viewBox="0 0 100 92">
-              <path d="M38 22c-4-5 4-8 0-13M52 20c-4-5 4-8 0-13M66 22c-4-5 4-8 0-13" fill="none" stroke="#6E5A4C" strokeWidth="3.5" strokeLinecap="round" />
-              <path d="M22 44h56v18a20 20 0 0 1-20 20H42a20 20 0 0 1-20-20z" fill="#F6BFA8" stroke="#6E5A4C" strokeWidth="3.5" strokeLinejoin="round" />
-              <path d="M22 52h-8M78 52h8" stroke="#6E5A4C" strokeWidth="5" strokeLinecap="round" />
-              <ellipse cx="50" cy="42" rx="31" ry="7" fill="#F2A98F" stroke="#6E5A4C" strokeWidth="3.5" />
-              <circle cx="50" cy="33" r="4.5" fill="#6E5A4C" />
-              <circle cx="40" cy="59" r="3.6" fill="#4A3B30" />
-              <circle cx="60" cy="59" r="3.6" fill="#4A3B30" />
-              <ellipse cx="33" cy="66" rx="5" ry="3" fill="#FFB8AE" />
-              <ellipse cx="67" cy="66" rx="5" ry="3" fill="#FFB8AE" />
-              <path d="M45 65q5 5 10 0" fill="none" stroke="#4A3B30" strokeWidth="3" strokeLinecap="round" />
-            </svg>
-            <div
-              style={{
-                display: 'flex',
-                fontFamily: serif,
-                fontWeight: 700,
-                fontSize: 60,
-                lineHeight: 1,
-                letterSpacing: '-0.02em',
-                color: C.ink,
-                marginBottom: 6,
-              }}
-            >
-              {WORDMARK}
-            </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end' }}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- Satori renders plain <img> */}
+            <img src={lockupSrc} alt="homecookd" width={340} height={66} />
           </div>
 
-          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 14, display: 'flex', background: C.chartreuse }} />
+          <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 14, display: 'flex', background: C.yolk }} />
         </div>
       </div>
     ),

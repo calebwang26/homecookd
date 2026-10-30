@@ -195,7 +195,7 @@
   font-family: var(--ff-display);
   font-style: italic;
   font-weight: 500;
-  font-variation-settings: 'SOFT' 100, 'WONK' 1;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
   font-size: clamp(1.75rem, 1.15rem + 1.3vw, 2.5rem);
   line-height: 1.18;
   letter-spacing: -0.015em;

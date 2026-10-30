@@ -66,7 +66,7 @@
 .say {
   font-family: var(--ff-display);
   font-weight: 350;
-  font-variation-settings: 'SOFT' 100, 'WONK' 0;
+  font-variation-settings: 'SOFT' 100, 'opsz' 144;
   font-size: calc(var(--fs-marquee) * 0.6);
   line-height: 1;
   letter-spacing: -0.03em;
