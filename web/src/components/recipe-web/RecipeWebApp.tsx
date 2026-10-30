@@ -128,7 +128,7 @@ function TopBar({ onGetApp, overlay, clear, dish }: { onGetApp?: (el: HTMLElemen
   // On the dish pages the bar has a way back to the page the view opened from, and the wordmark stays put.
   const mark = (
     <>
-      <Logo height={28} />
+      <Logo height={28} reversed />
     </>
   );
   return (

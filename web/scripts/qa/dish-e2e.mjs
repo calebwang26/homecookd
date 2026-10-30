@@ -12,7 +12,7 @@
 // her words with the English under them). The recipe card on M5 and in M6, and the kid's card, open the
 // locked recipe view (the /r mechanism on the dish card's version): the recipe, ingredients and steps open;
 // any other tap says "Get the app", and the sheet copies the page's link, then opens the store. Every screen
-// is shot at 390×844 into --out. Exits 1 on a failure. Flags: --base, --out, --chrome (default:
+// is shot at 390×844 (--width N for another width) into --out. Exits 1 on a failure. Flags: --base, --out, --chrome (default:
 // /Applications/Google Chrome.app), --port (fake).
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -30,7 +30,7 @@ const args = Object.fromEntries(
 const BASE = String(args.base ?? 'http://localhost:3105').replace(/\/+$/, '');
 const OUT = path.resolve(String(args.out ?? '/tmp/dish-e2e'));
 const CHROME = String(args.chrome ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
-const PHONE = { width: 390, height: 844 };
+const PHONE = { width: Number(args.width ?? 390), height: 844 }; // --width 360 checks the narrow phones
 mkdirSync(OUT, { recursive: true });
 
 const failures = [];
