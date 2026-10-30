@@ -11,6 +11,7 @@ export const relationV = v.union(
   v.literal("grandpa"),
   v.literal("auntie"),
   v.literal("uncle"),
+  v.literal("none"),
 );
 export const questionIdV = v.union(v.literal("q1"), v.literal("q2"), v.literal("q3"), v.literal("q4"), v.literal("q5"), v.literal("q6"));
 const statusV = v.union(v.literal("stated"), v.literal("guessed"), v.literal("unknown"), v.literal("mom"));
@@ -92,7 +93,7 @@ export const cardV = v.object({
   kidVoiceUrl: maybeText,
   kidVoiceS: v.union(v.number(), v.null()), // its length in seconds, as the page measured it
   photoUrls: v.array(v.string()),
-  askUrl: v.string(),
+  askUrl: v.union(v.string(), v.null()), // null while relation is "none"
   askedAt: v.union(v.number(), v.null()),
   openedAt: v.union(v.number(), v.null()),
   finishedAt: v.union(v.number(), v.null()),

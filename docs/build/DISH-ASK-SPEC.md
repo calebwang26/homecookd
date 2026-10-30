@@ -67,7 +67,7 @@ The recipe shapes are the MVP's (`convex/lib/dishAsk/types.ts`, ported from `sup
 with one field added: `isGuess` on each ingredient and line.
 
 ```ts
-type Relation = "mom" | "dad" | "grandma" | "grandpa" | "auntie" | "uncle";
+type Relation = "mom" | "dad" | "grandma" | "grandpa" | "auntie" | "uncle" | "none"; // none: no one in particular (§10)
 type QuestionId = "q1" | "q2" | "q3" | "q4" | "q5" | "q6"; // q1–q3 suggested with the card, q4–q6 the kid's own
 type Status = "stated" | "guessed" | "unknown" | "mom";   // where a value came from (see below)
 
@@ -126,7 +126,7 @@ type Card = {                 // what the kid's page gets
   kidVoiceUrl: string | null; // the kid's voice note to Mom (a Convex storage URL)
   kidVoiceS: number | null;   // its length in seconds, as the page measured it (cards/update `voiceNoteS`)
   photoUrls: string[];        // the photos the card was made from (0–3)
-  askUrl: string;             // https://homecookd.app/a?t=<ask token>
+  askUrl: string | null;      // https://homecookd.app/a?t=<ask token>; null while relation is "none" (§10)
   askedAt: number | null; openedAt: number | null; finishedAt: number | null; // ms since epoch
   createdAt: number;
   filmingDay: number | null;  // the day Mom plans to film it, 0 (Sunday) to 6 (§8 cravings.setFilmingDay)
@@ -210,7 +210,7 @@ type Ask = {                  // what Mom's page gets; never the kid token
   more than 0 and at most 60. It shows as `kidVoiceS` on both pages.
 - Once Mom has finished, `message` and `voiceNote` give `409 closed`.
 
-**`POST /dish/cards/ask`** `{kidToken, questions: [{id?, text}]}` → `{card}`
+**`POST /dish/cards/ask`** `{kidToken, questions: [{id?, text?, about?}]}` → `{card}` (`about`: §10)
 - What Mom is asked. These are the MVP's rules (`/cards/ask`), unchanged:
   - her answered questions stay first;
   - at most 3 open at a time and 6 in all;
@@ -558,3 +558,73 @@ type MyCard = Card & {        // the web's Card (§3), plus:
 ```
 - **The kid's side:** the kid (`personId`) sees the guess, and Mom's version and clips once it's written.
 - **Mom's side** (`requestedOf`): she sees the same card. Her own clips are in `answers`.
+
+## 10. The kid shapes the card (Oct 29, from user feedback)
+
+Three changes to the kid's routes. Nothing changes for Mom's page except what she's shown.
+
+### No one in particular
+- `relation` may be `"none"`: a dish the kid craves that isn't tied to anyone. It's accepted on `POST /dish/cards`
+  and `cards/update`. A missing relation still means `mom`.
+- **The guess** is a plain tonight's version, cooked by nobody in particular: the prompt says so, and no line or
+  question names a cook. It still gets its 3 suggested questions, ready for when the kid picks someone.
+- **Asking is off until the kid picks someone:**
+  - `cards/ask` and `cards/sent` answer `400 bad_request` "Pick who you're asking first.";
+  - `Card.askUrl` is null;
+  - `message` is "" until a relation is picked. Then the default message is written, as on a relation change.
+- `cards/update {relation: "mom"}` (or any other relation) turns asking on. Moving back to `"none"` after the card
+  was sent is a `409 closed`.
+
+### The kid picks what to ask
+`cards/ask` items may carry `about`, a part of the guess:
+- `{kind: "ingredient", index}`: an index into `guess.ingredients`;
+- `{kind: "line", step, line}`: indexes into `guess.steps` and its `lines`.
+
+The rules:
+- **Text:** with no `text`, the server writes a short question in the kid's voice from a template. No model is
+  called. The kid can reword it before sending.
+  - For an ingredient: "How much <name> do you use?", with the name before any comma.
+  - For a line: "How do you do this part: <line without ** marks, up to 60 characters>?"
+  - With `text`, the kid's own words are used (3–120 characters, word-filtered).
+- **Ids:** such a question takes the next free own id (`q4`–`q6`). It can't also carry an `id` (`400`). The guess's ingredient or line gets `ask` set to
+  that id, so her answer goes where it belongs in the merge, the way `q1`–`q3` already work.
+- **Caps:** the same as before, 3 open and 6 in all. An `about` that doesn't point at a part of the guess is a
+  `400`.
+- **Mom's page** shows them like any other question.
+
+### The kid edits the guess
+`cards/update` takes `edits`, a list of at most 20:
+- `{kind: "ingredient", index, name?, amount?}`;
+- `{kind: "line", step, line, text?}`.
+
+The rules:
+- **Limits:**
+  - `name` is 1–80 characters and `amount` 1–40, both plain with no `**`;
+  - a line's `text` is 1–80 characters as read; `**` marks are kept when paired, as in the guess.
+  - Everything is word-filtered (`422 words`), and a bad index is a `400`. No model is called.
+- **What changes:** an edited ingredient or line becomes `status: "stated"` (`isGuess: false`): the kid's own
+  knowledge. It keeps its `ask`, so the kid can still ask about it. A line's `detail` is cleared when its text
+  changes.
+- **What Mom sees:** the edited guess, as "<kid> thinks…". `stated` values aren't shown as guesses. Her page's
+  translation is redone, because the translation key now includes the guess.
+- **Locked after Send:** once Mom has sent her answers, edits are `409 closed` (her version is built from the guess
+  as it was).
+
+### Shorter steps on the card (`short`)
+Caleb: the card reads too recipe-like and wordy.
+- **What:** every step line (`Line`) in the guess, Mom's version and `inLang` carries
+  `short: string | null`. It's at most about 6 words (at most 40 characters as read), e.g.
+  "Scramble eggs **soft**. Set aside."
+- **What stays:** the full `text`, shown when the kid taps the step; and `detail`, shown for a line under it.
+- **Rules,** after the app's cook-mode short steps (`pipeline/shorten.py`'s rules):
+  - one action, plain words, no filler;
+  - `**bold**` only around amounts, heat and times, and only ones the line's `text` gives;
+  - no number, heat or time the line doesn't have.
+- **Where it's written:**
+  - in the same structured call as the guess and the merge, so there's no extra model call;
+  - the server checks it against the line's `text` (bold and numbers), and sets it to null when it fails;
+  - a line Mom changed gets her short line, checked against her words like the line itself;
+  - a line the kid edits (`edits`) has its `short` cleared to null.
+- **Translation:** `short` is translated with the rest of the card for her page language (`inLang`).
+- **On the page:** `short` is optional; show `text` when it's null or missing.
+- **Status (Oct 29):** specced, not built yet. It's next on Convex & accounts' list after the usage reset.

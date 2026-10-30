@@ -19,7 +19,7 @@ import { type ActionCtx, httpAction } from "../_generated/server";
 import { DishModelError, type GuessResult, type Photo, type Spend, transcribe, translateForMom, writeGuess } from "../dishAskModel";
 import { recordSpend } from "../dishAsks";
 import type { QuestionId, Relation } from "./dishAsk/types";
-import { baseType, isQuestionId, isRelation, LIMITS } from "./dishAsk/validate";
+import { baseType, cleanBold, isQuestionId, isRelation, LIMITS, plain } from "./dishAsk/validate";
 import {
   badRequest,
   CLIP_BYTES,
@@ -371,10 +371,69 @@ const updateCard: Route = async ({ ctx, req }) => {
     }
     voiceNoteS = Math.min(KID_VOICE_S, Math.round(s * 100) / 100);
   }
-  if (flagged(kidName, message)) throw fail(422, "words", WORDS);
-  const card = await ctx.runMutation(internal.dishAsks.kidUpdate, { ...kid, relation, kidName, message, voiceNote, voiceNoteS });
+  const edits = editsOf(b.edits);
+  if (flagged(kidName, message, ...edits.flatMap((e) => (e.kind === "ingredient" ? [e.name, e.amount] : [e.text])))) {
+    throw fail(422, "words", WORDS);
+  }
+  const card = await ctx.runMutation(internal.dishAsks.kidUpdate, {
+    ...kid,
+    relation,
+    kidName,
+    message,
+    voiceNote,
+    voiceNoteS,
+    ...(edits.length ? { edits } : {}),
+  });
   return { body: { card } };
 };
+
+const MAX_EDITS = 20;
+const index = (v: unknown, field: string) => {
+  if (typeof v !== "number" || !Number.isInteger(v) || v < 0) throw badRequest(`${field} must be a whole number from 0`);
+  return v;
+};
+const editText = (v: unknown, field: string, max: number) => {
+  if (v === undefined || v === null) return undefined;
+  if (typeof v !== "string" || !v.trim()) throw badRequest(`${field} must be 1 to ${max} characters`);
+  return v.replace(/\s+/g, " ").trim();
+};
+
+/** The kid's fixes to the guess (§10): sizes and shapes here; indexes against the guess in dishAsks.kidUpdate. */
+function editsOf(raw: unknown) {
+  if (raw === undefined || raw === null) return [];
+  if (!Array.isArray(raw) || raw.length > MAX_EDITS) throw badRequest(`edits must be a list of at most ${MAX_EDITS}`);
+  return raw.map((x: unknown, i) => {
+    const o = (x && typeof x === "object" ? x : {}) as Body;
+    if (o.kind === "ingredient") {
+      const name = editText(o.name, `edits[${i}].name`, LIMITS.name);
+      const amount = editText(o.amount, `edits[${i}].amount`, LIMITS.amount);
+      if (name && (name.includes("**") || name.length > LIMITS.name)) throw badRequest(`edits[${i}].name must be 1 to ${LIMITS.name} characters`);
+      if (amount && (amount.includes("**") || amount.length > LIMITS.amount)) {
+        throw badRequest(`edits[${i}].amount must be 1 to ${LIMITS.amount} characters`);
+      }
+      if (!name && !amount) throw badRequest(`edits[${i}] needs a name or an amount`);
+      return { kind: "ingredient" as const, index: index(o.index, `edits[${i}].index`), name, amount };
+    }
+    if (o.kind === "line") {
+      const raw = editText(o.text, `edits[${i}].text`, LIMITS.lineText);
+      const text = raw === undefined ? undefined : cleanBold(raw);
+      if (text !== undefined && (!plain(text) || plain(text).length > LIMITS.lineText)) {
+        throw badRequest(`edits[${i}].text must be 1 to ${LIMITS.lineText} characters`);
+      }
+      return { kind: "line" as const, step: index(o.step, `edits[${i}].step`), line: index(o.line, `edits[${i}].line`), text };
+    }
+    throw badRequest(`edits[${i}].kind must be ingredient or line`);
+  });
+}
+
+/** A question about a part of the guess (§10): `{kind: "ingredient", index}` or `{kind: "line", step, line}`. */
+function aboutOf(raw: unknown, field: string) {
+  if (raw === undefined || raw === null) return undefined;
+  const o = (typeof raw === "object" ? raw : {}) as Body;
+  if (o.kind === "ingredient") return { kind: "ingredient" as const, index: index(o.index, `${field}.index`) };
+  if (o.kind === "line") return { kind: "line" as const, step: index(o.step, `${field}.step`), line: index(o.line, `${field}.line`) };
+  throw badRequest(`${field}.kind must be ingredient or line`);
+}
 
 const askMom: Route = async ({ ctx, req, ipKey }) => {
   await limit(ctx, ipKey, RATE.ask);
@@ -383,11 +442,14 @@ const askMom: Route = async ({ ctx, req, ipKey }) => {
   if (!Array.isArray(b.questions)) throw badRequest("questions must be a list of 1 to 3 questions");
   const questions = b.questions.map((x: unknown, i) => {
     const o = (x && typeof x === "object" ? x : {}) as Body;
-    if (typeof o.text !== "string") throw badRequest(`questions[${i}].text must be a string`);
+    const about = aboutOf(o.about, `questions[${i}].about`);
+    if (typeof o.text !== "string" && !(about && (o.text === undefined || o.text === null))) {
+      throw badRequest(`questions[${i}].text must be a string`);
+    }
     if (o.id !== undefined && o.id !== null && typeof o.id !== "string") {
       throw badRequest(`questions[${i}].id must be q1, q2 or q3, or left out for the kid's own question`);
     }
-    return { id: (o.id ?? null) as string | null, text: o.text };
+    return { id: (o.id ?? null) as string | null, text: typeof o.text === "string" ? o.text : null, ...(about ? { about } : {}) };
   });
   return { body: { card: await ctx.runMutation(internal.dishAsks.kidAsk, { ...kid, questions }) } };
 };
