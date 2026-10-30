@@ -22,9 +22,23 @@ const askTokenOf = (kid) => {
 };
 
 const RELATION_LABEL = { mom: 'Mom', dad: 'Dad', grandma: 'Grandma', grandpa: 'Grandpa', auntie: 'Auntie', uncle: 'Uncle' };
+const isRelation = (r) => r === 'none' || !!RELATION_LABEL[r];
+const defaultMessage = (relation, dish) => (relation === 'none' ? '' : `${RELATION_LABEL[relation]}, how do you make your ${dish}? I'm trying to make it here.`);
+const plain = (t) => String(t).replaceAll('**', '');
+
+/** DISH-ASK-SPEC §10: a part of the guess named by the kid, as the real server resolves `about`. */
+function partOf(guess, about) {
+  if (about?.kind === 'ingredient') return guess.ingredients[about.index] ?? null;
+  if (about?.kind === 'line') return guess.steps[about.step]?.lines[about.line] ?? null;
+  return null;
+}
+/** §10 template: no model is called. */
+const templateFor = (about, part) =>
+  about.kind === 'ingredient' ? `How much ${part.name.split(',')[0].trim()} do you use?` : `How do you do this part: ${plain(part.text).slice(0, 60)}?`;
+const FILTERED = /\b(fuck|shit)\b/i;
 
 const ing = (name, amount, status, ask = null) => ({ name, amount, status, isGuess: status === 'guessed' || status === 'unknown', ask, clip: null, was: null, quote: null });
-const line = (text, ask = null) => ({ text, detail: null, status: 'guessed', isGuess: true, ask, clip: null, was: null, quote: null });
+const line = (text, short, ask = null) => ({ text, short, detail: null, status: 'guessed', isGuess: true, ask, clip: null, was: null, quote: null });
 
 function guessFor(dish) {
   return {
@@ -41,10 +55,10 @@ function guessFor(dish) {
       ing('scallion, sliced', '~1', 'guessed'),
     ],
     steps: [
-      { title: 'Scramble the eggs', lines: [line('Scramble the eggs **soft**.'), line('Take them out.')], uses: [0], tip: null },
-      { title: 'Cook the tomatoes', lines: [line('Cook the tomatoes until they go **soft and saucy**.')], uses: [1], tip: null },
-      { title: 'Season', lines: [line('Stir in the ketchup and salt.')], uses: [2, 3, 4], tip: null },
-      { title: 'Finish', lines: [line('Eggs back in. Fold **twice**, top with scallion, eat with rice.', 'q3')], uses: [0, 5], tip: null },
+      { title: 'Scramble the eggs', lines: [line('Scramble the eggs **soft**.', 'Scramble eggs **soft**.'), line('Take them out.', 'Set aside.')], uses: [0], tip: null },
+      { title: 'Cook the tomatoes', lines: [line('Cook the tomatoes until they go **soft and saucy**.', 'Tomatoes, **soft and saucy**.')], uses: [1], tip: null },
+      { title: 'Season', lines: [line('Stir in the ketchup and salt.', 'Add ketchup, salt.')], uses: [2, 3, 4], tip: null },
+      { title: 'Finish', lines: [line('Eggs back in. Fold **twice**, top with scallion, eat with rice.', 'Eggs back. Fold **twice**.', 'q3')], uses: [0, 5], tip: null },
     ],
     questions: [
       { id: 'q1', text: 'How much ketchup do you put in?' },
@@ -63,8 +77,8 @@ function hindi(guess, card) {
     lang: 'hi',
     guess: {
       ...guess,
-      ingredients: guess.ingredients.map((x, i) => ({ ...x, name: names[i] ?? x.name })),
-      steps: guess.steps.map((st, i) => ({ ...st, lines: st.lines.map((l, j) => ({ ...l, text: lines[i]?.[j] ?? l.text })) })),
+      ingredients: guess.ingredients.map((x, i) => ({ ...x, name: x.status === 'stated' ? x.name : (names[i] ?? x.name) })),
+      steps: guess.steps.map((st, i) => ({ ...st, lines: st.lines.map((l, j) => ({ ...l, text: l.status === 'stated' ? l.text : (lines[i]?.[j] ?? l.text), short: null })) })),
       questions: guess.questions.map((q) => ({ ...q, text: qs[q.id] ?? q.text })),
     },
     questions: card.asked.map((q) => ({ ...q, text: qs[q.id] ?? q.text })),
@@ -140,7 +154,7 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
     kidVoiceUrl: fileUrl(c.voice),
     kidVoiceS: c.voice ? c.voiceS : null,
     photoUrls: c.photos.map(fileUrl),
-    askUrl: `${site}/a?t=${c.askToken}`,
+    askUrl: c.relation === 'none' ? null : `${site}/a?t=${c.askToken}`,
     askedAt: c.askedAt,
     openedAt: c.openedAt,
     finishedAt: c.finishedAt,
@@ -226,7 +240,7 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
         const dish = String(b.dish ?? '').trim();
         if (dish.length < 2 && !b.photos?.length && !b.voiceNote) return fail(400, 'bad_request', 'Tell us the dish.');
         if (/^(asdf|hello)$/i.test(dish)) return fail(422, 'not_a_dish', 'That doesn’t sound like a dish.');
-        const relation = RELATION_LABEL[b.relation] ? b.relation : 'mom';
+        const relation = isRelation(b.relation) ? b.relation : 'mom';
         const kidToken = token();
         const guess = guessFor(dish);
         const card = {
@@ -240,7 +254,7 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
           answers: new Map(),
           merging: false,
           asked: [],
-          message: `${RELATION_LABEL[relation]}, how do you make your ${guess.dish}? I'm trying to make it here.`,
+          message: defaultMessage(relation, guess.dish),
           voice: null,
           voiceS: null,
           photos: (b.photos ?? []).filter((id) => files.has(id)),
@@ -261,25 +275,76 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
       switch (url.pathname) {
         case '/dish/cards/get':
           return send(200, { card: cardOut(c) });
-        case '/dish/cards/update':
-          if (c.finishedAt && (b.message !== undefined || b.voiceNote !== undefined)) return fail(409, 'closed', 'Mom already sent her answers.');
-          if (b.kidName !== undefined) c.kidName = b.kidName ? String(b.kidName).slice(0, 40) : null;
-          if (b.relation && RELATION_LABEL[b.relation]) c.relation = b.relation;
-          if (typeof b.message === 'string') c.message = b.message.trim().slice(0, 500);
+        case '/dish/cards/update': {
+          if (c.finishedAt && (b.message !== undefined || b.voiceNote !== undefined || b.edits !== undefined)) return fail(409, 'closed', 'Mom already sent her answers.');
+          if (b.relation !== undefined && !isRelation(b.relation)) return fail(400, 'bad_request', 'That isn’t a relation.');
+          if (b.relation === 'none' && c.relation !== 'none' && c.askedAt) return fail(409, 'closed', 'This card was already sent.');
           if (b.voiceNoteS !== undefined && !(b.voiceNoteS > 0 && b.voiceNoteS <= 60)) return fail(400, 'bad_request', 'voiceNoteS is over 0 and at most 60.');
+          if (b.edits !== undefined) {
+            if (!Array.isArray(b.edits) || b.edits.length > 20) return fail(400, 'bad_request', 'At most 20 edits.');
+            const next = structuredClone(c.guess);
+            for (const e of b.edits) {
+              const part = partOf(next, e);
+              const values = e.kind === 'ingredient' ? [e.name, e.amount] : [e.text];
+              if (!part || !values.some((v) => v !== undefined)) return fail(400, 'bad_request', 'That edit doesn’t point at a part of the guess.');
+              const limits = e.kind === 'ingredient' ? [80, 40] : [80];
+              for (const [i, v] of values.entries()) {
+                if (v === undefined) continue;
+                const plainV = e.kind === 'ingredient' ? String(v) : plain(v);
+                if (typeof v !== 'string' || plainV.trim().length < 1 || plainV.length > limits[i] || (e.kind === 'ingredient' && String(v).includes('**'))) return fail(400, 'bad_request', 'That edit is the wrong length.');
+                if (FILTERED.test(v)) return fail(422, 'words', 'Let’s keep it to the food.');
+              }
+              if (e.kind === 'ingredient') {
+                if (e.name !== undefined) part.name = e.name.trim();
+                if (e.amount !== undefined) part.amount = e.amount.trim();
+              } else {
+                part.text = e.text.trim();
+                part.detail = null;
+                part.short = null;
+              }
+              Object.assign(part, { status: 'stated', isGuess: false });
+            }
+            c.guess = next;
+          }
+          if (b.kidName !== undefined) c.kidName = b.kidName ? String(b.kidName).slice(0, 40) : null;
+          if (b.relation) {
+            // Picking someone turns asking on and writes the default message (or re-writes the default one).
+            const wasDefault = c.message === defaultMessage(c.relation, c.guess.dish);
+            c.relation = b.relation;
+            if (wasDefault) c.message = defaultMessage(c.relation, c.guess.dish);
+          }
+          if (typeof b.message === 'string') c.message = b.message.trim().slice(0, 500);
           if (b.voiceNote !== undefined) {
             c.voice = b.voiceNote && files.has(b.voiceNote) ? b.voiceNote : null;
             c.voiceS = c.voice ? (b.voiceNoteS ?? null) : null;
           }
           return send(200, { card: cardOut(c) });
+        }
         case '/dish/cards/ask': {
-          const qs = (b.questions ?? []).slice(0, 3).map((q, i) => ({ id: q.id ?? `q${4 + i}`, text: String(q.text) }));
+          if (c.relation === 'none') return fail(400, 'bad_request', 'Pick who you’re asking first.');
           const kept = c.asked.filter((q) => c.answers.has(q.id));
-          c.asked = [...kept, ...qs.filter((q) => !c.answers.has(q.id))];
+          const used = new Set(c.asked.map((q) => q.id));
+          const out = [];
+          for (const q of b.questions ?? []) {
+            if (q.id && q.about) return fail(400, 'bad_request', 'Send an id or about, not both.');
+            if (q.about) {
+              const part = partOf(c.guess, q.about);
+              if (!part) return fail(400, 'bad_request', 'That doesn’t point at a part of the guess.');
+              const id = ['q4', 'q5', 'q6'].find((x) => !used.has(x) && !out.some((o) => o.id === x));
+              if (!id) continue;
+              part.ask = id;
+              out.push({ id, text: String(q.text ?? templateFor(q.about, part)) });
+            } else {
+              out.push({ id: q.id ?? ['q4', 'q5', 'q6'].find((x) => !used.has(x) && !out.some((o) => o.id === x)) ?? 'q6', text: String(q.text) });
+            }
+          }
+          const open = out.filter((q) => !c.answers.has(q.id)).slice(0, Math.min(3, 6 - kept.length));
+          c.asked = [...kept, ...open];
           if (c.finishedAt && c.asked.some((q) => !c.answers.has(q.id))) c.finishedAt = null;
           return send(200, { card: cardOut(c) });
         }
         case '/dish/cards/sent':
+          if (c.relation === 'none') return fail(400, 'bad_request', 'Pick who you’re asking first.');
           c.askedAt ??= Date.now();
           return send(200, { card: cardOut(c) });
       }
