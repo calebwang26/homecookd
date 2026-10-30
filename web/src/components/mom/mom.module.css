@@ -1,15 +1,15 @@
 /* Mom's /a screens (v2 mockups M1–M7): the peach wash, big type, one action each. */
 .page {
   min-height: 100svh;
-  background: #f7f7f2;
+  background: #fbf5ea;
 }
 .column {
   position: relative;
   max-width: 430px;
   min-height: 100svh;
   margin: 0 auto;
-  background: linear-gradient(180deg, #f9e3cf 0, #f7efe6 300px, #f7f7f2 520px);
-  color: #1e2410;
+  background: linear-gradient(180deg, #fcebd0 0, #fbf5ea 300px, #fbf5ea 520px);
+  color: #1f2430;
   font-family: var(--ff-text);
   display: flex;
   flex-direction: column;
@@ -49,7 +49,7 @@
   bottom: 0;
   margin: auto -24px 0;
   padding: 28px 24px max(28px, env(safe-area-inset-bottom));
-  background: linear-gradient(180deg, rgba(247, 247, 242, 0), #f7f7f2 30%);
+  background: linear-gradient(180deg, rgba(247, 247, 242, 0), #fbf5ea 30%);
   text-align: center;
 }
 .dock > a,
@@ -59,7 +59,7 @@
 .under {
   margin: 12px 0 0;
   font-size: 14px;
-  color: #5f6352;
+  color: #5b554e;
 }
 
 /* ---------- M1 ---------- */
@@ -68,22 +68,22 @@
   width: 104px;
   height: 104px;
   border-radius: 999px;
-  border: 5px solid #fffdf7;
-  background: #ece6f2;
-  color: #3f3558;
+  border: 5px solid #ffffff;
+  background: #ffffff;
+  color: #1f2430;
   display: grid;
   place-items: center;
   font-family: var(--ff-display);
   font-weight: 600;
   font-size: 48px;
-  box-shadow: 0 12px 28px -10px rgba(30, 36, 16, 0.3);
+  box-shadow: 0 12px 28px -10px rgba(31, 36, 48, 0.3);
 }
 .voice {
   margin-top: 24px;
   padding: 14px 18px 14px 14px;
   border-radius: 28px;
-  background: #ece6f2;
-  color: #3f3558;
+  background: #ffffff;
+  color: #1f2430;
   display: flex;
   align-items: center;
   gap: 12px;
@@ -94,11 +94,11 @@
   height: 64px;
   border-radius: 999px;
   border: 0;
-  background: #5b6f00;
-  color: #fffdf7;
+  background: var(--yolk);
+  color: var(--ink);
   display: grid;
   place-items: center;
-  box-shadow: 0 0 0 8px rgba(30, 36, 16, 0.08);
+  box-shadow: 0 0 0 8px rgba(31, 36, 48, 0.08);
   cursor: pointer;
 }
 .voiceTime {
@@ -111,8 +111,8 @@
   margin-top: 16px;
   padding: 16px 18px;
   border-radius: 24px;
-  background: #fffdf7;
-  box-shadow: 0 8px 24px rgba(30, 36, 16, 0.06);
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(31, 36, 48, 0.06);
   font-size: 19px;
   line-height: 1.45;
 }
@@ -124,15 +124,15 @@
   padding: 0 12px;
   margin-top: 8px;
   border-radius: 999px;
-  border: 1.5px solid rgba(30, 36, 16, 0.12);
-  background: #fffdf7;
-  color: #3c4a0b;
+  border: 1.5px solid rgba(31, 36, 48, 0.12);
+  background: #ffffff;
+  color: #34430c;
   font: 600 14px/1 var(--ff-text);
   cursor: pointer;
 }
 .englishToggle[aria-pressed='true'] {
   background: #e6ebcf;
-  border-color: #5b6f00;
+  border-color: #34430c;
 }
 
 /* ---------- M2 ---------- */
@@ -147,7 +147,7 @@
   margin-top: -44px;
   padding: 28px 24px 0;
   border-radius: 32px 32px 0 0;
-  background: #f7f7f2;
+  background: #fbf5ea;
   flex: 1;
   display: flex;
   flex-direction: column;
@@ -159,8 +159,8 @@
   height: 30px;
   padding: 0 12px;
   border-radius: 999px;
-  background: #ece6f2;
-  color: #3f3558;
+  background: #ffffff;
+  color: #1f2430;
   font-size: 13px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -175,9 +175,9 @@
   list-style: none;
   margin: 12px 0 0;
   padding: 6px 8px;
-  background: #fffdf7;
+  background: #ffffff;
   border-radius: 28px;
-  box-shadow: 0 8px 24px rgba(30, 36, 16, 0.06);
+  box-shadow: 0 8px 24px rgba(31, 36, 48, 0.06);
 }
 .row {
   min-height: 48px;
@@ -188,7 +188,7 @@
   gap: 10px;
   font-size: 17px;
   line-height: 1.35;
-  border-bottom: 1px solid rgba(30, 36, 16, 0.06);
+  border-bottom: 1px solid rgba(31, 36, 48, 0.06);
 }
 .row:last-child {
   border-bottom: 0;
@@ -196,7 +196,7 @@
 .row[data-tone='butter'] {
   margin: 2px 0;
   padding: 0 10px 0 12px;
-  background: #fff1c7;
+  background: #fcebd0;
   border-radius: 20px;
   border-bottom: 0;
 }
@@ -218,7 +218,7 @@
   height: 28px;
   border-radius: 999px;
   background: rgba(255, 253, 247, 0.85);
-  color: #5a3a22;
+  color: #1f2430;
   font-weight: 800;
   font-size: 15px;
   display: grid;
@@ -238,8 +238,8 @@
   min-height: 36px;
   padding: 0 14px;
   border-radius: 999px;
-  background: #fff1c7;
-  color: #5a3a22;
+  background: #fcebd0;
+  color: #1f2430;
   font-size: 15px;
   font-weight: 700;
 }
@@ -274,7 +274,7 @@
   gap: 8px;
   font-size: 15px;
   font-weight: 600;
-  color: #5f6352;
+  color: #5b554e;
 }
 .potDot {
   width: 28px;
@@ -282,12 +282,12 @@
   border-radius: 999px;
   display: grid;
   place-items: center;
-  background: #fffdf7;
+  background: #ffffff;
 }
 .was {
   margin-inline-start: 6px;
   font-size: 14px;
-  color: #5f6352;
+  color: #5b554e;
 }
 .amount {
   font-weight: 700;
@@ -335,7 +335,7 @@
   font-style: italic;
   font-size: 14px;
   line-height: 1.3;
-  color: #5f6352;
+  color: #5b554e;
 }
 .word {
   animation: word 550ms cubic-bezier(0.25, 1, 0.5, 1) both;
@@ -343,7 +343,7 @@
 }
 @keyframes word {
   from {
-    color: #cdd0bc;
+    color: #d8cebd;
   }
 }
 .play {
@@ -352,11 +352,11 @@
   height: 44px;
   border-radius: 999px;
   border: 0;
-  background: #fffdf7;
-  color: #5b6f00;
+  background: #ffffff;
+  color: #34430c;
   display: grid;
   place-items: center;
-  box-shadow: 0 2px 8px rgba(30, 36, 16, 0.08);
+  box-shadow: 0 2px 8px rgba(31, 36, 48, 0.08);
   cursor: pointer;
 }
 .dots {
@@ -368,7 +368,7 @@
   width: 7px;
   height: 7px;
   border-radius: 50%;
-  background: #5a3a22;
+  background: #1f2430;
   animation: pulse 1.2s ease-in-out infinite;
 }
 .dots span:nth-child(2) {
@@ -392,7 +392,7 @@
   text-align: center;
   font-size: 15px;
   font-weight: 700;
-  color: #5f6352;
+  color: #5b554e;
 }
 
 /* ---------- M5: sent, the SuccessBurst (ANIMATIONS.md) ---------- */
@@ -409,7 +409,7 @@
   width: 136px;
   height: 136px;
   border-radius: 999px;
-  border: 4px solid #febe29;
+  border: 4px solid #f2a23a;
   opacity: 0;
   animation: ring 700ms ease-out 300ms both;
 }
@@ -427,7 +427,7 @@
   width: 88px;
   height: 88px;
   border-radius: 999px;
-  background: #5b6f00;
+  background: var(--yolk);
   display: grid;
   place-items: center;
   box-shadow: 0 14px 30px rgba(52, 67, 12, 0.3);
@@ -442,7 +442,7 @@
   width: 44px;
   height: 44px;
   fill: none;
-  stroke: #fffdf7;
+  stroke: #ffffff;
   stroke-width: 3;
   stroke-linecap: round;
   stroke-linejoin: round;
@@ -504,7 +504,7 @@
   text-align: center;
   font-size: 19px;
   line-height: 1.4;
-  color: #5f6352;
+  color: #5b554e;
 }
 .miniCard {
   position: relative;
@@ -514,14 +514,14 @@
   gap: 14px;
   padding: 12px;
   border-radius: 24px;
-  background: #fffdf7;
-  box-shadow: 0 8px 24px rgba(30, 36, 16, 0.08);
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(31, 36, 48, 0.08);
 }
 /* In the film sheet (cream on cream): a hairline instead of the shadow, and tighter. */
 .miniCard[data-compact] {
   margin-top: 16px;
   padding: 8px 12px 8px 8px;
-  background: #f7f7f2;
+  background: #fbf5ea;
   box-shadow: none;
 }
 .miniCard[data-compact] .miniThumb {
@@ -535,7 +535,7 @@
 }
 .miniChevron {
   flex: none;
-  color: #5f6352;
+  color: #5b554e;
 }
 [dir='rtl'] .miniChevron {
   transform: scaleX(-1);
@@ -550,10 +550,10 @@
   transition: background-color 160ms ease;
 }
 .miniHit:active {
-  background: rgba(30, 36, 16, 0.05);
+  background: rgba(31, 36, 48, 0.05);
 }
 .miniHit:focus-visible {
-  outline: 3px solid #788c15;
+  outline: 3px solid #a3580c;
   outline-offset: 3px;
 }
 .miniThumb {
@@ -572,7 +572,7 @@
 .miniLine {
   display: block;
   font-size: 14px;
-  color: #5f6352;
+  color: #5b554e;
 }
 
 /* ---------- M6: the designed film frame ---------- */
@@ -582,7 +582,7 @@
   height: 190px;
   border-radius: 24px;
   overflow: hidden;
-  background: radial-gradient(120% 90% at 50% 40%, #fbeadb 0, #f9e3cf 55%, #f2cdb0 100%);
+  background: radial-gradient(120% 90% at 50% 40%, #fdf1de 0, #fcebd0 55%, #fbdeba 100%);
   display: grid;
   place-items: center;
 }
@@ -596,8 +596,8 @@
   height: 28px;
   padding: 0 10px;
   border-radius: 999px;
-  background: rgba(30, 36, 16, 0.75);
-  color: #fffdf7;
+  background: rgba(31, 36, 48, 0.75);
+  color: #ffffff;
   font-size: 13px;
   font-weight: 700;
 }
@@ -612,7 +612,7 @@
   position: absolute;
   width: 22px;
   height: 22px;
-  border: 3px solid #fffdf7;
+  border: 3px solid #ffffff;
 }
 .cornerTR {
   right: 14px;
@@ -682,7 +682,7 @@
   height: 28px;
   border-radius: 999px;
   background: #e6ebcf;
-  color: #3c4a0b;
+  color: #34430c;
   display: grid;
   place-items: center;
 }

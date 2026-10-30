@@ -137,8 +137,8 @@ function NotOpened({ why, retry }: { why: 'gone' | 'offline'; retry: () => void 
 function CalendarIcon() {
   return (
     <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <rect x="3.5" y="5" width="17" height="15" rx="3" fill="none" stroke="#5B6F00" strokeWidth="2" />
-      <path d="M3.5 10h17M8 3v4M16 3v4" stroke="#5B6F00" strokeWidth="2" strokeLinecap="round" />
+      <rect x="3.5" y="5" width="17" height="15" rx="3" fill="none" stroke="#34430C" strokeWidth="2" />
+      <path d="M3.5 10h17M8 3v4M16 3v4" stroke="#34430C" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }

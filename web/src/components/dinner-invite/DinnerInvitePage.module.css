@@ -1,11 +1,11 @@
 /* The /d dinner invite page: the /i invite page's look (pot + homecookd row, one Fraunces headline, the
-   430 px phone column) in the app's dinner lavender (#ECE6F2 -> #F7F7F2), with the dinner photo's warm
+   430 px phone column) in the app's dinner lavender (#FFFFFF -> #FBF5EA), with the dinner photo's warm
    sun glow around homie, a cream "Hosted by" pill and one cream "Friday · 7 pm" card. */
 
 .page {
   min-height: 100svh;
-  background: #f7f7f2;
-  color: #2d3222;
+  background: #fbf5ea;
+  color: #1f2430;
   font-family: var(--ff-text);
   font-size: 17px;
   line-height: 1.4;
@@ -21,15 +21,15 @@
   min-height: 100svh;
   margin: 0 auto;
   padding: 0 24px calc(16px + env(safe-area-inset-bottom));
-  background: linear-gradient(180deg, #ece6f2 0%, #f1edf3 300px, #f7f7f2 560px);
+  background: linear-gradient(180deg, #ffffff 0%, #fbf5ea 300px, #fbf5ea 560px);
   display: flex;
   flex-direction: column;
 }
 @media (min-width: 600px) {
   .column {
     box-shadow:
-      0 0 0 1px rgba(30, 36, 16, 0.04),
-      0 30px 80px rgba(30, 36, 16, 0.14);
+      0 0 0 1px rgba(31, 36, 48, 0.04),
+      0 30px 80px rgba(31, 36, 48, 0.14);
   }
 }
 
@@ -38,7 +38,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #1e2410;
+  color: #1f2430;
 }
 .word {
   font-family: var(--ff-display);
@@ -80,14 +80,14 @@
   width: 136px;
   height: 136px;
   border-radius: 50%;
-  background: #fffdf7;
+  background: #ffffff;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow:
     0 0 0 10px rgba(254, 190, 41, 0.14),
     0 0 70px rgba(254, 190, 41, 0.35),
-    0 18px 44px rgba(30, 36, 16, 0.12);
+    0 18px 44px rgba(31, 36, 48, 0.12);
   margin-bottom: 8px;
 }
 .face {
@@ -105,7 +105,7 @@
   font-size: 34px;
   line-height: 1.08;
   letter-spacing: -0.02em;
-  color: #1e2410;
+  color: #1f2430;
 }
 .line {
   margin: 0;
@@ -113,7 +113,7 @@
   text-wrap: balance;
   font-size: 19px;
   line-height: 1.4;
-  color: #5f6352;
+  color: #5b554e;
 }
 
 /* "Hosted by Mom": the app's cream host pill */
@@ -124,16 +124,16 @@
   gap: 12px;
   padding: 6px 18px 6px 6px;
   border-radius: 999px;
-  background: #fffdf7;
-  box-shadow: 0 4px 14px rgba(30, 36, 16, 0.08);
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(31, 36, 48, 0.08);
   text-align: left;
 }
 .initial {
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: #fff1c7;
-  color: #5a3a22;
+  background: #fcebd0;
+  color: #1f2430;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -149,12 +149,12 @@
 .hostLabel {
   font-size: 12px;
   font-weight: 600;
-  color: #5f6352;
+  color: #5b554e;
 }
 .hostName {
   font-size: 17px;
   font-weight: 700;
-  color: #1e2410;
+  color: #1f2430;
 }
 
 /* "Friday · 7 pm" */
@@ -165,11 +165,11 @@
   gap: 12px;
   padding: 14px 20px;
   border-radius: 22px;
-  background: #fffdf7;
-  box-shadow: 0 8px 24px rgba(30, 36, 16, 0.06);
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(31, 36, 48, 0.06);
   font-size: 17px;
   font-weight: 600;
-  color: #1e2410;
+  color: #1f2430;
 }
 
 .retry {
@@ -178,8 +178,8 @@
   height: 60px;
   border: none;
   border-radius: 999px;
-  background: #5b6f00;
-  color: #fffdf7;
+  background: var(--yolk);
+  color: var(--ink);
   font: inherit;
   font-size: 18px;
   font-weight: 700;
@@ -195,7 +195,7 @@
   transition-duration: 90ms;
 }
 .retry:focus-visible {
-  outline: 3px solid #788c15;
+  outline: 3px solid #a3580c;
   outline-offset: 3px;
 }
 
@@ -210,13 +210,13 @@
   align-items: center;
   font-size: 16px;
   font-weight: 600;
-  color: #5f6352;
+  color: #5b554e;
   text-decoration: underline;
   text-decoration-color: rgba(95, 99, 82, 0.4);
   text-underline-offset: 3px;
 }
 .about:focus-visible {
-  outline: 3px solid #788c15;
+  outline: 3px solid #a3580c;
   outline-offset: 2px;
   border-radius: 12px;
 }

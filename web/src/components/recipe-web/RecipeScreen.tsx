@@ -135,7 +135,7 @@ export function RecipeScreen() {
           <div className={s.meta}>
             {dish ? (
               // The card's own mark, never a stock face matched to the name "Mom".
-              <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: '50%', background: '#f9e3cf', display: 'grid', placeItems: 'center', flex: 'none' }}>
+              <span aria-hidden="true" style={{ width: 24, height: 24, borderRadius: '50%', background: '#fcebd0', display: 'grid', placeItems: 'center', flex: 'none' }}>
                 <PotMascot size={18} />
               </span>
             ) : (

@@ -391,7 +391,7 @@
   white-space: nowrap;
 }
 .w[data-accent] {
-  color: var(--green);
+  color: var(--yolk-deep);
 }
 .brk {
   display: inline;

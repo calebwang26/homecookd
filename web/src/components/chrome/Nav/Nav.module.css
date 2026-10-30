@@ -7,11 +7,11 @@
   --pill-h: 58px;
   /* float tone (default; also the server render) */
   --nav-fg: var(--ink);
-  --nav-hover: rgba(30, 36, 16, 0.06);
+  --nav-hover: rgba(31, 36, 48, 0.06);
   --picker-fg: var(--ink);
   --picker-label: var(--olive-ink);
   --picker-bg: var(--sage);
-  --picker-bg-hover: var(--lime-wash);
+  --picker-bg-hover: var(--sage-hover);
   --picker-border: transparent;
   --picker-focus: var(--focus-ring);
   position: fixed;
@@ -30,17 +30,17 @@
   --nav-hover: rgba(255, 253, 247, 0.14);
   --picker-fg: var(--cream);
   --picker-label: rgba(255, 253, 247, 0.86);
-  --picker-bg: rgba(20, 22, 12, 0.18);
+  --picker-bg: rgba(31, 36, 48, 0.18);
   --picker-bg-hover: rgba(255, 253, 247, 0.14);
   --picker-border: rgba(255, 253, 247, 0.62);
-  --picker-focus: var(--chartreuse);
+  --picker-focus: var(--yolk);
 }
 /* A soft olive veil behind the hero-tone nav keeps cream text AA on the brightest video frames. */
 .nav::before {
   content: '';
   position: absolute;
   inset: 0 0 -48px;
-  background: linear-gradient(180deg, rgba(20, 22, 12, 0.44) 0%, rgba(20, 22, 12, 0.3) 45%, rgba(20, 22, 12, 0) 100%);
+  background: linear-gradient(180deg, rgba(31, 36, 48, 0.44) 0%, rgba(31, 36, 48, 0.3) 45%, rgba(31, 36, 48, 0) 100%);
   opacity: 0;
   transition: opacity 360ms var(--ease-soft);
   pointer-events: none;
@@ -95,7 +95,7 @@
   backdrop-filter: blur(12px) saturate(1.15);
   box-shadow:
     0 0 0 1px var(--hairline),
-    0 14px 34px -22px rgba(30, 36, 16, 0.3);
+    0 14px 34px -22px rgba(31, 36, 48, 0.3);
   pointer-events: none;
   transition:
     opacity 360ms var(--ease-soft),
@@ -166,7 +166,7 @@
 }
 .nav[data-tone='hero'] .link,
 .nav[data-tone='hero'] .logo {
-  text-shadow: 0 1px 14px rgba(20, 22, 12, 0.35);
+  text-shadow: 0 1px 14px rgba(31, 36, 48, 0.35);
 }
 @media (hover: hover) {
   .link:hover {
@@ -198,7 +198,7 @@
 
 /* Focus: chartreuse on the dark hero, leaf on the canvas pill (3px, 3px offset). */
 .nav[data-tone='hero'] .bar :focus-visible {
-  outline-color: var(--chartreuse);
+  outline-color: var(--yolk);
 }
 
 /* ---------- intro (a7 M1): items blur in left → right, once ---------- */

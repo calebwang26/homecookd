@@ -20,15 +20,15 @@
   color: var(--ink);
 }
 .green {
-  background: var(--green);
-  color: var(--cream);
+  background: var(--yolk);
+  color: var(--ink);
 }
 @media (hover: hover) {
   .cream:hover {
-    background: var(--chartreuse);
+    background: var(--yolk);
   }
   .green:hover {
-    background: var(--green-deep);
+    background: var(--yolk-hover);
   }
 }
 

@@ -46,7 +46,7 @@
 .title em {
   font-style: italic;
   font-variation-settings: 'SOFT' 100, 'WONK' 1;
-  color: var(--green);
+  color: var(--yolk-deep);
 }
 .addWrap {
   display: flex;
@@ -71,7 +71,7 @@
   transition: background-color 200ms var(--ease-soft);
 }
 .addLink:hover {
-  background: var(--lime-wash);
+  background: var(--sage-hover);
 }
 .addLink:focus-visible {
   outline-offset: 2px;

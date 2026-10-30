@@ -16,7 +16,7 @@
   min-width: 0;
   font-size: 15px;
   font-weight: 600;
-  color: #5f6352;
+  color: #5b554e;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -26,7 +26,7 @@
   padding: 0 12px;
   border-radius: 999px;
   background: #e6ebcf;
-  color: #3c4a0b;
+  color: #34430c;
   font-size: 14px;
   font-weight: 700;
   line-height: 32px;
@@ -40,7 +40,7 @@
   font-size: 32px;
   line-height: 1.1;
   letter-spacing: -0.02em;
-  color: #1e2410;
+  color: #1f2430;
 }
 /* Nothing to set out: the app's compact EmptyState (sage disc, pot, Fraunces 20). */
 .empty {
@@ -65,13 +65,13 @@
   font-weight: 500;
   font-size: 20px;
   line-height: 1.2;
-  color: #1e2410;
+  color: #1f2430;
   text-align: center;
 }
 .card {
   border-radius: 28px;
-  background: #fffdf7;
-  box-shadow: 0 8px 24px rgba(30, 36, 16, 0.06);
+  background: #ffffff;
+  box-shadow: 0 8px 24px rgba(31, 36, 48, 0.06);
   padding: 6px 8px;
   display: flex;
   flex-direction: column;
@@ -90,7 +90,7 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  border: 2px solid rgba(30, 36, 16, 0.2);
+  border: 2px solid rgba(31, 36, 48, 0.2);
   background: transparent;
   color: transparent;
   display: flex;
@@ -105,8 +105,8 @@
 }
 .tick[data-on] {
   border-color: transparent;
-  background: #5b6f00;
-  color: #fffdf7;
+  background: #34430c;
+  color: #ffffff;
   transform: scale(1.04);
 }
 .lines {
@@ -120,16 +120,16 @@
   font-size: 16px;
   font-weight: 600;
   line-height: 1.3;
-  color: #1e2410;
+  color: #1f2430;
   transition: color 200ms ease;
 }
 .item[aria-checked='true'] .words {
-  color: #5f6352;
+  color: #5b554e;
 }
 .amount {
   font-size: 14px;
   line-height: 1.3;
-  color: #5f6352;
+  color: #5b554e;
 }
 
 /* "Not sure how much?": the app's link Dropdown (centred 15/600 green, 44 tall) opening a cream
@@ -153,7 +153,7 @@
 .unsure {
   margin-top: 12px;
   border-radius: 28px;
-  background: #fffdf7;
+  background: #ffffff;
   padding: 20px;
   display: flex;
   flex-direction: column;
@@ -164,7 +164,7 @@
   align-items: baseline;
   gap: 12px;
   padding: 10px 0;
-  border-bottom: 1px solid #efefe6;
+  border-bottom: 1px solid #f3ead9;
 }
 .unsureRow:last-child {
   border-bottom: 0;
@@ -175,11 +175,11 @@
   font-size: 15px;
   font-weight: 600;
   line-height: 1.3;
-  color: #1e2410;
+  color: #1f2430;
 }
 .unsureEst {
   font-size: 14px;
-  color: #5f6352;
+  color: #5b554e;
   white-space: nowrap;
 }
 .ask {

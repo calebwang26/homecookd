@@ -19,19 +19,19 @@
 }
 .primary {
   height: 60px;
-  background: #5b6f00;
-  color: #fffdf7;
+  background: var(--yolk);
+  color: var(--ink);
   font-size: 18px;
   box-shadow: 0 10px 24px rgba(52, 67, 12, 0.25);
 }
 .secondary {
   height: 56px;
-  background: #fffdf7;
-  color: #1e2410;
+  background: #ffffff;
+  color: #1f2430;
   font-size: 17px;
   box-shadow:
-    0 4px 14px rgba(30, 36, 16, 0.08),
-    0 0 0 1px rgba(30, 36, 16, 0.06);
+    0 4px 14px rgba(31, 36, 48, 0.08),
+    0 0 0 1px rgba(31, 36, 48, 0.06);
 }
 
 /* press feedback, motion spec 5 (same as recipe-web's .press) */
@@ -48,7 +48,7 @@
   transition-duration: 90ms;
 }
 .press:focus-visible {
-  outline: 3px solid #788c15;
+  outline: 3px solid #a3580c;
   outline-offset: 3px;
 }
 
@@ -60,11 +60,11 @@
   text-wrap: balance;
   font-size: 17px;
   line-height: 1.45;
-  color: #5f6352;
+  color: #5b554e;
 }
 .note[data-strong] {
   font-size: 18px;
-  color: #3c4a0b;
+  color: #34430c;
   font-weight: 600;
 }
 
@@ -74,19 +74,19 @@
   min-height: 64px;
   padding: 14px 20px;
   border-radius: 22px;
-  background: #fffdf7;
-  box-shadow: 0 4px 14px rgba(30, 36, 16, 0.08);
+  background: #ffffff;
+  box-shadow: 0 4px 14px rgba(31, 36, 48, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
   font-size: 18px;
   font-weight: 700;
-  color: #1e2410;
+  color: #1f2430;
 }
 .desk svg {
   flex: none;
-  color: #5b6f00;
+  color: #34430c;
 }
 
 @media (prefers-reduced-motion: reduce) {

@@ -11,7 +11,7 @@
   position: relative;
   height: 380px;
   overflow: hidden;
-  background: #efefe6;
+  background: #f3ead9;
   transform-origin: 50% 0%;
 }
 .heroImg {
@@ -25,7 +25,7 @@
 .heroEmpty {
   position: absolute;
   inset: 0;
-  background: #f9e3cf;
+  background: #fcebd0;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -39,7 +39,7 @@
   height: 48px;
   border-radius: 50%;
   background: rgba(255, 253, 247, 0.92);
-  color: #1e2410;
+  color: #1f2430;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -65,7 +65,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #1e2410;
+  color: #1f2430;
   font-size: 14px;
   font-weight: 600;
 }
@@ -82,7 +82,7 @@
   position: relative;
   margin-top: -44px;
   border-radius: 32px 32px 0 0;
-  background: #f7f7f2;
+  background: #fbf5ea;
   padding: 28px 24px 16px;
   display: flex;
   flex-direction: column;
@@ -101,7 +101,7 @@
   font-size: 30px;
   line-height: 1.1;
   letter-spacing: -0.02em;
-  color: #1e2410;
+  color: #1f2430;
 }
 .meta {
   display: flex;
@@ -109,28 +109,28 @@
   gap: 8px;
   font-size: 15px;
   line-height: 1.35;
-  color: #5f6352;
+  color: #5b554e;
 }
 .source {
   margin: -4px 0 0;
   font-size: 14px;
-  color: #5f6352;
+  color: #5b554e;
 }
 
 /* The dish pages: one line of her own words (with the English under it) where /r quotes the cook. */
 .hers {
   padding: 14px 20px 16px;
   border-radius: 20px;
-  background: #f9e3cf;
+  background: #fcebd0;
 }
 .quote {
   margin: 0;
   padding: 16px 20px;
   border-radius: 20px;
-  background: #f9e3cf;
+  background: #fcebd0;
   font-family: var(--ff-display);
   font-style: italic;
   font-size: 17px;
   line-height: 1.4;
-  color: #1e2410;
+  color: #1f2430;
 }

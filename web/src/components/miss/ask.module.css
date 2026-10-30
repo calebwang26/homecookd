@@ -14,7 +14,7 @@
   margin: 18px 0 8px;
   font-size: 15px;
   font-weight: 600;
-  color: #5f6352;
+  color: #5b554e;
 }
 .name,
 .message {
@@ -23,8 +23,8 @@
   box-sizing: border-box;
   border: 0;
   border-radius: 20px;
-  background: #ece6f2;
-  color: #1e2410;
+  background: #ffffff;
+  color: #1f2430;
   font: 400 19px/1.4 var(--ff-text);
 }
 .name {
@@ -38,7 +38,7 @@
 }
 .name:focus-visible,
 .message:focus-visible {
-  outline: 3px solid #788c15;
+  outline: 3px solid #a3580c;
   outline-offset: 1px;
 }
 .voice {
@@ -48,8 +48,8 @@
   gap: 12px;
   padding: 10px 8px 10px 10px;
   border-radius: 20px;
-  background: #ece6f2;
-  color: #3f3558;
+  background: #ffffff;
+  color: #1f2430;
 }
 .voicePlay {
   flex: none;
@@ -57,8 +57,8 @@
   height: 44px;
   border-radius: 999px;
   border: 0;
-  background: #5b6f00;
-  color: #fffdf7;
+  background: var(--yolk);
+  color: var(--ink);
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -81,7 +81,7 @@
   border-radius: 999px;
   border: 0;
   background: rgba(255, 253, 247, 0.75);
-  color: #3f3558;
+  color: #1f2430;
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -95,9 +95,9 @@
   gap: 12px;
   padding: 10px 14px 10px 10px;
   border-radius: 20px;
-  border: 1.5px dashed #8e80ae;
+  border: 1.5px dashed #cfc3ae;
   background: #f6f3f9;
-  color: #3f3558;
+  color: #1f2430;
   font-family: var(--ff-text);
   text-align: start;
   cursor: pointer;
@@ -123,8 +123,8 @@
   width: 44px;
   height: 44px;
   border-radius: 999px;
-  background: #3f3558;
-  color: #fffdf7;
+  background: #1f2430;
+  color: #ffffff;
   display: grid;
   place-items: center;
 }
@@ -143,12 +143,12 @@
 .sees {
   margin: 12px 0 0;
   font-size: 14px;
-  color: #5f6352;
+  color: #5b554e;
 }
 .rule {
   height: 1px;
   margin: 20px 0 18px;
-  background: rgba(30, 36, 16, 0.08);
+  background: rgba(31, 36, 48, 0.08);
 }
 .shareRow {
   display: grid;
@@ -160,7 +160,7 @@
   background: none;
   padding: 0;
   font: 600 13px/1.2 var(--ff-text);
-  color: #1e2410;
+  color: #1f2430;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -174,22 +174,22 @@
   border-radius: 999px;
   display: grid;
   place-items: center;
-  background: #1e2410;
-  color: #fffdf7;
+  background: #1f2430;
+  color: #ffffff;
 }
 .shareDisc[data-tone='green'] {
-  background: #5b6f00;
+  background: #34430c;
 }
 .shareDisc[data-tone='peach'] {
-  background: #f2a98f;
-  color: #1e2410;
+  background: #f2a23a;
+  color: #1f2430;
 }
 .shareDisc[data-tone='forest'] {
   background: #34430c;
 }
 .shareDisc[data-tone='grey'] {
-  background: #efefe6;
-  color: #1e2410;
+  background: #f3ead9;
+  color: #1f2430;
 }
 
 /* "Ask someone": who to ask, for a card made for no one in particular */
@@ -202,9 +202,9 @@
 .whoChip {
   min-height: 56px;
   border-radius: 20px;
-  border: 1.5px solid rgba(30, 36, 16, 0.12);
-  background: #fffdf7;
-  color: #1e2410;
+  border: 1.5px solid rgba(31, 36, 48, 0.12);
+  background: #ffffff;
+  color: #1f2430;
   font: 700 18px/1 var(--ff-text);
   cursor: pointer;
 }

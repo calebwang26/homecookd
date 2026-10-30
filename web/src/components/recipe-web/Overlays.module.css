@@ -27,16 +27,16 @@
   right: 8px;
   padding: 20px 20px 16px;
   border-radius: 24px;
-  background: #5b6f00;
-  color: #fffdf7;
-  box-shadow: 0 18px 40px rgba(30, 36, 16, 0.28);
+  background: var(--yolk);
+  color: var(--ink);
+  box-shadow: 0 18px 40px rgba(31, 36, 48, 0.28);
   pointer-events: auto;
 }
 .pointer {
   position: absolute;
   width: 18px;
   height: 18px;
-  background: #5b6f00;
+  background: var(--yolk);
   border-radius: 3px;
   transform: rotate(45deg);
   top: -7px;
@@ -52,7 +52,7 @@
   font-size: 22px;
   line-height: 1.2;
   letter-spacing: -0.01em;
-  color: #fffdf7;
+  color: #ffffff;
 }
 .popLine {
   margin: 8px 0 0;
@@ -71,7 +71,7 @@
   height: 48px;
   padding: 0 16px;
   border-radius: 999px;
-  color: #fffdf7;
+  color: #ffffff;
   font-size: 16px;
   font-weight: 700;
 }
@@ -79,8 +79,8 @@
   height: 52px;
   padding: 0 26px;
   border-radius: 999px;
-  background: #fffdf7;
-  color: #1e2410;
+  background: #ffffff;
+  color: #1f2430;
   font-size: 16px;
   font-weight: 700;
 }
@@ -89,7 +89,7 @@
 .backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(30, 36, 16, 0.35);
+  background: rgba(31, 36, 48, 0.35);
   -webkit-backdrop-filter: blur(6px);
   backdrop-filter: blur(6px);
   pointer-events: auto;
@@ -102,9 +102,9 @@
   max-height: calc(100% - 24px);
   overflow-y: auto;
   border-radius: 32px 32px 0 0;
-  background: #fffdf7;
+  background: #ffffff;
   padding: 12px 24px calc(28px + env(safe-area-inset-bottom));
-  box-shadow: 0 -24px 60px rgba(20, 22, 12, 0.18);
+  box-shadow: 0 -24px 60px rgba(31, 36, 48, 0.18);
   pointer-events: auto;
 }
 .grabber {
@@ -113,7 +113,7 @@
   height: 5px;
   margin: 0 auto;
   border-radius: 3px;
-  background: rgba(30, 36, 16, 0.18);
+  background: rgba(31, 36, 48, 0.18);
 }
 .close {
   position: absolute;
@@ -122,8 +122,8 @@
   width: 44px;
   height: 44px;
   border-radius: 50%;
-  background: #f7f7f2;
-  color: #1e2410;
+  background: #fbf5ea;
+  color: #1f2430;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -145,7 +145,7 @@
   font-size: 28px;
   line-height: 1.1;
   letter-spacing: -0.02em;
-  color: #1e2410;
+  color: #1f2430;
 }
 .sheetTitle:focus {
   outline: none;

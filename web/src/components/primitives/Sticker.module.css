@@ -1,7 +1,7 @@
 .sticker {
   --size: 170px;
   --disc: var(--surface);
-  --seal: var(--sun);
+  --seal: var(--yolk);
   --st-ink: var(--forest);
   position: relative;
   display: inline-grid;
@@ -14,8 +14,8 @@
      exactly without re-rasterizing a filter every frame while the ring spins. */
   border-radius: 50%;
   box-shadow:
-    0 1px 2px rgba(30, 36, 16, 0.06),
-    0 10px 18px -4px rgba(30, 36, 16, 0.2);
+    0 1px 2px rgba(31, 36, 48, 0.06),
+    0 10px 18px -4px rgba(31, 36, 48, 0.2);
   container-type: inline-size;
 }
 .ring {
@@ -65,21 +65,21 @@
 /* tones */
 .sunOnCream {
   --disc: var(--surface);
-  --seal: var(--sun);
+  --seal: var(--yolk);
   --st-ink: var(--forest);
 }
 .chartreuseOnForest {
   --disc: var(--forest);
-  --seal: var(--chartreuse);
+  --seal: var(--yolk);
   --st-ink: var(--forest);
 }
 .chartreuseOnForest .disc {
-  stroke: var(--chartreuse);
+  stroke: var(--yolk);
   stroke-width: 2;
   stroke-opacity: 0.5;
 }
 .creamOnSun {
-  --disc: var(--sun);
+  --disc: var(--yolk);
   --seal: var(--surface);
   --st-ink: var(--forest);
 }

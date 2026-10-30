@@ -116,7 +116,7 @@
   position: absolute;
   inset: 0;
   border-radius: inherit;
-  background: var(--sun);
+  background: var(--yolk);
   transform-origin: 0 50%;
   transform: scaleX(0);
   animation-name: fill;
@@ -232,7 +232,7 @@
   gap: 3px;
   height: 1.6rem;
   margin-top: 0.55rem;
-  color: var(--green);
+  color: var(--yolk-deep);
 }
 .wave i {
   display: block;
@@ -342,7 +342,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  color: var(--green);
+  color: var(--yolk-deep);
   font-weight: 600;
   /* two even lines on phones, never "top." alone */
   text-wrap: balance;

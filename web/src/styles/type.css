@@ -151,7 +151,7 @@
 /* Last word in the accent color: wrap it in <em> or .accent. */
 .t-eyebrow :is(em, .accent) {
   font-style: normal;
-  color: var(--eyebrow-accent, var(--green));
+  color: var(--eyebrow-accent, var(--yolk-deep));
 }
 
 .t-hand {
@@ -164,7 +164,7 @@
 }
 
 /* Helpers */
-.t-accent { color: var(--green); }
+.t-accent { color: var(--yolk-deep); }
 .t-ink { color: var(--ink); }
 .t-muted { color: var(--muted); }
 .t-cream { color: var(--cream); }

@@ -18,7 +18,7 @@
   color: var(--ink);
 }
 .accent {
-  color: var(--green);
+  color: var(--yolk-deep);
 }
 /* word spans for the scroll fill (wordFill.ts targets .w) */
 .word {

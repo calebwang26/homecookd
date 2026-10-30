@@ -14,11 +14,11 @@
 .ring {
   position: absolute;
   inset: -3%;
-  background: var(--sun);
+  background: var(--yolk);
   clip-path: var(--clip);
 }
 .star[data-ring='chartreuse'] .ring {
-  background: var(--chartreuse);
+  background: var(--yolk);
 }
 .popOut {
   position: absolute;

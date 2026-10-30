@@ -28,7 +28,7 @@ function Line({ text, accent, color }: { text: string; accent: string | null; co
 export function PlainHeading({
   text,
   accent = [],
-  accentColor = 'var(--green)',
+  accentColor = 'var(--yolk-deep)',
   as = 'h2',
   id,
   className,

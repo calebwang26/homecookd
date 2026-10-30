@@ -1,4 +1,5 @@
-/* homecookd brand tokens — v1 (Oct 29 2026) */
+/* homecookd brand tokens — v1.1 (Oct 30 2026): Caleb's FINAL palette (yolk main, dark green second, cream, ink).
+   Kit names kept; --hc-yolk-tint, --hc-green, --hc-green-tint, --hc-record added. The web and the app read these. */
 :root {
   /* Core palette */
   --hc-yolk: #F2A23A;        /* brand accent: yolk, primary fills, app icon ground */
@@ -8,6 +9,10 @@
   --hc-white: #FFFFFF;       /* cards, egg white */
   --hc-muted: #5B554E;       /* secondary text (6.8:1 on cream) */
   --hc-line: #E6DDCF;        /* hairlines, card borders */
+  --hc-yolk-tint: #FCEBD0;   /* guess rows and the "Only Mom knows" block */
+  --hc-green: #34430C;       /* second color: secondary text, icons, success */
+  --hc-green-tint: #E6EBCF;  /* Mom's answer rows */
+  --hc-record: #9A4F47;      /* recording state */
 
   /* Semantic (light) */
   --hc-bg: var(--hc-cream);
@@ -17,8 +22,8 @@
   --hc-accent: var(--hc-yolk);
   --hc-accent-text: var(--hc-yolk-deep);
   --hc-border: var(--hc-line);
-  --hc-button-bg: var(--hc-ink);
-  --hc-button-text: var(--hc-cream);
+  --hc-button-bg: var(--hc-yolk);   /* primary action: yolk fill, ink text, always */
+  --hc-button-text: var(--hc-ink);
 
   /* Type */
   --hc-font-display: "Fraunces", Georgia, serif;   /* variation: "SOFT" 100, "opsz" 144; weight 600–650 */
@@ -43,6 +48,10 @@
     --hc-accent: #F2A23A;
     --hc-accent-text: #F2A23A;   /* yolk passes as text on dark (8.5:1 on #15181F) */
     --hc-border: #343A48;
+    --hc-yolk-tint: #3A2E1A;
+    --hc-green: #B7C48A;
+    --hc-green-tint: #27301C;
+    --hc-record: #E07A6F;
     --hc-button-bg: #F2A23A;
     --hc-button-text: #1F2430;
   }

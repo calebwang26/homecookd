@@ -29,7 +29,7 @@ function Flower() {
   return (
     <svg viewBox="0 0 40 40" className={s.flower} aria-hidden="true" focusable="false">
       {[0, 72, 144, 216, 288].map((a) => (
-        <ellipse key={a} cx={20} cy={10.6} rx={6.6} ry={9.6} transform={`rotate(${a} 20 20)`} fill="var(--sun)" />
+        <ellipse key={a} cx={20} cy={10.6} rx={6.6} ry={9.6} transform={`rotate(${a} 20 20)`} fill="var(--yolk)" />
       ))}
       <circle cx={20} cy={20} r={5.2} fill="#E89A12" />
     </svg>

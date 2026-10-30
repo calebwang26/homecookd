@@ -69,14 +69,14 @@
   list-style: disc;
 }
 .list li::marker {
-  color: var(--green);
+  color: var(--yolk-deep);
 }
 .page strong {
   color: var(--ink);
   font-weight: 600;
 }
 .link {
-  color: var(--green);
+  color: var(--yolk-deep);
   font-weight: 600;
   text-decoration: underline;
   text-underline-offset: 0.2em;

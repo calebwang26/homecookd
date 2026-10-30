@@ -16,7 +16,7 @@ export interface SteamProps {
   style?: CSSProperties;
 }
 
-const COLOR = { cream: 'var(--cream)', white: '#fff', green: 'var(--green)', cocoa: 'var(--cocoa)', ink: 'var(--ink)' };
+const COLOR = { cream: 'var(--cream)', white: '#fff', green: 'var(--yolk-deep)', cocoa: 'var(--cocoa)', ink: 'var(--ink)' };
 
 export function Steam({ color = 'cream', size = 60, still = false, once = false, className, style }: SteamProps) {
   return (
