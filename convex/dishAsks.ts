@@ -69,7 +69,59 @@ export const askUrlOf = (askToken: string) => `${webOrigin()}/a?t=${askToken}`;
 
 /** The Ask Mom text a card starts with. */
 export const defaultMessage = (relation: Relation, dish: string) =>
-  `${RELATION_LABEL[relation]}, how do you make your ${dish}? I'm trying to make it here.`;
+  relation === "none" ? "" : `${RELATION_LABEL[relation]}, how do you make your ${dish}? I'm trying to make it here.`;
+
+const PICK_SOMEONE = "Pick who you're asking first.";
+
+/** The kid's own fix to the guess (§10): checked for size and words in the route, applied here. */
+const editV = v.union(
+  v.object({ kind: v.literal("ingredient"), index: v.number(), name: v.optional(v.string()), amount: v.optional(v.string()) }),
+  v.object({ kind: v.literal("line"), step: v.number(), line: v.number(), text: v.optional(v.string()) }),
+);
+
+/** The guess with the kid's edits: each edited part is `stated` (the kid's own knowledge) and keeps its `ask`. */
+function editedGuess(before: Row["guess"], edits: Infer<typeof editV>[]): Row["guess"] {
+  const guess = JSON.parse(JSON.stringify(before)) as Row["guess"];
+  edits.forEach((e, i) => {
+    if (e.kind === "ingredient") {
+      const part = partOf(guess, e, `edits[${i}]`) as Row["guess"]["ingredients"][number];
+      Object.assign(part, { ...(e.name ? { name: e.name } : {}), ...(e.amount ? { amount: e.amount } : {}), status: "stated" });
+    } else {
+      const part = partOf(guess, e, `edits[${i}]`) as Row["guess"]["steps"][number]["lines"][number];
+      if (e.text && e.text !== part.text) Object.assign(part, { text: e.text, detail: null });
+      part.status = "stated";
+    }
+  });
+  return guess;
+}
+
+/** What the kid points at in the guess (§10): an ingredient, or a step's line. */
+type About = { kind: "ingredient"; index: number } | { kind: "line"; step: number; line: number };
+const aboutV = v.union(
+  v.object({ kind: v.literal("ingredient"), index: v.number() }),
+  v.object({ kind: v.literal("line"), step: v.number(), line: v.number() }),
+);
+
+/** The part of the guess `about` names, or a 400. */
+function partOf(guess: Row["guess"], about: About, field: string) {
+  const part =
+    about.kind === "ingredient" ? guess.ingredients[about.index] : guess.steps[about.step]?.lines[about.line];
+  if (!part || ![about.kind === "ingredient" ? about.index : about.line, about.kind === "line" ? about.step : 0].every(Number.isInteger)) {
+    throw badRequest(`${field} doesn't point at a part of the guess`);
+  }
+  return part;
+}
+
+/** The kid's question about a part of the guess, when they didn't word it: a template, no model. */
+function questionAbout(guess: Row["guess"], about: About, field: string): string {
+  if (about.kind === "ingredient") {
+    const name = (partOf(guess, about, field) as Row["guess"]["ingredients"][number]).name.split(",")[0].trim();
+    return `How much ${name} do you use?`;
+  }
+  const line = (partOf(guess, about, field) as { text: string }).text.replaceAll("**", "").replace(/\s+/g, " ").trim();
+  const short = line.length <= 60 ? line : `${line.slice(0, 59).replace(/\s+\S*$/, "")}…`;
+  return `How do you do this part: ${short.replace(/[.!?]+$/, "")}?`;
+}
 
 const theirs = (r: Relation) => (r === "dad" || r === "grandpa" || r === "uncle" ? "his" : "her");
 
@@ -191,7 +243,7 @@ async function cardJson(ctx: QueryCtx, s: State, askToken: string): Promise<Card
     kidVoiceUrl: await url(ctx, row.kidVoiceNote),
     kidVoiceS: row.kidVoiceNote ? (row.kidVoiceS ?? null) : null,
     photoUrls: await photoUrls(ctx, row),
-    askUrl: askUrlOf(askToken),
+    askUrl: row.relation === "none" ? null : askUrlOf(askToken),
     askedAt: row.askedAt ?? null,
     openedAt: row.openedAt ?? null,
     finishedAt: row.finishedAt ?? null,
@@ -201,8 +253,8 @@ async function cardJson(ctx: QueryCtx, s: State, askToken: string): Promise<Card
 }
 
 /** What Mom's page in another language was translated from: while it matches, the translation stands. */
-const momLangKey = (row: Pick<Row, "asked" | "message" | "version">) =>
-  JSON.stringify([row.asked.map((q) => [q.id, q.text]), row.message, row.version ?? null]);
+const momLangKey = (row: Pick<Row, "asked" | "message" | "version" | "guess">) =>
+  JSON.stringify([row.asked.map((q) => [q.id, q.text]), row.message, row.version ?? null, row.guess]);
 
 /** The card in Mom's page language, from the cache (never translated here); null for English or none yet. */
 function inLangOf(row: Row, lang: string | undefined, open: MissQuestion[]): Ask["inLang"] {
@@ -488,14 +540,26 @@ export const kidUpdate = internalMutation({
     message: v.optional(v.string()),
     voiceNote: v.optional(v.union(v.string(), v.null())),
     voiceNoteS: v.optional(v.number()),
+    edits: v.optional(v.array(editV)),
   },
   returns: cardV,
   handler: async (ctx, a) => {
     const row = await byKid(ctx, a.kidTokenHash);
-    if (row.finishedAt && (a.message !== undefined || a.voiceNote !== undefined)) {
+    if (row.finishedAt && (a.message !== undefined || a.voiceNote !== undefined || a.edits?.length)) {
       throw fail(409, "closed", `${RELATION_LABEL[row.relation]} already sent ${theirs(row.relation)} answers.`);
     }
-    const patch: { relation?: Relation; kidName?: string; message?: string; kidVoiceNote?: Id<"_storage">; kidVoiceS?: number } = {};
+    if (a.relation === "none" && row.relation !== "none" && row.askedAt !== undefined) {
+      throw fail(409, "closed", "This one was already sent.");
+    }
+    const patch: {
+      relation?: Relation;
+      kidName?: string;
+      message?: string;
+      kidVoiceNote?: Id<"_storage">;
+      kidVoiceS?: number;
+      guess?: Row["guess"];
+    } = {};
+    if (a.edits?.length) patch.guess = editedGuess(row.guess, a.edits);
     if (a.relation !== undefined && a.relation !== row.relation) {
       patch.relation = a.relation;
       // A message the kid never changed follows who they're asking.
@@ -524,7 +588,12 @@ export const kidUpdate = internalMutation({
  * already is left out (the kid's page learns of her answers only with her version), and 409 when that leaves
  * nothing. Returns her answered questions as they were, then these.
  */
-export function askedOf(given: { id: string | null; text: string }[], before: MissQuestion[], answered: Set<QuestionId>): MissQuestion[] {
+export function askedOf(
+  given: { id: string | null; text: string; about?: About }[],
+  before: MissQuestion[],
+  answered: Set<QuestionId>,
+  linked: { id: QuestionId; about: About }[] = [],
+): MissQuestion[] {
   const [min, max] = LIMITS.asked;
   if (!given.length) throw badRequest("questions must be a list of 1 to 3 questions");
   if (given.length > LIMITS.askOpen) throw badRequest(`At most ${LIMITS.askOpen} questions at a time`);
@@ -534,7 +603,8 @@ export function askedOf(given: { id: string | null; text: string }[], before: Mi
     if (q.id !== null && !isSuggestionId(q.id)) {
       throw badRequest(`questions[${i}].id must be q1, q2 or q3, or left out for the kid's own question`);
     }
-    return { id: q.id as QuestionId | null, text };
+    if (q.id !== null && q.about) throw badRequest(`questions[${i}] can't have both an id and about`);
+    return { id: q.id as QuestionId | null, text, about: q.about };
   });
   const ids = all.flatMap((q) => (q.id ? [q.id] : []));
   if (new Set(ids).size !== ids.length) throw badRequest("The same question is in the list twice");
@@ -549,6 +619,7 @@ export function askedOf(given: { id: string | null; text: string }[], before: Mi
     ...open.map((q) => {
       const id = q.id ?? free.shift();
       if (!id) throw badRequest("At most 3 questions of your own");
+      if (q.about) linked.push({ id, about: q.about });
       return { id, text: q.text };
     }),
   ];
@@ -556,15 +627,34 @@ export function askedOf(given: { id: string | null; text: string }[], before: Mi
 
 /** Her answered questions stay; these replace the rest. When she had sent, her link opens again on them. */
 export const kidAsk = internalMutation({
-  args: { ...kidArgs, questions: v.array(v.object({ id: v.union(v.string(), v.null()), text: v.string() })) },
+  args: {
+    ...kidArgs,
+    questions: v.array(v.object({ id: v.union(v.string(), v.null()), text: v.union(v.string(), v.null()), about: v.optional(aboutV) })),
+  },
   returns: cardV,
   handler: async (ctx, a) => {
     const row = await byKid(ctx, a.kidTokenHash);
+    if (row.relation === "none") throw badRequest(PICK_SOMEONE);
     const answers = await answersOf(ctx, row._id);
-    const asked = askedOf(a.questions, row.asked, new Set(answers.map((x) => x.questionId)));
+    // A question about a part of the guess gets the template's words when the kid gave none (§10).
+    const given = a.questions.map((q, i) => {
+      if (q.about) partOf(row.guess, q.about, `questions[${i}].about`);
+      const text = q.text ?? (q.about ? questionAbout(row.guess, q.about, `questions[${i}].about`) : null);
+      if (text === null) throw badRequest(`questions[${i}].text must be a string`);
+      return { id: q.id, text, about: q.about };
+    });
+    const linked: { id: QuestionId; about: About }[] = [];
+    const asked = askedOf(given, row.asked, new Set(answers.map((x) => x.questionId)), linked);
+    // Her answer to it goes where it belongs in the merge: the part's `ask` names the question, as q1–q3 do.
+    const guess = linked.length ? JSON.parse(JSON.stringify(row.guess)) as Row["guess"] : row.guess;
+    for (const { id, about } of linked) {
+      if (about.kind === "ingredient") guess.ingredients[about.index].ask = id;
+      else guess.steps[about.step].lines[about.line].ask = id;
+    }
     const now = Date.now();
     await ctx.db.patch("dishAsks", row._id, {
       asked,
+      ...(linked.length ? { guess } : {}),
       questionsAt: now,
       ...(row.finishedAt ? { finishedAt: undefined, status: "asked" as const } : {}),
     });
@@ -578,6 +668,7 @@ export const kidSent = internalMutation({
   returns: cardV,
   handler: async (ctx, a) => {
     const row = await byKid(ctx, a.kidTokenHash);
+    if (row.relation === "none") throw badRequest(PICK_SOMEONE);
     const now = Date.now();
     const patch = {
       ...(row.askedAt === undefined ? { askedAt: now, askedVia: a.via } : {}),

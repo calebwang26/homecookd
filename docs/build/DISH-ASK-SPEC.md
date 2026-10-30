@@ -583,11 +583,10 @@ Three changes to the kid's routes. Nothing changes for Mom's page except what sh
 The rules:
 - **Text:** with no `text`, the server writes a short question in the kid's voice from a template. No model is
   called. The kid can reword it before sending.
-  - For an ingredient: "How much <name> do you use?". When the name already has an amount word, it's
-    "How do you make the <name>?" instead.
+  - For an ingredient: "How much <name> do you use?", with the name before any comma.
   - For a line: "How do you do this part: <line without ** marks, up to 60 characters>?"
   - With `text`, the kid's own words are used (3–120 characters, word-filtered).
-- **Ids:** such a question takes the next free own id (`q4`–`q6`). The guess's ingredient or line gets `ask` set to
+- **Ids:** such a question takes the next free own id (`q4`–`q6`). It can't also carry an `id` (`400`). The guess's ingredient or line gets `ask` set to
   that id, so her answer goes where it belongs in the merge, the way `q1`–`q3` already work.
 - **Caps:** the same as before, 3 open and 6 in all. An `about` that doesn't point at a part of the guess is a
   `400`.

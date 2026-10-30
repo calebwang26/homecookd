@@ -31,7 +31,7 @@ import type {
   MissQuote,
 } from "./types";
 
-export const RELATIONS: readonly Relation[] = ["mom", "dad", "grandma", "grandpa", "auntie", "uncle"];
+export const RELATIONS: readonly Relation[] = ["mom", "dad", "grandma", "grandpa", "auntie", "uncle", "none"];
 export const RELATION_LABEL: Record<Relation, string> = {
   mom: "Mom",
   dad: "Dad",
@@ -39,6 +39,8 @@ export const RELATION_LABEL: Record<Relation, string> = {
   grandpa: "Grandpa",
   auntie: "Auntie",
   uncle: "Uncle",
+  // A dish the kid craves that isn't tied to anyone: the prompts name no one (DISH-ASK-SPEC.md §10).
+  none: "the cook",
 };
 /** Every question id: q1–q3 the card's suggestions (linked to its gaps), q4–q6 the kid's own. */
 export const QUESTION_IDS: readonly QuestionId[] = ["q1", "q2", "q3", "q4", "q5", "q6"];

@@ -2,7 +2,7 @@
 // (the shapes the routes return), so change both together. Relation is spelled out here because the
 // web imports it from '@/lib/relation'.
 
-export type Relation = "mom" | "dad" | "grandma" | "grandpa" | "auntie" | "uncle";
+export type Relation = "mom" | "dad" | "grandma" | "grandpa" | "auntie" | "uncle" | "none"; // none: no one in particular
 
 /**
  * q1–q3: the 3 questions suggested with the card, linked to its gaps through `ask`.
