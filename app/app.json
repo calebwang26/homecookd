@@ -7,13 +7,13 @@
     "icon": "./assets/images/icon.png",
     "scheme": ["homecookd", "edible"],
     "userInterfaceStyle": "automatic",
-    "backgroundColor": "#FBF6EE",
+    "backgroundColor": "#FBF5EA",
     "ios": {
       "supportsTablet": false
     },
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#FBF6EE",
+        "backgroundColor": "#F2A23A",
         "foregroundImage": "./assets/images/android-icon-foreground.png",
         "backgroundImage": "./assets/images/android-icon-background.png",
         "monochromeImage": "./assets/images/android-icon-monochrome.png"
@@ -29,11 +29,11 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#FBF6EE",
+          "backgroundColor": "#FBF5EA",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76,
           "dark": {
-            "backgroundColor": "#221813"
+            "backgroundColor": "#15181F"
           }
         }
       ],
