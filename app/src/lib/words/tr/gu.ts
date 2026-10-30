@@ -716,6 +716,7 @@ const words: Translation = {
   'messages.bubble.namePhoto': '{name} નો વાનગીનો ફોટો',
   'messages.bubble.theyPhoto': 'વાનગીનો તેમનો ફોટો',
   'messages.bubble.howClose': 'તમારી વાનગી જેવું કેટલું બન્યું',
+  'messages.bubble.rating': '{max} માંથી {n} જરદી',
   'messages.log.waiting': '{when} · તમારી રાહ જોવાય છે',
   'messages.log.sent': '{time} · મોકલ્યું',
   'messages.log.answeredByYou': 'તમે જવાબ આપ્યો',

@@ -716,6 +716,7 @@ const words: Translation = {
   'messages.bubble.namePhoto': 'Larawan ni {name} ng putahe',
   'messages.bubble.theyPhoto': 'Kanyang larawan ng putahe',
   'messages.bubble.howClose': 'Gaano kahawig ng sa inyo',
+  'messages.bubble.rating': '{n} sa {max} na pula ng itlog',
   'messages.log.waiting': '{when} · naghihintay po sa inyo',
   'messages.log.sent': '{time} · Naipadala',
   'messages.log.answeredByYou': 'Sinagot po ninyo',

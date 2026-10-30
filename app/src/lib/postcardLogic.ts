@@ -5,7 +5,6 @@
 //   madeItWords(told, cookName)     the burst: "You made it" + "We told Dad." (never speaks for the cook)
 //   postcardAsk / ratingAsk         "Show Dad how it came out" / "How close to Dad’s?"
 //   nextRating(current, tapped)     tap a yolk to rate, the same yolk again to take it back (optional)
-//   ratingWords(n)                  "4 of 5" (screen readers; the yolks were pots)
 //   isPostcard(m)                   a `cooked` message that carries a photo
 //   postcardTilt(id)                one steady 1-1.5° tilt per card (callers drop it under Reduce Motion)
 //   likedIds(messages, meId)        cooked messages I already answered "Just like mine"
@@ -116,8 +115,6 @@ export function nextRating(current: number | null, tapped: number): number | nul
 export function cleanRating(v: unknown): number | null {
   return typeof v === 'number' && Number.isInteger(v) && v >= 1 && v <= RATING_MAX ? v : null;
 }
-
-export const ratingWords = (n: number) => `${n} of ${RATING_MAX}`;
 
 /** A `cooked` message with a photo: drawn as a postcard (cook's Home, the chat). */
 export const isPostcard = (m: { kind?: string | null; photo_url?: string | null } | null | undefined) =>

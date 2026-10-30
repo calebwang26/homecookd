@@ -716,6 +716,7 @@ const words: Translation = {
   'messages.bubble.namePhoto': 'Foto del plato de {name}',
   'messages.bubble.theyPhoto': 'Foto del plato',
   'messages.bubble.howClose': 'Qué tan parecido al suyo',
+  'messages.bubble.rating': '{n} de {max} yemas',
   'messages.log.waiting': '{when} · esperando su respuesta',
   'messages.log.sent': '{time} · Enviado',
   'messages.log.answeredByYou': 'Respuesta suya',
