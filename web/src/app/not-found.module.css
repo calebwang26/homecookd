@@ -1,4 +1,4 @@
-/* The 404 (QA B25): centred on the lander's canvas, the pot over one Fraunces line and a big green
+/* The 404 (QA B25): centred on the lander's canvas, the egg over one Fraunces line and a big yolk
    pill home (the lander's primary button look). */
 .page {
   min-height: 100svh;
@@ -14,6 +14,7 @@
 .title {
   max-width: 14ch;
   text-wrap: balance;
+  line-height: 1.15; /* the g of "page" must not touch the line under it */
 }
 .home {
   display: inline-flex;
