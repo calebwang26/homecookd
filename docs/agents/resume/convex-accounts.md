@@ -23,6 +23,8 @@ Last updated Oct 30, 12:05 UTC, right after the weekly limit reset. The pause li
 - **ntfy email limit:** the free ntfy account sends at most 5 emails a day, counted per sending IP, and Convex's
   servers may share theirs with other customers. If an alert email goes missing, check that first; a paid ntfy
   plan counts per account.
+- **Stop the Moss sync after Apple approves 1.0** (Caleb, Oct 31): not built yet, and held until then. The steps are in
+  `docs/agents/memory/moss-sync-off-after-approval.md`.
 - **Stretch, only if asked:** `pushEvents.filmed({askId, recipeId})` from `worker.published` when a filmed
   recipe answers a craving card. That needs the job to carry `dishAskId`.
 - **Caleb's numbers** (`TODO(caleb)`):
