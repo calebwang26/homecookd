@@ -52,7 +52,7 @@ resource "aws_s3_bucket_versioning" "backups" {
   versioning_configuration { status = "Enabled" }
 }
 
-# /privacy promises a deleted account's data leaves backups within 30 days of its deletion. Don't raise this past that.
+# /privacy promises a deleted account's data leaves backups within 30 days of its deletion: 21 + 7 stays inside that.
 resource "aws_s3_bucket_lifecycle_configuration" "backups" {
   bucket     = aws_s3_bucket.backups.id
   depends_on = [aws_s3_bucket_versioning.backups]
@@ -60,8 +60,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "backups" {
     id     = "expire"
     status = "Enabled"
     filter {}
-    expiration { days = 28 }
-    noncurrent_version_expiration { noncurrent_days = 1 }
+    expiration { days = 21 }
+    noncurrent_version_expiration { noncurrent_days = 7 }
     abort_incomplete_multipart_upload { days_after_initiation = 2 }
   }
 }
@@ -156,7 +156,8 @@ resource "aws_iam_role_policy" "execution_secret" {
   })
 }
 
-# The job can add a backup. It can't read or delete one, so a stolen key can't erase the history.
+# The job can add a backup. It can't read or delete one, but it can overwrite one by name: the original then stays
+# recoverable for 7 days (the lifecycle rule above).
 resource "aws_iam_role" "task" {
   name               = "${local.name}-task"
   assume_role_policy = data.aws_iam_policy_document.ecs_assume.json

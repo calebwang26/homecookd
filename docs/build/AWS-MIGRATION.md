@@ -51,8 +51,9 @@ deployment to prove it works.
 
 Decided and built in `infra/backups` (Caleb, Oct 31: the key lives in Secrets Manager). Today's preview key can't export, so
 the job uses its own key that reaches only `grand-dragon-649`. That key can still write to the deployment, so only this
-job's start-up role can read it, and the job itself can add backups but not read or delete them. Backups expire after 28
-days to keep `/privacy`'s promise (a deleted account's data leaves backups within 30 days). Restore test: into a local
+job's start-up role can read it. The job can add backups but not read or delete them. It can overwrite one by name, so a
+stolen role could replace recent backups; the originals then stay recoverable for 7 days. Backups expire after 21 days, plus
+those 7, to keep `/privacy`'s promise (a deleted account's data leaves backups within 30 days). Restore test: into a local
 Convex backend on Caleb's Mac, so no cloud deployment changes.
 
 **Blocker before the first real export:** `/privacy` names who stores family data (Convex, Supabase, Google Cloud, Vercel), and
@@ -135,7 +136,7 @@ Check while building:
 - Page links such as `/r`, `/i`, `/d`, `/miss` and `/a`: Vercel serves clean URLs, and CloudFront needs a small function to
   do the same, including any path after them that the pages read themselves. `/.well-known/apple-app-site-association` must stay exact, or universal links break for every
   installed app. That's an App Review guard path.
-- **The live site deploys from the other repo** (`calebwang26/homecookd`, not this one), so deploys move here too.
+- Vercel builds production from this repo's `main` today, so the new workflow replaces that trigger.
 - Vercel gives every PR a preview link. A preview on S3 is more work, so decide whether to rebuild that or use staging.
 - `/privacy` says "This website runs on Vercel", and `web/src/app/layout.tsx` falls back on Vercel's env variables for the
   site's address (set `NEXT_PUBLIC_SITE_URL`).
