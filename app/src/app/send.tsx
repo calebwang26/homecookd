@@ -346,7 +346,7 @@ export default function SendScreen() {
         {/* Content scrolls under the pinned button; fade it into the page. */}
         <LinearGradient
           pointerEvents="none"
-          colors={['rgba(251,245,234,0)', colors.page]}
+          colors={['rgba(238,243,240,0)', colors.page]}
           locations={[0, 0.45]}
           style={styles.fade}
         />

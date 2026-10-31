@@ -22,16 +22,16 @@
   background: var(--yolk);
   color: var(--ink);
   font-size: 18px;
-  box-shadow: 0 10px 24px rgba(52, 67, 12, 0.25);
+  box-shadow: 0 10px 24px rgba(36, 74, 57, 0.25);
 }
 .secondary {
   height: 56px;
   background: #ffffff;
-  color: #1f2430;
+  color: #18221d;
   font-size: 17px;
   box-shadow:
-    0 4px 14px rgba(31, 36, 48, 0.08),
-    0 0 0 1px rgba(31, 36, 48, 0.06);
+    0 4px 14px rgba(24, 34, 29, 0.08),
+    0 0 0 1px rgba(24, 34, 29, 0.06);
 }
 
 /* press feedback, motion spec 5 (same as recipe-web's .press) */
@@ -60,11 +60,11 @@
   text-wrap: balance;
   font-size: 17px;
   line-height: 1.45;
-  color: #5b554e;
+  color: #4f5d55;
 }
 .note[data-strong] {
   font-size: 18px;
-  color: #34430c;
+  color: #244a39;
   font-weight: 600;
 }
 
@@ -75,18 +75,18 @@
   padding: 14px 20px;
   border-radius: 22px;
   background: #ffffff;
-  box-shadow: 0 4px 14px rgba(31, 36, 48, 0.08);
+  box-shadow: 0 4px 14px rgba(24, 34, 29, 0.08);
   display: flex;
   align-items: center;
   justify-content: center;
   gap: 10px;
   font-size: 18px;
   font-weight: 700;
-  color: #1f2430;
+  color: #18221d;
 }
 .desk svg {
   flex: none;
-  color: #34430c;
+  color: #244a39;
 }
 
 @media (prefers-reduced-motion: reduce) {

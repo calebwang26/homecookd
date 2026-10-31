@@ -45,7 +45,7 @@ const light = (bg: string, soft: string, accent: string = colors.green): SlideTo
   soft,
   accent,
   barOn: colors.ink,
-  barOff: 'rgba(31,36,48,0.14)',
+  barOff: 'rgba(24,34,29,0.14)',
   dark: false,
 });
 const dark: SlideTone = {

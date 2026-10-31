@@ -1,5 +1,5 @@
 /* The v2 dish pages' shared parts (the approved mockups in the v2 canvas): Hearth colors as the
-   mockups set them. Ink #1F2430, muted #5B554E, green #34430C, cream #FFFFFF, page #FBF5EA. */
+   mockups set them. Ink #18221D, muted #4F5D55, green #244A39, cream #FFFFFF, page #EEF3F0. */
 .langRoot {
   min-height: 100svh;
 }
@@ -22,7 +22,7 @@
   font-weight: 650;
   font-size: 24px;
   letter-spacing: -0.02em;
-  color: #1f2430;
+  color: #18221d;
 }
 .topRight {
   display: flex;
@@ -39,8 +39,8 @@
   padding: 0 12px;
   border-radius: 999px;
   background: rgba(255, 253, 247, 0.85);
-  border: 1.5px solid rgba(31, 36, 48, 0.12);
-  color: #1f2430;
+  border: 1.5px solid rgba(24, 34, 29, 0.12);
+  color: #18221d;
   font: 600 15px/1 var(--ff-text);
   white-space: nowrap;
 }
@@ -103,7 +103,7 @@
 .backdrop {
   position: absolute;
   inset: 0;
-  background: rgba(31, 36, 48, 0.35);
+  background: rgba(24, 34, 29, 0.35);
   backdrop-filter: blur(10px);
   -webkit-backdrop-filter: blur(10px);
 }
@@ -116,8 +116,8 @@
   padding: 0 24px max(20px, env(safe-area-inset-bottom));
   border-radius: 32px 32px 0 0;
   background: #ffffff;
-  box-shadow: 0 -10px 30px rgba(31, 36, 48, 0.1);
-  color: #1f2430;
+  box-shadow: 0 -10px 30px rgba(24, 34, 29, 0.1);
+  color: #18221d;
   outline: none;
 }
 .grabber {
@@ -126,7 +126,7 @@
   height: 5px;
   margin: 8px auto 11px;
   border-radius: 999px;
-  background: rgba(31, 36, 48, 0.18);
+  background: rgba(24, 34, 29, 0.18);
 }
 .sheetClose {
   position: absolute;
@@ -135,8 +135,8 @@
   width: 44px;
   height: 44px;
   border-radius: 999px;
-  background: #f3ead9;
-  color: #1f2430;
+  background: #e3ebe6;
+  color: #18221d;
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -162,10 +162,10 @@
   max-width: 340px;
   padding: 8px 20px 8px 8px;
   border-radius: 999px;
-  background: #1f2430;
+  background: #18221d;
   color: #ffffff;
   font: 600 15px/1.3 var(--ff-text);
-  box-shadow: 0 10px 30px rgba(31, 36, 48, 0.22);
+  box-shadow: 0 10px 30px rgba(24, 34, 29, 0.22);
 }
 .toastDisc {
   flex: none;
@@ -174,7 +174,7 @@
   width: 32px;
   height: 32px;
   border-radius: 999px;
-  background: #34430c;
+  background: #244a39;
   color: #ffffff;
 }
 .toastDisc[data-tone='error'] {
@@ -183,7 +183,7 @@
 
 .wave {
   display: block;
-  fill: #1f2430;
+  fill: #18221d;
 }
 
 /* ---------- Get the app (K4, M6) ---------- */
@@ -205,7 +205,7 @@
   margin: 8px 0 0;
   font-size: 17px;
   line-height: 1.4;
-  color: #5b554e;
+  color: #4f5d55;
 }
 .reasons {
   list-style: none;
@@ -227,16 +227,16 @@
   border-radius: 999px;
   display: grid;
   place-items: center;
-  background: #e6ebcf;
-  color: #34430c;
+  background: #dcebe2;
+  color: #244a39;
 }
 .reasonIcon[data-tone='butter'] {
   background: #fcebd0;
-  color: #1f2430;
+  color: #18221d;
 }
 .reasonIcon[data-tone='peach'] {
   background: #fcebd0;
-  color: #1f2430;
+  color: #18221d;
 }
 .reasonTitle {
   display: block;
@@ -246,7 +246,7 @@
 .reasonLine {
   display: block;
   font-size: 15px;
-  color: #5b554e;
+  color: #4f5d55;
 }
 .reasonOnly {
   display: block;
@@ -268,6 +268,6 @@
   padding: 0 8px;
 }
 .openApp {
-  color: #5b554e;
+  color: #4f5d55;
   font-weight: 500;
 }

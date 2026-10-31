@@ -8,6 +8,6 @@ export type SwatchId = 'peach' | 'sage' | 'ink';
 /** `label`: the swatch's spoken name ("Peach card"), read with t(). */
 export const SWATCHES: { id: SwatchId; label: WordKey; stage: string; dark: boolean }[] = [
   { id: 'peach', label: 'share.swatch.peach', stage: '#FCEBD0', dark: false },
-  { id: 'sage', label: 'share.swatch.sage', stage: '#E6EBCF', dark: false },
-  { id: 'ink', label: 'share.swatch.ink', stage: '#1F2430', dark: true },
+  { id: 'sage', label: 'share.swatch.sage', stage: '#DCEBE2', dark: false },
+  { id: 'ink', label: 'share.swatch.ink', stage: '#18221D', dark: true },
 ];

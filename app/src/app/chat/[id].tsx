@@ -492,8 +492,8 @@ export default function ChatScreen() {
           {log}
         </ScrollView>
         {/* Messages fade softly under the header and the composer. */}
-        <LinearGradient pointerEvents="none" colors={[colors.page, 'rgba(251,245,234,0)']} style={[styles.fade, styles.fadeTop]} />
-        <LinearGradient pointerEvents="none" colors={['rgba(251,245,234,0)', colors.page]} style={[styles.fade, styles.fadeBottom]} />
+        <LinearGradient pointerEvents="none" colors={[colors.page, 'rgba(238,243,240,0)']} style={[styles.fade, styles.fadeTop]} />
+        <LinearGradient pointerEvents="none" colors={['rgba(238,243,240,0)', colors.page]} style={[styles.fade, styles.fadeBottom]} />
       </View>
 
       {notFound ? (

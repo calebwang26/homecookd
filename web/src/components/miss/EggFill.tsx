@@ -45,20 +45,20 @@ export function EggFill({ size = 140, done = false, label }: { size?: number; do
             <path className={s.eggFillWave} d={WAVE} fill="#F7C47C" />
           </g>
         </g>
-        <path d={WHITE} fill="none" stroke="#1F2430" strokeWidth={10} strokeLinejoin="round" />
-        <circle cx="96" cy="98" r="42" fill="#F2A23A" stroke="#1F2430" strokeWidth={10} />
+        <path d={WHITE} fill="none" stroke="#18221D" strokeWidth={10} strokeLinejoin="round" />
+        <circle cx="96" cy="98" r="42" fill="#F2A23A" stroke="#18221D" strokeWidth={10} />
         <path d="M68 86 Q70 76 80 70" fill="none" stroke="#FFFFFF" strokeWidth={8} strokeLinecap="round" />
         {done ? (
           <>
-            <path d="M77 102 Q83 93 89 102" fill="none" stroke="#1F2430" strokeWidth={6} strokeLinecap="round" />
-            <path d="M103 102 Q109 93 115 102" fill="none" stroke="#1F2430" strokeWidth={6} strokeLinecap="round" />
-            <path d="M84 112 Q96 130 108 112 Z" fill="#1F2430" stroke="#1F2430" strokeWidth={5} strokeLinejoin="round" />
+            <path d="M77 102 Q83 93 89 102" fill="none" stroke="#18221D" strokeWidth={6} strokeLinecap="round" />
+            <path d="M103 102 Q109 93 115 102" fill="none" stroke="#18221D" strokeWidth={6} strokeLinecap="round" />
+            <path d="M84 112 Q96 130 108 112 Z" fill="#18221D" stroke="#18221D" strokeWidth={5} strokeLinejoin="round" />
           </>
         ) : (
           <>
-            <circle cx="84" cy="100" r="6" fill="#1F2430" />
-            <circle cx="110" cy="100" r="6" fill="#1F2430" />
-            <path d="M87 114 Q97 124 107 114" fill="none" stroke="#1F2430" strokeWidth={6} strokeLinecap="round" />
+            <circle cx="84" cy="100" r="6" fill="#18221D" />
+            <circle cx="110" cy="100" r="6" fill="#18221D" />
+            <path d="M87 114 Q97 124 107 114" fill="none" stroke="#18221D" strokeWidth={6} strokeLinecap="round" />
           </>
         )}
       </svg>

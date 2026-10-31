@@ -59,7 +59,7 @@ export const ASK_HOMIE_SIZE = 176;
 const TOP = 0.42;
 /** expo-blur intensity: light, so the kitchen still reads behind homie (was 70). */
 const BLUR = 30;
-const TINT = 'rgba(31,36,48,0.5)';
+const TINT = 'rgba(24,34,29,0.5)';
 const WHITE_SOFT = 'rgba(255,255,255,0.8)';
 const OPEN_MS = 420;
 const RISE_AT = 300;

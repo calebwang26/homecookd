@@ -7,8 +7,8 @@
   max-width: 430px;
   min-height: 100svh;
   margin: 0 auto;
-  background: #fbf5ea;
-  color: #1f2430;
+  background: #eef3f0;
+  color: #18221d;
   font-family: var(--ff-text);
   font-size: 16px;
   line-height: 1.35;
@@ -16,7 +16,7 @@
 
 @media (min-width: 600px) {
   .column {
-    box-shadow: 0 0 0 1px rgba(31, 36, 48, 0.04), 0 30px 80px rgba(31, 36, 48, 0.14);
+    box-shadow: 0 0 0 1px rgba(24, 34, 29, 0.04), 0 30px 80px rgba(24, 34, 29, 0.14);
   }
 }
 
@@ -48,7 +48,7 @@
   background: var(--yolk);
   color: var(--ink);
   font: 700 18px/1.2 var(--ff-text);
-  box-shadow: 0 10px 24px rgba(52, 67, 12, 0.25);
+  box-shadow: 0 10px 24px rgba(36, 74, 57, 0.25);
   cursor: pointer;
 }
 
@@ -67,10 +67,10 @@
   min-width: 92px;
   min-height: 60px;
   padding: 0 20px;
-  border: 1.5px solid rgba(31, 36, 48, 0.12);
+  border: 1.5px solid rgba(24, 34, 29, 0.12);
   border-radius: 999px;
   background: #ffffff;
-  color: #1f2430;
+  color: #18221d;
   font: 700 17px/1.2 var(--ff-text);
   cursor: pointer;
 }
@@ -88,8 +88,8 @@
   height: 48px;
   border-radius: 50%;
   background: rgba(255, 253, 247, 0.92);
-  color: #1f2430;
-  box-shadow: 0 4px 14px rgba(31, 36, 48, 0.08);
+  color: #18221d;
+  box-shadow: 0 4px 14px rgba(24, 34, 29, 0.08);
   cursor: pointer;
 }
 
@@ -98,7 +98,7 @@
   align-items: center;
   gap: 8px;
   min-height: 44px;
-  color: #4c5a10;
+  color: #244a39;
   font: 600 15px/1.2 var(--ff-text);
   text-decoration: none;
   cursor: pointer;

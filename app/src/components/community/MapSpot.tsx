@@ -17,8 +17,8 @@ const PICKED = 70;
 const GROW = PICKED / PHOTO;
 const RIM = 3;
 // From the Community canvas: a circle lifts off the map, and the picked one wears a yolk ring.
-const LIFT = '0 4px 12px rgba(31,36,48,0.22)';
-const RING = '0 0 0 5px rgba(242,162,58,0.55), 0 6px 18px rgba(31,36,48,0.25)';
+const LIFT = '0 4px 12px rgba(24,34,29,0.22)';
+const RING = '0 0 0 5px rgba(242,162,58,0.55), 0 6px 18px rgba(24,34,29,0.25)';
 
 export type MapSpotProps = {
   x: number;

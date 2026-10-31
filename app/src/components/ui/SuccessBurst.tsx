@@ -1,5 +1,5 @@
 // Motion spec 5 success moment (Luma's "You're In", in homecookd colours):
-//   0 ms     green #34430C badge (success) grows 0 -> 1 on a spring
+//   0 ms     green #244A39 badge (success) grows 0 -> 1 on a spring
 //   120 ms   cream check stroke draws on (220 ms)
 //   250 ms   yolk #F2A23A ring scales 1 -> 1.8 while fading; 10 confetti dots (yolk, green, yolk-deep,
 //            yolk tint) fly 28-44 px outward and fade

@@ -137,7 +137,7 @@ export function ProgressRow({ elapsed, duration, progress, tone = 'page', onSeek
         onResponderTerminate={letGo}>
         <View pointerEvents="none" style={styles.chapters}>
           {chapters(marks).map(([a, b]) => (
-            <View key={a} style={[styles.track, { flex: b - a, backgroundColor: tone === 'tint' ? 'rgba(52,67,12,0.18)' : tone === 'video' ? 'rgba(255,255,255,0.35)' : colors.track }]}>
+            <View key={a} style={[styles.track, { flex: b - a, backgroundColor: tone === 'tint' ? 'rgba(36,74,57,0.18)' : tone === 'video' ? 'rgba(255,255,255,0.35)' : colors.track }]}>
               <View style={[styles.fill, { width: `${Math.max(0, Math.min(1, (p - a) / (b - a))) * 100}%`, backgroundColor: fill }]} />
             </View>
           ))}

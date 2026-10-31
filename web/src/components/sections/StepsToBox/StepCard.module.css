@@ -46,7 +46,7 @@
   font-size: 36cqw;
   line-height: 0.8;
   color: rgba(255, 253, 247, 0.92);
-  text-shadow: 0 2px 18px rgba(31, 36, 48, 0.28);
+  text-shadow: 0 2px 18px rgba(24, 34, 29, 0.28);
   pointer-events: none;
 }
 .vertical .body {
@@ -112,7 +112,7 @@
   padding-inline: 0.55em 0.75em;
   gap: 0.35em;
   rotate: -3deg;
-  box-shadow: 0 10px 24px -10px rgba(31, 36, 48, 0.4), 0 1px 2px rgba(31, 36, 48, 0.08);
+  box-shadow: 0 10px 24px -10px rgba(24, 34, 29, 0.4), 0 1px 2px rgba(24, 34, 29, 0.08);
 }
 .chipLine {
   display: block;
@@ -161,7 +161,7 @@
   overflow: hidden;
   background: var(--surface);
   border: 1px solid var(--hairline);
-  box-shadow: 0 2px 4px rgba(31, 36, 48, 0.06), 0 18px 36px -18px rgba(31, 36, 48, 0.35);
+  box-shadow: 0 2px 4px rgba(24, 34, 29, 0.06), 0 18px 36px -18px rgba(24, 34, 29, 0.35);
   rotate: 3deg;
 }
 .s2 .numeral {

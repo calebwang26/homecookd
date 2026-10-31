@@ -24,7 +24,7 @@ import type { RecordWords } from './words';
 const AnimatedBlurView = Animated.createAnimatedComponent(BlurView);
 // The same dim and blur as homie's questions (AskMoment).
 const BLUR = 70;
-const TINT = 'rgba(31,36,48,0.5)';
+const TINT = 'rgba(24,34,29,0.5)';
 const SHUTTER = 84;
 /** Room either side of the shutter: the flip button and its label on the right. */
 export const PLATE_FLIP_SIDE = 104;

@@ -22,7 +22,7 @@ import { alpha, colors } from '@/theme/tokens';
 import { ProgressRow, SkipGlyph } from './ProgressRow';
 
 const SKIP_S = 10;
-const DARK = '#15181F'; // the kit's dark ground
+const DARK = '#111915'; // the kit's dark ground
 
 export type StepPlayerFullProps = {
   url: string;

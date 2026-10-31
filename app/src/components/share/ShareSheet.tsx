@@ -370,7 +370,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    boxShadow: '0 10px 30px rgba(31,36,48,0.22)',
+    boxShadow: '0 10px 30px rgba(24,34,29,0.22)',
   },
   sentDisc: { width: 30, height: 30, borderRadius: 15, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
   sentText: { flexShrink: 1 },

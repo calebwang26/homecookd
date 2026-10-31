@@ -17,7 +17,7 @@
   inset: 0;
   display: grid;
   place-items: center;
-  background: linear-gradient(180deg, rgba(31, 36, 48, 0) 40%, rgba(31, 36, 48, 0.18));
+  background: linear-gradient(180deg, rgba(24, 34, 29, 0) 40%, rgba(24, 34, 29, 0.18));
   transition: opacity 200ms var(--ease-soft);
 }
 .playDisc {

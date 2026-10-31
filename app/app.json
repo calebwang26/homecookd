@@ -7,7 +7,7 @@
     "icon": "./assets/images/icon.png",
     "scheme": ["homecookd", "edible"],
     "userInterfaceStyle": "automatic",
-    "backgroundColor": "#FBF5EA",
+    "backgroundColor": "#EEF3F0",
     "ios": {
       "supportsTablet": false
     },
@@ -29,11 +29,11 @@
       [
         "expo-splash-screen",
         {
-          "backgroundColor": "#FBF5EA",
+          "backgroundColor": "#EEF3F0",
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76,
           "dark": {
-            "backgroundColor": "#15181F"
+            "backgroundColor": "#111915"
           }
         }
       ],

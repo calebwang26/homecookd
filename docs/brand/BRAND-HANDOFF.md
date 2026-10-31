@@ -47,17 +47,19 @@ tokens/
 
 ## 4. Color
 
+**Oct 30 2026, "Kitchen tile" (Caleb):** the cream page became a pale sage, the ink a green-black and the dark green a bottle green `#244A39` (tint `#DCEBE2`). Yolk, its tints and the record red are unchanged. The PNG exports in `png/` still carry the old ink; re-export them with the next icon change.
+
 | Token | Hex | Use |
 |---|---|---|
 | yolk | `#F2A23A` | Yolk, accent fills, app icon background, highlights. Not for small text on light backgrounds. |
-| yolk-deep | `#A3580C` | Accent **text** & links on cream or white (4.9:1). |
-| ink | `#1F2430` | Outlines, body text, primary buttons. |
-| cream | `#FBF5EA` | Page background. |
+| yolk-deep | `#A3580C` | Accent **text** & links on the page (4.7:1) or white (5.3:1). |
+| ink | `#18221D` | Outlines, body text, primary buttons. |
+| cream (page) | `#EEF3F0` | Page background: pale sage. The token keeps the name "cream". |
 | white | `#FFFFFF` | Cards, the egg white. |
-| muted | `#5B554E` | Secondary text (6.8:1 on cream). |
-| line | `#E6DDCF` | Hairlines & card borders. |
+| muted | `#4F5D55` | Secondary text (6.2:1 on the page). |
+| line | `#D6E0DA` | Hairlines & card borders. |
 
-Dark mode (the app has one): background `#15181F`, surface `#1F2430`, text cream, muted `#C9C1B4`, borders `#343A48`. Yolk works as text on dark (8.5:1). Primary buttons flip to a yolk background with ink text. Use `mark-reversed.svg` / `lockup-horizontal-reversed.svg` on dark. All values are in `tokens/`.
+Dark mode (the app has one): background `#111915`, surface `#18221D`, text `#EEF3F0`, muted `#C9C1B4`, borders `#343A48`. Yolk works as text on dark (8.5:1). Primary buttons flip to a yolk background with ink text. Use `mark-reversed.svg` / `lockup-horizontal-reversed.svg` on dark. All values are in `tokens/`.
 
 ## 5. Type
 
@@ -104,7 +106,7 @@ One mascot per screen, at most. The mascot never speaks for the cook; it reacts.
 
 1. Copy `tokens/tokens.css` into the global styles & map existing color/font variables onto the `--hc-*` tokens. Remove the old palette values once nothing references them.
 2. Load fonts as in section 5 & apply the variables on `<html>`.
-3. Icons via Next's file conventions in the `app/` directory: `favicon.ico`, `icon.svg` (use `png/web/favicon.svg`) & `apple-icon.png` (use `apple-touch-icon.png`). Put `icon-192.png`, `icon-512.png` & `icon-maskable-512.png` in `public/` & reference them from a web manifest (`purpose: "maskable"` on the maskable one). Set `theme_color` & `background_color` to `#FBF5EA`.
+3. Icons via Next's file conventions in the `app/` directory: `favicon.ico`, `icon.svg` (use `png/web/favicon.svg`) & `apple-icon.png` (use `apple-touch-icon.png`). Put `icon-192.png`, `icon-512.png` & `icon-maskable-512.png` in `public/` & reference them from a web manifest (`purpose: "maskable"` on the maskable one). Set `theme_color` & `background_color` to `#EEF3F0`.
 4. Social card: the lander currently generates a dynamic OG image. Either update its template to the new lockup, cream background & the "Cook it like Grandma does." line, or replace it with `png/web/og-image.png`. Keep the `?for=<relation>` personalization if the dynamic route supports it.
 5. Header/nav & footer: replace the old logo with `lockup-horizontal.svg` (mark alone on narrow phones below ~360px). Inline the SVG or use `<img>` with `alt="homecookd"`.
 6. Replace every pot illustration with the matching mascot mood (section 6). Search the codebase for the pot asset names & any `pot` components.
@@ -113,7 +115,7 @@ One mascot per screen, at most. The mascot never speaks for the cook; it reacts.
 
 ## 8. App checklist (`app/`, Expo)
 
-1. `app.json`/`app.config`: `name` → "homecookd"; `icon` → `png/app/icon-1024.png`; `splash.image` → `png/app/splash-icon.png` with `backgroundColor: "#FBF5EA"` (dark: `"#15181F"`); Android `adaptiveIcon.foregroundImage` → `adaptive-icon-foreground.png` with `backgroundColor: "#F2A23A"`. Check whether `slug`/`scheme`/bundle IDs should change before touching them; ask Caleb.
+1. `app.json`/`app.config`: `name` → "homecookd"; `icon` → `png/app/icon-1024.png`; `splash.image` → `png/app/splash-icon.png` with `backgroundColor: "#EEF3F0"` (dark: `"#111915"`); Android `adaptiveIcon.foregroundImage` → `adaptive-icon-foreground.png` with `backgroundColor: "#F2A23A"`. Check whether `slug`/`scheme`/bundle IDs should change before touching them; ask Caleb.
 2. Theme: load `tokens/tokens.json` into the existing theme object for light & dark.
 3. Fonts: swap Newsreader → Fraunces for headings; DM Sans & Caveat stay.
 4. Replace the pot mascot & illustrations with the mascot SVGs (`react-native-svg`), following the table in section 6: home greeting → hello, Hear the cook sheet → listening, cook-mode "Done" → made-it, empty family table → sleepy, failed upload card → oops.

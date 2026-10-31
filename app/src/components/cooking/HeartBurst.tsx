@@ -184,6 +184,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.card,
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 10px 30px rgba(31,36,48,0.14)',
+    boxShadow: '0 10px 30px rgba(24,34,29,0.14)',
   },
 });

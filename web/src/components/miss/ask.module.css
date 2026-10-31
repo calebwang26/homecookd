@@ -14,7 +14,7 @@
   margin: 18px 0 8px;
   font-size: 15px;
   font-weight: 600;
-  color: #5b554e;
+  color: #4f5d55;
 }
 .name,
 .message {
@@ -24,7 +24,7 @@
   border: 0;
   border-radius: 20px;
   background: #ffffff;
-  color: #1f2430;
+  color: #18221d;
   font: 400 19px/1.4 var(--ff-text);
 }
 .name {
@@ -49,7 +49,7 @@
   padding: 10px 8px 10px 10px;
   border-radius: 20px;
   background: #ffffff;
-  color: #1f2430;
+  color: #18221d;
 }
 .voicePlay {
   flex: none;
@@ -81,7 +81,7 @@
   border-radius: 999px;
   border: 0;
   background: rgba(255, 253, 247, 0.75);
-  color: #1f2430;
+  color: #18221d;
   display: grid;
   place-items: center;
   cursor: pointer;
@@ -95,9 +95,9 @@
   gap: 12px;
   padding: 10px 14px 10px 10px;
   border-radius: 20px;
-  border: 1.5px dashed #cfc3ae;
+  border: 1.5px dashed #bccbc2;
   background: #f6f3f9;
-  color: #1f2430;
+  color: #18221d;
   font-family: var(--ff-text);
   text-align: start;
   cursor: pointer;
@@ -123,7 +123,7 @@
   width: 44px;
   height: 44px;
   border-radius: 999px;
-  background: #1f2430;
+  background: #18221d;
   color: #ffffff;
   display: grid;
   place-items: center;
@@ -143,12 +143,12 @@
 .sees {
   margin: 12px 0 0;
   font-size: 14px;
-  color: #5b554e;
+  color: #4f5d55;
 }
 .rule {
   height: 1px;
   margin: 20px 0 18px;
-  background: rgba(31, 36, 48, 0.08);
+  background: rgba(24, 34, 29, 0.08);
 }
 .shareRow {
   display: grid;
@@ -160,7 +160,7 @@
   background: none;
   padding: 0;
   font: 600 13px/1.2 var(--ff-text);
-  color: #1f2430;
+  color: #18221d;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -174,22 +174,22 @@
   border-radius: 999px;
   display: grid;
   place-items: center;
-  background: #1f2430;
+  background: #18221d;
   color: #ffffff;
 }
 .shareDisc[data-tone='green'] {
-  background: #34430c;
+  background: #244a39;
 }
 .shareDisc[data-tone='peach'] {
   background: #f2a23a;
-  color: #1f2430;
+  color: #18221d;
 }
 .shareDisc[data-tone='forest'] {
-  background: #34430c;
+  background: #244a39;
 }
 .shareDisc[data-tone='grey'] {
-  background: #f3ead9;
-  color: #1f2430;
+  background: #e3ebe6;
+  color: #18221d;
 }
 
 /* "Ask someone": who to ask, for a card made for no one in particular */
@@ -202,9 +202,9 @@
 .whoChip {
   min-height: 56px;
   border-radius: 20px;
-  border: 1.5px solid rgba(31, 36, 48, 0.12);
+  border: 1.5px solid rgba(24, 34, 29, 0.12);
   background: #ffffff;
-  color: #1f2430;
+  color: #18221d;
   font: 700 18px/1 var(--ff-text);
   cursor: pointer;
 }

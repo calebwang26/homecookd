@@ -1,6 +1,6 @@
-// Kid-Recipe "Cooking for" control: track #F3EAD9, padding 6, radius 22, gap 6; options 60 tall,
+// Kid-Recipe "Cooking for" control: track #E3EBE6, padding 6, radius 22, gap 6; options 60 tall,
 // radius 16, title 16/700 ink + subtitle 13 muted; the selected one is cream with
-// 0 2px 8px rgba(31,36,48,0.08). The cream thumb slides between options on a spring.
+// 0 2px 8px rgba(24,34,29,0.08). The cream thumb slides between options on a spring.
 import { useEffect, useRef, useState } from 'react';
 import { StyleSheet, View, type LayoutChangeEvent, type StyleProp, type ViewStyle } from 'react-native';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';

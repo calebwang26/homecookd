@@ -1,5 +1,5 @@
 // Profile avatars. The seeded demo family's photos (app/assets/avatars/{mom,dad,grandma,leo}.jpg) for
-// a profile whose avatar_key names one, else the bible's initial tile (green-tint #E6EBCF, green #34430C
+// a profile whose avatar_key names one, else the bible's initial tile (green-tint #DCEBE2, green #244A39
 // Fraunces 600). Never a photo guessed from a real person's name. Extras from the bible:
 //  ring  - 0 0 0 3px #FFFFFF (Kid-Home header avatar)
 //  dot   - green unread dot top-right with a cream ring (Main "Mom", Kid-Messages "Mom")

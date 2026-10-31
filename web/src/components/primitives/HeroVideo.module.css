@@ -42,7 +42,7 @@
   min-height: 60px;
   padding: 6px 22px 6px 6px;
   border-radius: var(--r-pill);
-  background: rgba(31, 36, 48, 0.42);
+  background: rgba(24, 34, 29, 0.42);
   color: var(--cream);
   font-family: var(--ff-text);
   font-weight: 600;
@@ -69,6 +69,6 @@
   .play {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
-    background: rgba(31, 36, 48, 0.6);
+    background: rgba(24, 34, 29, 0.6);
   }
 }

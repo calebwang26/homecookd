@@ -569,7 +569,7 @@ const styles = StyleSheet.create({
   wrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   wrapGap: { flexDirection: 'row', flexWrap: 'wrap', gap: 12, alignItems: 'center' },
   swatchItem: { width: 72, gap: 4 },
-  swatch: { height: 40, borderRadius: 12, boxShadow: '0 0 0 1px rgba(31,36,48,0.08)' },
+  swatch: { height: 40, borderRadius: 12, boxShadow: '0 0 0 1px rgba(24,34,29,0.08)' },
   iconCell: { width: 48, height: 48, borderRadius: 14, backgroundColor: colors.card, alignItems: 'center', justifyContent: 'center', boxShadow: shadows.chip },
   grid2: { flexDirection: 'row', gap: 12 },
   flex: { flex: 1 },

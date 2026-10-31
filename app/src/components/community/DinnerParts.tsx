@@ -19,7 +19,7 @@ import { errorText } from './labels';
 import { fadeIn } from './motion';
 
 // From the mockup: a yolk ring at 14%, a soft yolk glow, and the usual drop shadow.
-const GLOW = '0 0 0 10px rgba(242,162,58,0.14), 0 0 70px rgba(242,162,58,0.35), 0 18px 44px rgba(31,36,48,0.18)';
+const GLOW = '0 0 0 10px rgba(242,162,58,0.14), 0 0 70px rgba(242,162,58,0.35), 0 18px 44px rgba(24,34,29,0.18)';
 const PHOTO_RADIUS = 32;
 
 export function DinnerPhoto({ uri, dish, width, height }: { uri: string | null; dish: string; width: number; height: number }) {

@@ -151,23 +151,23 @@
 .outlineCream {
   --bg: transparent;
   --fg: var(--cream);
-  --border: rgba(251, 245, 234, 0.7);
+  --border: rgba(238, 243, 240, 0.7);
   --circle-bg: var(--cream);
   --circle-fg: var(--forest);
 }
 .outlineCream:hover {
-  --bg: rgba(251, 245, 234, 0.12);
+  --bg: rgba(238, 243, 240, 0.12);
   --border: var(--cream);
 }
 .outlineInk {
   --bg: transparent;
   --fg: var(--ink);
-  --border: rgba(31, 36, 48, 0.35);
+  --border: rgba(24, 34, 29, 0.35);
   --circle-bg: var(--ink);
   --circle-fg: var(--cream);
 }
 .outlineInk:hover {
-  --bg: rgba(31, 36, 48, 0.05);
+  --bg: rgba(24, 34, 29, 0.05);
   --border: var(--ink);
 }
 .black {

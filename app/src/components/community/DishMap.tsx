@@ -108,7 +108,7 @@ const styles = StyleSheet.create({
   you: { position: 'absolute', width: YOU_HALO, alignItems: 'center' },
   halo: { width: YOU_HALO, height: YOU_HALO, borderRadius: YOU_HALO / 2, backgroundColor: 'rgba(242,162,58,0.2)', alignItems: 'center', justifyContent: 'center' },
   haloOn: { backgroundColor: 'rgba(242,162,58,0.4)' },
-  dot: { width: YOU_DOT, height: YOU_DOT, borderRadius: YOU_DOT / 2, borderWidth: 3, borderColor: colors.card, backgroundColor: colors.yolk, boxShadow: '0 2px 8px rgba(31,36,48,0.2)' },
+  dot: { width: YOU_DOT, height: YOU_DOT, borderRadius: YOU_DOT / 2, borderWidth: 3, borderColor: colors.card, backgroundColor: colors.yolk, boxShadow: '0 2px 8px rgba(24,34,29,0.2)' },
   news: { position: 'absolute', top: 6, right: 6, width: 12, height: 12, borderRadius: 6, borderWidth: 2, borderColor: colors.card, backgroundColor: colors.yolk },
   youTag: { marginTop: -6, paddingHorizontal: 8, paddingVertical: 2, borderRadius: radii.pill, backgroundColor: colors.card },
 });

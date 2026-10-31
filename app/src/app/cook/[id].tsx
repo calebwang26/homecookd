@@ -445,7 +445,7 @@ export default function CookScreen() {
           <PotDots total={total} reached={n} />
         </View>
       </View>
-      <LinearGradient pointerEvents="none" colors={[colors.page, 'rgba(251,245,234,0)']} style={styles.headFade} />
+      <LinearGradient pointerEvents="none" colors={[colors.page, 'rgba(238,243,240,0)']} style={styles.headFade} />
     </View>
   );
 

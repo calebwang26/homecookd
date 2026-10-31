@@ -11,7 +11,7 @@
   position: relative;
   height: 380px;
   overflow: hidden;
-  background: #f3ead9;
+  background: #e3ebe6;
   transform-origin: 50% 0%;
 }
 .heroImg {
@@ -42,7 +42,7 @@
   height: 48px;
   border-radius: 50%;
   background: rgba(255, 253, 247, 0.92);
-  color: #1f2430;
+  color: #18221d;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -68,7 +68,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #1f2430;
+  color: #18221d;
   font-size: 14px;
   font-weight: 600;
 }
@@ -85,7 +85,7 @@
   position: relative;
   margin-top: -44px;
   border-radius: 32px 32px 0 0;
-  background: #fbf5ea;
+  background: #eef3f0;
   padding: 28px 24px 16px;
   display: flex;
   flex-direction: column;
@@ -104,7 +104,7 @@
   font-size: 30px;
   line-height: 1.1;
   letter-spacing: -0.02em;
-  color: #1f2430;
+  color: #18221d;
 }
 .meta {
   display: flex;
@@ -112,12 +112,12 @@
   gap: 8px;
   font-size: 15px;
   line-height: 1.35;
-  color: #5b554e;
+  color: #4f5d55;
 }
 .source {
   margin: -4px 0 0;
   font-size: 14px;
-  color: #5b554e;
+  color: #4f5d55;
 }
 
 /* The dish pages: one line of her own words (with the English under it) where /r quotes the cook. */
@@ -135,6 +135,6 @@
   font-style: italic;
   font-size: 17px;
   line-height: 1.4;
-  color: #1f2430;
+  color: #18221d;
 }
 

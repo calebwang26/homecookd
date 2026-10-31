@@ -98,7 +98,7 @@ function VideoTile({ clip, index, onPress }: { clip: DraftClip; index: number; o
               styles.check,
               clip.selected
                 ? { backgroundColor: colors.yolk }
-                : { backgroundColor: 'rgba(31,36,48,0.25)', borderWidth: 2, borderColor: colors.card },
+                : { backgroundColor: 'rgba(24,34,29,0.25)', borderWidth: 2, borderColor: colors.card },
             ]}>
             <CheckIcon size={14} strokeWidth={3.5} color={clip.selected ? colors.ink : colors.card} />
           </View>
