@@ -222,6 +222,7 @@ const words: Translation = {
   'profiles.invite.label': 'Imbitahan ang pamilya',
   'profiles.invite.shareTitle': 'Sumalo po sa aming mesa',
   'profiles.invite.sent': 'Naipadala na ang imbitasyon',
+  'profiles.invite.notReady': 'Hindi pa po handa ang mga invite link. Subukan po ulit mamaya.',
   'profiles.invite.noPhone': 'Walang phone? Idagdag po sila rito',
   'profiles.invite.noPhoneHint': 'Para sa nagluluto gamit ang phone na ito',
   'profiles.phoneless.title': 'Magdagdag ng taong walang phone',
