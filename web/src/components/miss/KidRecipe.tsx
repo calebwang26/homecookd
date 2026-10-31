@@ -1,12 +1,11 @@
 'use client';
 // The kid's card (tonight's version, or Mom's once she answered) as the locked recipe view: its ingredients and
-// its steps open, with no cover page (Caleb, Oct 31: it only repeated the card); every other tap says "Get it on your phone." and opens K4's sheet.
-import { useCallback, useMemo } from 'react';
+// its steps open, with no cover page (Caleb, Oct 31: it only repeated the card); every other tap says "Get it on your phone.", and Get the app goes to the store.
+import { useMemo } from 'react';
 import { useLang, useRel } from '@/components/dish/lang';
 import { DishRecipeView } from '@/components/recipe-web/DishRecipeView';
 import { cardTitle } from '@/lib/dish/text';
 import type { Card, Recipe } from '@/lib/dish/types';
-import { SaveSheet } from './SaveSheet';
 
 export function KidRecipe({ card, token, version, onClose }: { card: Card; token: string; version: Recipe; onClose: () => void }) {
   const { t } = useLang();
@@ -15,10 +14,6 @@ export function KidRecipe({ card, token, version, onClose }: { card: Card; token
   const photo = card.photoUrls[0] ?? null;
   const title = cardTitle(card.relation, version.dish || card.dish);
   const meta = [card.version ? t('card.fromKitchen', { R }) : t('card.guessMeta'), version.time, version.servings && t('card.serves', { n: version.servings })].filter(Boolean).join(' · ');
-  const sheet = useCallback(
-    ({ open, onClose: close }: { open: boolean; onClose: () => void }) => <SaveSheet open={open} onClose={close} photo={photo} relation={card.relation} token={token} title={title} />,
-    [photo, card.relation, title, token],
-  );
   return (
     <DishRecipeView
       id={token}
@@ -32,7 +27,6 @@ export function KidRecipe({ card, token, version, onClose }: { card: Card; token
       meta={meta}
       clips={clips}
       popover={{ title: t('get.title'), line: t('get.keepLine') }}
-      sheet={sheet}
       onClose={onClose}
     />
   );

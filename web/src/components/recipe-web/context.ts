@@ -32,7 +32,6 @@ export type DishLock = {
   clips: Partial<Record<QuestionId, { audioUrl: string | null; durationS: number }>>;
   /** every locked tap says this */
   popover: LockCopy;
-  renderSheet: (p: { open: boolean; onClose: () => void }) => ReactNode;
   /** back to the page this view opened from */
   onClose: () => void;
   /** No cover page: Back from the ingredients is `onClose`. */

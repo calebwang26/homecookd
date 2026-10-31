@@ -4,30 +4,47 @@
   min-height: 100svh;
 }
 
-/* ---------- top bar: the pot and homecookd, then the links and the language switch ---------- */
+/* ---------- top bar: the logo and Get the app, then a row with the language ---------- */
 .topBar {
-  height: 72px;
-  padding: 0 16px 0 24px;
+  position: sticky;
+  top: 0;
+  z-index: 30;
+  height: 64px;
+  padding: 0 16px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  background: #18221d;
+}
+.brand {
+  display: flex;
+  align-items: center;
+  min-width: 0;
+}
+.topGetApp {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: 48px;
+  padding: 0 20px;
+  border-radius: 999px;
+  background: #f2a23a;
+  color: #18221d;
+  font-size: 15px;
+  font-weight: 700;
+  white-space: nowrap;
+  text-decoration: none;
+}
+.subBar {
+  min-height: 48px;
+  padding: 8px 16px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 8px;
 }
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-family: var(--ff-display);
-  font-variation-settings: 'SOFT' 100, 'opsz' 144;
-  font-weight: 650;
-  font-size: 24px;
-  letter-spacing: -0.02em;
-  color: #18221d;
-}
-.topRight {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+.subLeft {
   min-width: 0;
 }
 .langSwitch {

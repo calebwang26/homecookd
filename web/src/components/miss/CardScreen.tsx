@@ -3,7 +3,7 @@
 // over his struck-through guesses, her own words with the English under them, and her clips. The dock
 // saves (K4, the download ask) or asks her (K3). The recipe itself stays in English: it's data.
 import { Fragment, useCallback, useEffect, useMemo, useState, type MouseEvent } from 'react';
-import { DishHero, Toast, useAudio, useToast } from '@/components/dish/parts';
+import { DishHero, Toast, TopBar, useAudio, useToast } from '@/components/dish/parts';
 import { useLang, useRel } from '@/components/dish/lang';
 import { Logo } from '@/components/primitives/Logo';
 import { IconBack, IconClose, IconPause, IconPlay } from '@/components/recipe-web/icons';
@@ -128,6 +128,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
 
   return (
     <main className={s.card}>
+      <TopBar lang={false} />
       {/* A photo gets the hero. Without one, the dish name shows once, as the title (Caleb, Oct 30: the
           name-on-white hero above it was redundant), and Back sits in a plain top row. */}
       {photo ? (

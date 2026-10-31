@@ -1,22 +1,17 @@
 'use client';
 // Mom's recipe from the Sent screen (M5) or the film ask (M6): her version as the locked recipe view. The
 // recipe, its ingredients and its steps open; every other tap says what the app is for, in her words.
-import { useCallback, useMemo } from 'react';
+import { useMemo } from 'react';
 import { useLang, useRel } from '@/components/dish/lang';
 import { DishRecipeView } from '@/components/recipe-web/DishRecipeView';
 import { cardTitle } from '@/lib/dish/text';
 import type { Ask, Recipe } from '@/lib/dish/types';
-import { FilmSheet } from './MomScreens';
 
 export function MomRecipe({ ask, kid, token, version, onClose }: { ask: Ask; kid: string; token: string; version: Recipe; onClose: () => void }) {
   const { t } = useLang();
   const R = useRel()(ask.relation);
   const clips = useMemo(() => Object.fromEntries(ask.clips.map((c) => [c.id, { audioUrl: c.audioUrl, durationS: c.durationS }])), [ask.clips]);
   const meta = [t('m4.fromKitchen', { R }), version.time, version.servings && t('card.serves', { n: version.servings })].filter(Boolean).join(' · ');
-  const sheet = useCallback(
-    ({ open, onClose: close }: { open: boolean; onClose: () => void }) => <FilmSheet open={open} onClose={close} kid={kid} token={token} />,
-    [kid, token],
-  );
   return (
     <DishRecipeView
       id={token}
@@ -28,7 +23,6 @@ export function MomRecipe({ ask, kid, token, version, onClose }: { ask: Ask; kid
       meta={meta}
       clips={clips}
       popover={{ title: t('m6.title', { kid }), line: t('m6.save') }}
-      sheet={sheet}
       onClose={onClose}
     />
   );

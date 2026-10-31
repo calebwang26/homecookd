@@ -84,7 +84,7 @@ const strayStock = (page) =>
   page.evaluate(() => [...document.querySelectorAll('img')].map((i) => i.getAttribute('src') ?? '').filter((s) => /\/media\//.test(s) && !/dish-(dal|pho|dumplings)-\d+\.webp$/.test(s)));
 
 /** The locked recipe view's three screens, then a locked tap: the popover, then the dish pages' sheet. */
-async function lockedView(page, { who, title, fromKitchen, shotName, pop, sheetTitle, sheetTexts, link, store, cover = true }) {
+async function lockedView(page, { who, title, fromKitchen, shotName, pop, link, store, cover = true }) {
   const view = page.locator('main');
   if (cover) {
   await page.getByRole('button', { name: 'Start cooking' }).waitFor();
@@ -123,22 +123,15 @@ async function lockedView(page, { who, title, fromKitchen, shotName, pop, sheetT
   await popover.waitFor();
   check(`${who} locked: the popover says it`, (await popover.innerText()).includes(pop.line), await popover.innerText());
   await shot(page, `${shotName}-popover`);
-  await popover.getByRole('button', { name: 'Get the app' }).click();
-  const sheet = page.locator('[role=dialog][aria-modal=true]');
-  await sheet.waitFor();
-  const text = await sheet.innerText();
-  check(`${who} locked: the sheet’s wording`, text.includes(sheetTitle) && sheetTexts.every((x) => text.includes(x)), text);
-  check(`${who} locked: Get the app goes to the App Store`, (await sheet.getByTestId('get-app').getAttribute('href')) === 'https://apps.apple.com/app/id6825621614');
-  await shot(page, `${shotName}-sheet`);
 
-  // Get the app copies the page's own link first, then opens the store.
+  // Get the app goes straight to the store, copying the page's own link first: no sheet in between.
   const copied = [];
   await page.exposeFunction('__copied', (v) => copied.push(v));
   await page.evaluate(() => {
     const write = navigator.clipboard.writeText.bind(navigator.clipboard);
     navigator.clipboard.writeText = (v) => (window.__copied(v), write(v));
   });
-  await Promise.all([page.waitForURL(store), sheet.getByTestId('get-app').click()]);
+  await Promise.all([page.waitForURL(store), popover.getByRole('button', { name: 'Get the app' }).click()]);
   check(`${who} locked: it copied ${link} before the store`, copied[0] === link, JSON.stringify(copied));
 }
 
@@ -170,9 +163,10 @@ try {
   check('K2: "4 steps"', k2.includes('4 steps'));
   const k2Block = kid.locator('section[aria-labelledby="knows"]');
   check('K2: "Only Mom knows" starts empty: a plus and the cap, no default questions', k2.includes('Only Mom knows') && !k2.includes('Do you add sugar?') && (await k2Block.locator('li').count()) === 0 && (await k2Block.getByRole('button', { name: 'Add a question' }).count()) === 1 && (await k2Block.innerText()).includes('Up to 3 questions'));
+  check('K2: the top bar has the logo and Get the app', (await kid.locator('header').getByRole('link', { name: 'Get the app' }).getAttribute('href')) === 'https://apps.apple.com/app/id6825621614');
   check('K2: no line starts out asked', (await kid.locator('main button[aria-pressed="true"]').count()) === 0);
   check('K2: a toggle on every ingredient', (await kid.getByRole('button', { name: 'Ask Mom about this' }).count()) === 6);
-  check('K2: no stock photo stands in for their dish', (await strayStock(kid)).length === 0 && (await kid.locator('main img').count()) === 0);
+  check('K2: no stock photo stands in for their dish', (await strayStock(kid)).length === 0 && (await kid.locator('main img:not(header img)').count()) === 0);
   await shot(kid, 'K2-tonight');
   await shot(kid, 'K2-tonight-full', { full: true });
 
@@ -279,8 +273,6 @@ try {
     fromKitchen: 'From Mom’s kitchen',
     shotName: 'L-mom-locked',
     pop: { title: 'Surprise Caleb by filming a video.', line: 'Save this recipe so it never gets lost.' },
-    sheetTitle: 'Surprise Caleb by filming a video.',
-    sheetTexts: ['Caleb misses the sound of your voice.', 'Save this recipe so it never gets lost.', 'Keep being part of Caleb’s cooking life.'],
     link: `https://homecookd.app/a?t=${card.askToken}`,
     store: /apps\.apple\.com/,
   });
@@ -336,8 +328,6 @@ try {
     fromKitchen: 'From Mom’s kitchen',
     shotName: 'L-kid-locked',
     pop: { title: 'Get it on your phone.', line: 'Every dish you save, in one place.' },
-    sheetTitle: 'Get it on your phone.',
-    sheetTexts: ['Keep it', 'Every dish you save, in one place.', 'Know when Mom answers', 'We’ll tell you the moment she does.'],
     link: `https://homecookd.app/miss?k=${kidToken}`,
     store: /apps\.apple\.com/,
   });
@@ -347,6 +337,11 @@ try {
   // ── K5: the daily budget ────────────────────────────────────────────────────────────────────
   fake.setBudget(true);
   await kid.goto(`${BASE}/miss`, { waitUntil: 'networkidle' });
+  {
+    const a = await kid.getByRole('link', { name: /Your last dish/ }).boundingBox();
+    const b = await kid.getByLabel(/^Language/).locator('..').boundingBox().catch(() => null);
+    check('K1: "Your last dish" and the language sit on one row', !!a && !!b && Math.abs(a.y + a.height / 2 - (b.y + b.height / 2)) < 8, JSON.stringify([a, b]));
+  }
   check('K1: "Your last dish" shows once a dish is made', (await kid.getByRole('link', { name: /Your last dish/ }).count()) === 1);
   await kid.getByLabel('The dish you miss').fill('dad’s dumplings');
   await kid.getByRole('button', { name: 'Make my recipe' }).click();
@@ -541,16 +536,9 @@ try {
   const hiIng = await hi.locator('main').innerText();
   check('Hindi locked: her amount in Hindi, her guess struck, her words with the English under them', hiIng.includes('2 बड़े चम्मच') && hiIng.includes('Two big spoons. Don’t skimp.') && (await hi.locator('s').count()) >= 1, hiIng);
   await shot(hi, 'L-hindi-locked-ingredients');
-  await hi.locator('header').getByRole('button', { name: 'ऐप पाएँ' }).click();
-  const hiPop = hi.getByRole('dialog', { name: /Caleb को चौंका दीजिए/ });
-  await hiPop.waitFor();
-  check('Hindi locked: the popover is in Hindi', (await hiPop.innerText()).includes('सेव कर लीजिए') && (await hiPop.getByRole('button', { name: 'अभी नहीं' }).count()) === 1);
-  await hiPop.getByRole('button', { name: 'ऐप पाएँ' }).click();
-  const hiSheet = hi.locator('[role=dialog][aria-modal=true]');
-  await hiSheet.waitFor();
-  const hiSheetText = await hiSheet.innerText();
-  check('Hindi locked: the sheet’s three lines in Hindi', hiSheetText.includes('चौंका दीजिए') && hiSheetText.includes('सेव कर लीजिए') && hiSheetText.includes('साथ बने रहिए'), hiSheetText);
-  await shot(hi, 'L-hindi-locked-sheet');
+  await hi.route('https://apps.apple.com/**', (r) => r.fulfill({ contentType: 'text/html', body: '<title>App Store</title>' }));
+  await Promise.all([hi.waitForURL(/apps\.apple\.com/), hi.locator('header').getByRole('button', { name: 'ऐप पाएँ' }).click()]);
+  check('Hindi locked: the bar’s Get the app goes straight to the store', true);
 } catch (e) {
   failures.push(`crashed: ${e.stack ?? e}`);
   console.log(`  ✗ crashed: ${e.message}`);

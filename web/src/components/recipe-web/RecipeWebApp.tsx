@@ -8,6 +8,7 @@
 // Mom just wrote or the kid's card, read from the dish card instead of recipe.json (DishRecipeView).
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
+import { goToStore } from '@/components/dish/parts';
 import { Logo } from '@/components/primitives/Logo';
 import { LANDER_LINK } from '@/lib/app-links';
 import { getRecipe, getShare, isPlausibleToken, LoadError, type LoadErrorKind } from '@/lib/recipe-web/api';
@@ -132,7 +133,7 @@ function TopBar({ onGetApp, overlay, clear, dish }: { onGetApp?: (el: HTMLElemen
     </>
   );
   return (
-    <header className={ui.topbar} data-overlay={overlay || undefined} data-clear={(overlay && clear) || undefined}>
+    <header className={ui.topbar} data-dish={dish ? '' : undefined} data-overlay={overlay || undefined} data-clear={(overlay && clear) || undefined}>
       {dish && (
         <button type="button" className={`${ui.press} ${ui.topBack}`} aria-label={dish.t('common.back')} onClick={dish.onClose}>
           <IconBack size={22} />
@@ -191,6 +192,7 @@ export function RecipeWebView({ share, recipe, dish = null, start = 'recipe' }: 
   const lock = useCallback(
     (kind: LockKind, anchor: HTMLElement | null) => {
       if (!anchor) return;
+      if (dish && kind === 'getApp') return goToStore();
       setPopover({ rect: anchor.getBoundingClientRect(), copy: dish ? dish.popover : lockCopy(kind, recipe.cook.name, recipe.title), key: Date.now() });
     },
     [recipe, dish],
@@ -319,16 +321,13 @@ export function RecipeWebView({ share, recipe, dish = null, start = 'recipe' }: 
             onClose={() => setPopover(null)}
             onGetApp={() => {
               setPopover(null);
-              setSheet(true);
+              if (dish) goToStore();
+              else setSheet(true);
             }}
           />
         )}
       </AnimatePresence>
-      {dish ? (
-        dish.renderSheet({ open: sheet, onClose: closeSheet })
-      ) : (
-        <AnimatePresence>{sheet && <GetAppSheet key="get-app" onClose={closeSheet} share={share} reduced={reduced} />}</AnimatePresence>
-      )}
+      {!dish && <AnimatePresence>{sheet && <GetAppSheet key="get-app" onClose={closeSheet} share={share} reduced={reduced} />}</AnimatePresence>}
       <AnimatePresence>
         {/* The recipe's Watch: the whole video (the app's media sheet: dish name, the cook under it). */}
         {watching && (
