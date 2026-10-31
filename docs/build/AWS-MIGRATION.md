@@ -15,6 +15,21 @@ Oct 31, 2028; $100 expires Oct 17, 2027). Claude stays billed by Anthropic, and 
   turned off when a phase ends. They go only when the app versions that call them are gone.
 - Each step has a way back that takes minutes, until the old system is switched off for good.
 
+## How the rewrite ships (Caleb, Oct 31)
+
+One long-lived branch, with one reviewable PR per area merged into it. **Nothing from it reaches `main` or deploys until
+Apple approves 1.0.** After approval: app 1.1 with our own addresses first, then each area switches over on its own, with
+Convex as its way back until it's proven. Build 6 keeps calling the old services, so they stay up until those phones have
+updated. `main` keeps changing `convex/` meanwhile, so the branch merges `main` often and ports each change.
+
+**Before the rewrite starts:** staging fully tested, Convex backups running (phase 0), a real video job measured, and
+Caleb's OK on creating production, lifting the Supabase freeze, and any copy of real data into a test database.
+
+**Priorities (Caleb, Oct 31):** phase 0, phase 1, the worker from phase 3, then phases 4-6. **Voice is out of the near-term
+work:** homie is switched off, so voice stays on Cloud Run until homie is back on. Not confirmed: whether anything live,
+such as build 6, still calls the voice service. Check before anyone proposes turning it off (changing Cloud Run needs
+Caleb's OK anyway).
+
 ## Phases
 
 | # | Phase | What it needs | Way back |
@@ -22,7 +37,7 @@ Oct 31, 2028; $100 expires Oct 17, 2027). Claude stays billed by Anthropic, and 
 | 0 | Safety | Scheduled Convex exports to S3 | Nothing to undo |
 | 1 | Our own addresses | DNS change, app 1.1 | Point the addresses back; old URLs still work |
 | 2 | Foundation and staging | This PR merged, about $100 a month | `terraform destroy` on staging |
-| 3 | Easy services | Voice and worker code changes | Keep Cloud Run and the laptop worker running; switch back |
+| 3 | Worker off the laptop (voice waits for homie) | Worker code changes | Keep the laptop worker ready; switch back |
 | 4 | Media | Copy of the GCS buckets, signer replaced | Addresses point back to GCS |
 | 5 | Supabase to RDS | Production database, about 2-4 weeks of work | Supabase stays the source until cutover, read-only after |
 | 6 | Convex to Postgres | About 6-10 weeks of work, one area at a time | Per area: route back to Convex |
@@ -47,8 +62,8 @@ tested on staging before 1.1 depends on it. If it fails, Convex keeps its own UR
 The load balancer is plain HTTP and accepts any token, which is acceptable only while voice is fake and has no real data.
 `voice_count` stays 0 unless someone is testing.
 
-### 3. Easy services
-**Voice.** Calls last up to an hour, but **Fargate kills a task at most 120 seconds after asking it to stop**. The load
+### 3. Worker off the laptop
+**Voice (waits until homie is back on).** Calls last up to an hour, but **Fargate kills a task at most 120 seconds after asking it to stop**. The load
 balancer's one-hour drain doesn't change that. So the voice code must hold ECS task protection while it has a live call
 and release it after. The role and setting are in `infra/`; **the code in `voice/` is not written yet** and belongs to the
 Voice & homie chat. Without it, every release cuts calls. The PR gets the live Marathi and English run AGENTS.md requires.

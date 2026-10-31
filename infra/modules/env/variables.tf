@@ -76,7 +76,8 @@ variable "alert_email" {
   type = string
 }
 
-variable "github_repo" {
-  type    = string
-  default = "calebwang26/hackathon-homecookd"
+variable "github_subject_prefix" {
+  description = "This repo as GitHub's login names it, with its permanent ids: gh api repos/<repo>/actions/oidc/customization/sub"
+  type        = string
+  default     = "repo:calebwang26@292613801/hackathon-homecookd@1431696591"
 }

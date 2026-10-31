@@ -32,16 +32,19 @@ AWS_PROFILE=homecookd terraform apply
 
 ## Starting staging's voice service
 
+Voice is only a smoke test of the setup here (homie is off, and voice stays on Cloud Run for now).
+
 1. `terraform apply` creates everything with `voice_count = 0`.
 2. Push the first image, from Actions ("Deploy to AWS") or by hand. Actions needs the repo variable `AWS_ACCOUNT_ID` and
    a GitHub environment named `staging`.
-3. `terraform apply -var voice_count=1`, then `curl <load_balancer_url>/health`.
+3. `terraform apply -var voice_count=1`, then `curl <load_balancer_url>/health`. Then `terraform apply` again, back to 0.
 
 ## Before production
 
 The deploy role trusts the GitHub environment's name, so anyone with write access could run the workflow against an
-environment called `production`. **Don't create that GitHub environment until production is approved, and give it
-required reviewers (Caleb) before anything else uses it.**
+environment called `production`. **A GitHub environment named `Production` already exists, with no required reviewers**
+(probably made by Vercel's deployments; GitHub ignores case in these names). It's harmless while the production deploy
+role doesn't exist. **Give it required reviewers (Caleb) before production is created.**
 
 ## Rules
 
