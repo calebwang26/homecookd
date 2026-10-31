@@ -12,14 +12,16 @@
 //                    Grandma from the family" / "Remove Grandma?" with Remove / Keep; the phone stays
 //                    in and goes back to its owner. POST /profiles/:id/remove; old messages keep
 //                    their name and face.
-//  mode 'new':     "New message" from an inbox; only the others ("Hasn't joined yet" still shows).
+//  mode 'new':     "New message" from an inbox; a plus row "Add family" on top (the family's join link,
+//                  AddFamilySheet; Caleb, Oct 31), then only the others ("Hasn't joined yet" still shows).
 // Rows follow the inbox rows (52 avatar, 17/700 name, 14 muted line, hairlines); cooks first.
 import { router } from 'expo-router';
 import { useState } from 'react';
 import { ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import Animated, { FadeIn } from 'react-native-reanimated';
 
-import { ActionButton, type ActionState, Avatar, BottomSheet, ListCard, ListRow, PressableScale, Txt, useToast } from '@/components/ui';
+import { AddFamilySheet } from '@/components/profiles';
+import { ActionButton, type ActionState, Avatar, BottomSheet, ListCard, ListRow, PlusIcon, PressableScale, Txt, useToast } from '@/components/ui';
 import { api, errorMessage, type Profile } from '@/lib/api';
 import { openChatWith } from '@/lib/messaging';
 import { recipesByCook, useLibrary } from '@/lib/recipes';
@@ -43,7 +45,21 @@ export function MembersSheet(props: {
   // Every open starts on the list (never on a confirm left over from last time).
   const [opened, setOpened] = useState({ visible: props.visible, n: 0 });
   if (props.visible !== opened.visible) setOpened({ visible: props.visible, n: opened.n + (props.visible ? 1 : 0) });
-  return <Members key={opened.n} {...props} />;
+  // A fresh key per open, so the invite sheet starts over every time (as InviteButton does).
+  const [invite, setInvite] = useState({ open: false, n: 0 });
+  return (
+    <>
+      <Members
+        key={opened.n}
+        {...props}
+        onInvite={() => {
+          props.onClose();
+          setInvite((s) => ({ open: true, n: s.n + 1 }));
+        }}
+      />
+      <AddFamilySheet key={`invite-${invite.n}`} visible={invite.open} onClose={() => setInvite((s) => ({ ...s, open: false }))} />
+    </>
+  );
 }
 
 function Members({
@@ -51,11 +67,13 @@ function Members({
   onClose,
   mode = 'members',
   members,
+  onInvite,
 }: {
   visible: boolean;
   onClose: () => void;
   mode?: 'members' | 'new';
   members?: Profile[];
+  onInvite: () => void;
 }) {
   const { me, profiles, deviceProfileId, refresh, setMe, leaveFamily } = useSession();
   const { entries } = useLibrary();
@@ -202,8 +220,20 @@ function Members({
           style={[styles.scroll, { maxHeight: Math.max(320, winH * 0.92 - 160) }]}
           contentContainerStyle={styles.pad}
           showsVerticalScrollIndicator={false}>
-          {people.length ? (
+          {people.length || mode === 'new' ? (
             <ListCard padH={12}>
+              {mode === 'new' ? (
+                <ListRow padV={12} last={!people.length} onPress={onInvite} accessibilityLabel={t('profiles.picker.addFamily')}>
+                  <View style={styles.plus}>
+                    <PlusIcon size={24} color={colors.page} strokeWidth={2.2} />
+                  </View>
+                  <View style={styles.text}>
+                    <Txt variant="title" numberOfLines={1}>
+                      {t('profiles.picker.addFamily')}
+                    </Txt>
+                  </View>
+                </ListRow>
+              ) : null}
               {people.map((p, i) => {
                 const sub = line(p);
                 const invited = isInvited(p);
@@ -278,6 +308,7 @@ const styles = StyleSheet.create({
   scroll: { marginHorizontal: -4 },
   pad: { paddingHorizontal: 4, paddingBottom: 12, paddingTop: 2 },
   text: { flex: 1, minWidth: 0, gap: 2, justifyContent: 'center' },
+  plus: { width: 52, height: 52, borderRadius: 26, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.ink },
   // A 40 pt row plus 4 pt of slop each way: a 48 pt target that doesn't push the row apart.
   remove: { alignSelf: 'flex-start', minHeight: 40, justifyContent: 'center' },
   empty: { paddingVertical: 24 },
