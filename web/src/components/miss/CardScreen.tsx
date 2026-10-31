@@ -8,7 +8,7 @@ import { useLang, useRel } from '@/components/dish/lang';
 import { Logo } from '@/components/primitives/Logo';
 import { IconBack, IconClose, IconPause, IconPlay } from '@/components/recipe-web/icons';
 import { DishError, getCard, updateCard } from '@/lib/dish/api';
-import { applyEdits, askItems, cleanPicked, EDIT_LIMITS, initialPicked, ingredientRef, lineRef, openCap, unitOf, unitText, withEdit } from '@/lib/dish/shape';
+import { applyEdits, askItems, cleanPicked, EDIT_LIMITS, initialPicked, ingredientRef, lineRef, openCap, ownUnit, QUESTION_LIMITS, unitOf, unitText, withDefaults, withEdit } from '@/lib/dish/shape';
 import { boldRuns, cardTitle, plain } from '@/lib/dish/text';
 import type { Card, Edit, Ingredient, Line, PartRef, Quote, Recipe } from '@/lib/dish/types';
 import { AskSheet } from './AskSheet';
@@ -36,6 +36,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
   const [picked, setPicked] = useState<string[]>(() => initialPicked(initial));
   const [edits, setEdits] = useState<Edit[]>([]);
   const [capHit, setCapHit] = useState(false);
+  const [adding, setAdding] = useState(false); // the plus square: a question in his own words
   const [editing, setEditing] = useState<string | null>(null);
   const [open, setOpen] = useState<number | null>(null); // the step shown in full
   const guess = useMemo(() => applyEdits(card.guess, edits), [card.guess, edits]);
@@ -57,14 +58,16 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
   const cap = openCap(card);
   const chosen = cleanPicked(card, guess, picked); // unique units: a question's id, or a part with none
   const full = chosen.length >= cap;
+  const toSend = askItems(card, guess, withDefaults(card, chosen, cap)); // Mom always gets the full 3
   const clipUrl = (id: Ingredient['clip']) => (id ? (card.answers.find((a) => a.id === id)?.audioUrl ?? null) : null);
 
+  const flashCap = () => {
+    setCapHit(true);
+    window.setTimeout(() => setCapHit(false), 2200);
+  };
   const toggleUnit = (unit: string) => {
     if (chosen.includes(unit)) return setPicked(chosen.filter((x) => x !== unit));
-    if (full) {
-      setCapHit(true);
-      return void window.setTimeout(() => setCapHit(false), 2200);
-    }
+    if (full) return flashCap();
     setPicked([...chosen, unit]);
   };
   const toggle = (ref: PartRef) => toggleUnit(unitOf(card, guess, ref));
@@ -207,7 +210,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
             <h2 id="knows" className={s.knowsTitle}>
               {none ? t('card.onlyNone') : t('card.only', { R })}
             </h2>
-            {chosen.length > 0 ? (
+            {chosen.length > 0 && (
               <ul className={s.knowsList}>
                 {chosen.map((unit) => (
                   <li key={unit}>
@@ -218,14 +221,25 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
                   </li>
                 ))}
               </ul>
+            )}
+            {adding ? (
+              <OwnQuestion
+                onCancel={() => setAdding(false)}
+                onSave={(text) => {
+                  setPicked([...chosen, ownUnit(text)]);
+                  setAdding(false);
+                }}
+              />
             ) : (
-              <p className={s.knowsEmpty}>{t('card.knowsEmpty')}</p>
+              <button type="button" className={`${ui.press} ${s.knowsAdd}`} aria-label={t('card.askAdd')} aria-disabled={full || undefined} onClick={() => (full ? flashCap() : setAdding(true))}>
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" aria-hidden="true">
+                  <path d="M12 5v14M5 12h14" />
+                </svg>
+              </button>
             )}
-            {full && chosen.length > 0 && (
-              <p className={s.knowsCap} role="status" data-hit={capHit || undefined}>
-                {t('ask.cap', { n: cap })}
-              </p>
-            )}
+            <p className={s.knowsCap} role="status" data-hit={capHit || undefined}>
+              {t('ask.cap', { n: cap })}
+            </p>
           </section>
         )}
 
@@ -310,13 +324,13 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
           </svg>
           {t('card.save')}
         </button>
-        <button type="button" className={`${ui.press} ${ui.primary}`} disabled={!chosen.length} onClick={onAsk}>
+        <button type="button" className={`${ui.press} ${ui.primary}`} disabled={!toSend.length} onClick={onAsk}>
           {askLabel}
         </button>
       </div>
 
       <WhoSheet open={who} onClose={closeWho} token={token} onPicked={pickedWho} toast={show} />
-      <AskSheet key={card.relation} open={asking} onClose={closeAsk} token={token} card={card} onCard={setCard} toast={show} items={askItems(card, guess, chosen)} />
+      <AskSheet key={card.relation} open={asking} onClose={closeAsk} token={token} card={card} onCard={setCard} toast={show} items={toSend} />
       <SaveSheet open={saving} onClose={closeSave} photo={photo} relation={card.relation} token={token} title={title} />
       <Toast toast={toast} />
     </main>
@@ -379,6 +393,18 @@ function StepLine({ line, editing, on, full, label, ask, onEdit, onCancel, onSav
       </span>
       <RowActions fix={`${t('edit.fix')}: ${plain(line.text)}`} onEdit={onEdit} on={on} full={full} label={label} ask={ask} onToggle={onToggle} />
     </span>
+  );
+}
+
+function OwnQuestion({ onCancel, onSave }: { onCancel: () => void; onSave: (text: string) => void }) {
+  const { t } = useLang();
+  const [text, setText] = useState('');
+  const ok = text.trim().length >= QUESTION_LIMITS.min && text.trim().length <= QUESTION_LIMITS.max;
+  return (
+    <form className={`${s.editForm} ${s.knowsForm}`} onSubmit={(e) => (e.preventDefault(), ok && onSave(text))} onKeyDown={(e) => e.key === 'Escape' && onCancel()}>
+      <input className={s.editName} aria-label={t('card.askAdd')} placeholder={t('card.askPlaceholder')} value={text} maxLength={QUESTION_LIMITS.max} autoFocus dir="auto" onChange={(e) => setText(e.target.value)} />
+      <EditButtons ok={ok} onCancel={onCancel} />
+    </form>
   );
 }
 

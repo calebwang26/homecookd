@@ -52,10 +52,27 @@ export function unitOf(card: Pick<Card, 'guess' | 'asked'>, guess: Recipe, ref: 
   return (part && questionOf(card, part)?.id) || keyOf(ref);
 }
 
-/** What starts chosen: the questions already asked and not answered yet, else the 3 suggested ones. */
-export function initialPicked(card: Pick<Card, 'guess' | 'asked' | 'answers'>): string[] {
+/** What starts chosen: the questions already asked and not answered yet. A new card starts empty (Caleb, Oct 31): the suggested ones stay hidden, see `withDefaults`. */
+export function initialPicked(card: Pick<Card, 'asked' | 'answers'>): string[] {
   const answered = new Set(card.answers.map((a) => a.id));
-  return (card.asked.length ? card.asked : card.guess.questions).filter((q) => !answered.has(q.id)).map((q) => q.id);
+  return card.asked.filter((q) => !answered.has(q.id)).map((q) => q.id);
+}
+
+/** A question in the kid's own words, as a unit. */
+const OWN = 't:';
+export const ownUnit = (text: string) => `${OWN}${text.trim()}`;
+/** DISH-ASK-SPEC §4 cards/ask: a question's text. */
+export const QUESTION_LIMITS = { min: 3, max: 120 } as const;
+
+/** What goes to Mom: what the kid chose, then suggested questions he never sees, up to the cap (Caleb, Oct 31: she always gets 3). */
+export function withDefaults(card: Pick<Card, 'guess' | 'asked' | 'answers'>, units: string[], cap: number): string[] {
+  const answered = new Set<string>(card.answers.map((a) => a.id));
+  const out = [...units];
+  for (const q of knownQuestions(card)) {
+    if (out.length >= cap) break;
+    if (!answered.has(q.id) && !out.includes(q.id)) out.push(q.id);
+  }
+  return out;
 }
 
 /** The chosen units as they stand now: a part that has gained a question becomes that question, no repeats, none answered or gone. */
@@ -64,6 +81,13 @@ export function cleanPicked(card: Pick<Card, 'guess' | 'asked' | 'answers'>, gue
   const answered = new Set<string>(card.answers.map((a) => a.id));
   const out: string[] = [];
   for (const key of picked) {
+    if (key.startsWith(OWN)) {
+      // Once it was sent, his question has an id.
+      const sent = knownQuestions(card).find((q) => q.text === key.slice(OWN.length))?.id;
+      const unit = sent ?? key;
+      if (!answered.has(unit) && !out.includes(unit)) out.push(unit);
+      continue;
+    }
     const ref = refOf(key);
     if (ref ? !partOf(guess, ref) : !known.has(key)) continue;
     const unit = ref ? unitOf(card, guess, ref) : key;
@@ -76,6 +100,7 @@ export function cleanPicked(card: Pick<Card, 'guess' | 'asked' | 'answers'>, gue
 export function unitText(card: Pick<Card, 'guess' | 'asked'>, guess: Recipe, unit: string): string {
   const own = knownQuestions(card).find((q) => q.id === unit);
   if (own) return own.text;
+  if (unit.startsWith(OWN)) return unit.slice(OWN.length);
   const ref = refOf(unit);
   const part = ref && partOf(guess, ref);
   if (!ref || !part) return '';
@@ -89,6 +114,7 @@ export function askItems(card: Pick<Card, 'guess' | 'asked'>, guess: Recipe, uni
   return units.flatMap((unit): AskItem[] => {
     const q = known.find((k) => k.id === unit);
     if (q) return [{ id: q.id, text: q.text }];
+    if (unit.startsWith(OWN)) return [{ text: unit.slice(OWN.length) }];
     const ref = refOf(unit);
     return ref && partOf(guess, ref) ? [{ about: ref }] : [];
   });

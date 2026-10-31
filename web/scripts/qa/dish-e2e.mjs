@@ -166,7 +166,9 @@ try {
   check('K2: one label, "Our guess. Mom knows the rest."', k2.includes('Our guess. Mom knows the rest.') && !/Tonight’s version|best guess|We guessed/.test(k2));
   check('K2: a short step, "Scramble eggs soft. Set aside.", with its bold piece set in bold and no raw asterisks', k2.includes('Scramble eggs soft. Set aside.') && !k2.includes('**') && (await kid.locator('main ol b', { hasText: 'soft' }).count()) >= 1);
   check('K2: "4 steps"', k2.includes('4 steps'));
-  check('K2: "Only Mom knows" lists the 3 suggested questions', k2.includes('Only Mom knows') && k2.includes('Do you add sugar?') && k2.includes('How much ketchup do you put in?'));
+  const k2Block = kid.locator('section[aria-labelledby="knows"]');
+  check('K2: "Only Mom knows" starts empty: a plus and the cap, no default questions', k2.includes('Only Mom knows') && !k2.includes('Do you add sugar?') && (await k2Block.locator('li').count()) === 0 && (await k2Block.getByRole('button', { name: 'Add a question' }).count()) === 1 && (await k2Block.innerText()).includes('Up to 3 questions'));
+  check('K2: no line starts out asked', (await kid.locator('main button[aria-pressed="true"]').count()) === 0);
   check('K2: a toggle on every ingredient', (await kid.getByRole('button', { name: 'Ask Mom about this' }).count()) === 6);
   check('K2: no stock photo stands in for their dish', (await strayStock(kid)).length === 0 && (await kid.locator('main img').count()) === 0);
   await shot(kid, 'K2-tonight');
@@ -198,14 +200,8 @@ try {
   check('K3: the default message', (await sheet.getByLabel('Your message').inputValue()) === 'Mom, how do you make your tomato egg? I\'m trying to make it here.');
   check('K3: "She’ll see your guess and 3 questions."', (await sheet.innerText()).includes('She’ll see your guess and 3 questions.'));
   await sheet.getByLabel('Your name').fill('Caleb');
-  await shot(kid, 'K3b-ask-voice-empty');
-  await hold(kid, sheet.getByRole('button', { name: /Add a voice note/ }), 1800);
-  await sheet.getByRole('button', { name: 'Play your voice note' }).waitFor({ timeout: 10000 });
-  const voiced = fake.cards.get(kidUrl.split('k=')[1]);
-  check('K3: the voice note uploaded and attached', !!voiced.voice);
-  check('K3: voiceNoteS sent from the recorder', voiced.voiceS > 0 && voiced.voiceS <= 60, String(voiced.voiceS));
-  check('K3: kidVoiceS shown as its time', (await sheet.getByText(/^0:0[1-9]$/).count()) === 1);
-  await shot(kid, 'K3-ask-voice-recorded');
+  check('K3: no voice note in the sheet', !/voice note/i.test(await sheet.innerText()));
+  await shot(kid, 'K3-ask');
   await sheet.getByRole('button', { name: 'Copy link' }).click();
   await kid.waitForTimeout(800);
   const card = fake.cards.get(kidUrl.split('k=')[1]);
@@ -222,8 +218,6 @@ try {
   await mom.goto(askUrl, { waitUntil: 'networkidle' });
   await mom.getByRole('heading', { level: 1 }).waitFor();
   check('M1: "Caleb wants to make your tomato egg."', (await mom.getByRole('heading', { level: 1 }).innerText()).replace(/\s+/g, ' ') === 'Caleb wants to make your tomato egg.');
-  check('M1: the kid’s voice note plays first', (await mom.getByRole('button', { name: 'Play Caleb’s voice note' }).count()) === 1);
-  check('M1: kidVoiceS shown on the player', (await mom.getByText(/^0:0[1-9]$/).count()) === 1);
   check('M1: the button is "See Caleb’s guess"', (await mom.getByRole('button', { name: 'See Caleb’s guess' }).count()) === 1);
   await shot(mom, 'M1-voice-note');
   await mom.getByRole('button', { name: 'See Caleb’s guess' }).click();
@@ -247,6 +241,7 @@ try {
   const box = await mic.boundingBox();
   await mom.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await mom.mouse.down();
+  await mom.getByText(/0:0[1-9]/).first().waitFor({ timeout: 8000 }).catch(() => {}); // the mic can take a moment on the first use
   await mom.waitForTimeout(1500);
   await mom.screenshot({ path: path.join(OUT, 'M3-recording.png') });
   await mom.mouse.up();
@@ -375,12 +370,18 @@ try {
   const shapeToken = kid.url().split('k=')[1];
   const block = kid.locator('section[aria-labelledby="knows"]');
   const toggles = kid.getByRole('button', { name: 'Ask Mom about this' });
-  check('Shape: 3 suggested questions to start', (await block.locator('li').count()) === 3);
-  await toggles.nth(0).click({ force: true }); // the eggs, with 3 chosen already
-  check('Shape: at the cap, "Up to 3 questions" and still 3', (await block.innerText()).includes('Up to 3 questions') && (await block.locator('li').count()) === 3);
-  await block.getByRole('button', { name: 'Take this question out' }).nth(1).click(); // the sugar out
-  await toggles.nth(0).click(); // the eggs in
-  check('Shape: a tapped line joins the block, worded by the template', (await block.innerText()).includes('How much eggs do you use?') && (await block.locator('li').count()) === 3);
+  check('Shape: nothing chosen to start, the cap still shown', (await block.locator('li').count()) === 0 && (await block.innerText()).includes('Up to 3 questions'));
+  await block.getByRole('button', { name: 'Add a question' }).click();
+  await block.getByLabel('Add a question').last().fill('Do you use butter?');
+  await kid.keyboard.press('Enter');
+  check('Shape: the plus adds a question in his own words', (await block.locator('li').innerText()).includes('Do you use butter?'));
+  await toggles.nth(0).click(); // the eggs
+  check('Shape: a tapped line joins the block, worded by the template, and the cap stays up', (await block.innerText()).includes('How much eggs do you use?') && (await block.innerText()).includes('Up to 3 questions') && (await block.locator('li').count()) === 2);
+  await toggles.nth(2).click();
+  await toggles.nth(5).click({ force: true }); // a fourth, at the cap
+  await block.getByRole('button', { name: 'Add a question' }).click({ force: true });
+  check('Shape: at the cap nothing more joins', (await block.locator('li').count()) === 3 && (await block.locator('input').count()) === 0);
+  await block.getByRole('button', { name: 'Take this question out' }).nth(2).click();
   await shot(kid, 'S-only-mom-knows');
   // A filtered word is refused with a toast, the line goes back; a real fix goes through.
   await kid.getByRole('button', { name: /^Fix: .*salt/ }).click();
@@ -402,8 +403,9 @@ try {
   await kid.getByRole('dialog').getByRole('button', { name: 'Copy link' }).click();
   await kid.waitForTimeout(800);
   const shaped = fake.cards.get(shapeToken);
-  check('Shape: the share asked what he chose (q1, q3, then his own q4)', shaped.asked.map((q) => q.id).join() === 'q1,q3,q4', JSON.stringify(shaped.asked));
-  check('Shape: his own question points at the eggs', shaped.asked[2].text === 'How much eggs do you use?' && shaped.guess.ingredients[0].ask === 'q4');
+  check('Shape: Mom gets 3: his two, then one hidden default', shaped.asked.length === 3 && shaped.asked[0].text === 'Do you use butter?' && shaped.asked[1].text === 'How much eggs do you use?' && ['q1', 'q2', 'q3'].includes(shaped.asked[2].id), JSON.stringify(shaped.asked));
+  check('Shape: the line question points at the eggs', shaped.guess.ingredients[0].ask === shaped.asked[1].id);
+  check('Shape: the hidden default never shows in the block', (await block.locator('li').count()) === 2);
   await kid.keyboard.press('Escape');
 
   // A card as the live server writes it (the fake's "live" dish): two parts point at one question. A question counts once.
@@ -418,17 +420,13 @@ try {
   const liveTitle = await kid.title();
   check('Live: the tab title has "Mom’s" once', (liveTitle.match(/mom.s/gi) ?? []).length === 1, liveTitle);
   let rows3 = await liveRows();
-  check('Live: exactly 3 unique questions', rows3.length === 3 && new Set(rows3.map((r) => r.trim())).size === 3, rows3.join(' | '));
-  check('Live: the cap counts unique questions', (await liveBlock.innerText()).includes('Up to 3 questions'));
-  check('Live: the linked ingredients show as chosen', (await liveTog.nth(1).getAttribute('aria-pressed')) === 'true' && (await liveTog.nth(3).getAttribute('aria-pressed')) === 'true' && (await liveTog.nth(0).getAttribute('aria-pressed')) === 'false');
-  await liveTog.nth(1).click(); // the tomatoes: takes out q1, once
+  check('Live: nothing chosen to start', rows3.length === 0);
+  await liveTog.nth(1).click(); // the tomatoes: q1
   rows3 = await liveRows();
-  check('Live: toggling a linked ingredient removes that one question', rows3.length === 2 && !rows3.some((r) => /tomatoes before the eggs/.test(r)) && (await liveTog.nth(1).getAttribute('aria-pressed')) === 'false');
-  await liveTog.nth(1).click(); // and puts the same question back
-  rows3 = await liveRows();
-  check('Live: toggling it again restores that same question, once', rows3.length === 3 && rows3.filter((r) => /tomatoes before the eggs/.test(r)).length === 1);
-  await liveTog.nth(0).click({ force: true }); // the eggs, at the cap
-  check('Live: at the cap, another part does not join', (await liveRows()).length === 3);
+  check('Live: a linked ingredient brings its one question', rows3.length === 1 && /tomatoes before the eggs/.test(rows3[0]));
+  await liveTog.nth(1).click();
+  check('Live: toggling it again takes it out', (await liveRows()).length === 0);
+  await liveTog.nth(1).click();
   await kid.getByRole('button', { name: 'Ask Mom', exact: true }).click();
   check('Live: "She’ll see your guess and 3 questions."', (await kid.getByRole('dialog').innerText()).includes('She’ll see your guess and 3 questions.'));
   await kid.getByRole('dialog').getByRole('button', { name: 'Copy link' }).click();
@@ -449,8 +447,7 @@ try {
   check('None: "Only the cook knows" and "Ask someone"', (await noneBlock.innerText()).includes('Only the cook knows') && (await kid.getByRole('button', { name: 'Ask someone', exact: true }).count()) === 1);
   check('None: no ask link and no message yet', fake.cards.get(noneToken).relation === 'none' && fake.cards.get(noneToken).message === '');
   await shot(kid, 'N-none-card');
-  for (let i = 0; i < 3; i++) await noneBlock.getByRole('button', { name: 'Take this question out' }).first().click();
-  check('None: nothing chosen turns Ask off and says what to do', (await kid.getByRole('button', { name: 'Ask someone', exact: true }).isDisabled()) && (await noneBlock.innerText()).includes('Choose any line to ask about.'));
+  check('None: nothing chosen and Ask still works', (await noneBlock.locator('li').count()) === 0 && (await kid.getByRole('button', { name: 'Ask someone', exact: true }).isEnabled()));
   await kid.getByRole('button', { name: 'Ask someone about this' }).nth(0).click();
   await kid.getByRole('button', { name: 'Ask someone', exact: true }).click();
   await kid.getByText('Who do you want to ask?').waitFor();

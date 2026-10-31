@@ -87,7 +87,7 @@
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: rgba(255, 253, 247, 0.92);
+  background: rgba(255, 255, 255, 0.92);
   color: #18221d;
   box-shadow: 0 4px 14px rgba(24, 34, 29, 0.08);
   cursor: pointer;
@@ -115,7 +115,7 @@
   width: 22px;
   height: 22px;
   margin: auto;
-  border: 2.5px solid rgba(255, 253, 247, 0.35);
+  border: 2.5px solid rgba(255, 255, 255, 0.35);
   border-top-color: #ffffff;
   border-radius: 50%;
   animation: turn 800ms linear infinite;

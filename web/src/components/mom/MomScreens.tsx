@@ -333,7 +333,7 @@ export function FillScreen({ ask, guess, version, onDone }: { ask: Ask; guess: R
 
 // ── M5 and M6 ─────────────────────────────────────────────────────────────────────────────────
 
-const CONFETTI = ['#244A39', '#F2A23A', '#F2A23A', '#BCCBC2', '#244A39', '#F2A23A', '#F2A23A', '#BCCBC2', '#244A39', '#F2A23A'];
+const CONFETTI = ['#244A39', '#F2A23A', '#F2A23A', '#d6e0da', '#244A39', '#F2A23A', '#F2A23A', '#d6e0da', '#244A39', '#F2A23A'];
 
 /** The dish card ("Mom's sweet tomato egg"). With `onOpen` the whole card is one tap that opens her recipe. */
 function RecipeCard({ ask, compact, onOpen }: { ask: Ask; compact?: boolean; onOpen: (() => void) | null }) {

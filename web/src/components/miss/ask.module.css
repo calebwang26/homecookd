@@ -1,4 +1,4 @@
-/* K3, the Ask Mom sheet (v2 mockups K3-AskMom and K3b-VoiceEmpty). */
+/* K3, the Ask Mom sheet (v2 mockup K3-AskMom). */
 .title {
   margin: 8px 0 0;
   padding-inline-end: 52px;
@@ -40,105 +40,6 @@
 .message:focus-visible {
   outline: 3px solid #a3580c;
   outline-offset: 1px;
-}
-.voice {
-  margin-top: 12px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 8px 10px 10px;
-  border-radius: 20px;
-  background: #ffffff;
-  color: #18221d;
-}
-.voicePlay {
-  flex: none;
-  width: 44px;
-  height: 44px;
-  border-radius: 999px;
-  border: 0;
-  background: var(--yolk);
-  color: var(--ink);
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-}
-.voiceWave {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-}
-.voiceTime {
-  flex: none;
-  font-size: 14px;
-  font-weight: 600;
-  font-variant-numeric: tabular-nums;
-}
-.voiceRedo {
-  flex: none;
-  width: 44px;
-  height: 44px;
-  border-radius: 999px;
-  border: 0;
-  background: rgba(255, 253, 247, 0.75);
-  color: #18221d;
-  display: grid;
-  place-items: center;
-  cursor: pointer;
-  touch-action: none;
-}
-.voiceEmpty {
-  margin-top: 12px;
-  width: 100%;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 14px 10px 10px;
-  border-radius: 20px;
-  border: 1.5px dashed #bccbc2;
-  background: #f6f3f9;
-  color: #18221d;
-  font-family: var(--ff-text);
-  text-align: start;
-  cursor: pointer;
-  touch-action: none;
-  -webkit-user-select: none;
-  user-select: none;
-  -webkit-touch-callout: none;
-}
-.voiceEmpty > * {
-  pointer-events: none;
-}
-.voiceEmpty[data-rec] {
-  border-style: solid;
-  border-color: #9a4f47;
-  background: #f8e9e6;
-}
-.voiceEmpty:disabled {
-  opacity: 0.5;
-  cursor: default;
-}
-.voiceMic {
-  flex: none;
-  width: 44px;
-  height: 44px;
-  border-radius: 999px;
-  background: #18221d;
-  color: #ffffff;
-  display: grid;
-  place-items: center;
-}
-.voiceEmpty[data-rec] .voiceMic {
-  background: #9a4f47;
-}
-.voiceTitle {
-  display: block;
-  font-size: 16px;
-  font-weight: 700;
-}
-.voiceHint {
-  display: block;
-  font-size: 14px;
 }
 .sees {
   margin: 12px 0 0;

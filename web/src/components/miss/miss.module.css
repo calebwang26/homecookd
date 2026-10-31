@@ -48,7 +48,7 @@
   margin: 0 24px;
   padding: 0 12px 0 16px;
   border-radius: 999px;
-  background: rgba(255, 253, 247, 0.85);
+  background: rgba(255, 255, 255, 0.85);
   border: 1.5px solid rgba(24, 34, 29, 0.12);
   font-size: 15px;
   font-weight: 600;
@@ -134,7 +134,7 @@
 }
 .field:focus-within {
   border-color: #244a39;
-  box-shadow: 0 0 0 3px rgba(120, 140, 21, 0.35), 0 8px 24px rgba(24, 34, 29, 0.06);
+  box-shadow: 0 0 0 3px rgba(36, 74, 57, 0.35), 0 8px 24px rgba(24, 34, 29, 0.06);
 }
 .field input {
   flex: 1;
@@ -324,7 +324,7 @@
   height: 36px;
   border-radius: 999px;
   border: 0;
-  background: rgba(255, 253, 247, 0.75);
+  background: rgba(255, 255, 255, 0.75);
   color: #18221d;
   display: grid;
   place-items: center;
@@ -359,7 +359,7 @@
   text-align: center;
   font-size: 15px;
   font-weight: 600;
-  color: #8a3f37;
+  color: #9a4f47;
 }
 .cta {
   position: fixed;
@@ -370,7 +370,7 @@
   max-width: 430px;
   transform: translateX(-50%);
   padding: 28px 24px max(28px, env(safe-area-inset-bottom));
-  background: linear-gradient(180deg, rgba(247, 247, 242, 0), #eef3f0 30%);
+  background: linear-gradient(180deg, rgba(238, 243, 240, 0), #eef3f0 30%);
 }
 .cta > button {
   width: 100%;
@@ -710,7 +710,7 @@
   place-items: center;
 }
 .step[data-tone] .num {
-  background: rgba(255, 253, 247, 0.75);
+  background: rgba(255, 255, 255, 0.75);
   color: #18221d;
 }
 .stepText {
@@ -731,7 +731,7 @@
   max-width: 430px;
   transform: translateX(-50%);
   padding: 28px 24px max(28px, env(safe-area-inset-bottom));
-  background: linear-gradient(180deg, rgba(247, 247, 242, 0), #eef3f0 30%);
+  background: linear-gradient(180deg, rgba(238, 243, 240, 0), #eef3f0 30%);
   display: flex;
   gap: 10px;
 }
@@ -881,7 +881,7 @@
   cursor: pointer;
 }
 .toggle[aria-pressed='true'] {
-  border-color: #f0c64a;
+  border-color: #f2a23a;
   background: #fcebd0;
   color: #18221d;
 }
@@ -949,7 +949,7 @@
   font-weight: 600;
   font-size: 24px;
   line-height: 1.15;
-  color: #4a3016;
+  color: #18221d;
 }
 .knowsList {
   list-style: none;
@@ -966,11 +966,11 @@
   gap: 8px;
   padding: 8px 8px 8px 14px;
   border-radius: 16px;
-  background: rgba(255, 253, 247, 0.75);
+  background: rgba(255, 255, 255, 0.75);
   font-size: 16px;
   font-weight: 600;
   line-height: 1.3;
-  color: #4a3016;
+  color: #18221d;
 }
 .knowsX {
   flex: none;
@@ -984,10 +984,24 @@
   place-items: center;
   cursor: pointer;
 }
-.knowsEmpty {
-  margin: 10px 0 0;
-  font-size: 15px;
-  color: #18221d;
+/* The plus square: a question in his own words */
+.knowsAdd {
+  margin-top: 12px;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  border: 0;
+  background: #18221d;
+  color: #eef3f0;
+  display: grid;
+  place-items: center;
+  cursor: pointer;
+}
+.knowsAdd[aria-disabled='true'] {
+  opacity: 0.45;
+}
+.knowsForm {
+  margin-top: 12px;
 }
 .knowsCap {
   margin: 10px 0 0;
@@ -1026,7 +1040,7 @@
   height: 8px;
   margin-inline-start: 8px;
   border-radius: 999px;
-  background: #f0c64a;
+  background: #f2a23a;
 }
 .stepChevron {
   flex: none;
