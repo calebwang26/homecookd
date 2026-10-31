@@ -43,7 +43,8 @@ Voice is only a smoke test of the setup here (homie is off, and voice stays on C
 
 ## Starting the backups
 
-First, `/privacy` must list AWS (docs/build/AWS-MIGRATION.md, phase 0).
+**Waiting on Apple's approval of 1.0:** `/privacy` must list AWS first, and it stays unchanged during review
+(`docs/build/AWS-MIGRATION.md`).
 
 1. `terraform apply` in `infra/backups` (schedule off).
 2. Push the image from `infra/backups/job` to its ECR repository as `:latest`.
