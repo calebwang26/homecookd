@@ -84,8 +84,9 @@ const strayStock = (page) =>
   page.evaluate(() => [...document.querySelectorAll('img')].map((i) => i.getAttribute('src') ?? '').filter((s) => /\/media\//.test(s) && !/dish-(dal|pho|dumplings)-\d+\.webp$/.test(s)));
 
 /** The locked recipe view's three screens, then a locked tap: the popover, then the dish pages' sheet. */
-async function lockedView(page, { who, title, fromKitchen, shotName, pop, sheetTitle, sheetTexts, link, store }) {
+async function lockedView(page, { who, title, fromKitchen, shotName, pop, sheetTitle, sheetTexts, link, store, cover = true }) {
   const view = page.locator('main');
+  if (cover) {
   await page.getByRole('button', { name: 'Start cooking' }).waitFor();
   const top = await page.locator('body').innerText();
   check(`${who} locked: the dish title`, (await page.getByRole('heading', { level: 1 }).innerText()) === title, await page.getByRole('heading', { level: 1 }).innerText());
@@ -96,6 +97,7 @@ async function lockedView(page, { who, title, fromKitchen, shotName, pop, sheetT
 
   // Ingredients: her amount, the guess she replaced struck through, her own words.
   await page.getByRole('button', { name: 'Start cooking' }).click();
+  }
   await page.getByRole('heading', { name: 'Get these ready' }).waitFor();
   const ing = await view.innerText();
   check(`${who} locked: her amount`, ing.includes('2 big spoons'), ing);
@@ -314,8 +316,15 @@ try {
   // The version on the card opens the locked recipe view, with the kid's words on the sheet.
   await kid.route('https://apps.apple.com/**', (r) => r.fulfill({ contentType: 'text/html', body: '<title>App Store</title>' }));
   const kidToken = kidUrl.split('k=')[1];
-  await kid.getByRole('button', { name: /^Open the recipe: Mom’s tomato egg/ }).click();
+  check('Kid: the card has no arrow to a cover page', (await kid.getByRole('button', { name: /^Open the recipe/ }).count()) === 0);
+  await kid.getByRole('button', { name: 'Start cooking' }).click();
+  await kid.getByRole('heading', { name: 'Get these ready' }).waitFor();
+  await kid.getByRole('button', { name: 'Back', exact: true }).first().click();
+  await kid.getByRole('button', { name: 'Start cooking' }).waitFor();
+  check('Kid: Back from the ingredients is the card', (await kid.getByText('From Mom’s kitchen').count()) >= 1);
+  await kid.getByRole('button', { name: 'Start cooking' }).click();
   await lockedView(kid, {
+    cover: false,
     who: 'Kid',
     title: 'Mom’s tomato egg',
     fromKitchen: 'From Mom’s kitchen',

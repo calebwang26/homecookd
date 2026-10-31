@@ -50,7 +50,7 @@ export function IngredientsScreen() {
   return (
     <div className={s.wrap}>
       <div className={s.top}>
-        <button type="button" className={`${ui.press} ${ui.roundBtn}`} aria-label={dish ? dish.t('common.back') : 'Back to the recipe'} onClick={() => go({ name: 'recipe' })}>
+        <button type="button" className={`${ui.press} ${ui.roundBtn}`} aria-label={dish ? dish.t('common.back') : 'Back to the recipe'} onClick={() => (dish?.coverless ? dish.onClose() : go({ name: 'recipe' }))}>
           <IconBack />
         </button>
         <span className={s.dish}>{r.title}</span>

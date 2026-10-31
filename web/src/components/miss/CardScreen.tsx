@@ -27,7 +27,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
   const [asking, setAsking] = useState(false);
   const [who, setWho] = useState(false); // "Ask someone": who to ask, when the card has no one yet
   const [saving, setSaving] = useState(false);
-  const [locked, setLocked] = useState<'recipe' | 'ingredients' | null>(null); // the locked recipe view over the card, and its first screen
+  const [locked, setLocked] = useState(false); // the locked recipe view over the card, from its ingredients
   const { toast, show } = useToast();
   const audio = useAudio();
 
@@ -94,7 +94,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
   const closeSave = useCallback(() => setSaving(false), []);
   const closeAsk = useCallback(() => setAsking(false), []);
   const closeWho = useCallback(() => setWho(false), []);
-  const closeRecipe = useCallback(() => setLocked(null), []);
+  const closeRecipe = useCallback(() => setLocked(false), []);
   const onAsk = () => (none ? setWho(true) : setAsking(true));
   const pickedWho = (c: Card) => {
     setCard(c);
@@ -115,7 +115,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
     </a>
   );
 
-  if (locked) return <KidRecipe card={card} token={token} version={recipe} start={locked} onClose={closeRecipe} />;
+  if (locked) return <KidRecipe card={card} token={token} version={recipe} onClose={closeRecipe} />;
 
   const ingProps = (i: number) => ({
     part: ingredientRef(i),
@@ -138,8 +138,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
         <div className={s.topRow}>{back}</div>
       )}
       <section className={s.sheet} data-flat={photo ? undefined : ''}>
-        {/* The version is one tap: the button covers it and opens the recipe as the locked view. */}
-        <div className={s.head}>
+        <div>
           {card.version && (
             <span className={s.pill} data-tone="peach">
               {t('card.theirVersion', { R })}
@@ -154,10 +153,6 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
               {t('card.fromKitchen', { R })}
             </div>
           )}
-          <svg className={s.headChevron} width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-            <path d="M9 5l7 7-7 7" />
-          </svg>
-          <button type="button" className={s.headHit} aria-label={`${t('lock.open')}: ${title}`} onClick={() => setLocked('recipe')} />
         </div>
 
         {card.merging ? (
@@ -171,7 +166,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
           </p>
         ) : null}
 
-        <button type="button" className={`${ui.press} ${ui.primary} ${s.start}`} onClick={() => setLocked('ingredients')}>
+        <button type="button" className={`${ui.press} ${ui.primary} ${s.start}`} onClick={() => setLocked(true)}>
           {t('lock.start')}
         </button>
 

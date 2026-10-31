@@ -395,7 +395,7 @@ function Cta({
         type="button"
         className={`${ui.press} ${ui.ctaBack}`}
         aria-label={dish ? dish.t('common.back') : screen.i === 0 ? 'Back to the ingredients' : 'Previous step'}
-        onClick={() => go(screen.i === 0 ? (r.ingredients.length ? { name: 'ingredients' } : { name: 'recipe' }) : { name: 'step', i: screen.i - 1 })}
+        onClick={() => (screen.i === 0 && !r.ingredients.length && dish?.coverless ? dish.onClose() : go(screen.i === 0 ? (r.ingredients.length ? { name: 'ingredients' } : { name: 'recipe' }) : { name: 'step', i: screen.i - 1 }))}
       >
         <IconBack />
       </button>
