@@ -450,7 +450,7 @@ try {
   check('None: no ask link and no message yet', fake.cards.get(noneToken).relation === 'none' && fake.cards.get(noneToken).message === '');
   await shot(kid, 'N-none-card');
   for (let i = 0; i < 3; i++) await noneBlock.getByRole('button', { name: 'Take this question out' }).first().click();
-  check('None: nothing chosen turns Ask off and says what to do', (await kid.getByRole('button', { name: 'Ask someone', exact: true }).isDisabled()) && (await noneBlock.innerText()).includes('Tap + on anything to ask.'));
+  check('None: nothing chosen turns Ask off and says what to do', (await kid.getByRole('button', { name: 'Ask someone', exact: true }).isDisabled()) && (await noneBlock.innerText()).includes('Choose any line to ask about.'));
   await kid.getByRole('button', { name: 'Ask someone about this' }).nth(0).click();
   await kid.getByRole('button', { name: 'Ask someone', exact: true }).click();
   await kid.getByText('Who do you want to ask?').waitFor();

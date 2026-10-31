@@ -15,7 +15,7 @@ import { FitLabel } from './FitLabel';
 import { useRW } from './context';
 import { HearSheet } from './HearBar';
 import { IconBubble, IconCheck, IconChevronDown, IconClose, IconEye, IconPlay, IconSparkle, IconWave } from './icons';
-import { bestStepQuote, cutSentence, lookFor, stepIngredients, watchLabel } from './stepText';
+import { bestStepQuote, cutSentence, lookFor, splitCue, stepIngredients, stepTime, watchLabel } from './stepText';
 import { RangeClip, Sheet, WatchSheet } from './WatchSheet';
 import { hasAudio, hearLabel, ingredientLines, mmss } from '@/lib/recipe-web/recipe';
 import type { Recipe, Step, Story } from '@/lib/recipe-web/types';
@@ -385,19 +385,54 @@ function DishStep({ index }: { index: number }) {
   const clip = clipId ? dish.clips[clipId] : null;
   const url = clip?.audioUrl ?? null;
   const quote = hers.find((l) => l.quote)?.quote ?? st.tip;
+  // The structure the video steps have (MoreFrom: "In this step", the Look for box), from the card's own data.
+  const ings = st.uses.flatMap((k) => dish.recipe.ingredients[k] ?? []);
+  const { actions, cue } = splitCue(st.lines);
+  const time = stepTime(st.lines);
   return (
     <div className={s.full}>
       <div className={s.words}>
         <h1 className={s.h1}>{st.title}</h1>
-        {st.lines.map((l, i) => (
-          <p key={i} className={s.body} dir="auto">
-            <Bold text={l.text} />
-            {l.status === 'mom' && l.was && <Was block text={l.was.replaceAll('**', '')} />}
-          </p>
-        ))}
-        {hers.map((l, i) => l.quote && <Her key={i} quote={l.quote} />)}
-        {st.tip && <Her quote={st.tip} />}
+        {time && <span className={s.time}>{time}</span>}
       </div>
+      {ings.length > 0 && (
+        <div className={s.inStep}>
+          <span className={s.eyebrow}>{dish.t('lock.inStep')}</span>
+          {ings.map((x, k) => (
+            <div key={`${x.name}-${k}`} className={s.ingRow}>
+              <span className={s.ingWords} dir="auto">
+                {x.name}
+              </span>
+              <span className={s.ingAmt}>{x.amount}</span>
+            </div>
+          ))}
+        </div>
+      )}
+      <ol className={s.actions}>
+        {actions.map((l, i) => (
+          <li key={i} className={s.action}>
+            {actions.length > 1 && (
+              <span className={s.actionNum} aria-hidden="true">
+                {i + 1}
+              </span>
+            )}
+            <span className={s.actionText} dir="auto">
+              <Bold text={l.detail || l.text} />
+              {l.status === 'mom' && l.was && <Was block text={l.was.replaceAll('**', '')} />}
+            </span>
+          </li>
+        ))}
+      </ol>
+      {cue && (
+        <div className={s.look}>
+          <IconEye size={20} />
+          <p className={s.lookText} dir="auto">
+            <Bold text={cue.text} />
+          </p>
+        </div>
+      )}
+      {hers.map((l, i) => l.quote && <Her key={i} quote={l.quote} />)}
+      {st.tip && <Her quote={st.tip} />}
       {url && (
         <div className={ui.pillPair} style={{ gridTemplateColumns: '1fr' }}>
           <button

@@ -825,21 +825,12 @@
   color: #4f5d55;
 }
 
-/* K2: a line the kid can shape. Tap the words to fix them; the round button adds or takes out the question. */
+/* K2: a line the kid can shape. The pencil fixes it; the pill adds or takes out the question. */
 .rowEdit {
   flex: 1;
   min-width: 0;
   display: block;
-  padding: 0;
-  border: 0;
-  background: none;
-  font: inherit;
-  color: inherit;
-  text-align: start;
-  cursor: text;
-  -webkit-tap-highlight-color: transparent;
 }
-.rowEdit:focus-visible,
 .stepHit:focus-visible {
   outline: 3px solid #a3580c;
   outline-offset: 2px;
@@ -856,16 +847,37 @@
   letter-spacing: 0.02em;
   color: #244a39;
 }
-.toggle {
+.rowActions {
   flex: none;
-  width: 32px;
-  height: 32px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.pencil {
+  flex: none;
+  width: 36px;
+  height: 36px;
   border-radius: 999px;
   border: 1.5px solid rgba(24, 34, 29, 0.14);
   background: transparent;
   color: #4f5d55;
   display: grid;
   place-items: center;
+  cursor: pointer;
+}
+.toggle {
+  flex: none;
+  min-height: 36px;
+  max-width: 116px;
+  padding: 0 12px;
+  border-radius: 999px;
+  border: 1.5px solid #244a39;
+  background: transparent;
+  color: #244a39;
+  font: 700 13px/1.15 var(--ff-text);
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   cursor: pointer;
 }
 .toggle[aria-pressed='true'] {
@@ -1008,9 +1020,6 @@
   gap: 8px;
   padding: 2px 0 8px;
 }
-.stepLine .toggle {
-  margin-top: 0;
-}
 .stepDot {
   display: inline-block;
   width: 8px;
@@ -1057,4 +1066,10 @@
   .eggFillWave {
     animation: none;
   }
+}
+
+/* K2: Start cooking, in reach as the card opens. */
+.start {
+  width: 100%;
+  margin-top: 16px;
 }
