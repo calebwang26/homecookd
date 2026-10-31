@@ -27,7 +27,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
   const [asking, setAsking] = useState(false);
   const [who, setWho] = useState(false); // "Ask someone": who to ask, when the card has no one yet
   const [saving, setSaving] = useState(false);
-  const [locked, setLocked] = useState(false); // the locked recipe view over the card
+  const [locked, setLocked] = useState<'recipe' | 'ingredients' | null>(null); // the locked recipe view over the card, and its first screen
   const { toast, show } = useToast();
   const audio = useAudio();
 
@@ -91,7 +91,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
   const closeSave = useCallback(() => setSaving(false), []);
   const closeAsk = useCallback(() => setAsking(false), []);
   const closeWho = useCallback(() => setWho(false), []);
-  const closeRecipe = useCallback(() => setLocked(false), []);
+  const closeRecipe = useCallback(() => setLocked(null), []);
   const onAsk = () => (none ? setWho(true) : setAsking(true));
   const pickedWho = (c: Card) => {
     setCard(c);
@@ -112,13 +112,14 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
     </a>
   );
 
-  if (locked) return <KidRecipe card={card} token={token} version={recipe} onClose={closeRecipe} />;
+  if (locked) return <KidRecipe card={card} token={token} version={recipe} start={locked} onClose={closeRecipe} />;
 
   const ingProps = (i: number) => ({
     part: ingredientRef(i),
     on: isOn(ingredientRef(i)),
     toggle,
     label: t('card.askToggle', { who: none ? t('card.someone') : R }),
+    ask: askLabel,
     full,
   });
 
@@ -155,7 +156,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
           <svg className={s.headChevron} width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M9 5l7 7-7 7" />
           </svg>
-          <button type="button" className={s.headHit} aria-label={`${t('lock.open')}: ${title}`} onClick={() => setLocked(true)} />
+          <button type="button" className={s.headHit} aria-label={`${t('lock.open')}: ${title}`} onClick={() => setLocked('recipe')} />
         </div>
 
         {card.merging ? (
@@ -168,6 +169,10 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
             {t('card.waiting', { R })}
           </p>
         ) : null}
+
+        <button type="button" className={`${ui.press} ${ui.primary} ${s.start}`} onClick={() => setLocked('ingredients')}>
+          {t('lock.start')}
+        </button>
 
         <Facts recipe={recipe} />
 
@@ -186,7 +191,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
         )}
 
         <h2 className={s.h2}>{t('card.need')}</h2>
-        {card.version ? <p className={s.sub}>{t('card.needMom', { R })}</p> : shaping && <p className={s.sub}>{t('card.fixHint')}</p>}
+        {card.version && <p className={s.sub}>{t('card.needMom', { R })}</p>}
         <ul className={s.list}>
           {recipe.ingredients.map((ing, i) =>
             shaping ? (
@@ -251,6 +256,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
                             on={isOn(ref)}
                             full={full}
                             label={t('card.askToggle', { who: none ? t('card.someone') : R })}
+                            ask={askLabel}
                             onEdit={() => setEditing(k)}
                             onCancel={() => setEditing(null)}
                             onSave={(text) => edit({ kind: 'line', step: i, line: j, text })}
@@ -343,35 +349,35 @@ function IngredientEdit({ ing, onCancel, onSave }: { ing: Ingredient; onCancel: 
   );
 }
 
-/** A line of "What you need" the kid can shape: tap the words to fix them, the round button to ask about it. */
-function ShapeRow({ ing, part, on, toggle, label, full, editing, onEdit, onCancel, onSave }: { ing: Ingredient; part: PartRef; on: boolean; toggle: (r: PartRef) => void; label: string; full: boolean; editing: boolean; onEdit: () => void; onCancel: () => void; onSave: (e: Pair) => void }) {
+/** A line of "What you need" the kid can shape: the pencil fixes it, the pill asks about it. */
+function ShapeRow({ ing, part, on, toggle, label, ask, full, editing, onEdit, onCancel, onSave }: { ing: Ingredient; part: PartRef; on: boolean; toggle: (r: PartRef) => void; label: string; ask: string; full: boolean; editing: boolean; onEdit: () => void; onCancel: () => void; onSave: (e: Pair) => void }) {
   const { t } = useLang();
   const own = ing.status === 'stated';
   if (editing) return <IngredientEdit ing={ing} onCancel={onCancel} onSave={onSave} />;
   const amt = ing.amount.trim();
   return (
     <li className={s.row}>
-      <button type="button" className={s.rowEdit} onClick={onEdit} aria-label={`${t('edit.fix')}: ${amt} ${ing.name}`}>
+      <span className={s.rowEdit}>
         <span className={s.rowText} dir="auto">
           {amt && <b className={s.amt}>{amt}</b>} {ing.name}
           {own && <small className={s.you}>{t('card.you')}</small>}
         </span>
-      </button>
-      <AskToggle on={on} full={full} label={label} onClick={() => toggle(part)} />
+      </span>
+      <RowActions fix={`${t('edit.fix')}: ${amt} ${ing.name}`} onEdit={onEdit} on={on} full={full} label={label} ask={ask} onToggle={() => toggle(part)} />
     </li>
   );
 }
 
-function StepLine({ line, editing, on, full, label, onEdit, onCancel, onSave, onToggle }: { line: Line; editing: boolean; on: boolean; full: boolean; label: string; onEdit: () => void; onCancel: () => void; onSave: (text: string) => void; onToggle: () => void }) {
+function StepLine({ line, editing, on, full, label, ask, onEdit, onCancel, onSave, onToggle }: { line: Line; editing: boolean; on: boolean; full: boolean; label: string; ask: string; onEdit: () => void; onCancel: () => void; onSave: (text: string) => void; onToggle: () => void }) {
   const { t } = useLang();
   if (editing) return <LineEdit line={line} onCancel={onCancel} onSave={onSave} />;
   return (
     <span className={s.stepLine}>
-      <button type="button" className={s.rowEdit} onClick={onEdit} aria-label={`${t('edit.fix')}: ${plain(line.text)}`}>
+      <span className={s.rowEdit} dir="auto">
         <Bold text={line.text} />
         {line.status === 'stated' && <small className={s.you}>{t('card.you')}</small>}
-      </button>
-      <AskToggle on={on} full={full} label={label} onClick={onToggle} />
+      </span>
+      <RowActions fix={`${t('edit.fix')}: ${plain(line.text)}`} onEdit={onEdit} on={on} full={full} label={label} ask={ask} onToggle={onToggle} />
     </span>
   );
 }
@@ -411,14 +417,25 @@ function EditButtons({ ok, onCancel }: { ok: boolean; onCancel: () => void }) {
   );
 }
 
-/** The subtle round control on a line: + adds it to what the kid asks, the check takes it out again. */
-function AskToggle({ on, full, label, onClick }: { on: boolean; full: boolean; label: string; onClick: () => void }) {
+/** A line's two buttons, each saying what it does (Caleb, Oct 30: the bare + read as "fix this"): the pencil edits, the pill adds it to what the kid asks. */
+function RowActions({ fix, onEdit, on, full, label, ask, onToggle }: { fix: string; onEdit: () => void; on: boolean; full: boolean; label: string; ask: string; onToggle: () => void }) {
+  const { t } = useLang();
   return (
-    <button type="button" className={`${ui.press} ${s.toggle}`} aria-pressed={on} aria-disabled={(!on && full) || undefined} aria-label={label} onClick={onClick}>
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        {on ? <path d="M5 12.5l4.5 4.5L19 7.5" /> : <path d="M12 5v14M5 12h14" />}
-      </svg>
-    </button>
+    <span className={s.rowActions}>
+      <button type="button" className={`${ui.press} ${s.pencil}`} aria-label={fix} onClick={onEdit}>
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+          <path d="M4 20l1-4L16 5l3 3L8 19z" />
+        </svg>
+      </button>
+      <button type="button" className={`${ui.press} ${s.toggle}`} aria-pressed={on} aria-disabled={(!on && full) || undefined} aria-label={label} onClick={onToggle}>
+        {on && (
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.8" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <path d="M5 12.5l4.5 4.5L19 7.5" />
+          </svg>
+        )}
+        {on ? t('card.asking') : ask}
+      </button>
+    </span>
   );
 }
 
