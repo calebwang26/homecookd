@@ -9,7 +9,9 @@ modules/env/      everything one environment has: network, Postgres, load balanc
                   secret names, alarms, roles
 envs/staging/     the cheap copy: no real keys, no real data
 envs/production/  NOT created yet. Applying it needs Caleb's OK
+backups/          daily Convex exports to S3, with their own small network and a key only for this
 scripts/load-secrets.sh   copies keys from the root .env into Secrets Manager without printing them
+scripts/create-backup-key.sh   makes the Convex key for backups and stores it, unseen. Caleb runs it
 ```
 
 `.github/workflows/deploy-aws.yml` builds one service and rolls it out. It's manual and stores no keys.
@@ -38,6 +40,16 @@ Voice is only a smoke test of the setup here (homie is off, and voice stays on C
 2. Push the first image, from Actions ("Deploy to AWS") or by hand. Actions needs the repo variable `AWS_ACCOUNT_ID` and
    a GitHub environment named `staging`.
 3. `terraform apply -var voice_count=1`, then `curl <load_balancer_url>/health`. Then `terraform apply` again, back to 0.
+
+## Starting the backups
+
+First, `/privacy` must list AWS (docs/build/AWS-MIGRATION.md, phase 0).
+
+1. `terraform apply` in `infra/backups` (schedule off).
+2. Push the image from `infra/backups/job` to its ECR repository as `:latest`.
+3. Caleb runs `infra/scripts/create-backup-key.sh`. This creates a key on Convex.
+4. Run the task once by hand, and check the zip in S3.
+5. `terraform apply -var job_count_enabled=true` turns on the daily schedule and the "missed" alarm.
 
 ## Before production
 

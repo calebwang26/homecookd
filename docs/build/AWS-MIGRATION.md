@@ -3,7 +3,7 @@
 Written Oct 31, 2026 (AWS backend chat). Why: long-term reliability, and $10,100 in unused AWS credits ($10,000 expires
 Oct 31, 2028; $100 expires Oct 17, 2027). Claude stays billed by Anthropic, and credits don't pay for it.
 
-**Staying outside AWS:** Cartesia, Apple, Expo/EAS, Vercel, Moss for now, and Claude.
+**Staying outside AWS:** Cartesia, Apple, Expo/EAS, Moss for now, and Claude. Vercel goes too (phase 7, Caleb, Oct 31).
 
 ## Rules for every phase
 
@@ -25,7 +25,7 @@ updated. `main` keeps changing `convex/` meanwhile, so the branch merges `main` 
 **Before the rewrite starts:** staging fully tested, Convex backups running (phase 0), a real video job measured, and
 Caleb's OK on creating production, lifting the Supabase freeze, and any copy of real data into a test database.
 
-**Priorities (Caleb, Oct 31):** phase 0, phase 1, the worker from phase 3, then phases 4-6. **Voice is out of the near-term
+**Priorities (Caleb, Oct 31):** phase 0, phase 1, the worker from phase 3, then phases 4-7. **Voice is out of the near-term
 work:** homie is switched off, so voice stays on Cloud Run until homie is back on. Not confirmed: whether anything live,
 such as build 6, still calls the voice service. Check before anyone proposes turning it off (changing Cloud Run needs
 Caleb's OK anyway).
@@ -41,12 +41,23 @@ Caleb's OK anyway).
 | 4 | Media | Copy of the GCS buckets, signer replaced | Addresses point back to GCS |
 | 5 | Supabase to RDS | Production database, about 2-4 weeks of work | Supabase stays the source until cutover, read-only after |
 | 6 | Convex to Postgres | About 6-10 weeks of work, one area at a time | Per area: route back to Convex |
+| 7 | Website off Vercel | S3 + CloudFront, a deploy workflow, a DNS change | Point DNS back to Vercel, kept running for a while |
 
 ### 0. Safety
 Convex runs on `grand-dragon-649`, a **preview** deployment. Its expiry was cleared on Oct 25, but it is still a preview,
 and moving to a Convex production deployment would change the URL that build 6 calls. So: a scheduled
 `npx convex export --include-file-storage` to a private, versioned S3 bucket, and one test restore into a throwaway
-deployment to prove it works. Exports only read, but Caleb decides where the deploy key may live for this.
+deployment to prove it works.
+
+Decided and built in `infra/backups` (Caleb, Oct 31: the key lives in Secrets Manager). Today's preview key can't export, so
+the job uses its own key that reaches only `grand-dragon-649`. That key can still write to the deployment, so only this
+job's start-up role can read it. The job can add backups but not read or delete them. It can overwrite one by name, so a
+stolen role could replace recent backups; the originals then stay recoverable for 7 days. Backups expire after 21 days, plus
+those 7, to keep `/privacy`'s promise (a deleted account's data leaves backups within 30 days). Restore test: into a local
+Convex backend on Caleb's Mac, so no cloud deployment changes.
+
+**Blocker before the first real export:** `/privacy` names who stores family data (Convex, Supabase, Google Cloud, Vercel), and
+AWS isn't listed. It has to be added first, under the App Review guard, by the App Store, web & builds chat.
 
 ### 1. Our own addresses
 Ship `api.homecookd.app`, `media.homecookd.app` and a voice address in app 1.1, alongside the edible-to-homecookd rename.
@@ -114,6 +125,24 @@ What makes it hard:
 
 Each area: copy its data, freeze writes for a short planned window, switch its routes, watch, and keep Convex as the way
 back until the area is proven. Tables that cross areas are the risk, so each area's PR lists them first.
+
+### 7. Website off Vercel
+Added by Caleb on Oct 31, under the same rule: built on the migration branch, merged only after Apple approves. **This is
+the easiest piece.** `web/` is already a static export (`output: "export"` in `web/next.config.ts`), with no server code,
+so it's files on S3 behind CloudFront. The only Vercel setting in use is the cache and content-type headers in
+`web/vercel.json`, which become CloudFront response headers.
+
+Check while building:
+- Page links such as `/r`, `/i`, `/d`, `/miss` and `/a`: Vercel serves clean URLs, and CloudFront needs a small function to
+  do the same, including any path after them that the pages read themselves. `/.well-known/apple-app-site-association` must stay exact, or universal links break for every
+  installed app. That's an App Review guard path.
+- Vercel builds production from this repo's `main` today, so the new workflow replaces that trigger.
+- Vercel gives every PR a preview link. A preview on S3 is more work, so decide whether to rebuild that or use staging.
+- `/privacy` says "This website runs on Vercel", and `web/src/app/layout.tsx` falls back on Vercel's env variables for the
+  site's address (set `NEXT_PUBLIC_SITE_URL`).
+- The domain's DNS: needs Caleb's OK, and has to be coordinated with phase 1's `api.` and `media.` addresses.
+
+Cost: a few dollars a month at today's traffic.
 
 ## Cost
 
