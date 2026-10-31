@@ -57,7 +57,7 @@ export function StepScreen({ index }: { index: number }) {
   return (
     <div className={s.wrap} data-open={open || undefined}>
       <div className={s.top}>
-        <button type="button" className={`${ui.press} ${ui.roundBtn}`} aria-label={dish ? dish.t('common.close') : 'Close and go back to the recipe'} onClick={() => go({ name: 'recipe' })}>
+        <button type="button" className={`${ui.press} ${ui.roundBtn}`} aria-label={dish ? dish.t('common.close') : 'Close and go back to the recipe'} onClick={() => (dish?.coverless ? dish.onClose() : go({ name: 'recipe' }))}>
           <IconClose />
         </button>
         <button type="button" className={s.progress} aria-haspopup="dialog" aria-label={dish ? dish.t('lock.stepOf', { n, m: total }) : `Step ${n} of ${total}. Shows all steps`} onClick={() => setSheet('steps')}>

@@ -323,6 +323,12 @@ try {
   await kid.getByRole('button', { name: 'Start cooking' }).waitFor();
   check('Kid: Back from the ingredients is the card', (await kid.getByText('From Mom’s kitchen').count()) >= 1);
   await kid.getByRole('button', { name: 'Start cooking' }).click();
+  await kid.getByRole('button', { name: /Start step 1/ }).click();
+  await kid.getByText('Step 1 of 4').waitFor();
+  await kid.locator('main button').first().click(); // the X
+  await kid.getByRole('button', { name: 'Start cooking' }).waitFor();
+  check('Kid: the X on a step is the card, never a cover', (await kid.getByRole('heading', { name: 'How to make it' }).count()) === 1);
+  await kid.getByRole('button', { name: 'Start cooking' }).click();
   await lockedView(kid, {
     cover: false,
     who: 'Kid',
