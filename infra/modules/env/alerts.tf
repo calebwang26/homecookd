@@ -39,7 +39,7 @@ resource "aws_cloudwatch_metric_alarm" "service_unhealthy" {
   evaluation_periods  = 3
   threshold           = 1
   comparison_operator = "LessThanThreshold"
-  treat_missing_data  = "breaching"
+  treat_missing_data  = "notBreaching" # a new service has no data yet; a real outage reports 0
   alarm_actions       = [aws_sns_topic.alerts.arn]
 }
 
