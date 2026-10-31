@@ -222,7 +222,7 @@ a.getAppLink {
   content: '';
   position: absolute;
   inset: 0;
-  background: linear-gradient(180deg, rgba(247, 247, 242, 0) 0%, rgba(247, 247, 242, 0.94) 45%, #eef3f0 100%);
+  background: linear-gradient(180deg, rgba(238, 243, 240, 0) 0%, rgba(238, 243, 240, 0.94) 45%, #eef3f0 100%);
   pointer-events: none;
 }
 .dock > * {

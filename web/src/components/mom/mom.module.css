@@ -49,7 +49,7 @@
   bottom: 0;
   margin: auto -24px 0;
   padding: 28px 24px max(28px, env(safe-area-inset-bottom));
-  background: linear-gradient(180deg, rgba(247, 247, 242, 0), #eef3f0 30%);
+  background: linear-gradient(180deg, rgba(238, 243, 240, 0), #eef3f0 30%);
   text-align: center;
 }
 .dock > a,
@@ -217,7 +217,7 @@
   width: 28px;
   height: 28px;
   border-radius: 999px;
-  background: rgba(255, 253, 247, 0.85);
+  background: rgba(255, 255, 255, 0.85);
   color: #18221d;
   font-weight: 800;
   font-size: 15px;
@@ -291,7 +291,7 @@
 }
 .amount {
   font-weight: 700;
-  background-image: linear-gradient(#ffd45e, #ffd45e);
+  background-image: linear-gradient(#f2a23a, #f2a23a);
   background-repeat: no-repeat;
   background-position: 0 85%;
   background-size: 0% 70%;
@@ -308,7 +308,7 @@
   }
   to {
     background-size: 100% 70%;
-    background-image: linear-gradient(rgba(255, 212, 94, 0), rgba(255, 212, 94, 0));
+    background-image: linear-gradient(rgba(242, 162, 58, 0), rgba(242, 162, 58, 0));
   }
 }
 .quote {
@@ -343,7 +343,7 @@
 }
 @keyframes word {
   from {
-    color: #c9d4cd;
+    color: #d6e0da;
   }
 }
 .play {
@@ -579,7 +579,7 @@
   height: 190px;
   border-radius: 24px;
   overflow: hidden;
-  background: radial-gradient(120% 90% at 50% 40%, #fdf1de 0, #fcebd0 55%, #fbdeba 100%);
+  background: radial-gradient(120% 90% at 50% 40%, #fcebd0 0, #fcebd0 55%, #fcebd0 100%);
   display: grid;
   place-items: center;
 }
@@ -603,7 +603,7 @@
   width: 8px;
   height: 8px;
   border-radius: 50%;
-  background: #ef5b45;
+  background: #9a4f47;
 }
 .corner {
   position: absolute;

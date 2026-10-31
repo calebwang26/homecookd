@@ -100,16 +100,4 @@ export function watchLabel(seconds: number): string {
 
 // A dish card's step (DISH-ASK-SPEC §10): the guess writes its doneness cue as the last line, "Ready when **…**",
 // and bolds its times. A cue she changed keeps its struck guess, so it stays with the actions.
-const READY = /^\s*ready when\b/i;
-const BOLD_TIME = /\*\*[^*]*?(\d+(?:\s*(?:-|to|–)\s*\d+)?)\s*(sec|second|min|minute|hr|hour)s?\b[^*]*?\*\*/gi;
 
-export function splitCue<L extends { text: string; was?: string | null }>(lines: L[]): { actions: L[]; cue: L | null } {
-  const last = lines[lines.length - 1];
-  return last && lines.length > 1 && READY.test(last.text) && !last.was ? { actions: lines.slice(0, -1), cue: last } : { actions: lines, cue: null };
-}
-
-/** The step's time, when its lines bold exactly one ("**5 min**"), for the chip under the title; more than one reads in the lines. */
-export function stepTime(lines: { text: string }[]): string | null {
-  const found = lines.flatMap((l) => [...l.text.matchAll(BOLD_TIME)]);
-  return found.length === 1 ? found[0][0].replaceAll('*', '').trim() : null;
-}

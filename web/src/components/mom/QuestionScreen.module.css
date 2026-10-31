@@ -125,7 +125,7 @@
 }
 /* Only when the question runs under it: a solid bar would show as a band on the peach wash. */
 .dock[data-over] {
-  background: linear-gradient(180deg, rgba(247, 247, 242, 0), #eef3f0 28px);
+  background: linear-gradient(180deg, rgba(238, 243, 240, 0), #eef3f0 28px);
 }
 
 .micWrap {

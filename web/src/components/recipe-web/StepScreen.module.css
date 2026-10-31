@@ -90,7 +90,7 @@
   height: 32px;
   padding: 0 12px;
   border-radius: 999px;
-  background: rgba(255, 253, 247, 0.94);
+  background: rgba(255, 255, 255, 0.94);
   color: #18221d;
   font-size: 13px;
   font-weight: 600;
@@ -160,7 +160,7 @@
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background: rgba(255, 253, 247, 0.92);
+  background: rgba(255, 255, 255, 0.92);
   color: #18221d;
   display: flex;
   align-items: center;
@@ -493,15 +493,6 @@
 }
 
 /* A dish card's step: what you need, the actions one per line, how you know it's done. */
-.time {
-  align-self: flex-start;
-  padding: 4px 12px;
-  border-radius: 999px;
-  background: #dcebe2;
-  color: #244a39;
-  font-size: 14px;
-  font-weight: 700;
-}
 .actions {
   list-style: none;
   margin: 0;
@@ -512,7 +503,7 @@
 }
 .action {
   display: flex;
-  gap: 12px;
+  gap: 14px;
   align-items: flex-start;
 }
 .actionNum {
@@ -522,15 +513,52 @@
   border-radius: 50%;
   display: grid;
   place-items: center;
-  background: #244a39;
-  color: #fff;
+  background: #f2a23a;
+  color: #18221d;
   font-size: 14px;
   font-weight: 700;
+}
+.actionMore {
+  flex: 1;
+  min-width: 0;
+  padding: 0;
+  text-align: start;
+  font-size: 17px;
+  line-height: 1.5;
+  color: #18221d;
+  cursor: pointer;
+}
+.dishIngs {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.dishIngsTitle {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: #18221d;
+}
+.dishIngsBox {
+  list-style: none;
+  margin: 0;
+  padding: 0 16px;
+  border-radius: 20px;
+  background: #fff;
+}
+.dishIngsBox li {
+  padding: 12px 0;
+  font-size: 17px;
+  line-height: 1.4;
+  color: #18221d;
+}
+.dishIngsBox li + li {
+  border-top: 1px solid #e3ebe6;
 }
 .actionText {
   flex: 1;
   min-width: 0;
   font-size: 17px;
-  line-height: 1.45;
+  line-height: 1.5;
   color: #18221d;
 }

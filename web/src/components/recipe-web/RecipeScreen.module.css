@@ -34,14 +34,14 @@
   padding-top: 8px;
 }
 
-/* Share + heart: the app's 48 px glass IconButtons (rgba(255,253,247,0.92), ink glyph, no shadow). */
+/* Share + heart: the app's 48 px glass IconButtons (rgba(255, 255, 255,0.92), ink glyph, no shadow). */
 .float {
   position: absolute;
   top: 64px;
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: rgba(255, 253, 247, 0.92);
+  background: rgba(255, 255, 255, 0.92);
   color: #18221d;
   display: flex;
   align-items: center;
@@ -64,7 +64,7 @@
   height: 40px;
   padding: 0 14px 0 4px;
   border-radius: 999px;
-  background: rgba(255, 253, 247, 0.88);
+  background: rgba(255, 255, 255, 0.88);
   display: flex;
   align-items: center;
   gap: 8px;
