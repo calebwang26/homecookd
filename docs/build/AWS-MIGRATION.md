@@ -22,8 +22,25 @@ Apple approves 1.0.** After approval: app 1.1 with our own addresses first, then
 Convex as its way back until it's proven. Build 6 keeps calling the old services, so they stay up until those phones have
 updated. `main` keeps changing `convex/` meanwhile, so the branch merges `main` often and ports each change.
 
-**Before the rewrite starts:** staging fully tested, Convex backups running (phase 0), a real video job measured, and
-Caleb's OK on creating production, lifting the Supabase freeze, and any copy of real data into a test database.
+**Before the rewrite starts:** staging fully tested, a real video job measured, and Caleb's OK on creating production,
+lifting the Supabase freeze, and any copy of real data into a test database. **Before any area switches over:** Convex backups
+running and a restore proven (phase 0).
+
+## Waiting on Apple's approval of 1.0
+
+Decided by Caleb on Oct 31. **To build, and blocked until the App Store approves the app:**
+
+1. **Add AWS to `/privacy`** ("Where it's kept"), as one of the companies that stores data. It stays unchanged during review.
+   Owner: App Store, web & builds, under the App Review guard.
+2. **Turn on the Convex backups** once that's live. Backups copy family data to AWS, so `/privacy` has to come first. The job
+   is on `main` but not applied. Steps: `infra/README.md`, "Starting the backups". Until then, **there is no scheduled
+   backup of Convex**, which still runs on a preview deployment.
+3. **Restore test,** after the first export.
+4. **Remove the Oct 25 export** in `~/Documents/homecookd-backups/` by Nov 24, 2026, Caleb's call. Files on a laptop don't
+   expire, and `/privacy` promises a deleted account's data leaves backups within 30 days.
+5. Everything else that merges or deploys from the migration branch.
+
+## Phases
 
 **Priorities (Caleb, Oct 31):** phase 0, phase 1, the worker from phase 3, then phases 4-7. **Voice is out of the near-term
 work:** homie is switched off, so voice stays on Cloud Run until homie is back on. Not confirmed: whether anything live,
@@ -57,7 +74,11 @@ those 7, to keep `/privacy`'s promise (a deleted account's data leaves backups w
 Convex backend on Caleb's Mac, so no cloud deployment changes.
 
 **Blocker before the first real export:** `/privacy` names who stores family data (Convex, Supabase, Google Cloud, Vercel), and
-AWS isn't listed. It has to be added first, under the App Review guard, by the App Store, web & builds chat.
+AWS isn't listed. It gets added after Apple approves 1.0 (see "Waiting on Apple's approval of 1.0").
+
+**How the 30-day promise is kept:** S3's lifecycle rule deletes old backups by age, with no code. AWS can't tell what an
+account is, so deleting an account's data stays in our code (`convex/account.ts`, `pipeline/account_purge.py`). In phase 6
+its schedule moves to EventBridge. The same rules in code; AWS only runs them on time.
 
 ### 1. Our own addresses
 Ship `api.homecookd.app`, `media.homecookd.app` and a voice address in app 1.1, alongside the edible-to-homecookd rename.
