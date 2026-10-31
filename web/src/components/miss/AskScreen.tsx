@@ -113,16 +113,18 @@ export function AskScreen({ draft, onDraft, error, limited, lastToken, onOpenLas
 
   return (
     <main className={s.ask}>
-      <TopBar />
-      {/* "Your last dish" sits under the bar, so the bar stays the pot, homecookd and the language. */}
-      {lastToken && (
-        <a className={`${ui.press} ${s.lastDish}`} href={`/miss?k=${lastToken}`} onClick={onOpenLast}>
-          {t('k1.lastDish')}
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
-            <path d="M9 6l6 6-6 6" />
-          </svg>
-        </a>
-      )}
+      <TopBar
+        row={
+          lastToken && (
+            <a className={`${ui.press} ${s.lastDish}`} href={`/miss?k=${lastToken}`} onClick={onOpenLast}>
+              {t('k1.lastDish')}
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" aria-hidden="true">
+                <path d="M9 6l6 6-6 6" />
+              </svg>
+            </a>
+          )
+        }
+      />
       <div className={s.polaroids} aria-hidden="true">
         {POLAROIDS.map((p) => (
           <div key={p.src} className={s.polaroid}>

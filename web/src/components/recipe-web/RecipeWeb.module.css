@@ -60,6 +60,13 @@
 .topbar[data-overlay] {
   margin-bottom: -52px;
 }
+.topbar[data-dish] {
+  height: 64px;
+  padding: 0 16px;
+}
+.topbar[data-dish][data-overlay] {
+  margin-bottom: -64px;
+}
 .topbar[data-clear] {
   background: rgba(24, 34, 29, 0.38);
   -webkit-backdrop-filter: blur(16px) saturate(1.3);

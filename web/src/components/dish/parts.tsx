@@ -6,7 +6,7 @@ import { useCallback, useEffect, useId, useRef, useState, type ReactNode } from 
 import { AnimatePresence, motion, useReducedMotion } from 'motion/react';
 import { Logo } from '@/components/primitives/Logo';
 import { IconClose } from '@/components/recipe-web/icons';
-import { APP_STORE_URL, copyText } from '@/lib/app-links';
+import { APP_STORE_URL, copyText, WEB_ORIGIN } from '@/lib/app-links';
 import { CheckIcon } from './shareIcons';
 import { LangSwitch, useLang } from './lang';
 import ui from './ui.module.css';
@@ -15,17 +15,44 @@ import s from './dish.module.css';
 /** The App Store page; NEXT_PUBLIC_APP_STORE_URL wins, so no Vercel change is needed. */
 export const STORE_URL = APP_STORE_URL ?? 'https://apps.apple.com/app/id6825621614';
 
-export function TopBar({ right }: { right?: ReactNode }) {
+/** Straight to the store (Caleb, Oct 31: no sheet in between). A page with its own link copies it first, so the app can pick up the same dish. */
+export function goToStore() {
+  const open = () => {
+    window.location.href = STORE_URL;
+  };
+  const { pathname, search } = window.location;
+  if (search) void copyText(`${WEB_ORIGIN}${pathname}${search}`).finally(open);
+  else open();
+}
+
+/** The bar on every page: the logo and "Get the app", then a row under it with `row` on the left and the language on the right. */
+export function TopBar({ row, lang = true }: { row?: ReactNode; lang?: boolean }) {
+  const { t } = useLang();
   return (
-    <header className={s.topBar}>
-      <span className={s.brand}>
-        <Logo height={30} />
-      </span>
-      <span className={s.topRight}>
-        {right}
-        <LangSwitch compact={!!right} />
-      </span>
-    </header>
+    <>
+      <header className={s.topBar}>
+        <span className={s.brand}>
+          <Logo height={28} reversed />
+        </span>
+        <a
+          className={`${ui.press} ${s.topGetApp}`}
+          href={STORE_URL}
+          onClick={(e) => {
+            if (e.metaKey || e.ctrlKey || e.shiftKey) return;
+            e.preventDefault();
+            goToStore();
+          }}
+        >
+          {t('common.getApp')}
+        </a>
+      </header>
+      {(row || lang) && (
+        <div className={s.subBar}>
+          <span className={s.subLeft}>{row}</span>
+          {lang && <LangSwitch />}
+        </div>
+      )}
+    </>
   );
 }
 

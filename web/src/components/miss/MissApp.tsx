@@ -7,6 +7,7 @@
 // MVP's MissApp (calebwang26/homecookd PR #40) onto the Convex /dish/* routes (DISH-ASK-SPEC).
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { DishLangProvider, useLang } from '@/components/dish/lang';
+import { TopBar } from '@/components/dish/parts';
 import { EggMascot } from '@/components/primitives/EggMascot';
 import { createCard, DishError, getCard, isPlausibleToken, uploadFile } from '@/lib/dish/api';
 import { AttachError, photoToJpeg, voiceType } from '@/lib/dish/attach';
@@ -191,10 +192,13 @@ const FILL_DONE_MS = 700;
 function Making({ done }: { done: boolean }) {
   const { t } = useLang();
   return (
-    <main className={s.center} aria-busy={!done}>
-      <EggFill size={140} done={done} label={t('making.title')} />
-      <h1 className={s.centerTitle}>{t('making.title')}</h1>
-    </main>
+    <>
+      <TopBar lang={false} />
+      <main className={s.center} aria-busy={!done}>
+        <EggFill size={140} done={done} label={t('making.title')} />
+        <h1 className={s.centerTitle}>{t('making.title')}</h1>
+      </main>
+    </>
   );
 }
 
@@ -202,6 +206,7 @@ function Skeleton() {
   const { t } = useLang();
   return (
     <main aria-busy="true" aria-label={t('card.opening')}>
+      <TopBar lang={false} />
       <div className={s.skHero}>
         <EggMascot size={112} mood="hello" />
       </div>
@@ -219,6 +224,8 @@ function FailureScreen({ failure, onRetry, onNewDish }: { failure: Failure; onRe
   const { t } = useLang();
   const title: Record<Failure, WordKey> = { 'not-found': 'err.notFound', offline: 'common.offline', rate: 'err.rate' };
   return (
+    <>
+    <TopBar lang={false} />
     <main className={s.center}>
       <EggMascot size={88} mood="oops" />
       <h1 className={s.centerTitle}>{t(title[failure])}</h1>
@@ -232,5 +239,6 @@ function FailureScreen({ failure, onRetry, onNewDish }: { failure: Failure; onRe
         </button>
       )}
     </main>
+    </>
   );
 }
