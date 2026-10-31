@@ -22,12 +22,12 @@ type Props = Omit<DishLock, 't' | 'recipe' | 'renderSheet'> & {
   sheet: (p: { open: boolean; onClose: () => void }) => ReactNode;
 };
 
-export function DishRecipeView({ id, start = 'recipe', title, photo, version, sheet, R, hear, meta, clips, popover, onClose }: Props) {
+export function DishRecipeView({ id, start = 'recipe', title, photo, version, sheet, R, hear, meta, clips, popover, onClose, coverless }: Props) {
   const { t } = useLang();
   const { recipe, share } = useMemo(() => recipeFromDish(`dish-${id}`, title, R, photo, version), [id, title, R, photo, version]);
   const dish = useMemo<DishLock>(
-    () => ({ recipe: version, t, R, hear, meta, clips, popover, renderSheet: sheet, onClose }),
-    [version, t, R, hear, meta, clips, popover, sheet, onClose],
+    () => ({ recipe: version, t, R, hear, meta, clips, popover, renderSheet: sheet, onClose, coverless }),
+    [version, t, R, hear, meta, clips, popover, sheet, onClose, coverless],
   );
   useEffect(() => {
     window.scrollTo(0, 0);
