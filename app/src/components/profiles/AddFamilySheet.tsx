@@ -35,7 +35,7 @@ import { ExternalRow } from '@/components/share/ExternalRow';
 import { cooksFirst } from '@/components/share/FamilyRow';
 import { InviteCard } from '@/components/share/InviteCard';
 import { BottomSheet, PlusIcon, PressableScale, Txt } from '@/components/ui';
-import type { Profile, Role } from '@/lib/api';
+import { ApiError, type Profile, type Role } from '@/lib/api';
 import { familyInviteText, familyJoinLink } from '@/lib/invites';
 import { useSession } from '@/lib/session';
 import { useWords } from '@/lib/words/useWords';
@@ -94,14 +94,17 @@ function InviteSheet({ visible, onClose, onSwitch, initialRole }: AddFamilySheet
   const link = useRef<Promise<string> | null>(null);
   const getUrl = useCallback(() => {
     if (!link.current) {
-      const p = familyJoinLink(from);
+      // A 404: the server doesn't have join links yet (they ship after Apple approves 1.0). Say so in plain words.
+      const p = familyJoinLink(from).catch((e) => {
+        throw e instanceof ApiError && e.status === 404 ? new ApiError(t('profiles.invite.notReady'), 404, 'http') : e;
+      });
       link.current = p;
       p.catch(() => {
         if (link.current === p) link.current = null;
       });
     }
     return link.current;
-  }, [from]);
+  }, [from, t]);
 
   const people = useMemo(() => cooksFirst(profiles), [profiles]);
 

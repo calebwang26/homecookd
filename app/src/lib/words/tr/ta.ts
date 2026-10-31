@@ -222,6 +222,7 @@ const words: Translation = {
   'profiles.invite.label': 'குடும்பத்தை அழையுங்கள்',
   'profiles.invite.shareTitle': 'எங்கள் குடும்ப மேஜையில் சேருங்கள்',
   'profiles.invite.sent': 'அழைப்பு அனுப்பப்பட்டது',
+  'profiles.invite.notReady': 'அழைப்பு இணைப்புகள் இன்னும் தயாராகவில்லை. சிறிது நேரம் கழித்து மீண்டும் முயலுங்கள்.',
   'profiles.invite.noPhone': 'போன் இல்லையா? இந்த போனில் சேர்த்துவிடுங்கள்',
   'profiles.invite.noPhoneHint': 'இந்த போனில் சமைப்பவருக்காக',
   'profiles.phoneless.title': 'போன் இல்லாதவரைச் சேருங்கள்',

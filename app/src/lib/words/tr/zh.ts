@@ -222,6 +222,7 @@ const words: Translation = {
   'profiles.invite.label': '邀请家人',
   'profiles.invite.shareTitle': '来我们家的饭桌吧',
   'profiles.invite.sent': '邀请已发送',
+  'profiles.invite.notReady': '邀请链接还没准备好，请稍后再试。',
   'profiles.invite.noPhone': '没有手机？加到这部手机上',
   'profiles.invite.noPhoneHint': '给在这部手机上做饭的人',
   'profiles.phoneless.title': '添加没有手机的家人',

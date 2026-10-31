@@ -222,6 +222,7 @@ const words: Translation = {
   'profiles.invite.label': 'Convidar a família',
   'profiles.invite.shareTitle': 'Venha para a mesa da nossa família',
   'profiles.invite.sent': 'Convite enviado',
+  'profiles.invite.notReady': 'Os links de convite ainda não estão prontos. Tente de novo daqui a pouco.',
   'profiles.invite.noPhone': 'Sem celular? Adicione neste celular',
   'profiles.invite.noPhoneHint': 'Para quem cozinha neste celular',
   'profiles.phoneless.title': 'Adicionar alguém sem celular',

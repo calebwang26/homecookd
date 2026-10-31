@@ -222,6 +222,7 @@ const words: Translation = {
   'profiles.invite.label': '가족 초대',
   'profiles.invite.shareTitle': '우리 가족 식탁에 함께해요',
   'profiles.invite.sent': '초대를 보냈어요',
+  'profiles.invite.notReady': '초대 링크가 아직 준비되지 않았어요. 잠시 후 다시 해 주세요.',
   'profiles.invite.noPhone': '휴대폰이 없나요? 이 휴대폰에 추가하세요',
   'profiles.invite.noPhoneHint': '이 휴대폰으로 요리하는 분을 위해',
   'profiles.phoneless.title': '휴대폰 없는 분 추가하기',

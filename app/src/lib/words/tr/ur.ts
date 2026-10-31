@@ -222,6 +222,7 @@ const words: Translation = {
   'profiles.invite.label': 'خاندان کو بلائیں',
   'profiles.invite.shareTitle': 'ہمارے خاندانی دسترخوان پر آئیں',
   'profiles.invite.sent': 'دعوت بھیج دی',
+  'profiles.invite.notReady': 'دعوت کے لنک ابھی تیار نہیں ہیں۔ تھوڑی دیر بعد دوبارہ کوشش کریں۔',
   'profiles.invite.noPhone': 'فون نہیں؟ انہیں اسی فون میں شامل کریں',
   'profiles.invite.noPhoneHint': 'اُن کے لیے جو اسی فون پر پکاتے ہیں',
   'profiles.phoneless.title': 'بغیر فون والے کسی کو شامل کریں',

@@ -77,6 +77,7 @@ export const PROFILES = {
   'profiles.invite.label': 'Invite family',
   'profiles.invite.shareTitle': 'Join our family table',
   'profiles.invite.sent': 'Invite sent',
+  'profiles.invite.notReady': 'Invite links aren’t ready yet. Try again soon.',
   'profiles.invite.noPhone': 'No phone? Add them to this phone',
   'profiles.invite.noPhoneHint': 'For someone who cooks on this phone',
 
