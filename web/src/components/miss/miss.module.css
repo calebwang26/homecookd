@@ -518,13 +518,6 @@
   font-weight: 600;
   color: #4f5d55;
 }
-.dashed {
-  width: 24px;
-  height: 24px;
-  border-radius: 999px;
-  border: 1.5px dashed #4f5d55;
-  box-sizing: border-box;
-}
 .avatar {
   width: 28px;
   height: 28px;

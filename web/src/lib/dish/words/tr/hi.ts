@@ -60,8 +60,6 @@ const words: Translation = {
   'card.fromKitchen': '{R} की रसोई से',
   'card.merging': '{R} ने जवाब दे दिया। अब सब जोड़ रहे हैं।',
   'card.waiting': '{R} को भेज दिया। {R} के जवाब देते ही यहाँ दिखा देंगे।',
-  'card.ourGuess': 'हमारा अंदाज़ा। बाकी {R} को पता है।',
-  'card.ourGuessNone': 'हमारा अंदाज़ा। बाकी बनाने वाले को पता है।',
   'card.guessMeta': 'हमारा अंदाज़ा',
   'card.you': 'आप',
   'card.only': 'सिर्फ़ {R} को पता है',

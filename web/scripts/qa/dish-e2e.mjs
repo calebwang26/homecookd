@@ -155,7 +155,7 @@ try {
 
   await kid.getByLabel('The dish you miss').fill('mom’s tomato egg');
   await kid.getByRole('button', { name: 'Make my recipe' }).click();
-  await kid.getByText('Our guess. Mom knows the rest.').waitFor({ timeout: 15000 });
+  await kid.getByRole('heading', { name: 'What you need' }).waitFor({ timeout: 15000 });
   check('K2: the address carries the kid token', /\/miss\?k=[A-Za-z0-9]{22}$/.test(kid.url()), kid.url());
   const kidUrl = kid.url();
   const k2 = await kid.locator('main').innerText();
@@ -163,7 +163,7 @@ try {
   check('K2: guessed amounts keep their "~"', /~1 tbsp\s*ketchup/.test(k2));
   const rows = await kid.locator('main li').allInnerTexts();
   check('K2: an unknown amount shows the name only', rows.some((r) => /^sugar\b/.test(r.trim())), rows.join(' | '));
-  check('K2: one label, "Our guess. Mom knows the rest."', k2.includes('Our guess. Mom knows the rest.') && !/Tonight’s version|best guess|We guessed/.test(k2));
+  check('K2: no "Our guess" line', !/Our guess|knows the rest|best guess|We guessed/.test(k2));
   check('K2: a short step, "Scramble eggs soft. Set aside.", with its bold piece set in bold and no raw asterisks', k2.includes('Scramble eggs soft. Set aside.') && !k2.includes('**') && (await kid.locator('main ol b', { hasText: 'soft' }).count()) >= 1);
   check('K2: "4 steps"', k2.includes('4 steps'));
   const k2Block = kid.locator('section[aria-labelledby="knows"]');
@@ -366,7 +366,7 @@ try {
   await kid.goto(`${BASE}/miss`, { waitUntil: 'networkidle' });
   await kid.getByLabel('The dish you miss').fill('mom’s tomato egg');
   await kid.getByRole('button', { name: 'Make my recipe' }).click();
-  await kid.getByText('Our guess. Mom knows the rest.').waitFor({ timeout: 15000 });
+  await kid.getByRole('heading', { name: 'What you need' }).waitFor({ timeout: 15000 });
   const shapeToken = kid.url().split('k=')[1];
   const block = kid.locator('section[aria-labelledby="knows"]');
   const toggles = kid.getByRole('button', { name: 'Ask Mom about this' });
@@ -412,7 +412,7 @@ try {
   await kid.goto(`${BASE}/miss`, { waitUntil: 'networkidle' });
   await kid.getByLabel('The dish you miss').fill('mom’s tomato egg live');
   await kid.getByRole('button', { name: 'Make my recipe' }).click();
-  await kid.getByText('Our guess. Mom knows the rest.').waitFor({ timeout: 15000 });
+  await kid.getByRole('heading', { name: 'What you need' }).waitFor({ timeout: 15000 });
   const liveToken = kid.url().split('k=')[1];
   const liveBlock = kid.locator('section[aria-labelledby="knows"]');
   const liveRows = () => liveBlock.locator('li').allInnerTexts();
@@ -435,12 +435,32 @@ try {
   check('Live: the ask has no duplicates (q1, q2, q3 once each)', liveAsked.map((q) => q.id).sort().join() === 'q1,q2,q3', JSON.stringify(liveAsked));
   await kid.keyboard.press('Escape');
 
+  // A refused question: only that one is lost; the good one goes, with hidden ones in the refused one's place.
+  await kid.goto(`${BASE}/miss`, { waitUntil: 'networkidle' });
+  await kid.getByLabel('The dish you miss').fill('mom’s tomato egg');
+  await kid.getByRole('button', { name: 'Make my recipe' }).click();
+  await kid.getByRole('heading', { name: 'What you need' }).waitFor({ timeout: 15000 });
+  const refusedToken = kid.url().split('k=')[1];
+  const refBlock = kid.locator('section[aria-labelledby="knows"]');
+  for (const q of ['Do you use butter?', 'What the shit is this?']) {
+    await refBlock.getByRole('button', { name: 'Add a question' }).click();
+    await refBlock.getByLabel('Add a question').last().fill(q);
+    await kid.keyboard.press('Enter');
+  }
+  await kid.getByRole('button', { name: 'Ask Mom', exact: true }).click();
+  await kid.getByRole('dialog').getByRole('button', { name: 'Copy link' }).click();
+  await kid.getByText('Let’s keep it to the food.').first().waitFor({ timeout: 5000 });
+  await kid.waitForTimeout(1000);
+  const refused = fake.cards.get(refusedToken).asked;
+  check('Refused: his good question still goes, topped back up to 3', refused.length === 3 && refused[0].text === 'Do you use butter?' && !refused.some((q) => /shit/.test(q.text)), JSON.stringify(refused));
+  await kid.keyboard.press('Escape');
+
   // No one in particular: a plain title, asking off until someone is picked.
   await kid.goto(`${BASE}/miss`, { waitUntil: 'networkidle' });
   await kid.getByRole('button', { name: 'No one in particular' }).click();
   await kid.getByLabel('The dish you miss').fill('tomato egg');
   await kid.getByRole('button', { name: 'Make my recipe' }).click();
-  await kid.getByText('Our guess. The cook knows the rest.').waitFor({ timeout: 15000 });
+  await kid.getByRole('heading', { name: 'What you need' }).waitFor({ timeout: 15000 });
   const noneToken = kid.url().split('k=')[1];
   const noneBlock = kid.locator('section[aria-labelledby="knows"]');
   check('None: the title is just the dish', (await kid.getByRole('heading', { level: 1 }).innerText()).trim() === 'Tomato egg');
@@ -464,7 +484,7 @@ try {
   await kid.goto(`${BASE}/miss`, { waitUntil: 'networkidle' });
   await kid.getByLabel('The dish you miss').fill('mom’s tomato egg');
   await kid.getByRole('button', { name: 'Make my recipe' }).click();
-  await kid.getByText('Our guess. Mom knows the rest.').waitFor({ timeout: 15000 });
+  await kid.getByRole('heading', { name: 'What you need' }).waitFor({ timeout: 15000 });
   await kid.locator('div').filter({ hasText: /^SaveAsk Mom$/ }).getByRole('button', { name: 'Ask Mom' }).click();
   await kid.getByRole('dialog').getByRole('button', { name: 'Copy link' }).click();
   await kid.waitForTimeout(600);

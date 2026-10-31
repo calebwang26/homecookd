@@ -62,8 +62,6 @@ const words: Translation = {
   'card.fromKitchen': '{R}의 주방에서',
   'card.merging': '{R}의 답변이 왔어요. 지금 합치는 중이에요.',
   'card.waiting': '{R}에게 보냈어요. {R}의 답이 오면 여기에 보여 드릴게요.',
-  'card.ourGuess': '저희의 짐작이에요. 나머지는 {R}이(가) 알아요.',
-  'card.ourGuessNone': '저희의 짐작이에요. 나머지는 요리하는 분이 알아요.',
   'card.guessMeta': '저희의 짐작',
   'card.you': '나',
   'card.only': '{R}만 알아요',

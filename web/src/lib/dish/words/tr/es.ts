@@ -61,8 +61,6 @@ const words: Translation = {
   'card.fromKitchen': 'De la cocina de {R}',
   'card.merging': '{R} respondió. Lo estamos juntando.',
   'card.waiting': 'Enviado a {R}. Lo mostraremos aquí cuando {R} responda.',
-  'card.ourGuess': 'Es nuestra suposición. {R} sabe el resto.',
-  'card.ourGuessNone': 'Es nuestra suposición. Quien cocina sabe el resto.',
   'card.guessMeta': 'Nuestra suposición',
   'card.you': 'tú',
   'card.only': 'Solo {R} lo sabe',

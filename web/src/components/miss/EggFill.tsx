@@ -3,7 +3,7 @@
 // yolk from the bottom. The server sends no progress, so the fill eases toward 92% while it waits and
 // tops up to 100% (with the made-it grin) once the card is back (`done`). The kit's egg (public/brand/mascot),
 // drawn inline so the yolk can rise inside the white.
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 
 import s from './miss.module.css';
 
@@ -21,6 +21,7 @@ function eased(ms: number) {
 }
 
 export function EggFill({ size = 140, done = false, label }: { size?: number; done?: boolean; label: string }) {
+  const clip = useId();
   const [waited, setWaited] = useState(0);
   useEffect(() => {
     if (done) return;
@@ -35,12 +36,12 @@ export function EggFill({ size = 140, done = false, label }: { size?: number; do
     <div role="progressbar" aria-label={label} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(p * 100)}>
       <svg width={size} height={size} viewBox="0 0 200 200" aria-hidden="true">
         <defs>
-          <clipPath id="egg-white">
+          <clipPath id={clip}>
             <path d={WHITE} />
           </clipPath>
         </defs>
         <path d={WHITE} fill="#FFFFFF" />
-        <g clipPath="url(#egg-white)">
+        <g clipPath={`url(#${clip})`}>
           <g className={s.eggFillLevel} style={{ transform: `translateY(${y - 6}px)` }}>
             <path className={s.eggFillWave} d={WAVE} fill="#F7C47C" />
           </g>

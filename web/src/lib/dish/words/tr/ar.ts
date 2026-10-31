@@ -61,8 +61,6 @@ const words: Translation = {
   'card.fromKitchen': 'من مطبخ {R}',
   'card.merging': 'وصل ردّ {R}. نجمع كل شيء الآن.',
   'card.waiting': 'أُرسل إلى {R}. سنعرضه هنا عندما يصل ردّ {R}.',
-  'card.ourGuess': 'هذا تخميننا. والباقي تعرفه {R}.',
-  'card.ourGuessNone': 'هذا تخميننا. والباقي يعرفه من يطبخ.',
   'card.guessMeta': 'تخميننا',
   'card.you': 'أنت',
   'card.only': '{R} وحدها تعرف',
