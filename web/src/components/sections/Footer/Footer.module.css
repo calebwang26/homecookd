@@ -165,7 +165,7 @@
   align-items: center;
   min-height: 48px;
   color: var(--ink);
-  text-decoration-color: rgba(31, 36, 48, 0.3);
+  text-decoration-color: rgba(24, 34, 29, 0.3);
 }
 .authors a:hover {
   color: var(--yolk-deep);

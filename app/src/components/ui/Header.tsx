@@ -1,6 +1,6 @@
 // Motion spec 2: the large title scrolls away with the content, and a compact sticky header
 // (17 px DM Sans 600, centred) fades in over the first 48 px of scroll on a frosted background
-// (BlurView 40, light, + rgba(251,245,234,0.72)).
+// (BlurView 40, light, + rgba(238,243,240,0.72)).
 //
 //   const { scrollY, onScroll } = useScrollY();
 //   <View style={{ flex: 1 }}>
@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
   eyebrowRight: { justifyContent: 'center', alignItems: 'flex-end' },
   sticky: { position: 'absolute', left: 0, right: 0, top: 0, zIndex: 10 },
   // Barely there: the bible's scrolled frames show no rule under the header.
-  hairline: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(31,36,48,0.04)' },
+  hairline: { height: StyleSheet.hairlineWidth, backgroundColor: 'rgba(24,34,29,0.04)' },
   bar: { flex: 1, flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12 },
   side: { width: 64, flexDirection: 'row', alignItems: 'center' },
   sideRight: { justifyContent: 'flex-end' },

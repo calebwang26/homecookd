@@ -27,11 +27,11 @@ export type ActionState = 'idle' | 'loading' | 'success' | 'error';
 
 export type ActionVariant =
   | 'primary' // yolk #F2A23A, INK label (never white), cta shadow: the main action
-  | 'ink' // ink #1F2430, white label ("Ask about a dish")
+  | 'ink' // ink #18221D, white label ("Ask about a dish")
   | 'outline' // white with 1.5px hairline border (Watch / Hear)
   | 'cream' // solid white on photos / dark cards
   | 'glass' // translucent white on the dark hero ("Hear Mom · 0:24")
-  | 'secondary'; // dark green #34430C, white label: the second action next to a yolk one ("Invite family")
+  | 'secondary'; // dark green #244A39, white label: the second action next to a yolk one ("Invite family")
 
 /** Heights and label sizes from the bible: lg 60/18 (default), xl 64/19, md 56/17, sm 52/16, xs 44/15. */
 export type ActionSize = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
@@ -82,7 +82,7 @@ export type ActionButtonProps = {
   haptics?: boolean;
   /** Label / icon colour override (e.g. yolk-deep #A3580C on the outline "Send to Maya"). */
   fg?: string;
-  /** Border colour override for the outline variant (e.g. rgba(31,36,48,0.14)). */
+  /** Border colour override for the outline variant (e.g. rgba(24,34,29,0.14)). */
   borderColor?: string;
   /** Horizontal padding override (default 20; the bible's small outline pills use 16). */
   padH?: number;

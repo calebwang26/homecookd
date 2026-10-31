@@ -1,5 +1,5 @@
 // The background of the cook's centred screens (recording, the walkie-talkie, done; Caleb's v3b): the
-// yolk-tint wash over the whole height (#FCEBD0 at the top, #FDF1DE, then the cream page #FBF5EA), and a
+// yolk-tint wash over the whole height (#FCEBD0 at the top, #FDF1DE, then the cream page #EEF3F0), and a
 // soft warm glow (WarmGlow: the yolk at 16%, fading out over ~230 pt) centred behind the big button (never
 // behind the egg: the kit has no glows on it). All of them, and homie's questions while she records, use one centred column with the same
 // rhythm (COLUMN): 32 pt at the sides, 56 pt from the words to homie or the button, 48 pt from there

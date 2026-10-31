@@ -132,7 +132,7 @@
   transition: background-color 220ms var(--ease-soft), color 220ms var(--ease-soft);
 }
 .tabBtn:hover:not(.active) {
-  background: #e3e5d6;
+  background: #dde6e0;
 }
 .tab.active {
   background: var(--black);

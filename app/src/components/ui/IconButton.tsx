@@ -1,9 +1,9 @@
 // Round icon buttons and the "< Back" pill.
 //  cream: white #FFFFFF + 0 4px 14px shadow (back / close on the page, Kid-Ingredients, Kid-Step)
 //  glass: rgba(255,255,255,0.92), no shadow (back / heart / share over a photo)
-//  ink: #1F2430 with a white glyph (play in a voice row, composer mic)
+//  ink: #18221D with a white glyph (play in a voice row, composer mic)
 //  yolkTint: #FCEBD0 with an ink glyph ("Add a hello" mic, the cook's voice play)
-//  well: #F3EAD9 (quiet secondary buttons: a sheet's close, a hello's play)
+//  well: #E3EBE6 (quiet secondary buttons: a sheet's close, a hello's play)
 //  glassDark: rgba(255,255,255,0.3) with a white glyph (heart on a photo card)
 //  clear: transparent (heart in a list row)
 //  field: white + 0 4px 14px 0.06 (voice search next to the search field)

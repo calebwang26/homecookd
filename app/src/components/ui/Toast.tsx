@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 10,
-    boxShadow: '0 10px 30px rgba(31,36,48,0.22)',
+    boxShadow: '0 10px 30px rgba(24,34,29,0.22)',
   },
   disc: { width: 32, height: 32, borderRadius: 16, backgroundColor: colors.green, alignItems: 'center', justifyContent: 'center' },
   msg: { flexShrink: 1 },

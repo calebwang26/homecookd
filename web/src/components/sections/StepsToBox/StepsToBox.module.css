@@ -443,7 +443,7 @@
     width: 64px;
     margin-bottom: -7px;
     visibility: hidden;
-    filter: drop-shadow(0 6px 8px rgba(31, 36, 48, 0.18));
+    filter: drop-shadow(0 6px 8px rgba(24, 34, 29, 0.18));
   }
   .mascot > svg {
     display: block;

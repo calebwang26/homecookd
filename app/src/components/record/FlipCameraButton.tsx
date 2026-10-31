@@ -101,7 +101,7 @@ export function FlipCameraButton({
 const styles = StyleSheet.create({
   wrap: { alignItems: 'center', gap: 6 },
   button: { width: FLIP_SIZE, height: FLIP_SIZE, borderRadius: FLIP_SIZE / 2, alignItems: 'center', justifyContent: 'center' },
-  onPage: { backgroundColor: colors.card, borderWidth: 1.5, borderColor: 'rgba(31,36,48,0.12)', boxShadow: shadows.button },
+  onPage: { backgroundColor: colors.card, borderWidth: 1.5, borderColor: 'rgba(24,34,29,0.12)', boxShadow: shadows.button },
   onDark: { backgroundColor: alpha.glassButton },
   waiting: { opacity: 0.5 },
 });

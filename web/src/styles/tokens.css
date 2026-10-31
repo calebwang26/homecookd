@@ -6,37 +6,37 @@
   color-scheme: light;
 
   /* ---- homecookd brand kit (docs/brand/tokens/tokens.css, values verbatim) ----
-     Four colors: cream, ink, YOLK (the main one) and DARK GREEN (second). Caleb's palette rule
+     Four colors ("Kitchen tile", Oct 30): a pale sage page, ink, YOLK (the main one) and BOTTLE GREEN (second). Caleb's palette rule
      (docs/agents/memory/brand-egg.md) overrides the kit's palette section: no lavender, no peach. */
   --hc-yolk: #F2A23A;        /* primary fills; ink text on it, never yolk text on a light ground */
-  --hc-yolk-deep: #A3580C;   /* links and accent text on cream or white (4.9:1) */
-  --hc-ink: #1F2430;         /* outlines, text, ink on yolk */
-  --hc-cream: #FBF5EA;       /* page background */
+  --hc-yolk-deep: #A3580C;   /* links and accent text on the page (4.7:1) or white (5.3:1) */
+  --hc-ink: #18221D;         /* outlines, text, ink on yolk */
+  --hc-cream: #EEF3F0;       /* page background: pale sage, "Kitchen tile" (the name is from the old cream) */
   --hc-white: #FFFFFF;       /* cards, sheets, the egg white */
-  --hc-muted: #5B554E;       /* secondary text (6.8:1 on cream) */
-  --hc-line: #E6DDCF;        /* hairlines, card borders */
+  --hc-muted: #4F5D55;       /* secondary text (6.2:1 on the page) */
+  --hc-line: #D6E0DA;        /* hairlines, card borders */
   --hc-radius-sm: 12px;  --hc-radius-md: 20px;  --hc-radius-lg: 28px;  --hc-radius-pill: 999px;
   --hc-tap: 48px;            /* minimum touch target */
   /* the dark green (second color) and its tint, from the site's green family */
-  --hc-green: #34430C;  --hc-green-tint: #E6EBCF;  --hc-record: #9A4F47;
+  --hc-green: #244A39;  --hc-green-tint: #DCEBE2;  --hc-record: #9A4F47;
   /* yolk tints: guesses and asks ("Only Mom knows", the butter rows) and the soft top wash */
   --hc-yolk-tint: #FCEBD0;  --hc-yolk-soft: #FBDEBA;  --hc-yolk-wash: #FDF1DE;  --hc-yolk-hover: #E69426;
 
   /* neutrals */
-  --canvas: var(--hc-cream);  --surface: var(--hc-white);  --sunken: #F3EAD9;
+  --canvas: var(--hc-cream);  --surface: var(--hc-white);  --sunken: #E3EBE6;
   --pistachio-wash: var(--hc-yolk-wash);  --footer-bg: var(--hc-yolk-wash);
-  --hairline: var(--hc-line);  --halo: rgba(31, 36, 48, 0.05);
+  --hairline: var(--hc-line);  --halo: rgba(24, 34, 29, 0.05);
   --hero-dark: var(--hc-ink);                   /* stage behind the hero sheet corners */
 
   /* text */
   --ink: var(--hc-ink);  --text: var(--hc-ink);  --muted: var(--hc-muted);
-  --ghost: #D8CEBD;                             /* unfilled scrub words. NEVER a final state */
-  --cream: var(--hc-cream);  --muted-inverse: #C9D0AE;
+  --ghost: #C9D4CD;                             /* unfilled scrub words. NEVER a final state */
+  --cream: var(--hc-cream);  --muted-inverse: #B9CFC3;
 
   /* greens (second color) */
-  --forest: var(--hc-green);  --forest-swirl: #3D4E10;  --green-deep: #2A360A;
-  --green: var(--hc-green);  --green-swirl: #3D4E10;
-  --sage: var(--hc-green-tint);  --sage-hover: #DAE2B9;  --olive-ink: var(--hc-green);
+  --forest: var(--hc-green);  --forest-swirl: #2B5443;  --green-deep: #1C3B2E;
+  --green: var(--hc-green);  --green-swirl: #2B5443;
+  --sage: var(--hc-green-tint);  --sage-hover: #CDE2D5;  --olive-ink: var(--hc-green);
 
   /* yolk (main color) and its tints */
   --yolk: var(--hc-yolk);  --yolk-deep: var(--hc-yolk-deep);  --yolk-hover: var(--hc-yolk-hover);
@@ -49,14 +49,14 @@
   --rec: var(--hc-record);
 
   /* accent-only */
-  --cocoa: var(--hc-ink);  --black: #15181F;
+  --cocoa: var(--hc-ink);  --black: #111915;
 
   /* semantic */
   --btn-hero-bg: var(--yolk);        --btn-hero-fg: var(--ink);
   --btn-primary-bg: var(--yolk);     --btn-primary-fg: var(--ink);  --btn-primary-hover: var(--yolk-hover);
   --btn-soft-bg: var(--sage);        --btn-soft-fg: var(--forest);
   --focus-ring: var(--yolk-deep);
-  --scrim-strong: rgba(31, 36, 48, 0.70);  --scrim-soft: rgba(31, 36, 48, 0.55);
+  --scrim-strong: rgba(24, 34, 29, 0.70);  --scrim-soft: rgba(24, 34, 29, 0.55);
 
   /* type families (next/font sets the --font-* variables on <html>) */
   --ff-display: var(--font-display), 'Iowan Old Style', Georgia, serif;
@@ -93,9 +93,9 @@
   --r-media: 28px; --r-big: 32px; --r-sheet: 40px;
 
   /* shadows */
-  --shadow-card: 0 1px 2px rgba(31,36,48,.04), 0 12px 32px -12px rgba(31,36,48,.18);
-  --shadow-float: 0 2px 6px rgba(31,36,48,.05), 0 28px 60px -20px rgba(31,36,48,.28);
-  --shadow-sheet: 0 -24px 60px rgba(31,36,48,.18);
+  --shadow-card: 0 1px 2px rgba(24,34,29,.04), 0 12px 32px -12px rgba(24,34,29,.18);
+  --shadow-float: 0 2px 6px rgba(24,34,29,.05), 0 28px 60px -20px rgba(24,34,29,.28);
+  --shadow-sheet: 0 -24px 60px rgba(24,34,29,.18);
   --ring-halo: 0 0 0 8px var(--halo);
 
   /* motion */

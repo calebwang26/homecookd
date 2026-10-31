@@ -1,6 +1,6 @@
 // Cards from the bible.
-//  default: white #FFFFFF, radius 28, 0 8px 24px rgba(31,36,48,0.06) (list cards, panels)
-//  raised:  same with 0 10px 30px rgba(31,36,48,0.08) ("Leo asked you", "Waiting for your answer")
+//  default: white #FFFFFF, radius 28, 0 8px 24px rgba(24,34,29,0.06) (list cards, panels)
+//  raised:  same with 0 10px 30px rgba(24,34,29,0.08) ("Leo asked you", "Waiting for your answer")
 //  tinted:  yolkTint (asks: request card, give-back card) / greenTint (the cook's answers) fills, no shadow
 // `ListCard` + `ListRow` are the bible's rows-with-hairlines pattern (Browse, Messages, Your recipes).
 import type { ReactNode } from 'react';
@@ -58,7 +58,7 @@ export function ListCard({ children, padH = 16, padV = 6, style }: { children?: 
   return <Card padding={0} style={[{ paddingHorizontal: padH, paddingVertical: padV }, style]}>{children}</Card>;
 }
 
-/** One row in a ListCard: horizontal, gap 14, a #E6DDCF hairline below unless `last`. */
+/** One row in a ListCard: horizontal, gap 14, a #D6E0DA hairline below unless `last`. */
 export function ListRow({
   children,
   last,

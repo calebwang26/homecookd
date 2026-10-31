@@ -543,7 +543,7 @@ const styles = StyleSheet.create({
     padding: 20,
     borderRadius: 24,
     backgroundColor: colors.card,
-    boxShadow: '0 8px 24px rgba(31,36,48,0.06)',
+    boxShadow: '0 8px 24px rgba(24,34,29,0.06)',
   },
   retry: { alignSelf: 'flex-start', marginTop: 8 },
 });

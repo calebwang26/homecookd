@@ -150,7 +150,7 @@ export function ShareCard({ data, swatch, photo, stageHeight, compact = false }:
               : t('share.card.a11y', { title })
           : t('share.card.a11yLoading')
       }>
-      <View style={[styles.card, { width: cardW, boxShadow: dark ? '0 16px 40px rgba(0,0,0,0.32)' : '0 10px 30px rgba(31,36,48,0.10)' }]}>
+      <View style={[styles.card, { width: cardW, boxShadow: dark ? '0 16px 40px rgba(0,0,0,0.32)' : '0 10px 30px rgba(24,34,29,0.10)' }]}>
         {photo > 0 ? (
           <View style={[styles.photo, { width: inner, height: photo }]}>
             {poster ? (

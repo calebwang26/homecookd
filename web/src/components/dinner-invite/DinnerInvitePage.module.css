@@ -1,11 +1,11 @@
 /* The /d dinner invite page: the /i invite page's look (pot + homecookd row, one Fraunces headline, the
-   430 px phone column) in the app's dinner lavender (#FFFFFF -> #FBF5EA), with the dinner photo's warm
+   430 px phone column) in the app's dinner lavender (#FFFFFF -> #EEF3F0), with the dinner photo's warm
    sun glow around homie, a cream "Hosted by" pill and one cream "Friday · 7 pm" card. */
 
 .page {
   min-height: 100svh;
-  background: #fbf5ea;
-  color: #1f2430;
+  background: #eef3f0;
+  color: #18221d;
   font-family: var(--ff-text);
   font-size: 17px;
   line-height: 1.4;
@@ -21,15 +21,15 @@
   min-height: 100svh;
   margin: 0 auto;
   padding: 0 24px calc(16px + env(safe-area-inset-bottom));
-  background: linear-gradient(180deg, #ffffff 0%, #fbf5ea 300px, #fbf5ea 560px);
+  background: linear-gradient(180deg, #ffffff 0%, #eef3f0 300px, #eef3f0 560px);
   display: flex;
   flex-direction: column;
 }
 @media (min-width: 600px) {
   .column {
     box-shadow:
-      0 0 0 1px rgba(31, 36, 48, 0.04),
-      0 30px 80px rgba(31, 36, 48, 0.14);
+      0 0 0 1px rgba(24, 34, 29, 0.04),
+      0 30px 80px rgba(24, 34, 29, 0.14);
   }
 }
 
@@ -38,7 +38,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
-  color: #1f2430;
+  color: #18221d;
 }
 .word {
   font-family: var(--ff-display);
@@ -87,7 +87,7 @@
   box-shadow:
     0 0 0 10px rgba(254, 190, 41, 0.14),
     0 0 70px rgba(254, 190, 41, 0.35),
-    0 18px 44px rgba(31, 36, 48, 0.12);
+    0 18px 44px rgba(24, 34, 29, 0.12);
   margin-bottom: 8px;
 }
 .face {
@@ -105,7 +105,7 @@
   font-size: 34px;
   line-height: 1.08;
   letter-spacing: -0.02em;
-  color: #1f2430;
+  color: #18221d;
 }
 .line {
   margin: 0;
@@ -113,7 +113,7 @@
   text-wrap: balance;
   font-size: 19px;
   line-height: 1.4;
-  color: #5b554e;
+  color: #4f5d55;
 }
 
 /* "Hosted by Mom": the app's cream host pill */
@@ -125,7 +125,7 @@
   padding: 6px 18px 6px 6px;
   border-radius: 999px;
   background: #ffffff;
-  box-shadow: 0 4px 14px rgba(31, 36, 48, 0.08);
+  box-shadow: 0 4px 14px rgba(24, 34, 29, 0.08);
   text-align: left;
 }
 .initial {
@@ -133,7 +133,7 @@
   height: 44px;
   border-radius: 50%;
   background: #fcebd0;
-  color: #1f2430;
+  color: #18221d;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -149,12 +149,12 @@
 .hostLabel {
   font-size: 12px;
   font-weight: 600;
-  color: #5b554e;
+  color: #4f5d55;
 }
 .hostName {
   font-size: 17px;
   font-weight: 700;
-  color: #1f2430;
+  color: #18221d;
 }
 
 /* "Friday · 7 pm" */
@@ -166,10 +166,10 @@
   padding: 14px 20px;
   border-radius: 22px;
   background: #ffffff;
-  box-shadow: 0 8px 24px rgba(31, 36, 48, 0.06);
+  box-shadow: 0 8px 24px rgba(24, 34, 29, 0.06);
   font-size: 17px;
   font-weight: 600;
-  color: #1f2430;
+  color: #18221d;
 }
 
 .retry {
@@ -184,7 +184,7 @@
   font-size: 18px;
   font-weight: 700;
   cursor: pointer;
-  box-shadow: 0 10px 24px rgba(52, 67, 12, 0.25);
+  box-shadow: 0 10px 24px rgba(36, 74, 57, 0.25);
   transition:
     transform 420ms cubic-bezier(0.34, 1.4, 0.64, 1),
     opacity 200ms ease;
@@ -210,7 +210,7 @@
   align-items: center;
   font-size: 16px;
   font-weight: 600;
-  color: #5b554e;
+  color: #4f5d55;
   text-decoration: underline;
   text-decoration-color: rgba(95, 99, 82, 0.4);
   text-underline-offset: 3px;

@@ -4,8 +4,8 @@
   "description": "Prop up a phone and cook like always. homecookd turns your videos into a recipe your kids can follow, in your own words and voice.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#FBF5EA",
-  "theme_color": "#FBF5EA",
+  "background_color": "#EEF3F0",
+  "theme_color": "#EEF3F0",
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },

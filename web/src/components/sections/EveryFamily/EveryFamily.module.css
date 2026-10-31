@@ -223,8 +223,8 @@
   text-align: left;
   box-shadow:
     0 0 0 1px var(--hairline),
-    0 2px 4px rgba(31, 36, 48, 0.05),
-    0 18px 36px -14px rgba(31, 36, 48, 0.34);
+    0 2px 4px rgba(24, 34, 29, 0.05),
+    0 18px 36px -14px rgba(24, 34, 29, 0.34);
 }
 .bTitle {
   font-family: var(--ff-text);

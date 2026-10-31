@@ -1,7 +1,7 @@
 // Chat bubbles for every message kind, in the two bible layouts (egg colours: the kid's asks in the yolk tint, the cook's answers in the green tint).
 //
 // Kid-Chat (learner):   my bubbles yolk tint #FCEBD0 (radius 20 20 6 20, right, max 270), the cook's
-//                       green tint #E6EBCF (20 20 20 6, left, max 290); 16/1.4 text, padding 12 16;
+//                       green tint #DCEBE2 (20 20 20 6, left, max 290); 16/1.4 text, padding 12 16;
 //                       step chip 13/700 ink above; times 12 muted.
 // Parent-Chat (cook):   the learner's bubbles yolk tint on the left (22 22 22 6, max 280), mine green tint on
 //                       the right (22 22 6 22, max 290); 17/1.4, padding 14 18; step chip 14/700;

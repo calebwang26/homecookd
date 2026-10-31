@@ -23,13 +23,13 @@ const size = { width: 1200, height: 630 };
 
 // The brand kit's colors (docs/brand/tokens): cream, ink, yolk, yolk-deep.
 const C = {
-  canvas: '#FBF5EA',
-  cream: '#FBF5EA',
-  ink: '#1F2430',
+  canvas: '#EEF3F0',
+  cream: '#EEF3F0',
+  ink: '#18221D',
   accent: '#A3580C',
   highlighter: '#F6BE75',
   yolk: '#F2A23A',
-  muted: '#5B554E',
+  muted: '#4F5D55',
 };
 
 /** the italic word on the highlighter, as on the page */
@@ -109,7 +109,7 @@ async function render(audience: Audience): Promise<ImageResponse> {
               height: 630,
               display: 'flex',
               backgroundImage:
-                'linear-gradient(to top, rgba(31,36,48,0.86) 0%, rgba(31,36,48,0.62) 30%, rgba(31,36,48,0.18) 58%, rgba(31,36,48,0) 76%)',
+                'linear-gradient(to top, rgba(24,34,29,0.86) 0%, rgba(24,34,29,0.62) 30%, rgba(24,34,29,0.18) 58%, rgba(24,34,29,0) 76%)',
             }}
           />
           <div

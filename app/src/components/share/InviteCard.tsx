@@ -105,7 +105,7 @@ const styles = StyleSheet.create({
     padding: CARD_PAD,
     paddingBottom: 20,
     gap: 10,
-    boxShadow: '0 10px 30px rgba(31,36,48,0.10)',
+    boxShadow: '0 10px 30px rgba(24,34,29,0.10)',
   },
   table: { height: TABLE_H },
   pot: { position: 'absolute', width: 48, alignItems: 'center' },

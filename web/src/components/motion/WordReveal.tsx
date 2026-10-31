@@ -43,7 +43,7 @@ export interface WordRevealProps {
 const PALE: Partial<Record<HexName, string>> = {
   green: HEX.greenPale,
   chartreuse: HEX.chartreusePale,
-  forest: '#9AA27A',
+  forest: '#8FAE9E',
   sun: '#C9A64E',
   tomato: '#E9B3A3',
 };

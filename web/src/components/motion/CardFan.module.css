@@ -34,7 +34,7 @@
   height: 4vw;
   translate: -50% 0;
   border-radius: 50%;
-  background: rgba(31, 36, 48, 0.12);
+  background: rgba(24, 34, 29, 0.12);
   filter: blur(30px);
   pointer-events: none;
 }

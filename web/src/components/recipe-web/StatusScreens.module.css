@@ -4,13 +4,13 @@
 }
 .skHero {
   height: 300px;
-  background: #f3ead9;
+  background: #e3ebe6;
   animation: pulse 1.4s ease-in-out infinite;
 }
 .skSheet {
   margin-top: -44px;
   border-radius: 32px 32px 0 0;
-  background: #fbf5ea;
+  background: #eef3f0;
   padding: 28px 24px;
   display: flex;
   flex-direction: column;
@@ -21,7 +21,7 @@
 .skBlock {
   display: block;
   border-radius: 10px;
-  background: #e6ddcf;
+  background: #d6e0da;
   animation: pulse 1.4s ease-in-out infinite;
 }
 .skBlock {
@@ -41,7 +41,7 @@
   align-items: center;
   text-align: center;
   gap: 12px;
-  background: linear-gradient(180deg, #ffffff 0%, #fbf5ea 360px);
+  background: linear-gradient(180deg, #ffffff 0%, #eef3f0 360px);
 }
 .title {
   margin: 12px 0 0;
@@ -51,7 +51,7 @@
   font-size: 30px;
   line-height: 1.1;
   letter-spacing: -0.02em;
-  color: #1f2430;
+  color: #18221d;
 }
 .line {
   margin: 0;
@@ -59,7 +59,7 @@
   max-width: 320px;
   font-size: 16px;
   line-height: 1.45;
-  color: #5b554e;
+  color: #4f5d55;
 }
 .actions {
   margin-top: 16px;
@@ -83,10 +83,10 @@
 .primary {
   background: var(--yolk);
   color: var(--ink);
-  box-shadow: 0 10px 24px rgba(52, 67, 12, 0.25);
+  box-shadow: 0 10px 24px rgba(36, 74, 57, 0.25);
 }
 .secondary {
   background: #ffffff;
-  color: #1f2430;
-  box-shadow: 0 4px 14px rgba(31, 36, 48, 0.08);
+  color: #18221d;
+  box-shadow: 0 4px 14px rgba(24, 34, 29, 0.08);
 }

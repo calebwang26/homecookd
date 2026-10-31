@@ -15,7 +15,7 @@
   box-shadow:
     inset 0 0 0 1px var(--hairline),
     inset 0 0 0 calc(var(--bezel) * 0.35) rgba(255, 253, 247, 1),
-    inset 0 0 0 calc(var(--bezel) * 0.35 + 1px) rgba(31, 36, 48, 0.07);
+    inset 0 0 0 calc(var(--bezel) * 0.35 + 1px) rgba(24, 34, 29, 0.07);
 }
 /* hairline side buttons (volume rocker left, side button right), the iPhone silhouette at a glance */
 .css::before,
@@ -41,10 +41,10 @@
 .shadow {
   box-shadow:
     inset 0 0 0 1px var(--hairline),
-    inset 0 0 0 calc(var(--bezel) * 0.35 + 1px) rgba(31, 36, 48, 0.06),
+    inset 0 0 0 calc(var(--bezel) * 0.35 + 1px) rgba(24, 34, 29, 0.06),
     0 0 0 8px var(--halo),
-    0 2px 6px rgba(31, 36, 48, 0.06),
-    0 40px 80px -30px rgba(31, 36, 48, 0.35);
+    0 2px 6px rgba(24, 34, 29, 0.06),
+    0 40px 80px -30px rgba(24, 34, 29, 0.35);
 }
 .screen {
   position: relative;
@@ -99,5 +99,5 @@
   z-index: 1;
 }
 .handShadow .handImg {
-  filter: drop-shadow(0 30px 40px rgba(31, 36, 48, 0.22));
+  filter: drop-shadow(0 30px 40px rgba(24, 34, 29, 0.22));
 }

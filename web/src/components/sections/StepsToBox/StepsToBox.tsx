@@ -110,11 +110,11 @@ function StepsToBoxKid() {
         const words = root.querySelectorAll<HTMLElement>('[data-steps-h2] .w');
         gsap.fromTo(
           words,
-          { autoAlpha: 0, y: '0.3em', color: '#D8CEBD' },
+          { autoAlpha: 0, y: '0.3em', color: '#C9D4CD' },
           {
             autoAlpha: 1,
             y: 0,
-            color: (_i: number, el: HTMLElement) => (el.hasAttribute('data-accent') ? '#A3580C' : '#1F2430'),
+            color: (_i: number, el: HTMLElement) => (el.hasAttribute('data-accent') ? '#A3580C' : '#18221D'),
             duration: 0.6,
             ease: 'power4.out',
             stagger: 0.09,

@@ -1,36 +1,36 @@
 // homecookd design tokens. Layout, radii, type roles and motion come from the "Hearth" design bible
 // (docs/design/hearth-bible/source/*.dc.html, 390x844). The COLORS are the egg brand kit's
-// (docs/brand/tokens/tokens.json, Oct 30), which wins over the bible: cream, ink, yolk (the main color)
-// and dark green (the second). No peach, lavender or butter. Light only: the app has no dark mode yet
+// (docs/brand/tokens/tokens.json, "Kitchen tile", Oct 30), which wins over the bible: a pale sage page, ink, yolk (the main color)
+// and bottle green (the second). No peach, lavender or butter. Light only: the app has no dark mode yet
 // (the kit's dark values are in `darkColors`, unused until it does).
 import type { TextStyle } from 'react-native';
 
 export const colors = {
   // Surfaces
-  page: '#FBF5EA', // cream: every screen background
+  page: '#EEF3F0', // pale sage ("Kitchen tile"): every screen background
   card: '#FFFFFF', // white: cards, round buttons, tab bar, sheets
-  well: '#F3EAD9', // sunken cream (the web's --sunken): segmented track, quiet buttons
-  line: '#E6DDCF', // hairlines and card borders
-  track: '#E6DDCF', // unfilled step progress (the line color)
+  well: '#E3EBE6', // sunken sage (the web's --sunken): segmented track, quiet buttons
+  line: '#D6E0DA', // hairlines and card borders
+  track: '#D6E0DA', // unfilled step progress (the line color)
   // Text
-  ink: '#1F2430', // titles, body text, ink on yolk, dark pills, active tab
-  text: '#1F2430', // body text (ink: the kit has one text color)
-  muted: '#5B554E', // secondary lines (6.8:1 on cream)
+  ink: '#18221D', // titles, body text, ink on yolk, dark pills, active tab
+  text: '#18221D', // body text (ink: the kit has one text color)
+  muted: '#4F5D55', // secondary lines (6.2:1 on the page)
   // Yolk, the main color
   yolk: '#F2A23A', // FILLS only: primary buttons (ink label, never white), selected chips, badges, progress
-  yolkDeep: '#A3580C', // links and accent text on cream, white or yolkTint (never yolk text on light)
+  yolkDeep: '#A3580C', // links and accent text on the page, white or yolkTint (never yolk text on light)
   yolkTint: '#FCEBD0', // guesses and asks: the kid's asks, waiting pills, request cards, the top wash
-  // Dark green, the second color
-  green: '#34430C', // secondary and success: checks, "Sent", secondary fills (white label), text on greenTint
-  greenTint: '#E6EBCF', // the cook's answers: her bubbles, her quote cards, "Look for"
+  // Bottle green, the second color
+  green: '#244A39', // secondary and success: checks, "Sent", secondary fills (white label), text on greenTint
+  greenTint: '#DCEBE2', // the cook's answers: her bubbles, her quote cards, "Look for"
   danger: '#9A4F47', // the kit's "record": record dot, recording mic, saved heart, errors
 } as const;
 
 /** The kit's dark palette (docs/brand/tokens/tokens.json "semantic.dark"), for when the app gets a dark mode. */
 export const darkColors = {
-  page: '#15181F',
-  card: '#1F2430',
-  ink: '#FBF5EA',
+  page: '#111915',
+  card: '#18221D',
+  ink: '#EEF3F0',
   muted: '#C9C1B4',
   line: '#343A48',
   yolk: '#F2A23A',
@@ -50,45 +50,45 @@ export const alpha = {
   glassHeart: 'rgba(255,255,255,0.3)', // unsaved heart on a photo card
   tabBar: 'rgba(255,255,255,0.96)',
   tabBarFrosted: 'rgba(255,255,255,0.88)', // with blur (motion spec 2)
-  headerFrosted: 'rgba(251,245,234,0.72)', // sticky header over blur (motion spec 2)
-  pageClear: 'rgba(251,245,234,0)', // the page color, see-through (top and bottom fades)
-  hairline: 'rgba(31,36,48,0.08)',
-  border: 'rgba(31,36,48,0.12)', // 1.5px outline buttons (Watch / Hear, Record row)
-  borderStrong: 'rgba(31,36,48,0.14)', // "Send to Maya"
-  checkRing: 'rgba(31,36,48,0.2)', // empty ingredient check
-  dashed: 'rgba(31,36,48,0.28)', // "Add family" dashed tile
-  grabber: 'rgba(31,36,48,0.18)',
-  backdrop: 'rgba(31,36,48,0.35)', // sheet backdrop (motion spec 4)
+  headerFrosted: 'rgba(238,243,240,0.72)', // sticky header over blur (motion spec 2)
+  pageClear: 'rgba(238,243,240,0)', // the page color, see-through (top and bottom fades)
+  hairline: 'rgba(24,34,29,0.08)',
+  border: 'rgba(24,34,29,0.12)', // 1.5px outline buttons (Watch / Hear, Record row)
+  borderStrong: 'rgba(24,34,29,0.14)', // "Send to Maya"
+  checkRing: 'rgba(24,34,29,0.2)', // empty ingredient check
+  dashed: 'rgba(24,34,29,0.28)', // "Add family" dashed tile
+  grabber: 'rgba(24,34,29,0.18)',
+  backdrop: 'rgba(24,34,29,0.35)', // sheet backdrop (motion spec 4)
   recordHalo: 'rgba(154,79,71,0.18)',
   yolkGlow: 'rgba(242,162,58,0.28)', // a soft yolk ring or halo (homie lit, the "you" dot)
-  photoShadeTop: 'rgba(21,24,31,0)',
-  photoShade: 'rgba(21,24,31,0.82)', // hero card bottom
-  photoShadeCard: 'rgba(21,24,31,0.75)', // "Picked for you" cards
-  photoShadeLeft: 'rgba(21,24,31,0.8)', // "Leo made your ramen" (left to right)
+  photoShadeTop: 'rgba(17,25,21,0)',
+  photoShade: 'rgba(17,25,21,0.82)', // hero card bottom
+  photoShadeCard: 'rgba(17,25,21,0.75)', // "Picked for you" cards
+  photoShadeLeft: 'rgba(17,25,21,0.8)', // "Leo made your ramen" (left to right)
 } as const;
 
-/** Top-of-screen washes: [from, to], over `height` px. Both are the yolk tint into cream (no lavender or peach). */
+/** Top-of-screen washes: [from, to], over `height` px. Both are the yolk tint into the page (no lavender or peach). */
 export const washes = {
-  kid: ['#FCEBD0', '#FBF5EA'],
-  parent: ['#FCEBD0', '#FBF5EA'],
+  kid: ['#FCEBD0', '#EEF3F0'],
+  parent: ['#FCEBD0', '#EEF3F0'],
 } as const;
 
 /** Box shadows (RN 0.86 renders CSS `boxShadow` strings): the bible's, in the kit's ink. */
 export const shadows = {
-  card: '0 8px 24px rgba(31,36,48,0.06)', // list cards, panels
-  cardRaised: '0 10px 30px rgba(31,36,48,0.08)', // "Leo asked you" / "Waiting for your answer"
-  hero: '0 16px 40px rgba(31,36,48,0.16)', // Kid-Home hero card
-  button: '0 4px 14px rgba(31,36,48,0.08)', // round white back / close buttons
-  field: '0 4px 14px rgba(31,36,48,0.06)', // search field, voice search button
-  chip: '0 2px 8px rgba(31,36,48,0.05)', // filter chips, "About ..." pill
-  person: '0 2px 8px rgba(31,36,48,0.06)', // "Who is it for?" chips
-  segment: '0 2px 8px rgba(31,36,48,0.08)', // selected segment
-  composer: '0 6px 20px rgba(31,36,48,0.08)', // chat text field
+  card: '0 8px 24px rgba(24,34,29,0.06)', // list cards, panels
+  cardRaised: '0 10px 30px rgba(24,34,29,0.08)', // "Leo asked you" / "Waiting for your answer"
+  hero: '0 16px 40px rgba(24,34,29,0.16)', // Kid-Home hero card
+  button: '0 4px 14px rgba(24,34,29,0.08)', // round white back / close buttons
+  field: '0 4px 14px rgba(24,34,29,0.06)', // search field, voice search button
+  chip: '0 2px 8px rgba(24,34,29,0.05)', // filter chips, "About ..." pill
+  person: '0 2px 8px rgba(24,34,29,0.06)', // "Who is it for?" chips
+  segment: '0 2px 8px rgba(24,34,29,0.08)', // selected segment
+  composer: '0 6px 20px rgba(24,34,29,0.08)', // chat text field
   cta: '0 10px 24px rgba(163,88,12,0.22)', // big yolk buttons (a warm yolk-deep shadow)
   mic: '0 12px 28px rgba(163,88,12,0.28)', // "Tap to talk"
   micRecording: '0 0 0 10px rgba(154,79,71,0.18)',
-  tabBar: '0 10px 30px rgba(31,36,48,0.14), 0 0 0 1px rgba(31,36,48,0.04)',
-  panelUp: '0 -10px 30px rgba(31,36,48,0.06)', // Parent-Chat answer panel
+  tabBar: '0 10px 30px rgba(24,34,29,0.14), 0 0 0 1px rgba(24,34,29,0.04)',
+  panelUp: '0 -10px 30px rgba(24,34,29,0.06)', // Parent-Chat answer panel
   ringCard: '0 0 0 3px #FFFFFF', // avatar ring, dot ring
   ringYolk: '0 0 0 2px #F2A23A', // the question waiting for an answer
   ringSelected: '0 0 0 3px #F2A23A', // selected video thumb
