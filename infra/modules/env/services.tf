@@ -70,7 +70,7 @@ resource "aws_ecs_task_definition" "service" {
     essential    = true
     stopTimeout  = 120 # Fargate's maximum; long calls are held by task protection instead (docs/build/AWS-MIGRATION.md)
     portMappings = contains(keys(local.lb_services), each.key) ? [{ containerPort = each.value.port }] : []
-    environment = [for k, v in merge(each.value.env, {
+    environment = [for k, v in merge(each.value.env, each.value.uses_database ? { DB_HOST = aws_db_instance.main.address } : {}, {
       PORT           = tostring(each.value.port)
       MEDIA_BUCKET   = aws_s3_bucket.media.bucket
       UPLOAD_BUCKET  = aws_s3_bucket.uploads.bucket
