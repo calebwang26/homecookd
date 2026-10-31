@@ -158,11 +158,11 @@ function TopBar({ onGetApp, overlay, clear, dish }: { onGetApp?: (el: HTMLElemen
   );
 }
 
-export function RecipeWebView({ share, recipe, dish = null }: { share: Share; recipe: Recipe; dish?: DishLock | null }) {
+export function RecipeWebView({ share, recipe, dish = null, start = 'recipe' }: { share: Share; recipe: Recipe; dish?: DishLock | null; start?: 'recipe' | 'ingredients' }) {
   const reduced = !!useReducedMotion();
   const steps = recipe.steps.length;
   // On the dish pages the screens live in state only: the page's own address and back button stay as they are.
-  const [screen, setScreen] = useState<Screen>(() => (dish ? { name: 'recipe' } : parseHash(steps)));
+  const [screen, setScreen] = useState<Screen>(() => (dish ? { name: start } : parseHash(steps)));
   const [popover, setPopover] = useState<{ rect: DOMRect; copy: LockCopy; key: number } | null>(null);
   const [sheet, setSheet] = useState(false);
   const closeSheet = useCallback(() => setSheet(false), []);

@@ -8,7 +8,7 @@ import { cardTitle } from '@/lib/dish/text';
 import type { Card, Recipe } from '@/lib/dish/types';
 import { SaveSheet } from './SaveSheet';
 
-export function KidRecipe({ card, token, version, onClose }: { card: Card; token: string; version: Recipe; onClose: () => void }) {
+export function KidRecipe({ card, token, version, start, onClose }: { card: Card; token: string; version: Recipe; start: 'recipe' | 'ingredients'; onClose: () => void }) {
   const { t } = useLang();
   const R = useRel()(card.relation);
   const clips = useMemo(() => Object.fromEntries(card.answers.map((a) => [a.id, { audioUrl: a.audioUrl, durationS: a.durationS }])), [card.answers]);
@@ -22,6 +22,7 @@ export function KidRecipe({ card, token, version, onClose }: { card: Card; token
   return (
     <DishRecipeView
       id={token}
+      start={start}
       title={title}
       photo={photo}
       version={version}

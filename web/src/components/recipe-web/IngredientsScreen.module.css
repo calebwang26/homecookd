@@ -123,8 +123,13 @@
   color: #18221d;
   transition: color 200ms ease;
 }
-.item[aria-checked='true'] .words {
+.item[aria-checked='true'] .words,
+.item[aria-checked='true'] .amount {
   color: #4f5d55;
+  text-decoration: line-through;
+}
+.item[aria-checked='true'] .lines {
+  opacity: 0.55;
 }
 .amount {
   font-size: 14px;

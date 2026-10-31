@@ -491,3 +491,46 @@
     animation: none;
   }
 }
+
+/* A dish card's step: what you need, the actions one per line, how you know it's done. */
+.time {
+  align-self: flex-start;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: #dcebe2;
+  color: #244a39;
+  font-size: 14px;
+  font-weight: 700;
+}
+.actions {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+.action {
+  display: flex;
+  gap: 12px;
+  align-items: flex-start;
+}
+.actionNum {
+  flex: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #244a39;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+}
+.actionText {
+  flex: 1;
+  min-width: 0;
+  font-size: 17px;
+  line-height: 1.45;
+  color: #18221d;
+}

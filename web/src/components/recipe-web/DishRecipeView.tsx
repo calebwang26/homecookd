@@ -14,13 +14,15 @@ import ui from './RecipeWeb.module.css';
 type Props = Omit<DishLock, 't' | 'recipe' | 'renderSheet'> & {
   /** the card's token: keeps this view's ticked ingredients apart from other dishes */
   id: string;
+  /** the screen it opens on: the recipe, or "Get these ready" from the card's Start cooking */
+  start?: 'recipe' | 'ingredients';
   title: string;
   photo: string | null;
   version: DishRecipe;
   sheet: (p: { open: boolean; onClose: () => void }) => ReactNode;
 };
 
-export function DishRecipeView({ id, title, photo, version, sheet, R, hear, meta, clips, popover, onClose }: Props) {
+export function DishRecipeView({ id, start = 'recipe', title, photo, version, sheet, R, hear, meta, clips, popover, onClose }: Props) {
   const { t } = useLang();
   const { recipe, share } = useMemo(() => recipeFromDish(`dish-${id}`, title, R, photo, version), [id, title, R, photo, version]);
   const dish = useMemo<DishLock>(
@@ -33,7 +35,7 @@ export function DishRecipeView({ id, title, photo, version, sheet, R, hear, meta
   return (
     <div className={ui.page}>
       <div className={ui.column}>
-        <RecipeWebView share={share} recipe={recipe} dish={dish} />
+        <RecipeWebView share={share} recipe={recipe} dish={dish} start={start} />
       </div>
     </div>
   );
