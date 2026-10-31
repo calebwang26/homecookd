@@ -1,0 +1,50 @@
+# Builds one service from this commit and rolls it out on AWS. Manual only. It logs in with GitHub's OIDC login, so no
+# key is stored in GitHub. Needs the repo variable AWS_ACCOUNT_ID and a GitHub environment named like the target.
+name: Deploy to AWS
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        type: choice
+        options: [staging, production]
+        default: staging
+      service:
+        type: choice
+        options: [voice, worker]
+        default: voice
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    environment: ${{ inputs.environment }}
+    env:
+      NAME: homecookd-${{ inputs.environment }}
+      SERVICE: ${{ inputs.service }}
+      REGISTRY: ${{ vars.AWS_ACCOUNT_ID }}.dkr.ecr.us-west-2.amazonaws.com
+    steps:
+      - uses: actions/checkout@v4
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/homecookd-${{ inputs.environment }}-deploy
+          aws-region: us-west-2
+      - uses: aws-actions/amazon-ecr-login@v2
+      - name: Build and push
+        run: |
+          IMAGE="$REGISTRY/$NAME/$SERVICE:$GITHUB_SHA"
+          DIR=$([ "$SERVICE" = worker ] && echo pipeline || echo "$SERVICE")
+          docker build -t "$IMAGE" "$DIR"
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
+      - name: Roll out
+        run: |
+          aws ecs describe-task-definition --task-definition "$NAME-$SERVICE" --query taskDefinition > current.json
+          jq --arg image "$IMAGE" '.containerDefinitions[0].image = $image
+            | {family, containerDefinitions, taskRoleArn, executionRoleArn, networkMode, requiresCompatibilities, cpu, memory}' \
+            current.json > next.json
+          ARN=$(aws ecs register-task-definition --cli-input-json file://next.json --query taskDefinition.taskDefinitionArn --output text)
+          aws ecs update-service --cluster "$NAME" --service "$SERVICE" --task-definition "$ARN" >/dev/null
+          echo "Rolling out $ARN. Tasks holding a live call finish it first."

@@ -1,0 +1,48 @@
+# infra/: homecookd on AWS (Terraform)
+
+The plan and its rollbacks are in `docs/build/AWS-MIGRATION.md`. Region: Oregon (`us-west-2`). Login: the `homecookd`
+AWS profile, which you refresh with `aws sso login --profile homecookd`.
+
+```
+bootstrap/        one-time, account-wide: Terraform's state bucket, the GitHub login, the budget alerts
+modules/env/      everything one environment has: network, Postgres, load balancer, S3 + CloudFront, Fargate, SQS,
+                  secret names, alarms, roles
+envs/staging/     the cheap copy: no real keys, no real data
+envs/production/  NOT created yet. Applying it needs Caleb's OK
+scripts/load-secrets.sh   copies keys from the root .env into Secrets Manager without printing them
+```
+
+`.github/workflows/deploy-aws.yml` builds one service and rolls it out. It's manual and stores no keys.
+
+## Commands
+
+```bash
+# check the code (no login needed)
+cd infra/envs/staging && terraform init -backend=false && terraform validate
+
+# first time only
+cd infra/bootstrap && AWS_PROFILE=homecookd terraform init && AWS_PROFILE=homecookd terraform apply
+
+# an environment
+cd infra/envs/staging
+AWS_PROFILE=homecookd terraform init -backend-config="bucket=homecookd-tfstate-$(aws sts get-caller-identity --profile homecookd --query Account --output text)"
+AWS_PROFILE=homecookd terraform plan
+AWS_PROFILE=homecookd terraform apply
+```
+
+## Starting staging's voice service
+
+1. `terraform apply` creates everything with `voice_count = 0`.
+2. Push the first image, from Actions ("Deploy to AWS") or by hand. Actions needs the repo variable `AWS_ACCOUNT_ID` and
+   a GitHub environment named `staging`.
+3. `terraform apply -var voice_count=1`, then `curl <load_balancer_url>/health`.
+
+## Rules
+
+- Secret values never go in Terraform, because they would land in its state file. It holds the names only.
+- A deploy registers its own task definition, so Terraform ignores that field on the service. An env or size change in
+  Terraform reaches the service on the next deploy.
+- Staging is plain HTTP on the AWS address until a domain and certificate exist, which needs a DNS change (phase 1).
+- Which services can run here today: `voice` and `worker` have Dockerfiles that build. The worker still needs Convex and
+  GCS, and `api` has no code yet, so both stay at 0 tasks. The upload signer has no Dockerfile on purpose: the `api`
+  takes over its job in phase 4. The glasses ingest has none either: the VM has been stopped since Oct 25, so it waits.
