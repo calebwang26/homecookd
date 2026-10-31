@@ -37,12 +37,20 @@ AWS_PROFILE=homecookd terraform apply
    a GitHub environment named `staging`.
 3. `terraform apply -var voice_count=1`, then `curl <load_balancer_url>/health`.
 
+## Before production
+
+The deploy role trusts the GitHub environment's name, so anyone with write access could run the workflow against an
+environment called `production`. **Don't create that GitHub environment until production is approved, and give it
+required reviewers (Caleb) before anything else uses it.**
+
 ## Rules
 
 - Secret values never go in Terraform, because they would land in its state file. It holds the names only.
 - A deploy registers its own task definition, so Terraform ignores that field on the service. An env or size change in
   Terraform reaches the service on the next deploy.
-- Staging is plain HTTP on the AWS address until a domain and certificate exist, which needs a DNS change (phase 1).
+- Staging is plain HTTP on the AWS address until a domain and certificate exist, which needs a DNS change (phase 1). With
+  `VOICE_STUB=1` it accepts any token. That's acceptable only while voice is fake and has no real data, and `voice_count`
+  stays 0 unless someone is testing.
 - Which services can run here today: `voice` and `worker` have Dockerfiles that build. The worker still needs Convex and
   GCS, and `api` has no code yet, so both stay at 0 tasks. The upload signer has no Dockerfile on purpose: the `api`
   takes over its job in phase 4. The glasses ingest has none either: the VM has been stopped since Oct 25, so it waits.

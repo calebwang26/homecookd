@@ -44,6 +44,8 @@ tested on staging before 1.1 depends on it. If it fails, Convex keeps its own UR
 ### 2. Foundation and staging
 `infra/` (see `infra/README.md`). Staging has no real keys or data: voice runs with `VOICE_STUB=1` and
 `VOICE_FAKE_SPEECH=1`, so a stranger who finds the address can't spend credits or see a family.
+The load balancer is plain HTTP and accepts any token, which is acceptable only while voice is fake and has no real data.
+`voice_count` stays 0 unless someone is testing.
 
 ### 3. Easy services
 **Voice.** Calls last up to an hour, but **Fargate kills a task at most 120 seconds after asking it to stop**. The load
@@ -70,6 +72,10 @@ and an address its firmware can reach.
 already Postgres, so `pg_dump` and restore is the easy part. The work is moving the Deno code to Node on Fargate, replacing
 pg_cron with EventBridge, and re-running `two_sided_live`, `api-smoke` and `retention_live` against the new host. The
 Supabase freeze has to be lifted for this, which is Caleb's call. **Roughly 2-4 weeks.**
+
+Before real data arrives: create a limited app user for `api` and `worker`, and take the RDS master login
+(`DB_CREDENTIALS` in `infra/modules/env/services.tf`) out of their tasks. When production deploys start, pin the deploy
+workflow's actions to commit SHAs.
 
 ### 6. Convex to Postgres
 **Size:** about 11,400 lines, 29 tables, 8 crons, 184 functions (28 queries, 34 mutations, 5 actions, 117 internal), 33

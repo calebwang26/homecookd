@@ -47,4 +47,4 @@ jobs:
             current.json > next.json
           ARN=$(aws ecs register-task-definition --cli-input-json file://next.json --query taskDefinition.taskDefinitionArn --output text)
           aws ecs update-service --cluster "$NAME" --service "$SERVICE" --task-definition "$ARN" >/dev/null
-          echo "Rolling out $ARN. Tasks holding a live call finish it first."
+          echo "Rolling out $ARN. Until voice/ holds task protection (phase 3), this can cut live voice calls."
