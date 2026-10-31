@@ -67,7 +67,7 @@ follows it, and it wins over the docs below on UI/UX and flows.
   `git add -A`: the tree holds untracked demo PNGs and Finder " 2" duplicates.
 - **Section chats (Oct 26):** each codebase section has one permanent Claude chat that owns it (Voice & homie,
   Pipeline & recipes, Convex & accounts, App screens & recording, App Store, web & builds, and since Oct 29
-  Notifications & linking). Work goes to the owner of the files it touches: `docs/agents/memory/section-chats.md`.
+  Notifications & linking, since Oct 31 AWS backend). Work goes to the owner of the files it touches: `docs/agents/memory/section-chats.md`.
 - **The Merge Agent approves every PR.** After `gh pr create`, send the PR (number, link, branch, files touched,
   one-line summary) to the Claude Desktop session titled **Merge Agent** (Claude Code: `ListAgents`, then
   `SendMessage`; Codex or Salik: ask Caleb to pass it on). Don't merge until it approves. When PRs conflict, the
@@ -141,6 +141,9 @@ follows it, and it wins over the docs below on UI/UX and flows.
   report/block, /privacy and /terms, the icon, the TEST family) must (1) state why it still passes the App Review
   guidelines, and (2) update the reviewer notes, App Store answers and legal pages in the same PR before it ships.
   Paths and steps: `docs/agents/memory/app-review-guard.md`.
+- **AWS (Oct 31):** Caleb's OK in chat each time for switching live traffic, production data, DNS, changing Cloud Run,
+  Convex, Supabase or GCS, anything likely to add over $300 a month, or deleting what this work didn't create. Secret values
+  never go in Terraform (`docs/agents/memory/aws-migration.md`).
 - **`TODO(caleb)`** marks a decision only Caleb can make. Use the documented default and leave the marker.
 - English only.
 
@@ -169,6 +172,7 @@ glasses/    ESP32 glasses → GCP VM (Python): WS ingest, MP4 mux, GCS upload, C
 supabase/   Frozen: functions/api (today's sign-in, invites, older screens), migrations/, tests/
 pipeline/   Python: prep.py → process.py (Gemini) → Muse Spark → publish.py, and worker.py (claims jobs from Convex)
 cloud/      GCS upload signer (Cloud Run) + IAM scripts
+infra/      AWS, as Terraform (infra/README.md; the plan is docs/build/AWS-MIGRATION.md). Staging only so far; nothing live runs there
 scripts/    check-cartesia.mjs, check-moss.mjs (key checks), set-apple-ids.mjs (launch prep)
 data/       sample + synthetic recipes; data/out/ is pipeline output (gitignored)
 docs/       specs, design bible, QA, learning notes; docs/agents/ = shared agent state + memory
@@ -205,6 +209,10 @@ npx convex deploy --preview-name hackathon -y                      # deploy (CON
 # backend (Supabase, frozen)
 npx --yes deno@2 test --node-modules-dir=none --allow-env --allow-read supabase/tests/   # unit tests
 npx --yes deno@2 check --node-modules-dir=none supabase/functions/api/*.ts              # typecheck
+
+# AWS (infra/README.md; profile homecookd, refresh with: aws sso login --profile homecookd)
+cd infra/envs/staging && terraform init -backend=false && terraform validate   # no login needed
+cd infra/envs/staging && AWS_PROFILE=homecookd terraform plan        # production apply: Caleb's OK
 
 # upload signer (cloud/signer)
 python3 cloud/signer/test_main.py                                  # sign-in check (Convex + GCS faked)
