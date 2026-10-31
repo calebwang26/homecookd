@@ -8,7 +8,7 @@ import { useLang, useRel } from '@/components/dish/lang';
 import { Logo } from '@/components/primitives/Logo';
 import { IconBack, IconClose, IconPause, IconPlay } from '@/components/recipe-web/icons';
 import { DishError, getCard, updateCard } from '@/lib/dish/api';
-import { applyEdits, askItems, cleanPicked, EDIT_LIMITS, initialPicked, ingredientRef, lineRef, openCap, ownUnit, QUESTION_LIMITS, unitOf, unitText, withDefaults, withEdit } from '@/lib/dish/shape';
+import { applyEdits, ASK_TOTAL_MAX, askItems, cleanPicked, EDIT_LIMITS, initialPicked, ingredientRef, lineRef, openCap, ownUnit, QUESTION_LIMITS, unitOf, unitText, withDefaults, withEdit } from '@/lib/dish/shape';
 import { boldRuns, cardTitle, plain } from '@/lib/dish/text';
 import type { Card, Edit, Ingredient, Line, PartRef, Quote, Recipe } from '@/lib/dish/types';
 import { AskSheet } from './AskSheet';
@@ -146,16 +146,14 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
             </span>
           )}
           <h1 className={s.title}>{title}</h1>
-          <div className={s.byline}>
-            {card.version ? (
+          {card.version && (
+            <div className={s.byline}>
               <span className={s.avatar} aria-hidden="true">
                 <Logo variant="mark" size={22} />
               </span>
-            ) : (
-              <span className={s.dashed} aria-hidden="true" />
-            )}
-            {card.version ? t('card.fromKitchen', { R }) : none ? t('card.ourGuessNone') : t('card.ourGuess', { R })}
-          </div>
+              {t('card.fromKitchen', { R })}
+            </div>
+          )}
           <svg className={s.headChevron} width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
             <path d="M9 5l7 7-7 7" />
           </svg>
@@ -330,7 +328,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
       </div>
 
       <WhoSheet open={who} onClose={closeWho} token={token} onPicked={pickedWho} toast={show} />
-      <AskSheet key={card.relation} open={asking} onClose={closeAsk} token={token} card={card} onCard={setCard} toast={show} items={toSend} />
+      <AskSheet key={card.relation} open={asking} onClose={closeAsk} token={token} card={card} onCard={setCard} toast={show} items={toSend} spares={askItems(card, guess, withDefaults(card, [], ASK_TOTAL_MAX))} />
       <SaveSheet open={saving} onClose={closeSave} photo={photo} relation={card.relation} token={token} title={title} />
       <Toast toast={toast} />
     </main>

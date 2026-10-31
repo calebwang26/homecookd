@@ -10,14 +10,15 @@ import { InstagramIcon, LinkIcon, MessageIcon, MoreIcon, WhatsAppIcon } from '@/
 import { copyText } from '@/lib/app-links';
 import { askQuestions, DishError, getCard, markSent, updateCard } from '@/lib/dish/api';
 import { saveName, savedName } from '@/lib/dish/saved';
+import { refillAsk } from '@/lib/dish/shape';
 import { openQuestions, pronounOf } from '@/lib/dish/text';
 import type { AskItem, Card, SendVia } from '@/lib/dish/types';
 import ui from '@/components/dish/ui.module.css';
 import s from './ask.module.css';
 
-type Props = { open: boolean; onClose: () => void; token: string; card: Card; onCard: (c: Card) => void; toast: (m: string, tone?: 'success' | 'error') => void; /** what the kid chose to ask (shape.askItems), sent with the share */ items: AskItem[] };
+type Props = { open: boolean; onClose: () => void; token: string; card: Card; onCard: (c: Card) => void; toast: (m: string, tone?: 'success' | 'error') => void; /** what the kid chose to ask (shape.askItems), sent with the share */ items: AskItem[]; /** the hidden questions that can stand in for a refused one */ spares: AskItem[] };
 
-export function AskSheet({ open, onClose, token, card, onCard, toast, items }: Props) {
+export function AskSheet({ open, onClose, token, card, onCard, toast, items, spares }: Props) {
   const { t } = useLang();
   const rel = useRel();
   const id = useId();
@@ -49,20 +50,25 @@ export function AskSheet({ open, onClose, token, card, onCard, toast, items }: P
     if (Object.keys(patch).length) updateCard(token, patch).then(onCard, () => {});
   };
 
+  /** The word filter refused one of his own questions. Each goes alone to find which; only that one is lost, and hidden ones fill its place. */
+  const askWithoutRefused = async () => {
+    toast(t('k1.words'), 'error');
+    const kept: AskItem[] = [];
+    for (const q of items) {
+      if (q.id || q.about) kept.push(q);
+      else if (await askQuestions(token, [q]).then(() => true, () => false)) kept.push(q);
+    }
+    const next = refillAsk(kept, spares, items.length);
+    if (next.length) await askQuestions(token, next).then(onCard, () => {});
+  };
+
   const share = (via: SendVia) => {
     const url = card.askUrl; // null while the card has no one to ask (WhoSheet picks first)
     if (busy || !url) return;
     const text = `${message.trim() || card.message} ${url}`;
     saveEdits();
     // The chosen questions go first, then the send is marked; once both are in, the card is read again (they race).
-    // His own words can be refused (the word filter): say so, and the rest still go.
-    const asked = items.length
-      ? askQuestions(token, items).then(onCard, (err: unknown) => {
-          if (!(err instanceof DishError && err.kind === 'words')) return;
-          toast(t('k1.words'), 'error');
-          return askQuestions(token, items.filter((q) => q.id || q.about)).then(onCard, () => {});
-        })
-      : Promise.resolve();
+    const asked = items.length ? askQuestions(token, items).then(onCard, (err: unknown) => (err instanceof DishError && err.kind === 'words' ? askWithoutRefused() : undefined)) : Promise.resolve();
     void Promise.all([asked, markSent(token, via).then(onCard, () => {})]).then(() => getCard(token).then(onCard, () => {}));
     if (via === 'copy') {
       void copyText(url).then((ok) => toast(ok ? t('share.copied') : t('share.noCopy'), ok ? 'success' : 'error'));

@@ -120,6 +120,12 @@ export function askItems(card: Pick<Card, 'guess' | 'asked'>, guess: Recipe, uni
   });
 }
 
+/** After the word filter refused some of his own: what's left, topped back up from `spares` to `size`, no question twice. */
+export function refillAsk(kept: AskItem[], spares: AskItem[], size: number): AskItem[] {
+  const ids = new Set(kept.map((q) => q.id));
+  return [...kept, ...spares.filter((q) => !ids.has(q.id))].slice(0, size);
+}
+
 /** The guess with the kid's corrections in: each edited part is `stated` (his own), a guess no more. */
 export function applyEdits(recipe: Recipe, edits: Edit[]): Recipe {
   if (!edits.length) return recipe;

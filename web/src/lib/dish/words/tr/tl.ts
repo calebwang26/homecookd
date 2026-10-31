@@ -60,8 +60,6 @@ const words: Translation = {
   'card.fromKitchen': 'Mula sa kusina ni {R}',
   'card.merging': 'Sumagot na si {R}. Pinagsasama na ngayon.',
   'card.waiting': 'Naipadala kay {R}. Ipapakita namin dito kapag sumagot si {R}.',
-  'card.ourGuess': 'Hula namin ito. Alam ni {R} ang iba.',
-  'card.ourGuessNone': 'Hula namin ito. Alam ng nagluluto ang iba.',
   'card.guessMeta': 'Hula namin',
   'card.you': 'ikaw',
   'card.only': 'Si {R} lang ang nakakaalam',

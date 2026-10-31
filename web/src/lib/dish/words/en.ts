@@ -70,8 +70,6 @@ export const EN = {
   'card.how': 'How to make it',
   'card.steps': '{n} steps',
   'card.step': '1 step',
-  'card.ourGuess': 'Our guess. {R} knows the rest.',
-  'card.ourGuessNone': 'Our guess. The cook knows the rest.',
   'card.guessMeta': 'Our guess',
   'card.you': 'you',
   'card.only': 'Only {R} knows',

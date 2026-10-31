@@ -60,8 +60,6 @@ const words: Translation = {
   'card.fromKitchen': '来自{R}的厨房',
   'card.merging': '{R}回复了，正在合在一起。',
   'card.waiting': '已发给{R}。{R}回复后，这里会显示。',
-  'card.ourGuess': '我们的猜测，其余的{R}知道。',
-  'card.ourGuessNone': '我们的猜测，其余的做菜的人知道。',
   'card.guessMeta': '我们的猜测',
   'card.you': '你',
   'card.only': '只有{R}知道',

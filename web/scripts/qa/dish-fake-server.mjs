@@ -338,6 +338,7 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
         }
         case '/dish/cards/ask': {
           if (c.relation === 'none') return fail(400, 'bad_request', 'Pick who you’re asking first.');
+          if ((b.questions ?? []).some((q) => FILTERED.test(q.text ?? ''))) return fail(422, 'words', 'Let’s keep it to the food.');
           const kept = c.asked.filter((q) => c.answers.has(q.id));
           const used = new Set(c.asked.map((q) => q.id));
           const out = [];
