@@ -1,5 +1,6 @@
 // The one session check. A phone holds a random token; only its SHA-256 is stored (convex/lib/auth.ts, so existing sessions
 // carry over). A wrong answer here is a security problem, so a database failure refuses rather than guesses.
+// Someone who left or deleted, or a phone that was signed out, is refused here too, so no later bug can leave them a working session.
 import { createHash } from "node:crypto";
 import type { FastifyRequest } from "fastify";
 import { db } from "./db.js";
@@ -21,10 +22,12 @@ export async function findSession(token: string): Promise<(Signed & { removed: b
     `select s.id as session_id, p.id as person_id, p.family_id, p.role, p.removed_at is not null as removed
        from sessions s
        join people p on p.id = s.person_id
+       left join devices d on d.id = s.device_id
       where s.token_hash = $1
         and s.expires_at > now()
         and s.family_id = p.family_id
-        and p.deleted_at is null`,
+        and p.deleted_at is null
+        and d.revoked_at is null`,
     [hashToken(token)],
   );
   const row = rows[0];
@@ -36,12 +39,24 @@ export async function findSession(token: string): Promise<(Signed & { removed: b
  * than route by route. It's a 403, not a 401: their phone is still signed in, and only the accounts area can end that (routeCoverage.test.ts holds every route to it).
  */
 export async function requireSession(req: FastifyRequest): Promise<void> {
+  if ((await readSession(req)).removed) throw forbidden();
+}
+
+/**
+ * The same check, for the one thing someone who left must still be able to do: delete their account (App Review 5.1.1(v)), with what the app does around it. Every route using
+ * this is listed in routeCoverage.test.ts with why.
+ */
+export async function requireSessionEvenIfRemoved(req: FastifyRequest): Promise<void> {
+  await readSession(req);
+}
+
+async function readSession(req: FastifyRequest): Promise<{ removed: boolean }> {
   const header = req.headers.authorization;
   const token = header?.startsWith("Bearer ") ? header.slice(7) : "";
   const signed = token ? await findSession(token) : null;
   if (!signed) throw signedOut();
-  if (signed.removed) throw forbidden();
   req.signed = { sessionId: signed.sessionId, personId: signed.personId, familyId: signed.familyId, role: signed.role };
+  return signed;
 }
 
 export function signedIn(req: FastifyRequest): Signed {

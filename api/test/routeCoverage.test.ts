@@ -50,6 +50,8 @@ type SignedIn = {
   outsider: number | Check | { familyWide: string };
   /** A route that can't succeed here yet says so, and what it answers. */
   notYet?: { status: number; why: string };
+  /** Someone who left the family may still call this. Only what deleting an account needs (auth.ts, requireSessionEvenIfRemoved). */
+  removedMayCall?: string;
 };
 
 type Anonymous = {
@@ -163,7 +165,82 @@ const madeAnew = (why: string): Check => ({ why, check: (r) => assert.ok(r.statu
 
 const WORDS_IN_THE_PAIR = "Words in the pair";
 
+const preflight: Anonymous = {
+  anonymous: "A browser's CORS preflight: it reads nothing and holds nothing",
+  capability: async () => {},
+};
+/** The old routes' proof is a device key or the family code, not a session. A guess at either is refused. accountsProofs.test.ts holds the rest. */
+const oldProof = (method: "GET" | "POST", url: string): Anonymous => ({
+  anonymous: "Old builds prove themselves with a device key or the family code",
+  capability: async (s) => {
+    const guess = { "x-device-key": "Q".repeat(43) };
+    const res = await s.app.inject({ method, url, headers: { ...guess, ...(method === "POST" ? { "content-type": "application/json" } : {}) }, ...(method === "POST" ? { payload: "{}" } : {}) });
+    assert.equal(res.statusCode, 401, res.body);
+    const none = await s.app.inject({ method, url, ...(method === "POST" ? { headers: { "content-type": "application/json" }, payload: "{}" } : {}) });
+    assert.equal(none.statusCode, 401, none.body);
+  },
+});
+const LEFT = "App Review 5.1.1(v): someone who left must still be able to delete their account";
+
 const ROUTES: Record<string, SignedIn | Anonymous> = {
+  // --- accounts
+  "OPTIONS /family": preflight,
+  "GET /family": oldProof("GET", "/family"),
+  "OPTIONS /profiles": preflight,
+  "POST /profiles": oldProof("POST", "/profiles"),
+  "OPTIONS /profiles/self": preflight,
+  "POST /profiles/self": oldProof("POST", "/profiles/self"),
+  "OPTIONS /profiles/:id/remove": preflight,
+  "POST /profiles/:id/remove": oldProof("POST", "/profiles/x/remove"),
+  "OPTIONS /devices": preflight,
+  "POST /devices": oldProof("POST", "/devices"),
+  "OPTIONS /devices/revoke": preflight,
+  "POST /devices/revoke": oldProof("POST", "/devices/revoke"),
+  "OPTIONS /invites": preflight,
+  "POST /invites": oldProof("POST", "/invites"),
+  "OPTIONS /invites/peek": preflight,
+  "POST /invites/peek": { anonymous: "The invite's token is the capability", capability: async (s) => assert.ok((await post(s.app, null, "/invites/peek", { token: "Q".repeat(22) }, { key: null })).status >= 400) },
+  "OPTIONS /invites/accept": preflight,
+  "POST /invites/accept": { anonymous: "The invite's token is the capability", capability: async (s) => assert.ok((await post(s.app, null, "/invites/accept", { token: "Q".repeat(22), deviceId: "a-device-id" }, { key: null })).status >= 400) },
+  "OPTIONS /join-links": preflight,
+  "POST /join-links": oldProof("POST", "/join-links"),
+  "OPTIONS /join-links/revoke": preflight,
+  "POST /join-links/revoke": oldProof("POST", "/join-links/revoke"),
+  "OPTIONS /move-requests": preflight,
+  "POST /move-requests": oldProof("POST", "/move-requests"),
+  "OPTIONS /move-requests/mine": preflight,
+  "GET /move-requests/mine": oldProof("GET", "/move-requests/mine"),
+  "GET /move-requests": oldProof("GET", "/move-requests"),
+  "OPTIONS /move-requests/:id/approve": preflight,
+  "POST /move-requests/:id/approve": oldProof("POST", "/move-requests/x/approve"),
+  "OPTIONS /move-requests/:id/decline": preflight,
+  "POST /move-requests/:id/decline": oldProof("POST", "/move-requests/x/decline"),
+  "OPTIONS /auth/apple": preflight,
+  "POST /auth/apple": { anonymous: "Signing in: Apple's signed token is the proof", capability: async (s) => assert.ok((await post(s.app, null, "/auth/apple", { id_token: "not-a-real-token" }, { key: null })).status >= 400) },
+  "OPTIONS /auth/google": preflight,
+  "POST /auth/google": { anonymous: "Signing in: Google's signed token is the proof", capability: async (s) => assert.ok((await post(s.app, null, "/auth/google", { id_token: "not-a-real-token" }, { key: null })).status >= 400) },
+  "POST /v1/sessions/start": { anonymous: "Makes a session from a device key", capability: async (s) => assert.equal((await post(s.app, null, "/v1/sessions/start", { deviceKey: "Q".repeat(43), profileId: s.mom.id }, { key: null })).status, 401) },
+  "POST /v1/sessions/end": { anonymous: "Ends the session it names: a guess ends nothing, and a removed person can always sign out", capability: async (s) => {
+    assert.equal((await post(s.app, null, "/v1/sessions/end", {}, { key: null, headers: { authorization: `Bearer ${"Q".repeat(43)}` } })).status, 200);
+    assert.equal((await get(s.app, s.mom, "/v1/circle")).status, 200, "nobody else was signed out");
+  } },
+  "POST /v1/account/delete": {
+    call: (s, who) => post(s.app, who, "/v1/account/delete", {}, { key: null }),
+    otherFamily: { why: "It only ever deletes the caller", check: (r) => assert.equal(r.status, 503, r.body) },
+    outsider: { familyWide: "It only ever deletes the caller" },
+    notYet: { status: 503, why: "ACCOUNTS_OWNS_PEOPLE is off here: accountDeletion.test.ts runs it on" },
+    removedMayCall: LEFT,
+  },
+  "GET /v1/apple/revoke-ready": { call: (s, who) => get(s.app, who, "/v1/apple/revoke-ready"), otherFamily: { why: "Says only whether the key is set", check: (r) => assert.equal(r.status, 200, r.body) }, outsider: { familyWide: "Says only whether the key is set" }, removedMayCall: LEFT },
+  "POST /v1/apple/revoke": { call: (s, who) => post(s.app, who, "/v1/apple/revoke", { authorizationCode: "abc" }, { key: null }), otherFamily: { why: "Revokes only the code the caller holds", check: (r) => assert.equal(r.status, 200, r.body) }, outsider: { familyWide: "Revokes only the code the caller holds" }, removedMayCall: LEFT },
+  "POST /v1/links/claim": { call: (s, who) => post(s.app, who, "/v1/links/claim", { token: "Q".repeat(43) }, { key: null }), otherFamily: 404, outsider: 404, notYet: { status: 404, why: "A real claim is in accountsLinks.test.ts" } },
+  "POST /v1/links/moved": { call: (s, who) => post(s.app, who, "/v1/links/moved", { receipt: "x" }, { key: null }), otherFamily: 403, outsider: 403, notYet: { status: 403, why: "A real receipt is in accountsLinks.test.ts" } },
+  "POST /link/open": { anonymous: "The link's token is the capability, from our own site only", capability: async (s) => {
+    const refused = await s.app.inject({ method: "POST", url: "/link/open", headers: { origin: "https://example.com", "content-type": "application/json" }, payload: JSON.stringify({ token: "Q".repeat(43) }) });
+    assert.equal(refused.statusCode, 403, refused.body);
+  } },
+  "OPTIONS /link/open": preflight,
+
   // --- jobs, recipes and recordings
   "POST /v1/video-uploads": { call: (s, who) => post(s.app, who, "/v1/video-uploads", { videos: [VIDEO] }), otherFamily: madeAnew("A new folder of the caller's own, in their own family"), outsider: 403 },
   "POST /v1/video-uploads/:uploadId/links": { call: (s, who) => post(s.app, who, `/v1/video-uploads/${s.upload}/links`), otherFamily: 404, outsider: 404 },
@@ -356,7 +433,8 @@ for (const [route, c] of Object.entries(ROUTES)) {
     expectStatus(await c.call(s, null), 401, "no session");
     expectStatus(await c.call(s, s.expired), 401, "expired");
     expectStatus(await c.call(s, s.tomb), 401, "a deleted person");
-    expectStatus(await c.call(s, s.gone), 403, "someone removed from the family");
+    if (c.removedMayCall) assert.notEqual((await c.call(s, s.gone)).status, 403, c.removedMayCall);
+    else expectStatus(await c.call(s, s.gone), 403, "someone removed from the family");
 
     const stranger = await c.call(s, s.stranger);
     if (typeof c.otherFamily === "number") expectStatus(stranger, c.otherFamily, "another family");

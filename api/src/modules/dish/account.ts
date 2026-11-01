@@ -1,6 +1,6 @@
 // What deleting an account does to the dish ask (SCHEMA.md section 4, C3). It goes by person: a card's family alone deletes nothing, and an
-// anonymous card has no person, so nothing reaches it until it's claimed. Nothing calls this yet: the account purge moves last, and until the
-// one-way sync fills `people`, `person_id` and `requested_of` stay null. Each card is one transaction; a file is marked before its row goes.
+// anonymous card has no person, so nothing reaches it until it's claimed. The account purge calls this (accounts/purgeSteps.ts); until the one-way
+// sync fills `people`, `person_id` and `requested_of` stay null. Each card is one transaction; a file is marked before its row goes.
 import { db, tx, type Queryable } from "../../db.js";
 import { dropQueuedCraving } from "../messages/pushData.js";
 import { personIsLive } from "../people/service.js";
@@ -62,10 +62,12 @@ async function deleteCard(c: Queryable, card: CardRow): Promise<void> {
 
 const BATCH = 100;
 
-/** Safe to run again: each card leaves the person's lists as it's handled. */
-export async function purgeDishForPerson(personId: string): Promise<void> {
+/** Safe to run again: each card leaves the person's lists as it's handled. Says how many rows it handled, so the account purge knows when nothing's left. */
+export async function purgeDishForPerson(personId: string): Promise<number> {
+  let handled = 0;
   for (;;) {
     const ids = await data.cardsOfKid(db(), personId, BATCH);
+    handled += ids.length;
     for (const id of ids) {
       await tx(async (c) => {
         const card = await data.cardById(c, id, true);
@@ -79,6 +81,7 @@ export async function purgeDishForPerson(personId: string): Promise<void> {
   }
   for (;;) {
     const ids = await data.cardsAskedOf(db(), personId, BATCH);
+    handled += ids.length;
     for (const id of ids) {
       await tx(async (c) => {
         const card = await data.cardById(c, id, true);
@@ -88,5 +91,9 @@ export async function purgeDishForPerson(personId: string): Promise<void> {
     if (ids.length < BATCH) break;
   }
   // Cards made from a link stay: they follow the rules above.
-  while ((await data.deleteCravingLinksOf(db(), personId, BATCH)) === BATCH);
+  for (;;) {
+    const links = await data.deleteCravingLinksOf(db(), personId, BATCH);
+    handled += links;
+    if (links < BATCH) return handled;
+  }
 }

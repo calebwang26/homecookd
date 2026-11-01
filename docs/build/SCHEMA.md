@@ -355,6 +355,8 @@ still exist, also GCS and Supabase's rows and buckets: AWS-MIGRATION says purge 
 `media_urls_legacy` is kept. **Backups:** production keeps RDS backups 14 days and S3's old versions 28 days, both inside what
 `/privacy` promises (30 more days).
 
+**Built:** `api/src/modules/accounts/purgeSteps.ts`, with `060_accounts.sql` adding `families.blanked_at`, `account_deletions.lists_cleared_at` and `files.purge_deletion_id`. Three small additions to this table came out of building it, all in `docs/build/ACCOUNTS-MIGRATION.md`: a family invite they sent is also revoked, a kept `link:` signup also loses its `person_id`, and a blanked family's phones, sessions and links stop.
+
 **Personal data** is tagged `-- personal` in the SQL. Also sensitive, though not readable as-is: `key_hash`, `token_hash`,
 `code_hash`, `kid_token_hash`, `ask_token_hash` (hashes of live credentials); `ip_key` and `rate_hits.key` (IP HMACs);
 `approx_*` (rounded place). Stored readable by design, so a leaked table gives working links: `craving_links.token`,

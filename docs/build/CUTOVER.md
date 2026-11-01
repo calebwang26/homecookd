@@ -44,7 +44,7 @@ The second is a hard rule: no merge before Apple approves 1.0. The first is buil
 | Community, dinners, cravings' signed-in side | **Built,** fakes and local Postgres only. No app or site calls it | None yet: the app adapter isn't built | `COMMUNITY-MIGRATION.md` |
 | Live updates | **Built** for job progress, fakes and local Postgres only. No app calls it | None yet: the same | `LIVE-UPDATES.md` |
 | Messages, questions, push, the table, the recap | **Built,** fakes and local Postgres only. No app calls it, and no Expo or Claude has run against it. Story cards aren't built | None yet: the same | `MESSAGES-MIGRATION.md` |
-| Accounts, sessions, sign-in, the purge | Draft in progress | Not decided | |
+| Accounts, sessions, sign-in, the purge | **Built,** fakes and local Postgres only. No app calls it, and no real Apple or Google sign-in has run. Two gates: the purge can't reach S3's other buckets, and it still has its own SQL where messages, community and jobs now have purges of their own, which nothing calls | `ACCOUNTS_OWNS_PEOPLE` | `ACCOUNTS-MIGRATION.md` |
 | Jobs, recipes, recordings: the routes that send the worker its work | **Built,** fakes and local Postgres only, with the real worker's code on the database. Nothing films through it, no app calls it, no real video has run. Writing recordings isn't built (homie is off) | `RECIPE_WRITES` with `moved_at` on `recipes`, and the worker's switch | `JOBS-MIGRATION.md` |
 
 ## The steps
@@ -141,7 +141,7 @@ Least-connected first. Every area passes the five checks in AWS-MIGRATION ("What
 | 2 | Community, dinners, cravings, share requests | Built, not switchable yet: it needs the adapter and the gates in `COMMUNITY-MIGRATION.md` (reports move once, a way to review them, the daily reminder's schedule). `shareRequests.*` go with Messages | Not written |
 | 3 | Live updates, then messages, questions, story cards, push | Built except story cards, not switchable yet: it needs the adapter, `MEDIA_BASE_URL`, `EXPO_ACCESS_TOKEN` and the schedules. Live updates go before what needs them | Not written |
 | 4 | Jobs, worker routes, recording, glasses | Built except the recording writes and a plan for videos over 5 GiB (`TODO(caleb)`, `JOBS-MIGRATION.md`). It needs `s3:ListBucket` on `uploads`, `MEDIA_BASE_URL` and the `jobs.sweep` schedule. A real video job first, measured, on Caleb's own footage (`WORKER-MIGRATION.md`). Set `moved_at` on `recipes` in the release that switches the worker | The laptop's worker stays ready, and goes back to polling Convex |
-| 5 | Sessions, accounts, Apple sign-in, the purge | Draft in progress. Last, because everything depends on it. The purge must cover both stores | |
+| 5 | Sessions, accounts, Apple sign-in, the purge | Built, not switchable yet. Last, because everything depends on it. First, `purgeSteps.ts` calls the areas' own purges instead of its own SQL. The purge must cover both stores and S3's other buckets, and the sync must call `startDeletion(id, "sync")` | Not written |
 
 **Check each:** the same behavior tests on old and new, old answers compared with new on real requests, and speed targets under load. `sync_copies.moved_at` is set for what moved.
 

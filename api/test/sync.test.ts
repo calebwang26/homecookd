@@ -617,8 +617,10 @@ test("a copied table is read-only to everything but the sync", { skip: !hasDatab
     const sync = join(root, "modules", "sync");
     // The one exception: every write in that file checks the recipes switch first (recipes.test.ts holds it to that), and the trigger still refuses it until `moved_at` is set.
     const switched = join(root, "modules", "recipes", "writes.ts");
+    // And accounts, behind ACCOUNTS_OWNS_PEOPLE (accountDeletion.test.ts holds each write to it). The trigger refuses them too once the copy is read-only and hasn't moved.
+    const accounts = ["data.ts", "deletion.ts", "purgeSteps.ts", "neighbors.ts"].map((f) => join(root, "modules", "accounts", f));
     const writes = /\b(insert\s+into|update|delete\s+from|truncate)\s+(families|people|recipes)\b/i;
-    const others = files(root).filter((path) => !path.startsWith(sync) && path !== switched);
+    const others = files(root).filter((path) => !path.startsWith(sync) && path !== switched && !accounts.includes(path));
     assert.ok(others.length > 10);
     for (const path of others) {
       const source = readFileSync(path, "utf8");
