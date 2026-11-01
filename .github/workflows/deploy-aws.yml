@@ -44,8 +44,13 @@ jobs:
         run: |
           IMAGE="$REGISTRY/$NAME/$SERVICE:$GITHUB_SHA"
           DIR=$([ "$SERVICE" = worker ] && echo pipeline || echo "$SERVICE")
-          docker build -t "$IMAGE" "$DIR"
-          docker push "$IMAGE"
+          # Tags can't be overwritten, so a commit that's already built just rolls out again.
+          if aws ecr describe-images --repository-name "$NAME/$SERVICE" --image-ids "imageTag=$GITHUB_SHA" >/dev/null 2>&1; then
+            echo "Already built: $IMAGE"
+          else
+            docker build -t "$IMAGE" "$DIR"
+            docker push "$IMAGE"
+          fi
           echo "IMAGE=$IMAGE" >> "$GITHUB_ENV"
       - name: Roll out
         run: |
