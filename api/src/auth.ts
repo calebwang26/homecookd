@@ -15,10 +15,10 @@ declare module "fastify" {
 
 export const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
-export async function findSession(token: string): Promise<Signed | null> {
+export async function findSession(token: string): Promise<(Signed & { removed: boolean }) | null> {
   if (token.length < 20 || token.length > 200) return null;
   const { rows } = await db().query(
-    `select s.id as session_id, p.id as person_id, p.family_id, p.role
+    `select s.id as session_id, p.id as person_id, p.family_id, p.role, p.removed_at is not null as removed
        from sessions s
        join people p on p.id = s.person_id
       where s.token_hash = $1
@@ -28,16 +28,20 @@ export async function findSession(token: string): Promise<Signed | null> {
     [hashToken(token)],
   );
   const row = rows[0];
-  return row ? { sessionId: row.session_id, personId: row.person_id, familyId: row.family_id, role: row.role } : null;
+  return row ? { sessionId: row.session_id, personId: row.person_id, familyId: row.family_id, role: row.role, removed: row.removed } : null;
 }
 
-/** A route's preValidation: refuses before the body is looked at. */
+/**
+ * A route's preValidation: refuses before the body is looked at. Someone who left the family keeps a session until it ends, so it's refused here, on every route, rather
+ * than route by route. It's a 403, not a 401: their phone is still signed in, and only the accounts area can end that (routeCoverage.test.ts holds every route to it).
+ */
 export async function requireSession(req: FastifyRequest): Promise<void> {
   const header = req.headers.authorization;
   const token = header?.startsWith("Bearer ") ? header.slice(7) : "";
   const signed = token ? await findSession(token) : null;
   if (!signed) throw signedOut();
-  req.signed = signed;
+  if (signed.removed) throw forbidden();
+  req.signed = { sessionId: signed.sessionId, personId: signed.personId, familyId: signed.familyId, role: signed.role };
 }
 
 export function signedIn(req: FastifyRequest): Signed {
