@@ -4,7 +4,7 @@ import { after, test } from "node:test";
 import { S3Client } from "@aws-sdk/client-s3";
 import { handleMessage } from "../src/scheduled.js";
 import { s3Store, VIDEO_LINK_S } from "../src/storage.js";
-import { MAX_VIDEO_BYTES, RATE } from "../src/modules/jobs/uploads.js";
+import { MAX_VIDEO_BYTES, ONE_PUT_BYTES, PART_BYTES, RATE } from "../src/modules/jobs/uploads.js";
 import { SWEEP, sweepUploads } from "../src/modules/jobs/tasks.js";
 import { addJob, askLinks, call, clearLimits, db, family, freshDatabase, hasDatabase, job, jobMessages, land, newJob, openRecipeWrites, closeRecipeWrites, recipe, setUp, trace, who } from "./jobsHelpers.js";
 
@@ -34,7 +34,7 @@ test("uploads", { skip: !hasDatabase }, async (t) => {
     const big = await ask([{ contentType: "video/mp4", size: MAX_VIDEO_BYTES + 1 }]);
     assert.equal(big.status, 413);
     assert.equal(big.data.error, "too_large");
-    assert.equal((await ask([{ contentType: "video/mp4", size: MAX_VIDEO_BYTES }])).status, 201, "S3's limit for one PUT is allowed");
+    assert.equal((await ask([{ contentType: "video/mp4", size: MAX_VIDEO_BYTES }])).status, 201, "the signer's limit is allowed");
     assert.equal((await db().query(`select count(*)::int as n from files`)).rows[0].n, before + 1);
     const noKey = await call(app, dad, "POST", "/v1/video-uploads", { videos: [video] });
     assert.equal(noKey.status, 400, "a write a phone retries needs its key");
@@ -328,6 +328,68 @@ test("uploads", { skip: !hasDatabase }, async (t) => {
     await closeRecipeWrites();
   });
 
+  await t.test("a video too big for one PUT goes up in parts, and lands like any other", async () => {
+    const size = ONE_PUT_BYTES + PART_BYTES + 5;
+    const asked = await call(app, dad, "POST", "/v1/video-uploads", { videos: [{ contentType: "video/mp4", size }, { contentType: "video/mp4", size: 5 }] }, { "idempotency-key": `parts-${Date.now()}` });
+    assert.equal(asked.status, 201);
+    const { uploadId, uploads } = asked.data;
+    const count = Math.ceil(size / PART_BYTES);
+    assert.deepEqual(uploads[0], { index: 1, method: "PARTS", partBytes: PART_BYTES, partCount: count });
+    assert.equal(uploads[1].method, "PUT", "the small one is a plain PUT");
+    assert.ok(asked.data.expiresInS > 0);
+    const parts = (body: object) => call(app, dad, "POST", `/v1/video-uploads/${uploadId}/parts`, body);
+    const finish = (body: object) => call(app, dad, "POST", `/v1/video-uploads/${uploadId}/parts/finish`, body);
+
+    // Only what this video needs.
+    assert.equal((await parts({ index: 2, partNumbers: [1] })).status, 400, "the small one has no parts");
+    assert.equal((await parts({ index: 3, partNumbers: [1] })).status, 400);
+    assert.equal((await parts({ index: 1, partNumbers: [] })).status, 400);
+    assert.equal((await parts({ index: 1, partNumbers: [count + 1] })).status, 400);
+    assert.equal((await parts({ index: 1, partNumbers: Array.from({ length: 101 }, (_, i) => i + 1) })).status, 400);
+    assert.equal((await finish({ index: 1, parts: [{ partNumber: 1, etag: "a" }] })).status, 400, "not started, and not every part");
+    const started = videos.partsStarted.length;
+
+    // The size of each part is signed: the last one is what's left.
+    const first = (await parts({ index: 1, partNumbers: [1, count] })).data;
+    assert.equal(new URL(first.parts[0].url).searchParams.get("size"), String(PART_BYTES));
+    assert.equal(new URL(first.parts[1].url).searchParams.get("size"), String(size - PART_BYTES * (count - 1)));
+    assert.equal(videos.partsStarted.length, started + 1);
+    await parts({ index: 1, partNumbers: [2] });
+    assert.equal(videos.partsStarted.length, started + 1, "asking again uses the same upload");
+
+    // Nobody else's.
+    assert.equal((await call(app, sam, "POST", `/v1/video-uploads/${uploadId}/parts`, { index: 1, partNumbers: [1] })).status, 404);
+    const other = await who(home);
+    assert.equal((await call(app, other, "POST", `/v1/video-uploads/${uploadId}/parts/finish`, { index: 1, parts: [{ partNumber: 1, etag: "a" }] })).status, 404);
+
+    // Every part, then it has landed, however the phone orders them. Asking again doesn't ask S3 again.
+    const all = Array.from({ length: count }, (_, i) => ({ partNumber: count - i, etag: `e${count - i}` }));
+    assert.equal((await finish({ index: 1, parts: all.slice(1) })).status, 400, "one missing");
+    videos.landWhenFinished = size;
+    assert.deepEqual((await finish({ index: 1, parts: all })).data, { finished: true });
+    assert.deepEqual(videos.partsFinished.at(-1)!.parts.map((p) => p.partNumber), Array.from({ length: count }, (_, i) => i + 1), "S3 wants them in order");
+    const finishes = videos.partsFinished.length;
+    assert.deepEqual((await finish({ index: 1, parts: all })).data, { finished: true });
+    assert.equal(videos.partsFinished.length, finishes);
+    videos.landWhenFinished = undefined;
+
+    land(videos, `${uploadId}/02.mp4`);
+    const done = await call(app, dad, "POST", `/v1/video-uploads/${uploadId}/complete`);
+    assert.equal(done.data.complete, true);
+  });
+
+  await t.test("a video that joined up at the wrong size hasn't landed", async () => {
+    const size = ONE_PUT_BYTES + 1;
+    const { data } = await call(app, dad, "POST", "/v1/video-uploads", { videos: [{ contentType: "video/mp4", size }] }, { "idempotency-key": `wrong-${Date.now()}` });
+    await call(app, dad, "POST", `/v1/video-uploads/${data.uploadId}/parts`, { index: 1, partNumbers: [1] });
+    videos.landWhenFinished = size - 1;
+    const count = Math.ceil(size / PART_BYTES);
+    const all = Array.from({ length: count }, (_, i) => ({ partNumber: i + 1, etag: "e" }));
+    assert.deepEqual((await call(app, dad, "POST", `/v1/video-uploads/${data.uploadId}/parts/finish`, { index: 1, parts: all })).data, { finished: false });
+    videos.landWhenFinished = undefined;
+    assert.equal((await call(app, dad, "POST", `/v1/video-uploads/${data.uploadId}/complete`)).data.complete, false);
+  });
+
   await t.test("a stopped job's files leave S3 once the links are out of time, even one that landed after the stop", async () => {
     const { uploadId, keys } = await askLinks(app, dad);
     const { data } = await newJob(app, dad, uploadId);
@@ -426,6 +488,18 @@ test("uploads", { skip: !hasDatabase }, async (t) => {
   });
 
   await app.close();
+});
+
+test("the real S3 adapter signs a part for its upload, number, size and 6 hours, with no network", async () => {
+  const client = new S3Client({ region: "us-west-2", credentials: { accessKeyId: "AKIAFAKEFAKEFAKE", secretAccessKey: "fake" } });
+  const store = s3Store({ bucket: "test-uploads", client, uploadLinkS: VIDEO_LINK_S });
+  const link = await store.presignPart("abc/01.mov", "multipart-1", 7, 1234);
+  const url = new URL(link.url);
+  assert.equal(url.searchParams.get("uploadId"), "multipart-1");
+  assert.equal(url.searchParams.get("partNumber"), "7");
+  assert.equal(url.searchParams.get("X-Amz-Expires"), String(6 * 3600));
+  assert.match(url.searchParams.get("X-Amz-SignedHeaders") ?? "", /content-length/);
+  assert.equal(link.expiresInS, 6 * 3600);
 });
 
 test("the real S3 adapter signs a video's link for its type, size and 6 hours, with no network", async () => {

@@ -59,6 +59,15 @@ const store: ObjectStore = {
     const q = new URLSearchParams({ type: contentType, size: String(size), expires: String(Date.now() + UPLOAD_LINK_S * 1000) });
     return { url: `${STORE}/${encodeURI(key)}?${q}`, headers: { "Content-Type": contentType }, expiresInS: UPLOAD_LINK_S };
   },
+  async startParts() {
+    throw new Error("the local api doesn't do parts");
+  },
+  async presignPart() {
+    throw new Error("the local api doesn't do parts");
+  },
+  async finishParts() {
+    throw new Error("the local api doesn't do parts");
+  },
   async presignGet(key) {
     return `${STORE}/${encodeURI(key)}`;
   },

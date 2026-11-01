@@ -15,8 +15,13 @@ import * as data from "./data.js";
 
 const MAX_VIDEOS = 20; // cloud/signer MAX_FILES
 const MAX_HOURS = 4; // cloud/signer MAX_HOURS, pipeline/worker.py
-/** A presigned PUT is one S3 request, and S3 takes at most 5 GiB in one. The signer's 20 GB can't hold here: JOBS-MIGRATION.md, decision 1. */
-export const MAX_VIDEO_BYTES = 5 * 1024 ** 3;
+/** The signer's limit (Caleb, Nov 1). A 3-hour iPhone recording is about 10 GB. */
+export const MAX_VIDEO_BYTES = 20 * 1024 ** 3;
+/** A presigned PUT is one S3 request, and S3 takes at most 5 GiB in one. Past that a video goes up in parts: JOBS-MIGRATION.md, decision 1. */
+export const ONE_PUT_BYTES = 5 * 1024 ** 3;
+/** S3 wants at least 5 MiB and at most 10,000 parts. A dropped part costs this much to send again. */
+export const PART_BYTES = 64 * 1024 ** 2;
+const PARTS_AT_ONCE = 100;
 const CONTENT_TYPE = /^video\/[a-z0-9][a-z0-9.+-]{0,60}$/i;
 const EXTENSION: Record<string, string> = { "video/quicktime": ".mov", "video/mp4": ".mp4", "video/x-m4v": ".m4v" };
 const ROUTE = "POST /v1/video-uploads";
@@ -42,7 +47,7 @@ function checkVideos(videos: VideoAsked[]): void {
   let totalS = 0;
   for (const v of videos) {
     if (!CONTENT_TYPE.test(v.contentType)) throw refuse("Every file must be a video.");
-    if (v.size > MAX_VIDEO_BYTES) throw refused(413, "too_large", "That video is too big to send in one piece. Try splitting it into shorter videos.");
+    if (v.size > MAX_VIDEO_BYTES) throw refused(413, "too_large", "That video is too big to send. Try splitting it into shorter videos.");
     if ((v.durationS ?? 0) > 24 * 3600) throw refuse("A video's length doesn't look right.");
     totalS += v.durationS ?? 0;
   }
@@ -59,23 +64,33 @@ async function storage<T>(call: () => Promise<T>): Promise<T> {
   }
 }
 
-/** `index` is the file's place in what was asked for, from 1, as the signer's was. */
+const inParts = (f: data.UploadFile) => Number(f.size_bytes) > ONE_PUT_BYTES;
+const partCount = (size: number) => Math.ceil(size / PART_BYTES);
+const partSize = (size: number, partNumber: number) => (partNumber < partCount(size) ? PART_BYTES : size - PART_BYTES * (partCount(size) - 1));
+
+type Link =
+  | { index: number; method: "PUT"; url: string; headers: Record<string, string>; expiresInS: number }
+  | { index: number; method: "PARTS"; partBytes: number; partCount: number };
+
+/** `index` is the file's place in what was asked for, from 1, as the signer's was. A video in parts has no link yet: the phone asks for its parts' links as it needs them. */
 const linksFor = (files: data.UploadFile[], only: (f: data.UploadFile) => boolean) =>
   storage(() =>
     Promise.all(
-      files.flatMap((f, i) =>
-        only(f)
-          ? [
-              uploadStore()
-                .presignPut(f.key, f.content_type, Number(f.size_bytes))
-                .then((p) => ({ index: i + 1, url: p.url, method: "PUT" as const, headers: p.headers, expiresInS: p.expiresInS })),
-            ]
-          : [],
-      ),
+      files.flatMap((f, i): Promise<Link>[] => {
+        if (!only(f)) return [];
+        const size = Number(f.size_bytes);
+        if (inParts(f)) return [Promise.resolve({ index: i + 1, method: "PARTS" as const, partBytes: PART_BYTES, partCount: partCount(size) })];
+        return [
+          uploadStore()
+            .presignPut(f.key, f.content_type, size)
+            .then((p) => ({ index: i + 1, url: p.url, method: "PUT" as const, headers: p.headers, expiresInS: p.expiresInS })),
+        ];
+      }),
     ),
   );
 
 const notIn = (f: data.UploadFile) => !f.uploaded_at;
+const linkLife = (uploads: Link[]) => uploads.flatMap((u) => (u.method === "PUT" ? [u.expiresInS] : []))[0] ?? null;
 const cancelled = (files: data.UploadFile[]) => files.some((f) => f.delete_requested_at);
 
 /** The folder is random, so a key holds nothing a cook typed (the signer's held a slug of her dish's name). */
@@ -102,7 +117,7 @@ export async function requestUpload(signed: Signed, videos: VideoAsked[], idempo
   const uploads = await linksFor(files, notIn);
   return {
     status: first ? 201 : 200,
-    body: { uploadId, uploadPath: `${uploadId}/`, uploads, expiresInS: uploads[0]?.expiresInS ?? null },
+    body: { uploadId, uploadPath: `${uploadId}/`, uploads, expiresInS: linkLife(uploads) },
   };
 }
 
@@ -119,7 +134,49 @@ export async function newLinks(signed: Signed, uploadId: string) {
   if (cancelled(files)) throw notFound();
   await data.noteLinks(db(), uploadId); // a phone still at it: the overdue clock starts again
   const uploads = await linksFor(files, notIn);
-  return { uploadId, uploads, expiresInS: uploads[0]?.expiresInS ?? null };
+  return { uploadId, uploads, expiresInS: linkLife(uploads) };
+}
+
+const fileInParts = async (signed: Signed, uploadId: string, index: number) => {
+  const files = await ownUpload(db(), signed, uploadId);
+  if (cancelled(files)) throw notFound();
+  const file = files[index - 1];
+  if (!file) throw refuse("That isn't one of this upload's videos.");
+  if (!inParts(file)) throw refuse("That video goes up in one piece.");
+  return file;
+};
+
+/** The links for some of a video's parts, starting its upload at S3 the first time. Two phones' tries at once can both start one: the first saved wins, and the other's aborts by the bucket's rule. */
+export async function partLinks(signed: Signed, uploadId: string, index: number, partNumbers: number[]) {
+  await limited(signed.personId, RATE.links);
+  const file = await fileInParts(signed, uploadId, index);
+  const size = Number(file.size_bytes);
+  if (partNumbers.length === 0 || partNumbers.length > PARTS_AT_ONCE || partNumbers.some((n) => !Number.isInteger(n) || n < 1 || n > partCount(size))) {
+    throw refuse(`Ask for 1 to ${PARTS_AT_ONCE} parts of this video, numbered from 1 to ${partCount(size)}.`);
+  }
+  const multipartId = file.multipart_id ?? (await data.saveMultipartId(db(), file.key, await storage(() => uploadStore().startParts(file.key, file.content_type))));
+  await data.noteLinks(db(), uploadId); // a phone still at it: the overdue clock starts again
+  const parts = await storage(() =>
+    Promise.all(
+      partNumbers.map((n) => uploadStore().presignPart(file.key, multipartId, n, partSize(size, n)).then((p) => ({ partNumber: n, url: p.url, method: "PUT" as const, headers: p.headers, expiresInS: p.expiresInS }))),
+    ),
+  );
+  return { uploadId, index, parts, expiresInS: parts[0]?.expiresInS ?? null };
+}
+
+/** Every part is up: S3 joins them, and the video has landed. Safe to repeat: one that's already whole isn't asked again. The phone then asks /complete, as for any other. */
+export async function finishParts(signed: Signed, uploadId: string, index: number, parts: { partNumber: number; etag: string }[]) {
+  await limited(signed.personId, RATE.complete);
+  const file = await fileInParts(signed, uploadId, index);
+  const expected = partCount(Number(file.size_bytes));
+  const numbers = parts.map((p) => p.partNumber).sort((a, b) => a - b);
+  if (numbers.length !== expected || numbers.some((n, i) => n !== i + 1)) throw refuse("That isn't every part of this video.");
+  if (!file.multipart_id) throw refuse("This video's upload hasn't started.");
+  const multipartId = file.multipart_id;
+  if ((await landed([file])).length === 0) {
+    await storage(() => uploadStore().finishParts(file.key, multipartId, [...parts].sort((a, b) => a.partNumber - b.partNumber)));
+  }
+  return { finished: (await landed([file])).length > 0 };
 }
 
 /** What S3 has now, read before the transaction: an outside call must never hold a database connection. A wrong size can't arrive on a signed link, but it wouldn't count. */
