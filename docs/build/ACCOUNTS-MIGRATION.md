@@ -81,9 +81,9 @@ Per SCHEMA.md section 2, a device key lasts until revoked and mints sessions; a 
 
 ### Outside the database: read this before calling deletion finished
 
-`purgeOutside` deletes the Cartesia voice clone, and reports on the rest. **It doesn't reach most of S3 yet, and it says so.** The sweep reaches only anonymous uploads in the private bucket (AWS-MIGRATION.md, "Before real data"), and nothing here can list a folder. So a deletion holding any of these keeps `external_purged_at` null, with the reason in `external_error` ("Not reached yet: 2 upload folders; ..."):
+`purgeOutside` deletes the Cartesia voice clone, and reports on the rest. **It doesn't reach most of S3 yet, and it says so.** The sweep reaches only the private bucket: anonymous uploads and anything a deletion marked there (AWS-MIGRATION.md, "Before real data"). It can't reach `media`, and nothing here can list a folder. So a deletion holding any of these keeps `external_purged_at` null, with the reason in `external_error` ("Not reached yet: 2 upload folders; ..."):
 
-- files marked by this deletion or owned by the person, and not yet deleted, including every voice note and photo from a signed-in person;
+- files marked by this deletion or owned by the person, and not yet deleted, which leaves `media`'s once the sweep has run;
 - `upload_keys`, `media_keys`, `media_prefixes`, `media_urls_legacy`.
 
 It tries again with waits doubling from 10 minutes to a day, and after 10 tries raises `AccountOutsidePurgeGaveUp`. A person restarts it with `retryOutside`. **This must be built before real data or the switch**, and `/privacy` promises depend on it.
@@ -198,7 +198,8 @@ Leaving signs a person out and frees their Apple login in one transaction (`remo
 ## Known limits
 
 - **The outside purge doesn't reach most of S3,** as above. This blocks real data.
-- **A phone with no person of its own gets no session (`POST /v1/sessions/start`):** 403 "Add yourself first.", whether it came by invite or by code (Caleb, Nov 1). Convex's `sessions.start` answers a code phone today, so the adapter has to send one to add itself first. Build 1.1 has no codes, and the switch is off, so this has no App Review effect. **What's left:** a code phone's first write as a phone-less person still makes the phone theirs (old builds, `proofs.ts`), and from then on it's that person's phone. Someone holding the code can go that way.
+- **A phone with no person of its own gets no session (`POST /v1/sessions/start`):** 403 "Add yourself first.", whether it came by invite or by code (Caleb, Nov 1). Convex's `sessions.start` answers a code phone today, so the adapter has to send one to add itself first. Build 1.1 has no codes, and the switch is off, so this has no App Review effect. It can't write as an existing phone-less person either, so nothing makes the phone theirs: it adds itself (`POST /profiles/self`). No 1.0 build ever calls this api, and the sync is one-way into Postgres, so old builds aren't affected. `device_needs_profile` is true for both kinds here, where Supabase's says only an opened invite.
+- **A solo move deletes a face that can't come along** (the new family has that name, or is full). `needs_move` returns them as `would_delete`, and the app must warn before it sends `move: true`.
 - **When the last signed-in person leaves, what they left stays stored with no way in.** Leaving isn't deleting: their recipes and messages stay under the old row, unless they moved with `solo`. It's the same gap as someone who left and came back, and it's Caleb's call.
 - **The TEST family, at the switch.** If Apple's reviewer is its only signed-in person and deletes, its phone-less people go and it's blanked. Check how it's set up before the switch, so a reviewer always has a family to sign in to.
 - **Once Mom has deleted, her old link still opens the card,** so whoever holds it could answer. The kid's card waits for that answer, and nothing else can reach her, so the link stays. Only the kid's link stops when the kid deletes.

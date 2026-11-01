@@ -15,7 +15,7 @@ export type Ctx = {
   /** Everyone in the family but tombstones, removed people included: for names and roles on old messages. */
   everyone: Person[];
   me: Person | null;
-  /** The calling phone, when it sent x-device-key. `person_id` is set once: who signed in on it, who it was let in as, or the first phone-less person it wrote as. */
+  /** The calling phone, when it sent x-device-key. `person_id` is set once: who signed in on it, who it was let in as, or who it added. */
   device: { id: string; person_id: string | null; via: Via } | null;
   /** People with a live phone of their own. */
   phones: Set<string>;
@@ -28,8 +28,6 @@ export type ProofOptions = {
   lenientMe?: boolean;
   /** x-profile-id isn't read at all. */
   ignoreMe?: boolean;
-  /** This write never makes a phone with no person theirs. */
-  keepOwner?: boolean;
   /** A deleted x-profile-id isn't refused: the app's "remove" right after its delete still gets its ok. */
   tombstoneOk?: boolean;
 };
@@ -42,8 +40,8 @@ declare module "fastify" {
 
 export type ProofInput = { key?: string; code?: string; profileId?: string; ip: string; method: string };
 
-/** A phone that opened a forwarded invite and hasn't added itself. It reads the family and writes nothing: Supabase's `device_needs_profile`. */
-export const needsProfile = (device: Ctx["device"]) => device?.via === "invite" && !device.person_id;
+/** A phone with no person of its own, from an opened invite or a family code. It reads the family, and adds itself before anything else (Caleb, Nov 1). */
+export const needsProfile = (device: Ctx["device"]) => !!device && !device.person_id;
 
 const ownPhone = (p: Person) => refuse(403, `${p.name} uses their own phone.`);
 
@@ -109,8 +107,8 @@ export async function prove(input: ProofInput, options: ProofOptions = {}): Prom
       }
     }
   }
-  // A phone that joined through a family invite says who it is before it writes: it adds itself or asks to move in as someone, which someone else approves. Writing
-  // as an existing face never makes it theirs, so whoever opened a forwarded link can't become Dad.
+  // A phone with no person says who it is before it writes: it adds itself or, from an invite, asks to move in as someone, which someone else approves. Writing as an existing
+  // face never makes it theirs, so whoever opened a forwarded link, or holds the code, can't become Dad.
   if (me && input.method !== "GET" && needsProfile(device)) throw refuse(403, "Add yourself first.");
   // Someone with their own phone is only ever them from that phone: another phone, or the family code, gets 403, reads included.
   if (me && phones.has(me.id) && device?.person_id !== me.id) {
@@ -120,13 +118,6 @@ export async function prove(input: ProofInput, options: ProofOptions = {}): Prom
   // Nobody writes as someone only invited: until Dad taps his own link, a message "from Dad" would really be from whoever's phone this is.
   if (me && input.method !== "GET" && device?.person_id !== me.id && (await invitedOnly(me.id))) {
     throw refuse(403, `${me.name} hasn't joined yet. Pick your own face.`);
-  }
-  // A family-code swap with no person yet becomes the phone of the first person it writes as. Set once; reads never set it.
-  if (device && !device.person_id && device.via !== "invite" && me && input.method !== "GET" && !options.keepOwner) {
-    if (await data.claimDevice(q, device.id, me.id)) {
-      device.person_id = me.id;
-      phones.add(me.id);
-    }
   }
   return { family, profiles, everyone, me, device, phones, meDeleted };
 }

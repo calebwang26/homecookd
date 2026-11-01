@@ -93,7 +93,7 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
   on("GET", "/family", { lenientMe: true }, (req) => familyView(ctxOf(req)));
   on("POST", "/profiles", {}, (req) => addProfile(ctxOf(req), bodyOf(req)));
   on("POST", "/profiles/self", { ignoreMe: true }, (req) => addSelf(ctxOf(req), bodyOf(req)));
-  on("POST", "/profiles/:id/remove", { keepOwner: true, tombstoneOk: true }, (req) => leaveFamily(ctxOf(req), (req.params as { id: string }).id));
+  on("POST", "/profiles/:id/remove", { tombstoneOk: true }, (req) => leaveFamily(ctxOf(req), (req.params as { id: string }).id));
   on("POST", "/devices", {}, (req) => swapCodeForKey(ctxOf(req), bodyOf(req)));
   on("POST", "/devices/revoke", { ignoreMe: true }, (req) => signOutPhone(ctxOf(req)));
 

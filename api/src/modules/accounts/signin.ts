@@ -231,20 +231,44 @@ async function claimMember(who: Who, target: Target, rawId: string, opts: Option
 }
 
 /** A solo family's phone-less faces go with the person who moves. One the new family already has a name for stays, and so does anyone past the limit. */
+/** Who comes along with someone moving: not a face the new family has a name for, and not past the limit. */
+function whoComes(faces: Person[], inNew: Pick<Person, "name">[]): { comes: Person[]; left: Person[] } {
+  const comes: Person[] = [];
+  const left: Person[] = [];
+  const names = new Set(inNew.map((p) => p.name.toLowerCase()));
+  for (const face of faces) {
+    if (inNew.length + comes.length >= MAX_PEOPLE || names.has(face.name.toLowerCase())) {
+      left.push(face);
+      continue;
+    }
+    comes.push(face);
+    names.add(face.name.toLowerCase());
+  }
+  return { comes, left };
+}
+
 async function moveFaces(c: Queryable, faces: Person[], fromId: string, toId: string, inNew: Person[]): Promise<Person[]> {
   const moved: Person[] = [];
-  const names = new Set(inNew.map((p) => p.name.toLowerCase()));
   let sort = inNew.reduce((m, x) => Math.max(m, x.sort), 0);
-  for (const face of faces) {
-    if (inNew.length + moved.length >= MAX_PEOPLE) break;
-    if (names.has(face.name.toLowerCase())) continue;
+  for (const face of whoComes(faces, inNew).comes) {
     sort += 1;
     if (!(await data.moveFace(c, face.id, fromId, toId, sort))) continue;
     moved.push(face);
-    names.add(face.name.toLowerCase());
     await data.revokeInvitesOf(c, face.id); // an invite naming them still points at the old family
   }
   return moved;
+}
+
+/**
+ * Asked before a move, so the app can warn: the phone-less people this move would delete. With nobody else signed in to the old family they come along, and one who can't comes to
+ * an end with it (endFamilyIfLast).
+ */
+async function facesAMoveDeletes(known: Known, target: Target, name: string | undefined): Promise<{ profile_id: string; name: string }[]> {
+  const old = known.person;
+  const others = (await data.peopleOf(db(), old.family_id)).filter((p) => !p.removed_at && p.id !== old.id);
+  if (await anySignedIn(db(), others.map((p) => p.id))) return [];
+  const members = (await data.peopleOf(db(), target.familyId)).filter((p) => !p.removed_at);
+  return whoComes(others, [...members, { name: name ?? old.name }]).left.map((p) => ({ profile_id: extId(p), name: p.name }));
 }
 
 /** Leaves family A as "Leave the family" does, then joins the link's family B (JOIN-SIMPLE.md section 4). Only with `move: true`, after a fresh sign-in. */
@@ -320,7 +344,9 @@ async function signInByLink(who: Who, b: Body, opts: Options) {
   const known = await knownIdentity(who);
   if (known && known.person.family_id === target.familyId) return (await signInKnown(who, known, opts)) ?? signInAgain(who, opts);
   if (known) {
-    if (b.move !== true) return { existing: true, needs_move: true, from_family: known.family.name, to_family: target.familyName };
+    if (b.move !== true) {
+      return { existing: true, needs_move: true, from_family: known.family.name, to_family: target.familyName, would_delete: await facesAMoveDeletes(known, target, opts.name ?? undefined) };
+    }
     return orLostLink(who, opts, () => moveTo(who, known, target, opts));
   }
   if (claim) return orLostLink(who, opts, () => claimMember(who, target, claim, opts));

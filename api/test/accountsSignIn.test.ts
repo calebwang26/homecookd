@@ -273,7 +273,7 @@ async function movable() {
 test("a known account in another family gets needs_move and nothing changes; move:true moves them", { skip }, async () => {
   const m = await movable();
   const asked = await api.apple({ id_token: m.token, join_token: m.link.token });
-  assert.deepEqual(asked.data, { existing: true, needs_move: true, from_family: "Zed's family", to_family: "The Pawars" });
+  assert.deepEqual(asked.data, { existing: true, needs_move: true, from_family: "Zed's family", to_family: "The Pawars", would_delete: [] });
   assert.equal((await row("families", "id = $1", [m.oldFamily])).blanked_at, null);
   assert.equal((await row("people", "id = $1", [m.old.data.profile_id])).removed_at, null);
   assert.equal((await api.apple({ id_token: m.token, join_token: m.link.token, move: "yes" })).status, 400);
@@ -304,6 +304,9 @@ test("solo: the old family's phone-less faces come along (not one the new family
   const m = await movable();
   const face = await makePerson(m.oldFamily, "Grandma");
   const clash = await makePerson(m.oldFamily, "Mom");
+  const asked = await api.apple({ id_token: m.token, join_token: m.link.token });
+  assert.deepEqual(asked.data.would_delete, [{ profile_id: clash, name: "Mom" }], "the app warns first, and nothing's changed");
+  assert.equal((await row("people", "id = $1", [clash])).deleted_at, null);
   const moved = await api.apple({ id_token: m.token, join_token: m.link.token, move: true });
   assert.equal(moved.status, 200);
   assert.equal((await row("people", "id = $1", [face])).family_id, m.f.id);
@@ -321,6 +324,7 @@ test("someone else still signing in to the old family: not solo, the faces stay"
   const other = await makePerson(m.oldFamily, "Sibling");
   await makeDevice(m.oldFamily, other);
   const face = await makePerson(m.oldFamily, "Grandma");
+  assert.deepEqual((await api.apple({ id_token: m.token, join_token: m.link.token })).data.would_delete, [], "they stay, so nobody's deleted");
   const moved = await api.apple({ id_token: m.token, join_token: m.link.token, move: true });
   const receipt = JSON.parse(Buffer.from(moved.data.moved.receipt.split(".")[0], "base64url").toString());
   assert.equal(receipt.solo, false);
