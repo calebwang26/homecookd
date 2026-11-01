@@ -203,6 +203,21 @@ def _budget_allows(job: dict, media: storage.Bucket, seconds: float) -> bool:
     return False
 
 
+_capped: dict[str, float] = {}  # Convex jobs waiting at the spend cap, by id: the seconds of video measured so far
+
+
+def _over_cap(job_id: str, seconds: float) -> bool:
+    """Whether this much video would pass the cap. A job over it isn't failed (nothing brings a failed job back): the
+    caller releases it, and it starts by itself once .env's cap is raised (spend_cap reads it on each check)."""
+    cap, spent = spend_cap(), spent_usd()
+    if spent + seconds / 3600 * COST_PER_HOUR_USD < cap:
+        return False
+    if job_id not in _capped:
+        print(f"  {job_id}: spend cap: ~${spent:.2f} spent, MAX_SPEND_USD ${cap:.2f}; waits", flush=True)
+    _capped[job_id] = max(seconds, _capped.get(job_id, 0.0))
+    return True
+
+
 def _download(blob: storage.Blob, dest: Path) -> None:
     """Download into <name>.part and rename, so a file at `dest` is always complete."""
     if dest.exists() and dest.stat().st_size == blob.size:
@@ -521,6 +536,9 @@ def handle_convex(convex: Convex, job: dict, media: storage.Bucket, uploads: sto
             print(f"{recipe_id}: another worker process is on it; skipping")
             return
         try:
+            if _over_cap(job_id, _capped.get(job_id, 0.0)):  # before the bucket: it comes back every 30 s while it waits
+                convex.release(job_id)
+                return
             report("preparing", 0.02)
             try:
                 blobs = _complete_upload(media, uploads, job["uploadPath"])
@@ -550,12 +568,10 @@ def handle_convex(convex: Convex, job: dict, media: storage.Bucket, uploads: sto
             actual_s = sum(prep.probe_duration(p) for p in inputs)
             if actual_s > MAX_HOURS * 3600:
                 return fail(MSG_TOO_LONG, f"{actual_s / 3600:.1f} h of video")
-            cap, spent = spend_cap(), spent_usd()
-            if spent + actual_s / 3600 * COST_PER_HOUR_USD >= cap:
-                # Not a failure: back in the queue, it starts by itself once .env's cap is raised (read on each check).
-                print(f"  {job_id}: spend cap: ~${spent:.2f} spent, MAX_SPEND_USD ${cap:.2f}; released", flush=True)
+            if _over_cap(job_id, actual_s):
                 convex.release(job_id)
                 return
+            _capped.pop(job_id, None)
             cook = job.get("cookName") or "Cook"
             # The dish the cook named; without one the writer names it (process.NO_TITLE).
             prep.run(recipe_id, job.get("title") or "", cook, job.get("relation") or cook, inputs)
