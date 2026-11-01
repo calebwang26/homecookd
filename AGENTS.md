@@ -218,6 +218,10 @@ npx --yes deno@2 check --node-modules-dir=none supabase/functions/api/*.ts      
 cd infra/envs/staging && terraform init -backend=false && terraform validate   # no login needed
 cd infra/envs/staging && AWS_PROFILE=homecookd terraform plan        # production apply: Caleb's OK
 
+# website on AWS (staging only; infra/modules/web, docs/build/WEB-MIGRATION.md)
+cd web && npm run build && cd .. && node --test infra/modules/web/rewrite.test.mjs   # the URL rules against every real file in web/out
+node infra/scripts/web-smoke.mjs https://homecookd.app                            # the same paths, against a running site
+
 # new backend (api/; TEST_DATABASE_URL adds the real-Postgres tests)
 cd api && npm ci && npm run typecheck && npm test
 docker run -d --rm --name hc-pg -e POSTGRES_PASSWORD=t -e POSTGRES_DB=t -p 15439:5432 postgres:17   # then: cd api && TEST_DATABASE_URL=postgres://postgres:t@localhost:15439/t npm test

@@ -77,7 +77,8 @@ Decided by Caleb on Oct 31. **To build, and blocked until the App Store approves
    does today.
 5. **Add Sentry to `/privacy` and the App Store privacy answers,** before Sentry goes on anything with real people's data. Until
    then it sees staging only, and the app and website don't use it.
-6. Everything else that merges or deploys from the migration branch.
+6. **Change `/privacy`'s "This website runs on Vercel"** when the site moves (phase 7, `docs/build/WEB-MIGRATION.md`).
+7. Everything else that merges or deploys from the migration branch.
 
 **Not waiting on Apple:** remove the Oct 25 export in `~/Documents/homecookd-backups/` by about **Dec 24, 2026**, Caleb's call.
 Files on a laptop don't expire. `/privacy` says data is deleted within 30 days and "it leaves our backups within 30 more", so
@@ -216,6 +217,8 @@ Each area: copy its data, freeze writes for a short planned window, switch its r
 back until the area is proven. Tables that cross areas are the risk, so each area's PR lists them first.
 
 ### 7. Website off Vercel
+What's built, the path table and the switch: `docs/build/WEB-MIGRATION.md`.
+
 Added by Caleb on Oct 31, under the same rule: built on the migration branch, merged only after Apple approves. **This is
 the easiest piece.** `web/` is already a static export (`output: "export"` in `web/next.config.ts`), with no server code,
 so it's files on S3 behind CloudFront. The only Vercel setting in use is the cache and content-type headers in

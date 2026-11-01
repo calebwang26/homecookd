@@ -1,0 +1,65 @@
+# Builds web/ and publishes it to staging's bucket and CloudFront. Staging only: there's no production target, and
+# homecookd.app stays on Vercel until Caleb OKs the DNS (docs/build/WEB-MIGRATION.md). It logs in with GitHub's OIDC login,
+# so no key is stored in GitHub. Does nothing until the repo variables below exist, which happens after the staging apply:
+#   STAGING_WEB_DISTRIBUTION_ID, STAGING_WEB_URL   terraform output web_distribution_id, web_url
+name: Deploy website to staging
+on:
+  workflow_dispatch:
+  push:
+    branches: [aws-migration]
+    paths:
+      - "web/**"
+      - "infra/scripts/web-*"
+      - "infra/modules/web/**"
+      - ".github/workflows/deploy-web.yml"
+
+permissions:
+  id-token: write
+  contents: read
+
+concurrency:
+  group: deploy-web-staging
+
+jobs:
+  deploy:
+    if: vars.STAGING_WEB_DISTRIBUTION_ID != ''
+    runs-on: ubuntu-latest
+    environment: staging
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build
+        working-directory: web
+        env:
+          # Without this the canonical link and share images say localhost: the code's fallback only knows Vercel's variables.
+          NEXT_PUBLIC_SITE_URL: ${{ vars.STAGING_WEB_URL }}
+          # These fall back on the live backends when unset. Staging has no https backend yet, so they point at a name that
+          # can't resolve (.invalid is reserved for this): a copy of the site on staging can't touch real families.
+          NEXT_PUBLIC_API_URL: ${{ vars.STAGING_WEB_API_URL || 'https://no-backend.invalid' }}
+          NEXT_PUBLIC_BUCKET_URL: ${{ vars.STAGING_WEB_BUCKET_URL || 'https://no-backend.invalid' }}
+          NEXT_PUBLIC_CONVEX_SITE_URL: ${{ vars.STAGING_WEB_CONVEX_SITE_URL || 'https://no-backend.invalid' }}
+        run: |
+          npm ci
+          npm run build
+      - name: Check the build before it goes anywhere
+        run: |
+          node --test infra/modules/web/rewrite.test.mjs
+          if grep -rlE 'grand-dragon-649|bsudybxsqvtwftsdmwmz|edible-media-' web/out/_next/static web/out/*.html; then
+            if [ -z "${{ vars.STAGING_WEB_CONVEX_SITE_URL }}" ]; then echo "This staging build points at a live backend."; exit 1; fi
+          fi
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/homecookd-staging-deploy
+          aws-region: us-west-2
+      - name: Publish
+        run: bash infra/scripts/web-sync.sh web/out "homecookd-staging-web-${{ vars.AWS_ACCOUNT_ID }}"
+      - name: Clear CloudFront's cache
+        env:
+          DISTRIBUTION: ${{ vars.STAGING_WEB_DISTRIBUTION_ID }}
+        run: |
+          ID=$(aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION" --paths '/*' --query Invalidation.Id --output text)
+          aws cloudfront wait invalidation-completed --distribution-id "$DISTRIBUTION" --id "$ID"
+      - name: Smoke test
+        run: node infra/scripts/web-smoke.mjs "${{ vars.STAGING_WEB_URL }}" --noindex

@@ -7,20 +7,27 @@ AWS profile, which you refresh with `aws sso login --profile homecookd`.
 bootstrap/        one-time, account-wide: Terraform's state bucket, the GitHub login, the budget alerts
 modules/env/      everything one environment has: network, Postgres, load balancer, S3 + CloudFront, Fargate, SQS,
                   secret names, alarms, roles
+modules/web/      the website on S3 + CloudFront, staging only so far (docs/build/WEB-MIGRATION.md)
 envs/staging/     the cheap copy: no real keys, no real data
 envs/production/  NOT created yet. Applying it needs Caleb's OK
 backups/          daily Convex exports to S3, with their own small network and a key only for this
 scripts/load-secrets.sh   copies keys from the root .env into Secrets Manager without printing them
 scripts/create-backup-key.sh   makes the Convex key for backups and stores it, unseen. Caleb runs it
+scripts/web-sync.sh, web-smoke.mjs   publish the website; check a running copy of it
 ```
 
 `.github/workflows/deploy-aws.yml` builds one service and rolls it out. It's manual and stores no keys.
+`.github/workflows/deploy-web.yml` publishes the website to staging. It stores no keys either.
 
 ## Commands
 
 ```bash
 # check the code (no login needed)
 cd infra/envs/staging && terraform init -backend=false && terraform validate
+
+# the website's CloudFront Function, against a real build
+cd web && npm ci && npm run build && cd .. && node --test infra/modules/web/rewrite.test.mjs
+node infra/scripts/web-smoke.mjs https://<address> [--noindex]   # reads only; the path table against a running site
 
 # first time only
 cd infra/bootstrap && AWS_PROFILE=homecookd terraform init && AWS_PROFILE=homecookd terraform apply
