@@ -16,3 +16,5 @@ export const forbidden = () => new ApiError(403, "forbidden");
 export const notFound = () => new ApiError(404, "not_found");
 export const tooMany = (retryAfterS: number) =>
   new ApiError(429, "rate_limited", { "retry-after": String(Math.max(1, Math.ceil(retryAfterS))) });
+/** The database is away or busy: ask again soon. The seconds are spread so that phones don't all return at once. */
+export const unavailable = () => new ApiError(503, "unavailable", { "retry-after": String(5 + Math.floor(Math.random() * 11)) });
