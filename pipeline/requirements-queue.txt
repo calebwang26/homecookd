@@ -1,0 +1,4 @@
+# Queue mode only (pipeline/queue_worker.py, docs/build/WORKER-MIGRATION.md). Convex mode and the laptop never need these,
+# and CI's pipeline job doesn't install them, so the Postgres and AWS checks in test_queue_worker.py skip there.
+boto3==1.43.123
+psycopg[binary]==3.3.6
