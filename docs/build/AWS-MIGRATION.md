@@ -72,7 +72,12 @@ Decided by Caleb on Oct 31. **To build, and blocked until the App Store approves
    is on `main` but not applied. Steps: `infra/README.md`, "Starting the backups". Until then, **there is no scheduled
    backup of Convex**, which still runs on a preview deployment.
 3. **Restore test,** after the first export.
-4. Everything else that merges or deploys from the migration branch.
+4. **Change `/privacy`'s "your one-to-one chats".** Caleb decided the other person's half stays when someone deletes their account
+   (SCHEMA.md, C1), so the page must say that. Have a lawyer read the new wording. Until then the page promises more than Convex
+   does today.
+5. **Add Sentry to `/privacy` and the App Store privacy answers,** before Sentry goes on anything with real people's data. Until
+   then it sees staging only, and the app and website don't use it.
+6. Everything else that merges or deploys from the migration branch.
 
 **Not waiting on Apple:** remove the Oct 25 export in `~/Documents/homecookd-backups/` by about **Dec 24, 2026**, Caleb's call.
 Files on a laptop don't expire. `/privacy` says data is deleted within 30 days and "it leaves our backups within 30 more", so
@@ -80,10 +85,18 @@ someone who deleted their account right after that export is covered until about
 sentence reads. It's also the only full copy until the new backups run, so the date may force a choice if Apple is still
 reviewing.
 
+## Before real data
+
+Before any backfill copies real rows into Postgres:
+
+- Seal `craving_links.token`, `dinners.invite_token` and `shares.token` (SCHEMA.md, M6).
+- Count violations of every new uniqueness rule, CHECK and domain (SCHEMA.md, section 7).
+
 ## Cutover list
 
 Before `aws-migration` reaches `main`:
 
+- Remove the temporary one-way sync of `families`, `people` and `recipes` (SCHEMA.md, M1).
 - Install `sentry-sdk` on the laptop's worker, or `import observability` crashes it.
 - Give the worker and api a limited database login in place of the master one.
 - Pin the workflows' actions to commit SHAs, and add a checksum for the downloaded gitleaks.
@@ -176,7 +189,7 @@ Before real data arrives: create a limited app user for `api` and `worker`, and 
 workflow's actions to commit SHAs.
 
 ### 6. Convex to Postgres
-**Size:** about 11,400 lines, 29 tables, 8 crons, 184 functions (28 queries, 34 mutations, 5 actions, 117 internal), 33
+**Size:** about 11,400 lines, 28 tables, 8 crons, 184 functions (28 queries, 34 mutations, 5 actions, 117 internal), 33
 scheduler calls, 47 file-storage calls, and 7,240 lines of tests to carry over.
 
 What makes it hard:
