@@ -46,6 +46,11 @@
       "why": "Two Sentry calls, both no-ops on the laptop",
       "fingerprint": "207d7cf1bb6a"
     },
+    "web/vercel.json": {
+      "switch": "the branch's name",
+      "why": "Vercel stops building aws-migration and claude/aws-*. It names no branch that deploys live, so main and every other branch build as before",
+      "fingerprint": "143d6f5ea59b"
+    },
     "web/next.config.ts": {
       "switch": "NEXT_PUBLIC_DISH_UPLOADS",
       "why": "Gives the switch a value in every build, so the new flow compiles out",
