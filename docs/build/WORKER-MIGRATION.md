@@ -23,7 +23,7 @@ spend cap and SIGTERM all work mid-step. It also keeps the steps' prints, which 
 
 **Driver: `psycopg[binary]` 3, pinned.** It's the standard Postgres driver for Python, the binary package needs no system libraries,
 and it supports `verify-full` for RDS. pg8000 is smaller but less widely used. It and `boto3` are in `requirements-queue.txt`, which
-the Dockerfile installs and CI and the laptop don't, and both are imported only when a connection or client is made.
+the Dockerfile and CI install and the laptop doesn't, and both are imported only when a connection or client is made.
 
 ## How it's run
 
@@ -84,7 +84,8 @@ does, with S3 versioning as a 28-day undo), and the message goes. If S3 fails, t
 
 ## Seams changed in existing files
 
-Only two. `worker.py`, `prep.py`, `process.py`, `account_purge.py`, `observability.py` and `requirements.txt` are unchanged.
+Two, plus Sentry's. `prep.py`, `process.py`, `account_purge.py` and `requirements.txt` are unchanged from `main`. `worker.py` adds only the Sentry calls, and
+`observability.py` does nothing without `sentry_sdk` or its env, so the laptop needs no new package (`test_worker_no_sentry.py`). `sentry-sdk` is in `requirements-queue.txt`.
 
 - `pipeline/publish.py`, `public_url`: uses `bucket.public_base` when the bucket has one. A GCS bucket doesn't, so its URLs don't change.
 - `pipeline/Dockerfile`: installs `requirements-queue.txt` and adds RDS's certificates. The entry point is unchanged.

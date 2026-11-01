@@ -75,7 +75,8 @@ this work, so production's values have to be listed from Vercel's settings at sw
 | `NEXT_PUBLIC_API_URL` | **Live Supabase** | `https://no-backend.invalid` | The backend that's live for `/r`, `/i`, web events |
 | `NEXT_PUBLIC_BUCKET_URL` | **Live GCS media** | `https://no-backend.invalid` | Whichever bucket or CDN is live |
 | `NEXT_PUBLIC_CONVEX_SITE_URL` | **Live Convex** (`/d`, `/miss`, `/a`) | `https://no-backend.invalid` | The backend that's live for those pages |
-| `NEXT_PUBLIC_DISH_URL` | Follows the Convex value | Unset | Unset |
+| `NEXT_PUBLIC_DISH_URL` | Follows the Convex value | Unset | Unset, until the kid's web flow switches (`CUTOVER.md`, step 11) |
+| `NEXT_PUBLIC_DISH_UPLOADS` | Raw files, as Convex takes them | `STAGING_WEB_DISH_UPLOADS`, set to `links` only when staging's site points at the new api | Unset, until then; set with `NEXT_PUBLIC_DISH_URL` |
 | `NEXT_PUBLIC_APP_STORE_URL` | "Get the app" says it's in early testing | Unset | Copy from Vercel |
 | `NEXT_PUBLIC_EARLY_ACCESS_URL` | The form sends nothing | Unset | Copy from Vercel, if set |
 | `NEXT_PUBLIC_CONTACT_EMAIL` | `team@homecookd.app` | Unset | Copy from Vercel, if set |

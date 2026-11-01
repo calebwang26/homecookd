@@ -3,17 +3,18 @@
 // version. The screen comes from the address, read on the client (static export):
 //   /miss                  the dish box (K1)
 //   /miss?k=<kid token>    that card (K2; Mom's version once she answered)
+//   /miss?c=<her token>    the dish box from a parent's craving link: the card is a request to her (DISH-ASK-SPEC §8)
 // A made card replaces /miss with /miss?k=…, and is remembered for "Your last dish". Ported from the
 // MVP's MissApp (calebwang26/homecookd PR #40) onto the Convex /dish/* routes (DISH-ASK-SPEC).
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type MouseEvent } from 'react';
 import { DishLangProvider, useLang } from '@/components/dish/lang';
 import { TopBar } from '@/components/dish/parts';
 import { EggMascot } from '@/components/primitives/EggMascot';
-import { createCard, DishError, getCard, isPlausibleToken, uploadFile } from '@/lib/dish/api';
+import { createCard, DishError, getCard, isLinkBusy, isPlausibleToken, peekCraving, uploadFile } from '@/lib/dish/api';
 import { AttachError, photoToJpeg, voiceType } from '@/lib/dish/attach';
-import { lastKidToken, saveLastKidToken, savedName } from '@/lib/dish/saved';
+import { lastKidToken, saveLastKidToken, saveName, savedName } from '@/lib/dish/saved';
 import { relationFromText } from '@/lib/dish/text';
-import type { Card } from '@/lib/dish/types';
+import type { Card, CravingPeek } from '@/lib/dish/types';
 import type { WordKey } from '@/lib/dish/words';
 import { AskScreen, type AskDraft } from './AskScreen';
 import { CardScreen } from './CardScreen';
@@ -31,7 +32,7 @@ type View =
   | { name: 'card'; token: string; card: Card }
   | { name: 'error'; failure: Failure; token: string | null };
 
-const EMPTY: AskDraft = { dish: '', relation: 'mom', other: null, picked: { photos: [], voice: null } };
+const EMPTY: AskDraft = { dish: '', name: '', relation: 'mom', other: null, picked: { photos: [], voice: null } };
 
 export function MissApp() {
   return (
@@ -48,6 +49,7 @@ export function MissApp() {
 function Miss() {
   const [view, setView] = useState<View>({ name: 'boot' });
   const [draft, setDraft] = useState<AskDraft>(EMPTY);
+  const [craving, setCraving] = useState<(CravingPeek & { token: string }) | 'off' | null>(null);
   const [error, setError] = useState<WordKey | null>(null);
   const [limited, setLimited] = useState(false);
   const [last, setLast] = useState<string | null>(null);
@@ -78,11 +80,36 @@ function Miss() {
   );
 
   const route = useCallback(() => {
-    const k = new URLSearchParams(window.location.search).get('k');
+    const query = new URLSearchParams(window.location.search);
+    const k = query.get('k');
+    const c = query.get('c');
     setLast(lastKidToken());
     if (k !== null && isPlausibleToken(k)) return open(k);
-    nav.current++;
-    show(k === null ? { name: 'ask' } : { name: 'error', failure: 'not-found', token: null });
+    const id = ++nav.current;
+    if (k !== null) return show({ name: 'error', failure: 'not-found', token: null });
+    if (c === null || !isPlausibleToken(c)) {
+      setCraving(c === null ? null : 'off');
+      return show({ name: 'ask' });
+    }
+    show({ name: 'loading' });
+    peekCraving(c).then(
+      (peek) => {
+        if (id !== nav.current) return;
+        setCraving({ ...peek, token: c });
+        setDraft((d) => (d.name ? d : { ...d, name: savedName() ?? '' }));
+        show({ name: 'ask' });
+      },
+      (e: unknown) => {
+        if (id !== nav.current) return;
+        const kind = e instanceof DishError ? e.kind : 'network';
+        // A stopped or unknown link still leaves the kid a page that works. Anything else may pass: try again.
+        if (kind === 'not-found' || kind === 'bad') {
+          setCraving('off');
+          return show({ name: 'ask' });
+        }
+        show({ name: 'error', failure: kind === 'rate' ? 'rate' : 'offline', token: null });
+      },
+    );
   }, [open, show]);
 
   useEffect(() => {
@@ -110,6 +137,10 @@ function Miss() {
     const dish = draft.dish.trim();
     const { photos, voice } = draft.picked;
     if (dish.length < 2 && !photos.length && !voice) return setError('k1.empty');
+    const link = craving !== 'off' ? craving : null;
+    const name = draft.name.trim();
+    if (link && !name) return setError('k1.needName');
+    if (link) saveName(name);
     const id = ++nav.current;
     const relation = draft.other === null && draft.relation !== 'none' && relationFromText(dish) ? relationFromText(dish)! : draft.relation;
     setError(null);
@@ -119,10 +150,10 @@ function Miss() {
         Promise.all(photos.map(async (f) => uploadFile('photo', await photoToJpeg(f), 'image/jpeg'))),
         voice ? uploadFile('voice', voice.blob, voiceType(voice.blob)) : Promise.resolve(undefined),
       ]);
-      const kidName = savedName();
+      const kidName = link ? name : savedName();
       const { kidToken, card } = await createCard({
         dish,
-        relation,
+        ...(link ? { cravingToken: link.token } : { relation }),
         ...(kidName ? { kidName } : {}),
         ...(photoIds.length ? { photos: photoIds } : {}),
         ...(voiceId ? { voiceNote: voiceId } : {}),
@@ -138,6 +169,13 @@ function Miss() {
       show({ name: 'card', token: kidToken, card });
     } catch (e) {
       if (id !== nav.current) return;
+      // Her link stopped or filled up while the kid typed: keep what they wrote, on the plain page.
+      if (link && e instanceof DishError && (e.kind === 'not-found' || isLinkBusy(e))) {
+        window.history.replaceState(null, '', window.location.pathname);
+        setCraving('off');
+        setError(null);
+        return show({ name: 'ask' });
+      }
       if (e instanceof DishError && e.kind === 'budget') setLimited(true);
       setError(
         e instanceof AttachError
@@ -152,7 +190,7 @@ function Miss() {
       );
       show({ name: 'ask' });
     }
-  }, [draft, show]);
+  }, [draft, craving, show]);
 
   const goTo = (href: string, e?: MouseEvent) => {
     if (e && (e.defaultPrevented || e.button !== 0 || e.metaKey || e.ctrlKey || e.shiftKey || e.altKey)) return;
@@ -166,6 +204,7 @@ function Miss() {
       {view.name === 'boot' || view.name === 'ask' ? (
         <AskScreen
           draft={draft}
+          craving={craving}
           onDraft={(d) => (setDraft(d), setError(null))}
           error={error}
           limited={limited}

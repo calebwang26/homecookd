@@ -4,4 +4,3 @@ pydantic>=2
 python-dotenv
 google-cloud-storage
 requests
-sentry-sdk>=2,<3

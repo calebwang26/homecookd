@@ -44,6 +44,9 @@ const words: Translation = {
   'k1.failed': 'Hindi iyon gumana. Subukan muli.',
   'k1.rate': 'Masyadong maraming subok. Maghintay ng isang minuto at subukan ulit.',
   'k1.empty': 'Sabihin muna sa amin ang ulam.',
+  'k1.cravingTitle': 'Gustong malaman ni {name} *kung ano ang nami-miss mo*',
+  'k1.linkOff': 'Hindi gumagana ang link na ito. Humingi ng bago, o gawin dito ang recipe mo.',
+  'k1.needName': 'Sabihin muna ang pangalan mo.',
   'k5.title': 'Nagawa na ng homecookd ang lahat ng recipe na kaya nitong gawin ngayon.',
   'k5.line': 'Subukan ulit bukas.',
 
