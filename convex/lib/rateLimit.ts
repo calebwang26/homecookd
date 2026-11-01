@@ -3,7 +3,7 @@
 // Old windows are pruned by a cron (crons.ts).
 import { v } from "convex/values";
 import { internal } from "../_generated/api";
-import { type ActionCtx, internalMutation } from "../_generated/server";
+import { type ActionCtx, internalMutation, type MutationCtx } from "../_generated/server";
 
 const MINUTE = 60_000;
 const DAY = 24 * 60 * MINUTE;
@@ -20,37 +20,41 @@ export const LIMITS = {
   /** Translating one card's page into one language (keyed by card and language, not IP): her 2-second polls
    *  never pay for more than 3 tries an hour when Claude fails or a reload lands mid-translation. */
   momLang: { bucket: "dish-mom-lang", max: 3, windowMs: 60 * MINUTE },
+  /** Upload links a person gets from the signer in a day (keyed by person, not IP). TODO(caleb): tune. */
+  signerUploads: { bucket: "signer-uploads", max: 20, windowMs: DAY },
 } satisfies Record<string, Limit>;
 
 /** A window this old is over for every bucket (the longest is a day). */
 const KEEP_MS = 2 * DAY;
 const PRUNE_BATCH = 500;
 
-/**
- * One hit on each bucket, all or none: false (and nothing counted) when any of them is full this window.
- * `key` is `<bucket>:<HMAC of the IP>`.
- */
+type Bucket = { key: string; max: number; windowMs: number };
+
+/** One hit on each bucket, all or none: false (and nothing counted) when any of them is full this window. */
+export async function hitBuckets(ctx: MutationCtx, buckets: Bucket[]): Promise<boolean> {
+  const now = Date.now();
+  const found = [];
+  for (const b of buckets) {
+    const windowStart = Math.floor(now / b.windowMs) * b.windowMs;
+    const row = await ctx.db
+      .query("rateHits")
+      .withIndex("by_key_window", (q) => q.eq("key", b.key).eq("windowStart", windowStart))
+      .unique();
+    if (row && row.count >= b.max) return false;
+    found.push({ key: b.key, windowStart, row });
+  }
+  for (const { key, windowStart, row } of found) {
+    if (row) await ctx.db.patch("rateHits", row._id, { count: row.count + 1 });
+    else await ctx.db.insert("rateHits", { key, windowStart, count: 1 });
+  }
+  return true;
+}
+
+/** hitBuckets for an action. `key` is `<bucket>:<HMAC of the IP>`. */
 export const hit = internalMutation({
   args: { buckets: v.array(v.object({ key: v.string(), max: v.number(), windowMs: v.number() })) },
   returns: v.boolean(),
-  handler: async (ctx, { buckets }) => {
-    const now = Date.now();
-    const found = [];
-    for (const b of buckets) {
-      const windowStart = Math.floor(now / b.windowMs) * b.windowMs;
-      const row = await ctx.db
-        .query("rateHits")
-        .withIndex("by_key_window", (q) => q.eq("key", b.key).eq("windowStart", windowStart))
-        .unique();
-      if (row && row.count >= b.max) return false;
-      found.push({ key: b.key, windowStart, row });
-    }
-    for (const { key, windowStart, row } of found) {
-      if (row) await ctx.db.patch("rateHits", row._id, { count: row.count + 1 });
-      else await ctx.db.insert("rateHits", { key, windowStart, count: 1 });
-    }
-    return true;
-  },
+  handler: (ctx, { buckets }) => hitBuckets(ctx, buckets),
 });
 
 /** The cron: drops windows that ended a while ago, a batch at a time. */

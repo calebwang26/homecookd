@@ -3,8 +3,8 @@
 POST JSON {title, cook_name, relation, files: [{name, content_type, size, duration_s}]}
 with the phone's Convex session (Authorization: Bearer <sessionToken>, checked against Convex) or,
 from older builds, the shared X-Edible-Family code. Returns V4 signed PUT URLs into the private uploads bucket
-and writes a public jobs/<job_id>.json status file the app polls. No key files: URLs are
-signed through the IAM signBlob API as this function's own service account.
+and writes a public jobs/<job_id>.json status file the app polls, which holds no names: anyone with its link can
+read it. No key files: URLs are signed through the IAM signBlob API as this function's own service account.
 """
 import datetime as dt
 import hmac
@@ -29,6 +29,7 @@ MAX_FILES = 20
 MAX_FILE_BYTES = 20 * 1024**3  # 20 GB; a 3-hour iPhone recording is ~10 GB
 MAX_HOURS = 4  # same cap as pipeline/worker.py; reject before the phone uploads GBs for nothing
 URL_TTL = dt.timedelta(days=7)  # V4 maximum; background uploads of long videos can take hours
+JOB_ID_HEX = 16  # 64 random bits: a job's public status file can only be found through its link
 
 client = storage.Client()
 EXT = {"video/quicktime": ".mov", "video/mp4": ".mp4", "video/x-m4v": ".m4v"}
@@ -67,11 +68,11 @@ class ConvexDown(Exception):
 TROUBLE = "The service is having trouble. Please try again in a minute."
 
 
-def _convex_query(path: str, args: dict):
-    """A public Convex query's value, or None if Convex refuses (e.g. a signed-out session). Raises
+def _convex_query(path: str, args: dict, kind: str = "query"):
+    """A public Convex function's value, or None if Convex refuses (e.g. a signed-out session). Raises
     ConvexDown when Convex can't be reached, so a blip isn't reported as "signed out"."""
     req = urllib.request.Request(
-        f"{CONVEX_URL}/api/query", method="POST", headers={"Content-Type": "application/json"},
+        f"{CONVEX_URL}/api/{kind}", method="POST", headers={"Content-Type": "application/json"},
         data=json.dumps({"path": path, "args": args, "format": "json"}).encode())
     try:
         with urllib.request.urlopen(req, timeout=5) as res:
@@ -119,6 +120,24 @@ def _not_theirs(token: str, kind: str, item_id) -> tuple | None:
         print(f"ownership check failed: {e}")
         return _json({"error": TROUBLE}, 502)
     return None if owns is True else _json({"error": f"That {kind} isn't yours to change."}, 403)
+
+
+def _upload_refused(token: str) -> tuple | None:
+    """For a signed-in phone: only a cook gets upload links, so many a day (signer:allowUpload). The links can't limit
+    a file's size without the phone's help, so this is what keeps the bucket's cost down."""
+    try:
+        answer = _convex_query("signer:allowUpload", {"sessionToken": token}, kind="mutation")
+    except ConvexDown as e:
+        print(f"upload check failed: {e}")
+        return _json({"error": TROUBLE}, 502)
+    if answer == "ok":
+        return None
+    if answer == "cook_only":
+        return _json({"error": "Only a cook can send a recording."}, 403)
+    if answer == "too_many":
+        return _json({"error": "That's a lot of recordings for one day. Please try again tomorrow."}, 429)
+    print(f"upload check: unexpected answer {answer!r}")  # e.g. Convex without signer:allowUpload yet
+    return _json({"error": TROUBLE}, 502)
 
 
 RECIPE_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,99}")
@@ -180,8 +199,8 @@ def create_upload(request):
         return (token and _not_theirs(token, "job", body.get("job_id"))) or _request_cancel(body)
     try:
         title = _text(body, "title", 120)
-        cook_name = _text(body, "cook_name", 60)
-        relation = _text(body, "relation", 40)
+        _text(body, "cook_name", 60)
+        _text(body, "relation", 40)
         files = body.get("files")
         if not isinstance(files, list) or not 1 <= len(files) <= MAX_FILES:
             raise ValueError(f"files must be a list of 1..{MAX_FILES}")
@@ -195,15 +214,16 @@ def create_upload(request):
             size = _number(f, "size", MAX_FILE_BYTES, "a file is larger than 20 GB (or its size is invalid)")
             duration_s = _number(f, "duration_s", 24 * 3600, "a video's length doesn't look right")
             total_s += duration_s or 0
-            name = f.get("name")
-            clean.append({"content_type": ct, "size": size, "duration_s": duration_s,
-                          "name": name[:200] if isinstance(name, str) else None})
+            clean.append({"content_type": ct, "size": size, "duration_s": duration_s})
         if total_s > MAX_HOURS * 3600:
             raise ValueError(f"That's more than {MAX_HOURS} hours of video. Please pick fewer videos.")
     except ValueError as e:
         return _json({"error": str(e)}, 400)
 
-    job_id = f"{_slug(title)}-{uuid.uuid4().hex[:6]}"
+    if token and (refused := _upload_refused(token)):
+        return refused
+
+    job_id = f"{_slug(title)}-{uuid.uuid4().hex[:JOB_ID_HEX]}"
     try:
         creds, _ = google.auth.default()
         creds.refresh(grequests.Request())
@@ -220,8 +240,7 @@ def create_upload(request):
             job_files.append({"index": i, "object": obj, **f})
 
         now = dt.datetime.now(dt.timezone.utc).isoformat()
-        job = {"id": job_id, "title": title, "cook_name": cook_name, "relation": relation,
-               "status": "uploading", "created_at": now, "updated_at": now,
+        job = {"id": job_id, "status": "uploading", "created_at": now, "updated_at": now,
                "files_expected": len(clean), "files_received": 0, "recipe_id": None, "message": None,
                "files": job_files}
         blob = client.bucket(MEDIA_BUCKET).blob(f"jobs/{job_id}.json")

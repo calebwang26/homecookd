@@ -260,7 +260,7 @@ voice/deploy.sh                                                    # Cloud Run h
 .venv/bin/python pipeline/fix_upside_down.py                      # dry run: front clips stored upside down (#79-#104); --try CLIP local; --write --clip PATH: Caleb's OK
 .venv/bin/python pipeline/test_fix_upside_down.py                 # which clips it flags + the repair (ffmpeg, no network)
 .venv/bin/python pipeline/test_account_purge.py                      # a deleted account's purge outside Convex (fakes)
-.venv/bin/python pipeline/worker.py [--once]                        # claim Convex jobs (--gcs: the old GCS job files)
+.venv/bin/python pipeline/worker.py [--once]                        # claim Convex jobs (--gcs: the old GCS job files; don't run it: it acts on anyone's cancel and delete markers)
 .venv/bin/python pipeline/worker.py --purge-dry-run                 # what each deleted account's purge would delete
 .venv/bin/python pipeline/process.py --id <id> --rewrite            # re-write recipe.json from the cached extraction
 

@@ -41,19 +41,25 @@ class Request:
 ME = {"status": "success", "value": {"personId": "p1", "name": "Aai"}}
 
 
-def convex_answers(body=None, status=200, error=None, owns=None):
-    """Fakes Convex: people:me answers `body` (or `status` / `error`); signer:owns answers `owns`."""
+def convex_answers(body=None, status=200, error=None, owns=None, allow="ok"):
+    """Fakes Convex: people:me answers `body` (or `status` / `error`); signer:owns answers `owns`;
+    signer:allowUpload answers `allow`, or fails as a deployment without it does when `allow` is None."""
     calls = []
 
     def urlopen(req, timeout):
         assert timeout <= 5
-        assert req.full_url == "https://grand-dragon-649.convex.cloud/api/query"
         sent = json.loads(req.data)
         calls.append(sent)
+        kind = "mutation" if sent["path"] == "signer:allowUpload" else "query"
+        assert req.full_url == f"https://grand-dragon-649.convex.cloud/api/{kind}"
         assert sent["args"]["sessionToken"] == TOKEN and sent["format"] == "json"
         answer = body
         if sent["path"] == "signer:owns":
             answer = {"status": "success", "value": owns}
+        elif sent["path"] == "signer:allowUpload":
+            if allow is None:
+                raise urllib.error.HTTPError(req.full_url, 400, "err", {}, io.BytesIO(b"{}"))
+            answer = {"status": "success", "value": allow}
         else:
             assert sent == {"path": "people:me", "args": {"sessionToken": TOKEN}, "format": "json"}
             if error:
@@ -137,6 +143,87 @@ class AuthTest(unittest.TestCase):
         body = {"title": "Dal", "cook_name": "Aai", "relation": "grandma",
                 "files": [{"content_type": "video/quicktime", "size": 10, "duration_s": 5}]}
         self.assertEqual(self.status({}, body), 403)
+
+
+UPLOAD = {"title": "Dal Tadka", "cook_name": "Aai Pawar", "relation": "grandma",
+          "files": [{"name": "Aai cooking.mov", "content_type": "video/quicktime", "size": 10, "duration_s": 5}]}
+
+
+class UploadTest(unittest.TestCase):
+    """What a create call writes in public, and who gets links at all. Google Cloud is faked."""
+
+    def setUp(self):
+        self.blob = mock.MagicMock()
+        self.blob.generate_signed_url.return_value = "https://signed.example/put"
+        client = mock.patch.object(main, "client").start()
+        client.bucket.return_value.blob.return_value = self.blob
+        self.blobs = client.bucket.return_value.blob
+        creds = mock.MagicMock(service_account_email="signer@example", token="tok")
+        mock.patch.object(sys.modules["google.auth"], "default", create=True, return_value=(creds, "p")).start()
+        sys.modules["google.auth.transport.requests"].Request = mock.MagicMock
+        sys.modules["google"].auth = sys.modules["google.auth"]
+        self.addCleanup(mock.patch.stopall)
+
+    def create(self, headers=None, body=UPLOAD):
+        res = main.create_upload(Request(headers or {"Authorization": f"Bearer {TOKEN}"}, body))
+        return json.loads(res[0]), res[1]
+
+    def test_the_public_file_holds_what_the_app_and_worker_read_and_no_names(self):
+        with convex_answers(ME):
+            answer, status = self.create()
+        self.assertEqual(status, 200)
+        written = self.blob.upload_from_string.call_args.args[0]
+        for private in ("Aai", "Pawar", "grandma", "cooking"):
+            self.assertNotIn(private, written)
+        job = json.loads(written)
+        # Build 6's describeJob and the Convex worker (_complete_upload, the upload's give-up time) read these.
+        self.assertEqual(
+            sorted(job),
+            ["created_at", "files", "files_expected", "files_received", "id", "message", "recipe_id", "status", "updated_at"])
+        self.assertEqual(job["status"], "uploading")
+        self.assertEqual(job["files"], [{"index": 1, "object": f"{job['id']}/01.mov", "content_type": "video/quicktime",
+                                         "size": 10, "duration_s": 5}])
+        self.assertEqual(answer["job_id"], job["id"])
+
+    def test_a_job_id_has_64_random_bits_and_stays_a_valid_folder_name(self):
+        with convex_answers(ME):
+            answer, _ = self.create(body={**UPLOAD, "title": "x" * 120})
+        self.assertRegex(answer["job_id"], r"^x{40}-[0-9a-f]{16}$")
+        self.assertTrue(main.RECIPE_ID.fullmatch(answer["job_id"]))
+
+    def test_a_kid_or_someone_over_the_daily_limit_gets_no_links(self):
+        for allow, code, words in (("cook_only", 403, "Only a cook"), ("too_many", 429, "tomorrow")):
+            with convex_answers(ME, allow=allow):
+                answer, status = self.create()
+            self.assertEqual(status, code)
+            self.assertIn(words, answer["error"])
+        self.blob.generate_signed_url.assert_not_called()
+        self.blobs.assert_not_called()
+
+    def test_no_answer_from_the_check_means_no_links(self):
+        for patch in (convex_answers(ME, allow=None), convex_answers(ME, allow="maybe")):
+            with patch:
+                _, status = self.create()
+            self.assertEqual(status, 502)
+        self.blob.generate_signed_url.assert_not_called()
+
+    def test_a_bad_request_isnt_counted(self):
+        with convex_answers(ME) as urlopen:
+            _, status = self.create(body={**UPLOAD, "files": []})
+        self.assertEqual(status, 400)
+        self.assertEqual([json.loads(c.args[0].data)["path"] for c in urlopen.call_args_list], ["people:me"])
+
+    def test_cancel_and_delete_arent_counted(self):
+        mock.patch.object(main, "_request_delete", return_value=main._json({"ok": True})).start()
+        with convex_answers(ME, owns=True) as urlopen:
+            main.create_upload(Request({"Authorization": f"Bearer {TOKEN}"}, {"action": "delete", "recipe_id": "dal-1"}))
+        self.assertNotIn("signer:allowUpload", [json.loads(c.args[0].data)["path"] for c in urlopen.call_args_list])
+
+    def test_the_family_code_path_asks_nothing(self):
+        with convex_answers(ME) as urlopen:
+            _, status = self.create(headers={"X-Edible-Family": "family-code-1234"})
+        self.assertEqual(status, 200)
+        urlopen.assert_not_called()
 
 
 if __name__ == "__main__":
