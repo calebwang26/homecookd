@@ -46,6 +46,9 @@ export const EN = {
   'k1.failed': 'That didn’t work. Try again.',
   'k1.rate': 'Too many tries. Wait a minute and try again.',
   'k1.empty': 'Tell us the dish first.',
+  'k1.cravingTitle': '{name} wants to know *what you miss*',
+  'k1.linkOff': 'This link isn’t working. Ask for a new one, or make your recipe here.',
+  'k1.needName': 'Tell us your name first.',
   // K5: today's budget is spent
   'k5.title': 'homecookd has made all the recipes it can today.',
   'k5.line': 'Try again tomorrow.',

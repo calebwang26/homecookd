@@ -44,6 +44,9 @@ const words: Translation = {
   'k1.failed': '没成功，再试一次。',
   'k1.rate': '尝试次数太多了。请等一分钟再试。',
   'k1.empty': '先告诉我们是哪道菜。',
+  'k1.cravingTitle': '{name}想知道*你想念什么味道*',
+  'k1.linkOff': '这个链接用不了了。请要一个新链接，或者在这里做你的食谱。',
+  'k1.needName': '请先告诉我们你的名字。',
   'k5.title': 'homecookd 今天能做的食谱都做完了。',
   'k5.line': '明天再来试试。',
 
