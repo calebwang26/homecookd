@@ -7,6 +7,7 @@ import { db } from "./db.js";
 import { ApiError } from "./errors.js";
 import { fieldPaths, fileGuard, lastName, looksLikeFileKey } from "./files.js";
 import { dishRoutes } from "./modules/dish/routes.js";
+import { messageRoutes } from "./modules/messages/routes.js";
 import { peopleRoutes } from "./modules/people/routes.js";
 
 declare module "fastify" {
@@ -129,6 +130,7 @@ export function buildApp(options: { logger?: object | boolean; routes?: (app: Fa
   });
 
   app.register(peopleRoutes);
+  app.register(messageRoutes);
   app.register(dishRoutes, { prefix: "/dish" });
   options.routes?.(app);
 

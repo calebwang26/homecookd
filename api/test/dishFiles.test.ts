@@ -308,6 +308,9 @@ test("every anonymous file field in the real app is checked: a guess is refused,
     "/dish/cards/update voiceNote": (id) => post(t, "/dish/cards/update", { kidToken: kid.kidToken, voiceNote: id }, { ip: "192.0.2.84" }),
     "/dish/cards/update voiceNoteS": "not a file", // its length in seconds
     "/dish/ask/answer fileId": (id) => attachAnswer(t, ask, "q1", id, { ip: "192.0.2.85" }),
+    // Signed-in routes, each with its own refusals in messagesFiles.test.ts. Not anonymous files, so not this test's guess.
+    "/v1/uploads/confirm key": "not a file",
+    "/v1/threads/:id/messages clipKey": "not a file",
   };
   const app = buildApp({ logger: false });
   await app.ready();
