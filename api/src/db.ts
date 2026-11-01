@@ -25,6 +25,10 @@ export function db(): pg.Pool {
 /** What data access needs: the pool, or a client inside tx(). */
 export type Queryable = Pick<pg.Pool, "query">;
 
+/** Every connection stayed busy past the wait. No connection was got, so nothing was written and a retry can't double anything. */
+export const isPoolWait = (error: unknown) =>
+  error instanceof Error && error.message === "timeout exceeded when trying to connect";
+
 const SERIALIZATION_FAILURE = "40001";
 const DEADLOCK = "40P01";
 

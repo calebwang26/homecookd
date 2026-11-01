@@ -6,6 +6,9 @@ import * as Sentry from "@sentry/node";
 import { db } from "./db.js";
 import { ApiError } from "./errors.js";
 import { fieldPaths, fileGuard, lastName, looksLikeFileKey } from "./files.js";
+import { inviteRoutes } from "./modules/community/inviteRoutes.js";
+import { communityRoutes } from "./modules/community/routes.js";
+import { cravingRoutes } from "./modules/dish/cravingRoutes.js";
 import { dishRoutes } from "./modules/dish/routes.js";
 import { liveRoutes } from "./modules/live/routes.js";
 import { peopleRoutes } from "./modules/people/routes.js";
@@ -36,6 +39,23 @@ export const REQUEST_TIMEOUT_MS = 30_000;
 export const pathOnly = (url: string) => url.split("?")[0];
 
 const WRITES = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/** Whether a NUL byte is anywhere in a parsed request: Postgres text can't hold one. A loop, because a body can nest deeper than a call stack. */
+function holdsNul(root: unknown): boolean {
+  const left = [root];
+  while (left.length > 0) {
+    const value = left.pop();
+    if (typeof value === "string") {
+      if (value.includes("\0")) return true;
+    } else if (value && typeof value === "object") {
+      for (const [name, child] of Object.entries(value)) {
+        if (name.includes("\0")) return true;
+        left.push(child);
+      }
+    }
+  }
+  return false;
+}
 
 /** Fails at start, not in production, for a route that could take a file key without saying so. */
 function guardFileKeys(app: FastifyInstance): void {
@@ -73,7 +93,8 @@ function guardFileKeys(app: FastifyInstance): void {
   });
 }
 
-export function buildApp(options: { logger?: object | boolean; routes?: (app: FastifyInstance) => void } = {}): FastifyInstance {
+/** `logStream`: production's logging, written somewhere a test can read. `logger` replaces it entirely. */
+export function buildApp(options: { logger?: object | boolean; logStream?: NodeJS.WritableStream; routes?: (app: FastifyInstance) => void } = {}): FastifyInstance {
   const app = Fastify({
     // Only addresses inside our network count as proxies (the load balancer), so a caller can't set req.ip with a header.
     trustProxy: "10.0.0.0/8",
@@ -82,6 +103,7 @@ export function buildApp(options: { logger?: object | boolean; routes?: (app: Fa
     requestTimeout: REQUEST_TIMEOUT_MS,
     logger: options.logger ?? {
       level: process.env.LOG_LEVEL ?? "info",
+      ...(options.logStream ? { stream: options.logStream } : {}),
       serializers: {
         req: (req) => ({ method: req.method, path: pathOnly(req.url) }),
         res: (res) => ({ status: res.statusCode }),
@@ -107,11 +129,17 @@ export function buildApp(options: { logger?: object | boolean; routes?: (app: Fa
 
   guardFileKeys(app);
 
+  // Before any route's own checks, so no route has to remember: Postgres would answer with an error, and that would be a 500.
+  app.addHook("preValidation", async (req) => {
+    if (holdsNul([req.params, req.query, req.body])) throw new ApiError(400, "bad_request");
+  });
+
   app.setNotFoundHandler((req, reply) => reply.status(404).send({ error: "not_found", requestId: req.id }));
 
   app.setErrorHandler((error: Error & { statusCode?: number; validation?: unknown }, req, reply) => {
     if (error instanceof ApiError) {
-      return reply.status(error.statusCode).headers(error.headers).send({ error: error.code, requestId: req.id });
+      const message = error.sentence ? { message: error.sentence } : {};
+      return reply.status(error.statusCode).headers(error.headers).send({ error: error.code, ...message, requestId: req.id });
     }
     if (error.validation) return reply.status(400).send({ error: "bad_request", requestId: req.id });
     const status = error.statusCode ?? 500;
@@ -140,6 +168,9 @@ export function buildApp(options: { logger?: object | boolean; routes?: (app: Fa
   app.register(peopleRoutes);
   app.register(dishRoutes, { prefix: "/dish" });
   app.register(liveRoutes);
+  app.register(communityRoutes);
+  app.register(cravingRoutes);
+  app.register(inviteRoutes, { prefix: "/invite" });
   options.routes?.(app);
 
   return app;
