@@ -1,5 +1,5 @@
 // What one row becomes (SCHEMA.md section 2). A Convex row keeps its Convex id, and its old uuid stays in supabase_id. Name, role, email, tz and
-// consent come from Supabase; language, voice clone and place from Convex; `relation` from Convex, else Supabase. Pure: no database, no outside call.
+// consent come from Supabase; language, voice clone consent and place from Convex; `relation` from Convex, else Supabase. Pure: no database, no outside call.
 // A row with no Convex side isn't copied at all: SYNC-MIGRATION.md says why.
 import type { ConvexFamily, ConvexPerson, ConvexRecipe, SupabaseFamily, SupabaseProfile } from "./sources.js";
 import { isSupabaseId } from "./sources.js";
@@ -55,7 +55,6 @@ export function mergePerson(person: ConvexPerson, supabase: SupabaseProfile | nu
     memorial: supabase?.memorial ?? false,
     language: person.language ?? null,
     voice_clone_consented_at: at(person.voiceClone?.consentedAt),
-    cartesia_voice_id: person.voiceClone?.cartesiaVoiceId ?? null,
     approx_lat: person.approx?.lat ?? null,
     approx_lng: person.approx?.lng ?? null,
     campus: person.campus ?? null,

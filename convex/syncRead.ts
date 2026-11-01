@@ -5,6 +5,7 @@
 // below. A test fails when the schema and these lists part, to make that a decision.
 import { paginationOptsValidator, paginationResultValidator } from "convex/server";
 import { v } from "convex/values";
+import type { Doc } from "./_generated/dataModel";
 import { internalQuery } from "./_generated/server";
 import schema from "./schema";
 
@@ -59,12 +60,20 @@ export const families = internalQuery({
   },
 });
 
+/** From a voice clone, only when she said yes. Its Cartesia id stays here: nothing in Postgres reads it, and its deletion goes through accountDeletions. */
+function personRow(doc: Doc<"people">) {
+  const { voiceClone, ...rest } = only(doc, PERSON_FIELDS);
+  return { ...rest, ...(voiceClone ? { voiceClone: { consentedAt: voiceClone.consentedAt } } : {}) };
+}
+
 export const people = internalQuery({
   args: { paginationOpts: paginationOptsValidator },
-  returns: paginationResultValidator(schema.doc("people").pick(...PERSON_FIELDS)),
+  returns: paginationResultValidator(
+    schema.doc("people").omit("voiceClone").extend({ voiceClone: v.optional(v.object({ consentedAt: v.number() })) }),
+  ),
   handler: async (ctx, { paginationOpts }) => {
     const result = await ctx.db.query("people").paginate(paginationOpts);
-    return { ...result, page: result.page.map((doc) => only(doc, PERSON_FIELDS)) };
+    return { ...result, page: result.page.map(personRow) };
   },
 });
 
