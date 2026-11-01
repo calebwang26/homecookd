@@ -7,7 +7,7 @@ import { enqueue } from "../../outbox.js";
 import type { Trace } from "../dish/budget.js";
 import * as data from "./data.js";
 import { requestMossSync } from "./neighbors.js";
-import { blankFamilyIfEmpty, DELETION, type Deletion, dropRecipes, PURGE_BATCH, RECIPE_FILES, STEPS } from "./purgeSteps.js";
+import { blankFamilyIfEmpty, DELETION, type Deletion, dropRecipes, PURGE_BATCH, RECIPE_FILES, type Step, STEPS } from "./purgeSteps.js";
 import { assertOwnsPeople, refuse } from "./values.js";
 
 /** A purge with no batch for this long stopped; the schedule starts it again. Past this many restarts someone is told, and it's still tried. */
@@ -134,6 +134,21 @@ async function lockedDeletion(c: Queryable, id: string): Promise<Deletion | null
   return rows[0] ?? null;
 }
 
+async function markRun(c: Queryable, id: string): Promise<Deletion | null> {
+  const d = await lockedDeletion(c, id);
+  if (d) await c.query(`update account_deletions set purge_run_at = now() where id = $1`, [id]);
+  return d;
+}
+
+/** A step with its own transactions runs after this row's lock is let go: holding a connection while it waits for more is how purges stop each other (db.ts). */
+async function outsideStep(step: Step, deletionId: string, max: number, options: PurgeOptions): Promise<number> {
+  const d = await tx((c) => markRun(c, deletionId));
+  if (!d) return -1;
+  const changed = await step.run(db(), d, max);
+  await options.fault?.("before-commit", step.name, changed);
+  return changed;
+}
+
 /**
  * Works through every step, a batch to a transaction, until a full pass finds nothing left, then marks the purge finished and starts the outside purge. That last empty pass is the
  * check: a row a moment late, or a batch lost to a crash, is found before anyone says it's done. Safe to run twice at once: each batch holds the deletion's row, and each step finds only
@@ -151,14 +166,15 @@ export async function runPurge(deletionId: string, trace: Pick<Trace, "requestId
     let touched = 0;
     for (const step of STEPS) {
       for (;;) {
-        const n = await tx(async (c) => {
-          const d = await lockedDeletion(c, deletionId);
-          if (!d) return -1;
-          await c.query(`update account_deletions set purge_run_at = now() where id = $1`, [deletionId]);
-          const changed = await step.run(step.outside ? db() : c, d, max);
-          await options.fault?.("before-commit", step.name, changed);
-          return changed;
-        });
+        const n = step.outside
+          ? await outsideStep(step, deletionId, max, options)
+          : await tx(async (c) => {
+              const d = await markRun(c, deletionId);
+              if (!d) return -1;
+              const changed = await step.run(c, d, max);
+              await options.fault?.("before-commit", step.name, changed);
+              return changed;
+            });
         if (n < 0) return "missing";
         await options.fault?.("after-commit", step.name, n);
         touched += n;
