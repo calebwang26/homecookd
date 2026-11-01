@@ -275,7 +275,7 @@ test("the upload's link is what S3 needs to refuse the wrong thing: its type and
   const t = await newBackend();
   const r = await post(t, "/dish/files?kind=voice", { contentType: "audio/webm;codecs=opus", size: 1234 });
   assert.equal(r.status, 201);
-  like(r.data, { kind: "voice", contentType: "audio/webm", size: 1234, uploadHeaders: { "Content-Type": "audio/webm" }, expiresInS: 900 });
+  like(r.data, { kind: "voice", contentType: "audio/webm", size: 1234, uploadHeaders: { "Content-Type": "audio/webm" }, expiresInS: 120 });
   const row = await fileRow(r.data.fileId);
   like(row, { bucket: "private", kind: "voice", content_type: "audio/webm", uploaded_at: null, attached_at: null, family_id: null, owner_person_id: null });
   assert.equal(String(row.size_bytes), "1234");

@@ -13,7 +13,7 @@ import type { AnswerRow, CardRow } from "./data.js";
 import * as data from "./data.js";
 import { type GuessResult, models, newSpend, type Photo } from "./model.js";
 import { flagged } from "./moderation.js";
-import { askJson, cardJson, due, fresh, type State, stateOf, translationHash } from "./pages.js";
+import { askJson, cardJson, due, fresh, saveTranslationIfCurrent, type State, stateOf, translationHash } from "./pages.js";
 import type { MissQuestion, QuestionId, Relation } from "./recipe/types.js";
 import { askedText, isSuggestionId, LIMITS, OWN_IDS, RELATION_LABEL } from "./recipe/validate.js";
 import { attachFile, checkUpload, confirmUpload, fileGone, type FileKind, makeUpload, readFile, usableFile } from "./uploads.js";
@@ -369,10 +369,7 @@ async function translateForPage(askTokenHash: string, lang: string, trace: Trace
       trace.log.warn({ lang }, "a translation has a filtered word; her page stays in English");
       return;
     }
-    await data.saveTranslation(db(), {
-      askId: row.id,
-      lang,
-      sourceHash,
+    await saveTranslationIfCurrent(row.id, lang, sourceHash, {
       guess,
       questions,
       message: out.message,

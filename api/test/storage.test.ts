@@ -23,7 +23,7 @@ test("an upload link: short-lived, and S3 itself refuses another type or size", 
   assert.equal(url.pathname, "/private/dish/abc");
   assert.ok(url.hostname.startsWith("hc-private-test.s3."), url.hostname);
   assert.equal(url.searchParams.get("X-Amz-Expires"), String(UPLOAD_LINK_S));
-  assert.equal(UPLOAD_LINK_S, 900);
+  assert.equal(UPLOAD_LINK_S, 120);
   const signed = url.searchParams.get("X-Amz-SignedHeaders")!.split(";");
   for (const header of ["content-length", "content-type", "host"]) assert.ok(signed.includes(header), signed.join());
   // A browser's plain PUT can't send checksum headers, and a signed link that expects them would fail.

@@ -1,8 +1,10 @@
-// Her words and her version, after the reply (convex/dishAsks.ts hear and merge). Both run from the `scheduled` queue, so either can arrive
-// twice. Safe to repeat:
-// - hear saves words only while the clip is still the answer's, and skips what's already heard.
-// - merge takes a claim first (mergeTries and mergeStartedAt together, only while none started in the last 3 minutes) and writes her
-//   version only while it still holds that claim. So a repeat does nothing, and a try a newer answer overtook writes nothing.
+// Her words and her version, after the reply (convex/dishAsks.ts hear and merge). Both run from the `scheduled` queue, together and possibly twice.
+// Safe to repeat, and safe at once:
+// - A clip is heard by one holder at a time (claimHearing), so Ink and the translation are paid once. Words and English are written only where
+//   they're still empty, so a slow holder can't change what a merge already quoted. A merge that finds a clip being heard gives its try back and
+//   looks again shortly. A holder that died stops counting after HEAR_STALE_MS.
+// - merge takes a claim first (mergeTries and mergeStartedAt together, only while none started in the last 3 minutes) and writes her version only
+//   while it still holds that claim. So a repeat does nothing, and a try a newer answer overtook writes nothing.
 // A failed try is tried again 3 minutes later, by this queue and by the kid's next look, at most 5 times.
 import { db, tx } from "../../db.js";
 import { enqueue } from "../../outbox.js";
@@ -11,10 +13,21 @@ import type { AnswerRow } from "./data.js";
 import * as data from "./data.js";
 import { DishModelError, models, newSpend, type Spend } from "./model.js";
 import { flagged } from "./moderation.js";
-import { due, momOver, stateOf, translationHash } from "./pages.js";
+import { due, momOver, saveTranslationIfCurrent, stateOf, translationHash } from "./pages.js";
 import type { QuestionId } from "./recipe/types.js";
 import { readFile } from "./uploads.js";
-import { dayOf, LIMITS_WORDS, MAX_MERGES, MERGE_STALE_MS, missRecipe, recipeTexts, type StoredRecipe, storedRecipe } from "./values.js";
+import {
+  dayOf,
+  HEAR_STALE_MS,
+  HEAR_WAIT_MS,
+  LIMITS_WORDS,
+  MAX_MERGES,
+  MERGE_STALE_MS,
+  missRecipe,
+  recipeTexts,
+  type StoredRecipe,
+  storedRecipe,
+} from "./values.js";
 
 type Heard = {
   answerId: string;
@@ -41,28 +54,49 @@ const heard = (a: AnswerRow): Heard => ({
 
 const momBudgetLeft = async () => !momOver(await data.spentOn(db(), dayOf(Date.now())));
 
+/** `a` as the database has it now. False when it's no longer the answer's clip. */
+async function reread(a: Heard): Promise<boolean> {
+  const row = await data.answerById(db(), a.answerId);
+  if (row?.audio_key !== a.audioKey) return false;
+  Object.assign(a, heard(row));
+  return true;
+}
+
 /**
- * Ink writes her clip down, then Claude puts it in English when she spoke another language; each is saved as it lands, so a later try
- * doesn't pay for it again. Updates `a` in place.
+ * Ink writes her clip down, then Claude puts it in English when she spoke another language; each is saved as it lands, so a later try doesn't pay
+ * for it again. Updates `a` in place to what's stored, which is what a merge must quote. "busy": someone else has this clip, or it was replaced.
  */
-async function hearOne(a: Heard, spend: Spend): Promise<"ok" | "budget" | "missing"> {
-  if (a.words === undefined) {
-    if (!(await momBudgetLeft())) return "budget";
-    const file = await readFile(a.audioKey);
-    if (!file) return "missing";
-    const blob = new Blob([Buffer.from(file.bytes)], { type: file.contentType ?? "" });
-    a.words = (await models.transcribe(blob, a.language, a.durationS, spend)).trim().slice(0, LIMITS_WORDS);
-    if (a.language === "en" || !a.words) a.english = null;
-    await data.setAnswerWords(db(), a.answerId, a.audioKey, { words: a.words, english: a.english });
-  }
-  if (a.english === undefined) {
-    if (a.words && a.language !== "en") {
+async function hearOne(a: Heard, spend: Spend): Promise<"ok" | "budget" | "missing" | "busy"> {
+  if (a.words !== undefined && a.english !== undefined) return "ok";
+  const claimedAt = new Date();
+  const held = await data.claimHearing(db(), a.answerId, a.audioKey, claimedAt, HEAR_STALE_MS);
+  if (!held) return (await reread(a)) && a.words !== undefined && a.english !== undefined ? "ok" : "busy";
+  Object.assign(a, heard(held));
+  try {
+    if (a.words === undefined) {
       if (!(await momBudgetLeft())) return "budget";
-      a.english = await models.toEnglish(a.words, spend);
-    } else a.english = null;
-    await data.setAnswerWords(db(), a.answerId, a.audioKey, { english: a.english });
+      const file = await readFile(a.audioKey);
+      if (!file) return "missing";
+      const blob = new Blob([Buffer.from(file.bytes)], { type: file.contentType ?? "" });
+      const words = (await models.transcribe(blob, a.language, a.durationS, spend)).trim().slice(0, LIMITS_WORDS);
+      const saved = await data.saveWords(db(), a.answerId, a.audioKey, words, a.language === "en" || !words ? null : undefined);
+      if (saved) Object.assign(a, heard(saved));
+      else if (!(await reread(a))) return "busy";
+    }
+    if (a.english === undefined) {
+      let english: string | null = null;
+      if (a.words && a.language !== "en") {
+        if (!(await momBudgetLeft())) return "budget";
+        english = await models.toEnglish(a.words, spend);
+      }
+      const saved = await data.saveEnglish(db(), a.answerId, a.audioKey, english);
+      if (saved) Object.assign(a, heard(saved));
+      else if (!(await reread(a))) return "busy";
+    }
+    return "ok";
+  } finally {
+    await data.releaseHearing(db(), a.answerId, a.audioKey, claimedAt);
   }
-  return "ok";
 }
 
 /** Right after she answers: Ink writes it down (and Claude translates), so Send seldom waits on it. */
@@ -142,6 +176,7 @@ async function versionInPageLang(askId: string, version: StoredRecipe, spend: Sp
     { guess: missRecipe(row.guess), questions: row.asked, message: row.message, version: missRecipe(version) },
     lang,
     spend,
+    TRY.translate,
   );
   if (!out?.version) return;
   const translated = {
@@ -151,8 +186,15 @@ async function versionInPageLang(askId: string, version: StoredRecipe, spend: Sp
     version: storedRecipe(out.version),
   };
   if (flagged(...recipeTexts(translated.guess), ...recipeTexts(translated.version), translated.message)) return;
-  await data.saveTranslation(db(), { askId, lang, sourceHash: translationHash({ ...row, version }), ...translated });
+  await saveTranslationIfCurrent(askId, lang, translationHash({ ...row, version }), translated, version);
 }
+
+/**
+ * How a try stays under MERGE_STALE_MS and SQS's 300 s visibility, even with 6 unheard clips (six times CLIP_WORST_MS wouldn't). Past hearMs it stops
+ * hearing, gives the try back and queues itself: what it heard is saved, so the next one goes on from there. So it's at most hearMs plus one clip's worst
+ * case, or hearMs, her version (60 s) and the page's translation (45 s, no retry). A test holds the sum.
+ */
+export const TRY = { hearMs: 45_000, translate: { timeoutMs: 45_000, retries: 0 } };
 
 /**
  * One merge try. Mom's version is rebuilt from the guess with all of her answers: Ink writes down the clips with no words yet, Claude
@@ -177,11 +219,20 @@ export async function merge(askId: string, trace: Trace): Promise<void> {
     trace.log.warn(tag, "today's budget is spent; the kid's next look on a later day starts the merge again");
     await release();
   };
+  /** Not a real try: give it back, and look again. */
+  const again = async (afterMs: number) => {
+    await release();
+    const sendAfter = new Date(Date.now() + afterMs);
+    await enqueue(db(), { queue: "scheduled", payload: { task: "dish.merge", askId }, requestId: trace.requestId, sendAfter });
+  };
   try {
     for (const a of claim.answers) {
+      const unheard = a.words === undefined || a.english === undefined;
       const r = await hearOne(a, spend);
       if (r === "budget") return await overBudget();
       if (r === "missing") throw new Error("a clip is missing");
+      if (r === "busy") return await again(HEAR_WAIT_MS);
+      if (unheard && Date.now() - started > TRY.hearMs) return await again(0);
     }
     const audioKeys = claim.answers.map((a) => a.audioKey);
     if (claim.hasVersion && !claim.answers.some((a) => !a.merged && a.words)) {

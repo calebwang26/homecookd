@@ -10,7 +10,7 @@ import { models } from "../src/modules/dish/model.js";
 import { dayOf, MERGE_STALE_MS, sha256Hex } from "../src/modules/dish/values.js";
 import { sendDue } from "../src/outbox.js";
 import { handleMessage } from "../src/scheduled.js";
-import { type ObjectStore, useObjectStore } from "../src/storage.js";
+import { type ObjectStore, UPLOAD_LINK_S, useObjectStore } from "../src/storage.js";
 import { freshDatabase, hasDatabase } from "./helpers.js";
 
 export { hasDatabase };
@@ -30,6 +30,7 @@ export type FakeStore = ObjectStore & {
   removed: string[];
   failRemoves: boolean;
   failHeads: boolean;
+  failGets: boolean;
 };
 
 export function fakeStore(): FakeStore {
@@ -39,13 +40,15 @@ export function fakeStore(): FakeStore {
     removed: [],
     failRemoves: false,
     failHeads: false,
+    failGets: false,
     put(url, bytes, contentType) {
       objects.set(new URL(url).pathname.slice(1), { bytes, contentType });
     },
     async presignPut(key, contentType) {
-      return { url: `https://fake-s3.test/${key}`, headers: { "Content-Type": contentType }, expiresInS: 900 };
+      return { url: `https://fake-s3.test/${key}`, headers: { "Content-Type": contentType }, expiresInS: UPLOAD_LINK_S };
     },
     async presignGet(key) {
+      if (store.failGets) throw new Error("no credentials");
       return `https://fake-s3.test/get/${key}`;
     },
     async head(key) {
@@ -79,6 +82,10 @@ export const model = {
   guess: null as null | Real,
   version: null as null | Real,
   forMom: null as null | Real,
+  /** Runs in place of Ink for a test: to hold a clip open, or to hear other words. */
+  transcribe: null as null | ((real: () => Promise<string>) => Promise<string>),
+  /** The same for the English. */
+  english: null as null | ((real: () => Promise<string | null>) => Promise<string | null>),
 };
 
 models.writeGuess = (async (...a: Parameters<typeof real.writeGuess>) => {
@@ -91,11 +98,11 @@ models.writeVersion = (async (...a: Parameters<typeof real.writeVersion>) => {
 }) as typeof real.writeVersion;
 models.transcribe = async (...a: Parameters<typeof real.transcribe>) => {
   model.calls.transcribe += 1;
-  return real.transcribe(...a);
+  return model.transcribe ? model.transcribe(() => real.transcribe(...a)) : real.transcribe(...a);
 };
 models.toEnglish = async (...a: Parameters<typeof real.toEnglish>) => {
   model.calls.toEnglish += 1;
-  return real.toEnglish(...a);
+  return model.english ? model.english(() => real.toEnglish(...a)) : real.toEnglish(...a);
 };
 models.translateForMom = (async (...a: Parameters<typeof real.translateForMom>) => {
   model.calls.forMom += 1;
@@ -125,6 +132,8 @@ export async function newBackend(): Promise<FastifyInstance> {
   model.guess = null;
   model.version = null;
   model.forMom = null;
+  model.transcribe = null;
+  model.english = null;
   return buildApp({ logger: false });
 }
 
@@ -217,7 +226,7 @@ const FILE_TIMES = ["created_at", "uploaded_at", "attached_at", "delete_requeste
 export async function advance(ms: number): Promise<void> {
   const shift = (cols: string[]) => cols.map((c) => `${c} = ${c} - make_interval(secs => $1)`).join(", ");
   await db().query(`update dish_asks set ${shift(CARD_TIMES)}`, [ms / 1000]);
-  await db().query(`update dish_answers set ${shift(["created_at"])}`, [ms / 1000]);
+  await db().query(`update dish_answers set ${shift(["created_at", "hearing_at"])}`, [ms / 1000]);
   await db().query(`update files set ${shift(FILE_TIMES)}`, [ms / 1000]);
   await db().query(`update outbox set ${shift(["send_after"])} where sent_at is null`, [ms / 1000]);
 }

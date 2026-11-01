@@ -1109,6 +1109,32 @@ test("when S3 can't answer, the caller hears it's safe to retry, and no file is 
   like(await post(t, "/dish/files/confirm", { fileId: link.data.fileId }), { status: 201, data: { size: anyNumber } });
 });
 
+test("a read link that can't be made never loses a card: the kid still gets the token, and the files aren't stranded", { skip }, async () => {
+  const t = await newBackend();
+  const photo = await fileId(t, "photo");
+  store.failGets = true;
+  const r = await post(t, "/dish/cards", { dish: "dal", kidName: "Caleb", photos: [photo] });
+  assert.equal(r.status, 201, r.body);
+  assert.match(r.data.kidToken, TOKEN22);
+  assert.deepEqual(r.data.card.photoUrls, [], "no link yet, in a shape the page already handles");
+  const askToken = new URL(r.data.card.askUrl).searchParams.get("t")!;
+  // The other pages come back too, with their files missing for now.
+  assert.equal((await post(t, "/dish/cards/get", { kidToken: r.data.kidToken })).status, 200);
+  assert.equal((await post(t, "/dish/ask/peek", { askToken })).status, 200);
+  store.failGets = false;
+  const card = await getCard(t, r.data.kidToken);
+  assert.equal(card.photoUrls.length, 1, "the next look has the file");
+  like(await post(t, "/dish/cards", { dish: "dal", photos: [photo] }), { status: 404 }); // it's on that one card
+});
+
+test("a clip whose read link can't be made reads as null, as a missing clip always did", { skip }, async () => {
+  const t = await newBackend();
+  const { askToken } = await askedCard(t);
+  await answer(t, askToken, "q1");
+  store.failGets = true;
+  like((await peek(t, askToken)).clips, [{ id: "q1", audioUrl: null, durationS: 4.2 }]);
+});
+
 after(async () => {
   if (hasDatabase) await db().end();
 });

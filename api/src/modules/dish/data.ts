@@ -10,9 +10,10 @@
 //   a card's uploads (delete)                 files_ask                             50
 //   mark files for deletion                   files primary key                     the card's own keys
 //   today's spend                             daily_spend primary key               one row
-//   orphan sweep                              files_orphans                         200 a pass
-//   S3 delete sweep                           files_to_delete                       200 a pass
+//   orphan sweep                              files_dish_orphans                    200 a pass
+//   S3 delete sweep                           files_dish_to_delete                  200 a pass
 //   drop deleted rows                         files_deleted_old                     500 a pass
+//   claim a clip, save its words              dish_answers primary key              one row
 //   C4: old ip_key on cards, files            dish_asks_ip_key_old, files_ip_key_old  500 a pass
 //   a person's cards (purge)                  dish_asks_person_recent, dish_asks_requested_recent  100 a pass
 //   a person's craving links (purge)          craving_links_person_newest           100 a pass
@@ -72,6 +73,7 @@ export type AnswerRow = {
   english: string | null;
   english_settled: boolean;
   merged: boolean;
+  hearing_at: Date | null;
   created_at: Date;
 };
 
@@ -177,28 +179,55 @@ export async function insertAnswer(
 export async function replaceAnswer(q: Queryable, id: string, a: { audioKey: string; durationS: number; language: string; now: Date }): Promise<void> {
   await q.query(
     `update dish_answers set audio_key = $2, duration_s = $3, language = $4, created_at = $5,
-       merged = false, words = null, english = null, english_settled = false
+       merged = false, words = null, english = null, english_settled = false, hearing_at = null
      where id = $1`,
     [id, a.audioKey, a.durationS, a.language, a.now],
   );
 }
 
-/** The words of one clip, kept only while it's still the answer's clip (a re-record keeps none). */
-export async function setAnswerWords(
-  q: Queryable,
-  id: string,
-  audioKey: string,
-  heard: { words?: string; english?: string | null },
-): Promise<void> {
-  const settle = heard.english !== undefined;
-  await q.query(
-    `update dish_answers set
-       words = case when $3 then $4 else words end,
-       english = case when $5 then $6 else english end,
-       english_settled = english_settled or $5
-     where id = $1 and audio_key = $2`,
-    [id, audioKey, heard.words !== undefined, heard.words ?? null, settle, heard.english ?? null],
+/**
+ * One holder hears a clip at a time, so she's paid for once and has one set of words. Null when there's nothing to take: someone is on it, it's
+ * done, or it's no longer the answer's clip. A holder that died stops counting after `staleMs`.
+ */
+export async function claimHearing(q: Queryable, id: string, audioKey: string, now: Date, staleMs: number): Promise<AnswerRow | null> {
+  const { rows } = await q.query(
+    `update dish_answers set hearing_at = $3
+      where id = $1 and audio_key = $2 and (words is null or not english_settled)
+        and (hearing_at is null or hearing_at <= $3::timestamptz - make_interval(secs => $4))
+      returning *`,
+    [id, audioKey, now, staleMs / 1000],
   );
+  return rows[0] ?? null;
+}
+
+export async function releaseHearing(q: Queryable, id: string, audioKey: string, claimedAt: Date): Promise<void> {
+  await q.query(`update dish_answers set hearing_at = null where id = $1 and audio_key = $2 and hearing_at = $3`, [id, audioKey, claimedAt]);
+}
+
+/**
+ * Her words, once: the first to land stays, so a slow holder can't overwrite what a merge already quoted. Null when that wasn't this call.
+ * `english` undefined leaves the English unsettled.
+ */
+export async function saveWords(q: Queryable, id: string, audioKey: string, words: string, english: string | null | undefined): Promise<AnswerRow | null> {
+  const settle = english !== undefined;
+  const { rows } = await q.query(
+    `update dish_answers set words = $3, english = case when $4 then $5 else english end, english_settled = english_settled or $4
+      where id = $1 and audio_key = $2 and words is null
+      returning *`,
+    [id, audioKey, words, settle, english ?? null],
+  );
+  return rows[0] ?? null;
+}
+
+/** Their English, once. */
+export async function saveEnglish(q: Queryable, id: string, audioKey: string, english: string | null): Promise<AnswerRow | null> {
+  const { rows } = await q.query(
+    `update dish_answers set english = $3, english_settled = true
+      where id = $1 and audio_key = $2 and not english_settled
+      returning *`,
+    [id, audioKey, english],
+  );
+  return rows[0] ?? null;
 }
 
 export async function markAnswersMerged(q: Queryable, askId: string, audioKeys: string[]): Promise<void> {
@@ -369,11 +398,15 @@ export async function unmarkAlertSent(key: string): Promise<void> {
 // ---------------------------------------------------------------------------------------------
 // The sweep
 
-export async function markOrphanFiles(olderThanMs: number, batch = 200): Promise<number> {
+// The sweep can reach one bucket (objectStore() is the private one), and it owns only anonymous uploads: another row's key would be "deleted" from
+// the wrong bucket, S3 would say fine, and the row would say deleted while the file lives on. The partial indexes say the same (010_dish_hearing.sql).
+const SWEEPABLE = `bucket = 'private' and capability_hash is not null`;
+
+export async function markOrphanFiles(olderThanMs: number, batch: number): Promise<number> {
   const { rowCount } = await db().query(
     `update files set delete_requested_at = now()
       where key in (select key from files
-                     where attached_at is null and delete_requested_at is null and deleted_at is null
+                     where ${SWEEPABLE} and attached_at is null and delete_requested_at is null and deleted_at is null
                        and created_at < now() - make_interval(secs => $1)
                      order by created_at limit $2)`,
     [olderThanMs / 1000, batch],
@@ -381,9 +414,12 @@ export async function markOrphanFiles(olderThanMs: number, batch = 200): Promise
   return rowCount ?? 0;
 }
 
-export async function filesToDelete(batch = 200): Promise<string[]> {
+/** A real deletion (a file that was on a card) before an orphan, so a flood of abandoned uploads can't hold it up. */
+export async function filesToDelete(batch: number): Promise<string[]> {
   const { rows } = await db().query(
-    `select key from files where delete_requested_at is not null and deleted_at is null order by delete_requested_at limit $1`,
+    `select key from files
+      where ${SWEEPABLE} and delete_requested_at is not null and deleted_at is null
+      order by attached_at is null, delete_requested_at limit $1`,
     [batch],
   );
   return rows.map((row) => row.key);
@@ -395,7 +431,7 @@ export async function markFileDeleted(key: string): Promise<void> {
 
 export async function dropDeletedFileRows(olderThanDays: number, batch = 500): Promise<number> {
   const { rowCount } = await db().query(
-    `delete from files where key in (select key from files where deleted_at < now() - make_interval(days => $1) limit $2)`,
+    `delete from files where key in (select key from files where ${SWEEPABLE} and deleted_at < now() - make_interval(days => $1) limit $2)`,
     [olderThanDays, batch],
   );
   return rowCount ?? 0;

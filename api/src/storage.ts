@@ -16,7 +16,11 @@ export interface ObjectStore {
   remove(key: string): Promise<void>;
 }
 
-export const UPLOAD_LINK_S = 15 * 60;
+/**
+ * Long enough to start an upload right after asking for the link: S3 checks a link when a request starts, so a slow upload isn't cut off. A link can be
+ * used again until it expires, even to put back a file just deleted (DISH-MIGRATION.md, known limits), so it's as short as it can be.
+ */
+export const UPLOAD_LINK_S = 2 * 60;
 /**
  * A read link is signed for the current hour and lasts two, so it's good for at least an hour and stays the same for an hour:
  * Mom's page polls every 2 seconds, and a new URL each time would restart the audio she's playing.

@@ -19,6 +19,7 @@ import {
   like,
   makeCard,
   MIN,
+  model,
   MOM_ASKED,
   newBackend,
   peek,
@@ -145,6 +146,46 @@ test("a purge is safe to run twice, and a card's family alone never reaches it",
   assert.deepEqual(await rowOf(c.kidToken), once);
   like(await rowOf(familyOnly.kidToken), { guess: { dish: "tomato egg" } });
   assert.equal((await post(t, "/dish/cards/get", { kidToken: familyOnly.kidToken })).status, 200);
+});
+
+test("a translation in flight while the kid deletes can't bring the message back", { skip }, async () => {
+  const { t, familyId, leo, dad, c, row, link } = await linkedCards();
+  await link({ person_id: leo, requested_of: dad, family_id: familyId });
+  await post(t, "/dish/cards/update", { kidToken: c.kidToken, kidName: "Leo" });
+  await db().query("delete from dish_ask_translations where ask_id = $1", [row.id]);
+  model.forMom = async (real) => {
+    const translated = await real(); // made from the message as it was
+    await deleteAccount(leo); // the purge lands before it's saved
+    return translated;
+  };
+  const ask = await peek(t, c.askToken, "mr");
+  assert.equal(ask.inLang, null);
+  assert.deepEqual(await translations(row.id), []);
+  assert.equal((await rowOf(c.kidToken)).message, "");
+});
+
+test("her version translated in flight while the kid deletes isn't saved either, and her version still lands", { skip }, async () => {
+  const t = await newBackend();
+  const familyId = await family();
+  const leo = await person(familyId, "kid");
+  const dad = await person(familyId, "cook");
+  const c = await makeCard(t, { dish: "tomato egg", kidName: "Leo" });
+  await askMom(t, c.kidToken, MOM_ASKED);
+  const row = await rowOf(c.kidToken);
+  await db().query("update dish_asks set person_id = $2, requested_of = $3 where id = $1", [row.id, leo, dad]);
+  await peek(t, c.askToken, "hi");
+  await answer(t, c.askToken, "q1", { lang: "hi" });
+  await finish(t, c.askToken);
+  model.forMom = async (real) => {
+    const translated = await real();
+    await deleteAccount(leo);
+    return translated;
+  };
+  await settle();
+  const kept = await rowOf(c.kidToken);
+  assert.ok(kept.version);
+  assert.equal(kept.message, "");
+  assert.deepEqual(await translations(row.id), [], "nothing holds the kid's message");
 });
 
 test("C4: an anonymous card's ip_key goes after 90 days, and a file's too; a newer one stays; the sweep repeats harmlessly", { skip }, async () => {

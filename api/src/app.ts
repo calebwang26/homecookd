@@ -23,6 +23,14 @@ declare module "fastify" {
 
 const REQUEST_ID = /^[A-Za-z0-9-]{8,64}$/;
 
+/**
+ * Above the load balancer's idle_timeout (infra/modules/env/load_balancer.tf, 3700 s): if this side closed an idle connection first, the load balancer could
+ * send a request down it as it closed, and the caller would get a 502. A test reads the Terraform and fails if this falls behind.
+ */
+export const KEEP_ALIVE_MS = 3_720_000;
+/** How long a caller may take to send a whole request, not how long we may take to answer. Bodies are small: files go straight to S3. */
+export const REQUEST_TIMEOUT_MS = 30_000;
+
 /** Paths can hold capability tokens in their query, so logs get the path only. */
 export const pathOnly = (url: string) => url.split("?")[0];
 
@@ -69,6 +77,8 @@ export function buildApp(options: { logger?: object | boolean; routes?: (app: Fa
     // Only addresses inside our network count as proxies (the load balancer), so a caller can't set req.ip with a header.
     trustProxy: "10.0.0.0/8",
     bodyLimit: 1024 * 1024, // bytes never pass through the api: files go straight to S3
+    keepAliveTimeout: KEEP_ALIVE_MS,
+    requestTimeout: REQUEST_TIMEOUT_MS,
     logger: options.logger ?? {
       level: process.env.LOG_LEVEL ?? "info",
       serializers: {

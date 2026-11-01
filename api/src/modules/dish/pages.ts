@@ -1,6 +1,6 @@
 // What the two pages get, and the state they're worked out from. A card's status is computed here: the stored one changes only on send,
 // version and reopen. (convex/dishAsks.ts cardJson, askJson and the helpers above them.)
-import { type Queryable } from "../../db.js";
+import { type Queryable, tx } from "../../db.js";
 import type { AnswerRow, CardRow } from "./data.js";
 import * as data from "./data.js";
 import type { MissQuestion } from "./recipe/types.js";
@@ -16,6 +16,7 @@ import {
   MOM_OVERAGE_USD,
   sha256Hex,
   shownRecipe,
+  type StoredRecipe,
 } from "./values.js";
 
 /** What the status and the merge are worked out from. */
@@ -25,7 +26,7 @@ export async function stateOf(q: Queryable, row: CardRow, now = Date.now()): Pro
   return { row, answers: await data.answersOf(q, row.id), now, spent: await data.spentOn(q, dayOf(now)) };
 }
 
-/** A try that started under 3 minutes ago may still be running (a try takes at most 2). */
+/** A try that started under 3 minutes ago may still be running (merge.ts holds a try under this). */
 const running = (s: State) => s.row.merge_started_at !== null && s.row.merge_started_at.getTime() > s.now - MERGE_STALE_MS;
 /** Ink heard no words in any of her clips: trying again won't change that. */
 const heardNothing = (answers: AnswerRow[]) => answers.length > 0 && answers.every((a) => a.words === "");
@@ -45,6 +46,7 @@ export const due = (s: State) => !!s.row.finished_at && s.row.merge_tries < MAX_
 
 const ms = (d: Date | null) => (d ? d.getTime() : null);
 const link = (key: string | null) => (key ? readLink(key) : Promise.resolve(null));
+const photoLinks = async (keys: string[]) => (await Promise.all(keys.map(readLink))).filter((url): url is string => !!url);
 
 export async function cardJson(s: State, askToken: string): Promise<Card> {
   const { row, answers } = s;
@@ -78,7 +80,7 @@ export async function cardJson(s: State, askToken: string): Promise<Card> {
     message: row.message,
     kidVoiceUrl: await link(row.kid_voice_note_key),
     kidVoiceS: row.kid_voice_note_key ? row.kid_voice_s : null,
-    photoUrls: await Promise.all(row.photo_keys.map((key) => readLink(key))),
+    photoUrls: await photoLinks(row.photo_keys),
     askUrl: row.relation === "none" ? null : askUrlOf(askToken),
     askedAt: ms(row.asked_at),
     openedAt: ms(row.opened_at),
@@ -101,6 +103,25 @@ function stable(v: unknown): string {
 /** What Mom's page in another language was translated from: while it matches, the translation stands. */
 export const translationHash = (row: Pick<CardRow, "asked" | "message" | "version" | "guess">) =>
   sha256Hex(stable([row.asked.map((q) => [q.id, q.text]), row.message, row.version ?? null, row.guess]));
+
+/**
+ * Saves a translation only if the card still says what was translated. A translation takes seconds, and in that time an account deletion can blank the
+ * kid's message or her version: this copy must not bring them back. `version`: the one it was made for, when the card doesn't hold it yet.
+ */
+export async function saveTranslationIfCurrent(
+  askId: string,
+  lang: string,
+  sourceHash: string,
+  translated: { guess: StoredRecipe; questions: MissQuestion[]; message: string; version: StoredRecipe | null },
+  version?: StoredRecipe,
+): Promise<void> {
+  await tx(async (c) => {
+    const row = await data.cardById(c, askId, true);
+    if (row && translationHash(version ? { ...row, version } : row) === sourceHash) {
+      await data.saveTranslation(c, { askId, lang, sourceHash, ...translated });
+    }
+  });
+}
 
 /** The card in Mom's page language, from the cache (never translated here); null for English or none yet. */
 async function inLangOf(q: Queryable, row: CardRow, lang: string | undefined, open: MissQuestion[]): Promise<Ask["inLang"]> {
@@ -132,7 +153,7 @@ export async function askJson(q: Queryable, s: State, lang?: string): Promise<As
     kidVoiceS: row.kid_voice_note_key ? row.kid_voice_s : null,
     guess: shownRecipe(row.guess),
     inLang: await inLangOf(q, row, lang, open),
-    photoUrls: await Promise.all(row.photo_keys.map((key) => readLink(key))),
+    photoUrls: await photoLinks(row.photo_keys),
     questions: open,
     answered: [...answered].sort(),
     clips: await Promise.all(answers.map(async (a) => ({ id: a.question_id, audioUrl: await readLink(a.audio_key), durationS: a.duration_s }))),

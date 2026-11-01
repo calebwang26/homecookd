@@ -60,9 +60,15 @@ export const CLIP_SLACK_S = 5;
 export const KID_VOICE_S = 60;
 export const MAX_EDITS = 20;
 export const LIMITS_WORDS = LIMITS.words;
-/** Merges: at most 5 tries per round of new answers, at least 3 minutes apart (a try is at most 2 minutes). */
+/** Merges: at most 5 tries per round of new answers, at least 3 minutes apart. A try stays under this (merge.ts, TRY). */
 export const MAX_MERGES = 5;
 export const MERGE_STALE_MS = 3 * 60_000;
+/** One clip's worst case: reading it from S3 (34 s with its retry), Ink (25 s), the English (60 s with its retry). */
+export const CLIP_WORST_MS = 120_000;
+/** A clip someone has been hearing for this long has no one hearing it anymore: the holder died. */
+export const HEAR_STALE_MS = CLIP_WORST_MS + 10_000;
+/** How soon a merge looks again when someone else is hearing one of her clips. */
+export const HEAR_WAIT_MS = 10_000;
 /** Answers left this long without Send (she closed the tab) count as sent, unless the kid asked since. */
 export const ABANDONED_MS = 20 * 60_000;
 /** An upload not on a card by then is deleted (nobody saved it). */

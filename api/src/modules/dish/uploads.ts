@@ -10,6 +10,7 @@
 //
 // Signed-in routes could pair this with the session guard once a card is claimed: when a card joins a family, its files get `family_id`,
 // and then files.ts's requireOwnFiles covers them too (the claim's PR).
+import * as Sentry from "@sentry/node";
 import { randomUUID } from "node:crypto";
 import { db, type Queryable } from "../../db.js";
 import { objectStore } from "../../storage.js";
@@ -123,4 +124,15 @@ export async function readFile(key: string): Promise<{ bytes: Uint8Array; conten
   return await storage(() => objectStore().read(key));
 }
 
-export const readLink = (key: string) => objectStore().presignGet(key);
+/**
+ * A read link, or null when one can't be made, which the pages' shapes already allow. It never throws: a page comes back with the file missing rather
+ * than failing, and POST /dish/cards has already committed by now, so a failure there would lose the only copy of the kid's token.
+ */
+export async function readLink(key: string): Promise<string | null> {
+  try {
+    return await objectStore().presignGet(key);
+  } catch (error) {
+    Sentry.captureException(error);
+    return null;
+  }
+}

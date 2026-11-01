@@ -1,6 +1,7 @@
-// The daily model budget (DISH-ASK-SPEC.md §6): every paid call goes into today's `daily_spend` row and `model_calls`. The check runs
-// before each paid call, so a few calls at the same moment can pass the cap by cents, as today. The total can't be lost to a race (an
-// atomic upsert), and only one caller can claim the day's alert.
+// The daily model budget (DISH-ASK-SPEC.md §6): every paid call goes into today's `daily_spend` row and `model_calls`. The check runs before a call and
+// the cost is added after it, as on Convex, so everything in flight when the cap is reached still lands: the overrun is what those calls cost. That's
+// about $0.001 a card, but up to about $0.30 a page translation on Opus, so 100 first-time translations at once could pass the cap by tens of dollars
+// (DISH-MIGRATION.md, known limits). The total can't be lost to a race (an atomic upsert), and only one caller can claim the day's alert.
 import { db, tx } from "../../db.js";
 import { enqueue } from "../../outbox.js";
 import * as data from "./data.js";

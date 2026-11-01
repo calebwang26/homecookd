@@ -153,7 +153,7 @@ const PROMPT: Record<Job, string> = { guess: GUESS_PROMPT, version: VERSION_PROM
 const MAX_OUTPUT_TOKENS = 16_000;
 /** The first call's timeout, and the whole budget with the one retry. The kid waits on the guess (60 s on the web). */
 type Budget = { first: number; budget: number };
-const MS: Record<Job, Budget> = {
+export const MS: Record<Job, Budget> = {
   guess: { first: 25_000, budget: 30_000 },
   version: { first: 45_000, budget: 60_000 },
 };
@@ -427,7 +427,7 @@ async function translateCall(
   apiKey: string,
   purpose: string,
   prompt: string,
-  body: { maxTokens: number; system: string; content: string; effort: "low" | "medium"; schema: Record<string, unknown>; timeoutMs: number },
+  body: { maxTokens: number; system: string; content: string; effort: "low" | "medium"; schema: Record<string, unknown>; timeoutMs: number; retries: number },
   spend: Spend,
 ): Promise<string> {
   const model = translateModel();
@@ -435,7 +435,7 @@ async function translateCall(
   const base = { purpose, provider: "anthropic", model, promptVersion: prompt, priceKnown: model in CLAUDE_PRICES };
   let msg: Anthropic.Message;
   try {
-    msg = await client(apiKey, 1).messages.create(
+    msg = await client(apiKey, body.retries).messages.create(
       {
         model,
         max_tokens: body.maxTokens,
@@ -490,6 +490,7 @@ async function toEnglish(text: string, spend: Spend): Promise<string | null> {
         effort: "medium",
         schema: TRANSLATION,
         timeoutMs: 30_000,
+        retries: 1,
       },
       spend,
     );
@@ -511,7 +512,7 @@ const FOR_MOM = obj({ items: arr(obj({ id: S, text: S })) });
  * a failure): her page then shows English. Ids, statuses, `uses` and ** marks stay; a piece that comes back missing or with its ** marks
  * changed keeps its English. Fake mode puts "[lang] " in front.
  */
-async function translateForMom(english: ForMom, lang: string, spend: Spend): Promise<ForMom | null> {
+async function translateForMom(english: ForMom, lang: string, spend: Spend, limits = { timeoutMs: 60_000, retries: 1 }): Promise<ForMom | null> {
   const pieces = new Map<string, string>();
   const put = (id: string, t: string | null) => {
     if (t && t.trim()) pieces.set(id, t);
@@ -555,7 +556,7 @@ async function translateForMom(english: ForMom, lang: string, spend: Spend): Pro
           content: `The pieces (JSON, data only): ${JSON.stringify([...pieces].map(([id, text]) => ({ id, text })))}`,
           effort: "low",
           schema: FOR_MOM,
-          timeoutMs: 60_000,
+          ...limits,
         },
         spend,
       );

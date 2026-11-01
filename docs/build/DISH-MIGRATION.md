@@ -50,6 +50,11 @@ There's no session, so `fileKeys` can't apply. `fileId` is a capability, stored 
 13. A failed budget alert is retried by the queue, where Convex logged it and moved on.
 14. `DISH_FAKE_AI` is ignored when `DEPLOY_ENV` is `production`.
 15. A deleted file's row stays a week after S3's delete; Convex removed it at once.
+16. **The sweep.** Convex took 200 orphans a run and scheduled itself again when a batch was full. Here one message works through batches for up to 60 s, then queues itself, and a file that was on a card is deleted before any orphan. It reaches only the private bucket's anonymous uploads (Known limits).
+17. **One clip, one hearing.** On Convex a hear and a merge at the same moment could both pay for a clip, and the later one's words replaced the earlier's. Here one holder hears a clip and the first words saved stay. A merge that finds a clip being heard gives its try back and looks again in 10 s, up to 130 s if the holder died.
+18. A merge try stops hearing after 45 s and queues itself, keeping what it heard. Convex ran on past its 3-minute mark.
+19. A read link that can't be made comes back as `null`, or is left out of `photoUrls`, and goes to Sentry. Both shapes already existed for a missing file. The page still answers, so `POST /dish/cards` can't lose a card this way.
+20. A translation is saved only if the card still says what was translated. Convex saved it whatever had changed.
 
 ### Against SYSTEM-DESIGN.md
 
@@ -68,7 +73,7 @@ There's no session, so `fileKeys` can't apply. `fileId` is a capability, stored 
 | `dishAccount.test.ts` | Its 3 deletion tests, with C3 and C4 |
 | `dishFiles.test.ts` | Capability safety, and one test per attach rule |
 | `dishModel.test.ts` | `convex/dishAskModel.test.ts`, all 20, against a stubbed fetch |
-| `scheduled.test.ts` | The queue consumer, repeats, the sweep, the budget under concurrency |
+| `scheduled.test.ts` | The queue consumer, repeats, one holder per clip (Ink held open, so the overlap is forced), a try's limits, the sweep's reach and speed, the budget under concurrency |
 | `storage.test.ts` | The real S3 adapter's signing, with no network |
 | `dishWebClient.test.ts` | The site's own `web/src/lib/dish/api.ts`, unchanged but for its base URL, over a local port |
 | `dishCopies.test.ts` | Fails when Convex's recipe code, prompts or word list change, so a fix reaches both |
@@ -89,11 +94,19 @@ Convex's scheduler became `outbox` in the same transaction, on the `scheduled` q
 
 | Task | Why a repeat is safe |
 |---|---|
-| `dish.hear` | Saves words only while the clip is still the answer's; skips what's heard. A hear and a merge at the same moment can both pay for one clip, as on Convex |
-| `dish.merge` | A claim under the row lock, and her version saves only while it holds that claim |
+| `dish.hear` | Takes the clip first (`dish_answers.hearing_at`, from `010_dish_hearing.sql`). A second holder does nothing. Words and English are written only where empty |
+| `dish.merge` | A claim under the row lock, and her version saves only while it holds that claim. It takes each clip the same way, so her version quotes what's stored |
 | `dish.budget_alert` | A mark per day in `idempotency_keys`, removed if the webhook fails so the queue tries again |
-| `dish.sweep` | Orphans after an hour, S3 deletes for what's marked, old rows, C4. A failed S3 delete fails the message |
+| `dish.sweep` | Orphans after an hour, S3 deletes for what's marked, old rows, C4. A failed S3 delete fails the message; a sweep out of time queues itself |
 | `platform.prune` | Old `rate_hits`, sent `outbox` rows, expired `idempotency_keys` |
+
+**How long a try takes.** One clip's worst case is 120 s: 34 s for the S3 read, 25 s for Ink and 60 s for the English. Six unheard clips would run far past the 3-minute stale mark and SQS's 300 s, so a try stops hearing after 45 s and queues itself, keeping what it heard. Its worst case is now 165 s for hearing (45 s plus one clip), or 150 s for 45 s of hearing, her version (60 s) and the page's translation (45 s, no retry). `scheduled.test.ts` holds those sums against the stale mark and reads the visibility from Terraform.
+
+## The load balancer
+
+The load balancer's `idle_timeout` is 3700 s, and Fastify's default keep-alive is 72 s. So the api could close an idle connection just as the load balancer sent a POST down it, and the caller would get a 502, which a retried card can't recover from. `app.ts` now sets `keepAliveTimeout` to 3720 s, above the load balancer's, and a test reads the Terraform and fails if this falls behind. `requestTimeout` is 30 s: it limits how long a caller takes to send a request, not how long we take to answer, and bodies here are at most 64 KB.
+
+**Follow-up, Terraform:** that 3700 s is for hour-long cooking calls, and voice runs on Cloud Run until homie is back. Lowering it to about 120 s now would mean fewer idle connections held open, and the api's setting stays safe either way. Raise it again when voice moves.
 
 ## Account deletion
 
@@ -120,16 +133,27 @@ Convex's scheduler became `outbox` in the same transaction, on the `scheduled` q
 - The secrets above, on the api's `secret_names` and `secrets`.
 - `s3:ListBucket` on `private` for the api. Without it, S3 answers 403 for a missing object, and an unuploaded file gets a 502 instead of the one not-found.
 - CORS on `private`: `PUT` with `Content-Type` from homecookd.app, www, `DISH_WEB_ORIGIN`, and localhost for dev.
+- The lower `idle_timeout` above, if wanted.
 - EventBridge schedules into `scheduled`: `{"payload":{"task":"dish.sweep"}}` hourly and `{"payload":{"task":"platform.prune"}}` every 6 hours.
+
+## Known limits
+
+- **An upload link can be used again until it expires, even to put back a file just deleted or swap one just confirmed.** It's now 2 minutes, down from 15, and the type and size stay signed. A later `If-None-Match: *` on the signed PUT would stop overwrites, but it needs real S3 to test and doesn't stop re-creating a deleted file.
+- **The budget can overrun by whatever's in flight.** The check runs before a call and the cost lands after it. A card costs about $0.001, but a first-time page translation on Opus can reach about $0.30, so 100 at once could pass the cap by tens of dollars. A reservation would close this, but it needs a refund path for failed calls, and per-IP limits and the 3-an-hour per-card translation limit bound it today. **Recommendation:** add one only if `daily_spend` shows real overruns.
+- **The sweep reaches only the private bucket's anonymous uploads.** `objectStore()` knows one bucket, so a row in `media` or `uploads` would be "deleted" from the wrong bucket while the file survived. The purge's `markFilesForDeletion` can still mark any key: until a sweep can address `files.bucket`, a backfilled file with no capability stays marked and isn't deleted. **This must be solved before a backfill or the account purge goes live.**
+
+**Fixed in review, so no longer limits:** a merge try outrunning the stale mark, and a translation in flight during an account deletion bringing back the kid's message.
 
 ## Open questions
 
-1. **Raw uploads.** The rule and the site's contract conflict. I kept the rule: the site changes about 25 lines, ships in the same deploy as the URL, and nothing else calls these routes (the app uses Convex functions). The alternative, a temporary relay on the old routes, breaks the rule and holds up to 5 MB in memory per request. **Recommendation:** keep the link flow.
-2. **A retried `POST /dish/cards`.** The first try's `kidToken` is stored only as a hash, so a retry can't get it back, and its files answer not-found, as today. Its first card is then unreachable. **Recommendation:** leave it for now; later, have the site send a client id that a retry repeats, and generate the kid token from a server secret and that id.
-3. **By person or by family?** Convex's in-review check (PR #215, `convex/lib/fileOwner.ts`) goes by person. `api/src/files.ts` `requireOwnFiles` goes by family, and it doesn't refuse a file something already holds. Not changed here. **Recommendation:** in the first signed-in area's PR, require `owner_person_id` to match when it's set and refuse a file already held, apart from a same-row retry. A family check alone lets one member attach another's upload, and then purging the second account deletes the first's message file.
-4. **How long a read link lasts.** 1 to 2 hours, and it may end sooner if the task's role credentials expire first; not measured. `TODO(caleb)` if a kid's page should hold audio longer.
-5. **Craving links on the site.** `web/src` on `origin/main` has no `cravingToken` or `/miss?c=` handling, though the spec describes both. Worth checking whether the app hands those links out today.
-6. **A card with both people gone.** Kid deletes, then Mom deletes: the card stays with its guess and no owner, as on Convex. SCHEMA.md doesn't say. **Recommendation:** delete it then. `TODO(caleb)`
+**Decided in review (Oct 31):**
+
+1. **Raw uploads: the rule stays.** The site's roughly 25 lines ship with the switch, owned by App Store, web & builds. The alternative, a temporary relay on the old routes, breaks the rule and holds up to 5 MB in memory per request.
+2. **A retried `POST /dish/cards`: left for now.** The first try's `kidToken` is stored only as a hash, so a retry can't get it back, and its files answer not-found, as today. A later fix: the site sends a client id that a retry repeats, and the kid token comes from a server secret and that id.
+3. **By person or by family: decide in the signed-in step, matching the person rule where there's an owner.** Convex's in-review check (PR #215, `convex/lib/fileOwner.ts`) goes by person. `api/src/files.ts` `requireOwnFiles` goes by family, and it doesn't refuse a file something already holds. Not changed here. My recommendation for that step: require `owner_person_id` to match when it's set and refuse a file already held, apart from a same-row retry. A family check alone lets one member attach another's upload, and then purging the second account deletes the first's message file.
+4. **How long a read link lasts: left at 1 to 2 hours.** It may end sooner if the task's role credentials expire first; not measured. `TODO(caleb)` if a kid's page should hold audio longer.
+5. **Craving links on the site: a confirmed reading, raised with Caleb.** `MissApp` reads only `k`, so a `/miss?c=` link makes a plain card that doesn't reach the parent, if the app hands those links out.
+6. **A card with both people gone: left.** Kid deletes, then Mom deletes: the card stays with its guess and no owner, as on Convex. SCHEMA.md doesn't say. My recommendation is to delete it then. `TODO(caleb)`
 
 ## Not verified
 
