@@ -162,12 +162,30 @@ test("attaching a file", { skip: !hasDatabase }, async (t) => {
   });
 });
 
-test("every route in the real app with a key field refuses another family's", { skip: !hasDatabase }, async () => {
+test("every route in the real app with a key field refuses another family's, and another person's", { skip: !hasDatabase }, async () => {
+  await freshDatabase();
+  const mine = await family();
+  const theirs = await family();
+  const me = await person(mine);
+  const sibling = await person(mine, "kid");
+  const token = await session(mine, me);
   const app = buildApp({ logger: false });
   await app.ready();
-  // Empty today: it fills as signed-in routes are added, and the loop above is what each must pass. The anonymous routes have no session,
-  // so they say notFileKeys instead, and dishFiles.test.ts's last test holds them to their own check, field by field.
-  assert.deepEqual(app.fileKeyRoutes, []);
+  // Each signed-in route with a key is named here when it's added. The anonymous routes have no session, so they say notFileKeys instead, and dishFiles.test.ts's last test
+  // holds them to their own check, field by field.
+  assert.deepEqual(app.fileKeyRoutes, [{ method: "POST", url: "/v1/cravings/:id/voice-recipe", fields: ["audioKey"] }]);
+  const other = await file(theirs);
+  const othersInMyFamily = await file(mine);
+  await db().query("update files set owner_person_id = $2 where key = $1", [othersInMyFamily, sibling]);
+  for (const route of app.fileKeyRoutes) {
+    for (const field of route.fields) {
+      for (const key of [other, othersInMyFamily, "private/nothing-here"]) {
+        const res = await sendWith(app, token, route, field, key, await file(mine));
+        assert.equal(res.statusCode, 404, `${route.url} ${field}`);
+        assert.equal(res.json().error, "not_found");
+      }
+    }
+  }
   assert.ok(app.notFileKeyRoutes.every((route) => route.url.startsWith("/dish/")), "only the anonymous routes may say a file field isn't a key");
 });
 

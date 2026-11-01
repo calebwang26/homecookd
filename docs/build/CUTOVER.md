@@ -173,6 +173,8 @@ Nothing here has a quick way back, so each waits until no phone calls it. Take a
 
 ## What the merge check can't catch
 
+- **What an `EXPO_PUBLIC_*` secret looks like in a local build.** CI can't see the gitignored `app/.env`, and a family code has no key-like shape. Before any EAS publish, run `node scripts/check-merge-safe.mjs --export <the export folder>` where that file is. EAS updates are on hold until this is settled (Master Agent, Nov 1).
+
 `scripts/check-merge-safe.mjs`, run by CI as the job `merge-safe`. It fails on: a conflict with main (on the PR into main; a warning on PRs into `aws-migration`), a changed file in a watched path that isn't on `scripts/merge-safe-list.json`, a listed file that changed since its review, a workflow that would run on main or deploy something live, a build that lost today's upload path or holds the new one, a worker that needs Sentry, and sync routes that answer without their secret. Past that:
 
 - **A PR with a conflict starts no checks at all,** because GitHub has no merge commit to run them on. GitHub shows the conflict itself. That's why PRs into `aws-migration` report conflicts with `main` early, as a warning.

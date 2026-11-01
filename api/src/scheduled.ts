@@ -5,6 +5,7 @@
 import { DeleteMessageCommand, ReceiveMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 import * as Sentry from "@sentry/node";
 import { db } from "./db.js";
+import { communityTasks } from "./modules/community/tasks.js";
 import type { Trace } from "./modules/dish/budget.js";
 import { dishTasks } from "./modules/dish/tasks.js";
 import { syncTasks } from "./modules/sync/tasks.js"; // temporary: comes off with the sync (docs/build/SYNC-MIGRATION.md)
@@ -26,7 +27,7 @@ async function prune(): Promise<void> {
   }
 }
 
-const TASKS: Record<string, Task> = { ...dishTasks, ...syncTasks, "platform.prune": prune };
+const TASKS: Record<string, Task> = { ...dishTasks, ...syncTasks, ...communityTasks, "platform.prune": prune };
 
 /** One message, from the outbox ({outboxId, requestId, payload}) or a schedule ({payload}). An unknown or broken one throws, so it's seen. */
 export async function handleMessage(body: string, log: Trace["log"]): Promise<void> {

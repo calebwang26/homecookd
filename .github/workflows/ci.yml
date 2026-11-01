@@ -82,6 +82,7 @@ jobs:
           node scripts/check-merge-safe.mjs --bundle web/out
       - name: The laptop's worker runs without Sentry
         run: |
+          sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg # prep.py runs it when imported
           pip install -r pipeline/requirements.txt
           python pipeline/test_worker_no_sentry.py
       - name: The sync's routes refuse everyone with no secret set
