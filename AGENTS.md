@@ -182,10 +182,10 @@ glasses/    ESP32 glasses → GCP VM (Python): WS ingest, MP4 mux, GCS upload, C
 supabase/   Frozen: functions/api (today's sign-in, invites, older screens), migrations/, tests/
 pipeline/   Python: prep.py → process.py (Gemini) → Muse Spark → publish.py, and worker.py (claims jobs from Convex)
 cloud/      GCS upload signer (Cloud Run) + IAM scripts
-api/        The new backend (Node, Fastify, Postgres), on the `aws-migration` branch until Apple approves (docs/build/SYSTEM-DESIGN.md)
+api/        The new backend (Node, Fastify, Postgres; docs/build/SYSTEM-DESIGN.md). Nothing live calls it until each area switches (docs/build/CUTOVER.md)
 tools/      media-copy: GCS to S3, refuses real buckets without its named flags (docs/build/MEDIA-MIGRATION.md)
 infra/      AWS, as Terraform (infra/README.md; the plan is docs/build/AWS-MIGRATION.md). Staging only so far; nothing live runs there
-scripts/    check-cartesia.mjs, check-moss.mjs (key checks), set-apple-ids.mjs (launch prep)
+scripts/    check-cartesia.mjs, check-moss.mjs (key checks), set-apple-ids.mjs (launch prep), check-merge-safe.mjs (aws-migration into main changes nothing live)
 data/       sample + synthetic recipes; data/out/ is pipeline output (gitignored)
 docs/       specs, design bible, QA, learning notes; docs/agents/ = shared agent state + memory
 ```
@@ -212,6 +212,7 @@ cd app && node scripts/sync-brand.mjs                             # the brand ki
 cd web && npm run dev -- --port 3000
 cd web && npm ci && npm run build                                  # confirm a PR's web/ builds
 node web/scripts/qa/dish-e2e.mjs --base http://localhost:3105 --out /tmp/dish-e2e   # v2 /miss + /a vs the local /dish fake (site: cd web && NEXT_PUBLIC_DISH_URL=http://localhost:8791 npx next dev --port 3105)
+  # the new api's uploads: add NEXT_PUBLIC_DISH_UPLOADS=links to the site and --uploads links here. Unset, as on main, the site sends raw files to Convex.
 
 node web/scripts/qa/dish-api-e2e.mjs --base http://localhost:3105 --api <api url> --out /tmp/dish-api-e2e   # the same flow against the new api (aws-migration only); made-up content only
 
@@ -224,6 +225,10 @@ npx convex deploy --preview-name hackathon -y                      # deploy (CON
 npx --yes deno@2 test --node-modules-dir=none --allow-env --allow-read supabase/tests/   # unit tests
 npx --yes deno@2 check --node-modules-dir=none supabase/functions/api/*.ts              # typecheck
 npx --yes deno@2 test --node-modules-dir=none --allow-env --allow-read --allow-run --allow-net supabase/tests/account_purge_sql_test.ts   # the purge's sign-up log step on real Postgres (needs .venv)
+
+# merging aws-migration into main (docs/build/CUTOVER.md)
+node scripts/check-merge-safe.mjs                                  # trial merge, the reviewed list, the workflows; CI runs it as the job merge-safe
+node scripts/check-merge-safe.mjs --bundle web/out                 # after a web build with no NEXT_PUBLIC_* set: still today's site
 
 # AWS (infra/README.md; profile homecookd, refresh with: aws sso login --profile homecookd)
 cd infra/envs/staging && terraform init -backend=false && terraform validate   # no login needed

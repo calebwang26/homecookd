@@ -13,6 +13,8 @@ The backend must follow `docs/build/SYSTEM-DESIGN.md`, and the plan carries no w
 
 Supabase features may be rebuilt on `aws-migration` with fake data (Caleb, Oct 31); live Supabase stays frozen. Details and his words: `docs/build/AWS-MIGRATION.md`.
 
+Caleb's two conditions on merging, in his words: "1. we're building the migration so that RIGHT when our app gets approved, one merge of a branch into main will finish the migration. 2. everything that effects the app store application isn't getting deployed/merged into main." The merge changes nothing live; `docs/build/CUTOVER.md` is what follows it.
+
 **Why:** Convex runs on a preview deployment, the worker on a laptop, and the credits expire (most on Oct 31, 2028).
 **How to apply:** Caleb's OK in chat each time for switching live traffic, production data, DNS, any change to Cloud Run,
 Convex, Supabase or GCS, anything likely to add over $300 a month, or deleting what this work didn't create. Until

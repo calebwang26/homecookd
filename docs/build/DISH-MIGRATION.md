@@ -75,7 +75,7 @@ There's no session, so `fileKeys` can't apply. `fileId` is a capability, stored 
 | `dishModel.test.ts` | `convex/dishAskModel.test.ts`, all 20, against a stubbed fetch |
 | `scheduled.test.ts` | The queue consumer, repeats, one holder per clip (Ink held open, so the overlap is forced), a try's limits, the sweep's reach and speed, the budget under concurrency |
 | `storage.test.ts` | The real S3 adapter's signing, with no network |
-| `dishWebClient.test.ts` | The site's own `web/src/lib/dish/api.ts`, unchanged but for its base URL, over a local port: uploads and an answer end to end, with PUTs routed to the fake store, and a failed PUT reading as `busy` |
+| `dishWebClient.test.ts` | The site's own `web/src/lib/dish/api.ts` with `NEXT_PUBLIC_DISH_UPLOADS=links`, unchanged but for its base URL, over a local port: uploads and an answer end to end, with PUTs routed to the fake store, and a failed PUT reading as `busy` |
 | `dishCopies.test.ts` | Fails when Convex's recipe code, prompts or word list change, so a fix reaches both |
 
 **Carried over:** 41 of 41 from `dishAsks.test.ts` and 20 of 20 from `dishAskModel.test.ts`. 60 keep their exact titles, and the kid-deletes test's title now also names the message and `ip_key`.
@@ -87,7 +87,7 @@ There's no session, so `fileKeys` can't apply. `fileId` is a capability, stored 
 **Not carried, because they're deferred:** `convex/cravings.test.ts`, and any `pushEvents` or `account.test.ts` assertion on these cards.
 
 **The pages, in real Chrome:**
-- `web/scripts/qa/dish-e2e.mjs` runs the site with `next dev` against its fake server, which now has a PUT endpoint that checks the signed type and size. It also covers a failed PUT and a dead read link.
+- `web/scripts/qa/dish-e2e.mjs` runs the site with `next dev` against its fake server, in either mode. `--uploads links` is this contract: a PUT endpoint that checks the signed type and size, a failed PUT and a dead read link. The default is today's: raw files, read links that never expire, and a clip that won't load reloads nothing. The fake refuses the contract it isn't speaking, so a site built for one fails against the other.
 - `web/scripts/qa/dish-api-e2e.mjs` runs the whole flow against a real api: a kid's card from a made-up dish with a test photo, Save, Ask Mom, her answers on Chrome's fake audio device, Send, and the kid reopening to her version. It checks states rather than a model's sentences, and any failed request or CORS error fails it. Locally it runs on `api/test/localApi.ts`: the real routes and Postgres, fake models, and a stand-in for S3 that checks the signed type, size and expiry and answers CORS. That file is under `test/`, so it's never in the api's image.
 
 ## Long work
@@ -125,7 +125,9 @@ The load balancer's `idle_timeout` is 3700 s, and Fastify's default keep-alive i
 
 ## What `web/` needs (written, on `aws-migration` only)
 
-`web/` stays owned by App Store, web & builds, and `main`'s live contract is unchanged. Still to do at the switch: point `NEXT_PUBLIC_DISH_URL` here.
+`web/` stays owned by App Store, web & builds. All of this is behind **`NEXT_PUBLIC_DISH_UPLOADS=links`**: unset, the site sends raw files to Convex as it always has, and the build holds none of the code below (`web/next.config.ts` always gives it a value, so the compiler drops the rest, and `scripts/check-merge-safe.mjs` reads the bundle). At the switch, set it and `NEXT_PUBLIC_DISH_URL` in one build (`CUTOVER.md`, step 11).
+
+**The craving routes have to exist first.** `main`'s site now reads `/miss?c=` and calls `POST /dish/craving/peek`. Here that answers 404, which the site takes for a dead link, so a parent's link would quietly become a plain card. It's the "Deferred" list above, and the switch waits on it.
 
 - `web/src/lib/dish/api.ts`: `uploadFile` asks for the link with `blob.size`, PUTs to `uploadUrl` with `uploadHeaders`, then confirms. `sendAnswer` uses `/dish/ask/answer/upload`, a PUT, then `/dish/ask/answer`. Their callers don't change. A failed PUT, of any kind, reads as `busy`, as a 502 does. Limits: 15 s for each api call, and 30 s for a file's PUT or 45 s for a clip's. It reads the PUT's reply to the end, because Chrome reports a fetch with an unread body as cancelled.
 - **Preflights:** every api call stays `text/plain` with its token in the body, so none needs a preflight. That's why the two answer routes now take `askToken` in the body. With the header, each answer would have added two preflights, never cached, because `durationS` changes the URL. A PUT always needs one, from S3's CORS, so an answer costs 1 preflight, as the old raw route did.
