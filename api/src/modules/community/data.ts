@@ -386,7 +386,7 @@ export async function swapsOfFamily(q: Queryable, familyId: string, blocked: str
 }
 
 // ---------------------------------------------------------------------------------------------
-// "Put it on the map": one kind of row in `questions`, which the Messages area owns next (COMMUNITY-MIGRATION.md).
+// "Put it on the map": one kind of row in `questions`, which the Messages area owns next, read here only (COMMUNITY-MIGRATION.md).
 
 export type ShareAsk = { recipe_id: string; share_said: "yes" | "no" | "unclear" | null; share_decided_at: Date | null };
 
@@ -399,15 +399,6 @@ export async function latestShareAsks(q: Queryable, recipeIds: string[]): Promis
     [recipeIds],
   );
   return new Map(rows.map((row) => [row.recipe_id, row]));
-}
-
-/** One open ask a dish (questions_one_open_share): a second at the same moment changes nothing. */
-export async function insertShareAsk(q: Queryable, a: { familyId: string; recipeId: string; askedBy: string; text: string }): Promise<void> {
-  await q.query(
-    `insert into questions (family_id, recipe_id, asked_by, text, status, kind) values ($1, $2, $3, $4, 'asked_cook', 'share')
-     on conflict (recipe_id) where kind = 'share' and share_said is null do nothing`,
-    [a.familyId, a.recipeId, a.askedBy, a.text],
-  );
 }
 
 // ---------------------------------------------------------------------------------------------

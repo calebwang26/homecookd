@@ -39,6 +39,23 @@ export const pathOnly = (url: string) => url.split("?")[0];
 
 const WRITES = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
+/** Whether a NUL byte is anywhere in a parsed request: Postgres text can't hold one. A loop, because a body can nest deeper than a call stack. */
+function holdsNul(root: unknown): boolean {
+  const left = [root];
+  while (left.length > 0) {
+    const value = left.pop();
+    if (typeof value === "string") {
+      if (value.includes("\0")) return true;
+    } else if (value && typeof value === "object") {
+      for (const [name, child] of Object.entries(value)) {
+        if (name.includes("\0")) return true;
+        left.push(child);
+      }
+    }
+  }
+  return false;
+}
+
 /** Fails at start, not in production, for a route that could take a file key without saying so. */
 function guardFileKeys(app: FastifyInstance): void {
   app.decorate("fileKeyRoutes", []);
@@ -100,6 +117,11 @@ export function buildApp(options: { logger?: object | boolean; routes?: (app: Fa
   });
 
   guardFileKeys(app);
+
+  // Before any route's own checks, so no route has to remember: Postgres would answer with an error, and that would be a 500.
+  app.addHook("preValidation", async (req) => {
+    if (holdsNul([req.params, req.query, req.body])) throw new ApiError(400, "bad_request");
+  });
 
   app.setNotFoundHandler((req, reply) => reply.status(404).send({ error: "not_found", requestId: req.id }));
 

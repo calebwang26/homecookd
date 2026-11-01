@@ -1,9 +1,9 @@
 // "Put it on the map" for a family dish (convex/shareRequests.ts). Only its cook can share a recipe, so when someone else in the family asks, homie asks her: it
-// becomes one of her open questions. Only her clear yes shares it; no, unclear, or no readable answer leaves it private, and then nobody in the family can ask again for a
-// day. Nobody outside the family can ask.
+// becomes one of her open questions, and only her clear yes shares it. Nobody outside the family can ask.
 //
-// What's here is the kid's side. Her own tap and her yes write `recipes.shared_at`, which is read-only until the jobs area moves, so her tap answers `not_moved` and
-// nothing is shared from here. Reading her answer, and translating the question for her, go with the Messages area (COMMUNITY-MIGRATION.md).
+// Only what can be true here is here. Asking stays on Convex until Messages moves: a question written in Postgres reaches no cook, no answer and no purge, so a kid would
+// be told it was asked and she'd never hear. Her own tap and her yes write `recipes.shared_at`, which is read-only until the jobs area moves. Both answer `not_moved`, and an
+// adapter sends them to Convex (COMMUNITY-MIGRATION.md). Nothing here writes.
 import type { Signed } from "../../auth.js";
 import { db } from "../../db.js";
 import { ApiError, notFound, refused } from "../../errors.js";
@@ -16,19 +16,8 @@ import type { ShareAsk } from "./data.js";
 import { recipeWords } from "./storyCard.js";
 import { WORDS_SHAREABLE } from "./words.js";
 
-/** After a no or an unclear answer, the family waits this long to ask her again. */
-export const ASK_AGAIN_MS = 24 * 60 * 60_000;
 const DISHES_PAGE = 100;
 const PICK_RECIPE = "Pick one of your family's recipes.";
-
-/**
- * TODO(caleb): the words homie asks the cook with (translated for her when she doesn't speak English). The culture is the model's guess at where the dish is from
- * ("Maharashtrian"), shown on the map card.
- */
-export function shareQuestion(askerName: string, dish: string): string {
-  const who = askerName.trim() || "Someone in your family";
-  return `${who} wants to put your ${dish} on the map for neighbors. They'd see the recipe, one line you said and homie's guess at where the dish is from, never your video. Is that okay?`;
-}
 
 /** Where the newest ask stands. `open`: waiting on her, or on homie reading what she said. `notNowAt`: when homie read a no or an unclear answer. */
 function askState(q: ShareAsk | undefined): { open: boolean; notNowAt: number | null } {
@@ -37,24 +26,13 @@ function askState(q: ShareAsk | undefined): { open: boolean; notNowAt: number | 
   return { open: false, notNowAt: q.share_said === "yes" || !q.share_decided_at ? null : q.share_decided_at.getTime() };
 }
 
-/** "shared": it's on the map already. "asked": waiting on the cook's answer. */
-export async function askToShare(signed: Signed, recipeId: string): Promise<{ result: "shared" | "asked" }> {
+/** "shared": it's on the map already. Anything that would ask her or share it answers `not_moved`: never "asked" or "shared" without it being so. */
+export async function askToShare(signed: Signed, recipeId: string): Promise<{ result: "shared" }> {
   const recipe = (await recipesByIds(db(), [recipeId])).get(recipeId);
   if (!recipe || recipe.family_id !== signed.familyId || recipe.status !== "ready") throw notFound(PICK_RECIPE);
   if (recipe.shared_at) return { result: "shared" };
-  if (recipe.cook_id === signed.personId) {
-    if (flagged(...recipeWords(recipe))) throw refused(422, "words", WORDS_SHAREABLE);
-    // Her own tap shares at once, which writes `recipes`. An adapter sends this to Convex until the jobs area moves. Never answered "shared" without sharing.
-    throw new ApiError(501, "not_moved", {}, "This can't be done here yet.");
-  }
-  const last = askState((await data.latestShareAsks(db(), [recipeId])).get(recipeId));
-  if (last.open) return { result: "asked" };
-  const people = await peopleByIds(db(), [recipe.cook_id, signed.personId]);
-  if (last.notNowAt !== null && Date.now() - last.notNowAt < ASK_AGAIN_MS) {
-    throw refused(409, "not_now", `${people.get(recipe.cook_id)?.name.trim() || "The cook"} said not now. Ask again tomorrow.`);
-  }
-  await data.insertShareAsk(db(), { familyId: signed.familyId, recipeId, askedBy: signed.personId, text: shareQuestion(people.get(signed.personId)?.name ?? "", recipe.title) });
-  return { result: "asked" };
+  if (recipe.cook_id === signed.personId && flagged(...recipeWords(recipe))) throw refused(422, "words", WORDS_SHAREABLE);
+  throw new ApiError(501, "not_moved", {}, "This can't be done here yet.");
 }
 
 /** My family's ready dishes for the "Share your recipe" chooser: whose, mine, on the map, asked, and when she last said not now. */

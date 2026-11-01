@@ -7,7 +7,6 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { MAX_OPENS, OPEN_BURST, OPEN_BURST_MS } from "../src/modules/community/dinners.js";
 import { HIDE_AFTER } from "../src/modules/community/safety.js";
-import { ASK_AGAIN_MS } from "../src/modules/community/shareAsks.js";
 import { CRAVING_MESSAGE_CHARS, CRAVING_TOTAL, DEFAULT_CRAVING_MESSAGE, VOICE_RECIPE_QUESTION } from "../src/modules/dish/cravings.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
@@ -38,9 +37,6 @@ test("the numbers and words are Convex's", { skip }, () => {
   assert.ok(dinners.includes(`OPEN_BURST = ${OPEN_BURST};`));
   assert.equal(OPEN_BURST_MS, 600_000);
   assert.ok(dinners.includes("OPEN_BURST_MS = 10 * 60_000;"));
-  assert.equal(ASK_AGAIN_MS, 86_400_000);
-  assert.ok(convex("shareRequests.ts").includes("ASK_AGAIN_MS = 24 * 60 * 60_000;"));
-  assert.equal(body(here("community/shareAsks.ts"), "shareQuestion"), body(convex("shareRequests.ts"), "shareQuestion"));
   const cravingLinks = convex("lib/cravingLinks.ts");
   assert.ok(cravingLinks.includes(`CRAVING_TOTAL = ${CRAVING_TOTAL};`));
   assert.ok(cravingLinks.includes(`CRAVING_MESSAGE_CHARS = ${CRAVING_MESSAGE_CHARS};`));

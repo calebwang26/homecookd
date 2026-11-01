@@ -145,6 +145,103 @@ test("a list refuses a cursor it didn't make, and a dinner's inputs are checked"
   assert.equal((await respond(t, rajani, MISSING, "maybe" as unknown as boolean)).status, 400);
 });
 
+test("a forged cursor of the right shape is a 400 on every list: a date that can't be one never reaches Postgres", { skip }, async () => {
+  const { t, serene } = await world();
+  const encode = (parts: (string | number)[]) => Buffer.from(JSON.stringify(parts)).toString("base64url");
+  const BAD_TIMES = [
+    "2026-13-01 12:00:00+00", // no such month
+    "2026-02-31 12:00:00+00", // no such day
+    "2026-00-10 12:00:00+00",
+    "2026-10-00 12:00:00+00",
+    "2026-10-01 25:00:00+00",
+    "2026-10-01 12:61:00+00",
+    "2026-10-01 12:00:61+00",
+    "0000-10-01 12:00:00+00",
+    "999999-10-01 12:00:00+00",
+    "2026-10-01 12:00:00+99",
+    "2026-10-01 12:00:00+05:99",
+  ];
+  const lists: [string, (at: string) => (string | number)[]][] = [
+    ["/v1/community/feed", (at) => [at, "x", 0]],
+    ["/v1/community/dinners", (at) => [at, "x"]],
+    ["/v1/community/swaps", (at) => [at, "x"]],
+    ["/v1/dinners/mine", (at) => [at, "x", "done", "done"]],
+    ["/v1/dinners/mine", (at) => ["done", "done", at, "x"]],
+    ["/v1/share-requests/dishes", (at) => [at, "x"]],
+    ["/v1/cravings", (at) => [at, "x"]],
+  ];
+  for (const [path, parts] of lists) {
+    for (const at of BAD_TIMES) {
+      const r = await call(t, serene, "GET", `${path}?cursor=${encode(parts(at))}`);
+      assert.equal(r.status, 400, `${path} ${at}: ${JSON.stringify(r.data)}`);
+      assert.equal(r.data.error, "bad_request");
+    }
+    // A real date in that shape is still a page, not a refusal.
+    assert.equal((await call(t, serene, "GET", `${path}?cursor=${encode(parts("2026-02-28 23:59:59.123456+05:30"))}`)).status, 200, path);
+  }
+  // A leap day only when there is one.
+  assert.equal((await call(t, serene, "GET", `/v1/community/swaps?cursor=${encode(["2028-02-29 12:00:00+00", "x"])}`)).status, 200);
+  assert.equal((await call(t, serene, "GET", `/v1/community/swaps?cursor=${encode(["2026-02-29 12:00:00+00", "x"])}`)).status, 400);
+});
+
+test("a cursor holding a NUL byte is a 400 on every list", { skip }, async () => {
+  const { t, serene } = await world();
+  const encode = (parts: (string | number)[]) => Buffer.from(JSON.stringify(parts)).toString("base64url");
+  const AT = "2026-10-01 12:00:00+00";
+  const cases: [string, (string | number)[]][] = [
+    ["/v1/community/feed", [AT, "a\u0000b", 0]],
+    ["/v1/community/dinners", [AT, "a\u0000b"]],
+    ["/v1/community/swaps", [AT, "a\u0000b"]],
+    ["/v1/community/blocks", ["a\u0000b"]],
+    ["/v1/dinners/mine", [AT, "a\u0000b", "done", "done"]],
+    ["/v1/share-requests/dishes", [AT, "a\u0000b"]],
+    ["/v1/cravings", [AT, "a\u0000b"]],
+  ];
+  for (const [path, parts] of cases) {
+    const r = await call(t, serene, "GET", `${path}?cursor=${encode(parts)}`);
+    assert.equal(r.status, 400, `${path}: ${JSON.stringify(r.data)}`);
+  }
+});
+
+test("a NUL byte in any route's id, query or body is refused, never a 500", { skip }, async () => {
+  const { serene } = await world();
+  const found: { method: string; url: string; body: string[] }[] = [];
+  const t = buildApp({
+    logger: false,
+    routes: (a) => {
+      a.addHook("onRoute", (route) => {
+        const schema = route.schema as { body?: { properties?: Record<string, unknown> } } | undefined;
+        for (const method of [route.method].flat()) {
+          if (method !== "HEAD" && method !== "OPTIONS") found.push({ method, url: route.url, body: Object.keys(schema?.body?.properties ?? {}) });
+        }
+      });
+    },
+  });
+  await t.ready();
+  const reachable = found.filter((r) => r.url !== "/health" && r.url !== "/ready" && !r.url.includes("*"));
+  assert.ok(reachable.length >= 35, `only ${reachable.length} routes`);
+  const headers = { authorization: `Bearer ${serene.token}`, origin: "https://homecookd.app", "content-type": "application/json" };
+  const NUL = "a\u0000b";
+  let next = 0;
+  for (const { method, url, body } of reachable) {
+    const path = url.replace(/:[a-zA-Z]+/g, "a%00b");
+    const hasBody = method !== "GET" && method !== "DELETE";
+    const requests: { url: string; payload?: string }[] = [{ url: `${path}${path.includes("?") ? "&" : "?"}cursor=a%00b&kind=a%00b&q=a%00b` }];
+    if (url !== path) requests.push({ url: path, ...(hasBody ? { payload: "{}" } : {}) });
+    if (hasBody) for (const field of body) requests.push({ url: url.replace(/:[a-zA-Z]+/g, "plain-id"), payload: JSON.stringify({ [field]: NUL }) });
+    if (hasBody) requests[0].payload = "{}";
+    for (const request of requests) {
+      // A new address each time, so a public route's rate limit doesn't answer in the check's place.
+      next += 1;
+      const res = await t.inject({ method: method as "GET", headers, remoteAddress: `198.18.${next >> 8}.${next & 255}`, ...request });
+      assert.ok([400, 404].includes(res.statusCode), `${method} ${request.url} ${request.payload ?? ""}: ${res.statusCode} ${res.body}`);
+    }
+  }
+  // Nested, as a list's item and an object's field.
+  const nested = await t.inject({ method: "POST", url: "/dish/cards/update", headers, payload: JSON.stringify({ kidToken: "A".repeat(22), edits: [{ kind: "line", text: NUL }] }) });
+  assert.ok([400, 404].includes(nested.statusCode), nested.body);
+});
+
 test("every list pages: nothing is repeated or lost, and the same rows come back to the microsecond", { skip }, async (s) => {
   const { t, rajani, shreya, serene, serenesMom } = await world();
   const walk = async (who: Who, path: string, list: string, id: string) => {
