@@ -1,0 +1,246 @@
+// Community dinners (convex/dinners.ts): someone hosts a dinner around one of their family's shared recipes (or another family's shared dish that family agreed to
+// cook with them) and neighbors ask to join. The address stays private: only the host and the guests they accepted ever see it.
+// "Invite friends": the host and accepted guests share one link per dinner; whoever opens it sees only the dish, the host's name and when, and counts once per phone
+// or browser in "X going".
+import { randomBytes } from "node:crypto";
+import type { Signed } from "../../auth.js";
+import { db, tx } from "../../db.js";
+import { notFound, refused } from "../../errors.js";
+import { afterOf, decodeCursor, encodeCursor, type After } from "../../paging.js";
+import { flagged } from "../dish/moderation.js";
+import { sha256Hex } from "../dish/values.js";
+import { familiesByIds, peopleByIds } from "../people/service.js";
+import * as data from "./data.js";
+import type { DinnerRow, PlaceKind } from "./data.js";
+import { distanceLabel, milesBetween, placeOf, roundToGrid } from "./geo.js";
+import { seenRecipes, type SeenRecipe, seesDinner, seesRecipe, type Shield, shieldFor } from "./safety.js";
+import { coverUrl, familyLabel } from "./storyCard.js";
+import { WORDS_POSTABLE } from "./words.js";
+
+/** Invite links open the website's /d page (or the app, where it's installed). */
+const INVITE_ORIGIN = "https://homecookd.app";
+/** A dinner's "going" count stops growing from link opens here. */
+export const MAX_OPENS = 300;
+/** At most this many new phones count per dinner in OPEN_BURST_MS; past it, the page still opens, uncounted. */
+export const OPEN_BURST = 60;
+export const OPEN_BURST_MS = 10 * 60_000;
+const MINE_PAGE = 50;
+
+const NOT_HAPPENING = "That dinner isn't happening anymore.";
+const PICK_RECIPE = "Pick one of your family's recipes.";
+
+/** What one person may see of these dinners. `recipes` holds their dishes. */
+async function viewDinners(signed: Signed, shield: Shield, dinners: DinnerRow[], recipes: Map<string, SeenRecipe>) {
+  const ids = dinners.map((d) => d.id);
+  const hosted = dinners.filter((d) => d.host_id === signed.personId).map((d) => d.id);
+  const accepted = await data.acceptedCounts(db(), ids);
+  const mine = await data.myRequests(db(), ids, signed.personId);
+  const opens = await data.inviteOpenCounts(db(), ids);
+  const asks = (await data.requestsOn(db(), hosted)).filter((r) => !shield.blocked.has(r.guest_family_id));
+  const people = await peopleByIds(db(), [signed.personId, ...dinners.map((d) => d.host_id), ...asks.map((r) => r.guest_id)]);
+  const families = await familiesByIds(db(), dinners.map((d) => d.host_family_id));
+  const me = people.get(signed.personId);
+  return dinners.map((d) => {
+    const isHost = d.host_id === signed.personId;
+    const request = mine.get(d.id);
+    const dish = d.recipe_id ? recipes.get(d.recipe_id) : undefined;
+    const canOpen = !!dish && (!!dish.shared_at || dish.family_id === signed.familyId) && seesRecipe(shield, dish);
+    const hostName = people.get(d.host_id)?.name ?? "";
+    return {
+      dinnerId: d.id,
+      dish: d.dish,
+      recipeId: canOpen ? d.recipe_id : null,
+      coverUrl: canOpen ? coverUrl(dish) : null,
+      hostName,
+      familyName: familyLabel(families.get(d.host_family_id), hostName),
+      ours: d.host_family_id === signed.familyId,
+      placeKind: d.place_kind,
+      placeName: d.place_name,
+      startsAt: d.starts_at.getTime(),
+      seats: d.seats,
+      seatsLeft: Math.max(0, d.seats - (accepted.get(d.id) ?? 0)),
+      inviteOpens: opens.get(d.id) ?? 0,
+      status: d.status,
+      distanceLabel: distanceLabel(milesBetween(placeOf(me), placeOf(d))),
+      isHost,
+      myRequest: request ? { requestId: request.id, status: request.status } : null,
+      address: isHost || request?.status === "accepted" ? d.address : null,
+      requests: isHost
+        ? asks.filter((r) => r.dinner_id === d.id).map((r) => ({ requestId: r.id, guestName: people.get(r.guest_id)?.name ?? "", status: r.status }))
+        : null,
+    };
+  });
+}
+
+/**
+ * A dish my family may host: one of our own ready recipes, once its cook shared it (the dish name reaches every neighbor's feed, so only her share switch lets it
+ * out), or another family's shared dish they agreed to cook with us ("Cook together").
+ */
+async function hostable(signed: Signed, recipeId: string): Promise<SeenRecipe> {
+  const recipe = (await seenRecipes(db(), [recipeId])).get(recipeId);
+  if (!recipe) throw notFound(PICK_RECIPE);
+  if (recipe.family_id === signed.familyId) {
+    if (recipe.status !== "ready") throw notFound(PICK_RECIPE);
+    if (!recipe.shared_at) throw refused(409, "not_shared", "Share this recipe first.");
+    return recipe;
+  }
+  const visible = seesRecipe(await shieldFor(db(), signed.familyId), recipe);
+  if (visible && recipe.status === "ready" && recipe.shared_at && (await data.ourAsk(db(), signed.familyId, recipeId, "cook"))?.status === "accepted") return recipe;
+  throw notFound(PICK_RECIPE);
+}
+
+function text(s: string, what: string): string {
+  const t = s.trim();
+  if (!t || t.length > 200) throw refused(400, "bad_request", `Add the ${what}.`);
+  return t;
+}
+
+export type NewDinner = { recipeId: string; startsAt: number; placeKind?: PlaceKind; placeName: string; address: string; seats: number };
+
+/**
+ * `idempotencyKey`, from a phone that may retry: the same key and body gets the first dinner back, and the same key with another body is refused. Without one (old
+ * builds), a retry makes a second dinner, as on Convex.
+ */
+export async function createDinner(signed: Signed, input: NewDinner, idempotencyKey?: string): Promise<{ dinnerId: string }> {
+  const recipe = await hostable(signed, input.recipeId);
+  if (input.startsAt <= Date.now()) throw refused(400, "bad_request", "Pick a time that hasn't passed.");
+  if (!Number.isInteger(input.seats) || input.seats < 1 || input.seats > 20) throw refused(400, "bad_request", "Seats go from 1 to 20.");
+  if (flagged(recipe.title, input.placeName, input.address)) throw refused(422, "words", WORDS_POSTABLE);
+  const placeName = text(input.placeName, "place's name");
+  const address = text(input.address, "address");
+  const place = roundToGrid(placeOf((await peopleByIds(db(), [signed.personId])).get(signed.personId)));
+  return await tx(async (c) => {
+    if (idempotencyKey) {
+      const hash = sha256Hex(JSON.stringify(input));
+      if (!(await data.claimRetryKey(c, signed.personId, idempotencyKey, hash))) {
+        // A second call at the same moment waited on the row's primary key, so the first has finished by now.
+        const first = await data.retryKeyOf(c, signed.personId, idempotencyKey);
+        if (first.request_hash !== hash || !first.resource_id) throw refused(409, "idempotency_conflict", "That was already sent with different details.");
+        return { dinnerId: first.resource_id };
+      }
+    }
+    const dinnerId = await data.insertDinner(c, {
+      hostId: signed.personId,
+      familyId: signed.familyId,
+      recipeId: recipe.id,
+      dish: recipe.title,
+      startsAt: new Date(input.startsAt),
+      placeKind: input.placeKind ?? "campus_kitchen",
+      placeName,
+      address,
+      lat: place.lat,
+      lng: place.lng,
+      seats: input.seats,
+    });
+    if (idempotencyKey) await data.finishRetryKey(c, signed.personId, idempotencyKey, dinnerId);
+    return { dinnerId };
+  });
+}
+
+export async function getDinner(signed: Signed, dinnerId: string) {
+  const d = await data.dinnerById(db(), dinnerId);
+  if (!d) throw notFound();
+  const shield = await shieldFor(db(), signed.familyId);
+  const recipes = await seenRecipes(db(), d.recipe_id ? [d.recipe_id] : []);
+  if (!seesDinner(shield, d, d.recipe_id ? recipes.get(d.recipe_id) : null)) throw notFound();
+  return (await viewDinners(signed, shield, [d], recipes))[0];
+}
+
+const DONE = "done";
+
+/** Dinners I host, then the ones I asked to join; soonest first within each page. The two lists page on their own, inside one cursor. */
+export async function myDinners(signed: Signed, cursor?: string) {
+  const position = decodeCursor(cursor, 4);
+  const place = (at: string, id: string): After | null | typeof DONE => (at === DONE ? DONE : at ? afterOf(at, id) : null);
+  const hostedAt = position ? place(position[0], position[1]) : null;
+  const askedAt = position ? place(position[2], position[3]) : null;
+
+  const hosted = hostedAt === DONE ? [] : await data.dinnersHostedBy(db(), signed.personId, hostedAt, MINE_PAGE + 1);
+  const asked = askedAt === DONE ? [] : await data.dinnersAskedBy(db(), signed.personId, askedAt, MINE_PAGE + 1);
+  const hosting = hosted.slice(0, MINE_PAGE);
+  const askedPage = asked.slice(0, MINE_PAGE);
+
+  const shield = await shieldFor(db(), signed.familyId);
+  const recipes = await seenRecipes(db(), [...hosting, ...askedPage].flatMap((d) => (d.recipe_id ? [d.recipe_id] : [])));
+  const joined = askedPage.filter((d) => seesDinner(shield, d, d.recipe_id ? recipes.get(d.recipe_id) : null)).sort((a, b) => a.starts_at.getTime() - b.starts_at.getTime());
+
+  const lastHosted = hosting.at(-1);
+  const lastAsked = askedPage.at(-1);
+  const moreHosted = hosted.length > MINE_PAGE && lastHosted;
+  const moreAsked = asked.length > MINE_PAGE && lastAsked;
+  const nextCursor =
+    moreHosted || moreAsked
+      ? encodeCursor([moreHosted ? lastHosted.cursor_at : DONE, moreHosted ? lastHosted.id : DONE, moreAsked ? lastAsked.ask_at : DONE, moreAsked ? lastAsked.ask_id : DONE])
+      : null;
+  return { dinners: await viewDinners(signed, shield, [...hosting, ...joined], recipes), nextCursor };
+}
+
+export async function requestJoin(signed: Signed, dinnerId: string): Promise<{ requestId: string }> {
+  const d = await data.dinnerById(db(), dinnerId);
+  const dish = d?.recipe_id ? (await seenRecipes(db(), [d.recipe_id])).get(d.recipe_id) : null;
+  const visible = !!d && seesDinner(await shieldFor(db(), signed.familyId), d, dish);
+  if (!d || !visible || d.status === "cancelled" || d.starts_at.getTime() <= Date.now()) throw notFound(NOT_HAPPENING);
+  if (d.host_family_id === signed.familyId) throw refused(409, "own_family", "This is your family's dinner.");
+  const already = () => refused(409, "already_asked", "You already asked to join.");
+  if (await data.requestOfGuest(db(), dinnerId, signed.personId)) throw already();
+  if (d.status === "full" || ((await data.acceptedCounts(db(), [dinnerId])).get(dinnerId) ?? 0) >= d.seats) throw refused(409, "full", "That dinner is full.");
+  const requestId = await data.insertRequest(db(), dinnerId, signed.personId, signed.familyId);
+  if (!requestId) throw already();
+  return { requestId };
+}
+
+/** The host says yes or no. The dinner is full once every seat has an accepted guest. Under the dinner's row lock, so two yeses can't both take the last seat. */
+export async function respondToJoin(signed: Signed, requestId: string, accept: boolean): Promise<void> {
+  await tx(async (c) => {
+    const refuse = () => notFound("Only the host can answer.");
+    const first = await data.requestById(c, requestId);
+    const d = first && (await data.dinnerById(c, first.dinner_id, true));
+    if (!first || !d || d.host_id !== signed.personId) throw refuse();
+    if ((await shieldFor(c, signed.familyId)).blocked.has(first.guest_family_id)) throw refuse();
+    const r = await data.requestById(c, requestId);
+    if (!r) throw refuse();
+    if (r.status !== "pending") throw refused(409, "answered", "You already answered.");
+    if (!accept) return await data.setRequestStatus(c, requestId, "declined");
+    const taken = (await data.acceptedCounts(c, [d.id])).get(d.id) ?? 0;
+    if (taken >= d.seats) throw refused(409, "full", "Every seat is taken.");
+    await data.setRequestStatus(c, requestId, "accepted");
+    if (taken + 1 >= d.seats) await data.setDinnerFull(c, d.id);
+  });
+}
+
+// ---------------------------------------------------------------------------------------------
+// "Invite friends"
+
+/** The dinner's one invite link, for the host or a guest they said yes to. The same link every time. */
+export async function inviteLink(signed: Signed, dinnerId: string): Promise<{ token: string; url: string }> {
+  const d = await data.dinnerById(db(), dinnerId);
+  const dish = d?.recipe_id ? (await seenRecipes(db(), [d.recipe_id])).get(d.recipe_id) : null;
+  const visible = !!d && seesDinner(await shieldFor(db(), signed.familyId), d, dish);
+  if (!d || !visible || d.status === "cancelled") throw notFound(NOT_HAPPENING);
+  if (d.host_id !== signed.personId && (await data.requestOfGuest(db(), dinnerId, signed.personId))?.status !== "accepted") {
+    throw refused(403, "not_a_guest", "Only the host and their guests can invite friends.");
+  }
+  const token = d.invite_token ?? (await data.keepInviteToken(db(), dinnerId, randomBytes(32).toString("base64url")));
+  return { token, url: `${INVITE_ORIGIN}/d?t=${token}` };
+}
+
+/**
+ * Someone opened an invite link. Counts this phone or browser once per dinner, while the dinner is still ahead, up to MAX_OPENS and OPEN_BURST per OPEN_BURST_MS. The
+ * reply is all the opener ever sees: the dish, the host's name and when. Never the place, the address or any id. Null when the link doesn't work.
+ * TODO(caleb): this is the host's whole display name; if families put surnames in it, decide whether a link anyone can forward should show less.
+ */
+export async function openInvite(token: string, deviceId: string): Promise<{ dish: string; hostName: string; startsAt: number } | null> {
+  const d = await data.dinnerByInviteToken(db(), token);
+  if (!d || d.status === "cancelled" || d.hidden_at) return null;
+  if (d.recipe_id && (await seenRecipes(db(), [d.recipe_id])).get(d.recipe_id)?.hidden) return null; // its dish was hidden after reports
+  const hostName = ((await peopleByIds(db(), [d.host_id])).get(d.host_id)?.name ?? "").trim();
+  const reply = { dish: d.dish, hostName, startsAt: d.starts_at.getTime() };
+  if (d.starts_at.getTime() <= Date.now()) return reply;
+  await tx(async (c) => {
+    await data.dinnerById(c, d.id, true); // the ceiling and the burst limit hold under many opens at once
+    const seen = await data.inviteOpenState(c, d.id, deviceId, OPEN_BURST_MS);
+    if (seen.total >= MAX_OPENS || seen.recent >= OPEN_BURST || seen.seen) return;
+    await data.insertInviteOpen(c, d.id, deviceId);
+  });
+  return reply;
+}
