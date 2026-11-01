@@ -18,7 +18,8 @@ const SPEND_TRIES = 3;
 /**
  * Adds what a piece of work spent to today's total. Never throws: losing a cost record must not lose her answer. When every
  * connection is busy it tries again, because a lost record means the budget undercounts and stops too late. That can hold the caller
- * for about 15 s at worst, under overload only. If it's still lost, Sentry is told how much.
+ * for about 15 s at worst, under overload only. If it's still lost, Sentry is told how much. A retry can't double-add: tx() throws only
+ * before its work or after a rollback, and the work inside uses its own client, never the pool.
  */
 export async function recordSpend(spend: Spend, askId: string | null, trace: Trace): Promise<void> {
   if (!(spend.usd > 0) && spend.calls.length === 0) return;

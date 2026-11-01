@@ -115,7 +115,7 @@ test("a person's page holds exactly the named fields, and a tombstone only what'
       supabaseProfileId: "seed:whole",
       name: "All fields",
       role: "kid",
-      voiceClone: { consentedAt: 1, cartesiaVoiceId: "v" },
+      voiceClone: { consentedAt: 1, cartesiaVoiceId: "CARTESIA-VOICE-ID" },
       language: "mr",
       relation: "Aaji",
       approx: { lat: 1, lng: 2 },
@@ -123,9 +123,14 @@ test("a person's page holds exactly the named fields, and a tombstone only what'
     });
     await ctx.db.insert("people", { familyId, supabaseProfileId: "seed:gone", name: "Deleted", role: "kid", deletedAt: 5 });
   });
-  const { rows } = await (await post(t, "/sync/page", { table: "people", cursor: null, limit: 100 })).json();
+  const res = await post(t, "/sync/page", { table: "people", cursor: null, limit: 100 });
+  const text = await res.text();
+  expect(text).not.toContain("CARTESIA-VOICE-ID");
+  expect(text).not.toContain("cartesiaVoiceId");
+  const { rows } = JSON.parse(text);
   const whole = rows.find((row: { supabaseProfileId: string }) => row.supabaseProfileId === "seed:whole");
   expect(Object.keys(whole).sort()).toEqual(PERSON_FIELDS.filter((field) => field !== "deletedAt").sort());
+  expect(whole.voiceClone).toEqual({ consentedAt: 1 }); // her yes, without the voice's id
   const gone = rows.find((row: { supabaseProfileId: string }) => row.supabaseProfileId === "seed:gone");
   expect(Object.keys(gone).sort()).toEqual(["_creationTime", "_id", "deletedAt", "familyId", "name", "role", "supabaseProfileId"]);
 });
