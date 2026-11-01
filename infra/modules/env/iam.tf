@@ -113,8 +113,9 @@ resource "aws_iam_role_policy" "task" {
   policy   = jsonencode({ Version = "2012-10-17", Statement = each.value })
 }
 
-# GitHub Actions' deploy login. No stored keys, and only a job running in this repo's matching GitHub environment
-# can use it. It can push images and roll services; it can't change the network, the database or secrets.
+# GitHub Actions' deploy login. No stored keys. Three things must all match: this repo's GitHub environment (sub), the deploy branch (ref), and one of the
+# two deploy workflows on that branch (job_workflow_ref). Without the last two, any branch with a workflow naming the environment could log in. It can push images and roll
+# services; it can't change the network, the database or secrets.
 data "aws_iam_policy_document" "deploy_assume" {
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
@@ -131,6 +132,16 @@ data "aws_iam_policy_document" "deploy_assume" {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
       values   = ["${var.github_subject_prefix}:environment:${var.environment}"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:ref"
+      values   = ["refs/heads/${var.deploy_branch}"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:job_workflow_ref"
+      values   = [for f in ["deploy-aws.yml", "deploy-web.yml"] : "${var.github_repository}/.github/workflows/${f}@refs/heads/${var.deploy_branch}"]
     }
   }
 }
