@@ -40,7 +40,10 @@ export async function session(familyId: string, personId: string, expiresInS = 3
 }
 
 export async function file(familyId: string, key = `private/${randomBytes(8).toString("hex")}`): Promise<string> {
-  await db().query("insert into files (key, bucket, kind, family_id) values ($1, 'private', 'voice', $2)", [key, familyId]);
+  await db().query(
+    "insert into files (key, bucket, kind, family_id, uploaded_at) values ($1, 'private', 'voice', $2, now())",
+    [key, familyId],
+  );
   return key;
 }
 

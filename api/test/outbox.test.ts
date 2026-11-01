@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { db } from "../src/db.js";
-import { enqueue, sendDue } from "../src/outbox.js";
+import { enqueue, oldestDueAgeS, oneAtATime, sendDue, STUCK_ATTEMPTS } from "../src/outbox.js";
 import { freshDatabase, hasDatabase } from "./helpers.js";
 
 async function clear() {
@@ -67,6 +67,56 @@ test("outbox", { skip: !hasDatabase }, async (t) => {
     assert.equal(rows[0].attempts, 1);
     assert.equal(rows[0].sent_at, null);
     assert.equal(rows[0].later, true);
+  });
+  await t.test("a row that keeps failing tells someone, once", async () => {
+    await clear();
+    await enqueue(db(), { queue: "jobs", payload: { a: 1 } });
+    const stuck: unknown[] = [];
+    const log = { error: () => {}, stuck: (f: unknown) => void stuck.push(f) };
+    const failing = async () => {
+      throw new Error("no");
+    };
+    for (let i = 0; i < STUCK_ATTEMPTS + 2; i++) {
+      await db().query("update outbox set send_after = now()");
+      await sendDue(db(), failing, log);
+    }
+    assert.equal(stuck.length, 1);
+  });
+
+  await t.test("when SQS looks down, a pass stops early rather than waiting on every row", async () => {
+    await clear();
+    for (let i = 0; i < 10; i++) await enqueue(db(), { queue: "jobs", payload: { i } });
+    let calls = 0;
+    await sendDue(db(), async () => {
+      calls += 1;
+      throw new Error("down");
+    });
+    assert.equal(calls, 3);
+  });
+
+  await t.test("a late row shows up in the age check", async () => {
+    await clear();
+    assert.equal(await oldestDueAgeS(db()), 0);
+    await enqueue(db(), { queue: "jobs", payload: {}, sendAfter: new Date(Date.now() - 1_000_000) });
+    assert.ok((await oldestDueAgeS(db())) > 900);
+  });
+
+  await t.test("only one pass at a time, and a failed pass doesn't jam it", async () => {
+    let running = 0;
+    let most = 0;
+    let fail = true;
+    const pass = oneAtATime(async () => {
+      running += 1;
+      most = Math.max(most, running);
+      await new Promise((resolve) => setTimeout(resolve, 20));
+      running -= 1;
+      if (fail) throw new Error("boom");
+    });
+    const results = await Promise.allSettled([pass(), pass(), pass()]);
+    assert.equal(most, 1);
+    assert.equal(results.filter((r) => r.status === "rejected").length, 1);
+    fail = false;
+    await pass();
   });
 });
 

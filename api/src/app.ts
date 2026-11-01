@@ -5,13 +5,14 @@ import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastif
 import * as Sentry from "@sentry/node";
 import { db } from "./db.js";
 import { ApiError } from "./errors.js";
-import { fileGuard, looksLikeFileKey } from "./files.js";
+import { fieldPaths, fileGuard, lastName, looksLikeFileKey } from "./files.js";
 import { peopleRoutes } from "./modules/people/routes.js";
 
 declare module "fastify" {
   interface FastifyContextConfig {
-    fileKeys?: string[]; // body fields holding S3 keys: each is checked against the caller's family
-    notFileKeys?: string[]; // body fields named like keys that aren't, such as an idempotency key
+    fileKeys?: string[]; // paths of fields holding S3 keys (files.ts): each is checked against the caller's family
+    notFileKeys?: string[]; // fields named like keys that aren't, such as an idempotency key
+    noBody?: boolean; // a write route that really takes no body
   }
   interface FastifyInstance {
     fileKeyRoutes: { method: string; url: string; fields: string[] }[];
@@ -23,21 +24,34 @@ const REQUEST_ID = /^[A-Za-z0-9-]{8,64}$/;
 /** Paths can hold capability tokens in their query, so logs get the path only. */
 export const pathOnly = (url: string) => url.split("?")[0];
 
-/** Fails at start, not in production, for a route that takes a key and doesn't say what it is. */
+const WRITES = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/** Fails at start, not in production, for a route that could take a file key without saying so. */
 function guardFileKeys(app: FastifyInstance): void {
   app.decorate("fileKeyRoutes", []);
   app.addHook("onRoute", (route) => {
-    const properties = (route.schema?.body as { properties?: Record<string, unknown> } | undefined)?.properties ?? {};
+    const methods = [route.method].flat();
+    const schema = route.schema as { body?: object; querystring?: object; params?: object } | undefined;
+    if (methods.some((m) => WRITES.has(m)) && !schema?.body && !route.config?.noBody) {
+      throw new Error(`${route.url}: a write route needs a body schema, or config.noBody`);
+    }
+    const found = [
+      ...fieldPaths(schema?.body),
+      ...fieldPaths(schema?.querystring).map((f) => `query.${f}`),
+      ...fieldPaths(schema?.params).map((f) => `params.${f}`),
+    ];
     const declared = route.config?.fileKeys ?? [];
     const exempt = route.config?.notFileKeys ?? [];
-    const missing = Object.keys(properties).filter((f) => looksLikeFileKey(f) && !declared.includes(f) && !exempt.includes(f));
+    const missing = found.filter((f) => looksLikeFileKey(lastName(f)) && !declared.includes(f) && !exempt.includes(f));
     if (missing.length > 0) {
       throw new Error(`${route.url}: declare ${missing.join(", ")} in config.fileKeys or config.notFileKeys`);
     }
     if (declared.length > 0) {
       const existing = route.preValidation ? [route.preValidation].flat() : [];
       route.preValidation = [...existing, fileGuard(declared)];
-      for (const method of [route.method].flat()) app.fileKeyRoutes.push({ method, url: route.url, fields: declared });
+      for (const method of methods) {
+        if (method !== "HEAD") app.fileKeyRoutes.push({ method, url: route.url, fields: declared });
+      }
     }
   });
 }

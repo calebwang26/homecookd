@@ -20,15 +20,21 @@ export async function enqueue(
 
 const backoffS = (attempts: number) => Math.min(3600, 30 * 2 ** attempts);
 
+// A row that's failed this many times tells someone. It keeps retrying.
+export const STUCK_ATTEMPTS = 5;
+// Enough failures that SQS itself looks down: stop, rather than hold a database connection through a whole batch of timeouts.
+const FAILURES_PER_PASS = 3;
+
+export type Reporter = {
+  error: (fields: object, message: string) => void;
+  stuck?: (fields: { outboxId: string; queue: string; attempts: number }) => void;
+};
+
 /** One pass. Returns how many it sent. A row that fails waits longer each time; it's never dropped. */
-export async function sendDue(
-  pool: Pool,
-  send: Send,
-  log?: { error: (fields: object, message: string) => void },
-  batch = 20,
-): Promise<number> {
+export async function sendDue(pool: Pool, send: Send, log?: Reporter, batch = 20): Promise<number> {
   const client = await pool.connect();
   let sent = 0;
+  let failures = 0;
   try {
     await client.query("begin");
     const { rows } = await client.query(
@@ -46,10 +52,14 @@ export async function sendDue(
         sent += 1;
       } catch (error) {
         log?.error({ outboxId: String(row.id), queue: row.queue, err: { type: (error as Error).name } }, "outbox send failed");
+        const attempts = row.attempts + 1;
+        if (attempts === STUCK_ATTEMPTS) log?.stuck?.({ outboxId: String(row.id), queue: row.queue, attempts });
         await client.query(
           `update outbox set attempts = attempts + 1, send_after = now() + make_interval(secs => $2) where id = $1`,
           [row.id, backoffS(row.attempts)],
         );
+        failures += 1;
+        if (failures >= FAILURES_PER_PASS) break;
       }
     }
     await client.query("commit");
@@ -60,4 +70,27 @@ export async function sendDue(
   } finally {
     client.release();
   }
+}
+
+/** How late the oldest due row is, in seconds, or 0. Each pass checks it, so a sender that's fallen behind tells someone. */
+export async function oldestDueAgeS(pool: Pick<Pool, "query">): Promise<number> {
+  const { rows } = await pool.query(
+    `select coalesce(extract(epoch from now() - min(send_after)), 0)::float as age from outbox
+      where sent_at is null and send_after <= now()`,
+  );
+  return Math.max(0, rows[0].age);
+}
+
+/** Runs `pass` on a timer, one at a time: a slow pass makes the next tick do nothing, so they can't use up the pool. */
+export function oneAtATime(pass: () => Promise<void>): () => Promise<void> {
+  let running = false;
+  return async () => {
+    if (running) return;
+    running = true;
+    try {
+      await pass();
+    } finally {
+      running = false;
+    }
+  };
 }
