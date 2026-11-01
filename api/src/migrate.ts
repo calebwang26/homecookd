@@ -10,7 +10,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import type { Pool } from "pg";
 
-const LOCK = 7263519; // an advisory lock, so two runs can't apply the same file
+export const LOCK = 7263519; // an advisory lock, so two runs can't apply the same file
 const NO_TRANSACTION = /^-- migrate: no-transaction\s*\n/;
 
 export const defaultDir = join(dirname(fileURLToPath(import.meta.url)), "..", "migrations");
@@ -19,7 +19,8 @@ export async function migrate(pool: Pool, dir = defaultDir): Promise<string[]> {
   const applied: string[] = [];
   const client = await pool.connect();
   try {
-    await client.query("set statement_timeout = 0"); // the pool's timeout is for requests
+    await client.query("set statement_timeout = 0"); // the pool's timeouts are for requests
+    await client.query("set lock_timeout = 0"); // and a second deploy waits its turn below
     await client.query("select pg_advisory_lock($1)", [LOCK]);
     await client.query(
       `create table if not exists schema_migrations (
@@ -56,7 +57,7 @@ export async function migrate(pool: Pool, dir = defaultDir): Promise<string[]> {
     return applied;
   } finally {
     await client.query("select pg_advisory_unlock($1)", [LOCK]).catch(() => {});
-    client.release();
+    client.release(true); // not back to the pool: it no longer has a request's timeouts
   }
 }
 
