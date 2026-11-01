@@ -241,8 +241,11 @@ limits and can now page.
 
 ### Jobs and recordings
 
+Later additions: `files.upload_id` (`070`) and `recipes.updated_at` (`071`). `docs/build/JOBS-MIGRATION.md` says why.
+
 | Read | From | Index |
 |---|---|---|
+| An upload's files | the upload-complete check, a stop, the purge | `files_upload` |
 | My family's jobs (the live list) | `jobs.forFamily` | `jobs_family_recent` |
 | Claim the oldest queued job | `worker.claim` | `jobs_queued` |
 | Is this folder a job, and whose? | `jobs.create` | `jobs_upload_key` |

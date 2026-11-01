@@ -107,7 +107,7 @@ Before any backfill copies real rows into Postgres:
 
 - Seal `craving_links.token`, `dinners.invite_token` and `shares.token` (SCHEMA.md, M6).
 - Count violations of every new uniqueness rule, CHECK and domain (SCHEMA.md, section 7).
-- The sweep reaches every bucket and row the purge can mark. Today it reaches only anonymous private uploads, so a backfilled file
+- The sweep reaches every bucket and row the purge can mark. `dish.sweep` reaches only anonymous private uploads, and the jobs draft's `jobs.sweep` adds `uploads` and the rest of `private` (`docs/build/JOBS-MIGRATION.md`), but `media` isn't reached, so a backfilled file there
   would stay marked and undeleted (DISH-MIGRATION.md, known limits).
 
 ## Cutover list

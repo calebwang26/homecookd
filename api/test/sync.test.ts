@@ -614,8 +614,10 @@ test("a copied table is read-only to everything but the sync", { skip: !hasDatab
         return statSync(path).isDirectory() ? files(path) : path.endsWith(".ts") ? [path] : [];
       });
     const sync = join(root, "modules", "sync");
+    // The one exception: every write in that file checks the recipes switch first (recipes.test.ts holds it to that), and the trigger still refuses it until `moved_at` is set.
+    const switched = join(root, "modules", "recipes", "writes.ts");
     const writes = /\b(insert\s+into|update|delete\s+from|truncate)\s+(families|people|recipes)\b/i;
-    const others = files(root).filter((path) => !path.startsWith(sync));
+    const others = files(root).filter((path) => !path.startsWith(sync) && path !== switched);
     assert.ok(others.length > 10);
     for (const path of others) {
       const source = readFileSync(path, "utf8");
