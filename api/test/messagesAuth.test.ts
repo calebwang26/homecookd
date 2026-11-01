@@ -134,7 +134,7 @@ test("an expired session and a deleted person are refused everywhere", { skip },
 });
 
 // Other areas hold their own routes to the same rule (communityRoutes.test.ts, live.test.ts). A new prefix fails below until it's placed.
-const OTHER_AREAS = /^\/v1\/(community|cravings|dinners|share-requests|live)(\/|$)/;
+const OTHER_AREAS = /^\/v1\/(community|cravings|dinners|dinner-requests|share-requests|live)(\/|$)/;
 
 test("every /v1 route in this area has a case above", { skip }, async () => {
   const found = new Set<string>();
