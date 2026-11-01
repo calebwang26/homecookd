@@ -72,7 +72,12 @@ Decided by Caleb on Oct 31. **To build, and blocked until the App Store approves
    is on `main` but not applied. Steps: `infra/README.md`, "Starting the backups". Until then, **there is no scheduled
    backup of Convex**, which still runs on a preview deployment.
 3. **Restore test,** after the first export.
-4. Everything else that merges or deploys from the migration branch.
+4. **Change `/privacy`'s "your one-to-one chats".** Caleb decided the other person's half stays when someone deletes their account
+   (SCHEMA.md, C1), so the page must say that. Have a lawyer read the new wording. Until then the page promises more than Convex
+   does today.
+5. **Add Sentry to `/privacy` and the App Store privacy answers,** before Sentry goes on anything with real people's data. Until
+   then it sees staging only, and the app and website don't use it.
+6. Everything else that merges or deploys from the migration branch.
 
 **Not waiting on Apple:** remove the Oct 25 export in `~/Documents/homecookd-backups/` by about **Dec 24, 2026**, Caleb's call.
 Files on a laptop don't expire. `/privacy` says data is deleted within 30 days and "it leaves our backups within 30 more", so
