@@ -70,6 +70,11 @@ limited database login.
 production: a bounded wait queue that fails fast with a 503 and `retry-after`; the load balancer's health check stays as it is; an alarm on
 pool waits; autoscaling on request load. **The proof is a load test that exercises pool exhaustion.**
 
+**Measured, Nov 1 (made-up data, local Postgres, one process with a pool of 10):** a request waiting on a row lock keeps its connection. 200 requests at once on one card finish in 408 ms
+with no error, because each holds the row for about 2 ms. If something else holds that row, the queue takes the whole pool: with a row held 7 s and 10 waiting, one of the 10 got a 500, and `/ready`
+answered 503 after 5 s for anyone, on any family's behalf. With 40 waiting, 31 got a 500. At 3 s nothing failed, but everything else waited the 3 s. So one stuck row can stop a task for every family.
+**Recommendation:** add a `lock_timeout` of about 3 s beside the bounded wait, so a request waiting on a row gives up and answers a 503 with `retry-after`, and load test it. Not built.
+
 ### Not building
 
 Microservices, Kubernetes, Redis, read replicas and multi-region, until measurements call for them.

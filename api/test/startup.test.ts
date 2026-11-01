@@ -13,5 +13,5 @@ test("the real app builds with every module", async () => {
 
 test("two routes on one address stop it", async () => {
   const app = buildApp({ logger: false, routes: (a) => void a.register(async (m) => void m.get("/health", async () => "again")) }); // as a module registers
-  await assert.rejects(() => app.ready(), /already declared/);
+  await assert.rejects(async () => void (await app.ready()), /already declared/);
 });
