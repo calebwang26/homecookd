@@ -22,8 +22,8 @@ resource "aws_s3_bucket_public_access_block" "uploads" {
   restrict_public_buckets = true
 }
 
-# A family's videos are the product: an overwrite or delete can be undone for 28 days. /privacy says deleted data leaves
-# backups within 30 days of the deletion, and S3's expiry can run a little late, so this stays under 30.
+# A family's videos are the product: an overwrite or delete can be undone for 28 days. /privacy says deleted within 30 days,
+# out of backups within 30 more, and S3's expiry can run a little late, so this stays under 30.
 resource "aws_s3_bucket_versioning" "media" {
   bucket = aws_s3_bucket.media.id
   versioning_configuration { status = "Enabled" }

@@ -17,7 +17,7 @@ Oct 31, 2028; $100 expires Oct 17, 2027). Claude stays billed by Anthropic, and 
 
 ## How the rewrite ships (Caleb, Oct 31)
 
-One long-lived branch, with one reviewable PR per area merged into it. **Nothing from it reaches `main` or deploys until
+One long-lived branch, `aws-migration`, with one reviewable PR per area merged into it. **Nothing from it reaches `main` or deploys until
 Apple approves 1.0.** After approval: app 1.1 with our own addresses first, then each area switches over on its own, with
 Convex as its way back until it's proven. Build 6 keeps calling the old services, so they stay up until those phones have
 updated. `main` keeps changing `convex/` meanwhile, so the branch merges `main` often and ports each change.
@@ -72,7 +72,9 @@ Decided by Caleb on Oct 31. **To build, and blocked until the App Store approves
    is on `main` but not applied. Steps: `infra/README.md`, "Starting the backups". Until then, **there is no scheduled
    backup of Convex**, which still runs on a preview deployment.
 3. **Restore test,** after the first export.
-4. Everything else that merges or deploys from the migration branch.
+4. **Add Sentry to `/privacy` and the App Store privacy answers,** before Sentry goes on anything with real people's data. Until
+   then it sees staging only, and the app and website don't use it.
+5. Everything else that merges or deploys from the migration branch.
 
 **Not waiting on Apple:** remove the Oct 25 export in `~/Documents/homecookd-backups/` by about **Dec 24, 2026**, Caleb's call.
 Files on a laptop don't expire. `/privacy` says data is deleted within 30 days and "it leaves our backups within 30 more", so
@@ -158,6 +160,9 @@ and an address its firmware can reach.
 4. **Deleted accounts must be purged from both stores** while both exist. It's a privacy promise, so test this first.
 
 ### 5. Supabase to RDS
+Supabase and Convex share one schema (`api/migrations/`), so this phase moves Supabase's data and routes into tables designed
+with Convex's, not a copy of Supabase's tables.
+
 **Size:** 7,727 lines in `supabase/functions/api/` (Deno), 15 migrations, 21 tables, and 6 references to pg_cron. It's
 already Postgres, so `pg_dump` and restore is the easy part. The work is moving the Deno code to Node on Fargate, replacing
 pg_cron with EventBridge, and re-running `two_sided_live`, `api-smoke` and `retention_live` against the new host. The
@@ -168,6 +173,8 @@ Before real data arrives: create a limited app user for `api` and `worker`, and 
 workflow's actions to commit SHAs.
 
 ### 6. Convex to Postgres
+Same shared schema as phase 5.
+
 **Size:** about 11,400 lines, 29 tables, 8 crons, 184 functions (28 queries, 34 mutations, 5 actions, 117 internal), 33
 scheduler calls, 47 file-storage calls, and 7,240 lines of tests to carry over.
 
