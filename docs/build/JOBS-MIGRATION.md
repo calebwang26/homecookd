@@ -162,10 +162,10 @@ The worker also deletes a stopped job's raw video as soon as it sees it, so the 
 
 ## Account deletion
 
-`jobs/account.ts` applies SCHEMA.md section 4 to these tables. **Nothing calls it yet.** When this area moves before Accounts does, `purgeJobsForPerson` goes in `sync.purge_person`. Both refuse to run on someone who hasn't deleted.
+`jobs/account.ts` applies SCHEMA.md section 4 to these tables. The account purge calls it (`accounts/deletion.ts`, `purgeSteps.ts`). Both refuse to run on someone who hasn't deleted.
 
-- **`stopPersonsWork(c, personId)`**, in the deletion's own transaction: unfinished jobs stop, recordings are abandoned, recipes go with their questions, cooking rows and swaps.
-- **`purgeJobsForPerson(personId)`**, in batches of 500, each a transaction, safe to repeat: any recipe published a moment later; cooking rows as the kid, and `cook_id` null as the cook of a library dish; recordings, each after its frame, with cover and frame marked (prompts, events and windows cascade); jobs; pending sends made by them, with the hello marked, and them taken off others' lists; everything else in the ledger; their retry keys. `model_calls` keeps its cost history with the ids nulled.
+- **`stopPersonsWork(c, personId)`**, in the deletion's own transaction: unfinished jobs stop, recordings are abandoned, the first 500 recipes go with their questions, cooking rows and swaps, and the rest go in the batches.
+- **`purgeJobsForPerson(personId)`**, in batches of 500, each a transaction, safe to repeat: any recipe published a moment later; cooking rows as the kid, and `cook_id` null as the cook of a library dish; recordings, each after its frame, with cover and frame marked (prompts, events and windows go first, in batches); jobs; pending sends made by them, with the hello marked, and them taken off others' lists; everything else in the ledger; their retry keys. `model_calls` keeps its cost history with the ids nulled.
 - **What's written first, on `account_deletions`:** recipe and job ids, `upload_keys`, `media_keys`, `media_prefixes`. It adds to what's there, and makes the row if there isn't one. That includes the folder a job with no recipe yet publishes to (`recipe-<job>/`), because a job stopped part way can leave files nothing else names.
 
 **The outside purge isn't written.** Raw videos are reached by the sweep through their ledger rows. Published folders in the media bucket are on `account_deletions` for an S3 purge nobody has written yet (WORKER-MIGRATION.md, open question 7). **That still blocks real data.**

@@ -114,6 +114,12 @@ export async function deleteFrame(c: Queryable, recordingId: string): Promise<st
   return rows[0]?.frame_key ?? null;
 }
 
+/** What's saved with their recordings, in batches first, so one long recording can't outgrow a statement when it cascades. */
+export async function deleteSavedWithRecordings(q: Queryable, table: "homie_prompts" | "live_events" | "live_windows", personId: string, limit: number): Promise<number> {
+  const { rowCount } = await q.query(`delete from ${table} where id in (select x.id from ${table} x join recordings r on r.id = x.recording_id where r.cook_id = $1 limit $2)`, [personId, limit]);
+  return rowCount ?? 0;
+}
+
 /** homie_prompts, live_events and live_windows cascade from it. */
 export async function deleteRecording(c: Queryable, recordingId: string): Promise<void> {
   await c.query(`delete from recordings where id = $1`, [recordingId]);

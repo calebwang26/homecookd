@@ -24,6 +24,7 @@ import {
   useVoiceClones,
 } from "../src/modules/accounts/deletion.js";
 import { JOIN_LINK_SALT, seal } from "../src/modules/accounts/sealed.js";
+import { workerFolder } from "../src/modules/jobs/account.js";
 import { accountsSweep } from "../src/modules/accounts/tasks.js";
 import { sweep } from "../src/modules/dish/tasks.js";
 import { handleMessage } from "../src/scheduled.js";
@@ -386,7 +387,7 @@ async function assertPurged(k: Kitchen) {
 
   // What the outside purge will need.
   assert.deepEqual([...d.upload_keys].sort(), [k.uploadA, k.uploadB].sort());
-  assert.deepEqual(d.media_prefixes, [k.prefix]);
+  assert.deepEqual([...d.media_prefixes].sort(), [k.prefix, workerFolder(k.jobDone), workerFolder(k.jobRunning)].sort(), "a job stopped part way can leave files under its own folder");
   assert.ok(d.media_keys.includes(k.video));
   assert.ok(d.media_keys.includes(`${k.prefix}recipe.json`));
   assert.ok(!d.media_keys.includes("library/demo/recipe.json"), "a seeded demo's files are the public library's");
@@ -538,6 +539,45 @@ test("nothing of hers is worked on after she deletes; what turns up later is pur
   assert.ok(d.media_prefixes.includes("recipes/late/"));
   assert.equal(await count("recipes", "cook_id = $1", [k.R]), 0);
   assert.equal(await count("jobs", "cook_id = $1", [k.R]), 0);
+});
+
+test("a recipe that lands after Community and Messages have had their turn: its dinner is called off and the answer on it is marked", { skip }, async () => {
+  const k = await kitchen();
+  const did = await startDeletion(k.R, "person");
+  const lateFile = FILE("late-answer");
+  let dinner = "";
+  await runPurge(did!, {}, {
+    fault: async (point: string, step: string) => {
+      // The last batch of Messages' purge, and the recipes' batch is next.
+      if (dinner || point !== "after-commit" || step !== "uploads nothing took") return;
+      const late = await id(`insert into recipes (family_id, cook_id, title, status) values ($1, $2, 'SECRET-R later still', 'ready') returning id`, [k.f, k.R]);
+      await q(`insert into questions (family_id, recipe_id, asked_by, text, status, answer_by, answer_audio_key) values ($1, $2, $3, 'KEEP-how long', 'answered', $3, $4)`, [k.f, late, k.shreya, lateFile]);
+      dinner = await id(
+        `insert into dinners (host_id, host_family_id, recipe_id, dish, starts_at, place_kind, place_name, address, approx_lat, approx_lng, seats, status, invite_token)
+         values ($1, $2, $3, 'KEEP-a dish', now() + interval '1 day', 'home', 'KEEP-home', 'KEEP-address', 42.36, -71.09, 4, 'open', $4) returning id`,
+        [k.mei, k.z, late, uniq("inv")],
+      );
+    },
+  });
+  assert.ok(dinner);
+  const called = await row("dinners", "id = $1", [dinner]);
+  assert.deepEqual([called.status, called.recipe_id], ["cancelled", null]);
+  assert.ok(await isMarked(lateFile));
+  assert.equal(await count("questions", "answer_audio_key = $1", [lateFile]), 0);
+});
+
+test("a file an area marks names this deletion, and a key with no row in the ledger still gets one", { skip }, async () => {
+  const k = await kitchen();
+  const did = await startDeletion(k.R, "person");
+  const unknown = FILE("no-ledger-row");
+  await q(`insert into messages (family_id, thread_id, sender_id, kind, audio_key) values ($1, $2, $3, 'voice', $4)`, [k.f, k.circle, k.R, unknown]);
+  await runPurge(did!, {});
+  assert.equal((await row("files", "key = $1", [unknown])).purge_deletion_id, did, "the only record of it can't go with the message");
+  for (const key of [k.rVoice, k.rPhoto, k.noteAudio, k.onThali, k.askedByHer, k.plate, k.frame, k.hello]) {
+    const file = await row("files", "key = $1", [key]);
+    assert.ok(file.delete_requested_at, key);
+    assert.equal(file.purge_deletion_id, did, key);
+  }
 });
 
 test("a row that turns up during the purge is caught: it finishes only after a pass finds nothing", { skip }, async () => {
@@ -922,7 +962,7 @@ test("the outside purge says plainly what it couldn't reach, and never claims it
   assert.equal(d.external_purged_at, null);
   assert.match(d.external_error, /Not reached yet: \d+ files marked and not deleted/);
   assert.match(d.external_error, /Not reached yet: 2 upload folders/);
-  assert.match(d.external_error, /Not reached yet: 1 recipe folders/);
+  assert.match(d.external_error, /Not reached yet: 3 recipe folders/);
   assert.equal(d.voice_clone_id, null);
   assert.equal(await purgeOutside(did!), "retry");
   assert.deepEqual(seen, ["voice_r"], "a clone already deleted isn't deleted twice");

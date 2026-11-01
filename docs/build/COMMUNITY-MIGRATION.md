@@ -181,7 +181,7 @@ Report alerts go through `outbox` on the `scheduled` queue. A voice recipe's mer
 
 ## Account deletion (SCHEMA.md section 4)
 
-`community/account.ts`, tested with the person's ids by hand. **Nothing calls it yet:** the account purge moves last. Each runs safely twice.
+`community/account.ts`, tested with the person's ids by hand. The account purge calls it (`accounts/deletion.ts`, `purgeSteps.ts`). Each runs safely twice.
 
 | Table | Done | How |
 |---|---|---|
