@@ -17,7 +17,7 @@ Oct 31, 2028; $100 expires Oct 17, 2027). Claude stays billed by Anthropic, and 
 
 ## How the rewrite ships (Caleb, Oct 31)
 
-One long-lived branch, with one reviewable PR per area merged into it. **Nothing from it reaches `main` or production until
+One long-lived branch, `aws-migration`, with one reviewable PR per area merged into it. **Nothing from it reaches `main` or production until
 Apple approves 1.0.** Merges into it do auto-deploy to staging. After approval: app 1.1 with our own addresses first, then each area switches over on its own, with
 Convex as its way back until it's proven. Build 6 keeps calling the old services, so they stay up until those phones have
 updated. `main` keeps changing `convex/` meanwhile, so the branch merges `main` often and ports each change.
@@ -179,6 +179,9 @@ and an address its firmware can reach.
 4. **Deleted accounts must be purged from both stores** while both exist. It's a privacy promise, so test this first.
 
 ### 5. Supabase to RDS
+Supabase and Convex share one schema (`api/migrations/`), so this phase moves Supabase's data and routes into tables designed
+with Convex's, not a copy of Supabase's tables.
+
 **Size:** 7,727 lines in `supabase/functions/api/` (Deno), 15 migrations, 21 tables, and 6 references to pg_cron. It's
 already Postgres, so `pg_dump` and restore is the easy part. The work is moving the Deno code to Node on Fargate, replacing
 pg_cron with EventBridge, and re-running `two_sided_live`, `api-smoke` and `retention_live` against the new host. The
@@ -189,6 +192,8 @@ Before real data arrives: create a limited app user for `api` and `worker`, and 
 workflow's actions to commit SHAs.
 
 ### 6. Convex to Postgres
+Same shared schema as phase 5.
+
 **Size:** about 11,400 lines, 28 tables, 8 crons, 184 functions (28 queries, 34 mutations, 5 actions, 117 internal), 33
 scheduler calls, 47 file-storage calls, and 7,240 lines of tests to carry over.
 

@@ -431,7 +431,8 @@ The questions as asked:
 ### Caleb's answers (Oct 31, 2026)
 
 - **C1: the other person's half stays.** When someone deletes their account, what they sent goes, and what the other person sent
-  stays, including voice notes. Convex does this today; Supabase's purge deletes both halves, so the new purge follows Convex.
+  stays. Caleb said "keep that text history". **Keeping the other person's voice notes too is this chat's reading, not yet confirmed
+  by him.** Convex does this today; Supabase's purge deletes both halves, so the new purge follows Convex.
   **`/privacy` says "your one-to-one chats" go, so its wording has to change** (AWS-MIGRATION, "Waiting on Apple's approval").
 - **C2: blank it.** When a family's last person deletes, `name`, `public_name` and both code columns are blanked. The row stays for
   the FKs.
