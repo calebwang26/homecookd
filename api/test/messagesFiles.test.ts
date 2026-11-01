@@ -91,7 +91,7 @@ test("every route that declares a file key is on the list above", { skip }, asyn
   const app = buildApp({ logger: false });
   await app.ready();
   const declared = app.fileKeyRoutes
-    .filter((r) => r.url.startsWith("/v1/") && r.url !== "/v1/messages/photo-note")
+    .filter((r) => r.url.startsWith("/v1/") && r.url !== "/v1/messages/photo-note" && !r.url.startsWith("/v1/cravings/")) // files.test.ts holds cravings to this
     .flatMap((r) => r.fields.map((f) => `${r.method} ${r.url} ${f}`));
   assert.deepEqual(declared.sort(), Object.keys(ROUTES).sort());
 });

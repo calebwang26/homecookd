@@ -133,6 +133,9 @@ test("an expired session and a deleted person are refused everywhere", { skip },
   assert.ok(await circleOf(w));
 });
 
+// Other areas hold their own routes to the same rule (communityRoutes.test.ts, live.test.ts). A new prefix fails below until it's placed.
+const OTHER_AREAS = /^\/v1\/(community|cravings|dinners|share-requests|live)(\/|$)/;
+
 test("every /v1 route in this area has a case above", { skip }, async () => {
   const found = new Set<string>();
   const app = buildApp({
@@ -140,7 +143,7 @@ test("every /v1 route in this area has a case above", { skip }, async () => {
     routes: (a) => {
       a.addHook("onRoute", (route) => {
         for (const method of [route.method].flat()) {
-          if (method !== "HEAD" && route.url.startsWith("/v1/") && route.url !== "/v1/me") found.add(`${method} ${route.url}`);
+          if (method !== "HEAD" && route.url.startsWith("/v1/") && route.url !== "/v1/me" && !OTHER_AREAS.test(route.url)) found.add(`${method} ${route.url}`);
         }
       });
     },

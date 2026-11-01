@@ -14,6 +14,9 @@ import { hasDatabase, IP, newBackend } from "./dishHelpers.js";
 
 const skip = !hasDatabase;
 
+// /v1/me has its own tests; a share link opens with its own token and no session, and messagesAuth.test.ts holds it to that.
+const PUBLIC_ROUTES = new Set(["/v1/me", "/v1/shares/open"]);
+
 function signedInRoutes(): { method: string; url: string }[] {
   const found: { method: string; url: string }[] = [];
   const app = buildApp({
@@ -21,7 +24,7 @@ function signedInRoutes(): { method: string; url: string }[] {
     routes: (a) => {
       a.addHook("onRoute", (route) => {
         for (const method of [route.method].flat()) {
-          if (route.url.startsWith("/v1/") && route.url !== "/v1/me" && method !== "HEAD") found.push({ method, url: route.url });
+          if (route.url.startsWith("/v1/") && !PUBLIC_ROUTES.has(route.url) && method !== "HEAD") found.push({ method, url: route.url });
         }
       });
     },
