@@ -42,7 +42,7 @@ declare module "fastify" {
 
 export type ProofInput = { key?: string; code?: string; profileId?: string; ip: string; method: string };
 
-/** A phone that opened a forwarded invite and hasn't added itself. It reads the family and nothing more: Supabase's `device_needs_profile`, and the live side's check on sessions. */
+/** A phone that opened a forwarded invite and hasn't added itself. It reads the family and writes nothing: Supabase's `device_needs_profile`. */
 export const needsProfile = (device: Ctx["device"]) => device?.via === "invite" && !device.person_id;
 
 const ownPhone = (p: Person) => refuse(403, `${p.name} uses their own phone.`);

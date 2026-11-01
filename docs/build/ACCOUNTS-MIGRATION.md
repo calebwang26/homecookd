@@ -56,7 +56,7 @@ Per SCHEMA.md section 2, a device key lasts until revoked and mints sessions; a 
 
 ## Account deletion
 
-`deletion.ts` and `purgeSteps.ts`. **It refuses no one who can prove who they are:** a person with nothing, a memorial person, a family's last person. A family member's phone may delete a phone-less person, but only a phone that already has its own person in that family, and the app must warn first (Caleb, Nov 1). An opened invite gets no session at all.
+`deletion.ts` and `purgeSteps.ts`. **It refuses no one who can prove who they are:** a person with nothing, a memorial person, a family's last person. A family member's phone may delete a phone-less person, but only a phone that already has its own person in that family, and the app must warn first (Caleb, Nov 1). A phone with no person of its own, from an invite or a code, gets no session at all.
 
 **At once, in one transaction:** the deletion row; a blank tombstone (the check constraint refuses one that keeps anything personal); sessions, phones, Apple and Google links, push tokens, invites naming them, asks to be them, and the sign-up log, by person and by their email, the one moment that's still known; jobs cancelled, recordings abandoned, dinners cancelled; recipes (500 here, the rest in the batches) with their questions, cooking rows and swaps; C2 if they were the last. The batches are queued in that same transaction.
 
@@ -195,7 +195,7 @@ Leaving signs a person out and frees their Apple login in one transaction (`remo
 ## Known limits
 
 - **The outside purge doesn't reach most of S3,** as above. This blocks real data.
-- **An opened invite gets no session (`POST /v1/sessions/start`):** 403 "Add yourself first." It reads Supabase's `device_needs_profile` (`needsProfile`), so both systems agree. **A phone from a family code with nobody yet still gets one,** because its person is only set on its first write, and Apple's reviewer signs in that way and may delete straight away. So someone holding the code can still start a session as a phone-less person, and delete them: `TODO(caleb)` in `sessions.ts`. Build 1.1 removes codes.
+- **A phone with no person of its own gets no session (`POST /v1/sessions/start`):** 403 "Add yourself first.", whether it came by invite or by code (Caleb, Nov 1). Convex's `sessions.start` answers a code phone today, so the adapter has to send one to add itself first. Build 1.1 has no codes, and the switch is off, so this has no App Review effect. **What's left:** a code phone's first write as a phone-less person still makes the phone theirs (old builds, `proofs.ts`), and from then on it's that person's phone. Someone holding the code can go that way.
 - **When the last signed-in person leaves, what they left stays stored with no way in.** Leaving isn't deleting: their recipes and messages stay under the old row, unless they moved with `solo`. It's the same gap as someone who left and came back, and it's Caleb's call.
 - **The TEST family, at the switch.** If Apple's reviewer is its only signed-in person and deletes, its phone-less people go and it's blanked. Check how it's set up before the switch, so a reviewer always has a family to sign in to.
 - **Once Mom has deleted, her old link still opens the card,** so whoever holds it could answer. The kid's card waits for that answer, and nothing else can reach her, so the link stays. Only the kid's link stops when the kid deletes.

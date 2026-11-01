@@ -3,7 +3,7 @@
 import { db, tx } from "../../db.js";
 import * as data from "./data.js";
 import { invitedIds } from "./family.js";
-import { needsProfile, prove } from "./proofs.js";
+import { prove } from "./proofs.js";
 import { ACCOUNT_DELETED, type Body, NOT_IN_THIS_FAMILY, refuse } from "./values.js";
 
 export async function startSession(b: Body, ip: string) {
@@ -16,9 +16,8 @@ export async function startSession(b: Body, ip: string) {
   const id = profileId.toLowerCase();
   const me = ctx.profiles.find((p) => p.id === id || p.supabase_id === id);
   if (!me) throw refuse(403, NOT_IN_THIS_FAMILY);
-  // A session can delete an account, so an opened invite gets none: whoever a link was forwarded to isn't Grandma. TODO(caleb): a phone from a family code with nobody yet still
-  // passes, because its person is only set on its first write, and Apple's reviewer signs in that way and may delete straight away (5.1.1(v)). Build 1.1 removes codes; this goes then.
-  if (needsProfile(ctx.device)) throw refuse(403, "Add yourself first.");
+  // A session can delete an account, so a phone with no person of its own gets none, whether it came by invite or by code (Caleb, Nov 1). It adds itself first.
+  if (!ctx.device?.person_id) throw refuse(403, "Add yourself first.");
   if ((await invitedIds(ctx.family.id)).has(me.id)) throw refuse(403, "They haven't joined yet.");
   if (ctx.phones.has(me.id) && ctx.device?.person_id !== me.id) throw refuse(403, `${me.name} uses their own phone.`);
   const token = await tx(async (c) => {
