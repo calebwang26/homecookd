@@ -26,11 +26,11 @@ test("the reconcile", { skip: !hasDatabase }, async (t) => {
     const w = new World();
     const f = w.family("A family", { publicName: "the family" });
     const cook = w.person(f, { language: "mr", approx: { lat: 19.0761, lng: 72.8777 }, supabase: { name: NAME, email: EMAIL } });
-    w.person(f, { role: "kid", voiceClone: { consentedAt: 1000.5 } });
+    w.person(f, { role: "kid", voiceClone: { consentedAt: 1000.5, cartesiaVoiceId: "voice-1" } as { consentedAt: number } });
     w.recipe(cook, { storyCard: { text: STORY, writtenAt: 2000 }, memories: [{ kind: "story", text: STORY }], coverUrl: "https://storage.googleapis.com/edible-media-prod/a/b.jpg?v=3" });
     await w.syncAll();
     const report = await runReconcile(w.run());
-    assert.deepEqual(report?.counts, {}, "the rounded place and times compare equal");
+    assert.deepEqual(report?.counts, {}, "the rounded place and times compare equal, and a voice's id is no difference");
     assert.deepEqual(w.report.alerts, []);
     assert.equal(report?.incomplete, false);
   });

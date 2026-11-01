@@ -60,6 +60,10 @@ and anything changing what build 6 calls, needs his separate OK.
 A restore drill, a deliberately killed service, a load test, and these gaps closed: 2+ api tasks, autoscaling, HTTPS, and a
 limited database login.
 
+**A production gate: overload (Master Agent, Nov 1).** Today, with all connections busy, a request waits 5 s then answers a 500. Before
+production: a bounded wait queue that fails fast with a 503 and `retry-after`; the load balancer's health check stays as it is; an alarm on
+pool waits; autoscaling on request load. **The proof is a load test that exercises pool exhaustion.**
+
 ### Not building
 
 Microservices, Kubernetes, Redis, read replicas and multi-region, until measurements call for them.

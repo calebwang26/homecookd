@@ -143,6 +143,11 @@ The load balancer's `idle_timeout` is 3700 s, and Fastify's default keep-alive i
 
 ## Known limits
 
+- **When the api's 10 database connections all stay busy past 5 seconds, requests wait those 5 seconds and then answer a 500.** `/health` keeps
+  answering, so the load balancer keeps sending traffic, and `/ready` answers 503. Nothing sheds load or scales yet; autoscaling and 2+
+  tasks are on the launch list. A model cost is retried, up to about 15 s, and goes to Sentry as `DishSpendLost` if it's still lost, so the
+  budget can undercount only under long overload. A load test will show when this starts (SYSTEM-DESIGN).
+
 - **An upload link can be used again until it expires, even to put back a file just deleted or swap one just confirmed.** It's now 2 minutes, down from 15, and the type and size stay signed. A later `If-None-Match: *` on the signed PUT would stop overwrites, but it needs real S3 to test and doesn't stop re-creating a deleted file.
 - **The budget can overrun by whatever's in flight.** The check runs before a call and the cost lands after it. A card costs about $0.001, but a first-time page translation on Opus can reach about $0.30, so 100 at once could pass the cap by tens of dollars. A reservation would close this, but it needs a refund path for failed calls, and per-IP limits and the 3-an-hour per-card translation limit bound it today. **Recommendation:** add one only if `daily_spend` shows real overruns.
 - **The sweep reaches only the private bucket's anonymous uploads.** `objectStore()` knows one bucket, so a row in `media` or `uploads` would be "deleted" from the wrong bucket while the file survived. The purge's `markFilesForDeletion` can still mark any key: until a sweep can address `files.bucket`, a backfilled file with no capability stays marked and isn't deleted. **This must be solved before a backfill or the account purge goes live.**
