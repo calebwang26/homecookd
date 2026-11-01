@@ -22,7 +22,8 @@ resource "aws_s3_bucket_public_access_block" "uploads" {
   restrict_public_buckets = true
 }
 
-# A family's videos are the product: an overwrite or delete can be undone for 30 days.
+# A family's videos are the product: an overwrite or delete can be undone for 28 days. /privacy says deleted data leaves
+# backups within 30 days of the deletion, and S3's expiry can run a little late, so this stays under 30.
 resource "aws_s3_bucket_versioning" "media" {
   bucket = aws_s3_bucket.media.id
   versioning_configuration { status = "Enabled" }
@@ -35,16 +36,26 @@ resource "aws_s3_bucket_lifecycle_configuration" "media" {
     id     = "old-versions"
     status = "Enabled"
     filter {}
-    noncurrent_version_expiration { noncurrent_days = 30 }
+    expiration { expired_object_delete_marker = true }
+    noncurrent_version_expiration { noncurrent_days = 28 }
   }
 }
 
-resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
+# The raw footage can't be filmed again. Same undo window as media.
+resource "aws_s3_bucket_versioning" "uploads" {
   bucket = aws_s3_bucket.uploads.id
+  versioning_configuration { status = "Enabled" }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
+  bucket     = aws_s3_bucket.uploads.id
+  depends_on = [aws_s3_bucket_versioning.uploads]
   rule {
-    id     = "abandoned-uploads"
+    id     = "old-versions-and-abandoned-uploads"
     status = "Enabled"
     filter {}
+    expiration { expired_object_delete_marker = true }
+    noncurrent_version_expiration { noncurrent_days = 28 }
     abort_incomplete_multipart_upload { days_after_initiation = 7 }
   }
 }

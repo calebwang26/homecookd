@@ -1,8 +1,7 @@
 # homecookd backend: system design rules
 
 Written Oct 31, 2026. Read this before designing or changing anything in the AWS backend. `docs/build/AWS-MIGRATION.md`
-says what moves and when; this file says how the result must be built. Numbers marked **(proposed)** are starting targets
-until Caleb confirms them.
+says what moves and when; this file says how the result must be built.
 
 When a change breaks a rule here, say so in the PR and explain why. Don't quietly work around it.
 
@@ -102,7 +101,7 @@ Run in at least two availability zones. No single task, zone or outside service 
 | Claude or Cartesia down | Jobs wait and retry; the rest of the app works | Alert on error rate |
 | Data deleted by mistake | Restore database to any point; S3 keeps old versions | A person, using the runbook |
 
-**Recovery targets (proposed):** at most 5 minutes of lost data (RPO), and back up within 1 hour (RTO).
+Recovery targets are in the table below.
 
 ## Speed and service targets
 
@@ -110,13 +109,23 @@ An SLO is our internal target; an SLA is a promise to customers with consequence
 99.9% is about 43 minutes down a month, and 99.99% about 4. 99.999% (about 5 minutes a year) isn't a sensible goal for a
 team this size, because each extra nine costs far more.
 
-| Measure | Target (proposed) |
+Caleb confirmed these on Oct 31, 2026.
+
+| Measure | Target |
 |---|---|
-| api availability | 99.9% a month |
-| api latency, ordinary requests | p95 under 300 ms, p99 under 1 s |
-| Media first byte | p95 under 200 ms |
-| Video job | 95% finish within 30 minutes of upload |
-| Throughput to load test before launch | 50 RPS on the api |
+| Availability | API 99.9% a month |
+| API speed | p95 under 300 ms and p99 under 1 s, measured at the load balancer. Excludes video and AI work, which runs on queues |
+| Media first byte | p95 under 200 ms for files already in the CDN, measured at the CDN. Cache-miss time and hit rate are tracked with no target until measured |
+| Video job | 95% finish within 30 minutes, from upload complete to recipe ready, for videos up to a length set after measuring real jobs. Failed jobs count as misses, and the success rate is tracked with no target yet |
+| Load test before launch | 50 RPS sustained for 15 minutes on a realistic mix of requests, meeting the API speed targets with under 0.1% errors |
+| Recovery, database | At most 5 minutes of data lost (RPO), and back up within 1 hour (RTO), for a failed zone, a bad release or accidental deletion. Losing a whole region isn't covered until the second-region backup exists |
+| Recovery, stored videos | Nothing already stored in S3 is lost in those same events. Video not yet uploaded stays on the phone. Region loss isn't covered yet |
+
+**Still unproven:** a timed restore of the database and S3, a load test, measured video jobs at several lengths on AWS, media
+timing from India and the US with cache hit rate, and Sentry and request-level monitoring.
+
+**The new schema must record upload-finished and job-finished times.** Convex's `jobs` table has neither, so the video job
+target can't be measured without them.
 
 Use percentiles, never averages. Track RPS, database QPS and slow queries, and bytes through CloudFront and NAT. To speed
 something up, measure first: fix queries, then indexes, then add capacity. Scale tasks out; the api keeps no state in memory.

@@ -52,7 +52,7 @@ resource "aws_s3_bucket_versioning" "backups" {
   versioning_configuration { status = "Enabled" }
 }
 
-# /privacy promises a deleted account's data leaves backups within 30 days of its deletion: 21 + 7 stays inside that.
+# /privacy: data is deleted within 30 days, and leaves backups within 30 more. 21 + 7 is stricter than that, on purpose.
 resource "aws_s3_bucket_lifecycle_configuration" "backups" {
   bucket     = aws_s3_bucket.backups.id
   depends_on = [aws_s3_bucket_versioning.backups]
