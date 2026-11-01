@@ -148,16 +148,22 @@ test("family code still works, and POST /devices swaps it for a key (never a key
   assert.equal(wrong.data.error, "Family code not recognised");
 });
 
-test("a phone with no person gets one on its first write as someone phone-less, and it never moves", { skip }, async () => {
+test("a code phone's write as someone phone-less is refused and never makes the phone theirs; it adds itself, and then it's that person's", { skip }, async () => {
   const f = await makeFamily();
-  const first = await makePerson(f.id, "Grandma");
-  const second = await makePerson(f.id, "Grandpa");
+  const grandma = await makePerson(f.id, "Grandma");
   const phone = await makeDevice(f.id, null, "code");
-  assert.equal((await api.get("/family", device(phone.key, first))).data.device_profile_id, null, "a read never sets it");
-  assert.equal((await api.post("/join-links", {}, device(phone.key, first))).status, 200);
-  assert.equal((await row("devices", "id = $1", [phone.id])).person_id, first);
-  assert.equal((await api.post("/join-links", {}, device(phone.key, second))).status, 200, "lending to another phone-less person");
-  assert.equal((await row("devices", "id = $1", [phone.id])).person_id, first, "it stays hers");
+  assert.equal((await api.get("/family", device(phone.key, grandma))).data.device_profile_id, null, "a read never sets it");
+  const refused = await api.post("/join-links", {}, device(phone.key, grandma));
+  assert.deepEqual([refused.status, refused.data.error], [403, "Add yourself first."]);
+  assert.equal((await row("devices", "id = $1", [phone.id])).person_id, null);
+  const added = await api.post("/profiles/self", { name: "Asha", role: "cook" }, device(phone.key));
+  assert.equal(added.status, 200);
+  const me = (await row("devices", "id = $1", [phone.id])).person_id;
+  assert.ok(me);
+  assert.equal((await api.post("/join-links", {}, device(phone.key, me))).status, 200);
+  assert.equal((await api.post("/join-links", {}, device(phone.key, grandma))).status, 200, "lending to a phone-less person, from a phone that's someone's");
+  assert.equal((await row("devices", "id = $1", [phone.id])).person_id, me, "it stays theirs");
+  assert.equal((await api.post("/v1/sessions/start", { deviceKey: phone.key, profileId: me })).status, 200);
 });
 
 test("someone with their own phone can only be them from it: other phones and the code get 403, reads too", { skip }, async () => {

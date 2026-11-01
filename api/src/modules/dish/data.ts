@@ -402,9 +402,9 @@ export async function unmarkAlertSent(key: string): Promise<void> {
 
 // The sweep can reach one bucket (objectStore() is the private one): another row's key would be "deleted" from the wrong bucket, S3 would say fine, and the
 // row would say deleted while the file lives on. It decides orphans for anonymous uploads only (messages/tasks.ts gives signed-in ones a longer wait), and
-// does the S3 delete for those and for signed-in uploads marked by anything. The partial indexes say the same (010_dish_hearing.sql, 050_messages.sql).
+// does the S3 delete for those, for signed-in uploads marked by anything, and for whatever a deletion marked. The partial indexes say the same for the first two (010_dish_hearing.sql, 050_messages.sql).
 const SWEEPABLE = `bucket = 'private' and capability_hash is not null`;
-const DELETABLE = `bucket = 'private' and (capability_hash is not null or owner_person_id is not null)`;
+const DELETABLE = `bucket = 'private' and (capability_hash is not null or owner_person_id is not null or purge_deletion_id is not null)`;
 
 export async function markOrphanFiles(olderThanMs: number, batch: number): Promise<number> {
   const { rowCount } = await db().query(

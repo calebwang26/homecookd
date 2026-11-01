@@ -946,14 +946,18 @@ test("a phone with no person of its own gets no session, so it can't delete anyo
   const invited = await makeDevice(f.id, null, "invite");
   const swapped = (await api.post("/devices", { device_label: "iPhone" }, code(f.code))).data.device_key as string;
   assert.equal((await api.get("/family", device(invited.key))).data.device_needs_profile, true);
-  assert.equal((await api.get("/family", device(swapped))).data.device_needs_profile, false, "the old flag still says only an invite must add itself to read on");
+  assert.equal((await api.get("/family", device(swapped))).data.device_needs_profile, true);
   for (const key of [invited.key, swapped]) {
+    // Writing once as Grandma doesn't make the phone hers.
+    const wrote = await api.post("/join-links", {}, device(key, grandma));
+    assert.deepEqual([wrote.status, wrote.data.error], [403, "Add yourself first."]);
     const res = await api.post("/v1/sessions/start", { deviceKey: key, profileId: grandma });
     assert.deepEqual([res.status, res.data.error], [403, "Add yourself first."]);
     assert.equal((await api.post("/v1/sessions/start", { deviceKey: key, profileId: left })).status, 403);
   }
   assert.equal(await count("sessions", "person_id = $1", [grandma]), 0);
   assert.equal((await row("people", "id = $1", [grandma])).deleted_at, null);
+  assert.equal(await count("devices", "person_id = $1", [grandma]), 0);
 });
 
 test("a phone from another family can't start a session as someone here", { skip }, async () => {
@@ -1006,6 +1010,19 @@ test("a kid's card files name the deletion, so the outside purge can't say done 
   const d = await deletionOf(kid);
   assert.equal(d.external_purged_at, null);
   assert.match(d.external_error, /Not reached yet: 3 files marked and not deleted/);
+  // A key with no row gets one the sweep can act on, or the deletion would stay open for good.
+  const store = fakeStore();
+  useObjectStore(store);
+  try {
+    await sweep({ log: silent });
+    for (const key of [known, unknown, voice]) {
+      assert.ok((await row("files", "key = $1", [key])).deleted_at, key);
+      assert.ok(store.removed.includes(key), key);
+    }
+  } finally {
+    useObjectStore(undefined);
+  }
+  assert.equal(await purgeOutside(did), "done");
 });
 
 for (const order of ["kid", "mom"] as const) {
@@ -1203,7 +1220,7 @@ test("the outside purge says plainly what it couldn't reach, and never claims it
   assert.deepEqual(seen, ["voice_r"], "a clone already deleted isn't deleted twice");
 });
 
-test("the sweep reaches what's stated: anonymous and signed-in private uploads. The rest stays marked until it can reach more", { skip }, async () => {
+test("the sweep reaches what's stated: every private file marked by a deletion. The rest stays marked until it can reach more", { skip }, async () => {
   const k = await kitchen();
   const store = fakeStore();
   useObjectStore(store);
@@ -1212,8 +1229,9 @@ test("the sweep reaches what's stated: anonymous and signed-in private uploads. 
   await sweep({ log: silent });
   assert.ok(store.removed.includes(k.answerClip), "her clip on a card, an anonymous upload, comes off S3");
   assert.ok(store.removed.includes(k.owned), "a signed-in upload with its owner on it: Messages' sweep reaches these");
-  for (const key of [k.rVoice, k.video, k.frame]) assert.ok(!store.removed.includes(key), `not reachable yet: ${key}`);
-  assert.equal((await row("files", "key = $1", [k.rVoice])).deleted_at, null);
+  for (const key of [k.rVoice, k.frame]) assert.ok(store.removed.includes(key), `in the private bucket: ${key}`);
+  assert.ok(!store.removed.includes(k.video), "the media bucket isn't reachable yet");
+  assert.equal((await row("files", "key = $1", [k.video])).deleted_at, null);
   assert.equal(await purgeOutside(did), "retry");
   useObjectStore(undefined);
 });

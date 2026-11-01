@@ -164,7 +164,7 @@ export async function leaveFamily(ctx: Ctx, rawId: string) {
   return { ok: true };
 }
 
-/** POST /devices: swaps a saved family code for this phone's own key. Its person is the first phone-less person it then writes as. Not from a key: a second key would belong to nobody. */
+/** POST /devices: swaps a saved family code for this phone's own key. It adds itself next (addSelf). Not from a key: a second key would belong to nobody. */
 export async function swapCodeForKey(ctx: Ctx, b: Body) {
   if (ctx.device) throw refuse(400, "This phone already has its own key.");
   await limit("devices", ctx.family.id, 30, 60);

@@ -60,8 +60,8 @@ export async function startDeletion(personId: string, source: DeletionSource, re
 
 /**
  * C2 (Caleb, Nov 1): a family doesn't outlive its last signed-in person. When they go, by deleting, leaving or moving, the phone-less people left are deleted the way anyone is, so
- * their rows and files get purged too, and the family is blanked. Someone who never signed in going ends nothing: that's Grandma deleted from Mom's phone, or an old family that
- * only ever used its code. `wasSignedIn` is asked before they're signed out. Run under the family's lock.
+ * their rows and files get purged too, and the family is blanked. Signed in means an identity, or a live phone that's theirs. Someone with neither going ends nothing: that's
+ * Grandma deleted from Mom's phone, or a family whose people only ever typed its code. `wasSignedIn` is asked before they're signed out. Run under the family's lock.
  */
 export async function endFamilyIfLast(c: Queryable, familyId: string, wasSignedIn: boolean, requestId?: string): Promise<void> {
   if (wasSignedIn) {

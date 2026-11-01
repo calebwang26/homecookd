@@ -16,7 +16,7 @@ export async function startSession(b: Body, ip: string) {
   const id = profileId.toLowerCase();
   const me = ctx.profiles.find((p) => p.id === id || p.supabase_id === id);
   if (!me) throw refuse(403, NOT_IN_THIS_FAMILY);
-  // A session can delete an account, so a phone with no person of its own gets none, whether it came by invite or by code (Caleb, Nov 1). It adds itself first.
+  // A session can delete an account, so a phone with no person of its own gets none.
   if (!ctx.device?.person_id) throw refuse(403, "Add yourself first.");
   if ((await invitedIds(ctx.family.id)).has(me.id)) throw refuse(403, "They haven't joined yet.");
   if (ctx.phones.has(me.id) && ctx.device?.person_id !== me.id) throw refuse(403, `${me.name} uses their own phone.`);
