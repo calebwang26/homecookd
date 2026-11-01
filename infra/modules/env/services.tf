@@ -74,6 +74,7 @@ resource "aws_ecs_task_definition" "service" {
       PORT           = tostring(each.value.port)
       MEDIA_BUCKET   = aws_s3_bucket.media.bucket
       UPLOAD_BUCKET  = aws_s3_bucket.uploads.bucket
+      PRIVATE_BUCKET = aws_s3_bucket.private.bucket
       JOBS_QUEUE_URL = aws_sqs_queue.jobs.url
       DEPLOY_ENV     = var.environment
     }) : { name = k, value = v }]
