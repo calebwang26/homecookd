@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { Writable } from "node:stream";
+import type { Event } from "@sentry/node";
 import { buildApp, pathOnly } from "../src/app.js";
 import { scrub } from "../src/sentry.js";
 
@@ -48,7 +49,7 @@ test("Sentry events lose the query, body, headers, user and every error's text",
     message: "her secret masala",
     logentry: { message: "her secret masala" },
     user: { id: "person" },
-  } as never);
+  } as unknown as Event);
   assert.deepEqual(event.request, { method: "POST", url: "https://x/a" });
   assert.deepEqual(event.exception?.values, [{ type: "DatabaseError", value: "" }]);
   const sent = JSON.stringify(event);
