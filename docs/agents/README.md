@@ -71,6 +71,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [lander-reference-dribbble-food](memory/lander-reference-dribbble-food.md) | Where Caleb looks for lander inspiration |
 | [learning-the-stack](memory/learning-the-stack.md) | Caleb is learning the codebase; the teach → quiz loop |
 | [edible-hackathon](memory/edible-hackathon.md) | Origin: Oct 11 hackathon, PRD is the source of truth |
+| [family-ends-with-last-signed-in](memory/family-ends-with-last-signed-in.md) | A family ends with its last signed-in person; who may delete a phone-less person |
 
 Not copied: a note about Claude's Workflow tool, which doesn't apply to Codex. "The App UI session" and
 "the other session" in these notes were other Claude Code sessions, so they no longer exist.

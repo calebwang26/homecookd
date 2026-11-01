@@ -5,6 +5,7 @@ export class ApiError extends Error {
     readonly code: string,
     readonly headers: Record<string, string> = {},
     readonly sentence?: string, // what the app shows; never logged
+    readonly extra: Record<string, unknown> = {}, // more fields next to `error`, such as an invite's `status` on a 410
   ) {
     super(code);
     this.name = "ApiError";

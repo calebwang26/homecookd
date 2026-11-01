@@ -6,6 +6,7 @@ import * as Sentry from "@sentry/node";
 import { db, isLockWait, isPoolWait } from "./db.js";
 import { ApiError, unavailable } from "./errors.js";
 import { fieldPaths, fileGuard, lastName, looksLikeFileKey } from "./files.js";
+import { accountRoutes } from "./modules/accounts/routes.js";
 import { inviteRoutes } from "./modules/community/inviteRoutes.js";
 import { communityRoutes } from "./modules/community/routes.js";
 import { cravingRoutes } from "./modules/dish/cravingRoutes.js";
@@ -146,7 +147,7 @@ export function buildApp(options: { logger?: object | boolean; logStream?: NodeJ
   app.setErrorHandler((error: Error & { statusCode?: number; validation?: unknown }, req, reply) => {
     if (error instanceof ApiError) {
       const message = error.sentence ? { message: error.sentence } : {};
-      return reply.status(error.statusCode).headers(error.headers).send({ error: error.code, ...message, requestId: req.id });
+      return reply.status(error.statusCode).headers(error.headers).send({ ...error.extra, error: error.code, ...message, requestId: req.id });
     }
     if (error.validation) return reply.status(400).send({ error: "bad_request", requestId: req.id });
     // Too busy, and nothing was written: the phone may simply try again. An alarm on these belongs with the overload gate (AWS-MIGRATION.md).
@@ -182,6 +183,7 @@ export function buildApp(options: { logger?: object | boolean; logStream?: NodeJ
   app.register(recipeRoutes);
   app.register(recordingRoutes);
   app.register(peopleRoutes);
+  app.register(accountRoutes);
   app.register(messageRoutes);
   app.register(dishRoutes, { prefix: "/dish" });
   app.register(liveRoutes);

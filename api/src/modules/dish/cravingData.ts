@@ -37,7 +37,7 @@ export async function lockLinksOf(q: Queryable, personId: string): Promise<void>
 const CARD = `id, kid_token_hash, ask_token_hash, dish, relation, kid_name, photo_keys::text[] as photo_keys, dish_voice_note_key,
   kid_voice_note_key, kid_voice_s, guess, version, asked, message, mom_page_lang, status, merge_tries, merge_started_at, merged_at,
   asked_at, asked_via, opened_at, finished_at, questions_at, gen_ms, created_at, ip_key, person_id, requested_of, kid_claimed_at,
-  cook_claimed_at, filming_day, voice_recipe_q, family_id, created_at::text as cursor_at`;
+  cook_claimed_at, filming_day, voice_recipe_q, family_id, kid_deleted_at, created_at::text as cursor_at`;
 
 export type AskedRow = CardRow & { family_id: string | null; cursor_at: string };
 

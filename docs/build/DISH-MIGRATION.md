@@ -114,7 +114,7 @@ The load balancer's `idle_timeout` is 3700 s, and Fastify's default keep-alive i
 
 `account.ts` applies SCHEMA.md section 4 for dish asks, tested with hand-set ids: the kid's and Mom's rules, C3 (message and translations go, the guess stays), `ip_key`, and craving links.
 
-**Deferred:** calling it. The account purge moves last, and `person_id` is null until the sync. **C4 runs in the sweep**, needing nothing else. I also null `files.ip_key` after 90 days; C4 names only the card, but the file's HMAC is the same data.
+**Called by the account purge** (`docs/build/ACCOUNTS-MIGRATION.md`); `person_id` stays null until the sync or a claim sets it. **C4 runs in the sweep**, needing nothing else. I also null `files.ip_key` after 90 days; C4 names only the card, but the file's HMAC is the same data.
 
 ## Secrets and env the api now needs (names only)
 
