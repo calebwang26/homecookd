@@ -64,16 +64,13 @@ Per SCHEMA.md section 2, a device key lasts until revoked and mints sessions; a 
 
 `coverage.ts` holds SCHEMA.md section 4 as data, and tests hold it to the real schema: every table must be listed, and after a real purge every column with an FK to `people` must be empty for that person, except `account_deletions.person_id`, `threads.a_person_id`/`b_person_id` (C1) and `files.owner_person_id` (until its row goes). Another test scans every column of every table as JSON for what the fixture marked as hers.
 
-**Owners.** The dish module's `purgeDishForPerson` is used as it is, now returning a count. **These have no module yet, so their SQL sits in `purgeSteps.ts` under their area's name, and moves to that module's purge when it merges:**
+**Owners.** `purgeSteps.ts` calls each area's own purge, in this order: `purgeCommunityForPerson` (it finds dinners and swaps by the person's recipes, so before they go), `purgeMessagesForPerson`, `purgeJobsForPerson` and `purgeDishForPerson`. Its own steps are only this area's tables. `startDeletion` calls `dropPushTokens`, `cancelDinnersOfPerson` and `stopPersonsWork` in its one transaction.
 
-| Area, not merged | Tables |
-|---|---|
-| Recipes and jobs | `recipes`, `recordings`, `jobs`, `homie_prompts`, `live_events`, `live_windows`, `live_frames`, `cooking_sessions`, `pending_sends` |
-| Community | `dinners`, `dinner_invite_opens`, `dinner_requests`, `swap_requests`, `reports`, `blocks` |
-| Messages | `threads`, `thread_reads`, `messages`, `recipe_notes`, `questions`, `shares`, `favorites`, `recipe_events` |
-| Push | `push_tokens`, `push_log` |
+Each area's purge takes a `PurgeRun` (`api/src/purge.ts`): its batch size, and the hooks that keep the deletion marked as running, stop it when it's out of time, and let a test crash it at any batch. They say how many rows they changed, so the purge knows when a full pass found nothing. A file is marked with `markPurged`, in the transaction that deletes its row, so it names the deletion and gets a ledger row if it had none. Keys that can name public library media use `markPurgedIfKnown`.
 
-`neighbors.ts` holds the same kind of borrowed SQL for sign-in: circle notes, read marks, "has acted", a share's family, re-homing recipes after a move.
+Left as it is: Messages and Jobs both clear pending sends and spare uploads, because each area's purge still works alone. The second finds nothing. The dish purge takes no `PurgeRun`, so the interruption test stops only after it, not inside it, and out of time can't stop it part way.
+
+`neighbors.ts` holds borrowed SQL for sign-in: circle notes, read marks, "has acted", a share's family, re-homing recipes after a move.
 
 **C2:** `name` becomes `'Deleted'` because the column can't be empty, the other three go null, and new `families.blanked_at` says so. **Beyond SCHEMA.md:** the family's phones, sessions, join links (the operator's too) and pending invites stop, so nobody can join a family that no longer exists. A removed person doesn't count as someone left. **A family doesn't outlive its last signed-in person (Caleb, Nov 1):** when they delete, leave or move, the phone-less people left are deleted through the same `deletePerson`, so their rows and files get purged too, and the family is blanked (`endFamilyIfLast`). A memorial person goes with them. Someone who never signed in going ends nothing, which keeps a family that only ever used its code as it is. The sync passes on one person's deletion and no more.
 
@@ -131,7 +128,7 @@ Kept, in `appleRevoke.ts`: the same two calls in the same order, before the dele
 - **"Requests stay quick."** `/auth/*` waits on the providers' keys when not cached (5 s at most), and `/v1/apple/revoke` on Apple (up to about 30 s), because the phone needs the answer. No database connection is held meanwhile.
 - **"Version the api."** The Supabase-shaped routes stay unversioned, so old builds need only an address change. New ones are under `/v1`.
 - **"Writes from a phone take an idempotency key."** Old builds send none. Sign-in is safe to repeat by account, and `/invites` isn't, as today. Its daily limit bounds a retry.
-- **"Modules call each other's services, never each other's tables."** Broken on purpose by `purgeSteps.ts` and `neighbors.ts`, for modules that don't exist yet, and listed above.
+- **"Modules call each other's services, never each other's tables."** Broken on purpose by `neighbors.ts`, and listed above. `purgeSteps.ts` keeps to this now.
 
 ## Tests
 
