@@ -10,6 +10,13 @@ if (!/^https:\/\//.test(base)) {
   process.exit(2);
 }
 
+// CloudFront's function hands query parameters back grouped by name, and pages read them by name, so the order doesn't matter.
+const sameQueryOrder = (location) => {
+  if (!location?.includes('?')) return location;
+  const [path, query] = location.split('?');
+  return `${path}?${query.split('&').sort().join('&')}`;
+};
+
 const failures = [];
 const check = (name, got, want) => {
   if (got !== want) failures.push(`${name}: got ${JSON.stringify(got)}, want ${JSON.stringify(want)}`);
@@ -20,9 +27,9 @@ const get = (path, init = {}) => fetch(base + path, { redirect: 'manual', signal
 for (const want of PATHS) {
   const res = await get(want.path, { method: 'HEAD' });
   check(`${want.path} status`, res.status, want.status);
-  if (want.location) check(`${want.path} location`, res.headers.get('location'), want.location);
+  if (want.location) check(`${want.path} location`, sameQueryOrder(res.headers.get('location')), sameQueryOrder(want.location));
   if (want.type) check(`${want.path} type`, res.headers.get('content-type'), want.type);
-  check(`${want.path} cache`, noSpaces(res.headers.get('cache-control')), noSpaces(want.cache));
+  if (want.cache) check(`${want.path} cache`, noSpaces(res.headers.get('cache-control')), noSpaces(want.cache));
 }
 
 // The bytes Apple's servers get, not just the headers.
