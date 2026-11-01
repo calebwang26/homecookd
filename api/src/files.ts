@@ -66,17 +66,23 @@ export function valuesAt(root: unknown, path: string): unknown[] {
   return current;
 }
 
-export async function requireOwnFiles(familyId: string, keys: string[]): Promise<void> {
+/**
+ * A file must be the caller's family's, and the caller's own when it has an owner: a family check alone would let one member attach another's upload, and
+ * then purging the second account would delete the first's file. Refusing a file something already holds needs the row it's going on, so the route's
+ * service does that, under that row's lock (dish/cravings.ts).
+ */
+export async function requireOwnFiles(familyId: string, personId: string, keys: string[]): Promise<void> {
   if (keys.length === 0) return;
   const unique = [...new Set(keys)];
   const { rows } = await db().query(
     `select key from files
       where key = any($1::text[])
         and family_id = $2
+        and (owner_person_id is null or owner_person_id = $3)
         and uploaded_at is not null
         and deleted_at is null
         and delete_requested_at is null`,
-    [unique, familyId],
+    [unique, familyId, personId],
   );
   if (rows.length !== unique.length) throw notFound();
 }
@@ -89,6 +95,7 @@ export function fileGuard(fields: string[]) {
       return valuesAt(req.body ?? {}, field);
     }).flatMap((value) => (Array.isArray(value) ? value : [value]));
     if (keys.some((key) => typeof key !== "string")) throw notFound();
-    await requireOwnFiles(signedIn(req).familyId, keys as string[]);
+    const signed = signedIn(req);
+    await requireOwnFiles(signed.familyId, signed.personId, keys as string[]);
   };
 }

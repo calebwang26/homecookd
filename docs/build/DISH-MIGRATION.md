@@ -18,7 +18,7 @@ Step 5 of `docs/build/AWS-MIGRATION.md`, Oct 31, 2026. A draft on `aws-migration
 **Deferred: they need `people` and `families`, so they wait for the one-way sync (SCHEMA.md, M1):**
 - `POST /dish/craving/peek` answers the catch-all 404 for now. It needs her first name and relation.
 - `cravingToken` on `POST /dish/cards` answers 404. Making a plain card instead would quietly not reach her.
-- Claiming a card, `dishAsks.forMe` and `get`, the `cravings.*` functions, `sendVoiceRecipe`, `setFilmingDay`: the signed-in side.
+- Claiming a card, `dishAsks.forMe` and `get`. The signed-in `cravings.*` functions, `sendVoiceRecipe` and `setFilmingDay` are now built: `COMMUNITY-MIGRATION.md`.
 - `pushEvents.requested` and `answered`. `answered` does nothing without a `personId`, which is always null here.
 - `dish_asks.person_id`, `family_id` and `requested_of` stay null.
 
@@ -143,6 +143,11 @@ The load balancer's `idle_timeout` is 3700 s, and Fastify's default keep-alive i
 
 ## Known limits
 
+- **When the api's 10 database connections all stay busy past 5 seconds, requests wait those 5 seconds and then answer a 500.** `/health` keeps
+  answering, so the load balancer keeps sending traffic, and `/ready` answers 503. Nothing sheds load or scales yet; autoscaling and 2+
+  tasks are on the launch list. A model cost is retried, up to about 15 s, and goes to Sentry as `DishSpendLost` if it's still lost, so the
+  budget can undercount only under long overload. A load test will show when this starts (SYSTEM-DESIGN).
+
 - **An upload link can be used again until it expires, even to put back a file just deleted or swap one just confirmed.** It's now 2 minutes, down from 15, and the type and size stay signed. A later `If-None-Match: *` on the signed PUT would stop overwrites, but it needs real S3 to test and doesn't stop re-creating a deleted file.
 - **The budget can overrun by whatever's in flight.** The check runs before a call and the cost lands after it. A card costs about $0.001, but a first-time page translation on Opus can reach about $0.30, so 100 at once could pass the cap by tens of dollars. A reservation would close this, but it needs a refund path for failed calls, and per-IP limits and the 3-an-hour per-card translation limit bound it today. **Recommendation:** add one only if `daily_spend` shows real overruns.
 - **The sweep reaches only the private bucket's anonymous uploads.** `objectStore()` knows one bucket, so a row in `media` or `uploads` would be "deleted" from the wrong bucket while the file survived. The purge's `markFilesForDeletion` can still mark any key: until a sweep can address `files.bucket`, a backfilled file with no capability stays marked and isn't deleted. **This must be solved before a backfill or the account purge goes live.**
@@ -155,7 +160,7 @@ The load balancer's `idle_timeout` is 3700 s, and Fastify's default keep-alive i
 
 1. **Raw uploads: the rule stays.** The site's change is written on `aws-migration` and ships with the switch, owned by App Store, web & builds. The alternative, a temporary relay on the old routes, breaks the rule and holds up to 5 MB in memory per request.
 2. **A retried `POST /dish/cards`: left for now.** The first try's `kidToken` is stored only as a hash, so a retry can't get it back, and its files answer not-found, as today. A later fix: the site sends a client id that a retry repeats, and the kid token comes from a server secret and that id.
-3. **By person or by family: decided in the signed-in step (`MESSAGES-MIGRATION.md`, "File safety"), matching the person rule where there's an owner.** Convex's in-review check (PR #215, `convex/lib/fileOwner.ts`) goes by person. `api/src/files.ts` `requireOwnFiles` goes by family, and it doesn't refuse a file something already holds. Not changed here. My recommendation for that step: require `owner_person_id` to match when it's set and refuse a file already held, apart from a same-row retry. A family check alone lets one member attach another's upload, and then purging the second account deletes the first's message file.
+3. **By person or by family: done in the signed-in step (`COMMUNITY-MIGRATION.md`, `MESSAGES-MIGRATION.md`), by the person rule where there's an owner.** What was written here first: decide in the signed-in step, matching the person rule where there's an owner. Convex's in-review check (PR #215, `convex/lib/fileOwner.ts`) goes by person. `api/src/files.ts` `requireOwnFiles` goes by family, and it doesn't refuse a file something already holds. Not changed here. My recommendation for that step: require `owner_person_id` to match when it's set and refuse a file already held, apart from a same-row retry. A family check alone lets one member attach another's upload, and then purging the second account deletes the first's message file.
 4. **How long a read link lasts: left at 1 to 2 hours.** It may end sooner if the task's role credentials expire first; not measured. `TODO(caleb)` if a kid's page should hold audio longer.
 5. **Craving links on the site: a confirmed reading, raised with Caleb.** `MissApp` reads only `k`, so a `/miss?c=` link makes a plain card that doesn't reach the parent, if the app hands those links out.
 6. **A card with both people gone: left.** Kid deletes, then Mom deletes: the card stays with its guess and no owner, as on Convex. SCHEMA.md doesn't say. My recommendation is to delete it then. `TODO(caleb)`

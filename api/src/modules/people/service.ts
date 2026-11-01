@@ -14,3 +14,6 @@ export async function me(signed: Signed) {
 
 /** Has this person not deleted their account? Other modules ask here rather than read `people`. */
 export const personIsLive = (q: Queryable, personId: string) => isLive(q, personId);
+
+// Read-only for other modules: the one-way sync owns these rows until their area moves (SCHEMA.md, M1).
+export { type FamilyRow, familiesByIds, peopleByIds, type PersonRow } from "./data.js";

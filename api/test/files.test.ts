@@ -162,14 +162,35 @@ test("attaching a file", { skip: !hasDatabase }, async (t) => {
   });
 });
 
-test("every route in the real app with a key field refuses another family's", { skip: !hasDatabase }, async () => {
+test("every route in the real app with a key field refuses another family's, and another person's", { skip: !hasDatabase }, async () => {
+  await freshDatabase();
+  const mine = await family();
+  const theirs = await family();
+  const me = await person(mine);
+  const sibling = await person(mine, "kid");
+  const token = await session(mine, me);
   const app = buildApp({ logger: false });
   await app.ready();
-  // Each signed-in route with a key field runs the refusals above, one by one, in messagesFiles.test.ts (which fails when one isn't listed). The anonymous routes have
-  // no session, so they say notFileKeys instead, and dishFiles.test.ts's last test holds them to their own check, field by field.
+  // Each signed-in route with a key field runs the refusals, one by one: Community's here, Messages' in messagesFiles.test.ts (which fails
+  // when one isn't listed). The anonymous routes have no session, so they say notFileKeys instead, and dishFiles.test.ts's last test holds
+  // them to their own check, field by field.
   assert.ok(app.fileKeyRoutes.length > 0);
   assert.ok(app.fileKeyRoutes.every((route) => route.url.startsWith("/v1/")));
-  const ownChecks = new Set(["/v1/uploads/confirm", "/v1/threads/:id/messages"]); // not uploaded yet, and public library media: messagesFiles.test.ts tests each
+  const other = await file(theirs);
+  const othersInMyFamily = await file(mine);
+  await db().query("update files set owner_person_id = $2 where key = $1", [othersInMyFamily, sibling]);
+  const cravings = app.fileKeyRoutes.filter((route) => route.url.startsWith("/v1/cravings/"));
+  assert.deepEqual(cravings, [{ method: "POST", url: "/v1/cravings/:id/voice-recipe", fields: ["audioKey"] }]);
+  for (const route of cravings) {
+    for (const field of route.fields) {
+      for (const key of [other, othersInMyFamily, "private/nothing-here"]) {
+        const res = await sendWith(app, token, route, field, key, await file(mine));
+        assert.equal(res.statusCode, 404, `${route.url} ${field}`);
+        assert.equal(res.json().error, "not_found");
+      }
+    }
+  }
+  const ownChecks = new Set(["/v1/uploads/confirm", "/v1/threads/:id/messages"]); // not uploaded yet, and public library media: messagesFiles.test.ts
   assert.ok(app.notFileKeyRoutes.every((route) => route.url.startsWith("/dish/") || ownChecks.has(route.url)), "only these may say a file field isn't a key");
 });
 

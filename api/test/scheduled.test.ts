@@ -186,6 +186,39 @@ test("the budget's alert: twenty racing writes add up exactly, and only one can 
   assert.ok(!JSON.stringify(alerts).match(/[a-z]+@/));
 });
 
+test("a cost isn't lost when every connection stays busy past the wait", { skip }, async () => {
+  await newBackend();
+  const before = await spent();
+  const held = await Promise.all(Array.from({ length: 10 }, () => db().connect()));
+  const loud: string[] = [];
+  const spend = newSpend();
+  spend.usd = 0.5;
+  const saving = recordSpend(spend, null, { log: { ...silent, error: (_o: object, m: string) => void loud.push(m) } });
+  await new Promise((resolve) => setTimeout(resolve, 5_500)); // past one wait
+  for (const client of held) client.release();
+  await saving;
+  assert.deepEqual(loud, []);
+  close(await spent(), before + 0.5);
+  assert.equal(spend.usd, 0);
+});
+
+test("if the connections never free up, the lost cost says so, how much, and why", { skip }, async () => {
+  await newBackend();
+  const before = await spent();
+  const held = await Promise.all(Array.from({ length: 10 }, () => db().connect()));
+  const logged: { fields: { usd?: number; poolWait?: boolean; attempt?: number }; message: string }[] = [];
+  const spend = newSpend();
+  spend.usd = 0.5;
+  await recordSpend(spend, null, { log: { ...silent, error: (fields: object, message: string) => void logged.push({ fields, message }) } });
+  for (const client of held) client.release();
+  assert.equal(logged.length, 1);
+  assert.equal(logged[0].message, "dish spend wasn't recorded");
+  assert.equal(logged[0].fields.usd, 0.5);
+  assert.equal(logged[0].fields.poolWait, true);
+  assert.equal(logged[0].fields.attempt, 3);
+  close(await spent(), before);
+});
+
 test("the budget's alert repeats harmlessly; if the webhook fails, it's tried again", { skip }, async () => {
   await newBackend();
   process.env.REPORT_ALERT_URL = "https://ntfy.sh/homecookd-test";
