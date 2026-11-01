@@ -17,6 +17,7 @@ jobs:
       voice: ${{ steps.diff.outputs.voice }}
       pipeline: ${{ steps.diff.outputs.pipeline }}
       api: ${{ steps.diff.outputs.api }}
+      tools: ${{ steps.diff.outputs.tools }}
       web: ${{ steps.diff.outputs.web }}
     steps:
       - uses: actions/checkout@v4
@@ -25,7 +26,7 @@ jobs:
       - id: diff
         run: |
           FILES=$(git diff --name-only "origin/$GITHUB_BASE_REF...HEAD")
-          for AREA in infra convex voice pipeline api web; do
+          for AREA in infra convex voice pipeline api web tools; do
             echo "$FILES" | grep -q "^$AREA/" && echo "$AREA=true" >> "$GITHUB_OUTPUT" || echo "$AREA=false" >> "$GITHUB_OUTPUT"
           done
 
@@ -156,9 +157,25 @@ jobs:
         working-directory: web
       - run: node --test infra/modules/web/rewrite.test.mjs
 
+  media-copy:
+    needs: changes
+    if: needs.changes.outputs.tools == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: tools/media-copy
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: pip install -r requirements.txt -r requirements-test.txt
+      - run: python test_media_copy.py
+      - run: python test_stores.py # the fake GCS server isn't here, so its part skips
+
   checks:
     if: always()
-    needs: [changes, secrets, infra, convex, voice, pipeline, api, web]
+    needs: [changes, secrets, infra, convex, voice, pipeline, api, web, media-copy]
     runs-on: ubuntu-latest
     steps:
       - name: Fail if any check failed
