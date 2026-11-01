@@ -286,17 +286,7 @@ test("uploads", { skip: !hasDatabase }, async (t) => {
     assert.ok((await job(jobId)).cancelled_at, "the job she stopped doesn't run");
   });
 
-  await t.test("another cook's stop ends the job and keeps her footage, until Caleb says otherwise", async () => {
-    const mom = await who(home);
-    const { uploadId, keys } = await askLinks(app, dad);
-    land(videos, ...keys);
-    const { data } = await newJob(app, dad, uploadId);
-    assert.equal((await call(app, mom, "POST", `/v1/jobs/${data.jobId}/cancel`)).data.stopped, true);
-    const row = await job(data.jobId);
-    assert.deepEqual([row.stage, row.keep_upload], ["failed", true]);
-    assert.equal((await db().query(`select count(*)::int as n from files where upload_id = $1 and delete_requested_at is not null`, [uploadId])).rows[0].n, 0);
-
-    // Her own stop still deletes it, as Convex mode does.
+  await t.test("her own stop deletes the footage, as Convex mode does", async () => {
     const hers = await askLinks(app, dad);
     const own = await newJob(app, dad, hers.uploadId);
     await call(app, dad, "POST", `/v1/jobs/${own.data.jobId}/cancel`);

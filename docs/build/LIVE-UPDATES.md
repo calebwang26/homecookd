@@ -78,7 +78,7 @@ GET /v1/live/jobs?since=<version>      Authorization: Bearer <session token>
 ```
 
 - **Who's asking:** every poll runs the same `requireSession` as every other route. The family comes only from the session; there's
-  no family or job id to ask for. Any member sees the family's jobs, as `jobs.forFamily` does today (the "cook only" is in the app).
+  no family or job id to ask for. A cook sees only her own jobs (Caleb, Nov 1); `jobs.forFamily` shows the family's today, with the "cook only" in the app.
 - **A session ended or a person deleted:** nothing is served from that moment. The phone's next poll, at most 5.5 s later while a
   job moves or 33 s when idle, gets a 401 and stops. A request already past its session check when it happens can still finish.
   Moving to another family counts too. While sessions still live on Convex, add the sync's delay: open question 1.
