@@ -4,7 +4,7 @@
 //
 // The purge's order matters: notes before the messages they name, because recipe_notes.answer_message_id refuses a delete.
 import type { PoolClient } from "pg";
-import { db, tx } from "../../db.js";
+import { db, tx, type Queryable } from "../../db.js";
 import { inBatches, markPurged, ON_ITS_OWN, PURGE_BATCH, type PurgeRun } from "../../purge.js";
 import { recipeIdsOfCook } from "../recipes/read.js";
 import * as push from "./pushData.js";
@@ -12,7 +12,7 @@ import * as push from "./pushData.js";
 export { PURGE_BATCH };
 
 /** The at-once step (SCHEMA.md section 4): nothing reaches a deleted account, even before the purge runs. */
-export async function dropPushTokens(c: PoolClient, personId: string): Promise<void> {
+export async function dropPushTokens(c: Queryable, personId: string): Promise<void> {
   await push.dropTokensOf(c, personId);
 }
 

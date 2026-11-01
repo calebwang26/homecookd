@@ -26,7 +26,9 @@ import {
 import { claimCard } from "../src/modules/accounts/links.js";
 import { JOIN_LINK_SALT, seal } from "../src/modules/accounts/sealed.js";
 import { cardOfToken } from "../src/modules/dish/links.js";
-import { workerFolder } from "../src/modules/jobs/account.js";
+import { purgeCommunityForPerson } from "../src/modules/community/account.js";
+import { purgeJobsForPerson, workerFolder } from "../src/modules/jobs/account.js";
+import { purgeMessagesForPerson } from "../src/modules/messages/account.js";
 import { accountsSweep } from "../src/modules/accounts/tasks.js";
 import { sweep } from "../src/modules/dish/tasks.js";
 import { handleMessage } from "../src/scheduled.js";
@@ -426,6 +428,12 @@ test("no column points at a deleted person but the stated ones, and no word of h
 
 test("at once, in one transaction: a tombstone, every way in closed, nothing of hers worked on, her recipes gone", { skip }, async () => {
   const k = await kitchen();
+  // Hers, around no recipe: only the at-once step takes it off the map.
+  const hosted = await id(
+    `insert into dinners (host_id, host_family_id, dish, starts_at, place_kind, place_name, address, approx_lat, approx_lng, seats, status, invite_token)
+     values ($1, $2, 'SECRET-R hosted', now() + interval '1 day', 'home', 'SECRET-R', 'SECRET-R', 42.36, -71.09, 4, 'open', $3) returning id`,
+    [k.R, k.f, uniq("inv")],
+  );
   await startDeletion(k.R, "person");
   const me = await row("people", "id = $1", [k.R]);
   assert.deepEqual([me.name, me.email], ["Deleted", null]);
@@ -438,6 +446,7 @@ test("at once, in one transaction: a tombstone, every way in closed, nothing of 
   const job = await row("jobs", "id = $1", [k.jobRunning]);
   assert.deepEqual([job.stage, job.error], ["failed", "Cancelled."]);
   assert.ok(job.cancelled_at);
+  assert.equal((await row("dinners", "id = $1", [hosted])).status, "cancelled");
   assert.equal((await row("jobs", "id = $1", [k.jobDone])).stage, "done", "a finished job isn't changed");
   assert.equal((await row("recordings", "id = $1", [k.recording])).status, "abandoned");
   assert.equal((await row("dinners", "id = $1", [k.herDinner])).status, "cancelled");
@@ -585,19 +594,49 @@ test("a file an area marks names this deletion, and a key with no row in the led
 test("a row that turns up during the purge is caught: it finishes only after a pass finds nothing", { skip }, async () => {
   const k = await kitchen();
   const did = await startDeletion(k.R, "person");
-  let added = false;
+  let added = 0;
+  const late = () => q(`insert into messages (family_id, thread_id, sender_id, kind, body) values ($1, $2, $3, 'text', 'SECRET-R late message')`, [k.f, k.circle, k.R]);
   const result = await runPurge(did!, {}, {
-    fault: async (point: string, step: string) => {
+    fault: async (point: string, step: string, changed: number) => {
+      if (point !== "after-commit") return;
       // The messages step has already run this pass when one more arrives.
-      if (!added && point === "after-commit" && step === "jobs") {
-        added = true;
-        await q(`insert into messages (family_id, thread_id, sender_id, kind, body) values ($1, $2, $3, 'text', 'SECRET-R late message')`, [k.f, k.circle, k.R]);
+      if (added === 0 && step === "jobs") {
+        added = 1;
+        await late();
+      } else if (added === 1 && step === "messages" && changed > 0) {
+        // The next pass takes that one, and nothing else changes. Only its count can send the purge round again for this one.
+        added = 2;
+        await late();
       }
     },
   });
   assert.equal(result, "done");
-  assert.ok(added);
+  assert.equal(added, 2);
   await assertPurged(k);
+});
+
+test("each area's purge says how many rows it changed, and none once nothing's left, so a pass can finish", { skip }, async () => {
+  const k = await kitchen();
+  await startDeletion(k.R, "person");
+  const parts = [() => purgeCommunityForPerson(k.R, k.f), () => purgeMessagesForPerson(k.R, k.f), () => purgeJobsForPerson(k.R)];
+  for (const part of parts) assert.ok((await part()) > 0);
+  for (const part of parts) assert.equal(await part(), 0);
+});
+
+test("a long area's purge keeps the deletion marked as running, so the schedule leaves it alone", { skip }, async () => {
+  const k = await kitchen();
+  const did = await startDeletion(k.R, "person");
+  let seen: Date | undefined;
+  const longAgo = new Date(Date.now() - 2 * PURGE_STUCK_MS);
+  await runPurge(did!, {}, {
+    fault: async (point: string, step: string) => {
+      if (point !== "after-commit" || seen) return;
+      // Two batches of Messages' one purge: only the batch in between can have moved it.
+      if (step === "push log") await q(`update account_deletions set purge_run_at = $2 where id = $1`, [did, longAgo]);
+      if (step === "messages") seen = (await deletionOf(k.R)).purge_run_at;
+    },
+  });
+  assert.ok(seen && seen.getTime() > longAgo.getTime() + PURGE_STUCK_MS);
 });
 
 test("a large purge works through small batches, and queues itself when out of time", { skip }, async () => {

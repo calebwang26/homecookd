@@ -70,7 +70,7 @@ Each area's purge takes a `PurgeRun` (`api/src/purge.ts`): its batch size, and t
 
 Left as it is: Messages and Jobs both clear pending sends and spare uploads, because each area's purge still works alone. The second finds nothing. The dish purge takes no `PurgeRun`, so the interruption test stops only after it, not inside it, and out of time can't stop it part way.
 
-`neighbors.ts` holds the same kind of borrowed SQL for sign-in: circle notes, read marks, "has acted", a share's family, re-homing recipes after a move.
+`neighbors.ts` holds borrowed SQL for sign-in: circle notes, read marks, "has acted", a share's family, re-homing recipes after a move.
 
 **C2:** `name` becomes `'Deleted'` because the column can't be empty, the other three go null, and new `families.blanked_at` says so. **Beyond SCHEMA.md:** the family's phones, sessions, join links (the operator's too) and pending invites stop, so nobody can join a family that no longer exists. A removed person doesn't count as someone left. **A family doesn't outlive its last signed-in person (Caleb, Nov 1):** when they delete, leave or move, the phone-less people left are deleted through the same `deletePerson`, so their rows and files get purged too, and the family is blanked (`endFamilyIfLast`). A memorial person goes with them. Someone who never signed in going ends nothing, which keeps a family that only ever used its code as it is. The sync passes on one person's deletion and no more.
 
