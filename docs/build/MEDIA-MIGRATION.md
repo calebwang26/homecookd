@@ -185,9 +185,8 @@ buckets are well over 2 TB.
 3. **Copy `trash/`?** Today a deleted recipe stays in GCS's `trash/`, recoverable by hand. Recommendation: no. New company, public path,
    no reader. If an undo of a deleted recipe is wanted after GCS goes, it should be built on S3's versions.
 4. **Copy raw uploads at all?** Most raw files expire in GCS within 14 days and cost $0.12 per GB to move. The copies matter only for
-   jobs in flight at the switch. Recommendation: copy them as asked, since they can't be filmed again, and decide S3's own expiry: the
-   S3 bucket has no 14-day rule, so anything left there at the end stays forever, while SYSTEM-DESIGN.md says to keep raw input. Caleb's
-   call, and `/privacy` should say which.
+   jobs in flight at the switch. Recommendation: copy them as asked, since they can't be filmed again. The S3 bucket has the same
+   14-day rule (Caleb, Nov 1).
 5. **Abort rule on the media bucket.** `storage.tf` gives `uploads` and `private` one and not `media`. An abandoned multipart upload
    there holds family bytes no listing or purge sees, and nothing removes them. The tool's sweep covers what it knows. Recommendation:
    add `abort_incomplete_multipart_upload` to `media` in Terraform. Until then `sync` warns.

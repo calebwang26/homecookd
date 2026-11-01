@@ -49,6 +49,16 @@ variable "api_count" {
   default = 1
 }
 
+variable "front_door" {
+  description = "Phase 1's addresses, to prove them on staging. Empty is off, and a plain apply removes them. Shape: infra/modules/front_door/variables.tf. Steps: docs/build/ADDRESSES-MIGRATION.md"
+  type        = any
+  default     = {}
+  validation {
+    condition     = !can(regex("grand-dragon-649|bsudybxsqvtwftsdmwmz|homecookd-voice-|edible-", jsonencode(var.front_door)))
+    error_message = "Staging never forwards to a live service. Use a throwaway one."
+  }
+}
+
 module "env" {
   source            = "../../modules/env"
   environment       = "staging"
@@ -65,8 +75,13 @@ module "env" {
   alb_allowed_cidrs    = var.alb_allowed_cidrs
   private_cors_origins = [module.web.url, "http://localhost:3105"]
   schedules = {
-    "dish.sweep"     = { expression = "rate(1 hour)", task = "dish.sweep" }
-    "platform.prune" = { expression = "rate(6 hours)", task = "platform.prune" }
+    "dish.sweep"            = { expression = "rate(1 hour)", task = "dish.sweep" }
+    "platform.prune"        = { expression = "rate(6 hours)", task = "platform.prune" }
+    "jobs.sweep"            = { expression = "rate(1 hour)", task = "jobs.sweep" }
+    "messages.hourly"       = { expression = "rate(1 hour)", task = "messages.hourly" }
+    "messages.daily"        = { expression = "rate(1 day)", task = "messages.daily" }
+    "community.remind_open" = { expression = "cron(0 16 * * ? *)", task = "community.remind_open" }
+    "accounts.sweep"        = { expression = "rate(1 hour)", task = "accounts.sweep" }
   }
 
   services = {
@@ -103,6 +118,8 @@ module "env" {
       desired_count = 0 # size and home (Fargate or EC2) follow a measured video job
       uses_database = true
       secrets       = ["SENTRY_DSN_WORKER"]
+      # Queue mode (docs/build/WORKER-MIGRATION.md). No model keys here: a real run is a test window, with Caleb's OK.
+      entry_point = ["python", "pipeline/queue_worker.py"]
     }
   }
 }
@@ -114,9 +131,16 @@ module "web" {
   deploy_role_name = module.env.deploy_role_name
 }
 
+module "front_door" {
+  source    = "../../modules/front_door"
+  name      = "homecookd-staging-front-door"
+  addresses = var.front_door
+}
+
 output "load_balancer_url" { value = module.env.load_balancer_url }
 output "media_url" { value = module.env.media_url }
 output "deploy_role_arn" { value = module.env.deploy_role_arn }
 output "web_url" { value = module.web.url }
 output "web_bucket" { value = module.web.bucket }
 output "web_distribution_id" { value = module.web.distribution_id }
+output "front_door_domains" { value = module.front_door.cloudfront_domains }

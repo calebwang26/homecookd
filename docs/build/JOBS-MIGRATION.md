@@ -162,10 +162,10 @@ The worker also deletes a stopped job's raw video as soon as it sees it, so the 
 
 ## Account deletion
 
-`jobs/account.ts` applies SCHEMA.md section 4 to these tables. **Nothing calls it yet.** When this area moves before Accounts does, `purgeJobsForPerson` goes in `sync.purge_person`. Both refuse to run on someone who hasn't deleted.
+`jobs/account.ts` applies SCHEMA.md section 4 to these tables. The account purge calls it (`accounts/deletion.ts`, `purgeSteps.ts`). Both refuse to run on someone who hasn't deleted.
 
-- **`stopPersonsWork(c, personId)`**, in the deletion's own transaction: unfinished jobs stop, recordings are abandoned, recipes go with their questions, cooking rows and swaps.
-- **`purgeJobsForPerson(personId)`**, in batches of 500, each a transaction, safe to repeat: any recipe published a moment later; cooking rows as the kid, and `cook_id` null as the cook of a library dish; recordings, each after its frame, with cover and frame marked (prompts, events and windows cascade); jobs; pending sends made by them, with the hello marked, and them taken off others' lists; everything else in the ledger; their retry keys. `model_calls` keeps its cost history with the ids nulled.
+- **`stopPersonsWork(c, personId)`**, in the deletion's own transaction: unfinished jobs stop, recordings are abandoned, the first 500 recipes go with their questions, cooking rows and swaps, and the rest go in the batches.
+- **`purgeJobsForPerson(personId)`**, in batches of 500, each a transaction, safe to repeat: any recipe published a moment later; cooking rows as the kid, and `cook_id` null as the cook of a library dish; recordings, each after its frame, with cover and frame marked (prompts, events and windows go first, in batches); jobs; pending sends made by them, with the hello marked, and them taken off others' lists; everything else in the ledger; their retry keys. `model_calls` keeps its cost history with the ids nulled.
 - **What's written first, on `account_deletions`:** recipe and job ids, `upload_keys`, `media_keys`, `media_prefixes`. It adds to what's there, and makes the row if there isn't one. That includes the folder a job with no recipe yet publishes to (`recipe-<job>/`), because a job stopped part way can leave files nothing else names.
 
 **The outside purge isn't written.** Raw videos are reached by the sweep through their ledger rows. Published folders in the media bucket are on `account_deletions` for an S3 purge nobody has written yet (WORKER-MIGRATION.md, open question 7). **That still blocks real data.**
@@ -174,7 +174,7 @@ The worker also deletes a stopped job's raw video as soon as it sees it, so the 
 
 No new secrets. **Settings:** `MEDIA_BASE_URL` (new on the api), `RECIPE_WRITES` (leave unset). `UPLOAD_BUCKET`, `PRIVATE_BUCKET`, `JOBS_QUEUE_URL` and `SCHEDULED_QUEUE_URL` are already set. `RATE_LIMIT_SALT` is required, as it already is for the dish routes.
 
-## What `infra/` needs (not done: this PR touches only `api/` and `docs/build/`)
+## What `infra/` needed (in the infra PR, not applied)
 
 - **`s3:ListBucket` on `uploads` for the api. This blocks a real run.** Without it, S3 answers 403 for a file not there yet, so every `complete` during an upload is a 502 and the sweep's message fails.
 - `MEDIA_BASE_URL` on the api.
@@ -243,6 +243,7 @@ Nothing automatic deletes a clip that fully landed, unless its owner stops it or
 
 - **An upload no job took:** the sweep asks S3 first, because a phone can land everything and die before saying so. If anything landed, or S3 can't answer, nothing is marked. Only an upload with nothing in S3 expires, 7 days after its last link.
 - **A job waiting on its upload:** the clock runs from its last link or last landed clip, not from when it began. When it runs out the job fails visibly, what never arrived expires, and what landed stays.
+- **The 14-day rule still applies (Caleb, Nov 1).** Nothing in this code deletes a landed video by a clock, but the S3 lifecycle rule on `uploads` does, 14 days after upload. So "waiting on a person" has that limit.
 - **Someone is told:** the sweep raises one Sentry issue, "Landed videos are waiting on a person", with a count and no names. **A person decides, and there's no tool for it yet:** today it's a query on `files`, and asking the cook. How long raw footage is kept is still `TODO(caleb)` (AWS-MIGRATION.md).
 - **The sweep also notices** a job queued with no change for 26 hours, which a worker stopping on a job's last receive leaves behind, as well as the dead-letter alarm. It doesn't re-queue, because that could spend her money. And an ended job whose card still says "processing" because recipe writes were off: it's fixed once they're open, and reported until then.
 
