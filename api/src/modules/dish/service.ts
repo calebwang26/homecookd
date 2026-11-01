@@ -62,7 +62,7 @@ async function byAsk(q: Queryable, hash: string, lock = false): Promise<CardRow>
 }
 
 /** Starts a merge after the reply, in the same transaction as what made it due. The consumer's claim makes a repeat harmless. */
-async function mergeLater(q: Queryable, s: State, trace: Trace): Promise<void> {
+export async function mergeLater(q: Queryable, s: State, trace: Trace): Promise<void> {
   if (due(s)) await enqueue(q, { queue: "scheduled", payload: { task: "dish.merge", askId: s.row.id }, requestId: trace.requestId });
 }
 

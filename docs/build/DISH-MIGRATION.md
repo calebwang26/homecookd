@@ -18,7 +18,7 @@ Step 5 of `docs/build/AWS-MIGRATION.md`, Oct 31, 2026. A draft on `aws-migration
 **Deferred: they need `people` and `families`, so they wait for the one-way sync (SCHEMA.md, M1):**
 - `POST /dish/craving/peek` answers the catch-all 404 for now. It needs her first name and relation.
 - `cravingToken` on `POST /dish/cards` answers 404. Making a plain card instead would quietly not reach her.
-- Claiming a card, `dishAsks.forMe` and `get`, the `cravings.*` functions, `sendVoiceRecipe`, `setFilmingDay`: the signed-in side.
+- Claiming a card, `dishAsks.forMe` and `get`. The signed-in `cravings.*` functions, `sendVoiceRecipe` and `setFilmingDay` are now built: `COMMUNITY-MIGRATION.md`.
 - `pushEvents.requested` and `answered`. `answered` does nothing without a `personId`, which is always null here.
 - `dish_asks.person_id`, `family_id` and `requested_of` stay null.
 
@@ -160,7 +160,7 @@ The load balancer's `idle_timeout` is 3700 s, and Fastify's default keep-alive i
 
 1. **Raw uploads: the rule stays.** The site's change is written on `aws-migration` and ships with the switch, owned by App Store, web & builds. The alternative, a temporary relay on the old routes, breaks the rule and holds up to 5 MB in memory per request.
 2. **A retried `POST /dish/cards`: left for now.** The first try's `kidToken` is stored only as a hash, so a retry can't get it back, and its files answer not-found, as today. A later fix: the site sends a client id that a retry repeats, and the kid token comes from a server secret and that id.
-3. **By person or by family: decide in the signed-in step, matching the person rule where there's an owner.** Convex's in-review check (PR #215, `convex/lib/fileOwner.ts`) goes by person. `api/src/files.ts` `requireOwnFiles` goes by family, and it doesn't refuse a file something already holds. Not changed here. My recommendation for that step: require `owner_person_id` to match when it's set and refuse a file already held, apart from a same-row retry. A family check alone lets one member attach another's upload, and then purging the second account deletes the first's message file.
+3. **By person or by family: done in the signed-in step (`COMMUNITY-MIGRATION.md`), by the person rule where there's an owner.** What was written here first: decide in the signed-in step, matching the person rule where there's an owner. Convex's in-review check (PR #215, `convex/lib/fileOwner.ts`) goes by person. `api/src/files.ts` `requireOwnFiles` goes by family, and it doesn't refuse a file something already holds. Not changed here. My recommendation for that step: require `owner_person_id` to match when it's set and refuse a file already held, apart from a same-row retry. A family check alone lets one member attach another's upload, and then purging the second account deletes the first's message file.
 4. **How long a read link lasts: left at 1 to 2 hours.** It may end sooner if the task's role credentials expire first; not measured. `TODO(caleb)` if a kid's page should hold audio longer.
 5. **Craving links on the site: a confirmed reading, raised with Caleb.** `MissApp` reads only `k`, so a `/miss?c=` link makes a plain card that doesn't reach the parent, if the app hands those links out.
 6. **A card with both people gone: left.** Kid deletes, then Mom deletes: the card stays with its guess and no owner, as on Convex. SCHEMA.md doesn't say. My recommendation is to delete it then. `TODO(caleb)`

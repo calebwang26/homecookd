@@ -131,6 +131,10 @@ Before `aws-migration` reaches `main`:
   Dad" from a rewritten recipe fails with a 400. Needs a Supabase deploy, so Caleb's OK.
 - `pipeline/account_purge.py`'s `media_objects` must not silently skip a host that isn't GCS, ideally failing loudly on an unknown one,
   before any new-host link exists. Otherwise a deleted account's file on S3 stays.
+- **Community's switch gates (`COMMUNITY-MIGRATION.md`).** Apple reviews report and block, so Community doesn't switch until each of these exists and is tested:
+  - The team can act on a report: `reviewReport` has no route, script or task.
+  - `community.remind_open` has its daily schedule. Today nothing runs it, so a report left open would never remind anyone.
+  - The app adapter. It doesn't exist yet, and nothing has called these routes.
 - Remove the temporary one-way sync of `families`, `people` and `recipes` (SCHEMA.md, M1).
 - Install `sentry-sdk` on the laptop's worker, or `import observability` crashes it.
 - Give the worker and api a limited database login in place of the master one.
