@@ -3,8 +3,8 @@
 import { randomUUID } from "node:crypto";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import * as Sentry from "@sentry/node";
-import { db } from "./db.js";
-import { ApiError } from "./errors.js";
+import { db, isLockWait, isPoolWait } from "./db.js";
+import { ApiError, unavailable } from "./errors.js";
 import { fieldPaths, fileGuard, lastName, looksLikeFileKey } from "./files.js";
 import { accountRoutes } from "./modules/accounts/routes.js";
 import { inviteRoutes } from "./modules/community/inviteRoutes.js";
@@ -150,6 +150,12 @@ export function buildApp(options: { logger?: object | boolean; logStream?: NodeJ
       return reply.status(error.statusCode).headers(error.headers).send({ ...error.extra, error: error.code, ...message, requestId: req.id });
     }
     if (error.validation) return reply.status(400).send({ error: "bad_request", requestId: req.id });
+    // Too busy, and nothing was written: the phone may simply try again. An alarm on these belongs with the overload gate (AWS-MIGRATION.md).
+    if (isLockWait(error) || isPoolWait(error)) {
+      const busy = unavailable();
+      req.log.warn({ err: { type: error.name, code: (error as { code?: string }).code }, poolWait: isPoolWait(error) }, "too busy to answer");
+      return reply.status(busy.statusCode).headers(busy.headers).send({ error: busy.code, requestId: req.id });
+    }
     const status = error.statusCode ?? 500;
     if (status >= 500) {
       // Not the message: Postgres errors can carry row values, and family content never goes in logs.

@@ -4,7 +4,8 @@
 // app's own fetch sends no Origin. Errors are `{error}`, and the site reads only the status. The path stays unversioned, so the site and old apps need only a new host.
 import * as Sentry from "@sentry/node";
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { ApiError } from "../../errors.js";
+import { isLockWait, isPoolWait } from "../../db.js";
+import { ApiError, unavailable } from "../../errors.js";
 import { hit, subjectKey } from "../../rateLimit.js";
 import { openInvite } from "./dinners.js";
 
@@ -35,6 +36,10 @@ function corsFor(origin: string | undefined): Record<string, string> | false {
 
 function onError(error: FastifyError, req: FastifyRequest, reply: FastifyReply) {
   if (error instanceof ApiError && error.statusCode === 429) return reply.headers(error.headers).code(429).send({ error: "too many tries" });
+  if (isLockWait(error) || isPoolWait(error)) {
+    req.log.warn({ err: { type: error.name, code: error.code }, poolWait: isPoolWait(error) }, "too busy to answer");
+    return reply.headers(unavailable().headers).code(503).send({ error: "try again in a moment" });
+  }
   if (error.code === "FST_ERR_CTP_BODY_TOO_LARGE") return reply.code(400).send({ error: "body too large" });
   if (error.validation) return reply.code(400).send({ error: "token and deviceId are required" });
   if ((error.statusCode ?? 500) < 500) return reply.code(400).send({ error: "body must be JSON" });
