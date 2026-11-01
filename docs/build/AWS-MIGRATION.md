@@ -186,6 +186,8 @@ and an address its firmware can reach.
 3. Move uploads: the `api` hands out S3 upload links in place of `cloud/signer`. Old builds keep the old signer.
 4. **Deleted accounts must be purged from both stores** while both exist. It's a privacy promise, so test this first.
 
+The copy tool, the order of steps and the way back: `docs/build/MEDIA-MIGRATION.md`.
+
 ### 5. Supabase to RDS
 Supabase and Convex share one schema (`api/migrations/`), so this phase moves Supabase's data and routes into tables designed
 with Convex's, not a copy of Supabase's tables.
