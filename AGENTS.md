@@ -175,6 +175,7 @@ glasses/    ESP32 glasses → GCP VM (Python): WS ingest, MP4 mux, GCS upload, C
 supabase/   Frozen: functions/api (today's sign-in, invites, older screens), migrations/, tests/
 pipeline/   Python: prep.py → process.py (Gemini) → Muse Spark → publish.py, and worker.py (claims jobs from Convex)
 cloud/      GCS upload signer (Cloud Run) + IAM scripts
+api/        The new backend (Node, Fastify, Postgres), on the `aws-migration` branch until Apple approves (docs/build/SYSTEM-DESIGN.md)
 infra/      AWS, as Terraform (infra/README.md; the plan is docs/build/AWS-MIGRATION.md). Staging only so far; nothing live runs there
 scripts/    check-cartesia.mjs, check-moss.mjs (key checks), set-apple-ids.mjs (launch prep)
 data/       sample + synthetic recipes; data/out/ is pipeline output (gitignored)
@@ -216,6 +217,9 @@ npx --yes deno@2 check --node-modules-dir=none supabase/functions/api/*.ts      
 # AWS (infra/README.md; profile homecookd, refresh with: aws sso login --profile homecookd)
 cd infra/envs/staging && terraform init -backend=false && terraform validate   # no login needed
 cd infra/envs/staging && AWS_PROFILE=homecookd terraform plan        # production apply: Caleb's OK
+
+# new backend (api/; TEST_DATABASE_URL adds the real-Postgres tests)
+cd api && npm ci && npm run typecheck && npm test
 
 # upload signer (cloud/signer)
 python3 cloud/signer/test_main.py                                  # sign-in check (Convex + GCS faked)

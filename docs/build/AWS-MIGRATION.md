@@ -80,6 +80,14 @@ someone who deleted their account right after that export is covered until about
 sentence reads. It's also the only full copy until the new backups run, so the date may force a choice if Apple is still
 reviewing.
 
+## Cutover list
+
+Before `aws-migration` reaches `main`:
+
+- Install `sentry-sdk` on the laptop's worker, or `import observability` crashes it.
+- Give the worker and api a limited database login in place of the master one.
+- Pin the workflows' actions to commit SHAs, and add a checksum for the downloaded gitleaks.
+
 ## Priorities
 
 **Priorities (Caleb, Oct 31):** phase 0, phase 1, the worker from phase 3, then phases 4-7. **Voice is out of the near-term

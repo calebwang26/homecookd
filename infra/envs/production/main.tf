@@ -50,7 +50,7 @@ module "env" {
       cpu           = 1024
       memory        = 2048
       desired_count = 0
-      path_patterns = ["/cook*", "/record*", "/speak*", "/homie/*", "/health"]
+      path_patterns = ["/cook*", "/record*", "/speak*", "/homie/*"]
       drain_seconds = 3600
       secrets       = local.voice_secrets
     }

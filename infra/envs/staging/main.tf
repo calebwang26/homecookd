@@ -26,6 +26,12 @@ variable "voice_count" {
   default     = 0
 }
 
+variable "api_count" {
+  description = "0 until the first api image is pushed"
+  type        = number
+  default     = 0
+}
+
 module "env" {
   source            = "../../modules/env"
   environment       = "staging"
@@ -37,14 +43,14 @@ module "env" {
   db_backup_days    = 7
   db_protected      = false
   alert_email       = "caleb.wang26@gmail.com"
-  secret_names      = []
+  secret_names      = ["SENTRY_DSN_API", "SENTRY_DSN_WORKER"]
 
   services = {
     voice = {
       cpu           = 512
       memory        = 1024
       desired_count = var.voice_count
-      path_patterns = ["/cook*", "/record*", "/speak*", "/homie/*", "/health"]
+      path_patterns = ["/cook*", "/record*", "/speak*", "/homie/*"]
       drain_seconds = 3600
       env = {
         VOICE_STUB        = "1"
@@ -57,15 +63,17 @@ module "env" {
     api = {
       cpu           = 256
       memory        = 512
-      desired_count = 0 # no code yet: phases 5 and 6
+      desired_count = var.api_count
       default_route = true
       uses_database = true
+      secrets       = ["SENTRY_DSN_API"]
     }
     worker = {
       cpu           = 2048
       memory        = 8192
       desired_count = 0 # size and home (Fargate or EC2) follow a measured video job
       uses_database = true
+      secrets       = ["SENTRY_DSN_WORKER"]
     }
   }
 }
