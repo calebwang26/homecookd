@@ -25,6 +25,7 @@ Last updated Oct 30, 12:05 UTC, right after the weekly limit reset. The pause li
   plan counts per account.
 - **Stop the Moss sync after Apple approves 1.0** (Caleb, Oct 31): not built yet, and held until then. The steps are in
   `docs/agents/memory/moss-sync-off-after-approval.md`.
+- **Upload ownership:** planned, not built: `docs/build/UPLOAD-OWNERSHIP.md`. It waits for the Master Agent's go.
 - **Stretch, only if asked:** `pushEvents.filmed({askId, recipeId})` from `worker.published` when a filmed
   recipe answers a craving card. That needs the job to carry `dishAskId`.
 - **Caleb's numbers** (`TODO(caleb)`):

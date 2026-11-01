@@ -3,7 +3,7 @@
 // so none needs a preflight. Files don't go through the api: it hands out a link, and the page PUTs to storage.
 // NEXT_PUBLIC_DISH_URL overrides the base (the local fake in scripts/qa/dish-fake-server.mjs).
 import { CONVEX_SITE_URL } from '@/lib/recipe-web/config';
-import type { Ask, AskItem, Card, Edit, FileKind, QuestionId, Relation, SendVia } from './types';
+import type { Ask, AskItem, Card, CravingPeek, Edit, FileKind, QuestionId, Relation, SendVia } from './types';
 
 export const DISH_URL = (process.env.NEXT_PUBLIC_DISH_URL || CONVEX_SITE_URL).trim().replace(/\/+$/, '');
 
@@ -97,13 +97,24 @@ export async function uploadFile(kind: FileKind, blob: Blob, contentType: string
 
 export function createCard(input: {
   dish: string;
-  relation: Relation;
+  /** Left out with a craving link: the server asks the parent who sent it. */
+  relation?: Relation;
   kidName?: string | null;
   photos?: string[];
   voiceNote?: string;
+  cravingToken?: string;
 }): Promise<{ kidToken: string; card: Card }> {
   return post('/dish/cards', input, { timeoutMs: SLOW_MS });
 }
+
+// ── a parent's craving link (§8) ───────────────────────────────────────────────────────────────
+
+export function peekCraving(cravingToken: string): Promise<CravingPeek> {
+  return post('/dish/craving/peek', { cravingToken });
+}
+
+/** The link's own caps answer 429 `rate` like a per-IP limit does; only the words differ (§8, LINK_BUSY). */
+export const isLinkBusy = (e: DishError) => e.kind === 'rate' && e.message.includes('a lot of requests');
 
 export async function getCard(kidToken: string): Promise<Card> {
   return (await post<{ card: Card }>('/dish/cards/get', { kidToken })).card;

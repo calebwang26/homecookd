@@ -7,6 +7,7 @@
 //
 // Test hooks (not in the spec): POST /__fake/budget {spent: true|false} makes /dish/cards answer 429
 // `budget` as the spent daily budget does, POST /__fake/rate {on: true|false} answers 429 `rate` (a per-IP limit); GET /__fake/state returns every card; GET /files/<id> serves an upload.
+// In-process: fake.addCraving({parentName, relation, message, uses}) makes a craving link (§8), returning its token; fake.cravings holds them (revokedAt to stop one).
 // Import it to run it in-process: `const fake = await startFake({ port, site })`.
 import { createServer } from 'node:http';
 import { createHash, randomInt } from 'node:crypto';
@@ -149,6 +150,7 @@ function merge(card) {
 export async function startFake({ port = 8791, site = 'http://localhost:3105', mergeMs = 3000, translateMs = 1500 } = {}) {
   const cards = new Map(); // kidToken -> card
   const files = new Map(); // fileId -> {kind, type, size, bytes (once it's PUT), askToken (a clip's card)}
+  const cravings = new Map(); // token -> {parentName, relation, message, uses, revokedAt}
   const log = [];
   let linkGeneration = 1; // read links name this; expireLinks moves it on, so an old one gets a 403, as an expired S3 link does
   let budgetSpent = false;
@@ -271,13 +273,26 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
         if (!f?.bytes) return fail(404, 'not_found', 'That file doesn’t work anymore. Add it again.');
         return send(201, { fileId: b.fileId, kind: f.kind, contentType: f.type, size: f.size });
       }
+      case '/dish/craving/peek': {
+        const link = cravings.get(b.cravingToken);
+        if (!link || link.revokedAt) return fail(404, 'not_found', 'This link doesn’t work anymore.');
+        return send(200, { parentName: link.parentName, relation: link.relation, message: link.message });
+      }
       case '/dish/cards': {
+        const link = b.cravingToken ? cravings.get(b.cravingToken) : null;
+        if (b.cravingToken) {
+          if (!b.kidName) return fail(400, 'bad_request', 'kidName is required');
+          if (!link || link.revokedAt) return fail(404, 'not_found', 'This link doesn’t work anymore.');
+          if (link.uses >= 20) return fail(429, 'rate', 'This link has had a lot of requests. Ask for a new one.');
+          link.uses++;
+        }
         if (budgetSpent) return fail(429, 'budget', 'homecookd has made all the recipes it can today. Try again tomorrow.');
         if (rateLimited) return fail(429, 'rate', 'Too many tries. Please wait a few minutes.');
         const dish = String(b.dish ?? '').trim();
         if (dish.length < 2 && !b.photos?.length && !b.voiceNote) return fail(400, 'bad_request', 'Tell us the dish.');
         if (/^(asdf|hello)$/i.test(dish)) return fail(422, 'not_a_dish', 'That doesn’t sound like a dish.');
-        const relation = isRelation(b.relation) ? b.relation : 'mom';
+        const said = link?.relation?.toLowerCase();
+        const relation = isRelation(b.relation) ? b.relation : RELATION_LABEL[said] ? said : 'mom';
         const kidToken = token();
         const guess = guessFor(dish);
         const card = {
@@ -286,6 +301,7 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
           dish: dish || guess.dish,
           relation,
           kidName: b.kidName ? String(b.kidName).slice(0, 40) : null,
+          cravingToken: b.cravingToken ?? null,
           guess,
           version: null,
           answers: new Map(),
@@ -443,6 +459,12 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
   return {
     base,
     cards,
+    cravings,
+    addCraving: ({ parentName = 'Priya Sharma', relation = 'Mom', message = 'What do you miss from home? Tell me and I’ll make it for you.', uses = 0 } = {}) => {
+      const t = token();
+      cravings.set(t, { parentName: parentName.split(' ')[0], relation, message, uses, revokedAt: null });
+      return t;
+    },
     log,
     setBudget: (spent) => (budgetSpent = spent),
     setRate: (on) => (rateLimited = on),
