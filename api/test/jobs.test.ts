@@ -19,7 +19,7 @@ test("jobs", { skip: !hasDatabase }, async (t) => {
   const sam = await who(others);
   const samsKid = await who(others, "kid");
   const cancel = (by: Who, id: string) => call(app, by, "POST", `/v1/jobs/${id}/cancel`);
-  const stop = (by: Who, uploadId: string) => call(app, by, "POST", `/v1/uploads/${encodeURIComponent(uploadId)}/cancel`);
+  const stop = (by: Who, uploadId: string) => call(app, by, "POST", `/v1/video-uploads/${encodeURIComponent(uploadId)}/cancel`);
 
   await t.test("jobs.cancel stops a job at every unfinished stage, and a worker mid-way can't bring it back", async () => {
     await openRecipeWrites();
@@ -109,7 +109,7 @@ test("jobs", { skip: !hasDatabase }, async (t) => {
     const res = await newJob(app, aunt, uploadId);
     assert.equal(res.status, 400);
     assert.equal((await newJob(app, leo, uploadId)).status, 403);
-    const refused = await call(app, leo, "POST", "/v1/uploads", { videos: [{ contentType: "video/mp4", size: 5 }] }, { "idempotency-key": "kid-key-123456" });
+    const refused = await call(app, leo, "POST", "/v1/video-uploads", { videos: [{ contentType: "video/mp4", size: 5 }] }, { "idempotency-key": "kid-key-123456" });
     assert.equal(refused.status, 403);
   });
 
@@ -143,7 +143,7 @@ test("jobs", { skip: !hasDatabase }, async (t) => {
     for (let i = 0; i < 5; i += 1) {
       const { uploadId, keys } = await askLinks(app, dad);
       land(videos, ...keys);
-      await call(app, dad, "POST", `/v1/uploads/${uploadId}/complete`);
+      await call(app, dad, "POST", `/v1/video-uploads/${uploadId}/complete`);
       const replies = await Promise.all([newJob(app, dad, uploadId), newJob(app, dad, uploadId), newJob(app, dad, uploadId)]);
       assert.deepEqual(replies.map((r) => r.status).sort(), [200, 200, 201]);
       assert.equal(new Set(replies.map((r) => r.data.jobId)).size, 1);
@@ -163,7 +163,7 @@ test("jobs", { skip: !hasDatabase }, async (t) => {
     assert.deepEqual(await jobMessages(made.jobId), []);
 
     land(videos, keys[0]);
-    const part = await call(app, dad, "POST", `/v1/uploads/${uploadId}/complete`);
+    const part = await call(app, dad, "POST", `/v1/video-uploads/${uploadId}/complete`);
     assert.deepEqual(part.data, { complete: false, missing: [2], cancelled: false, job: { jobId: made.jobId, stage: "uploading" } });
     assert.equal((await job(made.jobId)).stage, "uploading");
     assert.deepEqual(await jobMessages(made.jobId), []);
@@ -171,13 +171,13 @@ test("jobs", { skip: !hasDatabase }, async (t) => {
     // A failure half way undoes all of it: no stage without its message, no file marked in without the stage.
     land(videos, keys[1]);
     await db().query(`alter table outbox add constraint test_no_jobs check (queue <> 'jobs') not valid`);
-    const failed = await call(app, dad, "POST", `/v1/uploads/${uploadId}/complete`);
+    const failed = await call(app, dad, "POST", `/v1/video-uploads/${uploadId}/complete`);
     await db().query(`alter table outbox drop constraint test_no_jobs`);
     assert.equal(failed.status, 500);
     assert.equal((await job(made.jobId)).stage, "uploading");
     assert.equal((await db().query(`select count(*)::int as n from files where upload_id = $1 and uploaded_at is not null`, [uploadId])).rows[0].n, 1);
 
-    const whole = await call(app, dad, "POST", `/v1/uploads/${uploadId}/complete`, undefined, { "x-request-id": "trace-this-request" });
+    const whole = await call(app, dad, "POST", `/v1/video-uploads/${uploadId}/complete`, undefined, { "x-request-id": "trace-this-request" });
     assert.deepEqual(whole.data, { complete: true, missing: [], cancelled: false, job: { jobId: made.jobId, stage: "queued" } });
     row = await job(made.jobId);
     assert.equal(row.stage, "queued");
@@ -187,7 +187,7 @@ test("jobs", { skip: !hasDatabase }, async (t) => {
 
     // A repeat changes nothing and sends nothing.
     const started = row.upload_finished_at.getTime();
-    const repeat = await call(app, dad, "POST", `/v1/uploads/${uploadId}/complete`);
+    const repeat = await call(app, dad, "POST", `/v1/video-uploads/${uploadId}/complete`);
     assert.deepEqual(repeat.data.job, { jobId: made.jobId, stage: "queued" });
     assert.equal((await jobMessages(made.jobId)).length, 1);
     assert.equal((await job(made.jobId)).upload_finished_at.getTime(), started);
@@ -196,7 +196,7 @@ test("jobs", { skip: !hasDatabase }, async (t) => {
   await t.test("the upload finishing first: the job is queued as it's made", async () => {
     const { uploadId, keys } = await askLinks(app, dad);
     land(videos, ...keys);
-    const done = await call(app, dad, "POST", `/v1/uploads/${uploadId}/complete`);
+    const done = await call(app, dad, "POST", `/v1/video-uploads/${uploadId}/complete`);
     assert.deepEqual(done.data, { complete: true, missing: [], cancelled: false, job: null });
     const { data } = await newJob(app, dad, uploadId);
     assert.equal((await job(data.jobId)).stage, "queued");
@@ -207,7 +207,7 @@ test("jobs", { skip: !hasDatabase }, async (t) => {
     for (let i = 0; i < 8; i += 1) {
       const { uploadId, keys } = await askLinks(app, dad);
       land(videos, ...keys);
-      const [made] = await Promise.all([newJob(app, dad, uploadId), call(app, dad, "POST", `/v1/uploads/${uploadId}/complete`)]);
+      const [made] = await Promise.all([newJob(app, dad, uploadId), call(app, dad, "POST", `/v1/video-uploads/${uploadId}/complete`)]);
       assert.equal((await job(made.data.jobId)).stage, "queued", `try ${i}`);
       assert.equal((await jobMessages(made.data.jobId)).length, 1, `try ${i}`);
     }
@@ -218,7 +218,7 @@ test("jobs", { skip: !hasDatabase }, async (t) => {
       const { uploadId, keys } = await askLinks(app, dad);
       const { data } = await newJob(app, dad, uploadId);
       land(videos, ...keys);
-      await Promise.all([cancel(dad, data.jobId), call(app, dad, "POST", `/v1/uploads/${uploadId}/complete`)]);
+      await Promise.all([cancel(dad, data.jobId), call(app, dad, "POST", `/v1/video-uploads/${uploadId}/complete`)]);
       const row = await job(data.jobId);
       assert.equal(row.stage, "failed", `try ${i}`);
       assert.ok(row.cancelled_at, `try ${i}`);
@@ -339,10 +339,10 @@ test("jobs", { skip: !hasDatabase }, async (t) => {
 
   await t.test("every route refuses without a session", async () => {
     const routes: ["GET" | "POST", string][] = [
-      ["POST", "/v1/uploads"],
-      ["POST", "/v1/uploads/x/links"],
-      ["POST", "/v1/uploads/x/complete"],
-      ["POST", "/v1/uploads/x/cancel"],
+      ["POST", "/v1/video-uploads"],
+      ["POST", "/v1/video-uploads/x/links"],
+      ["POST", "/v1/video-uploads/x/complete"],
+      ["POST", "/v1/video-uploads/x/cancel"],
       ["POST", "/v1/jobs"],
       ["GET", "/v1/jobs"],
       ["GET", "/v1/jobs/x"],
@@ -358,7 +358,7 @@ test("jobs", { skip: !hasDatabase }, async (t) => {
     const { uploadId, keys } = await askLinks(logged, dad);
     land(videos, ...keys);
     const { data } = await newJob(logged, dad, uploadId, { title: "Aaji's Secret Masala" });
-    await call(logged, dad, "POST", `/v1/uploads/${uploadId}/complete`);
+    await call(logged, dad, "POST", `/v1/video-uploads/${uploadId}/complete`);
     await call(logged, dad, "GET", "/v1/jobs");
     await cancel(dad, data.jobId);
     await newJob(logged, dad, "bad folder", { title: "Aaji's Secret Masala" });

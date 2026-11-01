@@ -56,7 +56,7 @@ const key = () => randomBytes(12).toString("base64url");
 export async function askLinks(app: FastifyInstance, cook: Who, count = 2, idempotencyKey = key()): Promise<{ uploadId: string; keys: string[]; res: Res }> {
   await clearLimits();
   const videos = Array.from({ length: count }, () => ({ contentType: "video/quicktime", size: 5, durationS: 60 }));
-  const res = await call(app, cook, "POST", "/v1/uploads", { videos }, { "idempotency-key": idempotencyKey });
+  const res = await call(app, cook, "POST", "/v1/video-uploads", { videos }, { "idempotency-key": idempotencyKey });
   const keys = (res.data.uploads ?? []).map((u: { url: string }) => new URL(u.url).pathname.slice(1));
   return { uploadId: res.data.uploadId, keys, res };
 }

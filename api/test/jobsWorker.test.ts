@@ -37,7 +37,7 @@ test("the worker's contract", { skip: missing ?? false }, async (t) => {
     assert.equal(early.results[0], null);
 
     land(videos, ...keys);
-    const done = await call(app, cook, "POST", `/v1/uploads/${uploadId}/complete`, undefined, { "x-request-id": "trace-the-whole-way" });
+    const done = await call(app, cook, "POST", `/v1/video-uploads/${uploadId}/complete`, undefined, { "x-request-id": "trace-the-whole-way" });
     assert.equal(done.data.job.stage, "queued");
     const messages = await sent();
     assert.equal(messages.length, 1);
@@ -97,7 +97,7 @@ test("the worker's contract", { skip: missing ?? false }, async (t) => {
   await t.test("with the recipes switch off there's no card, and the worker makes the recipe when it publishes", async () => {
     const { uploadId, keys } = await askLinks(app, cook);
     land(videos, ...keys);
-    await call(app, cook, "POST", `/v1/uploads/${uploadId}/complete`);
+    await call(app, cook, "POST", `/v1/video-uploads/${uploadId}/complete`);
     const { data: made } = await newJob(app, cook, uploadId);
     assert.equal(made.recipeId, null);
     const messages = (await sent()).filter((m) => m.queue === "jobs");
@@ -146,7 +146,7 @@ test("the worker's contract", { skip: missing ?? false }, async (t) => {
     const claimed = async () => {
       const { uploadId, keys } = await askLinks(app, cook);
       land(videos, ...keys);
-      await call(app, cook, "POST", `/v1/uploads/${uploadId}/complete`);
+      await call(app, cook, "POST", `/v1/video-uploads/${uploadId}/complete`);
       const { data } = await newJob(app, cook, uploadId);
       const claim = worker({ op: "claim", jobId: data.jobId }).results[0];
       assert.equal(claim.attempts, 1);
@@ -189,7 +189,7 @@ test("the worker's contract", { skip: missing ?? false }, async (t) => {
     await sent();
     const { uploadId, keys } = await askLinks(app, cook);
     land(videos, ...keys);
-    await call(app, cook, "POST", `/v1/uploads/${uploadId}/complete`);
+    await call(app, cook, "POST", `/v1/video-uploads/${uploadId}/complete`);
     const { data } = await newJob(app, cook, uploadId);
     await call(app, cook, "POST", `/v1/jobs/${data.jobId}/cancel`);
     const messages = (await sent()).filter((m) => m.queue === "jobs");

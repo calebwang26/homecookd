@@ -33,7 +33,7 @@ export const readWindowStart = (now: number) => new Date(Math.floor(now / READ_W
 /**
  * A video's link. A phone hands it to iOS's background uploader, which may start the PUT long after asking, so two minutes can't work. S3 refuses a link once
  * the credentials that signed it expire, whatever it was asked for, so this is an upper bound on a task role and the phone asks again when one is refused
- * (POST /v1/uploads/:uploadId/links). Google's signer gave 7 days. docs/build/JOBS-MIGRATION.md, known limits.
+ * (POST /v1/video-uploads/:uploadId/links). Google's signer gave 7 days. docs/build/JOBS-MIGRATION.md, known limits.
  */
 export const VIDEO_LINK_S = 6 * 3600;
 

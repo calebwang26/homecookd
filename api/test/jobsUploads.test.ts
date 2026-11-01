@@ -20,7 +20,7 @@ test("uploads", { skip: !hasDatabase }, async (t) => {
   const dad = await who(home);
   const others = await family();
   const sam = await who(others);
-  const ask = (videos_: object[], key = `key-${Math.random().toString(36).slice(2)}aaaa`, by = dad) => call(app, by, "POST", "/v1/uploads", { videos: videos_ }, { "idempotency-key": key });
+  const ask = (videos_: object[], key = `key-${Math.random().toString(36).slice(2)}aaaa`, by = dad) => call(app, by, "POST", "/v1/video-uploads", { videos: videos_ }, { "idempotency-key": key });
   const video = { contentType: "video/quicktime", size: 5 };
 
   await t.test("the signer's checks and sentences, before anything is written", async () => {
@@ -36,7 +36,7 @@ test("uploads", { skip: !hasDatabase }, async (t) => {
     assert.equal(big.data.error, "too_large");
     assert.equal((await ask([{ contentType: "video/mp4", size: MAX_VIDEO_BYTES }])).status, 201, "S3's limit for one PUT is allowed");
     assert.equal((await db().query(`select count(*)::int as n from files`)).rows[0].n, before + 1);
-    const noKey = await call(app, dad, "POST", "/v1/uploads", { videos: [video] });
+    const noKey = await call(app, dad, "POST", "/v1/video-uploads", { videos: [video] });
     assert.equal(noKey.status, 400, "a write a phone retries needs its key");
   });
 
@@ -81,18 +81,18 @@ test("uploads", { skip: !hasDatabase }, async (t) => {
   await t.test("new links for what isn't in yet; everyone else reads the same not-found", async () => {
     const { uploadId, keys } = await askLinks(app, dad, 3);
     land(videos, keys[1]);
-    await call(app, dad, "POST", `/v1/uploads/${uploadId}/complete`);
-    const links = await call(app, dad, "POST", `/v1/uploads/${uploadId}/links`);
+    await call(app, dad, "POST", `/v1/video-uploads/${uploadId}/complete`);
+    const links = await call(app, dad, "POST", `/v1/video-uploads/${uploadId}/links`);
     assert.equal(links.status, 200);
     assert.deepEqual(links.data.uploads.map((u: { index: number }) => u.index), [1, 3]);
     const aunt = await who(home);
     const refusals = [
-      await call(app, sam, "POST", `/v1/uploads/${uploadId}/links`),
-      await call(app, aunt, "POST", `/v1/uploads/${uploadId}/links`),
-      await call(app, sam, "POST", `/v1/uploads/${uploadId}/complete`),
-      await call(app, aunt, "POST", `/v1/uploads/${uploadId}/complete`),
-      await call(app, dad, "POST", `/v1/uploads/no-such-upload/links`),
-      await call(app, dad, "POST", `/v1/uploads/no-such-upload/complete`),
+      await call(app, sam, "POST", `/v1/video-uploads/${uploadId}/links`),
+      await call(app, aunt, "POST", `/v1/video-uploads/${uploadId}/links`),
+      await call(app, sam, "POST", `/v1/video-uploads/${uploadId}/complete`),
+      await call(app, aunt, "POST", `/v1/video-uploads/${uploadId}/complete`),
+      await call(app, dad, "POST", `/v1/video-uploads/no-such-upload/links`),
+      await call(app, dad, "POST", `/v1/video-uploads/no-such-upload/complete`),
     ];
     for (const res of refusals) {
       assert.equal(res.status, 404);
@@ -105,7 +105,7 @@ test("uploads", { skip: !hasDatabase }, async (t) => {
     const { uploadId, keys } = await askLinks(app, dad, 2);
     videos.objects.set(keys[0], { bytes: new Uint8Array(3), contentType: "video/quicktime" }); // short: can't arrive on a signed link, and doesn't count if it does
     land(videos, keys[1]);
-    assert.deepEqual((await call(app, dad, "POST", `/v1/uploads/${uploadId}/complete`)).data.missing, [1]);
+    assert.deepEqual((await call(app, dad, "POST", `/v1/video-uploads/${uploadId}/complete`)).data.missing, [1]);
     const at = new Date("2026-10-31T12:05:00Z");
     const realHead = videos.head;
     videos.head = async (key) => {
@@ -114,7 +114,7 @@ test("uploads", { skip: !hasDatabase }, async (t) => {
     };
     land(videos, keys[0]);
     const { data } = await newJob(app, dad, uploadId);
-    await call(app, dad, "POST", `/v1/uploads/${uploadId}/complete`);
+    await call(app, dad, "POST", `/v1/video-uploads/${uploadId}/complete`);
     videos.head = realHead;
     const row = await job(data.jobId);
     assert.equal(row.stage, "queued");
@@ -126,7 +126,7 @@ test("uploads", { skip: !hasDatabase }, async (t) => {
     const { uploadId, keys } = await askLinks(app, dad);
     land(videos, ...keys);
     videos.failHeads = true;
-    const res = await call(app, dad, "POST", `/v1/uploads/${uploadId}/complete`);
+    const res = await call(app, dad, "POST", `/v1/video-uploads/${uploadId}/complete`);
     videos.failHeads = false;
     assert.equal(res.status, 502);
     assert.equal(res.data.error, "storage");
@@ -237,7 +237,7 @@ test("uploads", { skip: !hasDatabase }, async (t) => {
   await t.test("a failed S3 delete stays marked and fails the message, so someone hears", async () => {
     const { uploadId, keys } = await askLinks(app, dad);
     land(videos, ...keys);
-    await call(app, dad, "POST", `/v1/uploads/${uploadId}/cancel`);
+    await call(app, dad, "POST", `/v1/video-uploads/${uploadId}/cancel`);
     await db().query(`update files set delete_requested_at = delete_requested_at - make_interval(secs => $2) where upload_id = $1`, [uploadId, VIDEO_LINK_S + 3700]);
     videos.failRemoves = true;
     await assert.rejects(sweepUploads(trace), /S3 calls failed/);

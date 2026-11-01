@@ -7,6 +7,8 @@ import { after, test } from "node:test";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { db } from "../src/db.js";
+import { useUploadStore } from "../src/storage.js";
+import { fakeStore } from "./dishHelpers.js";
 import { cravingCard } from "./cravingHelpers.js";
 import { CHILI, closeAll, familyRow, get, newKey, ok, pairOf, person, post, recipe, type Reply, say, skip, text, type Who, type World, world } from "./messagesHelpers.js";
 
@@ -32,6 +34,10 @@ type Scene = World & {
   ask: string;
   askClip: string;
   shareToken: string;
+  /** Mom's upload folder, a job on another folder, and a recording. */
+  upload: string;
+  job: string;
+  recording: string;
 };
 
 type Check = { why: string; check: (r: Reply, s: Scene) => void };
@@ -63,6 +69,8 @@ async function fileOf(who: Who | null, kind: "voice" | "photo"): Promise<string>
   await db().query(`insert into files (key, bucket, kind, content_type, family_id, owner_person_id, uploaded_at) values ($1, 'private', $2, 'image/jpeg', $3, $4, now())`, [key, kind, who.familyId, who.id]);
   return key;
 }
+
+const VIDEO = { contentType: "video/quicktime", size: 5, durationS: 60 };
 
 async function scene(): Promise<Scene> {
   const w = await world();
@@ -102,6 +110,13 @@ async function scene(): Promise<Scene> {
   const block = ok(await get(w.app, w.mom, "/v1/community/blocks")).blocked[0].blockId;
   const card = await cravingCard(w.app, { token: w.mom.token, personId: w.mom.id, familyId: w.family });
   const askClip = `private/test/${newKey()}`;
+  useUploadStore(fakeStore());
+  const upload = ok(await post(w.app, w.mom, "/v1/video-uploads", { videos: [VIDEO] }), 201).uploadId as string;
+  const jobRow = await db().query(
+    `insert into jobs (family_id, cook_id, upload_key, source, stage, progress, idempotency_key) values ($1, $2, 'up-a-job/', 'phone', 'queued', 0, 'up-a-job/') returning id`,
+    [w.family, w.mom.id],
+  );
+  const recordingRow = await db().query(`insert into recordings (family_id, cook_id, language, source, status) values ($1, $2, 'mr', 'glasses', 'recording') returning id`, [w.family, w.mom.id]);
   return Object.assign(w, {
     neighbor,
     gone,
@@ -122,6 +137,9 @@ async function scene(): Promise<Scene> {
     ask: card.row.id as string,
     askClip,
     shareToken: share.token as string,
+    upload,
+    job: jobRow.rows[0].id as string,
+    recording: recordingRow.rows[0].id as string,
   });
 }
 
@@ -146,6 +164,29 @@ const madeAnew = (why: string): Check => ({ why, check: (r) => assert.ok(r.statu
 const WORDS_IN_THE_PAIR = "Words in the pair";
 
 const ROUTES: Record<string, SignedIn | Anonymous> = {
+  // --- jobs, recipes and recordings
+  "POST /v1/video-uploads": { call: (s, who) => post(s.app, who, "/v1/video-uploads", { videos: [VIDEO] }), otherFamily: madeAnew("A new folder of the caller's own, in their own family"), outsider: 403 },
+  "POST /v1/video-uploads/:uploadId/links": { call: (s, who) => post(s.app, who, `/v1/video-uploads/${s.upload}/links`), otherFamily: 404, outsider: 404 },
+  "POST /v1/video-uploads/:uploadId/complete": { call: (s, who) => post(s.app, who, `/v1/video-uploads/${s.upload}/complete`), otherFamily: 404, outsider: 404 },
+  "POST /v1/video-uploads/:uploadId/cancel": { call: (s, who) => post(s.app, who, `/v1/video-uploads/${s.upload}/cancel`), otherFamily: { why: "Looks only in the caller's family, and stops nothing there", check: (r) => assert.equal(r.data.stopped, false, r.body) }, outsider: 403 },
+  "POST /v1/jobs": { call: (s, who) => post(s.app, who, "/v1/jobs", { uploadId: s.upload, source: "phone" }), otherFamily: 400, outsider: 403 },
+  "GET /v1/jobs": { call: (s, who) => get(s.app, who, "/v1/jobs"), otherFamily: { why: "The caller's own family's jobs", check: (r, s) => assert.ok(r.status === 200 && !r.body.includes(s.job), r.body) }, outsider: { familyWide: "jobs.forFamily: everyone in the family sees its jobs" } },
+  "GET /v1/jobs/:id": { call: (s, who) => get(s.app, who, `/v1/jobs/${s.job}`), otherFamily: 404, outsider: { familyWide: "A job belongs to the family" } },
+  "POST /v1/jobs/:id/cancel": { call: (s, who) => post(s.app, who, `/v1/jobs/${s.job}/cancel`), otherFamily: 404, outsider: 403 },
+  "GET /v1/recipes": { call: (s, who) => get(s.app, who, "/v1/recipes"), otherFamily: { why: "The caller's own family's recipes", check: (r) => assert.ok(r.status === 200 && !r.body.includes("Kanda Poha"), r.body) }, outsider: { familyWide: "A family's recipes are the whole family's" } },
+  "GET /v1/recipes/:id": { call: (s, who) => get(s.app, who, `/v1/recipes/${s.poha}`), otherFamily: 404, outsider: { familyWide: "A family's recipes are the whole family's" } },
+  "POST /v1/recipes/:id/memories-opt-in": {
+    call: (s, who) => post(s.app, who, `/v1/recipes/${s.poha}/memories-opt-in`, { optIn: true }),
+    otherFamily: 404,
+    outsider: 403,
+    notYet: { status: 501, why: "Recipe writes stay shut until the recipes switch: recipes.test.ts holds who may once it's open" },
+  },
+  "GET /v1/recordings/glasses-videos": { call: (s, who) => get(s.app, who, "/v1/recordings/glasses-videos"), otherFamily: ownRows((r) => r.data.videos), outsider: { familyWide: "glasses.videos: the family's recordings" } },
+  "GET /v1/recordings/:id": { call: (s, who) => get(s.app, who, `/v1/recordings/${s.recording}`), otherFamily: 404, outsider: { familyWide: "live.recording: the family's recordings" } },
+  "GET /v1/recordings/:id/log": { call: (s, who) => get(s.app, who, `/v1/recordings/${s.recording}/log`), otherFamily: 404, outsider: { familyWide: "liveEvents.forRecording: the family's recordings" } },
+  "GET /v1/recordings/:id/frame": { call: (s, who) => get(s.app, who, `/v1/recordings/${s.recording}/frame`), otherFamily: 404, outsider: { familyWide: "liveEvents.frame: the family's recordings" } },
+  "GET /v1/cooking": { call: (s, who) => get(s.app, who, "/v1/cooking"), otherFamily: ownRows((r) => r.data.cooking), outsider: { familyWide: "cooking.current: who's cooking in the family" } },
+
   // --- messages
   "GET /v1/threads": { call: (s, who) => get(s.app, who, "/v1/threads"), otherFamily: nothingOfTheirs, outsider: notThePair() },
   "POST /v1/threads": { call: (s, who) => post(s.app, who, "/v1/threads", { otherId: s.mom.id }, { key: null }), works: (s) => post(s.app, s.dad, "/v1/threads", { otherId: s.mom.id }, { key: null }), otherFamily: 404, outsider: { familyWide: "Anyone in a family may start a pair with anyone in it" } },

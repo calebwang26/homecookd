@@ -37,14 +37,14 @@ Everything under `/v1` needs `Authorization: Bearer <sessionToken>` and answers 
 
 | Old | Route | What an adapter does with the reply |
 |---|---|---|
-| `cloud/signer` POST | `POST /v1/uploads` `{videos: [{contentType, size, durationS?}]}`, header `Idempotency-Key` required | 201, or 200 on a retry. `{uploadId, uploadPath, uploads: [{index, url, method, headers, expiresInS}], expiresInS}`. No `status_url`: the job list replaces the status file |
-| new | `POST /v1/uploads/:uploadId/links` | New links for files not in yet, when one has run out |
-| new, was the status file and `worker.release` | `POST /v1/uploads/:uploadId/complete` | `{complete, missing, cancelled, job}`. Safe to repeat |
+| `cloud/signer` POST | `POST /v1/video-uploads` `{videos: [{contentType, size, durationS?}]}`, header `Idempotency-Key` required | 201, or 200 on a retry. `{uploadId, uploadPath, uploads: [{index, url, method, headers, expiresInS}], expiresInS}`. No `status_url`: the job list replaces the status file |
+| new | `POST /v1/video-uploads/:uploadId/links` | New links for files not in yet, when one has run out |
+| new, was the status file and `worker.release` | `POST /v1/video-uploads/:uploadId/complete` | `{complete, missing, cancelled, job}`. Safe to repeat |
 | `jobs.create` | `POST /v1/jobs` `{uploadId, source, title?, language?, forKidId?, forKidIds?, recordingId?}` | 201 new, 200 a retry. `{jobId, recipeId}`, and `recipeId` may be null (the switch). `uploadId` is `uploadPath` without the slash |
 | `jobs.forFamily` | `GET /v1/jobs?cursor=` | `.jobs`, 20 a page, and `.nextCursor` |
 | new | `GET /v1/jobs/:id` | One job |
 | `jobs.cancel` | `POST /v1/jobs/:id/cancel` | `{stopped}`. 404 becomes `false` |
-| `jobs.cancelUpload`, signer's `action: cancel` | `POST /v1/uploads/:uploadId/cancel` | `{stopped}` |
+| `jobs.cancelUpload`, signer's `action: cancel` | `POST /v1/video-uploads/:uploadId/cancel` | `{stopped}` |
 | `jobs.cancelUnfinished` | none | An operator's tool: one `update`, written when someone needs it |
 | `recipes.list` | `GET /v1/recipes?cursor=` | `.recipes`, 100 a page, whole, as today |
 | `recipes.get` | `GET /v1/recipes/:id` | 404 becomes `null` |
@@ -79,9 +79,9 @@ A `POST /v1/jobs` can still name a recording, with its guard, for rows that arri
 
 ## Uploads, in place of the signer
 
-1. `POST /v1/uploads`. The api writes one `files` row per video, with `upload_id`, and signs one PUT each. The folder is a random uuid, so a key holds nothing she typed (the signer's held a slug of her dish's name).
+1. `POST /v1/video-uploads`. The api writes one `files` row per video, with `upload_id`, and signs one PUT each. The folder is a random uuid, so a key holds nothing she typed (the signer's held a slug of her dish's name).
 2. The phone starts its background PUTs, and `POST /v1/jobs` at any point after that. The job waits as `uploading`, which the app already shows as "still sending".
-3. `POST /v1/uploads/:id/complete` when the phone sees them finish. The api asks S3 for each file, outside any transaction, then in one transaction marks what landed and, when all are in, queues the job with its message.
+3. `POST /v1/video-uploads/:id/complete` when the phone sees them finish. The api asks S3 for each file, outside any transaction, then in one transaction marks what landed and, when all are in, queues the job with its message.
 4. **If the phone never gets to say so,** `jobs.sweep` does the same check. That's what the old worker's 30-second re-queue caught.
 
 `uploaded_at` and so `upload_finished_at` are S3's own time for the last file, however late anyone asks, which is what the worker's own `coalesce(upload_finished_at, max(modified))` means. `finished_at` is set by the worker, by a stop and by an upload that never comes. For the 30-minute target, leave out `cancelled_at is not null`.
@@ -184,7 +184,7 @@ No new secrets. **Settings:** `MEDIA_BASE_URL` (new on the api), `RECIPE_WRITES`
 
 Only for 1.1 and after, at the switch. Build 6 keeps calling Convex and the signer.
 
-- `lib/uploads.ts startUpload`: `/v1/uploads` with a stored `Idempotency-Key`, the `uploadPath` it returns, and no `status_url`: `fetchJobStatus` and the home card read the job list.
+- `lib/uploads.ts startUpload`: `/v1/video-uploads` with a stored `Idempotency-Key`, the `uploadPath` it returns, and no `status_url`: `fetchJobStatus` and the home card read the job list.
 - On a PUT that answers 403, ask `/links` and go on, in place of treating it as final. Today's code retries only 408, 429 and 5xx.
 - `POST /complete` when `settled` resolves, and on every launch for a job still `uploading`.
 - `createJob` sends `uploadId`. `cancelLiveJob` and `cancelLiveUpload` read `stopped`. `lib/deletes.ts requestCancel` is no longer needed.

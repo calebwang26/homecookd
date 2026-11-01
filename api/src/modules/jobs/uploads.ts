@@ -1,10 +1,10 @@
 // A cook's videos going to S3, in place of cloud/signer. The api signs one PUT per video and writes down which files it expects, so only it can say an upload is
 // complete: the worker can't tell 2 of 3 clips from all of them (WORKER-MIGRATION.md, open question 1). Bytes never pass through here.
 //
-//   POST /v1/uploads with an Idempotency-Key       the folder and its links
-//   POST /v1/uploads/:id/links                     new links, when one has run out
+//   POST /v1/video-uploads with an Idempotency-Key       the folder and its links
+//   POST /v1/video-uploads/:id/links                     new links, when one has run out
 //   POST /v1/jobs                                  at any time after the first call (service.ts)
-//   POST /v1/uploads/:id/complete                  asks S3; when all are in, a job waiting on them is queued. The phone calls it, and a sweep does too, in case it never can
+//   POST /v1/video-uploads/:id/complete                  asks S3; when all are in, a job waiting on them is queued. The phone calls it, and a sweep does too, in case it never can
 import { createHash, randomUUID } from "node:crypto";
 import type { Signed } from "../../auth.js";
 import { db, tx, type Queryable } from "../../db.js";
@@ -19,7 +19,7 @@ const MAX_HOURS = 4; // cloud/signer MAX_HOURS, pipeline/worker.py
 export const MAX_VIDEO_BYTES = 5 * 1024 ** 3;
 const CONTENT_TYPE = /^video\/[a-z0-9][a-z0-9.+-]{0,60}$/i;
 const EXTENSION: Record<string, string> = { "video/quicktime": ".mov", "video/mp4": ".mp4", "video/x-m4v": ".m4v" };
-const ROUTE = "POST /v1/uploads";
+const ROUTE = "POST /v1/video-uploads";
 
 /** A person's limits. Generous, because a phone retries; they're here to stop a broken loop or a stolen session signing without end. */
 export const RATE = {

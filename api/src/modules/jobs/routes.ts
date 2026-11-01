@@ -57,18 +57,18 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
   app.addHook("preValidation", requireSession);
 
   // cloud/signer's POST
-  app.post("/v1/uploads", { schema: { body: askForUploads } }, async (req, reply) => {
+  app.post("/v1/video-uploads", { schema: { body: askForUploads } }, async (req, reply) => {
     const signed = signedIn(req);
     if (signed.role !== "cook") throw new ApiError(403, "forbidden");
     const { status, body } = await uploads.requestUpload(signed, (req.body as { videos: uploads.VideoAsked[] }).videos, idempotencyKey(req));
     return reply.code(status).send(body);
   });
   // New: the signer's links lasted 7 days
-  app.post("/v1/uploads/:uploadId/links", { schema: { params: byUpload }, config: { noBody: true } }, async (req) => await uploads.newLinks(signedIn(req), uploadIdOf(req)));
+  app.post("/v1/video-uploads/:uploadId/links", { schema: { params: byUpload }, config: { noBody: true } }, async (req) => await uploads.newLinks(signedIn(req), uploadIdOf(req)));
   // New: the upload-complete check, which the signer's status file and the worker's release did
-  app.post("/v1/uploads/:uploadId/complete", { schema: { params: byUpload }, config: { noBody: true } }, async (req) => await uploads.completeUpload(signedIn(req), uploadIdOf(req), trace(req)));
+  app.post("/v1/video-uploads/:uploadId/complete", { schema: { params: byUpload }, config: { noBody: true } }, async (req) => await uploads.completeUpload(signedIn(req), uploadIdOf(req), trace(req)));
   // jobs.cancelUpload, and the signer's action: cancel
-  app.post("/v1/uploads/:uploadId/cancel", { schema: { params: byUpload }, config: { noBody: true } }, async (req) => ({
+  app.post("/v1/video-uploads/:uploadId/cancel", { schema: { params: byUpload }, config: { noBody: true } }, async (req) => ({
     stopped: await service.cancelUpload(signedIn(req), uploadIdOf(req), trace(req)),
   }));
 
