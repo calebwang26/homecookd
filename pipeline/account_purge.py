@@ -7,7 +7,8 @@ finished from POST /worker/deletions/next and deletes, for real (no trash/), eac
      after each of her jobs, and any holding one of her recipe.json files) with their trash/ copies; the
      signer's jobs/<id>.json; the objects her mediaUrls name in our two buckets; our copies on this machine.
   2. Supabase (SUPABASE_REF): her voice notes and photos through the Storage API, then her rows in one SQL
-     statement (purge_sql). Skipped when she has no Supabase profile (a seeded or test person).
+     statement (purge_sql), her sign-up log rows included (SIGNUPS). Skipped when she has no Supabase profile (a
+     seeded or test person).
   3. Cartesia: her voice clone (404 = already gone).
 Then it reports to /worker/deletions/done: ok with what it deleted, or short reasons without secrets; Convex
 offers the row again later and gives up after 10 failures.
@@ -174,11 +175,17 @@ def purge_gcs(d: dict, media: storage.Bucket, uploads: storage.Bucket, dry_run: 
 
 # ---------- Supabase ----------
 
+DELETED_NAME = "Deleted"
 # Her rows (supabase/migrations/), in this order: (table, "set ..." or None to delete, where). {p} is her profile
-# id, {pairs} her 1:1 threads and {doomed} the messages that go: hers, and every message in those threads. A 1:1
-# can't outlive her (threads_shape_check needs both people on a 'pair'; its FK cascades), so the other person's
-# half goes with it. Her question's text leaves the notes that answered it; the answer stays.
+# id, {pairs} her 1:1 threads, {signups} her sign-up log rows and {doomed} the messages that go: hers, and every
+# message in those threads. A 1:1 can't outlive her (threads_shape_check needs both people on a 'pair'; its FK
+# cascades), so the other person's half goes with it. Her question's text leaves the notes that answered it; the
+# answer stays.
 ROWS: list[tuple[str, str | None, str]] = [
+    # A 'link:' row is what holds a card side to one join, so it stays, blanked. The rest go.
+    ("signups", f"name = '{DELETED_NAME}', email = null",
+     f"id = any({{signups}}) and share_token like 'link:%' and (name <> '{DELETED_NAME}' or email is not null)"),
+    ("signups", None, "id = any({signups}) and (share_token is null or share_token not like 'link:%')"),
     ("messages", "reply_to = null", "reply_to = any({doomed})"),
     ("recipe_notes", "question_message_id = null", "question_message_id = any({doomed})"),
     ("recipe_notes", None, "answer_message_id = any({doomed}) or answered_by = {p}"),
@@ -215,6 +222,40 @@ VOICE_FILES = (
 PHOTO_FILES = "select photo_path from public.messages where id = any({doomed}) and photo_path is not null"
 ELSEWHERE = "exists (select 1 from public.profiles where id = {p} and family_id <> {f})"
 
+# Her rows in the sign-up log, which has no person id. Nothing loose touches someone else's row:
+#   - a token naming her: her claim (link:claim:<profile id>) or her invite (invite:<id>);
+#   - her email, unless another profile or account holds it too;
+#   - no email at all, in her family, under her name, unless another profile there has that name, removed or not.
+# A row that looks like hers but fails these stays, and is counted as unsure (SIGNUPS_UNSURE).
+_NORM = "lower(btrim({}))"
+_HER_NAME = f"(select {_NORM.format('name')} from public.profiles where id = {{p}})"
+_HER_EMAILS = (
+    f"select {_NORM.format('email')} from public.profiles where id = {{p}} and email is not null"
+    f" union select {_NORM.format('email')} from public.identities where profile_id = {{p}} and email is not null"
+)
+_HELD_BY_OTHER = (
+    f"(exists (select 1 from public.profiles o where o.id <> {{p}} and {_NORM.format('o.email')} = e)"
+    f" or exists (select 1 from public.identities i where i.profile_id <> {{p}} and {_NORM.format('i.email')} = e))"
+)
+_ONLY_EMAILS = f"array(select e from ({_HER_EMAILS}) x(e) where e <> '' and not {_HELD_BY_OTHER})"
+_SHARED_EMAILS = f"array(select e from ({_HER_EMAILS}) x(e) where e <> '' and {_HELD_BY_OTHER})"
+_SAME_NAME_THERE = (
+    f"exists (select 1 from public.profiles o where o.id <> {{p}} and o.family_id = {{f}}"
+    f" and {_NORM.format('o.name')} = {_HER_NAME})"
+)
+_IS_HERS = (
+    "(s.share_token = 'link:claim:' || {p}::text"
+    " or s.share_token = any(array(select 'invite:' || i.id::text from public.invites i where i.profile_id = {p}))"
+    f" or {_NORM.format('s.email')} = any({_ONLY_EMAILS})"
+    " or (coalesce(btrim(s.email), '') = '' and s.family_id = {f}"
+    f" and {_NORM.format('s.name')} = {_HER_NAME} and not {_SAME_NAME_THERE}))"
+)
+SIGNUPS = f"select s.id from public.signups s where {_IS_HERS}"
+SIGNUPS_UNSURE = (
+    f"select count(*) from public.signups s where {_IS_HERS} is not true and ({_NORM.format('s.email')} = any({_SHARED_EMAILS})"
+    f" or (s.family_id = {{f}} and {_NORM.format('s.name')} = {_HER_NAME}))"
+)
+
 
 def sql_uuid(value: str) -> str:
     """A uuid as a SQL literal. The management API's DO block takes no bind parameters, so nothing else is ever
@@ -235,14 +276,17 @@ def plan_sql(profile_id: str, family_id: str) -> str:
     p, f = sql_uuid(profile_id), sql_uuid(family_id)
     pairs = f"array({PAIRS.format(p=p)})"
     doomed = f"array({DOOMED.format(p=p, pairs=pairs)})"
+    signups = f"array({SIGNUPS.format(p=p, f=f)})"
     counts = ", ".join(
-        f"'{row_label(t, s)}', (select count(*) from public.{t} where {w.format(p=p, pairs=pairs, doomed=doomed)})"
+        f"'{row_label(t, s)}', (select count(*) from public.{t}"
+        f" where {w.format(p=p, pairs=pairs, doomed=doomed, signups=signups)})"
         for t, s, w in ROWS
     )
     return (
         f"select json_build_object('counts', json_build_object({counts}),"
         f" 'voice', array({VOICE_FILES.format(p=p, doomed=doomed)}),"
         f" 'photos', array({PHOTO_FILES.format(doomed=doomed)}),"
+        f" 'signups_unsure', ({SIGNUPS_UNSURE.format(p=p, f=f)}),"
         f" 'elsewhere', {ELSEWHERE.format(p=p, f=f)}) as plan"
     )
 
@@ -252,13 +296,14 @@ def purge_sql(profile_id: str, family_id: str) -> str:
     p, f = sql_uuid(profile_id), sql_uuid(family_id)
     steps = "\n".join(
         f"  {'update' if s else 'delete from'} public.{t}{f' set {s.format(p=p)}' if s else ''}"
-        f" where {w.format(p=p, pairs='v_pairs', doomed='v_doomed')};"
+        f" where {w.format(p=p, pairs='v_pairs', doomed='v_doomed', signups='v_signups')};"
         for t, s, w in ROWS
     )
     return (
         "do $purge$\ndeclare\n"
         f"  v_pairs uuid[] := array({PAIRS.format(p=p)});\n"
         f"  v_doomed uuid[] := array({DOOMED.format(p=p, pairs='v_pairs')});\n"
+        f"  v_signups uuid[] := array({SIGNUPS.format(p=p, f=f)});\n"  # before her profile and accounts go
         "begin\n"
         f"  if {ELSEWHERE.format(p=p, f=f)} then\n"
         "    raise exception 'this profile is in another family';\n"
@@ -345,7 +390,12 @@ def purge_supabase(d: dict, supabase: Supabase | None, dry_run: bool) -> dict:
         "supabaseRows": sum(n for k, n in touched.items() if "." not in k),
         "supabaseUpdated": sum(n for k, n in touched.items() if "." in k),
         "supabaseFiles": sum(map(len, files.values())),
+        "signupsBlanked": plan["counts"].get("signups.name", 0),
+        "signupsDeleted": plan["counts"].get("signups", 0),
+        "signupsUnsure": plan.get("signups_unsure") or 0,
     }
+    if counts["signupsUnsure"]:
+        print(f"  supabase: left {counts['signupsUnsure']} sign-up row(s) that might be hers but can't be told apart")
     if not dry_run:
         # Files first: once the rows are gone, nothing says where they were.
         counts["supabaseFiles"] = sum(supabase.delete_files(b, paths) for b, paths in files.items() if paths)

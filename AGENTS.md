@@ -212,6 +212,7 @@ npx convex deploy --preview-name hackathon -y                      # deploy (CON
 # backend (Supabase, frozen)
 npx --yes deno@2 test --node-modules-dir=none --allow-env --allow-read supabase/tests/   # unit tests
 npx --yes deno@2 check --node-modules-dir=none supabase/functions/api/*.ts              # typecheck
+npx --yes deno@2 test --node-modules-dir=none --allow-env --allow-read --allow-run --allow-net supabase/tests/account_purge_sql_test.ts   # the purge's sign-up log step on real Postgres (needs .venv)
 
 # AWS (infra/README.md; profile homecookd, refresh with: aws sso login --profile homecookd)
 cd infra/envs/staging && terraform init -backend=false && terraform validate   # no login needed
