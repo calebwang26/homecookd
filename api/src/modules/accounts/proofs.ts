@@ -42,6 +42,9 @@ declare module "fastify" {
 
 export type ProofInput = { key?: string; code?: string; profileId?: string; ip: string; method: string };
 
+/** A phone that opened a forwarded invite and hasn't added itself. It reads the family and nothing more: Supabase's `device_needs_profile`, and the live side's check on sessions. */
+export const needsProfile = (device: Ctx["device"]) => device?.via === "invite" && !device.person_id;
+
 const ownPhone = (p: Person) => refuse(403, `${p.name} uses their own phone.`);
 
 /** Who has joined: signed in, or already acted in the family. */
@@ -108,7 +111,7 @@ export async function prove(input: ProofInput, options: ProofOptions = {}): Prom
   }
   // A phone that joined through a family invite says who it is before it writes: it adds itself or asks to move in as someone, which someone else approves. Writing
   // as an existing face never makes it theirs, so whoever opened a forwarded link can't become Dad.
-  if (me && input.method !== "GET" && device?.via === "invite" && !device.person_id) throw refuse(403, "Add yourself first.");
+  if (me && input.method !== "GET" && needsProfile(device)) throw refuse(403, "Add yourself first.");
   // Someone with their own phone is only ever them from that phone: another phone, or the family code, gets 403, reads included.
   if (me && phones.has(me.id) && device?.person_id !== me.id) {
     if (!options.lenientMe) throw ownPhone(me);

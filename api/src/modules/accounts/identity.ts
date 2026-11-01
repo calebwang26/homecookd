@@ -70,7 +70,9 @@ export function idTokensWith(keys: Record<Provider, JWTVerifyGetKey>): IdTokens 
       }
       const sub = typeof payload.sub === "string" ? payload.sub : "";
       if (!sub || sub.length > 255) throw refused();
-      const email = typeof payload.email === "string" && payload.email.length <= 254 ? payload.email.toLowerCase() : null;
+      // Apple sends "true" as a string, Google as a boolean. An email nobody checked isn't proof of anything, and deleting an account clears sign-ups by email.
+      const verified = payload.email_verified === true || payload.email_verified === "true";
+      const email = verified && typeof payload.email === "string" && payload.email.length <= 254 ? payload.email.toLowerCase() : null;
       const given = typeof payload.given_name === "string" ? payload.given_name.trim().slice(0, MAX_NAME) : "";
       return { provider, sub, email, givenName: given || null };
     },

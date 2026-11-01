@@ -2,9 +2,10 @@
 // code needed (put the invite back, delete the half-made profile) don't exist here: a failure leaves nothing behind.
 import { db, tx, type Queryable } from "../../db.js";
 import * as data from "./data.js";
+import { endFamilyIfLast } from "./deletion.js";
 import { extId, toProfile, type Family, type Person } from "./data.js";
 import { markCircleRead, quietNote } from "./neighbors.js";
-import { type Ctx, joinedIds, onOwnPhone, settledIds } from "./proofs.js";
+import { type Ctx, joinedIds, needsProfile, onOwnPhone, settledIds } from "./proofs.js";
 import { answerableMoves } from "./moves.js";
 import { MAX_NAME, MAX_PEOPLE, assertOwnsPeople, emailOf, deviceLabel, limit, refuse, roleOf, SIGNED_OUT, str, type Body, type Role } from "./values.js";
 
@@ -82,7 +83,7 @@ export async function familyView(ctx: Ctx) {
     })),
     former_profiles: ctx.everyone.filter((p) => p.removed_at).map(toProfile),
     device_profile_id: phoneOwner ? extId(phoneOwner) : null,
-    device_needs_profile: ctx.device?.via === "invite" && !ctx.device.person_id,
+    device_needs_profile: needsProfile(ctx.device),
     move_requests_pending: moves,
     can_manage: manage,
   };
@@ -156,7 +157,9 @@ export async function leaveFamily(ctx: Ctx, rawId: string) {
   if (!self) throw refuse(403, `Only ${p.name} can remove themselves.`);
   await tx(async (c) => {
     await data.lockFamily(c, ctx.family.id); // so a last person's delete, at the same moment, sees who's really left
+    const wasSignedIn = (await data.signedInIds(c, [p.id])).has(p.id);
     await removePerson(c, ctx.family.id, p.id);
+    await endFamilyIfLast(c, ctx.family.id, wasSignedIn);
   });
   return { ok: true };
 }

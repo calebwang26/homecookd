@@ -11,7 +11,7 @@ import { stopPersonsWork } from "../jobs/account.js";
 import { dropPushTokens } from "../messages/account.js";
 import * as data from "./data.js";
 import { requestMossSync } from "./neighbors.js";
-import { blankFamilyIfEmpty, DELETION, type Deletion, STEPS } from "./purgeSteps.js";
+import { DELETION, type Deletion, STEPS } from "./purgeSteps.js";
 import { assertOwnsPeople, refuse } from "./values.js";
 
 /** A purge with no batch for this long stopped; the schedule starts it again. Past this many restarts someone is told, and it's still tried. */
@@ -50,71 +50,94 @@ export async function startDeletion(personId: string, source: DeletionSource, re
     if (!found[0]) return null;
     // Family first, then person, everywhere: this is what serializes two last people, and a join, against the delete (C2).
     await data.lockFamily(c, found[0].family_id);
-    const { rows: locked } = await c.query(
-      `select id, family_id, supabase_id, email, cartesia_voice_id, deleted_at from people where id = $1 for no key update`,
-      [personId],
-    );
-    const person = locked[0];
-    if (!person || person.family_id !== found[0].family_id) throw new Error("the person moved during their deletion");
-
-    const existing = await c.query(`select id from account_deletions where person_id = $1`, [personId]);
-    if (existing.rows[0] && person.deleted_at) return existing.rows[0].id as string;
-
-    const hasRecipes = (await c.query(`select 1 from recipes where cook_id = $1 limit 1`, [personId])).rows.length > 0;
-    const jobs = (await c.query(`select id, upload_key from jobs where cook_id = $1 limit $2`, [personId, PURGE_BATCH])).rows;
-    const recordings = (await c.query(`select id, video_key from recordings where cook_id = $1 limit $2`, [personId, PURGE_BATCH])).rows;
-    const { rows: inserted } = await c.query(
-      `insert into account_deletions (family_id, person_id, supabase_profile_id, job_ids, upload_keys, media_keys, voice_clone_id)
-       values ($1, $2, $3, $4, $5::text[]::s3_key[], $6::text[]::s3_key[], $7)
-       on conflict (person_id) do nothing returning ${DELETION}`,
-      [
-        person.family_id,
-        personId,
-        person.supabase_id,
-        jobs.map((j) => j.id),
-        [...new Set(jobs.map((j) => j.upload_key))],
-        [...new Set(recordings.map((r) => r.video_key).filter(Boolean))],
-        person.cartesia_voice_id,
-      ],
-    );
-    const deletion: Deletion = inserted[0] ?? (await c.query(`select ${DELETION} from account_deletions where person_id = $1`, [personId])).rows[0];
-
-    const emails = (await c.query(`select email from identities where person_id = $1 and email is not null`, [personId])).rows.map((r) => r.email as string);
-    if (person.email) emails.push(person.email);
-
-    // Blank. The check constraint refuses a tombstone that keeps anything personal.
-    await c.query(
-      `update people set name = 'Deleted', relation = null, avatar_key = null, email = null, tz = null, share_cooking = null, language = null, voice_clone_consented_at = null,
-              cartesia_voice_id = null, approx_lat = null, approx_lng = null, campus = null, deleted_at = coalesce(deleted_at, now())
-        where id = $1`,
-      [personId],
-    );
-
-    // Every way in ends here.
-    await data.signPersonOut(c, personId);
-    await c.query(`update devices set person_id = null, label = null, revoked_at = coalesce(revoked_at, now()) where person_id = $1`, [personId]);
-    await data.dropIdentitiesOf(c, personId);
-    await dropPushTokens(c, personId);
-    await c.query(`delete from invites where person_id = $1`, [personId]);
-    await data.revokeFamilyInvitesFrom(c, personId);
-    await c.query(`delete from move_requests where person_id = $1`, [personId]);
-    // The sign-up log's name and email go now too, and this is the one moment their email is still known, for old rows with no person on them.
-    await c.query(
-      `update signups set email = null, name = 'Deleted', person_id = null where (person_id = $1 or email = any($2::text[])) and share_token like 'link:%'`,
-      [personId, emails],
-    );
-    await c.query(`delete from signups where (person_id = $1 or email = any($2::text[])) and (share_token is null or share_token not like 'link:%')`, [personId, emails]);
-
-    // Off the map now: dinners they host, and any around their recipes, which is why this comes before the recipes go.
-    await cancelDinnersOfPerson(c, personId);
-    // Nothing of theirs is worked on again: a worker can't claim or finish these (pipeline/queue_db.py reads cancelled_at), and the glasses can't make a recipe from these.
-    await stopPersonsWork(c, personId);
-    if (hasRecipes) await requestMossSync(c, person.family_id);
-
-    await blankFamilyIfEmpty(c, person.family_id);
-    await enqueue(c, { queue: "scheduled", payload: { task: "accounts.purge", deletionId: deletion.id }, requestId });
-    return deletion.id;
+    // The sync only passes on what the old system did, and that deletes one person.
+    const wasSignedIn = source === "person" && (await data.signedInIds(c, [personId])).has(personId);
+    const deletionId = await deletePerson(c, personId, found[0].family_id, requestId);
+    await endFamilyIfLast(c, found[0].family_id, wasSignedIn, requestId);
+    return deletionId;
   });
+}
+
+/**
+ * C2 (Caleb, Nov 1): a family doesn't outlive its last signed-in person. When they go, by deleting, leaving or moving, the phone-less people left are deleted the way anyone is, so
+ * their rows and files get purged too, and the family is blanked. Someone who never signed in going ends nothing: that's Grandma deleted from Mom's phone, or an old family that
+ * only ever used its code. `wasSignedIn` is asked before they're signed out. Run under the family's lock.
+ */
+export async function endFamilyIfLast(c: Queryable, familyId: string, wasSignedIn: boolean, requestId?: string): Promise<void> {
+  if (wasSignedIn) {
+    const left = (await data.peopleOf(c, familyId)).filter((p) => !p.removed_at);
+    if (left.length && (await data.signedInIds(c, left.map((p) => p.id))).size === 0) {
+      for (const p of left) await deletePerson(c, p.id, familyId, requestId);
+    }
+  }
+  await data.blankFamilyIfEmpty(c, familyId);
+}
+
+/** One person, in the caller's transaction, with the family's lock held. */
+async function deletePerson(c: Queryable, personId: string, familyId: string, requestId?: string): Promise<string> {
+  const { rows: locked } = await c.query(
+    `select id, family_id, supabase_id, email, cartesia_voice_id, deleted_at from people where id = $1 for no key update`,
+    [personId],
+  );
+  const person = locked[0];
+  if (!person || person.family_id !== familyId) throw new Error("the person moved during their deletion");
+
+  const existing = await c.query(`select id from account_deletions where person_id = $1`, [personId]);
+  if (existing.rows[0] && person.deleted_at) return existing.rows[0].id as string;
+
+  const hasRecipes = (await c.query(`select 1 from recipes where cook_id = $1 limit 1`, [personId])).rows.length > 0;
+  const jobs = (await c.query(`select id, upload_key from jobs where cook_id = $1 limit $2`, [personId, PURGE_BATCH])).rows;
+  const recordings = (await c.query(`select id, video_key from recordings where cook_id = $1 limit $2`, [personId, PURGE_BATCH])).rows;
+  const { rows: inserted } = await c.query(
+    `insert into account_deletions (family_id, person_id, supabase_profile_id, job_ids, upload_keys, media_keys, voice_clone_id)
+     values ($1, $2, $3, $4, $5::text[]::s3_key[], $6::text[]::s3_key[], $7)
+     on conflict (person_id) do nothing returning ${DELETION}`,
+    [
+      person.family_id,
+      personId,
+      person.supabase_id,
+      jobs.map((j) => j.id),
+      [...new Set(jobs.map((j) => j.upload_key))],
+      [...new Set(recordings.map((r) => r.video_key).filter(Boolean))],
+      person.cartesia_voice_id,
+    ],
+  );
+  const deletion: Deletion = inserted[0] ?? (await c.query(`select ${DELETION} from account_deletions where person_id = $1`, [personId])).rows[0];
+
+  const emails = (await c.query(`select email from identities where person_id = $1 and email is not null`, [personId])).rows.map((r) => r.email as string);
+  if (person.email) emails.push(person.email);
+
+  // Blank. The check constraint refuses a tombstone that keeps anything personal.
+  await c.query(
+    `update people set name = 'Deleted', relation = null, avatar_key = null, email = null, tz = null, share_cooking = null, language = null, voice_clone_consented_at = null,
+            cartesia_voice_id = null, approx_lat = null, approx_lng = null, campus = null, deleted_at = coalesce(deleted_at, now())
+      where id = $1`,
+    [personId],
+  );
+
+  // Every way in ends here.
+  await data.signPersonOut(c, personId);
+  await c.query(`update devices set person_id = null, label = null, revoked_at = coalesce(revoked_at, now()) where person_id = $1`, [personId]);
+  await data.dropIdentitiesOf(c, personId);
+  await dropPushTokens(c, personId);
+  await c.query(`delete from invites where person_id = $1`, [personId]);
+  await data.revokeFamilyInvitesFrom(c, personId);
+  await c.query(`delete from move_requests where person_id = $1`, [personId]);
+  // The sign-up log's name and email go now too, and this is the one moment their email is still known, for old rows with no person on them.
+  await c.query(
+    `update signups set email = null, name = 'Deleted', person_id = null where (person_id = $1 or (person_id is null and email = any($2::text[]))) and share_token like 'link:%'`,
+    [personId, emails],
+  );
+  await c.query(`delete from signups where (person_id = $1 or (person_id is null and email = any($2::text[]))) and (share_token is null or share_token not like 'link:%')`, [personId, emails]);
+
+  // Off the map now: dinners they host, and any around their recipes, which is why this comes before the recipes go.
+  await cancelDinnersOfPerson(c, personId);
+  // Nothing of theirs is worked on again: a worker can't claim or finish these (pipeline/queue_db.py reads cancelled_at), and the glasses can't make a recipe from these.
+  await stopPersonsWork(c, personId);
+  if (hasRecipes) await requestMossSync(c, person.family_id);
+
+  await enqueue(c, { queue: "scheduled", payload: { task: "accounts.purge", deletionId: deletion.id }, requestId });
+  return deletion.id;
 }
 
 // ---------------------------------------------------------------------------------------------

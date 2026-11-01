@@ -3,7 +3,7 @@
 export type Owner = "accounts" | "dish" | "jobs" | "community" | "messages" | "platform";
 
 export const TABLES: Record<string, { owner: Owner; does: string }> = {
-  families: { owner: "accounts", does: "stays; blanked when its last person deletes (C2)" },
+  families: { owner: "accounts", does: "stays; blanked when its last signed-in person goes, and the phone-less people left are deleted (C2)" },
   people: { owner: "accounts", does: "blank tombstone" },
   devices: { owner: "accounts", does: "person null, label null, revoked" },
   identities: { owner: "accounts", does: "deleted, which frees the account" },

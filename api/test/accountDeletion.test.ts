@@ -23,7 +23,9 @@ import {
   startDeletion,
   useVoiceClones,
 } from "../src/modules/accounts/deletion.js";
+import { claimCard } from "../src/modules/accounts/links.js";
 import { JOIN_LINK_SALT, seal } from "../src/modules/accounts/sealed.js";
+import { cardOfToken } from "../src/modules/dish/links.js";
 import { workerFolder } from "../src/modules/jobs/account.js";
 import { accountsSweep } from "../src/modules/accounts/tasks.js";
 import { sweep } from "../src/modules/dish/tasks.js";
@@ -706,6 +708,7 @@ test("when the family's last person deletes, its name and codes go, its phones a
   const a = await makePerson(f.id, "Solo A");
   const b = await makePerson(f.id, "Solo B");
   const aPhone = await makeDevice(f.id, a);
+  await makeDevice(f.id, b);
   const emptyPhone = await makeDevice(f.id, null, "invite");
   const link = await makeJoinLink(f.id, a);
   const operator = await makeJoinLink(f.id, null, { expires: null });
@@ -849,7 +852,7 @@ test("the database refuses a tombstone that keeps anything personal", { skip }, 
 
 // ---- refuses no one
 
-test("it refuses no one: a person with nothing, a phone-less person from a lent phone, the last in a family, a memorial person", { skip }, async () => {
+test("a phone that's someone's in this family can delete a phone-less person, and it refuses no one else: a person with nothing, the last in a family, a memorial person", { skip }, async () => {
   const f = await makeFamily();
   const mom = await makePerson(f.id, "Mom");
   const grandma = await makePerson(f.id, "Grandma");
@@ -894,6 +897,203 @@ test("someone who left the family with a live session can still delete their acc
   assert.ok((await row("people", "id = $1", [p])).deleted_at, "they're gone");
   assert.equal(await count("account_deletions", "person_id = $1", [p]), 1, "and their purge is on its way");
   assert.equal((await api.post("/v1/account/delete", {}, bearer(s))).status, 401, "signed out by it");
+});
+
+test("an opened invite gets no session, so it can't delete anyone, and it reads one way with GET /family's flag", { skip }, async () => {
+  const f = await makeFamily();
+  const grandma = await makePerson(f.id, "Grandma");
+  const invited = await makeDevice(f.id, null, "invite");
+  assert.equal((await api.get("/family", device(invited.key))).data.device_needs_profile, true);
+  const res = await api.post("/v1/sessions/start", { deviceKey: invited.key, profileId: grandma });
+  assert.deepEqual([res.status, res.data.error], [403, "Add yourself first."]);
+  assert.equal(await count("sessions", "person_id = $1", [grandma]), 0);
+  assert.equal((await row("people", "id = $1", [grandma])).deleted_at, null);
+});
+
+test("a phone from a family code with nobody yet keeps today's session, because Apple's reviewer signs in that way and may delete straight away", { skip }, async () => {
+  const f = await makeFamily();
+  const reviewer = await makePerson(f.id, "Reviewer");
+  await makePerson(f.id, "Keeps it open");
+  const swapped = (await api.post("/devices", { device_label: "iPhone" }, code(f.code))).data.device_key as string;
+  assert.equal((await api.get("/family", device(swapped))).data.device_needs_profile, false);
+  const s = await api.post("/v1/sessions/start", { deviceKey: swapped, profileId: reviewer });
+  assert.equal(s.status, 200);
+  assert.equal((await api.post("/v1/account/delete", {}, bearer(s.data.sessionToken))).status, 200);
+});
+
+test("a phone from another family can't start a session as someone here", { skip }, async () => {
+  const f = await makeFamily();
+  const grandma = await makePerson(f.id, "Grandma");
+  const g = await makeFamily();
+  const theirs = await makeDevice(g.id, await makePerson(g.id, "Elsewhere"));
+  assert.equal((await api.post("/v1/sessions/start", { deviceKey: theirs.key, profileId: grandma })).status, 403);
+  assert.equal(await count("sessions", "person_id = $1", [grandma]), 0);
+});
+
+test("signing a sign-up off by email leaves another person's row alone, and takes an old row with no person", { skip }, async () => {
+  const f = await makeFamily();
+  const p = await makePerson(f.id, "Deleting");
+  const other = await makePerson(f.id, "Other");
+  const email = `${uniq("same")}@example.com`;
+  await q(`update people set email = $2 where id = $1`, [p, email]);
+  const theirs = await id(`insert into signups (name, email, family_id, person_id) values ('KEEP-other', $1, $2, $3) returning id`, [email, f.id, other]);
+  const old = await id(`insert into signups (name, email, family_id) values ('SECRET-old', $1, $2) returning id`, [email, f.id]);
+  await purge(p);
+  assert.equal((await row("signups", "id = $1", [theirs])).name, "KEEP-other");
+  assert.equal(await count("signups", "id = $1", [old]), 0);
+});
+
+// ---- dish cards: both people, in either order
+
+const makeCard = async (familyId: string, kid: string | null, mom: string | null, fields: { kidToken?: string; photos?: string[]; voice?: string } = {}) =>
+  id(
+    `insert into dish_asks (kid_token_hash, ask_token_hash, dish, relation, kid_name, guess, message, status, family_id, person_id, requested_of, photo_keys, kid_voice_note_key)
+     values ($1, $2, 'dal', 'mom', 'SECRET-kid', '{"dish": "SECRET-guess"}', 'SECRET-message', 'asked', $3, $4, $5, $6::text[]::s3_key[], $7) returning id`,
+    [sha(fields.kidToken ?? uniq("k")), sha(uniq("a")), familyId, kid, mom, fields.photos ?? [], fields.voice ?? null],
+  );
+
+test("a kid's card files name the deletion, so the outside purge can't say done while one's in S3, and a key with no row gets one", { skip }, async () => {
+  const f = await makeFamily();
+  const kid = await makePerson(f.id, "Kid");
+  const mom = await makePerson(f.id, "Mom");
+  const [known, unknown, voice] = [FILE("card-photo"), FILE("card-photo-no-row"), FILE("card-voice")];
+  const card = await makeCard(f.id, kid, mom, { photos: [known, unknown], voice });
+  // An anonymous upload, later claimed: nobody owns the row, so nothing but the mark ties it to her.
+  await q(`insert into files (key, bucket, kind, ask_id, capability_hash, uploaded_at, attached_at, family_id) values ($1, 'private', 'photo', $2, $3, now(), now(), $4)`, [known, card, sha(uniq("cap")), f.id]);
+  const did = await purge(kid);
+  assert.equal((await one(`select cardinality(photo_keys) as n from dish_asks where id = $1`, [card])).n, 0);
+  for (const key of [known, unknown, voice]) {
+    const file = await row("files", "key = $1", [key]);
+    assert.ok(file?.delete_requested_at, key);
+    assert.equal(file.purge_deletion_id, did, key);
+  }
+  assert.equal(await purgeOutside(did), "retry");
+  const d = await deletionOf(kid);
+  assert.equal(d.external_purged_at, null);
+  assert.match(d.external_error, /Not reached yet: 3 files marked and not deleted/);
+});
+
+for (const order of ["kid", "mom"] as const) {
+  test(`a card goes once both have deleted, with the ${order === "kid" ? "kid" : "Mom"} going first`, { skip }, async () => {
+    const f = await makeFamily();
+    const kid = await makePerson(f.id, "Kid");
+    const mom = await makePerson(f.id, "Mom");
+    const card = await makeCard(f.id, kid, mom);
+    await purge(order === "kid" ? kid : mom);
+    assert.equal(await count("dish_asks", "id = $1", [card]), 1, "it stays for whoever's left");
+    await purge(order === "kid" ? mom : kid);
+    assert.equal(await count("dish_asks", "id = $1", [card]), 0);
+  });
+}
+
+test("once the kid has deleted, their link stops: it opens nothing and claims nothing, and Mom's still works", { skip }, async () => {
+  const f = await makeFamily();
+  const kid = await makePerson(f.id, "Kid");
+  const mom = await makePerson(f.id, "Mom");
+  const kidToken = randomBytes(16).toString("hex").slice(0, 22);
+  const card = await makeCard(f.id, kid, mom, { kidToken });
+  const askHash = (await row("dish_asks", "id = $1", [card])).ask_token_hash;
+  await purge(kid);
+  assert.equal(await cardOfToken(db(), sha(kidToken)), null);
+  const stranger = await makePerson(f.id, "Stranger");
+  const res = await api.post("/v1/links/claim", { token: kidToken }, bearer(await session(f.id, stranger)));
+  assert.equal(res.status, 404);
+  assert.equal((await row("dish_asks", "id = $1", [card])).person_id, null);
+  assert.equal((await cardOfToken(db(), askHash))?.card.id, card);
+});
+
+test("a card can't be claimed for someone whose deletion got there first", { skip }, async () => {
+  const f = await makeFamily();
+  const late = await makePerson(f.id, "Late");
+  const kidToken = randomBytes(16).toString("hex").slice(0, 22);
+  const card = await makeCard(f.id, null, null, { kidToken });
+  await purge(late);
+  await assert.rejects(claimCard({ personId: late, familyId: f.id } as Parameters<typeof claimCard>[0], { token: kidToken }), (error: { statusCode?: number; status?: number }) => (error.statusCode ?? error.status) === 403);
+  assert.equal((await row("dish_asks", "id = $1", [card])).person_id, null);
+});
+
+// ---- the last person leaving
+
+test("the last person leaving blanks the family: its name, its code and its join link stop", { skip }, async () => {
+  const f = await makeFamily("SECRET-L family");
+  const last = await makePerson(f.id, "Last");
+  const link = await makeJoinLink(f.id, last);
+  assert.equal((await api.post(`/profiles/${last}/remove`, {}, code(f.code, last))).status, 200);
+  const family = await row("families", "id = $1", [f.id]);
+  assert.deepEqual([family.name, family.code_hash, family.public_name], ["Deleted", null, null]);
+  assert.ok(family.blanked_at);
+  assert.equal((await api.get("/family", code(f.code))).status, 401, "the code opens nothing");
+  assert.ok((await row("join_links", "id = $1", [link.id])).revoked_at, "no join link outlives it");
+  assert.equal((await api.post(`/profiles/${last}/remove`, {}, code(f.code, last))).status, 401, "and a repeat reads as signed out");
+});
+
+const signedInFamily = async (name: string) => {
+  const f = await makeFamily(name);
+  const mom = await makePerson(f.id, "Mom");
+  const phone = await makeDevice(f.id, mom);
+  const grandma = await makePerson(f.id, "SECRET-Grandma");
+  const recipe = await id(`insert into recipes (family_id, cook_id, title, status) values ($1, $2, 'SECRET-her recipe', 'ready') returning id`, [f.id, grandma]);
+  const link = await makeJoinLink(f.id, mom);
+  return { f, mom, phone, grandma, recipe, link };
+};
+
+const assertEnded = async (x: Awaited<ReturnType<typeof signedInFamily>>) => {
+  const family = await row("families", "id = $1", [x.f.id]);
+  assert.deepEqual([family.name, family.code_hash], ["Deleted", null]);
+  assert.ok((await row("join_links", "id = $1", [x.link.id])).revoked_at);
+  const person = await row("people", "id = $1", [x.grandma]);
+  assert.deepEqual([person.name, !!person.deleted_at], ["Deleted", true], "her tombstone, the same as anyone's");
+  const d = await deletionOf(x.grandma);
+  assert.ok(d, "and her own deletion row");
+  assert.ok(await row("outbox", "payload->>'task' = 'accounts.purge' and payload->>'deletionId' = $1", [d.id]), "with its purge queued");
+  await runPurge(d.id, {});
+  assert.equal(await count("recipes", "id = $1", [x.recipe]), 0);
+  assert.equal((await deletionOf(x.grandma)).recipe_ids.includes(x.recipe), true);
+};
+
+test("the last signed-in person deleting takes the phone-less people left, through the same deletion, and blanks the family", { skip }, async () => {
+  const x = await signedInFamily("SECRET-N family");
+  await purge(x.mom);
+  await assertEnded(x);
+});
+
+test("the last signed-in person leaving does the same", { skip }, async () => {
+  const x = await signedInFamily("SECRET-O family");
+  assert.equal((await api.post(`/profiles/${x.mom}/remove`, {}, device(x.phone.key, x.mom))).status, 200);
+  assert.ok((await row("people", "id = $1", [x.mom])).removed_at, "leaving isn't deleting");
+  assert.equal((await row("people", "id = $1", [x.mom])).deleted_at, null);
+  await assertEnded(x);
+});
+
+test("while someone signed in is still here, a family stays, and so do its phone-less people", { skip }, async () => {
+  const x = await signedInFamily("KEEP-P family");
+  const dad = await makePerson(x.f.id, "Dad");
+  await makeDevice(x.f.id, dad);
+  await purge(x.mom);
+  assert.equal((await row("families", "id = $1", [x.f.id])).name, "KEEP-P family");
+  assert.equal((await row("people", "id = $1", [x.grandma])).deleted_at, null);
+});
+
+test("someone who never signed in going ends nothing: Grandma from Mom's phone, or a family that only ever used its code", { skip }, async () => {
+  const x = await signedInFamily("KEEP-Q family");
+  await purge(x.grandma);
+  assert.equal((await row("families", "id = $1", [x.f.id])).name, "KEEP-Q family");
+  assert.equal((await row("people", "id = $1", [x.mom])).deleted_at, null);
+
+  const f = await makeFamily("KEEP-R family");
+  const leaver = await makePerson(f.id, "Leaver");
+  const face = await makePerson(f.id, "Face");
+  assert.equal((await api.post(`/profiles/${leaver}/remove`, {}, code(f.code, leaver))).status, 200);
+  assert.equal((await row("families", "id = $1", [f.id])).name, "KEEP-R family");
+  assert.equal((await row("people", "id = $1", [face])).deleted_at, null);
+  assert.equal((await api.get("/family", code(f.code))).status, 200);
+});
+
+test("the sync passes on one person's deletion and no more", { skip }, async () => {
+  const x = await signedInFamily("KEEP-S family");
+  await startDeletion(x.mom, "sync");
+  assert.equal((await row("people", "id = $1", [x.grandma])).deleted_at, null);
+  assert.equal((await row("families", "id = $1", [x.f.id])).name, "KEEP-S family");
 });
 
 test("a database failure refuses: nothing changed, and the phone can try again", { skip }, async () => {

@@ -232,7 +232,7 @@ const ROUTES: Record<string, SignedIn | Anonymous> = {
     removedMayCall: LEFT,
   },
   "GET /v1/apple/revoke-ready": { call: (s, who) => get(s.app, who, "/v1/apple/revoke-ready"), otherFamily: { why: "Says only whether the key is set", check: (r) => assert.equal(r.status, 200, r.body) }, outsider: { familyWide: "Says only whether the key is set" }, removedMayCall: LEFT },
-  "POST /v1/apple/revoke": { call: (s, who) => post(s.app, who, "/v1/apple/revoke", { authorizationCode: "abc" }, { key: null }), otherFamily: { why: "Revokes only the code the caller holds", check: (r) => assert.equal(r.status, 200, r.body) }, outsider: { familyWide: "Revokes only the code the caller holds" }, removedMayCall: LEFT },
+  "POST /v1/apple/revoke": { call: (s, who) => post(s.app, who, "/v1/apple/revoke", { authorizationCode: "abc" }, { key: null }), otherFamily: { why: "Revokes only the code the caller holds", check: (r) => assert.equal(r.status, 503, r.body) }, outsider: { familyWide: "Revokes only the code the caller holds" }, notYet: { status: 503, why: "ACCOUNTS_OWNS_PEOPLE is off here: accountsApple.test.ts runs it on" }, removedMayCall: LEFT },
   "POST /v1/links/claim": { call: (s, who) => post(s.app, who, "/v1/links/claim", { token: "Q".repeat(43) }, { key: null }), otherFamily: 404, outsider: 404, notYet: { status: 404, why: "A real claim is in accountsLinks.test.ts" } },
   "POST /v1/links/moved": { call: (s, who) => post(s.app, who, "/v1/links/moved", { receipt: "x" }, { key: null }), otherFamily: 403, outsider: 403, notYet: { status: 403, why: "A real receipt is in accountsLinks.test.ts" } },
   "POST /link/open": { anonymous: "The link's token is the capability, from our own site only", capability: async (s) => {

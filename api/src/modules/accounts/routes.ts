@@ -24,7 +24,7 @@ import { approveMove, askToMove, declineMove, movesICanAnswer, myMove } from "./
 import { ctxOf, requireProof, type ProofOptions } from "./proofs.js";
 import { endSession, startSession } from "./sessions.js";
 import { signInWith } from "./signin.js";
-import { refuse, type Body } from "./values.js";
+import { assertOwnsPeople, limit, refuse, type Body } from "./values.js";
 
 // Supabase's: any site may call these, because each needs a key or a code, and the web /i page reads /invites/peek.
 const OPEN_CORS: Record<string, string> = {
@@ -125,6 +125,8 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
   /** The app asks before showing "Apple will ask you to confirm.": true once the key is set. */
   app.get("/v1/apple/revoke-ready", { preValidation: requireSessionEvenIfRemoved }, async () => ({ ready: appleKey() !== null }));
   app.post("/v1/apple/revoke", { ...object, preValidation: [emptyIsObject, requireSessionEvenIfRemoved] }, async (req) => {
+    assertOwnsPeople();
+    await limit("applerevoke", signedIn(req).personId, 20, 60);
     const k = appleKey();
     if (!k) return { revoked: false, reason: "not configured" };
     const raw = bodyOf(req).authorizationCode;

@@ -12,6 +12,8 @@ create index account_deletions_lists_due on account_deletions (external_purged_a
 -- Which deletion marked this file, so the outside purge can tell whether everything it marked is gone. A row marked from a message or a question has no
 -- owner to find it by, and may have had no row in the ledger before the mark.
 alter table files add column purge_deletion_id text references account_deletions (id);
+-- The kid deleted while Mom stayed. kid_claimed_at can't say so: it goes with the rest of what the kid left.
+alter table dish_asks add column kid_deleted_at timestamptz;
 create index files_purge_deletion on files (purge_deletion_id) where purge_deletion_id is not null;
 
 -- The last person's delete turns off every phone in the family, the person-less ones too: devices_family_live leaves those out.
