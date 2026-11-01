@@ -66,6 +66,15 @@ environment called `production`. **A GitHub environment named `Production` alrea
 (probably made by Vercel's deployments; GitHub ignores case in these names). It's harmless while the production deploy
 role doesn't exist. **Give it required reviewers (Caleb) before production is created.**
 
+## The kid's web flow on staging
+
+Order matters, because a task can't start while a secret it names has no value: `terraform apply`, then
+`infra/scripts/make-salt.sh staging`, then a deploy. It runs with `DISH_FAKE_AI=1`: real S3 and SQS, no model calls, no spend.
+
+**Real models are a test window, with Caleb's OK.** Caleb runs `infra/scripts/load-secrets.sh staging`, then
+`terraform apply -var real_ai=true` and a deploy; afterwards a plain apply and a deploy turn it off. The load balancer is public, so
+anyone who finds it can spend up to the cap during the window: $1 a day on `dish_budget_usd`, plus Mom's overage and calls in flight.
+
 ## Database migrations
 
 `api/migrations/*.sql`, run by `api/src/migrate.ts` as a one-off task before each api rollout. A failure stops the rollout.

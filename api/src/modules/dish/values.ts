@@ -77,7 +77,12 @@ export const ORPHAN_MS = 60 * 60_000;
 export const IP_KEY_DAYS = 90;
 
 /** TODO(caleb): the daily model budget, in dollars. Over it, no new cards today. */
-export const DAILY_BUDGET_USD = 10;
+export const budgetFrom = (value: string | undefined) => {
+  const usd = Number(value);
+  return value && Number.isFinite(usd) && usd > 0 ? usd : 10;
+};
+/** DISH_DAILY_BUDGET_USD is for staging, which holds real keys only during a test (infra/envs/staging/main.tf). */
+export const DAILY_BUDGET_USD = budgetFrom(process.env.DISH_DAILY_BUDGET_USD);
 /** TODO(caleb): how far past the budget Mom's transcription, translation and merge may still go. */
 export const MOM_OVERAGE_USD = 1;
 

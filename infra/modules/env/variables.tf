@@ -72,6 +72,18 @@ variable "media_certificate_arn" {
   default     = null
 }
 
+variable "private_cors_origins" {
+  description = "Sites that upload straight to the private bucket with presigned links"
+  type        = list(string)
+  default     = []
+}
+
+variable "schedules" {
+  description = "EventBridge schedules into the scheduled queue: a cron or rate expression, and the task to run"
+  type        = map(object({ expression = string, task = string }))
+  default     = {}
+}
+
 variable "alert_email" {
   type = string
 }

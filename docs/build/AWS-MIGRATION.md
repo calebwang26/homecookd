@@ -86,12 +86,19 @@ someone who deleted their account right after that export is covered until about
 sentence reads. It's also the only full copy until the new backups run, so the date may force a choice if Apple is still
 reviewing.
 
+## Next proof: step 5 on real services
+
+Step 5 isn't done until these run on staging: real S3 and SQS, a browser against presigned links, an `--api` mode for
+`web/scripts/qa/dish-e2e.mjs`, then a window with real Claude and Ink (`infra/README.md`).
+
 ## Before real data
 
 Before any backfill copies real rows into Postgres:
 
 - Seal `craving_links.token`, `dinners.invite_token` and `shares.token` (SCHEMA.md, M6).
 - Count violations of every new uniqueness rule, CHECK and domain (SCHEMA.md, section 7).
+- The sweep reaches every bucket and row the purge can mark. Today it reaches only anonymous private uploads, so a backfilled file
+  would stay marked and undeleted (DISH-MIGRATION.md, known limits).
 
 ## Cutover list
 

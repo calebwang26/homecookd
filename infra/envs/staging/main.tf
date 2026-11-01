@@ -26,6 +26,18 @@ variable "voice_count" {
   default     = 0
 }
 
+variable "real_ai" {
+  description = "Real Claude and Cartesia, for a test window only: costs real money, capped by dish_budget_usd"
+  type        = bool
+  default     = false
+}
+
+variable "dish_budget_usd" {
+  description = "The dish ask's daily model budget on staging. Mom's answers may pass it by MOM_OVERAGE_USD, and calls in flight by more (DISH-MIGRATION.md)"
+  type        = string
+  default     = "1"
+}
+
 variable "api_count" {
   type    = number
   default = 1
@@ -42,7 +54,13 @@ module "env" {
   db_backup_days    = 7
   db_protected      = false
   alert_email       = "caleb.wang26@gmail.com"
-  secret_names      = ["SENTRY_DSN_API", "SENTRY_DSN_WORKER"]
+  secret_names      = ["SENTRY_DSN_API", "SENTRY_DSN_WORKER", "RATE_LIMIT_SALT", "ANTHROPIC_API_KEY", "CARTESIA_API_KEY"]
+
+  private_cors_origins = [module.web.url, "http://localhost:3105"]
+  schedules = {
+    "dish.sweep"     = { expression = "rate(1 hour)", task = "dish.sweep" }
+    "platform.prune" = { expression = "rate(6 hours)", task = "platform.prune" }
+  }
 
   services = {
     voice = {
@@ -65,7 +83,12 @@ module "env" {
       desired_count = var.api_count
       default_route = true
       uses_database = true
-      secrets       = ["SENTRY_DSN_API"]
+      # A secret with no value stops a task starting, so the real keys are named here only for a test window.
+      secrets = concat(["SENTRY_DSN_API", "RATE_LIMIT_SALT"], var.real_ai ? ["ANTHROPIC_API_KEY", "CARTESIA_API_KEY"] : [])
+      env = merge(
+        { DISH_WEB_ORIGIN = module.web.url, DISH_DAILY_BUDGET_USD = var.dish_budget_usd },
+        var.real_ai ? {} : { DISH_FAKE_AI = "1" },
+      )
     }
     worker = {
       cpu           = 2048
