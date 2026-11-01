@@ -128,7 +128,7 @@ The load balancer's `idle_timeout` is 3700 s, and Fastify's default keep-alive i
 - `components/dish/parts.tsx`: when `a.play()` fails, reload the card for a fresh link, because a page open over an hour holds an expired one. Today it stops silently.
 - `dish-fake-server.mjs` and `dish-e2e.mjs` to match.
 
-## What `infra/` would need (not made)
+## What `infra/` needs (done, except as noted)
 
 - The secrets above, on the api's `secret_names` and `secrets`.
 - `s3:ListBucket` on `private` for the api. Without it, S3 answers 403 for a missing object, and an unuploaded file gets a 502 instead of the one not-found.

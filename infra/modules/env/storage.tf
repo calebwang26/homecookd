@@ -37,6 +37,17 @@ resource "aws_s3_bucket_lifecycle_configuration" "private" {
   }
 }
 
+resource "aws_s3_bucket_cors_configuration" "private" {
+  count  = length(var.private_cors_origins) > 0 ? 1 : 0
+  bucket = aws_s3_bucket.private.id
+  cors_rule {
+    allowed_origins = var.private_cors_origins
+    allowed_methods = ["PUT"]
+    allowed_headers = ["Content-Type"]
+    max_age_seconds = 3600
+  }
+}
+
 resource "aws_s3_bucket_public_access_block" "media" {
   bucket                  = aws_s3_bucket.media.id
   block_public_acls       = true
