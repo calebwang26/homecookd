@@ -246,7 +246,10 @@ try {
   await mom.getByText('3 of 3').waitFor({ timeout: 10000 });
   await hold(mom, mic, 1500);
   await mom.getByText('Writing it in your words').waitFor({ timeout: 10000 });
-  check('M3: answers went up as raw audio with the token in a header', fake.log.filter((l) => l.path === '/dish/ask/answer').every((l) => l.token === card.askToken && /^audio\//.test(l.type) && !('t' in l.query)));
+  const answerCalls = fake.log.filter((l) => l.path === '/dish/ask/answer');
+  const puts = fake.log.filter((l) => l.path === '/__storage');
+  check('M3: her clips went straight to storage, as audio', puts.length === 3 && puts.every((l) => /^audio\//.test(l.type) && l.size > 0 && !/;/.test(l.type)), JSON.stringify(puts));
+  check('M3: the answers named the file, with the token in the body and no preflight', answerCalls.length === 3 && answerCalls.every((l) => l.token === card.askToken && !l.preflighted && !('t' in l.query)), JSON.stringify(answerCalls));
   await shot(mom, 'M4-waiting');
   await mom.getByText('2 big spoons').waitFor({ timeout: 15000 });
   await mom.waitForTimeout(500);
@@ -302,6 +305,21 @@ try {
   check('Kid: her own words', k6.includes('Two big spoons. Don’t be shy.'));
   check('Kid: her clips play', (await kid.getByRole('button', { name: 'Hear Mom say it' }).count()) >= 2);
   check('Kid: "Your last dish" remembered', true);
+  // A read link dies after an hour: the tap fails, the card reloads for a fresh one, and the next tap plays.
+  const hear = kid.getByRole('button', { name: 'Hear Mom say it' }).first();
+  const reloads = () => fake.log.filter((l) => l.path === '/dish/cards/get').length;
+  const before = reloads();
+  fake.expireLinks();
+  await hear.click();
+  await kid.waitForTimeout(1200);
+  check('Links: a dead read link reloads the card', reloads() === before + 1, `${before} -> ${reloads()}`);
+  check('Links: the failed tap leaves the button off', (await hear.getAttribute('aria-pressed')) === 'false');
+  await hear.click();
+  await kid.waitForTimeout(400);
+  check('Links: the next tap plays her clip', (await kid.getByRole('button', { name: /Stop|Pause/ }).count()) + (await kid.locator('button[aria-pressed="true"]').count()) >= 1);
+  await kid.locator('button[aria-pressed="true"]').first().click().catch(() => {});
+  // The console's 403 for the dead link is the point of this check, not an error on the page.
+  kid.errors = [];
   await shot(kid, 'K6-moms-version');
   await shot(kid, 'K6-moms-version-full', { full: true });
 
@@ -333,6 +351,23 @@ try {
   });
   await kid.goto(kidUrl, { waitUntil: 'networkidle' });
   await kid.getByText('From Mom’s kitchen').waitFor();
+
+  // A failed PUT reads as "busy": the kid's dish stays in the box, and trying again works.
+  fake.setFailingPuts(true);
+  await kid.goto(`${BASE}/miss`, { waitUntil: 'networkidle' });
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/AAAMBAQAY3Y2wAAAAAElFTkSuQmCC', 'base64');
+  await kid.locator('input[type="file"][accept="image/*"]').setInputFiles({ name: 'dish.png', mimeType: 'image/png', buffer: png });
+  await kid.getByLabel('The dish you miss').fill('mom’s tomato egg');
+  await kid.getByRole('button', { name: 'Make my recipe' }).click();
+  await kid.getByRole('button', { name: 'Make my recipe' }).waitFor({ timeout: 15000 });
+  check('Upload: a failed PUT leaves the dish in the box', (await kid.getByLabel('The dish you miss').inputValue()) === 'mom’s tomato egg');
+  await shot(kid, 'K1-upload-failed');
+  kid.errors = [];
+  fake.setFailingPuts(false);
+  await kid.getByRole('button', { name: 'Make my recipe' }).click();
+  await kid.getByRole('heading', { name: 'What you need' }).waitFor({ timeout: 15000 });
+  const withPhoto = fake.cards.get(kid.url().split('k=')[1]);
+  check('Upload: trying again works, and the card has the photo', withPhoto.photos.length === 1, JSON.stringify(withPhoto.photos));
 
   // ── K5: the daily budget ────────────────────────────────────────────────────────────────────
   fake.setBudget(true);

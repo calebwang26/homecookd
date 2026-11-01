@@ -1,7 +1,7 @@
-// The kid's and Mom's pages talk to the Convex /dish/* routes (docs/build/DISH-ASK-SPEC.md §4). Every
-// route is a POST with the token in the JSON body, or in the X-Dish-Token header for Mom's raw audio,
-// so tokens never land in a URL the server logs. NEXT_PUBLIC_DISH_URL overrides the base (the local
-// fake in scripts/qa/dish-fake-server.mjs).
+// The kid's and Mom's pages talk to the api's /dish/* routes (docs/build/DISH-MIGRATION.md). Every route is a
+// POST with the token in the JSON body, so tokens never land in a URL the server logs, and sent as text/plain,
+// so none needs a preflight. Files don't go through the api: it hands out a link, and the page PUTs to storage.
+// NEXT_PUBLIC_DISH_URL overrides the base (the local fake in scripts/qa/dish-fake-server.mjs).
 import { CONVEX_SITE_URL } from '@/lib/recipe-web/config';
 import type { Ask, AskItem, Card, Edit, FileKind, QuestionId, Relation, SendVia } from './types';
 
@@ -25,6 +25,9 @@ export class DishError extends Error {
 const TIMEOUT_MS = 15_000;
 /** Making a card waits on Claude (and Ink for a voice note): about 4–8 s, 60 s at most. */
 const SLOW_MS = 60_000;
+/** A photo or voice note going up to storage, and Mom's clip, which can be longer. */
+const PUT_FILE_MS = 30_000;
+const PUT_CLIP_MS = 45_000;
 
 async function call<T>(path: string, init: RequestInit, timeoutMs = TIMEOUT_MS): Promise<T> {
   const controller = new AbortController();
@@ -64,9 +67,30 @@ export function isPlausibleToken(t: string | null | undefined): t is string {
 
 // ── files ──────────────────────────────────────────────────────────────────────────────────────
 
+type Upload = { fileId: string; uploadUrl: string; uploadHeaders: Record<string, string> };
+
+/**
+ * The bytes, straight to storage with the link the api gave. A failed PUT reads as 'busy', as a 502 does: it's safe to
+ * try again, and that asks for a new link. PUT always needs a preflight, from storage's own CORS.
+ */
+async function put(link: Upload, blob: Blob, timeoutMs: number): Promise<void> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const res = await fetch(link.uploadUrl, { method: 'PUT', headers: link.uploadHeaders, body: blob, signal: controller.signal });
+    await res.text(); // read to the end: a body nobody reads holds the connection, and shows as a cancelled request
+    if (!res.ok) throw new DishError('busy');
+  } catch (e) {
+    throw e instanceof DishError ? e : new DishError('busy');
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function uploadFile(kind: FileKind, blob: Blob, contentType: string): Promise<string> {
-  const out = await call<{ fileId: string }>(`/dish/files?kind=${kind}`, { headers: { 'Content-Type': contentType }, body: blob }, 30_000);
-  return out.fileId;
+  const link = await post<Upload>(`/dish/files?kind=${kind}`, { contentType, size: blob.size });
+  await put(link, blob, PUT_FILE_MS);
+  return (await post<{ fileId: string }>('/dish/files/confirm', { fileId: link.fileId })).fileId;
 }
 
 // ── the kid's card ─────────────────────────────────────────────────────────────────────────────
@@ -108,16 +132,12 @@ export async function peekAsk(askToken: string, lang?: string): Promise<Ask> {
   return (await post<{ ask: Ask }>('/dish/ask/peek', lang && lang !== 'en' ? { askToken, lang } : { askToken }, { timeoutMs: 30_000 })).ask;
 }
 
-/** One answer, raw audio; `lang` is the language she speaks (for Ink). */
+/** One answer: her clip goes to storage, then the api takes it; `lang` is the language she speaks (for Ink). */
 export async function sendAnswer(askToken: string, q: QuestionId, lang: string, durationS: number, clip: Blob, contentType: string): Promise<Ask> {
   const qs = new URLSearchParams({ q, lang, durationS: String(Math.round(durationS * 10) / 10) });
-  return (
-    await call<{ ask: Ask }>(
-      `/dish/ask/answer?${qs}`,
-      { headers: { 'Content-Type': contentType, 'X-Dish-Token': askToken }, body: clip },
-      45_000,
-    )
-  ).ask;
+  const link = await post<Upload>(`/dish/ask/answer/upload?${qs}`, { askToken, contentType, size: clip.size });
+  await put(link, clip, PUT_CLIP_MS);
+  return (await post<{ ask: Ask }>(`/dish/ask/answer?${qs}`, { askToken, fileId: link.fileId })).ask;
 }
 
 export async function finishAsk(askToken: string): Promise<Ask> {

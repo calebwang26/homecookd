@@ -160,8 +160,11 @@ export function Toast({ toast }: { toast: ToastItem | null }) {
   );
 }
 
-/** One audio element for the page: play(url) toggles; `playing` is the url playing now. */
-export function useAudio() {
+/**
+ * One audio element for the page: play(url) toggles; `playing` is the url playing now. Read links expire, so a page open
+ * for over an hour can hold a dead one: `onStale` reloads the card for a fresh link, and the next tap plays it.
+ */
+export function useAudio(onStale?: () => void) {
   const audio = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState<string | null>(null);
   const [progress, setProgress] = useState(0);
@@ -183,9 +186,13 @@ export function useAudio() {
       };
       setPlaying(url);
       setProgress(0);
-      a.play().catch(() => setPlaying(null));
+      a.play().catch((e: unknown) => {
+        setPlaying(null);
+        // Only a source that won't load: not a pause mid-start (AbortError), or a browser refusing to autoplay.
+        if ((e as { name?: string }).name === 'NotSupportedError') onStale?.();
+      });
     },
-    [playing, stop],
+    [playing, stop, onStale],
   );
   useEffect(() => () => audio.current?.pause(), []);
   return { playing, progress, play, stop };

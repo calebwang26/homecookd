@@ -115,6 +115,11 @@ function Mom() {
     return () => window.clearInterval(timer);
   }, [stage, token, lang]);
 
+  // A read link on the page has expired: her page again, for fresh ones.
+  const refresh = useCallback(() => {
+    if (token) void peekAsk(token, lang).then(keep, () => {});
+  }, [token, lang]);
+
   const inLang = lang !== 'en' && !english ? (inLangs[lang] ?? null) : null;
   const kid = ask?.kidName?.trim() || t('m.family');
   const guess = inLang?.guess ?? ask?.guess ?? null;
@@ -202,7 +207,7 @@ function Mom() {
 
   switch (stage) {
     case 'intro':
-      return <IntroScreen ask={ask} kid={kid} message={inLang?.message ?? ask.message} toggle={toggle} onNext={() => setStage('guess')} />;
+      return <IntroScreen ask={ask} kid={kid} message={inLang?.message ?? ask.message} toggle={toggle} onNext={() => setStage('guess')} onStale={refresh} />;
     case 'guess':
       return <GuessScreen ask={ask} kid={kid} guess={guess} toggle={toggle} onBack={() => setStage('intro')} onNext={startQuestions} />;
     case 'questions':
@@ -227,7 +232,7 @@ function Mom() {
         </>
       );
     case 'fill':
-      return <FillScreen ask={ask} guess={guess} version={inLang?.version ?? ask.version} onDone={toSent} />;
+      return <FillScreen ask={ask} guess={guess} version={inLang?.version ?? ask.version} onDone={toSent} onStale={refresh} />;
     case 'sent':
     case 'recipe': {
       // Her version, in her language once it is translated (the same pick as the fill screen).
