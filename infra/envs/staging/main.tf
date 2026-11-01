@@ -75,9 +75,13 @@ module "env" {
   alb_allowed_cidrs    = var.alb_allowed_cidrs
   private_cors_origins = [module.web.url, "http://localhost:3105"]
   schedules = {
-    "dish.sweep"     = { expression = "rate(1 hour)", task = "dish.sweep" }
-    "platform.prune" = { expression = "rate(6 hours)", task = "platform.prune" }
-    # community.remind_open: cron(0 16 * * ? *), once its task reaches this branch (a schedule with no task only fills the dead letters).
+    "dish.sweep"            = { expression = "rate(1 hour)", task = "dish.sweep" }
+    "platform.prune"        = { expression = "rate(6 hours)", task = "platform.prune" }
+    "jobs.sweep"            = { expression = "rate(1 hour)", task = "jobs.sweep" }
+    "messages.hourly"       = { expression = "rate(1 hour)", task = "messages.hourly" }
+    "messages.daily"        = { expression = "rate(1 day)", task = "messages.daily" }
+    "community.remind_open" = { expression = "cron(0 16 * * ? *)", task = "community.remind_open" }
+    # accounts.sweep, rate(1 hour), once its task reaches this branch (a schedule with no task only fills the dead letters).
   }
 
   services = {

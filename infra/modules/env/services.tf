@@ -73,6 +73,7 @@ resource "aws_ecs_task_definition" "service" {
     environment = [for k, v in merge(each.value.env, each.value.uses_database ? { DB_HOST = aws_db_instance.main.address } : {}, each.key == "worker" ? { MEDIA_BASE_URL = local.media_url } : {}, {
       PORT                = tostring(each.value.port)
       MEDIA_BUCKET        = aws_s3_bucket.media.bucket
+      MEDIA_BASE_URL      = local.media_url
       UPLOAD_BUCKET       = aws_s3_bucket.uploads.bucket
       PRIVATE_BUCKET      = aws_s3_bucket.private.bucket
       JOBS_QUEUE_URL      = aws_sqs_queue.jobs.url

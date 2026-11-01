@@ -232,6 +232,7 @@ node scripts/check-merge-safe.mjs --bundle web/out                 # after a web
 
 # AWS (infra/README.md; profile homecookd, refresh with: aws sso login --profile homecookd)
 cd infra/envs/staging && terraform init -backend=false && terraform validate   # no login needed
+cd infra/modules/front_door && terraform init -backend=false && terraform test   # also infra/backup-copy, infra/modules/bucket_copy; no login needed
 cd infra/envs/staging && AWS_PROFILE=homecookd terraform plan        # production apply: Caleb's OK
 
 # website on AWS (staging only; infra/modules/web, docs/build/WEB-MIGRATION.md)

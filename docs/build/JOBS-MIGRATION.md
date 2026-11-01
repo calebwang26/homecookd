@@ -174,7 +174,7 @@ The worker also deletes a stopped job's raw video as soon as it sees it, so the 
 
 No new secrets. **Settings:** `MEDIA_BASE_URL` (new on the api), `RECIPE_WRITES` (leave unset). `UPLOAD_BUCKET`, `PRIVATE_BUCKET`, `JOBS_QUEUE_URL` and `SCHEDULED_QUEUE_URL` are already set. `RATE_LIMIT_SALT` is required, as it already is for the dish routes.
 
-## What `infra/` needs (not done: this PR touches only `api/` and `docs/build/`)
+## What `infra/` needed (in the infra PR, not applied)
 
 - **`s3:ListBucket` on `uploads` for the api. This blocks a real run.** Without it, S3 answers 403 for a file not there yet, so every `complete` during an upload is a 502 and the sweep's message fails.
 - `MEDIA_BASE_URL` on the api.
