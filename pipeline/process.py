@@ -851,6 +851,17 @@ def make_cover(client: genai.Client | claude.ClaudeText, model: str, recipe: Rec
 Report = Callable[[str, float], None]  # (Convex job stage, progress 0..1 across the whole job)
 
 
+def report_extractions(pool: ThreadPoolExecutor, futures: list, n: int, report: Report) -> None:
+    """Reports each finished extraction. A report can raise (the cook stopped the job): the ones not started yet are
+    dropped, so they cost nothing, and leaving the pool's `with` still waits for the running ones."""
+    try:
+        for done, _ in enumerate(as_completed(futures), 1):
+            report("understanding", 0.2 + 0.5 * done / n)
+    except BaseException:
+        pool.shutdown(wait=False, cancel_futures=True)
+        raise
+
+
 def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_s: float = BATCH_TIMEOUT_S,
         shorten: bool = True, rewrite: bool = False, report: Report | None = None,
         language: str | None = None, homie_log: list[dict] | None = None, live: dict | None = None,
@@ -921,12 +932,12 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
                 f"but the cook speaks {said['language']} ({said.get('language_note', '')[:300]}); using that")
             manifest["language"] = said["language"]
             manifest_path.write_text(json.dumps(manifest, indent=2, ensure_ascii=False) + "\n")
+        report("understanding", 0.2)  # the cook may have stopped it while it was heard: before the costly part
         with ThreadPoolExecutor(max_workers=min(n, MAX_WORKERS)) as pool:
             futures = [pool.submit(extract_claude.extract_one,
                                    Extraction(cfg, i, n, s, ai, out_dir, media_dur, usage, manifest), claude_extract,
                                    heard, force) for i, (s, ai) in enumerate(jobs, 1)]
-            for done, _ in enumerate(as_completed(futures), 1):
-                report("understanding", 0.2 + 0.5 * done / n)
+            report_extractions(pool, futures, n, report)
             results = [f.result() for f in futures]
     elif batch:
         results = extract_batch(client, cfg, [Extraction(cfg, i, n, s, ai, out_dir, media_dur, usage, manifest)
@@ -936,8 +947,7 @@ def run(recipe_id: str, force: bool = False, batch: bool = False, batch_timeout_
         with ThreadPoolExecutor(max_workers=min(n, MAX_WORKERS)) as pool:
             futures = [pool.submit(extract_one, client, cfg, i, n, s, ai, out_dir, media_dur, usage, force, manifest)
                        for i, (s, ai) in enumerate(jobs, 1)]
-            for done, _ in enumerate(as_completed(futures), 1):
-                report("understanding", 0.2 + 0.5 * done / n)
+            report_extractions(pool, futures, n, report)
             results = [f.result() for f in futures]
     log(f"[process {recipe_id}] extraction done in {time.monotonic() - t0:.1f} s")
 

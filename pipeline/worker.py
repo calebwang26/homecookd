@@ -552,7 +552,10 @@ def handle_convex(convex: Convex, job: dict, media: storage.Bucket, uploads: sto
                 return fail(MSG_TOO_LONG, f"{actual_s / 3600:.1f} h of video")
             cap, spent = spend_cap(), spent_usd()
             if spent + actual_s / 3600 * COST_PER_HOUR_USD >= cap:
-                return fail(MSG_PAUSED, f"spend cap: ~${spent:.2f} spent, MAX_SPEND_USD ${cap:.2f}")
+                # Not a failure: back in the queue, it starts by itself once .env's cap is raised (read on each check).
+                print(f"  {job_id}: spend cap: ~${spent:.2f} spent, MAX_SPEND_USD ${cap:.2f}; released", flush=True)
+                convex.release(job_id)
+                return
             cook = job.get("cookName") or "Cook"
             # The dish the cook named; without one the writer names it (process.NO_TITLE).
             prep.run(recipe_id, job.get("title") or "", cook, job.get("relation") or cook, inputs)

@@ -319,6 +319,39 @@ def test_worker_stops_a_job_the_cook_cancelled():
     assert "cancelled job1 by the cook: stopped" in log.getvalue(), log.getvalue()
 
 
+def test_worker_at_the_spend_cap_requeues_the_job_and_runs_it_when_the_cap_is_raised():
+    """At the cap the job isn't failed (nothing would ever bring a failed job back): it goes back in the queue, costs
+    nothing, and runs by itself once MAX_SPEND_USD is raised."""
+    calls: dict = {"progress": [], "released": [], "ran": []}
+
+    class Convex:
+        def progress(self, _job_id, stage, _progress, error=None):
+            calls["progress"].append(stage)
+
+        def release(self, job_id):
+            calls["released"].append(job_id)
+
+        def published(self, *_a, **_k):
+            return "recipe1"
+
+    upload = SimpleNamespace(name="chili-abc123/01.mov", size=10)
+    job = {"jobId": "job1", "uploadPath": "chili-abc123/", "cookName": "Dad", "title": "Chili"}
+    cap = {"usd": 5.0}
+    published = SimpleNamespace(model_dump=lambda mode: {})
+    with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()), \
+            patched(worker, LOCKS=Path(tmp) / ".locks", INPUT=Path(tmp), _complete_upload=lambda *_a: [upload],
+                    _download=lambda *_a: None, spend_cap=lambda: cap["usd"], spent_usd=lambda: 5.0), \
+            patched(worker.prep, run=lambda *_a: None, probe_duration=lambda _p: 60.0), \
+            patched(worker.process, run=lambda *_a, **_k: calls["ran"].append(1)), \
+            patched(publish, publish_recipe=lambda *_a, **_k: published):
+        worker.handle_convex(Convex(), job, FakeBucket(), FakeBucket())
+        assert calls["released"] == ["job1"] and calls["ran"] == [], calls
+        assert "failed" not in calls["progress"], calls["progress"]
+        cap["usd"] = 50.0
+        worker.handle_convex(Convex(), job, FakeBucket(), FakeBucket())
+    assert calls["released"] == ["job1"] and calls["ran"] == [1], calls
+
+
 def test_worker_stopped_right_after_publishing_trashes_the_media_and_keeps_running():
     """Stopped in the last moment: /worker/published answers 409. What publish_recipe put in the public
     bucket goes to trash/, and a storage error while cleaning up doesn't take the worker down."""
