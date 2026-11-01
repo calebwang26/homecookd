@@ -228,6 +228,8 @@ node infra/scripts/web-smoke.mjs https://homecookd.app                          
 cd api && npm ci && npm run typecheck && npm test
 docker run -d --rm --name hc-pg -e POSTGRES_PASSWORD=t -e POSTGRES_DB=t -p 15439:5432 postgres:17   # then: cd api && TEST_DATABASE_URL=postgres://postgres:t@localhost:15439/t npm test
 
+# temporary sync into Postgres: off by default, never on real data without Caleb's OK (docs/build/SYNC-MIGRATION.md)
+
 # upload signer (cloud/signer)
 python3 cloud/signer/test_main.py                                  # sign-in check (Convex + GCS faked)
 cloud/deploy-signer.sh                                             # Cloud Run edible-upload, us-west1
