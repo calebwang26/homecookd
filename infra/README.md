@@ -67,6 +67,6 @@ role doesn't exist. **Give it required reviewers (Caleb) before production is cr
 - Staging is plain HTTP on the AWS address until a domain and certificate exist, which needs a DNS change (phase 1). With
   `VOICE_STUB=1` it accepts any token. That's acceptable only while voice is fake and has no real data, and `voice_count`
   stays 0 unless someone is testing.
-- Which services can run here today: `voice` and `worker` have Dockerfiles that build. The worker still needs Convex and
-  GCS, and `api` has no code yet, so both stay at 0 tasks. The upload signer has no Dockerfile on purpose: the `api`
+- Which services can run here today: `api`, `voice` and `worker` have Dockerfiles that build. The worker still needs Convex
+  and GCS, so it stays at 0 tasks. The upload signer has no Dockerfile on purpose: the `api`
   takes over its job in phase 4. The glasses ingest has none either: the VM has been stopped since Oct 25, so it waits.

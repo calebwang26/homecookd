@@ -50,7 +50,8 @@ jobs:
       - name: Roll out
         run: |
           aws ecs describe-task-definition --task-definition "$NAME-$SERVICE" --query taskDefinition > current.json
-          jq --arg image "$IMAGE" '.containerDefinitions[0].image = $image
+          jq --arg image "$IMAGE" --arg release "$GITHUB_SHA" '.containerDefinitions[0].image = $image
+            | .containerDefinitions[0].environment = ([.containerDefinitions[0].environment[] | select(.name != "RELEASE")] + [{name: "RELEASE", value: $release}])
             | {family, containerDefinitions, taskRoleArn, executionRoleArn, networkMode, requiresCompatibilities, cpu, memory}' \
             current.json > next.json
           ARN=$(aws ecs register-task-definition --cli-input-json file://next.json --query taskDefinition.taskDefinitionArn --output text)
