@@ -67,6 +67,8 @@ and anything changing what build 6 calls, needs his separate OK.
 A restore drill, a deliberately killed service, a load test, and these gaps closed: 2+ api tasks, autoscaling, HTTPS, and a
 limited database login.
 
+**A budget alert reaches a person (Nov 1).** The real-models window showed the budget's alert reaching only the logs, because `REPORT_ALERT_URL` isn't set on AWS. A log alarm to the alerts topic now emails it. Before production: fire it once and see the email arrive.
+
 **A production gate: overload (Master Agent, Nov 1).** Today, with all connections busy, a request waits 5 s then answers a 500. Before
 production: a bounded wait queue that fails fast with a 503 and `retry-after`; the load balancer's health check stays as it is; an alarm on
 pool waits; autoscaling on request load. **The proof is a load test that exercises pool exhaustion.**
