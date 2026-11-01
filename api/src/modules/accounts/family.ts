@@ -158,6 +158,7 @@ export async function leaveFamily(ctx: Ctx, rawId: string) {
   await tx(async (c) => {
     await data.lockFamily(c, ctx.family.id); // so a last person's delete, at the same moment, sees who's really left
     const wasSignedIn = (await data.signedInIds(c, [p.id])).has(p.id);
+    await data.rememberLeftIdentities(c, p.id);
     await removePerson(c, ctx.family.id, p.id);
     await endFamilyIfLast(c, ctx.family.id, wasSignedIn);
   });

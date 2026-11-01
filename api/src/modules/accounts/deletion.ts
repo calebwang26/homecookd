@@ -39,21 +39,24 @@ export type DeletionSource = "person" | "sync";
  * source reaches Postgres's copy within minutes (SCHEMA.md, M1), and the sync draft calls this.
  *
  * Safe to run twice: a person already deleted finds their row, and nothing else happens.
- *
- * TODO(caleb): someone who moved families left a removed person behind in the old family, with their name and what they sent there. This deletes only who they are now, as JOIN-SIMPLE.md
- * section 4 approved and as today's code does. If a deletion should reach that old row too, a link from new person to old has to be written at the move, before moves start here.
  */
 export async function startDeletion(personId: string, source: DeletionSource, requestId?: string): Promise<string | null> {
   if (source === "person") assertOwnsPeople();
   return tx(async (c) => {
     const { rows: found } = await c.query(`select family_id from people where id = $1`, [personId]);
     if (!found[0]) return null;
-    // Family first, then person, everywhere: this is what serializes two last people, and a join, against the delete (C2).
-    await data.lockFamily(c, found[0].family_id);
-    // The sync only passes on what the old system did, and that deletes one person.
+    const familyId: string = found[0].family_id;
+    // Whoever they were before they left or moved goes with them. The sync only passes on what the old system did, and that deletes one person.
+    const earlier = source === "person" ? await data.earlierSelves(c, personId) : [];
+    // Family first, then person, everywhere: this is what serializes two last people, and a join, against the delete (C2). In id order, as a move does, so the two can't deadlock.
+    for (const id of [...new Set([familyId, ...earlier.map((e) => e.family_id)])].sort()) await data.lockFamily(c, id);
     const wasSignedIn = source === "person" && (await data.signedInIds(c, [personId])).has(personId);
-    const deletionId = await deletePerson(c, personId, found[0].family_id, requestId);
-    await endFamilyIfLast(c, found[0].family_id, wasSignedIn, requestId);
+    const deletionId = await deletePerson(c, personId, familyId, requestId);
+    await endFamilyIfLast(c, familyId, wasSignedIn, requestId);
+    for (const e of earlier) {
+      await deletePerson(c, e.id, e.family_id, requestId);
+      await data.blankFamilyIfEmpty(c, e.family_id);
+    }
     return deletionId;
   });
 }
@@ -110,10 +113,12 @@ async function deletePerson(c: Queryable, personId: string, familyId: string, re
   // Blank. The check constraint refuses a tombstone that keeps anything personal.
   await c.query(
     `update people set name = 'Deleted', relation = null, avatar_key = null, email = null, tz = null, share_cooking = null, language = null, voice_clone_consented_at = null,
-            cartesia_voice_id = null, approx_lat = null, approx_lng = null, campus = null, deleted_at = coalesce(deleted_at, now())
+            cartesia_voice_id = null, approx_lat = null, approx_lng = null, campus = null, previous_person_id = null, deleted_at = coalesce(deleted_at, now())
       where id = $1`,
     [personId],
   );
+
+  await c.query(`delete from left_identities where person_id = $1`, [personId]);
 
   // Every way in ends here.
   await data.signPersonOut(c, personId);

@@ -190,7 +190,7 @@ Everything in SCHEMA.md section 3, "Sessions and accounts", is used as written, 
 
 Leaving signs a person out and frees their Apple login in one transaction (`removePerson`), so normally they have no session to come back with. A session can still be alive for a row marked removed another way, such as the sync. Every route refuses that person (a 403), except these, which use `requireSessionEvenIfRemoved` so they can still delete their account (App Review 5.1.1(v)): `POST /v1/account/delete`, `GET /v1/apple/revoke-ready`, `POST /v1/apple/revoke`. `routeCoverage.test.ts` lists each with why.
 
-**What this doesn't reach, and it's Caleb's call:** someone who left and signed back in is a new person, and deleting covers only that one. What they sent stays under the old row, with nothing linking the two. It's the same gap as open question 1. **Recommendation:** a link from the new person to the old rows, so deleting reaches them.
+**Someone who left or moved and came back (Caleb, Nov 1)** is a new person, tied to the old row by `people.previous_person_id`, so deleting them also deletes every removed row behind them, across families. A move sets it in the same transaction. Leaving keeps a keyed hash of provider and subject in `left_identities`, never the subject, and the same account's next sign-in sets the link and uses the hash up. The link gives no access: nothing reads it but the deletion. A row that's deleted loses its hash and its link. **A deleted person who returns stays a new person:** keeping a stable identifier after deletion is hard to square with `/privacy`'s "deleted" and 5.1.1(v), for almost nothing, because the purge left almost nothing to link to. With no `LINK_JOIN_SECRET` set, nothing is kept and no link is made.
 
 ## Known limits
 
@@ -210,7 +210,7 @@ Leaving signs a person out and frees their Apple login in one transaction (`remo
 
 `TODO(caleb)`, each with the documented default in place:
 
-1. **A moved person's old row.** Deleting covers who they are now, as JOIN-SIMPLE.md section 4 approved and as today. Their name and what they sent stay in the old family, under a removed person, and nothing links the two. **Recommendation:** decide before moves start here, because a link has to be written at the move to reach it later.
+1. **A moved person's old row.** Decided by Caleb on Nov 1, and built: see "Someone who left the family".
 2. **The Expo Go audience** in Apple's default list. Any Expo Go project can get tokens for it. **Recommendation:** drop it at the switch.
 3. **Email sign-in,** as under "Not built".
 4. **`JOIN_LINK_DAYS` (7), `JOIN_WINDOW_DAYS` (30), the solo rule, who a new phone may ask to be:** kept as they are, with their existing markers.

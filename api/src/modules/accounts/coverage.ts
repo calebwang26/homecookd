@@ -12,6 +12,7 @@ export const TABLES: Record<string, { owner: Owner; does: string }> = {
   join_links: { owner: "accounts", does: "inviter null; the family's link keeps working" },
   move_requests: { owner: "accounts", does: "asking to be them: deleted. Decided by them: decided_by null" },
   signups: { owner: "accounts", does: "a link: row stays nameless; others deleted" },
+  left_identities: { owner: "accounts", does: "deleted with the person: a keyed hash kept only for someone who left" },
   account_deletions: { owner: "accounts", does: "stays as proof; lists cleared 60 days after the outside purge (C5)" },
   recipes: { owner: "jobs", does: "theirs deleted at once; folder noted by media_prefix" },
   recordings: { owner: "jobs", does: "theirs deleted after everything saved with them" },
