@@ -3,7 +3,7 @@ output "load_balancer_url" {
 }
 
 output "media_url" {
-  value = "https://${var.media_domain != null ? var.media_domain : aws_cloudfront_distribution.media.domain_name}"
+  value = local.media_url
 }
 
 output "deploy_role_arn" {

@@ -1,0 +1,30 @@
+# Today's live origins, for when Caleb OKs phase 1 (docs/build/ADDRESSES-MIGRATION.md). Copy to addresses.tfvars, which git ignores.
+# Nothing reads this file by itself. These host names are already public: the app and the site ship them.
+certificate_domains = ["api.homecookd.app", "media.homecookd.app", "voice.homecookd.app"]
+
+addresses = {
+  api = {
+    origin_domain = "bsudybxsqvtwftsdmwmz.supabase.co" # the app calls /functions/v1/api/...
+    # domain          = "api.homecookd.app"
+    # certificate_arn = "<certificate_arn from this root's output, once ACM says ISSUED>"
+    routes = [
+      { path = "/api/*", origin_domain = "grand-dragon-649.convex.cloud" },   # the Convex client, its WebSocket included: unproven
+      { path = "/dish/*", origin_domain = "grand-dragon-649.convex.site" },   # the kid's web flow
+      { path = "/invite/*", origin_domain = "grand-dragon-649.convex.site" }, # dinner invites
+      { path = "/link/*", origin_domain = "grand-dragon-649.convex.site" },   # dish cards
+      { path = "/upload", origin_domain = "edible-upload-vyatb2n6oq-uw.a.run.app" }, # the signer, until phase 4 replaces it
+    ]
+  }
+  media = {
+    files         = true
+    origin_domain = "storage.googleapis.com"
+    origin_path   = "/edible-media-379797517579"
+    # domain          = "media.homecookd.app"
+    # certificate_arn = "<same certificate>"
+  }
+  voice = {
+    origin_domain = "homecookd-voice-vyatb2n6oq-uw.a.run.app"
+    # domain          = "voice.homecookd.app"
+    # certificate_arn = "<same certificate>"
+  }
+}

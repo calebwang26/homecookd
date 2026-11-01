@@ -102,6 +102,13 @@ resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
     noncurrent_version_expiration { noncurrent_days = 28 }
     abort_incomplete_multipart_upload { days_after_initiation = 7 }
   }
+  # Caleb, Nov 1: raw footage goes after 14 days, as on GCS today. The rule above keeps the deleted version for its undo window.
+  rule {
+    id     = "raw-footage-14-days"
+    status = "Enabled"
+    filter {}
+    expiration { days = 14 }
+  }
 }
 
 # The same rule as cloud/media-cors.json.
@@ -114,6 +121,10 @@ resource "aws_s3_bucket_cors_configuration" "media" {
     expose_headers  = ["Content-Type", "Content-Range", "Accept-Ranges"]
     max_age_seconds = 3600
   }
+}
+
+locals {
+  media_url = "https://${var.media_domain != null ? var.media_domain : aws_cloudfront_distribution.media.domain_name}"
 }
 
 resource "aws_cloudfront_origin_access_control" "media" {
