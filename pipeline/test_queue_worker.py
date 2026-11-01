@@ -169,9 +169,11 @@ class FakeS3:
     def get_object(self, Bucket: str, Key: str) -> dict:
         return {"Body": io.BytesIO(self.objects[(Bucket, Key)]["Body"])}
 
-    def delete_objects(self, Bucket: str, Delete: dict) -> None:
+    def delete_objects(self, Bucket: str, Delete: dict) -> dict | None:
         if self.delete_error:
             raise self.delete_error
+        if getattr(self, "delete_answer", None):
+            return self.delete_answer
         for o in Delete["Objects"]:
             self.objects.pop((Bucket, o["Key"]), None)
 
@@ -1362,6 +1364,19 @@ def test_the_child_stops_at_the_length_limit_and_on_a_short_download():
         except RuntimeError:
             pass
         assert not (Path(tmp) / "input" / "00-00.mov").exists() or (Path(tmp) / "input" / "00-00.mov").stat().st_size == 3
+
+
+def test_a_partly_failed_s3_delete_is_an_error_and_names_no_key():
+    s3 = FakeS3()
+    s3.put("uploads", "family-a/00.mov")
+    s3.delete_answer = {"Errors": [{"Key": "family-a/00.mov", "Code": "AccessDenied", "Message": "no"}]}
+    storage = S3Storage("uploads", "media", None, "https://cdn.test", client=s3)
+    try:
+        storage.delete_upload("family-a/")
+    except RuntimeError as e:
+        assert "AccessDenied" in str(e) and "family-a" not in str(e)
+    else:
+        raise AssertionError("a refused delete must not look like success")
 
 
 def test_upload_listing_and_cancel_delete_stay_in_their_own_folder():
