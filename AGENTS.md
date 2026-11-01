@@ -214,7 +214,7 @@ cd web && npm ci && npm run build                                  # confirm a P
 node web/scripts/qa/dish-e2e.mjs --base http://localhost:3105 --out /tmp/dish-e2e   # v2 /miss + /a vs the local /dish fake (site: cd web && NEXT_PUBLIC_DISH_URL=http://localhost:8791 npx next dev --port 3105)
   # the new api's uploads: add NEXT_PUBLIC_DISH_UPLOADS=links to the site and --uploads links here. Unset, as on main, the site sends raw files to Convex.
 
-node web/scripts/qa/dish-api-e2e.mjs --base http://localhost:3105 --api <api url> --out /tmp/dish-api-e2e   # the same flow against the new api (aws-migration only); made-up content only
+node web/scripts/qa/dish-api-e2e.mjs --base http://localhost:3105 --api <api url> --out /tmp/dish-api-e2e   # the same flow against the new api (site built with NEXT_PUBLIC_DISH_UPLOADS=links); made-up content only
 
 # convex (repo root)
 npx vitest run                                                     # convex-test suites (convex/*.test.ts)

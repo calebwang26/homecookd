@@ -107,11 +107,20 @@ reads, S3's CORS, and SQS, on fake models.
 **Still to prove:** real Claude and Ink in a test window (`infra/README.md`); the deployed site with an HTTPS api; Safari and a real iPhone
 recording.
 
+## Open: how long raw footage is kept (`TODO(caleb)`)
+
+**Live GCS `uploads` deletes after 14 days. S3 `uploads` has no such rule, and `SYSTEM-DESIGN.md` says "keep the raw input".** It's a
+retention decision that also changes what `/privacy` covers, so it's Caleb's, and nothing has chosen it. **The queue worker assumes the raw
+upload is still there for a re-run after a crash, or for a re-run with a better model:** after a 14-day rule, a job re-run later fails
+visibly at the upload listing, and past recipes can't be rebuilt from source. Keeping it costs storage and holds more family footage.
+Until he decides, staging has no rule, and no real footage is on it.
+
 ## Before real data
 
 Before any backfill copies real rows into Postgres:
 
 - Seal `craving_links.token`, `dinners.invite_token` and `shares.token` (SCHEMA.md, M6).
+- Caleb decides how long raw footage is kept (above).
 - Count violations of every new uniqueness rule, CHECK and domain (SCHEMA.md, section 7).
 - The sweep reaches every bucket and row the purge can mark. Today it reaches only anonymous private uploads, so a backfilled file
   would stay marked and undeleted (DISH-MIGRATION.md, known limits).
@@ -126,6 +135,13 @@ Before production (CUTOVER.md, step 6):
 
 - Give the worker and api a limited database login in place of the master one.
 - Pin the workflows' actions to commit SHAs, and add a checksum for the downloaded gitleaks.
+
+Before any new-host link exists (CUTOVER.md, step 10):
+
+- `supabase/functions/api/index.ts:931` must accept the new media host: it refuses an `audio_url` not on `BUCKET_URL`, so "Hear
+  Dad" from a rewritten recipe fails with a 400. Needs a Supabase deploy, so Caleb's OK.
+- `pipeline/account_purge.py`'s `media_objects` must not silently skip a host that isn't GCS, ideally failing loudly on an unknown one,
+  before any new-host link exists. Otherwise a deleted account's file on S3 stays.
 
 Removing the temporary one-way sync of `families`, `people` and `recipes` (SCHEMA.md, M1) is the end of the list: CUTOVER.md, step 14.
 

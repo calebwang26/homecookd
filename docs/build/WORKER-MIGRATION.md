@@ -59,7 +59,7 @@ told once. Cartesia's transcription isn't in `usage.json`, so it isn't counted.
 
 ## What each crash does
 
-Every attempt starts clean from the raw upload, which is kept. So a re-run pays for its model calls again, and they count toward the job cap.
+Every attempt starts clean from the raw upload, which this assumes is still there (live GCS deletes after 14 days and S3 has no rule: `TODO(caleb)` in AWS-MIGRATION). So a re-run pays for its model calls again, and they count toward the job cap.
 
 | The worker dies... | State left behind | What the re-run does |
 |---|---|---|

@@ -19,7 +19,7 @@ The second is a hard rule: no merge before Apple approves 1.0. The first is buil
 
 | What runs after a merge | What it does here | Why that's safe | Checked by |
 |---|---|---|---|
-| Vercel builds `main` for homecookd.app | The same site | Uploads and audio are behind `NEXT_PUBLIC_DISH_UPLOADS`, compiled out when unset | `dish-e2e.mjs`, and the merge check reads the built bundle |
+| Vercel builds `main` for homecookd.app | The same site | Uploads and audio are behind `NEXT_PUBLIC_DISH_UPLOADS`, compiled out when unset. Built in one folder, 60 of main's 63 chunks are identical, and the other 3 differ only by a prop or argument nothing uses without the switch | `dish-e2e.mjs`, and the merge check reads the built bundle |
 | Convex deploy, if someone runs it | Adds `POST /sync/page` and `/sync/deletions`, and four internal queries | With `SYNC_READ_SECRET` unset they answer 401 to everyone, before reading the body. No schema change | `convex/syncRead.test.ts`. Never deployed anywhere real |
 | The laptop's worker, once restarted | The same Convex mode | `observability.py` does nothing without `sentry_sdk`. `publish.py`'s new branch needs a bucket with `public_base`, and only queue mode's has one | `pipeline/test_worker_no_sentry.py`, `test_publish.py` |
 | GitHub Actions | PR checks only | `deploy-staging.yml` and `deploy-web.yml` start on a push to `aws-migration`, never `main`. `deploy-aws.yml` is manual. None runs `terraform apply` | The merge check reads every workflow |
@@ -175,6 +175,7 @@ Nothing here has a quick way back, so each waits until no phone calls it. Take a
 
 `scripts/check-merge-safe.mjs`, run by CI as the job `merge-safe`. It fails on: a conflict with main (on the PR into main; a warning on PRs into `aws-migration`), a changed file in a watched path that isn't on `scripts/merge-safe-list.json`, a listed file that changed since its review, a workflow that would run on main or deploy something live, a build that lost today's upload path or holds the new one, a worker that needs Sentry, and sync routes that answer without their secret. Past that:
 
+- **A PR with a conflict starts no checks at all,** because GitHub has no merge commit to run them on. GitHub shows the conflict itself. That's why PRs into `aws-migration` report conflicts with `main` early, as a warning.
 - **It doesn't block anything.** With no GitHub Pro, a red check is advice and a person has to read it. Caleb's rule 2 depends on people too: `APPLE_APPROVED_1_0` is what someone set.
 - **Vercel's settings aren't in the repo.** CI builds with no `NEXT_PUBLIC_*` set. If Vercel's project already holds one of these switches, the live site differs from what CI read. Check step 2 catches that afterwards, not before.
 - **A fingerprint says a file changed, not that the change is safe.** Anyone can paste a new one. It's there so the change shows up in a PR for a person to read.
