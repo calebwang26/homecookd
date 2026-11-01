@@ -103,6 +103,8 @@ module "env" {
       desired_count = 0 # size and home (Fargate or EC2) follow a measured video job
       uses_database = true
       secrets       = ["SENTRY_DSN_WORKER"]
+      # Queue mode (docs/build/WORKER-MIGRATION.md). No model keys here: a real run is a test window, with Caleb's OK.
+      entry_point = ["python", "pipeline/queue_worker.py"]
     }
   }
 }

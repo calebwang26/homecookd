@@ -116,6 +116,10 @@ resource "aws_s3_bucket_cors_configuration" "media" {
   }
 }
 
+locals {
+  media_url = "https://${var.media_domain != null ? var.media_domain : aws_cloudfront_distribution.media.domain_name}"
+}
+
 resource "aws_cloudfront_origin_access_control" "media" {
   name                              = "${local.name}-media"
   origin_access_control_origin_type = "s3"

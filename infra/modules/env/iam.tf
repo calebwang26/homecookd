@@ -86,6 +86,18 @@ locals {
         Action   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
         Resource = "${aws_s3_bucket.media.arn}/*"
       },
+      # A job reads its upload's listing, and a cancel lists what it published. Without this S3 also answers 403 for a missing key.
+      {
+        Effect   = "Allow"
+        Action   = "s3:ListBucket"
+        Resource = [aws_s3_bucket.uploads.arn, aws_s3_bucket.media.arn]
+      },
+      # The cook's plate photo, read only. A missing photo answers 403 here, which pipeline/queue_aws.py treats as no photo.
+      {
+        Effect   = "Allow"
+        Action   = "s3:GetObject"
+        Resource = "${aws_s3_bucket.private.arn}/*"
+      },
       {
         Effect   = "Allow"
         Action   = ["sqs:ReceiveMessage", "sqs:DeleteMessage", "sqs:ChangeMessageVisibility", "sqs:GetQueueAttributes"]
