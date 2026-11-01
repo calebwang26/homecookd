@@ -11,6 +11,8 @@ owner is the "AWS backend" chat.
 
 The backend must follow `docs/build/SYSTEM-DESIGN.md`, and the plan carries no week estimates (Caleb, Oct 31).
 
+Supabase features may be rebuilt on `aws-migration` with fake data (Caleb, Oct 31); live Supabase stays frozen. Details and his words: `docs/build/AWS-MIGRATION.md`.
+
 **Why:** Convex runs on a preview deployment, the worker on a laptop, and the credits expire (most on Oct 31, 2028).
 **How to apply:** Caleb's OK in chat each time for switching live traffic, production data, DNS, any change to Cloud Run,
 Convex, Supabase or GCS, anything likely to add over $300 a month, or deleting what this work didn't create. Until

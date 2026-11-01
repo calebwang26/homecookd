@@ -28,6 +28,13 @@ updated. `main` keeps changing `convex/` meanwhile, so the branch merges `main` 
 lifting the Supabase freeze, and any copy of real data into a test database. **Before any area switches over:** Convex backups
 running and a restore proven (phase 0).
 
+### The Supabase freeze (Caleb, Oct 31)
+
+The freeze stays for live Supabase. Its features may be rebuilt on `aws-migration` and tested on staging with fake data. Caleb's words:
+"i give the ok" (to that wording), and "im giving approval to u that u can touch teh supabase code for the purpose of migrating to AWS".
+**This doesn't cover** deploying the live `api`, running live Supabase migrations, touching its data or switching traffic. Each of those,
+and anything changing what build 6 calls, needs his separate OK.
+
 ### Build order (Caleb, Oct 31)
 
 1. Automatic PR checks, and auto-deploy to staging.
