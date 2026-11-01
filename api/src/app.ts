@@ -7,6 +7,7 @@ import { db } from "./db.js";
 import { ApiError } from "./errors.js";
 import { fieldPaths, fileGuard, lastName, looksLikeFileKey } from "./files.js";
 import { dishRoutes } from "./modules/dish/routes.js";
+import { liveRoutes } from "./modules/live/routes.js";
 import { peopleRoutes } from "./modules/people/routes.js";
 
 declare module "fastify" {
@@ -96,6 +97,14 @@ export function buildApp(options: { logger?: object | boolean; routes?: (app: Fa
     reply.header("x-request-id", req.id);
   });
 
+  // Stopping closes the connections idle at that moment. One that finishes a request a moment later would then stay open for
+  // KEEP_ALIVE_MS and hold the stop up until ECS kills the task, so keep closing them until it's done.
+  app.addHook("preClose", async () => {
+    const sweep = setInterval(() => app.server.closeIdleConnections(), 100);
+    sweep.unref();
+    app.server.once("close", () => clearInterval(sweep));
+  });
+
   guardFileKeys(app);
 
   app.setNotFoundHandler((req, reply) => reply.status(404).send({ error: "not_found", requestId: req.id }));
@@ -130,6 +139,7 @@ export function buildApp(options: { logger?: object | boolean; routes?: (app: Fa
 
   app.register(peopleRoutes);
   app.register(dishRoutes, { prefix: "/dish" });
+  app.register(liveRoutes);
   options.routes?.(app);
 
   return app;
