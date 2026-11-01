@@ -239,7 +239,7 @@ These tables are read-only here. Each writes nothing today, and each needs its o
 
 ## Account deletion
 
-`account.ts` applies SCHEMA.md section 4 and C1 for these tables: messages, read marks, notes, questions, pending sends, shares, favorites, events, push tokens and log, retry keys, and spare uploads. Batches of 500, each its own transaction, and safe to run again. A file is marked before its row goes. Nothing calls it yet: the account purge moves last. Tests set the tombstone by hand.
+`account.ts` applies SCHEMA.md section 4 and C1 for these tables: messages, read marks, notes, questions, pending sends, shares, favorites, events, push tokens and log, retry keys, and spare uploads. Batches of 500, each its own transaction, and safe to run again. A file is marked before its row goes. The account purge calls it (`accounts/purgeSteps.ts`). These tests set the tombstone by hand; `accountDeletion.test.ts` runs the whole purge.
 
 - `dropPushTokens` and `deleteQuestionsOnRecipes` are for the purge's at-once step: `questions` never cascades, so they must go before a recipe does.
 - A pair stays, pointing at the tombstone. If nothing is left in it, it drops out of the other person's inbox. Otherwise it reads `removed: true`, and the other person can't write to it.

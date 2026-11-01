@@ -1,5 +1,33 @@
-// What every area's part of an account purge shares (accounts/deletion.ts runs them).
-import type { Queryable } from "./db.js";
+// What every area's part of an account purge shares: batches, each its own transaction, and marking a file before its row goes (accounts/deletion.ts runs them).
+import type { PoolClient } from "pg";
+import { tx, type Queryable } from "./db.js";
+
+export const PURGE_BATCH = 500;
+
+export type PurgeRun = {
+  max: number;
+  /** In the batch's transaction. It keeps the deletion marked as running. */
+  beforeCommit?: (c: PoolClient, step: string, changed: number) => void | Promise<void>;
+  /** Throwing here stops the purge after a batch that's safely done: out of time, or a test acting out a crash. */
+  afterCommit?: (step: string, changed: number) => void | Promise<void>;
+};
+
+/** An area's purge run on its own, as its tests do. */
+export const ON_ITS_OWN: PurgeRun = { max: PURGE_BATCH };
+
+/** Until a batch comes back short. Says how many rows changed, so the purge can tell when a full pass found nothing. */
+export async function inBatches(run: PurgeRun, step: string, work: (c: PoolClient, max: number) => Promise<number>): Promise<number> {
+  for (let total = 0; ; ) {
+    const changed = await tx(async (c) => {
+      const n = await work(c, run.max);
+      await run.beforeCommit?.(c, step, n);
+      return n;
+    });
+    await run.afterCommit?.(step, changed);
+    total += changed;
+    if (changed < run.max) return total;
+  }
+}
 
 const present = (keys: (string | null | undefined)[]) => [...new Set(keys.filter((k): k is string => !!k))];
 

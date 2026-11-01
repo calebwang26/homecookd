@@ -4,10 +4,14 @@
 import * as Sentry from "@sentry/node";
 import { db, tx, type Queryable } from "../../db.js";
 import { enqueue } from "../../outbox.js";
+import { inBatches, PURGE_BATCH, type PurgeRun } from "../../purge.js";
+import { cancelDinnersOfPerson } from "../community/account.js";
 import type { Trace } from "../dish/budget.js";
+import { stopPersonsWork } from "../jobs/account.js";
+import { dropPushTokens } from "../messages/account.js";
 import * as data from "./data.js";
 import { requestMossSync } from "./neighbors.js";
-import { DELETION, type Deletion, dropRecipes, PURGE_BATCH, RECIPE_FILES, type Step, STEPS } from "./purgeSteps.js";
+import { DELETION, type Deletion, STEPS } from "./purgeSteps.js";
 import { assertOwnsPeople, refuse } from "./values.js";
 
 /** A purge with no batch for this long stopped; the schedule starts it again. Past this many restarts someone is told, and it's still tried. */
@@ -81,7 +85,7 @@ async function deletePerson(c: Queryable, personId: string, familyId: string, re
   const existing = await c.query(`select id from account_deletions where person_id = $1`, [personId]);
   if (existing.rows[0] && person.deleted_at) return existing.rows[0].id as string;
 
-  const recipes = (await c.query(`select ${RECIPE_FILES} from recipes where cook_id = $1 limit $2`, [personId, PURGE_BATCH])).rows;
+  const hasRecipes = (await c.query(`select 1 from recipes where cook_id = $1 limit 1`, [personId])).rows.length > 0;
   const jobs = (await c.query(`select id, upload_key from jobs where cook_id = $1 limit $2`, [personId, PURGE_BATCH])).rows;
   const recordings = (await c.query(`select id, video_key from recordings where cook_id = $1 limit $2`, [personId, PURGE_BATCH])).rows;
   const { rows: inserted } = await c.query(
@@ -115,7 +119,7 @@ async function deletePerson(c: Queryable, personId: string, familyId: string, re
   await data.signPersonOut(c, personId);
   await c.query(`update devices set person_id = null, label = null, revoked_at = coalesce(revoked_at, now()) where person_id = $1`, [personId]);
   await data.dropIdentitiesOf(c, personId);
-  await c.query(`delete from push_tokens where person_id = $1`, [personId]);
+  await dropPushTokens(c, personId);
   await c.query(`delete from invites where person_id = $1`, [personId]);
   await data.revokeFamilyInvitesFrom(c, personId);
   await c.query(`delete from move_requests where person_id = $1`, [personId]);
@@ -126,17 +130,11 @@ async function deletePerson(c: Queryable, personId: string, familyId: string, re
   );
   await c.query(`delete from signups where (person_id = $1 or (person_id is null and email = any($2::text[]))) and (share_token is null or share_token not like 'link:%')`, [personId, emails]);
 
+  // Off the map now: dinners they host, and any around their recipes, which is why this comes before the recipes go.
+  await cancelDinnersOfPerson(c, personId);
   // Nothing of theirs is worked on again: a worker can't claim or finish these (pipeline/queue_db.py reads cancelled_at), and the glasses can't make a recipe from these.
-  await c.query(
-    `update jobs set stage = 'failed', progress = 0, error = 'Cancelled.', cancelled_at = coalesce(cancelled_at, now()), claimed_at = null, finished_at = coalesce(finished_at, now()), updated_at = now()
-      where cook_id = $1 and stage not in ('done', 'failed')`,
-    [personId],
-  );
-  await c.query(`update recordings set status = 'abandoned', updated_at = now() where cook_id = $1 and status <> 'abandoned'`, [personId]);
-  // Off the map now: dinners they host, and any around their recipes (dropRecipes).
-  await c.query(`update dinners set status = 'cancelled' where host_id = $1 and status <> 'cancelled'`, [personId]);
-  await dropRecipes(c, deletion, recipes);
-  if (recipes.length) await requestMossSync(c, person.family_id);
+  await stopPersonsWork(c, personId);
+  if (hasRecipes) await requestMossSync(c, person.family_id);
 
   await enqueue(c, { queue: "scheduled", payload: { task: "accounts.purge", deletionId: deletion.id }, requestId });
   return deletion.id;
@@ -163,14 +161,7 @@ async function markRun(c: Queryable, id: string): Promise<Deletion | null> {
   return d;
 }
 
-/** A step with its own transactions runs after this row's lock is let go: holding a connection while it waits for more is how purges stop each other (db.ts). */
-async function outsideStep(step: Step, deletionId: string, max: number, options: PurgeOptions): Promise<number> {
-  const d = await tx((c) => markRun(c, deletionId));
-  if (!d) return -1;
-  const changed = await step.run(db(), d, max);
-  await options.fault?.("before-commit", step.name, changed);
-  return changed;
-}
+class OutOfTime extends Error {}
 
 /**
  * Works through every step, a batch to a transaction, until a full pass finds nothing left, then marks the purge finished and starts the outside purge. That last empty pass is the
@@ -185,28 +176,38 @@ export async function runPurge(deletionId: string, trace: Pick<Trace, "requestId
   if (!first.rows[0]) return "missing";
   if (first.rows[0].purged_at) return "done";
 
+  const run: PurgeRun = {
+    max,
+    beforeCommit: async (c, step, changed) => {
+      await c.query(`update account_deletions set purge_run_at = now() where id = $1`, [deletionId]);
+      await options.fault?.("before-commit", step, changed);
+    },
+    afterCommit: async (step, changed) => {
+      await options.fault?.("after-commit", step, changed);
+      if (changed >= max && Date.now() - started > budget) throw new OutOfTime();
+    },
+  };
+
   for (;;) {
     let touched = 0;
-    for (const step of STEPS) {
-      for (;;) {
-        const n = step.outside
-          ? await outsideStep(step, deletionId, max, options)
-          : await tx(async (c) => {
-              const d = await markRun(c, deletionId);
-              if (!d) return -1;
-              const changed = await step.run(c, d, max);
-              await options.fault?.("before-commit", step.name, changed);
-              return changed;
-            });
-        if (n < 0) return "missing";
-        await options.fault?.("after-commit", step.name, n);
-        touched += n;
-        if (n < max) break;
-        if (Date.now() - started > budget) {
-          await enqueue(db(), { queue: "scheduled", payload: { task: "accounts.purge", deletionId }, requestId: trace.requestId });
-          return "more";
+    try {
+      for (const step of STEPS) {
+        if ("area" in step) {
+          // An area's purge has transactions of its own, so this row's lock is let go first: holding a connection while it waits for more is how purges stop each other (db.ts).
+          const d = await tx((c) => markRun(c, deletionId));
+          if (!d) return "missing";
+          touched += await step.area(d, run);
+        } else {
+          touched += await inBatches(run, step.name, async (c, batch) => {
+            const d = await lockedDeletion(c, deletionId);
+            return d ? step.run(c, d, batch) : 0;
+          });
         }
       }
+    } catch (error) {
+      if (!(error instanceof OutOfTime)) throw error;
+      await enqueue(db(), { queue: "scheduled", payload: { task: "accounts.purge", deletionId }, requestId: trace.requestId });
+      return "more";
     }
     if (touched > 0) continue;
     await tx(async (c) => {
