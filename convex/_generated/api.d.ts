@@ -32,6 +32,7 @@ import type * as lib_dishAsk_types from "../lib/dishAsk/types.js";
 import type * as lib_dishAsk_validate from "../lib/dishAsk/validate.js";
 import type * as lib_dishAskRoutes from "../lib/dishAskRoutes.js";
 import type * as lib_dishAskValues from "../lib/dishAskValues.js";
+import type * as lib_fileOwner from "../lib/fileOwner.js";
 import type * as lib_forKids from "../lib/forKids.js";
 import type * as lib_geo from "../lib/geo.js";
 import type * as lib_glassesRoutes from "../lib/glassesRoutes.js";
@@ -105,6 +106,7 @@ declare const fullApi: ApiFromModules<{
   "lib/dishAsk/validate": typeof lib_dishAsk_validate;
   "lib/dishAskRoutes": typeof lib_dishAskRoutes;
   "lib/dishAskValues": typeof lib_dishAskValues;
+  "lib/fileOwner": typeof lib_fileOwner;
   "lib/forKids": typeof lib_forKids;
   "lib/geo": typeof lib_geo;
   "lib/glassesRoutes": typeof lib_glassesRoutes;

@@ -1,6 +1,7 @@
-# Upload ownership in Convex: the plan (not built)
+# Upload ownership in Convex
 
-Written Oct 31 for the Master Agent. Nothing here is built or deployed.
+Written Oct 31. **Built, and waiting for Apple:** Caleb's call is "Build, ship after approval", so nothing here is live
+until 1.0 is approved. The code is `convex/lib/fileOwner.ts`.
 
 ## The gap
 
@@ -20,8 +21,8 @@ Storage ids show in file URLs, so anyone who has seen a file's URL has its id. W
 - **Delete it:** set it as their cover, then set another cover or delete their account. `setCover` and the account purge
   both delete the file a row points at, whoever uploaded it. This is the worst one.
 
-**On the live data today (Oct 31):** 2 files are attached to messages, answers or covers, none of them twice, so there's
-no sign it has happened. That check didn't cover the dish tables.
+**On the live data today (Oct 31):** 22 files are held across messages, answers, live frames and dish tables, none of them
+by two rows, so there's no sign it has happened.
 
 ## The fix: the first person to use a fresh file owns it
 
@@ -40,26 +41,41 @@ else can know the id of a new file until it's attached, because that's when the 
    `cravings.sendVoiceRecipe`. `setCover` also gets the size and image checks it lacks.
 4. **`sharePhoto` claims too.** Its context is a query, which can't write, so the action calls a small claim mutation
    first. The kid can then take as long as they like over the note before sending.
-5. **Files the server stores itself get a claim when stored** (`lib/dishAskRoutes.ts`, `lib/glassesRoutes.ts`), with no
-   person on it, so they can never be attached.
-6. **Deleting checks the claim:** `setCover`'s old cover and the account purge's `dropFile` delete a file only if this
-   person's claim is on it or no claim exists. The purge also deletes the person's claims.
+5. **Files already on a card or a recording can't be attached,** even fresh. `claimFile` looks them up in `dishFiles`,
+   `dishAnswers` and `liveFrames`. That covers what the server stores itself (`lib/dishAskRoutes.ts`,
+   `lib/glassesRoutes.ts`) with no extra write per glasses frame, and it covers rows from before this change.
+6. **Deleting checks the claim:** `setCover`'s old cover and the account purge delete a file only if the row's owner has
+   the claim on it or no claim exists. The purge also removes the person's remaining claims and their files, such as a
+   photo drafted and never sent.
 
 **No backfill is needed.** Old files have no claim and are past the one-day window, so they can't be attached. Old rows
-keep their files and URLs, since only new attachments are checked.
+keep their files and URLs, since only new attachments are checked. One gap remains for the first day after the deploy: a
+file attached in the day before it has no claim and is still fresh, so someone who has its URL could claim it. With this
+little data, that isn't worth a backfill.
 
 ## Why build 6 keeps working
 
-No client changes: the arguments, return values and error wording stay the same. From `app/src/lib/live/convex.ts`'s
-notes, each app flow is upload, then use, by the same person. The one old-build risk is a phone holding an upload for more
-than a day before attaching it. I haven't ruled that out, so the build PR must check it on build 6's code.
+No client changes: the arguments, return values and error wording stay the same.
+
+**Checked on build 6's code (`5ab9f6f69`, `app/src/lib/live/convex.ts`):** no phone holds an unclaimed upload for a day. All
+three uploads go straight into their call: `setCover`, `answerQuestion`, and `sharePhoto`. The postcard then keeps the file
+id in memory only (`PostcardStep`'s state) until `sendPhoto`, and `sharePhoto` has claimed it by then, so that can wait
+any length of time. Nothing writes these ids to disk. Main has the same three, plus `sendVoiceRecipe`, which isn't in build 6.
 
 ## When it can ship
 
-It's a Convex-only deploy: no Supabase `api` deploy, no EAS update, and no path on the App Review guard's list. So it
-doesn't have to wait for Apple. But the reviewer's account uses these functions, so a bug here could break sending a voice
-note or photo during review.
+**After Apple approves 1.0 (Caleb).** The reviewer's account uses these functions, and a bug here could break sending a
+voice note or photo during review. It's a Convex-only deploy: no Supabase `api` deploy, no EAS update, and no path on the
+App Review guard's list.
 
-**Recommendation:** build it now with tests, including another person's file refused for each function. Deploy once the
-Master Agent is happy with those, then send a voice note and a photo from the TEST family straight after. If that risk
-isn't worth taking during review, hold the deploy until Apple approves; the live check above shows nothing urgent.
+**The PR stays unmerged until then.** Nothing deploys Convex on merge (the only workflow is `deploy-aws.yml`), but any later
+`npx convex deploy` from main would ship whatever main holds, so merging early could send this out with someone else's work.
+
+**At deploy time:**
+1. Merge main into the PR, then run `npx vitest run` and `npx tsc -p convex --noEmit`. Merge the PR.
+2. Deploy: `npx convex deploy --preview-name hackathon -y`, then check `expiresAt` is still null.
+3. From the TEST family straight after: answer a question by voice, send a postcard photo with its note, and set a plate
+   cover. Then check the logs for "Upload" refusals.
+4. **To roll back:** redeploy the functions as they were and keep the two schema additions; they're unused then.
+
+**For the move to AWS:** the new schema needs `fileClaims` too, or the purge and these checks lose their owner.

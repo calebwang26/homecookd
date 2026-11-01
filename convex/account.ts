@@ -17,6 +17,7 @@ import { deleteCard, dropCook, dropKid } from "./dishAsks";
 import { cancelJob } from "./jobs";
 import { dropLogOf, dropTokensOf } from "./push";
 import { requireSession } from "./lib/auth";
+import { dropFileOf } from "./lib/fileOwner";
 import { requestMossSync } from "./worker";
 
 /** Rows deleted (or changed) per purge run; the next run carries on where this one stopped. */
@@ -133,10 +134,6 @@ type Deletion = Doc<"accountDeletions">;
 /** Deletes (or changes) at most `max` rows and says how many; fewer than `max` means this step is done. */
 type Step = (ctx: MutationCtx, d: Deletion, max: number) => Promise<number>;
 
-async function dropFile(ctx: MutationCtx, id: Id<"_storage"> | undefined) {
-  if (id && (await ctx.db.system.get("_storage", id))) await ctx.storage.delete(id);
-}
-
 const union = <T>(a: T[], b: T[]) => [...new Set([...a, ...b])];
 
 /** Adds what a step found that deleteMe didn't know of to the deletion row (and to `d`, for the steps after). */
@@ -172,7 +169,7 @@ const recipes: Step = async (ctx, d, max) => {
 const messages: Step = async (ctx, d, max) => {
   const sent = await ctx.db.query("messages").withIndex("by_from", (q) => q.eq("from", d.personId)).take(max);
   for (const m of sent) {
-    await dropFile(ctx, m.fileId);
+    await dropFileOf(ctx, m.from, m.fileId);
     await ctx.db.delete("messages", m._id);
   }
   return sent.length;
@@ -182,7 +179,7 @@ const messages: Step = async (ctx, d, max) => {
 const questions: Step = async (ctx, d, max) => {
   const drop = async (rows: Doc<"questions">[]) => {
     for (const q of rows) {
-      await dropFile(ctx, q.answer?.audioId);
+      await dropFileOf(ctx, q.answer?.by, q.answer?.audioId);
       await ctx.db.delete("questions", q._id);
     }
     return rows.length;
@@ -200,7 +197,7 @@ const questions: Step = async (ctx, d, max) => {
 const answers: Step = async (ctx, d, max) => {
   const rows = await ctx.db.query("questions").withIndex("by_answer_by", (q) => q.eq("answer.by", d.personId)).take(max);
   for (const q of rows) {
-    await dropFile(ctx, q.answer?.audioId);
+    await dropFileOf(ctx, d.personId, q.answer?.audioId);
     await ctx.db.patch("questions", q._id, { status: "asked_cook", answer: undefined });
   }
   return rows.length;
@@ -230,13 +227,13 @@ const recordings: Step = async (ctx, d, max) => {
     for (const table of ["homiePrompts", "liveEvents", "liveWindows", "liveFrames"] as const) {
       const rows = await ctx.db.query(table).withIndex("by_recordingId", (q) => q.eq("recordingId", rec._id)).take(max - n);
       for (const row of rows) {
-        if ("storageId" in row) await dropFile(ctx, row.storageId);
+        if ("storageId" in row) await dropFileOf(ctx, d.personId, row.storageId);
         await ctx.db.delete(table, row._id);
       }
       n += rows.length;
       if (n >= max) return n;
     }
-    await dropFile(ctx, rec.coverStorageId);
+    await dropFileOf(ctx, d.personId, rec.coverStorageId);
     await ctx.db.delete("recordings", rec._id);
     n++;
   }
@@ -334,7 +331,14 @@ const cravingLinks: Step = async (ctx, d, max) => {
 const pushLog: Step = (ctx, d, max) => dropLogOf(ctx, d.personId, max);
 
 // Recipes first, so a late one's questions, cooking and swaps go with the rest.
+/** Whatever they uploaded and no row of theirs held any more: a draft photo, say. */
+const fileClaims: Step = async (ctx, d, max) => {
+  const rows = await ctx.db.query("fileClaims").withIndex("by_person", (q) => q.eq("personId", d.personId)).take(max);
+  for (const c of rows) await dropFileOf(ctx, d.personId, c.storageId);
+  return rows.length;
+};
+
 const STEPS: Step[] = [
   recipes, messages, questions, answers, cooking, recordings, jobs, hostedDinners, dinnerAsks, swaps, dishCardsAsKid, dishCardsAsCook,
-  cravingLinks, pushLog,
+  cravingLinks, pushLog, fileClaims,
 ];

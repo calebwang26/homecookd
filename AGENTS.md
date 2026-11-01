@@ -134,7 +134,8 @@ follows it, and it wins over the docs below on UI/UX and flows.
   Every public function takes the `sessionToken` from `sessions.start` and checks it with `requireSession`
   (`convex/lib/auth.ts`). The exceptions are the HTTP routes for people without an account: `/invite/open` and the
   v2 web flow's `/dish/*` (`docs/build/DISH-ASK-SPEC.md`). They use hashed capability tokens, per-IP limits
-  (`lib/rateLimit.ts`) and a $10 daily model budget. Tests set `DISH_FAKE_AI=1` (no model calls). Read `convex/_generated/ai/guidelines.md` before writing Convex code; the skills are in
+  (`lib/rateLimit.ts`) and a $10 daily model budget. Tests set `DISH_FAKE_AI=1` (no model calls). A function that takes
+  an uploaded file checks it with `claimFile` (`lib/fileOwner.ts`), and deleting one goes through `dropFileOf`. Read `convex/_generated/ai/guidelines.md` before writing Convex code; the skills are in
   `.agents/skills` (Codex) and `.claude/skills` (Claude Code).
 - **TestFlight is live.** Teammates, judges and the demo use TestFlight builds; use an EAS dev build while coding
   and EAS Update for JS-only fixes. Expo Go can't load the native mic-streaming module. Filming in the app

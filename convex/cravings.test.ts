@@ -356,6 +356,11 @@ test("sendVoiceRecipe: only the one it was asked of; a wrong type or size is ref
   vi.advanceTimersByTime(2 * 60 * 60_000);
   await expect(send(t, dad.sessionToken, row._id, old)).rejects.toThrow("Upload the recording first.");
   expect(await fileGone(t, old)).toBe(false);
+  // Someone else's upload, fresh but already theirs, is refused and never deleted.
+  const leos = await audio(t);
+  await t.mutation(api.messages.send, { sessionToken: leo.sessionToken, kind: "voice", fileId: leos });
+  await expect(send(t, dad.sessionToken, row._id, leos)).rejects.toThrow("Upload the recording first.");
+  expect(await fileGone(t, leos)).toBe(false);
 
   for (const durationS of [0.5, 126, Number.NaN]) {
     await expect(send(t, dad.sessionToken, row._id, clip, { durationS })).rejects.toThrow("1 second to 2 minutes");

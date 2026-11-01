@@ -6,6 +6,7 @@ import { internal } from "./_generated/api";
 import type { Doc } from "./_generated/dataModel";
 import { internalAction, internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server";
 import { requireCook, requireSession } from "./lib/auth";
+import { claimFile } from "./lib/fileOwner";
 import { textKeyName, textModel } from "./lib/textModel";
 import { translate } from "./lib/translate";
 import { familyRecipe } from "./recipes";
@@ -93,7 +94,7 @@ export const answer = mutation({
     if (!words && !audioId) throw new ConvexError("Say or type an answer first.");
     if (words && words.length > MAX_TEXT) throw new ConvexError("That answer is too long.");
     if (audioId) {
-      const file = await ctx.db.system.get("_storage", audioId);
+      const file = await claimFile(ctx, signed.person, audioId);
       if (!file) throw new ConvexError("Upload the voice note before sending it.");
       if (file.size > MAX_AUDIO_BYTES) throw new ConvexError("That voice note is too long.");
     }

@@ -5,10 +5,12 @@ import { ConvexError, v } from "convex/values";
 import type { Doc } from "./_generated/dataModel";
 import { internalMutation, internalQuery, mutation, query, type QueryCtx } from "./_generated/server";
 import { findSession, requireCook, requireSession, type Signed } from "./lib/auth";
+import { claimFile, dropFileOf } from "./lib/fileOwner";
 import { familyKids, forKidArgs, forKidFields, kidNames } from "./lib/forKids";
 import schema from "./schema";
 
 const IDLE_MS = 2 * 3600 * 1000;
+const MAX_COVER_BYTES = 20 * 1024 * 1024;
 const LIVE = ["intro", "recording", "wrapping_up"] as const;
 
 const promptKind = schema.tables.homiePrompts.validator.fields.kind;
@@ -101,7 +103,11 @@ export const setCover = mutation({
     const row = await ctx.db.get("recordings", recordingId);
     if (!row || row.cookId !== signed.person._id) throw new ConvexError("That recording isn't yours.");
     if (row.status === "abandoned") return { ok: false };
-    if (row.coverStorageId && row.coverStorageId !== storageId) await ctx.storage.delete(row.coverStorageId);
+    const file = await claimFile(ctx, signed.person, storageId);
+    if (!file || file.size > MAX_COVER_BYTES || (file.contentType && !file.contentType.startsWith("image/"))) {
+      return { ok: false };
+    }
+    if (row.coverStorageId !== storageId) await dropFileOf(ctx, row.cookId, row.coverStorageId);
     await ctx.db.patch("recordings", row._id, { coverStorageId: storageId, updatedAt: Date.now() });
     return { ok: true };
   },

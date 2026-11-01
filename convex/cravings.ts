@@ -25,6 +25,7 @@ import type { QuestionId } from "./lib/dishAsk/types";
 import { baseType, OWN_IDS } from "./lib/dishAsk/validate";
 import { randomBase62 } from "./lib/dishAskRoutes";
 import { CLIP_BYTES, CLIP_SLACK_S, LANGS, MAX_CLIP_S, ORPHAN_MS, relationV, VOICE_TYPES, voiceRecipeV, WORDS } from "./lib/dishAskValues";
+import { claimFile, dropFileOf } from "./lib/fileOwner";
 import { flagged } from "./lib/moderation";
 
 type Row = Doc<"dishAsks">;
@@ -271,16 +272,13 @@ export const saveVoiceRecipe = internalMutation({
     const language = a.language ?? (mine && LANGS.includes(mine) ? mine : "en");
 
     const now = Date.now();
-    const file = await ctx.db.system.get("_storage", a.audioId);
-    // Only a fresh upload no card holds: storage ids show in file URLs, so an older or used one may be someone
-    // else's photo or clip. It's refused and never deleted or shared.
-    const inUse =
-      (await ctx.db.query("dishAnswers").withIndex("by_audio", (q) => q.eq("audio", a.audioId)).first()) ??
-      (await ctx.db.query("dishFiles").withIndex("by_storage", (q) => q.eq("storageId", a.audioId)).first());
-    if (!file || inUse || file._creationTime <= now - ORPHAN_MS) throw new ConvexError("Upload the recording first.");
+    // Only a fresh upload of theirs that no card holds: storage ids show in file URLs, so an older or used one may be
+    // someone else's photo or clip. It's refused and never deleted or shared.
+    const file = await claimFile(ctx, signed.person, a.audioId);
+    if (!file || file._creationTime <= now - ORPHAN_MS) throw new ConvexError("Upload the recording first.");
     const bad = badRecording(file);
     if (bad) {
-      await ctx.storage.delete(a.audioId);
+      await dropFileOf(ctx, signed.person._id, a.audioId);
       return bad;
     }
 

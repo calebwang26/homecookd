@@ -3,8 +3,9 @@
 import { ConvexError, v } from "convex/values";
 import { internal } from "./_generated/api";
 import type { Id } from "./_generated/dataModel";
-import { action, internalQuery, mutation, query } from "./_generated/server";
+import { action, internalMutation, internalQuery, mutation, query } from "./_generated/server";
 import { findSession, requireSession, SIGNED_OUT } from "./lib/auth";
+import { claimFile, ownsFile } from "./lib/fileOwner";
 import { claudeText, WRITER_MODEL, writerOnClaude } from "./lib/textModel";
 import { familyRecipe } from "./recipes";
 import schema from "./schema";
@@ -114,7 +115,7 @@ export const send = mutation({
     if (args.kind === "text" && !text) throw new ConvexError("Write something first.");
     if (args.kind !== "text") {
       if (!args.fileId) throw new ConvexError("Upload it before sending it.");
-      const file = await ctx.db.system.get("_storage", args.fileId);
+      const file = await claimFile(ctx, signed.person, args.fileId);
       if (!file) throw new ConvexError("Upload it before sending it.");
       if (file.size > MAX_FILE_BYTES) throw new ConvexError("That file is too big.");
     } else if (args.fileId) {
@@ -146,6 +147,17 @@ export const send = mutation({
 const MUSE_URL = "https://api.meta.ai/v1/chat/completions";
 const MUSE_MODEL = "muse-spark-1.3"; // pinned; not a "-contributor" model, which may train on family data
 
+/** Before the model reads it, and it stays theirs however long they take over the note. */
+export const claimPhoto = internalMutation({
+  args: { sessionToken: v.string(), fileId: v.id("_storage") },
+  returns: v.null(),
+  handler: async (ctx, { sessionToken, fileId }) => {
+    const signed = await findSession(ctx, sessionToken);
+    if (signed) await claimFile(ctx, signed.person, fileId);
+    return null;
+  },
+});
+
 export const photoContext = internalQuery({
   args: { sessionToken: v.string(), recipeId: v.id("recipes"), fileId: v.id("_storage") },
   returns: v.union(
@@ -159,7 +171,9 @@ export const photoContext = internalQuery({
     if (!recipe) return { error: "That recipe isn't here anymore." };
     const file = await ctx.db.system.get("_storage", fileId);
     const photoUrl = await ctx.storage.getUrl(fileId);
-    if (!file || !photoUrl) return { error: "Upload the photo before sharing it." };
+    if (!file || !photoUrl || !(await ownsFile(ctx, signed.person._id, fileId))) {
+      return { error: "Upload the photo before sharing it." };
+    }
     if (file.contentType && !file.contentType.startsWith("image/")) return { error: "That isn't a photo." };
     if (file.size > MAX_FILE_BYTES) return { error: "That photo is too big." };
     const cook = await ctx.db.get("people", recipe.cookId);
@@ -192,6 +206,7 @@ export const sharePhoto = action({
   args: { sessionToken: v.string(), recipeId: v.id("recipes"), fileId: v.id("_storage") },
   returns: v.object({ draft: v.string(), aiDrafted: v.literal(true) }),
   handler: async (ctx, args) => {
+    await ctx.runMutation(internal.messages.claimPhoto, { sessionToken: args.sessionToken, fileId: args.fileId });
     const c = await ctx.runQuery(internal.messages.photoContext, args);
     if ("error" in c) throw new ConvexError(c.error ?? "Try again.");
     const onClaude = writerOnClaude();

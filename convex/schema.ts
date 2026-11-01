@@ -341,6 +341,14 @@ export default defineSchema({
     confidence: v.number(),
   }).index("by_recordingId", ["recordingId"]),
 
+  /** Who owns an uploaded file: the first person to use it while it's fresh (lib/fileOwner.ts). */
+  fileClaims: defineTable({
+    storageId: v.id("_storage"),
+    personId: v.id("people"),
+  })
+    .index("by_storage", ["storageId"])
+    .index("by_person", ["personId"]),
+
   /** The newest glasses frame of a live recording (one row each, replaced about once a second by the laptop
    *  bridge), so the cook's phone can show what the glasses see. Older frames' files are deleted. */
   liveFrames: defineTable({
@@ -351,7 +359,8 @@ export default defineSchema({
     // so an older frame that lands late must not replace a newer one.
     sessionId: v.optional(v.string()),
     t: v.optional(v.number()),
-  }).index("by_recordingId", ["recordingId"]),
+  }).index("by_recordingId", ["recordingId"])
+    .index("by_storage", ["storageId"]),
 
   /** Each window the live analysis tried, so a hole in liveEvents reads as "not analysed", not "nothing happened". */
   liveWindows: defineTable({
