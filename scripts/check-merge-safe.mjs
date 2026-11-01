@@ -32,7 +32,7 @@ const BUNDLE = {
 
 // What a workflow may be started by, and text that deploys something live if a workflow ever runs it.
 const SAFE_EVENTS = new Set(['pull_request', 'workflow_dispatch', 'workflow_call', 'push']);
-const LIVE_COMMANDS = [/terraform\s+apply/, /convex\s+deploy/, /eas(-cli)?\s+(update|build|submit)/, /vercel\s+(deploy|--prod)/, /gcloud\s+run\s+deploy/, /deploy-signer\.sh/, /voice\/deploy\.sh/, /environment:\s*production/];
+const LIVE_COMMANDS = [/convex\s+deploy/, /eas(-cli)?\s+(update|build|submit)/, /vercel\s+(deploy|--prod)/, /gcloud\s+run\s+deploy/, /deploy-signer\.sh/, /voice\/deploy\.sh/, /environment:\s*production/];
 
 const args = process.argv.slice(2);
 const flag = (name) => args.includes(`--${name}`);
@@ -111,6 +111,8 @@ function workflows() {
       else if (/\bmain\b|\bmaster\b/.test(text)) failures.push(`${name}: starts on a push to main.`);
     }
     for (const command of LIVE_COMMANDS) if (command.test(yaml)) failures.push(`${name}: contains ${command}, which deploys something live.`);
+    // Staging may apply by itself (its triggers are checked above). A workflow that can reach production may not.
+    if (/terraform\s+apply/.test(yaml) && /production/.test(yaml)) failures.push(`${name}: runs terraform apply and names production.`);
   }
   console.log(`Workflows: ${names.length} read`);
 }

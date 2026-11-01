@@ -24,7 +24,7 @@
     "convex/syncRead.ts": {
       "switch": "SYNC_READ_SECRET",
       "why": "New internal queries, reached only through those routes",
-      "fingerprint": "d99c2c18c592"
+      "fingerprint": "e990b9575211"
     },
     "pipeline/Dockerfile": {
       "switch": "none needed: the image, not the laptop",
