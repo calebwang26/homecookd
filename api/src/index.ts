@@ -3,6 +3,7 @@ import * as Sentry from "@sentry/node";
 import { buildApp } from "./app.js";
 import { db } from "./db.js";
 import { oldestDueAgeS, oneAtATime, sendDue } from "./outbox.js";
+import { sqsReceiver, startConsumer } from "./scheduled.js";
 
 const app = buildApp();
 
@@ -44,6 +45,10 @@ if (queues.jobs && queues.scheduled) {
     });
   }, 5_000);
   app.addHook("onClose", async () => clearInterval(timer));
+
+  // The other half: every api task also works the scheduled queue (scheduled.ts).
+  const consumer = startConsumer(sqsReceiver(queues.scheduled), app.log as never);
+  app.addHook("onClose", async () => consumer.stop());
 }
 
 // ECS sends SIGTERM before stopping a task: finish what's running, then leave.

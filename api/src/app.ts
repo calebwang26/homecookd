@@ -6,6 +6,7 @@ import * as Sentry from "@sentry/node";
 import { db } from "./db.js";
 import { ApiError } from "./errors.js";
 import { fieldPaths, fileGuard, lastName, looksLikeFileKey } from "./files.js";
+import { dishRoutes } from "./modules/dish/routes.js";
 import { peopleRoutes } from "./modules/people/routes.js";
 
 declare module "fastify" {
@@ -16,10 +17,19 @@ declare module "fastify" {
   }
   interface FastifyInstance {
     fileKeyRoutes: { method: string; url: string; fields: string[] }[];
+    notFileKeyRoutes: { method: string; url: string; fields: string[] }[]; // what said it isn't an S3 key: each needs its own check and test
   }
 }
 
 const REQUEST_ID = /^[A-Za-z0-9-]{8,64}$/;
+
+/**
+ * Above the load balancer's idle_timeout (infra/modules/env/load_balancer.tf, 3700 s): if this side closed an idle connection first, the load balancer could
+ * send a request down it as it closed, and the caller would get a 502. A test reads the Terraform and fails if this falls behind.
+ */
+export const KEEP_ALIVE_MS = 3_720_000;
+/** How long a caller may take to send a whole request, not how long we may take to answer. Bodies are small: files go straight to S3. */
+export const REQUEST_TIMEOUT_MS = 30_000;
 
 /** Paths can hold capability tokens in their query, so logs get the path only. */
 export const pathOnly = (url: string) => url.split("?")[0];
@@ -29,6 +39,7 @@ const WRITES = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 /** Fails at start, not in production, for a route that could take a file key without saying so. */
 function guardFileKeys(app: FastifyInstance): void {
   app.decorate("fileKeyRoutes", []);
+  app.decorate("notFileKeyRoutes", []);
   app.addHook("onRoute", (route) => {
     const methods = [route.method].flat();
     const schema = route.schema as { body?: object; querystring?: object; params?: object } | undefined;
@@ -46,6 +57,11 @@ function guardFileKeys(app: FastifyInstance): void {
     if (missing.length > 0) {
       throw new Error(`${route.url}: declare ${missing.join(", ")} in config.fileKeys or config.notFileKeys`);
     }
+    if (exempt.length > 0) {
+      for (const method of methods) {
+        if (method !== "HEAD") app.notFileKeyRoutes.push({ method, url: route.url, fields: exempt });
+      }
+    }
     if (declared.length > 0) {
       const existing = route.preValidation ? [route.preValidation].flat() : [];
       route.preValidation = [...existing, fileGuard(declared)];
@@ -61,6 +77,8 @@ export function buildApp(options: { logger?: object | boolean; routes?: (app: Fa
     // Only addresses inside our network count as proxies (the load balancer), so a caller can't set req.ip with a header.
     trustProxy: "10.0.0.0/8",
     bodyLimit: 1024 * 1024, // bytes never pass through the api: files go straight to S3
+    keepAliveTimeout: KEEP_ALIVE_MS,
+    requestTimeout: REQUEST_TIMEOUT_MS,
     logger: options.logger ?? {
       level: process.env.LOG_LEVEL ?? "info",
       serializers: {
@@ -111,6 +129,7 @@ export function buildApp(options: { logger?: object | boolean; routes?: (app: Fa
   });
 
   app.register(peopleRoutes);
+  app.register(dishRoutes, { prefix: "/dish" });
   options.routes?.(app);
 
   return app;

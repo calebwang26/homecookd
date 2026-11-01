@@ -1,8 +1,11 @@
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { test } from "node:test";
+import { fileURLToPath } from "node:url";
 import { Writable } from "node:stream";
 import type { Event } from "@sentry/node";
-import { buildApp, pathOnly } from "../src/app.js";
+import { buildApp, KEEP_ALIVE_MS, pathOnly, REQUEST_TIMEOUT_MS } from "../src/app.js";
 import { scrub } from "../src/sentry.js";
 
 test("/health answers without a database", async () => {
@@ -96,6 +99,16 @@ test("the caller can't choose their own IP: only the load balancer's hop counts"
   assert.equal(res.json().ip, "1.1.1.1");
   const direct = await app.inject({ url: "/test/ip", headers: { "x-forwarded-for": "6.6.6.6" }, remoteAddress: "8.8.8.8" });
   assert.equal(direct.json().ip, "8.8.8.8");
+});
+
+test("this side keeps an idle connection open longer than the load balancer does, so it can't 502 a POST", () => {
+  const app = buildApp({ logger: false });
+  assert.equal(app.server.keepAliveTimeout, KEEP_ALIVE_MS);
+  assert.equal(app.server.requestTimeout, REQUEST_TIMEOUT_MS);
+  const terraform = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "infra", "modules", "env", "load_balancer.tf");
+  if (!existsSync(terraform)) return;
+  const idleS = Number(/idle_timeout\s*=\s*(\d+)/.exec(readFileSync(terraform, "utf8"))![1]);
+  assert.ok(KEEP_ALIVE_MS > idleS * 1000, `the load balancer's idle_timeout is ${idleS} s`);
 });
 
 test("/ready reaches a real database", { skip: !process.env.TEST_DATABASE_URL }, async () => {
