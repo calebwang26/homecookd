@@ -73,13 +73,14 @@ pool waits; autoscaling on request load. **The proof is a load test that exercis
 **Measured, Nov 1 (made-up data, local Postgres, one process with a pool of 10):** a request waiting on a row lock keeps its connection. 200 requests at once on one card finish in 408 ms
 with no error, because each holds the row for about 2 ms. If something else holds that row, the queue takes the whole pool: with a row held 7 s and 10 waiting, one of the 10 got a 500, and `/ready`
 answered 503 after 5 s for anyone, on any family's behalf. With 40 waiting, 31 got a 500. At 3 s nothing failed, but everything else waited the 3 s. So one stuck row can stop a task for every family.
-**Recommendation:** add a `lock_timeout` of about 3 s beside the bounded wait, so a request waiting on a row gives up and answers a 503 with `retry-after`, and load test it. Not built.
+**Built after that measurement:** `lock_timeout` is 3 s, and a request that gives up on a lock or on the pool answers a 503 with `retry-after`, in every error handler. Nothing was written, so the phone may try again.
+**It isn't a cure.** Requests take connections in the order they came, so with 40 waiting on a stuck row, others still wait behind them. With 15, `/ready` answered 200. The bounded wait above is still the gate. A test (`api/test/busy.test.ts`) holds it to this.
 
 **What the 5 s test failures were, Nov 1.** Not a full pool and not a lock, in the one that was caught: a request failed at 5,003 ms with 3 connections open and 2 of them idle, while one new connection
 took 5,022 ms and was cut off. On this Mac, looking up `localhost` sometimes takes 5 s: 8 of 6,000 connections to `localhost`, 7 of 6,000 lookups alone, 0 of 6,000 to `127.0.0.1` (slowest 30 ms). The pool's
 connection timeout is also 5 s. Local tests now use `127.0.0.1`. The three earlier failures have the same shape but ran without the probe, so that they had this cause is likely, not shown.
 **It does tell us something for production.** A request that starts a new connection stays tied to it: idle connections don't rescue it, so one slow lookup or handshake is a 500 with the pool half empty. `DB_HOST` is a
-name, and we haven't measured lookups on Fargate. **Recommendation:** in the same load test, count `timeout exceeded` errors with idle connections open, and try a `tx` again once on `isPoolWait` (nothing was written). Not built.
+name, and has to stay one because a failover moves the address. We haven't measured lookups on Fargate. **Recommendation:** in the same load test, count `timeout exceeded` errors with idle connections open, and try a `tx` again once on `isPoolWait` (nothing was written). Not built.
 
 ### Not building
 
