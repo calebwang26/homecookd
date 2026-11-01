@@ -56,7 +56,7 @@ locals {
       {
         Effect   = "Allow"
         Action   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
-        Resource = ["${aws_s3_bucket.uploads.arn}/*", "${aws_s3_bucket.media.arn}/*"]
+        Resource = ["${aws_s3_bucket.uploads.arn}/*", "${aws_s3_bucket.media.arn}/*", "${aws_s3_bucket.private.arn}/*"]
       },
       {
         Effect   = "Allow"
@@ -131,7 +131,7 @@ resource "aws_iam_role_policy" "deploy" {
       {
         Effect = "Allow"
         Action = [
-          "ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:CompleteLayerUpload", "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:CompleteLayerUpload", "ecr:DescribeImages", "ecr:GetDownloadUrlForLayer",
           "ecr:InitiateLayerUpload", "ecr:PutImage", "ecr:UploadLayerPart",
         ]
         Resource = [for r in aws_ecr_repository.service : r.arn]

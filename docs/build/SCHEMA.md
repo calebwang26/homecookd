@@ -1,6 +1,6 @@
 # homecookd's one Postgres schema
 
-**Draft for review, Oct 31, 2026.** Caleb reviews it, then the Master Agent. Nothing builds on it until then. The SQL is in
+**Oct 31, 2026.** Reviewed by the Master Agent, with Caleb's product calls in section 6. The SQL is in
 `api/migrations/` (8 files, 46 tables). It has been applied only to throwaway empty databases, and no real data has been
 copied or read. The rules it follows are in `docs/build/SYSTEM-DESIGN.md`.
 
@@ -55,7 +55,7 @@ Convex's other system table, `_scheduled_functions`, isn't counted above. What i
 | `profiles` | `people` | Merged; `learner` becomes `kid` |
 | `threads` | `threads` | This shape wins |
 | `messages` | `messages` | This shape wins; `audio_path`, `audio_url`, `photo_path` become keys |
-| `thread_reads` | `thread_reads` | |
+| `thread_reads` | Theirs deleted |
 | `shares` | `shares` | |
 | `pending_sends` | `pending_sends` | `job_id` is the signer's folder, so it's renamed `upload_id`; a real `job_id` FK is added |
 | `recipe_events` | `recipe_events` | |
@@ -302,7 +302,7 @@ The rule for any row with a file key: mark the key in `files` first, then delete
 
 | Table | What happens |
 |---|---|
-| `families` | Stays, with its name and code. See open question C2 |
+| `families` | Stays, with its name and code, until its last person deletes: then `name`, `public_name` and both code columns are blanked, and the row stays for the FKs (C2) |
 | `people` | Blank tombstone: `name = 'Deleted'`, everything personal null. The check constraint enforces it |
 | `devices` | `person_id` null, revoked. **New:** `label` null too |
 | `identities` | Deleted, which frees the Apple or Google account |
@@ -311,7 +311,7 @@ The rule for any row with a file key: mark the key in `files` first, then delete
 | `join_links` | `inviter_id` null. The family's link keeps working |
 | `move_requests` | Asking to be them: deleted. Decided by them: `decided_by` null |
 | `signups` | **New** (today nothing touches it): email null, name `'Deleted'`. A `link:` row stays to keep "one join per side"; others are deleted |
-| `account_deletions` | Stays as the record. See open question C5 |
+| `account_deletions` | Stays as proof. Its lists of ids and keys clear 60 days after the outside purge (C5) |
 | `recipes` | Theirs deleted at once. Their folder goes by `media_prefix` |
 | `recordings` | Theirs deleted, after everything saved with them |
 | `jobs` | Theirs deleted, with `upload_key` noted first |
@@ -320,7 +320,7 @@ The rule for any row with a file key: mark the key in `files` first, then delete
 | `cooking_sessions` | As the kid: deleted. On their recipes: cascade. As the cook of a library dish: `cook_id` null |
 | `pending_sends` | Sent by them: deleted, hello file marked. To them: removed from `recipient_ids` |
 | `craving_links` | Deleted. Cards made from one follow the next rows |
-| `dish_asks` | As the kid: with Mom still here, the card stays without the name, photos, voice notes and (**new**) `ip_key`; otherwise the whole card goes. As Mom: answers, version and filming day cleared; the card stays for the kid. A card's `family_id` alone deletes nothing. See C3 |
+| `dish_asks` | As the kid: with Mom still here, the card stays without the name, photos, voice notes and (**new**) `ip_key`; otherwise the whole card goes. As Mom: answers, version and filming day cleared; the card stays for the kid. A card's `family_id` alone deletes nothing. With Mom still here, the kid's `message` is blanked too (C3) |
 | `dish_ask_translations` | As Mom: deleted. As the kid: **new**, deleted, because translations copy the kid's message |
 | `dish_answers` | With the card, or as Mom. Clips marked |
 | `files` | Theirs and any from rows above: marked, deleted from S3 by a sweep, and the row removed later. Anonymous kids' uploads are found by `ask_id` |
@@ -332,9 +332,9 @@ The rule for any row with a file key: mark the key in `files` first, then delete
 | `swap_requests` | They asked, or either recipe is theirs: deleted |
 | `reports` | **New:** `reporter_person_id` null. The family's hide stays |
 | `blocks` | **New:** `label` becomes `'A family'` where their family is the blocked one, since it can hold a cook's first name |
-| `threads` | Their pairs deleted. The circle stays. See C1 |
+| `threads` | Their pairs stay, pointing at the tombstone, so the other person keeps their half (C1). The circle stays |
 | `thread_reads` | Theirs, and any on those threads |
-| `messages` | Everything they sent, plus everything in their pairs (C1). What others posted in the circle stays. Replies to deleted rows: `reply_to` null |
+| `messages` | Everything they sent, in pairs and the circle. What others sent stays, voice notes included (C1). Replies to deleted rows: `reply_to` null |
 | `recipe_notes` | Answered by them or from a deleted message: deleted. Asked by them: `asked_by` and `question` null |
 | `questions` | They asked, or on their recipes: deleted. Their answer to someone else's: taken off, status back to `asked_cook` |
 | `shares` | `sender_id` null. The link stops working once the recipe's files go |
@@ -403,7 +403,7 @@ Answered Oct 31:
   The sync is temporary, so removing it is on AWS-MIGRATION's Cutover list.
 - **M2: yes.** A `private` bucket, in its own infra PR, with versioning and old-version expiry like `uploads`.
 - **M3: keep `files` and `outbox`.** The sender must use `FOR UPDATE SKIP LOCKED`, and SQS consumers must tolerate repeats.
-- **M4: yes,** its own PR after C1.
+- **M4: no change needed.** C1 keeps the other person's half, which is what `convex/account.test.ts` already pins. The behavior tests keep it; Supabase's purge is what changes.
 - **M5: yes,** in the api skeleton PR. A transaction-per-file runner can't use `CREATE INDEX CONCURRENTLY`, so the runner needs a
   stated way to run a file outside a transaction once tables have real rows.
 - **M6: later, but before any backfill** copies real tokens in readable form. It's on AWS-MIGRATION's "Before real data" list.
@@ -428,25 +428,17 @@ The questions as asked:
 - **M6. Readable link tokens.** `craving_links.token`, `dinners.invite_token` and `shares.token` are stored as they are.
   **Recommendation:** seal them as `join_links.token_enc` does, in a later PR. Not a blocker.
 
-### For Caleb (product calls)
+### Caleb's answers (Oct 31, 2026)
 
-Each default below is already what the schema assumes.
-
-- **C1.** `TODO(caleb)`: **when someone deletes their account, does the other person's half of a 1:1 go too?** `/privacy` says "your
-  one-to-one chats". Supabase deletes both halves. Convex keeps the other person's, on purpose (it's theirs). Merging messages
-  forces one rule. **Recommendation:** both halves go, because that's what `/privacy` promises, though it does delete a voice note
-  the other person sent.
-- **C2.** `TODO(caleb)`: **what happens to a family when its last person deletes?** Today its name and code stay forever.
-  **Recommendation:** blank `name`, `public_name` and both code columns, and keep the row for the FKs.
-- **C3.** `TODO(caleb)`: **when a kid deletes and the card stays for Mom, how much stays?** Today the message in the kid's voice and
-  the translations of it stay. **Recommendation:** blank the message and drop the translations. Keep the guess, because her version
-  is built on it.
-- **C4.** `TODO(caleb)`: **how long to keep an anonymous card's `ip_key`?** Today it's kept with the card, and cards are kept until
-  asked (your Oct 29 call). It's for stopping abuse, which is over in days. **Recommendation:** null it after 90 days.
-- **C5.** `TODO(caleb)`: **how long to keep the deletion record?** **Recommendation:** forever as proof, but clear its lists of ids and
-  keys 60 days after the outside purge.
-- **C6.** `TODO(caleb)`: **do the seeded demo families come along?** `seed:` rows, including fake Community neighbors. **Default:**
-  yes, as they are, so nothing changes. **Recommendation:** drop them at launch if real neighbors exist.
+- **C1: the other person's half stays.** When someone deletes their account, what they sent goes, and what the other person sent
+  stays, including voice notes. Convex does this today; Supabase's purge deletes both halves, so the new purge follows Convex.
+  **`/privacy` says "your one-to-one chats" go, so its wording has to change** (AWS-MIGRATION, "Waiting on Apple's approval").
+- **C2: blank it.** When a family's last person deletes, `name`, `public_name` and both code columns are blanked. The row stays for
+  the FKs.
+- **C3: remove the kid's message and its translations.** The guess stays, because Mom's version is built on it.
+- **C4: null an anonymous card's `ip_key` after 90 days.** A sweep does it.
+- **C5: keep the deletion record as proof.** Clear its lists of ids and keys 60 days after the outside purge.
+- **C6: the seeded demo families come along for now.** Drop them at launch if real neighbors exist.
 
 ## 7. How it was tested, and what wasn't
 

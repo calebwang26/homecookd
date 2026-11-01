@@ -6,6 +6,37 @@ resource "aws_s3_bucket" "uploads" {
   bucket = "${local.name}-uploads-${local.account_id}"
 }
 
+# Voice notes and photos between family members: never on the CDN's public path, read only with short presigned links.
+resource "aws_s3_bucket" "private" {
+  bucket = "${local.name}-private-${local.account_id}"
+}
+
+resource "aws_s3_bucket_public_access_block" "private" {
+  bucket                  = aws_s3_bucket.private.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_versioning" "private" {
+  bucket = aws_s3_bucket.private.id
+  versioning_configuration { status = "Enabled" }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "private" {
+  bucket     = aws_s3_bucket.private.id
+  depends_on = [aws_s3_bucket_versioning.private]
+  rule {
+    id     = "old-versions-and-abandoned-uploads"
+    status = "Enabled"
+    filter {}
+    expiration { expired_object_delete_marker = true }
+    noncurrent_version_expiration { noncurrent_days = 28 }
+    abort_incomplete_multipart_upload { days_after_initiation = 7 }
+  }
+}
+
 resource "aws_s3_bucket_public_access_block" "media" {
   bucket                  = aws_s3_bucket.media.id
   block_public_acls       = true

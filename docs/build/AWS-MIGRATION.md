@@ -17,8 +17,8 @@ Oct 31, 2028; $100 expires Oct 17, 2027). Claude stays billed by Anthropic, and 
 
 ## How the rewrite ships (Caleb, Oct 31)
 
-One long-lived branch, with one reviewable PR per area merged into it. **Nothing from it reaches `main` or deploys until
-Apple approves 1.0.** After approval: app 1.1 with our own addresses first, then each area switches over on its own, with
+One long-lived branch, with one reviewable PR per area merged into it. **Nothing from it reaches `main` or production until
+Apple approves 1.0.** Merges into it do auto-deploy to staging. After approval: app 1.1 with our own addresses first, then each area switches over on its own, with
 Convex as its way back until it's proven. Build 6 keeps calling the old services, so they stay up until those phones have
 updated. `main` keeps changing `convex/` meanwhile, so the branch merges `main` often and ports each change.
 
