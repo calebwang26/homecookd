@@ -132,7 +132,7 @@ jobs:
 
   checks:
     if: always()
-    needs: [secrets, infra, convex, voice, pipeline, api]
+    needs: [changes, secrets, infra, convex, voice, pipeline, api]
     runs-on: ubuntu-latest
     steps:
       - name: Fail if any check failed
