@@ -23,7 +23,7 @@ spend cap and SIGTERM all work mid-step. It also keeps the steps' prints, which 
 
 **Driver: `psycopg[binary]` 3, pinned.** It's the standard Postgres driver for Python, the binary package needs no system libraries,
 and it supports `verify-full` for RDS. pg8000 is smaller but less widely used. It and `boto3` are in `requirements-queue.txt`, which
-the Dockerfile installs and CI and the laptop don't, and both are imported only when a connection or client is made.
+the Dockerfile and CI install and the laptop doesn't, and both are imported only when a connection or client is made.
 
 ## How it's run
 
@@ -36,8 +36,8 @@ On staging, Terraform sets that entry point on the worker's container (`entry_po
 Convex mode until it's chosen. Its `desired_count` is 0 today. A Terraform apply that changes the worker registers a task definition with
 the `:bootstrap` image, so run "Deploy to AWS" for `worker` before running a task by hand.
 
-**Message contract:** `{outboxId, requestId, payload: {jobId}}`, from `api/src/outbox.ts` with `queue: "jobs"`. No api route sends
-one yet. The api must set the job to `queued` and write the outbox row in one transaction, only once the upload is complete.
+**Message contract:** `{outboxId, requestId, payload: {jobId}}`, from `api/src/outbox.ts` with `queue: "jobs"`. The draft in
+`docs/build/JOBS-MIGRATION.md` sends it: it sets the job to `queued` and writes the outbox row in one transaction, only once the upload is complete.
 
 **Safe to repeat.** Only a conditional `UPDATE` starts a job (`queued`, or running with a heartbeat older than 10 minutes). It adds 1
 to `attempts`, and every later write names that attempt, so a worker that lost its claim changes nothing. Each attempt publishes to
@@ -86,7 +86,8 @@ does, with S3 versioning as a 28-day undo), and the message goes. If S3 fails, t
 
 ## Seams changed in existing files
 
-Only two. `worker.py`, `prep.py`, `process.py`, `account_purge.py`, `observability.py` and `requirements.txt` are unchanged.
+Two, plus Sentry's. `prep.py`, `process.py`, `account_purge.py` and `requirements.txt` are unchanged from `main`. `worker.py` adds only the Sentry calls, and
+`observability.py` does nothing without `sentry_sdk` or its env, so the laptop needs no new package (`test_worker_no_sentry.py`). `sentry-sdk` is in `requirements-queue.txt`.
 
 - `pipeline/publish.py`, `public_url`: uses `bucket.public_base` when the bucket has one. A GCS bucket doesn't, so its URLs don't change.
 - `pipeline/Dockerfile`: installs `requirements-queue.txt` and adds RDS's certificates. The entry point is unchanged.
@@ -142,9 +143,9 @@ doesn't list AWS yet. Expect roughly $2.50 an hour of video.
 
 ## Open questions, with recommendations
 
-1. **Who says an upload is complete?** There's no signer file in this mode, and the worker can't tell 2 of 3 clips from all of them.
+1. **Who says an upload is complete?** Built as recommended, in `docs/build/JOBS-MIGRATION.md`. There's no signer file in this mode, and the worker can't tell 2 of 3 clips from all of them.
    **Recommend** the api: `queued` only once `files.uploaded_at` is set for every clip. Until that route exists, a partial folder would run as it is.
-2. **Who consumes `recipe_published`?** Today Convex does Moss, translating follow-ups and more. Nothing reads the `scheduled` queue
+2. **Who consumes `recipe_published`?** The jobs area's task reads it now, and does nothing yet (`docs/build/JOBS-MIGRATION.md`, "Deferred"). Today Convex does Moss, translating follow-ups and more. Nothing reads the `scheduled` queue
    yet, so the job goes straight to `done` without `indexing`. **Recommend** the api's jobs area handles it. Moss is going away anyway.
 3. **Glasses' live analysis.** `liveLog` and `liveGaps` aren't carried over; `video_gaps` is. **Recommend** porting them when the glasses
    return. The VM has been stopped since Oct 25.

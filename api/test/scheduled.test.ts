@@ -60,8 +60,8 @@ function fakeQueue(messages: Received[]) {
     },
   };
 }
-const until = async (ok: () => boolean) => {
-  for (let i = 0; i < 400 && !ok(); i += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+const until = async (ok: () => boolean, ms = 2_000) => {
+  for (const start = Date.now(); Date.now() - start < ms && !ok(); ) await new Promise((resolve) => setTimeout(resolve, 5));
   assert.ok(ok(), "timed out");
 };
 
@@ -144,8 +144,15 @@ test("the real loop, end to end: a Send's work leaves through the outbox and lan
   // SQS delivers one of them twice.
   queue.push({ ...queue[1], id: "again" });
   const q = fakeQueue(queue);
-  const consumer = startConsumer(q.receiver, silent);
-  await until(() => q.removed.length === 3).finally(() => consumer.stop());
+  const errors: unknown[] = [];
+  const consumer = startConsumer(q.receiver, { ...silent, error: (fields: object, message: string) => void errors.push({ message, fields }) });
+  // Each message here runs several real transactions, and on a busy machine a pass can take seconds. What's checked is what happened, not how fast: a real SQS try has 300 s.
+  await until(() => q.removed.length === 3, 60_000)
+    .catch((error: Error) => {
+      // Name what happened, so a failure here isn't written off as load.
+      throw new Error(`${error.message}; removed ${q.removed.length} of 3; consumer errors: ${JSON.stringify(errors)}`);
+    })
+    .finally(() => consumer.stop());
   await settle(); // a merge that found the clip being heard queued itself to look again
   assert.ok((await rowOf(kidToken)).version);
   assert.equal(model.calls.version, 1);
@@ -184,6 +191,39 @@ test("the budget's alert: twenty racing writes add up exactly, and only one can 
   assert.equal(alerts.length, 1);
   assert.equal(alerts[0].payload.day, dayOf(Date.now()));
   assert.ok(!JSON.stringify(alerts).match(/[a-z]+@/));
+});
+
+test("a cost isn't lost when every connection stays busy past the wait", { skip }, async () => {
+  await newBackend();
+  const before = await spent();
+  const held = await Promise.all(Array.from({ length: 10 }, () => db().connect()));
+  const loud: string[] = [];
+  const spend = newSpend();
+  spend.usd = 0.5;
+  const saving = recordSpend(spend, null, { log: { ...silent, error: (_o: object, m: string) => void loud.push(m) } });
+  await new Promise((resolve) => setTimeout(resolve, 5_500)); // past one wait
+  for (const client of held) client.release();
+  await saving;
+  assert.deepEqual(loud, []);
+  close(await spent(), before + 0.5);
+  assert.equal(spend.usd, 0);
+});
+
+test("if the connections never free up, the lost cost says so, how much, and why", { skip }, async () => {
+  await newBackend();
+  const before = await spent();
+  const held = await Promise.all(Array.from({ length: 10 }, () => db().connect()));
+  const logged: { fields: { usd?: number; poolWait?: boolean; attempt?: number }; message: string }[] = [];
+  const spend = newSpend();
+  spend.usd = 0.5;
+  await recordSpend(spend, null, { log: { ...silent, error: (fields: object, message: string) => void logged.push({ fields, message }) } });
+  for (const client of held) client.release();
+  assert.equal(logged.length, 1);
+  assert.equal(logged[0].message, "dish spend wasn't recorded");
+  assert.equal(logged[0].fields.usd, 0.5);
+  assert.equal(logged[0].fields.poolWait, true);
+  assert.equal(logged[0].fields.attempt, 3);
+  close(await spent(), before);
 });
 
 test("the budget's alert repeats harmlessly; if the webhook fails, it's tried again", { skip }, async () => {

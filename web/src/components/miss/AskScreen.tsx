@@ -1,7 +1,8 @@
 'use client';
 // K1, the dish box (the v2 "Main" mockup): what the kid misses, who makes it, and something from home
 // (photos, a voice note). "Make my recipe" goes to MissApp. K5 is the same screen when today's
-// budget is spent: the line, and the button off.
+// budget is spent: the line, and the button off. From a parent's craving link (DISH-ASK-SPEC §8) it's her
+// asking: her name and line, and the kid's name instead of who makes it (the push says who's asking).
 import { useEffect, useId, useRef, useState, type MouseEvent } from 'react';
 import { TopBar } from '@/components/dish/parts';
 import { Rich, useLang, useRel } from '@/components/dish/lang';
@@ -9,7 +10,7 @@ import { canRecord, useRecorder } from '@/components/dish/useRecorder';
 import { EggMascot } from '@/components/primitives/EggMascot';
 import { IconClose } from '@/components/recipe-web/icons';
 import { clock, relationFromWord } from '@/lib/dish/text';
-import type { Relation } from '@/lib/dish/types';
+import type { CravingPeek, Relation } from '@/lib/dish/types';
 import type { WordKey } from '@/lib/dish/words';
 import ui from '@/components/dish/ui.module.css';
 import s from './miss.module.css';
@@ -26,10 +27,12 @@ const VOICE_MAX_MS = 60_000;
 
 export type Picked = { photos: File[]; voice: { blob: Blob; type: string; durationS: number } | null };
 
-export type AskDraft = { dish: string; relation: Relation; other: string | null; picked: Picked };
+export type AskDraft = { dish: string; name: string; relation: Relation; other: string | null; picked: Picked };
 
 type Props = {
   draft: AskDraft;
+  /** Her link, or 'off' when it can't be used: the plain page, and a line saying so. */
+  craving: CravingPeek | 'off' | null;
   onDraft: (d: AskDraft) => void;
   error: WordKey | null;
   limited: boolean;
@@ -45,12 +48,15 @@ function speechRecognition(): (new () => SpeechRec) | null {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition ?? null;
 }
 
-export function AskScreen({ draft, onDraft, error, limited, lastToken, onOpenLast, onSubmit }: Props) {
+export function AskScreen({ draft, craving, onDraft, error, limited, lastToken, onOpenLast, onSubmit }: Props) {
   const { t } = useLang();
   const rel = useRel();
   const photoInput = useRef<HTMLInputElement>(null);
   const voiceInput = useRef<HTMLInputElement>(null);
   const otherId = useId();
+  const nameId = useId();
+  const link = craving !== 'off' ? craving : null;
+  const asker = link ? (link.relation ?? link.parentName) : '';
   const [note, setNote] = useState<WordKey | null>(null);
   const [listening, setListening] = useState(false);
   const speech = useRef<SpeechRec | null>(null);
@@ -134,9 +140,20 @@ export function AskScreen({ draft, onDraft, error, limited, lastToken, onOpenLas
           </div>
         ))}
       </div>
+      {craving === 'off' && (
+        <p className={s.linkOff} role="status">
+          {t('k1.linkOff')}
+        </p>
+      )}
       <h1 className={s.h1}>
-        <Rich text={t('k1.title')} />
+        <Rich text={link ? t('k1.cravingTitle', { name: asker }) : t('k1.title')} />
       </h1>
+      {link && (
+        <figure className={s.herLine}>
+          <blockquote dir="auto">“{link.message}”</blockquote>
+          {link.relation && <figcaption>{link.parentName}</figcaption>}
+        </figure>
+      )}
 
       <div className={s.field}>
         <label htmlFor="dish" className={ui.srOnly}>
@@ -175,6 +192,16 @@ export function AskScreen({ draft, onDraft, error, limited, lastToken, onOpenLas
         </div>
       )}
 
+      {link ? (
+      <div className={s.group}>
+        <label htmlFor={nameId} className={s.label}>
+          {t('ask.name')}
+        </label>
+        <div className={s.other}>
+          <input id={nameId} autoComplete="given-name" maxLength={40} placeholder={t('ask.namePlaceholder', { R: asker })} value={draft.name} onChange={(e) => set({ name: e.target.value })} dir="auto" />
+        </div>
+      </div>
+      ) : (
       <div className={s.group} role="group" aria-labelledby="who">
         <p id="who" className={s.label}>
           {t('k1.who')}
@@ -214,6 +241,7 @@ export function AskScreen({ draft, onDraft, error, limited, lastToken, onOpenLas
           </div>
         )}
       </div>
+      )}
 
       {!limited && (
         <div className={s.group}>

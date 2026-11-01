@@ -24,7 +24,7 @@ test("the sync's passes", { skip: !hasDatabase }, async (t) => {
       relation: "Aaji",
       approx: { lat: 19.0761, lng: 72.8777 },
       campus: CAMPUS,
-      voiceClone: { consentedAt: Date.UTC(2026, 8, 1), cartesiaVoiceId: "voice-1" },
+      voiceClone: { consentedAt: Date.UTC(2026, 8, 1), cartesiaVoiceId: "voice-1" } as { consentedAt: number }, // an id reaching here still isn't copied
       supabase: { name: NAME, email: EMAIL, tz: "Asia/Kolkata", share_cooking: true, relation: "ignored", avatar_key: "egg", sort: 2, memorial: false },
     });
     const kid = w.person(f, { role: "kid", supabase: { relation: "Beta", removed_at: "2026-09-02T00:00:00Z" } });
@@ -64,7 +64,8 @@ test("the sync's passes", { skip: !hasDatabase }, async (t) => {
     assert.equal(p.sort, 2);
     assert.equal(p.language, "mr");
     assert.equal(p.relation, "Aaji", "Convex's relation first");
-    assert.equal(p.cartesia_voice_id, "voice-1");
+    assert.equal(p.voice_clone_consented_at.getTime(), Date.UTC(2026, 8, 1), "her yes is copied");
+    assert.equal(p.cartesia_voice_id, null, "the voice's id isn't");
     assert.equal(p.approx_lat, "19.08", "rounded to the 1 km grid by the column");
     assert.equal(p.approx_lng, "72.88");
     assert.equal(p.campus, CAMPUS);
@@ -614,8 +615,10 @@ test("a copied table is read-only to everything but the sync", { skip: !hasDatab
         return statSync(path).isDirectory() ? files(path) : path.endsWith(".ts") ? [path] : [];
       });
     const sync = join(root, "modules", "sync");
+    // The one exception: every write in that file checks the recipes switch first (recipes.test.ts holds it to that), and the trigger still refuses it until `moved_at` is set.
+    const switched = join(root, "modules", "recipes", "writes.ts");
     const writes = /\b(insert\s+into|update|delete\s+from|truncate)\s+(families|people|recipes)\b/i;
-    const others = files(root).filter((path) => !path.startsWith(sync));
+    const others = files(root).filter((path) => !path.startsWith(sync) && path !== switched);
     assert.ok(others.length > 10);
     for (const path of others) {
       const source = readFileSync(path, "utf8");

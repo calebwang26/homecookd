@@ -12,12 +12,22 @@ function config(): pg.PoolConfig {
 let pool: pg.Pool | undefined;
 
 export function db(): pg.Pool {
-  pool ??= new pg.Pool(config());
+  if (!pool) {
+    pool = new pg.Pool(config());
+    // A restart or failover drops idle connections. With no listener that error ends the whole process, on every task at once.
+    pool.on("error", (error) => {
+      console.error(JSON.stringify({ level: "warn", msg: "idle database connection lost", code: (error as { code?: string }).code }));
+    });
+  }
   return pool;
 }
 
 /** What data access needs: the pool, or a client inside tx(). */
 export type Queryable = Pick<pg.Pool, "query">;
+
+/** Every connection stayed busy past the wait. No connection was got, so nothing was written and a retry can't double anything. */
+export const isPoolWait = (error: unknown) =>
+  error instanceof Error && error.message === "timeout exceeded when trying to connect";
 
 const SERIALIZATION_FAILURE = "40001";
 const DEADLOCK = "40P01";

@@ -1,0 +1,85 @@
+{
+  "about": "Every file that aws-migration changes compared to main, in a path that deploys or runs by itself after a merge (scripts/check-merge-safe.mjs). Each names the switch that keeps it from changing anything. A fingerprint is what the branch changes in that file, so any later change fails until someone reviews it and updates the fingerprint.",
+  "files": {
+    "convex/_generated/api.d.ts": {
+      "switch": "SYNC_READ_SECRET",
+      "why": "Types for the sync's routes, edited by hand; regenerated at the first Convex deploy",
+      "fingerprint": "7d007c9a74fa"
+    },
+    "convex/http.ts": {
+      "switch": "SYNC_READ_SECRET",
+      "why": "Registers the sync's routes, which refuse everyone while it's unset",
+      "fingerprint": "eeafae325b94"
+    },
+    "convex/lib/http.ts": {
+      "switch": "SYNC_READ_SECRET",
+      "why": "Adds the sync's secret header; the other routes are untouched",
+      "fingerprint": "608500501bdc"
+    },
+    "convex/lib/syncRoutes.ts": {
+      "switch": "SYNC_READ_SECRET",
+      "why": "New routes, read-only, 401 before the body is read",
+      "fingerprint": "d08f78697492"
+    },
+    "convex/syncRead.ts": {
+      "switch": "SYNC_READ_SECRET",
+      "why": "New internal queries, reached only through those routes",
+      "fingerprint": "e990b9575211"
+    },
+    "pipeline/Dockerfile": {
+      "switch": "none needed: the image, not the laptop",
+      "why": "Adds queue mode's packages and RDS's certificates. Nothing builds this on a merge, and its entry point stays Convex mode",
+      "fingerprint": "077ddcd76f31"
+    },
+    "pipeline/observability.py": {
+      "switch": "SENTRY_DSN_WORKER and DEPLOY_ENV, and the package",
+      "why": "New; does nothing without all three (test_worker_no_sentry.py)",
+      "fingerprint": "b5aee098be27"
+    },
+    "pipeline/publish.py": {
+      "switch": "bucket.public_base",
+      "why": "Only queue mode's S3 bucket has it, so GCS links don't change",
+      "fingerprint": "025ea1f7a7f2"
+    },
+    "pipeline/worker.py": {
+      "switch": "SENTRY_DSN_WORKER and DEPLOY_ENV, and the package",
+      "why": "Two Sentry calls, both no-ops on the laptop",
+      "fingerprint": "207d7cf1bb6a"
+    },
+    "web/vercel.json": {
+      "switch": "the branch's name",
+      "why": "Vercel stops building aws-migration and claude/aws-*. It names no branch that deploys live, so main and every other branch build as before",
+      "fingerprint": "143d6f5ea59b"
+    },
+    "web/next.config.ts": {
+      "switch": "NEXT_PUBLIC_DISH_UPLOADS",
+      "why": "Gives the switch a value in every build, so the new flow compiles out",
+      "fingerprint": "4058774a8c6f"
+    },
+    "web/src/components/dish/parts.tsx": {
+      "switch": "NEXT_PUBLIC_DISH_UPLOADS",
+      "why": "The audio reload runs only with it set",
+      "fingerprint": "b330cf06861b"
+    },
+    "web/src/components/miss/CardScreen.tsx": {
+      "switch": "NEXT_PUBLIC_DISH_UPLOADS",
+      "why": "Hands useAudio its reload, which parts.tsx ignores with it unset",
+      "fingerprint": "554c459ffdf4"
+    },
+    "web/src/components/mom/MomApp.tsx": {
+      "switch": "NEXT_PUBLIC_DISH_UPLOADS",
+      "why": "The same, for Mom's page",
+      "fingerprint": "7ea5b914d641"
+    },
+    "web/src/components/mom/MomScreens.tsx": {
+      "switch": "NEXT_PUBLIC_DISH_UPLOADS",
+      "why": "The same, for Mom's screens",
+      "fingerprint": "dce232ad36db"
+    },
+    "web/src/lib/dish/api.ts": {
+      "switch": "NEXT_PUBLIC_DISH_UPLOADS",
+      "why": "Upload links with it set, raw files to Convex without",
+      "fingerprint": "0bf584aff19e"
+    }
+  }
+}

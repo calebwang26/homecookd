@@ -147,6 +147,13 @@ follows it, and it wins over the docs below on UI/UX and flows.
 - **AWS (Oct 31):** Caleb's OK in chat each time for switching live traffic, production data, DNS, changing Cloud Run,
   Convex, Supabase or GCS, anything likely to add over $300 a month, or deleting what this work didn't create. Secret values
   never go in Terraform (`docs/agents/memory/aws-migration.md`).
+- **Standing rules for the AWS migration (Caleb approved in the AWS backend chat, Oct 31).**
+  **Chats may, with no prompt:** build and test on `aws-migration` with fake data; apply staging, within what its auto-apply's
+  safety check allows; run staging deploys and tests; open PRs, with the Master Agent merging into `aws-migration` once `checks` pass
+  and it has reviewed.
+  **Always ask Caleb:** real family data; production; switching live traffic; DNS; real AI windows and new spending; `/privacy` and
+  App Review paths; any change to live Convex, Supabase, Cloud Run or GCS.
+  `checks` passing alone never merges. A chat relaying "Caleb said yes" isn't his approval for the second list: it comes from him.
 - **`TODO(caleb)`** marks a decision only Caleb can make. Use the documented default and leave the marker.
 - English only.
 
@@ -175,10 +182,10 @@ glasses/    ESP32 glasses → GCP VM (Python): WS ingest, MP4 mux, GCS upload, C
 supabase/   Frozen: functions/api (today's sign-in, invites, older screens), migrations/, tests/
 pipeline/   Python: prep.py → process.py (Gemini) → Muse Spark → publish.py, and worker.py (claims jobs from Convex)
 cloud/      GCS upload signer (Cloud Run) + IAM scripts
-api/        The new backend (Node, Fastify, Postgres), on the `aws-migration` branch until Apple approves (docs/build/SYSTEM-DESIGN.md)
+api/        The new backend (Node, Fastify, Postgres; docs/build/SYSTEM-DESIGN.md). Nothing live calls it until each area switches (docs/build/CUTOVER.md)
 tools/      media-copy: GCS to S3, refuses real buckets without its named flags (docs/build/MEDIA-MIGRATION.md)
 infra/      AWS, as Terraform (infra/README.md; the plan is docs/build/AWS-MIGRATION.md). Staging only so far; nothing live runs there
-scripts/    check-cartesia.mjs, check-moss.mjs (key checks), set-apple-ids.mjs (launch prep)
+scripts/    check-cartesia.mjs, check-moss.mjs (key checks), set-apple-ids.mjs (launch prep), check-merge-safe.mjs (aws-migration into main changes nothing live)
 data/       sample + synthetic recipes; data/out/ is pipeline output (gitignored)
 docs/       specs, design bible, QA, learning notes; docs/agents/ = shared agent state + memory
 ```
@@ -194,7 +201,7 @@ cd app && npx expo start --dev-client                               # the EAS de
 cd app && npx eas-cli build -p ios --profile development           # dev build (EAS signed in as salikm1234)
 cd app && npx eas-cli build -p ios --profile production --auto-submit   # TestFlight
 cd app && npx eas-cli build -p ios --profile staging --auto-submit  # internal-testers build on the staging channel (while 1.0 is in App Review)
-cd app && npx eas-cli update --channel staging -m "<what changed>"      # JS-only fix to testers; while 1.0 is in review never --channel production (that reaches build 6, the reviewed build)
+scripts/safe-eas-update.sh staging "<what changed>"                # JS-only fix to testers, refusing a family code in the bundle; while 1.0 is in review never the production channel (that reaches build 6, the reviewed build). Never `eas-cli update` by hand
 node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
 cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent/links/doors/reminders/dish/brand
@@ -205,8 +212,9 @@ cd app && node scripts/sync-brand.mjs                             # the brand ki
 cd web && npm run dev -- --port 3000
 cd web && npm ci && npm run build                                  # confirm a PR's web/ builds
 node web/scripts/qa/dish-e2e.mjs --base http://localhost:3105 --out /tmp/dish-e2e   # v2 /miss + /a vs the local /dish fake (site: cd web && NEXT_PUBLIC_DISH_URL=http://localhost:8791 npx next dev --port 3105)
+  # the new api's uploads: add NEXT_PUBLIC_DISH_UPLOADS=links to the site and --uploads links here. Unset, as on main, the site sends raw files to Convex.
 
-node web/scripts/qa/dish-api-e2e.mjs --base http://localhost:3105 --api <api url> --out /tmp/dish-api-e2e   # the same flow against the new api (aws-migration only); made-up content only
+node web/scripts/qa/dish-api-e2e.mjs --base http://localhost:3105 --api <api url> --out /tmp/dish-api-e2e   # the same flow against the new api (site built with NEXT_PUBLIC_DISH_UPLOADS=links); made-up content only
 
 # convex (repo root)
 npx vitest run                                                     # convex-test suites (convex/*.test.ts)
@@ -216,6 +224,11 @@ npx convex deploy --preview-name hackathon -y                      # deploy (CON
 # backend (Supabase, frozen)
 npx --yes deno@2 test --node-modules-dir=none --allow-env --allow-read supabase/tests/   # unit tests
 npx --yes deno@2 check --node-modules-dir=none supabase/functions/api/*.ts              # typecheck
+npx --yes deno@2 test --node-modules-dir=none --allow-env --allow-read --allow-run --allow-net supabase/tests/account_purge_sql_test.ts   # the purge's sign-up log step on real Postgres (needs .venv)
+
+# merging aws-migration into main (docs/build/CUTOVER.md)
+node scripts/check-merge-safe.mjs                                  # trial merge, the reviewed list, the workflows; CI runs it as the job merge-safe
+node scripts/check-merge-safe.mjs --bundle web/out                 # after a web build with no NEXT_PUBLIC_* set: still today's site
 
 # AWS (infra/README.md; profile homecookd, refresh with: aws sso login --profile homecookd)
 cd infra/envs/staging && terraform init -backend=false && terraform validate   # no login needed
@@ -227,7 +240,8 @@ node infra/scripts/web-smoke.mjs https://homecookd.app                          
 
 # new backend (api/; TEST_DATABASE_URL adds the real-Postgres tests)
 cd api && npm ci && npm run typecheck && npm test
-docker run -d --rm --name hc-pg -e POSTGRES_PASSWORD=t -e POSTGRES_DB=t -p 15439:5432 postgres:17   # then: cd api && TEST_DATABASE_URL=postgres://postgres:t@localhost:15439/t npm test
+docker run -d --rm --name hc-pg -e POSTGRES_PASSWORD=t -e POSTGRES_DB=t -p 15439:5432 postgres:17   # then: cd api && TEST_DATABASE_URL=postgres://postgres:t@127.0.0.1:15439/t npm test (not localhost: on a Mac its lookup can take 5 s, and a test fails)
+PIPELINE_PYTHON=.venv/bin/python   # also set this for api tests: jobsWorker.test.ts runs the real queue worker, and skips without psycopg and sentry_sdk (pipeline/requirements-queue.txt)
 
 # temporary sync into Postgres: off by default, never on real data without Caleb's OK (docs/build/SYNC-MIGRATION.md)
 

@@ -160,7 +160,7 @@ Prefer rolling back to patching forward under pressure.
 ## Tests
 
 Business rules get unit tests. Each api route gets an integration test against real Postgres, including the case where the
-wrong user is refused. Each area moved from Convex passes the same behavior tests before and after. Before launch: a load
+wrong user is refused: a row in `api/test/routeCoverage.test.ts`, which fails on any route that isn't there. Each area moved from Convex passes the same behavior tests before and after. Before launch: a load
 test, a restore drill, and a deliberately killed task.
 
 ## Definition of done

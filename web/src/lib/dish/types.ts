@@ -115,5 +115,8 @@ export type Ask = {
   merging: boolean;
 };
 
+/** POST /dish/craving/peek: who sent the craving link, and her line (§8). `relation` is what the family calls her. */
+export type CravingPeek = { parentName: string; relation: string | null; message: string };
+
 export type FileKind = 'photo' | 'voice';
 export type SendVia = 'copy' | 'sms' | 'instagram' | 'whatsapp' | 'more';
