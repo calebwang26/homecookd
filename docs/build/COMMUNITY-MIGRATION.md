@@ -104,13 +104,13 @@ An adapter turns any refusal into `ConvexError(message)`. Where a 404 has no `me
 8. **`respondSwap` checks blocked before "already answered".** Otherwise that answer would say a row exists.
 9. **Refusals get real statuses:** 400, 403, 409, 422, as listed in each service. The sentences are Convex's, in `message`.
 10. **Validation before our sentences.** A wrong type (`recipeId: 12`, a `reason` not on the list) is a plain 400 `bad_request` with no sentence, where Convex's validator threw its own error. The app never sends these.
-11. **`POST /invite/open` has per-address limits:** 120 opens per 10 minutes, and 20 tokens that don't work. Convex had only the per-dinner burst. It's a 429 with `retry-after`, and the site reads anything but 200, 400 and 404 as "offline".
+11. **`POST /invite/open` has per-address limits:** 120 opens per 10 minutes, and 20 tokens that name no dinner. A real link to a cancelled or hidden dinner answers the same 404 and doesn't count as a guess, so a dorm opening an old link can't be locked out. Convex had only the per-dinner burst. It's a 429 with `retry-after`, and the site reads anything but 200, 400 and 404 as "offline".
 12. **`/invite/open` needs `RATE_LIMIT_SALT`**, and a body over 1000 bytes is still its 400.
 13. **Report alerts** go through `outbox`, so a failed webhook is retried. Convex logged and moved on. The text's "Review:" line now names this doc in place of `npx convex run`.
 14. **The log line.** Convex logged `community report: <kind> <id> (<reason>)`. It's gone: the alert's payload holds the kind and reason, and there's no family content anywhere.
 15. **A share ask isn't made here.** A kid's `POST /v1/share-requests` answers 501 `not_moved`, including where Convex would say "asked" or "said not now", and the adapter sends it to Convex.
 16. **The chooser finds a share ask however many cooking questions follow it.** Convex read the newest 100 questions and could miss it.
-17. **Dinner retries.** `POST /v1/dinners` takes an optional `Idempotency-Key`: the same key and body returns the first dinner, and another body is a 409. Without one, as on old builds, a retry makes a second dinner, as on Convex.
+17. **Dinner retries.** `POST /v1/dinners` takes an optional `Idempotency-Key`: the same key and body returns the first dinner, even if the dish has since been unshared or the time has passed, and another body is a 409. Without one, as on old builds, a retry makes a second dinner, as on Convex.
 18. **The voice recipe is three steps,** because bytes skip the api: the upload link, the PUT, the send.
 19. **A bad recording is refused at the link,** by its declared type and size, before anything exists. If the bytes then don't match, it's deleted and refused at the send, as on Convex. The size's sentence is the dish module's "That answer is too long.", where Convex said "That recording is too long."
 20. **Any file for a voice recipe must be her own upload for this card.** Convex's check was "a fresh file no card holds", and a storage id was enough to reach someone's. An old upload is refused once the hourly sweep has marked it, not at exactly an hour.
@@ -204,7 +204,11 @@ Nothing new. `RATE_LIMIT_SALT`, `REPORT_ALERT_URL`, `REPORT_ALERT_TOKEN`, `REPOR
 
 ## What `infra/` needs (not done: this PR touches only `api/` and `docs/build/`)
 
-- An EventBridge schedule into `scheduled`: `{"payload":{"task":"community.remind_open"}}` daily at 16:00 UTC, as Convex's cron.
+- An EventBridge schedule into `scheduled`: `{"payload":{"task":"community.remind_open"}}` daily at 16:00 UTC, as Convex's cron. A switch gate (AWS-MIGRATION's Cutover list).
+
+## Invite opens and the database
+
+An open that changes nothing (this phone's been counted, or the count has stopped) takes no row lock, so a busy link doesn't queue pool connections behind a host's answers. A new phone's count still takes the dinner's row, because the ceiling and the burst limit must hold under many opens at once. While a link is filling up, those can still wait on a host's answer, and the other way round.
 
 ## What the app and site need at the switch
 
@@ -227,7 +231,7 @@ Nothing new. `RATE_LIMIT_SALT`, `REPORT_ALERT_URL`, `REPORT_ALERT_TOKEN`, `REPOR
 ## Open questions, with recommendations
 
 1. **`sendVoiceRecipe` can't go through an adapter alone.** An old app uploads through Convex's `files.uploadUrl` and sends a Convex storage id. **Recommendation:** keep `cravings.sendVoiceRecipe` on Convex for old apps until they're gone, which means its cards must stay readable there, so switch all of `cravings.*` together. Only a new app uses the three steps.
-2. **How the team runs `openReports` and `reviewReport`.** Convex's were `npx convex run`, and there's no equivalent here. **Recommendation:** a small script run from a task, in the same PR as the switch. A signed-in admin route would add a surface for no gain.
+2. **How the team runs `openReports` and `reviewReport`.** Convex's were `npx convex run`, and there's no equivalent here. This is a switch gate (AWS-MIGRATION's Cutover list): Apple reviews report and block, and the team must be able to act on a report. **Recommendation:** a small script run from a task, in the same PR as the switch. A signed-in admin route would add a surface for no gain.
 3. **`shareRequests.*` should switch with Messages, not Community.** `POST /v1/share-requests` already refuses to ask. `familyDishes` must read from the side the asks are written on, and until Messages moves that's Convex. **Recommendation:** an adapter keeps both on Convex until Messages switches.
 4. **`reports` and `blocks` move as one, once.** Convex's two-family hide and Postgres's would disagree if each side took reports during a window. **Recommendation:** freeze report writes for the area's planned window, copy, switch, as AWS-MIGRATION already describes.
 5. `TODO(caleb)`: the host's whole display name on `/invite/open` (kept from Convex), the demo venue's coordinates, and the 20-card link total are all still his, and carry their markers. The words homie asks with keep theirs on Convex.

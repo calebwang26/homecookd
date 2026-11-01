@@ -80,9 +80,10 @@ export async function inviteRoutes(app: FastifyInstance): Promise<void> {
       if (typeof token !== "string" || !TOKEN.test(token) || typeof deviceId !== "string" || !DEVICE.test(deviceId)) {
         return reply.code(400).send({ error: "token and deviceId are required" });
       }
-      const dinner = await openInvite(token, deviceId);
+      const { dinner, known } = await openInvite(token, deviceId);
       if (dinner) return dinner;
-      await hit(subject, [RATE.badTokens]);
+      // Only a token that names nothing is a guess. A real link to a dinner that's off is a dorm opening what it was sent, and it must not use up that address's limit.
+      if (!known) await hit(subject, [RATE.badTokens]);
       return reply.code(404).send({ error: "no such dinner" });
     },
   );

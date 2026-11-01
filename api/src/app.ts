@@ -92,7 +92,8 @@ function guardFileKeys(app: FastifyInstance): void {
   });
 }
 
-export function buildApp(options: { logger?: object | boolean; routes?: (app: FastifyInstance) => void } = {}): FastifyInstance {
+/** `logStream`: production's logging, written somewhere a test can read. `logger` replaces it entirely. */
+export function buildApp(options: { logger?: object | boolean; logStream?: NodeJS.WritableStream; routes?: (app: FastifyInstance) => void } = {}): FastifyInstance {
   const app = Fastify({
     // Only addresses inside our network count as proxies (the load balancer), so a caller can't set req.ip with a header.
     trustProxy: "10.0.0.0/8",
@@ -101,6 +102,7 @@ export function buildApp(options: { logger?: object | boolean; routes?: (app: Fa
     requestTimeout: REQUEST_TIMEOUT_MS,
     logger: options.logger ?? {
       level: process.env.LOG_LEVEL ?? "info",
+      ...(options.logStream ? { stream: options.logStream } : {}),
       serializers: {
         req: (req) => ({ method: req.method, path: pathOnly(req.url) }),
         res: (res) => ({ status: res.statusCode }),

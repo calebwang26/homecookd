@@ -97,11 +97,23 @@ function text(s: string, what: string): string {
 
 export type NewDinner = { recipeId: string; startsAt: number; placeKind?: PlaceKind; placeName: string; address: string; seats: number };
 
+/** What a used retry key answers: the first dinner for the same body, and a refusal for another. */
+function firstDinner(first: { request_hash: string | null; resource_id: string | null }, hash: string): { dinnerId: string } {
+  if (first.request_hash !== hash || !first.resource_id) throw refused(409, "idempotency_conflict", "That was already sent with different details.");
+  return { dinnerId: first.resource_id };
+}
+
 /**
  * `idempotencyKey`, from a phone that may retry: the same key and body gets the first dinner back, and the same key with another body is refused. Without one (old
  * builds), a retry makes a second dinner, as on Convex.
  */
 export async function createDinner(signed: Signed, input: NewDinner, idempotencyKey?: string): Promise<{ dinnerId: string }> {
+  const hash = sha256Hex(JSON.stringify(input));
+  // Before the checks: a retry gets its dinner back even if the dish has since been unshared or the time has passed.
+  if (idempotencyKey) {
+    const first = await data.retryKeyOf(db(), signed.personId, idempotencyKey);
+    if (first) return firstDinner(first, hash);
+  }
   const recipe = await hostable(signed, input.recipeId);
   if (input.startsAt <= Date.now()) throw refused(400, "bad_request", "Pick a time that hasn't passed.");
   if (!Number.isInteger(input.seats) || input.seats < 1 || input.seats > 20) throw refused(400, "bad_request", "Seats go from 1 to 20.");
@@ -110,14 +122,9 @@ export async function createDinner(signed: Signed, input: NewDinner, idempotency
   const address = text(input.address, "address");
   const place = roundToGrid(placeOf((await peopleByIds(db(), [signed.personId])).get(signed.personId)));
   return await tx(async (c) => {
-    if (idempotencyKey) {
-      const hash = sha256Hex(JSON.stringify(input));
-      if (!(await data.claimRetryKey(c, signed.personId, idempotencyKey, hash))) {
-        // A second call at the same moment waited on the row's primary key, so the first has finished by now.
-        const first = await data.retryKeyOf(c, signed.personId, idempotencyKey);
-        if (first.request_hash !== hash || !first.resource_id) throw refused(409, "idempotency_conflict", "That was already sent with different details.");
-        return { dinnerId: first.resource_id };
-      }
+    // A second call at the same moment passed the look above, and waits here on the row's primary key, so the first has finished by the time this returns false.
+    if (idempotencyKey && !(await data.claimRetryKey(c, signed.personId, idempotencyKey, hash))) {
+      return firstDinner((await data.retryKeyOf(c, signed.personId, idempotencyKey))!, hash);
     }
     const dinnerId = await data.insertDinner(c, {
       hostId: signed.personId,
@@ -226,21 +233,25 @@ export async function inviteLink(signed: Signed, dinnerId: string): Promise<{ to
 
 /**
  * Someone opened an invite link. Counts this phone or browser once per dinner, while the dinner is still ahead, up to MAX_OPENS and OPEN_BURST per OPEN_BURST_MS. The
- * reply is all the opener ever sees: the dish, the host's name and when. Never the place, the address or any id. Null when the link doesn't work.
+ * reply is all the opener ever sees: the dish, the host's name and when. Never the place, the address or any id.
+ * `dinner` null: the link doesn't work. `known`: it was a real link, to a dinner that's off, so nobody is guessing (inviteRoutes.ts). The caller's answer is the same either way.
  * TODO(caleb): this is the host's whole display name; if families put surnames in it, decide whether a link anyone can forward should show less.
  */
-export async function openInvite(token: string, deviceId: string): Promise<{ dish: string; hostName: string; startsAt: number } | null> {
+export async function openInvite(token: string, deviceId: string): Promise<{ dinner: { dish: string; hostName: string; startsAt: number } | null; known: boolean }> {
   const d = await data.dinnerByInviteToken(db(), token);
-  if (!d || d.status === "cancelled" || d.hidden_at) return null;
-  if (d.recipe_id && (await seenRecipes(db(), [d.recipe_id])).get(d.recipe_id)?.hidden) return null; // its dish was hidden after reports
+  if (!d) return { dinner: null, known: false };
+  if (d.status === "cancelled" || d.hidden_at) return { dinner: null, known: true };
+  if (d.recipe_id && (await seenRecipes(db(), [d.recipe_id])).get(d.recipe_id)?.hidden) return { dinner: null, known: true }; // its dish was hidden after reports
   const hostName = ((await peopleByIds(db(), [d.host_id])).get(d.host_id)?.name ?? "").trim();
-  const reply = { dish: d.dish, hostName, startsAt: d.starts_at.getTime() };
-  if (d.starts_at.getTime() <= Date.now()) return reply;
+  const dinner = { dish: d.dish, hostName, startsAt: d.starts_at.getTime() };
+  if (d.starts_at.getTime() <= Date.now()) return { dinner, known: true };
+  const full = (seen: { total: number; recent: number; seen: boolean }) => seen.total >= MAX_OPENS || seen.recent >= OPEN_BURST || seen.seen;
+  // Most opens of a busy link change nothing: this phone's been counted, or the count has stopped. Those take no lock, so they don't queue pool connections behind the
+  // host's answers. Only a new phone's count does, and it looks again under the lock, so the ceiling and the burst limit hold under many opens at once.
+  if (full(await data.inviteOpenState(db(), d.id, deviceId, OPEN_BURST_MS))) return { dinner, known: true };
   await tx(async (c) => {
-    await data.dinnerById(c, d.id, true); // the ceiling and the burst limit hold under many opens at once
-    const seen = await data.inviteOpenState(c, d.id, deviceId, OPEN_BURST_MS);
-    if (seen.total >= MAX_OPENS || seen.recent >= OPEN_BURST || seen.seen) return;
-    await data.insertInviteOpen(c, d.id, deviceId);
+    await data.dinnerById(c, d.id, true);
+    if (!full(await data.inviteOpenState(c, d.id, deviceId, OPEN_BURST_MS))) await data.insertInviteOpen(c, d.id, deviceId);
   });
-  return reply;
+  return { dinner, known: true };
 }

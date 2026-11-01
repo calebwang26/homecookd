@@ -8,7 +8,7 @@ import { buildApp } from "../src/app.js";
 import { db } from "../src/db.js";
 import { cravingCard, voiceUpload } from "./cravingHelpers.js";
 import {
-  ADDRESS, block, call, cookTogether, dinner, family, feed, host, join, MISSING, ok, person, recipe, refusedWith, report, requestSwap, respond, respondSwap, sameAsMissing, tryHost, view, type Who, world,
+  ADDRESS, block, call, cookTogether, dinner, family, feed, host, join, MISSING, ok, person, recipe, refusedWith, report, requestSwap, respond, respondSwap, sameAsMissing, setShared, tryHost, view, type Who, world,
 } from "./communityHelpers.js";
 import { hasDatabase, IP, newBackend } from "./dishHelpers.js";
 
@@ -416,11 +416,43 @@ test("a phone's retry of a new dinner, with its key, gets the first dinner back"
   assert.equal((await db().query("select count(*)::int as n from dinners")).rows[0].n, 4);
 });
 
-test("logs carry no family content", { skip }, async () => {
+test("a retry gets its dinner back even when the checks would refuse it now", { skip }, async () => {
+  const { t, rajani } = await world();
+  const poha = await recipe(rajani, { sharedAt: 1 });
+  const body = { startsAt: Date.now() + 3_600_000 };
+  const headers = { "idempotency-key": "retry-key-0003" };
+  const first = await ok(tryHost(t, rajani, poha, body, headers));
+
+  // The dish has been unshared since: the same key is the first dinner, and a new one is refused.
+  await setShared(poha, false);
+  assert.deepEqual(await ok(tryHost(t, rajani, poha, body, headers)), first);
+  await refusedWith(tryHost(t, rajani, poha, body, { "idempotency-key": "retry-key-0004" }), 409, "Share this recipe first.");
+  await setShared(poha, true);
+
+  // Its time has passed since.
+  const now = Date.now;
+  Date.now = () => now() + 2 * 3_600_000;
+  try {
+    assert.deepEqual(await ok(tryHost(t, rajani, poha, body, headers)), first);
+    await refusedWith(tryHost(t, rajani, poha, body, { "idempotency-key": "retry-key-0005" }), 400, "Pick a time that hasn't passed.");
+  } finally {
+    Date.now = now;
+  }
+  // Only the first dinner was ever made.
+  const { rows } = await db().query("select count(*)::int as n from dinners");
+  assert.equal(rows[0].n, 1);
+});
+
+test("logs carry no family content, as production writes them", { skip }, async () => {
   const { rajani, serene, caleb } = await world();
   const lines: string[] = [];
   const stream = new Writable({ write: (chunk, _enc, done) => (lines.push(String(chunk)), done()) });
-  const t = buildApp({ logger: { level: "trace", stream, serializers: { req: (req: { method: string; url: string }) => ({ method: req.method, path: req.url.split("?")[0] }), res: (res: { statusCode: number }) => ({ status: res.statusCode }) } } });
+  // Production's logger and its serializers, with only where it writes changed, at the level that says the most.
+  const level = process.env.LOG_LEVEL;
+  process.env.LOG_LEVEL = "trace";
+  const t = buildApp({ logStream: stream });
+  if (level === undefined) delete process.env.LOG_LEVEL;
+  else process.env.LOG_LEVEL = level;
   const poha = await recipe(rajani, { sharedAt: 1 });
   const night = await host(t, rajani, poha);
   const { requestId } = await ok(join(t, serene, night));
@@ -429,6 +461,8 @@ test("logs carry no family content", { skip }, async () => {
   const salik = await person(await family("Mian home"), "Salik", "kid");
   await ok(report(t, salik, "recipe", poha, "rude"));
   await feed(t, serene);
+  const secretCursor = Buffer.from(JSON.stringify(["2026-10-01 12:00:00+00", "the-cursor-secret"])).toString("base64url");
+  await ok(call(t, serene, "GET", `/v1/community/swaps?cursor=${secretCursor}`));
   const { token } = await ok(call(t, rajani, "POST", `/v1/dinners/${night}/invite-link`));
   await t.inject({ method: "POST", url: "/invite/open", remoteAddress: IP, payload: { token, deviceId: "device-0123456789abcdef" } });
   // A database failure's log line carries its type and code, not its text.
@@ -440,7 +474,11 @@ test("logs carry no family content", { skip }, async () => {
   }
   const all = lines.join("");
   assert.ok(all.length > 0);
-  for (const word of ["Kanda", "Poha", "Rajani", "Serene", "Caleb", "Pawar", ADDRESS, "Baker", token, "dinner_requests"]) assert.ok(!all.includes(word), word);
+  for (const word of ["Kanda", "Poha", "Rajani", "Serene", "Caleb", "Pawar", ADDRESS, "Baker", token, "dinner_requests", rajani.token, serene.token, secretCursor, "the-cursor-secret"]) assert.ok(!all.includes(word), word);
+  // It really was production's: a request is its method and path, and never the url with its query.
+  assert.ok(all.includes('"path":"/v1/community/swaps"'), "the path serializer");
+  assert.ok(!all.includes('"url"'), "a whole url");
+  assert.ok(all.includes('"status":200'), "the response serializer");
 });
 
 after(async () => {

@@ -226,9 +226,9 @@ export async function claimRetryKey(q: Queryable, personId: string, key: string,
   return Boolean(rowCount);
 }
 
-export async function retryKeyOf(q: Queryable, personId: string, key: string): Promise<{ request_hash: string | null; resource_id: string | null }> {
+export async function retryKeyOf(q: Queryable, personId: string, key: string): Promise<{ request_hash: string | null; resource_id: string | null } | null> {
   const { rows } = await q.query(`select request_hash, resource_id from idempotency_keys where scope = $1 and key = $2`, [personId, key]);
-  return rows[0];
+  return rows[0] ?? null;
 }
 
 export async function finishRetryKey(q: Queryable, personId: string, key: string, dinnerId: string): Promise<void> {
