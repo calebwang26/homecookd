@@ -81,7 +81,7 @@ module "env" {
     "messages.hourly"       = { expression = "rate(1 hour)", task = "messages.hourly" }
     "messages.daily"        = { expression = "rate(1 day)", task = "messages.daily" }
     "community.remind_open" = { expression = "cron(0 16 * * ? *)", task = "community.remind_open" }
-    # accounts.sweep, rate(1 hour), once its task reaches this branch (a schedule with no task only fills the dead letters).
+    "accounts.sweep"        = { expression = "rate(1 hour)", task = "accounts.sweep" }
   }
 
   services = {
