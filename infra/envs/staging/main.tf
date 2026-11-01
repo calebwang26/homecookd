@@ -27,9 +27,8 @@ variable "voice_count" {
 }
 
 variable "api_count" {
-  description = "0 until the first api image is pushed"
-  type        = number
-  default     = 0
+  type    = number
+  default = 1
 }
 
 module "env" {
