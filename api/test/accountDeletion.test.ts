@@ -859,26 +859,22 @@ test("someone who left the family with a live session can still delete their acc
   assert.equal((await api.post("/v1/account/delete", {}, bearer(s))).status, 401, "signed out by it");
 });
 
-test("an opened invite gets no session, so it can't delete anyone, and it reads one way with GET /family's flag", { skip }, async () => {
+test("a phone with no person of its own gets no session, so it can't delete anyone: an opened invite, or a code phone, whoever holds the code", { skip }, async () => {
   const f = await makeFamily();
   const grandma = await makePerson(f.id, "Grandma");
+  const left = await makePerson(f.id, "Left");
+  await q(`update people set removed_at = now() where id = $1`, [left]);
   const invited = await makeDevice(f.id, null, "invite");
+  const swapped = (await api.post("/devices", { device_label: "iPhone" }, code(f.code))).data.device_key as string;
   assert.equal((await api.get("/family", device(invited.key))).data.device_needs_profile, true);
-  const res = await api.post("/v1/sessions/start", { deviceKey: invited.key, profileId: grandma });
-  assert.deepEqual([res.status, res.data.error], [403, "Add yourself first."]);
+  assert.equal((await api.get("/family", device(swapped))).data.device_needs_profile, false, "the old flag still says only an invite must add itself to read on");
+  for (const key of [invited.key, swapped]) {
+    const res = await api.post("/v1/sessions/start", { deviceKey: key, profileId: grandma });
+    assert.deepEqual([res.status, res.data.error], [403, "Add yourself first."]);
+    assert.equal((await api.post("/v1/sessions/start", { deviceKey: key, profileId: left })).status, 403);
+  }
   assert.equal(await count("sessions", "person_id = $1", [grandma]), 0);
   assert.equal((await row("people", "id = $1", [grandma])).deleted_at, null);
-});
-
-test("a phone from a family code with nobody yet keeps today's session, because Apple's reviewer signs in that way and may delete straight away", { skip }, async () => {
-  const f = await makeFamily();
-  const reviewer = await makePerson(f.id, "Reviewer");
-  await makePerson(f.id, "Keeps it open");
-  const swapped = (await api.post("/devices", { device_label: "iPhone" }, code(f.code))).data.device_key as string;
-  assert.equal((await api.get("/family", device(swapped))).data.device_needs_profile, false);
-  const s = await api.post("/v1/sessions/start", { deviceKey: swapped, profileId: reviewer });
-  assert.equal(s.status, 200);
-  assert.equal((await api.post("/v1/account/delete", {}, bearer(s.data.sessionToken))).status, 200);
 });
 
 test("a phone from another family can't start a session as someone here", { skip }, async () => {
