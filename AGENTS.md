@@ -176,6 +176,7 @@ supabase/   Frozen: functions/api (today's sign-in, invites, older screens), mig
 pipeline/   Python: prep.py → process.py (Gemini) → Muse Spark → publish.py, and worker.py (claims jobs from Convex)
 cloud/      GCS upload signer (Cloud Run) + IAM scripts
 api/        The new backend (Node, Fastify, Postgres), on the `aws-migration` branch until Apple approves (docs/build/SYSTEM-DESIGN.md)
+tools/      media-copy: GCS to S3, refuses real buckets without its named flags (docs/build/MEDIA-MIGRATION.md)
 infra/      AWS, as Terraform (infra/README.md; the plan is docs/build/AWS-MIGRATION.md). Staging only so far; nothing live runs there
 scripts/    check-cartesia.mjs, check-moss.mjs (key checks), set-apple-ids.mjs (launch prep)
 data/       sample + synthetic recipes; data/out/ is pipeline output (gitignored)
@@ -229,6 +230,9 @@ cd api && npm ci && npm run typecheck && npm test
 docker run -d --rm --name hc-pg -e POSTGRES_PASSWORD=t -e POSTGRES_DB=t -p 15439:5432 postgres:17   # then: cd api && TEST_DATABASE_URL=postgres://postgres:t@localhost:15439/t npm test
 
 # temporary sync into Postgres: off by default, never on real data without Caleb's OK (docs/build/SYNC-MIGRATION.md)
+
+# media copy (tools/media-copy; never against real buckets without Caleb's OK and /privacy listing AWS)
+cd tools/media-copy && python3 test_media_copy.py && python3 test_stores.py
 
 # upload signer (cloud/signer)
 python3 cloud/signer/test_main.py                                  # sign-in check (Convex + GCS faked)
