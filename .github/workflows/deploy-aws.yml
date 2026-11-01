@@ -10,8 +10,16 @@ on:
         default: staging
       service:
         type: choice
-        options: [voice, worker]
-        default: voice
+        options: [api, voice, worker]
+        default: api
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: true
+      service:
+        type: string
+        required: true
 
 permissions:
   id-token: write
@@ -48,3 +56,12 @@ jobs:
           ARN=$(aws ecs register-task-definition --cli-input-json file://next.json --query taskDefinition.taskDefinitionArn --output text)
           aws ecs update-service --cluster "$NAME" --service "$SERVICE" --task-definition "$ARN" >/dev/null
           echo "Rolling out $ARN. Until voice/ holds task protection (phase 3), this can cut live voice calls."
+      - name: Wait, then smoke test
+        run: |
+          aws ecs wait services-stable --cluster "$NAME" --services "$SERVICE"
+          COUNT=$(aws ecs describe-services --cluster "$NAME" --services "$SERVICE" --query 'services[0].desiredCount' --output text)
+          if [ "$SERVICE" = api ] && [ "$COUNT" != 0 ] && [ -n "${{ vars.STAGING_URL }}" ] && [ "${{ inputs.environment }}" = staging ]; then
+            curl -sSf --max-time 15 "${{ vars.STAGING_URL }}/health"
+          else
+            echo "No smoke test for $SERVICE with $COUNT tasks."
+          fi
