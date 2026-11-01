@@ -119,6 +119,31 @@
   font-style: italic;
   font-variation-settings: 'SOFT' 100, 'opsz' 144;
 }
+.linkOff {
+  margin: 14px 24px 0;
+  padding: 14px 16px;
+  border-radius: 16px;
+  background: #fcebd0;
+  font-size: 16px;
+  line-height: 1.35;
+  color: #18221d;
+}
+.herLine {
+  margin: 14px 24px 0;
+}
+.herLine blockquote {
+  margin: 0;
+  font-size: 18px;
+  line-height: 1.4;
+  color: #18221d;
+  overflow-wrap: anywhere;
+}
+.herLine figcaption {
+  margin-top: 4px;
+  font-size: 15px;
+  font-weight: 600;
+  color: #4f5d55;
+}
 .field {
   margin: 22px 24px 0;
   display: flex;

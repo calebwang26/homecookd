@@ -11,7 +11,8 @@
 // switch; and a Hindi phone's Mom page (English first, then her language; answers sent with lang=hi;
 // her words with the English under them). The recipe card on M5 and in M6, and the kid's card, open the
 // locked recipe view (the /r mechanism on the dish card's version): the recipe, ingredients and steps open;
-// any other tap says "Get the app", and the sheet copies the page's link, then opens the store. Every screen
+// any other tap says "Get the app", and the sheet copies the page's link, then opens the store. A parent's craving link (/miss?c=, §8): her name and line,
+// the kid's name required, the card tied to her; a stopped, bad or full link falls back to the plain page. Every screen
 // is shot at 390×844 (--width N for another width) into --out. Exits 1 on a failure. Flags: --base, --out, --chrome (default:
 // /Applications/Google Chrome.app), --port (fake).
 import { createRequire } from 'node:module';
@@ -539,6 +540,73 @@ try {
   await hi.route('https://apps.apple.com/**', (r) => r.fulfill({ contentType: 'text/html', body: '<title>App Store</title>' }));
   await Promise.all([hi.waitForURL(/apps\.apple\.com/), hi.locator('header').getByRole('button', { name: 'ऐप पाएँ' }).click()]);
   check('Hindi locked: the bar’s Get the app goes straight to the store', true);
+
+  // ── A parent's craving link ─────────────────────────────────────────────────────────────────
+  fake.setBudget(false);
+  fake.setRate(false);
+  const line = 'What do you miss from home? Tell me and I’ll make it for you.';
+  const cravingToken = fake.addCraving({ message: line });
+  const cr = await phone();
+  await cr.goto(`${BASE}/miss?c=${cravingToken}`);
+  await cr.getByRole('heading', { name: /Mom wants to know/ }).waitFor();
+  check('C1: her line and her first name', (await cr.getByText(line).count()) === 1 && (await cr.getByText('Priya', { exact: true }).count()) === 1);
+  check('C1: no "Who makes it?": the card goes to her', (await cr.getByText('Who makes it?').count()) === 0);
+  await shot(cr, 'C1-craving-link', { full: true });
+  await cr.getByLabel('The dish you miss').fill('braised pork');
+  await cr.getByRole('button', { name: 'Make my recipe' }).click();
+  await cr.getByRole('alert').filter({ hasText: 'Tell us your name first.' }).waitFor();
+  check('C1: the name is required before anything is sent', !fake.log.some((l) => l.path === '/dish/cards' && [...fake.cards.values()].some((c) => c.cravingToken)));
+  await shot(cr, 'C1-craving-needs-name', { full: true });
+  await cr.getByLabel('Your name').fill('Caleb');
+  await cr.getByRole('button', { name: 'Make my recipe' }).click();
+  await cr.waitForURL(/\?k=/);
+  await cr.getByRole('button', { name: /Start cooking/ }).first().waitFor();
+  const made = [...fake.cards.values()].find((c) => c.cravingToken === cravingToken);
+  check('C2: the card carries her token and the kid’s name', made?.kidName === 'Caleb' && made?.relation === 'mom', JSON.stringify({ name: made?.kidName, relation: made?.relation }));
+  check('C2: the link counted one use', fake.cravings.get(cravingToken).uses === 1);
+  check('C2: the token left the address', !cr.url().includes('c='));
+  await shot(cr, 'C2-craving-card');
+
+  // No family word for her: her first name heads the page, and the kid's saved name is filled in.
+  const noRelation = fake.addCraving({ parentName: 'Meera', relation: null });
+  await cr.goto(`${BASE}/miss?c=${noRelation}`);
+  await cr.getByRole('heading', { name: /Meera wants to know/ }).waitFor();
+  check('C3: no relation: her name heads the page', (await cr.getByLabel('Your name').inputValue()) === 'Caleb');
+
+  for (const [what, href] of [
+    ['a malformed token', '/miss?c=nope'],
+    ['an unknown token', '/miss?c=AAAAAAAAAAAAAAAAAAAAAA'],
+  ]) {
+    await cr.goto(`${BASE}${href}`);
+    await cr.getByRole('status').filter({ hasText: 'isn’t working' }).waitFor();
+    check(`C4: ${what} falls back to the plain page`, /What do you miss\s*from home\?/.test(await cr.getByRole('heading', { level: 1 }).innerText()) && (await cr.getByText('Who makes it?').count()) === 1);
+  }
+  await shot(cr, 'C4-craving-off', { full: true });
+
+  // Stopped, or full, while the kid types: what they wrote stays, and the next try makes a plain card.
+  for (const [what, spoil] of [
+    ['stopped', (t) => (fake.cravings.get(t).revokedAt = Date.now())],
+    ['full', (t) => (fake.cravings.get(t).uses = 20)],
+  ]) {
+    const t = fake.addCraving();
+    await cr.goto(`${BASE}/miss?c=${t}`);
+    await cr.getByLabel('The dish you miss').fill('braised pork');
+    spoil(t);
+    await cr.getByRole('button', { name: 'Make my recipe' }).click();
+    await cr.getByRole('status').filter({ hasText: 'isn’t working' }).waitFor();
+    check(`C5: ${what} link: the kid’s dish stays`, (await cr.getByLabel('The dish you miss').inputValue()) === 'braised pork' && !cr.url().includes('c='));
+  }
+  const before = fake.cards.size;
+  await cr.getByRole('button', { name: 'Make my recipe' }).click();
+  await cr.waitForURL(/\?k=/);
+  check('C5: the next try makes a plain card', fake.cards.size === before + 1 && [...fake.cards.values()].at(-1).cravingToken === null);
+
+  // Hindi phone: the new words read in Hindi; her line stays as she wrote it.
+  const crHi = await phone('hi-IN');
+  await crHi.goto(`${BASE}/miss?c=${cravingToken}`);
+  await crHi.getByRole('heading', { name: /का सवाल/ }).waitFor();
+  check('C6: Hindi: her line as she wrote it', (await crHi.getByText(line).count()) === 1);
+  await shot(crHi, 'C6-craving-hindi', { full: true });
 } catch (e) {
   failures.push(`crashed: ${e.stack ?? e}`);
   console.log(`  ✗ crashed: ${e.message}`);
