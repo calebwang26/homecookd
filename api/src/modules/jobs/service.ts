@@ -54,9 +54,9 @@ export function toLiveJob(row: JobRow): LiveJob {
   };
 }
 
-/** The newest 20, as jobs.forFamily does. `active` says something here may still move, so a phone should look again soon. */
+/** Her newest 20. `active` says something here may still move, so a phone should look again soon. */
 export async function liveJobs(signed: Signed, now = Date.now()): Promise<{ data: LiveJob[]; active: boolean }> {
-  const rows = await data.recentJobs(signed.familyId, PAGE);
+  const rows = await data.recentJobs(signed.familyId, signed.personId, PAGE);
   const jobs = rows.map(toLiveJob);
   const active = rows.some((row, i) => !FINISHED.has(jobs[i].stage) && now - row.updated_at.getTime() < STALE_MS);
   return { data: jobs, active };
@@ -152,50 +152,46 @@ async function chooseLanguage(c: Queryable, signed: Signed, input: JobInput, rec
 }
 
 export async function listJobs(signed: Signed, cursor?: string) {
-  const rows = await data.familyJobs(db(), signed.familyId, afterCursor(cursor), PAGE + 1);
+  const rows = await data.jobsOfCook(db(), signed.familyId, signed.personId, afterCursor(cursor), PAGE + 1);
   const page = pageOf(rows, PAGE);
   return { jobs: page.rows.map(jobView), nextCursor: page.nextCursor };
 }
 
 export async function getJob(signed: Signed, id: string) {
   const job = await data.jobById(db(), id);
-  if (!job || job.family_id !== signed.familyId) throw notFound();
+  if (!job || job.family_id !== signed.familyId || job.cook_id !== signed.personId) throw notFound();
   return jobView(job);
 }
 
 /**
  * One job stopped, with everything that says so, under the upload's locks: a worker mid-way finds it on its next write. The raw video goes, as Convex mode does. A job still
  * uploading has no message for the worker yet, so it gets one here. The sweep deletes the files again once the phone's upload links have run out.
- *
- * TODO(caleb): another cook's stop. Convex lets any cook in the family cancel, and there the footage stayed. Until he answers, it stops the job and keeps her video
- * (`keep_upload`), and the sweep's alarm asks a person. JOBS-MIGRATION.md, decisions.
  */
-async function stopHeld(c: Queryable, jobId: string, byPerson: string, requestId?: string): Promise<boolean> {
+async function stopHeld(c: Queryable, jobId: string, requestId?: string): Promise<boolean> {
   const job = await data.lockJob(c, jobId);
   if (!job) throw notFound();
-  const keep = job.cook_id !== byPerson;
   const waitingOnUpload = job.stage === "uploading";
-  if (!(await data.cancelJobRow(c, jobId, CANCELLED, keep))) return false;
+  if (!(await data.cancelJobRow(c, jobId, CANCELLED, false))) return false;
   if (job.recipe_id) await failRecipeIfOpen(c, job.recipe_id);
-  if (!keep) await data.markUploadForDeletion(c, job.upload_id);
+  await data.markUploadForDeletion(c, job.upload_id);
   if (waitingOnUpload) await enqueue(c, { queue: "jobs", payload: { jobId }, requestId });
   return true;
 }
 
-async function stop(jobId: string, familyId: string, byPerson: string, requestId?: string): Promise<boolean> {
+async function stop(jobId: string, signed: Signed, requestId?: string): Promise<boolean> {
   return await tx(async (c) => {
     // Files before the job, as everyone else takes them.
     const seen = await data.jobById(c, jobId);
-    if (!seen || seen.family_id !== familyId) throw notFound();
+    if (!seen || seen.family_id !== signed.familyId || seen.cook_id !== signed.personId) throw notFound();
     await data.lockUpload(c, seen.upload_id);
-    return await stopHeld(c, jobId, byPerson, requestId);
+    return await stopHeld(c, jobId, requestId);
   });
 }
 
-/** The cook stops one of her family's jobs. False once it's over. Another family's job answers the same as one that doesn't exist. */
+/** The cook stops her own job. False once it's over. Anyone else's job answers the same as one that doesn't exist. */
 export async function cancelJob(signed: Signed, id: string, requestId?: string): Promise<boolean> {
   requireCook(signed);
-  return await stop(id, signed.familyId, signed.personId, requestId);
+  return await stop(id, signed, requestId);
 }
 
 /**
@@ -209,10 +205,10 @@ export async function cancelUpload(signed: Signed, uploadId: string, requestId?:
   // All under the files' locks, which createJob holds until it commits: a job being made as she stops is seen here, and stopped.
   return await tx(async (c) => {
     const files = await data.lockUpload(c, id);
-    const jobs = await data.jobsOfFolder(c, signed.familyId, id);
+    const jobs = await data.jobsOfFolder(c, signed.familyId, signed.personId, id);
     let stopped = false;
     for (const job of jobs) {
-      if (await stopHeld(c, job.id, signed.personId, requestId)) stopped = true;
+      if (await stopHeld(c, job.id, requestId)) stopped = true;
     }
     const hers = files.length > 0 && files.every((f) => f.family_id === signed.familyId && f.owner_person_id === signed.personId);
     // Only with no job: a finished job's raw video stays (SYSTEM-DESIGN.md, "Keep the raw input").

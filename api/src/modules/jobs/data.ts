@@ -48,18 +48,19 @@ export type JobRow = {
 const JOB = `id, family_id, cook_id, recipe_id, recording_id, upload_key, upload_id, source, title, language, for_kid_ids, stage, progress, error, video_gaps, attempts,
   claimed_at, created_at, updated_at, upload_finished_at, finished_at, cancelled_at, created_at::text as cursor_at`;
 
-export async function familyJobs(q: Queryable, familyId: string, before: After | null, limit: number): Promise<JobRow[]> {
+/** A job shows only to the cook who filmed it (Caleb, Nov 1). Everyone else sees the recipe once it's published. */
+export async function jobsOfCook(q: Queryable, familyId: string, cookId: string, before: After | null, limit: number): Promise<JobRow[]> {
   const { rows } = await q.query(
     `select ${JOB} from jobs
-      where family_id = $1 ${before ? "and (created_at, id) < ($3::timestamptz, $4)" : ""}
-      order by created_at desc, id desc limit $2`,
-    before ? [familyId, limit, before.at, before.id] : [familyId, limit],
+      where family_id = $1 and cook_id = $2 ${before ? "and (created_at, id) < ($4::timestamptz, $5)" : ""}
+      order by created_at desc, id desc limit $3`,
+    before ? [familyId, cookId, limit, before.at, before.id] : [familyId, cookId, limit],
   );
   return rows;
 }
 
 /** The live poll's read (docs/build/LIVE-UPDATES.md), which needs no cursor. */
-export const recentJobs = (familyId: string, limit: number) => familyJobs(db(), familyId, null, limit);
+export const recentJobs = (familyId: string, cookId: string, limit: number) => jobsOfCook(db(), familyId, cookId, null, limit);
 
 export async function jobById(q: Queryable, id: string): Promise<JobRow | null> {
   const { rows } = await q.query(`select ${JOB} from jobs where id = $1`, [id]);
@@ -83,8 +84,8 @@ export async function folderIsAnotherFamilys(q: Queryable, familyId: string, upl
   return rows.some((row) => row.family_id !== familyId);
 }
 
-export async function jobsOfFolder(q: Queryable, familyId: string, uploadId: string): Promise<JobRow[]> {
-  const { rows } = await q.query(`select ${JOB} from jobs where family_id = $1 and upload_id = $2 order by created_at desc limit 20`, [familyId, uploadId]);
+export async function jobsOfFolder(q: Queryable, familyId: string, cookId: string, uploadId: string): Promise<JobRow[]> {
+  const { rows } = await q.query(`select ${JOB} from jobs where family_id = $1 and cook_id = $2 and upload_id = $3 order by created_at desc limit 20`, [familyId, cookId, uploadId]);
   return rows;
 }
 

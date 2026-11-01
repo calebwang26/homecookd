@@ -289,13 +289,14 @@ test("jobs", { skip: !hasDatabase }, async (t) => {
     assert.equal((await job((await newJob(app, dad, (await askLinks(app, dad)).uploadId)).data.jobId)).language, "en");
   });
 
-  await t.test("the list: newest first, 20 at a time, in the shape the app reads, and only her family's", async () => {
+  await t.test("the list: newest first, 20 at a time, in the shape the app reads, and only her own", async () => {
     const lone = await family();
     const cook = await who(lone);
     const kid = await who(lone, "kid");
     const made: string[] = [];
     for (let i = 0; i < 23; i += 1) made.push((await addJob(cook, "queued", `list-${i}`, false)).jobId);
-    const first = await call(app, kid, "GET", "/v1/jobs");
+    assert.deepEqual((await call(app, kid, "GET", "/v1/jobs")).data.jobs, [], "they're hers until the recipe is out");
+    const first = await call(app, cook, "GET", "/v1/jobs");
     assert.equal(first.status, 200);
     assert.equal(first.data.jobs.length, 20);
     const second = await call(app, cook, "GET", `/v1/jobs?cursor=${first.data.nextCursor}`);
@@ -317,13 +318,45 @@ test("jobs", { skip: !hasDatabase }, async (t) => {
     assert.equal((await newJob(app, cook, "a\0b")).status, 400);
   });
 
-  await t.test("one job's progress, for its family only", async () => {
+  await t.test("one job's progress, for the cook who filmed it only", async () => {
     const ids = await addJob(dad, "writing");
-    const mine = await call(app, leo, "GET", `/v1/jobs/${ids.jobId}`);
+    const mine = await call(app, dad, "GET", `/v1/jobs/${ids.jobId}`);
     assert.equal(mine.status, 200);
     assert.equal(mine.data.stage, "writing");
     assert.equal(mine.data.progress, 0.3);
-    assert.equal((await call(app, sam, "GET", `/v1/jobs/${ids.jobId}`)).status, 404);
+    assert.equal((await call(app, leo, "GET", `/v1/jobs/${ids.jobId}`)).status, 404, "her kid");
+    assert.equal((await call(app, sam, "GET", `/v1/jobs/${ids.jobId}`)).status, 404, "another family");
+  });
+
+  await t.test("another cook in the family sees nothing of it and can't stop it, by its id or its folder", async () => {
+    const other = await who(dadsFamily);
+    const uploading = await askLinks(app, dad);
+    const made = await newJob(app, dad, uploading.uploadId);
+    for (const stage of ["uploading", "queued", "writing", "failed"]) {
+      const ids = stage === "uploading" ? { jobId: made.data.jobId } : await addJob(dad, stage);
+      assert.equal((await call(app, other, "GET", `/v1/jobs/${ids.jobId}`)).status, 404, stage);
+      assert.equal((await call(app, other, "POST", `/v1/jobs/${ids.jobId}/cancel`)).status, 404, stage);
+      assert.ok(!(await call(app, other, "GET", "/v1/jobs")).data.jobs.some((j: { _id: string }) => j._id === ids.jobId), stage);
+      assert.ok(!(await call(app, other, "GET", "/v1/live/jobs")).data.data.some((j: { _id: string }) => j._id === ids.jobId), `${stage}, while polling`);
+      assert.equal((await job(ids.jobId)).cancelled_at, null, stage);
+    }
+    assert.deepEqual((await call(app, other, "POST", `/v1/video-uploads/${uploading.uploadId}/cancel`)).data, { stopped: false });
+    assert.equal((await job(made.data.jobId)).cancelled_at, null);
+    assert.ok((await call(app, dad, "GET", "/v1/live/jobs")).data.data.some((j: { _id: string }) => j._id === made.data.jobId), "she sees it");
+
+    // Her recipe card, while it's being made or if it failed, is hers too. Once it's ready, everyone sees it.
+    const card = (await db().query(`insert into recipes (family_id, cook_id, title, status) values ($1, $2, 'KEEP-being made', 'processing') returning id`, [dad.familyId, dad.personId])).rows[0].id as string;
+    const listed = async (by: Who) => (await call(app, by, "GET", "/v1/recipes")).data.recipes.some((r: { _id: string }) => r._id === card);
+    for (const status of ["processing", "failed"]) {
+      await db().query(`update recipes set status = $2 where id = $1`, [card, status]);
+      assert.equal((await call(app, other, "GET", `/v1/recipes/${card}`)).status, 404, status);
+      assert.equal(await listed(other), false, status);
+      assert.equal((await call(app, dad, "GET", `/v1/recipes/${card}`)).status, 200, status);
+      assert.equal(await listed(dad), true, status);
+    }
+    await db().query(`update recipes set status = 'ready' where id = $1`, [card]);
+    assert.equal((await call(app, other, "GET", `/v1/recipes/${card}`)).status, 200);
+    assert.equal(await listed(other), true);
   });
 
   await t.test("a job can't be made while the sync still owns recipes, and a retry still gets its job", async () => {

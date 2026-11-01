@@ -37,9 +37,12 @@ export const recordingView = (r: data.RecordingRow) => ({
   updatedAt: r.updated_at.getTime(),
 });
 
+/** A recording is its cook's own until its recipe is published (Caleb, Nov 1), like the job behind it. After that the family reads it. */
 const ownFamily = async (signed: Signed, id: string) => {
   const row = await data.recordingById(db(), id);
-  return row && row.family_id === signed.familyId ? row : null;
+  if (!row || row.family_id !== signed.familyId) return null;
+  if (row.cook_id === signed.personId) return row;
+  return (await data.publishedJobs(db(), [row.job_id])).size ? row : null;
 };
 
 /** live.recording. Null for a missing recording and for another family's: they read the same. */
@@ -74,8 +77,10 @@ export async function readLiveFrame(signed: Signed, id: string) {
 /** glasses.videos: the ones the laptop saved, and ones that ended in the last 2 h that it's still building. */
 export async function readGlassesVideos(signed: Signed) {
   const rows = await data.familyRecordings(db(), signed.familyId, VIDEOS_READ);
+  const published = await data.publishedJobs(db(), rows.map((r) => r.job_id));
   const now = Date.now();
   return rows
+    .filter((r) => r.cook_id === signed.personId || (r.job_id && published.has(r.job_id)))
     .filter((r) => r.source === "glasses" && (r.video_key || (r.status === "ended" && !r.job_id && now - r.updated_at.getTime() < PREPARING_MS)))
     .slice(0, VIDEOS_SHOWN)
     .map((r) => ({

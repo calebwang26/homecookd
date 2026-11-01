@@ -56,6 +56,14 @@ export async function familyRecordings(q: Queryable, familyId: string, limit: nu
   return rows;
 }
 
+/** Of these jobs, the ones whose recipe is out. */
+export async function publishedJobs(q: Queryable, jobIds: (string | null)[]): Promise<Set<string>> {
+  const ids = jobIds.filter((id): id is string => !!id);
+  if (!ids.length) return new Set();
+  const { rows } = await q.query(`select j.id from jobs j join recipes r on r.id = j.recipe_id where j.id = any($1::text[]) and r.status = 'ready'`, [ids]);
+  return new Set(rows.map((r) => r.id));
+}
+
 export type LiveEventRow = { kind: string; title: string; text: string; said_as: string | null; at_ms: number };
 
 /** Oldest first, on the wall clock. */
