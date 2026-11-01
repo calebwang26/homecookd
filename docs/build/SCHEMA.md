@@ -305,7 +305,7 @@ The rule for any row with a file key: mark the key in `files` first, then delete
 
 | Table | What happens |
 |---|---|
-| `families` | Stays, with its name and code, until its last person deletes: then `name`, `public_name` and both code columns are blanked, and the row stays for the FKs (C2) |
+| `families` | Stays, with its name and code, until its last signed-in person deletes, leaves or moves: then the phone-less people left are deleted the same way, `name`, `public_name` and both code columns are blanked, and the row stays for the FKs (C2) |
 | `people` | Blank tombstone: `name = 'Deleted'`, everything personal null. The check constraint enforces it |
 | `devices` | `person_id` null, revoked. **New:** `label` null too |
 | `identities` | Deleted, which frees the Apple or Google account |
@@ -354,6 +354,8 @@ The rule for any row with a file key: mark the key in `files` first, then delete
 still exist, also GCS and Supabase's rows and buckets: AWS-MIGRATION says purge both stores during media's move, which is why
 `media_urls_legacy` is kept. **Backups:** production keeps RDS backups 14 days and S3's old versions 28 days, both inside what
 `/privacy` promises (30 more days).
+
+**Built:** `api/src/modules/accounts/purgeSteps.ts`, with `060_accounts.sql` adding `families.blanked_at`, `account_deletions.lists_cleared_at` and `files.purge_deletion_id`. Three small additions to this table came out of building it, all in `docs/build/ACCOUNTS-MIGRATION.md`: a family invite they sent is also revoked, a kept `link:` signup also loses its `person_id`, and a blanked family's phones, sessions and links stop.
 
 **Personal data** is tagged `-- personal` in the SQL. Also sensitive, though not readable as-is: `key_hash`, `token_hash`,
 `code_hash`, `kid_token_hash`, `ask_token_hash` (hashes of live credentials); `ip_key` and `rate_hits.key` (IP HMACs);
@@ -436,8 +438,8 @@ The questions as asked:
 - **C1: the other person's half stays.** When someone deletes their account, what they sent goes, and what the other person sent
   stays, voice notes included (Caleb confirmed). Convex does this today; Supabase's purge deletes both halves, so the new purge follows Convex.
   **`/privacy` says "your one-to-one chats" go, so its wording has to change** (AWS-MIGRATION, "Waiting on Apple's approval").
-- **C2: blank it.** When a family's last person deletes, `name`, `public_name` and both code columns are blanked. The row stays for
-  the FKs.
+- **C2: blank it.** When a family's last signed-in person deletes, leaves or moves (Caleb, Nov 1), the phone-less people left are deleted through the normal path, so their rows and
+  files get purged too, and `name`, `public_name`, both code columns and every join link are blanked. A family with only phone-less faces doesn't outlive them. The row stays for the FKs.
 - **C3: remove the kid's message and its translations.** The guess stays, because Mom's version is built on it.
 - **C4: null an anonymous card's `ip_key` after 90 days.** A sweep does it.
 - **C5: keep the deletion record as proof.** Clear its lists of ids and keys 60 days after the outside purge.
