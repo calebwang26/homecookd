@@ -24,6 +24,32 @@ resource "aws_cloudwatch_metric_alarm" "alb_5xx" {
   alarm_actions       = [aws_sns_topic.alerts.arn]
 }
 
+# The dish budget running out, from the api's own log line, to the same email as every other alarm. The api's REPORT_ALERT_URL (a secret-like webhook address) stays unset on AWS.
+resource "aws_cloudwatch_log_metric_filter" "dish_budget" {
+  name           = "${local.name}-dish-budget-reached"
+  log_group_name = aws_cloudwatch_log_group.service["api"].name
+  pattern        = "\"ALERT dish budget reached\""
+  metric_transformation {
+    name      = "DishBudgetReached"
+    namespace = "homecookd/${local.name}"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "dish_budget" {
+  alarm_name          = "${local.name}-dish-budget-reached"
+  alarm_description   = "The dish ask reached its daily model budget: new cards are refused until tomorrow"
+  namespace           = "homecookd/${local.name}"
+  metric_name         = "DishBudgetReached"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
 resource "aws_cloudwatch_metric_alarm" "service_unhealthy" {
   for_each          = { for k, s in local.lb_services : k => s if s.desired_count > 0 }
   alarm_name        = "${local.name}-${each.key}-no-healthy-tasks"
