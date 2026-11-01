@@ -1,4 +1,5 @@
-# Queue mode only (pipeline/queue_worker.py, docs/build/WORKER-MIGRATION.md). Convex mode and the laptop never need these,
-# and CI's pipeline job doesn't install them, so the Postgres and AWS checks in test_queue_worker.py skip there.
+# Queue mode only (pipeline/queue_worker.py, docs/build/WORKER-MIGRATION.md). Convex mode and the laptop never need these: the
+# worker runs without them (test_worker_no_sentry.py). The Dockerfile and CI's pipeline job install them.
 boto3==1.43.123
 psycopg[binary]==3.3.6
+sentry-sdk>=2,<3
