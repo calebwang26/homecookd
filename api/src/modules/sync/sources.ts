@@ -15,7 +15,7 @@ export type ConvexPerson = {
   supabaseProfileId: string;
   name: string;
   role: "cook" | "kid";
-  voiceClone?: { consentedAt: number; cartesiaVoiceId?: string };
+  voiceClone?: { consentedAt: number }; // her yes. The route leaves the Cartesia id in Convex
   language?: string;
   relation?: string;
   approx?: { lat: number; lng: number };
