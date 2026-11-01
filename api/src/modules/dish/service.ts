@@ -37,6 +37,9 @@ import {
 } from "./values.js";
 
 /** The Ask Mom text a card starts with. */
+/** What a push about a card needs (messages/tasks.ts): read-only, and the only thing another module asks of a card. */
+export const cardForPush = (askId: string) => data.cardById(db(), askId);
+
 export const defaultMessage = (relation: Relation, dish: string) =>
   relation === "none" ? "" : `${RELATION_LABEL[relation]}, how do you make your ${dish}? I'm trying to make it here.`;
 

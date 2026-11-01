@@ -120,8 +120,9 @@ Before any backfill copies real rows into Postgres:
 - Seal `craving_links.token`, `dinners.invite_token` and `shares.token` (SCHEMA.md, M6).
 - Caleb decides how long raw footage is kept (above).
 - Count violations of every new uniqueness rule, CHECK and domain (SCHEMA.md, section 7).
-- The sweep reaches every bucket and row the purge can mark. Today it reaches only anonymous private uploads, so a backfilled file
-  would stay marked and undeleted (DISH-MIGRATION.md, known limits).
+- The sweep reaches every bucket and row the purge can mark. Today it reaches the private bucket's anonymous and signed-in uploads, so a backfilled file
+  with no owner, or in another bucket, would stay marked and undeleted (DISH-MIGRATION.md, known limits).
+- Count doubled reactions and Convex messages sent to oneself, which the new schema refuses (MESSAGES-MIGRATION.md, "Before real data").
 
 ## Cutover list
 

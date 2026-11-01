@@ -398,9 +398,11 @@ export async function unmarkAlertSent(key: string): Promise<void> {
 // ---------------------------------------------------------------------------------------------
 // The sweep
 
-// The sweep can reach one bucket (objectStore() is the private one), and it owns only anonymous uploads: another row's key would be "deleted" from
-// the wrong bucket, S3 would say fine, and the row would say deleted while the file lives on. The partial indexes say the same (010_dish_hearing.sql).
+// The sweep can reach one bucket (objectStore() is the private one): another row's key would be "deleted" from the wrong bucket, S3 would say fine, and the
+// row would say deleted while the file lives on. It decides orphans for anonymous uploads only (messages/tasks.ts gives signed-in ones a longer wait), and
+// does the S3 delete for those and for signed-in uploads marked by anything. The partial indexes say the same (010_dish_hearing.sql, 050_messages.sql).
 const SWEEPABLE = `bucket = 'private' and capability_hash is not null`;
+const DELETABLE = `bucket = 'private' and (capability_hash is not null or owner_person_id is not null)`;
 
 export async function markOrphanFiles(olderThanMs: number, batch: number): Promise<number> {
   const { rowCount } = await db().query(
@@ -418,7 +420,7 @@ export async function markOrphanFiles(olderThanMs: number, batch: number): Promi
 export async function filesToDelete(batch: number): Promise<string[]> {
   const { rows } = await db().query(
     `select key from files
-      where ${SWEEPABLE} and delete_requested_at is not null and deleted_at is null
+      where ${DELETABLE} and delete_requested_at is not null and deleted_at is null
       order by attached_at is null, delete_requested_at limit $1`,
     [batch],
   );
@@ -431,7 +433,7 @@ export async function markFileDeleted(key: string): Promise<void> {
 
 export async function dropDeletedFileRows(olderThanDays: number, batch = 500): Promise<number> {
   const { rowCount } = await db().query(
-    `delete from files where key in (select key from files where ${SWEEPABLE} and deleted_at < now() - make_interval(days => $1) limit $2)`,
+    `delete from files where key in (select key from files where ${DELETABLE} and deleted_at < now() - make_interval(days => $1) limit $2)`,
     [olderThanDays, batch],
   );
   return rowCount ?? 0;

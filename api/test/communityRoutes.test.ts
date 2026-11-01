@@ -14,42 +14,7 @@ import { hasDatabase, IP, newBackend } from "./dishHelpers.js";
 
 const skip = !hasDatabase;
 
-function signedInRoutes(): { method: string; url: string }[] {
-  const found: { method: string; url: string }[] = [];
-  const app = buildApp({
-    logger: false,
-    routes: (a) => {
-      a.addHook("onRoute", (route) => {
-        for (const method of [route.method].flat()) {
-          if (route.url.startsWith("/v1/") && route.url !== "/v1/me" && method !== "HEAD") found.push({ method, url: route.url });
-        }
-      });
-    },
-  });
-  return Object.assign(found, { app });
-}
-
-test("every signed-in route refuses without a session, before it reads anything", { skip }, async () => {
-  const t = await newBackend();
-  const routes = signedInRoutes();
-  await (routes as unknown as { app: FastifyInstance }).app.ready();
-  assert.ok(routes.length >= 25, `only ${routes.length} routes`);
-  const expired = await (async () => {
-    const f = await family("Old home");
-    const who = await person(f, "Old", "cook");
-    await db().query("update sessions set expires_at = now() - interval '1 second' where person_id = $1", [who.personId]);
-    return who;
-  })();
-  for (const { method, url } of routes) {
-    const path = url.replace(":id", "anything");
-    const body = method === "GET" || method === "DELETE" ? undefined : {};
-    for (const who of [null, expired, { ...expired, token: "x".repeat(43) }]) {
-      const r = await call(t, who, method as "GET", path, body);
-      assert.equal(r.status, 401, `${method} ${url}: ${JSON.stringify(r.data)}`);
-      assert.equal(r.data.error, "signed_out");
-    }
-  }
-});
+// routeCoverage.test.ts holds every route to no session, expired, deleted, removed and another family.
 
 test("a deleted person's session is refused on Community", { skip }, async () => {
   const { t, serene } = await world();
