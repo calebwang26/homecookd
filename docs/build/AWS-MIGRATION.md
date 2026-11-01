@@ -22,9 +22,45 @@ Apple approves 1.0.** After approval: app 1.1 with our own addresses first, then
 Convex as its way back until it's proven. Build 6 keeps calling the old services, so they stay up until those phones have
 updated. `main` keeps changing `convex/` meanwhile, so the branch merges `main` often and ports each change.
 
+**The goal is a backend built to `docs/build/SYSTEM-DESIGN.md`, not only a move of hosting.**
+
 **Before the rewrite starts:** staging fully tested, a real video job measured, and Caleb's OK on creating production,
 lifting the Supabase freeze, and any copy of real data into a test database. **Before any area switches over:** Convex backups
 running and a restore proven (phase 0).
+
+### Build order (Caleb, Oct 31)
+
+1. Automatic PR checks, and auto-deploy to staging.
+2. Sentry, traceable logs, alerts.
+3. **One Postgres schema, designed for Convex and Supabase together** around how the app reads data, even though areas still
+   move one at a time.
+4. The api skeleton: auth checks, permissions, rate limits, errors, tests.
+5. The kid's web flow first, as the template for the rest.
+6. The worker on queues, with jobs safe to repeat.
+7. The remaining areas one at a time, with the live-updates replacement before the areas that need it.
+8. A backup copy in a separate AWS account or region.
+
+### What each area must pass before it switches
+
+- The same behavior tests pass on old and new.
+- Old app versions keep working.
+- Old and new answers are compared on real requests, where practical.
+- Speed targets hold under load.
+- The way back has been tested.
+
+### Before production launch
+
+A restore drill, a deliberately killed service, a load test, and these gaps closed: 2+ api tasks, autoscaling, HTTPS, and a
+limited database login.
+
+### Not building
+
+Microservices, Kubernetes, Redis, read replicas and multi-region, until measurements call for them.
+
+### Time
+
+No week estimates: Claude builds this, so the ones here were too human. Real numbers come after the first area is done. Real
+time is set by Caleb's approvals, reviews, Apple, phones updating, and proof under real traffic.
 
 ## Waiting on Apple's approval of 1.0
 
@@ -36,11 +72,13 @@ Decided by Caleb on Oct 31. **To build, and blocked until the App Store approves
    is on `main` but not applied. Steps: `infra/README.md`, "Starting the backups". Until then, **there is no scheduled
    backup of Convex**, which still runs on a preview deployment.
 3. **Restore test,** after the first export.
-4. **Remove the Oct 25 export** in `~/Documents/homecookd-backups/` by Nov 24, 2026, Caleb's call. Files on a laptop don't
-   expire, and `/privacy` promises a deleted account's data leaves backups within 30 days.
-5. Everything else that merges or deploys from the migration branch.
+4. Everything else that merges or deploys from the migration branch.
 
-## Phases
+**Not waiting on Apple:** remove the Oct 25 export in `~/Documents/homecookd-backups/` by **Nov 24, 2026**, Caleb's call. Files
+on a laptop don't expire, and `/privacy` promises a deleted account's data leaves backups within 30 days. It's also the only
+full copy until the new backups run, so that deadline may force a choice if Apple is still reviewing.
+
+## Priorities
 
 **Priorities (Caleb, Oct 31):** phase 0, phase 1, the worker from phase 3, then phases 4-7. **Voice is out of the near-term
 work:** homie is switched off, so voice stays on Cloud Run until homie is back on. Not confirmed: whether anything live,
@@ -56,8 +94,8 @@ Caleb's OK anyway).
 | 2 | Foundation and staging | This PR merged, about $100 a month | `terraform destroy` on staging |
 | 3 | Worker off the laptop (voice waits for homie) | Worker code changes | Keep the laptop worker ready; switch back |
 | 4 | Media | Copy of the GCS buckets, signer replaced | Addresses point back to GCS |
-| 5 | Supabase to RDS | Production database, about 2-4 weeks of work | Supabase stays the source until cutover, read-only after |
-| 6 | Convex to Postgres | About 6-10 weeks of work, one area at a time | Per area: route back to Convex |
+| 5 | Supabase to RDS | Production database, the shared schema | Supabase stays the source until cutover, read-only after |
+| 6 | Convex to Postgres | One area at a time, the shared schema | Per area: route back to Convex |
 | 7 | Website off Vercel | S3 + CloudFront, a deploy workflow, a DNS change | Point DNS back to Vercel, kept running for a while |
 
 ### 0. Safety
@@ -65,6 +103,9 @@ Convex runs on `grand-dragon-649`, a **preview** deployment. Its expiry was clea
 and moving to a Convex production deployment would change the URL that build 6 calls. So: a scheduled
 `npx convex export --include-file-storage` to a private, versioned S3 bucket, and one test restore into a throwaway
 deployment to prove it works.
+
+This job is only a bridge. After the migration Convex shuts down, and RDS and S3 backups take over. Not verified: whether
+Convex's free plan handles a daily export, so check on the first run.
 
 Decided and built in `infra/backups` (Caleb, Oct 31: the key lives in Secrets Manager). Today's preview key can't export, so
 the job uses its own key that reaches only `grand-dragon-649`. That key can still write to the deployment, so only this
@@ -118,7 +159,7 @@ and an address its firmware can reach.
 **Size:** 7,727 lines in `supabase/functions/api/` (Deno), 15 migrations, 21 tables, and 6 references to pg_cron. It's
 already Postgres, so `pg_dump` and restore is the easy part. The work is moving the Deno code to Node on Fargate, replacing
 pg_cron with EventBridge, and re-running `two_sided_live`, `api-smoke` and `retention_live` against the new host. The
-Supabase freeze has to be lifted for this, which is Caleb's call. **Roughly 2-4 weeks.**
+Supabase freeze has to be lifted for this, which is Caleb's call.
 
 Before real data arrives: create a limited app user for `api` and `worker`, and take the RDS master login
 (`DB_CREDENTIALS` in `infra/modules/env/services.tf`) out of their tasks. When production deploys start, pin the deploy
@@ -126,8 +167,7 @@ workflow's actions to commit SHAs.
 
 ### 6. Convex to Postgres
 **Size:** about 11,400 lines, 29 tables, 8 crons, 184 functions (28 queries, 34 mutations, 5 actions, 117 internal), 33
-scheduler calls, 47 file-storage calls, and 7,240 lines of tests to carry over. **Roughly 6-10 weeks.** Both estimates are
-rough, for agents working with review, and were made without trying any of it.
+scheduler calls, 47 file-storage calls, and 7,240 lines of tests to carry over.
 
 What makes it hard:
 - **Live updates.** Screens subscribe through one helper (`app/src/lib/live/convex.ts:238`), so it's one place to change,
@@ -137,7 +177,7 @@ What makes it hard:
 - **Build 6 and 1.0 phones** call Convex by function name, so Convex stays up until they're gone.
 
 **Order, least-connected first:**
-1. Shared Postgres schema, session checks (read from Convex at first), test harness.
+1. The shared schema and api skeleton from the build order, session checks (read from Convex at first), test harness.
 2. The kid's web flow (`dishAsks`, `dishAskModel`, `lib/dishAskRoutes`; about 2,800 lines). Plain HTTP, no subscriptions.
 3. Community, dinners, cravings, share requests.
 4. Messages, questions, story cards, push.

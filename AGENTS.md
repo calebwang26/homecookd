@@ -38,6 +38,9 @@ and homesick college kids. It's a family product, not a tool.
 (kid on the web → Ask Mom → parent answers by voice → film in the app). Every new screen, flow and piece of copy
 follows it, and it wins over the docs below on UI/UX and flows.
 
+**AWS backend work (since Oct 31):** read `docs/build/SYSTEM-DESIGN.md` first. It sets how the backend must be built, and
+`docs/build/AWS-MIGRATION.md` says what moves and when. A PR that breaks one of its rules says so and explains why.
+
 0. `docs/build/STACK.md`: **the hackathon stack and build plan** (Convex, live voice service, Cartesia, Moss, Claude,
    Muse Spark, glasses), the contracts between the pieces, and the 2-day build order. It beats everything below
    where they conflict. The data model is `convex/schema.ts`.
