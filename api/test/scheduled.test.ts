@@ -144,8 +144,14 @@ test("the real loop, end to end: a Send's work leaves through the outbox and lan
   // SQS delivers one of them twice.
   queue.push({ ...queue[1], id: "again" });
   const q = fakeQueue(queue);
-  const consumer = startConsumer(q.receiver, silent);
-  await until(() => q.removed.length === 3).finally(() => consumer.stop());
+  const errors: unknown[] = [];
+  const consumer = startConsumer(q.receiver, { ...silent, error: (fields: object, message: string) => void errors.push({ message, fields }) });
+  await until(() => q.removed.length === 3)
+    .catch((error: Error) => {
+      // Name what happened, so a failure here isn't written off as load.
+      throw new Error(`${error.message}; removed ${q.removed.length} of 3; consumer errors: ${JSON.stringify(errors)}`);
+    })
+    .finally(() => consumer.stop());
   await settle(); // a merge that found the clip being heard queued itself to look again
   assert.ok((await rowOf(kidToken)).version);
   assert.equal(model.calls.version, 1);
