@@ -1,6 +1,5 @@
-// The site's own client against this api, over a real local port: web/src/lib/dish/api.ts as it is today, read from its file with only its import
-// of the old base URL replaced, so this says what a URL change alone gets you. What it can't do yet is pinned here too: `uploadFile` and `sendAnswer`
-// send raw bytes, and those are the two web/ changes DISH-MIGRATION.md lists. Skipped where web/ isn't there. Models and S3 are fakes.
+// The site's own client against this api, over a real local port: web/src/lib/dish/api.ts as it is, read from its file with only its import of the
+// base URL replaced. Uploads and an answer run end to end, with PUTs routed to the fake store. Skipped where web/ isn't there. Models and S3 are fakes.
 import assert from "node:assert/strict";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -8,7 +7,8 @@ import { dirname, join } from "node:path";
 import { after, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { db } from "../src/db.js";
-import { askedCard, hasDatabase, newBackend, seedSpend, settle, store } from "./dishHelpers.js";
+import { FAKE_WORDS } from "../src/modules/dish/model.js";
+import { askedCard, clearWindow, hasDatabase, model, newBackend, seedSpend, settle, store } from "./dishHelpers.js";
 
 const source = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "web", "src", "lib", "dish", "api.ts");
 const skip = !hasDatabase || !existsSync(source);
@@ -27,6 +27,26 @@ test("the site's client, unchanged but for its base URL", { skip }, async (t) =>
   const app = await newBackend();
   const base = await app.listen({ host: "127.0.0.1", port: 0 });
   const site = await siteClient(base);
+  // S3 is the fake store: PUTs to its links land there, and everything else goes to the real local port.
+  const puts: { contentType: string; size: number }[] = [];
+  const calls: { url: string; contentType: string; hasDishHeader: boolean }[] = [];
+  let putAnswer: null | (() => Response) = null;
+  const realFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: string | URL | Request, init?: RequestInit) => {
+    const url = String(input);
+    const headers = new Headers(init?.headers);
+    if (url.startsWith("https://fake-s3.test/")) {
+      assert.equal(init?.method, "PUT");
+      if (putAnswer) return putAnswer();
+      const bytes = new Uint8Array(await new Response(init?.body).arrayBuffer());
+      const contentType = headers.get("content-type") ?? "";
+      puts.push({ contentType, size: bytes.length });
+      store.put(url, bytes, contentType);
+      return new Response("", { status: 200 });
+    }
+    calls.push({ url, contentType: headers.get("content-type") ?? "", hasDishHeader: headers.has("x-dish-token") });
+    return realFetch(input, init);
+  }) as typeof fetch;
   try {
     let kidToken = "";
     let askToken = "";
@@ -66,35 +86,65 @@ test("the site's client, unchanged but for its base URL", { skip }, async (t) =>
       assert.equal(await kind(site.createCard({ dish: "dal", relation: "mom" })), "rate");
     });
 
-    await t.test("what needs web/ changed: raw bytes are refused until uploadFile and sendAnswer use a link", async () => {
-      const kind = (p: Promise<unknown>) => p.then(() => "no error", (e: { kind: string }) => e.kind);
-      const blob = new Blob([new Uint8Array(1000)], { type: "image/jpeg" });
-      assert.equal(await kind(site.uploadFile("photo", blob, "image/jpeg")), "bad");
-      assert.equal(await kind(site.sendAnswer(askToken, "q1", "en", 3, new Blob([new Uint8Array(1000)]), "audio/mp4")), "bad");
-      assert.equal(store.objects.size, 0);
+    await t.test("a card from a photo and a voice note: link, PUT, confirm, each through the site's own uploadFile", async () => {
+      await clearWindow("dish-cards"); // the test above used this IP's limit
+      const photo = await site.uploadFile("photo", new Blob([new Uint8Array(1000).fill(7)], { type: "image/jpeg" }), "image/jpeg");
+      const voice = await site.uploadFile("voice", new Blob([new Uint8Array(800).fill(7)], { type: "audio/webm;codecs=opus" }), "audio/webm;codecs=opus");
+      assert.ok(site.isPlausibleToken(photo) && site.isPlausibleToken(voice));
+      assert.equal(puts.length, 2);
+      assert.equal(puts[1].contentType, "audio/webm", "the type the link was signed for, not the recorder's");
+      const made = await site.createCard({ dish: "a made-up blue lentil stew", relation: "mom", photos: [photo], voiceNote: voice });
+      assert.equal(made.card.photoUrls.length, 1);
+      assert.equal(model.calls.transcribe, 1);
     });
 
-    await t.test("Her answer as it would run once they do: link, PUT, answer, then the kid's page", async () => {
+    await t.test("Mom's answer, end to end: sendAnswer, Send, the merge, then the kid's page", async () => {
       const fresh = await askedCard(app, "192.0.2.90");
-      const link = await fetch(`${base}/dish/ask/answer/upload?q=q1&durationS=3`, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain", "X-Dish-Token": fresh.askToken },
-        body: JSON.stringify({ contentType: "audio/mp4", size: 400 }),
-      }).then((r) => r.json());
-      store.put(link.uploadUrl, new Uint8Array(400).fill(1), "audio/mp4");
-      const answered = await fetch(`${base}/dish/ask/answer?q=q1&durationS=3`, {
-        method: "POST",
-        headers: { "Content-Type": "text/plain", "X-Dish-Token": fresh.askToken },
-        body: JSON.stringify({ fileId: link.fileId }),
-      }).then((r) => r.json());
-      assert.deepEqual(answered.ask.answered, ["q1"]);
+      const ask = await site.sendAnswer(fresh.askToken, "q1", "en", 3, new Blob([new Uint8Array(400).fill(1)], { type: "audio/webm;codecs=opus" }), "audio/webm;codecs=opus");
+      assert.deepEqual(ask.answered, ["q1"]);
+      assert.equal(ask.clips[0].durationS, 3);
       assert.equal((await site.finishAsk(fresh.askToken)).merging, true);
       await settle();
       const card = await site.getCard(fresh.kidToken);
       assert.equal(card.status, "answered");
       assert.equal(card.version.ingredients[2].amount, "two big spoons");
+      assert.equal(card.answers[0].words, FAKE_WORDS);
+    });
+
+    await t.test("none of it needs a preflight but the PUT: JSON goes as text/plain, the token in the body, never the query", async () => {
+      assert.ok(calls.length > 0);
+      for (const c of calls) {
+        assert.match(c.contentType, /^text\/plain/, c.url);
+        assert.ok(!/Token|token/.test(c.url), c.url);
+        assert.equal(c.hasDishHeader, false, c.url);
+      }
+    });
+
+    await t.test("a failed PUT reads as busy, a network failure too, and a refused type as bad", async () => {
+      const kind = (p: Promise<unknown>) => p.then(() => "no error", (e: { kind: string }) => e.kind);
+      const blob = new Blob([new Uint8Array(1000)], { type: "image/jpeg" });
+      putAnswer = () => new Response("<Error/>", { status: 403 });
+      assert.equal(await kind(site.uploadFile("photo", blob, "image/jpeg")), "busy");
+      putAnswer = () => {
+        throw new TypeError("fetch failed");
+      };
+      assert.equal(await kind(site.uploadFile("photo", blob, "image/jpeg")), "busy");
+      putAnswer = null;
+      assert.equal(await kind(site.uploadFile("photo", blob, "image/gif")), "bad");
+      const fresh = await askedCard(app, "192.0.2.91");
+      putAnswer = () => new Response("", { status: 500 });
+      assert.equal(await kind(site.sendAnswer(fresh.askToken, "q1", "en", 3, new Blob([new Uint8Array(400)]), "audio/mp4")), "busy");
+      putAnswer = null;
+    });
+
+    await t.test("a file S3 never got isn't taken: a PUT that said fine but stored nothing can't be confirmed", async () => {
+      const kind = (p: Promise<unknown>) => p.then(() => "no error", (e: { kind: string }) => e.kind);
+      putAnswer = () => new Response("", { status: 200 });
+      assert.equal(await kind(site.uploadFile("photo", new Blob([new Uint8Array(1000)], { type: "image/jpeg" }), "image/jpeg")), "not-found");
+      putAnswer = null;
     });
   } finally {
+    globalThis.fetch = realFetch;
     await app.close();
   }
 });
