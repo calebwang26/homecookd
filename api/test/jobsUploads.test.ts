@@ -61,7 +61,7 @@ test("uploads", { skip: !hasDatabase }, async (t) => {
   });
 
   await t.test("a retry with the same key gets the same upload, and a different body under it is refused", async () => {
-    const key = "retry-key-12345678";
+    const key = "retrytry1";
     const first = await ask([video, video], key);
     const again = await ask([video, video], key);
     assert.equal(first.status, 201);

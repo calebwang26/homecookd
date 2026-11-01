@@ -109,7 +109,7 @@ test("jobs", { skip: !hasDatabase }, async (t) => {
     const res = await newJob(app, aunt, uploadId);
     assert.equal(res.status, 400);
     assert.equal((await newJob(app, leo, uploadId)).status, 403);
-    const refused = await call(app, leo, "POST", "/v1/video-uploads", { videos: [{ contentType: "video/mp4", size: 5 }] }, { "idempotency-key": "kid-key-123456" });
+    const refused = await call(app, leo, "POST", "/v1/video-uploads", { videos: [{ contentType: "video/mp4", size: 5 }] }, { "idempotency-key": "leos-try1" });
     assert.equal(refused.status, 403);
   });
 
