@@ -123,13 +123,10 @@ reads, S3's CORS, and SQS, on fake models.
 **Still to prove:** real Claude and Ink in a test window (`infra/README.md`); the deployed site with an HTTPS api; Safari and a real iPhone
 recording.
 
-## Open: how long raw footage is kept (`TODO(caleb)`)
+## Raw footage goes after 14 days (Caleb, Nov 1)
 
-**Live GCS `uploads` deletes after 14 days. S3 `uploads` has no such rule, and `SYSTEM-DESIGN.md` says "keep the raw input".** It's a
-retention decision that also changes what `/privacy` covers, so it's Caleb's, and nothing has chosen it. **The queue worker assumes the raw
-upload is still there for a re-run after a crash, or for a re-run with a better model:** after a 14-day rule, a job re-run later fails
-visibly at the upload listing, and past recipes can't be rebuilt from source. Keeping it costs storage and holds more family footage.
-Until he decides, staging has no rule, and no real footage is on it.
+The same rule as live GCS `uploads`, as a lifecycle rule on S3 `uploads`. A job re-run after that fails visibly at the upload listing, and past recipes can't be rebuilt from source. S3 keeps
+a deleted version for its 28-day undo window, so the bytes are fully gone about 42 days after upload. `/privacy` needs no change for the rule itself; it needs AWS named first.
 
 ## Before real data
 
