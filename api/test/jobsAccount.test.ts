@@ -1,4 +1,4 @@
-// What deleting an account does to these tables (SCHEMA.md section 4, the "cook deleting" part of convex/account.test.ts). Nothing calls the purge yet, so the test blanks the person itself.
+// What deleting an account does to these tables (SCHEMA.md section 4, the "cook deleting" part of convex/account.test.ts). These tests run this part alone, so they blank the person themselves; accountDeletion.test.ts runs the whole purge.
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { purgeJobsForPerson, stopPersonsWork, workerFolder } from "../src/modules/jobs/account.js";

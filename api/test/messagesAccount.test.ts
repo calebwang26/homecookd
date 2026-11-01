@@ -1,4 +1,4 @@
-// SCHEMA.md section 4 and C1 for this area's tables: what they sent goes; what the other person sent stays, voice notes included. Nothing calls this yet, so the tests
+// SCHEMA.md section 4 and C1 for this area's tables: what they sent goes; what the other person sent stays, voice notes included. These run this part alone (accountDeletion.test.ts runs the whole purge), so the tests
 // tombstone the person by hand. Carries over convex/account.test.ts's messages, questions and push steps.
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
@@ -132,7 +132,7 @@ test("the at-once step can take a recipe's questions before the recipe goes, mar
   const { questionId } = ok(await post(w.app, w.leo, "/v1/questions", { recipeId: poha, text: "Salt?" }), 201);
   const clip = await uploaded(w, w.mom);
   ok(await post(w.app, w.mom, `/v1/questions/${questionId}/answer`, { audioKey: clip }));
-  assert.equal(await tx((c) => deleteQuestionsOnRecipes(c, [poha])), 1);
+  assert.equal(await tx((c) => deleteQuestionsOnRecipes(c, w.mom.id, [poha])), 1);
   assert.ok(await marked(clip));
   await db().query(`delete from recipes where id = $1`, [poha]);
 });
