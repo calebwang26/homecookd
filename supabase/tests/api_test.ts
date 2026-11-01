@@ -722,6 +722,10 @@ t("a family-invite phone can't take a face: writes as anyone are 403 'Add yourse
   const cid = await circleId();
   // Reads as phone-less faces stay fine (the Profiles screen reads everyone's lines).
   assertEquals((await call("GET", "/favorites", { headers: as(lin.id) })).status, 200);
+  // Convex's sessions.start relies on this flag: Lin looks free to act as, so only it stops a session.
+  const asLin = await call("GET", "/family", { headers: as(lin.id) });
+  assertEquals([asLin.status, asLin.data.device_needs_profile], [200, true]);
+  assertEquals(asLin.data.profiles.find((p: Row) => p.id === lin.id).locked, false);
   // Any write as an existing face, phone-less (Lin, Dad), locked (Mom) or only invited (Kai): 403.
   for (const who of [lin.id, DAD, MOM, kai.id]) {
     const r = await write(cid, as(who));

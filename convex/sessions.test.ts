@@ -47,6 +47,31 @@ test("sign-in refuses locked, invited and unknown people, and passes Supabase's 
   expect(await t.run((ctx) => ctx.db.query("sessions").collect())).toHaveLength(0);
 });
 
+test("a phone from a forwarded invite gets no session until it adds itself, then may lend", async () => {
+  // Supabase's answer to a person-less invite phone: phone-less Dad reads as neither locked nor invited.
+  stubFetch({ ...FAMILY, device_profile_id: null, device_needs_profile: true });
+  const t = newBackend();
+  for (const who of ["p-dad", "p-leo", "p-mom", "p-amy"]) {
+    await expect(signIn(t, who)).rejects.toThrow("Add yourself first.");
+  }
+  expect(await t.run((ctx) => ctx.db.query("sessions").collect())).toHaveLength(0);
+  expect(await t.run((ctx) => ctx.db.query("families").collect())).toHaveLength(0);
+
+  // Added itself as Leo: its own person, and phone-less Dad on loan, as any phone with a person.
+  stubFetch({ ...FAMILY, device_profile_id: "p-leo", device_needs_profile: false });
+  expect((await signIn(t, "p-leo")).role).toBe("kid");
+  expect((await signIn(t, "p-dad")).role).toBe("cook");
+  await expect(signIn(t, "p-mom")).rejects.toThrow("Mom uses their own phone.");
+});
+
+test("a family-code phone with nobody yet still signs in as the person it picks", async () => {
+  // The App Review path: the TEST family's code, swapped for a key, then a face. Its person is only
+  // set on its first Supabase write, so this first session has to work without one.
+  stubFetch({ ...FAMILY, device_profile_id: null, device_needs_profile: false });
+  const t = newBackend();
+  expect((await signIn(t, "p-leo")).role).toBe("kid");
+});
+
 test("every public function needs a live session, and sees only its own family", async () => {
   stubFetch();
   const t = newBackend();
