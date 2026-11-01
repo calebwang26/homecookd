@@ -241,6 +241,7 @@ node infra/scripts/web-smoke.mjs https://homecookd.app                          
 # new backend (api/; TEST_DATABASE_URL adds the real-Postgres tests)
 cd api && npm ci && npm run typecheck && npm test
 docker run -d --rm --name hc-pg -e POSTGRES_PASSWORD=t -e POSTGRES_DB=t -p 15439:5432 postgres:17   # then: cd api && TEST_DATABASE_URL=postgres://postgres:t@localhost:15439/t npm test
+PIPELINE_PYTHON=.venv/bin/python   # also set this for api tests: jobsWorker.test.ts runs the real queue worker, and skips without psycopg and sentry_sdk (pipeline/requirements-queue.txt)
 
 # temporary sync into Postgres: off by default, never on real data without Caleb's OK (docs/build/SYNC-MIGRATION.md)
 
