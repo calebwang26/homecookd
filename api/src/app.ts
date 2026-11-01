@@ -6,6 +6,9 @@ import * as Sentry from "@sentry/node";
 import { db } from "./db.js";
 import { ApiError } from "./errors.js";
 import { fieldPaths, fileGuard, lastName, looksLikeFileKey } from "./files.js";
+import { inviteRoutes } from "./modules/community/inviteRoutes.js";
+import { communityRoutes } from "./modules/community/routes.js";
+import { cravingRoutes } from "./modules/dish/cravingRoutes.js";
 import { dishRoutes } from "./modules/dish/routes.js";
 import { peopleRoutes } from "./modules/people/routes.js";
 
@@ -102,7 +105,8 @@ export function buildApp(options: { logger?: object | boolean; routes?: (app: Fa
 
   app.setErrorHandler((error: Error & { statusCode?: number; validation?: unknown }, req, reply) => {
     if (error instanceof ApiError) {
-      return reply.status(error.statusCode).headers(error.headers).send({ error: error.code, requestId: req.id });
+      const message = error.sentence ? { message: error.sentence } : {};
+      return reply.status(error.statusCode).headers(error.headers).send({ error: error.code, ...message, requestId: req.id });
     }
     if (error.validation) return reply.status(400).send({ error: "bad_request", requestId: req.id });
     const status = error.statusCode ?? 500;
@@ -130,6 +134,9 @@ export function buildApp(options: { logger?: object | boolean; routes?: (app: Fa
 
   app.register(peopleRoutes);
   app.register(dishRoutes, { prefix: "/dish" });
+  app.register(communityRoutes);
+  app.register(cravingRoutes);
+  app.register(inviteRoutes, { prefix: "/invite" });
   options.routes?.(app);
 
   return app;
