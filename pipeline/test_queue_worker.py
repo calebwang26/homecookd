@@ -354,6 +354,9 @@ class FakeStore:
         if job and job["stage"] == "queued" and not job["cancelled_at"]:
             job["error"] = message
 
+    def keeps_upload(self, job_id):
+        return bool((self.jobs.get(job_id) or {}).get("keep_upload"))
+
     def acknowledge_cancel(self, job_id, message):
         job = self.jobs.get(job_id)
         if job and job["cancelled_at"]:
@@ -418,8 +421,8 @@ class FakeContext:
     def job(self, job_id) -> dict | None:
         return self.store.jobs.get(job_id)
 
-    def cancel(self, job_id):
-        self.store.jobs[job_id].update(cancelled_at=time.time(), stage="failed", progress=0, error="Cancelled.")
+    def cancel(self, job_id, keep_upload=False):
+        self.store.jobs[job_id].update(cancelled_at=time.time(), stage="failed", progress=0, error="Cancelled.", keep_upload=keep_upload)
 
     def delete_job(self, job_id):
         del self.store.jobs[job_id]
@@ -480,8 +483,8 @@ class PostgresContext:
     def job(self, job_id) -> dict | None:
         return self.admin.execute("select * from jobs where id = %s", (job_id,)).fetchone()
 
-    def cancel(self, job_id):
-        self.admin.execute("update jobs set cancelled_at = now(), stage = 'failed', progress = 0, error = 'Cancelled.' where id = %s", (job_id,))
+    def cancel(self, job_id, keep_upload=False):
+        self.admin.execute("update jobs set cancelled_at = now(), stage = 'failed', progress = 0, error = 'Cancelled.', keep_upload = %s where id = %s", (keep_upload, job_id))
 
     def delete_job(self, job_id):
         self.admin.execute("delete from jobs where id = %s", (job_id,))
@@ -841,6 +844,19 @@ def a_job_cancelled_in_the_queue_never_starts(box: Box):
     box.deliver(box.worker(runner))
     assert not runner.specs and ctx.job(job_id)["attempts"] == 0
     assert box.s3.keys("uploads") == [] and box.queue.alive() == []
+
+
+@scenario
+def another_cooks_stop_leaves_her_raw_video(box: Box):
+    ctx = box.ctx
+    job_id = box.job_with_upload()
+    kept = box.s3.keys("uploads")
+    ctx.cancel(job_id, keep_upload=True)
+    box.queue.send(job_id)
+    runner = FakeRunner({})
+    box.deliver(box.worker(runner))
+    assert not runner.specs and box.queue.alive() == []
+    assert box.s3.keys("uploads") == kept and kept
 
 
 @scenario

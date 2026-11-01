@@ -9,8 +9,8 @@ export interface ObjectStore {
   /** A link that accepts exactly this type and this many bytes, for a few minutes. */
   presignPut(key: string, contentType: string, size: number): Promise<PresignedPut>;
   presignGet(key: string): Promise<string>;
-  /** Null when there's no such object. Throws when S3 can't say. */
-  head(key: string): Promise<{ size: number; contentType: string | null } | null>;
+  /** Null when there's no such object. Throws when S3 can't say. `modified` is S3's own time for when the upload landed. */
+  head(key: string): Promise<{ size: number; contentType: string | null; modified?: Date | null } | null>;
   read(key: string): Promise<{ bytes: Uint8Array; contentType: string | null } | null>;
   /** Deleting what's already gone is fine. */
   remove(key: string): Promise<void>;
@@ -30,9 +30,16 @@ const READ_WINDOW_MS = 60 * 60_000;
 
 export const readWindowStart = (now: number) => new Date(Math.floor(now / READ_WINDOW_MS) * READ_WINDOW_MS);
 
+/**
+ * A video's link. A phone hands it to iOS's background uploader, which may start the PUT long after asking, so two minutes can't work. S3 refuses a link once
+ * the credentials that signed it expire, whatever it was asked for, so this is an upper bound on a task role and the phone asks again when one is refused
+ * (POST /v1/video-uploads/:uploadId/links). Google's signer gave 7 days. docs/build/JOBS-MIGRATION.md, known limits.
+ */
+export const VIDEO_LINK_S = 6 * 3600;
+
 type S3Send = Pick<S3Client, "send">;
 
-export function s3Store(options: { bucket: string; client?: S3Client; now?: () => number }): ObjectStore {
+export function s3Store(options: { bucket: string; client?: S3Client; now?: () => number; uploadLinkS?: number }): ObjectStore {
   const client =
     options.client ??
     new S3Client({
@@ -44,6 +51,7 @@ export function s3Store(options: { bucket: string; client?: S3Client; now?: () =
   const send: S3Send["send"] = client.send.bind(client);
   const Bucket = options.bucket;
   const now = options.now ?? Date.now;
+  const uploadLinkS = options.uploadLinkS ?? UPLOAD_LINK_S;
   const missing = (error: unknown) => {
     const e = error as { name?: string; $metadata?: { httpStatusCode?: number } };
     return e.name === "NotFound" || e.name === "NoSuchKey" || e.$metadata?.httpStatusCode === 404;
@@ -52,11 +60,11 @@ export function s3Store(options: { bucket: string; client?: S3Client; now?: () =
     async presignPut(key, contentType, size) {
       const command = new PutObjectCommand({ Bucket, Key: key, ContentType: contentType, ContentLength: size });
       const url = await getSignedUrl(client, command, {
-        expiresIn: UPLOAD_LINK_S,
+        expiresIn: uploadLinkS,
         // Signed, so S3 itself refuses another type or size.
         signableHeaders: new Set(["content-type", "content-length"]),
       });
-      return { url, headers: { "Content-Type": contentType }, expiresInS: UPLOAD_LINK_S };
+      return { url, headers: { "Content-Type": contentType }, expiresInS: uploadLinkS };
     },
     presignGet(key) {
       return getSignedUrl(client, new GetObjectCommand({ Bucket, Key: key }), {
@@ -67,7 +75,7 @@ export function s3Store(options: { bucket: string; client?: S3Client; now?: () =
     async head(key) {
       try {
         const out = await send(new HeadObjectCommand({ Bucket, Key: key }));
-        return { size: out.ContentLength ?? 0, contentType: out.ContentType ?? null };
+        return { size: out.ContentLength ?? 0, contentType: out.ContentType ?? null, ...(out.LastModified ? { modified: out.LastModified } : {}) };
       } catch (error) {
         if (missing(error)) return null;
         throw error;
@@ -103,4 +111,21 @@ export function objectStore(): ObjectStore {
 /** For tests. */
 export function useObjectStore(next: ObjectStore | undefined): void {
   store = next;
+}
+
+let videos: ObjectStore | undefined;
+
+/** The `uploads` bucket: a cook's raw videos, which the worker reads. */
+export function uploadStore(): ObjectStore {
+  if (!videos) {
+    const bucket = process.env.UPLOAD_BUCKET?.trim();
+    if (!bucket) throw new Error("UPLOAD_BUCKET isn't set");
+    videos = s3Store({ bucket, uploadLinkS: VIDEO_LINK_S });
+  }
+  return videos;
+}
+
+/** For tests. */
+export function useUploadStore(next: ObjectStore | undefined): void {
+  videos = next;
 }
