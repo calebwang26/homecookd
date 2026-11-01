@@ -3,6 +3,7 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { db, tx } from "../src/db.js";
+import { purgeDishForPerson } from "../src/modules/dish/account.js";
 import { deliver, queuePush, RECEIPTS_AFTER_MS, type PushInput } from "../src/modules/messages/push.js";
 import { deadReceipts, EXPO_RECEIPTS_URL, sendExpoPush } from "../src/modules/messages/expo.js";
 import { CRAVINGS_PER_DAY, DAILY_MAX } from "../src/modules/messages/push.js";
@@ -565,6 +566,72 @@ test("pushEvents: Mom answered goes to the kid, a craving to the parent, in thei
   const web = await card(w, {});
   await run({ task: "push.dish_answered", askId: web });
   assert.equal((await db().query(`select count(*)::int as n from push_log`)).rows[0].n, 2);
+});
+
+test("a craving waiting for morning doesn't go if its kid or cook has deleted, and takes its words with it", { skip }, async () => {
+  const words = async (askId: string, cook: string) => (await db().query(`select status, title, body from push_log where person_id = $1 and dedupe_key = $2`, [cook, `craving:${askId}`])).rows[0];
+  const gone = { status: "none", title: null, body: null };
+  const deleted = (id: string) => db().query(`update people set deleted_at = now(), name = 'Deleted', relation = null, avatar_key = null, email = null, tz = null, share_cooking = null, language = null where id = $1`, [id]);
+  const waiting = async (w: World, o: { person?: string; requestedOf: string }) => {
+    const askId = await card(w, o);
+    await run({ task: "push.dish_requested", askId });
+    assert.equal((await words(askId, o.requestedOf)).status, "queued");
+    assert.match((await words(askId, o.requestedOf)).title, /Caleb/);
+    return askId;
+  };
+
+  // The kid deleted and the purge hasn't run: the card still names them, and nothing goes.
+  let w = await world();
+  await phone(w, w.dad, "dad");
+  const beforePurge = await waiting(w, { person: w.leo.id, requestedOf: w.dad.id });
+  await deleted(w.leo.id);
+  await dueNow();
+  await drain();
+  assert.equal(w.expo.sent.flat().length, 0);
+  assert.deepEqual(await words(beforePurge, w.dad.id), gone);
+
+  // The purge ran with Dad still here: the card stays for him, the name comes off it, and the row's words go at once, not at 8:00.
+  w = await world();
+  await phone(w, w.dad, "dad");
+  const afterPurge = await waiting(w, { person: w.leo.id, requestedOf: w.dad.id });
+  await deleted(w.leo.id);
+  await purgeDishForPerson(w.leo.id);
+  assert.equal((await db().query(`select kid_name from dish_asks where id = $1`, [afterPurge])).rows[0].kid_name, null);
+  assert.deepEqual(await words(afterPurge, w.dad.id), gone);
+  await dueNow();
+  await drain();
+  assert.equal(w.expo.sent.flat().length, 0);
+
+  // The card itself is gone.
+  w = await world();
+  await phone(w, w.dad, "dad");
+  const noCard = await waiting(w, { requestedOf: w.dad.id });
+  await db().query(`delete from dish_asks where id = $1`, [noCard]);
+  await dueNow();
+  await drain();
+  assert.equal(w.expo.sent.flat().length, 0);
+  assert.deepEqual(await words(noCard, w.dad.id), gone);
+
+  // The cook deleted.
+  w = await world();
+  await phone(w, w.dad, "dad");
+  const cookLeft = await waiting(w, { person: w.leo.id, requestedOf: w.dad.id });
+  await deleted(w.dad.id);
+  await dueNow();
+  await drain();
+  assert.equal(w.expo.sent.flat().length, 0);
+  assert.deepEqual(await words(cookLeft, w.dad.id), gone);
+
+  // Nobody deleted: an anonymous kid's craving goes, and so does one that never had a name.
+  w = await world();
+  await phone(w, w.dad, "dad");
+  await waiting(w, { requestedOf: w.dad.id });
+  const nameless = await card(w, { requestedOf: w.dad.id });
+  await db().query(`update dish_asks set kid_name = null where id = $1`, [nameless]);
+  await run({ task: "push.dish_requested", askId: nameless });
+  await dueNow();
+  await drain();
+  assert.deepEqual(pushes(w.expo).map((p) => p[1]).sort(), ["Caleb wants your braised pork", "Your kid wants your braised pork"]);
 });
 
 test("pushEvents: a recipe Mom filmed goes to the kid once", { skip }, async () => {

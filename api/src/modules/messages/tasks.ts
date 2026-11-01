@@ -10,7 +10,7 @@ import * as data from "./data.js";
 import type { MessageRow, ThreadRow } from "./data.js";
 import { library } from "./library.js";
 import { deliver, KEEP_LOG_DAYS, queuePush, receipts } from "./push.js";
-import { pruneLog } from "./pushData.js";
+import { cravingKey, pruneLog } from "./pushData.js";
 import { dishName, messagePush, postcardKey, postcardPush, reactionPush } from "./pushRules.js";
 import { pushWords, relationLabel } from "./pushWords.js";
 import { readFollowUp, readShare, transcribeTask, translateTask } from "./questions.js";
@@ -112,7 +112,7 @@ async function pushRequested(askId: string): Promise<void> {
   if (!card?.requested_of) return;
   const language = (await memberById(db(), card.requested_of))?.language ?? undefined;
   const { title, body } = pushWords("craving", language, { kid: card.kid_name ?? undefined, dish: dishOf(card) });
-  await tx((c) => queuePush(c, { personId: card.requested_of!, kind: "craving", title, body, url: `/request/${askId}`, dedupeKey: `craving:${askId}` }));
+  await tx((c) => queuePush(c, { personId: card.requested_of!, kind: "craving", title, body, url: `/request/${askId}`, dedupeKey: cravingKey(askId) }));
 }
 
 /** A recipe Mom filmed for this card was published: the video is the upgrade to her voice answer. */
