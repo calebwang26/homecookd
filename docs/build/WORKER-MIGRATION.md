@@ -50,10 +50,10 @@ spend cap. Worth another try: anything else, 5 then 10 minutes later. On the thi
 to the dead letters, which alarm. Every failure goes to `observability.report_failure`, and logs carry only ids, stages and error
 types.
 
-**Spend caps, and they aren't complete: they count Claude, not Cartesia.** `TODO(caleb)` on the amounts.
+**Spend caps, and they aren't complete: they count Claude, not Cartesia.**
 
 **Spend caps.** `PIPELINE_JOB_CAP_USD` (default $12, across all attempts) and `PIPELINE_DAILY_CAP_USD` (default $30, UTC day, in
-`daily_spend`). Both are `TODO(caleb)` defaults. Before any model runs, the video's length is checked at `COST_PER_HOUR_USD`. Over
+`daily_spend`). Both are Caleb's numbers (Nov 1). Before any model runs, the video's length is checked at `COST_PER_HOUR_USD`. Over
 the job cap, the job fails. Over the daily cap, it waits in `queued` until the new UTC day with the paused words, and the team is
 told once. Cartesia's transcription isn't in `usage.json`, so it isn't counted.
 

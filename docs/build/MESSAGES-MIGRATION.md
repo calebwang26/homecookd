@@ -305,7 +305,7 @@ Add to AWS-MIGRATION's list, as backfill counts:
 ## Known limits
 
 - **A craving waiting out quiet hours holds the kid's name** on its queued row, up to 11 hours. It doesn't go if the kid or cook has deleted or the card is gone: `push.deliver` reads the card again, and the kid's purge clears the row's words at once. One already claimed for sending can still go, like any push in flight. A kid who only leaves the family (not deleted) still sends: the check is for deleted accounts.
-- **A cook's answer to a pair question becomes a family-visible recipe note.** Left as it is, and open for Caleb.
+- **A cook's answer to a pair question becomes a family-visible recipe note.** Caleb's call, Nov 1: it stays that way.
 
 ## Open questions
 

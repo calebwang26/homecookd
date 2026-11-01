@@ -120,8 +120,8 @@ reviewing.
 **Passed Oct 31:** `web/scripts/qa/dish-api-e2e.mjs`, 18 of 18, in real Chrome from a local site to staging's api, with real S3 uploads and
 reads, S3's CORS, and SQS, on fake models.
 
-**Still to prove:** real Claude and Ink in a test window (`infra/README.md`); the deployed site with an HTTPS api; Safari and a real iPhone
-recording.
+**Still to prove:** real Claude and Ink in a test window (`infra/README.md`, waiting on Caleb); the deployed site with an HTTPS api; Safari and a real iPhone
+recording. **A real video through the AWS pipeline waits until `/privacy` names AWS (Caleb, Nov 1).**
 
 ## Open: how long raw footage is kept (`TODO(caleb)`)
 
