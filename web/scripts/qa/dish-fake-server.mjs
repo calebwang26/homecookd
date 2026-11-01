@@ -1,9 +1,15 @@
-// A local fake of the Convex /dish/* routes (docs/build/DISH-ASK-SPEC.md §4), for the v2 web pages
-// before the real routes are deployed. Canned "tomato egg" guess and merge, a Hindi translation for
-// `lang: 'hi'`, files kept in memory. No models, no keys.
+// A local fake of the /dish/* routes (docs/build/DISH-ASK-SPEC.md §4), for the v2 web pages before the
+// real routes are deployed. Canned "tomato egg" guess and merge, a Hindi translation for `lang: 'hi'`,
+// files kept in memory. No models, no keys.
+//
+// It speaks one of two contracts, and refuses the other, so a site built for one can't pass against the other:
+//   raw (default)  Convex today: raw bytes to /dish/files and /dish/ask/answer, read links that never expire.
+//   links          The new api (docs/build/DISH-MIGRATION.md): JSON for a link, a PUT, a confirm. A raw file gets 415, and read links expire.
 //
 //   node web/scripts/qa/dish-fake-server.mjs                      # http://localhost:8791
 //   cd web && NEXT_PUBLIC_DISH_URL=http://localhost:8791 npx next dev --port 3105
+//   UPLOADS=links node web/scripts/qa/dish-fake-server.mjs
+//   cd web && NEXT_PUBLIC_DISH_URL=http://localhost:8791 NEXT_PUBLIC_DISH_UPLOADS=links npx next dev --port 3105
 //
 // Test hooks (not in the spec): POST /__fake/budget {spent: true|false} makes /dish/cards answer 429
 // `budget` as the spent daily budget does, POST /__fake/rate {on: true|false} answers 429 `rate` (a per-IP limit); GET /__fake/state returns every card; GET /files/<id> serves an upload.
@@ -147,18 +153,21 @@ function merge(card) {
   return v;
 }
 
-export async function startFake({ port = 8791, site = 'http://localhost:3105', mergeMs = 3000, translateMs = 1500 } = {}) {
+export async function startFake({ port = 8791, site = 'http://localhost:3105', mergeMs = 3000, translateMs = 1500, uploads = 'raw' } = {}) {
+  if (uploads !== 'raw' && uploads !== 'links') throw new Error(`uploads is raw or links, not ${uploads}`);
+  const links = uploads === 'links';
   const cards = new Map(); // kidToken -> card
-  const files = new Map(); // fileId -> {kind, type, size, bytes (once it's PUT), askToken (a clip's card)}
+  const files = new Map(); // fileId -> {kind, type, size, bytes (once it's PUT, or at once when raw), askToken (a clip's card)}
   const cravings = new Map(); // token -> {parentName, relation, message, uses, revokedAt}
   const log = [];
-  let linkGeneration = 1; // read links name this; expireLinks moves it on, so an old one gets a 403, as an expired S3 link does
+  let linkGeneration = 1; // links only: read links name this; expireLinks moves it on, so an old one gets a 403, as an expired S3 link does
+  let brokenFiles = false; // every read of a file fails, whichever the contract: a clip that won't load
   let budgetSpent = false;
   let rateLimited = false;
-  let failingPuts = false;
+  let failingUploads = false;
   let base = `http://localhost:${port}`;
   const byAsk = (t) => [...cards.values()].find((c) => c.askToken === t);
-  const fileUrl = (id) => (id ? `${base}/files/${id}?v=${linkGeneration}` : null);
+  const fileUrl = (id) => (id ? `${base}/files/${id}${links ? `?v=${linkGeneration}` : ''}` : null);
   const uploadLink = (fileId, type) => ({ uploadUrl: `${base}/__storage/${fileId}`, uploadHeaders: { 'Content-Type': type }, expiresInS: 120 });
   const baseType = (t) => String(t ?? '').split(';')[0].trim();
 
@@ -218,20 +227,21 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
     const url = new URL(req.url, base);
     if (origin && !cors['Access-Control-Allow-Origin']) return fail(403, 'origin', 'This request came from another site.');
     if (req.method === 'OPTIONS') {
-      res.writeHead(204, { ...cors, 'Access-Control-Allow-Methods': 'POST, PUT, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, X-Dish-Token', 'Access-Control-Max-Age': '600' });
+      res.writeHead(204, { ...cors, 'Access-Control-Allow-Methods': links ? 'POST, PUT, OPTIONS' : 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, X-Dish-Token', 'Access-Control-Max-Age': '600' });
       return res.end();
     }
     if (req.method === 'GET' && url.pathname.startsWith('/files/')) {
       const f = files.get(url.pathname.slice(7));
-      if (url.searchParams.get('v') !== String(linkGeneration)) return fail(403, 'expired', 'This link has expired.');
+      if (brokenFiles) return fail(404, 'not_found', 'No such file.');
+      if (links && url.searchParams.get('v') !== String(linkGeneration)) return fail(403, 'expired', 'This link has expired.');
       return f?.bytes ? send(200, f.bytes, f.type) : fail(404, 'not_found', 'No such file.');
     }
     // Storage: what a presigned PUT does. The link was signed for one type and one size.
-    if (req.method === 'PUT' && url.pathname.startsWith('/__storage/')) {
+    if (links && req.method === 'PUT' && url.pathname.startsWith('/__storage/')) {
       const f = files.get(url.pathname.slice(11));
       const raw = await read(req);
       log.push({ path: '/__storage', type: req.headers['content-type'] ?? '', size: raw.length, query: Object.fromEntries(url.searchParams) });
-      if (failingPuts) return fail(503, 'storage', 'Storage is down.');
+      if (failingUploads) return fail(503, 'storage', 'Storage is down.');
       if (!f || req.headers['content-type'] !== f.type || raw.length !== f.size) return fail(403, 'signature', 'That isn’t what this link was signed for.');
       f.bytes = raw;
       res.writeHead(200, cors);
@@ -240,14 +250,20 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
     if (req.method === 'GET' && url.pathname === '/__fake/state') return send(200, [...cards.values()].map((c) => ({ kidToken: c.kidToken, askToken: c.askToken, ...cardOut(c) })));
     if (req.method !== 'POST') return fail(405, 'bad_request', 'POST only.');
     const raw = await read(req);
-    const b = (() => {
-      try {
-        return JSON.parse(raw.toString('utf8') || '{}');
-      } catch {
-        return null;
-      }
-    })();
-    log.push({ path: url.pathname, query: Object.fromEntries(url.searchParams), type: req.headers['content-type'] ?? '', token: b?.askToken ?? null, preflighted: !/^text\/plain/.test(req.headers['content-type'] ?? '') });
+    const contentType = req.headers['content-type'] ?? '';
+    const isRaw = !links && (url.pathname === '/dish/files' || url.pathname === '/dish/ask/answer'); // today's two routes that take bytes, not JSON
+    const b = isRaw
+      ? {}
+      : (() => {
+          try {
+            return JSON.parse(raw.toString('utf8') || '{}');
+          } catch {
+            return null;
+          }
+        })();
+    log.push({ path: url.pathname, query: Object.fromEntries(url.searchParams), type: contentType, token: isRaw ? (req.headers['x-dish-token'] ?? null) : (b?.askToken ?? null), preflighted: !/^text\/plain/.test(contentType) });
+    // The api refuses a raw file unread (DISH-MIGRATION.md, difference 2), so the old site against the new api fails loudly here too.
+    if (links && (url.pathname === '/dish/files' || url.pathname === '/dish/ask/answer') && /^(image|audio|video)\//.test(contentType)) return fail(415, 'bad_type', 'Files go through an upload link.');
     if (b === null) return fail(400, 'bad_request', 'That isn’t JSON.');
 
     switch (url.pathname) {
@@ -259,16 +275,23 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
         return send(200, { rateLimited });
       case '/dish/files': {
         const kind = url.searchParams.get('kind');
-        const type = baseType(b.contentType);
+        if (!links && failingUploads) return fail(502, 'storage', 'Storage is down.');
+        const type = baseType(links ? b.contentType : contentType);
         if (kind !== 'photo' && kind !== 'voice') return fail(400, 'bad_request', 'kind is photo or voice.');
         if (kind === 'photo' ? !/^image\/(jpeg|png|webp)$/.test(type) : !/^audio\//.test(type)) return fail(415, 'bad_type', 'We don’t take that type.');
-        if (!(b.size > 0)) return fail(400, 'bad_request', 'The file is empty.');
-        if (b.size > (kind === 'photo' ? 5 : 3) * 1024 * 1024) return fail(413, 'too_large', 'That file is too big.');
+        const size = links ? b.size : raw.length;
+        if (!(size > 0)) return fail(400, 'bad_request', 'The file is empty.');
+        if (size > (kind === 'photo' ? 5 : 3) * 1024 * 1024) return fail(413, 'too_large', 'That file is too big.');
         const fileId = token();
-        files.set(fileId, { kind, type, size: b.size });
-        return send(201, { fileId, kind, contentType: type, size: b.size, ...uploadLink(fileId, type) });
+        if (!links) {
+          files.set(fileId, { kind, type, size, bytes: raw });
+          return send(201, { fileId, kind, contentType: type, size });
+        }
+        files.set(fileId, { kind, type, size });
+        return send(201, { fileId, kind, contentType: type, size, ...uploadLink(fileId, type) });
       }
       case '/dish/files/confirm': {
+        if (!links) return fail(404, 'not_found', 'No such route.');
         const f = files.get(b.fileId);
         if (!f?.bytes) return fail(404, 'not_found', 'That file doesn’t work anymore. Add it again.');
         return send(201, { fileId: b.fileId, kind: f.kind, contentType: f.type, size: f.size });
@@ -405,7 +428,19 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
       return fail(404, 'not_found', 'No such route.');
     }
 
-    if (url.pathname === '/dish/ask/answer/upload' || url.pathname === '/dish/ask/answer') {
+    if (!links && url.pathname === '/dish/ask/answer') {
+      const c = byAsk(req.headers['x-dish-token']);
+      if (!c) return fail(404, 'not_found', 'This link doesn’t work anymore.');
+      if (c.finishedAt) return fail(409, 'closed', 'You already sent your answers.');
+      const q = url.searchParams.get('q');
+      if (!c.asked.some((x) => x.id === q)) return fail(400, 'bad_request', 'That question wasn’t asked.');
+      const fileId = token();
+      files.set(fileId, { kind: 'answer', type: baseType(contentType || 'audio/webm'), size: raw.length, bytes: raw });
+      c.answers.set(q, { file: fileId, durationS: Math.min(120, Number(url.searchParams.get('durationS')) || 0), lang: url.searchParams.get('lang') || 'en' });
+      return send(200, { ask: askOut(c) });
+    }
+
+    if (links && (url.pathname === '/dish/ask/answer/upload' || url.pathname === '/dish/ask/answer')) {
       const c = byAsk(b.askToken);
       if (!c) return fail(404, 'not_found', 'This link doesn’t work anymore.');
       if (c.finishedAt) return fail(409, 'closed', 'You already sent your answers.');
@@ -468,7 +503,8 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
     log,
     setBudget: (spent) => (budgetSpent = spent),
     setRate: (on) => (rateLimited = on),
-    setFailingPuts: (on) => (failingPuts = on),
+    setFailingUploads: (on) => (failingUploads = on),
+    setBrokenFiles: (on) => (brokenFiles = on),
     expireLinks: () => (linkGeneration += 1),
     close: () => new Promise((r) => server.close(r)),
   };
@@ -476,6 +512,7 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   const port = Number(process.env.PORT ?? 8791);
-  const fake = await startFake({ port, site: process.env.SITE ?? 'http://localhost:3105' });
-  console.log(`dish fake on ${fake.base}`);
+  const uploads = process.env.UPLOADS ?? 'raw';
+  const fake = await startFake({ port, site: process.env.SITE ?? 'http://localhost:3105', uploads });
+  console.log(`dish fake on ${fake.base} (${uploads})`);
 }
