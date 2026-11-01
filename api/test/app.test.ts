@@ -40,14 +40,32 @@ test("a server error hides its message from the caller and gives the request id"
   assert.ok(res.json().requestId);
 });
 
-test("Sentry events lose the query, body, headers and user", () => {
+test("Sentry events lose the query, body, headers, user and every error's text", () => {
   const event = scrub({
     type: undefined,
-    request: { method: "POST", url: "https://x/a?token=t", data: "her message", headers: { authorization: "Bearer t" }, cookies: { a: "b" } },
+    request: { method: "POST", url: "https://x/a?token=secret-token", data: "her message", headers: { authorization: "Bearer t" }, cookies: { a: "b" } },
+    exception: { values: [{ type: "DatabaseError", value: "Key (name)=(her secret masala) already exists" }] },
+    message: "her secret masala",
+    logentry: { message: "her secret masala" },
     user: { id: "person" },
-  } as never) as { request: Record<string, unknown>; user?: unknown };
+  } as never);
   assert.deepEqual(event.request, { method: "POST", url: "https://x/a" });
-  assert.equal(event.user, undefined);
+  assert.deepEqual(event.exception?.values, [{ type: "DatabaseError", value: "" }]);
+  const sent = JSON.stringify(event);
+  assert.doesNotMatch(sent, /secret-token|her secret masala|her message|Bearer|person/);
+});
+
+test("a server error's text and row values stay out of the logs", async () => {
+  const lines: string[] = [];
+  const stream = new Writable({ write(chunk, _e, done) { lines.push(chunk.toString()); done(); } });
+  const app = buildApp({ logger: { stream } });
+  app.get("/boom", async () => {
+    throw Object.assign(new Error("Key (name)=(her secret masala) already exists"), { code: "23505" });
+  });
+  await app.inject("/boom");
+  const output = lines.join("");
+  assert.match(output, /23505/);
+  assert.doesNotMatch(output, /her secret masala/);
 });
 
 test("/ready reaches a real database", { skip: !process.env.TEST_DATABASE_URL }, async () => {

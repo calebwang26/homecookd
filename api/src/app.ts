@@ -32,7 +32,8 @@ export function buildApp(options: { logger?: object | boolean } = {}): FastifyIn
   app.setErrorHandler((error: Error & { statusCode?: number }, req, reply) => {
     const status = error.statusCode ?? 500;
     if (status >= 500) {
-      req.log.error({ err: { type: error.name, message: error.message } }, "request failed");
+      // Not the message: Postgres errors can carry row values, and family content never goes in logs.
+      req.log.error({ err: { type: error.name, code: (error as { code?: string }).code } }, "request failed");
       Sentry.captureException(error, { tags: { request_id: String(req.id) } });
       return reply.status(status).send({ error: "server_error", requestId: req.id });
     }

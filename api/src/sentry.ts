@@ -6,6 +6,10 @@ export function scrub<T extends Sentry.Event>(event: T): T {
   if (event.request) {
     event.request = { method: event.request.method, url: event.request.url?.split("?")[0] };
   }
+  // An error's text can hold row values (Postgres: "Key (x)=(...)"), so only its type and location go out.
+  for (const exception of event.exception?.values ?? []) exception.value = "";
+  delete event.message;
+  delete event.logentry;
   delete event.user;
   return event;
 }
@@ -26,6 +30,7 @@ if (process.env.SENTRY_DSN_API) {
       genAI: { inputs: false, outputs: false },
     },
     tracesSampleRate: 0.1,
+    maxBreadcrumbs: 0,
     beforeSend: scrub,
     beforeSendTransaction: scrub,
   });
