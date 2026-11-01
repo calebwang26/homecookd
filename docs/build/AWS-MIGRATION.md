@@ -45,7 +45,7 @@ and anything changing what build 6 calls, needs his separate OK.
 5. The kid's web flow first, as the template for the rest.
 6. The worker on queues, with jobs safe to repeat.
 7. The remaining areas one at a time, with the live-updates replacement before the areas that need it.
-8. A backup copy in a separate AWS account or region.
+8. A backup copy in a separate AWS account or region. Written, off, and never applied: `docs/build/REGION-COPY.md`.
 
 ### What each area must pass before it switches
 
