@@ -11,7 +11,7 @@ Nothing is frozen. A PR that touches what Apple's reviewer checks (paths below) 
    - the handoff doc "homecookd App Store submission for Salik" (https://claude.ai/artifact/Ew2JKrCAeqDbWb7eNuQ2ST):
      the reviewer notes, App Privacy and age rating answers, screenshots list. Claude sessions edit it with the Docs
      connector; Codex asks Caleb to pass the change on;
-   - homecookd.app/privacy and /terms (`web/`, plus the same PR in calebwang26/homecookd, which deploys the site);
+   - homecookd.app/privacy and /terms (`web/`; production builds from this repo's `main`, and the older repo is not touched);
    - App Store Connect itself if it's already filled (Caleb or Salik edits it; list the exact field changes in the PR);
    - new screenshots in `docs/app-store/screenshots/` if a screen in them changed.
    Then merge (Merge Agent), deploy as usual, and note in STATE.md what changed for App Review.
@@ -30,7 +30,7 @@ The paths:
 - **Report and block (1.2):** `app/src/components/community/ReportSheet.tsx`, `report.ts`,
   `app/src/app/community/[id].tsx`, `app/src/app/dinner/[id].tsx`, `convex/lib/safety.ts`, `convex/lib/moderation.ts`,
   `convex/reports.ts`, `convex/alerts.ts`.
-- **Links Apple opens:** `app/src/lib/links.ts`, `web/src/app/privacy/`, `web/src/app/terms/` (both repos).
+- **Links Apple opens:** `app/src/lib/links.ts`, `web/src/app/privacy/`, `web/src/app/terms/`.
 - **Listing assets:** the icon and name in `app/app.json` / `app/assets/images/icon.png`, `docs/app-store/screenshots/`.
 - **Review data:** the TEST family's code and its faces (Mom, Dad, Grandma, Leo, Maya, Reviewer) and its
   Chicken Biryani recipe. Don't delete or rename them, or change the code.

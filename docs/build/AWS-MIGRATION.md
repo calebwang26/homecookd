@@ -24,6 +24,12 @@ updated. `main` keeps changing `convex/` meanwhile, so the branch merges `main` 
 
 **The goal is a backend built to `docs/build/SYSTEM-DESIGN.md`, not only a move of hosting.**
 
+### Caleb's two conditions on merging
+
+In his words: "1. we're building the migration so that RIGHT when our app gets approved, one merge of a branch into main will finish the migration. 2. everything that effects the app store application isn't getting deployed/merged into main."
+
+The second is a hard rule. The first can't be literal, because a merge can't move data, DNS, phones or production. So the merge changes nothing live, every behavior sits behind a switch that defaults to today's, and `docs/build/CUTOVER.md` lists the steps after it. `scripts/check-merge-safe.mjs` checks the merge on every PR.
+
 **Before the rewrite starts:** staging fully tested, a real video job measured, and Caleb's OK on creating production,
 lifting the Supabase freeze, and any copy of real data into a test database. **Before any area switches over:** Convex backups
 running and a restore proven (phase 0).
@@ -126,7 +132,16 @@ Before any backfill copies real rows into Postgres:
 
 ## Cutover list
 
-Before `aws-migration` reaches `main`:
+The steps, in order, with who runs each and the way back: `docs/build/CUTOVER.md`. The two things this list used to ask for before `main` changed on Nov 1:
+the sync stays on the branch and goes to `main` switched off, because the steps after the merge need it, and it comes off at the end. The laptop's worker no
+longer needs `sentry-sdk`.
+
+Before production (CUTOVER.md, step 6):
+
+- Give the worker and api a limited database login in place of the master one.
+- Pin the workflows' actions to commit SHAs, and add a checksum for the downloaded gitleaks.
+
+Before any new-host link exists (CUTOVER.md, step 10):
 
 - `supabase/functions/api/index.ts:931` must accept the new media host: it refuses an `audio_url` not on `BUCKET_URL`, so "Hear
   Dad" from a rewritten recipe fails with a 400. Needs a Supabase deploy, so Caleb's OK.
@@ -136,10 +151,8 @@ Before `aws-migration` reaches `main`:
   - The team can act on a report: `reviewReport` has no route, script or task.
   - `community.remind_open` has its daily schedule. Today nothing runs it, so a report left open would never remind anyone.
   - The app adapter. It doesn't exist yet, and nothing has called these routes.
-- Remove the temporary one-way sync of `families`, `people` and `recipes` (SCHEMA.md, M1).
-- Install `sentry-sdk` on the laptop's worker, or `import observability` crashes it.
-- Give the worker and api a limited database login in place of the master one.
-- Pin the workflows' actions to commit SHAs, and add a checksum for the downloaded gitleaks.
+
+Removing the temporary one-way sync of `families`, `people` and `recipes` (SCHEMA.md, M1) is the end of the list: CUTOVER.md, step 14.
 
 ## Priorities
 

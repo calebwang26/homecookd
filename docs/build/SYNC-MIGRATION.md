@@ -1,8 +1,8 @@
 # The temporary sync into Postgres
 
 **Oct 31, 2026. Off, and has never run against anything real.** This is SCHEMA.md's M1: a one-way copy of `families`, `people` and
-`recipes` from Convex and Supabase into Postgres, so signed-in areas can move, with their foreign keys on, before accounts do. It comes
-off before `aws-migration` reaches `main` (AWS-MIGRATION, "Cutover list").
+`recipes` from Convex and Supabase into Postgres, so signed-in areas can move, with their foreign keys on, before accounts do. It reaches
+`main` with `aws-migration`, switched off (with `SYNC_READ_SECRET` unset its routes refuse everyone), and comes off once every area has moved (`CUTOVER.md`, step 14).
 
 All of it lives in `api/src/modules/sync/`, `api/migrations/012_sync.sql`, one line of `api/src/scheduled.ts`, and on Convex's side
 `convex/syncRead.ts` and `convex/lib/syncRoutes.ts`.

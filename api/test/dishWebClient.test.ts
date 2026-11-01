@@ -14,6 +14,9 @@ const source = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "web", 
 const skip = !hasDatabase || !existsSync(source);
 const scratch = mkdtempSync(join(tmpdir(), "dish-web-client-"));
 
+// The site's switch for this api's links (web/next.config.ts compiles it in; here its code reads it at each call).
+process.env.NEXT_PUBLIC_DISH_UPLOADS = "links";
+
 async function siteClient(base: string) {
   const code = readFileSync(source, "utf8")
     .replace(/import \{ CONVEX_SITE_URL \} from '[^']+';/, `const CONVEX_SITE_URL = ${JSON.stringify(base)};`)

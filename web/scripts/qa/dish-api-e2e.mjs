@@ -4,9 +4,9 @@
 //
 //   Locally (api/test/localApi.ts: real routes and Postgres, fake models and storage):
 //     cd api && DATABASE_URL=postgres://postgres:t@localhost:15451/t npx tsx test/localApi.ts
-//     cd web && NEXT_PUBLIC_DISH_URL=http://localhost:8792 npx next dev --port 3105
+//     cd web && NEXT_PUBLIC_DISH_URL=http://localhost:8792 NEXT_PUBLIC_DISH_UPLOADS=links npx next dev --port 3105
 //     node web/scripts/qa/dish-api-e2e.mjs --base http://localhost:3105 --api http://localhost:8792 --out /path/to/shots
-//   Against staging: the same site, built or served with NEXT_PUBLIC_DISH_URL set to the staging api, and --api <staging api>.
+//   Against staging: the same site, built or served with NEXT_PUBLIC_DISH_URL set to the staging api and NEXT_PUBLIC_DISH_UPLOADS=links, and --api <staging api>.
 //
 // Flags: --base (the site), --api (what the site was built against; required), --out, --chrome, --width, --merge-s (how long to wait for her version, default 120).
 import { createRequire } from 'node:module';

@@ -40,6 +40,8 @@ jobs:
           NEXT_PUBLIC_API_URL: ${{ vars.STAGING_WEB_API_URL || 'https://no-backend.invalid' }}
           NEXT_PUBLIC_BUCKET_URL: ${{ vars.STAGING_WEB_BUCKET_URL || 'https://no-backend.invalid' }}
           NEXT_PUBLIC_CONVEX_SITE_URL: ${{ vars.STAGING_WEB_CONVEX_SITE_URL || 'https://no-backend.invalid' }}
+          # Only when staging's site points at the new api: unset, it sends raw files as today (docs/build/CUTOVER.md).
+          NEXT_PUBLIC_DISH_UPLOADS: ${{ vars.STAGING_WEB_DISH_UPLOADS }}
         run: |
           npm ci
           npm run build
