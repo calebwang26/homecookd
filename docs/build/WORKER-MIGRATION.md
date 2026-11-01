@@ -50,6 +50,8 @@ spend cap. Worth another try: anything else, 5 then 10 minutes later. On the thi
 to the dead letters, which alarm. Every failure goes to `observability.report_failure`, and logs carry only ids, stages and error
 types.
 
+**Spend caps, and they aren't complete: they count Claude, not Cartesia.** `TODO(caleb)` on the amounts.
+
 **Spend caps.** `PIPELINE_JOB_CAP_USD` (default $12, across all attempts) and `PIPELINE_DAILY_CAP_USD` (default $30, UTC day, in
 `daily_spend`). Both are `TODO(caleb)` defaults. Before any model runs, the video's length is checked at `COST_PER_HOUR_USD`. Over
 the job cap, the job fails. Over the daily cap, it waits in `queued` until the new UTC day with the paused words, and the team is
@@ -70,6 +72,8 @@ Every attempt starts clean from the raw upload, which is kept. So a re-run pays 
 | On the last try | Job running, no tries left | The sweep fails it visibly within 5 minutes of the lease ending; the message goes to the dead letters |
 | Only the child, say out of memory | The parent is alive | Counts as a failed try |
 | Database down mid-job | The parent stops the child before the lease could lapse, and writes nothing | Message returns; re-runs once the database is back |
+
+**Every worker deploy uses one of a job's 3 receives,** so three deploys during one long job send it to the dead letters, which alarm. Don't deploy the worker repeatedly during a long job.
 
 **SIGTERM:** stops taking messages, kills the child, sets the job back to `queued`, hands the message back at once. A job that had
 already finished its work saves first. This uses up one of the 3 receives, so a stop on the last one reaches the dead letters with
@@ -117,6 +121,8 @@ insert `outbox`; read `people`, `recordings`, `homie_prompts`.
 | Link calls to the recipe | `model_calls_job` |
 
 ## How to measure a real job
+
+**Needs Caleb's OK each time, and only his own consenting test footage, never a family's video:** `/privacy` doesn't list AWS yet. It costs real money, past the caps' Claude-only count.
 
 **Needs Caleb's OK: it costs money and needs real footage.** Use his own consenting test video on staging, never a family's. `/privacy`
 doesn't list AWS yet. Close the IAM gaps first. Expect roughly $2.50 an hour of video.
