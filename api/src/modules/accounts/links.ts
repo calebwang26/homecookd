@@ -8,7 +8,7 @@ import * as data from "./data.js";
 import { extId } from "./data.js";
 import { rehomeCookWork, requestMossSync } from "./neighbors.js";
 import { cardRef, joinSecret, signTicket, verifyMoved } from "./tickets.js";
-import { DAY_MS, DEAD_LINK, JOIN_TOKEN, JOIN_WINDOW_DAYS, limit, newJti, refuse, sha256Hex, TICKET_MS, UUID, type Body } from "./values.js";
+import { DAY_MS, DEAD_LINK, JOIN_TOKEN, JOIN_WINDOW_DAYS, limit, newJti, NOT_IN_THIS_FAMILY, refuse, sha256Hex, TICKET_MS, UUID, type Body } from "./values.js";
 
 const TOO_MANY_TRIES = "Too many tries. Please wait a few minutes and try again.";
 const CANT_CHECK = "That move can't be checked. Your recipes stay where they were.";
@@ -88,6 +88,8 @@ export async function claimCard(signed: Signed, b: Body) {
   const token = b.token;
   if (typeof token !== "string" || !JOIN_TOKEN.test(token)) throw refuse(404, DEAD_LINK);
   return tx(async (c) => {
+    // Held to the end, so a deletion can't pass between the session's check and the card naming them.
+    if (!(await data.lockLivePerson(c, signed.personId))) throw refuse(403, NOT_IN_THIS_FAMILY);
     const found = await cards.cardOfToken(c, sha256Hex(token), true);
     if (!found) throw refuse(404, DEAD_LINK);
     const { card, side } = found;

@@ -6,6 +6,7 @@
 // community/account.ts, jobs/account.ts), tested but not called yet, and these steps still do the work. Replacing them is a gate before the switch: CUTOVER.md. coverage.ts, with a
 // test, holds this list to the real schema.
 import type { Queryable } from "../../db.js";
+import { blankFamilyIfEmpty } from "./data.js";
 import { purgeDishForPerson } from "../dish/account.js";
 
 export const PURGE_BATCH = 500;
@@ -270,20 +271,6 @@ const threadTimes = (q: Queryable, d: Deletion, max: number) =>
       [d.person_id, d.family_id, max],
     )
     .then((r) => r.rowCount ?? 0);
-
-/** C2: when their family's last person has gone, its name and codes go, and it takes nobody in. The row stays for the FKs. Run under the family's lock. */
-export async function blankFamilyIfEmpty(q: Queryable, familyId: string): Promise<boolean> {
-  const { rows } = await q.query(`select blanked_at from families where id = $1 for no key update`, [familyId]);
-  if (!rows[0] || rows[0].blanked_at) return false;
-  const live = await q.query(`select 1 from people where family_id = $1 and deleted_at is null and removed_at is null limit 1`, [familyId]);
-  if (live.rows.length) return false;
-  await q.query(`update families set name = 'Deleted', public_name = null, code_hash = null, code_enc = null, blanked_at = now() where id = $1`, [familyId]);
-  await q.query(`update devices set revoked_at = coalesce(revoked_at, now()) where family_id = $1`, [familyId]);
-  await q.query(`delete from sessions where family_id = $1`, [familyId]);
-  await q.query(`update join_links set revoked_at = coalesce(revoked_at, now()) where family_id = $1`, [familyId]);
-  await q.query(`update invites set status = 'revoked' where family_id = $1 and status = 'pending'`, [familyId]);
-  return true;
-}
 
 // Recipes first, so a late one's questions, cooking and swaps go with the rest.
 export const STEPS: Step[] = [

@@ -186,3 +186,17 @@ test("only a signed-in phone may ask", { skip }, async () => {
   assert.equal((await api.post("/v1/apple/revoke", { authorizationCode: "code-1" }, bad)).status, 401);
   assert.deepEqual(sent, []);
 });
+
+test("revoke waits for the switch, and one person can't call it over and over", { skip }, async () => {
+  const sent = stubApple();
+  delete process.env.ACCOUNTS_OWNS_PEOPLE;
+  try {
+    assert.deepEqual([(await revoke("code-1")).status, sent.length], [503, 0]);
+  } finally {
+    process.env.ACCOUNTS_OWNS_PEOPLE = "1";
+  }
+  const f = await makeFamily();
+  const someone = await session(f.id, await makePerson(f.id, "Often"));
+  for (let i = 0; i < 20; i += 1) assert.equal((await revoke(`code-${i}`, someone)).status, 200);
+  assert.equal((await revoke("one-more", someone)).status, 429);
+});

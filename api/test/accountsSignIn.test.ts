@@ -274,6 +274,7 @@ test("a known account in another family gets needs_move and nothing changes; mov
   const m = await movable();
   const asked = await api.apple({ id_token: m.token, join_token: m.link.token });
   assert.deepEqual(asked.data, { existing: true, needs_move: true, from_family: "Zed's family", to_family: "The Pawars" });
+  assert.equal((await row("families", "id = $1", [m.oldFamily])).blanked_at, null);
   assert.equal((await row("people", "id = $1", [m.old.data.profile_id])).removed_at, null);
   assert.equal((await api.apple({ id_token: m.token, join_token: m.link.token, move: "yes" })).status, 400);
 
@@ -294,6 +295,7 @@ test("a known account in another family gets needs_move and nothing changes; mov
   assert.equal((await api.get("/v1/me", bearer(session))).status, 401);
   assert.equal((await api.post("/v1/sessions/start", { deviceKey: m.old.data.device_key, profileId: m.old.data.profile_id })).status, 401);
   assert.deepEqual(await notes(m.oldFamily), ["Zed left"]);
+  assert.equal((await row("families", "id = $1", [m.oldFamily])).name, "Deleted", "they were its last");
   assert.deepEqual(await notes(m.f.id), ["Zed New joined"]);
   assert.equal((await api.apple({ id_token: m.token })).data.profile_id, moved.data.profile_id, "signing in later lands in the new family");
 });
@@ -305,9 +307,13 @@ test("solo: the old family's phone-less faces come along (not one the new family
   const moved = await api.apple({ id_token: m.token, join_token: m.link.token, move: true });
   assert.equal(moved.status, 200);
   assert.equal((await row("people", "id = $1", [face])).family_id, m.f.id);
-  assert.equal((await row("people", "id = $1", [clash])).family_id, m.oldFamily, "the new family already has a Mom");
+  const left = await row("people", "id = $1", [clash]);
+  assert.equal(left.family_id, m.oldFamily, "the new family already has a Mom");
+  assert.ok(left.deleted_at, "and she can't keep a family with nobody signed in open");
+  assert.equal(await count("account_deletions", "person_id = $1", [clash]), 1);
   const receipt = JSON.parse(Buffer.from(moved.data.moved.receipt.split(".")[0], "base64url").toString());
   assert.deepEqual([receipt.solo, receipt.faces, receipt.kind], [true, [face], "moved"]);
+  assert.ok((await row("families", "id = $1", [m.oldFamily])).blanked_at);
 });
 
 test("someone else still signing in to the old family: not solo, the faces stay", { skip }, async () => {
@@ -654,4 +660,11 @@ test("the sentence on a 429 is the old one, with retry-after", { skip }, async (
 test("the helper signs real tokens that the real check takes", { skip }, async () => {
   const jwt = await new SignJWT({}).setProtectedHeader({ alg: "RS256", kid: "apple-1" }).setSubject("direct").setAudience(BUNDLE).setIssuer(APPLE_ISS).setExpirationTime("1m").sign(keys.apple.privateKey);
   assert.equal((await api.apple({ id_token: jwt })).data.needs_name, true);
+});
+
+test("an email nobody checked isn't kept", { skip }, async () => {
+  const sub = `unverified-${Date.now()}`;
+  const res = await api.apple({ id_token: await appleToken(keys, sub, { email: "not.checked@example.com", email_verified: "false" }), name: "Asha", role: "cook" });
+  assert.equal(res.status, 200);
+  assert.equal((await row("identities", "subject = $1", [sub])).email, null);
 });

@@ -59,6 +59,7 @@ export type CardRow = {
   requested_of: string | null;
   kid_claimed_at: Date | null;
   cook_claimed_at: Date | null;
+  kid_deleted_at: Date | null;
   filming_day: number | null;
   voice_recipe_q: QuestionId | null;
 };
@@ -94,7 +95,7 @@ export type FileRow = {
 const CARD = `id, kid_token_hash, ask_token_hash, dish, relation, kid_name, photo_keys::text[] as photo_keys, dish_voice_note_key,
   kid_voice_note_key, kid_voice_s, guess, version, asked, message, mom_page_lang, status, merge_tries, merge_started_at, merged_at,
   asked_at, asked_via, opened_at, finished_at, questions_at, gen_ms, created_at, ip_key, person_id, requested_of, kid_claimed_at,
-  cook_claimed_at, filming_day, voice_recipe_q, family_id`;
+  cook_claimed_at, filming_day, voice_recipe_q, family_id, kid_deleted_at`;
 
 const one = async (q: Queryable, where: string, value: string, lock: boolean): Promise<CardRow | null> => {
   const { rows } = await q.query(`select ${CARD} from dish_asks where ${where} = $1${lock ? " for update" : ""}`, [value]);

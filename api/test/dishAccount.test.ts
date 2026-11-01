@@ -29,6 +29,7 @@ import {
   silent,
   store,
 } from "./dishHelpers.js";
+import { cardById } from "../src/modules/dish/data.js";
 import { family, person } from "./helpers.js";
 
 const skip = !hasDatabase;
@@ -74,7 +75,7 @@ test("the kid deletes, Mom is still here: the card stays for her, without the ki
   assert.ok(row.ip_key);
   assert.equal((await translations(row.id)).length, 1);
   await deleteAccount(leo);
-  const kept = await rowOf(c.kidToken);
+  const kept = (await cardById(db(), row.id))!;
   like(kept, { requested_of: dad, photo_keys: [], status: "answered", person_id: null, kid_name: null, kid_voice_note_key: null, dish_voice_note_key: null, ip_key: null });
   assert.equal(kept.message, "", "C3: the kid's message goes");
   assert.ok(kept.guess, "C3: the guess stays, because her version is built on it");
@@ -161,7 +162,7 @@ test("a translation in flight while the kid deletes can't bring the message back
   const ask = await peek(t, c.askToken, "mr");
   assert.equal(ask.inLang, null);
   assert.deepEqual(await translations(row.id), []);
-  assert.equal((await rowOf(c.kidToken)).message, "");
+  assert.equal((await cardById(db(), row.id))!.message, "");
 });
 
 test("her version translated in flight while the kid deletes isn't saved either, and her version still lands", { skip }, async () => {
@@ -182,7 +183,7 @@ test("her version translated in flight while the kid deletes isn't saved either,
     return translated;
   };
   await settle();
-  const kept = await rowOf(c.kidToken);
+  const kept = (await cardById(db(), row.id))!;
   assert.ok(kept.version);
   assert.equal(kept.message, "");
   assert.deepEqual(await translations(row.id), [], "nothing holds the kid's message");

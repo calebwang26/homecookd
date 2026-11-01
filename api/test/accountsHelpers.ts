@@ -44,19 +44,19 @@ export async function setup(): Promise<Keys> {
   return keys;
 }
 
-export type Claims = { sub?: string; aud?: string; iss?: string; expiresIn?: string | number; email?: string; given_name?: string };
+export type Claims = { sub?: string; aud?: string; iss?: string; expiresIn?: string | number; email?: string; email_verified?: boolean | string; given_name?: string };
 
 export function signToken(key: Key, claims: Claims): Promise<string> {
-  const { sub, aud, iss, expiresIn = "10m", email, given_name } = claims;
-  const jwt = new SignJWT({ ...(email ? { email } : {}), ...(given_name ? { given_name } : {}) }).setProtectedHeader({ alg: "RS256", kid: key.jwk.kid });
+  const { sub, aud, iss, expiresIn = "10m", email, email_verified, given_name } = claims;
+  const jwt = new SignJWT({ ...(email ? { email, email_verified } : {}), ...(given_name ? { given_name } : {}) }).setProtectedHeader({ alg: "RS256", kid: key.jwk.kid });
   if (sub !== undefined) jwt.setSubject(sub);
   if (aud !== undefined) jwt.setAudience(aud);
   if (iss !== undefined) jwt.setIssuer(iss);
   return jwt.setIssuedAt().setExpirationTime(expiresIn).sign(key.privateKey);
 }
 
-export const appleToken = (keys: Keys, sub: string, claims: Claims = {}) => signToken(keys.apple, { sub, aud: BUNDLE, iss: APPLE_ISS, ...claims });
-export const googleToken = (keys: Keys, sub: string, claims: Claims = {}) => signToken(keys.google, { sub, aud: GOOGLE_CLIENT, iss: GOOGLE_ISS, ...claims });
+export const appleToken = (keys: Keys, sub: string, claims: Claims = {}) => signToken(keys.apple, { sub, aud: BUNDLE, iss: APPLE_ISS, email_verified: "true", ...claims });
+export const googleToken = (keys: Keys, sub: string, claims: Claims = {}) => signToken(keys.google, { sub, aud: GOOGLE_CLIENT, iss: GOOGLE_ISS, email_verified: true, ...claims });
 
 let nextIp = 0;
 export const newIp = () => {

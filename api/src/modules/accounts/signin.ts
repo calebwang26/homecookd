@@ -3,6 +3,7 @@
 // than guesses, and it can never land on a tombstone: a deleted person's accounts are unlinked, and no path here makes or claims anyone who has deleted.
 import { db, tx, type Queryable } from "../../db.js";
 import * as data from "./data.js";
+import { endFamilyIfLast } from "./deletion.js";
 import { extId, type Family, type Person } from "./data.js";
 import { addPerson, mapUnique, removePerson } from "./family.js";
 import { audiencesOf, idTokens, providerLabel, type Provider, type Who } from "./identity.js";
@@ -260,6 +261,7 @@ async function moveTo(who: Who, known: Known, target: Target, opts: Options) {
       const members = await lockTargetFamily(c, target.familyId);
       const { person, device } = await joinAsNew(c, who, target, opts.name ?? old.name, opts.label, members, () => removePerson(c, fromId, old.id));
       const faces = solo ? await moveFaces(c, others, fromId, target.familyId, [...members, person]) : [];
+      await endFamilyIfLast(c, fromId, true); // a face the new family has a name for doesn't come along, and doesn't keep the old one open
       return { person, device, solo, faces };
     }),
     ownName(joinedName, opts.name ?? old.name),

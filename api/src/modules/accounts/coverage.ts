@@ -4,7 +4,7 @@
 export type Owner = "accounts" | "dish" | "its SQL here for now: recipes and jobs" | "its SQL here for now: community" | "its SQL here for now: messages" | "its SQL here for now: push" | "platform";
 
 export const TABLES: Record<string, { owner: Owner; does: string }> = {
-  families: { owner: "accounts", does: "stays; blanked when its last person deletes (C2)" },
+  families: { owner: "accounts", does: "stays; blanked when its last signed-in person goes, and the phone-less people left are deleted (C2)" },
   people: { owner: "accounts", does: "blank tombstone" },
   devices: { owner: "accounts", does: "person null, label null, revoked" },
   identities: { owner: "accounts", does: "deleted, which frees the account" },

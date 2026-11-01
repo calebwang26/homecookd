@@ -56,7 +56,7 @@ Per SCHEMA.md section 2, a device key lasts until revoked and mints sessions; a 
 
 ## Account deletion
 
-`deletion.ts` and `purgeSteps.ts`. **It refuses no one who can prove who they are:** a person with nothing, someone phone-less on a lent phone, a memorial person, a family's last person.
+`deletion.ts` and `purgeSteps.ts`. **It refuses no one who can prove who they are:** a person with nothing, a memorial person, a family's last person. A family member's phone may delete a phone-less person, but only a phone that already has its own person in that family, and the app must warn first (Caleb, Nov 1). An opened invite gets no session at all.
 
 **At once, in one transaction:** the deletion row; a blank tombstone (the check constraint refuses one that keeps anything personal); sessions, phones, Apple and Google links, push tokens, invites naming them, asks to be them, and the sign-up log, by person and by their email, the one moment that's still known; jobs cancelled, recordings abandoned, dinners cancelled; recipes (500 here, the rest in the batches) with their questions, cooking rows and swaps; C2 if they were the last. The batches are queued in that same transaction.
 
@@ -75,7 +75,7 @@ Per SCHEMA.md section 2, a device key lasts until revoked and mints sessions; a 
 
 `neighbors.ts` holds the same kind of borrowed SQL for sign-in: circle notes, read marks, "has acted", a share's family, re-homing recipes after a move.
 
-**C2:** `name` becomes `'Deleted'` because the column can't be empty, the other three go null, and new `families.blanked_at` says so. **Beyond SCHEMA.md:** the family's phones, sessions, join links (the operator's too) and pending invites stop, so nobody can join a family that no longer exists. A removed person doesn't count as someone left; a phone-less face does.
+**C2:** `name` becomes `'Deleted'` because the column can't be empty, the other three go null, and new `families.blanked_at` says so. **Beyond SCHEMA.md:** the family's phones, sessions, join links (the operator's too) and pending invites stop, so nobody can join a family that no longer exists. A removed person doesn't count as someone left. **A family doesn't outlive its last signed-in person (Caleb, Nov 1):** when they delete, leave or move, the phone-less people left are deleted through the same `deletePerson`, so their rows and files get purged too, and the family is blanked (`endFamilyIfLast`). A memorial person goes with them. Someone who never signed in going ends nothing, which keeps a family that only ever used its code as it is. The sync passes on one person's deletion and no more.
 
 **C5:** cleared by the sweep 60 days after the outside purge; `lists_cleared_at` records it.
 
@@ -198,10 +198,15 @@ Leaving signs a person out and frees their Apple login in one transaction (`remo
 ## Known limits
 
 - **The outside purge doesn't reach most of S3,** as above. This blocks real data.
+- **An opened invite gets no session (`POST /v1/sessions/start`):** 403 "Add yourself first." It reads Supabase's `device_needs_profile` (`needsProfile`), so both systems agree. **A phone from a family code with nobody yet still gets one,** because its person is only set on its first write, and Apple's reviewer signs in that way and may delete straight away. So someone holding the code can still start a session as a phone-less person, and delete them: `TODO(caleb)` in `sessions.ts`. Build 1.1 removes codes.
+- **When the last signed-in person leaves, what they left stays stored with no way in.** Leaving isn't deleting: their recipes and messages stay under the old row, unless they moved with `solo`. It's the same gap as someone who left and came back, and it's Caleb's call.
+- **The TEST family, at the switch.** If Apple's reviewer is its only signed-in person and deletes, its phone-less people go and it's blanked. Check how it's set up before the switch, so a reviewer always has a family to sign in to.
+- **Once Mom has deleted, her old link still opens the card,** so whoever holds it could answer. The kid's card waits for that answer, and nothing else can reach her, so the link stays. Only the kid's link stops when the kid deletes.
+- **A person's name stays in rows other people hold,** by decision: a "Zed left" note, and the removed person's own row, which keeps their name on what they sent (C1). Not changed here.
+- **No nonce on Apple or Google tokens,** the same as Supabase's flow, which checks none. A stolen token works for its short life.
 - **A family code can't be changed,** so removing someone can't keep out a person who holds it (Supabase's `TODO(caleb)`, kept).
-- **An Apple or Google token can be replayed within its short life,** because no nonce is checked. As today.
 - **A row a worker writes after the purge finishes** isn't caught. Other areas must refuse a deleted person when they arrive. `outbox` handlers skip them, per SCHEMA.md.
-- **A card with both people gone** stays with its guess and no owner: DISH-MIGRATION.md's open question 6, still open.
+- **An anonymous kid's card, once Mom has deleted, stays** with its guess: the kid's link still works, and it waits for an answer. DISH-MIGRATION.md's open question 6.
 
 ## Open questions
 
