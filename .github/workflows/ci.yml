@@ -17,6 +17,7 @@ jobs:
       voice: ${{ steps.diff.outputs.voice }}
       pipeline: ${{ steps.diff.outputs.pipeline }}
       api: ${{ steps.diff.outputs.api }}
+      web: ${{ steps.diff.outputs.web }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -24,7 +25,7 @@ jobs:
       - id: diff
         run: |
           FILES=$(git diff --name-only "origin/$GITHUB_BASE_REF...HEAD")
-          for AREA in infra convex voice pipeline api; do
+          for AREA in infra convex voice pipeline api web; do
             echo "$FILES" | grep -q "^$AREA/" && echo "$AREA=true" >> "$GITHUB_OUTPUT" || echo "$AREA=false" >> "$GITHUB_OUTPUT"
           done
 
@@ -130,9 +131,23 @@ jobs:
       - run: npm run typecheck
       - run: npm test
 
+  # The site still builds, and the CloudFront Function still serves every file in that build as Vercel would.
+  web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci && npm run build
+        working-directory: web
+      - run: node --test infra/modules/web/rewrite.test.mjs
+
   checks:
     if: always()
-    needs: [changes, secrets, infra, convex, voice, pipeline, api]
+    needs: [changes, secrets, infra, convex, voice, pipeline, api, web]
     runs-on: ubuntu-latest
     steps:
       - name: Fail if any check failed

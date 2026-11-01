@@ -77,6 +77,16 @@ module "env" {
   }
 }
 
+# The website on S3 and CloudFront (phase 7). Nothing points at it: homecookd.app stays on Vercel until Caleb OKs the DNS.
+module "web" {
+  source           = "../../modules/web"
+  environment      = "staging"
+  deploy_role_name = module.env.deploy_role_name
+}
+
 output "load_balancer_url" { value = module.env.load_balancer_url }
 output "media_url" { value = module.env.media_url }
 output "deploy_role_arn" { value = module.env.deploy_role_arn }
+output "web_url" { value = module.web.url }
+output "web_bucket" { value = module.web.bucket }
+output "web_distribution_id" { value = module.web.distribution_id }
