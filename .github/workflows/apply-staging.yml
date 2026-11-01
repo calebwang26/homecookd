@@ -1,0 +1,120 @@
+# Plans infra/envs/staging when a merge into aws-migration changes it, checks the saved plan, and applies exactly that plan. Anything
+# the check refuses stops here and goes to Caleb, with the commands to run it himself (infra/README.md, "Merges apply staging").
+#
+# Does nothing until Caleb has created the role (infra/staging-apply-role) and set the repo variable STAGING_INFRA_APPLY to "on".
+# Setting that to anything else turns this off. A merge can't change a repo variable.
+#
+# It logs in with GitHub's OIDC login, so no key is stored in GitHub. The role trusts only this file, on this branch, in the
+# environment staging-infra. Renaming this file or the branch stops the login until infra/staging-apply-role changes too.
+name: Apply staging infra
+on:
+  workflow_dispatch:
+  push:
+    branches: [aws-migration]
+    paths:
+      - "infra/envs/staging/**"
+      - "infra/modules/**"
+
+permissions:
+  id-token: write
+  contents: read
+
+# One at a time. GitHub keeps only the newest run waiting, which is fine: every run plans the tip of the branch, not its own commit.
+concurrency:
+  group: apply-staging
+  cancel-in-progress: false
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  apply:
+    if: vars.STAGING_INFRA_APPLY == 'on' && github.ref == 'refs/heads/aws-migration'
+    runs-on: ubuntu-24.04
+    environment: staging-infra
+    timeout-minutes: 45
+    env:
+      ROOT: infra/envs/staging
+      TF_IN_AUTOMATION: "1"
+    steps:
+      # The tip, not this run's commit: re-running an old run can't put old config back, and a run that waited picks up every merge.
+      # Each action is pinned to a commit, since whatever runs in this job can act as the role.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: aws-migration
+          persist-credentials: false
+
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3
+        with:
+          terraform_version: "1.17.1"
+          terraform_wrapper: false
+
+      # Provider code runs during a plan, before the check can read anything. With this file only the AWS provider can be installed, so
+      # nothing else can run, and this turns off the folders Terraform would otherwise load a provider from. Its data lives outside the
+      # repo so a committed .terraform folder is ignored.
+      - name: Allow only the AWS provider
+        run: |
+          cat > "$RUNNER_TEMP/terraformrc" <<'EOF'
+          provider_installation {
+            direct {
+              include = ["registry.terraform.io/hashicorp/aws"]
+            }
+          }
+          EOF
+          echo "TF_CLI_CONFIG_FILE=$RUNNER_TEMP/terraformrc" >> "$GITHUB_ENV"
+          echo "TF_DATA_DIR=$RUNNER_TEMP/tfdata" >> "$GITHUB_ENV"
+
+      # First, so a refusal from the steps below can still reach the alerts topic. No Terraform runs until the file check passes.
+      - uses: aws-actions/configure-aws-credentials@7474bc4690e29a8392af63c5b98e7449536d5c3a # v4
+        with:
+          role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/homecookd-staging-infra
+          role-session-name: apply-staging
+          aws-region: us-west-2
+
+      - name: Test the check itself
+        run: python3 infra/scripts/test_plan_check.py
+
+      - name: Check the files, before Terraform runs
+        id: files
+        run: python3 infra/scripts/plan_check.py files "$ROOT" infra/modules | tee "$RUNNER_TEMP/verdict.txt"
+
+      - name: Init
+        run: terraform -chdir="$ROOT" init -input=false -lockfile=readonly -backend-config="bucket=homecookd-tfstate-${{ vars.AWS_ACCOUNT_ID }}"
+
+      # If someone holds the lock (Caleb applying by hand, say), this waits 10 minutes, then fails and tells him. It never force-unlocks:
+      # a lock can mean an apply is halfway through, and only a person can tell.
+      - name: Plan
+        id: plan
+        run: |
+          set +e
+          terraform -chdir="$ROOT" plan -input=false -no-color -lock-timeout=10m -detailed-exitcode -out="$RUNNER_TEMP/staging.tfplan"
+          CODE=$?
+          set -e
+          case "$CODE" in
+            0) echo "changes=false" >> "$GITHUB_OUTPUT"; echo "No changes. Nothing to do." ;;
+            2) echo "changes=true" >> "$GITHUB_OUTPUT" ;;
+            *) exit 1 ;;
+          esac
+
+      - name: Check the saved plan
+        id: check
+        if: steps.plan.outputs.changes == 'true'
+        run: |
+          terraform -chdir="$ROOT" show -json "$RUNNER_TEMP/staging.tfplan" > "$RUNNER_TEMP/plan.json"
+          python3 infra/scripts/plan_check.py plan "$RUNNER_TEMP/plan.json" --backend "$TF_DATA_DIR/terraform.tfstate" | tee "$RUNNER_TEMP/verdict.txt"
+
+      # Exactly the saved plan, never a new one. If the state moved since the plan, Terraform refuses it as stale, and this fails.
+      - name: Apply the saved plan
+        id: apply
+        if: steps.plan.outputs.changes == 'true'
+        run: terraform -chdir="$ROOT" apply -input=false -no-color -lock-timeout=10m "$RUNNER_TEMP/staging.tfplan"
+
+      - name: Tell Caleb
+        if: failure() || cancelled()
+        env:
+          REFUSED: ${{ steps.files.outcome == 'failure' || steps.check.outcome == 'failure' }}
+          APPLY_OUTCOME: ${{ steps.apply.outcome }}
+          TOPIC: arn:aws:sns:us-west-2:${{ vars.AWS_ACCOUNT_ID }}:homecookd-staging-alerts
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: bash infra/scripts/apply-alert.sh

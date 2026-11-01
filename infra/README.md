@@ -13,13 +13,17 @@ envs/production/  NOT created yet. Applying it needs Caleb's OK
 backups/          daily Convex exports to S3, with their own small network and a key only for this
 backup-copy/      a copy in a second region, off by default, never applied (docs/build/REGION-COPY.md; module: modules/bucket_copy/)
 addresses/        phase 1's api., media. and voice addresses, off by default, never applied (docs/build/ADDRESSES-MIGRATION.md; module: modules/front_door/)
+staging-apply-role/  the login that lets a merge apply staging. Caleb creates it, once ("Merges apply staging" below)
 scripts/load-secrets.sh   copies keys from the root .env into Secrets Manager without printing them
 scripts/create-backup-key.sh   makes the Convex key for backups and stores it, unseen. Caleb runs it
 scripts/web-sync.sh, web-smoke.mjs   publish the website; check a running copy of it
+scripts/plan_check.py, test_plan_check.py   the safety check on staging's plans, and its tests
+scripts/simulate_apply_role.py   asks AWS's simulator what the apply role can and can't do; read-only
 ```
 
 `.github/workflows/deploy-aws.yml` builds one service and rolls it out. It's manual and stores no keys.
 `.github/workflows/deploy-web.yml` publishes the website to staging. It stores no keys either.
+`.github/workflows/apply-staging.yml` applies `envs/staging` on a merge, through the safety check. It stores no keys either.
 
 ## Commands
 
@@ -43,6 +47,66 @@ AWS_PROFILE=homecookd terraform init -backend-config="bucket=homecookd-tfstate-$
 AWS_PROFILE=homecookd terraform plan
 AWS_PROFILE=homecookd terraform apply
 ```
+
+## Merges apply staging
+
+**This widens what a merge can do.** Merging into `aws-migration` used to deploy code. Once this is switched on, a merge that
+touches `envs/staging` or `modules/` also changes staging's infrastructure, with nobody at a terminal. **So a merge into
+`aws-migration` is a real gate, and the only thing enforcing it is the Master Agent's review.** We have no GitHub Pro, so GitHub can't
+require checks or block a direct push. Anyone with write access can push to the branch, including changes to the check itself.
+The role below is what limits the damage when that gate fails. It's worth reading as the real boundary, with the check as the
+friendly layer on top.
+
+What happens: `apply-staging.yml` plans the tip of the branch, `scripts/plan_check.py` reads the saved plan, and Terraform applies
+exactly that plan. A plan with no changes does nothing.
+
+**What applies by itself** is short, and it's the `AUTO` table in `plan_check.py`: task definitions (settings and sizes), a service's
+count, alarms, log groups, queues, schedules, a new secret's name, S3 CORS and lifecycle rules, and the website's CloudFront Function.
+
+**What stops and goes to Caleb** with the commands to apply it himself:
+1. deleting or replacing a database or a bucket
+2. anything outside staging
+3. any IAM change: trust or permissions, wider or narrower
+4. real models on, anything new open to the public (any change to the network, load balancer, CloudFront distribution or bucket
+   policy counts), or a secret's value
+5. $50 a month or more added, by list price, counting only fixed charges. Fargate is worked out from size and count; S3, SQS, logs
+   and CloudFront depend on use, so they count as $0. Savings don't offset additions. Many small merges can add up, and only the
+   budget alerts in `bootstrap/` see that.
+6. anything it doesn't recognize: an unknown resource type, a value not known until apply, a Terraform feature it wasn't taught
+
+**The role (`staging-apply-role/`) can't do most of that anyway.** It has no IAM write at all, so it can't change its own trust or
+permissions, or give another role more and run code as it. It can't write security groups, routes, load balancers, CloudFront
+distributions, bucket policies, or secret values, can't delete or change the database, and can't delete a bucket. It logs in only from
+`apply-staging.yml`, on `aws-migration`, in the GitHub environment `staging-infra`.
+
+**If you add a type to `AUTO`**, also add what it needs to the role, list it in `scripts/simulate_apply_role.py`, and ask Caleb to apply
+the role. A new type refused until then is working as intended.
+
+**Creating the role, once. Caleb runs this,** after this is merged:
+
+```bash
+aws sso login --profile homecookd
+cd infra/staging-apply-role
+AWS_PROFILE=homecookd terraform init -backend-config="bucket=homecookd-tfstate-$(aws sts get-caller-identity --profile homecookd --query Account --output text)"
+AWS_PROFILE=homecookd terraform plan -out=role.tfplan     # should say: 2 to add, 0 to change, 0 to destroy
+AWS_PROFILE=homecookd terraform show -json role.tfplan > role-plan.json && AWS_PROFILE=homecookd python3 ../scripts/simulate_apply_role.py role-plan.json; rm role-plan.json   # should end: 0 wrong
+AWS_PROFILE=homecookd terraform apply role.tfplan
+gh variable set STAGING_INFRA_APPLY --body on --repo calebwang26/hackathon-homecookd    # the switch; any other value turns it off
+gh workflow run apply-staging.yml --ref aws-migration --repo calebwang26/hackathon-homecookd   # a first run: proves the login and the reads
+```
+
+**Things to know:**
+- The workflow waits up to 10 minutes on Terraform's lock, then fails and tells Caleb. It never force-unlocks.
+- A deploy from the same merge waits for the apply (`scripts/wait-for-apply.sh`). If the apply is refused the deploy stops, and it's
+  re-run from Actions afterward.
+- A change to a task definition reaches the service on the next deploy, as before.
+- **During a real-models window** or with `voice_count=1` set by hand, a merge plans with the defaults and would undo it. Turning real
+  models off needs an IAM change, and reopening the load balancer is a network change, so a real-models window comes back refused and
+  emails Caleb. A hand-set `voice_count` just goes back to 0. Set the switch to `off` for a long window.
+- **Alerts:** a refusal or failure emails Caleb through the `homecookd-staging-alerts` topic, and the run goes red. GitHub's own email
+  goes only to whoever triggered the run, if they turned it on, so it isn't enough by itself. If the login itself fails, the topic
+  can't be reached, and the red run is the only sign.
+- When `aws-migration` merges to `main` and goes away, the role's `branch` variable and this workflow's branch change together.
 
 ## Starting staging's voice service
 
