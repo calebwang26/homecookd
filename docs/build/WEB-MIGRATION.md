@@ -137,3 +137,11 @@ Review guard, and isn't touched here. No guard file changes in this work: the Ap
    move makes problems harder to read.
 4. **Point staging at a real backend?** Recommendation: not until the new api serves those routes over https. Staging's load balancer is
    plain HTTP, and a browser would block it from an https page.
+
+## Proven on real CloudFront (Oct 31, staging)
+
+The Apple file: 200, exactly `application/json`, no redirect, same bytes as the repo. An unknown page: status 404 with the HTML page. A
+308 keeps its query string, regrouped by name. `http` to `https`: 301. HSTS on pages and redirects, video ranges (206), brotli.
+Two differences from Vercel found: query parameters are regrouped by name in a redirect, which pages don't mind, and a missing font's
+404 isn't cached for a year, which is better.
+

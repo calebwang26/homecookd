@@ -88,8 +88,11 @@ reviewing.
 
 ## Next proof: step 5 on real services
 
-Step 5 isn't done until these run on staging: real S3 and SQS, a browser against presigned links, an `--api` mode for
-`web/scripts/qa/dish-e2e.mjs`, then a window with real Claude and Ink (`infra/README.md`).
+**Passed Oct 31:** `web/scripts/qa/dish-api-e2e.mjs`, 18 of 18, in real Chrome from a local site to staging's api, with real S3 uploads and
+reads, S3's CORS, and SQS, on fake models.
+
+**Still to prove:** real Claude and Ink in a test window (`infra/README.md`); the deployed site with an HTTPS api; Safari and a real iPhone
+recording.
 
 ## Before real data
 

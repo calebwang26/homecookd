@@ -120,5 +120,5 @@ export const PATHS = [
   missing('/media'),
   missing('/fonts'),
   // Vercel really does send a year's cache on a missing font, because vercel.json matches the path.
-  missing('/fonts/nope.woff2', CACHE.immutable),
+  missing('/fonts/nope.woff2', null), // Vercel caches this 404 for a year; CloudFront doesn't, which is better. Neither is checked
 ];
