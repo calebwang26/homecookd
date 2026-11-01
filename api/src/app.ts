@@ -10,6 +10,7 @@ import { inviteRoutes } from "./modules/community/inviteRoutes.js";
 import { communityRoutes } from "./modules/community/routes.js";
 import { cravingRoutes } from "./modules/dish/cravingRoutes.js";
 import { dishRoutes } from "./modules/dish/routes.js";
+import { liveRoutes } from "./modules/live/routes.js";
 import { peopleRoutes } from "./modules/people/routes.js";
 
 declare module "fastify" {
@@ -118,6 +119,14 @@ export function buildApp(options: { logger?: object | boolean; logStream?: NodeJ
     reply.header("x-request-id", req.id);
   });
 
+  // Stopping closes the connections idle at that moment. One that finishes a request a moment later would then stay open for
+  // KEEP_ALIVE_MS and hold the stop up until ECS kills the task, so keep closing them until it's done.
+  app.addHook("preClose", async () => {
+    const sweep = setInterval(() => app.server.closeIdleConnections(), 100);
+    sweep.unref();
+    app.server.once("close", () => clearInterval(sweep));
+  });
+
   guardFileKeys(app);
 
   // Before any route's own checks, so no route has to remember: Postgres would answer with an error, and that would be a 500.
@@ -158,6 +167,7 @@ export function buildApp(options: { logger?: object | boolean; logStream?: NodeJ
 
   app.register(peopleRoutes);
   app.register(dishRoutes, { prefix: "/dish" });
+  app.register(liveRoutes);
   app.register(communityRoutes);
   app.register(cravingRoutes);
   app.register(inviteRoutes, { prefix: "/invite" });
