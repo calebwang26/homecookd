@@ -319,6 +319,54 @@ def test_worker_stops_a_job_the_cook_cancelled():
     assert "cancelled job1 by the cook: stopped" in log.getvalue(), log.getvalue()
 
 
+def test_worker_at_the_spend_cap_requeues_the_job_without_touching_the_bucket_again():
+    """At the cap the job isn't failed (nothing would ever bring a failed job back): it goes back in the queue, and
+    it runs by itself once MAX_SPEND_USD is raised. It comes back every 30 s, so a pass at the cap reads no bucket:
+    already over, none at all; over only with this video's length, one pass to measure it."""
+    def passes(spent: float) -> tuple[dict, list]:
+        calls: dict = {"progress": [], "released": [], "ran": [], "listed": 0, "downloaded": 0}
+
+        class Convex:
+            def progress(self, _job_id, stage, _progress, error=None):
+                calls["progress"].append(stage)
+
+            def release(self, job_id):
+                calls["released"].append(job_id)
+
+            def published(self, *_a, **_k):
+                return "recipe1"
+
+        def listed(*_a):
+            calls["listed"] += 1
+            return [SimpleNamespace(name="chili-abc123/01.mov", size=10)]
+
+        def downloaded(*_a):
+            calls["downloaded"] += 1
+
+        cap = {"usd": 5.0}
+        job = {"jobId": "job1", "uploadPath": "chili-abc123/", "cookName": "Dad", "title": "Chili"}
+        seen = []
+        with tempfile.TemporaryDirectory() as tmp, contextlib.redirect_stdout(io.StringIO()), \
+                patched(worker, LOCKS=Path(tmp) / ".locks", INPUT=Path(tmp), _complete_upload=listed, _capped={},
+                        _download=downloaded, spend_cap=lambda: cap["usd"], spent_usd=lambda: spent), \
+                patched(worker.prep, run=lambda *_a: None, probe_duration=lambda _p: 60.0), \
+                patched(worker.process, run=lambda *_a, **_k: calls["ran"].append(1)), \
+                patched(publish, publish_recipe=lambda *_a, **_k: SimpleNamespace(model_dump=lambda mode: {})):
+            for _ in range(3):
+                worker.handle_convex(Convex(), job, FakeBucket(), FakeBucket())
+                seen.append((calls["listed"], calls["downloaded"], len(calls["released"])))
+            assert calls["ran"] == [] and "failed" not in calls["progress"], calls
+            cap["usd"] = 50.0
+            worker.handle_convex(Convex(), job, FakeBucket(), FakeBucket())
+            assert calls["ran"] == [1] and worker._capped == {}, calls
+        return calls, seen
+
+    _, seen = passes(spent=5.0)  # already at the cap: no list, no download, on any pass
+    assert seen == [(0, 0, 1), (0, 0, 2), (0, 0, 3)], seen
+    _, seen = passes(spent=4.99)  # only this video passes it: measured once, then nothing
+    assert seen == [(1, 1, 1), (1, 1, 2), (1, 1, 3)], seen
+
+
 def test_worker_stopped_right_after_publishing_trashes_the_media_and_keeps_running():
     """Stopped in the last moment: /worker/published answers 409. What publish_recipe put in the public
     bucket goes to trash/, and a storage error while cleaning up doesn't take the worker down."""

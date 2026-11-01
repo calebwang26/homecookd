@@ -11,7 +11,9 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import traceback
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
@@ -177,6 +179,70 @@ def test_a_recording_tagged_english_but_found_marathi_is_extracted_as_marathi() 
     assert saved["language"] == "mr" and recipe["language"] == "mr", (saved.get("language"), recipe.get("language"))
     prompt = fake.calls[0]["messages"][0]["content"][-1]["text"]
     assert "The family says the cook narrates in Marathi" in prompt and "00:03 मोहरी टाकते" in prompt
+
+
+def test_a_stopped_job_drops_the_extractions_not_started_and_waits_for_the_running_one() -> None:
+    class Stopped(Exception):
+        pass
+
+    def report(_stage, _progress):
+        raise Stopped  # Convex's 409: the cook stopped it
+
+    started, gate = [], threading.Event()
+
+    def extract(i):
+        started.append(i)
+        if i == 1:
+            gate.wait(10)  # running when the report raises, so 2 and 3 can only still be queued
+
+    pool = ThreadPoolExecutor(max_workers=1)
+    futures = [pool.submit(extract, i) for i in range(4)]
+    try:
+        process.report_extractions(pool, futures, 4, report)
+        raise AssertionError("the report's exception should reach the caller")
+    except Stopped:
+        pass
+    gate.set()
+    pool.shutdown(wait=True)
+    assert futures[2].cancelled() and futures[3].cancelled() and 2 not in started and 3 not in started, started
+
+
+def test_stopped_while_being_heard_means_no_extraction_at_all() -> None:
+    """The check right after the transcript: the cook stopped it, so no frames go to Claude."""
+    from pipeline import transcribe
+    from pipeline.test_coverage import MANIFEST
+
+    class Stopped(Exception):
+        pass
+
+    seen = []
+
+    def report(stage, progress):
+        seen.append((stage, progress))
+        if len(seen) == 2:
+            raise Stopped
+
+    manifest = json.loads(json.dumps(MANIFEST))
+    manifest["sessions"][0]["ai_files"] = [{"path": "work/ai_01.mp4", "start_in_file_s": 0, "duration_s": 30.0}]
+    fake = FakeAnthropic()
+    with env(GEMINI_API_KEY="fake", GEMINI_MODEL="fake-pro", GEMINI_EXTRACT_MODEL="", GEMINI_MEDIA_RESOLUTION="LOW",
+             COVERAGE_GAP_S="", RECIPE_WRITER="claude", TEXT_PROVIDER=None, EXTRACTOR="claude",
+             ANTHROPIC_API_KEY="fake", CLAUDE_EXTRACT_MODEL=None, CLAUDE_WRITER_MODEL=None), \
+            tempfile.TemporaryDirectory() as tmp, patched(process, "OUT_ROOT", Path(tmp)), \
+            patched(process, "load_dotenv", lambda *a, **k: None), patched(process.genai, "Client", lambda **_k: None), \
+            patched(claude.anthropic, "Anthropic", fake):
+        out = Path(tmp) / "t-cover"
+        (out / "work").mkdir(parents=True)
+        (out / "work" / "manifest.json").write_text(json.dumps(manifest))
+        video(out / "work" / "ai_01.mp4", 30)
+        (out / "voice.m4a").write_bytes(b"m4a")
+        (out / "work" / transcribe.FILE).write_text(json.dumps({"language": "en", "words": []}))
+        try:
+            process.run("t-cover", report=report)
+            raise AssertionError("the report's exception should reach the caller")
+        except Stopped:
+            pass
+    assert fake.calls == [], fake.calls
 
 
 def test_extractor_flag_picks_claude_and_sonnet() -> None:
