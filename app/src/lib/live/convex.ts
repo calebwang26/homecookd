@@ -1,7 +1,7 @@
 // Track A boundary: every call the app makes to Convex (docs/build/STACK.md "App → Convex").
 //
 //   const token = await convexSession();                 sessions.start with this phone's device key
-//   useLiveJobs()                                        jobs.forFamily, live (parent progress)
+//   useLiveJobs()                                        jobs.mine, live (parent progress)
 //   useCookQuestions()                                   questions.openForCook, live
 //   await createJob(uploadPath, source)                  jobs.create
 //   await answerQuestion(id, { audioUri })               files.uploadUrl + questions.answer
@@ -12,7 +12,7 @@
 //   const { recordingId } = await startRecording({ dish, forKidIds, language?, source })  live.startRecording
 //   useRecording(recordingId)                            live.recording, live (the recording screen)
 //   await recordingJob(recordingId, cookId)              live.recording's job and its stage, once (a resend after a crash)
-//   await uploadJob(uploadId, cookId)                    the same for a Send-screen upload, by its folder (jobs.forFamily)
+//   await uploadJob(uploadId, cookId)                    the same for a Send-screen upload, by its folder (jobs.mine)
 //   await endRecording(recordingId, as?)                 live.endRecording: the stop button with no voice line
 //   await startFilming(recordingId)                      live.startFilming: glasses, her Start button
 //   await setCover(recordingId, photoUri)                files.uploadUrl + live.setCover: the plate photo (in-app filming)
@@ -258,7 +258,7 @@ export function useLive<T>(
 // Calls
 
 export function useLiveJobs(enabled = true): LiveJob[] {
-  return useLive<LiveJob[]>('jobs:forFamily', [], stub.watchJobs, enabled);
+  return useLive<LiveJob[]>('jobs:mine', [], stub.watchJobs, enabled);
 }
 
 export function useCookQuestions(enabled = true): CookQuestion[] {
@@ -387,7 +387,7 @@ export async function recordingJob(recordingId: string, as?: string): Promise<Re
     const row = await call<LiveRecording | null | undefined>('query', 'live:recording', { sessionToken, recordingId }, () => undefined, { soft: true });
     if (!row) return undefined;
     if (!row.jobId) return null;
-    const jobs = await call<LiveJob[] | undefined>('query', 'jobs:forFamily', { sessionToken }, () => undefined, { soft: true });
+    const jobs = await call<LiveJob[] | undefined>('query', 'jobs:mine', { sessionToken }, () => undefined, { soft: true });
     if (!jobs) return undefined;
     const job = jobs.find((j) => j._id === row.jobId);
     return { id: row.jobId, stage: job?.stage ?? null, error: job?.error ?? null };
@@ -400,19 +400,19 @@ export async function recordingJob(recordingId: string, as?: string): Promise<Re
 /**
  * The Convex job for a Send-screen upload (the folder "<uploadId>/"), asked once before a resend after a
  * crash (lib/unsentLogic jobForUpload): stage null when this phone saw Convex take it (`convexHadIt`, its
- * row's convex_job 'ok') but it's no longer among the family's newest, null when there's no job (or no
+ * row's convex_job 'ok') but it's no longer among her newest, null when there's no job (or no
  * upload was made), undefined when Convex couldn't say. `as`: the cook (a profile id).
  */
 export async function uploadJob(uploadId: string | null, convexHadIt: boolean, as?: string): Promise<RecordingJob | null | undefined> {
   if (stubbed || !client) return undefined;
   try {
     const sessionToken = await token(as);
-    const jobs = await call<LiveJob[] | undefined>('query', 'jobs:forFamily', { sessionToken }, () => undefined, { soft: true });
+    const jobs = await call<LiveJob[] | undefined>('query', 'jobs:mine', { sessionToken }, () => undefined, { soft: true });
     if (!jobs) return undefined;
     const job = jobForUpload(jobs, uploadId, convexHadIt);
     return job ? { id: job.id, stage: job.stage as JobStage | null, error: job.error } : null;
   } catch (e) {
-    console.warn('[convex] jobs.forFamily', String(e).slice(0, 160));
+    console.warn('[convex] jobs.mine', String(e).slice(0, 160));
     return undefined;
   }
 }
