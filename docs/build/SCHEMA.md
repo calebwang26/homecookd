@@ -1,7 +1,7 @@
 # homecookd's one Postgres schema
 
 **Oct 31, 2026.** Reviewed by the Master Agent, with Caleb's product calls in section 6. The SQL is in
-`api/migrations/` (8 files, 46 tables). It has been applied only to throwaway empty databases, and no real data has been
+`api/migrations/` (files `001`-`008` hold these 46 tables; later files add to them, and `012` is the temporary sync's, which comes off at cutover). It has been applied only to throwaway empty databases, and no real data has been
 copied or read. The rules it follows are in `docs/build/SYSTEM-DESIGN.md`.
 
 Words used below: an **index** is a sorted lookup that makes a query fast. A **foreign key** (FK) makes the database refuse a
@@ -456,7 +456,7 @@ docker exec homecookd-schema-test psql -U postgres -d homecookd -tAc "select cou
 docker rm -f homecookd-schema-test
 ```
 
-Result both times: PostgreSQL 17.11, 0 tables before, all 8 files applied with no errors, 46 tables, 202 indexes, 101 FKs.
+Result both times, when `001`-`008` were all the files: PostgreSQL 17.11, 0 tables before, all 8 applied with no errors, 46 tables, 202 indexes, 101 FKs.
 
 ### Also checked, on that throwaway database
 
@@ -476,7 +476,7 @@ Result both times: PostgreSQL 17.11, 0 tables before, all 8 files applied with n
 
 - **No real data.** Convex and Supabase weren't touched, so these are all assumptions about real rows, and the backfill must count
   violations of each one first:
-  - **New uniqueness rules:** `people.supabase_id`, `swap_requests`, `dinner_requests`, `reports`, follow-up ids, family names, one
+  - **New uniqueness rules:** `people.supabase_id`, `swap_requests`, `dinner_requests`, `reports`, follow-up ids, one
     job per upload folder (only the newest job in a folder gets the idempotency key), and `shareRecipeId = recipeId`.
   - **New CHECKs and domains:** `body` <= 2000, `duration_s` <= 300, the `library_id` pattern, `hex_digest` (lowercase hex hashes),
     `s3_key`, `lang_code`, `tz`, the phone pattern, and the photo count.

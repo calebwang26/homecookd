@@ -1,7 +1,11 @@
 // The temporary sync's read-only routes (lib/syncRoutes.ts): the secret, paging to the end, what a deletion row gives away, and that nothing changes.
+import { defineSchema } from "convex/server";
+import { convexTest } from "convex-test";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { Id } from "./_generated/dataModel";
-import { type Backend, newBackend } from "./test.helpers";
+import schema from "./schema";
+import { FAMILY_FIELDS, PERSON_FIELDS, RECIPE_FIELDS } from "./syncRead";
+import { type Backend, modules, newBackend } from "./test.helpers";
 
 vi.mock("@moss-js/moss", () => ({ MossClient: class {} }));
 
@@ -81,6 +85,56 @@ test("pages walk a whole table oldest first, and say when it's over", async () =
   expect(families.next).toBeNull();
   const recipes = await (await post(t, "/sync/page", { table: "recipes", cursor: null, limit: 10 })).json();
   expect(recipes.rows[0].title).toBe("Dal");
+});
+
+test("a field with no column in Postgres doesn't leave Convex", async () => {
+  // The real schema refuses a field it doesn't list, so this stands in for one added to it later.
+  const t = convexTest(defineSchema(schema.tables, { schemaValidation: false }), modules) as unknown as Backend;
+  await t.run(async (ctx) => {
+    const extra = { newField: "NO-COLUMN-FOR-THIS", nested: { deep: "NO-COLUMN-FOR-THIS" } };
+    const familyId = await ctx.db.insert("families", { name: "The Testers", supabaseFamilyId: "seed:f", ...extra } as never);
+    const cookId = await ctx.db.insert("people", { familyId, supabaseProfileId: "seed:p", name: "A Cook", role: "cook", campus: "A campus", ...extra } as never);
+    await ctx.db.insert("recipes", { familyId, cookId, title: "Dal", status: "ready", steps: [], memories: [], memoriesOptIn: false, ...extra } as never);
+  });
+  for (const [table, kept] of [["families", "The Testers"], ["people", "A campus"], ["recipes", "Dal"]]) {
+    const res = await post(t, "/sync/page", { table, cursor: null, limit: 10 });
+    expect(res.status).toBe(200);
+    const text = await res.text();
+    expect(text).toContain(kept);
+    expect(text).not.toContain("NO-COLUMN-FOR-THIS");
+    expect(text).not.toContain("newField");
+  }
+});
+
+test("a person's page holds exactly the named fields, and a tombstone only what's left of it", async () => {
+  const t = newBackend();
+  const { familyId } = await world(t);
+  await t.run(async (ctx) => {
+    await ctx.db.insert("people", {
+      familyId,
+      supabaseProfileId: "seed:whole",
+      name: "All fields",
+      role: "kid",
+      voiceClone: { consentedAt: 1, cartesiaVoiceId: "v" },
+      language: "mr",
+      relation: "Aaji",
+      approx: { lat: 1, lng: 2 },
+      campus: "A campus",
+    });
+    await ctx.db.insert("people", { familyId, supabaseProfileId: "seed:gone", name: "Deleted", role: "kid", deletedAt: 5 });
+  });
+  const { rows } = await (await post(t, "/sync/page", { table: "people", cursor: null, limit: 100 })).json();
+  const whole = rows.find((row: { supabaseProfileId: string }) => row.supabaseProfileId === "seed:whole");
+  expect(Object.keys(whole).sort()).toEqual(PERSON_FIELDS.filter((field) => field !== "deletedAt").sort());
+  const gone = rows.find((row: { supabaseProfileId: string }) => row.supabaseProfileId === "seed:gone");
+  expect(Object.keys(gone).sort()).toEqual(["_creationTime", "_id", "deletedAt", "familyId", "name", "role", "supabaseProfileId"]);
+});
+
+test("a field added to the schema has to be decided: copied or kept here", () => {
+  const fieldsOf = (table: "families" | "people" | "recipes") => [...Object.keys(schema.tables[table].validator.fields), "_id", "_creationTime"].sort();
+  expect([...FAMILY_FIELDS].sort()).toEqual(fieldsOf("families"));
+  expect([...PERSON_FIELDS].sort()).toEqual(fieldsOf("people"));
+  expect([...RECIPE_FIELDS].sort()).toEqual(fieldsOf("recipes"));
 });
 
 test("deletions come after a time, with ids only", async () => {

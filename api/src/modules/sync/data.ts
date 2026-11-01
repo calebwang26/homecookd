@@ -12,6 +12,8 @@ type Row = Record<string, unknown> & { id: string };
 
 const JSON_COLUMNS = new Set(["steps", "memories", "added_ingredients"]);
 const WRITER = `select set_config('homecookd.sync_writer', 'on', true)`;
+/** A recipe with anything left in it. The title alone won't do: a dish can really be called that. */
+const RECIPE_HOLDS = (name: string) => `(title <> ${name} or steps <> '[]' or memories <> '[]' or added_ingredients <> '[]' or story_card_text is not null)`;
 const lockPerson = (c: Queryable, personId: string) =>
   c.query(`select pg_advisory_xact_lock(hashtextextended('sync-person:' || $1, 0))`, [personId]);
 const lockFamily = (c: Queryable, familyId: string) =>
@@ -60,7 +62,10 @@ export async function upsertFamily(id: string, build: (blank: boolean) => Row): 
   });
 }
 
-/** Removes a recipe. A row that still points at it and may not cascade (a question holds a file key) keeps the row, so its contents go instead. */
+/**
+ * Removes a recipe. A row that still points at it and may not cascade (a question holds a file key) keeps the row, so its contents go instead. That update
+ * has to run before sync_deleted names the cook, because the trigger refuses any write to their recipes after: applyDeletion's order is what lets it through.
+ */
 async function dropRecipe(c: Queryable, id: string): Promise<void> {
   await c.query("savepoint drop_recipe");
   try {
@@ -73,7 +78,7 @@ async function dropRecipe(c: Queryable, id: string): Promise<void> {
       `update recipes set title = $2, library_id = null, media_prefix = null, recipe_json_key = null, cover_key = null, cover_version = null,
               cover_stock_path = null, steps = '[]', memories = '[]', added_ingredients = '[]', shared_at = null, story_card_text = null,
               story_card_written_at = null, story_card_used_stories = null, story_card_culture = null, story_card_quote = null, moss_indexed_at = null
-        where id = $1 and title <> $2`,
+        where id = $1 and ${RECIPE_HOLDS("$2")}`,
       [id, BLANK_NAME],
     );
     await noteIssue(c, "recipes", id, "recipe_blanked_still_referenced");
@@ -325,7 +330,7 @@ export async function deletionHolds(personId: string, recipeIds: string[]): Prom
   const { rows } = await db().query(
     `select exists (select 1 from sync_deleted where kind = 'person' and id = $1)
         and not exists (select 1 from people where id = $1 and deleted_at is null)
-        and not exists (select 1 from recipes where (cook_id = $1 or id = any($2)) and title <> $3) as holds`,
+        and not exists (select 1 from recipes where (cook_id = $1 or id = any($2)) and ${RECIPE_HOLDS("$3")}) as holds`,
     [personId, recipeIds, BLANK_NAME],
   );
   return rows[0].holds;

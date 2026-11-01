@@ -8,6 +8,7 @@ import { db } from "../src/db.js";
 import { handleMessage } from "../src/scheduled.js";
 import { applyDeletion, upsertRow } from "../src/modules/sync/data.js";
 import { mergePerson } from "../src/modules/sync/merge.js";
+import { runReconcile } from "../src/modules/sync/reconcile.js";
 import { runDeletions, runPass } from "../src/modules/sync/service.js";
 import { bearer, freshDatabase, hasDatabase, session } from "./helpers.js";
 import { assertNoContent, CAMPUS, count, EMAIL, familyRow, issues, NAME, person, recipe, stateOf, STORY, World } from "./syncHelpers.js";
@@ -286,6 +287,45 @@ test("deletions reaching the copy", { skip: !hasDatabase }, async (t) => {
     assert.equal(row.cover_key, null);
     assert.ok((await issues()).some((issue) => issue.rule === "recipe_blanked_still_referenced"));
     assert.equal((await runDeletions(w.run())).applied, 0, "a repeat changes nothing");
+  });
+
+  await t.test("emptying a referenced recipe gets past its own trigger, by coming first, and the trigger holds after", async () => {
+    const w = new World();
+    const f = w.family();
+    const cook = w.person(f, full);
+    const kid = w.person(f, { role: "kid" });
+    const named = w.recipe(cook, { title: "Deleted", memories: [{ kind: "story", text: STORY }], storyCard: { text: STORY, writtenAt: 1 } });
+    await w.syncAll();
+    await db().query("insert into questions (family_id, recipe_id, asked_by, text, status) values ($1, $2, $3, 'a question', 'asked_cook')", [f._id, named._id, kid._id]);
+
+    // Only the person's own row says so: the people walk's path, with no deletion row.
+    const row = w.convex.people.find((p) => p._id === cook._id)!;
+    w.convex.people[w.convex.people.indexOf(row)] = { _id: row._id, _creationTime: row._creationTime, familyId: row.familyId, supabaseProfileId: row.supabaseProfileId, name: "Deleted", role: row.role, deletedAt: Date.now() };
+    w.convex.recipes = [];
+    const result = await w.passAll();
+    assert.equal(result.stats.deleted >= 1, true);
+    assert.equal(result.stats.held, 0);
+
+    const emptied = await recipe(named._id);
+    assert.deepEqual(emptied.memories, [], "a dish really called Deleted is emptied too");
+    assert.equal(emptied.story_card_text, null);
+    assertBlank(await person(cook._id));
+    assert.deepEqual(await issues(), [{ table_name: "recipes", row_id: named._id, rule: "recipe_blanked_still_referenced" }]);
+
+    const c = await db().connect();
+    try {
+      await c.query("begin");
+      await c.query(`select set_config('homecookd.sync_writer', 'on', true)`);
+      await assert.rejects(c.query("update recipes set title = 'Back' where id = $1", [named._id]), { code: "HC002" });
+    } finally {
+      await c.query("rollback");
+      c.release();
+    }
+
+    // Going over it again finds nothing to do, so it never meets the trigger.
+    await w.passAll();
+    assert.equal((await recipe(named._id)).title, "Deleted");
+    assert.equal((await runReconcile(w.run()))?.counts.people?.deletion_not_applied, undefined);
   });
 
   await t.test("the last person deleting blanks the family, and a stale family row can't restore it (C2)", async () => {

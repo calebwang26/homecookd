@@ -23,6 +23,19 @@ read-only HTTP routes do it, behind their own secret: `POST /sync/page` (Convex'
 (ids and times only, never file URLs or the voice clone id). Convex hard-deletes recipes, so a recipe that a finished pass didn't read is
 removed; if more than 10% (at least 20) look gone, that's held as a bad read and raises an alert. People and families are never removed.
 
+**What leaves Convex is named field by field,** in `convex/syncRead.ts`; the routes don't return whole documents. A field added to a table later stays in
+Convex until someone gives it a column and adds it to the list, and a test fails until they decide.
+
+| Table | Copied (the Convex field) | Dropped at the source |
+|---|---|---|
+| `people` | `_id`, `_creationTime`, `familyId`, `supabaseProfileId`, `name`, `role`, `voiceClone`, `language`, `relation`, `approx`, `campus`, `deletedAt` | Nothing today: each has a column |
+| `families` | `_id`, `_creationTime`, `name`, `supabaseFamilyId`, `publicName`, `mossSync` | Nothing today |
+| `recipes` | `_id`, `_creationTime`, `familyId`, `cookId`, `title`, `status`, `libraryId`, `recipeJsonUrl`, `coverUrl`, `steps`, `memories`, `memoriesOptIn`, `mossIndexedAt`, `language`, `sharedAt`, `storyCard`, `hiddenAt`, `addedIngredients` | Nothing today |
+| `accountDeletions` | `_id`, `_creationTime`, `personId`, `familyId`, `supabaseProfileId`, `requestedAt`, `recipeIds` | `jobIds`, `uploadPaths`, `mediaUrls`, `voiceCloneId` and the purge's progress |
+
+Dropped later, at the merge: Convex's `name` and `role` where Supabase has its own, and the full URLs in `recipeJsonUrl` and `coverUrl`, which become keys.
+Nothing in `api/` reads `people.cartesia_voice_id` while the outside purge stays with Convex, but it has a column, so it's copied.
+
 **Reading Supabase.** PostgREST, for the rows on the page, with a fixed column list. Family codes aren't in the list, so they never leave
 Supabase. A page where Supabase fails stops and retries, because a person with only Convex's half would be a wrong row.
 
@@ -43,7 +56,8 @@ stops touching it and the api may write it.
 
 A deletion is on record in `sync_deleted` within about a minute of Convex reading it. In one transaction it:
 
-- removes their recipes, or empties one that a question still points at, so a reference can't block a deletion
+- removes their recipes, or empties one that a question still points at, so a reference can't block a deletion. This comes before the record is
+  written: after that, the trigger refuses any write to a deleted cook's recipes
 - blanks the person (`people_tombstone_blank` checks it)
 - deletes their sessions, identities and push tokens, and revokes their phones
 - blanks the family if they were its last person (C2)
@@ -83,7 +97,7 @@ To stop for good: `deletions`, then empty the copies, then `off`.
 | Database down, statement timeout | The batch stops and the place isn't lost. Every statement touches one row or a small page, so none should come near the 10 s limit | The same |
 | A crash anywhere | The rows in that page repeat and change nothing. The lease expires after 3 minutes | Nothing needed |
 | A deletion can't apply | The others go on, its place doesn't pass it, and the message fails | Dead-letter alarm |
-| Deletions not succeeding for 15 minutes | Alert. Access isn't refused yet (question 3) | `SyncDeletionsLate` |
+| Deletions not succeeding for 15 minutes | Alert. Access isn't refused yet (decision 3) | `SyncDeletionsLate` |
 | Convex forgets a cursor | That table starts again, which is safe | Logs |
 
 Logs and alerts hold counts, row ids and rule names, and never a name, an email, a place or a recipe's words. The reconcile keeps its last
@@ -97,15 +111,17 @@ None of this has been done.
 
 1. **Caleb's OK.** This copies production data.
 2. **`/privacy` lists AWS** (waits for Apple's approval of 1.0), and Sentry too, or no DSN on the task that runs this.
-3. **Deploy the Convex routes,** which also needs Caleb's OK, and set `SYNC_READ_SECRET` in Convex env.
-4. **Infra, not in this PR.** Secrets `SYNC_READ_SECRET` and `SUPABASE_SYNC_KEY`; env `CONVEX_SITE_URL`, `SUPABASE_URL`, `SYNC_MODE`; the three schedules above.
-5. **Run on staging with made-up rows first** against a throwaway Convex deployment, including real PostgREST and a real expired cursor.
-6. **If the queue worker runs against the same database,** see question 4.
+3. **Regenerate `convex/_generated/api.d.ts`.** It's edited by hand on this branch, accepted as an exception here only, because generating it needs a deployment.
+4. **Deploy the Convex routes,** which also needs Caleb's OK, and set `SYNC_READ_SECRET` in Convex env.
+5. **A read-only Supabase role** for `SUPABASE_SYNC_KEY` (decision 5). Never the service role.
+6. **Infra, not in this PR.** Secrets `SYNC_READ_SECRET` and `SUPABASE_SYNC_KEY`; env `CONVEX_SITE_URL`, `SUPABASE_URL`, `SYNC_MODE`; the three schedules above.
+7. **Run on staging with made-up rows first** against a throwaway Convex deployment, including real PostgREST and a real expired cursor.
+8. **If the queue worker runs against the same database,** see decision 4.
 
 ## How it's removed
 
 Set the schedules and `SYNC_MODE` off, delete `api/src/modules/sync/`, the import and spread in `scheduled.ts`, `api/test/sync*`, then
-`convex/syncRead.ts`, `convex/lib/syncRoutes.ts`, its line in `convex/http.ts` and `syncReader` in `lib/http.ts`. Unset the secrets. A new migration
+`convex/syncRead.ts`, `convex/lib/syncRoutes.ts`, its line in `convex/http.ts`, `syncReader` in `lib/http.ts` and their lines in `convex/_generated/api.d.ts`. Unset the secrets. A new migration
 drops the triggers, the three functions and the `sync_*` tables. A copied table whose area never moved needs its backfill first.
 
 ## Queries and their indexes
@@ -119,21 +135,26 @@ drops the triggers, the three functions and the `sync_*` tables. A copied table 
 | A deletion's recipes | `recipes_cook`, primary key |
 | A deletion's sessions, phones, links, tokens | `sessions_person`, `devices_person`, `identities_person`, `push_tokens_person` |
 
+## Decided (the review, Oct 31)
+
+None of these is built yet.
+
+1. **Sessions.** M1 names three tables and `findSession` reads `sessions`, which nothing fills, so signed-in routes can't work yet. On a miss, check Convex and
+   store the row. This goes in before the first signed-in area. Deletion already removes them.
+2. **A new person** has no copy for up to a pass, about 15 minutes, because M1's just-in-time upsert would be a live read on a request. Each area decides
+   what that request does, and a faster path comes only if real requests hit this.
+3. **Late deletions refuse sign-in.** At about 15 minutes late, added to `findSession` with the first signed-in area (SYSTEM-DESIGN: account deletion is
+   "consistent: refuse"). Until then it only alerts.
+4. **The queue worker writes `recipes`** (`pipeline/queue_db.py`), and is refused once the copies are read-only. Set `moved_at` on `recipes` in the release
+   that switches the worker. A recipe the sync never landed is never swept, so the two can't remove each other's rows.
+5. **The Supabase key is a read-only role,** made at the OK to run, which is Caleb's call. Never the service role for this.
+6. **Cost.** A full pass reads every recipe and Convex bills by bytes read. Measure it on the first day, then change the 15 minutes (`PASS_EVERY_MS`) and the
+   reconcile's schedule.
+7. **`convex/_generated/api.d.ts`.** The hand edit is accepted on this branch only, as an exception. It's regenerated before this can run, and it comes off with the sync.
+
 ## Open questions
 
-1. **Sessions aren't copied, so signed-in routes still can't work.** M1 names three tables, and `findSession` reads `sessions`, which nothing fills.
-   **Recommendation:** decide before the first signed-in area. On a miss, check Convex and store the row, as AWS-MIGRATION's "read from Convex at first" says. Deletion already removes them.
-2. **A new person waits up to a pass.** Someone who just signed up has no copy for up to 15 minutes, and M1's just-in-time upsert isn't built, because it's a live read on a request.
-   **Recommendation:** each area decides what that request does, and add a faster path only if real requests hit this.
-3. **Should sign-in refuse when deletions are late?** SYSTEM-DESIGN says account deletion is "consistent: refuse". Today it only alerts.
-   **Recommendation:** add the check to `findSession` with the first signed-in area, at about 15 minutes. Convex being down means most of the app is down anyway.
-4. **The queue worker writes `recipes`** (`pipeline/queue_db.py`). Once the copies are read-only, it's refused.
-   **Recommendation:** set `moved_at` on `recipes` in the release that switches the worker. A recipe the sync never landed is never swept, so the two can't remove each other's rows.
-5. **The Supabase key.** PostgREST with the service role can write everything, and a read-only role means changing frozen Supabase.
-   **Recommendation:** make a read-only role at the OK to run, Caleb's call.
-6. **How often.** A full pass reads every recipe, and Convex bills by bytes read. Real sizes weren't measured, because that's a live read.
-   **Recommendation:** look at the first day's usage, then change the 15 minutes (`PASS_EVERY_MS`) and the reconcile's schedule.
-7. **Duplicates need a person.** SCHEMA.md says to find and repoint them first. **Recommendation:** read the first report, then fix them at the source.
+1. **Duplicates need a person.** SCHEMA.md says to find and repoint them first. **Recommendation:** read the first report, then fix them at the source.
 
 ## Tested, and not tested
 
