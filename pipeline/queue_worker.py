@@ -561,7 +561,9 @@ class Worker:
         """Her raw video goes, as Convex mode does, and anything this job published. If S3 fails the message stays, so it's tried
         again, and on the third try the alarm says footage she stopped is still there."""
         try:
-            gone = self.storage.delete_upload(job["upload_key"]) + self.storage.delete_media(job_prefix(job))
+            # Another cook's stop keeps her raw video: footage is irreplaceable, and a person decides (JOBS-MIGRATION.md, decisions).
+            keep = self.store.keeps_upload(job["id"])
+            gone = (0 if keep else self.storage.delete_upload(job["upload_key"])) + self.storage.delete_media(job_prefix(job))
         except Exception as e:  # noqa: BLE001
             log("cancelled job's files not deleted", "error", error_type=type(e).__name__)
             self.report(e, job["id"])

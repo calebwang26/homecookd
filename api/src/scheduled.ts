@@ -8,6 +8,7 @@ import { db } from "./db.js";
 import { communityTasks } from "./modules/community/tasks.js";
 import type { Trace } from "./modules/dish/budget.js";
 import { dishTasks } from "./modules/dish/tasks.js";
+import { jobTasks } from "./modules/jobs/tasks.js";
 import { syncTasks } from "./modules/sync/tasks.js"; // temporary: comes off with the sync (docs/build/SYNC-MIGRATION.md)
 import { messageTasks } from "./modules/messages/tasks.js";
 
@@ -28,12 +29,15 @@ async function prune(): Promise<void> {
   }
 }
 
-const TASKS: Record<string, Task> = { ...dishTasks, ...syncTasks, ...communityTasks, ...messageTasks, "platform.prune": prune };
+const TASKS: Record<string, Task> = { ...dishTasks, ...jobTasks, ...syncTasks, ...communityTasks, ...messageTasks, "platform.prune": prune };
 
-/** One message, from the outbox ({outboxId, requestId, payload}) or a schedule ({payload}). An unknown or broken one throws, so it's seen. */
+/**
+ * One message, from the outbox ({outboxId, requestId, payload}) or a schedule ({payload}). An unknown or broken one throws, so it's seen. The worker's own
+ * row names its work `kind` (pipeline/queue_db.py, finish), where the api's say `task`.
+ */
 export async function handleMessage(body: string, log: Trace["log"]): Promise<void> {
   const message = JSON.parse(body) as { outboxId?: string; requestId?: string | null; payload?: Record<string, unknown> };
-  const name = message.payload?.task;
+  const name = message.payload?.task ?? message.payload?.kind;
   const task = typeof name === "string" ? TASKS[name] : undefined;
   if (!task || !message.payload) throw new Error("A message with no known task");
   await task(message.payload, { requestId: message.requestId ?? undefined, log });

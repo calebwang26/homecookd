@@ -34,8 +34,8 @@ docker run --entrypoint python <image> pipeline/queue_worker.py [--once]
 It reads no `.env`, and exits unless `JOBS_QUEUE_URL`, `UPLOAD_BUCKET`, `MEDIA_BUCKET`, `MEDIA_BASE_URL` and `DEPLOY_ENV` are set.
 On ECS this needs `entryPoint` set on the worker's container. Its `desired_count` is 0 today.
 
-**Message contract:** `{outboxId, requestId, payload: {jobId}}`, from `api/src/outbox.ts` with `queue: "jobs"`. No api route sends
-one yet. The api must set the job to `queued` and write the outbox row in one transaction, only once the upload is complete.
+**Message contract:** `{outboxId, requestId, payload: {jobId}}`, from `api/src/outbox.ts` with `queue: "jobs"`. The draft in
+`docs/build/JOBS-MIGRATION.md` sends it: it sets the job to `queued` and writes the outbox row in one transaction, only once the upload is complete.
 
 **Safe to repeat.** Only a conditional `UPDATE` starts a job (`queued`, or running with a heartbeat older than 10 minutes). It adds 1
 to `attempts`, and every later write names that attempt, so a worker that lost its claim changes nothing. Each attempt publishes to
@@ -141,9 +141,9 @@ doesn't list AWS yet. Close the IAM gaps first. Expect roughly $2.50 an hour of 
 
 ## Open questions, with recommendations
 
-1. **Who says an upload is complete?** There's no signer file in this mode, and the worker can't tell 2 of 3 clips from all of them.
+1. **Who says an upload is complete?** Built as recommended, in `docs/build/JOBS-MIGRATION.md`. There's no signer file in this mode, and the worker can't tell 2 of 3 clips from all of them.
    **Recommend** the api: `queued` only once `files.uploaded_at` is set for every clip. Until that route exists, a partial folder would run as it is.
-2. **Who consumes `recipe_published`?** Today Convex does Moss, translating follow-ups and more. Nothing reads the `scheduled` queue
+2. **Who consumes `recipe_published`?** The jobs area's task reads it now, and does nothing yet (`docs/build/JOBS-MIGRATION.md`, "Deferred"). Today Convex does Moss, translating follow-ups and more. Nothing reads the `scheduled` queue
    yet, so the job goes straight to `done` without `indexing`. **Recommend** the api's jobs area handles it. Moss is going away anyway.
 3. **Glasses' live analysis.** `liveLog` and `liveGaps` aren't carried over; `video_gaps` is. **Recommend** porting them when the glasses
    return. The VM has been stopped since Oct 25.
