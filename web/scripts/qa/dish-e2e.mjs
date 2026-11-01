@@ -5,15 +5,21 @@
 //   cd web && NEXT_PUBLIC_DISH_URL=http://localhost:8791 npx next dev --port 3105
 //   node web/scripts/qa/dish-e2e.mjs --base http://localhost:3105 --out /tmp/dish-e2e
 //
+// That's today's site against today's contract, raw files to Convex. The new api's way of sending files is its own run: the site
+// built for it, and the fake told to speak it (docs/build/CUTOVER.md). Each contract refuses the other, so a site built for one fails against the other:
+//   cd web && NEXT_PUBLIC_DISH_URL=http://localhost:8791 NEXT_PUBLIC_DISH_UPLOADS=links npx next dev --port 3105
+//   node web/scripts/qa/dish-e2e.mjs --uploads links --base http://localhost:3105 --out /tmp/dish-e2e-links
+//
 // It covers: a kid makes a card (K1 → K2, no stock photo of another dish), Save (K4), Ask Mom (K3, the
 // voice note's empty and recorded states), Mom answers all 3 by voice (M1–M6), the kid reopens and sees
 // Mom's version (her amount, his struck guess, her words); the daily budget's 429 (K5); the language
 // switch; and a Hindi phone's Mom page (English first, then her language; answers sent with lang=hi;
 // her words with the English under them). The recipe card on M5 and in M6, and the kid's card, open the
 // locked recipe view (the /r mechanism on the dish card's version): the recipe, ingredients and steps open;
-// any other tap says "Get the app", and the sheet copies the page's link, then opens the store. Every screen
+// any other tap says "Get the app", and the sheet copies the page's link, then opens the store. A parent's craving link (/miss?c=, §8): her name and line,
+// the kid's name required, the card tied to her; a stopped, bad or full link falls back to the plain page. Every screen
 // is shot at 390×844 (--width N for another width) into --out. Exits 1 on a failure. Flags: --base, --out, --chrome (default:
-// /Applications/Google Chrome.app), --port (fake).
+// /Applications/Google Chrome.app), --port (fake), --uploads (raw, the default, or links).
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -31,6 +37,8 @@ const BASE = String(args.base ?? 'http://localhost:3105').replace(/\/+$/, '');
 const OUT = path.resolve(String(args.out ?? '/tmp/dish-e2e'));
 const CHROME = String(args.chrome ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
 const PHONE = { width: Number(args.width ?? 390), height: 844 }; // --width 360 checks the narrow phones
+const UPLOADS = String(args.uploads ?? 'raw');
+const LINKS = UPLOADS === 'links';
 mkdirSync(OUT, { recursive: true });
 
 const failures = [];
@@ -44,7 +52,8 @@ function check(name, ok, detail) {
   }
 }
 
-const fake = await startFake({ port: Number(args.port ?? 8791), site: BASE, mergeMs: 2500, translateMs: 1500 });
+console.log(`Uploads: ${UPLOADS}`);
+const fake = await startFake({ port: Number(args.port ?? 8791), site: BASE, mergeMs: 2500, translateMs: 1500, uploads: UPLOADS });
 const browser = await chromium.launch({
   executablePath: CHROME,
   headless: true,
@@ -247,9 +256,13 @@ try {
   await hold(mom, mic, 1500);
   await mom.getByText('Writing it in your words').waitFor({ timeout: 10000 });
   const answerCalls = fake.log.filter((l) => l.path === '/dish/ask/answer');
-  const puts = fake.log.filter((l) => l.path === '/__storage');
-  check('M3: her clips went straight to storage, as audio', puts.length === 3 && puts.every((l) => /^audio\//.test(l.type) && l.size > 0 && !/;/.test(l.type)), JSON.stringify(puts));
-  check('M3: the answers named the file, with the token in the body and no preflight', answerCalls.length === 3 && answerCalls.every((l) => l.token === card.askToken && !l.preflighted && !('t' in l.query)), JSON.stringify(answerCalls));
+  if (LINKS) {
+    const puts = fake.log.filter((l) => l.path === '/__storage');
+    check('M3: her clips went straight to storage, as audio', puts.length === 3 && puts.every((l) => /^audio\//.test(l.type) && l.size > 0 && !/;/.test(l.type)), JSON.stringify(puts));
+    check('M3: the answers named the file, with the token in the body and no preflight', answerCalls.length === 3 && answerCalls.every((l) => l.token === card.askToken && !l.preflighted && !('t' in l.query)), JSON.stringify(answerCalls));
+  } else {
+    check('M3: answers went up as raw audio with the token in a header', answerCalls.length === 3 && answerCalls.every((l) => l.token === card.askToken && /^audio\//.test(l.type) && !('t' in l.query)), JSON.stringify(answerCalls));
+  }
   await shot(mom, 'M4-waiting');
   await mom.getByText('2 big spoons').waitFor({ timeout: 15000 });
   await mom.waitForTimeout(500);
@@ -305,20 +318,30 @@ try {
   check('Kid: her own words', k6.includes('Two big spoons. Don’t be shy.'));
   check('Kid: her clips play', (await kid.getByRole('button', { name: 'Hear Mom say it' }).count()) >= 2);
   check('Kid: "Your last dish" remembered', true);
-  // A read link dies after an hour: the tap fails, the card reloads for a fresh one, and the next tap plays.
   const hear = kid.getByRole('button', { name: 'Hear Mom say it' }).first();
   const reloads = () => fake.log.filter((l) => l.path === '/dish/cards/get').length;
-  const before = reloads();
-  fake.expireLinks();
-  await hear.click();
-  await kid.waitForTimeout(1200);
-  check('Links: a dead read link reloads the card', reloads() === before + 1, `${before} -> ${reloads()}`);
-  check('Links: the failed tap leaves the button off', (await hear.getAttribute('aria-pressed')) === 'false');
+  const reloadsBefore = reloads();
+  if (LINKS) {
+    // A read link dies after an hour: the tap fails, the card reloads for a fresh one, and the next tap plays.
+    fake.expireLinks();
+    await hear.click();
+    await kid.waitForTimeout(1200);
+    check('Links: a dead read link reloads the card', reloads() === reloadsBefore + 1, `${reloadsBefore} -> ${reloads()}`);
+    check('Links: the failed tap leaves the button off', (await hear.getAttribute('aria-pressed')) === 'false');
+  } else {
+    // Today's links never expire, so a clip that won't load stays a failed tap: nothing is fetched again.
+    fake.setBrokenFiles(true);
+    await hear.click();
+    await kid.waitForTimeout(1200);
+    check('Audio: a clip that won’t load doesn’t reload the card', reloads() === reloadsBefore, `${reloadsBefore} -> ${reloads()}`);
+    check('Audio: the failed tap leaves the button off', (await hear.getAttribute('aria-pressed')) === 'false');
+    fake.setBrokenFiles(false);
+  }
   await hear.click();
   await kid.waitForTimeout(400);
-  check('Links: the next tap plays her clip', (await kid.getByRole('button', { name: /Stop|Pause/ }).count()) + (await kid.locator('button[aria-pressed="true"]').count()) >= 1);
+  check('Audio: the next tap plays her clip', (await kid.getByRole('button', { name: /Stop|Pause/ }).count()) + (await kid.locator('button[aria-pressed="true"]').count()) >= 1);
   await kid.locator('button[aria-pressed="true"]').first().click().catch(() => {});
-  // The console's 403 for the dead link is the point of this check, not an error on the page.
+  // The console's error for the dead link is the point of this check, not an error on the page.
   kid.errors = [];
   await shot(kid, 'K6-moms-version');
   await shot(kid, 'K6-moms-version-full', { full: true });
@@ -352,18 +375,18 @@ try {
   await kid.goto(kidUrl, { waitUntil: 'networkidle' });
   await kid.getByText('From Mom’s kitchen').waitFor();
 
-  // A failed PUT reads as "busy": the kid's dish stays in the box, and trying again works.
-  fake.setFailingPuts(true);
+  // A failed upload reads as "busy" (with links, that's the PUT): the kid's dish stays in the box, and trying again works.
+  fake.setFailingUploads(true);
   await kid.goto(`${BASE}/miss`, { waitUntil: 'networkidle' });
   const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/AAAMBAQAY3Y2wAAAAAElFTkSuQmCC', 'base64');
   await kid.locator('input[type="file"][accept="image/*"]').setInputFiles({ name: 'dish.png', mimeType: 'image/png', buffer: png });
   await kid.getByLabel('The dish you miss').fill('mom’s tomato egg');
   await kid.getByRole('button', { name: 'Make my recipe' }).click();
   await kid.getByRole('button', { name: 'Make my recipe' }).waitFor({ timeout: 15000 });
-  check('Upload: a failed PUT leaves the dish in the box', (await kid.getByLabel('The dish you miss').inputValue()) === 'mom’s tomato egg');
+  check('Upload: a failed upload leaves the dish in the box', (await kid.getByLabel('The dish you miss').inputValue()) === 'mom’s tomato egg');
   await shot(kid, 'K1-upload-failed');
   kid.errors = [];
-  fake.setFailingPuts(false);
+  fake.setFailingUploads(false);
   await kid.getByRole('button', { name: 'Make my recipe' }).click();
   await kid.getByRole('heading', { name: 'What you need' }).waitFor({ timeout: 15000 });
   const withPhoto = fake.cards.get(kid.url().split('k=')[1]);
@@ -574,6 +597,78 @@ try {
   await hi.route('https://apps.apple.com/**', (r) => r.fulfill({ contentType: 'text/html', body: '<title>App Store</title>' }));
   await Promise.all([hi.waitForURL(/apps\.apple\.com/), hi.locator('header').getByRole('button', { name: 'ऐप पाएँ' }).click()]);
   check('Hindi locked: the bar’s Get the app goes straight to the store', true);
+
+  // ── A parent's craving link ─────────────────────────────────────────────────────────────────
+  fake.setBudget(false);
+  fake.setRate(false);
+  const line = 'What do you miss from home? Tell me and I’ll make it for you.';
+  const cravingToken = fake.addCraving({ message: line });
+  const cr = await phone();
+  await cr.goto(`${BASE}/miss?c=${cravingToken}`);
+  await cr.getByRole('heading', { name: /Mom wants to know/ }).waitFor();
+  check('C1: her line and her first name', (await cr.getByText(line).count()) === 1 && (await cr.getByText('Priya', { exact: true }).count()) === 1);
+  check('C1: no "Who makes it?": the card goes to her', (await cr.getByText('Who makes it?').count()) === 0);
+  await shot(cr, 'C1-craving-link', { full: true });
+  await cr.getByLabel('The dish you miss').fill('braised pork');
+  await cr.getByRole('button', { name: 'Make my recipe' }).click();
+  await cr.getByRole('alert').filter({ hasText: 'Tell us your name first.' }).waitFor();
+  check('C1: the name is required before anything is sent', !fake.log.some((l) => l.path === '/dish/cards' && [...fake.cards.values()].some((c) => c.cravingToken)));
+  await shot(cr, 'C1-craving-needs-name', { full: true });
+  await cr.getByLabel('Your name').fill('Caleb');
+  await cr.getByRole('button', { name: 'Make my recipe' }).click();
+  await cr.waitForURL(/\?k=/);
+  await cr.getByRole('button', { name: /Start cooking/ }).first().waitFor();
+  const made = [...fake.cards.values()].find((c) => c.cravingToken === cravingToken);
+  check('C2: the card carries her token and the kid’s name', made?.kidName === 'Caleb' && made?.relation === 'mom', JSON.stringify({ name: made?.kidName, relation: made?.relation }));
+  check('C2: the link counted one use', fake.cravings.get(cravingToken).uses === 1);
+  check('C2: the token left the address', !cr.url().includes('c='));
+  await shot(cr, 'C2-craving-card');
+
+  // No family word for her: her first name heads the page, and the kid's saved name is filled in.
+  const noRelation = fake.addCraving({ parentName: 'Meera', relation: null });
+  await cr.goto(`${BASE}/miss?c=${noRelation}`);
+  await cr.getByRole('heading', { name: /Meera wants to know/ }).waitFor();
+  check('C3: no relation: her name heads the page', (await cr.getByLabel('Your name').inputValue()) === 'Caleb');
+
+  for (const [what, href] of [
+    ['a malformed token', '/miss?c=nope'],
+    ['an unknown token', '/miss?c=AAAAAAAAAAAAAAAAAAAAAA'],
+  ]) {
+    await cr.goto(`${BASE}${href}`);
+    await cr.getByRole('status').filter({ hasText: 'isn’t working' }).waitFor();
+    check(`C4: ${what} falls back to the plain page`, /What do you miss\s*from home\?/.test(await cr.getByRole('heading', { level: 1 }).innerText()) && (await cr.getByText('Who makes it?').count()) === 1);
+  }
+  await shot(cr, 'C4-craving-off', { full: true });
+
+  // Stopped, or full, while the kid types: what they wrote stays, and the next try makes a plain card.
+  for (const [what, spoil] of [
+    ['stopped', (t) => (fake.cravings.get(t).revokedAt = Date.now())],
+    ['full', (t) => (fake.cravings.get(t).uses = 20)],
+  ]) {
+    const t = fake.addCraving();
+    await cr.goto(`${BASE}/miss?c=${t}`);
+    await cr.getByLabel('The dish you miss').fill('braised pork');
+    spoil(t);
+    await cr.getByRole('button', { name: 'Make my recipe' }).click();
+    await cr.getByRole('status').filter({ hasText: 'isn’t working' }).waitFor();
+    check(`C5: ${what} link: the kid’s dish stays`, (await cr.getByLabel('The dish you miss').inputValue()) === 'braised pork' && !cr.url().includes('c='));
+  }
+  const before = fake.cards.size;
+  await cr.getByRole('button', { name: 'Make my recipe' }).click();
+  await cr.waitForURL(/\?k=/);
+  check('C5: the next try makes a plain card', fake.cards.size === before + 1 && [...fake.cards.values()].at(-1).cravingToken === null);
+
+  // Hindi phone: the new words read in Hindi; her line stays as she wrote it.
+  const crHi = await phone('hi-IN');
+  await crHi.goto(`${BASE}/miss?c=${cravingToken}`);
+  await crHi.getByRole('heading', { name: /का सवाल/ }).waitFor();
+  check('C6: Hindi: her line as she wrote it', (await crHi.getByText(line).count()) === 1);
+  await shot(crHi, 'C6-craving-hindi', { full: true });
+
+  // ── Which contract the whole run used ───────────────────────────────────────────────────────
+  const newRoutes = fake.log.filter((l) => l.path === '/__storage' || l.path === '/dish/files/confirm' || l.path === '/dish/ask/answer/upload');
+  if (LINKS) check('Uploads: every file went by link', newRoutes.length > 0);
+  else check('Uploads: nothing called the new routes, and every file went up raw', newRoutes.length === 0 && fake.log.some((l) => l.path === '/dish/files' && /^image\//.test(l.type)), JSON.stringify(newRoutes.slice(0, 3)));
 } catch (e) {
   failures.push(`crashed: ${e.stack ?? e}`);
   console.log(`  ✗ crashed: ${e.message}`);

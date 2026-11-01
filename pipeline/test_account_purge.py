@@ -197,11 +197,13 @@ def test_purge_sql_is_one_guarded_statement_over_her_rows_only():
     assert sql.startswith("do $purge$") and sql.endswith("$purge$;")
     assert f"if exists (select 1 from public.profiles where id = '{P}'::uuid and family_id <> '{F}'::uuid) then" in sql
     # Nothing but her id, her family's id and SQL: no other value is ever put into it.
-    assert set(re.findall(r"'([^']*)'", sql)) == {P, F, "pair", "this profile is in another family"}
+    assert set(re.findall(r"'([^']*)'", sql)) == {
+        P, F, "pair", "this profile is in another family", "", ap.DELETED_NAME, "link:%", "link:claim:", "invite:",
+    }
     statements = [s.strip() for s in sql.split("begin\n", 1)[1].split("\n") if s.strip().startswith(("delete", "update"))]
     assert len(statements) == len(ap.ROWS)
     for s in statements:  # each one only touches rows tied to her
-        assert re.search(rf"where .*('{P}'::uuid|v_doomed|v_pairs)", s), s
+        assert re.search(rf"where .*('{P}'::uuid|v_doomed|v_pairs|v_signups)", s), s
     for expected in (
         "update public.messages set reply_to = null where reply_to = any(v_doomed);",
         f"delete from public.recipe_notes where answer_message_id = any(v_doomed) or answered_by = '{P}'::uuid;",
@@ -212,12 +214,17 @@ def test_purge_sql_is_one_guarded_statement_over_her_rows_only():
         f"update public.pending_sends set recipient_ids = array_remove(recipient_ids, '{P}'::uuid) "
         f"where '{P}'::uuid = any(recipient_ids);",
         f"update public.devices set profile_id = null, revoked_at = coalesce(revoked_at, now()) where profile_id = '{P}'::uuid;",
+        "update public.signups set name = 'Deleted', email = null where id = any(v_signups) and share_token like 'link:%' "
+        "and (name <> 'Deleted' or email is not null);",
+        "delete from public.signups where id = any(v_signups) and (share_token is null or share_token not like 'link:%');",
     ):
         assert expected in statements, expected
     order = [s.split(" where ")[0] for s in statements]
     assert order.index("update public.messages set reply_to = null") < order.index("delete from public.messages")
     assert order.index("delete from public.messages") < order.index("delete from public.threads")
     assert order[-1] == "delete from public.profiles"
+    # Worked out before anything goes: the match reads her profile and accounts.
+    assert sql.index("v_signups uuid[] :=") < sql.index("begin\n")
     assert f"v_pairs uuid[] := array(select id from public.threads where kind = 'pair' and '{P}'::uuid in (a_profile, b_profile));" in sql
     assert "storage." not in sql  # Storage files go through the Storage API
 
@@ -230,6 +237,7 @@ def test_plan_sql_only_reads():
         assert f"'{ap.row_label(table, change)}', (select count(*) from public.{table} where " in sql
     assert "'voice', array(select audio_path from public.messages" in sql and "hello_path" in sql
     assert "'photos', array(select photo_path from public.messages" in sql
+    assert "'signups_unsure', (select count(*) from public.signups s where " in sql
 
 
 # ---------- Supabase calls ----------
@@ -269,7 +277,9 @@ class FakeHttp:
 
 
 PLAN = {
-    "counts": {"messages": 3, "messages.reply_to": 1, "profiles": 1, "identities": 1, "threads": 0},
+    "counts": {"messages": 3, "messages.reply_to": 1, "profiles": 1, "identities": 1, "threads": 0,
+               "signups": 2, "signups.name": 1},
+    "signups_unsure": 1,
     "voice": [f"{F}/11111111-2222-3333-4444-555555555555.m4a", "../../secrets.txt"],
     "photos": [f"{F}/66666666-7777-8888-9999-000000000000.jpg"],
     "elsewhere": False,
@@ -302,7 +312,9 @@ def test_supabase_files_then_rows_with_the_key_kept_quiet():
     assert voice["headers"] == {"apikey": "SERVICE-ROLE-KEY", "Authorization": "Bearer SERVICE-ROLE-KEY"}
     assert http.calls[2][1] == f"https://{ap.SUPABASE_REF}.supabase.co/storage/v1/object/voice"
     assert purge["json"] == {"query": ap.purge_sql(P, F), "read_only": False}
-    assert counts == {"supabaseRows": 5, "supabaseUpdated": 1, "supabaseFiles": 2}
+    assert counts == {"supabaseRows": 7, "supabaseUpdated": 2, "supabaseFiles": 2,
+                      "signupsBlanked": 1, "signupsDeleted": 2, "signupsUnsure": 1}
+    assert "left 1 sign-up row(s)" in out
     assert "SERVICE-ROLE-KEY" not in out and "sk_mgmt_TOKEN" not in out
 
 
@@ -311,6 +323,18 @@ def test_supabase_dry_run_only_reads():
     counts, out = quiet(ap.purge_supabase, deletion(), ap.Supabase("sk_mgmt_TOKEN", http=http), True)
     assert [m for m, _, _ in http.calls] == ["POST"] and http.calls[0][2]["json"]["read_only"] is True
     assert counts["supabaseFiles"] == 2 and "would delete 2 file(s)" in out
+
+
+def test_signup_counts_are_numbers_only():
+    http = FakeHttp()
+    _, out = quiet(ap.purge_supabase, deletion(), ap.Supabase("sk_mgmt_TOKEN", http=http), True)
+    assert "signups 2" in out and "signups.name 1" in out and "@" not in out
+
+
+def test_signup_step_copes_with_a_plan_without_the_unsure_count():
+    plan = {k: v for k, v in PLAN.items() if k != "signups_unsure"}
+    counts, out = quiet(ap.purge_supabase, deletion(), ap.Supabase("sk_mgmt_TOKEN", http=FakeHttp(plan=plan)), True)
+    assert counts["signupsUnsure"] == 0 and "sign-up row" not in out
 
 
 def test_supabase_refuses_a_profile_in_another_family():
@@ -391,8 +415,8 @@ def test_each_deletion_reported_done_or_failed_without_secrets():
     assert convex.asked == [[], ["del1"], ["del1", "del2"]]
     (id1, ok1, err1, counts1), (id2, ok2, err2, counts2) = convex.reports
     assert (id1, ok1, err1) == ("del1", True, None)
-    assert counts1 == {"gcsObjects": 11, "localFolders": 0, "supabaseRows": 5, "supabaseUpdated": 1, "supabaseFiles": 2,
-                       "voiceClones": 1}
+    assert counts1 == {"gcsObjects": 11, "localFolders": 0, "supabaseRows": 7, "supabaseUpdated": 2, "supabaseFiles": 2,
+                       "signupsBlanked": 1, "signupsDeleted": 2, "signupsUnsure": 1, "voiceClones": 1}
     assert (id2, ok2, err2, counts2) == ("del2", True, None, {"gcsObjects": 0, "localFolders": 0})
     assert "jobs/her-upload-abc123.json" not in media.blobs
 

@@ -18,7 +18,7 @@ Step 5 of `docs/build/AWS-MIGRATION.md`, Oct 31, 2026. A draft on `aws-migration
 **Deferred: they need `people` and `families`, so they wait for the one-way sync (SCHEMA.md, M1):**
 - `POST /dish/craving/peek` answers the catch-all 404 for now. It needs her first name and relation.
 - `cravingToken` on `POST /dish/cards` answers 404. Making a plain card instead would quietly not reach her.
-- Claiming a card, `dishAsks.forMe` and `get`, the `cravings.*` functions, `sendVoiceRecipe`, `setFilmingDay`: the signed-in side.
+- Claiming a card, `dishAsks.forMe` and `get`. The signed-in `cravings.*` functions, `sendVoiceRecipe` and `setFilmingDay` are now built: `COMMUNITY-MIGRATION.md`.
 - `pushEvents.requested` and `answered`. `answered` does nothing without a `personId`, which is always null here.
 - `dish_asks.person_id`, `family_id` and `requested_of` stay null.
 
@@ -75,7 +75,7 @@ There's no session, so `fileKeys` can't apply. `fileId` is a capability, stored 
 | `dishModel.test.ts` | `convex/dishAskModel.test.ts`, all 20, against a stubbed fetch |
 | `scheduled.test.ts` | The queue consumer, repeats, one holder per clip (Ink held open, so the overlap is forced), a try's limits, the sweep's reach and speed, the budget under concurrency |
 | `storage.test.ts` | The real S3 adapter's signing, with no network |
-| `dishWebClient.test.ts` | The site's own `web/src/lib/dish/api.ts`, unchanged but for its base URL, over a local port: uploads and an answer end to end, with PUTs routed to the fake store, and a failed PUT reading as `busy` |
+| `dishWebClient.test.ts` | The site's own `web/src/lib/dish/api.ts` with `NEXT_PUBLIC_DISH_UPLOADS=links`, unchanged but for its base URL, over a local port: uploads and an answer end to end, with PUTs routed to the fake store, and a failed PUT reading as `busy` |
 | `dishCopies.test.ts` | Fails when Convex's recipe code, prompts or word list change, so a fix reaches both |
 
 **Carried over:** 41 of 41 from `dishAsks.test.ts` and 20 of 20 from `dishAskModel.test.ts`. 60 keep their exact titles, and the kid-deletes test's title now also names the message and `ip_key`.
@@ -87,7 +87,7 @@ There's no session, so `fileKeys` can't apply. `fileId` is a capability, stored 
 **Not carried, because they're deferred:** `convex/cravings.test.ts`, and any `pushEvents` or `account.test.ts` assertion on these cards.
 
 **The pages, in real Chrome:**
-- `web/scripts/qa/dish-e2e.mjs` runs the site with `next dev` against its fake server, which now has a PUT endpoint that checks the signed type and size. It also covers a failed PUT and a dead read link.
+- `web/scripts/qa/dish-e2e.mjs` runs the site with `next dev` against its fake server, in either mode. `--uploads links` is this contract: a PUT endpoint that checks the signed type and size, a failed PUT and a dead read link. The default is today's: raw files, read links that never expire, and a clip that won't load reloads nothing. The fake refuses the contract it isn't speaking, so a site built for one fails against the other.
 - `web/scripts/qa/dish-api-e2e.mjs` runs the whole flow against a real api: a kid's card from a made-up dish with a test photo, Save, Ask Mom, her answers on Chrome's fake audio device, Send, and the kid reopening to her version. It checks states rather than a model's sentences, and any failed request or CORS error fails it. Locally it runs on `api/test/localApi.ts`: the real routes and Postgres, fake models, and a stand-in for S3 that checks the signed type, size and expiry and answers CORS. That file is under `test/`, so it's never in the api's image.
 
 ## Long work
@@ -125,7 +125,9 @@ The load balancer's `idle_timeout` is 3700 s, and Fastify's default keep-alive i
 
 ## What `web/` needs (written, on `aws-migration` only)
 
-`web/` stays owned by App Store, web & builds, and `main`'s live contract is unchanged. Still to do at the switch: point `NEXT_PUBLIC_DISH_URL` here.
+`web/` stays owned by App Store, web & builds. All of this is behind **`NEXT_PUBLIC_DISH_UPLOADS=links`**: unset, the site sends raw files to Convex as it always has, and the build holds none of the code below (`web/next.config.ts` always gives it a value, so the compiler drops the rest, and `scripts/check-merge-safe.mjs` reads the bundle). At the switch, set it and `NEXT_PUBLIC_DISH_URL` in one build (`CUTOVER.md`, step 11).
+
+**The craving routes have to exist first.** `main`'s site now reads `/miss?c=` and calls `POST /dish/craving/peek`. Here that answers 404, which the site takes for a dead link, so a parent's link would quietly become a plain card. It's the "Deferred" list above, and the switch waits on it.
 
 - `web/src/lib/dish/api.ts`: `uploadFile` asks for the link with `blob.size`, PUTs to `uploadUrl` with `uploadHeaders`, then confirms. `sendAnswer` uses `/dish/ask/answer/upload`, a PUT, then `/dish/ask/answer`. Their callers don't change. A failed PUT, of any kind, reads as `busy`, as a 502 does. Limits: 15 s for each api call, and 30 s for a file's PUT or 45 s for a clip's. It reads the PUT's reply to the end, because Chrome reports a fetch with an unread body as cancelled.
 - **Preflights:** every api call stays `text/plain` with its token in the body, so none needs a preflight. That's why the two answer routes now take `askToken` in the body. With the header, each answer would have added two preflights, never cached, because `durationS` changes the URL. A PUT always needs one, from S3's CORS, so an answer costs 1 preflight, as the old raw route did.
@@ -143,6 +145,11 @@ The load balancer's `idle_timeout` is 3700 s, and Fastify's default keep-alive i
 
 ## Known limits
 
+- **When the api's 10 database connections all stay busy past 5 seconds, requests wait those 5 seconds and then answer a 500.** `/health` keeps
+  answering, so the load balancer keeps sending traffic, and `/ready` answers 503. Nothing sheds load or scales yet; autoscaling and 2+
+  tasks are on the launch list. A model cost is retried, up to about 15 s, and goes to Sentry as `DishSpendLost` if it's still lost, so the
+  budget can undercount only under long overload. A load test will show when this starts (SYSTEM-DESIGN).
+
 - **An upload link can be used again until it expires, even to put back a file just deleted or swap one just confirmed.** It's now 2 minutes, down from 15, and the type and size stay signed. A later `If-None-Match: *` on the signed PUT would stop overwrites, but it needs real S3 to test and doesn't stop re-creating a deleted file.
 - **The budget can overrun by whatever's in flight.** The check runs before a call and the cost lands after it. A card costs about $0.001, but a first-time page translation on Opus can reach about $0.30, so 100 at once could pass the cap by tens of dollars. A reservation would close this, but it needs a refund path for failed calls, and per-IP limits and the 3-an-hour per-card translation limit bound it today. **Recommendation:** add one only if `daily_spend` shows real overruns.
 - **The sweep reaches only the private bucket's anonymous uploads.** (`jobs.sweep` in `docs/build/JOBS-MIGRATION.md` adds `uploads` and the rest of `private`, in draft. `media` stays unreached.) `objectStore()` knows one bucket, so a row in `media` or `uploads` would be "deleted" from the wrong bucket while the file survived. The purge's `markFilesForDeletion` can still mark any key: until a sweep can address `files.bucket`, a backfilled file with no capability stays marked and isn't deleted. **This must be solved before a backfill or the account purge goes live.**
@@ -155,7 +162,7 @@ The load balancer's `idle_timeout` is 3700 s, and Fastify's default keep-alive i
 
 1. **Raw uploads: the rule stays.** The site's change is written on `aws-migration` and ships with the switch, owned by App Store, web & builds. The alternative, a temporary relay on the old routes, breaks the rule and holds up to 5 MB in memory per request.
 2. **A retried `POST /dish/cards`: left for now.** The first try's `kidToken` is stored only as a hash, so a retry can't get it back, and its files answer not-found, as today. A later fix: the site sends a client id that a retry repeats, and the kid token comes from a server secret and that id.
-3. **By person or by family: decide in the signed-in step, matching the person rule where there's an owner.** Convex's in-review check (PR #215, `convex/lib/fileOwner.ts`) goes by person. `api/src/files.ts` `requireOwnFiles` goes by family, and it doesn't refuse a file something already holds. Not changed here. My recommendation for that step: require `owner_person_id` to match when it's set and refuse a file already held, apart from a same-row retry. A family check alone lets one member attach another's upload, and then purging the second account deletes the first's message file.
+3. **By person or by family: done in the signed-in step (`COMMUNITY-MIGRATION.md`, `MESSAGES-MIGRATION.md`), by the person rule where there's an owner.** What was written here first: decide in the signed-in step, matching the person rule where there's an owner. Convex's in-review check (PR #215, `convex/lib/fileOwner.ts`) goes by person. `api/src/files.ts` `requireOwnFiles` goes by family, and it doesn't refuse a file something already holds. Not changed here. My recommendation for that step: require `owner_person_id` to match when it's set and refuse a file already held, apart from a same-row retry. A family check alone lets one member attach another's upload, and then purging the second account deletes the first's message file.
 4. **How long a read link lasts: left at 1 to 2 hours.** It may end sooner if the task's role credentials expire first; not measured. `TODO(caleb)` if a kid's page should hold audio longer.
 5. **Craving links on the site: a confirmed reading, raised with Caleb.** `MissApp` reads only `k`, so a `/miss?c=` link makes a plain card that doesn't reach the parent, if the app hands those links out.
 6. **A card with both people gone: left.** Kid deletes, then Mom deletes: the card stays with its guess and no owner, as on Convex. SCHEMA.md doesn't say. My recommendation is to delete it then. `TODO(caleb)`

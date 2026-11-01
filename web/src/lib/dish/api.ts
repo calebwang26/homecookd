@@ -1,9 +1,15 @@
-// The kid's and Mom's pages talk to the api's /dish/* routes (docs/build/DISH-MIGRATION.md). Every route is a
-// POST with the token in the JSON body, so tokens never land in a URL the server logs, and sent as text/plain,
-// so none needs a preflight. Files don't go through the api: it hands out a link, and the page PUTs to storage.
-// NEXT_PUBLIC_DISH_URL overrides the base (the local fake in scripts/qa/dish-fake-server.mjs).
+// The kid's and Mom's pages talk to the Convex /dish/* routes (docs/build/DISH-ASK-SPEC.md §4). Every
+// route is a POST with the token in the JSON body, or in the X-Dish-Token header for Mom's raw audio,
+// so tokens never land in a URL the server logs. NEXT_PUBLIC_DISH_URL overrides the base (the local
+// fake in scripts/qa/dish-fake-server.mjs).
+//
+// NEXT_PUBLIC_DISH_UPLOADS=links selects the new api's way of sending files (docs/build/DISH-MIGRATION.md): it
+// hands out a link, the page PUTs to storage, and every call stays text/plain with the token in the body. Unset,
+// the site sends raw files to Convex as it always has. The value is compiled in, so the switch goes with
+// NEXT_PUBLIC_DISH_URL in the same build (docs/build/CUTOVER.md). It's written out at each use, not kept in a
+// const, so a build without it holds none of the new flow's code (scripts/check-merge-safe.mjs reads the bundle).
 import { CONVEX_SITE_URL } from '@/lib/recipe-web/config';
-import type { Ask, AskItem, Card, Edit, FileKind, QuestionId, Relation, SendVia } from './types';
+import type { Ask, AskItem, Card, CravingPeek, Edit, FileKind, QuestionId, Relation, SendVia } from './types';
 
 export const DISH_URL = (process.env.NEXT_PUBLIC_DISH_URL || CONVEX_SITE_URL).trim().replace(/\/+$/, '');
 
@@ -88,22 +94,37 @@ async function put(link: Upload, blob: Blob, timeoutMs: number): Promise<void> {
 }
 
 export async function uploadFile(kind: FileKind, blob: Blob, contentType: string): Promise<string> {
-  const link = await post<Upload>(`/dish/files?kind=${kind}`, { contentType, size: blob.size });
-  await put(link, blob, PUT_FILE_MS);
-  return (await post<{ fileId: string }>('/dish/files/confirm', { fileId: link.fileId })).fileId;
+  if (process.env.NEXT_PUBLIC_DISH_UPLOADS === 'links') {
+    const link = await post<Upload>(`/dish/files?kind=${kind}`, { contentType, size: blob.size });
+    await put(link, blob, PUT_FILE_MS);
+    return (await post<{ fileId: string }>('/dish/files/confirm', { fileId: link.fileId })).fileId;
+  }
+  const out = await call<{ fileId: string }>(`/dish/files?kind=${kind}`, { headers: { 'Content-Type': contentType }, body: blob }, 30_000);
+  return out.fileId;
 }
 
 // ── the kid's card ─────────────────────────────────────────────────────────────────────────────
 
 export function createCard(input: {
   dish: string;
-  relation: Relation;
+  /** Left out with a craving link: the server asks the parent who sent it. */
+  relation?: Relation;
   kidName?: string | null;
   photos?: string[];
   voiceNote?: string;
+  cravingToken?: string;
 }): Promise<{ kidToken: string; card: Card }> {
   return post('/dish/cards', input, { timeoutMs: SLOW_MS });
 }
+
+// ── a parent's craving link (§8) ───────────────────────────────────────────────────────────────
+
+export function peekCraving(cravingToken: string): Promise<CravingPeek> {
+  return post('/dish/craving/peek', { cravingToken });
+}
+
+/** The link's own caps answer 429 `rate` like a per-IP limit does; only the words differ (§8, LINK_BUSY). */
+export const isLinkBusy = (e: DishError) => e.kind === 'rate' && e.message.includes('a lot of requests');
 
 export async function getCard(kidToken: string): Promise<Card> {
   return (await post<{ card: Card }>('/dish/cards/get', { kidToken })).card;
@@ -132,12 +153,21 @@ export async function peekAsk(askToken: string, lang?: string): Promise<Ask> {
   return (await post<{ ask: Ask }>('/dish/ask/peek', lang && lang !== 'en' ? { askToken, lang } : { askToken }, { timeoutMs: 30_000 })).ask;
 }
 
-/** One answer: her clip goes to storage, then the api takes it; `lang` is the language she speaks (for Ink). */
+/** One answer, raw audio (with the switch: her clip goes to storage, then the api takes it); `lang` is the language she speaks (for Ink). */
 export async function sendAnswer(askToken: string, q: QuestionId, lang: string, durationS: number, clip: Blob, contentType: string): Promise<Ask> {
   const qs = new URLSearchParams({ q, lang, durationS: String(Math.round(durationS * 10) / 10) });
-  const link = await post<Upload>(`/dish/ask/answer/upload?${qs}`, { askToken, contentType, size: clip.size });
-  await put(link, clip, PUT_CLIP_MS);
-  return (await post<{ ask: Ask }>(`/dish/ask/answer?${qs}`, { askToken, fileId: link.fileId })).ask;
+  if (process.env.NEXT_PUBLIC_DISH_UPLOADS === 'links') {
+    const link = await post<Upload>(`/dish/ask/answer/upload?${qs}`, { askToken, contentType, size: clip.size });
+    await put(link, clip, PUT_CLIP_MS);
+    return (await post<{ ask: Ask }>(`/dish/ask/answer?${qs}`, { askToken, fileId: link.fileId })).ask;
+  }
+  return (
+    await call<{ ask: Ask }>(
+      `/dish/ask/answer?${qs}`,
+      { headers: { 'Content-Type': contentType, 'X-Dish-Token': askToken }, body: clip },
+      45_000,
+    )
+  ).ask;
 }
 
 export async function finishAsk(askToken: string): Promise<Ask> {

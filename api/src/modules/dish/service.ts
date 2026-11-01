@@ -37,6 +37,9 @@ import {
 } from "./values.js";
 
 /** The Ask Mom text a card starts with. */
+/** What a push about a card needs (messages/tasks.ts): read-only, and the only thing another module asks of a card. */
+export const cardForPush = (askId: string) => data.cardById(db(), askId);
+
 export const defaultMessage = (relation: Relation, dish: string) =>
   relation === "none" ? "" : `${RELATION_LABEL[relation]}, how do you make your ${dish}? I'm trying to make it here.`;
 
@@ -62,7 +65,7 @@ async function byAsk(q: Queryable, hash: string, lock = false): Promise<CardRow>
 }
 
 /** Starts a merge after the reply, in the same transaction as what made it due. The consumer's claim makes a repeat harmless. */
-async function mergeLater(q: Queryable, s: State, trace: Trace): Promise<void> {
+export async function mergeLater(q: Queryable, s: State, trace: Trace): Promise<void> {
   if (due(s)) await enqueue(q, { queue: "scheduled", payload: { task: "dish.merge", askId: s.row.id }, requestId: trace.requestId });
 }
 

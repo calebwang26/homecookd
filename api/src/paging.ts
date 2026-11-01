@@ -28,7 +28,7 @@ const MAX_YEAR = 275_760;
 export type After = { at: string; id: string };
 
 /** A real moment Postgres will take, so a forged cursor is our 400 and not its error. No row's time falls outside these years. */
-function isTime(at: string): boolean {
+export function isTime(at: string): boolean {
   const m = TIME.exec(at);
   if (!m) return false;
   const [year, month, day, hour, minute, second, zoneH, zoneM] = [m[1], m[2], m[3], m[4], m[5], m[6], m[8], m[9] ?? "0"].map(Number);

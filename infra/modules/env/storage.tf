@@ -80,6 +80,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "media" {
     filter {}
     expiration { expired_object_delete_marker = true }
     noncurrent_version_expiration { noncurrent_days = 28 }
+    # An abandoned upload holds family bytes that no listing or purge can see.
+    abort_incomplete_multipart_upload { days_after_initiation = 7 }
   }
 }
 
@@ -121,8 +123,22 @@ resource "aws_cloudfront_origin_access_control" "media" {
   signing_protocol                  = "sigv4"
 }
 
-data "aws_cloudfront_cache_policy" "optimized" {
-  name = "Managed-CachingOptimized"
+# Like Managed-CachingOptimized, with publish.py's ?v= in the cache key, or a replaced file stays stale until it expires.
+resource "aws_cloudfront_cache_policy" "media" {
+  name        = "${local.name}-media"
+  default_ttl = 86400
+  max_ttl     = 31536000
+  min_ttl     = 1
+  parameters_in_cache_key_and_forwarded_to_origin {
+    enable_accept_encoding_brotli = true
+    enable_accept_encoding_gzip   = true
+    cookies_config { cookie_behavior = "none" }
+    headers_config { header_behavior = "none" }
+    query_strings_config {
+      query_string_behavior = "whitelist"
+      query_strings { items = ["v"] }
+    }
+  }
 }
 
 data "aws_cloudfront_origin_request_policy" "cors" {
@@ -146,7 +162,7 @@ resource "aws_cloudfront_distribution" "media" {
     viewer_protocol_policy   = "redirect-to-https"
     allowed_methods          = ["GET", "HEAD", "OPTIONS"]
     cached_methods           = ["GET", "HEAD"]
-    cache_policy_id          = data.aws_cloudfront_cache_policy.optimized.id
+    cache_policy_id          = aws_cloudfront_cache_policy.media.id
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.cors.id
     compress                 = true
   }

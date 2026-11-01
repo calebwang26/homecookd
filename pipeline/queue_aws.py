@@ -196,7 +196,13 @@ class S3Storage:
 
     def _delete(self, bucket: str, keys: list[str]) -> int:
         for i in range(0, len(keys), 1000):
-            self.client.delete_objects(Bucket=bucket, Delete={"Objects": [{"Key": k} for k in keys[i:i + 1000]], "Quiet": True})
+            batch = keys[i:i + 1000]
+            answer = self.client.delete_objects(Bucket=bucket, Delete={"Objects": [{"Key": k} for k in batch], "Quiet": True})
+            # S3 answers 200 even when some keys failed, and footage someone stopped would quietly stay. No keys in the error:
+            # they name a family.
+            failed = (answer or {}).get("Errors") or []
+            if failed:
+                raise RuntimeError(f"S3 refused {len(failed)} of {len(batch)} deletes: {failed[0].get('Code')}")
         return len(keys)
 
     def media_bucket(self, recipe_id: str, prefix: str) -> S3Bucket:

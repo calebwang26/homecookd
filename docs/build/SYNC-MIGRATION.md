@@ -1,8 +1,8 @@
 # The temporary sync into Postgres
 
 **Oct 31, 2026. Off, and has never run against anything real.** This is SCHEMA.md's M1: a one-way copy of `families`, `people` and
-`recipes` from Convex and Supabase into Postgres, so signed-in areas can move, with their foreign keys on, before accounts do. It comes
-off before `aws-migration` reaches `main` (AWS-MIGRATION, "Cutover list").
+`recipes` from Convex and Supabase into Postgres, so signed-in areas can move, with their foreign keys on, before accounts do. It reaches
+`main` with `aws-migration`, switched off (with `SYNC_READ_SECRET` unset its routes refuse everyone), and comes off once every area has moved (`CUTOVER.md`, step 14).
 
 All of it lives in `api/src/modules/sync/`, `api/migrations/012_sync.sql`, one line of `api/src/scheduled.ts`, and on Convex's side
 `convex/syncRead.ts` and `convex/lib/syncRoutes.ts`.
@@ -28,19 +28,21 @@ Convex until someone gives it a column and adds it to the list, and a test fails
 
 | Table | Copied (the Convex field) | Dropped at the source |
 |---|---|---|
-| `people` | `_id`, `_creationTime`, `familyId`, `supabaseProfileId`, `name`, `role`, `voiceClone`, `language`, `relation`, `approx`, `campus`, `deletedAt` | Nothing today: each has a column |
-| `families` | `_id`, `_creationTime`, `name`, `supabaseFamilyId`, `publicName`, `mossSync` | Nothing today |
+| `people` | `_id`, `_creationTime`, `familyId`, `supabaseProfileId`, `name`, `role`, `voiceClone.consentedAt`, `language`, `relation`, `approx`, `campus`, `deletedAt` | `voiceClone.cartesiaVoiceId` |
+| `families` | `_id`, `_creationTime`, `name`, `supabaseFamilyId`, `publicName`, `mossSync` | Nothing in Convex; family codes stay in Supabase |
 | `recipes` | `_id`, `_creationTime`, `familyId`, `cookId`, `title`, `status`, `libraryId`, `recipeJsonUrl`, `coverUrl`, `steps`, `memories`, `memoriesOptIn`, `mossIndexedAt`, `language`, `sharedAt`, `storyCard`, `hiddenAt`, `addedIngredients` | Nothing today |
 | `accountDeletions` | `_id`, `_creationTime`, `personId`, `familyId`, `supabaseProfileId`, `requestedAt`, `recipeIds` | `jobIds`, `uploadPaths`, `mediaUrls`, `voiceCloneId` and the purge's progress |
 
 Dropped later, at the merge: Convex's `name` and `role` where Supabase has its own, and the full URLs in `recipeJsonUrl` and `coverUrl`, which become keys.
-Nothing in `api/` reads `people.cartesia_voice_id` while the outside purge stays with Convex, but it has a column, so it's copied.
+**A cloned voice's id stays in Convex,** like family codes in Supabase: nothing here reads it, and it shouldn't sit in a second place. Her consent is a separate
+fact, so `consentedAt` is copied, to `voice_clone_consented_at`. `people.cartesia_voice_id` stays null until the accounts backfill, and the reconcile doesn't compare
+it. Deleting the voice doesn't depend on the copy: `accountDeletions.voiceCloneId` still takes it to `pipeline/account_purge.py`, and that field isn't sent here either.
 
 **Reading Supabase.** PostgREST, for the rows on the page, with a fixed column list. Family codes aren't in the list, so they never leave
 Supabase. A page where Supabase fails stops and retries, because a person with only Convex's half would be a wrong row.
 
 **Merging (SCHEMA.md section 2).** A row keeps its Convex id, and its uuid stays in `supabase_id`. Name, role, email, tz and consent come from
-Supabase; language, voice clone and place from Convex; `relation` from Convex, else Supabase. When the two name different families, Supabase
+Supabase; language, voice clone consent and place from Convex; `relation` from Convex, else Supabase. When the two name different families, Supabase
 wins, if that family has a copy. Otherwise Convex's stays, and the reconcile counts it.
 
 **Not copied:** rows only Supabase has. They're counted as `supabase_only`. Convex's areas can't see them today, and every session belongs to

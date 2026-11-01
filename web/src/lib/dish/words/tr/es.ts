@@ -45,6 +45,9 @@ const words: Translation = {
   'k1.failed': 'No funcionó. Inténtalo de nuevo.',
   'k1.rate': 'Demasiados intentos. Espera un minuto y vuelve a intentarlo.',
   'k1.empty': 'Primero dinos el plato.',
+  'k1.cravingTitle': '{name} quiere saber *qué extrañas*',
+  'k1.linkOff': 'Este enlace no funciona. Pide uno nuevo o prepara tu receta aquí.',
+  'k1.needName': 'Primero dinos tu nombre.',
   'k5.title': 'homecookd ya hizo hoy todas las recetas que puede.',
   'k5.line': 'Vuelve a intentarlo mañana.',
 

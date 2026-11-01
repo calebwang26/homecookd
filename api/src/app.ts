@@ -6,7 +6,12 @@ import * as Sentry from "@sentry/node";
 import { db } from "./db.js";
 import { ApiError } from "./errors.js";
 import { fieldPaths, fileGuard, lastName, looksLikeFileKey } from "./files.js";
+import { inviteRoutes } from "./modules/community/inviteRoutes.js";
+import { communityRoutes } from "./modules/community/routes.js";
+import { cravingRoutes } from "./modules/dish/cravingRoutes.js";
 import { dishRoutes } from "./modules/dish/routes.js";
+import { liveRoutes } from "./modules/live/routes.js";
+import { messageRoutes } from "./modules/messages/routes.js";
 import { peopleRoutes } from "./modules/people/routes.js";
 import { jobRoutes } from "./modules/jobs/routes.js";
 import { recipeRoutes } from "./modules/recipes/routes.js";
@@ -21,6 +26,7 @@ declare module "fastify" {
   interface FastifyInstance {
     fileKeyRoutes: { method: string; url: string; fields: string[] }[];
     notFileKeyRoutes: { method: string; url: string; fields: string[] }[]; // what said it isn't an S3 key: each needs its own check and test
+    allRoutes: { method: string; url: string }[]; // every route, for routeCoverage.test.ts
   }
 }
 
@@ -60,8 +66,10 @@ function holdsNul(root: unknown): boolean {
 function guardFileKeys(app: FastifyInstance): void {
   app.decorate("fileKeyRoutes", []);
   app.decorate("notFileKeyRoutes", []);
+  app.decorate("allRoutes", []);
   app.addHook("onRoute", (route) => {
     const methods = [route.method].flat();
+    for (const method of methods) app.allRoutes.push({ method, url: route.url });
     const schema = route.schema as { body?: object; querystring?: object; params?: object } | undefined;
     if (methods.some((m) => WRITES.has(m)) && !schema?.body && !route.config?.noBody) {
       throw new Error(`${route.url}: a write route needs a body schema, or config.noBody`);
@@ -92,7 +100,8 @@ function guardFileKeys(app: FastifyInstance): void {
   });
 }
 
-export function buildApp(options: { logger?: object | boolean; routes?: (app: FastifyInstance) => void } = {}): FastifyInstance {
+/** `logStream`: production's logging, written somewhere a test can read. `logger` replaces it entirely. */
+export function buildApp(options: { logger?: object | boolean; logStream?: NodeJS.WritableStream; routes?: (app: FastifyInstance) => void } = {}): FastifyInstance {
   const app = Fastify({
     // Only addresses inside our network count as proxies (the load balancer), so a caller can't set req.ip with a header.
     trustProxy: "10.0.0.0/8",
@@ -101,6 +110,7 @@ export function buildApp(options: { logger?: object | boolean; routes?: (app: Fa
     requestTimeout: REQUEST_TIMEOUT_MS,
     logger: options.logger ?? {
       level: process.env.LOG_LEVEL ?? "info",
+      ...(options.logStream ? { stream: options.logStream } : {}),
       serializers: {
         req: (req) => ({ method: req.method, path: pathOnly(req.url) }),
         res: (res) => ({ status: res.statusCode }),
@@ -114,6 +124,14 @@ export function buildApp(options: { logger?: object | boolean; routes?: (app: Fa
 
   app.addHook("onSend", async (req, reply) => {
     reply.header("x-request-id", req.id);
+  });
+
+  // Stopping closes the connections idle at that moment. One that finishes a request a moment later would then stay open for
+  // KEEP_ALIVE_MS and hold the stop up until ECS kills the task, so keep closing them until it's done.
+  app.addHook("preClose", async () => {
+    const sweep = setInterval(() => app.server.closeIdleConnections(), 100);
+    sweep.unref();
+    app.server.once("close", () => clearInterval(sweep));
   });
 
   guardFileKeys(app);
@@ -158,7 +176,12 @@ export function buildApp(options: { logger?: object | boolean; routes?: (app: Fa
   app.register(recipeRoutes);
   app.register(recordingRoutes);
   app.register(peopleRoutes);
+  app.register(messageRoutes);
   app.register(dishRoutes, { prefix: "/dish" });
+  app.register(liveRoutes);
+  app.register(communityRoutes);
+  app.register(cravingRoutes);
+  app.register(inviteRoutes, { prefix: "/invite" });
   options.routes?.(app);
 
   return app;

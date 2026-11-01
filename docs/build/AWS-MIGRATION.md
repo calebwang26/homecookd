@@ -24,6 +24,12 @@ updated. `main` keeps changing `convex/` meanwhile, so the branch merges `main` 
 
 **The goal is a backend built to `docs/build/SYSTEM-DESIGN.md`, not only a move of hosting.**
 
+### Caleb's two conditions on merging
+
+In his words: "1. we're building the migration so that RIGHT when our app gets approved, one merge of a branch into main will finish the migration. 2. everything that effects the app store application isn't getting deployed/merged into main."
+
+The second is a hard rule. The first can't be literal, because a merge can't move data, DNS, phones or production. So the merge changes nothing live, every behavior sits behind a switch that defaults to today's, and `docs/build/CUTOVER.md` lists the steps after it. `scripts/check-merge-safe.mjs` checks the merge on every PR.
+
 **Before the rewrite starts:** staging fully tested, a real video job measured, and Caleb's OK on creating production,
 lifting the Supabase freeze, and any copy of real data into a test database. **Before any area switches over:** Convex backups
 running and a restore proven (phase 0).
@@ -59,6 +65,10 @@ and anything changing what build 6 calls, needs his separate OK.
 
 A restore drill, a deliberately killed service, a load test, and these gaps closed: 2+ api tasks, autoscaling, HTTPS, and a
 limited database login.
+
+**A production gate: overload (Master Agent, Nov 1).** Today, with all connections busy, a request waits 5 s then answers a 500. Before
+production: a bounded wait queue that fails fast with a 503 and `retry-after`; the load balancer's health check stays as it is; an alarm on
+pool waits; autoscaling on request load. **The proof is a load test that exercises pool exhaustion.**
 
 ### Not building
 
@@ -101,23 +111,48 @@ reads, S3's CORS, and SQS, on fake models.
 **Still to prove:** real Claude and Ink in a test window (`infra/README.md`); the deployed site with an HTTPS api; Safari and a real iPhone
 recording.
 
+## Open: how long raw footage is kept (`TODO(caleb)`)
+
+**Live GCS `uploads` deletes after 14 days. S3 `uploads` has no such rule, and `SYSTEM-DESIGN.md` says "keep the raw input".** It's a
+retention decision that also changes what `/privacy` covers, so it's Caleb's, and nothing has chosen it. **The queue worker assumes the raw
+upload is still there for a re-run after a crash, or for a re-run with a better model:** after a 14-day rule, a job re-run later fails
+visibly at the upload listing, and past recipes can't be rebuilt from source. Keeping it costs storage and holds more family footage.
+Until he decides, staging has no rule, and no real footage is on it.
+
 ## Before real data
 
 Before any backfill copies real rows into Postgres:
 
 - Seal `craving_links.token`, `dinners.invite_token` and `shares.token` (SCHEMA.md, M6).
+- Caleb decides how long raw footage is kept (above).
 - Count violations of every new uniqueness rule, CHECK and domain (SCHEMA.md, section 7).
 - The sweep reaches every bucket and row the purge can mark. `dish.sweep` reaches only anonymous private uploads, and the jobs draft's `jobs.sweep` adds `uploads` and the rest of `private` (`docs/build/JOBS-MIGRATION.md`), but `media` isn't reached, so a backfilled file there
   would stay marked and undeleted (DISH-MIGRATION.md, known limits).
+- Count doubled reactions and Convex messages sent to oneself, which the new schema refuses (MESSAGES-MIGRATION.md, "Before real data").
 
 ## Cutover list
 
-Before `aws-migration` reaches `main`:
+The steps, in order, with who runs each and the way back: `docs/build/CUTOVER.md`. The two things this list used to ask for before `main` changed on Nov 1:
+the sync stays on the branch and goes to `main` switched off, because the steps after the merge need it, and it comes off at the end. The laptop's worker no
+longer needs `sentry-sdk`.
 
-- Remove the temporary one-way sync of `families`, `people` and `recipes` (SCHEMA.md, M1).
-- Install `sentry-sdk` on the laptop's worker, or `import observability` crashes it.
+Before production (CUTOVER.md, step 6):
+
 - Give the worker and api a limited database login in place of the master one.
 - Pin the workflows' actions to commit SHAs, and add a checksum for the downloaded gitleaks.
+
+Before any new-host link exists (CUTOVER.md, step 10):
+
+- `supabase/functions/api/index.ts:931` must accept the new media host: it refuses an `audio_url` not on `BUCKET_URL`, so "Hear
+  Dad" from a rewritten recipe fails with a 400. Needs a Supabase deploy, so Caleb's OK.
+- `pipeline/account_purge.py`'s `media_objects` must not silently skip a host that isn't GCS, ideally failing loudly on an unknown one,
+  before any new-host link exists. Otherwise a deleted account's file on S3 stays.
+- **Community's switch gates (`COMMUNITY-MIGRATION.md`).** Apple reviews report and block, so Community doesn't switch until each of these exists and is tested:
+  - The team can act on a report: `reviewReport` has no route, script or task.
+  - `community.remind_open` has its daily schedule. Today nothing runs it, so a report left open would never remind anyone.
+  - The app adapter. It doesn't exist yet, and nothing has called these routes.
+
+Removing the temporary one-way sync of `families`, `people` and `recipes` (SCHEMA.md, M1) is the end of the list: CUTOVER.md, step 14.
 
 ## Priorities
 
