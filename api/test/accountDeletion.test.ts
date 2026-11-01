@@ -130,6 +130,9 @@ async function kitchen(options: { events?: number } = {}) {
   const video = `glasses/${uniq("video")}.mp4`;
   const plate = FILE("plate");
   const frame = FILE("frame");
+  // Filmed by someone else, for her.
+  const forHerRecording = await id(`insert into recordings (family_id, cook_id, source, status, dish, for_kid_ids) values ($1, $2, 'phone', 'ended', 'KEEP-for her', $3) returning id`, [f, aai, [R, shreya]]);
+  const forHerJob = await id(`insert into jobs (family_id, cook_id, upload_key, source, stage, for_kid_ids) values ($1, $2, $3, 'phone', 'done', $4) returning id`, [f, aai, `${uniq("for-her")}/`, [R, shreya]]);
   const recording = await id(`insert into recordings (family_id, cook_id, source, status, dish, video_key, cover_key) values ($1, $2, 'glasses', 'recording', 'SECRET-R dish', $3, $4) returning id`, [
     f,
     R,
@@ -267,7 +270,7 @@ async function kitchen(options: { events?: number } = {}) {
   await q(`insert into files (key, bucket, kind, family_id, owner_person_id, uploaded_at) values ($1, 'private', 'voice', $2, $3, now())`, [shreyaVoice, f, shreya]);
 
   return {
-    f, z, R, aai, shreya, mei, serene, email, appleSub, pawars, zhangs, phone, phone2, sessionOnPhone, oldSession, shreyaPhone, poha, upma, seeded, thalipeeth, mooncakes, jobDone, jobRunning,
+    forHerRecording, forHerJob, f, z, R, aai, shreya, mei, serene, email, appleSub, pawars, zhangs, phone, phone2, sessionOnPhone, oldSession, shreyaPhone, poha, upma, seeded, thalipeeth, mooncakes, jobDone, jobRunning,
     uploadA, uploadB, prefix, video, plate, frame, recording, circle, pair, rVoice, rPhoto, shreyaVoice, rMessage, shreyaReply, shreyaMessage, noteAudio, noteAsked, onPoha, onThali, askedByHer,
     pohaQuestion, aaiQuestion, herQuestion, shreyaOnPoha, shreyaOnLibrary, hello, sentToHer, sentByHer, craving, herCard, askedOfHer, answerClip, herDinner, theirPohaNight, theirOwn,
     inviteNaming, familyInvite, inviteOther, link, askToBeHer, decidedByHer, linkSignup, joinSignup, oldSignup, eventOfShreya, owned, askingPhone,
@@ -388,6 +391,10 @@ async function assertPurged(k: Kitchen) {
     assert.deepEqual([row2.person_id, row2.label], [null, null]);
     assert.ok(row2.revoked_at);
   }
+
+  // Someone else's filming for her stays, without her.
+  assert.deepEqual((await row("recordings", "id = $1", [k.forHerRecording])).for_kid_ids, [k.shreya]);
+  assert.deepEqual((await row("jobs", "id = $1", [k.forHerJob])).for_kid_ids, [k.shreya]);
 
   // What the outside purge will need.
   assert.deepEqual([...d.upload_keys].sort(), [k.uploadA, k.uploadB].sort());
@@ -958,6 +965,49 @@ test("a phone with no person of its own gets no session, so it can't delete anyo
   assert.equal(await count("sessions", "person_id = $1", [grandma]), 0);
   assert.equal((await row("people", "id = $1", [grandma])).deleted_at, null);
   assert.equal(await count("devices", "person_id = $1", [grandma]), 0);
+});
+
+test("a plate photo the sweep has taken isn't reported forever: the deletion can finish", { skip }, async () => {
+  const f = await makeFamily();
+  const cook = await makePerson(f.id, "Cook");
+  await makePerson(f.id, "Someone else");
+  const plate = FILE("plate");
+  await q(`insert into recordings (family_id, cook_id, source, status, cover_key) values ($1, $2, 'phone', 'ended', $3)`, [f.id, cook, plate]);
+  const did = await purge(cook);
+  assert.ok((await deletionOf(cook)).media_keys.includes(plate));
+  assert.equal(await purgeOutside(did), "retry", "still there");
+  const store = fakeStore();
+  useObjectStore(store);
+  try {
+    await sweep({ log: silent });
+  } finally {
+    useObjectStore(undefined);
+  }
+  assert.ok(store.removed.includes(plate));
+  assert.equal(await purgeOutside(did), "done");
+});
+
+test("with the recipe copy read-only, a purge doesn't finish while the sync still holds her recipes", { skip }, async () => {
+  const f = await makeFamily();
+  const cook = await makePerson(f.id, "Cook");
+  await makePerson(f.id, "Someone else");
+  const recipe = await id(`insert into recipes (family_id, cook_id, title, status) values ($1, $2, 'SECRET-held by the sync', 'ready') returning id`, [f.id, cook]);
+  const copy = await one(`select read_only, moved_at from sync_copies where table_name = 'recipes'`);
+  await q(`insert into sync_copies (table_name, read_only) values ('recipes', true) on conflict (table_name) do update set read_only = true, moved_at = null`);
+  try {
+    const did = await startDeletion(cook, "sync");
+    assert.equal(await count("recipes", "id = $1", [recipe]), 1, "the sync owns them");
+    await assert.rejects(runPurge(did!, {}), /recipes are still here/);
+    assert.equal((await deletionOf(cook)).purged_at, null);
+    await tx(async (c) => {
+      await c.query(`select set_config('homecookd.sync_writer', 'on', true)`);
+      await c.query(`delete from recipes where id = $1`, [recipe]);
+    });
+    assert.equal(await runPurge(did!, {}), "done");
+  } finally {
+    if (copy) await q(`update sync_copies set read_only = $1, moved_at = $2 where table_name = 'recipes'`, [copy.read_only, copy.moved_at]);
+    else await q(`delete from sync_copies where table_name = 'recipes'`);
+  }
 });
 
 test("a phone from another family can't start a session as someone here", { skip }, async () => {

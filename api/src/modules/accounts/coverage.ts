@@ -40,7 +40,7 @@ export const TABLES: Record<string, { owner: Owner; does: string }> = {
   thread_reads: { owner: "messages", does: "theirs, and any on their pairs" },
   messages: { owner: "messages", does: "what they sent goes; what others sent stays (C1)" },
   recipe_notes: { owner: "messages", does: "answered by them: deleted. Asked by them: asked_by and question null" },
-  questions: { owner: "messages", does: "they asked, or on their recipes: deleted. Their answer to another's: taken off" },
+  questions: { owner: "messages", does: "they asked, or on their recipes: deleted, with the answer's audio marked, even another family member's, because a question can't outlive its recipe. Their answer to another's: taken off" },
   shares: { owner: "messages", does: "sender null" },
   favorites: { owner: "messages", does: "deleted" },
   recipe_events: { owner: "messages", does: "theirs deleted; cook_id null where it names them" },

@@ -218,6 +218,9 @@ export async function runPurge(deletionId: string, trace: Pick<Trace, "requestId
     await tx(async (c) => {
       const d = await lockedDeletion(c, deletionId);
       if (!d || d.purged_at) return;
+      // With the recipe copy read-only the sync takes them. It isn't finished while they're here, so this stops, and the schedule starts it again.
+      const { rows: held } = await c.query(`select 1 from recipes where cook_id = $1 limit 1`, [d.person_id]);
+      if (held.length) throw new Error("this person's recipes are still here");
       await c.query(`update account_deletions set purged_at = now() where id = $1`, [deletionId]);
       if (d.recipe_ids.length) await requestMossSync(c, d.family_id); // again at the end, for a recipe a worker published after the start
       await enqueue(c, { queue: "scheduled", payload: { task: "accounts.outside", deletionId }, requestId: trace.requestId });
@@ -304,10 +307,15 @@ export async function purgeOutside(deletionId: string): Promise<"done" | "retry"
     `select count(*)::int as n from files where (purge_deletion_id = $1 or owner_person_id = $2) and deleted_at is null`,
     [d.id, d.person_id],
   );
+  // A key the sweep has already taken isn't left to report (a plate photo is noted here and also in the ledger). The rest can't be seen yet.
+  const media = await db().query(
+    `select count(*)::int as n from unnest($1::text[]) as k where not exists (select 1 from files f where f.key = k and f.deleted_at is not null)`,
+    [d.media_keys],
+  );
   const notReached: [string, number][] = [
     ["files marked and not deleted", left.rows[0].n],
     ["upload folders", d.upload_keys.length],
-    ["media files", d.media_keys.length],
+    ["media files", media.rows[0].n],
     ["recipe folders", d.media_prefixes.length],
     ["GCS links", d.media_urls_legacy.length],
   ];
