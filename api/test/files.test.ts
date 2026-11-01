@@ -165,10 +165,12 @@ test("attaching a file", { skip: !hasDatabase }, async (t) => {
 test("every route in the real app with a key field refuses another family's", { skip: !hasDatabase }, async () => {
   const app = buildApp({ logger: false });
   await app.ready();
-  // Empty today: it fills as signed-in routes are added, and the loop above is what each must pass. The anonymous routes have no session,
-  // so they say notFileKeys instead, and dishFiles.test.ts's last test holds them to their own check, field by field.
-  assert.deepEqual(app.fileKeyRoutes, []);
-  assert.ok(app.notFileKeyRoutes.every((route) => route.url.startsWith("/dish/")), "only the anonymous routes may say a file field isn't a key");
+  // Each signed-in route with a key field runs the refusals above, one by one, in messagesFiles.test.ts (which fails when one isn't listed). The anonymous routes have
+  // no session, so they say notFileKeys instead, and dishFiles.test.ts's last test holds them to their own check, field by field.
+  assert.ok(app.fileKeyRoutes.length > 0);
+  assert.ok(app.fileKeyRoutes.every((route) => route.url.startsWith("/v1/")));
+  const ownChecks = new Set(["/v1/uploads/confirm", "/v1/threads/:id/messages"]); // not uploaded yet, and public library media: messagesFiles.test.ts tests each
+  assert.ok(app.notFileKeyRoutes.every((route) => route.url.startsWith("/dish/") || ownChecks.has(route.url)), "only these may say a file field isn't a key");
 });
 
 after(async () => {
