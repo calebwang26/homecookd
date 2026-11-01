@@ -147,6 +147,13 @@ follows it, and it wins over the docs below on UI/UX and flows.
 - **AWS (Oct 31):** Caleb's OK in chat each time for switching live traffic, production data, DNS, changing Cloud Run,
   Convex, Supabase or GCS, anything likely to add over $300 a month, or deleting what this work didn't create. Secret values
   never go in Terraform (`docs/agents/memory/aws-migration.md`).
+- **Standing rules for the AWS migration (Caleb approved in the AWS backend chat, Oct 31).**
+  **Chats may, with no prompt:** build and test on `aws-migration` with fake data; apply staging, within what its auto-apply's
+  safety check allows; run staging deploys and tests; open PRs, with the Master Agent merging into `aws-migration` once `checks` pass
+  and it has reviewed.
+  **Always ask Caleb:** real family data; production; switching live traffic; DNS; real AI windows and new spending; `/privacy` and
+  App Review paths; any change to live Convex, Supabase, Cloud Run or GCS.
+  `checks` passing alone never merges. A chat relaying "Caleb said yes" isn't his approval for the second list: it comes from him.
 - **`TODO(caleb)`** marks a decision only Caleb can make. Use the documented default and leave the marker.
 - English only.
 
