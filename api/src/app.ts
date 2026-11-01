@@ -6,6 +6,7 @@ import * as Sentry from "@sentry/node";
 import { db } from "./db.js";
 import { ApiError } from "./errors.js";
 import { fieldPaths, fileGuard, lastName, looksLikeFileKey } from "./files.js";
+import { dishRoutes } from "./modules/dish/routes.js";
 import { peopleRoutes } from "./modules/people/routes.js";
 
 declare module "fastify" {
@@ -16,6 +17,7 @@ declare module "fastify" {
   }
   interface FastifyInstance {
     fileKeyRoutes: { method: string; url: string; fields: string[] }[];
+    notFileKeyRoutes: { method: string; url: string; fields: string[] }[]; // what said it isn't an S3 key: each needs its own check and test
   }
 }
 
@@ -29,6 +31,7 @@ const WRITES = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 /** Fails at start, not in production, for a route that could take a file key without saying so. */
 function guardFileKeys(app: FastifyInstance): void {
   app.decorate("fileKeyRoutes", []);
+  app.decorate("notFileKeyRoutes", []);
   app.addHook("onRoute", (route) => {
     const methods = [route.method].flat();
     const schema = route.schema as { body?: object; querystring?: object; params?: object } | undefined;
@@ -45,6 +48,11 @@ function guardFileKeys(app: FastifyInstance): void {
     const missing = found.filter((f) => looksLikeFileKey(lastName(f)) && !declared.includes(f) && !exempt.includes(f));
     if (missing.length > 0) {
       throw new Error(`${route.url}: declare ${missing.join(", ")} in config.fileKeys or config.notFileKeys`);
+    }
+    if (exempt.length > 0) {
+      for (const method of methods) {
+        if (method !== "HEAD") app.notFileKeyRoutes.push({ method, url: route.url, fields: exempt });
+      }
     }
     if (declared.length > 0) {
       const existing = route.preValidation ? [route.preValidation].flat() : [];
@@ -111,6 +119,7 @@ export function buildApp(options: { logger?: object | boolean; routes?: (app: Fa
   });
 
   app.register(peopleRoutes);
+  app.register(dishRoutes, { prefix: "/dish" });
   options.routes?.(app);
 
   return app;

@@ -15,8 +15,8 @@ import { notFound } from "./errors.js";
  * describe (the route never sees those as typed fields). Name file fields with one of these words.
  */
 export const looksLikeFileKey = (field: string) =>
-  /(^|_)(keys?|paths?|files?|file_?ids?|storage_?ids?|uploads?)$/i.test(field) ||
-  /[a-z0-9](Keys?|Paths?|Files?|FileIds?|StorageIds?|Uploads?)$/.test(field);
+  /(^|_)(keys?|paths?|files?|file_?ids?|storage_?ids?|uploads?|photos?|voice_?notes?|clips?|audio)$/i.test(field) ||
+  /[a-z0-9](Keys?|Paths?|Files?|FileIds?|StorageIds?|Uploads?|Photos?|VoiceNotes?|Clips?|Audio)$/.test(field);
 
 type Schema = {
   properties?: Record<string, Schema>;
