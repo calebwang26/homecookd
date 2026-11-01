@@ -195,7 +195,7 @@ The live-updates draft (`claude/aws-live`) plugs in here, and I built no subscri
 25. **Someone removed from the family is refused on every route with a session,** a 403 from `requireSession`, so no area can forget it. That includes `GET /v1/me`. Supabase's `GET /family` still loads for them, so the adapter's path for it (blocker 4) has to answer that itself. Their session lasts until it ends: ending it on removal is accounts' step.
 26. **Only a recording's sender can change its list or deliver it.** Supabase let anyone in the family overwrite the sender and recipients with the upload id, or deliver it as the sender.
 27. **A replaced hello, or one taken off, is marked for deletion in the same transaction,** under the row's lock. Supabase left it in the bucket for good. A postcard's replaced photo was already marked, and now under the message's lock, so two at once can't leave one unmarked.
-28. **A push that won't go keeps no words.** `none` and `capped` rows hold no title or body, as `skipped` rows don't. See known limits for one that's waiting.
+28. **A push that won't go keeps no words.** `none` and `capped` rows hold no title or body, as `skipped` rows don't. Known limits covers one that's waiting.
 29. **A read mark only moves forward,** so a late write can't turn read messages unread.
 30. **A forged cursor is a 400 `bad_request`, as on Community** (`paging.ts`), and a forged `after` a 400 `bad_time`. Either could reach Postgres as a 500 before.
 
@@ -304,7 +304,7 @@ Add to AWS-MIGRATION's list, as backfill counts:
 
 ## Known limits
 
-- **A craving waiting out quiet hours holds the kid's name** on its queued row and sends it at 8:00, up to 11 hours later, even if the kid has deleted their account by then. The kid's purge can't find a row by the words in it, because `push_log` is keyed by who it's to. Delivering it is the same risk as any push in flight. **Recommendation:** when cards get a person, have `push.deliver` read the card again and drop it if the kid is gone.
+- **A craving waiting out quiet hours holds the kid's name** on its queued row, up to 11 hours. It doesn't go if the kid or cook has deleted or the card is gone: `push.deliver` reads the card again, and the kid's purge clears the row's words at once. One already claimed for sending can still go, like any push in flight. A kid who only leaves the family (not deleted) still sends: the check is for deleted accounts.
 - **A cook's answer to a pair question becomes a family-visible recipe note.** Left as it is, and open for Caleb.
 
 ## Open questions
@@ -319,5 +319,6 @@ Add to AWS-MIGRATION's list, as backfill counts:
 - **Real S3, SQS, Expo, Claude, Ink, RDS or a phone.** Everything ran against fakes, on the Docker image. The Claude adapters' requests were checked against a stubbed fetch, and Ink's is dish's.
 - **Load or latency.** `EXPLAIN` on 13 of the main queries with synthetic rows (300 families, 60,000 messages, 50,000 events, 20,000 pushes): all used an index. One, the push caps, chose `push_log (person_id, dedupe_key)` over the one SCHEMA.md names, and "my events" chose the dedupe index. The inbox's summary as a whole wasn't run through `EXPLAIN`, and its unread count reads a thread's unread rows.
 - **The adapter.** It's a table here, not code. Nothing has called these routes as an old build would.
+- **Why the end-to-end queue test failed once (`scheduled.test.ts`).** It was never reproduced. Its wait went from 2 s to 60 s because that flow came close to 2 s under load, 1.26 to 1.50 s, and that's suggestive, no more. A pass with the longer wait isn't proof of the cause, or that the loop is fast enough: the load test is still the production gate.
 - **A deliberately crashed task.** Takeover and repeats are tested by running a message twice and by moving a holder's time back, not by killing a process.
 - **Against Convex and Supabase side by side.** The behavior tests have the same meaning, but old and new haven't answered the same request.

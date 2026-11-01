@@ -2,6 +2,7 @@
 // anonymous card has no person, so nothing reaches it until it's claimed. Nothing calls this yet: the account purge moves last, and until the
 // one-way sync fills `people`, `person_id` and `requested_of` stay null. Each card is one transaction; a file is marked before its row goes.
 import { db, tx, type Queryable } from "../../db.js";
+import { dropQueuedCraving } from "../messages/pushData.js";
 import { personIsLive } from "../people/service.js";
 import type { CardRow } from "./data.js";
 import * as data from "./data.js";
@@ -69,6 +70,7 @@ export async function purgeDishForPerson(personId: string): Promise<void> {
       await tx(async (c) => {
         const card = await data.cardById(c, id, true);
         if (!card || card.person_id !== personId) return;
+        if (card.requested_of) await dropQueuedCraving(c, card.requested_of, card.id); // it names them, and can be waiting for morning
         if (card.requested_of && (await personIsLive(c, card.requested_of))) await dropKid(c, card);
         else await deleteCard(c, card);
       });

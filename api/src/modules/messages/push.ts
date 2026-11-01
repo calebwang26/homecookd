@@ -7,7 +7,9 @@
 import type { Queryable } from "../../db.js";
 import { db, tx } from "../../db.js";
 import { enqueue } from "../../outbox.js";
+import { cardForPush } from "../dish/service.js";
 import { memberById, signedOutDevices } from "../people/family.js";
+import { personIsLive } from "../people/service.js";
 import { type ExpoMessage, pushSender } from "./expo.js";
 import * as data from "./pushData.js";
 import { capCheck, quietDelayMs, type CapReason } from "./pushRules.js";
@@ -109,12 +111,23 @@ export async function queuePush(c: Queryable, p: PushInput, now = new Date()): P
   return await queue(0);
 }
 
+/**
+ * A craving names its kid and can wait up to 11 hours for morning. If the card's gone, or the kid on it has deleted, it doesn't go. The purge drops the row itself (dish/account.ts),
+ * so this covers the time before it runs. A card no kid has claimed has no person to check, and its name may be blank from the start: that's a craving like any other.
+ */
+async function cravingStands(log: data.LogRow): Promise<boolean> {
+  if (log.kind !== "craving" || !log.dedupe_key?.startsWith(data.cravingKey(""))) return true;
+  const card = await cardForPush(log.dedupe_key.slice(data.cravingKey("").length));
+  if (!card) return false;
+  return !card.person_id || (await personIsLive(db(), card.person_id));
+}
+
 /** push.deliver: what's still due goes to Expo, with no database connection held while it waits. */
 export async function deliver(logId: string): Promise<void> {
   const log = await data.claimDelivery(db(), logId);
   if (!log) return;
   const person = await memberById(db(), log.person_id);
-  if (!person || person.deleted_at || person.removed_at || person.memorial) {
+  if (!person || person.deleted_at || person.removed_at || person.memorial || !(await cravingStands(log))) {
     await data.finishDelivery(db(), logId, "none", [], null);
     return;
   }
