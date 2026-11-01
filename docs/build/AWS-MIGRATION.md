@@ -74,9 +74,11 @@ Decided by Caleb on Oct 31. **To build, and blocked until the App Store approves
 3. **Restore test,** after the first export.
 4. Everything else that merges or deploys from the migration branch.
 
-**Not waiting on Apple:** remove the Oct 25 export in `~/Documents/homecookd-backups/` by **Nov 24, 2026**, Caleb's call. Files
-on a laptop don't expire, and `/privacy` promises a deleted account's data leaves backups within 30 days. It's also the only
-full copy until the new backups run, so that deadline may force a choice if Apple is still reviewing.
+**Not waiting on Apple:** remove the Oct 25 export in `~/Documents/homecookd-backups/` by about **Dec 24, 2026**, Caleb's call.
+Files on a laptop don't expire. `/privacy` says data is deleted within 30 days and "it leaves our backups within 30 more", so
+someone who deleted their account right after that export is covered until about then. A lawyer should confirm how that
+sentence reads. It's also the only full copy until the new backups run, so the date may force a choice if Apple is still
+reviewing.
 
 ## Priorities
 
@@ -111,13 +113,13 @@ Decided and built in `infra/backups` (Caleb, Oct 31: the key lives in Secrets Ma
 the job uses its own key that reaches only `grand-dragon-649`. That key can still write to the deployment, so only this
 job's start-up role can read it. The job can add backups but not read or delete them. It can overwrite one by name, so a
 stolen role could replace recent backups; the originals then stay recoverable for 7 days. Backups expire after 21 days, plus
-those 7, to keep `/privacy`'s promise (a deleted account's data leaves backups within 30 days). Restore test: into a local
+those 7, which is stricter than `/privacy` needs (deleted within 30 days, out of backups within 30 more). Restore test: into a local
 Convex backend on Caleb's Mac, so no cloud deployment changes.
 
 **Blocker before the first real export:** `/privacy` names who stores family data (Convex, Supabase, Google Cloud, Vercel), and
 AWS isn't listed. It gets added after Apple approves 1.0 (see "Waiting on Apple's approval of 1.0").
 
-**How the 30-day promise is kept:** S3's lifecycle rule deletes old backups by age, with no code. AWS can't tell what an
+**How the deletion promise is kept:** S3's lifecycle rule deletes old backups by age, with no code. AWS can't tell what an
 account is, so deleting an account's data stays in our code (`convex/account.ts`, `pipeline/account_purge.py`). In phase 6
 its schedule moves to EventBridge. The same rules in code; AWS only runs them on time.
 
