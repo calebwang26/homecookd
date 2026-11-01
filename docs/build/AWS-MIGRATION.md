@@ -80,10 +80,18 @@ someone who deleted their account right after that export is covered until about
 sentence reads. It's also the only full copy until the new backups run, so the date may force a choice if Apple is still
 reviewing.
 
+## Before real data
+
+Before any backfill copies real rows into Postgres:
+
+- Seal `craving_links.token`, `dinners.invite_token` and `shares.token` (SCHEMA.md, M6).
+- Count violations of every new uniqueness rule, CHECK and domain (SCHEMA.md, section 7).
+
 ## Cutover list
 
 Before `aws-migration` reaches `main`:
 
+- Remove the temporary one-way sync of `families`, `people` and `recipes` (SCHEMA.md, M1).
 - Install `sentry-sdk` on the laptop's worker, or `import observability` crashes it.
 - Give the worker and api a limited database login in place of the master one.
 - Pin the workflows' actions to commit SHAs, and add a checksum for the downloaded gitleaks.
@@ -176,7 +184,7 @@ Before real data arrives: create a limited app user for `api` and `worker`, and 
 workflow's actions to commit SHAs.
 
 ### 6. Convex to Postgres
-**Size:** about 11,400 lines, 29 tables, 8 crons, 184 functions (28 queries, 34 mutations, 5 actions, 117 internal), 33
+**Size:** about 11,400 lines, 28 tables, 8 crons, 184 functions (28 queries, 34 mutations, 5 actions, 117 internal), 33
 scheduler calls, 47 file-storage calls, and 7,240 lines of tests to carry over.
 
 What makes it hard:

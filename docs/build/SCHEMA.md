@@ -9,10 +9,9 @@ reference to a row that doesn't exist. A **tombstone** is a blanked row kept onl
 
 ## 1. Where every table goes
 
-### Convex (29)
+### Convex (28 tables, plus `_storage`)
 
-`convex/schema.ts` defines 28 tables by mechanical count. `docs/build/AWS-MIGRATION.md` says 29, and the 29th can only be
-the file system table `_storage`, so that's how this list reaches 29.
+`convex/schema.ts` defines 28 tables. `_storage` is Convex's file system table, listed last because its data has to move too.
 
 | Convex table | New home | Notes |
 |---|---|---|
@@ -128,8 +127,9 @@ Several families can hold the same library id on a seeded demo, so it isn't uniq
   and `messages.send` accepts any storage id.
 - **Deleting is durable.** S3 can't join a database transaction, so a delete marks the row (`delete_requested_at`) and a sweep
   does the S3 call and sets `deleted_at`.
-- **Other tables have no FK to `files`,** because a key can also name public library media, which has no row there. The api
-  checks `files` when something is attached.
+- **Other tables have no FK to `files`,** because a key can also name public library media, which has no row there. So the api's
+  attach check is the only guard, and that gap is live today in `messages.send`. **Required test, for every route that takes a
+  key: attaching another family's key is refused.**
 - **Keep the folder, not a guess.** `recipes.media_prefix` is set only when the pipeline made the recipe from this family's
   upload. It replaces both `account_purge.py`'s folder name derived from a job id and the check that a recipe was uploaded.
 - **Covers:** `cover_key` is a family's file; `cover_stock_path` is one of our website's stock photos. Community may show only
@@ -396,6 +396,20 @@ still exist, also GCS and Supabase's rows and buckets: AWS-MIGRATION says purge 
 
 ### For the Master Agent
 
+Answered Oct 31:
+
+- **M1: yes, with conditions.** One-way sync. Postgres's copies of `families`, `people` and `recipes` are read-only until their area
+  moves, and a scheduled reconcile counts differences. An account deletion reaches the copy within minutes, not on the next sync.
+  The sync is temporary, so removing it is on AWS-MIGRATION's Cutover list.
+- **M2: yes.** A `private` bucket, in its own infra PR, with versioning and old-version expiry like `uploads`.
+- **M3: keep `files` and `outbox`.** The sender must use `FOR UPDATE SKIP LOCKED`, and SQS consumers must tolerate repeats.
+- **M4: yes,** its own PR after C1.
+- **M5: yes,** in the api skeleton PR. A transaction-per-file runner can't use `CREATE INDEX CONCURRENTLY`, so the runner needs a
+  stated way to run a file outside a transaction once tables have real rows.
+- **M6: later, but before any backfill** copies real tokens in readable form. It's on AWS-MIGRATION's "Before real data" list.
+
+The questions as asked:
+
 - **M1. FKs while areas move one at a time.** Dish asks move first, but `dish_asks.person_id` needs `people`, which moves last, and
   Community reads `recipes`, which moves with jobs. **Recommendation:** a one-way sync from Convex and Supabase keeps `families`,
   `people` and `recipes` copied into Postgres from the start, with a just-in-time upsert before any write that references one.
@@ -468,10 +482,12 @@ Result both times: PostgreSQL 17.11, 0 tables before, all 8 files applied with n
 
 ### Not verified
 
-- **No real data.** Convex and Supabase weren't touched. So every uniqueness rule that's new here is an assumption about real rows:
-  `people.supabase_id`, `swap_requests`, `dinner_requests`, `reports`, follow-up ids, family names, one job per upload folder (only
-  the newest job in a folder gets the idempotency key), `shareRecipeId = recipeId`, and every stored hash being lowercase hex. The
-  backfill must count violations first.
+- **No real data.** Convex and Supabase weren't touched, so these are all assumptions about real rows, and the backfill must count
+  violations of each one first:
+  - **New uniqueness rules:** `people.supabase_id`, `swap_requests`, `dinner_requests`, `reports`, follow-up ids, family names, one
+    job per upload folder (only the newest job in a folder gets the idempotency key), and `shareRecipeId = recipeId`.
+  - **New CHECKs and domains:** `body` <= 2000, `duration_s` <= 300, the `library_id` pattern, `hex_digest` (lowercase hex hashes),
+    `s3_key`, `lang_code`, `tz`, the phone pattern, and the photo count.
 - **Query coverage.** Convex's reads come from a grep of every `withIndex` and `query` call outside tests, plus reading most
   functions. Supabase's come from a script listing every `.from()` chain (213 call sites) and reading the sign-in, join and
   removal paths; I didn't read all 7,700 lines. `dishAskModel.ts`, `dishAskRoutes.ts`, `voice/`, `glasses/` and `cloud/signer` were
