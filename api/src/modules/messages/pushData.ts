@@ -124,6 +124,14 @@ export async function insertLog(
 }
 
 /** What the caps read: pushes homecookd sent on its own in the last 40 days, which covers a local calendar month with room for DST. */
+/** A craving's key. It's how a queued one is found again: its words name a kid, and the row is keyed by who it's to. */
+export const cravingKey = (askId: string) => `craving:${askId}`;
+
+/** A queued craving that won't go now, words and all. Its outbox row finds nothing left to claim. */
+export async function dropQueuedCraving(q: Queryable, cookId: string, askId: string): Promise<void> {
+  await q.query(`update push_log set status = 'none', title = null, body = null where person_id = $1 and dedupe_key = $2 and status = 'queued'`, [cookId, cravingKey(askId)]);
+}
+
 export async function recentAppInitiated(q: Queryable, personId: string, now: Date): Promise<{ sent_at: string; app_initiated: boolean }[]> {
   const { rows } = await q.query(
     `select ${iso("created_at")} as sent_at, app_initiated from push_log

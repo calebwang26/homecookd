@@ -35,15 +35,15 @@ The second is a hard rule: no merge before Apple approves 1.0. The first is buil
 
 | Area | State | Its switch (off today) | Doc |
 |---|---|---|---|
-| Kid's web flow, anonymous routes | **Built.** Passed in Chrome against staging on fake models. Craving links and the signed-in side aren't built | `NEXT_PUBLIC_DISH_UPLOADS=links` with `NEXT_PUBLIC_DISH_URL=<api>`, in one build | `DISH-MIGRATION.md` |
+| Kid's web flow, anonymous routes | **Built.** Passed in Chrome against staging on fake models. `/dish/craving/peek` and craving cards wait for the sync | `NEXT_PUBLIC_DISH_UPLOADS=links` with `NEXT_PUBLIC_DISH_URL=<api>`, in one build | `DISH-MIGRATION.md` |
 | One-way sync | **Built,** never run on anything real | `SYNC_READ_SECRET` in Convex env, `SYNC_MODE` on the api task | `SYNC-MIGRATION.md` |
 | Worker on queues | **Built,** fakes and local Postgres only. No api route sends it a job yet | The container's entry point, and the worker's `desired_count` (0) | `WORKER-MIGRATION.md` |
 | Media copy | **Built,** never run on a real bucket | Its `--real-*` flags | `MEDIA-MIGRATION.md` |
 | Website on S3 and CloudFront | **Built,** on staging only | DNS | `WEB-MIGRATION.md` |
 | Convex backups | **Built,** not running | `job_count_enabled` | `infra/README.md` |
-| Community | Draft in progress | Not decided | |
-| Live updates | Draft in progress | Not decided | |
-| Messages | Draft in progress | Not decided | |
+| Community, dinners, cravings' signed-in side | **Built,** fakes and local Postgres only. No app or site calls it | None yet: the app adapter isn't built | `COMMUNITY-MIGRATION.md` |
+| Live updates | **Built** for job progress, fakes and local Postgres only. No app calls it | None yet: the same | `LIVE-UPDATES.md` |
+| Messages, questions, push, the table, the recap | **Built,** fakes and local Postgres only. No app calls it, and no Expo or Claude has run against it. Story cards aren't built | None yet: the same | `MESSAGES-MIGRATION.md` |
 | Accounts, sessions, sign-in, the purge | Draft in progress | Not decided | |
 | Jobs, recipes, recordings: the routes that send the worker its work | **Built,** fakes and local Postgres only, with the real worker's code on the database. Nothing films through it, no app calls it, no real video has run. Writing recordings isn't built (homie is off) | `RECIPE_WRITES` with `moved_at` on `recipes`, and the worker's switch | `JOBS-MIGRATION.md` |
 
@@ -138,8 +138,8 @@ Least-connected first. Every area passes the five checks in AWS-MIGRATION ("What
 | Order | Area | Do | Back |
 |---|---|---|---|
 | 1 | Kid's web flow | **First build the craving routes and the claim.** The api answers 404 to `/dish/craving/peek` today, so `/miss?c=` would fall back to a plain card that doesn't reach the parent. Copy `dish_asks`. Then one Vercel build with `NEXT_PUBLIC_DISH_URL=https://api.homecookd.app` and `NEXT_PUBLIC_DISH_UPLOADS=links`, both at once: the new api refuses raw files with a 415, and Convex refuses the links | Unset both and rebuild, or promote the previous deployment. **Cards made in between stay on the new side,** so copy them back first, which isn't written |
-| 2 | Community, dinners, cravings, share requests | Draft in progress | |
-| 3 | Live updates, then messages, questions, story cards, push | Draft in progress. Live updates go before what needs them | |
+| 2 | Community, dinners, cravings, share requests | Built, not switchable yet: it needs the adapter and the gates in `COMMUNITY-MIGRATION.md` (reports move once, a way to review them, the daily reminder's schedule). `shareRequests.*` go with Messages | Not written |
+| 3 | Live updates, then messages, questions, story cards, push | Built except story cards, not switchable yet: it needs the adapter, `MEDIA_BASE_URL`, `EXPO_ACCESS_TOKEN` and the schedules. Live updates go before what needs them | Not written |
 | 4 | Jobs, worker routes, recording, glasses | Built except the recording writes and a plan for videos over 5 GiB (`TODO(caleb)`, `JOBS-MIGRATION.md`). It needs `s3:ListBucket` on `uploads`, `MEDIA_BASE_URL` and the `jobs.sweep` schedule. A real video job first, measured, on Caleb's own footage (`WORKER-MIGRATION.md`). Set `moved_at` on `recipes` in the release that switches the worker | The laptop's worker stays ready, and goes back to polling Convex |
 | 5 | Sessions, accounts, Apple sign-in, the purge | Draft in progress. Last, because everything depends on it. The purge must cover both stores | |
 
