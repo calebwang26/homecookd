@@ -1,0 +1,140 @@
+# Runs on every PR to aws-migration: only the checks for what changed, plus the secret scan. One final job, "checks", is the
+# one to require, so a skipped job never blocks a merge. `main` gets these once the branch merges.
+name: Checks
+on:
+  pull_request:
+    branches: [aws-migration]
+
+permissions:
+  contents: read
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      infra: ${{ steps.diff.outputs.infra }}
+      convex: ${{ steps.diff.outputs.convex }}
+      voice: ${{ steps.diff.outputs.voice }}
+      pipeline: ${{ steps.diff.outputs.pipeline }}
+      api: ${{ steps.diff.outputs.api }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: diff
+        run: |
+          FILES=$(git diff --name-only "origin/$GITHUB_BASE_REF...HEAD")
+          for AREA in infra convex voice pipeline api; do
+            echo "$FILES" | grep -q "^$AREA/" && echo "$AREA=true" >> "$GITHUB_OUTPUT" || echo "$AREA=false" >> "$GITHUB_OUTPUT"
+          done
+
+  secrets:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Scan this PR's commits
+        run: |
+          curl -sSfL https://github.com/gitleaks/gitleaks/releases/download/v8.24.0/gitleaks_8.24.0_linux_x64.tar.gz | tar xz gitleaks
+          ./gitleaks git --no-banner --redact --log-opts="origin/$GITHUB_BASE_REF..HEAD"
+
+  infra:
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: hashicorp/setup-terraform@v3
+        with:
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive infra
+      - name: Validate every root
+        run: |
+          for ROOT in bootstrap backups envs/staging envs/production; do
+            terraform -chdir="infra/$ROOT" init -backend=false -input=false >/dev/null
+            terraform -chdir="infra/$ROOT" validate
+          done
+
+  convex:
+    needs: changes
+    if: needs.changes.outputs.convex == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npx tsc -p convex --noEmit
+      - run: npx vitest run
+
+  voice:
+    needs: changes
+    if: needs.changes.outputs.voice == 'true'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: voice
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  pipeline:
+    needs: changes
+    if: needs.changes.outputs.pipeline == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: pip install -r pipeline/requirements.txt
+      - name: Unit tests (fakes only)
+        run: |
+          for TEST in pipeline/test_*.py; do
+            echo "== $TEST"
+            python "$TEST"
+          done
+
+  api:
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: homecookd_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: api
+    env:
+      TEST_DATABASE_URL: postgres://postgres:ci-only@localhost:5432/homecookd_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  checks:
+    if: always()
+    needs: [secrets, infra, convex, voice, pipeline, api]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Fail if any check failed
+        run: |
+          echo '${{ toJSON(needs.*.result) }}' | grep -qE '"(failure|cancelled)"' && exit 1 || exit 0
