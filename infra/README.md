@@ -59,6 +59,10 @@ environment called `production`. **A GitHub environment named `Production` alrea
 (probably made by Vercel's deployments; GitHub ignores case in these names). It's harmless while the production deploy
 role doesn't exist. **Give it required reviewers (Caleb) before production is created.**
 
+## Database migrations
+
+`api/migrations/*.sql`, run by `api/src/migrate.ts` as a one-off task before each api rollout. A failure stops the rollout.
+
 ## Rules
 
 - Secret values never go in Terraform, because they would land in its state file. It holds the names only.

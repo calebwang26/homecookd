@@ -60,6 +60,17 @@ jobs:
             | {family, containerDefinitions, taskRoleArn, executionRoleArn, networkMode, requiresCompatibilities, cpu, memory}' \
             current.json > next.json
           ARN=$(aws ecs register-task-definition --cli-input-json file://next.json --query taskDefinition.taskDefinitionArn --output text)
+          if [ "$SERVICE" = api ]; then
+            NETWORK=$(aws ecs describe-services --cluster "$NAME" --services api \
+              --query 'services[0].networkConfiguration' --output json)
+            TASK=$(aws ecs run-task --cluster "$NAME" --launch-type FARGATE --task-definition "$ARN" \
+              --network-configuration "$NETWORK" \
+              --overrides '{"containerOverrides":[{"name":"api","command":["node","dist/migrate.js"]}]}' \
+              --query 'tasks[0].taskArn' --output text)
+            aws ecs wait tasks-stopped --cluster "$NAME" --tasks "$TASK"
+            CODE=$(aws ecs describe-tasks --cluster "$NAME" --tasks "$TASK" --query 'tasks[0].containers[0].exitCode' --output text)
+            if [ "$CODE" != 0 ]; then echo "Migrations failed ($CODE): nothing rolled out."; exit 1; fi
+          fi
           aws ecs update-service --cluster "$NAME" --service "$SERVICE" --task-definition "$ARN" >/dev/null
           echo "Rolling out $ARN. Until voice/ holds task protection (phase 3), this can cut live voice calls."
       - name: Wait, then smoke test

@@ -88,3 +88,23 @@ resource "aws_cloudwatch_metric_alarm" "dead_letters" {
   comparison_operator = "GreaterThanThreshold"
   alarm_actions       = [aws_sns_topic.alerts.arn]
 }
+
+# Work that's sitting: a consumer has stopped, or can't keep up. The outbox's own lateness goes to Sentry (api/src/index.ts).
+resource "aws_cloudwatch_metric_alarm" "queue_age" {
+  for_each = {
+    jobs      = { name = aws_sqs_queue.jobs.name, seconds = 3600 }
+    scheduled = { name = aws_sqs_queue.scheduled.name, seconds = 900 }
+  }
+  alarm_name          = "${local.name}-${each.key}-queue-age"
+  alarm_description   = "The oldest ${each.key} message has waited over ${each.value.seconds} seconds"
+  namespace           = "AWS/SQS"
+  metric_name         = "ApproximateAgeOfOldestMessage"
+  dimensions          = { QueueName = each.value.name }
+  statistic           = "Maximum"
+  period              = 300
+  evaluation_periods  = 2
+  threshold           = each.value.seconds
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}

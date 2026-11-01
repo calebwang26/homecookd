@@ -71,12 +71,13 @@ resource "aws_ecs_task_definition" "service" {
     stopTimeout  = 120 # Fargate's maximum; long calls are held by task protection instead (docs/build/AWS-MIGRATION.md)
     portMappings = contains(keys(local.lb_services), each.key) ? [{ containerPort = each.value.port }] : []
     environment = [for k, v in merge(each.value.env, each.value.uses_database ? { DB_HOST = aws_db_instance.main.address } : {}, {
-      PORT           = tostring(each.value.port)
-      MEDIA_BUCKET   = aws_s3_bucket.media.bucket
-      UPLOAD_BUCKET  = aws_s3_bucket.uploads.bucket
-      PRIVATE_BUCKET = aws_s3_bucket.private.bucket
-      JOBS_QUEUE_URL = aws_sqs_queue.jobs.url
-      DEPLOY_ENV     = var.environment
+      PORT                = tostring(each.value.port)
+      MEDIA_BUCKET        = aws_s3_bucket.media.bucket
+      UPLOAD_BUCKET       = aws_s3_bucket.uploads.bucket
+      PRIVATE_BUCKET      = aws_s3_bucket.private.bucket
+      JOBS_QUEUE_URL      = aws_sqs_queue.jobs.url
+      SCHEDULED_QUEUE_URL = aws_sqs_queue.scheduled.url
+      DEPLOY_ENV          = var.environment
     }) : { name = k, value = v }]
     secrets = concat(
       [for s in each.value.secrets : { name = s, valueFrom = aws_secretsmanager_secret.app[s].arn }],
