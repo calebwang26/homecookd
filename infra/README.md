@@ -71,9 +71,14 @@ role doesn't exist. **Give it required reviewers (Caleb) before production is cr
 Order matters, because a task can't start while a secret it names has no value: `terraform apply`, then
 `infra/scripts/make-salt.sh staging`, then a deploy. It runs with `DISH_FAKE_AI=1`: real S3 and SQS, no model calls, no spend.
 
-**Real models are a test window, with Caleb's OK.** Caleb runs `infra/scripts/load-secrets.sh staging`, then
-`terraform apply -var real_ai=true` and a deploy; afterwards a plain apply and a deploy turn it off. The load balancer is public, so
-anyone who finds it can spend up to the cap during the window: $1 a day on `dish_budget_usd`, plus Mom's overage and calls in flight.
+**Real models are a test window, with Caleb's OK each time.** The load balancer is plain HTTP, so card tokens and test content cross
+it in the clear. So: made-up dishes and voices only, never real family content, and the load balancer is locked to one address.
+1. Caleb runs `infra/scripts/load-secrets.sh staging`.
+2. `terraform apply -var real_ai=true -var 'alb_allowed_cidrs=["<address>/32"]'`, then a deploy by hand (its smoke test can't reach
+   the locked load balancer, so that step fails; check from the allowed address instead).
+3. Right after: a plain `terraform apply` and a deploy turn it off and reopen it.
+
+The cap is $1 a day on `dish_budget_usd`, plus Mom's overage and calls in flight.
 
 ## Database migrations
 
