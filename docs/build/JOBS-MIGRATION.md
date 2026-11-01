@@ -174,7 +174,7 @@ The worker also deletes a stopped job's raw video as soon as it sees it, so the 
 
 No new secrets. **Settings:** `MEDIA_BASE_URL` (new on the api), `RECIPE_WRITES` (leave unset). `UPLOAD_BUCKET`, `PRIVATE_BUCKET`, `JOBS_QUEUE_URL` and `SCHEDULED_QUEUE_URL` are already set. `RATE_LIMIT_SALT` is required, as it already is for the dish routes.
 
-## What `infra/` needs (not done: this PR touches only `api/` and `docs/build/`)
+## What `infra/` needed (in the infra PR, not applied)
 
 - **`s3:ListBucket` on `uploads` for the api. This blocks a real run.** Without it, S3 answers 403 for a file not there yet, so every `complete` during an upload is a 502 and the sweep's message fails.
 - `MEDIA_BASE_URL` on the api.
@@ -243,6 +243,7 @@ Nothing automatic deletes a clip that fully landed, unless its owner stops it or
 
 - **An upload no job took:** the sweep asks S3 first, because a phone can land everything and die before saying so. If anything landed, or S3 can't answer, nothing is marked. Only an upload with nothing in S3 expires, 7 days after its last link.
 - **A job waiting on its upload:** the clock runs from its last link or last landed clip, not from when it began. When it runs out the job fails visibly, what never arrived expires, and what landed stays.
+- **The 14-day rule still applies (Caleb, Nov 1).** Nothing in this code deletes a landed video by a clock, but the S3 lifecycle rule on `uploads` does, 14 days after upload. So "waiting on a person" has that limit.
 - **Someone is told:** the sweep raises one Sentry issue, "Landed videos are waiting on a person", with a count and no names. **A person decides, and there's no tool for it yet:** today it's a query on `files`, and asking the cook. How long raw footage is kept is still `TODO(caleb)` (AWS-MIGRATION.md).
 - **The sweep also notices** a job queued with no change for 26 hours, which a worker stopping on a job's last receive leaves behind, as well as the dead-letter alarm. It doesn't re-queue, because that could spend her money. And an ended job whose card still says "processing" because recipe writes were off: it's fixed once they're open, and reported until then.
 

@@ -150,7 +150,8 @@ Prefer rolling back to patching forward under pressure.
 ## Delivery (CI/CD)
 
 - **Every PR runs tests automatically** (type checks, unit tests, Terraform validate, secret scan). A failing check blocks merge.
-- **Merging to the main line deploys to staging automatically** and runs smoke tests.
+- **Merging to the main line deploys to staging automatically** and runs smoke tests. It also applies staging's Terraform, when a safety
+  check on the plan passes; anything it refuses goes to Caleb (`infra/README.md`, "Merges apply staging").
 - **Production uses the same image, after one human approval,** through GitHub environment reviewers. It rolls out gradually
   and rolls back on failure. Deploy logins use OIDC, with no stored keys.
 - **Infrastructure changes only through Terraform.** Staging and production differ in size, not shape.

@@ -46,6 +46,7 @@ variable "services" {
     env           = optional(map(string), {})
     secrets       = optional(list(string), [])
     uses_database = optional(bool, false)
+    entry_point   = optional(list(string))
   }))
 }
 

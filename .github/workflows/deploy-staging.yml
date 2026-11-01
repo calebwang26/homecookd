@@ -10,6 +10,7 @@ on:
 permissions:
   id-token: write
   contents: read
+  actions: read # to see whether apply-staging.yml has finished
 
 jobs:
   changes:
@@ -21,6 +22,11 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 2
+      - name: Let Terraform go first
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPLY_SWITCH: ${{ vars.STAGING_INFRA_APPLY }}
+        run: bash infra/scripts/wait-for-apply.sh
       - id: diff
         run: |
           FILES=$(git diff --name-only HEAD~1 HEAD)

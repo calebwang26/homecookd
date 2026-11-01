@@ -191,7 +191,7 @@ Nothing here has a quick way back, so each waits until no phone calls it. Take a
 
 - How long App Review takes on 1.1, and how long phones take to leave 1.0 and 1.1 behind.
 - Whether Convex's WebSocket forwards through our address, and whether Convex's plan handles the daily export.
-- What a real video job costs and how long it takes on Fargate. Real Claude and Ink, Safari, and a real iPhone recording against the new api.
+- What a real video job costs and how long it takes on Fargate. This waits until `/privacy` names AWS (Caleb, Nov 1). Real Claude and Ink, Safari, and a real iPhone recording against the new api.
 - Whether a read link's 1 to 2 hours holds on a task's role credentials.
 - How to copy a kid's cards made on the new side back to Convex, if the first area has to go back. Today that way back loses them.
 - Real sizes and costs: the media dry run, a full sync pass, production's bill.

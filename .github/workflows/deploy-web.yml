@@ -16,6 +16,7 @@ on:
 permissions:
   id-token: write
   contents: read
+  actions: read # to see whether apply-staging.yml has finished
 
 concurrency:
   group: deploy-web-staging
@@ -27,6 +28,14 @@ jobs:
     environment: staging
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      # The smoke test checks the CloudFront Function, which Terraform owns.
+      - name: Let Terraform go first
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPLY_SWITCH: ${{ vars.STAGING_INFRA_APPLY }}
+        run: bash infra/scripts/wait-for-apply.sh
       - uses: actions/setup-node@v4
         with:
           node-version: 22

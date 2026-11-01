@@ -52,7 +52,7 @@ MAX_HOLD_S = 43000  # just under SQS's 12 hours
 SWEEP_EVERY_S = 300
 IDLE_BACKOFF_S = 30
 FINISH_TRIES, FINISH_RETRY_S = 4, 20  # stays inside Fargate's 120 seconds after a stop signal
-# TODO(caleb): both caps are defaults. $12 covers the longest video (MAX_HOURS x COST_PER_HOUR_USD) once, and a bit.
+# Caleb, Nov 1: $12 a job and $30 a day. $12 covers the longest video (MAX_HOURS x COST_PER_HOUR_USD) once, and a bit.
 JOB_CAP_USD = "12"
 DAILY_CAP_USD = "30"
 
