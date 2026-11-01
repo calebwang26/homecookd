@@ -185,12 +185,12 @@ test("the worker's contract", { skip: missing ?? false }, async (t) => {
     assert.ok(row.finished_at);
   });
 
-  await t.test("another cook's stop: the worker lets go and leaves her raw video where it is", async () => {
-    const other = await who(cook.familyId);
+  await t.test("a stopped job marked to keep its upload: the worker lets go and leaves the raw video where it is", async () => {
     const { uploadId, keys } = await askLinks(app, cook);
     land(videos, ...keys);
     const { data } = await newJob(app, cook, uploadId);
-    assert.equal((await call(app, other, "POST", `/v1/jobs/${data.jobId}/cancel`)).data.stopped, true);
+    // No route sets this since a job became its cook's alone (JOBS-MIGRATION.md, decision 6). The worker still reads it.
+    await db().query(`update jobs set stage = 'failed', error = 'Cancelled.', cancelled_at = now(), finished_at = now(), claimed_at = null, keep_upload = true where id = $1`, [data.jobId]);
     const out = worker({ op: "deliver", body: JSON.stringify({ outboxId: "1", payload: { jobId: data.jobId } }), objects: keys }).results[0];
     assert.equal(out.started, 0);
     assert.deepEqual(out.uploads.sort(), [...keys].sort(), "nothing of hers is deleted");

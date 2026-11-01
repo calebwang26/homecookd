@@ -88,12 +88,13 @@ const COLUMNS = `id, family_id, cook_id, title, status, library_id, media_prefix
   added_ingredients, step_count, memories_opt_in, moss_indexed_at, language, shared_at, story_card_text, story_card_written_at, story_card_used_stories,
   story_card_culture, story_card_quote, hidden_at, created_at, created_at::text as cursor_at`;
 
-async function familyRecipes(q: Queryable, familyId: string, before: After | null, limit: number): Promise<RecipeRow[]> {
+/** A recipe that isn't ready yet, or failed, shows only to its cook (Caleb, Nov 1), like the job behind it. */
+async function familyRecipes(q: Queryable, familyId: string, viewerId: string, before: After | null, limit: number): Promise<RecipeRow[]> {
   const { rows } = await q.query(
     `select ${COLUMNS} from recipes
-      where family_id = $1 ${before ? "and (created_at, id) < ($3::timestamptz, $4)" : ""}
-      order by created_at desc, id desc limit $2`,
-    before ? [familyId, limit, before.at, before.id] : [familyId, limit],
+      where family_id = $1 and (status = 'ready' or cook_id = $2) ${before ? "and (created_at, id) < ($4::timestamptz, $5)" : ""}
+      order by created_at desc, id desc limit $3`,
+    before ? [familyId, viewerId, limit, before.at, before.id] : [familyId, viewerId, limit],
   );
   return rows;
 }
@@ -123,7 +124,7 @@ export async function recipesVersion(familyId: string): Promise<string> {
 }
 
 export async function listRecipes(signed: Signed, cursor?: string) {
-  const fetched = await familyRecipes(db(), signed.familyId, afterCursor(cursor), PAGE + 1);
+  const fetched = await familyRecipes(db(), signed.familyId, signed.personId, afterCursor(cursor), PAGE + 1);
   const { rows, nextCursor } = pageOf(fetched, PAGE);
   const names = await namesOf(db(), rows.map((r) => r.cook_id));
   return { recipes: rows.map((r) => recipeView(r, signed, names.get(r.cook_id) ?? "")), nextCursor };
@@ -133,6 +134,7 @@ export async function listRecipes(signed: Signed, cursor?: string) {
 export async function readRecipe(signed: Signed, id: string) {
   const row = await recipeById(db(), id);
   if (!row || row.family_id !== signed.familyId) return null;
+  if (row.status !== "ready" && row.cook_id !== signed.personId) return null;
   const names = await namesOf(db(), [row.cook_id]);
   return recipeView(row, signed, names.get(row.cook_id) ?? "");
 }

@@ -201,12 +201,14 @@ test("live updates", { skip: !hasDatabase }, async (t) => {
     assert.equal(res.changed, false);
   });
 
-  await t.test("a kid in the family sees its jobs too, as jobs.forFamily does today", async () => {
+  await t.test("nobody else in the family sees a job while they poll: a kid or another cook", async () => {
     const cook = await signedInCook();
-    const kid = await person(cook.family, "kid");
     const id = await job(cook.family, cook.person);
-    const res = (await poll(app, await session(cook.family, kid))).json();
-    assert.equal(res.data[0]._id, id);
+    for (const role of ["kid", "cook"] as const) {
+      const res = (await poll(app, await session(cook.family, await person(cook.family, role)))).json();
+      assert.deepEqual(res.data, [], role);
+    }
+    assert.equal((await poll(app, cook.token)).json().data[0]._id, id);
   });
 
   await t.test("mid-way: a session ended stops the very next poll", async () => {
