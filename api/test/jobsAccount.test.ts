@@ -46,6 +46,7 @@ test("account deletion: jobs, recipes, recordings", { skip: !hasDatabase }, asyn
     assert.equal((await db().query(`select status from recordings where id = $1`, [recording])).rows[0].status, "abandoned");
     assert.equal(await recipe(running.recipeId!), undefined);
     assert.ok(await recipe(theirs.recipeId!), "another cook's stays");
+    await db().query(`update recipes set status = 'ready' where id = $1`, [theirs.recipeId]);
     assert.deepEqual((await call(app, kid, "GET", "/v1/recipes")).data.recipes.map((r: { _id: string }) => r._id), [theirs.recipeId]);
     const { rows } = await db().query(`select recipe_ids from account_deletions where person_id = $1`, [cook.personId]);
     assert.deepEqual(rows[0].recipe_ids.sort(), [running.recipeId, finished.recipeId].sort());

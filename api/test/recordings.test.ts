@@ -23,9 +23,9 @@ test("recordings", { skip: !hasDatabase }, async (t) => {
   const others = await family();
   const sam = await who(others);
 
-  await t.test("the recording screen's view, for its family only", async () => {
+  await t.test("the recording screen's view, for its cook", async () => {
     const id = await addRecording(dad, { dish: "Masale Bhaat", for_kid_ids: [leo.personId], video_key: `glasses-${"abc"}/full.mp4`, started_at: new Date("2026-10-31T12:00:00Z") });
-    const { status, data } = await call(app, leo, "GET", `/v1/recordings/${id}`);
+    const { status, data } = await call(app, dad, "GET", `/v1/recordings/${id}`);
     assert.equal(status, 200);
     assert.equal(data._id, id);
     assert.equal(data.status, "recording");
@@ -68,11 +68,30 @@ test("recordings", { skip: !hasDatabase }, async (t) => {
     assert.deepEqual(none.data, { events: [], windows: { analysed: 0, missed: 0 } });
   });
 
+  await t.test("nobody else sees a recording until its recipe is out, then the family reads it", async () => {
+    const other = await who(home);
+    const recipe = (await db().query(`insert into recipes (family_id, cook_id, title, status) values ($1, $2, 'KEEP-a dish', 'processing') returning id`, [dad.familyId, dad.personId])).rows[0].id as string;
+    const jobId = (await db().query(`insert into jobs (family_id, cook_id, recipe_id, upload_key, source, stage) values ($1, $2, $3, $4, 'glasses', 'writing') returning id`, [dad.familyId, dad.personId, recipe, `own-${Date.now()}/`])).rows[0].id as string;
+    const id = await addRecording(dad, { status: "ended", job_id: jobId, video_key: "glasses-own/full.mp4" });
+    const listed = async (by: Who) => (await call(app, by, "GET", "/v1/recordings/glasses-videos")).data.videos.some((v: { recordingId: string }) => v.recordingId === id);
+    for (const by of [other, leo]) {
+      for (const path of ["", "/log", "/frame"]) assert.equal((await call(app, by, "GET", `/v1/recordings/${id}${path}`)).status, 404, path);
+      assert.equal(await listed(by), false);
+    }
+    assert.equal((await call(app, dad, "GET", `/v1/recordings/${id}`)).status, 200);
+    assert.equal(await listed(dad), true);
+    await db().query(`update recipes set status = 'ready' where id = $1`, [recipe]);
+    for (const by of [other, leo]) {
+      for (const path of ["", "/log", "/frame"]) assert.equal((await call(app, by, "GET", `/v1/recordings/${id}${path}`)).status, 200, path);
+      assert.equal(await listed(by), true);
+    }
+  });
+
   await t.test("the newest frame, by a link; none yet, and a link that can't be made, read as no frame", async () => {
     const id = await addRecording(dad);
     assert.deepEqual((await call(app, dad, "GET", `/v1/recordings/${id}/frame`)).data, { frame: null });
     await db().query(`insert into live_frames (recording_id, frame_key, at) values ($1, 'private/frames/one.jpg', '2026-10-31T12:00:00Z')`, [id]);
-    const { data } = await call(app, leo, "GET", `/v1/recordings/${id}/frame`);
+    const { data } = await call(app, dad, "GET", `/v1/recordings/${id}/frame`);
     assert.deepEqual(data, { frame: { url: "https://fake-s3.test/get/private/frames/one.jpg", at: Date.parse("2026-10-31T12:00:00Z") } });
     privateFiles.failGets = true;
     assert.deepEqual((await call(app, dad, "GET", `/v1/recordings/${id}/frame`)).data, { frame: null });
