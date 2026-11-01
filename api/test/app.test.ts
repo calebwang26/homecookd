@@ -69,6 +69,35 @@ test("a server error's text and row values stay out of the logs", async () => {
   assert.doesNotMatch(output, /her secret masala/);
 });
 
+test("an unknown path and a bad body answer without detail", async () => {
+  const app = buildApp({
+    logger: false,
+    routes: (a) => {
+      a.post("/test/typed", { schema: { body: { type: "object", required: ["n"], properties: { n: { type: "number" } } } } }, async () => ({}));
+    },
+  });
+  const missing = await app.inject("/nothing");
+  assert.equal(missing.statusCode, 404);
+  assert.equal(missing.json().error, "not_found");
+  const bad = await app.inject({ method: "POST", url: "/test/typed", payload: { n: "her secret masala" } });
+  assert.equal(bad.statusCode, 400);
+  assert.equal(bad.json().error, "bad_request");
+  assert.doesNotMatch(bad.body, /masala/);
+});
+
+test("the caller can't choose their own IP: only the load balancer's hop counts", async () => {
+  const app = buildApp({
+    logger: false,
+    routes: (a) => {
+      a.get("/test/ip", async (req) => ({ ip: req.ip }));
+    },
+  });
+  const res = await app.inject({ url: "/test/ip", headers: { "x-forwarded-for": "6.6.6.6, 1.1.1.1" }, remoteAddress: "10.20.0.5" });
+  assert.equal(res.json().ip, "1.1.1.1");
+  const direct = await app.inject({ url: "/test/ip", headers: { "x-forwarded-for": "6.6.6.6" }, remoteAddress: "8.8.8.8" });
+  assert.equal(direct.json().ip, "8.8.8.8");
+});
+
 test("/ready reaches a real database", { skip: !process.env.TEST_DATABASE_URL }, async () => {
   process.env.DATABASE_URL = process.env.TEST_DATABASE_URL;
   const { db } = await import("../src/db.js");

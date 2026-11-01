@@ -220,6 +220,7 @@ cd infra/envs/staging && AWS_PROFILE=homecookd terraform plan        # productio
 
 # new backend (api/; TEST_DATABASE_URL adds the real-Postgres tests)
 cd api && npm ci && npm run typecheck && npm test
+docker run -d --rm --name hc-pg -e POSTGRES_PASSWORD=t -e POSTGRES_DB=t -p 15439:5432 postgres:17   # then: cd api && TEST_DATABASE_URL=postgres://postgres:t@localhost:15439/t npm test
 
 # upload signer (cloud/signer)
 python3 cloud/signer/test_main.py                                  # sign-in check (Convex + GCS faked)

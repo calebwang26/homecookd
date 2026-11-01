@@ -61,7 +61,7 @@ locals {
       {
         Effect   = "Allow"
         Action   = ["sqs:SendMessage"]
-        Resource = aws_sqs_queue.jobs.arn
+        Resource = [aws_sqs_queue.jobs.arn, aws_sqs_queue.scheduled.arn]
       },
       {
         Effect   = "Allow"
@@ -138,6 +138,17 @@ resource "aws_iam_role_policy" "deploy" {
       },
       # These two don't support naming a resource.
       { Effect = "Allow", Action = ["ecs:DescribeTaskDefinition", "ecs:RegisterTaskDefinition"], Resource = "*" },
+      # Runs database migrations as a one-off task before a release.
+      {
+        Effect   = "Allow"
+        Action   = "ecs:RunTask"
+        Resource = "arn:aws:ecs:${local.region}:${local.account_id}:task-definition/${local.name}-api:*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = "ecs:DescribeTasks"
+        Resource = "arn:aws:ecs:${local.region}:${local.account_id}:task/${local.name}/*"
+      },
       {
         Effect   = "Allow"
         Action   = ["ecs:DescribeServices", "ecs:UpdateService"]

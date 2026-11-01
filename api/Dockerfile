@@ -16,6 +16,7 @@ RUN chmod 644 /app/rds-ca.pem
 ENV NODE_EXTRA_CA_CERTS=/app/rds-ca.pem
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
+COPY migrations ./migrations
 COPY package.json ./
 USER node
 CMD ["node", "--import", "./dist/sentry.js", "dist/index.js"]
