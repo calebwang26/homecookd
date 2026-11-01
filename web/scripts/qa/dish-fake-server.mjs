@@ -148,13 +148,17 @@ function merge(card) {
 
 export async function startFake({ port = 8791, site = 'http://localhost:3105', mergeMs = 3000, translateMs = 1500 } = {}) {
   const cards = new Map(); // kidToken -> card
-  const files = new Map(); // fileId -> {kind, type, bytes}
+  const files = new Map(); // fileId -> {kind, type, size, bytes (once it's PUT), askToken (a clip's card)}
   const log = [];
+  let linkGeneration = 1; // read links name this; expireLinks moves it on, so an old one gets a 403, as an expired S3 link does
   let budgetSpent = false;
   let rateLimited = false;
+  let failingPuts = false;
   let base = `http://localhost:${port}`;
   const byAsk = (t) => [...cards.values()].find((c) => c.askToken === t);
-  const fileUrl = (id) => (id ? `${base}/files/${id}` : null);
+  const fileUrl = (id) => (id ? `${base}/files/${id}?v=${linkGeneration}` : null);
+  const uploadLink = (fileId, type) => ({ uploadUrl: `${base}/__storage/${fileId}`, uploadHeaders: { 'Content-Type': type }, expiresInS: 120 });
+  const baseType = (t) => String(t ?? '').split(';')[0].trim();
 
   const cardOut = (c) => ({
     dish: c.dish,
@@ -212,26 +216,37 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
     const url = new URL(req.url, base);
     if (origin && !cors['Access-Control-Allow-Origin']) return fail(403, 'origin', 'This request came from another site.');
     if (req.method === 'OPTIONS') {
-      res.writeHead(204, { ...cors, 'Access-Control-Allow-Methods': 'POST, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, X-Dish-Token', 'Access-Control-Max-Age': '600' });
+      res.writeHead(204, { ...cors, 'Access-Control-Allow-Methods': 'POST, PUT, OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type, X-Dish-Token', 'Access-Control-Max-Age': '600' });
       return res.end();
     }
     if (req.method === 'GET' && url.pathname.startsWith('/files/')) {
       const f = files.get(url.pathname.slice(7));
-      return f ? send(200, f.bytes, f.type) : fail(404, 'not_found', 'No such file.');
+      if (url.searchParams.get('v') !== String(linkGeneration)) return fail(403, 'expired', 'This link has expired.');
+      return f?.bytes ? send(200, f.bytes, f.type) : fail(404, 'not_found', 'No such file.');
+    }
+    // Storage: what a presigned PUT does. The link was signed for one type and one size.
+    if (req.method === 'PUT' && url.pathname.startsWith('/__storage/')) {
+      const f = files.get(url.pathname.slice(11));
+      const raw = await read(req);
+      log.push({ path: '/__storage', type: req.headers['content-type'] ?? '', size: raw.length, query: Object.fromEntries(url.searchParams) });
+      if (failingPuts) return fail(503, 'storage', 'Storage is down.');
+      if (!f || req.headers['content-type'] !== f.type || raw.length !== f.size) return fail(403, 'signature', 'That isn’t what this link was signed for.');
+      f.bytes = raw;
+      res.writeHead(200, cors);
+      return res.end();
     }
     if (req.method === 'GET' && url.pathname === '/__fake/state') return send(200, [...cards.values()].map((c) => ({ kidToken: c.kidToken, askToken: c.askToken, ...cardOut(c) })));
     if (req.method !== 'POST') return fail(405, 'bad_request', 'POST only.');
     const raw = await read(req);
-    log.push({ path: url.pathname, query: Object.fromEntries(url.searchParams), type: req.headers['content-type'] ?? '', token: req.headers['x-dish-token'] ?? null });
-    const body = () => {
+    const b = (() => {
       try {
         return JSON.parse(raw.toString('utf8') || '{}');
       } catch {
         return null;
       }
-    };
-    const b = url.pathname === '/dish/files' || url.pathname === '/dish/ask/answer' ? null : body();
-    if (b === null && url.pathname !== '/dish/files' && url.pathname !== '/dish/ask/answer') return fail(400, 'bad_request', 'That isn’t JSON.');
+    })();
+    log.push({ path: url.pathname, query: Object.fromEntries(url.searchParams), type: req.headers['content-type'] ?? '', token: b?.askToken ?? null, preflighted: !/^text\/plain/.test(req.headers['content-type'] ?? '') });
+    if (b === null) return fail(400, 'bad_request', 'That isn’t JSON.');
 
     switch (url.pathname) {
       case '/__fake/budget':
@@ -242,13 +257,19 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
         return send(200, { rateLimited });
       case '/dish/files': {
         const kind = url.searchParams.get('kind');
-        const type = (req.headers['content-type'] ?? '').split(';')[0].trim();
+        const type = baseType(b.contentType);
         if (kind !== 'photo' && kind !== 'voice') return fail(400, 'bad_request', 'kind is photo or voice.');
         if (kind === 'photo' ? !/^image\/(jpeg|png|webp)$/.test(type) : !/^audio\//.test(type)) return fail(415, 'bad_type', 'We don’t take that type.');
-        if (raw.length > (kind === 'photo' ? 5 : 3) * 1024 * 1024) return fail(413, 'too_large', 'That file is too big.');
+        if (!(b.size > 0)) return fail(400, 'bad_request', 'The file is empty.');
+        if (b.size > (kind === 'photo' ? 5 : 3) * 1024 * 1024) return fail(413, 'too_large', 'That file is too big.');
         const fileId = token();
-        files.set(fileId, { kind, type, bytes: raw });
-        return send(201, { fileId, kind, contentType: type, size: raw.length });
+        files.set(fileId, { kind, type, size: b.size });
+        return send(201, { fileId, kind, contentType: type, size: b.size, ...uploadLink(fileId, type) });
+      }
+      case '/dish/files/confirm': {
+        const f = files.get(b.fileId);
+        if (!f?.bytes) return fail(404, 'not_found', 'That file doesn’t work anymore. Add it again.');
+        return send(201, { fileId: b.fileId, kind: f.kind, contentType: f.type, size: f.size });
       }
       case '/dish/cards': {
         if (budgetSpent) return fail(429, 'budget', 'homecookd has made all the recipes it can today. Try again tomorrow.');
@@ -273,7 +294,7 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
           message: defaultMessage(relation, guess.dish),
           voice: null,
           voiceS: null,
-          photos: (b.photos ?? []).filter((id) => files.has(id)),
+          photos: (b.photos ?? []).filter((id) => files.get(id)?.bytes),
           askedAt: null,
           openedAt: null,
           finishedAt: null,
@@ -331,7 +352,7 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
           }
           if (typeof b.message === 'string') c.message = b.message.trim().slice(0, 500);
           if (b.voiceNote !== undefined) {
-            c.voice = b.voiceNote && files.has(b.voiceNote) ? b.voiceNote : null;
+            c.voice = b.voiceNote && files.get(b.voiceNote)?.bytes ? b.voiceNote : null;
             c.voiceS = c.voice ? (b.voiceNoteS ?? null) : null;
           }
           return send(200, { card: cardOut(c) });
@@ -368,15 +389,23 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
       return fail(404, 'not_found', 'No such route.');
     }
 
-    if (url.pathname === '/dish/ask/answer') {
-      const c = byAsk(req.headers['x-dish-token']);
+    if (url.pathname === '/dish/ask/answer/upload' || url.pathname === '/dish/ask/answer') {
+      const c = byAsk(b.askToken);
       if (!c) return fail(404, 'not_found', 'This link doesn’t work anymore.');
       if (c.finishedAt) return fail(409, 'closed', 'You already sent your answers.');
       const q = url.searchParams.get('q');
       if (!c.asked.some((x) => x.id === q)) return fail(400, 'bad_request', 'That question wasn’t asked.');
-      const fileId = token();
-      files.set(fileId, { kind: 'answer', type: (req.headers['content-type'] ?? 'audio/webm').split(';')[0], bytes: raw });
-      c.answers.set(q, { file: fileId, durationS: Math.min(120, Number(url.searchParams.get('durationS')) || 0), lang: url.searchParams.get('lang') || 'en' });
+      if (url.pathname === '/dish/ask/answer/upload') {
+        const type = baseType(b.contentType);
+        if (!/^audio\//.test(type)) return fail(415, 'bad_type', 'That recording type isn’t supported.');
+        if (!(b.size > 0)) return fail(400, 'bad_request', 'The recording is empty.');
+        const fileId = token();
+        files.set(fileId, { kind: 'voice', type, size: b.size, askToken: c.askToken });
+        return send(201, { fileId, kind: 'voice', contentType: type, size: b.size, ...uploadLink(fileId, type) });
+      }
+      const f = files.get(b.fileId);
+      if (!f?.bytes || f.askToken !== c.askToken) return fail(404, 'not_found', 'That file doesn’t work anymore. Add it again.');
+      c.answers.set(q, { file: b.fileId, durationS: Math.min(120, Number(url.searchParams.get('durationS')) || 0), lang: url.searchParams.get('lang') || 'en' });
       return send(200, { ask: askOut(c) });
     }
 
@@ -417,6 +446,8 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
     log,
     setBudget: (spent) => (budgetSpent = spent),
     setRate: (on) => (rateLimited = on),
+    setFailingPuts: (on) => (failingPuts = on),
+    expireLinks: () => (linkGeneration += 1),
     close: () => new Promise((r) => server.close(r)),
   };
 }

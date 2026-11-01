@@ -1135,6 +1135,43 @@ test("a clip whose read link can't be made reads as null, as a missing clip alwa
   like((await peek(t, askToken)).clips, [{ id: "q1", audioUrl: null, durationS: 4.2 }]);
 });
 
+test("Mom's two answer routes take her token in the body, like every other JSON route; the header still works; neither goes in the query", { skip }, async () => {
+  const t = await newBackend();
+  const { kidToken, askToken } = await askedCard(t);
+  const q = "q=q1&durationS=3";
+  const link = await post(t, `/dish/ask/answer/upload?${q}`, { askToken, contentType: "audio/mp4", size: 400 });
+  assert.equal(link.status, 201, link.body);
+  store.put(link.data.uploadUrl, new Uint8Array(400).fill(1), "audio/mp4");
+  const r = await post(t, `/dish/ask/answer?${q}`, { askToken, fileId: link.data.fileId });
+  assert.deepEqual(r.data.ask.answered, ["q1"]);
+  assert.equal((await answersOf((await rowOf(kidToken)).id)).length, 1);
+  like(await post(t, `/dish/ask/answer/upload?${q}`, { contentType: "audio/mp4", size: 400 }), { status: 400, data: { error: "The X-Dish-Token header is required" } });
+  like(await post(t, `/dish/ask/answer/upload?${q}&askToken=${askToken}`, { contentType: "audio/mp4", size: 400 }), { status: 400 });
+  like(await post(t, `/dish/ask/answer/upload?${q}`, { askToken: "Z".repeat(22), contentType: "audio/mp4", size: 400 }), { status: 404 });
+});
+
+test("a page on localhost may call on any deployment, as on Convex; DISH_WEB_ORIGIN takes only https", { skip }, async () => {
+  const t = await newBackend();
+  const before = process.env.DEPLOY_ENV;
+  try {
+    for (const env of ["staging", "production"]) {
+      process.env.DEPLOY_ENV = env;
+      const local = await post(t, "/dish/cards/get", { kidToken: "Z".repeat(22) }, { origin: "http://localhost:3105" });
+      assert.equal(local.headers["access-control-allow-origin"], "http://localhost:3105", env);
+    }
+    process.env.DEPLOY_ENV = "staging"; // fake models stay off on production
+    process.env.DISH_WEB_ORIGIN = "http://evil.example";
+    like(await post(t, "/dish/cards/get", {}, { origin: "http://evil.example" }), { status: 403, data: { code: "origin" } });
+    assert.equal((await makeCard(t)).card.askUrl.startsWith("https://homecookd.app/a?t="), true, "an http origin isn't honored");
+    process.env.DISH_WEB_ORIGIN = "https://test.homecookd.app";
+    assert.equal((await post(t, "/dish/cards/get", {}, { origin: "https://test.homecookd.app" })).headers["access-control-allow-origin"], "https://test.homecookd.app");
+  } finally {
+    if (before === undefined) delete process.env.DEPLOY_ENV;
+    else process.env.DEPLOY_ENV = before;
+    delete process.env.DISH_WEB_ORIGIN;
+  }
+});
+
 after(async () => {
   if (hasDatabase) await db().end();
 });

@@ -10,8 +10,8 @@
 //   POST /dish/cards/ask                {kidToken, questions} -> {card}
 //   POST /dish/cards/sent               {kidToken, via}       -> {card}
 //   POST /dish/ask/peek                 {askToken, lang?}     -> {ask}
-//   POST /dish/ask/answer/upload?q=&lang=&durationS=  X-Dish-Token, {contentType, size} -> 201 {fileId, ..., uploadUrl, ...}  NEW
-//   POST /dish/ask/answer?q=&lang=&durationS=         X-Dish-Token, {fileId}            -> {ask}  NEW BODY
+//   POST /dish/ask/answer/upload?q=&lang=&durationS=  {askToken, contentType, size} -> 201 {fileId, ..., uploadUrl, ...}  NEW
+//   POST /dish/ask/answer?q=&lang=&durationS=         {askToken, fileId}            -> {ask}  NEW BODY
 //   POST /dish/ask/finish               {askToken, lang?}     -> {ask}
 //
 // Files go straight to S3 (SYSTEM-DESIGN.md), so the two routes that took raw bytes now give out a link: docs/build/DISH-MIGRATION.md.
@@ -116,7 +116,8 @@ function askOf(token: unknown, field = "askToken"): string {
   return sha256Hex(token);
 }
 
-const askHeader = (req: FastifyRequest) => askOf(req.headers["x-dish-token"], "The X-Dish-Token header");
+/** In the body like every other route, so the site's text/plain call needs no preflight; the header still works. */
+const askFrom = (req: FastifyRequest) => askOf(bodyOf(req).askToken ?? req.headers["x-dish-token"], "The X-Dish-Token header");
 
 /** Mom's page language: a known code other than English, else undefined (the page stays in English). */
 function pageLang(v: unknown): string | undefined {
@@ -287,14 +288,14 @@ async function fileConfirm(req: FastifyRequest) {
 }
 
 async function answerLink(req: FastifyRequest) {
-  const askTokenHash = askHeader(req);
+  const askTokenHash = askFrom(req);
   const { questionId } = answerQuery(req);
   const b = bodyOf(req);
   return await service.requestAnswerUpload({ askTokenHash, questionId, contentType: b.contentType, size: b.size, ipKey: ipKeyOf(req) });
 }
 
 async function answer(req: FastifyRequest) {
-  const askTokenHash = askHeader(req);
+  const askTokenHash = askFrom(req);
   const { questionId, language, durationS } = answerQuery(req);
   const fileIdHash = fileHash(bodyOf(req).fileId, "fileId");
   return { ask: await service.momAnswer({ askTokenHash, questionId, fileIdHash, durationS, language }, traceOf(req)) };
@@ -409,8 +410,8 @@ export async function dishRoutes(app: FastifyInstance): Promise<void> {
     const hash = askOf(b.askToken);
     return { ask: await service.momPeek(hash, pageLang(b.lang), traceOf(req)) };
   });
-  post("/ask/answer/upload", fields("contentType", "size"), answerLink, { status: 201, onRequest: limited(RATE.answer) });
-  post("/ask/answer", fields("fileId"), answer, { notFileKeys: ["fileId"] });
+  post("/ask/answer/upload", fields("askToken", "contentType", "size"), answerLink, { status: 201, onRequest: limited(RATE.answer) });
+  post("/ask/answer", fields("askToken", "fileId"), answer, { notFileKeys: ["fileId"] });
   post("/ask/finish", fields("askToken", "lang"), async (req) => {
     const b = bodyOf(req);
     const hash = askOf(b.askToken);

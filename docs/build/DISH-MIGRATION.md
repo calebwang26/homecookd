@@ -12,8 +12,8 @@ Step 5 of `docs/build/AWS-MIGRATION.md`, Oct 31, 2026. A draft on `aws-migration
 |---|---|---|
 | `POST /dish/files?kind=` | the raw file; 201 `{fileId, kind, contentType, size}` | JSON `{contentType, size}`; 201 with those fields plus `uploadUrl`, `uploadHeaders`, `expiresInS` |
 | `POST /dish/files/confirm` | none | New. `{fileId}`; 201 `{fileId, kind, contentType, size}`, once S3 has the bytes |
-| `POST /dish/ask/answer/upload?q=&lang=&durationS=` | none | New. `X-Dish-Token`, JSON `{contentType, size}`; 201 with an upload link. Runs every check the old route ran before storing, and takes the rate limit |
-| `POST /dish/ask/answer?q=&lang=&durationS=` | `X-Dish-Token`, the raw audio; `{ask}` | Same query, header and reply. The body is JSON `{fileId}` |
+| `POST /dish/ask/answer/upload?q=&lang=&durationS=` | none | New. JSON `{askToken, contentType, size}`; 201 with an upload link. Runs every check the old route ran before storing, and takes the rate limit |
+| `POST /dish/ask/answer?q=&lang=&durationS=` | `X-Dish-Token`, the raw audio; `{ask}` | Same query and reply. The body is JSON `{askToken, fileId}`. Both routes still take the token in `X-Dish-Token`, but the site doesn't send it |
 
 **Deferred: they need `people` and `families`, so they wait for the one-way sync (SCHEMA.md, M1):**
 - `POST /dish/craving/peek` answers the catch-all 404 for now. It needs her first name and relation.
@@ -75,7 +75,7 @@ There's no session, so `fileKeys` can't apply. `fileId` is a capability, stored 
 | `dishModel.test.ts` | `convex/dishAskModel.test.ts`, all 20, against a stubbed fetch |
 | `scheduled.test.ts` | The queue consumer, repeats, one holder per clip (Ink held open, so the overlap is forced), a try's limits, the sweep's reach and speed, the budget under concurrency |
 | `storage.test.ts` | The real S3 adapter's signing, with no network |
-| `dishWebClient.test.ts` | The site's own `web/src/lib/dish/api.ts`, unchanged but for its base URL, over a local port |
+| `dishWebClient.test.ts` | The site's own `web/src/lib/dish/api.ts`, unchanged but for its base URL, over a local port: uploads and an answer end to end, with PUTs routed to the fake store, and a failed PUT reading as `busy` |
 | `dishCopies.test.ts` | Fails when Convex's recipe code, prompts or word list change, so a fix reaches both |
 
 **Carried over:** 41 of 41 from `dishAsks.test.ts` and 20 of 20 from `dishAskModel.test.ts`. 60 keep their exact titles, and the kid-deletes test's title now also names the message and `ip_key`.
@@ -86,7 +86,9 @@ There's no session, so `fileKeys` can't apply. `fileId` is a capability, stored 
 
 **Not carried, because they're deferred:** `convex/cravings.test.ts`, and any `pushEvents` or `account.test.ts` assertion on these cards.
 
-**`web/scripts/qa/dish-e2e.mjs` was not run.** It starts its own fake server in-process and reads that fake's state (`fake.cards`), and its checks expect the fake's canned card, not `DISH_FAKE_AI`'s. It needs an `--api` mode that reads state another way, and the `web/` upload change. `dishWebClient.test.ts` covers the contract instead, not the pages.
+**The pages, in real Chrome:**
+- `web/scripts/qa/dish-e2e.mjs` runs the site with `next dev` against its fake server, which now has a PUT endpoint that checks the signed type and size. It also covers a failed PUT and a dead read link.
+- `web/scripts/qa/dish-api-e2e.mjs` runs the whole flow against a real api: a kid's card from a made-up dish with a test photo, Save, Ask Mom, her answers on Chrome's fake audio device, Send, and the kid reopening to her version. It checks states rather than a model's sentences, and any failed request or CORS error fails it. Locally it runs on `api/test/localApi.ts`: the real routes and Postgres, fake models, and a stand-in for S3 that checks the signed type, size and expiry and answers CORS. That file is under `test/`, so it's never in the api's image.
 
 ## Long work
 
@@ -121,12 +123,15 @@ The load balancer's `idle_timeout` is 3700 s, and Fastify's default keep-alive i
 - **Tests only:** `DISH_FAKE_AI`.
 - **Models:** today's, kept: `claude-haiku-5-5` for the guess and merge, `claude-opus-5-5` for translations, `ink-whisper` for voice. Voice stays on Cartesia, which AGENTS.md's "Off Gemini" rule allows for audio.
 
-## What `web/` would need (not made)
+## What `web/` needs (written, on `aws-migration` only)
 
-- `NEXT_PUBLIC_DISH_URL` pointed here.
-- `web/src/lib/dish/api.ts`, about 25 lines. `uploadFile`: ask for the link with `blob.size`, `PUT` to `uploadUrl` with `uploadHeaders`, then confirm. `sendAnswer`: `/ask/answer/upload`, `PUT`, then `/ask/answer` with `{fileId}`. Their callers don't change.
-- `components/dish/parts.tsx`: when `a.play()` fails, reload the card for a fresh link, because a page open over an hour holds an expired one. Today it stops silently.
-- `dish-fake-server.mjs` and `dish-e2e.mjs` to match.
+`web/` stays owned by App Store, web & builds, and `main`'s live contract is unchanged. Still to do at the switch: point `NEXT_PUBLIC_DISH_URL` here.
+
+- `web/src/lib/dish/api.ts`: `uploadFile` asks for the link with `blob.size`, PUTs to `uploadUrl` with `uploadHeaders`, then confirms. `sendAnswer` uses `/dish/ask/answer/upload`, a PUT, then `/dish/ask/answer`. Their callers don't change. A failed PUT, of any kind, reads as `busy`, as a 502 does. Limits: 15 s for each api call, and 30 s for a file's PUT or 45 s for a clip's. It reads the PUT's reply to the end, because Chrome reports a fetch with an unread body as cancelled.
+- **Preflights:** every api call stays `text/plain` with its token in the body, so none needs a preflight. That's why the two answer routes now take `askToken` in the body. With the header, each answer would have added two preflights, never cached, because `durationS` changes the URL. A PUT always needs one, from S3's CORS, so an answer costs 1 preflight, as the old raw route did.
+- `components/dish/parts.tsx`: `useAudio(onStale)` reloads the card when a tap finds a source that won't load (`NotSupportedError`), because a page open over an hour holds a dead link. The tap itself plays nothing; the next one plays the fresh link. `CardScreen`, `IntroScreen` and `FillScreen` pass it. Only `CardScreen`'s path is tested in a browser.
+
+**Localhost against staging:** `ORIGINS` in `routes.ts` already allows `http://localhost`, `127.0.0.1` and `[::1]` on any port and on every deployment, production included, as Convex's does. So `http://localhost:3105` against the staging api needs no change, and staging's S3 CORS already lists it. `webOrigin()` still takes only https. A test pins all of this. `TODO(caleb)`: closing localhost on production would be a small change at the switch; I left it matching today.
 
 ## What `infra/` needs (done, except as noted)
 
@@ -148,7 +153,7 @@ The load balancer's `idle_timeout` is 3700 s, and Fastify's default keep-alive i
 
 **Decided in review (Oct 31):**
 
-1. **Raw uploads: the rule stays.** The site's roughly 25 lines ship with the switch, owned by App Store, web & builds. The alternative, a temporary relay on the old routes, breaks the rule and holds up to 5 MB in memory per request.
+1. **Raw uploads: the rule stays.** The site's change is written on `aws-migration` and ships with the switch, owned by App Store, web & builds. The alternative, a temporary relay on the old routes, breaks the rule and holds up to 5 MB in memory per request.
 2. **A retried `POST /dish/cards`: left for now.** The first try's `kidToken` is stored only as a hash, so a retry can't get it back, and its files answer not-found, as today. A later fix: the site sends a client id that a retry repeats, and the kid token comes from a server secret and that id.
 3. **By person or by family: decide in the signed-in step, matching the person rule where there's an owner.** Convex's in-review check (PR #215, `convex/lib/fileOwner.ts`) goes by person. `api/src/files.ts` `requireOwnFiles` goes by family, and it doesn't refuse a file something already holds. Not changed here. My recommendation for that step: require `owner_person_id` to match when it's set and refuse a file already held, apart from a same-row retry. A family check alone lets one member attach another's upload, and then purging the second account deletes the first's message file.
 4. **How long a read link lasts: left at 1 to 2 hours.** It may end sooner if the task's role credentials expire first; not measured. `TODO(caleb)` if a kid's page should hold audio longer.
@@ -157,4 +162,10 @@ The load balancer's `idle_timeout` is 3700 s, and Fastify's default keep-alive i
 
 ## Not verified
 
-Real S3, SQS, Claude or Ink; the browser against presigned links; `dish-e2e.mjs`; RDS; load or latency. The sweep has no schedule until `infra/` adds one. The 10-minute and daily rate tests can flake across a real window edge, as `rateLimit.test.ts` can.
+- **The deployed site with an HTTPS api.** Unproven: every browser run so far is `next dev` on localhost over plain http. `dish-api-e2e.mjs` is built to run against staging, and hasn't yet.
+- **Real S3 from a browser.** A presigned PUT and read link, and S3's CORS and its 403 on a dead link, are stood in for locally. Only the signing was checked against the real adapter, offline.
+- **Real SQS, Claude or Ink, RDS, load or latency.**
+- **Browsers other than Chrome.** Safari's `play()` failure on a dead link and its PUT of an iPhone recording haven't been run. A browser that fails `play()` with another error name won't reload the card.
+- **Mom's dead read link** in a browser (`IntroScreen`, `FillScreen`). It's the same hook as the kid's, which is tested.
+
+The 10-minute and daily rate tests can flake across a real window edge, as `rateLimit.test.ts` can.
