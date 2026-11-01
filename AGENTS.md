@@ -235,6 +235,8 @@ cd infra/envs/staging && terraform init -backend=false && terraform validate   #
 cd infra/modules/front_door && terraform init -backend=false && terraform test   # also infra/backup-copy, infra/modules/bucket_copy; no login needed
 cd infra/envs/staging && AWS_PROFILE=homecookd terraform plan        # production apply: Caleb's OK
 
+python3 infra/scripts/test_plan_check.py                                # what a merge may apply to staging by itself: every guard has a test that fails without it
+
 # website on AWS (staging only; infra/modules/web, docs/build/WEB-MIGRATION.md)
 cd web && npm run build && cd .. && node --test infra/modules/web/rewrite.test.mjs   # the URL rules against every real file in web/out
 node infra/scripts/web-smoke.mjs https://homecookd.app                            # the same paths, against a running site

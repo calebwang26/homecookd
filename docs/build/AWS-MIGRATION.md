@@ -18,7 +18,8 @@ Oct 31, 2028; $100 expires Oct 17, 2027). Claude stays billed by Anthropic, and 
 ## How the rewrite ships (Caleb, Oct 31)
 
 One long-lived branch, `aws-migration`, with one reviewable PR per area merged into it. **Nothing from it reaches `main` or production until
-Apple approves 1.0.** Merges into it do auto-deploy to staging. After approval: app 1.1 with our own addresses first, then each area switches over on its own, with
+Apple approves 1.0.** Merges into it do auto-deploy to staging, and once Caleb creates its role they apply staging's Terraform too, through a
+safety check. That makes a merge here a real gate, held only by the Master Agent's review (`infra/README.md`, "Merges apply staging"). After approval: app 1.1 with our own addresses first, then each area switches over on its own, with
 Convex as its way back until it's proven. Build 6 keeps calling the old services, so they stay up until those phones have
 updated. `main` keeps changing `convex/` meanwhile, so the branch merges `main` often and ports each change.
 
