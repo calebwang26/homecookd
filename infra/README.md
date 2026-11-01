@@ -12,6 +12,7 @@ envs/staging/     the cheap copy: no real keys, no real data
 envs/production/  NOT created yet. Applying it needs Caleb's OK
 backups/          daily Convex exports to S3, with their own small network and a key only for this
 backup-copy/      a copy in a second region, off by default, never applied (docs/build/REGION-COPY.md; module: modules/bucket_copy/)
+addresses/        phase 1's api., media. and voice addresses, off by default, never applied (docs/build/ADDRESSES-MIGRATION.md; module: modules/front_door/)
 scripts/load-secrets.sh   copies keys from the root .env into Secrets Manager without printing them
 scripts/create-backup-key.sh   makes the Convex key for backups and stores it, unseen. Caleb runs it
 scripts/web-sync.sh, web-smoke.mjs   publish the website; check a running copy of it
@@ -25,6 +26,9 @@ scripts/web-sync.sh, web-smoke.mjs   publish the website; check a running copy o
 ```bash
 # check the code (no login needed)
 cd infra/envs/staging && terraform init -backend=false && terraform validate
+
+# the off-by-default parts' rules, on Terraform's mock provider (no login, no AWS)
+cd infra/backup-copy && terraform init -backend=false && terraform test   # also infra/modules/bucket_copy, infra/modules/front_door
 
 # the website's CloudFront Function, against a real build
 cd web && npm ci && npm run build && cd .. && node --test infra/modules/web/rewrite.test.mjs

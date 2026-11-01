@@ -183,6 +183,9 @@ a server-side switch with no app release.
 Not proven yet: Convex's client keeps a WebSocket open to its own host, and forwarding that through our address has to be
 tested on staging before 1.1 depends on it. If it fails, Convex keeps its own URL until phase 6 replaces the client.
 
+Written, off, and never applied: `docs/build/ADDRESSES-MIGRATION.md` has the steps, the test, and what must change first. **Through CloudFront, Convex's and
+Supabase's per-IP limits see CloudFront's address, not the caller's**, so `api.` can't carry live traffic until that's solved.
+
 ### 2. Foundation and staging
 `infra/` (see `infra/README.md`). Staging has no real keys or data: voice runs with `VOICE_STUB=1` and
 `VOICE_FAKE_SPEECH=1`, so a stranger who finds the address can't spend credits or see a family.

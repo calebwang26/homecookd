@@ -49,6 +49,16 @@ variable "api_count" {
   default = 1
 }
 
+variable "front_door" {
+  description = "Phase 1's addresses, to prove them on staging. Empty is off, and a plain apply removes them. Shape: infra/modules/front_door/variables.tf. Steps: docs/build/ADDRESSES-MIGRATION.md"
+  type        = any
+  default     = {}
+  validation {
+    condition     = !can(regex("grand-dragon-649|bsudybxsqvtwftsdmwmz|homecookd-voice-|edible-", jsonencode(var.front_door)))
+    error_message = "Staging never forwards to a live service. Use a throwaway one."
+  }
+}
+
 module "env" {
   source            = "../../modules/env"
   environment       = "staging"
@@ -67,6 +77,7 @@ module "env" {
   schedules = {
     "dish.sweep"     = { expression = "rate(1 hour)", task = "dish.sweep" }
     "platform.prune" = { expression = "rate(6 hours)", task = "platform.prune" }
+    # community.remind_open: cron(0 16 * * ? *), once its task reaches this branch (a schedule with no task only fills the dead letters).
   }
 
   services = {
@@ -116,9 +127,16 @@ module "web" {
   deploy_role_name = module.env.deploy_role_name
 }
 
+module "front_door" {
+  source    = "../../modules/front_door"
+  name      = "homecookd-staging-front-door"
+  addresses = var.front_door
+}
+
 output "load_balancer_url" { value = module.env.load_balancer_url }
 output "media_url" { value = module.env.media_url }
 output "deploy_role_arn" { value = module.env.deploy_role_arn }
 output "web_url" { value = module.web.url }
 output "web_bucket" { value = module.web.bucket }
 output "web_distribution_id" { value = module.web.distribution_id }
+output "front_door_domains" { value = module.front_door.cloudfront_domains }
