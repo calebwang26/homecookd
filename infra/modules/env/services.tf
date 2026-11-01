@@ -64,15 +64,16 @@ resource "aws_ecs_task_definition" "service" {
   execution_role_arn       = aws_iam_role.execution[each.key].arn
   task_role_arn            = aws_iam_role.task[each.key].arn
 
-  container_definitions = jsonencode([{
+  container_definitions = jsonencode([merge({
     name         = each.key
     image        = "${aws_ecr_repository.service[each.key].repository_url}:bootstrap"
     essential    = true
     stopTimeout  = 120 # Fargate's maximum; long calls are held by task protection instead (docs/build/AWS-MIGRATION.md)
     portMappings = contains(keys(local.lb_services), each.key) ? [{ containerPort = each.value.port }] : []
-    environment = [for k, v in merge(each.value.env, each.value.uses_database ? { DB_HOST = aws_db_instance.main.address } : {}, {
+    environment = [for k, v in merge(each.value.env, each.value.uses_database ? { DB_HOST = aws_db_instance.main.address } : {}, each.key == "worker" ? { MEDIA_BASE_URL = local.media_url } : {}, {
       PORT                = tostring(each.value.port)
       MEDIA_BUCKET        = aws_s3_bucket.media.bucket
+      MEDIA_BASE_URL      = local.media_url
       UPLOAD_BUCKET       = aws_s3_bucket.uploads.bucket
       PRIVATE_BUCKET      = aws_s3_bucket.private.bucket
       JOBS_QUEUE_URL      = aws_sqs_queue.jobs.url
@@ -91,7 +92,7 @@ resource "aws_ecs_task_definition" "service" {
         awslogs-stream-prefix = each.key
       }
     }
-  }])
+  }, each.value.entry_point == null ? {} : { entryPoint = each.value.entry_point })])
 }
 
 resource "aws_ecs_service" "service" {

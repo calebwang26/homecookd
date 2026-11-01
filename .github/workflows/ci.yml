@@ -113,9 +113,15 @@ jobs:
       - run: terraform fmt -check -recursive infra
       - name: Validate every root
         run: |
-          for ROOT in bootstrap backups envs/staging envs/production; do
+          for ROOT in bootstrap backups backup-copy addresses envs/staging envs/production; do
             terraform -chdir="infra/$ROOT" init -backend=false -input=false >/dev/null
             terraform -chdir="infra/$ROOT" validate
+          done
+      - name: Terraform's own tests (they plan with fake credentials, and reach nothing)
+        run: |
+          for ROOT in backup-copy modules/front_door modules/bucket_copy; do
+            terraform -chdir="infra/$ROOT" init -backend=false -input=false >/dev/null
+            terraform -chdir="infra/$ROOT" test
           done
 
   convex:

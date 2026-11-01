@@ -32,7 +32,9 @@ docker run --entrypoint python <image> pipeline/queue_worker.py [--once]
 ```
 
 It reads no `.env`, and exits unless `JOBS_QUEUE_URL`, `UPLOAD_BUCKET`, `MEDIA_BUCKET`, `MEDIA_BASE_URL` and `DEPLOY_ENV` are set.
-On ECS this needs `entryPoint` set on the worker's container. Its `desired_count` is 0 today.
+On staging, Terraform sets that entry point on the worker's container (`entry_point` in `infra/envs/staging/main.tf`). Production's stays
+Convex mode until it's chosen. Its `desired_count` is 0 today. A Terraform apply that changes the worker registers a task definition with
+the `:bootstrap` image, so run "Deploy to AWS" for `worker` before running a task by hand.
 
 **Message contract:** `{outboxId, requestId, payload: {jobId}}`, from `api/src/outbox.ts` with `queue: "jobs"`. The draft in
 `docs/build/JOBS-MIGRATION.md` sends it: it sets the job to `queued` and writes the outbox row in one transaction, only once the upload is complete.
@@ -59,7 +61,7 @@ told once. Cartesia's transcription isn't in `usage.json`, so it isn't counted.
 
 ## What each crash does
 
-Every attempt starts clean from the raw upload, which this assumes is still there (live GCS deletes after 14 days and S3 has no rule: `TODO(caleb)` in AWS-MIGRATION). So a re-run pays for its model calls again, and they count toward the job cap.
+Every attempt starts clean from the raw upload, which this assumes is still there (GCS and S3 both delete it after 14 days: AWS-MIGRATION). So a re-run pays for its model calls again, and they count toward the job cap.
 
 | The worker dies... | State left behind | What the re-run does |
 |---|---|---|
@@ -95,17 +97,17 @@ Two, plus Sentry's. `prep.py`, `process.py`, `account_purge.py` and `requirement
 ## Env and permissions needed (names only)
 
 **Already on the task:** `JOBS_QUEUE_URL`, `UPLOAD_BUCKET`, `MEDIA_BUCKET`, `PRIVATE_BUCKET`, `DB_HOST`, `DB_CREDENTIALS`, `DEPLOY_ENV`,
-`RELEASE`, `SENTRY_DSN_WORKER`.
+`RELEASE`, `SENTRY_DSN_WORKER`, `MEDIA_BASE_URL` (the worker's only).
 
-**To add:** `MEDIA_BASE_URL`, `PIPELINE_JOB_CAP_USD`, `PIPELINE_DAILY_CAP_USD`, `EXTRACTOR`, `TEXT_PROVIDER`, `COVER_PROVIDER`,
+**To add for a real run:** `PIPELINE_JOB_CAP_USD`, `PIPELINE_DAILY_CAP_USD`, `EXTRACTOR`, `TEXT_PROVIDER`, `COVER_PROVIDER`,
 `ALIGN_PROVIDER`, `RECIPE_WRITER`, `WRITER_PROVIDER`, `TRANSCRIPT_PROOFREAD`, `ANTHROPIC_API_KEY`, `CARTESIA_API_KEY`, `CARTESIA_API_KEYS_BACKUP`.
 Staging has none of those keys today. `QUEUE_WORKER_DEBUG` shows the steps' output, which can quote family content: fake data only.
 
-**IAM gaps, which block a real run (`infra/modules/env/iam.tf`, not changed here):**
-- `s3:ListBucket` on `uploads` and `media`. Without it every job fails at the upload listing.
-- `s3:GetObject` on `private`, for the plate photo. Without it the cover falls back to a video frame.
+**Permissions (`infra/modules/env/iam.tf`):** `s3:ListBucket` on `uploads` and `media`, and `s3:GetObject` on `private` for the plate photo.
+Not `s3:ListBucket` on `private`, so a missing photo answers 403, which `download_cover` already treats as no photo.
 
-**Infra:** set `entryPoint` on the worker's container. Fargate's default 20 GB disk may be too small; see below.
+**Infra:** Fargate's default 20 GB disk may be too small; see below. Terraform leaves it until a job is measured: the measuring task sets it
+with `run-task --overrides '{"ephemeralStorage":{"sizeInGiB":100},"containerOverrides":[{"name":"worker","command":["--once"]}]}'`.
 
 **Database login (when the limited one replaces master):** read and write `jobs`, `recipes`, `questions`, `model_calls`, `daily_spend`;
 insert `outbox`; read `people`, `recordings`, `homie_prompts`.
@@ -126,7 +128,7 @@ insert `outbox`; read `people`, `recordings`, `homie_prompts`.
 **Needs Caleb's OK each time, and only his own consenting test footage, never a family's video:** `/privacy` doesn't list AWS yet. It costs real money, past the caps' Claude-only count.
 
 **Needs Caleb's OK: it costs money and needs real footage.** Use his own consenting test video on staging, never a family's. `/privacy`
-doesn't list AWS yet. Close the IAM gaps first. Expect roughly $2.50 an hour of video.
+doesn't list AWS yet. Expect roughly $2.50 an hour of video.
 
 1. Pick 3 clips: about 5, 30 and 60 minutes.
 2. Run each on a fresh task, with `--once`, so the peak figures belong to one job: 2 vCPU, 8 GB, 100 GB of ephemeral storage. Set
