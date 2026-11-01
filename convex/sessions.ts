@@ -17,11 +17,13 @@ export const start = action({
     if (!deviceKey || deviceKey.length > 200 || !profileId || profileId.length > 100) {
       throw new ConvexError("Sign in again.");
     }
-    const { family, profiles, needsPerson } = await fetchFamily(deviceKey, profileId);
-    // Supabase lets this phone read as a phone-less person but not write as them, and a session can
-    // write, even delete the account. Whoever opened a forwarded family invite adds themselves first.
-    // A family-code phone (`via: 'code'`) passes: it becomes the first person it picks, as on Supabase.
-    if (needsPerson) throw new ConvexError("Add yourself first.");
+    const { family, profiles, needsPerson, devicePersonId } = await fetchFamily(deviceKey, profileId);
+    // Supabase lets a phone with nobody read as a phone-less person, but a session can write, even
+    // delete the account. Whoever opened a forwarded family invite adds themselves first. A family-code
+    // phone with nobody follows the same rule once SESSIONS_NEED_OWN_PERSON=1: unset until 1.1 is in
+    // the store, because 1.0's only sign-in for the TEST family is a code (Caleb, Nov 1).
+    const noPersonYet = process.env.SESSIONS_NEED_OWN_PERSON === "1" && !devicePersonId;
+    if (needsPerson || noPersonYet) throw new ConvexError("Add yourself first.");
     const me = profiles.find((p) => p.id === profileId);
     if (!me) throw new ConvexError("That person isn't in this family anymore.");
     if (me.invited) throw new ConvexError("They haven't joined yet.");

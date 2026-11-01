@@ -3,7 +3,10 @@ import { api, internal } from "./_generated/api";
 import { addRecipe, FAMILY, newBackend, signIn, stubFetch } from "./test.helpers";
 
 vi.mock("@moss-js/moss", () => ({ MossClient: class {} }));
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
+});
 
 test("sign-in checks the device key with Supabase and mirrors the family", async () => {
   const fetch = stubFetch();
@@ -64,12 +67,29 @@ test("a phone from a forwarded invite gets no session until it adds itself, then
   await expect(signIn(t, "p-mom")).rejects.toThrow("Mom uses their own phone.");
 });
 
-test("a family-code phone with nobody yet still signs in as the person it picks", async () => {
-  // The App Review path: the TEST family's code, swapped for a key, then a face. Its person is only
-  // set on its first Supabase write, so this first session has to work without one.
+test("a family-code phone with nobody yet signs in until SESSIONS_NEED_OWN_PERSON is on", async () => {
+  // 1.0's App Review path: the TEST family's code, swapped for a key, then a face. Its person is only
+  // set on its first Supabase write, so the switch stays off until 1.1 is in the store.
   stubFetch({ ...FAMILY, device_profile_id: null, device_needs_profile: false });
   const t = newBackend();
   expect((await signIn(t, "p-leo")).role).toBe("kid");
+
+  vi.stubEnv("SESSIONS_NEED_OWN_PERSON", "1");
+  for (const who of ["p-dad", "p-leo"]) {
+    await expect(signIn(t, who)).rejects.toThrow("Add yourself first.");
+  }
+  expect(await t.run((ctx) => ctx.db.query("sessions").collect())).toHaveLength(1);
+
+  // Its first write made Leo its person: Leo, and phone-less Dad on loan, sign in again.
+  stubFetch({ ...FAMILY, device_profile_id: "p-leo", device_needs_profile: false });
+  expect((await signIn(t, "p-leo")).role).toBe("kid");
+  expect((await signIn(t, "p-dad")).role).toBe("cook");
+});
+
+test("with the switch on, an answer that doesn't name the phone's person gets no session", async () => {
+  vi.stubEnv("SESSIONS_NEED_OWN_PERSON", "1");
+  stubFetch(); // FAMILY has no device_profile_id
+  await expect(signIn(newBackend(), "p-leo")).rejects.toThrow("Add yourself first.");
 });
 
 test("every public function needs a live session, and sees only its own family", async () => {

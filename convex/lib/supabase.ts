@@ -17,6 +17,8 @@ export type SupabaseFamily = {
   profiles: SupabaseProfile[];
   /** This phone came in through a family invite and hasn't said who it is yet. */
   needsPerson: boolean;
+  /** This phone's own person. Null for a swapped family code until its first write as someone. */
+  devicePersonId: string | null;
 };
 
 /** `GET /family` as this phone and this person. Throws the server's own error text (it's written for people). */
@@ -31,9 +33,14 @@ export async function fetchFamily(deviceKey: string, profileId: string): Promise
     throw new ConvexError("Couldn't reach sign-in. Try again soon.");
   }
   const body = (await res.json().catch(() => null)) as
-    | (Partial<SupabaseFamily> & { device_needs_profile?: boolean; error?: string })
+    | (Partial<SupabaseFamily> & { device_needs_profile?: boolean; device_profile_id?: string | null; error?: string })
     | null;
   if (!res.ok) throw new ConvexError(body?.error || `Sign-in failed (${res.status}).`);
   if (!body?.family?.id || !Array.isArray(body.profiles)) throw new ConvexError("Sign-in sent something odd.");
-  return { family: body.family, profiles: body.profiles, needsPerson: body.device_needs_profile === true };
+  return {
+    family: body.family,
+    profiles: body.profiles,
+    needsPerson: body.device_needs_profile === true,
+    devicePersonId: body.device_profile_id ?? null,
+  };
 }
