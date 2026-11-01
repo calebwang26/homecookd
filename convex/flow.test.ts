@@ -82,6 +82,9 @@ test("an upload goes from jobs.create through the worker to a ready, indexed rec
   expect((await post(t, "/worker/progress", { jobId, stage: "writing", progress: 0.6 }, asWorker)).status).toBe(200);
   const [job] = await t.query(api.jobs.forFamily, { sessionToken: dad.sessionToken });
   expect(job).toMatchObject({ stage: "writing", progress: 0.6 });
+  // A recording on its way shows only to whoever filmed it.
+  expect((await t.query(api.jobs.mine, { sessionToken: dad.sessionToken })).map((j) => j._id)).toEqual([jobId]);
+  expect(await t.query(api.jobs.mine, { sessionToken: leo.sessionToken })).toEqual([]);
 
   expect((await post(t, "/worker/published", { jobId, recipe: { title: "x", steps: [] } }, asWorker)).status).toBe(400);
   const pub = await post(

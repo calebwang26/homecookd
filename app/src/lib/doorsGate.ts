@@ -18,7 +18,7 @@ export type DoorsInput = {
   seen: { profileId: string; seen: boolean } | null;
   /** The family's recipes.list rows (null until Convex answers for this person). */
   recipes: readonly unknown[] | null;
-  /** The family's recording jobs, jobs.forFamily (null until Convex answers for this person). */
+  /** Her own recording jobs, jobs.mine (null until Convex answers for this person). */
   jobs: readonly unknown[] | null;
 };
 

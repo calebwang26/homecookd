@@ -10,7 +10,7 @@
 //   Ready:   the recipe exists but the send to Leo hasn't reached the server yet ("Ready · sending
 //            it to Leo"), no spinner; Your recipes hides this row once the recipe card is listed.
 // Live (hackathon, docs/build/STACK.md): once the videos are in, the worker's stage from Convex
-// jobs.forFamily replaces the estimate: "Watching your video", "Writing the recipe"… and the second
+// jobs.mine replaces the estimate: "Watching your video", "Writing the recipe"… and the second
 // half of the bar is its real progress. Its 'uploading' (the worker found the video incomplete) is
 // still the sending half: "Still sending the video", that half not full (components/parent/jobsLogic).
 // Its 'done' opens the recipe once PendingRecipes knows its library id.
