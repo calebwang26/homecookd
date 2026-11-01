@@ -131,7 +131,7 @@ resource "aws_iam_role_policy" "deploy" {
       {
         Effect = "Allow"
         Action = [
-          "ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:CompleteLayerUpload", "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:CompleteLayerUpload", "ecr:DescribeImages", "ecr:GetDownloadUrlForLayer",
           "ecr:InitiateLayerUpload", "ecr:PutImage", "ecr:UploadLayerPart",
         ]
         Resource = [for r in aws_ecr_repository.service : r.arn]

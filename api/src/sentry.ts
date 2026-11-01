@@ -33,5 +33,7 @@ if (process.env.SENTRY_DSN_API) {
     maxBreadcrumbs: 0,
     beforeSend: scrub,
     beforeSendTransaction: scrub,
+    // Sentry's newer 'stream' mode ignores beforeSendTransaction, and scrub is a required lock.
+    traceLifecycle: "static",
   });
 }
