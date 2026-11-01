@@ -81,11 +81,11 @@ export async function queuePush(c: Queryable, p: PushInput, now = new Date()): P
 
   if (convex) {
     if (tokens.length === 0) {
-      return (await data.insertLog(c, { ...base, status: "none", skippedReason: null, sendAt: now })) ? "none" : "dup";
+      return (await data.insertLog(c, { ...base, status: "none", skippedReason: null, title: null, body: null, sendAt: now })) ? "none" : "dup";
     }
     const recent = await data.recentConvexKinds(c, p.personId, CONVEX_KINDS, now, DAILY_MAX * 2);
     if (recent.length >= DAILY_MAX || (p.kind === "craving" && recent.filter((r) => r.kind === "craving").length >= CRAVINGS_PER_DAY)) {
-      return (await data.insertLog(c, { ...base, status: "capped", skippedReason: null, sendAt: now })) ? "capped" : "dup";
+      return (await data.insertLog(c, { ...base, status: "capped", skippedReason: null, title: null, body: null, sendAt: now })) ? "capped" : "dup";
     }
     const delay = p.kind === "craving" ? quietDelayMs(now.getTime(), tokens[0].tz ?? person.tz ?? DEFAULT_TZ) : 0;
     return await queue(delay);

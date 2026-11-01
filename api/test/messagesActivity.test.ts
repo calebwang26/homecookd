@@ -81,6 +81,66 @@ test("re-registering with the same hello isn't a second attach", { skip }, async
   ok(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-h", recipientIds: [w.nia.id], helloKey: hello }));
 });
 
+test("re-registering with another hello marks the old one in the same breath, and dropping the hello does too: a private voice note can't outlive its owner", { skip }, async () => {
+  const w = await world();
+  const first = await uploaded(w, w.dad);
+  ok(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-swap", recipientIds: [w.leo.id], helloKey: first }));
+  assert.equal((await fileRow(first)).delete_requested_at, null);
+  const second = await uploaded(w, w.dad);
+  ok(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-swap", recipientIds: [w.leo.id], helloKey: second }));
+  assert.notEqual((await fileRow(first)).delete_requested_at, null, "the replaced hello is on its way out");
+  assert.equal((await fileRow(second)).delete_requested_at, null);
+  ok(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-swap", recipientIds: [w.leo.id] }));
+  assert.notEqual((await fileRow(second)).delete_requested_at, null, "a hello taken off goes too");
+  // The same hello again changes nothing.
+  const third = await uploaded(w, w.dad);
+  ok(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-swap", recipientIds: [w.leo.id], helloKey: third }));
+  ok(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-swap", recipientIds: [w.nia.id], helloKey: third }));
+  assert.equal((await fileRow(third)).delete_requested_at, null);
+});
+
+test("two registers racing with different hellos leave one, and mark the other", { skip }, async () => {
+  const w = await world();
+  for (let round = 0; round < 6; round += 1) {
+    const [a, b] = [await uploaded(w, w.dad), await uploaded(w, w.dad)];
+    const uploadId = `job-race-${round}`;
+    const send = (helloKey: string) => post(w.app, w.dad, "/v1/pending-sends", { uploadId, recipientIds: [w.leo.id], helloKey });
+    const replies = await Promise.all([send(a), send(b)]);
+    assert.deepEqual(replies.map((r) => r.status), [200, 200]);
+    const kept = (await db().query(`select hello_key from pending_sends where upload_id = $1`, [uploadId])).rows[0].hello_key;
+    const loser = kept === a ? b : a;
+    assert.notEqual((await fileRow(loser)).delete_requested_at, null, `round ${round}: the loser survived`);
+    assert.equal((await fileRow(kept)).delete_requested_at, null);
+  }
+});
+
+test("only the sender can change a recording's list, and only the sender can deliver it: not anyone else in the family with the upload id", { skip }, async () => {
+  const w = await world();
+  ok(await post(w.app, w.mom, "/v1/pending-sends", { uploadId: "job-moms", recipientIds: [w.leo.id] }));
+  const hijack = await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-moms", recipientIds: [w.nia.id] });
+  assert.deepEqual([hijack.status, hijack.data.error], [409, "upload_is_someone_elses"]);
+  const row = (await db().query(`select sender_id, recipient_ids from pending_sends where upload_id = 'job-moms'`)).rows[0];
+  assert.deepEqual([row.sender_id, row.recipient_ids], [w.mom.id, [w.leo.id]]);
+
+  const fromDad = await post(w.app, w.dad, "/v1/pending-sends/job-moms/published", { libraryId: CHILI }, { key: null });
+  assert.deepEqual([fromDad.status, fromDad.data.error], [403, "not_your_recording"]);
+  assert.equal((await db().query(`select delivered_at from pending_sends where upload_id = 'job-moms'`)).rows[0].delivered_at, null);
+  assert.equal((await db().query(`select count(*)::int as n from messages`)).rows[0].n, 0, "no message went out as Mom");
+
+  assert.deepEqual(ok(await post(w.app, w.mom, "/v1/pending-sends/job-moms/published", { libraryId: CHILI }, { key: null })), { delivered: 1 });
+  // The worker has no person: it still delivers.
+  ok(await post(w.app, w.mom, "/v1/pending-sends", { uploadId: "job-worker", recipientIds: [w.leo.id] }));
+  assert.deepEqual(await deliverPending(w.family, "job-worker", CHILI), { delivered: 1 });
+});
+
+test("a recording already published isn't delivered by someone else trying to register it", { skip }, async () => {
+  const w = await world();
+  ok(await post(w.app, w.mom, "/v1/pending-sends", { uploadId: "job-fast-2", recipientIds: [w.leo.id] }));
+  w.lib.published.set("job-fast-2", CHILI);
+  refused(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-fast-2", recipientIds: [w.leo.id] }), 409, "upload_is_someone_elses");
+  assert.equal((await db().query(`select count(*)::int as n from messages`)).rows[0].n, 0);
+});
+
 // --- shares
 
 test("a share link is one per family, dish and sender; opening it counts and names who sent it, and a full one gets replaced", { skip }, async () => {
@@ -304,6 +364,29 @@ test("my stats join views, cooks, hearts and what someone sent me, most recent f
   const next = ok(await get(w.app, w.leo, `/v1/me/recipe-stats?limit=2&cursor=${page.nextCursor}`));
   assert.deepEqual(next.stats.map((s: any) => [s.libraryId, s.views]), [[CHILI, 1]]);
   assert.equal(next.nextCursor, null);
+});
+
+test("a third person never reads words written in someone else's pair, as a note or a time", { skip }, async () => {
+  const w = await world();
+  ok(await event(w, w.mom, { libraryId: DAL, kind: "cooked" }));
+  const pair = await pairOf(w, w.mom, w.dad);
+  ok(await post(w.app, w.mom, `/v1/threads/${pair}/messages`, { kind: "cooked", libraryId: DAL, body: "SECRET words to Dad" }));
+  ok(await post(w.app, w.mom, "/v1/send-recipe", { libraryId: DAL, to: [w.dad.id] }));
+  const asLeo = await get(w.app, w.leo, `/v1/dishes/${DAL}/activity`);
+  assert.equal(asLeo.status, 200);
+  assert.ok(!asLeo.body.includes("SECRET"), asLeo.body);
+  assert.deepEqual(asLeo.data.cooked.map((c: any) => [c.person.name, c.note]), [["Mom", null]]);
+  assert.equal(asLeo.data.lastSentAt, null, "that a recipe went between two others isn't Leo's to know");
+  // The two in the pair still read it.
+  for (const who of [w.mom, w.dad]) {
+    const act = ok(await get(w.app, who, `/v1/dishes/${DAL}/activity`));
+    assert.equal(act.cooked[0].note, "SECRET words to Dad");
+    assert.equal(typeof act.lastSentAt, "string");
+  }
+  // Said in the circle, everyone reads it.
+  const ring = ok(await get(w.app, w.leo, "/v1/circle")).id;
+  ok(await post(w.app, w.mom, `/v1/threads/${ring}/messages`, { kind: "cooked", libraryId: DAL, body: "For everyone" }));
+  assert.equal(ok(await get(w.app, w.leo, `/v1/dishes/${DAL}/activity`)).cooked[0].note, "For everyone");
 });
 
 test("dish activity: who cooked it with their note, who looked, and when it was last sent; people who left aren't shown", { skip }, async () => {

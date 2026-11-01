@@ -20,7 +20,7 @@ import { iso } from "./data.js";
 import { dishesOf, library } from "./library.js";
 import { actorOf, type Write } from "./actor.js";
 import { deliverRecipe } from "./service.js";
-import { attachFile } from "./uploads.js";
+import { attachFile, markForDeletion } from "./uploads.js";
 import { bad, decodeCursor, encodeCursor, isRowId, libraryId, LIBRARY_ID, MAX_RECIPIENTS, MAX_VOICE_S, number, pageSize } from "./values.js";
 import { mediaUrl, personView } from "./views.js";
 
@@ -120,24 +120,33 @@ export async function registerPendingSend(signed: Signed, body: Body, w: Write) 
   await once(
     { scope: actor.me.id, key: w.key, route: "POST /v1/pending-sends", hash: requestHash([uploadId, recipients, helloKey, helloDuration]) },
     async (c) => {
-      const before = await c.query(`select family_id, delivered_at, hello_key from pending_sends where upload_id = $1 for update`, [uploadId]);
-      const existing = before.rows[0];
-      if (existing && existing.family_id !== actor.familyId) throw new ApiError(409, "upload_is_someone_elses");
-      if (existing?.delivered_at) throw new ApiError(409, "already_delivered");
-      if (helloKey && existing?.hello_key !== helloKey) await attachFile(c, actor, helloKey, ["voice"]);
-      await c.query(
+      // A first register makes the row, so two at once have one row to wait on and the second sees the first's hello. A later one holds its lock until it's done.
+      const made = await c.query(
         `insert into pending_sends (upload_id, family_id, sender_id, recipient_ids, hello_key, hello_duration_s) values ($1, $2, $3, $4, $5, $6)
-         on conflict (upload_id) do update set sender_id = excluded.sender_id, recipient_ids = excluded.recipient_ids,
-           hello_key = excluded.hello_key, hello_duration_s = excluded.hello_duration_s`,
+         on conflict (upload_id) do nothing returning upload_id`,
         [uploadId, actor.familyId, actor.me.id, recipients, helloKey, helloDuration],
       );
+      if (made.rowCount) {
+        if (helloKey) await attachFile(c, actor, helloKey, ["voice"]);
+        return uploadId;
+      }
+      const before = await c.query(`select family_id, sender_id, delivered_at, hello_key from pending_sends where upload_id = $1 for update`, [uploadId]);
+      const existing = before.rows[0];
+      // Only its sender. Someone else in the family with the upload id can't redirect it, or send it as them.
+      if (existing.family_id !== actor.familyId || existing.sender_id !== actor.me.id) throw new ApiError(409, "upload_is_someone_elses");
+      if (existing.delivered_at) throw new ApiError(409, "already_delivered");
+      if (helloKey !== existing.hello_key) {
+        if (helloKey) await attachFile(c, actor, helloKey, ["voice"]);
+        await markForDeletion(c, [existing.hello_key]); // nothing else holds it: a private voice note mustn't outlive its owner
+      }
+      await c.query(`update pending_sends set recipient_ids = $2, hello_key = $3, hello_duration_s = $4 where upload_id = $1`, [uploadId, recipients, helloKey, helloDuration]);
       return uploadId;
     },
   );
   // If the recording was already published (fast pipeline, slow phone), deliver right away. The old host's job file: the worker's own call covers the rest.
   const dish = await library().publishedDish(uploadId);
   if (dish) {
-    const out = await deliverPending(actor.familyId, uploadId, dish, w.requestId);
+    const out = await deliverPending(actor.familyId, uploadId, dish, w.requestId, actor.me.id);
     return { ok: true, delivered: out.delivered };
   }
   return { ok: true };
@@ -147,8 +156,12 @@ export async function registerPendingSend(signed: Signed, body: Body, w: Write) 
  * The recipe, and the hello when there is one, to each recipient still in the family. The claim and every message are one transaction, so a worker's retry
  * delivers nothing twice and a failure leaves nothing half-sent, where Supabase had to release its claim by hand.
  */
-export async function deliverPending(familyId: string, uploadId: string, dish: string, requestId?: string): Promise<{ delivered: number; already?: boolean }> {
+export async function deliverPending(familyId: string, uploadId: string, dish: string, requestId?: string, onlySender?: string): Promise<{ delivered: number; already?: boolean }> {
   const out = await tx(async (c) => {
+    if (onlySender) {
+      const owner = await c.query(`select sender_id from pending_sends where upload_id = $1 and family_id = $2`, [uploadId, familyId]);
+      if (owner.rows[0] && owner.rows[0].sender_id !== onlySender) throw new ApiError(403, "not_your_recording");
+    }
     const { rows } = await c.query(
       `update pending_sends set delivered_at = now(), library_id = $3 where upload_id = $1 and family_id = $2 and delivered_at is null
        returning sender_id, recipient_ids, hello_key, hello_duration_s`,
@@ -170,7 +183,7 @@ export async function deliverPending(familyId: string, uploadId: string, dish: s
 export async function publishedFromPhone(signed: Signed, uploadId: string, body: Body, requestId?: string) {
   if (!UPLOAD_ID.test(uploadId)) throw bad("bad_upload_id");
   const actor = await actorOf(signed);
-  return await deliverPending(actor.familyId, uploadId, libraryId(body.libraryId, true)!, requestId);
+  return await deliverPending(actor.familyId, uploadId, libraryId(body.libraryId, true)!, requestId, actor.me.id);
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -381,7 +394,10 @@ export async function myRecipeStats(signed: Signed, query: Record<string, unknow
   };
 }
 
-/** Who in the family cooked or looked at one dish, and when it was last sent. People who left aren't shown. */
+/** A message's thread is the circle or a pair of mine. $3 is me. */
+const SEEN_BY_ME = `(t.kind = 'circle' or t.a_person_id = $3 or t.b_person_id = $3)`;
+
+/** Who in the family cooked or looked at one dish, and when it was last sent. People who left aren't shown, and notes and times come only from threads I'm in. */
 export async function dishActivity(signed: Signed, libraryIdParam: string) {
   const actor = await actorOf(signed);
   if (!LIBRARY_ID.test(libraryIdParam)) throw bad("bad_library_id");
@@ -397,14 +413,18 @@ export async function dishActivity(signed: Signed, libraryIdParam: string) {
         where family_id = $1 and library_id = $2 and kind = 'viewed' and person_id = any($3::text[]) group by person_id order by count(*) desc limit 200`,
       [actor.familyId, libraryIdParam, here],
     ),
+    // Only what the caller can see. A pair's words, or that two others traded a dish, aren't a third person's, whatever Supabase did.
     db().query(
-      `select ${iso("created_at")} as at from messages where family_id = $1 and library_id = $2 and kind = 'recipe' order by messages.created_at desc limit 1`,
-      [actor.familyId, libraryIdParam],
+      `select ${iso("m.created_at")} as at from messages m join threads t on t.id = m.thread_id
+        where m.family_id = $1 and m.library_id = $2 and m.kind = 'recipe' and ${SEEN_BY_ME}
+        order by m.created_at desc limit 1`,
+      [actor.familyId, libraryIdParam, actor.me.id],
     ),
     db().query(
-      `select distinct on (sender_id) sender_id, body from messages
-        where family_id = $1 and library_id = $2 and kind = 'cooked' and body is not null order by sender_id, messages.created_at desc limit 200`,
-      [actor.familyId, libraryIdParam],
+      `select distinct on (m.sender_id) m.sender_id, m.body from messages m join threads t on t.id = m.thread_id
+        where m.family_id = $1 and m.library_id = $2 and m.kind = 'cooked' and m.body is not null and ${SEEN_BY_ME}
+        order by m.sender_id, m.created_at desc limit 200`,
+      [actor.familyId, libraryIdParam, actor.me.id],
     ),
   ]);
   const byId = new Map(actor.here.map((p) => [p.id, p]));

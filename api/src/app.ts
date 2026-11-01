@@ -23,6 +23,7 @@ declare module "fastify" {
   interface FastifyInstance {
     fileKeyRoutes: { method: string; url: string; fields: string[] }[];
     notFileKeyRoutes: { method: string; url: string; fields: string[] }[]; // what said it isn't an S3 key: each needs its own check and test
+    allRoutes: { method: string; url: string }[]; // every route, for routeCoverage.test.ts
   }
 }
 
@@ -62,8 +63,10 @@ function holdsNul(root: unknown): boolean {
 function guardFileKeys(app: FastifyInstance): void {
   app.decorate("fileKeyRoutes", []);
   app.decorate("notFileKeyRoutes", []);
+  app.decorate("allRoutes", []);
   app.addHook("onRoute", (route) => {
     const methods = [route.method].flat();
+    for (const method of methods) app.allRoutes.push({ method, url: route.url });
     const schema = route.schema as { body?: object; querystring?: object; params?: object } | undefined;
     if (methods.some((m) => WRITES.has(m)) && !schema?.body && !route.config?.noBody) {
       throw new Error(`${route.url}: a write route needs a body schema, or config.noBody`);

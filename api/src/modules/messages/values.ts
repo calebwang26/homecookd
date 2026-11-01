@@ -1,5 +1,6 @@
 // Limits and small checks for the messages area. Every refusal is a code (errors.ts); docs/build/MESSAGES-MIGRATION.md maps each to the sentence old builds read.
 import { ApiError } from "../../errors.js";
+import { type After, afterCursor, badCursor, encodeCursor as encodeParts, isTime } from "../../paging.js";
 
 export const LIBRARY_ID = /^[a-z0-9][a-z0-9-]{0,99}$/;
 export const ROW_ID = /^[A-Za-z0-9:_-]{1,100}$/;
@@ -44,23 +45,18 @@ export function libraryId(value: unknown, required: boolean): string | null {
 
 export const isRowId = (value: unknown): value is string => typeof value === "string" && ROW_ID.test(value);
 
-export type Cursor = { at: string; id: string };
+export type Cursor = After;
 
-export const encodeCursor = (at: string, id: string) => Buffer.from(JSON.stringify([at, id])).toString("base64url");
+/** The server's own ISO text, as Postgres writes it: what paging.ts takes. */
+const postgresTime = (at: string) => at.replace("T", " ").replace(/Z$/, "+00");
 
-/** An opaque keyset position: `(created_at, id)`, with the time as the server's own text so it keeps its microseconds. */
+/** An opaque keyset position: `(created_at, id)`, with the time as the server's own text so it keeps its microseconds. Paging's rules: a forged one is a 400. */
+export const encodeCursor = (at: string, id: string) => encodeParts([postgresTime(at), id]);
+
 export function decodeCursor(value: unknown): Cursor | null {
   if (value === undefined || value === null || value === "") return null;
-  if (typeof value !== "string" || value.length > 300) throw bad("bad_cursor");
-  try {
-    const parsed = JSON.parse(Buffer.from(value, "base64url").toString());
-    if (Array.isArray(parsed) && typeof parsed[0] === "string" && typeof parsed[1] === "string" && !Number.isNaN(Date.parse(parsed[0]))) {
-      return { at: parsed[0], id: parsed[1] };
-    }
-  } catch {
-    // Falls through to the refusal below.
-  }
-  throw bad("bad_cursor");
+  if (typeof value !== "string") throw badCursor();
+  return afterCursor(value);
 }
 
 export function pageSize(value: unknown, page: { default: number; max: number } = PAGE): number {
@@ -70,12 +66,14 @@ export function pageSize(value: unknown, page: { default: number; max: number } 
   return Math.min(n, page.max);
 }
 
-/** An ISO time from a client, kept as sent: a raw "+00:00" arrives as a space when a client forgets to encode it. */
+const ISO_TIME = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d{1,6})?(Z|[+-]\d{2}(:?\d{2})?)$/;
+
+/** An ISO time from a client, kept as sent so it keeps its microseconds: a raw "+00:00" arrives as a space when a client forgets to encode it. Postgres must be able to read it. */
 export function isoTime(value: unknown): string | null {
   if (value === undefined || value === null || value === "") return null;
   if (typeof value !== "string" || value.length > 40) throw bad("bad_time");
   const fixed = value.trim().replace(" ", "+");
-  if (Number.isNaN(Date.parse(fixed))) throw bad("bad_time");
+  if (!ISO_TIME.test(fixed) || !isTime(postgresTime(fixed).replace(/([+-]\d{2})(\d{2})$/, "$1:$2"))) throw bad("bad_time");
   return fixed;
 }
 

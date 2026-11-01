@@ -232,6 +232,20 @@ test("Expo's receipts: dead ids only; a failure reads as none", { skip: false },
   assert.deepEqual(await deadReceipts(["x"], { fetch: (async () => Promise.reject(new TypeError("off"))) as typeof fetch }), []);
 });
 
+test("a push that won't go keeps no words: no phone and capped, as skipped already does", { skip }, async () => {
+  const w = await world();
+  // A craving names the kid. With no phone, it logs `none`.
+  assert.equal(await push(w.dad.id, { kind: "craving", title: "SECRET-KID wants your dal", body: "Show SECRET-KID how you make it." }), "none");
+  assert.deepEqual((await logOf(w.dad.id)).map((r) => [r.status, r.title, r.body]), [["none", null, null]]);
+  // Past the day's cravings, it logs `capped`.
+  await phone(w, w.dad, "dad");
+  for (let i = 0; i < CRAVINGS_PER_DAY; i += 1) await push(w.dad.id, { kind: "craving", title: "ok", body: "ok" });
+  assert.equal(await push(w.dad.id, { kind: "craving", title: "SECRET-KID wants your dal", body: "Show SECRET-KID how you make it." }), "capped");
+  const capped = (await logOf(w.dad.id)).find((r) => r.status === "capped");
+  assert.deepEqual([capped.title, capped.body], [null, null]);
+  assert.ok(!JSON.stringify(await logOf(w.dad.id)).includes("SECRET-KID"));
+});
+
 test("the log is pruned after 40 days", { skip }, async () => {
   const w = await world();
   await push(w.leo.id);
@@ -448,6 +462,23 @@ test("PR 3: only my own cooked message, a photo of ours, a rating of 1-5; never 
   await db().query(`update people set removed_at = now() where id = $1`, [w.dad.id]);
   const gone = await send(card.id, { photoKey: photo });
   assert.deepEqual([gone.status, gone.data.error], [403, "other_left"]);
+});
+
+test("two postcards racing with different photos leave one, and mark the other: a replaced photo can't outlive its owner", { skip }, async () => {
+  const w = await world();
+  const pair = await pairOf(w, w.leo, w.dad);
+  for (let round = 0; round < 6; round += 1) {
+    const card = await made(w, w.leo, pair);
+    const [a, b] = [await uploaded(w, w.leo, "photo"), await uploaded(w, w.leo, "photo")];
+    const send = (photoKey: string) => post(w.app, w.leo, `/v1/messages/${card.id}/postcard`, { photoKey });
+    const replies = await Promise.all([send(a), send(b)]);
+    assert.deepEqual(replies.map((r) => r.status), [200, 200]);
+    const kept = (await db().query(`select photo_key from messages where id = $1`, [card.id])).rows[0].photo_key;
+    const loser = kept === a ? b : a;
+    const state = async (key: string) => (await db().query(`select delete_requested_at from files where key = $1`, [key])).rows[0].delete_requested_at;
+    assert.notEqual(await state(loser), null, `round ${round}: the loser survived`);
+    assert.equal(await state(kept), null);
+  }
 });
 
 test("PR 3: the postcard limit: 60 an hour per person", { skip }, async () => {

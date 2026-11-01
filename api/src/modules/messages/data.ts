@@ -181,7 +181,7 @@ export async function unreadSummary(q: Queryable, personId: string, familyId: st
 export async function markRead(q: Queryable, threadId: string, personId: string, at: string | null = null): Promise<void> {
   await q.query(
     `insert into thread_reads (thread_id, person_id, last_read_at) values ($1, $2, coalesce($3::timestamptz, now()))
-     on conflict (thread_id, person_id) do update set last_read_at = excluded.last_read_at`,
+     on conflict (thread_id, person_id) do update set last_read_at = greatest(thread_reads.last_read_at, excluded.last_read_at)`,
     [threadId, personId, at],
   );
 }
@@ -254,6 +254,11 @@ export async function insertMessage(c: PoolClient, thread: ThreadRow, senderId: 
 
 export async function messageInFamily(q: Queryable, id: string, familyId: string): Promise<MessageRow | null> {
   const { rows } = await q.query(`select ${MESSAGE()} from messages m where m.id = $1 and m.family_id = $2`, [id, familyId]);
+  return rows[0] ?? null;
+}
+
+export async function messageInFamilyForUpdate(q: Queryable, id: string, familyId: string): Promise<MessageRow | null> {
+  const { rows } = await q.query(`select ${MESSAGE()} from messages m where m.id = $1 and m.family_id = $2 for update`, [id, familyId]);
   return rows[0] ?? null;
 }
 

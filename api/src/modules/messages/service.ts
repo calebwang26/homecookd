@@ -397,7 +397,8 @@ export async function postcard(signed: Signed, messageId: string, body: Body, w:
   await once(
     { scope: actor.me.id, key: w.key, route: "POST /v1/messages/:id/postcard", hash: requestHash([messageId, fields(body, POSTCARD_FIELDS)]) },
     async (c) => {
-      const current = await data.messageInFamily(c, messageId, actor.familyId);
+      // Under the row's lock, so two at once see each other's photo and the one replaced is marked.
+      const current = await data.messageInFamilyForUpdate(c, messageId, actor.familyId);
       // The same photo again is the same attach, with a new rating at most.
       if (current?.photo_key !== photoKey) {
         await attachFile(c, actor, photoKey, ["photo"]);

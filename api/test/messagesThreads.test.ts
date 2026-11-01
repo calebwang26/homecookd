@@ -4,6 +4,7 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { db } from "../src/db.js";
 import { tx } from "../src/db.js";
+import { markRead } from "../src/modules/messages/data.js";
 import { NotSetUp } from "../src/modules/messages/models.js";
 import { deliverRecipe, postSystemNote } from "../src/modules/messages/service.js";
 import { CHILI, circleOf, closeAll, DAL, drain, fakeModels, get, NOODLES, ok, pairOf, person, phone, post, pushes, recipe, refused, say, skip, text, tokenFor, uploaded, type World, world } from "./messagesHelpers.js";
@@ -86,7 +87,46 @@ test("messages page back in order, and a poll reads only what's new", { skip }, 
   assert.deepEqual((await messages(w, w.dad, pair, `?after=${encodeURIComponent(sent[3].createdAt)}`)).map((m: any) => m.body), ["m4"]);
   assert.deepEqual(await messages(w, w.dad, pair, `?after=${encodeURIComponent(sent[4].createdAt)}`), []);
   refused(await get(w.app, w.dad, `/v1/threads/${pair}/messages?after=soon`), 400, "bad_time");
-  refused(await get(w.app, w.dad, `/v1/threads/${pair}/messages?cursor=nope`), 400, "bad_cursor");
+  refused(await get(w.app, w.dad, `/v1/threads/${pair}/messages?cursor=nope`), 400, "bad_request");
+});
+
+test("a forged cursor or time is a 400, never a server error", { skip }, async () => {
+  const w = await world();
+  const pair = await pairOf(w, w.mom, w.dad);
+  await text(w, w.mom, pair, "Hi");
+  const cursor = (parts: unknown) => Buffer.from(JSON.stringify(parts)).toString("base64url");
+  const forged = [
+    "nope",
+    cursor(["2026-02-31T00:00:00Z", "x"]), // Date.parse takes this, and Postgres doesn't
+    cursor(["1", "x"]),
+    cursor(["2026-11-01 10:00:00+00", "x\0y"]),
+    cursor(["2026-11-01 10:00:00+00"]),
+    cursor({ at: 1 }),
+  ];
+  for (const url of [`/v1/threads/${pair}/messages`, "/v1/threads", "/v1/messages", "/v1/favorites", "/v1/me/recipe-stats", "/v1/questions/open", `/v1/dishes/${CHILI}/notes`]) {
+    for (const c of forged) {
+      const r = await get(w.app, w.mom, `${url}?cursor=${encodeURIComponent(c)}`);
+      assert.equal(r.status, 400, `${url} ${c}: ${r.body}`);
+    }
+  }
+  const huge = cursor(["2026-11-01 10:00:00+00", "99999999999:x"]);
+  assert.equal((await get(w.app, w.mom, `/v1/dishes/${CHILI}/notes?cursor=${huge}`)).status, 400);
+  for (const after of ["1", "soon", "2026-02-31T00:00:00Z", "2026-11-01"]) {
+    refused(await get(w.app, w.mom, `/v1/threads/${pair}/messages?after=${encodeURIComponent(after)}`), 400, "bad_time");
+  }
+  // What the server itself hands out still works, with a raw "+" arriving as a space.
+  ok(await get(w.app, w.mom, `/v1/threads/${pair}/messages?after=${encodeURIComponent("2026-11-01T10:00:00.123456+00:00")}`));
+  ok(await get(w.app, w.mom, `/v1/threads/${pair}/messages?after=2026-11-01T10:00:00.123456+00:00`));
+});
+
+test("a read mark never moves backward: a late write can't turn read messages unread", { skip }, async () => {
+  const w = await world();
+  const pair = await pairOf(w, w.mom, w.dad);
+  await text(w, w.mom, pair, "One");
+  ok(await post(w.app, w.dad, `/v1/threads/${pair}/read`, undefined, { key: null }));
+  assert.equal(await unread(w, w.dad), 0);
+  await markRead(db(), pair, w.dad.id, "2020-01-01T00:00:00Z");
+  assert.equal(await unread(w, w.dad), 0);
 });
 
 test("what a poll needs: unread and lastMessageAt move with every new message", { skip }, async () => {

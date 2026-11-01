@@ -94,7 +94,7 @@ export async function notesOfDish(signed: Signed, libraryId: string, query: Reco
   const cursor = decodeCursor(query.cursor);
   const split = cursor?.id.indexOf(":") ?? -1;
   const after = cursor && split > 0 ? { step: Number(cursor.id.slice(0, split)), at: cursor.at, id: cursor.id.slice(split + 1) } : null;
-  if (cursor && (!after || !Number.isInteger(after.step))) throw bad("bad_cursor");
+  if (cursor && (!after || !Number.isInteger(after.step) || after.step < 0 || after.step > 2147483647)) throw bad("bad_request");
   const rows = await data.notesOfDish(db(), actor.familyId, dish, limit, after);
   const end = rows.at(-1);
   return {

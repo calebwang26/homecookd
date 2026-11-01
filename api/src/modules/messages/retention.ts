@@ -16,6 +16,7 @@ import { ApiError } from "../../errors.js";
 import { enqueue } from "../../outbox.js";
 import type { Trace } from "../dish/budget.js";
 import { everyoneIn, membersByIds, signedOutDevices, type Member } from "../people/family.js";
+import { actorOf } from "./actor.js";
 import { answersFor } from "./answers.js";
 import * as data from "./data.js";
 import { iso } from "./data.js";
@@ -169,7 +170,8 @@ export async function getTable(signed: Signed, req: FastifyRequest) {
   const header = req.headers["x-tz"];
   const headerTz = validTz(typeof header === "string" ? header : null);
   // This request's zone wins over the stored one, so the very first call already counts the week in their own time.
-  const profiles = (await everyoneIn(db(), signed.familyId)).map(toProfile).map((p) => (headerTz && p.id === signed.personId ? { ...p, tz: headerTz } : p));
+  const actor = await actorOf(signed);
+  const profiles = actor.everyone.map(toProfile).map((p) => (headerTz && p.id === signed.personId ? { ...p, tz: headerTz } : p));
   const me = profiles.find((p) => p.id === signed.personId && !p.removed_at) ?? null;
   const [activity, own] = await Promise.all([loadActivity(signed.familyId, now, profiles), familyRecordings(signed.familyId)]);
   const table = computeTable({ now, kidTz: viewerTz(me, profiles, headerTz), profiles, activity, me: me?.id ?? null });

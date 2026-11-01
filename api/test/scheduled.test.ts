@@ -60,8 +60,8 @@ function fakeQueue(messages: Received[]) {
     },
   };
 }
-const until = async (ok: () => boolean) => {
-  for (let i = 0; i < 400 && !ok(); i += 1) await new Promise((resolve) => setTimeout(resolve, 5));
+const until = async (ok: () => boolean, ms = 2_000) => {
+  for (const start = Date.now(); Date.now() - start < ms && !ok(); ) await new Promise((resolve) => setTimeout(resolve, 5));
   assert.ok(ok(), "timed out");
 };
 
@@ -146,7 +146,8 @@ test("the real loop, end to end: a Send's work leaves through the outbox and lan
   const q = fakeQueue(queue);
   const errors: unknown[] = [];
   const consumer = startConsumer(q.receiver, { ...silent, error: (fields: object, message: string) => void errors.push({ message, fields }) });
-  await until(() => q.removed.length === 3)
+  // Each message here runs several real transactions, and on a busy machine a pass can take seconds. What's checked is what happened, not how fast: a real SQS try has 300 s.
+  await until(() => q.removed.length === 3, 60_000)
     .catch((error: Error) => {
       // Name what happened, so a failure here isn't written off as load.
       throw new Error(`${error.message}; removed ${q.removed.length} of 3; consumer errors: ${JSON.stringify(errors)}`);

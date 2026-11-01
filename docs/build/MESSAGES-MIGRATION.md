@@ -46,7 +46,7 @@ Every route checks the session, and every route below `/v1`. The one exception i
 | `GET /threads` | `GET /v1/threads` | Old returns an array, new `{threads, nextCursor}`: read every page. `recipe_id` is `libraryId` |
 | `POST /threads` `{other_id}` | `POST /v1/threads` `{otherId}` | |
 | `GET /circle` | `GET /v1/circle` | |
-| `GET /threads/:id/messages?after=` | `GET /v1/threads/:id/messages?after=` | Same `after`. Old took the newest 500, new takes 100 a page |
+| `GET /threads/:id/messages?after=` | `GET /v1/threads/:id/messages?after=` | Same `after`. Old took the newest 500, new takes 100 a page, newest first. A poll with more than a page waiting gets the newest page: it must follow `nextCursor` back until it reaches its `after`, or the older ones are skipped |
 | `POST /threads/:id/messages` | `POST /v1/threads/:id/messages` | An old build has no key: the adapter makes one per request, so it behaves as today, with no dedupe. `audio_path` becomes `audioKey`, `audio_url` `clipKey` (strip the host), `photo_path` `photoKey`, `recipe_id` `libraryId` |
 | `POST /threads/:id/read` | `POST /v1/threads/:id/read` | |
 | `GET /unread` | `GET /v1/unread` | Adds `lastMessageAt` |
@@ -61,7 +61,7 @@ Every route checks the session, and every route below `/v1`. The one exception i
 | `POST /shares` | `POST /v1/shares` | |
 | `GET /shares/:token` | `POST /v1/shares/open` `{token}` | So the token stays out of logs |
 | `POST /pending-sends` | `POST /v1/pending-sends` | `job_id` is `uploadId`, as in SCHEMA.md |
-| `POST /jobs/:job_id/published` | `POST /v1/pending-sends/:uploadId/published`, `deliverPending()` for the worker | |
+| `POST /jobs/:job_id/published` | `POST /v1/pending-sends/:uploadId/published`, `deliverPending()` for the worker | Only the sender on the route. Supabase's took the family code, so the pipeline's call must become the worker's `deliverPending()` |
 | `POST /events` (signed in) | `POST /v1/events` | `start_s` is `startS` |
 | `GET /favorites`, `POST /favorites` | same under `/v1` | The POST no longer returns the whole list: read `GET /v1/favorites` after it |
 | `GET /me/recipe-stats` | `GET /v1/me/recipe-stats` | `{stats, nextCursor}` |
@@ -97,11 +97,12 @@ Every refusal is a code. An adapter maps each back to the sentence an old build 
 | 400 `answer_required` | Convex "Say or type an answer first." |
 | 403 `other_left` | "Dad isn't in the family anymore." The adapter finds the name |
 | 403 `not_your_dish`, `not_your_message`, `cant_take_this_out` | "Only whoever made the dish can send its postcard", "You can only save your own messages", "Only the person who answered, …" |
+| 403 `not_your_recording` | New: Supabase let anyone in the family deliver |
 | 403 `only_the_recipes_cook`, `forbidden` | Convex "Only the recipe's cook can answer this.", "Only the cook can do that." |
 | 404 `not_found` | "No such conversation", "No such message", "That answer isn't in the recipe anymore."; Convex "That question isn't here anymore." and "They aren't in this family." A refused file also reads this way |
 | 404 `no_such_recipe` | "No recipe with that id"; Convex "That recipe isn't here anymore." |
 | 409 `already_answered` | Convex "That question already has an answer." |
-| 409 `upload_is_someone_elses`, `already_delivered` | "That job belongs to someone else", "That recipe was already delivered" |
+| 409 `upload_is_someone_elses`, `already_delivered` | "That job belongs to someone else" (now also someone else in the same family), "That recipe was already delivered" |
 | 409 `idempotency_conflict` | New |
 | 413 `too_large`, 415 `bad_type` | Convex "That file is too big."; "content_type must be one of …" |
 | 502 `storage`, `note_failed`; 503 `note_writer_not_set_up`, `library_unreachable` | New; Convex "Couldn't draft a note just now."; "The note writer isn't set up yet."; "Can't reach the family recipes right now." |
@@ -181,7 +182,7 @@ The live-updates draft (`claude/aws-live`) plugs in here, and I built no subscri
 12. **A delivery is all-or-nothing.** Supabase released its claim by hand after a failure, which could leave some recipients with a copy and resend to them on retry.
 13. **`POST /v1/shares/open` is rate limited** by IP (120 in 10 minutes). Supabase's wasn't.
 14. **The photo note is limited** to 30 an hour per person. Convex's wasn't, and it's a paid call.
-15. **Someone outside a pair gets a 404 on its postcard and notes routes,** where Supabase's 403 said the message exists.
+15. **Someone outside a pair gets a 404 on a postcard and on saving a note,** where Supabase's 403 said the message exists. Taking a note out (`POST /v1/notes/:id/remove`) stays a 403 for anyone who didn't answer, ask or cook the dish: a saved note belongs to the whole family, so its existence isn't private.
 16. **Stats are counted in SQL,** so `/me/recipe-stats` no longer undercounts past 1000 rows, and the recap no longer pages.
 17. **The table's 60-second cache of old rows is gone.** SYSTEM-DESIGN: the api keeps no state in memory, and no measurement asks for one. The library's 10-minute cache stays, because it avoids an outside call per push.
 18. **A recap job with the library down fails its task,** so the queue retries it, and after 3 tries it raises the dead-letter alert. Supabase logged it and waited for the next hour. The next hour still tries here too.
@@ -190,6 +191,13 @@ The live-updates draft (`claude/aws-live`) plugs in here, and I built no subscri
 21. **A voice note's transcript failing is logged and read as unclear,** with no retry, as on Convex.
 22. **`GET /v1/messages` shows every kind,** because the table is now shared. Nothing in the app reads it today.
 23. **No `x-profile-id`.** A session is one person. See blockers.
+24. **A dish's activity shows only notes and times from threads the caller is in.** Supabase showed everyone the words a cook-made note carried, even from someone else's pair, and when a recipe last went between two others. Who cooked it stays family-wide.
+25. **Someone removed from the family is refused on every route with a session,** a 403 from `requireSession`, so no area can forget it. That includes `GET /v1/me`. Supabase's `GET /family` still loads for them, so the adapter's path for it (blocker 4) has to answer that itself. Their session lasts until it ends: ending it on removal is accounts' step.
+26. **Only a recording's sender can change its list or deliver it.** Supabase let anyone in the family overwrite the sender and recipients with the upload id, or deliver it as the sender.
+27. **A replaced hello, or one taken off, is marked for deletion in the same transaction,** under the row's lock. Supabase left it in the bucket for good. A postcard's replaced photo was already marked, and now under the message's lock, so two at once can't leave one unmarked.
+28. **A push that won't go keeps no words.** `none` and `capped` rows hold no title or body, as `skipped` rows don't. See known limits for one that's waiting.
+29. **A read mark only moves forward,** so a late write can't turn read messages unread.
+30. **A forged cursor is a 400 `bad_request`, as on Community** (`paging.ts`), and a forged `after` a 400 `bad_time`. Either could reach Postgres as a 500 before.
 
 ### Against SYSTEM-DESIGN.md
 
@@ -227,7 +235,7 @@ These tables are read-only here. Each writes nothing today, and each needs its o
 3. **`x-tz` wrote `people.tz` on every call.** It isn't stored here. `GET /v1/table` reads the header for that request, and `POST /v1/push-tokens` stores a zone on the token, which pushes read when the person has none. **Recommendation:** the accounts area takes the header. Until then a kid's stored zone can go stale.
 4. **`x-profile-id` and a lent phone.** Supabase lets a phone write as a phone-less face, or read with no person at all. A session here is one person. Old builds can't go through `/v1` until the accounts step decides how an adapter speaks for them. **Recommendation:** an adapter-only path that takes a device key and a profile id, checks Supabase's owner rule, and calls these services directly.
 5. **`pushEvents` and system notes have callers elsewhere.** The dish area's merge doesn't queue `push.dish_answered` yet, because a card's `person_id` is always null until the sync. `postSystemNote` and `queuePush` are ready for accounts' "Sam joined." and "joined" pushes.
-6. **`POST /v1/pending-sends/:uploadId/published` can be called by anyone in the family,** as Supabase's can. **Recommendation:** make it worker-only when jobs move, and have the worker call `deliverPending()`.
+6. **`POST /v1/pending-sends/:uploadId/published` is the sender's now, and the worker has no route yet.** **Recommendation:** when jobs move, the worker calls `deliverPending()` with no person.
 
 ## Account deletion
 
@@ -246,7 +254,6 @@ These tables are read-only here. Each writes nothing today, and each needs its o
 |---|---|
 | `messagesThreads.test.ts` | Threads, kinds, reactions, reads, recipe notes, chat questions, `send-recipe`, system notes, Convex's `send`, `list`, `madeMyDish` |
 | `messagesFiles.test.ts` | Attach refusals per field, uploads, the sweep's reach, a key never leaving the server |
-| `messagesAuth.test.ts` | Every route: no session, another family, someone outside the pair. Fails when a route has no entry |
 | `messagesIdempotency.test.ts` | Retries, a different body, racing tries, a failure halfway |
 | `messagesPush.test.ts` | `convex/push.test.ts`, `pushEvents`, `notify`, message pushes, postcards, Expo down, a repeat |
 | `messagesQuestions.test.ts` | Flow, translation, Ink, follow-ups, share answers, the real adapters' requests against a stubbed fetch |
@@ -254,6 +261,7 @@ These tables are read-only here. Each writes nothing today, and each needs its o
 | `messagesRetention.test.ts` | The history query, `GET /v1/table`, the nudge, `GET /v1/recap`, the recap push, the hourly job |
 | `messagesAccount.test.ts` | Section 4 and C1 |
 | `messagesLogs.test.ts` | No words, tokens, names or file keys in logs, and ids only in the outbox |
+| `routeCoverage.test.ts` | One table of every route the app registers, in every area: no session, expired, deleted, removed, another family, and someone outside the pair or a stated family-wide reason, then the same request working. An anonymous route says why and shows its capability refusing. A new route fails until it's added |
 | `messagesCopies.test.ts` | Fails when Supabase's `time.ts`, `table.ts`, `recap.ts`, Convex's `pushWords.ts`, or a prompt or cap changes, so a fix reaches both |
 | `retentionTable.test.ts`, `retentionRecap.test.ts`, `retentionRules.test.ts` | Supabase's own pure tests, run unchanged but for imports and field names |
 
@@ -293,6 +301,11 @@ Add to AWS-MIGRATION's list, as backfill counts:
 - Doubles of a reaction (the new unique index).
 - Convex messages with `to == from`.
 - `questions.follow_up_said = 'yes'` with no matching ingredient, and share yeses, to apply when `recipes` moves.
+
+## Known limits
+
+- **A craving waiting out quiet hours holds the kid's name** on its queued row and sends it at 8:00, up to 11 hours later, even if the kid has deleted their account by then. The kid's purge can't find a row by the words in it, because `push_log` is keyed by who it's to. Delivering it is the same risk as any push in flight. **Recommendation:** when cards get a person, have `push.deliver` read the card again and drop it if the kid is gone.
+- **A cook's answer to a pair question becomes a family-visible recipe note.** Left as it is, and open for Caleb.
 
 ## Open questions
 
