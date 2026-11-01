@@ -90,13 +90,24 @@ jobs:
     needs: changes
     if: needs.changes.outputs.pipeline == 'true'
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: homecookd_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://postgres:ci-only@localhost:5432/homecookd_test
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.12"
       - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
-      - run: pip install -r pipeline/requirements.txt
+      - run: pip install -r pipeline/requirements.txt -r pipeline/requirements-queue.txt
       - name: Unit tests (fakes only)
         run: |
           for TEST in pipeline/test_*.py; do

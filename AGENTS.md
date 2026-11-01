@@ -265,6 +265,9 @@ voice/deploy.sh                                                    # Cloud Run h
 .venv/bin/python pipeline/worker.py --purge-dry-run                 # what each deleted account's purge would delete
 .venv/bin/python pipeline/process.py --id <id> --rewrite            # re-write recipe.json from the cached extraction
 
+.venv/bin/python pipeline/test_queue_worker.py                     # the queue worker (TEST_DATABASE_URL adds real Postgres; needs requirements-queue.txt)
+python pipeline/queue_worker.py                                     # queue mode, on AWS only (docs/build/WORKER-MIGRATION.md)
+
 # glasses VM (glasses/README.md; uses .venv + ffmpeg)
 .venv/bin/python glasses/ingest/test_server.py                      # unit tests: the VM's state machine
 .venv/bin/python glasses/ingest/e2e_test.py                         # stub Convex + fake glasses → MP4, no cloud
