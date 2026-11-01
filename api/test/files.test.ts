@@ -78,7 +78,7 @@ test("a route that could take a key without saying so won't start", async (t) =>
 });
 
 test("key-looking names", () => {
-  for (const f of ["audioKey", "audio_key", "photo_keys", "key", "audioPath", "fileId", "file_id", "storageId", "coverUpload", "file"]) {
+  for (const f of ["audioKey", "audio_key", "photo_keys", "key", "audioPath", "fileId", "file_id", "storageId", "coverUpload", "file", "photos", "photo", "voiceNote", "voice_note", "clip", "audio", "kidPhoto"]) {
     assert.ok(looksLikeFileKey(f), f);
   }
   for (const f of ["monkey", "text", "turkey_recipe", "profile", "name"]) assert.ok(!looksLikeFileKey(f), f);
@@ -165,8 +165,10 @@ test("attaching a file", { skip: !hasDatabase }, async (t) => {
 test("every route in the real app with a key field refuses another family's", { skip: !hasDatabase }, async () => {
   const app = buildApp({ logger: false });
   await app.ready();
-  // Empty today. It fills as routes are added, and files.test.ts's loop above is what each must pass.
-  for (const route of app.fileKeyRoutes) assert.ok(route.fields.length > 0);
+  // Empty today: it fills as signed-in routes are added, and the loop above is what each must pass. The anonymous routes have no session,
+  // so they say notFileKeys instead, and dishFiles.test.ts's last test holds them to their own check, field by field.
+  assert.deepEqual(app.fileKeyRoutes, []);
+  assert.ok(app.notFileKeyRoutes.every((route) => route.url.startsWith("/dish/")), "only the anonymous routes may say a file field isn't a key");
 });
 
 after(async () => {

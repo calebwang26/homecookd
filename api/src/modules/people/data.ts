@@ -1,4 +1,4 @@
-import { db } from "../../db.js";
+import { db, type Queryable } from "../../db.js";
 
 export async function personWithFamily(personId: string) {
   const { rows } = await db().query(
@@ -9,4 +9,9 @@ export async function personWithFamily(personId: string) {
     [personId],
   );
   return rows[0] ?? null;
+}
+
+export async function isLive(q: Queryable, personId: string): Promise<boolean> {
+  const { rows } = await q.query("select 1 from people where id = $1 and deleted_at is null", [personId]);
+  return rows.length > 0;
 }
