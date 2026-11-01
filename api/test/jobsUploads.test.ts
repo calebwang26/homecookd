@@ -188,22 +188,144 @@ test("uploads", { skip: !hasDatabase }, async (t) => {
     await closeRecipeWrites();
   });
 
-  await t.test("an upload nothing took goes after 7 days; one a job holds stays", async () => {
+  await t.test("an upload nothing landed in goes after 7 days, and one a job holds stays", async () => {
     const orphan = await askLinks(app, dad);
     const held = await askLinks(app, dad);
     await newJob(app, dad, held.uploadId);
-    land(videos, ...orphan.keys, ...held.keys);
+    land(videos, ...held.keys);
     await age(orphan.uploadId, 8 * DAY_S);
     await age(held.uploadId, 8 * DAY_S);
     await sweepUploads(trace);
     const { rows } = await db().query(`select upload_id, count(*) filter (where delete_requested_at is not null)::int as marked from files where upload_id = any($1) group by 1`, [[orphan.uploadId, held.uploadId]]);
     assert.deepEqual(Object.fromEntries(rows.map((r) => [r.upload_id, r.marked])), { [orphan.uploadId]: 2, [held.uploadId]: 0 });
-    assert.ok(videos.objects.has(orphan.keys[0]), "marked just now: a link may still be out, so not deleted yet");
     await db().query(`update files set delete_requested_at = delete_requested_at - make_interval(secs => $2) where upload_id = $1`, [orphan.uploadId, VIDEO_LINK_S + 3700]);
     await sweepUploads(trace);
-    assert.ok(!videos.objects.has(orphan.keys[0]));
     assert.ok(videos.objects.has(held.keys[0]));
     assert.equal((await db().query(`select count(*)::int as n from files where upload_id = $1 and deleted_at is not null`, [orphan.uploadId])).rows[0].n, 2);
+  });
+
+  await t.test("landed footage is never swept away: not reported, part of a folder, or a month old, and someone is told", async () => {
+    await db().query(`delete from files where upload_id is not null`);
+    // The phone died before saying so: only S3 knows.
+    const unreported = await askLinks(app, dad);
+    land(videos, ...unreported.keys);
+    // One of two arrived.
+    const partly = await askLinks(app, dad);
+    land(videos, partly.keys[0]);
+    await age(unreported.uploadId, 30 * DAY_S);
+    await age(partly.uploadId, 30 * DAY_S);
+    const told: { count: number; message: string }[] = [];
+    const log = { ...trace.log, error: (fields: object, message: string) => void told.push({ count: (fields as { count: number }).count, message }) };
+    for (let i = 0; i < 2; i += 1) await sweepUploads({ ...trace, log });
+    const marked = await db().query(`select count(*)::int as n from files where upload_id = any($1) and delete_requested_at is not null`, [[unreported.uploadId, partly.uploadId]]);
+    assert.equal(marked.rows[0].n, 0, "not one of hers is marked");
+    for (const key of [...unreported.keys, partly.keys[0]]) assert.ok(videos.objects.has(key), key);
+    assert.equal((await db().query(`select count(*)::int as n from files where upload_id = $1 and uploaded_at is not null`, [unreported.uploadId])).rows[0].n, 2, "S3 was asked, and it's written down");
+    assert.ok(told.some((t) => t.message === "Landed videos are waiting on a person"), JSON.stringify(told));
+    // With S3 unable to answer, nothing is marked either: it isn't "nothing landed".
+    const unknown = await askLinks(app, dad);
+    await age(unknown.uploadId, 30 * DAY_S);
+    const realHead = videos.head;
+    videos.head = async () => {
+      throw new Error("S3 is down");
+    };
+    await assert.rejects(sweepUploads(trace), /failed/);
+    videos.head = realHead;
+    assert.equal((await db().query(`select count(*)::int as n from files where upload_id = $1 and delete_requested_at is not null`, [unknown.uploadId])).rows[0].n, 0);
+    await db().query(`delete from files where upload_id = any($1)`, [[unreported.uploadId, partly.uploadId, unknown.uploadId]]);
+  });
+
+  await t.test("the overdue clock runs from the phone's last word, and failing a job keeps what landed", async () => {
+    await openRecipeWrites();
+    const { uploadId, keys } = await askLinks(app, dad);
+    const { data } = await newJob(app, dad, uploadId);
+    await ageJob(data.jobId, 8 * DAY_S);
+    await age(uploadId, 8 * DAY_S);
+    // A phone still at it on day 8 asks for a link, so the job isn't overdue.
+    await clearLimits();
+    assert.equal((await call(app, dad, "POST", `/v1/video-uploads/${uploadId}/links`)).status, 200);
+    await sweepUploads(trace);
+    assert.equal((await job(data.jobId)).stage, "uploading");
+
+    // A clip lands, then nothing more for 8 days: the job fails, and the clip stays.
+    land(videos, keys[0]);
+    await sweepUploads(trace);
+    assert.equal((await job(data.jobId)).stage, "uploading", "it just landed");
+    await db().query(`update files set last_link_at = last_link_at - interval '8 days', uploaded_at = uploaded_at - interval '8 days' where upload_id = $1`, [uploadId]);
+    await sweepUploads(trace);
+    assert.equal((await job(data.jobId)).stage, "failed");
+    const rows = await db().query(`select key, delete_requested_at is not null as marked from files where upload_id = $1 order by key`, [uploadId]);
+    assert.deepEqual(rows.rows.map((r) => r.marked), [false, true], "the landed clip stays; the one that never came expires");
+    assert.ok(videos.objects.has(keys[0]));
+    await closeRecipeWrites();
+  });
+
+  await t.test("a stop while the job is being made still stops it", async () => {
+    const { uploadId } = await askLinks(app, dad);
+    // What createJob holds until it commits: the files' locks, and a job nobody else can see yet.
+    const making = await db().connect();
+    let jobId: string;
+    let stopped: boolean;
+    try {
+      await making.query("begin");
+      await making.query(`select 1 from files where upload_id = $1 order by key for update`, [uploadId]);
+      const { rows } = await making.query(
+        `insert into jobs (family_id, cook_id, upload_key, source, stage, progress, idempotency_key) values ($1, $2, $3::text, 'phone', 'queued', 0, $3::text) returning id`,
+        [dad.familyId, dad.personId, `${uploadId}/`],
+      );
+      jobId = rows[0].id;
+      const stopping = call(app, dad, "POST", `/v1/video-uploads/${uploadId}/cancel`);
+      await new Promise((resolve) => setTimeout(resolve, 200));
+      await making.query("commit");
+      stopped = (await stopping).data.stopped;
+    } finally {
+      await making.query("rollback").catch(() => {});
+      making.release();
+    }
+    assert.equal(stopped, true);
+    assert.ok((await job(jobId)).cancelled_at, "the job she stopped doesn't run");
+  });
+
+  await t.test("another cook's stop ends the job and keeps her footage, until Caleb says otherwise", async () => {
+    const mom = await who(home);
+    const { uploadId, keys } = await askLinks(app, dad);
+    land(videos, ...keys);
+    const { data } = await newJob(app, dad, uploadId);
+    assert.equal((await call(app, mom, "POST", `/v1/jobs/${data.jobId}/cancel`)).data.stopped, true);
+    const row = await job(data.jobId);
+    assert.deepEqual([row.stage, row.keep_upload], ["failed", true]);
+    assert.equal((await db().query(`select count(*)::int as n from files where upload_id = $1 and delete_requested_at is not null`, [uploadId])).rows[0].n, 0);
+
+    // Her own stop still deletes it, as Convex mode does.
+    const hers = await askLinks(app, dad);
+    const own = await newJob(app, dad, hers.uploadId);
+    await call(app, dad, "POST", `/v1/jobs/${own.data.jobId}/cancel`);
+    assert.equal((await job(own.data.jobId)).keep_upload, false);
+    assert.ok((await db().query(`select count(*)::int as n from files where upload_id = $1 and delete_requested_at is not null`, [hers.uploadId])).rows[0].n > 0);
+  });
+
+  await t.test("a job stuck queued is noticed, and an ended job's card is fixed once writes are open again", async () => {
+    await openRecipeWrites();
+    const { jobId, recipeId } = await addJob(dad, "queued");
+    await db().query(`update jobs set updated_at = now() - interval '27 hours' where id = $1`, [jobId]);
+    const told: string[] = [];
+    const log = { ...trace.log, error: (_f: object, message: string) => void told.push(message) };
+    await sweepUploads({ ...trace, log });
+    assert.ok(told.includes("Jobs are stuck queued with no message"), JSON.stringify(told));
+    assert.equal((await job(jobId)).stage, "queued", "a person decides: it could spend her money");
+
+    const { recipeId: card } = await addJob(dad, "failed");
+    await closeRecipeWrites();
+    told.length = 0;
+    await sweepUploads({ ...trace, log });
+    assert.ok(told.includes("Ended jobs have cards still saying processing, and recipe writes are off"), JSON.stringify(told));
+    assert.equal((await recipe(card!)).status, "processing");
+    await openRecipeWrites();
+    await sweepUploads(trace);
+    assert.equal((await recipe(card!)).status, "failed");
+    await db().query(`update jobs set stage = 'failed' where id = $1`, [jobId]);
+    await db().query(`update recipes set status = 'failed' where id = $1`, [recipeId]);
+    await closeRecipeWrites();
   });
 
   await t.test("a stopped job's files leave S3 once the links are out of time, even one that landed after the stop", async () => {

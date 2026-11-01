@@ -164,31 +164,38 @@ export async function getJob(signed: Signed, id: string) {
 }
 
 /**
- * One job stopped, in its own transaction, with everything that says so: a worker mid-way finds it on its next write. The raw video goes, as Convex mode does. A job
- * still uploading has no message for the worker yet, so it gets one here, because that's what deletes the files it holds now. The sweep deletes them again once the
- * phone's upload links have run out.
+ * One job stopped, with everything that says so, under the upload's locks: a worker mid-way finds it on its next write. The raw video goes, as Convex mode does. A job still
+ * uploading has no message for the worker yet, so it gets one here. The sweep deletes the files again once the phone's upload links have run out.
+ *
+ * TODO(caleb): another cook's stop. Convex lets any cook in the family cancel, and there the footage stayed. Until he answers, it stops the job and keeps her video
+ * (`keep_upload`), and the sweep's alarm asks a person. JOBS-MIGRATION.md, decisions.
  */
-async function stop(jobId: string, familyId: string, requestId?: string): Promise<boolean> {
+async function stopHeld(c: Queryable, jobId: string, byPerson: string, requestId?: string): Promise<boolean> {
+  const job = await data.lockJob(c, jobId);
+  if (!job) throw notFound();
+  const keep = job.cook_id !== byPerson;
+  const waitingOnUpload = job.stage === "uploading";
+  if (!(await data.cancelJobRow(c, jobId, CANCELLED, keep))) return false;
+  if (job.recipe_id) await failRecipeIfOpen(c, job.recipe_id);
+  if (!keep) await data.markUploadForDeletion(c, job.upload_id);
+  if (waitingOnUpload) await enqueue(c, { queue: "jobs", payload: { jobId }, requestId });
+  return true;
+}
+
+async function stop(jobId: string, familyId: string, byPerson: string, requestId?: string): Promise<boolean> {
   return await tx(async (c) => {
     // Files before the job, as everyone else takes them.
     const seen = await data.jobById(c, jobId);
     if (!seen || seen.family_id !== familyId) throw notFound();
     await data.lockUpload(c, seen.upload_id);
-    const job = await data.lockJob(c, jobId);
-    if (!job) throw notFound();
-    const waitingOnUpload = job.stage === "uploading";
-    if (!(await data.cancelJobRow(c, jobId, CANCELLED))) return false;
-    if (job.recipe_id) await failRecipeIfOpen(c, job.recipe_id);
-    await data.markUploadForDeletion(c, job.upload_id);
-    if (waitingOnUpload) await enqueue(c, { queue: "jobs", payload: { jobId }, requestId });
-    return true;
+    return await stopHeld(c, jobId, byPerson, requestId);
   });
 }
 
 /** The cook stops one of her family's jobs. False once it's over. Another family's job answers the same as one that doesn't exist. */
 export async function cancelJob(signed: Signed, id: string, requestId?: string): Promise<boolean> {
   requireCook(signed);
-  return await stop(id, signed.familyId, requestId);
+  return await stop(id, signed.familyId, signed.personId, requestId);
 }
 
 /**
@@ -199,15 +206,17 @@ export async function cancelUpload(signed: Signed, uploadId: string, requestId?:
   requireCook(signed);
   const id = uploadId.trim();
   if (!UPLOAD_ID.test(id)) return false;
-  let stopped = false;
-  for (const job of await data.jobsOfFolder(db(), signed.familyId, id)) {
-    if (await stop(job.id, signed.familyId, requestId)) stopped = true;
-  }
-  await tx(async (c) => {
+  // All under the files' locks, which createJob holds until it commits: a job being made as she stops is seen here, and stopped.
+  return await tx(async (c) => {
     const files = await data.lockUpload(c, id);
+    const jobs = await data.jobsOfFolder(c, signed.familyId, id);
+    let stopped = false;
+    for (const job of jobs) {
+      if (await stopHeld(c, job.id, signed.personId, requestId)) stopped = true;
+    }
     const hers = files.length > 0 && files.every((f) => f.family_id === signed.familyId && f.owner_person_id === signed.personId);
     // Only with no job: a finished job's raw video stays (SYSTEM-DESIGN.md, "Keep the raw input").
-    if (hers && !(await data.jobForFolder(c, signed.familyId, `${id}/`))) await data.markUploadForDeletion(c, id);
+    if (hers && jobs.length === 0) await data.markUploadForDeletion(c, id);
+    return stopped;
   });
-  return stopped;
 }

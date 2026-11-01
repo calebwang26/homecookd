@@ -127,11 +127,11 @@ export async function queueJob(c: Queryable, jobId: string, uploadFinishedAt: Da
 }
 
 /** Stops a job for good. It's over, so `finished_at` is set, and a worker mid-way finds `cancelled_at` on its next write (queue_db.py). */
-export async function cancelJobRow(c: Queryable, jobId: string, message: string): Promise<boolean> {
+export async function cancelJobRow(c: Queryable, jobId: string, message: string, keepUpload: boolean): Promise<boolean> {
   const { rowCount } = await c.query(
-    `update jobs set stage = 'failed', progress = 0, error = $2, claimed_at = null, cancelled_at = now(), finished_at = now(), updated_at = now()
+    `update jobs set stage = 'failed', progress = 0, error = $2, claimed_at = null, cancelled_at = now(), finished_at = now(), updated_at = now(), keep_upload = $3
       where id = $1 and stage not in ('done', 'failed')`,
-    [jobId, message],
+    [jobId, message, keepUpload],
   );
   return !!rowCount;
 }
@@ -167,9 +167,10 @@ export type UploadFile = {
   uploaded_at: Date | null;
   attached_at: Date | null;
   delete_requested_at: Date | null;
+  last_link_at: Date | null;
 };
 
-const FILE = `key, content_type, size_bytes, family_id, owner_person_id, uploaded_at, attached_at, delete_requested_at`;
+const FILE = `key, content_type, size_bytes, family_id, owner_person_id, uploaded_at, attached_at, delete_requested_at, last_link_at`;
 
 export async function uploadFiles(q: Queryable, uploadId: string): Promise<UploadFile[]> {
   const { rows } = await q.query(`select ${FILE} from files where upload_id = $1 order by key`, [uploadId]);
@@ -201,6 +202,15 @@ export async function attachUpload(c: Queryable, uploadId: string): Promise<void
   await c.query(`update files set attached_at = coalesce(attached_at, now()) where upload_id = $1`, [uploadId]);
 }
 
+/** A job that ran out of time: what never arrived expires, and what did stays. Footage is irreplaceable, so a person decides. */
+export async function markUnlandedForDeletion(c: Queryable, uploadId: string): Promise<void> {
+  await c.query(`update files set delete_requested_at = coalesce(delete_requested_at, now()) where upload_id = $1 and uploaded_at is null and deleted_at is null`, [uploadId]);
+}
+
+export async function noteLinks(q: Queryable, uploadId: string): Promise<void> {
+  await q.query(`update files set last_link_at = now() where upload_id = $1`, [uploadId]);
+}
+
 export async function markUploadForDeletion(c: Queryable, uploadId: string): Promise<void> {
   await c.query(`update files set delete_requested_at = coalesce(delete_requested_at, now()) where upload_id = $1 and deleted_at is null`, [uploadId]);
 }
@@ -224,16 +234,53 @@ export async function readUploadKey(c: Queryable, personId: string, key: string)
 
 const REACHES = `bucket in ('uploads', 'private') and capability_hash is null`;
 
-export async function markOrphanUploads(olderThanDays: number, limit: number): Promise<number> {
-  const { rowCount } = await db().query(
-    `update files set delete_requested_at = now()
-      where key in (select key from files
-                     where upload_id is not null and attached_at is null and delete_requested_at is null and deleted_at is null
-                       and created_at < now() - make_interval(days => $1)
-                     order by created_at limit $2)`,
+/**
+ * Uploads no job took, with nothing landed and no phone asking for a link in this long. These may still have a file in S3 that nobody reported, so the sweep asks S3 before
+ * it marks anything. An upload with a landed clip is never here: that's footage, and it waits for a person.
+ */
+export async function uploadsNothingTook(olderThanDays: number, limit: number): Promise<string[]> {
+  const { rows } = await db().query(
+    `select distinct upload_id, min(created_at) from files f
+      where upload_id is not null and attached_at is null and delete_requested_at is null and deleted_at is null and uploaded_at is null
+        and coalesce(last_link_at, created_at) < now() - make_interval(days => $1)
+        and not exists (select 1 from files o where o.upload_id = f.upload_id and o.uploaded_at is not null)
+      group by upload_id order by 2 limit $2`,
     [olderThanDays, limit],
   );
-  return rowCount ?? 0;
+  return rows.map((r) => r.upload_id);
+}
+
+/** Landed footage nothing will ever use without a person: no job took it, or its job ran out of time or was stopped by someone else. */
+export async function landedWaitingOnAPerson(olderThanDays: number, overdueMessage: string): Promise<number> {
+  const { rows } = await db().query(
+    `select count(*)::int as n from (
+       select 1 from files f
+        where f.upload_id is not null and f.uploaded_at is not null and f.delete_requested_at is null and f.deleted_at is null
+          and coalesce(f.last_link_at, f.created_at) < now() - make_interval(days => $1)
+          and (f.attached_at is null
+               or exists (select 1 from jobs j where j.upload_id = f.upload_id and j.family_id = f.family_id and j.stage = 'failed' and (j.keep_upload or j.error = $2)))
+        limit 1000) waiting`,
+    [olderThanDays, overdueMessage],
+  );
+  return rows[0].n;
+}
+
+/** Queued with no change in this long: longer than a budget pause, so its message is gone. A worker stopping on a job's last receive leaves one like this. */
+export async function jobsStuckQueued(olderThanHours: number): Promise<number> {
+  const { rows } = await db().query(
+    `select count(*)::int as n from (select 1 from jobs where stage = 'queued' and updated_at < now() - make_interval(hours => $1) limit 1000) stuck`,
+    [olderThanHours],
+  );
+  return rows[0].n;
+}
+
+/** A job that's over with a card that still says "processing": recipe writes were off when it ended. */
+export async function endedJobsWithOpenCards(limit: number): Promise<string[]> {
+  const { rows } = await db().query(
+    `select r.id from recipes r join jobs j on j.recipe_id = r.id where r.status = 'processing' and j.stage = 'failed' order by r.created_at limit $1`,
+    [limit],
+  );
+  return rows.map((r) => r.id);
 }
 
 /** Marked at least `graceS` ago: an upload link still in a phone's hands could put a file back until it expires. */

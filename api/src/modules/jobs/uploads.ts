@@ -117,12 +117,13 @@ export async function newLinks(signed: Signed, uploadId: string) {
   await limited(signed.personId, RATE.links);
   const files = await ownUpload(db(), signed, uploadId);
   if (cancelled(files)) throw notFound();
+  await data.noteLinks(db(), uploadId); // a phone still at it: the overdue clock starts again
   const uploads = await linksFor(files, notIn);
   return { uploadId, uploads, expiresInS: uploads[0]?.expiresInS ?? null };
 }
 
 /** What S3 has now, read before the transaction: an outside call must never hold a database connection. A wrong size can't arrive on a signed link, but it wouldn't count. */
-async function landed(files: data.UploadFile[]): Promise<{ key: string; at: Date }[]> {
+export async function landed(files: data.UploadFile[]): Promise<{ key: string; at: Date }[]> {
   const waiting = files.filter((f) => notIn(f) && !f.delete_requested_at);
   const heads = await storage(() => Promise.all(waiting.map((f) => uploadStore().head(f.key))));
   return waiting.flatMap((f, i) => {

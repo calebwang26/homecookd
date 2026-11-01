@@ -131,7 +131,7 @@ test("account deletion: jobs, recipes, recordings", { skip: !hasDatabase }, asyn
     assert.deepEqual(d.job_ids, [upload.jobId]);
     assert.deepEqual(d.upload_keys, [`${uploadId}/`]);
     assert.deepEqual(d.media_prefixes.sort(), ["recipe-a/", workerFolder(upload.jobId)].sort(), "a seeded recipe's files are the public library's, so it has no folder here");
-    assert.deepEqual(d.media_keys.sort(), ["glasses-z/full.mp4", "recipe-a/a1/poster.jpg", "recipe-a/a1/recipe.json"]);
+    assert.deepEqual(d.media_keys.sort(), ["glasses-z/full.mp4", "private/plate-1", "recipe-a/a1/poster.jpg", "recipe-a/a1/recipe.json"]);
   });
 
   await t.test("a kid deleting: her cooking rows go, and nothing of anyone else's", async () => {

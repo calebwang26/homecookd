@@ -100,7 +100,7 @@ A `POST /v1/jobs` can still name a recording, with its guard, for rows that arri
 - A stop while still uploading has no message in flight, so the api writes one. The worker receives it, deletes the raw video and lets go. Without that row nothing would.
 - `workerFolder` in the purge gives the same folder as the worker's `recipe_folder`.
 
-**To run it:** `PIPELINE_PYTHON=<python with pipeline/requirements.txt and requirements-queue.txt>`. **CI's api job has no such python, so this file skips there and says why in its output.** It needs one line in `.github/workflows/ci.yml`, outside this PR's folders: run it in the pipeline job, which has both, or install them in the api job.
+**To run it:** `PIPELINE_PYTHON=<python with pipeline/requirements.txt and requirements-queue.txt>`. CI's api job has one, and fails rather than skips if it can't import them.
 
 **Found by this:** the worker's `recipe_published` row says `kind`, and `handleMessage` read only `task`, so every published recipe would have failed three times and reached the dead letters. `scheduled.ts` reads either now.
 
@@ -132,8 +132,8 @@ This area adds no subscription. A topic is one line in its `topics`, with a `rea
 6. **A stopped upload with no job yet marks its files,** so a late `POST /v1/jobs` is refused. On Convex it could still be made.
 7. **`jobs.cancel` on another family's job, or a missing one, is 404,** where Convex said `false`. `cancelUpload` keeps `false` for both, with the same bytes, because a folder name isn't a row of hers. A malformed id too, except that one over 100 characters is Fastify's own 414 before the session check.
 8. **`recipes.get`, `live.recording` and `forRecording` are 404, where Convex said `null`.**
-9. **An upload that never finishes fails visibly after 7 days,** with the worker's words, and its files go. Convex's stayed in `uploading` or `queued`.
-10. **An upload nothing took is deleted after 7 days.** The signer's stayed forever.
+9. **An upload that never finishes fails visibly 7 days after the phone's last word,** with the worker's words. What never arrived expires and what landed stays ("Landed video is never deleted by a clock"). Convex's stayed in `uploading` or `queued`.
+10. **An upload no job took, with nothing in S3, is forgotten after 7 days.** One with anything landed stays, as the signer's did, and a person is asked.
 11. **A stopped job gets `finished_at` and `cancelled_at`,** and the worker no longer matches `"Cancelled."`. `error` still says it, for old clients. `toLiveJob` keeps its rule, that a stop reads as failed at once.
 12. **A second cook in the family can't take over another's upload** (a retry of a job already made still gets it, by family, as on Convex).
 13. **A file with no row in the ledger is refused,** so a signer-made folder can't become a job here. An in-flight upload at the switch finishes on Convex.
@@ -234,6 +234,17 @@ Only for 1.1 and after, at the switch. Build 6 keeps calling Convex and the sign
 3. **Taking stories back while Moss is on.** Convex's `setMemoriesOptIn` re-syncs, so her stories leave the index. Here it marks the row and nothing re-syncs. It's safe only if Moss is off by the time this switch is on. **Recommendation:** make that a condition of turning it on, or add the sync to `recipe_published`'s task list.
 4. **A link's 6 hours.** Long enough for a phone to start a queued upload, and short enough to limit a leaked link. **Not measured:** on a task role, S3 refuses a link when the signing credentials expire, and those may be sooner. The phone asking again covers it, once the app does.
 5. **A new cook's first 15 minutes.** See above. **Recommendation:** read her from Convex just this once on a job's insert, or tell her to wait. It's the same question for every signed-in area.
+
+6. **Another cook stopping a job. Caleb's call (`TODO(caleb)`, `service.ts`).** Convex lets any cook in the family cancel a job, and its footage stayed. Deleting the raw video on that stop would be new, and footage can't be replaced. **Default until he answers:** it stops the job and keeps her video (`jobs.keep_upload`), and the worker leaves it. Her own stop deletes it, as Convex mode does.
+
+## Landed video is never deleted by a clock
+
+Nothing automatic deletes a clip that fully landed, unless its owner stops it or deletes their account. The signer kept these forever, and they can't be replaced.
+
+- **An upload no job took:** the sweep asks S3 first, because a phone can land everything and die before saying so. If anything landed, or S3 can't answer, nothing is marked. Only an upload with nothing in S3 expires, 7 days after its last link.
+- **A job waiting on its upload:** the clock runs from its last link or last landed clip, not from when it began. When it runs out the job fails visibly, what never arrived expires, and what landed stays.
+- **Someone is told:** the sweep raises one Sentry issue, "Landed videos are waiting on a person", with a count and no names. **A person decides, and there's no tool for it yet:** today it's a query on `files`, and asking the cook. How long raw footage is kept is still `TODO(caleb)` (AWS-MIGRATION.md).
+- **The sweep also notices** a job queued with no change for 26 hours, which a worker stopping on a job's last receive leaves behind, as well as the dead-letter alarm. It doesn't re-queue, because that could spend her money. And an ended job whose card still says "processing" because recipe writes were off: it's fixed once they're open, and reported until then.
 
 ## Known limits
 

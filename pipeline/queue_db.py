@@ -236,6 +236,12 @@ class PostgresStore:
             log.append(entry)
         return {**row, "homie_log": log}
 
+    def keeps_upload(self, job_id: str) -> bool:
+        def work(c):
+            row = c.execute("select keep_upload from jobs where id = %s", (job_id,)).fetchone()
+            return bool(row and row["keep_upload"])
+        return self._do(work)
+
     def peek(self, job_id: str, lease_s: int) -> dict | None:
         def work(c):
             return c.execute(

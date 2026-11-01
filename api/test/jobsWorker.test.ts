@@ -185,6 +185,18 @@ test("the worker's contract", { skip: missing ?? false }, async (t) => {
     assert.ok(row.finished_at);
   });
 
+  await t.test("another cook's stop: the worker lets go and leaves her raw video where it is", async () => {
+    const other = await who(cook.familyId);
+    const { uploadId, keys } = await askLinks(app, cook);
+    land(videos, ...keys);
+    const { data } = await newJob(app, cook, uploadId);
+    assert.equal((await call(app, other, "POST", `/v1/jobs/${data.jobId}/cancel`)).data.stopped, true);
+    const out = worker({ op: "deliver", body: JSON.stringify({ outboxId: "1", payload: { jobId: data.jobId } }), objects: keys }).results[0];
+    assert.equal(out.started, 0);
+    assert.deepEqual(out.uploads.sort(), [...keys].sort(), "nothing of hers is deleted");
+    assert.equal(out.messagesLeft, 0);
+  });
+
   await t.test("a queued job stopped before the worker saw it never starts", async () => {
     await sent();
     const { uploadId, keys } = await askLinks(app, cook);

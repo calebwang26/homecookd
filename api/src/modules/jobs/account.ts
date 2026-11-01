@@ -113,7 +113,9 @@ export async function purgeJobsForPerson(personId: string): Promise<void> {
       for (const r of rows) {
         const frame = await recordings.deleteFrame(c, r.id);
         await markFiles(c, [frame, r.cover_key, r.video_key]);
-        if (r.video_key) await note(c, familyId, personId, { mediaKeys: [r.video_key] });
+        // The plate photo too: either can live outside the ledger.
+        const outside = [r.video_key, r.cover_key].filter((k): k is string => !!k);
+        if (outside.length) await note(c, familyId, personId, { mediaKeys: outside });
         await recordings.deleteRecording(c, r.id);
       }
       return rows.length;

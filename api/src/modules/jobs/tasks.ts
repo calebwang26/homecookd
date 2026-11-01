@@ -1,5 +1,6 @@
 // The jobs area's work on the `scheduled` queue. Each can arrive twice. A task that throws leaves its message on the queue, and after 3 tries it goes to the dead-letter
 // queue, which alarms. Logs get ids and counts, never a title.
+import * as Sentry from "@sentry/node";
 import { db, tx } from "../../db.js";
 import { enqueue } from "../../outbox.js";
 import { afterOf, type After } from "../../paging.js";
@@ -8,7 +9,7 @@ import type { Trace } from "../dish/budget.js";
 import { failRecipeIfOpen } from "../recipes/writes.js";
 import * as data from "./data.js";
 import { NO_UPLOAD } from "./service.js";
-import { settleUpload } from "./uploads.js";
+import { landed, settleUpload } from "./uploads.js";
 
 type Payload = Record<string, unknown>;
 
@@ -17,13 +18,38 @@ export const UPLOAD_DAYS = 7;
 const GRACE_S = VIDEO_LINK_S + 3600; // a link still in a phone's hands could put a file back
 const KEEP_DELETED_DAYS = 7;
 export const SWEEP = { ms: 60_000, batch: 50 };
+/** Longer than a budget pause, which waits for the next UTC day. */
+const STUCK_QUEUED_HOURS = 26;
 
+/** Files first, as everyone takes them. What landed stays: footage is irreplaceable, and the sweep's alarm asks a person. */
 async function failOverdue(job: data.JobRow): Promise<void> {
   await tx(async (c) => {
+    await data.lockUpload(c, job.upload_id);
     if (!(await data.failUploadingJob(c, job.id, NO_UPLOAD))) return;
     if (job.recipe_id) await failRecipeIfOpen(c, job.recipe_id);
-    await data.markUploadForDeletion(c, job.upload_id);
+    await data.markUnlandedForDeletion(c, job.upload_id);
   });
+}
+
+/** The phone's last word on this job: its start, a new link, or a clip landing. A phone mid-upload on day 6.9 isn't overdue. */
+const lastWord = (job: data.JobRow, files: data.UploadFile[]) =>
+  Math.max(job.created_at.getTime(), ...files.flatMap((f) => [f.last_link_at?.getTime() ?? 0, f.uploaded_at?.getTime() ?? 0]));
+
+/** S3 is asked first: a phone can land everything and die before saying so. Then it's only marked if nothing landed and still no job holds it. */
+async function expireIfNothingLanded(uploadId: string): Promise<void> {
+  const arrived = await landed(await data.uploadFiles(db(), uploadId));
+  await tx(async (c) => {
+    for (const a of arrived) await data.markUploaded(c, a.key, a.at);
+    const files = await data.lockUpload(c, uploadId);
+    if (files.length && files.every((f) => !f.uploaded_at && !f.attached_at)) await data.markUploadForDeletion(c, uploadId);
+  });
+}
+
+/** Someone should look. One Sentry issue however many sweeps see it, with counts and never a name. */
+function notice(message: string, count: number, trace: Trace): void {
+  if (count === 0) return;
+  trace.log.error({ count }, message);
+  Sentry.captureMessage(message, { level: "warning", extra: { count } });
 }
 
 /**
@@ -47,7 +73,7 @@ export async function sweepUploads(trace: Trace, after: After | null = null): Pr
       const settled = await settleUpload(job.upload_id, job.family_id, trace.requestId, files);
       // No job found by its key: a row copied from Convex with no ledger behind it. It can only ever run out of time.
       const stillWaiting = settled.job === null || settled.job.stage === "uploading";
-      if (stillWaiting && job.created_at.getTime() < Date.now() - UPLOAD_DAYS * 86_400_000) await failOverdue(job);
+      if (stillWaiting && lastWord(job, await data.uploadFiles(db(), job.upload_id)) < Date.now() - UPLOAD_DAYS * 86_400_000) await failOverdue(job);
     } catch (error) {
       failures += 1;
       trace.log.error({ jobId: job.id, err: { type: (error as Error).name } }, "checking an upload failed");
@@ -56,7 +82,25 @@ export async function sweepUploads(trace: Trace, after: After | null = null): Pr
   }
   const carryOn = waiting.length === SWEEP.batch && reached;
 
-  if ((await data.markOrphanUploads(UPLOAD_DAYS, SWEEP.batch)) === SWEEP.batch) more = true;
+  const nothingTook = await data.uploadsNothingTook(UPLOAD_DAYS, SWEEP.batch);
+  for (const uploadId of nothingTook) {
+    if (!inTime()) break;
+    try {
+      await expireIfNothingLanded(uploadId);
+    } catch (error) {
+      failures += 1;
+      trace.log.error({ err: { type: (error as Error).name } }, "checking an upload nothing took failed");
+    }
+  }
+  if (nothingTook.length === SWEEP.batch) more = true;
+
+  notice("Landed videos are waiting on a person", await data.landedWaitingOnAPerson(UPLOAD_DAYS, NO_UPLOAD), trace);
+  notice("Jobs are stuck queued with no message", await data.jobsStuckQueued(STUCK_QUEUED_HOURS), trace);
+  let openCards = 0;
+  for (const recipeId of await data.endedJobsWithOpenCards(SWEEP.batch)) {
+    if (!(await tx((c) => failRecipeIfOpen(c, recipeId)))) openCards += 1;
+  }
+  notice("Ended jobs have cards still saying processing, and recipe writes are off", openCards, trace);
 
   while (inTime()) {
     const files = await data.filesToDelete(GRACE_S, SWEEP.batch);
