@@ -38,6 +38,12 @@ variable "dish_budget_usd" {
   default     = "1"
 }
 
+variable "alb_allowed_cidrs" {
+  description = "Set to one address (x.x.x.x/32) for a real_ai window. Open otherwise, for the deploy's smoke test"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
 variable "api_count" {
   type    = number
   default = 1
@@ -56,6 +62,7 @@ module "env" {
   alert_email       = "caleb.wang26@gmail.com"
   secret_names      = ["SENTRY_DSN_API", "SENTRY_DSN_WORKER", "RATE_LIMIT_SALT", "ANTHROPIC_API_KEY", "CARTESIA_API_KEY"]
 
+  alb_allowed_cidrs    = var.alb_allowed_cidrs
   private_cors_origins = [module.web.url, "http://localhost:3105"]
   schedules = {
     "dish.sweep"     = { expression = "rate(1 hour)", task = "dish.sweep" }

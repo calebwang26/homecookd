@@ -11,12 +11,14 @@ resource "aws_security_group" "alb" {
 }
 
 resource "aws_vpc_security_group_ingress_rule" "alb_web" {
-  for_each          = toset(["80", "443"])
+  for_each = {
+    for pair in setproduct(["80", "443"], var.alb_allowed_cidrs) : "${pair[0]}-${pair[1]}" => { port = tonumber(pair[0]), cidr = pair[1] }
+  }
   security_group_id = aws_security_group.alb.id
-  cidr_ipv4         = "0.0.0.0/0"
+  cidr_ipv4         = each.value.cidr
   ip_protocol       = "tcp"
-  from_port         = tonumber(each.key)
-  to_port           = tonumber(each.key)
+  from_port         = each.value.port
+  to_port           = each.value.port
 }
 
 resource "aws_vpc_security_group_egress_rule" "alb_to_vpc" {

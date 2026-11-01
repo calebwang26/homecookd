@@ -84,6 +84,12 @@ variable "schedules" {
   default     = {}
 }
 
+variable "alb_allowed_cidrs" {
+  description = "Who can reach the load balancer"
+  type        = list(string)
+  default     = ["0.0.0.0/0"]
+}
+
 variable "alert_email" {
   type = string
 }
