@@ -9,6 +9,11 @@
 name: Apply staging infra
 on:
   workflow_dispatch:
+    inputs:
+      apply:
+        description: "Apply what passes the check. Off, it stops after the check: a first run proves the login and the reads, and changes nothing."
+        type: boolean
+        default: false
   push:
     branches: [aws-migration]
     paths:
@@ -71,13 +76,20 @@ jobs:
           role-to-assume: arn:aws:iam::${{ vars.AWS_ACCOUNT_ID }}:role/homecookd-staging-infra
           role-session-name: apply-staging
           aws-region: us-west-2
+          mask-aws-account-id: true
 
       - name: Test the check itself
         run: python3 infra/scripts/test_plan_check.py
 
       - name: Check the files, before Terraform runs
         id: files
-        run: python3 infra/scripts/plan_check.py files "$ROOT" infra/modules | tee "$RUNNER_TEMP/verdict.txt"
+        run: |
+          set +e
+          python3 infra/scripts/plan_check.py files "$ROOT" infra/modules > "$RUNNER_TEMP/verdict.txt"
+          CODE=$?
+          set -e
+          cat "$RUNNER_TEMP/verdict.txt"
+          exit "$CODE"
 
       - name: Init
         run: terraform -chdir="$ROOT" init -input=false -lockfile=readonly -backend-config="bucket=homecookd-tfstate-${{ vars.AWS_ACCOUNT_ID }}"
@@ -102,12 +114,17 @@ jobs:
         if: steps.plan.outputs.changes == 'true'
         run: |
           terraform -chdir="$ROOT" show -json "$RUNNER_TEMP/staging.tfplan" > "$RUNNER_TEMP/plan.json"
-          python3 infra/scripts/plan_check.py plan "$RUNNER_TEMP/plan.json" --backend "$TF_DATA_DIR/terraform.tfstate" | tee "$RUNNER_TEMP/verdict.txt"
+          set +e
+          python3 infra/scripts/plan_check.py plan "$RUNNER_TEMP/plan.json" --backend "$TF_DATA_DIR/terraform.tfstate" > "$RUNNER_TEMP/verdict.txt"
+          CODE=$?
+          set -e
+          cat "$RUNNER_TEMP/verdict.txt"
+          exit "$CODE"
 
       # Exactly the saved plan, never a new one. If the state moved since the plan, Terraform refuses it as stale, and this fails.
       - name: Apply the saved plan
         id: apply
-        if: steps.plan.outputs.changes == 'true'
+        if: steps.plan.outputs.changes == 'true' && (github.event_name == 'push' || inputs.apply == true)
         run: terraform -chdir="$ROOT" apply -input=false -no-color -lock-timeout=10m "$RUNNER_TEMP/staging.tfplan"
 
       - name: Tell Caleb

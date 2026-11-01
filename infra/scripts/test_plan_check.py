@@ -6,6 +6,7 @@ changed with a variable set (scrub_plan.py removed the account id and addresses)
 Then every guard is switched off in turn: a guard that no test notices missing fails the run.
 """
 import copy
+import os
 import json
 import subprocess
 import sys
@@ -406,6 +407,11 @@ REFUSED = {
     "another secret as the database's": (lambda p: edit_container(p, API_TD, lambda c: (c["secrets"].clear(), add_secret(c, "DB_CREDENTIALS", staging_secret("CARTESIA_API_KEY")))), "task_secrets_are_listed"),
     "a real key in plain env": (lambda p: edit_container(p, API_TD, lambda c: set_env(c, "ANTHROPIC_API_KEY", "typed-in")), "no_keys_in_plain_env"),
     "voice's placeholder key swapped": (lambda p: edit_container(p, VOICE_TD, lambda c: set_env(c, "CARTESIA_API_KEY", "typed-in")), "no_keys_in_plain_env"),
+    "a lifecycle rule that empties a bucket": (lambda p: update(p, LIFECYCLE, rule=[{"id": "x", "expiration": [{"days": 1}]}]), "lifecycle_keeps_files"),
+    "a shorter undo window": (lambda p: update(p, LIFECYCLE, rule=[{**r, "noncurrent_version_expiration": [{"noncurrent_days": 1}]} for r in find(p, LIFECYCLE)["change"]["before"]["rule"]]), "lifecycle_keeps_files"),
+    "a shorter wait on unfinished uploads": (lambda p: update(p, LIFECYCLE, rule=[{**r, "abort_incomplete_multipart_upload": [{"days_after_initiation": 1}]} for r in find(p, LIFECYCLE)["change"]["before"]["rule"]]), "lifecycle_keeps_files"),
+    "a dated expiration": (lambda p: update(p, LIFECYCLE, rule=[{"id": "x", "expiration": [{"date": "2026-11-02T00:00:00Z"}]}]), "lifecycle_keeps_files"),
+    "a filter that brings more under a deleting rule": (lambda p: update(p, LIFECYCLE, rule=[{**r, "filter": [{"prefix": "x"}]} for r in find(p, LIFECYCLE)["change"]["before"]["rule"]]), "lifecycle_keeps_files"),
     "a key-shaped value under a dull name": (lambda p: edit_container(p, API_TD, lambda c: set_env(c, "NOTE", "sk-ant-abcdef")), "no_key_shaped_values"),
     "a key-shaped value in a schedule": (lambda p: update(p, SCHEDULE, description="AKIA" + "ABCDEFGHIJKLMNOP"), "no_key_shaped_values"),
     "env loaded from a file in S3": (lambda p: edit_container(p, API_TD, lambda c: c.update(environmentFiles=[{"value": "arn:aws:s3:::x/y", "type": "s3"}])), "task_runs_staging_image"),
@@ -573,6 +579,40 @@ def other_checks():
         )
         if any(leftovers):
             wrong.append(f"{path.name} isn't scrubbed")
+
+    # A deploy doesn't go ahead over an apply someone cancelled part way, unless a newer one finished.
+    with tempfile.TemporaryDirectory() as tmp:
+        script = HERE / "wait-for-apply.sh"
+        fake = Path(tmp) / "gh"
+        fake.write_text('#!/bin/sh\ncase "$*" in *--commit*) echo "$THIS" ;; *) echo "$NEWER" ;; esac\n')
+        fake.chmod(0o755)
+        repo = Path(tmp) / "repo"
+        repo.mkdir()
+        (repo / "infra/modules").mkdir(parents=True)
+        git = ["git", "-c", "user.name=t", "-c", "user.email=t@example.com"]
+        subprocess.run([*git, "init", "-q"], cwd=repo, check=True)
+        subprocess.run([*git, "commit", "-q", "--allow-empty", "-m", "a"], cwd=repo, check=True)
+        (repo / "infra/modules/x.tf").write_text("#")
+        subprocess.run([*git, "add", "."], cwd=repo, check=True)
+        subprocess.run([*git, "commit", "-q", "-m", "b"], cwd=repo, check=True)
+        at = "2026-11-01T00:00:00Z"
+        for this, newer, want in (
+            (f"completed success {at}", "", 0),
+            (f"completed failure {at}", "", 1),
+            (f"completed cancelled {at}", "", 1),
+            (f"completed cancelled {at}", "completed failure", 1),
+            (f"completed cancelled {at}", "completed success", 0),
+            (f"completed cancelled {at}", "completed cancelled,completed success", 0),
+        ):
+            env = {**os.environ, "PATH": f"{tmp}:{os.environ['PATH']}", "APPLY_SWITCH": "on", "GITHUB_SHA": "x", "THIS": this, "NEWER": newer, "APPLY_POLL_S": "0"}
+            done = subprocess.run(["bash", str(script)], cwd=repo, env=env, capture_output=True, text=True, timeout=60)
+            if done.returncode != want:
+                wrong.append(f"wait-for-apply: {this!r} with newer {newer!r} should exit {want}, got {done.returncode}")
+
+    # A refusal has to fail its step by itself, whatever the shell's defaults are.
+    workflow_text = (root.parent / ".github/workflows/apply-staging.yml").read_text()
+    if "| tee" in workflow_text:
+        wrong.append("a step pipes the check through tee, so a refusal depends on pipefail")
 
     # One Terraform version, everywhere it's pinned.
     workflow = (root.parent / ".github/workflows/apply-staging.yml").read_text()

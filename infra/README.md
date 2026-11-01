@@ -15,6 +15,7 @@ backup-copy/      a copy in a second region, off by default, never applied (docs
 addresses/        phase 1's api., media. and voice addresses, off by default, never applied (docs/build/ADDRESSES-MIGRATION.md; module: modules/front_door/)
 staging-apply-role/  the login that lets a merge apply staging. Caleb creates it, once ("Merges apply staging" below)
 scripts/load-secrets.sh   copies keys from the root .env into Secrets Manager without printing them
+scripts/clear-real-keys.sh   overwrites staging's real model keys with a dummy, at the end of a real-models window
 scripts/create-backup-key.sh   makes the Convex key for backups and stores it, unseen. Caleb runs it
 scripts/web-sync.sh, web-smoke.mjs   publish the website; check a running copy of it
 scripts/plan_check.py, test_plan_check.py   the safety check on staging's plans, and its tests
@@ -61,10 +62,10 @@ What happens: `apply-staging.yml` plans the tip of the branch, `scripts/plan_che
 exactly that plan. A plan with no changes does nothing.
 
 **What applies by itself** is short, and it's the `AUTO` table in `plan_check.py`: task definitions (settings and sizes), a service's
-count, alarms, log groups, queues, schedules, a new secret's name, S3 CORS and lifecycle rules, and the website's CloudFront Function.
+count, alarms, log groups, queues, schedules, a new secret's name, S3 CORS, lifecycle rules that don't delete sooner, and the website's CloudFront Function.
 
 **What stops and goes to Caleb** with the commands to apply it himself:
-1. deleting or replacing a database or a bucket
+1. deleting or replacing a database or a bucket, or a new or shorter lifecycle rule that deletes files (the web bucket excepted)
 2. anything outside staging
 3. any IAM change: trust or permissions, wider or narrower
 4. real models on, anything new open to the public (any change to the network, load balancer, CloudFront distribution or bucket
@@ -76,7 +77,7 @@ count, alarms, log groups, queues, schedules, a new secret's name, S3 CORS and l
 
 **The role (`staging-apply-role/`) can't do most of that anyway.** It has no IAM write at all, so it can't change its own trust or
 permissions, or give another role more and run code as it. It can't write security groups, routes, load balancers, CloudFront
-distributions, bucket policies, or secret values, can't delete or change the database, and can't delete a bucket. It logs in only from
+distributions, bucket policies, or an existing secret's value, can't delete or change the database, and can't delete a bucket. It logs in only from
 `apply-staging.yml`, on `aws-migration`, in the GitHub environment `staging-infra`.
 
 **If you add a type to `AUTO`**, also add what it needs to the role, list it in `scripts/simulate_apply_role.py`, and ask Caleb to apply
@@ -89,10 +90,10 @@ aws sso login --profile homecookd
 cd infra/staging-apply-role
 AWS_PROFILE=homecookd terraform init -backend-config="bucket=homecookd-tfstate-$(aws sts get-caller-identity --profile homecookd --query Account --output text)"
 AWS_PROFILE=homecookd terraform plan -out=role.tfplan     # should say: 2 to add, 0 to change, 0 to destroy
-AWS_PROFILE=homecookd terraform show -json role.tfplan > role-plan.json && AWS_PROFILE=homecookd python3 ../scripts/simulate_apply_role.py role-plan.json; rm role-plan.json   # should end: 0 wrong
+AWS_PROFILE=homecookd terraform show -json role.tfplan > "$TMPDIR/role-plan.json" && AWS_PROFILE=homecookd python3 ../scripts/simulate_apply_role.py "$TMPDIR/role-plan.json"; rm "$TMPDIR/role-plan.json"   # should end: 0 wrong
 AWS_PROFILE=homecookd terraform apply role.tfplan
 gh variable set STAGING_INFRA_APPLY --body on --repo calebwang26/hackathon-homecookd    # the switch; any other value turns it off
-gh workflow run apply-staging.yml --ref aws-migration --repo calebwang26/hackathon-homecookd   # a first run: proves the login and the reads
+gh workflow run apply-staging.yml --ref aws-migration --repo calebwang26/hackathon-homecookd   # a first run: proves the login and the reads, stops after the check, and changes nothing
 ```
 
 **Things to know:**
@@ -102,7 +103,7 @@ gh workflow run apply-staging.yml --ref aws-migration --repo calebwang26/hackath
 - A change to a task definition reaches the service on the next deploy, as before.
 - **During a real-models window** or with `voice_count=1` set by hand, a merge plans with the defaults and would undo it. Turning real
   models off needs an IAM change, and reopening the load balancer is a network change, so a real-models window comes back refused and
-  emails Caleb. A hand-set `voice_count` just goes back to 0. Set the switch to `off` for a long window.
+  emails Caleb. A hand-set `voice_count` just goes back to 0. That's why the switch goes `off` before every window.
 - **Alerts:** a refusal or failure emails Caleb through the `homecookd-staging-alerts` topic, and the run goes red. GitHub's own email
   goes only to whoever triggered the run, if they turned it on, so it isn't enough by itself. If the login itself fails, the topic
   can't be reached, and the red run is the only sign.
@@ -142,10 +143,12 @@ Order matters, because a task can't start while a secret it names has no value: 
 
 **Real models are a test window, with Caleb's OK each time.** The load balancer is plain HTTP, so card tokens and test content cross
 it in the clear. So: made-up dishes and voices only, never real family content, and the load balancer is locked to one address.
-1. Caleb runs `infra/scripts/load-secrets.sh staging`.
-2. `terraform apply -var real_ai=true -var 'alb_allowed_cidrs=["<address>/32"]'`, then a deploy by hand (its smoke test can't reach
+1. `gh variable set STAGING_INFRA_APPLY --body off`, so a merge during the window can't undo it. Every window, not only long ones.
+2. Caleb runs `infra/scripts/load-secrets.sh staging`.
+3. `terraform apply -var real_ai=true -var 'alb_allowed_cidrs=["<address>/32"]'`, then a deploy by hand (its smoke test can't reach
    the locked load balancer, so that step fails; check from the allowed address instead).
-3. Right after: a plain `terraform apply` and a deploy turn it off and reopen it.
+4. Right after: a plain `terraform apply` and a deploy turn it off and reopen it. Then `infra/scripts/clear-real-keys.sh staging` overwrites the two real keys with a
+   dummy, because closing the path isn't removing them, and `STAGING_INFRA_APPLY` goes back on.
 
 The cap is $1 a day on `dish_budget_usd`, plus Mom's overage and calls in flight.
 

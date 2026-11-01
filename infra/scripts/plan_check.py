@@ -440,6 +440,35 @@ def forbidden_settings(plan):
                 yield r["address"], f"sets {field}"
 
 
+LIFECYCLE_LIMITS = (
+    ("expiration", "days"),
+    ("expiration", "date"),
+    ("noncurrent_version_expiration", "noncurrent_days"),
+    ("abort_incomplete_multipart_upload", "days_after_initiation"),
+)
+
+
+@guard(1)
+def lifecycle_keeps_files(plan):
+    """Lifecycle rules apply by themselves, but `expiration { days = 1 }` would empty a bucket. Only a longer wait, or no wait, passes. The web bucket is rebuilt from the repo."""
+    for r in plan.written:
+        if r["type"] != "aws_s3_bucket_lifecycle_configuration" or "-web-" in str(after(r).get("bucket", "")):
+            continue
+        old = {rule.get("id"): rule for rule in before(r).get("rule") or []}
+        for rule in after(r).get("rule") or []:
+            was = old.get(rule.get("id")) or {}
+            for block, field in LIFECYCLE_LIMITS:
+                for item in rule.get(block) or []:
+                    value = item.get(field)
+                    if not value:
+                        continue
+                    earlier = [x.get(field) for x in was.get(block) or [] if x.get(field)]
+                    if not earlier or (field == "date") or value < min(earlier):
+                        yield r["address"], f"a new or shorter {block} can delete staging's files"
+            if was and was.get("filter") != rule.get("filter") and any(rule.get(block) for block, _ in LIFECYCLE_LIMITS):
+                yield r["address"], "a changed filter can bring more files under a rule that deletes them"
+
+
 # Rule 2: stays inside staging
 
 
