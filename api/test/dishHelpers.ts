@@ -219,7 +219,7 @@ export async function askedCard(app: FastifyInstance, ip = IP) {
 // ---------------------------------------------------------------------------------------------
 // The clock and the queue
 
-const CARD_TIMES = ["created_at", "merge_started_at", "merged_at", "asked_at", "opened_at", "finished_at", "questions_at"];
+const CARD_TIMES = ["created_at", "merge_started_at", "merge_queued_at", "merged_at", "asked_at", "opened_at", "finished_at", "questions_at"];
 const FILE_TIMES = ["created_at", "uploaded_at", "attached_at", "delete_requested_at", "deleted_at"];
 
 /** Time passes: everything stored happened `ms` earlier. Rate windows don't move: clear them with `clearWindow`. */

@@ -127,7 +127,8 @@ export async function claimMerge(askId: string) {
     const s = await stateOf(c, row, now);
     if (!due(s)) return null;
     const claimedAt = new Date(now);
-    await data.patchCard(c, askId, { merge_tries: row.merge_tries + 1, merge_started_at: claimedAt });
+    // The message has done its job: an answer that comes after this needs one of its own, straight away.
+    await data.patchCard(c, askId, { merge_tries: row.merge_tries + 1, merge_started_at: claimedAt, merge_queued_at: null });
     return {
       claimedAt,
       tries: row.merge_tries + 1,
