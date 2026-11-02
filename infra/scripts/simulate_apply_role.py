@@ -59,6 +59,7 @@ ALLOW = [
         {},
     ),
     ("rds:DescribeDBInstances", [f"arn:aws:rds:{R}:{A}:db:*"], {}),
+    ("logs:DescribeMetricFilters", [LOG], {}),
     ("cloudwatch:DescribeAlarms", [f"arn:aws:cloudwatch:{R}:{A}:alarm:*"], {}),
     # Reads by name
     (
@@ -111,6 +112,7 @@ ALL_NAMED = [
     ("sqs:SetQueueAttributes sqs:CreateQueue", [f"arn:aws:sqs:{R}:{A}:{PRODUCTION}-jobs"], {}),
     ("cloudwatch:PutMetricAlarm cloudwatch:DeleteAlarms", [f"arn:aws:cloudwatch:{R}:{A}:alarm:{PRODUCTION}-db-cpu", f"arn:aws:cloudwatch:{R}:{A}:alarm:{BACKUPS}-missed"], {}),
     ("logs:CreateLogGroup logs:PutRetentionPolicy", [f"arn:aws:logs:{R}:{A}:log-group:/{PRODUCTION}/api", f"arn:aws:logs:{R}:{A}:log-group:/{BACKUPS}/job"], {}),
+    ("logs:DescribeMetricFilters", [f"arn:aws:logs:{R}:{A}:log-group:/{PRODUCTION}/api"], {}),
     ("scheduler:CreateSchedule scheduler:UpdateSchedule scheduler:DeleteSchedule", [f"arn:aws:scheduler:{R}:{A}:schedule/default/{BACKUPS}", f"arn:aws:scheduler:{R}:{A}:schedule/default/{PRODUCTION}-x"], {}),
     ("sns:Publish", [f"arn:aws:sns:{R}:{A}:{PRODUCTION}-alerts", f"arn:aws:sns:{R}:{A}:{BACKUPS}-alerts"], {}),
     ("rds:DeleteDBInstance rds:ModifyDBInstance", [f"arn:aws:rds:{R}:{A}:db:{PRODUCTION}"], {}),
