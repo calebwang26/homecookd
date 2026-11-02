@@ -65,3 +65,30 @@ test("head and read: a missing object is null, S3 being down throws", async () =
   assert.equal((await present.read("k"))?.bytes.length, 5);
   await present.remove("k");
 });
+
+test("listing a folder follows S3's pages up to the most asked for, and a delete S3 refuses throws without naming the key", async () => {
+  const pages = [{ Contents: [{ Key: "f/1" }, { Key: "f/2" }], IsTruncated: true, NextContinuationToken: "t" }, { Contents: [{ Key: "f/3" }], IsTruncated: false }];
+  const asked: Record<string, unknown>[] = [];
+  const store = s3Store({
+    bucket: "b",
+    client: client(async (command) => {
+      const input = (command as { input: Record<string, unknown> }).input;
+      asked.push(input);
+      if ("Delete" in input) {
+        const objects = (input.Delete as { Objects: { Key: string }[] }).Objects;
+        return objects.some((o) => o.Key === "secret-dish/1") ? { Errors: [{ Key: "secret-dish/1", Code: "AccessDenied" }] } : {};
+      }
+      return input.ContinuationToken === "t" ? pages[1] : pages[0];
+    }),
+  });
+  assert.deepEqual(await store.list("f/", 10), ["f/1", "f/2", "f/3"]);
+  assert.deepEqual([asked[0].Prefix, asked[0].MaxKeys, asked[1].ContinuationToken], ["f/", 10, "t"]);
+  asked.length = 0;
+  assert.deepEqual(await store.list("f/", 2), ["f/1", "f/2"], "stops once it has enough");
+  assert.equal(asked.length, 1);
+
+  asked.length = 0;
+  await store.removeMany(Array.from({ length: 1500 }, (_, i) => `f/${i}`));
+  assert.deepEqual(asked.map((a) => (a.Delete as { Objects: unknown[] }).Objects.length), [1000, 500], "S3 takes 1,000 at a time");
+  await assert.rejects(store.removeMany(["secret-dish/1"]), (e: Error) => !e.message.includes("secret") && /refused 1 deletes \(AccessDenied\)/.test(e.message));
+});

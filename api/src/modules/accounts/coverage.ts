@@ -27,7 +27,7 @@ export const TABLES: Record<string, { owner: Owner; does: string }> = {
   dish_asks: { owner: "dish", does: "the kid's and Mom's rules (C3)" },
   dish_ask_translations: { owner: "dish", does: "deleted" },
   dish_answers: { owner: "dish", does: "with the card, or as Mom; clips marked" },
-  files: { owner: "accounts", does: "marked; the sweep deletes from S3 (it doesn't reach every bucket yet)" },
+  files: { owner: "accounts", does: "marked; the sweep deletes each from its own bucket" },
   model_calls: { owner: "platform", does: "stays for cost history; its ids go null through the FKs" },
   daily_spend: { owner: "platform", does: "nothing: no person in it" },
   dinners: { owner: "community", does: "they host: deleted. Around their recipe: cancelled, recipe_id null" },

@@ -168,7 +168,7 @@ The worker also deletes a stopped job's raw video as soon as it sees it, so the 
 - **`purgeJobsForPerson(personId)`**, in batches of 500, each a transaction, safe to repeat: any recipe published a moment later; cooking rows as the kid, and `cook_id` null as the cook of a library dish; recordings, each after its frame, with cover and frame marked (prompts, events and windows go first, in batches); jobs; pending sends made by them, with the hello marked, and them taken off others' lists; everything else in the ledger; their retry keys. `model_calls` keeps its cost history with the ids nulled.
 - **What's written first, on `account_deletions`:** recipe and job ids, `upload_keys`, `media_keys`, `media_prefixes`. It adds to what's there, and makes the row if there isn't one. That includes the folder a job with no recipe yet publishes to (`recipe-<job>/`), because a job stopped part way can leave files nothing else names.
 
-**The outside purge isn't written.** Raw videos are reached by the sweep through their ledger rows. Published folders in the media bucket are on `account_deletions` for an S3 purge nobody has written yet (WORKER-MIGRATION.md, open question 7). **That still blocks real data.**
+**The outside purge** (ACCOUNTS-MIGRATION.md) deletes her upload folders and published folders from S3, 7 hours after the purge. Raw videos with a ledger row are the sweep's, which reaches all three buckets.
 
 ## Secrets and env the api now needs (names only)
 
@@ -250,7 +250,6 @@ Nothing automatic deletes a clip that fully landed, unless its owner stops it or
 ## Known limits
 
 - **A link can be used until it expires,** even to put back a file just deleted. The sweep deletes again 7 hours after a mark, past a link's life, but a PUT that started in time and ran past that is left behind. An upload link is also usable until then after the file is confirmed, to overwrite it with the same type and size. `If-None-Match: *` would stop overwrites, and needs real S3 and iOS to test.
-- **The sweep doesn't reach `media`.** `files` rows in that bucket stay marked. No such rows exist today; the outside purge takes those folders.
 - **`stopPersonsWork` marks nothing.** A crash between it and the purge leaves files unmarked until a restart, as Convex's did: Accounts' restart has to cover it.
 - **Costs of an abandoned attempt** aren't this area's: WORKER-MIGRATION.md.
 
