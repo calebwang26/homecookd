@@ -70,6 +70,8 @@ DOORS = {
         (
             "aws_db_instance", "aws_db_subnet_group", "aws_s3_bucket", "aws_s3_bucket_versioning", "aws_ecr_repository",
             "aws_ecr_lifecycle_policy", "aws_ecs_cluster", "aws_sns_topic", "aws_sns_topic_subscription",
+            # A log line counted into a metric. The role can't write one (no logs:PutMetricFilter), so a change is Caleb's.
+            "aws_cloudwatch_log_metric_filter",
         ),
         (0, HELD),
     ),
@@ -84,7 +86,9 @@ DATA_SOURCES = {
     "aws_availability_zones", "aws_caller_identity", "aws_region", "aws_iam_policy_document", "aws_cloudfront_cache_policy",
     "aws_cloudfront_origin_request_policy",
 }
-MODULE_SOURCES = {"env": "../../modules/env", "web": "../../modules/web"}
+MODULE_SOURCES = {"env": "../../modules/env", "web": "../../modules/web", "front_door": "../../modules/front_door"}
+# How each module is told it's staging. front_door takes a name, so its name must be staging's.
+MODULE_ENVIRONMENT = {"env": ("environment", "staging"), "web": ("environment", "staging"), "front_door": ("name", "homecookd-staging-")}
 BACKEND_ALLOWED = {"bucket", "key", "region", "use_lockfile"}
 PLAN_KEYS = {
     "format_version", "terraform_version", "variables", "planned_values", "resource_drift", "resource_changes", "output_changes",
@@ -268,7 +272,7 @@ def module_sources(plan):
     root = dict(plan.modules())["root"]
     calls = root.get("module_calls") or {}
     if set(calls) != set(MODULE_SOURCES):
-        yield "config", "its modules aren't exactly env and web"
+        yield "config", "its modules aren't exactly env, web and front_door"
     for name, call in calls.items():
         if call.get("source") != MODULE_SOURCES.get(name):
             yield f"module {name}", "comes from somewhere else"
@@ -280,7 +284,9 @@ def module_sources(plan):
 def environment_name(plan):
     root = dict(plan.modules())["root"]
     for name, call in (root.get("module_calls") or {}).items():
-        if ((call.get("expressions") or {}).get("environment") or {}).get("constant_value") != "staging":
+        arg, want = MODULE_ENVIRONMENT.get(name, ("environment", "staging"))
+        value = ((call.get("expressions") or {}).get(arg) or {}).get("constant_value")
+        if not isinstance(value, str) or not (value == want if arg == "environment" else value.startswith(want)):
             yield f"module {name}", "its environment isn't the plain word staging"
 
 

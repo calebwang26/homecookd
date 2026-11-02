@@ -20,6 +20,7 @@ scripts/create-backup-key.sh   makes the Convex key for backups and stores it, u
 scripts/web-sync.sh, web-smoke.mjs   publish the website; check a running copy of it
 scripts/plan_check.py, test_plan_check.py   the safety check on staging's plans, and its tests
 scripts/simulate_apply_role.py   asks AWS's simulator what the apply role can and can't do; read-only
+scripts/load-test.mjs   the api's load test: 50 a second for 15 minutes, then a burst; staging on fake models only
 ```
 
 `.github/workflows/deploy-aws.yml` builds one service and rolls it out. It's manual and stores no keys.
@@ -38,6 +39,7 @@ cd infra/backup-copy && terraform init -backend=false && terraform test   # also
 # the website's CloudFront Function, against a real build
 cd web && npm ci && npm run build && cd .. && node --test infra/modules/web/rewrite.test.mjs
 node infra/scripts/web-smoke.mjs https://<address> [--noindex]   # reads only; the path table against a running site
+node infra/scripts/load-test.mjs http://<staging api> [--rps 50] [--minutes 15] [--burst 300]   # makes 4 made-up cards; refuses production
 
 # first time only
 cd infra/bootstrap && AWS_PROFILE=homecookd terraform init && AWS_PROFILE=homecookd terraform apply
@@ -98,6 +100,7 @@ gh workflow run apply-staging.yml --ref aws-migration --repo calebwang26/hackath
 
 **Things to know:**
 - The workflow waits up to 10 minutes on Terraform's lock, then fails and tells Caleb. It never force-unlocks.
+- The apply role must be able to read every resource type the plan refreshes, or every apply fails at the plan. `infra/scripts/role_reads.py` lists each type with its reads, and `test_plan_check.py` fails when a type has no row or the role doesn't grant a read. A new type's reads come from a debug plan (`TF_LOG=debug`, each `HTTP Request Sent` line's `tf_resource_type` and `rpc.method`). Granting one is an IAM change, so Caleb re-applies `infra/staging-apply-role`.
 - The provider lock file must carry the provider's hashes for Linux, which GitHub's runners are, as well as Macs: the workflow's init can't add them (`-lockfile=readonly`), and its plan then refuses the provider. After changing a provider version, run `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64` in `infra/envs/staging`.
 - A deploy from the same merge waits for the apply (`scripts/wait-for-apply.sh`). If the apply is refused the deploy stops, and it's
   re-run from Actions afterward.

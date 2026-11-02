@@ -50,6 +50,83 @@ resource "aws_cloudwatch_metric_alarm" "dish_budget" {
   alarm_actions       = [aws_sns_topic.alerts.arn]
 }
 
+# The load balancer's own errors, not the api's: no healthy task to send to, or one that didn't answer in time.
+resource "aws_cloudwatch_metric_alarm" "alb_own_5xx" {
+  alarm_name          = "${local.name}-alb-own-5xx"
+  alarm_description   = "The load balancer itself is answering 502, 503 or 504: no healthy api task, or one too slow to answer"
+  namespace           = "AWS/ApplicationELB"
+  metric_name         = "HTTPCode_ELB_5XX_Count"
+  dimensions          = { LoadBalancer = aws_lb.main.arn_suffix }
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 10
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
+# Over the speed target (SYSTEM-DESIGN.md: p99 under 1 s at the load balancer) for 3 of the last 5 minutes.
+resource "aws_cloudwatch_metric_alarm" "api_slow" {
+  alarm_name          = "${local.name}-api-slow"
+  alarm_description   = "The api's p99 at the load balancer is over 1 second"
+  namespace           = "AWS/ApplicationELB"
+  metric_name         = "TargetResponseTime"
+  dimensions          = { LoadBalancer = aws_lb.main.arn_suffix }
+  extended_statistic  = "p99"
+  period              = 60
+  evaluation_periods  = 5
+  datapoints_to_alarm = 3
+  threshold           = 1
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
+# The api's own work is what runs out first: the Nov 2 load test held one 0.25 vCPU task at 80% for 50 requests a second, with the database at 10%.
+resource "aws_cloudwatch_metric_alarm" "api_cpu" {
+  alarm_name          = "${local.name}-api-cpu"
+  alarm_description   = "The api's tasks are near their CPU limit, so requests are starting to queue"
+  namespace           = "AWS/ECS"
+  metric_name         = "CPUUtilization"
+  dimensions          = { ClusterName = aws_ecs_cluster.main.name, ServiceName = aws_ecs_service.service["api"].name }
+  statistic           = "Average"
+  period              = 60
+  evaluation_periods  = 5
+  datapoints_to_alarm = 3
+  threshold           = 85
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
+# Requests turned away because every database connection, or the row they wanted, was busy: a 503 with retry-after ("too busy to answer" in app.ts, and in
+# the dish and invite routes' own handlers). A few in a burst is that working. More than this means the pool is too small or something holds rows (AWS-MIGRATION.md, "overload").
+resource "aws_cloudwatch_log_metric_filter" "api_busy" {
+  name           = "${local.name}-api-busy"
+  log_group_name = aws_cloudwatch_log_group.service["api"].name
+  pattern        = "\"too busy to answer\""
+  metric_transformation {
+    name      = "ApiTooBusy"
+    namespace = "homecookd/${local.name}"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "api_busy" {
+  alarm_name          = "${local.name}-api-busy"
+  alarm_description   = "The api is turning requests away because the database is busy"
+  namespace           = "homecookd/${local.name}"
+  metric_name         = "ApiTooBusy"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 20
+  comparison_operator = "GreaterThanThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
 resource "aws_cloudwatch_metric_alarm" "service_unhealthy" {
   for_each          = { for k, s in local.lb_services : k => s if s.desired_count > 0 }
   alarm_name        = "${local.name}-${each.key}-no-healthy-tasks"

@@ -6,12 +6,17 @@ import { buildApp } from "../src/app.js";
 import { findSession } from "../src/auth.js";
 import { db } from "../src/db.js";
 import { handleMessage } from "../src/scheduled.js";
-import { applyDeletion, upsertRow } from "../src/modules/sync/data.js";
+import { runPurge } from "../src/modules/accounts/deletion.js";
+import { upsertRow } from "../src/modules/sync/data.js";
 import { mergePerson } from "../src/modules/sync/merge.js";
 import { runReconcile } from "../src/modules/sync/reconcile.js";
-import { runDeletions, runPass } from "../src/modules/sync/service.js";
-import { bearer, freshDatabase, hasDatabase, session } from "./helpers.js";
-import { assertNoContent, CAMPUS, count, EMAIL, familyRow, issues, NAME, person, recipe, stateOf, STORY, World } from "./syncHelpers.js";
+import { passOnDeletion, runDeletions, runPass } from "../src/modules/sync/service.js";
+import { bearer, file, freshDatabase, hasDatabase, session } from "./helpers.js";
+import { assertNoContent, CAMPUS, count, EMAIL, familyRow, issues, NAME, person, recipe, stateOf, STORY, versions, World } from "./syncHelpers.js";
+
+const deletionOf = async (personId: string) => (await db().query("select * from account_deletions where person_id = $1", [personId])).rows[0];
+const purgesQueued = async () => (await db().query(`select payload from outbox where payload->>'task' = 'accounts.purge' order by created_at`)).rows.map((row) => row.payload);
+const silentLog = { info: () => {}, warn: () => {}, error: () => {} };
 
 function assertBlank(row: Record<string, unknown>) {
   assert.ok(row.deleted_at, "a deletion time");
@@ -110,7 +115,7 @@ test("deletions reaching the copy", { skip: !hasDatabase }, async (t) => {
     w.convex.afterRead = async (table) => {
       if (table === "people") {
         w.convex.afterRead = null;
-        await applyDeletion({ personId: cook._id, familyId: f._id, supabaseId: cook.supabaseProfileId, at: new Date(), recipeIds: [] });
+        await passOnDeletion({ personId: cook._id, familyId: f._id, supabaseId: cook.supabaseProfileId, at: new Date(), recipeIds: [] });
       }
     };
     const result = await w.passAll();
@@ -129,7 +134,7 @@ test("deletions reaching the copy", { skip: !hasDatabase }, async (t) => {
       await writer.query(`select set_config('homecookd.sync_writer', 'on', true)`);
       await writer.query(`update people set campus = 'A newer stale place' where id = $1`, [cook._id]);
       let done = false;
-      const deletion = applyDeletion({ personId: cook._id, familyId: f._id, supabaseId: cook.supabaseProfileId, at: new Date(), recipeIds: [] }).then((out) => {
+      const deletion = passOnDeletion({ personId: cook._id, familyId: f._id, supabaseId: cook.supabaseProfileId, at: new Date(), recipeIds: [] }).then((out) => {
         done = true;
         return out;
       });
@@ -202,6 +207,7 @@ test("deletions reaching the copy", { skip: !hasDatabase }, async (t) => {
     assert.equal(result.stats.deleted, 1);
     assertBlank(await person(cook._id));
     assert.equal(await recipe(r._id), undefined);
+    assert.ok(await deletionOf(cook._id), "a person Convex shows deleted gets the same purge");
     assert.equal(w.supabase.askedProfiles.includes(cook.supabaseProfileId), false);
     assert.ok(w.supabase.profileRows.has(cook.supabaseProfileId), "Supabase still lists them, and it doesn't matter");
     assert.ok(w.supabase.askedProfiles.includes(other.supabaseProfileId));
@@ -231,24 +237,179 @@ test("deletions reaching the copy", { skip: !hasDatabase }, async (t) => {
     w.deleteAtSource(cook);
     assert.equal((await runDeletions(w.run())).applied, 1);
     assert.equal((await runDeletions(w.run())).applied, 0, "read again within the overlap");
-    const { rows } = await db().query(`select payload from outbox where payload->>'task' = 'sync.purge_person'`);
-    assert.deepEqual(rows.map((row) => row.payload), [{ task: "sync.purge_person", personId: cook._id }], "ids only");
+    const deletionId = (await deletionOf(cook._id)).id;
+    assert.deepEqual(await purgesQueued(), [{ task: "accounts.purge", deletionId }], "one, with ids only");
   });
 
-  await t.test("the purge reaches an area that has moved, and it's safe to repeat", async () => {
+  await t.test("a deletion from Convex starts the account's whole purge, which reaches rows only Postgres has; a repeat changes nothing", async () => {
+    const w = new World();
+    const f = w.family();
+    const cook = w.person(f, full);
+    const stays = w.person(f, { role: "kid" });
+    const neighbors = w.family();
+    const host = w.person(neighbors);
+    const r = w.recipe(cook, { title: STORY });
+    await w.syncAll();
+    // Rows of areas that have moved: a craving link (dish), a voice note in the ledger (files) and another family's dinner around her dish (community).
+    await db().query(`insert into craving_links (family_id, person_id, token, message) values ($1, $2, 'madeup-token', 'her line')`, [f._id, cook._id]);
+    const voice = await file(f._id);
+    await db().query(`update files set owner_person_id = $2 where key = $1`, [voice, cook._id]);
+    const { rows: dinner } = await db().query(
+      `insert into dinners (host_id, host_family_id, recipe_id, dish, starts_at, place_kind, place_name, address, approx_lat, approx_lng, seats, status)
+       values ($1, $2, $3, 'A dish night', now() + interval '1 day', 'home', 'A place', 'An address', 42.36, -71.09, 4, 'open') returning id`,
+      [host._id, neighbors._id, r._id],
+    );
+
+    w.deleteAtSource(cook);
+    assert.equal((await runDeletions(w.run())).applied, 1);
+    const deletion = await deletionOf(cook._id);
+    assert.ok(deletion, "an account_deletions row, as the route's delete writes");
+    assert.equal(deletion.family_id, f._id);
+    assertBlank(await person(cook._id));
+    assert.equal((await person(cook._id)).deleted_at.getTime(), new Date(w.convex.deletionRows[0].requestedAt).getTime(), "the tombstone keeps Convex's time");
+    assert.equal(await recipe(r._id), undefined, "the sync still takes the recipes it owns");
+    const night = (await db().query(`select status, recipe_id from dinners where id = $1`, [dinner[0].id])).rows[0];
+    assert.deepEqual([night.status, night.recipe_id], ["cancelled", null], "called off before the recipe went, so it was found");
+
+    // The batches, as the queue runs them.
+    const [message] = await purgesQueued();
+    await handleMessage(JSON.stringify({ payload: message }), silentLog);
+    assert.ok((await deletionOf(cook._id)).purged_at, "finished: nothing left");
+    assert.equal(await count("craving_links"), 0);
+    const marked = (await db().query(`select delete_requested_at, purge_deletion_id from files where key = $1`, [voice])).rows[0];
+    assert.ok(marked.delete_requested_at, "marked for the sweep");
+    assert.equal(marked.purge_deletion_id, deletion.id);
+    assert.equal((await familyRow(f._id)).blanked_at, null, "someone's still here");
+    assert.equal((await person(stays._id)).deleted_at, null);
+
+    // Again, from both paths: nothing moves.
+    const before = [await versions("people"), await versions("families"), await versions("account_deletions")];
+    assert.equal((await runDeletions(w.run())).applied, 0);
+    assert.equal((await w.passAll()).stats.deleted, 0);
+    assert.deepEqual([await versions("people"), await versions("families"), await versions("account_deletions")], before);
+    assert.equal(await count("account_deletions"), 1);
+    assert.equal((await purgesQueued()).length, 1);
+    await handleMessage(JSON.stringify({ payload: message }), silentLog);
+    assertNoContent(w.report.text());
+  });
+
+  await t.test("a deletion whose purge can't start keeps its place, and nothing of it lands until it can", async () => {
+    const w = new World();
+    const f = w.family();
+    const first = w.person(f, full);
+    const second = w.person(f, { role: "kid" });
+    await w.syncAll();
+    const blocked = w.deleteAtSource(first);
+    w.deleteAtSource(second).creationTime = blocked.creationTime + 3_600_000;
+    await db().query(`create function sync_test_refuse() returns trigger language plpgsql as $$
+      begin
+        if new.person_id = '${first._id}' then raise exception 'no' using errcode = '23514', constraint = 'test_rule'; end if;
+        return new;
+      end $$`);
+    await db().query(`create trigger sync_test_refuse before insert on account_deletions for each row execute function sync_test_refuse()`);
+
+    await assert.rejects(runDeletions(w.run()), { name: "SyncDeletionFailed" });
+    assertBlank(await person(second._id));
+    assert.ok(await deletionOf(second._id));
+    assert.equal((await person(first._id)).deleted_at, null, "one transaction: the copy's part waits with the purge");
+    assert.equal(await deletionOf(first._id), undefined);
+    assert.equal((await db().query(`select 1 from sync_deleted where id = $1`, [first._id])).rows.length, 0);
+    assert.deepEqual(await issues(), [{ table_name: "people", row_id: first._id, rule: "test_rule" }]);
+    assert.ok((await stateOf("deletions")).after_ms < blocked.creationTime, "the place doesn't pass it");
+
+    await db().query(`drop trigger sync_test_refuse on account_deletions`);
+    assert.equal((await runDeletions(w.run())).applied, 1);
+    assertBlank(await person(first._id));
+    assert.ok(await deletionOf(first._id));
+    assert.deepEqual(await issues(), []);
+  });
+
+  await t.test("a deletion stuck behind a lock fails the whole run, so the queue tries again, and the place stays", async () => {
     const w = new World();
     const f = w.family();
     const cook = w.person(f, full);
     await w.syncAll();
-    await db().query(`insert into craving_links (family_id, person_id, token, message) values ($1, $2, 'madeup-token', 'her line')`, [f._id, cook._id]);
+    const placeBefore = (await stateOf("deletions")).after_ms;
+    w.deleteAtSource(cook);
+    const holder = await db().connect();
+    try {
+      await holder.query("begin");
+      await holder.query(`select 1 from families where id = $1 for update`, [f._id]);
+      await assert.rejects(runDeletions(w.run()), { code: "55P03" });
+    } finally {
+      await holder.query("rollback");
+      holder.release();
+    }
+    assert.equal((await stateOf("deletions")).after_ms, placeBefore);
+    assert.equal((await person(cook._id)).deleted_at, null);
+    assert.equal((await runDeletions(w.run())).applied, 1);
+    assert.ok(await deletionOf(cook._id));
+  });
+
+  await t.test("someone not in the copy yet gets only the record, and their purge once the tombstone lands", async () => {
+    const w = new World();
+    const f = w.family();
+    w.person(f, { role: "kid" });
+    const cook = w.person(f, full);
     w.deleteAtSource(cook);
     await runDeletions(w.run());
-    const log = { info: () => {}, warn: () => {}, error: () => {} };
-    const message = JSON.stringify({ payload: { task: "sync.purge_person", personId: cook._id } });
-    await handleMessage(message, log);
-    assert.equal(await count("craving_links"), 0);
-    await handleMessage(message, log);
-    await assert.rejects(handleMessage(JSON.stringify({ payload: { task: "sync.purge_person" } }), log), /missing personId/);
+    assert.equal(await count("account_deletions"), 0, "no row for it to name");
+    assert.equal(await count("sync_deleted"), 1);
+    await w.passAll();
+    assertBlank(await person(cook._id));
+    const deletion = await deletionOf(cook._id);
+    assert.ok(deletion);
+    assert.equal(await runPurge(deletion.id, {}), "done", "nothing to find");
+  });
+
+  await t.test("a recipe a question held goes once the purge has taken the question, and then the purge finishes", async () => {
+    const w = new World();
+    const f = w.family();
+    const cook = w.person(f, full);
+    const kid = w.person(f, { role: "kid" });
+    const r = w.recipe(cook, { title: STORY, memories: [{ kind: "story", text: STORY }] });
+    await w.syncAll();
+    await db().query("insert into questions (family_id, recipe_id, asked_by, text, status) values ($1, $2, $3, 'a question', 'asked_cook')", [f._id, r._id, kid._id]);
+    w.deleteAtSource(cook);
+    await runDeletions(w.run());
+    assert.equal((await recipe(r._id)).title, "Deleted", "emptied, not gone");
+    const deletionId = (await deletionOf(cook._id)).id;
+    assert.equal(await runPurge(deletionId, {}), "held", "the sync owns the recipe");
+    assert.equal(await count("questions"), 0, "the messages purge took the question");
+
+    const result = await w.passAll(); // the people walk passes her tombstone on again
+    assert.equal(result.stats.deleted, 1);
+    assert.equal(await recipe(r._id), undefined);
+    assert.deepEqual(await issues(), [], "and its issue goes with it");
+    assert.equal(await runPurge(deletionId, {}), "done");
+    assert.equal((await w.passAll()).stats.deleted, 0, "then nothing");
+  });
+
+  await t.test("the last person going: the sync blanks the family, and the purge leaves the read-only copy alone", async () => {
+    const w = new World();
+    const f = w.family("The Madeups");
+    const only = w.person(f, full);
+    await w.syncAll();
+    w.deleteAtSource(only);
+    await runDeletions(w.run());
+    assert.equal((await familyRow(f._id)).name, "Deleted");
+    assert.equal(await runPurge((await deletionOf(only._id)).id, {}), "done", "its family step would be refused here");
+    assert.equal((await familyRow(f._id)).blanked_at, null, "C2 on the copy is the sync's until families move");
+  });
+
+  await t.test("a deletion with no purge record doesn't hold, and the next pass starts one", async () => {
+    const w = new World();
+    const f = w.family();
+    const cook = w.person(f, full);
+    await w.syncAll();
+    w.deleteAtSource(cook);
+    await runDeletions(w.run());
+    assert.equal((await runReconcile(w.run()))?.counts.people?.deletion_not_applied, undefined);
+    await db().query(`delete from account_deletions where person_id = $1`, [cook._id]); // as one applied before the sync started the purge
+    assert.deepEqual((await runReconcile(w.run()))?.samples.people?.deletion_not_applied, [cook._id]);
+    await w.passAll();
+    assert.ok(await deletionOf(cook._id));
+    assert.equal((await runReconcile(w.run()))?.counts.people?.deletion_not_applied, undefined);
   });
 
   await t.test("a recipe named by the deletion goes even with another cook, and can't come back", async () => {
@@ -374,7 +535,7 @@ test("deletions reaching the copy", { skip: !hasDatabase }, async (t) => {
     w.convex.afterRead = async (table) => {
       if (table === "families") {
         w.convex.afterRead = null;
-        await applyDeletion({ personId: only._id, familyId: f._id, supabaseId: only.supabaseProfileId, at: new Date(), recipeIds: [] });
+        await passOnDeletion({ personId: only._id, familyId: f._id, supabaseId: only.supabaseProfileId, at: new Date(), recipeIds: [] });
       }
     };
     await runPass(w.run({ budgetMs: 0 })); // the families walk alone
