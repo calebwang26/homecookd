@@ -31,13 +31,13 @@ provider "aws" {
 variable "github_subject_prefix" {
   description = "This repo as GitHub's login names it, with its permanent ids: gh api repos/<repo>/actions/oidc/customization/sub"
   type        = string
-  default     = "repo:calebwang26@292613801/hackathon-homecookd@1431696591"
+  default     = "repo:calebwang26@292613801/homecookd@1431696591"
 }
 
 variable "github_repo" {
   description = "owner/name. GitHub's job_workflow_ref claim uses the name, so renaming the repo stops this login until this changes"
   type        = string
-  default     = "calebwang26/hackathon-homecookd"
+  default     = "calebwang26/homecookd"
 }
 
 variable "branch" {

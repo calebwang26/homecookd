@@ -1,7 +1,7 @@
 # Merge playbook
 
 How the **Merge Agent** session takes in PRs, puts them in order, checks them, resolves conflicts and merges them
-into `main` for calebwang26/hackathon-homecookd. Written Oct 24, 2026, the day before the demo.
+into `main` for calebwang26/homecookd. Written Oct 24, 2026, the day before the demo.
 
 The rule behind it (AGENTS.md, `memory/merge-agent-approval.md`): every session sends its PR here, nobody else
 merges, and the Merge Agent decides how conflicting PRs merge.
