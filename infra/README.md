@@ -192,9 +192,14 @@ api has `TEST_SIGNIN_KEY`, and the env module refuses that name in production. I
 ```bash
 grep -q '^TEST_SIGNIN_KEY=' /Users/calebwang/GitHub/homecookd/homecookd/.env || echo "TEST_SIGNIN_KEY=$(openssl rand -hex 32)" >> /Users/calebwang/GitHub/homecookd/homecookd/.env
 infra/scripts/load-secrets.sh staging TEST_SIGNIN_KEY   # this name only, so the real model keys aren't copied again
+infra/scripts/make-salt.sh staging LINK_JOIN_SECRET LEFT_IDENTITY_SECRET   # staging's own random values, never production's
 ```
-Order: the merge that names it (its own deploy waits for an apply that refuses it, IAM), then a hand apply, then the line above, then an api deploy.
-A deploy before the value is loaded can't start a task, and the running ones carry on.
+**Accounts is on for staging** (`ACCOUNTS_OWNS_PEOPLE=1`): staging runs no sync, so the api owns its people and families, and a sign-up, join or
+leave works there. Join links point at staging's own web page (`EDIBLE_WEB_URL`). The two link secrets are staging's own, made by `make-salt.sh`,
+so nobody needs to know them, and a link or ticket from staging never opens anywhere else.
+
+Order: the merge that names them (its own deploy waits for an apply that refuses it, IAM), then a hand apply, then the lines above, then an api
+deploy. A deploy before the values are loaded can't start a task, and the running ones carry on.
 
 ## Database migrations
 

@@ -81,7 +81,7 @@ module "env" {
   # name only goes on a service once its value is loaded: a secret with no value stops a task starting. TEST_SIGNIN_KEY turns on the api's test sign-in for
   # scripts (api/src/modules/accounts/testSignIn.ts); production refuses it. It's named on the api in the same change because the merge's own deploy waits for
   # an apply that refuses this (IAM), so nothing rolls out until Caleb has loaded its value (infra/README.md, "The app on staging").
-  secret_names = ["SENTRY_DSN_API", "SENTRY_DSN_WORKER", "RATE_LIMIT_SALT", "ANTHROPIC_API_KEY", "CARTESIA_API_KEY", "EDIBLE_CODE_KEY", "TEST_SIGNIN_KEY"]
+  secret_names = ["SENTRY_DSN_API", "SENTRY_DSN_WORKER", "RATE_LIMIT_SALT", "ANTHROPIC_API_KEY", "CARTESIA_API_KEY", "EDIBLE_CODE_KEY", "TEST_SIGNIN_KEY", "LINK_JOIN_SECRET", "LEFT_IDENTITY_SECRET"]
 
   alb_allowed_cidrs    = var.alb_allowed_cidrs
   private_cors_origins = [module.web.url, "http://localhost:3105"]
@@ -118,10 +118,13 @@ module "env" {
       default_route = true
       uses_database = true
       # A secret with no value stops a task starting, so the real keys are named here only for a test window.
-      secrets = concat(["SENTRY_DSN_API", "RATE_LIMIT_SALT", "EDIBLE_CODE_KEY", "TEST_SIGNIN_KEY"], var.real_ai ? ["ANTHROPIC_API_KEY", "CARTESIA_API_KEY"] : [])
+      secrets = concat(["SENTRY_DSN_API", "RATE_LIMIT_SALT", "EDIBLE_CODE_KEY", "TEST_SIGNIN_KEY", "LINK_JOIN_SECRET", "LEFT_IDENTITY_SECRET"], var.real_ai ? ["ANTHROPIC_API_KEY", "CARTESIA_API_KEY"] : [])
       env = merge(
         # OVERLOAD_SHED: overloaded, a request is turned away with a 503 and retry-after before any work (api/src/overload.ts). On here to test it; production decides with its size.
         { DISH_WEB_ORIGIN = module.web.url, DISH_DAILY_BUDGET_USD = var.dish_budget_usd, OVERLOAD_SHED = "on" },
+        # Accounts owns staging's people and families: staging runs no sync, and 1.1 signs up and joins here (docs/build/contracts/ACCOUNTS.md,
+        # "Staging testing"). Join links point at staging's own /i page. LINK_JOIN_SECRET and LEFT_IDENTITY_SECRET are staging's own random values.
+        { ACCOUNTS_OWNS_PEOPLE = "1", EDIBLE_WEB_URL = module.web.url },
         var.real_ai ? {} : { DISH_FAKE_AI = "1" },
       )
     }
