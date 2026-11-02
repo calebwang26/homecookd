@@ -197,7 +197,8 @@ first api deploy makes the two users before the api rolls out.
 **On staging, in this order.** Database and IAM changes never apply by themselves, so each apply here is Caleb's.
 1. This change's merge is refused by the auto-apply. Caleb applies it by hand. The plan turns on IAM logins at the database, adds the
    migrate task and its two roles, adds `rds-db:connect` to the api's and worker's roles, and lets the deploy role run the migrate task
-   instead of the api's. The api's and worker's tasks don't change.
+   instead of the api's. The api's and worker's tasks don't change. Until then a deploy runs the migrations in the api's own task, as before,
+   because there's no migrate task yet and the api still has the master login.
 2. Turn IAM logins on now, not at the next maintenance window. No outage, and the master login keeps working:
    ```bash
    AWS_PROFILE=homecookd aws rds modify-db-instance --db-instance-identifier homecookd-staging --enable-iam-database-authentication --apply-immediately
