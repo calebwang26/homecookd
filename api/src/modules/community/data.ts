@@ -15,6 +15,7 @@
 //   my family's blocks, the list           blocks unique                                          the caller's page
 //   open reports                           reports_open                                           500
 //   reports on a thing                     reports_target                                         500
+//   is anything open on a thing            reports_target                                         one row
 //   a recipe's share asks                  questions_share_recent                                 one a recipe
 //   purge steps                            dinners_host, dinners_recipe, dinner_requests_guest, swap_requests_requester,
 //                                          swap_requests_their_recipe, swap_requests_my_recipe, reports_reporter_person, blocks_reverse   500 a pass
@@ -116,6 +117,11 @@ export async function countOpenReports(q: Queryable, before?: Date): Promise<num
     before ? [before] : [],
   );
   return rows[0].n;
+}
+
+export async function hasOpenReport(q: Queryable, kind: ReportKind, targetId: string): Promise<boolean> {
+  const { rows } = await q.query(`select exists (select 1 from reports where kind = $1 and target_id = $2 and status = 'open') as open`, [kind, targetId]);
+  return rows[0].open;
 }
 
 export async function resolveReports(q: Queryable, kind: ReportKind, targetId: string): Promise<number> {

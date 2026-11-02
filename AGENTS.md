@@ -245,6 +245,7 @@ node infra/scripts/web-smoke.mjs https://homecookd.app                          
 cd api && npm ci && npm run typecheck && npm test
 docker run -d --rm --name hc-pg -e POSTGRES_PASSWORD=t -e POSTGRES_DB=t -p 15439:5432 postgres:17   # then: cd api && TEST_DATABASE_URL=postgres://postgres:t@127.0.0.1:15439/t npm test (not localhost: on a Mac its lookup can take 5 s, and a test fails)
 PIPELINE_PYTHON=.venv/bin/python   # also set this for api tests: jobsWorker.test.ts runs the real queue worker, and skips without psycopg and sentry_sdk (pipeline/requirements-queue.txt)
+node dist/reports.js open          # and review <kind> <id> keep|remove: the team acting on a Community report, as a one-off api task (COMMUNITY-MIGRATION.md, "The team's reports")
 
 # temporary sync into Postgres: off by default, never on real data without Caleb's OK (docs/build/SYNC-MIGRATION.md)
 
