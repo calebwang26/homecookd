@@ -35,7 +35,7 @@ import { handleMessage } from "../src/scheduled.js";
 import { FOLDER_MAX, S3_GRACE_MS } from "../src/modules/accounts/outside.js";
 import { sweepUploads } from "../src/modules/jobs/tasks.js";
 import { useMediaStore, useObjectStore, useUploadStore } from "../src/storage.js";
-import { Api, appleToken, bearer, code, count, device, freshDatabase, googleToken, hasDatabase, type Keys, makeDevice, makeFamily, makeJoinLink, makePerson, row, setup, SIGNED_OUT } from "./accountsHelpers.js";
+import { Api, appleToken, bearer, code, count, device, freshDatabase, googleToken, hasDatabase, type Keys, makeDevice, makeFamily, makeJoinLink, makePerson, row, said, setup, SIGNED_OUT } from "./accountsHelpers.js";
 import { fakeStore, type FakeStore, silent } from "./dishHelpers.js";
 import { session } from "./helpers.js";
 
@@ -773,8 +773,8 @@ test("when the family's last person deletes, its name and codes go, its phones a
   assert.deepEqual(await whereIs("SECRET-F"), []);
 
   assert.equal((await api.get("/family", code(f.code))).status, 401, "the code is gone");
-  assert.equal((await api.get("/family", device(emptyPhone.key))).data.error, SIGNED_OUT, "a phone with no person stops too");
-  assert.equal((await api.get("/family", device(aPhone.key))).data.error, SIGNED_OUT);
+  assert.deepEqual(said(await api.get("/family", device(emptyPhone.key))), ["signed_out", SIGNED_OUT], "a phone with no person stops too");
+  assert.deepEqual(said(await api.get("/family", device(aPhone.key))), ["signed_out", SIGNED_OUT]);
   for (const token of [link.token, operator.token]) {
     assert.equal((await api.post("/invites/peek", { token })).status, 404);
     const joined = await api.apple({ id_token: await appleToken(keys, uniq("sub")), join_token: token, name: "Latecomer", role: "learner" });
@@ -842,13 +842,13 @@ test("a deleted person trying every proof: refused each way, and nothing brings 
   // Her device keys.
   for (const phone of [k.phone, k.phone2]) {
     const seen = await api.get("/family", device(phone.key));
-    assert.deepEqual([seen.status, seen.data.error], [401, SIGNED_OUT]);
+    assert.deepEqual([seen.status, ...said(seen)], [401, "signed_out", SIGNED_OUT]);
     const asIf = await api.post("/v1/sessions/start", { deviceKey: phone.key, profileId: k.R });
-    assert.deepEqual([asIf.status, asIf.data.error], [401, SIGNED_OUT]);
+    assert.deepEqual([asIf.status, ...said(asIf)], [401, "signed_out", SIGNED_OUT]);
   }
   // Another phone in the family naming her, for a session or for anything else.
   const named = await api.post("/v1/sessions/start", { deviceKey: k.shreyaPhone.key, profileId: k.R });
-  assert.deepEqual([named.status, named.data.error], [403, "This account was deleted."], "the words the app matches");
+  assert.deepEqual([named.status, ...said(named)], [403, "account_deleted", "This account was deleted."], "the words the app matches");
   assert.equal((await api.post("/invites", {}, device(k.shreyaPhone.key, k.R))).status, 403);
   assert.equal((await api.get("/family", device(k.shreyaPhone.key, k.R))).status, 403);
   // The family code naming her.
@@ -859,7 +859,7 @@ test("a deleted person trying every proof: refused each way, and nothing brings 
   assert.ok(!names.includes(k.R));
   // A join link claiming her, by id and by the name a tombstone carries.
   const claim = await api.apple({ id_token: await appleToken(keys, uniq("sub")), join_token: k.link.token, claim_profile_id: k.R });
-  assert.deepEqual([claim.status, claim.data.error], [409, "That person isn't in this family."]);
+  assert.deepEqual([claim.status, ...said(claim)], [409, "not_in_family", "That person isn't in this family."]);
   assert.equal((await api.post("/invites/peek", { token: k.link.token, name: "Deleted" })).data.claimable, null);
   // An old invite that named her, and a family invite claiming her.
   const viaInvite = await api.apple({ id_token: await appleToken(keys, uniq("sub")), join_token: new URL(familyInvite.data.invite.url).searchParams.get("t"), claim_profile_id: k.R });
@@ -959,9 +959,9 @@ test("a phone with no person of its own gets no session, so it can't delete anyo
   for (const key of [invited.key, swapped]) {
     // Writing once as Grandma doesn't make the phone hers.
     const wrote = await api.post("/join-links", {}, device(key, grandma));
-    assert.deepEqual([wrote.status, wrote.data.error], [403, "Add yourself first."]);
+    assert.deepEqual([wrote.status, ...said(wrote)], [403, "forbidden", "Add yourself first."]);
     const res = await api.post("/v1/sessions/start", { deviceKey: key, profileId: grandma });
-    assert.deepEqual([res.status, res.data.error], [403, "Add yourself first."]);
+    assert.deepEqual([res.status, ...said(res)], [403, "forbidden", "Add yourself first."]);
     assert.equal((await api.post("/v1/sessions/start", { deviceKey: key, profileId: left })).status, 403);
   }
   assert.equal(await count("sessions", "person_id = $1", [grandma]), 0);

@@ -142,7 +142,7 @@ This area adds no subscription. A topic is one line in its `topics`, with a `rea
 16. **The folder name is a uuid,** where it held a slug of the dish's name. Logs and alerts get nothing from it.
 17. **New in the shape:** `stepCount` on a recipe, and `updatedAt`, `uploadFinishedAt`, `finishedAt`, `cancelledAt` on a job. A recording has no `coverStorageId`, which the app's `LiveRecording` doesn't read, and `videoUrl` is built from a key.
 18. **`coverUrl` and `recipeJsonUrl` are built from keys** on `MEDIA_BASE_URL`, with `?v=` from `cover_version`. Without the setting a route with a key fails loudly, as `objectStore()` does.
-19. **S3 failing is a new 502 `storage`.**
+19. **S3 failing is a new 502 `provider_down`** (`storage` before #288).
 20. **Lists page.** Each keeps Convex's limit: jobs 20, recipes 100, and `glasses.videos` and `cooking.current` stay at theirs with no paging.
 
 ### Against SYSTEM-DESIGN.md

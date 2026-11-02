@@ -1,7 +1,7 @@
-// What sign-in, invites and deletion share: the switch, the sentences phones read, tokens and the input checks. The sentences are the old routes' own,
-// because old builds match some of them and show the rest (supabase/functions/api/index.ts, convex/lib/auth.ts).
+// What sign-in, invites and deletion share: the switch, the codes and sentences phones read, tokens and the input checks. The sentences are the old routes' own
+// (supabase/functions/api/index.ts, convex/lib/auth.ts), now the English `message` beside a code (docs/build/contracts/ERROR-CODES.md).
 import { randomBytes } from "node:crypto";
-import { ApiError } from "../../errors.js";
+import { ApiError, invalid } from "../../errors.js";
 import { hit, subjectKey } from "../../rateLimit.js";
 
 export { hashToken as sha256Hex } from "../../auth.js";
@@ -23,12 +23,12 @@ export function assertOwnsPeople(): void {
 // ---------------------------------------------------------------------------------------------
 // Answers
 
-/** The old routes' shape: `{error: <a sentence for people>, ...extra}`. */
-export const refuse = (status: number, sentence: string, extra: Record<string, unknown> = {}) => new ApiError(status, sentence, {}, undefined, extra);
+/** `{error: <code>, message: <the old sentence>, ...extra}`, as on every route. */
+export { refused as refuse } from "../../errors.js";
 
-/** The exact 401 for a revoked or unknown device key. The app keys on this text. */
+/** With 401 `signed_out`: a revoked or unknown device key. */
 export const SIGNED_OUT = "This phone was signed out.";
-/** sessions.start for someone who deleted their account. The app matches these words. */
+/** With 403 `account_deleted`: sessions.start for someone who deleted their account. */
 export const ACCOUNT_DELETED = "This account was deleted.";
 export const NOT_IN_THIS_FAMILY = "That person isn't in this family anymore.";
 
@@ -117,12 +117,12 @@ export const present = (v: unknown) => v !== undefined && v !== null && !(typeof
 
 export function str(v: unknown, field: string, opts: { max: number; required?: boolean }): string | null {
   if (v === undefined || v === null || (typeof v === "string" && v.trim() === "")) {
-    if (opts.required) throw refuse(400, `${field} is required`);
+    if (opts.required) throw invalid(field, `${field} is required`);
     return null;
   }
-  if (typeof v !== "string") throw refuse(400, `${field} must be a string`);
+  if (typeof v !== "string") throw invalid(field, `${field} must be a string`);
   const s = v.trim();
-  if (s.length > opts.max) throw refuse(400, `${field} must be at most ${opts.max} characters`);
+  if (s.length > opts.max) throw invalid(field, `${field} must be at most ${opts.max} characters`);
   return s;
 }
 
@@ -130,7 +130,7 @@ export function emailOf(v: unknown): string | null {
   const s = str(v, "email", { max: 254 });
   if (s === null) return null;
   const email = s.toLowerCase();
-  if (!EMAIL.test(email)) throw refuse(400, "That email doesn't look right");
+  if (!EMAIL.test(email)) throw invalid("email", "That email doesn't look right");
   return email;
 }
 
@@ -155,7 +155,7 @@ export const roleOut = (role: string) => (role === "kid" ? "learner" : role);
 
 export function roleOf(v: unknown, required = false): Role | null {
   const raw = str(v, "role", { max: 10, required });
-  if (raw !== null && raw !== "cook" && raw !== "learner") throw refuse(400, "role must be cook or learner");
+  if (raw !== null && raw !== "cook" && raw !== "learner") throw invalid("role", "role must be cook or learner");
   return roleIn(raw);
 }
 
@@ -163,13 +163,13 @@ export function roleOf(v: unknown, required = false): Role | null {
 export const nameKey = (raw: unknown) => (typeof raw === "string" && raw.length <= 200 ? raw.trim().replace(/\s+/g, " ").toLowerCase() : "");
 
 // ---------------------------------------------------------------------------------------------
-// Rate limits (rateLimit.ts), with the old routes' sentence on a 429
+// Rate limits (rateLimit.ts): 429 `rate_limited` and its retry-after, with the old routes' sentence
 
 export async function limit(kind: string, value: string, max: number, windowMin: number, sentence = TOO_MANY): Promise<void> {
   try {
     await hit(subjectKey(value), [{ bucket: kind, max, windowS: windowMin * 60 }]);
   } catch (error) {
-    if (error instanceof ApiError && error.statusCode === 429) throw new ApiError(429, sentence, error.headers);
+    if (error instanceof ApiError && error.statusCode === 429) throw new ApiError(429, "rate_limited", error.headers, sentence);
     throw error;
   }
 }

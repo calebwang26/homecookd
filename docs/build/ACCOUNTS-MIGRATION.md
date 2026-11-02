@@ -6,7 +6,7 @@ The last item in `docs/build/AWS-MIGRATION.md`'s area order, Nov 1, 2026. A draf
 
 ## Routes, and the old route each replaces
 
-**Same path, shapes, statuses and sentences as Supabase's `api`,** proven by a device key or a family code:
+**Same path, shapes, statuses and sentences as Supabase's `api`,** proven by a device key or a family code. The one change, since #288: a refusal's sentence is its `message`, and `error` is a code (contracts/ERROR-CODES.md).
 
 | Route | Old code |
 |---|---|
@@ -120,7 +120,7 @@ Kept, in `appleRevoke.ts`: the same two calls in the same order, before the dele
 10. **Deletion also revokes family invites they sent,** as today's follow-up call to `/profiles/:id/remove` does, and `inviter_id` goes null.
 11. **`GET /family`'s `memorial`** is always present, since it can't be unreadable here.
 12. **Responses add `requestId` and `x-request-id`;** a 429 adds `retry-after`.
-13. **A malformed JSON body** gets `{error: "bad_request"}`, not "Body must be JSON". Nothing matches that sentence.
+13. **A malformed JSON body** gets `{error: "invalid", message: "The body must be JSON."}`, not "Body must be JSON". Nothing matches that sentence. Since #288 every refusal here is a code with the old sentence as `message` (contracts/ERROR-CODES.md).
 14. **Rate limits** are fixed windows (SCHEMA.md's choice), with `RATE_LIMIT_SALT` and no fallback key.
 15. **Sealed values need `EDIBLE_CODE_KEY`.** Supabase fell back on its service key. A join link that can't be opened is replaced with a new one; a family code is sealed again on its next use. Since Nov 2 the same key seals craving, dinner and share links (`api/src/sealed.ts`), and a share link is found by a hash keyed from it, so changing the key stops every share link opening.
 16. **`/link/open` reads a family with no uuid as `no_family`,** rather than minting a ticket Supabase would refuse.

@@ -52,7 +52,7 @@ test("a refused send frees its key: fixed and retried, it lands, and nothing was
   const pair = await pairOf(w, w.mom, w.dad);
   const key = newKey();
   refused(await say(w, w.mom, pair, { kind: "voice", audioKey: "private/not-there.m4a", durationS: 5 }, { key }), 404);
-  refused(await say(w, w.mom, pair, { kind: "text", body: "Hi", replyTo: "no-such-message" }, { key }), 400, "reply_not_in_thread");
+  refused(await say(w, w.mom, pair, { kind: "text", body: "Hi", replyTo: "no-such-message" }, { key }), 400, "invalid", "replyTo");
   assert.equal(await count("idempotency_keys"), 0);
   ok(await say(w, w.mom, pair, { kind: "text", body: "Hi" }, { key }));
 });
@@ -89,9 +89,9 @@ test("a key is required where someone's words are being created, and honored whe
     ["/v1/questions", { recipeId: chili, text: "Beans?" }],
     ["/v1/pending-sends", { uploadId: "up-1", recipientIds: [w.dad.id] }],
   ];
-  for (const [url, body] of required) refused(await post(w.app, w.mom, url, body, { key: null }), 400, "idempotency_key_required");
-  refused(await post(w.app, w.mom, `/v1/threads/${pair}/messages`, { kind: "text", body: "Hi" }, { key: "short" }), 400, "bad_idempotency_key");
-  refused(await post(w.app, w.mom, `/v1/threads/${pair}/messages`, { kind: "text", body: "Hi" }, { key: "has spaces in it!" }), 400, "bad_idempotency_key");
+  for (const [url, body] of required) refused(await post(w.app, w.mom, url, body, { key: null }), 400, "invalid", "Idempotency-Key");
+  refused(await post(w.app, w.mom, `/v1/threads/${pair}/messages`, { kind: "text", body: "Hi" }, { key: "short" }), 400, "invalid", "Idempotency-Key");
+  refused(await post(w.app, w.mom, `/v1/threads/${pair}/messages`, { kind: "text", body: "Hi" }, { key: "has spaces in it!" }), 400, "invalid", "Idempotency-Key");
 });
 
 test("a retried Convex send, question, answer, send-recipe and pending send each make one row", { skip }, async () => {
@@ -122,7 +122,7 @@ test("a retried answer on an answered question replays; another key on it is ref
   const chili = await recipe(w.family, w.dad.id);
   const asked = ok(await post(w.app, w.leo, "/v1/questions", { recipeId: chili, text: "Beans?" }), 201);
   ok(await post(w.app, w.dad, `/v1/questions/${asked.questionId}/answer`, { text: "Yes" }));
-  refused(await post(w.app, w.dad, `/v1/questions/${asked.questionId}/answer`, { text: "No" }), 409, "already_answered");
+  refused(await post(w.app, w.dad, `/v1/questions/${asked.questionId}/answer`, { text: "No" }), 409, "answered");
 });
 
 test("keys belong to one person: the same key from someone else is their own", { skip }, async () => {

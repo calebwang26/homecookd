@@ -12,7 +12,7 @@
 import { randomBytes, randomUUID } from "node:crypto";
 import type { Signed } from "../../auth.js";
 import { db, tx } from "../../db.js";
-import { ApiError, notFound } from "../../errors.js";
+import { forbidden, invalid, notFound, refused } from "../../errors.js";
 import { once, requestHash } from "../../idempotency.js";
 import { hit, subjectKey, type Limit } from "../../rateLimit.js";
 import { seal, SHARE_LINK_SALT, shareTokenHash, unseal } from "../../sealed.js";
@@ -22,13 +22,13 @@ import { dishesOf, library } from "./library.js";
 import { actorOf, type Write } from "./actor.js";
 import { deliverRecipe } from "./service.js";
 import { attachFile, markForDeletion } from "./uploads.js";
-import { bad, decodeCursor, encodeCursor, isRowId, libraryId, LIBRARY_ID, MAX_RECIPIENTS, MAX_VOICE_S, number, pageSize } from "./values.js";
+import { decodeCursor, encodeCursor, isRowId, libraryId, LIBRARY_ID, MAX_RECIPIENTS, MAX_VOICE_S, noSuchRecipe, number, pageSize } from "./values.js";
 import { mediaUrl, personView } from "./views.js";
 
 type Body = Record<string, unknown>;
 
 async function checkDish(id: string): Promise<void> {
-  if ((await library().exists(id)) === false) throw new ApiError(404, "no_such_recipe");
+  if ((await library().exists(id)) === false) throw noSuchRecipe();
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -110,18 +110,18 @@ const UPLOAD_ID = LIBRARY_ID;
 export async function registerPendingSend(signed: Signed, body: Body, w: Write) {
   const actor = await actorOf(signed);
   const uploadId = body.uploadId;
-  if (typeof uploadId !== "string" || !UPLOAD_ID.test(uploadId)) throw bad("bad_upload_id");
+  if (typeof uploadId !== "string" || !UPLOAD_ID.test(uploadId)) throw invalid("uploadId");
   const list = body.recipientIds;
-  if (!Array.isArray(list) || list.length === 0 || list.length > MAX_RECIPIENTS) throw bad("bad_recipients");
+  if (!Array.isArray(list) || list.length === 0 || list.length > MAX_RECIPIENTS) throw invalid("recipientIds");
   const here = new Set(actor.here.map((p) => p.id));
   for (const id of list) {
-    if (!isRowId(id)) throw bad("bad_person_id");
+    if (!isRowId(id)) throw invalid("recipientIds");
     if (!here.has(id)) throw notFound();
   }
   const recipients = [...new Set(list as string[])].filter((id) => id !== actor.me.id);
-  if (recipients.length === 0) throw bad("pick_someone_else");
+  if (recipients.length === 0) throw invalid("recipientIds");
   const helloKey = typeof body.helloKey === "string" && body.helloKey ? body.helloKey : null;
-  const helloDuration = number(body.helloDurationS, { min: 0, max: MAX_VOICE_S });
+  const helloDuration = number(body.helloDurationS, "helloDurationS", { min: 0, max: MAX_VOICE_S });
 
   await once(
     { scope: actor.me.id, key: w.key, route: "POST /v1/pending-sends", hash: requestHash([uploadId, recipients, helloKey, helloDuration]) },
@@ -139,8 +139,8 @@ export async function registerPendingSend(signed: Signed, body: Body, w: Write) 
       const before = await c.query(`select family_id, sender_id, delivered_at, hello_key from pending_sends where upload_id = $1 for update`, [uploadId]);
       const existing = before.rows[0];
       // Only its sender. Someone else in the family with the upload id can't redirect it, or send it as them.
-      if (existing.family_id !== actor.familyId || existing.sender_id !== actor.me.id) throw new ApiError(409, "upload_is_someone_elses");
-      if (existing.delivered_at) throw new ApiError(409, "already_delivered");
+      if (existing.family_id !== actor.familyId || existing.sender_id !== actor.me.id) throw refused(409, "conflict");
+      if (existing.delivered_at) throw refused(409, "already_delivered", "That recipe was already delivered.");
       if (helloKey !== existing.hello_key) {
         if (helloKey) await attachFile(c, actor, helloKey, ["voice"]);
         await markForDeletion(c, [existing.hello_key]); // nothing else holds it: a private voice note mustn't outlive its owner
@@ -166,7 +166,7 @@ export async function deliverPending(familyId: string, uploadId: string, dish: s
   const out = await tx(async (c) => {
     if (onlySender) {
       const owner = await c.query(`select sender_id from pending_sends where upload_id = $1 and family_id = $2`, [uploadId, familyId]);
-      if (owner.rows[0] && owner.rows[0].sender_id !== onlySender) throw new ApiError(403, "not_your_recording");
+      if (owner.rows[0] && owner.rows[0].sender_id !== onlySender) throw forbidden("Only whoever recorded this can send it.");
     }
     const { rows } = await c.query(
       `update pending_sends set delivered_at = now(), library_id = $3 where upload_id = $1 and family_id = $2 and delivered_at is null
@@ -187,7 +187,7 @@ export async function deliverPending(familyId: string, uploadId: string, dish: s
 }
 
 export async function publishedFromPhone(signed: Signed, uploadId: string, body: Body, requestId?: string) {
-  if (!UPLOAD_ID.test(uploadId)) throw bad("bad_upload_id");
+  if (!UPLOAD_ID.test(uploadId)) throw invalid("uploadId");
   const actor = await actorOf(signed);
   return await deliverPending(actor.familyId, uploadId, libraryId(body.libraryId, true)!, requestId, actor.me.id);
 }
@@ -215,7 +215,7 @@ export async function favorites(signed: Signed, query: Record<string, unknown>) 
 export async function setFavorite(signed: Signed, body: Body) {
   await actorOf(signed);
   const dish = libraryId(body.libraryId, true)!;
-  if (typeof body.on !== "boolean") throw bad("on_must_be_boolean");
+  if (typeof body.on !== "boolean") throw invalid("on");
   if (body.on) {
     await checkDish(dish);
     await db().query(`insert into favorites (person_id, library_id) values ($1, $2) on conflict do nothing`, [signed.personId, dish]);
@@ -235,9 +235,7 @@ export const HEARTS_RECENT_LIMIT = 20;
 /** `?ids=a,b,a` -> ['a', 'b']. Spaces and empty items are ignored. */
 export function parseDishIds(raw: unknown): string[] {
   const ids = [...new Set(String(raw ?? "").split(",").map((s) => s.trim()).filter(Boolean))];
-  if (ids.length === 0) throw bad("ids_required");
-  if (ids.some((id) => !LIBRARY_ID.test(id))) throw bad("bad_ids");
-  if (ids.length > DISH_STATS_MAX_IDS) throw bad("too_many_ids");
+  if (ids.length === 0 || ids.length > DISH_STATS_MAX_IDS || ids.some((id) => !LIBRARY_ID.test(id))) throw invalid("ids");
   return ids;
 }
 
@@ -247,7 +245,7 @@ export function parseSince(raw: unknown, now: Date): Date {
   const s = String(raw ?? "").trim();
   if (!s) return new Date(now.getTime() - HEARTS_RECENT_DEFAULT_DAYS * DAY_MS);
   const t = s.length <= 40 ? Date.parse(s) : NaN;
-  if (!Number.isFinite(t)) throw bad("bad_time");
+  if (!Number.isFinite(t)) throw invalid("since");
   return new Date(Math.min(Math.max(t, floor), now.getTime()));
 }
 
@@ -318,15 +316,15 @@ export async function recordEvent(signed: Signed, body: Body) {
   const actor = await actorOf(signed);
   const dish = libraryId(body.libraryId, true)!;
   const kind = body.kind;
-  if (typeof kind !== "string" || !EVENT_KINDS.includes(kind)) throw bad("bad_kind");
+  if (typeof kind !== "string" || !EVENT_KINDS.includes(kind)) throw invalid("kind");
   let cookId: string | null = null;
   if (body.cookId !== undefined && body.cookId !== null) {
-    if (!isRowId(body.cookId) || !actor.everyone.some((p) => p.id === body.cookId)) throw bad("cook_not_in_family");
+    if (!isRowId(body.cookId) || !actor.everyone.some((p) => p.id === body.cookId)) throw invalid("cookId");
     cookId = body.cookId;
   }
-  const duration = number(body.durationS, { min: 0, max: 3600 });
-  if (kind === "heard" && (duration === null || duration < HEARD_MIN_S)) throw bad("heard_too_short");
-  const start = number(body.startS, { min: 0, max: 86_400 });
+  const duration = number(body.durationS, "durationS", { min: 0, max: 3600 });
+  if (kind === "heard" && (duration === null || duration < HEARD_MIN_S)) throw invalid("durationS");
+  const start = number(body.startS, "startS", { min: 0, max: 86_400 });
   await checkDish(dish);
   const windowS = kind === "viewed" ? 30 * 60 : kind === "heard" ? 5 : 60;
   return await tx(async (c) => {
@@ -406,7 +404,7 @@ const SEEN_BY_ME = `(t.kind = 'circle' or t.a_person_id = $3 or t.b_person_id = 
 /** Who in the family cooked or looked at one dish, and when it was last sent. People who left aren't shown, and notes and times come only from threads I'm in. */
 export async function dishActivity(signed: Signed, libraryIdParam: string) {
   const actor = await actorOf(signed);
-  if (!LIBRARY_ID.test(libraryIdParam)) throw bad("bad_library_id");
+  if (!LIBRARY_ID.test(libraryIdParam)) throw invalid("libraryId");
   const here = actor.here.map((p) => p.id);
   const [cooked, viewed, sent, notes] = await Promise.all([
     db().query(

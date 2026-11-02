@@ -88,7 +88,7 @@ export async function insertFamily(q: Queryable, name: string): Promise<{ family
     );
     if (rows[0]) return { family: rows[0], code };
   }
-  throw refuse(500, "Couldn't create your family. Please try again.");
+  throw refuse(500, "server_error", "Couldn't create your family. Please try again.");
 }
 
 /** Keeps the recoverable copy of the code current (an older family, or a rotated key). Best effort, and never while the sync owns the row. */
@@ -410,7 +410,7 @@ export async function insertInvite(
     );
     if (rows[0]) return { id: rows[0].id, token, code, expiresAt: rows[0].expires_at };
   }
-  throw refuse(500, "Couldn't make an invite. Please try again.");
+  throw refuse(500, "server_error", "Couldn't make an invite. Please try again.");
 }
 
 /** This person has a pending, unexpired invite. */

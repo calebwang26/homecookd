@@ -260,9 +260,11 @@ export const ok = (r: Reply, status = 200) => {
   return r.data;
 };
 
-export const refused = (r: Reply, status: number, code?: string) => {
+/** `also`: the field an `invalid` names, or more of the body, such as `{ message }`, where the code alone doesn't say which case it was. */
+export const refused = (r: Reply, status: number, code?: string, also?: string | Record<string, unknown>) => {
   assert.equal(r.status, status, r.body);
   if (code) assert.equal(r.data.error, code);
+  for (const [name, value] of Object.entries(typeof also === "string" ? { field: also } : also ?? {})) assert.equal(r.data[name], value, `${name}: ${r.body}`);
 };
 
 export const circleOf = async (w: World, who: Who = w.mom): Promise<string> => ok(await get(w.app, who, "/v1/circle")).id;

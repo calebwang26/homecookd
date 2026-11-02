@@ -12,7 +12,7 @@ import * as Sentry from "@sentry/node";
 import type { FastifyRequest } from "fastify";
 import type { Signed } from "../../auth.js";
 import { db, tx, type Queryable } from "../../db.js";
-import { ApiError } from "../../errors.js";
+import { invalid, providerDown } from "../../errors.js";
 import { enqueue } from "../../outbox.js";
 import type { Trace } from "../dish/budget.js";
 import { everyoneIn, membersByIds, signedOutDevices, type Member } from "../people/family.js";
@@ -27,7 +27,7 @@ import { dueProfiles } from "./pushRules.js";
 import { computeRecap, isMonth, recapPush, type Photo, type Recap, type RecapEvent, type RecapFavorite, type RecapMessage, type RecipeInfo, type Slide } from "./recap.js";
 import { type Activity, computeTable, familyPairs, nudgeCandidates, nudgePush, type PairStreak, pickNudgeQuote, weekStart } from "./table.js";
 import { DEFAULT_TZ, localMonthKey, localParts, monthBounds, QUIET_FROM_HOUR, RECAP_AT, validTz, zoneOf } from "./time.js";
-import { bad, norm } from "./values.js";
+import { norm } from "./values.js";
 import { readLinks } from "./views.js";
 
 const DAY_MS = 86_400_000;
@@ -371,7 +371,7 @@ const build = (members: Member[], who: FamilyProfile, month: string, rows: Month
 
 export async function getRecap(signed: Signed, query: Record<string, unknown>, now = new Date(), first = FIRST_MONTH) {
   const raw = String(query.month ?? "").trim();
-  if (raw && !isMonth(raw)) throw bad("bad_month");
+  if (raw && !isMonth(raw)) throw invalid("month");
   const members = await everyoneIn(db(), signed.familyId);
   const me = members.find((p) => p.id === signed.personId);
   if (!me || me.removed_at || me.deleted_at || me.memorial) return { empty: true };
@@ -381,7 +381,7 @@ export async function getRecap(signed: Signed, query: Record<string, unknown>, n
   if (!live) return { empty: true };
   const index = await library().libraryIndex();
   // No library means no titles, cooks or sample flags: the month would come out smaller than the database says. A 503 lets the app say "try again" and keep the Home card.
-  if (index.size === 0) throw new ApiError(503, "library_unreachable");
+  if (index.size === 0) throw providerDown(503, "Can't reach the family recipes right now.");
   const scope: Scope = who.role === "cook" ? { kind: "cook", id: who.id, dishes: dishesOf(index, who.name) } : { kind: "learner", id: who.id };
   const rows = await loadMonth(signed.familyId, members, monthBounds(month, tz)!, scope);
   const recap = build(members, who, month, rows, index);

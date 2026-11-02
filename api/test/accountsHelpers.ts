@@ -66,6 +66,8 @@ export const newIp = () => {
 };
 
 export type Reply = { status: number; data: any; headers: Record<string, unknown> };
+/** A refusal's code and its English sentence: `error` is always a code, and the sentence is `message` (docs/build/contracts/ERROR-CODES.md). */
+export const said = (r: Reply) => [r.data.error, r.data.message];
 
 export class Api {
   readonly app: FastifyInstance = buildApp({ logger: false });

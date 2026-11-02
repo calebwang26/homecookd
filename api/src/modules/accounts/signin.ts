@@ -2,6 +2,7 @@
 // each path is one transaction: the put-it-back steps the old code needed for a half-done join are gone, because a failure leaves nothing behind. A sign-in refuses rather
 // than guesses, and it can never land on a tombstone: a deleted person's accounts are unlinked, and no path here makes or claims anyone who has deleted.
 import { db, tx, type Queryable } from "../../db.js";
+import { invalid, notFound, notSetUp } from "../../errors.js";
 import * as data from "./data.js";
 import { endFamilyIfLast } from "./deletion.js";
 import { extId, type Family, type Person } from "./data.js";
@@ -36,7 +37,7 @@ import {
   type Role,
 } from "./values.js";
 
-const nameTaken = (name: string) => refuse(409, `${name} is already in this family. Try another name.`);
+const nameTaken = (name: string) => refuse(409, "name_taken", `${name} is already in this family. Try another name.`);
 /** Another tap linked this account a moment ago: everything this one did goes back, and it signs in as that one did. */
 class LostLink extends Error {}
 
@@ -46,7 +47,7 @@ type Log = (fields: object, message: string) => void;
 type Options = { name: string | null; role: Role | null; label: string | null; ip: string; log?: Log };
 
 const ownName = (taken: (n: string) => string, name: string) => (constraint: string) =>
-  constraint === "people_family_name_unique" ? refuse(409, taken(name)) : null;
+  constraint === "people_family_name_unique" ? refuse(409, "name_taken", taken(name)) : null;
 
 const joinedName = (n: string) => `${n} is already in this family`;
 
@@ -87,7 +88,7 @@ async function signInKnown(who: Who, known: Known, opts: Options): Promise<Signe
 async function signInAgain(who: Who, opts: Options): Promise<SignedIn> {
   const known = await knownIdentity(who);
   const signed = known ? await signInKnown(who, known, opts) : null;
-  if (!signed) throw refuse(409, "Please try again.");
+  if (!signed) throw refuse(409, "retry", "Please try again.");
   return signed;
 }
 
@@ -119,7 +120,7 @@ type Target = {
 
 async function familyOf(id: string): Promise<Family> {
   const family = await data.familyByExtId(db(), id);
-  if (!family || family.blanked_at) throw refuse(404, "That family isn't on homecookd anymore.");
+  if (!family || family.blanked_at) throw notFound("That family isn't on homecookd anymore.");
   return family;
 }
 
@@ -127,7 +128,7 @@ async function targetOfLink(token: string, role: Role, ip: string): Promise<Targ
   const link = await data.joinLinkByToken(db(), token);
   if (!link) return inviteNotFound(ip);
   const status = linkStatus(link);
-  if (status !== "pending") throw refuse(410, LINK_GONE[status], { status });
+  if (status !== "pending") throw refuse(410, "gone", LINK_GONE[status], { status });
   const family = await familyOf(link.family_id);
   return { familyId: family.id, familyName: family.name, role, token: `join:${link.id}`, suggested: null, side: false, inviteId: null };
 }
@@ -136,17 +137,17 @@ async function targetOfInvite(token: string, role: Role, ip: string): Promise<Ta
   const inv = await data.inviteBy(db(), "token_hash", sha256Hex(token));
   if (!inv) return inviteNotFound(ip);
   const status = inviteStatus(inv);
-  if (status !== "pending") throw refuse(410, INVITE_GONE[status], { status });
+  if (status !== "pending") throw refuse(410, "gone", INVITE_GONE[status], { status });
   const family = await familyOf(inv.family_id);
   return { familyId: family.id, familyName: family.name, role, token: `invite:${inv.id}`, suggested: null, side: false, inviteId: inv.id };
 }
 
 async function targetOfTicket(raw: unknown): Promise<Target> {
   const secret = joinSecret();
-  if (!secret) throw refuse(503, "Links aren't set up yet.");
-  if (typeof raw !== "string") throw refuse(400, "link_ticket must be a string");
+  if (!secret) throw notSetUp("Links aren't set up yet.");
+  if (typeof raw !== "string") throw invalid("link_ticket", "link_ticket must be a string");
   const t = verifyTicket(secret, raw.trim(), Date.now());
-  if (!t) throw refuse(403, BAD_TICKET);
+  if (!t) throw refuse(403, "ticket_expired", BAD_TICKET);
   const family = await familyOf(t.fam); // only from the ticket: anything else in the body is ignored
   return {
     familyId: family.id,
@@ -162,7 +163,7 @@ async function targetOfTicket(raw: unknown): Promise<Target> {
 /** The target's family under its lock, checked again: its last person may have deleted since the link was read. */
 async function lockTargetFamily(c: Queryable, familyId: string): Promise<Person[]> {
   const family = await data.lockFamily(c, familyId);
-  if (!family || family.blanked_at) throw refuse(404, "That family isn't on homecookd anymore.");
+  if (!family || family.blanked_at) throw notFound("That family isn't on homecookd anymore.");
   return (await data.peopleOf(c, familyId)).filter((p) => !p.removed_at);
 }
 
@@ -171,8 +172,8 @@ async function useInvite(c: Queryable, inviteId: string): Promise<void> {
   if (claimed) return;
   const { rows } = await c.query(`select status, expires_at from invites where id = $1`, [inviteId]);
   const status = rows[0] ? inviteStatus(rows[0]) : ("revoked" as const);
-  if (status === "pending") throw refuse(409, "Please try again.");
-  throw refuse(410, INVITE_GONE[status], { status });
+  if (status === "pending") throw refuse(409, "retry", "Please try again.");
+  throw refuse(410, "gone", INVITE_GONE[status], { status });
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -192,7 +193,7 @@ async function joinAsNew(
   if (target.inviteId) await useInvite(c, target.inviteId);
   if (target.side) {
     signup = await data.claimSignup(c, { name, email: who.email, shareToken: target.token, familyId: target.familyId });
-    if (!signup) throw refuse(409, LINK_USED);
+    if (!signup) throw refuse(409, "link_used", LINK_USED);
   }
   const person = await addPerson(c, target.familyId, members, { name, role: target.role });
   await leave?.();
@@ -212,12 +213,12 @@ async function claimMember(who: Who, target: Target, rawId: string, opts: Option
   const claimed = await tx(async (c) => {
     await lockTargetFamily(c, target.familyId);
     const found = await data.personByExtId(c, rawId.toLowerCase());
-    if (!found || found.family_id !== target.familyId || found.removed_at || found.deleted_at) throw refuse(409, NOT_IN_FAMILY);
+    if (!found || found.family_id !== target.familyId || found.removed_at || found.deleted_at) throw refuse(409, "not_in_family", NOT_IN_FAMILY);
     const person = await data.lockLivePerson(c, found.id);
-    if (!person) throw refuse(409, NOT_IN_FAMILY);
-    if (await anySignedIn(c, [person.id])) throw refuse(409, ALREADY_ON);
+    if (!person) throw refuse(409, "not_in_family", NOT_IN_FAMILY);
+    if (await anySignedIn(c, [person.id])) throw refuse(409, "already_joined", ALREADY_ON);
     const signup = await data.claimSignup(c, { name: person.name, email: who.email, shareToken: `link:claim:${extId(person)}`, familyId: target.familyId });
-    if (!signup) throw refuse(409, ALREADY_ON);
+    if (!signup) throw refuse(409, "already_joined", ALREADY_ON);
     await data.setSignupPerson(c, signup, person.id);
     if (target.inviteId) await useInvite(c, target.inviteId);
     if (!(await data.linkIdentity(c, who, person.id))) throw new LostLink();
@@ -320,19 +321,19 @@ async function moveTo(who: Who, known: Known, target: Target, opts: Options) {
 }
 
 async function signInByLink(who: Who, b: Body, opts: Options) {
-  if (present(b.join_token) && present(b.link_ticket)) throw refuse(400, "Send join_token or link_ticket, not both.");
-  if (b.move !== undefined && b.move !== null && typeof b.move !== "boolean") throw refuse(400, "move must be true or false");
+  if (present(b.join_token) && present(b.link_ticket)) throw invalid("link_ticket", "Send join_token or link_ticket, not both.");
+  if (b.move !== undefined && b.move !== null && typeof b.move !== "boolean") throw invalid("move", "move must be true or false");
   let claim: string | null = null;
   if (present(b.claim_profile_id)) {
-    if (!present(b.join_token)) throw refuse(400, "claim_profile_id goes only with a family join link.");
-    if (typeof b.claim_profile_id !== "string" || b.claim_profile_id.length > 100) throw refuse(400, "claim_profile_id must be a profile id");
+    if (!present(b.join_token)) throw invalid("claim_profile_id", "claim_profile_id goes only with a family join link.");
+    if (typeof b.claim_profile_id !== "string" || b.claim_profile_id.length > 100) throw invalid("claim_profile_id", "claim_profile_id must be a profile id");
     claim = b.claim_profile_id.trim();
   }
   await limit("linkjoin-ip", opts.ip, 20, 10);
 
   let target: Target;
   if (present(b.join_token)) {
-    if (typeof b.join_token !== "string") throw refuse(400, "join_token must be a string");
+    if (typeof b.join_token !== "string") throw invalid("join_token", "join_token must be a string");
     const token = b.join_token.trim();
     const role = opts.role ?? "kid";
     if (JOIN_TOKEN.test(token)) target = await targetOfLink(token, role, opts.ip);
@@ -373,7 +374,7 @@ async function joinByShare(who: Who, share: Share, name: string, role: Role, opt
     const joined = await mapUnique(
       tx(async (c) => {
         const members = await lockTargetFamily(c, share.family_id);
-        if ((await data.joinsVia(c, `share:${share.id}`, share.family_id)) >= MAX_JOINS_PER_SHARE) throw refuse(403, "This link is full. Ask your family for a new one.");
+        if ((await data.joinsVia(c, `share:${share.id}`, share.family_id)) >= MAX_JOINS_PER_SHARE) throw refuse(403, "link_full", "This link is full. Ask your family for a new one.");
         const same = members.find((x) => x.name.toLowerCase() === name.toLowerCase());
         if (same) {
           const claimable = same.id !== share.sender_id && !same.email && !(await anySignedIn(c, [same.id])) && (await data.hasLiveInvite(c, same.id));
@@ -416,7 +417,7 @@ async function startFamily(who: Who, name: string, role: Role, opts: Options) {
  * the app asks, then calls again with the same token. With `join_token` or `link_ticket`, plus `move?` and `claim_profile_id?`, signInByLink answers.
  */
 export async function signInWith(provider: Provider, b: Body, ip: string, log?: Log) {
-  if (!audiencesOf(provider).length) throw refuse(503, `${providerLabel(provider)} sign-in isn't set up yet.`);
+  if (!audiencesOf(provider).length) throw notSetUp(`${providerLabel(provider)} sign-in isn't set up yet.`);
   await limit("authid-ip", ip, 30, 10);
   const idToken = str(b.id_token, "id_token", { max: 8000, required: true })!;
   return signInAs(() => idTokens().verify(provider, idToken), b, ip, log);
@@ -431,7 +432,7 @@ export async function signInAs(identify: () => Promise<Who>, b: Body, ip: string
   const name = str(b.name, "name", { max: MAX_NAME });
   const role = roleOf(b.role);
   const claim = typeof b.claim_profile_id === "string" ? b.claim_profile_id.trim() : "";
-  if (claim && !UUID.test(claim)) throw refuse(400, "claim_profile_id is not a valid id");
+  if (claim && !UUID.test(claim)) throw invalid("claim_profile_id", "claim_profile_id is not a valid id");
   const who = await identify();
   const opts: Options = { name, role, label, ip, log };
   if (present(b.join_token) || present(b.link_ticket) || present(b.claim_profile_id)) return signInByLink(who, b, opts);
@@ -449,6 +450,6 @@ export async function signInAs(identify: () => Promise<Who>, b: Body, ip: string
   // A recipe link that no longer works still means a learner; with no link at all the app asks.
   const hadLink = typeof b.share_token === "string" && b.share_token.trim() !== "";
   const finalRole = role ?? (hadLink ? "kid" : null);
-  if (!finalRole) throw refuse(400, "role must be cook or learner");
+  if (!finalRole) throw invalid("role", "role must be cook or learner");
   return startFamily(who, name, finalRole, opts);
 }

@@ -4,7 +4,7 @@
 import { createHash } from "node:crypto";
 import type { FastifyRequest } from "fastify";
 import { db } from "./db.js";
-import { forbidden, notFound, signedOut } from "./errors.js";
+import { forbidden, notFound, removedFromFamily, signedOut } from "./errors.js";
 
 export type Signed = { sessionId: string; personId: string; familyId: string; role: "cook" | "kid" };
 
@@ -39,7 +39,7 @@ export async function findSession(token: string): Promise<(Signed & { removed: b
  * than route by route. It's a 403, not a 401: their phone is still signed in, and only the accounts area can end that (routeCoverage.test.ts holds every route to it).
  */
 export async function requireSession(req: FastifyRequest): Promise<void> {
-  if ((await readSession(req)).removed) throw forbidden();
+  if ((await readSession(req)).removed) throw removedFromFamily();
 }
 
 /**

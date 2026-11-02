@@ -5,7 +5,7 @@
 import { randomBytes } from "node:crypto";
 import type { Signed } from "../../auth.js";
 import { db, tx } from "../../db.js";
-import { notFound, refused } from "../../errors.js";
+import { invalid, notFound, refused } from "../../errors.js";
 import { afterOf, decodeCursor, encodeCursor, type After } from "../../paging.js";
 import { DINNER_INVITE_SALT, seal, unseal } from "../../sealed.js";
 import { flagged } from "../dish/moderation.js";
@@ -90,9 +90,9 @@ async function hostable(signed: Signed, recipeId: string): Promise<SeenRecipe> {
   throw notFound(PICK_RECIPE);
 }
 
-function text(s: string, what: string): string {
+function text(s: string, field: string, what: string): string {
   const t = s.trim();
-  if (!t || t.length > 200) throw refused(400, "bad_request", `Add the ${what}.`);
+  if (!t || t.length > 200) throw invalid(field, `Add the ${what}.`);
   return t;
 }
 
@@ -116,11 +116,11 @@ export async function createDinner(signed: Signed, input: NewDinner, idempotency
     if (first) return firstDinner(first, hash);
   }
   const recipe = await hostable(signed, input.recipeId);
-  if (input.startsAt <= Date.now()) throw refused(400, "bad_request", "Pick a time that hasn't passed.");
-  if (!Number.isInteger(input.seats) || input.seats < 1 || input.seats > 20) throw refused(400, "bad_request", "Seats go from 1 to 20.");
+  if (input.startsAt <= Date.now()) throw invalid("startsAt", "Pick a time that hasn't passed.");
+  if (!Number.isInteger(input.seats) || input.seats < 1 || input.seats > 20) throw invalid("seats", "Seats go from 1 to 20.");
   if (flagged(recipe.title, input.placeName, input.address)) throw refused(422, "words", WORDS_POSTABLE);
-  const placeName = text(input.placeName, "place's name");
-  const address = text(input.address, "address");
+  const placeName = text(input.placeName, "placeName", "place's name");
+  const address = text(input.address, "address", "address");
   const place = roundToGrid(placeOf((await peopleByIds(db(), [signed.personId])).get(signed.personId)));
   return await tx(async (c) => {
     // A second call at the same moment passed the look above, and waits here on the row's primary key, so the first has finished by the time this returns false.

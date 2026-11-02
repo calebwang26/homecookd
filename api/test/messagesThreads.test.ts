@@ -49,7 +49,7 @@ test("two people starting the same pair at once make one thread", { skip }, asyn
 
 test("you can't start a conversation with yourself", { skip }, async () => {
   const w = await world();
-  refused(await post(w.app, w.mom, "/v1/threads", { otherId: w.mom.id }, { key: null }), 400, "cant_message_yourself");
+  refused(await post(w.app, w.mom, "/v1/threads", { otherId: w.mom.id }, { key: null }), 400, "invalid", "otherId");
   refused(await post(w.app, w.mom, "/v1/threads", { otherId: "nobody" }, { key: null }), 404);
 });
 
@@ -86,8 +86,8 @@ test("messages page back in order, and a poll reads only what's new", { skip }, 
   assert.equal(oldest.nextCursor, null);
   assert.deepEqual((await messages(w, w.dad, pair, `?after=${encodeURIComponent(sent[3].createdAt)}`)).map((m: any) => m.body), ["m4"]);
   assert.deepEqual(await messages(w, w.dad, pair, `?after=${encodeURIComponent(sent[4].createdAt)}`), []);
-  refused(await get(w.app, w.dad, `/v1/threads/${pair}/messages?after=soon`), 400, "bad_time");
-  refused(await get(w.app, w.dad, `/v1/threads/${pair}/messages?cursor=nope`), 400, "bad_request");
+  refused(await get(w.app, w.dad, `/v1/threads/${pair}/messages?after=soon`), 400, "invalid", "after");
+  refused(await get(w.app, w.dad, `/v1/threads/${pair}/messages?cursor=nope`), 400, "invalid", "cursor");
 });
 
 test("a forged cursor or time is a 400, never a server error", { skip }, async () => {
@@ -112,7 +112,7 @@ test("a forged cursor or time is a 400, never a server error", { skip }, async (
   const huge = cursor(["2026-11-01 10:00:00+00", "99999999999:x"]);
   assert.equal((await get(w.app, w.mom, `/v1/dishes/${CHILI}/notes?cursor=${huge}`)).status, 400);
   for (const after of ["1", "soon", "2026-02-31T00:00:00Z", "2026-11-01"]) {
-    refused(await get(w.app, w.mom, `/v1/threads/${pair}/messages?after=${encodeURIComponent(after)}`), 400, "bad_time");
+    refused(await get(w.app, w.mom, `/v1/threads/${pair}/messages?after=${encodeURIComponent(after)}`), 400, "invalid", "after");
   }
   // What the server itself hands out still works, with a raw "+" arriving as a space.
   ok(await get(w.app, w.mom, `/v1/threads/${pair}/messages?after=${encodeURIComponent("2026-11-01T10:00:00.123456+00:00")}`));
@@ -153,25 +153,26 @@ test("kinds: what each needs, and what's refused", { skip }, async () => {
   const w = await world();
   const pair = await pairOf(w, w.mom, w.dad);
   const send = (body: Record<string, unknown>) => say(w, w.mom, pair, body);
-  refused(await send({ body: "no kind" }), 400, "kind_required");
-  refused(await send({ kind: "text" }), 400, "body_required");
-  refused(await send({ kind: "text", body: "   " }), 400, "body_required");
-  refused(await send({ kind: "text", body: "x".repeat(2001) }), 400, "too_long");
-  refused(await send({ kind: "request" }), 400, "body_required");
-  refused(await send({ kind: "recipe" }), 400, "library_id_required");
-  refused(await send({ kind: "cooked" }), 400, "library_id_required");
-  refused(await send({ kind: "step", libraryId: CHILI }), 400, "step_needs_recipe");
-  refused(await send({ kind: "question" }), 400, "body_required");
-  refused(await send({ kind: "question", body: "?", stepOrder: 1 }), 400, "step_needs_recipe");
-  refused(await send({ kind: "voice" }), 400, "duration_required");
-  refused(await send({ kind: "voice", durationS: 0 }), 400, "bad_number");
-  refused(await send({ kind: "voice", durationS: 301 }), 400, "bad_number");
-  refused(await send({ kind: "voice", durationS: 5 }), 400, "audio_required");
-  refused(await send({ kind: "system", body: "fake" }), 400, "system_not_sent");
-  refused(await send({ kind: "wave" }), 400, "bad_kind");
-  refused(await send({ kind: "recipe", libraryId: "NOT A RECIPE" }), 400, "bad_library_id");
-  refused(await send({ kind: "recipe", libraryId: "no-such-dish" }), 404, "no_such_recipe");
-  refused(await send({ kind: "voice", durationS: 3, clipKey: `${CHILI}/a.m4a`, clipStartS: 9, clipEndS: 2 }), 400, "clip_end_before_start");
+  refused(await send({ body: "no kind" }), 400, "invalid", "kind");
+  refused(await send({ kind: "text" }), 400, "invalid", { field: "body", message: "Write something first." });
+  refused(await send({ kind: "text", body: "   " }), 400, "invalid", "body");
+  refused(await send({ kind: "text", body: "x".repeat(2001) }), 400, "invalid", { field: "body", message: "That message is too long." });
+  refused(await send({ kind: "request" }), 400, "invalid", "body");
+  refused(await send({ kind: "recipe" }), 400, "invalid", "libraryId");
+  refused(await send({ kind: "cooked" }), 400, "invalid", "libraryId");
+  refused(await send({ kind: "step", libraryId: CHILI }), 400, "invalid", "stepOrder");
+  refused(await send({ kind: "step", stepOrder: 3 }), 400, "invalid", "libraryId");
+  refused(await send({ kind: "question" }), 400, "invalid", { field: "body", message: "Write something first." });
+  refused(await send({ kind: "question", body: "?", stepOrder: 1 }), 400, "invalid", "libraryId");
+  refused(await send({ kind: "voice" }), 400, "invalid", "durationS");
+  refused(await send({ kind: "voice", durationS: 0 }), 400, "invalid", "durationS");
+  refused(await send({ kind: "voice", durationS: 301 }), 400, "invalid", "durationS");
+  refused(await send({ kind: "voice", durationS: 5 }), 400, "invalid", "audioKey");
+  refused(await send({ kind: "system", body: "fake" }), 400, "invalid", "kind");
+  refused(await send({ kind: "wave" }), 400, "invalid", "kind");
+  refused(await send({ kind: "recipe", libraryId: "NOT A RECIPE" }), 400, "invalid", "libraryId");
+  refused(await send({ kind: "recipe", libraryId: "no-such-dish" }), 404, "not_found", { message: "That recipe isn't here anymore." });
+  refused(await send({ kind: "voice", durationS: 3, clipKey: `${CHILI}/a.m4a`, clipStartS: 9, clipEndS: 2 }), 400, "invalid", "clipEndS");
   ok(await send({ kind: "recipe", libraryId: CHILI }));
   ok(await send({ kind: "step", libraryId: CHILI, stepOrder: 3 }));
 });
@@ -188,8 +189,8 @@ test("reply_to must be a message in this conversation", { skip }, async () => {
   const pair = await pairOf(w, w.mom, w.dad);
   const ring = await circleOf(w);
   const inRing = await text(w, w.mom, ring, "All of you");
-  refused(await say(w, w.mom, pair, { kind: "text", body: "x", replyTo: inRing.id }), 400, "reply_not_in_thread");
-  refused(await say(w, w.mom, pair, { kind: "text", body: "x", replyTo: "nope" }), 400, "reply_not_in_thread");
+  refused(await say(w, w.mom, pair, { kind: "text", body: "x", replyTo: inRing.id }), 400, "invalid", "replyTo");
+  refused(await say(w, w.mom, pair, { kind: "text", body: "x", replyTo: "nope" }), 400, "invalid", "replyTo");
 });
 
 test("retention: reactions: a heart (no push), 'Just like mine' only on a dish someone else made, once", { skip }, async () => {
@@ -201,14 +202,14 @@ test("retention: reactions: a heart (no push), 'Just like mine' only on a dish s
 
   const heart = ok(await say(w, w.mom, thread, { kind: "reaction", body: "heart" }));
   assert.deepEqual([heart.kind, heart.body], ["reaction", "heart"]);
-  refused(await say(w, w.mom, thread, { kind: "reaction", body: "wow" }), 400, "bad_reaction");
+  refused(await say(w, w.mom, thread, { kind: "reaction", body: "wow" }), 400, "invalid", "body");
   for (const body of [
     { kind: "reaction", body: "just_like_mine" }, // needs the dish
     { kind: "reaction", body: "just_like_mine", replyTo: words.id }, // not a dish
   ]) {
-    refused(await say(w, w.mom, thread, body), 400, "reaction_needs_dish");
+    refused(await say(w, w.mom, thread, body), 400, "invalid", "replyTo");
   }
-  refused(await say(w, w.leo, thread, { kind: "reaction", body: "heart", replyTo: made.id }), 400, "reaction_needs_dish"); // not on my own dish
+  refused(await say(w, w.leo, thread, { kind: "reaction", body: "heart", replyTo: made.id }), 400, "invalid", "replyTo"); // not on my own dish
 
   const jlm = { kind: "reaction", body: "just_like_mine", replyTo: made.id, libraryId: DAL };
   const [first, again] = await Promise.all([say(w, w.mom, thread, jlm), say(w, w.mom, thread, jlm)]);
@@ -297,7 +298,9 @@ test("the asker and the dish's cook may take an answer out; nobody else may", { 
   const w = await world();
   const { ring, q } = await leoAsks(w);
   const a = ok(await say(w, w.mom, ring, { kind: "text", body: "Ten minutes.", replyTo: q.id }));
-  refused(await post(w.app, w.nia, `/v1/notes/${a.noteId}/remove`, undefined, { key: null }), 403, "cant_take_this_out");
+  refused(await post(w.app, w.nia, `/v1/notes/${a.noteId}/remove`, undefined, { key: null }), 403, "forbidden", {
+    message: "Only the person who answered, the person who asked, or the cook can take this out.",
+  });
   // Dad's chili (cook.name in its recipe.json): he may.
   ok(await post(w.app, w.dad, `/v1/notes/${a.noteId}/remove`, undefined, { key: null }));
   const b = ok(await say(w, w.mom, ring, { kind: "text", body: "Twelve.", replyTo: q.id }));
@@ -349,7 +352,7 @@ test("GET /recipes/:id/questions: the circle's open questions and my own 1:1s, n
   ok(await say(w, dad, ring, { kind: "text", body: "Until it's smooth.", replyTo: q1.id }));
   assert.deepEqual(await list(priya), [[1, "Nia", true, "pair", "Dad"]]);
   assert.deepEqual(await list(leo), [[3, "Leo", true, "pair", "Dad"]]);
-  refused(await get(w.app, leo, "/v1/dishes/not%20a%20recipe/chat-questions"), 400, "bad_library_id");
+  refused(await get(w.app, leo, "/v1/dishes/not%20a%20recipe/chat-questions"), 400, "invalid", "libraryId");
 
   // Someone who left: their own questions drop (asker gone), and so do questions to them.
   await ask(ring, priya, { body: "Fresh or dried chiles?", libraryId: CHILI, stepOrder: 4 });
@@ -380,10 +383,10 @@ test("a cook can save their own message to a recipe by hand; a kid or someone el
   refused(await post(w.app, w.leo, "/v1/notes", { messageId: about.id }, { key: null }), 403); // a kid
   const ring = await circleOf(w);
   const theirs = await text(w, w.mom, ring, "Mine");
-  refused(await post(w.app, w.dad, "/v1/notes", { messageId: theirs.id }, { key: null }), 403, "not_your_message");
+  refused(await post(w.app, w.dad, "/v1/notes", { messageId: theirs.id }, { key: null }), 403, "forbidden", { message: "You can only save your own messages." });
   refused(await post(w.app, w.mom, "/v1/notes", { messageId: about.id }, { key: null }), 404); // outside the pair
   const plain = await text(w, w.dad, pair, "Hello");
-  refused(await post(w.app, w.dad, "/v1/notes", { messageId: plain.id }, { key: null }), 400, "not_about_a_recipe");
+  refused(await post(w.app, w.dad, "/v1/notes", { messageId: plain.id }, { key: null }), 400, "invalid", "messageId");
   refused(await post(w.app, w.dad, "/v1/notes", { messageId: "nope" }, { key: null }), 404);
 });
 
@@ -411,8 +414,8 @@ test("send-recipe: everyone, a list, never myself; a retry sends nothing twice",
   const w = await world();
   const everyone = ok(await post(w.app, w.mom, "/v1/send-recipe", { libraryId: DAL, to: "everyone", note: "Try this" }));
   assert.equal(everyone.sent.length, 3);
-  refused(await post(w.app, w.mom, "/v1/send-recipe", { libraryId: DAL, to: [w.mom.id] }), 400, "pick_someone_else");
-  refused(await post(w.app, w.mom, "/v1/send-recipe", { libraryId: DAL, to: [] }), 400, "bad_recipients");
+  refused(await post(w.app, w.mom, "/v1/send-recipe", { libraryId: DAL, to: [w.mom.id] }), 400, "invalid", "to");
+  refused(await post(w.app, w.mom, "/v1/send-recipe", { libraryId: DAL, to: [] }), 400, "invalid", "to");
   refused(await post(w.app, w.mom, "/v1/send-recipe", { libraryId: DAL, to: ["nobody"] }), 404);
   refused(await post(w.app, w.mom, "/v1/send-recipe", { libraryId: DAL, to: [w.stranger.id] }), 404);
   const key = "send-recipe-retry-1";
@@ -454,8 +457,8 @@ test("messages: privacy, and the photo note", { skip }, async () => {
   assert.equal(draft, "Made your chili, Dad. Not as good as yours yet!");
 
   ok(await post(w.app, w.leo, "/v1/messages", { kind: "photo", photoKey: photo, recipeId: chili, to: w.dad.id, text: `${draft} Thank you!`, aiDrafted: true }));
-  refused(await post(w.app, w.leo, "/v1/messages", { kind: "photo" }), 400, "photo_required");
-  refused(await post(w.app, w.leo, "/v1/messages", { kind: "text", text: "  " }), 400, "body_required");
+  refused(await post(w.app, w.leo, "/v1/messages", { kind: "photo" }), 400, "invalid", "photoKey");
+  refused(await post(w.app, w.leo, "/v1/messages", { kind: "text", text: "  " }), 400, "invalid", { field: "text", message: "Write something first." });
 
   const [msg] = ok(await get(w.app, w.dad, "/v1/messages")).messages;
   assert.deepEqual([msg.kind, msg.aiDrafted, msg.fromName, msg.to], ["photo", true, "Leo", w.dad.id]);
@@ -465,7 +468,7 @@ test("messages: privacy, and the photo note", { skip }, async () => {
   assert.deepEqual(ok(await get(w.app, w.nia, "/v1/messages")).messages, []);
 
   fakeModels.note = () => Promise.reject(new NotSetUp());
-  refused(await post(w.app, w.leo, "/v1/messages/photo-note", { recipeId: chili, photoKey: photo }, { key: null }), 503, "note_writer_not_set_up");
+  refused(await post(w.app, w.leo, "/v1/messages/photo-note", { recipeId: chili, photoKey: photo }, { key: null }), 503, "not_set_up", { message: "The note writer isn't set up yet." });
 });
 
 test("messages.send: to no one is the circle, to someone is the pair; the other family, a bad recipe and a file on text are refused", { skip }, async () => {
@@ -476,13 +479,13 @@ test("messages.send: to no one is the circle, to someone is the pair; the other 
   const toDad = ok(await post(w.app, w.leo, "/v1/messages", { kind: "text", text: "Hi Dad", to: w.dad.id }));
   assert.equal(toDad.threadId, await pairOf(w, w.leo, w.dad));
   refused(await post(w.app, w.leo, "/v1/messages", { kind: "text", text: "x", to: w.stranger.id }), 404);
-  refused(await post(w.app, w.leo, "/v1/messages", { kind: "text", text: "x", to: w.leo.id }), 400, "cant_message_yourself");
+  refused(await post(w.app, w.leo, "/v1/messages", { kind: "text", text: "x", to: w.leo.id }), 400, "invalid", "to");
   const theirs = await recipe(w.otherFamily, w.stranger.id);
-  refused(await post(w.app, w.leo, "/v1/messages", { kind: "text", text: "x", recipeId: theirs }), 404, "no_such_recipe");
+  refused(await post(w.app, w.leo, "/v1/messages", { kind: "text", text: "x", recipeId: theirs }), 404, "not_found", { message: "That recipe isn't here anymore." });
   refused(await post(w.app, w.leo, "/v1/messages", { kind: "text", text: "x", audioKey: "private/x" }), 404); // the guard says first
   const voice = await uploaded(w, w.leo);
-  refused(await post(w.app, w.leo, "/v1/messages", { kind: "text", text: "x", audioKey: voice }), 400, "text_has_no_file");
-  refused(await post(w.app, w.leo, "/v1/messages", { kind: "wave" }), 400, "bad_kind");
+  refused(await post(w.app, w.leo, "/v1/messages", { kind: "text", text: "x", audioKey: voice }), 400, "invalid", "audioKey");
+  refused(await post(w.app, w.leo, "/v1/messages", { kind: "wave" }), 400, "invalid", "kind");
   // Someone who left can't be written to.
   await db().query(`update people set removed_at = now() where id = $1`, [w.nia.id]);
   refused(await post(w.app, w.leo, "/v1/messages", { kind: "text", text: "x", to: w.nia.id }), 404);

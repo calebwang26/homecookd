@@ -44,7 +44,7 @@ test("a request waiting on a held row answers 503 with when to come back, and no
   const reply = await holdingTheRows(() => post(app, "/dish/cards/update", { kidToken, message: "waited" }));
   const waited = Date.now() - before;
   assert.equal(reply.status, 503, JSON.stringify(reply.data));
-  assert.equal(reply.data.code, "busy");
+  assert.equal(reply.data.error, "unavailable");
   assert.ok(Number(reply.headers["retry-after"]) >= 1, "says when to come back");
   assert.ok(waited >= 2_900 && waited < 4_500, `waited ${waited} ms`);
   const { rows } = await db().query("select count(*)::int as n from dish_asks where message = 'waited'");

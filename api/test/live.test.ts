@@ -363,7 +363,7 @@ test("live updates", { skip: !hasDatabase }, async (t) => {
     down.mock.restore();
     assert.equal(res.statusCode, 503);
     assert.ok(Number(res.headers["retry-after"]) >= 5);
-    assert.deepEqual(Object.keys(res.json()).sort(), ["error", "requestId"]);
+    assert.deepEqual(Object.keys(res.json()).sort(), ["error", "message", "requestId"]);
   });
 
   await t.test("a bug is not called an outage: it's a 500 that reaches the main handler", async () => {

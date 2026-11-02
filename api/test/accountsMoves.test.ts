@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { db } from "../src/db.js";
-import { Api, bearer, clearLimits, count, device, freshDatabase, hasDatabase, makeDevice, makeFamily, makePerson, row, setup, SIGNED_OUT } from "./accountsHelpers.js";
+import { Api, bearer, clearLimits, count, device, freshDatabase, hasDatabase, makeDevice, makeFamily, makePerson, row, said, setup, SIGNED_OUT } from "./accountsHelpers.js";
 import { session } from "./helpers.js";
 
 const skip = !hasDatabase;
@@ -43,7 +43,7 @@ test("move to a new phone: ask, the family sees it, approve, and the old phone i
   const copied = await session(m.f.id, m.dad);
   assert.equal((await api.post(`/move-requests/${asked.data.id}/approve`, {}, m.momMe)).data.ok, true);
 
-  assert.equal((await api.get("/family", device(m.dadPhone.key))).data.error, SIGNED_OUT);
+  assert.deepEqual(said(await api.get("/family", device(m.dadPhone.key))), ["signed_out", SIGNED_OUT]);
   assert.equal((await api.get("/v1/me", bearer(oldSession))).status, 401, "the lost phone's session ends at once");
   assert.equal((await api.get("/v1/me", bearer(copied))).status, 401, "and any old session with no phone on it");
   const onNew = await api.get("/family", device(m.newPhone.key));
@@ -91,7 +91,7 @@ test("an ask expires after 7 days: it reads expired, can't be answered, and the 
   assert.deepEqual((await api.get("/move-requests", m.momMe)).data, []);
   const late = await api.post(`/move-requests/${asked.data.id}/approve`, {}, m.momMe);
   assert.equal(late.status, 410);
-  assert.equal(late.data.error, "That request expired.");
+  assert.deepEqual(said(late), ["gone", "That request expired."]);
   const again = await api.post("/move-requests", { profile_id: m.dad }, m.asker);
   assert.notEqual(again.data.id, asked.data.id);
 });
@@ -129,7 +129,7 @@ test("only settled people answer asks: a day after their first phone joined, or 
   const asked = await api.post("/move-requests", { profile_id: m.dad }, m.asker);
   const refused = await api.post(`/move-requests/${asked.data.id}/approve`, {}, device(freshPhone.key, fresh));
   assert.equal(refused.status, 403);
-  assert.equal(refused.data.error, "You can do this after your first day here.");
+  assert.deepEqual(said(refused), ["forbidden", "You can do this after your first day here."]);
   assert.deepEqual((await api.get("/move-requests", device(freshPhone.key, fresh))).data, []);
 
   const other = await makeFamily();
@@ -154,7 +154,8 @@ test("only someone on their own phone can answer: not a lent phone, not the fami
   const asked = await api.post("/move-requests", { profile_id: m.dad }, m.asker);
   const lent = await api.post(`/move-requests/${asked.data.id}/approve`, {}, device(m.momPhone.key, grandma));
   assert.equal(lent.status, 403);
-  assert.match(lent.data.error, /own phone/);
+  assert.equal(lent.data.error, "forbidden");
+  assert.match(lent.data.message, /own phone/);
   const byCode = await api.post(`/move-requests/${asked.data.id}/approve`, {}, { "x-family-code": m.f.code, "x-profile-id": grandma });
   assert.equal(byCode.status, 403);
 });
@@ -171,7 +172,7 @@ test("approving for a phone that stopped waiting: 409, the ask is declined, nobo
   await db().query(`update devices set revoked_at = now() where id = $1`, [m.newPhone.id]);
   const res = await api.post(`/move-requests/${asked.data.id}/approve`, {}, m.momMe);
   assert.equal(res.status, 409);
-  assert.equal(res.data.error, "That phone isn't waiting anymore.");
+  assert.deepEqual(said(res), ["conflict", "That phone isn't waiting anymore."]);
   assert.equal((await row("move_requests", "id = $1", [asked.data.id])).status, "declined");
   assert.equal((await api.get("/family", device(m.dadPhone.key))).status, 200);
 });
@@ -182,7 +183,7 @@ test("decline: the ask closes with no note, and the phone can ask again", { skip
   assert.equal((await api.post(`/move-requests/${asked.data.id}/decline`, {}, m.momMe)).data.ok, true);
   const twice = await api.post(`/move-requests/${asked.data.id}/decline`, {}, m.momMe);
   assert.equal(twice.status, 409);
-  assert.equal(twice.data.error, "Already handled.");
+  assert.deepEqual(said(twice), ["answered", "Already handled."]);
   assert.equal(await count("messages", "family_id = $1", [m.f.id]), 0);
   assert.equal((await api.post("/move-requests", { profile_id: m.dad }, m.asker)).status, 200);
 });
