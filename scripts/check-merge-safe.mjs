@@ -28,7 +28,7 @@ const NOT_LIVE = [/^web\/scripts\/qa\//, /^convex\/.*\.test\.ts$/, /^pipeline\/t
 // In a build with the switches off. `absent` holds only what the new flow or a new address would add.
 const BUNDLE = {
   present: ['grand-dragon-649.convex.site', '/dish/files?kind=', '/dish/ask/answer?', 'X-Dish-Token'],
-  absent: ['/dish/files/confirm', '/dish/ask/answer/upload', 'uploadHeaders', 'amazonaws.com', 'cloudfront.net', 'api.homecookd.app', 'media.homecookd.app'],
+  absent: ['/dish/files/confirm', '/dish/ask/answer/upload', 'uploadHeaders', '/v1/shares/open', 'amazonaws.com', 'cloudfront.net', 'api.homecookd.app', 'media.homecookd.app'],
 };
 
 // What a workflow may be started by, and text that deploys something live if a workflow ever runs it.
