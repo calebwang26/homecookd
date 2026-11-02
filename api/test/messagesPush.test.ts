@@ -40,9 +40,9 @@ test("register moves a phone's token to whoever signed in last, and keeps 5 per 
   for (let i = 0; i < 7; i += 1) await phone(w, w.dad, `dad${i}`);
   assert.deepEqual((await tokensOf(w.dad.id)).map((r) => r.token).sort(), [2, 3, 4, 5, 6].map((i) => tokenFor(`dad${i}`)));
   const bad = await post(w.app, w.dad, "/v1/push-tokens", { token: "nope", platform: "ios" }, { key: null });
-  assert.deepEqual([bad.status, bad.data.error], [400, "bad_push_token"]);
+  assert.deepEqual([bad.status, bad.data.error, bad.data.field], [400, "invalid", "token"]);
   const web = await post(w.app, w.dad, "/v1/push-tokens", { token: tokenFor("a"), platform: "web" }, { key: null });
-  assert.deepEqual([web.status, web.data.error], [400, "bad_platform"]);
+  assert.deepEqual([web.status, web.data.error, web.data.field], [400, "invalid", "platform"]);
 });
 
 test("unregister drops a token only within the caller's family", { skip }, async () => {
@@ -446,14 +446,14 @@ test("PR 3: only my own cooked message, a photo of ours, a rating of 1-5; never 
   const send = (id: string, body: Record<string, unknown>, who: Who = w.leo) => post(w.app, who, `/v1/messages/${id}/postcard`, body);
 
   const notMine = await send(card.id, { photoKey: await uploaded(w, w.dad, "photo") }, w.dad);
-  assert.deepEqual([notMine.status, notMine.data.error], [403, "not_your_dish"]);
+  assert.deepEqual([notMine.status, notMine.data.error, notMine.data.message], [403, "forbidden", "Only whoever made the dish can send its postcard."]);
   const notDish = await send(words.id, { photoKey: photo });
-  assert.deepEqual([notDish.status, notDish.data.error], [400, "postcard_needs_dish"]);
+  assert.deepEqual([notDish.status, notDish.data.error, notDish.data.field], [400, "invalid", "id"]);
   const noPhoto = await send(card.id, {});
-  assert.deepEqual([noPhoto.status, noPhoto.data.error], [400, "photo_required"]);
+  assert.deepEqual([noPhoto.status, noPhoto.data.error, noPhoto.data.field], [400, "invalid", "photoKey"]);
   for (const rating of [0, 6, 2.5, "4", true]) {
     const r = await send(card.id, { photoKey: photo, rating });
-    assert.deepEqual([r.status, r.data.error], [400, "bad_rating"], JSON.stringify(rating));
+    assert.deepEqual([r.status, r.data.error, r.data.field], [400, "invalid", "rating"], JSON.stringify(rating));
   }
   assert.equal((await send("not a message", { photoKey: photo })).status, 404);
   assert.equal((await send("no-such-message", { photoKey: photo })).status, 404);

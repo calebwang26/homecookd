@@ -24,6 +24,7 @@ import {
   MIN,
   newBackend,
   post,
+  type Reply,
   rowOf,
   settle,
   silent,
@@ -31,7 +32,9 @@ import {
 } from "./dishHelpers.js";
 
 const skip = !hasDatabase;
-const GONE = { status: 404, data: { code: "not_found", error: FILE_GONE } };
+const GONE = { status: 404, data: { error: "not_found", message: FILE_GONE } };
+/** A reply's bytes but its request id, which each reply has its own of. */
+const bytes = (r: Reply) => r.body.replace(r.data.requestId, "");
 const fileRow = async (id: string) => (await db().query("select * from files where capability_hash = $1", [sha256Hex(id)])).rows[0];
 const outboxHears = async () => (await db().query("select count(*)::int as n from outbox where payload->>'task' = 'dish.hear'")).rows[0].n;
 
@@ -214,7 +217,7 @@ test("every refusal reads the same, byte for byte: a guess, someone else's, unco
     replies.push(await post(t, "/dish/cards/update", { kidToken: b.kidToken, voiceNote: id }, { ip: `192.0.2.${100 + i}` }));
   }
   for (const r of replies) like(r, GONE);
-  assert.equal(new Set(replies.map((r) => r.body)).size, 1, replies.map((r) => r.body).join(" | "));
+  assert.equal(new Set(replies.map(bytes)).size, 1, replies.map((r) => r.body).join(" | "));
   assert.equal(new Set(replies.map((r) => JSON.stringify(Object.keys(r.headers).filter((h) => h !== "x-request-id" && h !== "date" && h !== "content-length")))).size, 1);
 });
 
@@ -225,14 +228,14 @@ test("on the card route too, and on Mom's: a guess gets what a real file that is
   await makeCard(t, { dish: "dal", photos: [taken] });
   const onCard = await Promise.all([guess, taken].map((id, i) => post(t, "/dish/cards", { dish: "x y", photos: [id] }, { ip: `192.0.2.${110 + i}` })));
   like(onCard[0], GONE);
-  assert.equal(onCard[0].body, onCard[1].body);
+  assert.equal(bytes(onCard[0]), bytes(onCard[1]));
 
   const a = await askedCard(t, "192.0.2.112");
   const b = await askedCard(t, "192.0.2.113");
   const hers = (await answerClip(t, a.askToken, "q1", { ip: "192.0.2.112" })).data.fileId;
   const onAnswer = await Promise.all([guess, hers].map((id, i) => attachAnswer(t, b.askToken, "q1", id, { ip: `192.0.2.${114 + i}` })));
   like(onAnswer[0], GONE);
-  assert.equal(onAnswer[0].body, onAnswer[1].body);
+  assert.equal(bytes(onAnswer[0]), bytes(onAnswer[1]));
   like(await post(t, "/dish/files/confirm", { fileId: guess }), GONE);
 });
 
@@ -252,11 +255,11 @@ test("an upload S3 never got can't be confirmed; a real one can; a file that isn
   // S3 refuses a mismatch on a signed link. If one ever arrives, it's still not used.
   const big = (await post(t, "/dish/files?kind=photo", { contentType: "image/jpeg", size: 100 })).data;
   store.put(big.uploadUrl, new Uint8Array(6 * 1024 * 1024), "image/jpeg");
-  like(await post(t, "/dish/files/confirm", { fileId: big.fileId }), { status: 413, data: { code: "too_large" } });
+  like(await post(t, "/dish/files/confirm", { fileId: big.fileId }), { status: 413, data: { error: "too_large" } });
   assert.ok((await fileRow(big.fileId)).delete_requested_at);
   const odd = (await post(t, "/dish/files?kind=photo", { contentType: "image/jpeg", size: 100 })).data;
   store.put(odd.uploadUrl, new Uint8Array(100), "image/gif");
-  like(await post(t, "/dish/files/confirm", { fileId: odd.fileId }), { status: 415, data: { code: "bad_type" } });
+  like(await post(t, "/dish/files/confirm", { fileId: odd.fileId }), { status: 415, data: { error: "bad_type" } });
   await sweep({ log: silent });
   assert.ok(!store.objects.has((await fileRow(big.fileId)).key));
 });
@@ -264,10 +267,10 @@ test("an upload S3 never got can't be confirmed; a real one can; a file that isn
 test("a clip's link follows the card's rules: an unasked question or a closed card gets no link", { skip }, async () => {
   const t = await newBackend();
   const { askToken } = await askedCard(t);
-  like(await answerClip(t, askToken, "q5"), { status: 400, data: { error: "That question wasn't asked." } });
+  like(await answerClip(t, askToken, "q5"), { status: 400, data: { error: "invalid", field: "q", message: "That question wasn't asked." } });
   assert.equal(await answer(t, askToken, "q1").then((r) => r.status), 200);
   await finish(t, askToken);
-  like(await answerClip(t, askToken, "q1"), { status: 409, data: { code: "closed" } });
+  like(await answerClip(t, askToken, "q1"), { status: 409, data: { error: "closed" } });
   assert.equal((await db().query("select 1 from files")).rowCount, 1);
 });
 

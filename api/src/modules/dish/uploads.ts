@@ -42,7 +42,7 @@ async function storage<T>(call: () => Promise<T>): Promise<T> {
   try {
     return await call();
   } catch (error) {
-    throw Object.assign(fail(502, "storage", SORRY), { cause: error });
+    throw Object.assign(fail(502, "provider_down", SORRY), { cause: error });
   }
 }
 
@@ -58,8 +58,8 @@ export function checkUpload(rule: Rule, contentType: unknown, size: unknown): { 
   const r = RULES[rule];
   const type = baseType(typeof contentType === "string" ? contentType : "");
   if (!r.types.includes(type)) throw fail(415, "bad_type", r.badType);
-  if (typeof size !== "number" || !Number.isInteger(size) || size < 0) throw badRequest("size must be the file's length in bytes");
-  if (size === 0) throw badRequest(r.empty);
+  if (typeof size !== "number" || !Number.isInteger(size) || size < 0) throw badRequest("size must be the file's length in bytes", "size");
+  if (size === 0) throw badRequest(r.empty, "size");
   if (size > r.max) throw fail(413, "too_large", r.tooBig);
   return { type, bytes: size };
 }

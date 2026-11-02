@@ -119,7 +119,8 @@ test("links that don't work, bodies that don't parse, other sites, and dinners t
   assert.equal((await open({ token, deviceId: "short" })).statusCode, 400);
   assert.equal((await open({ token: 12, deviceId: device(1) })).statusCode, 400);
   assert.equal((await open("not json")).statusCode, 400);
-  assert.equal((await open({ token, deviceId: device(1), extra: "x".repeat(2000) })).statusCode, 400);
+  const big = await open({ token, deviceId: device(1), extra: "x".repeat(2000) });
+  assert.deepEqual([big.statusCode, big.json().error], [413, "too_large"], "the same status and code as every other route");
   const elsewhere = await open({ token, deviceId: device(1) }, "https://homecookd.app.example.com");
   assert.equal(elsewhere.statusCode, 403);
   assert.equal(elsewhere.headers["access-control-allow-origin"], undefined);
@@ -214,7 +215,9 @@ test("a real link to a dinner that's off answers as a bad token does, but uses u
   const opens = RATE.badTokens.max + 5;
   const replyTo = async (body: object, ip = dorm) => {
     const res = await open(body, undefined, ip);
-    return { status: res.statusCode, body: res.body };
+    const { requestId, ...rest } = res.json(); // every answer has its own
+    assert.ok(requestId);
+    return { status: res.statusCode, body: rest };
   };
   const unknown = await replyTo({ token: "u".repeat(43), deviceId: device(1) }, "192.0.2.211");
   assert.equal(unknown.status, 404);

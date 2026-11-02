@@ -61,7 +61,7 @@ test("over any bound a request is turned away; under all, and for /health and /r
   assert.ok(!isBusy(new Error("anything else")));
 });
 
-test("on, a blocked event loop turns requests away fast with the busy 503 and retry-after, in each route's own shape, and logs what the alarm counts", async () => {
+test("on, a blocked event loop turns requests away fast with the busy 503 and retry-after, in the one shape on every route, and logs what the alarm counts", async () => {
   await withEnv({ OVERLOAD_SHED: "on", OVERLOAD_MAX_LAG_MS: "100" }, async () => {
     const lines: string[] = [];
     const stream = new Writable({ write(chunk, _e, done) { lines.push(chunk.toString()); done(); } });
@@ -73,7 +73,7 @@ test("on, a blocked event loop turns requests away fast with the busy 503 and re
       const dish = await app.inject({ method: "POST", url: "/dish/cards/get", headers: { "content-type": "text/plain" }, payload: JSON.stringify({ kidToken: "x".repeat(22) }) });
       assert.equal(dish.statusCode, 503);
       assert.ok(Number(dish.headers["retry-after"]) > 0);
-      assert.equal(dish.json().code, "busy");
+      assert.equal(dish.json().error, "unavailable");
       assert.ok(Date.now() - started < 1_000, "fast, not after a wait");
 
       blockFor(400);

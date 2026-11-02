@@ -71,7 +71,7 @@ const moms = [];
 for (let i = 0; i < CARDS; i += 1) {
   const made = await call('/dish/cards', { dish: `LOADTEST poha ${i + 1}`, relation: 'mom', kidName: 'Load Test' });
   if (made.status !== 201) {
-    console.error(`Making a card answered ${made.status} ${made.data?.code ?? ''}: is this staging, on fake models, with the address under its card limit?`);
+    console.error(`Making a card answered ${made.status} ${made.data?.error ?? ''}: is this staging, on fake models, with the address under its card limit?`);
     process.exit(1);
   }
   kids.push(made.data.kidToken);

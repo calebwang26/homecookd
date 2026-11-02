@@ -1,6 +1,7 @@
 // Moving to a new phone. Dad lost his phone and joined again through a family link, so his new phone has a key with no person. It asks to be Dad; someone else settled,
 // on their own phone, lets him in, which makes the new phone his and signs his other phones out. A request lives 7 days; "expired" is computed, never stored.
 import { db, tx } from "../../db.js";
+import { forbidden, invalid, notFound } from "../../errors.js";
 import * as data from "./data.js";
 import { extId, toProfile, type MoveRow, type Person } from "./data.js";
 import { type Ctx, onOwnPhone, profileIn, requireMe, settledIds } from "./proofs.js";
@@ -12,13 +13,13 @@ const moveStatus = (r: MoveRow) => (r.status === "pending" && r.created_at.getTi
 
 function requireOwnPhone(ctx: Ctx): Person {
   const me = requireMe(ctx);
-  if (!onOwnPhone(ctx)) throw refuse(403, "Only someone on their own phone can let people in.");
+  if (!onOwnPhone(ctx)) throw forbidden("Only someone on their own phone can let people in.");
   return me;
 }
 
 async function requireAnswerer(ctx: Ctx): Promise<Person> {
   const me = requireOwnPhone(ctx);
-  if (!(await settledIds(ctx, [me.id])).has(me.id)) throw refuse(403, NOT_SETTLED);
+  if (!(await settledIds(ctx, [me.id])).has(me.id)) throw forbidden(NOT_SETTLED);
   return me;
 }
 
@@ -33,15 +34,15 @@ export async function answerableMoves(ctx: Ctx): Promise<MoveRow[]> {
 
 async function moveIn(ctx: Ctx, id: string): Promise<MoveRow> {
   const row = UUID.test(id) ? await data.moveById(db(), id.toLowerCase(), ctx.family.id) : null;
-  if (!row) throw refuse(404, "No such request.");
+  if (!row) throw notFound("No such request.");
   return row;
 }
 
-/** 409 once approved or declined, 410 once expired. */
+/** 409 `answered` once approved or declined, 410 `gone` once expired. */
 function assertOpen(r: MoveRow): void {
   const status = moveStatus(r);
-  if (status === "expired") throw refuse(410, MOVE_EXPIRED);
-  if (status !== "pending") throw refuse(409, ALREADY_HANDLED);
+  if (status === "expired") throw refuse(410, "gone", MOVE_EXPIRED, { status: "expired" });
+  if (status !== "pending") throw refuse(409, "answered", ALREADY_HANDLED);
 }
 
 const asked = (ctx: Ctx, r: MoveRow) => ({
@@ -54,7 +55,7 @@ const asked = (ctx: Ctx, r: MoveRow) => ({
 /** One pending ask per phone: the same person again returns it; someone else replaces it; an expired one is declined and a new one made. */
 export async function askToMove(ctx: Ctx, b: Body) {
   const device = ctx.device;
-  if (!device || device.via !== "invite" || device.person_id) throw refuse(400, "Only a phone that just joined can ask to move in.");
+  if (!device || device.via !== "invite" || device.person_id) throw invalid(undefined, "Only a phone that just joined can ask to move in.");
   // TODO(caleb): anyone still in the family can be asked for, phone-less faces and people only invited included (approval is the check). Supabase's own TODO, kept.
   const target = profileIn(ctx, b.profile_id, "profile_id");
   await limit("move-requests", ctx.family.id, 30, 60, "That's a lot of asks for one hour. Try again later.");
@@ -68,7 +69,7 @@ export async function askToMove(ctx: Ctx, b: Body) {
     // Another tap made one a moment ago (one pending per phone): if it's for the same person, it stands.
     const won = (await data.pendingMovesOfDevice(c, device.id))[0];
     if (won?.person_id === target.id) return asked(ctx, won);
-    throw refuse(409, "Please try again.");
+    throw refuse(409, "retry", "Please try again.");
   });
 }
 
@@ -98,14 +99,14 @@ export async function movesICanAnswer(ctx: Ctx) {
 /** After a conditional update that changed nothing: says why. */
 async function explainDecide(ctx: Ctx, id: string): Promise<never> {
   assertOpen(await moveIn(ctx, id));
-  throw refuse(409, ALREADY_HANDLED);
+  throw refuse(409, "answered", ALREADY_HANDLED);
 }
 
 /** Let them in: the asking phone becomes theirs and their other phones and sessions end, all at once. First answer wins. No circle note. */
 export async function approveMove(ctx: Ctx, id: string) {
   const me = await requireAnswerer(ctx);
   const r = await moveIn(ctx, id);
-  if (r.person_id === me.id) throw refuse(400, "You can't let yourself in.");
+  if (r.person_id === me.id) throw invalid(undefined, "You can't let yourself in.");
   assertOpen(r);
   const target = ctx.profiles.find((p) => p.id === r.person_id);
   // Each of these commits before it refuses, so the ask is closed however the answer reads.
@@ -123,8 +124,8 @@ export async function approveMove(ctx: Ctx, id: string) {
     return "ok" as const;
   });
   if (outcome === "ok") return { ok: true };
-  if (outcome === "gone") throw refuse(409, ALREADY_HANDLED);
-  if (outcome === "not_waiting") throw refuse(409, "That phone isn't waiting anymore.");
+  if (outcome === "gone") throw refuse(409, "answered", ALREADY_HANDLED);
+  if (outcome === "not_waiting") throw refuse(409, "conflict", "That phone isn't waiting anymore.");
   return explainDecide(ctx, r.id);
 }
 

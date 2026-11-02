@@ -3,6 +3,7 @@
 // last activity. Signed in, a claim puts the card in their app. Nobody is moved between families by a claim.
 import type { Signed } from "../../auth.js";
 import { db, tx } from "../../db.js";
+import { forbidden, invalid, notFound, removedFromFamily } from "../../errors.js";
 import * as cards from "../dish/links.js";
 import * as data from "./data.js";
 import { extId } from "./data.js";
@@ -15,27 +16,18 @@ const CANT_CHECK = "That move can't be checked. Your recipes stay where they wer
 
 const relationLabel = (relation: string) => relation.charAt(0).toUpperCase() + relation.slice(1);
 
-const coded = (status: number, sentence: string, code: string) => refuse(status, sentence, { code });
-
-/** Counted as `{error, code}`, the shape /link/open and the /dish routes share. */
-async function limited(kind: string, value: string, max: number, minutes: number): Promise<void> {
-  try {
-    await limit(kind, value, max, minutes);
-  } catch (error) {
-    if ((error as { statusCode?: number }).statusCode === 429) throw coded(429, TOO_MANY_TRIES, "rate");
-    throw error;
-  }
-}
+/** The /dish routes' sentence for a 429, with its retry-after like any other. */
+const limited = (kind: string, value: string, max: number, minutes: number) => limit(kind, value, max, minutes, TOO_MANY_TRIES);
 
 /** POST /link/open: says what the card is and, when it's an open invite to its family, hands back a ticket. It changes nothing but the rate-limit counters, so opening a link twice is harmless. */
 export async function openLink(b: Body, ip: string) {
   await limited("link-open", ip, 30, 10);
   const token = b.token;
-  if (typeof token !== "string" || !token) throw coded(400, "token is required", "bad_request");
+  if (typeof token !== "string" || !token) throw invalid("token", "token is required");
   const found = JOIN_TOKEN.test(token) ? await cards.cardOfToken(db(), sha256Hex(token)) : null;
   if (!found) {
     await limited("dish-bad", ip, 20, 10); // the same budget as a bad token on the /dish routes, as on Convex
-    throw coded(404, DEAD_LINK, "not_found");
+    throw notFound(DEAD_LINK);
   }
   const { card, side } = found;
   const family = card.family_id ? await data.familyById(db(), card.family_id) : null;
@@ -86,14 +78,14 @@ export async function openLink(b: Body, ip: string) {
  */
 export async function claimCard(signed: Signed, b: Body) {
   const token = b.token;
-  if (typeof token !== "string" || !JOIN_TOKEN.test(token)) throw refuse(404, DEAD_LINK);
+  if (typeof token !== "string" || !JOIN_TOKEN.test(token)) throw notFound(DEAD_LINK);
   return tx(async (c) => {
     // Held to the end, so a deletion can't pass between the session's check and the card naming them.
-    if (!(await data.lockLivePerson(c, signed.personId))) throw refuse(403, NOT_IN_THIS_FAMILY);
+    if (!(await data.lockLivePerson(c, signed.personId))) throw removedFromFamily(NOT_IN_THIS_FAMILY);
     const found = await cards.cardOfToken(c, sha256Hex(token), true);
-    if (!found) throw refuse(404, DEAD_LINK);
+    if (!found) throw notFound(DEAD_LINK);
     const { card, side } = found;
-    if (cards.otherSideOf(card, side) === signed.personId) throw refuse(409, "You're already on this card.");
+    if (cards.otherSideOf(card, side) === signed.personId) throw refuse(409, "already_on_card", "You're already on this card.");
     const familyId = card.family_id ?? signed.familyId;
     const result = { dishAskId: card.id, side, sameFamily: familyId === signed.familyId };
     const holder = await cards.liveHolder(c, cards.holderOf(card, side));
@@ -116,7 +108,7 @@ export async function afterMove(signed: Signed, b: Body) {
   const r = secret ? verifyMoved(secret, receipt, Date.now()) : null;
   const person = await data.personByExtId(db(), signed.personId);
   const family = await data.familyById(db(), signed.familyId);
-  if (!r || !person || !family || r.toProfile !== extId(person) || r.toFamily !== extId(family)) throw refuse(403, CANT_CHECK);
+  if (!r || !person || !family || r.toProfile !== extId(person) || r.toFamily !== extId(family)) throw forbidden(CANT_CHECK);
   const none = { recipes: 0, faces: 0 };
   if (!r.solo) return none;
   const from = await data.familyByExtId(db(), r.fromFamily);

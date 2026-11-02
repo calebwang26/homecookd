@@ -21,7 +21,7 @@ import {
   ABANDONED_MS,
   askTokenFor,
   badRequest,
-  BUDGET,
+  budgetSpent,
   DAILY_BUDGET_USD,
   fail,
   missRecipe,
@@ -82,7 +82,7 @@ type Part = StoredRecipe["ingredients"][number] | StoredRecipe["steps"][number][
 /** The part of the guess `about` names, or a 400. */
 function partOf(guess: StoredRecipe, about: About, field: string): Part {
   const part = about.kind === "ingredient" ? guess.ingredients[about.index] : guess.steps[about.step]?.lines[about.line];
-  if (!part) throw badRequest(`${field} doesn't point at a part of the guess`);
+  if (!part) throw badRequest(`${field} doesn't point at a part of the guess`, field);
   return part;
 }
 
@@ -122,30 +122,30 @@ export function askedOf(
   linked: { id: QuestionId; about: About }[] = [],
 ): MissQuestion[] {
   const [min, max] = LIMITS.asked;
-  if (!given.length) throw badRequest("questions must be a list of 1 to 3 questions");
-  if (given.length > LIMITS.askOpen) throw badRequest(`At most ${LIMITS.askOpen} questions at a time`);
+  if (!given.length) throw badRequest("questions must be a list of 1 to 3 questions", "questions");
+  if (given.length > LIMITS.askOpen) throw badRequest(`At most ${LIMITS.askOpen} questions at a time`, "questions");
   const all = given.map((q, i) => {
     const text = askedText(q.text);
-    if (text.length < min || text.length > max) throw badRequest(`questions[${i}].text must be ${min} to ${max} characters`);
+    if (text.length < min || text.length > max) throw badRequest(`questions[${i}].text must be ${min} to ${max} characters`, `questions[${i}].text`);
     if (q.id !== null && !isSuggestionId(q.id)) {
-      throw badRequest(`questions[${i}].id must be q1, q2 or q3, or left out for the kid's own question`);
+      throw badRequest(`questions[${i}].id must be q1, q2 or q3, or left out for the kid's own question`, `questions[${i}].id`);
     }
-    if (q.id !== null && q.about) throw badRequest(`questions[${i}] can't have both an id and about`);
+    if (q.id !== null && q.about) throw badRequest(`questions[${i}] can't have both an id and about`, `questions[${i}]`);
     return { id: q.id as QuestionId | null, text, about: q.about };
   });
   const ids = all.flatMap((q) => (q.id ? [q.id] : []));
-  if (new Set(ids).size !== ids.length) throw badRequest("The same question is in the list twice");
+  if (new Set(ids).size !== ids.length) throw badRequest("The same question is in the list twice", "questions");
   if (flagged(...all.map((q) => q.text))) throw fail(422, "words", WORDS);
   const open = all.filter((q) => !q.id || !answered.has(q.id));
   if (!open.length) throw fail(409, "closed", "That was already answered.");
   const kept = before.filter((q) => answered.has(q.id));
-  if (kept.length + open.length > LIMITS.askTotal) throw badRequest(`At most ${LIMITS.askTotal} questions in all`);
+  if (kept.length + open.length > LIMITS.askTotal) throw badRequest(`At most ${LIMITS.askTotal} questions in all`, "questions");
   const free = OWN_IDS.filter((id) => !answered.has(id));
   return [
     ...kept,
     ...open.map((q) => {
       const id = q.id ?? free.shift();
-      if (!id) throw badRequest("At most 3 questions of your own");
+      if (!id) throw badRequest("At most 3 questions of your own", "questions");
       if (q.about) linked.push({ id, about: q.about });
       return { id, text: q.text };
     }),
@@ -177,7 +177,7 @@ export async function createCard(
   input: { dish: string; relation: Relation; kidName: string | null; photos: string[]; voiceNote: string | null; ipKey: string },
   trace: Trace,
 ) {
-  if ((await spentToday()) >= DAILY_BUDGET_USD) throw fail(429, "budget", BUDGET);
+  if ((await spentToday()) >= DAILY_BUDGET_USD) throw budgetSpent();
   const photoFiles = await Promise.all(input.photos.map((h) => usableFile(db(), h, "photo")));
   const voiceFile = input.voiceNote ? await usableFile(db(), input.voiceNote, "voice") : null;
 
@@ -191,7 +191,7 @@ export async function createCard(
       if (!file) throw fileGone();
       const blob = new Blob([Buffer.from(file.bytes)], { type: voiceFile.content_type ?? "" });
       voiceWords = (await models.transcribe(blob, "en", undefined, spend)).trim();
-      if ((await spentToday()) >= DAILY_BUDGET_USD) throw fail(429, "budget", BUDGET);
+      if ((await spentToday()) >= DAILY_BUDGET_USD) throw budgetSpent();
     }
     const images: Photo[] = [];
     for (const p of photoFiles) {
@@ -309,7 +309,7 @@ export async function kidAsk(a: Kid & { questions: { id: string | null; text: st
     const given = a.questions.map((q, i) => {
       if (q.about) partOf(row.guess, q.about, `questions[${i}].about`);
       const text = q.text ?? (q.about ? questionAbout(row.guess, q.about, `questions[${i}].about`) : null);
-      if (text === null) throw badRequest(`questions[${i}].text must be a string`);
+      if (text === null) throw badRequest(`questions[${i}].text must be a string`, `questions[${i}].text`);
       return { id: q.id, text, about: q.about };
     });
     const linked: { id: QuestionId; about: About }[] = [];
@@ -403,7 +403,7 @@ export async function momPeek(askTokenHash: string, lang: string | undefined, tr
 /** Mom may record an answer to a question she was asked: a new one, or again until it's in her version. */
 function canAnswer(row: CardRow, answers: AnswerRow[], questionId: QuestionId) {
   if (row.finished_at) throw fail(409, "closed", "These answers were already sent.");
-  if (!row.asked.some((q) => q.id === questionId)) throw badRequest("That question wasn't asked.");
+  if (!row.asked.some((q) => q.id === questionId)) throw badRequest("That question wasn't asked.", "q");
   if (answers.some((a) => a.question_id === questionId && a.merged)) throw fail(409, "closed", "That answer was already sent.");
 }
 

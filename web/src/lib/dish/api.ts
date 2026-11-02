@@ -46,10 +46,12 @@ async function call<T>(path: string, init: RequestInit, timeoutMs = TIMEOUT_MS):
   } finally {
     clearTimeout(timer);
   }
-  const data = (await res.json().catch(() => null)) as (T & { error?: string; code?: string }) | null;
-  const msg = typeof data?.error === 'string' ? data.error : '';
+  const data = (await res.json().catch(() => null)) as (T & { error?: string; code?: string; message?: string }) | null;
+  // Convex answers `{error: <sentence>, code}`. The new api's one shape is `{error: <code>, message: <sentence>}`.
+  const said = process.env.NEXT_PUBLIC_DISH_UPLOADS === 'links' ? data?.message : data?.error;
+  const msg = typeof said === 'string' ? said : '';
   if (res.ok && data) return data;
-  const code = data?.code;
+  const code = process.env.NEXT_PUBLIC_DISH_UPLOADS === 'links' ? data?.error : data?.code;
   if (res.status === 404) throw new DishError('not-found', msg);
   if (res.status === 429) throw new DishError(code === 'budget' ? 'budget' : 'rate', msg);
   if (res.status === 409) throw new DishError('closed', msg);

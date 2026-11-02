@@ -75,39 +75,35 @@ Every route checks the session, and every route below `/v1`. The one exception i
 
 ### Refusals
 
-Every refusal is a code. An adapter maps each back to the sentence an old build reads.
+Every refusal is a code from contracts/ERROR-CODES.md. Since #290 every 400 is `invalid`, with the `field` that's wrong where there's one; before, each 400 had a code of its own (the old names are in brackets). An adapter maps each back to the sentence an old build reads.
 
-| Status, code | Old sentence (Supabase unless marked) |
+| Status, code (field) | Old sentence (Supabase unless marked) |
 |---|---|
-| 400 `body_required` | "body is required for a text message" and its like; Convex "Write something first." |
-| 400 `too_long` | "body must be at most 2000 characters"; Convex "That message is too long." |
-| 400 `bad_kind` | "kind must be one of …" |
-| 400 `system_not_sent` | "System notes are written by homecookd, not sent" |
-| 400 `library_id_required`, `bad_library_id` | "recipe_id is required for a … message", "… is not a valid recipe id" |
-| 400 `step_needs_recipe` | "recipe_id and step_order are required for a step message", "step_order needs a recipe_id" |
-| 400 `duration_required`, `audio_required` | "duration_s is required", "audio_path is required for a voice message" |
-| 400 `audio_only_on_voice`, `photo_only_on_cooked` | "audio_path is only for voice messages and questions", "photo_path is only for cooked messages" |
-| 400 `reply_not_in_thread` | "reply_to must be a message in this conversation" |
-| 400 `bad_reaction`, `reaction_needs_dish` | "body must be heart or just_like_mine", "A reaction answers a dish someone made" |
-| 400 `cant_message_yourself`, `pick_someone_else` | "You can't start a conversation with yourself", "Pick someone other than yourself" |
-| 400 `text_has_no_file`, `photo_required` | Convex "A text message has no file.", "photo_path is required" |
-| 400 `bad_rating`, `postcard_needs_dish` | "rating must be a whole number from 1 to 5", "A postcard goes on a dish you made" |
-| 400 `not_about_a_recipe`, `nothing_to_save`, `cant_save_that_kind` | "That message isn't about a recipe", "There's nothing in that message to save", "That message can't be saved to a recipe" |
-| 400 `heard_too_short`, `cook_not_in_family` | "duration_s must be at least 3 for heard", "cook_id must be someone in your family" |
-| 400 `bad_month`, `bad_time`, `ids_required`, `bad_ids`, `too_many_ids` | "month must be YYYY-MM", "since must be an ISO time", "ids is required", "ids must be recipe ids separated by commas", "ids: at most 50" |
-| 400 `bad_push_token`, `bad_platform` | "token must be an Expo push token", "platform must be ios or android" |
-| 400 `answer_required` | Convex "Say or type an answer first." |
+| 400 `invalid` (`body`, or `text` on `/v1/messages` and `/v1/questions`), "Write something first." [`body_required`] | "body is required for a text message" and its like; Convex "Write something first." |
+| 400 `invalid` (the field), "That message is too long." [`too_long`] | "body must be at most 2000 characters"; Convex "That message is too long." |
+| 400 `invalid` (`kind`) [`kind_required`, `bad_kind`, `system_not_sent`] | "kind must be one of …", "System notes are written by homecookd, not sent" |
+| 400 `invalid` (`libraryId`) [`library_id_required`, `bad_library_id`] | "recipe_id is required for a … message", "… is not a valid recipe id" |
+| 400 `invalid` (`stepOrder`, or `libraryId` with none) [`step_needs_recipe`] | "recipe_id and step_order are required for a step message", "step_order needs a recipe_id" |
+| 400 `invalid` (`durationS`, `audioKey`) [`duration_required`, `audio_required`] | "duration_s is required", "audio_path is required for a voice message" |
+| 400 `invalid` (`audioKey` or `clipKey`, `photoKey`) [`audio_only_on_voice`, `photo_only_on_cooked`] | "audio_path is only for voice messages and questions", "photo_path is only for cooked messages" |
+| 400 `invalid` (`replyTo`) [`reply_not_in_thread`, `reaction_needs_dish`] | "reply_to must be a message in this conversation", "A reaction answers a dish someone made" |
+| 400 `invalid` (`body`) [`bad_reaction`] | "body must be heart or just_like_mine" |
+| 400 `invalid` (`otherId`, `to` or `recipientIds`) [`cant_message_yourself`, `pick_someone_else`] | "You can't start a conversation with yourself", "Pick someone other than yourself" |
+| 400 `invalid` (`audioKey` or `photoKey`, `photoKey`) [`text_has_no_file`, `photo_required`] | Convex "A text message has no file.", "photo_path is required" |
+| 400 `invalid` (`rating`, `id`) [`bad_rating`, `postcard_needs_dish`] | "rating must be a whole number from 1 to 5", "A postcard goes on a dish you made" |
+| 400 `invalid` (`messageId`) [`not_about_a_recipe`, `nothing_to_save`, `cant_save_that_kind`] | "That message isn't about a recipe", "There's nothing in that message to save", "That message can't be saved to a recipe" |
+| 400 `invalid` (`durationS`, `cookId`) [`heard_too_short`, `cook_not_in_family`] | "duration_s must be at least 3 for heard", "cook_id must be someone in your family" |
+| 400 `invalid` (`month`, `since` or `after`, `ids`) [`bad_month`, `bad_time`, `ids_required`, `bad_ids`, `too_many_ids`] | "month must be YYYY-MM", "since must be an ISO time", "ids is required", "ids must be recipe ids separated by commas", "ids: at most 50" |
+| 400 `invalid` (`token`, `platform`) [`bad_push_token`, `bad_platform`] | "token must be an Expo push token", "platform must be ios or android" |
+| 400 `invalid`, "Say or type an answer first." [`answer_required`] | Convex "Say or type an answer first." |
 | 403 `other_left` | "Dad isn't in the family anymore." The adapter finds the name |
-| 403 `not_your_dish`, `not_your_message`, `cant_take_this_out` | "Only whoever made the dish can send its postcard", "You can only save your own messages", "Only the person who answered, …" |
-| 403 `not_your_recording` | New: Supabase let anyone in the family deliver |
-| 403 `only_the_recipes_cook`, `forbidden` | Convex "Only the recipe's cook can answer this.", "Only the cook can do that." |
-| 404 `not_found` | "No such conversation", "No such message", "That answer isn't in the recipe anymore."; Convex "That question isn't here anymore." and "They aren't in this family." A refused file also reads this way |
-| 404 `no_such_recipe` | "No recipe with that id"; Convex "That recipe isn't here anymore." |
-| 409 `already_answered` | Convex "That question already has an answer." |
-| 409 `upload_is_someone_elses`, `already_delivered` | "That job belongs to someone else" (now also someone else in the same family), "That recipe was already delivered" |
+| 403 `forbidden`, with the sentence [`not_your_dish`, `not_your_message`, `cant_take_this_out`, `not_your_recording`, `only_the_recipes_cook`] | "Only whoever made the dish can send its postcard", "You can only save your own messages", "Only the person who answered, …"; the recording's is new (Supabase let anyone in the family deliver); Convex "Only the recipe's cook can answer this.", "Only the cook can do that." |
+| 404 `not_found` | "No such conversation", "No such message", "That answer isn't in the recipe anymore."; Convex "That question isn't here anymore." and "They aren't in this family." A refused file also reads this way. A recipe is "That recipe isn't here anymore." [`no_such_recipe`] |
+| 409 `answered` [`already_answered`] | Convex "That question already has an answer." |
+| 409 `conflict` [`upload_is_someone_elses`], `already_delivered` | "That job belongs to someone else" (now also someone else in the same family), "That recipe was already delivered" |
 | 409 `idempotency_conflict` | New |
 | 413 `too_large`, 415 `bad_type` | Convex "That file is too big."; "content_type must be one of …" |
-| 502 `storage`, `note_failed`; 503 `note_writer_not_set_up`, `library_unreachable` | New; Convex "Couldn't draft a note just now."; "The note writer isn't set up yet."; "Can't reach the family recipes right now." |
+| 502 `provider_down` [`storage`, `note_failed`]; 503 `not_set_up` [`note_writer_not_set_up`], `provider_down` [`library_unreachable`] | New; Convex "Couldn't draft a note just now."; "The note writer isn't set up yet."; "Can't reach the family recipes right now." |
 
 ## Never losing or duplicating what someone wrote
 
@@ -211,7 +207,7 @@ The live-updates draft (`claude/aws-live`) plugs in here, and I built no subscri
 27. **A replaced hello, or one taken off, is marked for deletion in the same transaction,** under the row's lock. Supabase left it in the bucket for good. A postcard's replaced photo was already marked, and now under the message's lock, so two at once can't leave one unmarked.
 28. **A push that won't go keeps no words.** `none` and `capped` rows hold no title or body, as `skipped` rows don't. Known limits covers one that's waiting.
 29. **A read mark only moves forward,** so a late write can't turn read messages unread.
-30. **A forged cursor is a 400 `bad_request`, as on Community** (`paging.ts`), and a forged `after` a 400 `bad_time`. Either could reach Postgres as a 500 before.
+30. **A forged cursor is a 400 `invalid` with `field: "cursor"`, as on Community** (`paging.ts`), and a forged `after` a 400 `invalid` with `field: "after"`. Either could reach Postgres as a 500 before.
 31. **A share link's token isn't stored** (SCHEMA.md, M6). Supabase kept it as the primary key. A share has an id now, its token is found by a hash keyed from `EDIBLE_CODE_KEY`, because 10 characters are few enough to search for, and it's sealed so the share sheet shows the same link again. A join through it is logged in `signups` as `share:<id>`. Without the key a share can't be made or opened. One whose sealed token can't be opened gets a new link, and the old one still opens.
 32. **Only her yes to a kid's ask starts a story card here.** Her switch and her own tap stay on Convex until Community builds them.
 33. **A repeat of the card task does nothing,** because it writes only while a card is due. Convex's wrote, and paid, every time it ran.

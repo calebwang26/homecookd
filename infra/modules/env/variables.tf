@@ -55,11 +55,20 @@ variable "services" {
     )])
     error_message = "An autoscaled service needs min at least 1 and max no lower. Its desired_count is only the switch: 0 for off, or its min for on."
   }
+  # The api turns on its test sign-in when it has this key (api/src/modules/accounts/testSignIn.ts). Scripts on staging need it; production never may.
+  validation {
+    condition     = var.environment != "production" || alltrue([for s in var.services : !contains(s.secrets, "TEST_SIGNIN_KEY") && !contains(keys(s.env), "TEST_SIGNIN_KEY")])
+    error_message = "TEST_SIGNIN_KEY is staging's only: in production it would let anyone with the key sign in without Apple."
+  }
 }
 
 variable "secret_names" {
   description = "Secrets Manager entries, names only. infra/scripts/load-secrets.sh fills them."
   type        = set(string)
+  validation {
+    condition     = var.environment != "production" || !contains(var.secret_names, "TEST_SIGNIN_KEY")
+    error_message = "TEST_SIGNIN_KEY is staging's only: production has no test sign-in, so it has no key for one."
+  }
 }
 
 variable "certificate_arn" {

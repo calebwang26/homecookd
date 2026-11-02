@@ -482,7 +482,7 @@ async function backdateEverything(at: string) {
 
 test("PR 6: GET /recap is registered: a well-formed month; a month that can't hold anything is empty", { skip }, async () => {
   const w = await world();
-  refused(await get(w.app, w.mom, "/v1/recap?month=2026-13"), 400, "bad_month");
+  refused(await get(w.app, w.mom, "/v1/recap?month=2026-13"), 400, "invalid", "month");
   assert.deepEqual(ok(await get(w.app, w.mom, "/v1/recap?month=2099-01")), { empty: true });
   // October 2026 comes before the first edition: empty, whatever happened in it.
   assert.deepEqual(ok(await get(w.app, w.mom, "/v1/recap?month=2026-10")), { empty: true });
@@ -537,7 +537,7 @@ test("GET /recap: a kid's November, numbers from that month only; a memorial or 
 test("GET /recap with the library unreachable is a 503, never a smaller month", { skip }, async () => {
   const w = await world();
   w.lib.down = true;
-  await assert.rejects(getRecap(signedAs(w.leo, w.family), { month: "2026-11" }, DEC1), (e: Error & { statusCode?: number; code?: string }) => e.statusCode === 503 && e.code === "library_unreachable");
+  await assert.rejects(getRecap(signedAs(w.leo, w.family), { month: "2026-11" }, DEC1), (e: Error & { statusCode?: number; code?: string }) => e.statusCode === 503 && e.code === "provider_down");
 });
 
 test("GET /recap: past Supabase's 1000-row cap, 1300 clips all count", { skip }, async () => {

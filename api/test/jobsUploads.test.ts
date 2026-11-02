@@ -129,7 +129,7 @@ test("uploads", { skip: !hasDatabase }, async (t) => {
     const res = await call(app, dad, "POST", `/v1/video-uploads/${uploadId}/complete`);
     videos.failHeads = false;
     assert.equal(res.status, 502);
-    assert.equal(res.data.error, "storage");
+    assert.equal(res.data.error, "provider_down");
     assert.equal((await db().query(`select count(*)::int as n from files where upload_id = $1 and uploaded_at is not null`, [uploadId])).rows[0].n, 0);
   });
 

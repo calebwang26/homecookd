@@ -9,11 +9,12 @@ import { cancelDinnersOfPerson } from "../community/account.js";
 import type { Trace } from "../dish/budget.js";
 import { stopPersonsWork } from "../jobs/account.js";
 import { dropPushTokens } from "../messages/account.js";
+import { notFound } from "../../errors.js";
 import * as data from "./data.js";
 import { requestMossSync } from "./neighbors.js";
 import { reachS3, S3_GRACE_MS } from "./outside.js";
 import { DELETION, type Deletion, STEPS } from "./purgeSteps.js";
-import { assertOwnsPeople, ownsPeople, refuse } from "./values.js";
+import { assertOwnsPeople, ownsPeople } from "./values.js";
 
 /** A purge with no batch for this long stopped; the schedule starts it again. Past this many restarts someone is told, and it's still tried. */
 export const PURGE_STUCK_MS = 30 * 60_000;
@@ -431,6 +432,6 @@ export async function clearOldLists(batch = 200): Promise<number> {
 /** The route: `Signed` proved who they are, and nothing else can stop this but the database being down, in which case it refuses and the phone tries again. */
 export async function deleteMe(personId: string, requestId?: string): Promise<{ deleted: true }> {
   const id = await startDeletion(personId, "person", requestId);
-  if (!id) throw refuse(404, "not_found");
+  if (!id) throw notFound();
   return { deleted: true };
 }

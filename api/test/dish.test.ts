@@ -7,7 +7,7 @@ import { db } from "../src/db.js";
 import { sweep } from "../src/modules/dish/tasks.js";
 import { claimMerge, saveVersion } from "../src/modules/dish/merge.js";
 import { DishModelError, FAKE_COST, FAKE_WORDS } from "../src/modules/dish/model.js";
-import { askTokenFor, sha256Hex } from "../src/modules/dish/values.js";
+import { askTokenFor, sha256Hex, TOO_MANY } from "../src/modules/dish/values.js";
 import { handleMessage } from "../src/scheduled.js";
 import {
   advance,
@@ -119,29 +119,30 @@ const ASK_FOR_AS = "SVzfCqjszVI6GTwW6xsuR5"; // computed from the formula; dishC
 test("cards: bad input, filtered words and words that aren't a dish are refused, and nothing is stored", { skip }, async () => {
   const t = await newBackend();
   const card = (body: unknown, ip: string) => post(t, "/dish/cards", body, { ip });
-  const cases: [unknown, number, string][] = [
-    [{ dish: "x" }, 400, "bad_request"],
-    [{}, 400, "bad_request"],
-    [{ dish: "dal", relation: "cousin" }, 400, "bad_request"],
-    [{ dish: "dal", kidName: "x".repeat(41) }, 400, "bad_request"],
-    [{ dish: "x".repeat(201) }, 400, "bad_request"],
-    [{ dish: "dal", photos: ["a", "b", "c", "d"] }, 400, "bad_request"],
-    [{ dish: "dal", photos: "nope" }, 400, "bad_request"],
-    [{ dish: "dal", voiceNote: "not-a-file-id" }, 400, "bad_request"],
-    ["not json", 400, "bad_request"],
-    ["[1,2]", 400, "bad_request"],
+  const cases: [unknown, number, string, string?][] = [
+    [{ dish: "x" }, 400, "invalid", "dish"],
+    [{}, 400, "invalid", "dish"],
+    [{ dish: "dal", relation: "cousin" }, 400, "invalid", "relation"],
+    [{ dish: "dal", kidName: "x".repeat(41) }, 400, "invalid", "kidName"],
+    [{ dish: "x".repeat(201) }, 400, "invalid", "dish"],
+    [{ dish: "dal", photos: ["a", "b", "c", "d"] }, 400, "invalid", "photos"],
+    [{ dish: "dal", photos: "nope" }, 400, "invalid", "photos"],
+    [{ dish: "dal", voiceNote: "not-a-file-id" }, 400, "invalid", "voiceNote"],
+    ["not json", 400, "invalid"],
+    ["[1,2]", 400, "invalid"],
     [{ dish: "fuck this dal" }, 422, "words"],
     [{ dish: "dal", kidName: "slut" }, 422, "words"],
     [{ dish: "asdf qwerty" }, 422, "not_a_dish"],
   ];
-  for (const [i, [body, status, code]] of cases.entries()) {
+  for (const [i, [body, status, code, field]] of cases.entries()) {
     const r = await card(body, `198.51.100.${i}`);
-    assert.deepEqual([r.status, r.data.code], [status, code], JSON.stringify(body));
-    assert.equal(typeof r.data.error, "string");
+    assert.deepEqual([r.status, r.data.error, r.data.field], [status, code, field], JSON.stringify(body));
+    assert.equal(typeof r.data.message, "string");
+    assert.equal(typeof r.data.requestId, "string");
   }
-  assert.equal((await card("[1,2]", "198.51.100.98")).data.error, "The body must be a JSON object.");
-  assert.equal((await card("not json", "198.51.100.97")).data.error, "The body must be JSON.");
-  assert.equal((await call(t, "POST", "/dish/cards/get", undefined)).data.error, "kidToken is required");
+  assert.equal((await card("[1,2]", "198.51.100.98")).data.message, "The body must be a JSON object.");
+  assert.equal((await card("not json", "198.51.100.97")).data.message, "The body must be JSON.");
+  like(await call(t, "POST", "/dish/cards/get", undefined), { data: { error: "invalid", field: "kidToken", message: "kidToken is required" } });
   assert.equal((await card({ dish: "x".repeat(70_000) }, "198.51.100.99")).status, 413);
   assert.equal((await db().query("select 1 from dish_asks")).rowCount, 0);
   // Only the not-a-dish one reached the model.
@@ -155,29 +156,29 @@ test("cards: a filtered word in the guess is refused; a model failure is 502 and
     r.recipe.ingredients[0].name = "whore eggs";
     return r;
   };
-  like(await post(t, "/dish/cards", { dish: "tomato egg" }), { status: 422, data: { code: "words" } });
+  like(await post(t, "/dish/cards", { dish: "tomato egg" }), { status: 422, data: { error: "words" } });
   model.guess = async () => {
     throw new DishModelError("model", "Claude 500");
   };
-  like(await post(t, "/dish/cards", { dish: "tomato egg" }), { status: 502, data: { code: "model" } });
+  like(await post(t, "/dish/cards", { dish: "tomato egg" }), { status: 502, data: { error: "provider_down", message: "That didn't work. Try again." } });
   model.guess = async () => {
     throw new DishModelError("not_set_up", "ANTHROPIC_API_KEY isn't set");
   };
-  like(await post(t, "/dish/cards", { dish: "tomato egg" }), { status: 503, data: { code: "not_set_up" } });
+  like(await post(t, "/dish/cards", { dish: "tomato egg" }), { status: 503, data: { error: "not_set_up", message: "Not set up yet." } });
   assert.equal((await db().query("select 1 from dish_asks")).rowCount, 0);
 });
 
 test("cards: 6 per IP in 10 minutes and 30 a day; the keys hold an HMAC of the IP, never the IP", { skip }, async () => {
   const t = await newBackend();
   for (let i = 0; i < 6; i++) await makeCard(t);
-  like(await post(t, "/dish/cards", { dish: "tomato egg" }), { status: 429, data: { code: "rate" } });
+  like(await post(t, "/dish/cards", { dish: "tomato egg" }), { status: 429, headers: { "retry-after": anyString }, data: { error: "rate_limited", message: TOO_MANY } });
   await makeCard(t, { dish: "dal" }, "192.0.2.50"); // another IP
   for (let w = 1; w < 5; w++) {
     await clearWindow("dish-cards");
     for (let i = 0; i < 6; i++) await makeCard(t);
   }
   await clearWindow("dish-cards"); // a new 10 minutes, but 30 today
-  like(await post(t, "/dish/cards", { dish: "tomato egg" }), { status: 429, data: { code: "rate" } });
+  like(await post(t, "/dish/cards", { dish: "tomato egg" }), { status: 429, data: { error: "rate_limited" } });
   const keys = (await db().query("select key from rate_hits")).rows.map((r) => r.key as string);
   assert.ok(keys.some((k) => k.startsWith("dish-cards-day:")));
   for (const k of keys) {
@@ -206,10 +207,10 @@ test("cards from photos and a voice note: the photos stay on the card; the voice
   close(await spent(), FAKE_COST.guess + FAKE_COST.transcribe);
 
   // A file goes on one card only; an unknown one is a 404. The wrong kind is a 404 too (a 400 on Convex: DISH-MIGRATION.md).
-  like(await post(t, "/dish/cards", { dish: "dal", photos: [photos[0]] }), { status: 404, data: { code: "not_found" } });
+  like(await post(t, "/dish/cards", { dish: "dal", photos: [photos[0]] }), { status: 404, data: { error: "not_found" } });
   like(await post(t, "/dish/cards", { dish: "dal", photos: ["A".repeat(22)] }), { status: 404 });
   const another = await fileId(t, "voice");
-  like(await post(t, "/dish/cards", { dish: "dal", photos: [another] }), { status: 404, data: { code: "not_found" } });
+  like(await post(t, "/dish/cards", { dish: "dal", photos: [another] }), { status: 404, data: { error: "not_found" } });
   like(await post(t, "/dish/cards", { dish: "dal", photos: [another, another] }), { status: 400 });
 });
 
@@ -232,26 +233,26 @@ test("files: photos and voice notes by type and size, checked before anything is
   const fileRow = (await files())[0];
   assert.ok(!JSON.stringify(fileRow).includes(photo.data.fileId)); // only its hash
 
-  const refused: [string, string, number, number, string][] = [
+  const refused: [string, string, number, number, string, string?][] = [
     ["photo", "image/gif", 100, 415, "bad_type"],
     ["photo", "audio/webm", 100, 415, "bad_type"],
     ["voice", "image/jpeg", 100, 415, "bad_type"],
     ["voice", "video/mp4", 100, 415, "bad_type"],
     ["photo", "image/png", 5 * 1024 * 1024 + 1, 413, "too_large"],
     ["voice", "audio/mp4", 3 * 1024 * 1024 + 1, 413, "too_large"],
-    ["photo", "image/png", 0, 400, "bad_request"],
-    ["video", "video/mp4", 100, 400, "bad_request"],
+    ["photo", "image/png", 0, 400, "invalid", "size"],
+    ["video", "video/mp4", 100, 400, "invalid", "kind"],
   ];
   const rows = (await files()).length;
-  for (const [kind, type, bytes, status, code] of refused) {
+  for (const [kind, type, bytes, status, code, field] of refused) {
     const r = await upload(t, kind, type, bytes, { ip: "192.0.2.2" });
-    assert.deepEqual([r.status, r.data.code], [status, code], `${kind} ${type} ${bytes}`);
+    assert.deepEqual([r.status, r.data.error, r.data.field], [status, code, field], `${kind} ${type} ${bytes}`);
   }
   assert.equal(store.objects.size, stored);
   assert.equal((await files()).length, rows, "a refused call leaves no row");
 
   for (let i = 0; i < 28; i++) assert.equal((await upload(t, "photo", "image/webp", 10)).status, 201);
-  like(await upload(t, "photo", "image/webp", 10), { status: 429, data: { code: "rate" } });
+  like(await upload(t, "photo", "image/webp", 10), { status: 429, data: { error: "rate_limited" } });
 });
 
 test("an upload no card took is deleted after an hour; one on a card stays", { skip }, async () => {
@@ -291,11 +292,11 @@ test("cards/get, update and sent: the same card back; who, name, message and the
   assert.equal((await update({ relation: "dad" })).data.card.message, "Nani, how do you make it?");
   assert.equal((await update({ kidName: null })).data.card.kidName, null);
 
-  like(await update({ message: "   " }), { status: 400, data: { code: "bad_request" } });
+  like(await update({ message: "   " }), { status: 400, data: { error: "invalid", field: "message" } });
   like(await update({ message: "x".repeat(501) }), { status: 400 });
   like(await update({ message: 5 }), { status: 400 });
-  like(await update({ message: "fuck it, just tell me" }), { status: 422, data: { code: "words" } });
-  like(await update({ kidName: "cunt" }), { status: 422, data: { code: "words" } });
+  like(await update({ message: "fuck it, just tell me" }), { status: 422, data: { error: "words" } });
+  like(await update({ kidName: "cunt" }), { status: 422, data: { error: "words" } });
   like(await update({ relation: "boss" }), { status: 400 });
 
   // The voice note to Mom: a new one replaces (and deletes) the old; null removes it.
@@ -334,7 +335,7 @@ test("once Mom sent her answers, the message and the voice note to her are close
   await finish(t, askToken);
   await settle();
   const update = (body: Record<string, unknown>) => post(t, "/dish/cards/update", { kidToken, ...body });
-  like(await update({ message: "Mom?" }), { status: 409, data: { code: "closed", error: "Mom already sent her answers." } });
+  like(await update({ message: "Mom?" }), { status: 409, data: { error: "closed", message: "Mom already sent her answers." } });
   like(await update({ voiceNote: null }), { status: 409 });
   assert.equal((await update({ kidName: "Cal" })).status, 200);
 });
@@ -346,14 +347,14 @@ test("unknown and malformed tokens are 404, and after 20 in 10 minutes the IP ge
   const t = await newBackend();
   const { kidToken, askToken } = await makeCard(t);
   const bad = "Z".repeat(22);
-  like(await post(t, "/dish/cards/get", { kidToken: bad }), { status: 404, data: { code: "not_found", error: "This link doesn't work anymore." } });
+  like(await post(t, "/dish/cards/get", { kidToken: bad }), { status: 404, data: { error: "not_found", message: "This link doesn't work anymore." } });
   like(await post(t, "/dish/cards/get", {}), { status: 400 }); // missing: not counted
   like(await post(t, "/dish/ask/peek", { askToken: "short" }), { status: 404 });
   like(await post(t, "/dish/cards/get", { kidToken: askToken }), { status: 404 }); // the ask token reads no card
   like(await post(t, "/dish/ask/peek", { askToken: kidToken }), { status: 404 }); // and the kid token isn't Mom's
   like(await answer(t, askToken, "q1", { token: bad }), { status: 404 });
   for (let i = 5; i < 20; i++) assert.equal((await post(t, "/dish/ask/finish", { askToken: bad })).status, 404);
-  like(await post(t, "/dish/cards/update", { kidToken: bad }), { status: 429, data: { code: "rate" } });
+  like(await post(t, "/dish/cards/update", { kidToken: bad }), { status: 429, headers: { "retry-after": anyString }, data: { error: "rate_limited", message: TOO_MANY } });
   assert.equal((await post(t, "/dish/cards/get", { kidToken })).status, 200);
   assert.equal((await post(t, "/dish/ask/peek", { askToken })).status, 200);
   assert.equal((await post(t, "/dish/cards/get", { kidToken: bad }, { ip: "192.0.2.77" })).status, 404);
@@ -367,17 +368,21 @@ test("CORS: homecookd.app and local dev pages get their origin back, other sites
   const ok = await pre("https://www.homecookd.app");
   assert.equal(ok.status, 204);
   assert.equal(ok.headers["access-control-allow-origin"], "https://www.homecookd.app");
-  assert.equal(ok.headers["access-control-allow-headers"], "Content-Type, X-Dish-Token");
+  assert.equal(ok.headers["access-control-allow-headers"], "Content-Type, X-Dish-Token, X-Request-Id, Idempotency-Key");
+  assert.equal(ok.headers["access-control-expose-headers"], "retry-after, x-request-id");
   assert.equal(ok.headers["access-control-allow-methods"], "POST, OPTIONS");
   assert.equal((await pre("https://evil.example")).status, 403);
   assert.equal((await pre("https://homecookd.app.evil.example")).status, 403);
 
-  like(await post(t, "/dish/cards", { dish: "dal" }, { origin: "https://evil.example" }), { status: 403, data: { code: "origin" } });
+  like(await post(t, "/dish/cards", { dish: "dal" }, { origin: "https://evil.example" }), {
+    status: 403,
+    data: { error: "origin", message: "This site can't use these routes.", requestId: anyString },
+  });
   assert.equal(model.calls.guess, 0);
   const local = await post(t, "/dish/cards/get", { kidToken: "Z".repeat(22) }, { origin: "http://localhost:3105" });
   assert.deepEqual([local.status, local.headers["access-control-allow-origin"]], [404, "http://localhost:3105"]);
   assert.equal((await post(t, "/dish/cards", { dish: "dal" }, { origin: null })).status, 201); // no Origin: allowed
-  like(await post(t, "/dish/nope", {}), { status: 404, data: { code: "not_found" } });
+  like(await post(t, "/dish/nope", {}), { status: 404, headers: { "access-control-allow-origin": ORIGIN }, data: { error: "no_route", message: "No such route." } });
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -403,26 +408,26 @@ test("cards/ask: her answered questions stay first and are left out when asked a
     { id: "q2", text: "How do you know the eggs are ready?" },
   ]);
   assert.deepEqual((await peek(t, askToken)).questions.map((q: { id: string }) => q.id), ["q2"]);
-  like(await askMom(t, kidToken, [{ id: "q1", text: "How much ketchup again?" }]), { status: 409, data: { code: "closed", error: "That was already answered." } });
-  const bad: [unknown, string][] = [
-    [[], "questions must be a list of 1 to 3 questions"],
-    ["q1", "questions must be a list of 1 to 3 questions"],
-    [[{ text: "One?" }, { text: "Two?" }, { text: "Three?" }, { text: "Four?" }], "At most 3 questions at a time"],
-    [[{ id: "q1", text: "How much?" }, { id: "q1", text: "How much, again?" }], "The same question is in the list twice"],
-    [[{ id: "q4", text: "Mine?" }], "questions[0].id must be q1, q2 or q3, or left out for the kid's own question"],
-    [[{ text: "Hm" }], "questions[0].text must be 3 to 120 characters"],
-    [[{ text: "x".repeat(121) }], "questions[0].text must be 3 to 120 characters"],
-    [[{ text: 5 }], "questions[0].text must be a string"],
+  like(await askMom(t, kidToken, [{ id: "q1", text: "How much ketchup again?" }]), { status: 409, data: { error: "closed", message: "That was already answered." } });
+  const bad: [unknown, string, string][] = [
+    [[], "questions must be a list of 1 to 3 questions", "questions"],
+    ["q1", "questions must be a list of 1 to 3 questions", "questions"],
+    [[{ text: "One?" }, { text: "Two?" }, { text: "Three?" }, { text: "Four?" }], "At most 3 questions at a time", "questions"],
+    [[{ id: "q1", text: "How much?" }, { id: "q1", text: "How much, again?" }], "The same question is in the list twice", "questions"],
+    [[{ id: "q4", text: "Mine?" }], "questions[0].id must be q1, q2 or q3, or left out for the kid's own question", "questions.0.id"],
+    [[{ text: "Hm" }], "questions[0].text must be 3 to 120 characters", "questions.0.text"],
+    [[{ text: "x".repeat(121) }], "questions[0].text must be 3 to 120 characters", "questions.0.text"],
+    [[{ text: 5 }], "questions[0].text must be a string", "questions.0.text"],
   ];
-  for (const [questions, error] of bad) like(await askMom(t, kidToken, questions), { status: 400, data: { code: "bad_request", error } });
-  like(await askMom(t, kidToken, [{ text: "Why the fuck is it red?" }]), { status: 422, data: { code: "words" } });
+  for (const [questions, message, field] of bad) like(await askMom(t, kidToken, questions), { status: 400, data: { error: "invalid", message, field } });
+  like(await askMom(t, kidToken, [{ text: "Why the fuck is it red?" }]), { status: 422, data: { error: "words" } });
 
   r = await askMom(t, kidToken, [{ id: "q2", text: "How do you know they're ready?" }, { id: "q3", text: "What goes on top?" }, { text: "Can I use canned tomatoes?" }]);
   assert.deepEqual(r.data.card.asked.map((q: { id: string }) => q.id), ["q1", "q4", "q2", "q3", "q5"]);
   await answer(t, askToken, "q2");
   await answer(t, askToken, "q3");
   const three = [{ text: "One?" }, { text: "Two?" }, { text: "Three?" }];
-  assert.equal((await askMom(t, kidToken, three)).data.error, "At most 6 questions in all");
+  assert.equal((await askMom(t, kidToken, three)).data.message, "At most 6 questions in all");
   r = await askMom(t, kidToken, three.slice(0, 2));
   assert.deepEqual(r.data.card.asked.map((q: { id: string }) => q.id), ["q1", "q4", "q2", "q3", "q5", "q6"]);
   // A line break in a question becomes a space.
@@ -434,7 +439,7 @@ test("cards/ask: her answered questions stay first and are left out when asked a
   const own = await makeCard(t, { dish: "dal" }, ip);
   await askMom(t, own.kidToken, [{ text: "One?" }, { text: "Two?" }, { text: "Three?" }], { ip });
   for (const q of ["q4", "q5", "q6"]) await answer(t, own.askToken, q, { ip });
-  assert.equal((await askMom(t, own.kidToken, [{ text: "Four?" }], { ip })).data.error, "At most 3 questions of your own");
+  assert.equal((await askMom(t, own.kidToken, [{ text: "Four?" }], { ip })).data.message, "At most 3 questions of your own");
 });
 
 test("cards/ask: a text/plain body works (the share tap's keepalive save); 30 per IP in 10 minutes", { skip }, async () => {
@@ -445,7 +450,7 @@ test("cards/ask: a text/plain body works (the share tap's keepalive save); 30 pe
   assert.deepEqual(r.data.card.asked, questions);
   assert.deepEqual((await peek(t, askToken)).questions, questions);
   for (let i = 1; i < 30; i++) assert.equal((await askMom(t, kidToken, questions)).status, 200);
-  like(await askMom(t, kidToken, questions), { status: 429, data: { code: "rate" } });
+  like(await askMom(t, kidToken, questions), { status: 429, data: { error: "rate_limited" } });
 });
 
 // ---------------------------------------------------------------------------------------------
@@ -526,7 +531,7 @@ test("Mom's page in her language: translated once and cached, again when the mes
 
   // English, an unknown code or no lang: no translation. A lang that isn't a string is a 400.
   for (const lang of ["en", "xx", undefined, null]) assert.equal((await peek(t, askToken, lang)).inLang, null);
-  like(await post(t, "/dish/ask/peek", { askToken, lang: 5 }), { status: 400, data: { code: "bad_request" } });
+  like(await post(t, "/dish/ask/peek", { askToken, lang: 5 }), { status: 400, data: { error: "invalid", field: "lang" } });
   assert.equal(model.calls.forMom, 4);
 
   // Her answer (in its language) and Send (with lang) give the cached translation back; they never translate.
@@ -574,22 +579,22 @@ test("ask/answer: only an asked question, her audio checked before it's stored; 
   const { kidToken, askToken } = await askedCard(t);
   const askId = (await rowOf(kidToken)).id;
   const objects = store.objects.size;
-  const refused: [Parameters<typeof answer>[3] & { q?: string }, number, string][] = [
-    [{ q: "q5" }, 400, "That question wasn't asked."],
-    [{ q: "q9" }, 400, "q must be one of q1 to q6"],
-    [{ token: null }, 400, "The X-Dish-Token header is required"],
-    [{ type: "video/mp4" }, 415, "That recording type isn't supported."],
-    [{ type: "text/plain" }, 415, "That recording type isn't supported."],
-    [{ bytes: 5 * 1024 * 1024 + 1 }, 413, "That answer is too long."],
-    [{ bytes: 0 }, 400, "The recording is empty."],
-    [{ durationS: 0 }, 400, "durationS must be more than 0 and at most 120"],
-    [{ durationS: 126 }, 400, "durationS must be more than 0 and at most 120"],
-    [{ durationS: "abc" }, 400, "durationS must be more than 0 and at most 120"],
-    [{ lang: "xx" }, 400, "lang must be one of en hi mr gu ta te pa ur bn zh ko es tl ar pt vi"],
+  const refused: [Parameters<typeof answer>[3] & { q?: string }, number, string, string, string?][] = [
+    [{ q: "q5" }, 400, "invalid", "That question wasn't asked.", "q"],
+    [{ q: "q9" }, 400, "invalid", "q must be one of q1 to q6", "q"],
+    [{ token: null }, 400, "invalid", "The X-Dish-Token header is required", "X-Dish-Token"],
+    [{ type: "video/mp4" }, 415, "bad_type", "That recording type isn't supported."],
+    [{ type: "text/plain" }, 415, "bad_type", "That recording type isn't supported."],
+    [{ bytes: 5 * 1024 * 1024 + 1 }, 413, "too_large", "That answer is too long."],
+    [{ bytes: 0 }, 400, "invalid", "The recording is empty.", "size"],
+    [{ durationS: 0 }, 400, "invalid", "durationS must be more than 0 and at most 120", "durationS"],
+    [{ durationS: 126 }, 400, "invalid", "durationS must be more than 0 and at most 120", "durationS"],
+    [{ durationS: "abc" }, 400, "invalid", "durationS must be more than 0 and at most 120", "durationS"],
+    [{ lang: "xx" }, 400, "invalid", "lang must be one of en hi mr gu ta te pa ur bn zh ko es tl ar pt vi", "lang"],
   ];
-  for (const [o, status, error] of refused) {
+  for (const [o, status, code, message, field] of refused) {
     const r = await answer(t, askToken, o.q ?? "q1", { ...o, ip: "192.0.2.3" });
-    assert.deepEqual([r.status, r.data.error], [status, error], JSON.stringify(o));
+    assert.deepEqual([r.status, r.data.error, r.data.message, r.data.field], [status, code, message, field], JSON.stringify(o));
   }
   assert.equal(store.objects.size, objects);
 
@@ -621,7 +626,7 @@ test("ask/answer: 30 per IP in 10 minutes", { skip }, async () => {
   const t = await newBackend();
   const { askToken } = await askedCard(t);
   for (let i = 0; i < 30; i++) assert.equal((await answer(t, askToken, "q1")).status, 200);
-  like(await answer(t, askToken, "q1"), { status: 429, data: { code: "rate" } });
+  like(await answer(t, askToken, "q1"), { status: 429, data: { error: "rate_limited" } });
 });
 
 test("Send: finished and merging at once, then her version in her words; the kid gets it with her clip; no more answers", { skip }, async () => {
@@ -647,7 +652,7 @@ test("Send: finished and merging at once, then her version in her words; the kid
   assert.ok((await rowOf(kidToken)).merged_at);
   assert.equal(model.calls.version, 1);
 
-  like(await answer(t, askToken, "q1"), { status: 409, data: { code: "closed", error: "These answers were already sent." } });
+  like(await answer(t, askToken, "q1"), { status: 409, data: { error: "closed", message: "These answers were already sent." } });
   // Send again changes nothing, and no merge runs twice.
   like((await finish(t, askToken)).data.ask, { finished: true, merging: false });
   await settle();
@@ -668,7 +673,7 @@ test("a second card's ask token sees only that card, and can't answer the first 
   like(theirs, { kidName: "Priya", relation: "grandma", questions: [{ id: "q2", text: "How do you know it's done?" }] });
   assert.ok(!JSON.stringify(theirs).includes("Caleb"));
 
-  like(await answer(t, first.askToken, "q1", { token: second.askToken }), { status: 400, data: { error: "That question wasn't asked." } });
+  like(await answer(t, first.askToken, "q1", { token: second.askToken }), { status: 400, data: { error: "invalid", message: "That question wasn't asked." } });
   assert.equal((await answer(t, second.askToken, "q2")).status, 200);
   assert.deepEqual(await answersOf((await rowOf(first.kidToken)).id), []);
   assert.deepEqual((await answersOf((await rowOf(second.kidToken)).id)).map((a) => a.question_id), ["q2"]);
@@ -853,10 +858,11 @@ test("at $10 new cards are refused, but Mom's answer and Send still work and her
   const t = await newBackend();
   const { kidToken, askToken } = await askedCard(t);
   await seedSpend(10);
-  like(await post(t, "/dish/cards", { dish: "dal" }, { ip: "192.0.2.30" }), {
-    status: 429,
-    data: { code: "budget", error: "homecookd has made all the recipes it can today. Try again tomorrow." },
-  });
+  const refused = await post(t, "/dish/cards", { dish: "dal" }, { ip: "192.0.2.30" });
+  like(refused, { status: 429, data: { error: "budget", message: "homecookd has made all the recipes it can today. Try again tomorrow." } });
+  // Until the next UTC midnight, when the budget's day turns over.
+  const midnight = new Date().setUTCHours(24, 0, 0, 0);
+  assert.ok(Math.abs(Number(refused.headers["retry-after"]) - (midnight - Date.now()) / 1000) < 5, String(refused.headers["retry-after"]));
   assert.equal((await answer(t, askToken, "q1", { lang: "hi" })).status, 200);
   like((await finish(t, askToken)).data.ask, { finished: true, merging: true });
   await settle();
@@ -964,7 +970,7 @@ test("no one in particular: asking is off (no link, no message) until the kid pi
   assert.equal(r.status, 201);
   const { kidToken } = r.data;
   like(r.data.card, { relation: "none", askUrl: null, message: "" });
-  like(await askMom(t, kidToken, MOM_ASKED), { status: 400, data: { error: "Pick who you're asking first." } });
+  like(await askMom(t, kidToken, MOM_ASKED), { status: 400, data: { error: "invalid", message: "Pick who you're asking first." } });
   like(await post(t, "/dish/cards/sent", { kidToken, via: "sms" }), { status: 400 });
   const picked = (await post(t, "/dish/cards/update", { kidToken, relation: "grandma" })).data.card;
   assert.match(picked.askUrl, /\/a\?t=/);
@@ -988,9 +994,9 @@ test("the kid asks about any part of the guess: a template question (or their wo
   ]);
   assert.equal(r.data.card.guess.ingredients[1].ask, "q4");
   assert.equal(r.data.card.guess.steps[0].lines[0].ask, "q5");
-  like(await askMom(t, kidToken, [{ about: { kind: "ingredient", index: 99 } }]), { status: 400 });
+  like(await askMom(t, kidToken, [{ about: { kind: "ingredient", index: 99 } }]), { status: 400, data: { error: "invalid", field: "questions.0.about" } });
   like(await askMom(t, kidToken, [{ about: { kind: "line", step: 0, line: 0 }, text: "fuck this" }]), { status: 422 });
-  like(await askMom(t, kidToken, [{ id: "q1", about: { kind: "ingredient", index: 0 }, text: "How much?" }]), { status: 400 });
+  like(await askMom(t, kidToken, [{ id: "q1", about: { kind: "ingredient", index: 0 }, text: "How much?" }]), { status: 400, data: { error: "invalid", field: "questions.0" } });
 });
 
 test("the kid edits the guess: their fixes are stated, word-filtered and size-capped; closed after Send; strangers refused", { skip }, async () => {
@@ -1010,11 +1016,15 @@ test("the kid edits the guess: their fixes are stated, word-filtered and size-ca
 
   const bad = (edits: unknown) => post(t, "/dish/cards/update", { kidToken, edits });
   like(await bad([{ kind: "ingredient", index: 0, name: "fucking salt" }]), { status: 422 });
-  like(await bad([{ kind: "ingredient", index: 0, amount: "x".repeat(41) }]), { status: 400 });
-  like(await bad([{ kind: "line", step: 0, line: 0, text: "x".repeat(81) }]), { status: 400 });
-  like(await bad([{ kind: "ingredient", index: 99, amount: "2" }]), { status: 400 });
-  like(await bad([{ kind: "ingredient", index: 0 }]), { status: 400 });
-  like(await bad(Array.from({ length: 21 }, () => ({ kind: "ingredient", index: 0, amount: "2" }))), { status: 400 });
+  like(await bad([{ kind: "ingredient", index: 0, amount: "x".repeat(41) }]), { status: 400, data: { error: "invalid", field: "edits.0.amount" } });
+  like(await bad([{ kind: "line", step: 0, line: 0, text: "x".repeat(81) }]), { status: 400, data: { error: "invalid", field: "edits.0.text" } });
+  like(await bad([{ kind: "ingredient", index: 99, amount: "2" }]), { status: 400, data: { error: "invalid", field: "edits.0" } });
+  like(await bad([{ kind: "ingredient", index: 0 }]), { status: 400, data: { error: "invalid", field: "edits.0" } });
+  like(await bad([{ kind: "ingredient", index: 0, amount: "2" }, { kind: "step" }]), {
+    status: 400,
+    data: { error: "invalid", field: "edits.1.kind", message: "edits[1].kind must be ingredient or line" },
+  });
+  like(await bad(Array.from({ length: 21 }, () => ({ kind: "ingredient", index: 0, amount: "2" }))), { status: 400, data: { error: "invalid", field: "edits" } });
   like(await post(t, "/dish/cards/update", { kidToken: "A".repeat(22), edits: [{ kind: "ingredient", index: 0, amount: "2" }] }), { status: 404 });
 
   assert.equal((await answer(t, askToken, "q1")).status, 200);
@@ -1045,9 +1055,9 @@ test("a model call is written down with its cost and no family content", { skip 
 
 test("/dish/craving/peek and a craving token wait for the sync: an honest not-found, never a card that doesn't reach her", { skip }, async () => {
   const t = await newBackend();
-  like(await post(t, "/dish/craving/peek", { cravingToken: "A".repeat(22) }), { status: 404, data: { code: "not_found" } });
+  like(await post(t, "/dish/craving/peek", { cravingToken: "A".repeat(22) }), { status: 404, data: { error: "no_route" } });
   like(await post(t, "/dish/cards", { dish: "dal", kidName: "Cal", cravingToken: "A".repeat(22) }), { status: 404 });
-  like(await post(t, "/dish/cards", { dish: "dal", cravingToken: "A".repeat(22) }), { status: 400, data: { error: "kidName is required" } });
+  like(await post(t, "/dish/cards", { dish: "dal", cravingToken: "A".repeat(22) }), { status: 400, data: { error: "invalid", field: "kidName", message: "kidName is required" } });
   assert.equal((await db().query("select 1 from dish_asks")).rowCount, 0);
   assert.equal(model.calls.guess, 0);
 });
@@ -1108,9 +1118,9 @@ test("a raw file is refused, unread: bytes don't pass through the api", { skip }
   const t = await newBackend();
   const big = Buffer.alloc(6 * 1024 * 1024, 1);
   const raw = await call(t, "POST", "/dish/files?kind=photo", big, { headers: { "content-type": "image/jpeg" } });
-  like(raw, { status: 415, data: { code: "bad_type" } });
+  like(raw, { status: 415, data: { error: "bad_type", message: "Files go straight to storage. Ask for an upload link first." } });
   const clip = await call(t, "POST", "/dish/ask/answer?q=q1&durationS=3", big, { headers: { "content-type": "audio/webm", "x-dish-token": "A".repeat(22) } });
-  like(clip, { status: 415, data: { code: "bad_type" } });
+  like(clip, { status: 415, data: { error: "bad_type" } });
   assert.equal(store.objects.size, 0);
 });
 
@@ -1119,7 +1129,7 @@ test("when S3 can't answer, the caller hears it's safe to retry, and no file is 
   const link = await post(t, "/dish/files?kind=photo", { contentType: "image/jpeg", size: 100 });
   store.put(link.data.uploadUrl, new Uint8Array(100), "image/jpeg");
   store.failHeads = true;
-  like(await post(t, "/dish/files/confirm", { fileId: link.data.fileId }), { status: 502, data: { code: "storage" } });
+  like(await post(t, "/dish/files/confirm", { fileId: link.data.fileId }), { status: 502, data: { error: "provider_down", message: "Something went wrong on our side. Please try again." } });
   store.failHeads = false;
   like(await post(t, "/dish/files/confirm", { fileId: link.data.fileId }), { status: 201, data: { size: anyNumber } });
 });
@@ -1160,7 +1170,10 @@ test("Mom's two answer routes take her token in the body, like every other JSON 
   const r = await post(t, `/dish/ask/answer?${q}`, { askToken, fileId: link.data.fileId });
   assert.deepEqual(r.data.ask.answered, ["q1"]);
   assert.equal((await answersOf((await rowOf(kidToken)).id)).length, 1);
-  like(await post(t, `/dish/ask/answer/upload?${q}`, { contentType: "audio/mp4", size: 400 }), { status: 400, data: { error: "The X-Dish-Token header is required" } });
+  like(await post(t, `/dish/ask/answer/upload?${q}`, { contentType: "audio/mp4", size: 400 }), {
+    status: 400,
+    data: { error: "invalid", field: "X-Dish-Token", message: "The X-Dish-Token header is required" },
+  });
   like(await post(t, `/dish/ask/answer/upload?${q}&askToken=${askToken}`, { contentType: "audio/mp4", size: 400 }), { status: 400 });
   like(await post(t, `/dish/ask/answer/upload?${q}`, { askToken: "Z".repeat(22), contentType: "audio/mp4", size: 400 }), { status: 404 });
 });
@@ -1176,7 +1189,7 @@ test("a page on localhost may call on any deployment, as on Convex; DISH_WEB_ORI
     }
     process.env.DEPLOY_ENV = "staging"; // fake models stay off on production
     process.env.DISH_WEB_ORIGIN = "http://evil.example";
-    like(await post(t, "/dish/cards/get", {}, { origin: "http://evil.example" }), { status: 403, data: { code: "origin" } });
+    like(await post(t, "/dish/cards/get", {}, { origin: "http://evil.example" }), { status: 403, data: { error: "origin" } });
     assert.equal((await makeCard(t)).card.askUrl.startsWith("https://homecookd.app/a?t="), true, "an http origin isn't honored");
     process.env.DISH_WEB_ORIGIN = "https://test.homecookd.app";
     assert.equal((await post(t, "/dish/cards/get", {}, { origin: "https://test.homecookd.app" })).headers["access-control-allow-origin"], "https://test.homecookd.app");

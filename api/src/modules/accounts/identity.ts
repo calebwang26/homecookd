@@ -1,9 +1,11 @@
 // Sign in with Apple and Google: checking the id token a phone sends. Real signature, issuer, audience and expiry checks, against the provider's published keys,
 // behind one interface, so tests use fake keys and never call Apple or Google. Which answer for which failure is Supabase's, because a store build's life
-// depends on it: a bad token is 401; keys that can't be fetched are 503 (try again); a real token for an app id we don't list is 503 "not set up".
+// depends on it: a bad token is 401 `sign_in_failed`; keys that can't be fetched are 503 `provider_down` (try again); a real token for an app id we don't list is
+// 503 `not_set_up`.
 import * as Sentry from "@sentry/node";
 import { createRemoteJWKSet, errors as joseErrors, jwtVerify, type JWTPayload, type JWTVerifyGetKey } from "jose";
-import { MAX_NAME, refuse } from "./values.js";
+import { notSetUp, providerDown, refused as refuse } from "../../errors.js";
+import { MAX_NAME } from "./values.js";
 
 export type Provider = "apple" | "google";
 export type Who = { provider: Provider; sub: string; email: string | null; givenName: string | null };
@@ -43,7 +45,7 @@ export function idTokensWith(keys: Record<Provider, JWTVerifyGetKey>): IdTokens 
   return {
     async verify(provider, idToken) {
       const label = LABEL[provider];
-      const refused = () => refuse(401, `That ${label} sign-in didn't work. Please try again.`);
+      const refused = () => refuse(401, "sign_in_failed", `That ${label} sign-in didn't work. Please try again.`);
       let payload: JWTPayload;
       try {
         ({ payload } = await jwtVerify(idToken, keys[provider], {
@@ -57,7 +59,7 @@ export function idTokensWith(keys: Record<Provider, JWTVerifyGetKey>): IdTokens 
           // The audience is an app id, not a secret: it's what to add to the env list. It goes to Sentry as a tag, and the token doesn't.
           const aud = String((error as { payload?: { aud?: unknown } }).payload?.aud ?? "").slice(0, 200);
           Sentry.captureException(Object.assign(new Error("IdTokenAudienceRefused"), { name: "IdTokenAudienceRefused" }), { tags: { provider, aud } });
-          throw refuse(503, `${label} sign-in isn't set up for this version yet. Try an invite link.`);
+          throw notSetUp(`${label} sign-in isn't set up for this version yet. Try an invite link.`);
         }
         // A bare JOSEError is jose's "the key set didn't come back as 200 JSON"; anything that isn't jose's is a network failure.
         const keysDown =
@@ -66,7 +68,7 @@ export function idTokensWith(keys: Record<Provider, JWTVerifyGetKey>): IdTokens 
           error instanceof joseErrors.JWKSTimeout ||
           error instanceof joseErrors.JWKSInvalid;
         if (!keysDown) throw refused();
-        throw refuse(503, `We couldn't reach ${label} just now. Please try again.`);
+        throw providerDown(503, `We couldn't reach ${label} just now. Please try again.`);
       }
       const sub = typeof payload.sub === "string" ? payload.sub : "";
       if (!sub || sub.length > 255) throw refused();
