@@ -68,6 +68,12 @@ follows it, and it wins over the docs below on UI/UX and flows.
 - **Ship via PR, never straight to main.** Branch from `origin/main`, commit, `git fetch && git merge origin/main`,
   push, `gh pr create`, then check that `gh pr view --json mergeStateStatus` is `CLEAN`. Stage files by name, never
   `git add -A`: the tree holds untracked demo PNGs and Finder " 2" duplicates.
+- **Purge dead branches (Caleb, Nov 2).** Delete a branch when its PR merges (`gh pr merge --delete-branch`, or delete
+  the head after). At the weekly check, delete every remote branch that has no open PR and whose commits are all on `main`
+  or `aws-migration`, or whose draft was superseded by a merged PR. Never delete `main`, `aws-migration`, a branch with an
+  open PR, or a permanent section chat's worktree branch (`claude/aws-backend-b65c64`, `claude/in-app-recording-4c5510`,
+  `claude/pipeline-times-cover-8be573`, and any other a chat works from). Deleting is remote-only; a merged PR's branch
+  can be restored from its page. On Nov 2 the Master Agent deleted 273 such branches (281 → 9, list in PR #281).
 - **Section chats (Oct 26):** each codebase section has one permanent Claude chat that owns it (Voice & homie,
   Pipeline & recipes, Convex & accounts, App screens & recording, App Store, web & builds, and since Oct 29
   Notifications & linking, since Oct 31 AWS backend). Work goes to the owner of the files it touches: `docs/agents/memory/section-chats.md`.
