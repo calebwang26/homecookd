@@ -17,6 +17,7 @@
 // Files go straight to S3 (SYSTEM-DESIGN.md), so the two routes that took raw bytes now give out a link: docs/build/DISH-MIGRATION.md.
 // Waiting for the sync: /dish/craving/peek and `cravingToken` on /dish/cards.
 import * as Sentry from "@sentry/node";
+import { EXPOSE } from "../../cors.js";
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { isPoolWait } from "../../db.js";
 import { isBusy, Overloaded } from "../../overload.js";
@@ -66,7 +67,8 @@ function corsFor(origin: string | undefined): Record<string, string> | false {
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, X-Dish-Token",
+    "Access-Control-Allow-Headers": "Content-Type, X-Dish-Token, X-Request-Id, Idempotency-Key",
+    "Access-Control-Expose-Headers": EXPOSE,
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };

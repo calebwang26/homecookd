@@ -4,6 +4,7 @@
 // app's own fetch sends no Origin. Errors are `{error}`, and the site reads only the status. The path stays unversioned, so the site and old apps need only a new host.
 import * as Sentry from "@sentry/node";
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import { EXPOSE } from "../../cors.js";
 import { isPoolWait } from "../../db.js";
 import { isBusy, Overloaded } from "../../overload.js";
 import { ApiError, unavailable } from "../../errors.js";
@@ -29,7 +30,8 @@ function corsFor(origin: string | undefined): Record<string, string> | false {
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, X-Request-Id, Idempotency-Key",
+    "Access-Control-Expose-Headers": EXPOSE,
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };

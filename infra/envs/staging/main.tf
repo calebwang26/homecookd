@@ -125,6 +125,8 @@ module "env" {
         # Accounts owns staging's people and families: staging runs no sync, and 1.1 signs up and joins here (docs/build/contracts/ACCOUNTS.md,
         # "Staging testing"). Join links point at staging's own /i page. LINK_JOIN_SECRET and LEFT_IDENTITY_SECRET are staging's own random values.
         { ACCOUNTS_OWNS_PEOPLE = "1", EDIBLE_WEB_URL = module.web.url },
+        # The app's web build, for testing screens in a browser against staging (api/src/cors.ts); Expo takes the next free port. Production sets none.
+        { APP_WEB_ORIGINS = "http://localhost:8081,http://localhost:8082,http://localhost:8083" },
         var.real_ai ? {} : { DISH_FAKE_AI = "1" },
       )
     }

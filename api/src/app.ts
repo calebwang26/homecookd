@@ -3,6 +3,7 @@
 import { randomUUID } from "node:crypto";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import * as Sentry from "@sentry/node";
+import { appCors } from "./cors.js";
 import { db, isPoolWait } from "./db.js";
 import { ApiError, unavailable } from "./errors.js";
 import { fieldPaths, fileGuard, lastName, looksLikeFileKey } from "./files.js";
@@ -24,6 +25,7 @@ declare module "fastify" {
     fileKeys?: string[]; // paths of fields holding S3 keys (files.ts): each is checked against the caller's family
     notFileKeys?: string[]; // fields named like keys that aren't, such as an idempotency key
     noBody?: boolean; // a write route that really takes no body
+    ownCors?: boolean; // answers CORS itself, so cors.ts leaves it alone
   }
   interface FastifyInstance {
     fileKeyRoutes: { method: string; url: string; fields: string[] }[];
@@ -127,6 +129,7 @@ export function buildApp(options: { logger?: object | boolean; logStream?: NodeJ
   app.addHook("onSend", async (req, reply) => {
     reply.header("x-request-id", req.id);
   });
+  appCors(app);
 
   // Stopping closes the connections idle at that moment. One that finishes a request a moment later would then stay open for
   // KEEP_ALIVE_MS and hold the stop up until ECS kills the task, so keep closing them until it's done.

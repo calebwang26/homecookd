@@ -16,6 +16,7 @@ The "Conventions" section applies to every area.
 | Production | Not up yet. **TODO(caleb):** its name (planned `api.homecookd.app`) needs his DNS step. |
 | One host, two services | The load balancer sends `/cook*`, `/record*`, `/speak*` and `/homie/*` to the voice service. Everything else goes to the api. Code: `infra/envs/staging/main.tf`. |
 | Who can reach staging | Any address, except during a real-AI test window, when `alb_allowed_cidrs` may allow one address only. |
+| From a browser | Staging's `/v1/*` answers CORS for the app's web build on `http://localhost:8081`, `8082` and `8083` (`APP_WEB_ORIGINS`, `api/src/cors.ts`). Every CORS answer lets the page read `retry-after` and `x-request-id`, and takes `x-request-id` and `Idempotency-Key`. Production allows no origin. |
 | Up? | `GET /health` answers `ok` (text). `GET /ready` answers `{"database":"ok"}`, or 503. |
 
 ### Two credentials
