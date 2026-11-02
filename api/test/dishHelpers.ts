@@ -33,6 +33,7 @@ export type FakeStore = ObjectStore & {
   failGets: boolean;
   partsStarted: string[];
   partsFinished: { key: string; multipartId: string; parts: { partNumber: number; etag: string }[] }[];
+  failLists: boolean;
   /** A finish lands the object, at this size. */
   landWhenFinished?: number;
 };
@@ -45,6 +46,7 @@ export function fakeStore(): FakeStore {
     failRemoves: false,
     failHeads: false,
     failGets: false,
+    failLists: false,
     partsStarted: [],
     partsFinished: [],
     put(url, bytes, contentType) {
@@ -81,6 +83,13 @@ export function fakeStore(): FakeStore {
       if (store.failRemoves) throw new Error("S3 is down");
       objects.delete(key);
       store.removed.push(key);
+    },
+    async list(prefix, max) {
+      if (store.failLists) throw new Error("S3 is down");
+      return [...objects.keys()].filter((k) => k.startsWith(prefix)).sort().slice(0, max);
+    },
+    async removeMany(keys) {
+      for (const key of keys) await store.remove(key);
     },
   };
   return store;

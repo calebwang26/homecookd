@@ -153,5 +153,5 @@ doesn't list AWS yet. Expect roughly $2.50 an hour of video.
 5. **Are the $12 and $30 caps right?** Caleb's call. **Recommend** resetting them after the measured jobs.
 6. **The CDN ignores `?v=`.** `Managed-CachingOptimized` leaves query strings out of the cache key, so `cover_version` busts nothing.
    Attempt folders make that harmless for this mode. **Recommend** the media phase checks old GCS-style overwrites.
-7. **Account purge on S3 isn't written** (phase 4 and phase 6). `account_purge.py` only accepts GCS hosts. **Blocks real data.** It should take
-   `recipes.media_prefix` and `jobs.upload_key`.
+7. **Account purge on S3:** written in the api (Nov 2): the outside purge deletes `recipes.media_prefix` folders, each job's folder and `jobs.upload_key`
+   from S3 (ACCOUNTS-MIGRATION.md). `account_purge.py` still only accepts GCS hosts, which is right while it purges GCS.

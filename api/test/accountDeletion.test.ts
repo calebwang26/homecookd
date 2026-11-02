@@ -32,9 +32,11 @@ import { purgeMessagesForPerson } from "../src/modules/messages/account.js";
 import { accountsSweep } from "../src/modules/accounts/tasks.js";
 import { sweep } from "../src/modules/dish/tasks.js";
 import { handleMessage } from "../src/scheduled.js";
-import { useObjectStore } from "../src/storage.js";
+import { FOLDER_MAX, S3_GRACE_MS } from "../src/modules/accounts/outside.js";
+import { sweepUploads } from "../src/modules/jobs/tasks.js";
+import { useMediaStore, useObjectStore, useUploadStore } from "../src/storage.js";
 import { Api, appleToken, bearer, code, count, device, freshDatabase, googleToken, hasDatabase, type Keys, makeDevice, makeFamily, makeJoinLink, makePerson, row, setup, SIGNED_OUT } from "./accountsHelpers.js";
-import { fakeStore, silent } from "./dishHelpers.js";
+import { fakeStore, type FakeStore, silent } from "./dishHelpers.js";
 import { session } from "./helpers.js";
 
 const skip = !hasDatabase;
@@ -110,7 +112,7 @@ async function kitchen(options: { events?: number } = {}) {
   await q(`insert into push_log (person_id, kind, status, title, body) values ($1, 'message', 'sent', 'SECRET-R title', 'SECRET-R body')`, [R]);
 
   // Recipes, jobs, recordings.
-  const prefix = `recipes/${uniq("poha")}/`;
+  const prefix = `${uniq("poha")}/`; // as the worker names a recipe folder
   const poha = await id(
     `insert into recipes (family_id, cook_id, title, status, media_prefix, recipe_json_key, cover_key, memories, shared_at, story_card_text)
      values ($1, $2, 'SECRET-R poha', 'ready', $3, $4, $5, '["SECRET-R story"]', now(), 'SECRET-R card') returning id`,
@@ -975,7 +977,14 @@ test("a plate photo the sweep has taken isn't reported forever: the deletion can
   await q(`insert into recordings (family_id, cook_id, source, status, cover_key) values ($1, $2, 'phone', 'ended', $3)`, [f.id, cook, plate]);
   const did = await purge(cook);
   assert.ok((await deletionOf(cook)).media_keys.includes(plate));
-  assert.equal(await purgeOutside(did), "retry", "still there");
+  await pastWait(did);
+  const s3 = s3Fakes();
+  try {
+    assert.equal(await purgeOutside(did), "retry", "still there: the ledger has it, so it's the sweep's");
+    assert.ok(!s3.media.removed.includes(plate));
+  } finally {
+    s3.done();
+  }
   const store = fakeStore();
   useObjectStore(store);
   try {
@@ -1232,11 +1241,22 @@ test("from the route through the queue: the purge runs, then the outside purge, 
   };
   while ((await drain()) > 0);
   await assertPurged(k);
+  const waiting = await deletionOf(k.R);
+  assert.equal(waiting.voice_clone_id, null, "her voice clone was deleted");
+  assert.deepEqual([waiting.external_attempts, waiting.external_purged_at], [0, null], "S3 waits out the links");
+
+  await pastWait(waiting.id);
+  const s3 = s3Fakes();
+  try {
+    await q(`insert into outbox (queue, payload) values ('scheduled', $1)`, [{ task: "accounts.outside", deletionId: waiting.id }]); // as accounts.sweep sends it
+    while ((await drain()) > 0);
+  } finally {
+    s3.done();
+  }
   const after2 = await deletionOf(k.R);
-  assert.equal(after2.external_attempts, 1);
+  assert.equal(after2.external_attempts, 1, "the sweep's files are still marked");
   assert.ok(after2.external_tried_at);
   assert.equal(after2.external_purged_at, null);
-  assert.equal(after2.voice_clone_id, null, "her voice clone was deleted");
 });
 
 // ---- outside the database
@@ -1252,38 +1272,149 @@ function voiceStub(reply: () => void | Promise<void> = () => {}) {
   return seen;
 }
 
-test("the outside purge says plainly what it couldn't reach, and never claims it's done", { skip }, async () => {
+/** Stands in for the wait before S3 (outside.ts S3_GRACE_MS), and for the sweep's own (jobs/tasks.ts GRACE_S). */
+async function pastWait(deletionId: string) {
+  await q(`update account_deletions set purged_at = purged_at - make_interval(secs => $2) where id = $1`, [deletionId, S3_GRACE_MS / 1000 + 1]);
+  await q(`update files set delete_requested_at = delete_requested_at - make_interval(secs => $1) where delete_requested_at is not null`, [S3_GRACE_MS / 1000 + 1]);
+}
+
+function s3Fakes() {
+  const stores = { uploads: fakeStore(), media: fakeStore(), private: fakeStore() };
+  useUploadStore(stores.uploads);
+  useMediaStore(stores.media);
+  useObjectStore(stores.private);
+  return {
+    ...stores,
+    done: () => {
+      useUploadStore(undefined);
+      useMediaStore(undefined);
+      useObjectStore(undefined);
+    },
+  };
+}
+
+const put = (store: FakeStore, ...keys: string[]) => {
+  for (const key of keys) store.objects.set(key, { bytes: new Uint8Array(1), contentType: "application/octet-stream" });
+};
+
+test("the outside purge waits as long as the sweep, then empties her upload and recipe folders, and is done once the sweep has the rest", { skip }, async () => {
   const k = await kitchen();
   const seen = voiceStub();
   const did = await startDeletion(k.R, "person");
   assert.equal(await purgeOutside(did!), "not_ready", "a late recipe could still add to the lists");
   await runPurge(did!, {});
-  assert.equal(await purgeOutside(did!), "retry");
-  assert.deepEqual(seen, ["voice_r"]);
-  const d = await deletionOf(k.R);
-  assert.equal(d.external_purged_at, null);
-  assert.match(d.external_error, /Not reached yet: \d+ files marked and not deleted/);
-  assert.match(d.external_error, /Not reached yet: 2 upload folders/);
-  assert.match(d.external_error, /Not reached yet: 3 recipe folders/);
-  assert.equal(d.voice_clone_id, null);
-  assert.equal(await purgeOutside(did!), "retry");
-  assert.deepEqual(seen, ["voice_r"], "a clone already deleted isn't deleted twice");
+  assert.equal(await purgeOutside(did!), "not_ready", "a link in a phone's hands could still put a file back");
+  assert.deepEqual(seen, ["voice_r"], "her voice clone doesn't wait");
+
+  const s3 = s3Fakes();
+  try {
+    const hers = {
+      uploads: [`${k.uploadA}01.mov`, `${k.uploadA}02.mov`, `${k.uploadB}01.mov`],
+      media: [`${k.prefix}recipe.json`, `${k.prefix}poster.jpg`, `${k.prefix}steps/1.jpg`, `${workerFolder(k.jobRunning)}${k.jobRunning.slice(0, 4)}-a1/part.mp4`],
+    };
+    // Someone else's folders that start the same way, and the public library.
+    const theirs = { uploads: [`${k.uploadA.slice(0, -1)}-other/01.mov`], media: [`${k.prefix.slice(0, -1)}2/recipe.json`, "library/demo/recipe.json", "library.json"] };
+    put(s3.uploads, ...hers.uploads, ...theirs.uploads);
+    put(s3.media, ...hers.media, ...theirs.media, k.video);
+    await pastWait(did!);
+
+    assert.equal(await purgeOutside(did!), "retry", "the ledger's files are the sweep's, and it hasn't run");
+    assert.deepEqual(seen, ["voice_r"], "deleted once");
+    assert.deepEqual([...s3.uploads.objects.keys()].sort(), theirs.uploads);
+    assert.deepEqual([...s3.media.objects.keys()].sort(), [...theirs.media, k.video].sort(), "the video has a row in the ledger, so the sweep takes it");
+    const d = await deletionOf(k.R);
+    assert.match(d.external_error, /^Not reached yet: \d+ files marked and not deleted$/, "nothing else is left");
+
+    await sweepUploads(trace);
+    await sweep({ log: silent });
+    assert.ok(s3.media.removed.includes(k.video), "the sweep reaches the media bucket");
+    for (const key of [k.rVoice, k.frame, k.plate]) assert.ok(s3.private.removed.includes(key), key);
+    assert.equal(await purgeOutside(did!), "done");
+    const done = await deletionOf(k.R);
+    assert.equal(done.external_error, null);
+    assert.equal(done.external_counts.voiceClones, 1);
+    assert.deepEqual(done.external_counts, { voiceClones: 1, uploadObjects: hers.uploads.length, mediaObjects: hers.media.length }, "added up over both attempts, each file once");
+    assert.deepEqual([...s3.media.objects.keys()].sort(), theirs.media.sort(), "the library and the other folder stay");
+  } finally {
+    s3.done();
+  }
 });
 
-test("the sweep reaches what's stated: every private file marked by a deletion. The rest stays marked until it can reach more", { skip }, async () => {
-  const k = await kitchen();
-  const store = fakeStore();
-  useObjectStore(store);
+const trace = { requestId: "req-test", log: { info: () => {}, warn: () => {}, error: () => {} } };
+
+/** A deletion with nothing else on it, past the wait, holding these lists. */
+async function listed(lists: { upload_keys?: string[]; media_prefixes?: string[]; media_keys?: string[] }) {
+  const f = await makeFamily();
+  const p = await makePerson(f.id, "Listed");
+  await makePerson(f.id, "Someone else");
   voiceStub();
-  const did = await purge(k.R);
-  await sweep({ log: silent });
-  assert.ok(store.removed.includes(k.answerClip), "her clip on a card, an anonymous upload, comes off S3");
-  assert.ok(store.removed.includes(k.owned), "a signed-in upload with its owner on it: Messages' sweep reaches these");
-  for (const key of [k.rVoice, k.frame]) assert.ok(store.removed.includes(key), `in the private bucket: ${key}`);
-  assert.ok(!store.removed.includes(k.video), "the media bucket isn't reachable yet");
-  assert.equal((await row("files", "key = $1", [k.video])).deleted_at, null);
-  assert.equal(await purgeOutside(did), "retry");
-  useObjectStore(undefined);
+  const did = await purge(p);
+  await q(
+    `update account_deletions set upload_keys = $2::text[]::s3_key[], media_prefixes = $3::text[]::s3_key[], media_keys = $4::text[]::s3_key[] where id = $1`,
+    [did, lists.upload_keys ?? [], lists.media_prefixes ?? [], lists.media_keys ?? []],
+  );
+  await pastWait(did);
+  return { did, f };
+}
+
+test("a folder something else still names, one with an unexpected name, and one too big are left, each with its reason", { skip }, async () => {
+  const other = await makeFamily();
+  const cook = await makePerson(other.id, "Other cook");
+  const shared = `${uniq("shared")}/`;
+  const cover = `${uniq("covers")}/`;
+  const busy = `${uniq("busy-upload")}/`;
+  const big = `${uniq("big")}/`;
+  await q(`insert into recipes (family_id, cook_id, title, status, media_prefix) values ($1, $2, 'KEEP-theirs', 'ready', $3)`, [other.id, cook, shared]);
+  await q(`insert into recipes (family_id, cook_id, title, status, cover_key) values ($1, $2, 'KEEP-seeded', 'ready', $3)`, [other.id, cook, `${cover}poster.jpg`]);
+  await q(`insert into jobs (family_id, cook_id, upload_key, source, stage) values ($1, $2, $3, 'phone', 'done')`, [other.id, cook, busy]);
+  const { did } = await listed({
+    upload_keys: [busy, "deep/folder/"],
+    media_prefixes: [shared, cover, "library/", "glasses/", "recipes/odd/", big],
+    media_keys: ["library/demo/poster.jpg"],
+  });
+  const s3 = s3Fakes();
+  try {
+    put(s3.uploads, `${busy}01.mov`, "deep/folder/01.mov");
+    put(s3.media, `${shared}recipe.json`, `${cover}poster.jpg`, "library/demo/poster.jpg", "glasses/x.mp4", "recipes/odd/recipe.json");
+    for (let i = 0; i <= FOLDER_MAX; i += 1) put(s3.media, `${big}${i}.jpg`);
+    assert.equal(await purgeOutside(did), "retry");
+    assert.deepEqual([s3.uploads.removed, s3.media.removed], [[], []], "nothing was deleted");
+    const { external_error } = await deletionOf((await one(`select person_id from account_deletions where id = $1`, [did])).person_id);
+    assert.match(external_error, /Not reached yet: 1 upload folders still in use/);
+    assert.match(external_error, /Not reached yet: 1 upload folders with an unexpected name/);
+    assert.match(external_error, /Not reached yet: 2 media folders still in use/);
+    assert.match(external_error, /Not reached yet: 3 media folders with an unexpected name/);
+    assert.match(external_error, /Not reached yet: 1 media files with an unexpected name/);
+    assert.match(external_error, new RegExp(`Not reached yet: 1 media folders holding more than ${FOLDER_MAX} files`));
+  } finally {
+    s3.done();
+  }
+});
+
+test("S3 failing is a retry that names only the bucket; running out of time carries on in a new message without using an attempt", { skip }, async () => {
+  const folder = `${uniq("recipe")}/`;
+  const { did } = await listed({ upload_keys: [`${uniq("up")}/`], media_prefixes: [folder] });
+  const s3 = s3Fakes();
+  try {
+    put(s3.media, `${folder}recipe.json`);
+    s3.media.failLists = true;
+    assert.equal(await purgeOutside(did), "retry");
+    const row1 = await one(`select external_attempts, external_error from account_deletions where id = $1`, [did]);
+    assert.deepEqual([row1.external_attempts, row1.external_error], [1, "S3 media: Error"]);
+
+    s3.media.failLists = false;
+    const queued = await count("outbox", "payload->>'task' = 'accounts.outside' and payload->>'deletionId' = $1", [did]);
+    assert.equal(await purgeOutside(did, -1), "more");
+    assert.equal(await count("outbox", "payload->>'task' = 'accounts.outside' and payload->>'deletionId' = $1", [did]), queued + 1);
+    assert.equal((await one(`select external_attempts from account_deletions where id = $1`, [did])).external_attempts, 1, "not an attempt");
+    assert.ok(s3.media.objects.has(`${folder}recipe.json`), "it stopped before the next folder");
+
+    assert.equal(await purgeOutside(did), "done");
+    assert.ok(!s3.media.objects.has(`${folder}recipe.json`));
+    assert.equal(await purgeOutside(did), "done", "a second report changes nothing");
+  } finally {
+    s3.done();
+  }
 });
 
 test("with nothing outside left, it's done, with its counts; a second report changes nothing", { skip }, async () => {
