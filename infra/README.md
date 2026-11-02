@@ -34,7 +34,7 @@ scripts/load-test.mjs   the api's load test: 50 a second for 15 minutes, then a 
 cd infra/envs/staging && terraform init -backend=false && terraform validate
 
 # the off-by-default parts' rules, on Terraform's mock provider (no login, no AWS)
-cd infra/backup-copy && terraform init -backend=false && terraform test   # also infra/modules/bucket_copy, infra/modules/front_door
+cd infra/backup-copy && terraform init -backend=false && terraform test   # also infra/modules/bucket_copy, infra/modules/front_door, infra/modules/env
 
 # the website's CloudFront Function, against a real build
 cd web && npm ci && npm run build && cd .. && node --test infra/modules/web/rewrite.test.mjs
@@ -183,6 +183,44 @@ The cap is $1 a day on `dish_budget_usd`, plus Mom's overage and calls in flight
 ## Database migrations
 
 `api/migrations/*.sql`, run by `api/src/migrate.ts` as a one-off task before each api rollout. A failure stops the rollout.
+The task is `homecookd-<env>-migrate`, with that release's image. It's the only one with the master login ("Database logins" below).
+
+## Database logins
+
+The api and the worker each log in to Postgres as their own user, `homecookd_api` and `homecookd_worker`, made by
+`api/migrations/078_app_logins.sql`. They read and write rows, and that's all: no schema changes, no roles, no temporary tables, and
+no other database the master login owns on the server (RDS's `postgres`). The worker reaches only the tables its jobs use, never
+sign-in or messages. Each logs in with an IAM token its task role signs for its own user (`rds-db:connect`), new for each connection,
+so no password exists anywhere. Only the migrate task gets the master login (`DB_CREDENTIALS`).
+
+`db_iam_login` moves the api and worker over. Staging has it off until the steps below are done. Production starts with it on: its
+first api deploy makes the two users before the api rolls out.
+
+**On staging, in this order.** Database and IAM changes never apply by themselves, so each apply here is Caleb's.
+1. This change's merge is refused by the auto-apply. Caleb applies it by hand. The plan turns on IAM logins at the database, adds the
+   migrate task and its two roles, adds `rds-db:connect` to the api's and worker's roles, and lets the deploy role run the migrate task
+   instead of the api's. The api's and worker's tasks don't change. Until then a deploy runs the migrations in the api's own task, as before,
+   because there's no migrate task yet and the api still has the master login.
+2. Turn IAM logins on now, not at the next maintenance window. No outage, and the master login keeps working:
+   ```bash
+   AWS_PROFILE=homecookd aws rds modify-db-instance --db-instance-identifier homecookd-staging --enable-iam-database-authentication --apply-immediately
+   AWS_PROFILE=homecookd aws rds describe-db-instances --db-instance-identifier homecookd-staging --query 'DBInstances[0].IAMDatabaseAuthenticationEnabled'   # wait for true
+   ```
+3. Deploy the api (Actions, "Deploy to AWS", `staging`, `api`). Its migrate task makes the two users. The api still logs in as master.
+4. A one-line PR sets `db_iam_login`'s default to `true` in `envs/staging`, so a later merge doesn't plan it back. Its apply is refused
+   (IAM: the execution roles stop reading the master secret), and Caleb applies it by hand.
+5. Deploy the api, then the worker, so each picks up its new task definition. The deploy's smoke test only reads `/health`, which
+   doesn't touch the database, so check `/ready` answers `{"database":"ok"}`. The worker has 0 tasks, so its first run proves its login.
+
+**The way back:** `terraform apply -var db_iam_login=false` (or revert step 4's PR), then deploy the api and the worker. Apply first: an
+older task definition with the master login can't start until the execution roles may read its secret again. IAM logins at the
+database and the two users can stay. They don't change the master login.
+
+**A later table** is the api's automatically, because the migrate login makes it. The worker gets only what it's granted, so a table the
+worker needs is granted to it in the migration that makes it. `pipeline/test_queue_worker.py` and `api/test/jobsWorker.test.ts` run
+the real worker as `homecookd_worker`, so a missing grant fails there first.
+
+IAM logins suit fewer than about 200 new connections a second. The api's pool opens far fewer.
 
 ## Rules
 

@@ -49,6 +49,12 @@ variable "api_count" {
   default = 1
 }
 
+variable "db_iam_login" {
+  description = "The api and worker log in to Postgres as their own limited users with IAM tokens. Steps and the way back: infra/README.md, \"Database logins\""
+  type        = bool
+  default     = false
+}
+
 variable "front_door" {
   description = "Phase 1's addresses, to prove them on staging. Empty is off, and a plain apply removes them. Shape: infra/modules/front_door/variables.tf. Steps: docs/build/ADDRESSES-MIGRATION.md"
   type        = any
@@ -75,6 +81,7 @@ module "env" {
 
   alb_allowed_cidrs    = var.alb_allowed_cidrs
   private_cors_origins = [module.web.url, "http://localhost:3105"]
+  db_iam_login         = var.db_iam_login
   schedules = {
     "dish.sweep"            = { expression = "rate(1 hour)", task = "dish.sweep" }
     "platform.prune"        = { expression = "rate(6 hours)", task = "platform.prune" }

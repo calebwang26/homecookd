@@ -94,11 +94,12 @@ No area may switch before this passes. Until it does, there's no scheduled backu
 Likely to pass $300 a month (about $450-850 at 500 daily users), so it's his OK twice over.
 - **Who:** Claude writes it, Caleb OKs the plan, then Claude applies.
 - **Do, first:** give the GitHub `Production` environment required reviewers. Then close the gaps the plan lists for launch: 2 or more api tasks, autoscaling, HTTPS, a limited database login for the worker and api in place of the master one. Done on the branch (Nov 2): the workflows' actions pinned to commit SHAs, and a checksum for the downloaded gitleaks (`infra/README.md`, "Pinned actions and tools").
+  The limited login is built, and `envs/production` has it on from the start (`db_iam_login`). Prove it on staging first: `infra/README.md`, "Database logins".
   ```bash
   cd infra/envs/production && AWS_PROFILE=homecookd terraform plan   # Caleb reads this
   AWS_PROFILE=homecookd terraform apply
   ```
-  Then Actions, "Deploy to AWS", `production`, `api`, which runs the migrations first.
+  Then Actions, "Deploy to AWS", `production`, `api`, which runs the migrations first, as the migrate task with the master login. They make the api's and worker's own logins.
 - **Check:** `/health` and `/ready` over HTTPS. A restore drill, a deliberately killed service and a load test (AWS-MIGRATION, "Before production launch"). Run `dish-api-e2e.mjs` against production with its made-up dish. Production ignores `DISH_FAKE_AI`, so this uses real models at a small cost.
 - **Back:** `terraform destroy`, since nothing depends on it yet.
 

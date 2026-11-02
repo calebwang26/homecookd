@@ -65,7 +65,7 @@ and anything changing what build 6 calls, needs his separate OK.
 ### Before production launch
 
 A restore drill, a deliberately killed service, a load test, and these gaps closed: 2+ api tasks, autoscaling, HTTPS, and a
-limited database login.
+limited database login. The login is built (Nov 2) and waits on Caleb's staging apply (`infra/README.md`, "Database logins").
 
 **A budget alert reaches a person (Nov 1).** The real-models window showed the budget's alert reaching only the logs, because `REPORT_ALERT_URL` isn't set on AWS. A log alarm to the alerts topic now emails it. Before production: fire it once and see the email arrive.
 
@@ -161,7 +161,9 @@ longer needs `sentry-sdk`.
 
 Before production (CUTOVER.md, step 6):
 
-- Give the worker and api a limited database login in place of the master one.
+- Give the worker and api a limited database login in place of the master one. **Built (Nov 2):** each has its own user
+  (`api/migrations/078_app_logins.sql`), logs in with an IAM token, and can't change the schema. Only the migrate task keeps the master
+  login. Left: Caleb's staging apply and the switch, in the order in `infra/README.md`, "Database logins". Production starts with it on.
 - Pin the workflows' actions to commit SHAs, and add a checksum for the downloaded gitleaks. Done on the branch (Nov 2): every `uses:`
   names a commit, and gitleaks is checked against its sha256 before it runs (`infra/README.md`, "Pinned actions and tools").
 
@@ -270,8 +272,9 @@ pg_cron with EventBridge, and re-running `two_sided_live`, `api-smoke` and `rete
 Supabase freeze has to be lifted for this, which is Caleb's call.
 
 Before real data arrives: create a limited app user for `api` and `worker`, and take the RDS master login
-(`DB_CREDENTIALS` in `infra/modules/env/services.tf`) out of their tasks. The deploy workflow's actions are pinned to commit
-SHAs (Nov 2).
+(`DB_CREDENTIALS` in `infra/modules/env/services.tf`) out of their tasks. Built Nov 2: `homecookd_api` and `homecookd_worker`, with
+IAM tokens, and the master login only in the migrate task. Staging moves over with `db_iam_login` after Caleb's apply. The deploy
+workflow's actions are pinned to commit SHAs (Nov 2).
 
 ### 6. Convex to Postgres
 Same shared schema as phase 5.

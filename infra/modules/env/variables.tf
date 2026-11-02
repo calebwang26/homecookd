@@ -112,3 +112,9 @@ variable "github_subject_prefix" {
   type        = string
   default     = "repo:calebwang26@292613801/hackathon-homecookd@1431696591"
 }
+
+variable "db_iam_login" {
+  description = "The api and worker log in as their own limited users with IAM tokens, not the master login. Off until each step in infra/README.md, \"Database logins\", is done"
+  type        = bool
+  default     = false
+}
