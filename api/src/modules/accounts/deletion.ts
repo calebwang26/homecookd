@@ -47,9 +47,11 @@ export async function startDeletion(personId: string, source: DeletionSource, re
     if (!found[0]) return null;
     const familyId: string = found[0].family_id;
     // Whoever they were before they left or moved goes with them. The sync only passes on what the old system did, and that deletes one person.
-    const earlier = source === "person" ? await data.earlierSelves(c, personId) : [];
+    const seen = source === "person" ? await data.earlierSelves(c, personId) : [];
     // Family first, then person, everywhere: this is what serializes two last people, and a join, against the delete (C2). In id order, as a move does, so the two can't deadlock.
-    for (const id of [...new Set([familyId, ...earlier.map((e) => e.family_id)])].sort()) await data.lockFamily(c, id);
+    for (const id of [...new Set([familyId, ...seen.map((e) => e.family_id)])].sort()) await data.lockFamily(c, id);
+    // Read again under the locks: a move that finished while this waited has added to the chain.
+    const earlier = source === "person" ? await data.earlierSelves(c, personId) : [];
     const wasSignedIn = source === "person" && (await data.signedInIds(c, [personId])).has(personId);
     const deletionId = await deletePerson(c, personId, familyId, requestId);
     await endFamilyIfLast(c, familyId, wasSignedIn, requestId);
@@ -173,7 +175,7 @@ class OutOfTime extends Error {}
  * check: a row a moment late, or a batch lost to a crash, is found before anyone says it's done. Safe to run twice at once: each batch holds the deletion's row, and each step finds only
  * what's left. Out of time, it queues itself.
  */
-export async function runPurge(deletionId: string, trace: Pick<Trace, "requestId">, options: PurgeOptions = {}): Promise<"done" | "more" | "missing"> {
+export async function runPurge(deletionId: string, trace: Pick<Trace, "requestId">, options: PurgeOptions = {}): Promise<"done" | "more" | "held" | "missing"> {
   const started = Date.now();
   const max = options.batch ?? PURGE_BATCH;
   const budget = options.budgetMs ?? PURGE_BUDGET_MS;
@@ -215,17 +217,19 @@ export async function runPurge(deletionId: string, trace: Pick<Trace, "requestId
       return "more";
     }
     if (touched > 0) continue;
-    await tx(async (c) => {
+    const finished = await tx(async (c) => {
       const d = await lockedDeletion(c, deletionId);
-      if (!d || d.purged_at) return;
-      // With the recipe copy read-only the sync takes them. It isn't finished while they're here, so this stops, and the schedule starts it again.
+      if (!d || d.purged_at) return true;
+      // With the recipe copy read-only the sync takes them, normally within minutes. It isn't finished while they're here. That's not an error: restartPurges looks again, and
+      // someone hears if it keeps stopping.
       const { rows: held } = await c.query(`select 1 from recipes where cook_id = $1 limit 1`, [d.person_id]);
-      if (held.length) throw new Error("this person's recipes are still here");
+      if (held.length) return false;
       await c.query(`update account_deletions set purged_at = now() where id = $1`, [deletionId]);
       if (d.recipe_ids.length) await requestMossSync(c, d.family_id); // again at the end, for a recipe a worker published after the start
       await enqueue(c, { queue: "scheduled", payload: { task: "accounts.outside", deletionId }, requestId: trace.requestId });
+      return true;
     });
-    return "done";
+    return finished ? "done" : "held";
   }
 }
 

@@ -121,13 +121,15 @@ export async function applyDeletion(d: Deletion): Promise<"applied" | "unchanged
       await c.query(
         `update people set name = $3, relation = null, avatar_key = null, email = null, tz = null, share_cooking = null, memorial = false,
                 language = null, voice_clone_consented_at = null, cartesia_voice_id = null, approx_lat = null, approx_lng = null, campus = null,
-                deleted_at = coalesce(deleted_at, $2)
+                previous_person_id = null, deleted_at = coalesce(deleted_at, $2)
           where id = $1`,
         [d.personId, d.at, BLANK_NAME],
       );
       await c.query(`delete from sessions where person_id = $1`, [d.personId]);
       await c.query(`update devices set person_id = null, label = null, revoked_at = coalesce(revoked_at, now()) where person_id = $1`, [d.personId]);
       await c.query(`delete from identities where person_id = $1`, [d.personId]);
+      // A deleted person keeps no way back to this row (ACCOUNTS-MIGRATION.md, "Someone who left the family").
+      await c.query(`delete from left_identities where person_id = $1`, [d.personId]);
       await c.query(`delete from push_tokens where person_id = $1`, [d.personId]);
     } else if (canInsert) {
       // A tombstone only holds a place for rows pointing at it. If its old id is already taken, that's a duplicate to report, not a reason to fail.

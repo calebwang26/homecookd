@@ -997,7 +997,7 @@ test("with the recipe copy read-only, a purge doesn't finish while the sync stil
   try {
     const did = await startDeletion(cook, "sync");
     assert.equal(await count("recipes", "id = $1", [recipe]), 1, "the sync owns them");
-    await assert.rejects(runPurge(did!, {}), /recipes are still here/);
+    assert.equal(await runPurge(did!, {}), "held", "not an error: the sync takes them within minutes");
     assert.equal((await deletionOf(cook)).purged_at, null);
     await tx(async (c) => {
       await c.query(`select set_config('homecookd.sync_writer', 'on', true)`);

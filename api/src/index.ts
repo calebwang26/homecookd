@@ -5,6 +5,9 @@ import { db } from "./db.js";
 import { oldestDueAgeS, oneAtATime, sendDue } from "./outbox.js";
 import { sqsReceiver, startConsumer } from "./scheduled.js";
 
+// Someone who left can't be found when they come back without this (accounts/data.ts). Everything else works, so this says so rather than stopping.
+if (!process.env.LEFT_IDENTITY_SECRET?.trim()) console.error(JSON.stringify({ level: "warn", msg: "LEFT_IDENTITY_SECRET isn't set, so nobody who leaves can be linked when they return" }));
+
 const app = buildApp();
 
 // Every api task runs a sender; SKIP LOCKED keeps them off each other's rows. Off locally unless the queues are set.

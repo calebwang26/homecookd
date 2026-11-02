@@ -4,7 +4,6 @@ import { createHmac, randomUUID } from "node:crypto";
 import type { Queryable } from "../../db.js";
 import { seal, FAMILY_CODE_SALT, unseal } from "./sealed.js";
 import type { Who } from "./identity.js";
-import { joinSecret } from "./tickets.js";
 import {
   assertOwnsPeople,
   newFamilyCode,
@@ -308,10 +307,10 @@ export async function linkIdentity(q: Queryable, who: Who, personId: string): Pr
   return true;
 }
 
-/** Keyed, so the table can't be matched against a list of Apple ids. With no key set, nobody's link is kept. */
+/** Keyed with a secret only this api holds (LINK_JOIN_SECRET is Convex's and Supabase's too), so the table can't be matched against a list of Apple ids. With no key set, nobody's link is kept: the api says so when it starts. */
 function leftIdentityHash(provider: string, subject: string): string | null {
-  const secret = joinSecret();
-  return secret ? createHmac("sha256", secret).update(`left-identity:${provider}:${subject}`).digest("hex") : null;
+  const secret = process.env.LEFT_IDENTITY_SECRET?.trim();
+  return secret ? createHmac("sha256", secret).update(`${provider}:${subject}`).digest("hex") : null;
 }
 
 /** Before someone's identities go, when they leave. A later leave of the same account points at the newer row, and that row's own link reaches the older one. */

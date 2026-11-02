@@ -4,6 +4,7 @@ import { randomBytes } from "node:crypto";
 import { after, before, test } from "node:test";
 import { db } from "../src/db.js";
 import { startDeletion, runPurge } from "../src/modules/accounts/deletion.js";
+import { applyDeletion } from "../src/modules/sync/data.js";
 import { Api, appleToken, bearer, count, device, freshDatabase, hasDatabase, type Keys, makeDevice, makeFamily, makeJoinLink, makePerson, row, setup } from "./accountsHelpers.js";
 
 const skip = !hasDatabase;
@@ -124,6 +125,42 @@ test("someone who deleted and comes back is a new person: nothing about them was
   const back = await signUp(sub, "Asha");
   assert.notEqual(back.person, first.person);
   assert.equal((await row("people", "id = $1", [back.person])).previous_person_id, null);
+});
+
+test("someone who left, deleted through the old system, and signs up again is a new person: the sync leaves no way back", { skip }, async () => {
+  const sub = uniq("left-then-synced");
+  const first = await joinByLink(sub, "Asha");
+  assert.equal((await api.post(`/profiles/${first.person}/remove`, {}, device(first.key, first.person))).status, 200);
+  assert.equal(await count("left_identities", "person_id = $1", [first.person]), 1);
+  await applyDeletion({ personId: first.person, familyId: first.family, supabaseId: null, at: new Date(), recipeIds: [] });
+  assert.ok((await row("people", "id = $1", [first.person])).deleted_at);
+  assert.equal(await count("left_identities", "person_id = $1", [first.person]), 0);
+  const back = await signUp(sub, "Asha");
+  assert.equal((await row("people", "id = $1", [back.person])).previous_person_id, null);
+});
+
+test("the sync's deletion of a row in a chain clears its link", { skip }, async () => {
+  const sub = uniq("chain-synced");
+  await signUp(sub, "Zed");
+  const two = await joinByLink(sub, "Zed Two", { move: true });
+  assert.ok((await row("people", "id = $1", [two.person])).previous_person_id);
+  await applyDeletion({ personId: two.person, familyId: two.family, supabaseId: null, at: new Date(), recipeIds: [] });
+  assert.equal((await row("people", "id = $1", [two.person])).previous_person_id, null);
+});
+
+test("with no key set, nobody's link is kept, and leaving and signing in still work", { skip }, async () => {
+  const key = process.env.LEFT_IDENTITY_SECRET;
+  delete process.env.LEFT_IDENTITY_SECRET;
+  try {
+    const sub = uniq("no-key");
+    const first = await joinByLink(sub, "Asha");
+    assert.equal((await api.post(`/profiles/${first.person}/remove`, {}, device(first.key, first.person))).status, 200);
+    assert.equal(await count("left_identities", "person_id = $1", [first.person]), 0);
+    const back = await signUp(sub, "Asha");
+    assert.equal((await row("people", "id = $1", [back.person])).previous_person_id, null);
+  } finally {
+    process.env.LEFT_IDENTITY_SECRET = key;
+  }
 });
 
 test("someone who left and later deletes through their old row leaves nothing behind", { skip }, async () => {
