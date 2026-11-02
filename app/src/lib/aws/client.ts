@@ -83,8 +83,6 @@ export function setAwsTransportForTests(f: typeof fetch, w?: (ms: number) => Pro
 }
 
 const requestId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
-// TODO(aws): staging's CORS doesn't allow x-request-id yet (asked Nov 2); send it on the web once it does.
-const onWeb = typeof document !== 'undefined';
 
 /**
  * Only the api's own word that the key is gone signs the phone out: a 401 `signed_out`, or (before the
@@ -108,8 +106,7 @@ function keyDied(sentKey: string) {
 async function once<T>(path: string, o: RequestOpts, rid: string, token: string | null): Promise<T> {
   if (!AWS_URL) throw new AwsError('homecookd isn’t set up in this build.', { status: 0, code: 'not_configured', kind: 'refused' });
   const method = o.method ?? (o.body ? 'POST' : 'GET');
-  const headers: Record<string, string> = { accept: 'application/json' };
-  if (!onWeb) headers['x-request-id'] = rid;
+  const headers: Record<string, string> = { accept: 'application/json', 'x-request-id': rid };
   if (method === 'POST') headers['content-type'] = 'application/json';
   let sentKey: string | null = null;
   if (o.auth === 'key') {
