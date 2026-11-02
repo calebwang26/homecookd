@@ -4,7 +4,7 @@
 # Only names Terraform already created are filled. A name missing from .env is reported and left alone.
 set -euo pipefail
 ENVIRONMENT=${1:?usage: load-secrets.sh staging|production}
-ENV_FILE=/Users/calebwang/Documents/GitHub/hackathon-homecookd/.env
+ENV_FILE=/Users/calebwang/hackathon-homecookd/.env
 export AWS_PROFILE=${AWS_PROFILE:-homecookd} AWS_REGION=us-west-2
 
 for ARN_NAME in $(aws secretsmanager list-secrets --filters "Key=name,Values=homecookd/$ENVIRONMENT/" \
