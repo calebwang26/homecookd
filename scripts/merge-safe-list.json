@@ -59,7 +59,7 @@
     "supabase/migrations/20261102120000_app_builds_seen.sql": {
       "switch": "LOG_APP_BUILDS, and applied by hand",
       "why": "A new empty table and a daily clean-up. No merge applies a migration; the next api deploy applies it first (AGENTS.md)",
-      "fingerprint": "609f870ca939"
+      "fingerprint": "0c8734910eb2"
     },
     "supabase/tests/appBuilds_test.ts": {
       "switch": "none needed: a test",

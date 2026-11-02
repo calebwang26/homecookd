@@ -7,8 +7,8 @@
 -- Same access model as the rest: RLS on, no policies, no grants to anon/authenticated; only the api function
 -- (service role) writes it. Additive and idempotent. Apply BEFORE deploying an api with LOG_APP_BUILDS = true.
 --
--- Kept 120 days, by a daily pg_cron job. TODO(caleb): 120 days is the default. Step 13 watches a whole month,
--- so this keeps about four to compare.
+-- Kept 120 days, by a daily pg_cron job (Caleb's choice, Nov 2). Step 13 watches a whole month, so this keeps
+-- about four to compare.
 
 create table if not exists public.app_builds_seen (
   day date not null,
