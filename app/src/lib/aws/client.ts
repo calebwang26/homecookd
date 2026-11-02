@@ -26,8 +26,10 @@ export type RequestOpts = {
   body?: Record<string, unknown>;
   /** Which credential the route takes. */
   auth: Credential;
-  /** `key` routes: who is acting (x-profile-id). `session` routes: whose session (default: this phone's own person). */
+  /** `key` routes: who is acting (x-profile-id). `session` routes: whose session (default: the current person). */
   as?: string | null;
+  /** `key` routes: send this key instead of the phone's (an old key being revoked). */
+  deviceKey?: string | null;
   /** For writes that create what someone wrote; the same key repeats safely. */
   idempotencyKey?: string;
   timeoutMs?: number;
@@ -38,22 +40,29 @@ export type Session = { sessionToken: string; familyId: string; personId: string
 
 type State = {
   deviceKey: string | null;
-  /** This phone's own person (sign-in's profile_id). */
+  /** Whose session a /v1 call uses when it doesn't say: the person using the app now. */
   personId: string | null;
   sessions: Map<string, Session>;
 };
 
 let state: State = { deviceKey: null, personId: null, sessions: new Map() };
 let starting = new Map<string, Promise<Session>>();
-let deadKeyHandler: (() => void) | null = null;
+const deadKeyListeners = new Set<() => void>();
 let fetcher: typeof fetch = (input, init) => fetch(input, init);
 let wait = (ms: number) => new Promise<void>((r) => setTimeout(r, ms));
 
-/** After sign-in, or when the app starts with a saved key. A new key or person drops every session. */
-export function setAwsCredentials(next: { deviceKey: string | null; personId: string | null }) {
-  if (next.deviceKey !== state.deviceKey || next.personId !== state.personId) {
-    state = { deviceKey: next.deviceKey, personId: next.personId, sessions: new Map() };
+/**
+ * After sign-in, when the app starts with a saved key, and whenever someone else picks up the phone.
+ * A new key drops every session; a new person only changes whose session /v1 calls use.
+ */
+export function setAwsCredentials(next: { deviceKey?: string | null; personId?: string | null }) {
+  const deviceKey = next.deviceKey !== undefined ? next.deviceKey : state.deviceKey;
+  const personId = next.personId !== undefined ? next.personId : state.personId;
+  if (deviceKey !== state.deviceKey) {
+    state = { deviceKey, personId, sessions: new Map() };
     starting = new Map();
+  } else {
+    state = { ...state, personId };
   }
 }
 
@@ -61,9 +70,10 @@ export function awsPersonId(): string | null {
   return state.personId;
 }
 
-/** SessionProvider's hook: the device key was refused, so this phone is signed out. Called once per key. */
-export function onDeadKey(fn: (() => void) | null) {
-  deadKeyHandler = fn;
+/** The device key was refused, so this phone is signed out: heard once per key (api.ts tells the session). Returns the unsubscribe. */
+export function onDeadKey(fn: () => void): () => void {
+  deadKeyListeners.add(fn);
+  return () => deadKeyListeners.delete(fn);
 }
 
 /** Tests only: a fake fetch and an instant clock. */
@@ -73,27 +83,39 @@ export function setAwsTransportForTests(f: typeof fetch, w?: (ms: number) => Pro
 }
 
 const requestId = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36);
+// TODO(aws): staging's CORS doesn't allow x-request-id yet (asked Nov 2); send it on the web once it does.
+const onWeb = typeof document !== 'undefined';
+
+/**
+ * Only the api's own word that the key is gone signs the phone out: a 401 `signed_out`, or (before the
+ * error-shape PR) its sentence. A gateway's 401 or an outage never does (never-signed-out-by-a-crash.md).
+ */
+const saysKeyIsGone = (e: AwsError) => e.kind === 'signed_out' && (e.code === 'signed_out' || e.message === 'This phone was signed out.');
 
 function keyDied(sentKey: string) {
   if (sentKey !== state.deviceKey) return; // an old key; this phone already moved on
   state = { deviceKey: null, personId: null, sessions: new Map() };
   starting = new Map();
-  try {
-    deadKeyHandler?.();
-  } catch {
-    // the session's trouble; this call still fails
+  for (const fn of deadKeyListeners) {
+    try {
+      fn();
+    } catch {
+      // the session's trouble; this call still fails
+    }
   }
 }
 
 async function once<T>(path: string, o: RequestOpts, rid: string, token: string | null): Promise<T> {
   if (!AWS_URL) throw new AwsError('homecookd isn’t set up in this build.', { status: 0, code: 'not_configured', kind: 'refused' });
   const method = o.method ?? (o.body ? 'POST' : 'GET');
-  const headers: Record<string, string> = { accept: 'application/json', 'x-request-id': rid };
+  const headers: Record<string, string> = { accept: 'application/json' };
+  if (!onWeb) headers['x-request-id'] = rid;
   if (method === 'POST') headers['content-type'] = 'application/json';
   let sentKey: string | null = null;
   if (o.auth === 'key') {
-    if (!state.deviceKey) throw new AwsError('Sign in first.', { status: 401, code: 'signed_out', kind: 'signed_out' });
-    headers['x-device-key'] = sentKey = state.deviceKey;
+    const key = o.deviceKey ?? state.deviceKey;
+    if (!key) throw new AwsError('Sign in first.', { status: 401, code: 'not_signed_in', kind: 'signed_out' });
+    headers['x-device-key'] = sentKey = key;
     if (o.as) headers['x-profile-id'] = o.as;
   } else if (o.auth === 'session' && token) {
     headers.authorization = `Bearer ${token}`;
@@ -126,7 +148,7 @@ async function once<T>(path: string, o: RequestOpts, rid: string, token: string 
   const body = await res.text().catch(() => '');
   if (!res.ok) {
     const e = readError(res.status, body, res.headers.get('retry-after'));
-    if (e.status === 401 && sentKey) keyDied(sentKey);
+    if (sentKey && saysKeyIsGone(e)) keyDied(sentKey);
     throw e;
   }
   if (!body) return undefined as T;
@@ -140,7 +162,7 @@ async function once<T>(path: string, o: RequestOpts, rid: string, token: string 
 /** This person's session, started once and shared by concurrent calls. */
 export function session(as?: string | null): Promise<Session> {
   const personId = as ?? state.personId;
-  if (!state.deviceKey || !personId) return Promise.reject(new AwsError('Sign in first.', { status: 401, code: 'signed_out', kind: 'signed_out' }));
+  if (!state.deviceKey || !personId) return Promise.reject(new AwsError('Sign in first.', { status: 401, code: 'not_signed_in', kind: 'signed_out' }));
   const have = state.sessions.get(personId);
   if (have) return Promise.resolve(have);
   const inFlight = starting.get(personId);
@@ -153,7 +175,7 @@ export function session(as?: string | null): Promise<Session> {
     })
     .catch((e: unknown) => {
       // sessions/start carries the key in its body: a 401 there is the key itself.
-      if (isAwsError(e) && e.status === 401) keyDied(key);
+      if (isAwsError(e) && saysKeyIsGone(e)) keyDied(key);
       throw e;
     })
     .finally(() => {

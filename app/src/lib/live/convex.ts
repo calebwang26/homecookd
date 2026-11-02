@@ -49,8 +49,12 @@ import { ConvexClient } from 'convex/browser';
 import { makeFunctionReference, type FunctionType } from 'convex/server';
 import { File, UploadType } from 'expo-file-system';
 import { useEffect, useState, useSyncExternalStore } from 'react';
+import { AppState } from 'react-native';
 
 import { requireAiConsent } from '@/lib/aiConsent';
+import { accounts } from '@/lib/aws/accounts';
+import { AWS_ON } from '@/lib/aws/config';
+import { isAwsError } from '@/lib/aws/errors';
 import { getSession, useSession } from '@/lib/session';
 import { jobForUpload } from '@/lib/unsentLogic';
 import { secretGet } from '@/lib/storage';
@@ -496,8 +500,40 @@ const noGlassesVideos = (onData: (v: GlassesVideo[]) => void) => {
   return () => {};
 };
 
-/** Who this is on Convex, with their language ('en' when unset). Null until it loads. */
-export function useMe(enabled = true): Me | null {
+/** Who this is on Convex (on AWS under the 1.1 switch), with their language ('en' when unset). Null until it loads. */
+export const useMe: (enabled?: boolean) => Me | null = AWS_ON ? useAwsMe : useConvexMe;
+
+/**
+ * GET /v1/me for whoever is in: read when they change and when the app comes back to the front (it isn't
+ * live on AWS: ACCOUNTS.md, "Live updates"). Her relation comes from the family, as on Convex. Null until it loads.
+ */
+function useAwsMe(enabled = true): Me | null {
+  const { me } = useSession();
+  const [value, setValue] = useState<Me | null>(null);
+  const [front, setFront] = useState(0);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => s === 'active' && setFront((n) => n + 1));
+    return () => sub.remove();
+  }, []);
+  const id = me?.id ?? null;
+  const relation = me?.relation ?? undefined;
+  useEffect(() => {
+    if (!enabled || !id) return;
+    let live = true;
+    accounts.me(id).then(
+      ({ person }) => {
+        if (live) setValue({ personId: person.id, name: person.name, role: person.role, language: person.language ?? 'en', ...(relation ? { relation } : null) });
+      },
+      () => {}, // keep what we had; the next focus asks again
+    );
+    return () => {
+      live = false;
+    };
+  }, [enabled, id, relation, front]);
+  return value && value.personId === id ? value : null;
+}
+
+function useConvexMe(enabled = true): Me | null {
   // The stub's value comes from the hook's own person (useSession), not the module snapshot, which
   // isn't published yet right after sign-in; useLive subscribes again when that person changes.
   const { me } = useSession();
@@ -511,6 +547,8 @@ export function useMe(enabled = true): Me | null {
  * this phone until it closes). Throws when it didn't save.
  */
 export async function setLanguage(language: string, profileId?: string): Promise<'saved' | 'stub'> {
+  // TODO(aws): no AWS route saves a language yet (ACCOUNTS.md open item 8): this phone keeps her pick.
+  if (AWS_ON) return 'stub';
   const sessionToken = await convexSession(profileId);
   if (!sessionToken) throw new Error('Sign in first.');
   let viaStub = false;
@@ -532,6 +570,15 @@ const accountDeleted = (e: unknown) => /this account was deleted/i.test(String(e
  * Throws when it didn't happen.
  */
 export async function deleteMyAccount(profileId: string): Promise<'deleted' | 'stub'> {
+  if (AWS_ON) {
+    try {
+      await accounts.deleteAccount(profileId);
+    } catch (e) {
+      // A retry after a lost answer: their session is gone (401), or sessions/start says "deleted" (403).
+      if (!isAwsError(e) || !(e.status === 401 || accountDeleted(e.message))) throw e;
+    }
+    return 'deleted';
+  }
   if (stubbed || !client) return 'stub';
   const deviceKey = await secretGet('deviceKey');
   if (!deviceKey) throw new Error('Sign in first.');
@@ -548,6 +595,7 @@ export async function deleteMyAccount(profileId: string): Promise<'deleted' | 's
 
 /** Whether Convex has the Sign in with Apple key yet (apple.revokeReady). False on the stub or any trouble. */
 export async function appleRevokeReady(profileId: string): Promise<boolean> {
+  if (AWS_ON) return accounts.appleRevokeReady(profileId).then((r) => r.ready === true, () => false);
   if (stubbed) return false;
   try {
     const sessionToken = await convexSession(profileId);
@@ -563,6 +611,12 @@ export async function appleRevokeReady(profileId: string): Promise<boolean> {
  * throws: "Delete my account" goes on either way. Called before deleteMyAccount, which ends the session.
  */
 export async function revokeAppleSignIn(profileId: string, authorizationCode: string): Promise<boolean> {
+  if (AWS_ON) {
+    return accounts.appleRevoke(authorizationCode, profileId).then(
+      (r) => r.revoked === true,
+      () => false,
+    );
+  }
   if (stubbed) return false;
   try {
     const sessionToken = await convexSession(profileId);
