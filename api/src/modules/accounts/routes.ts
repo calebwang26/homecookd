@@ -12,6 +12,7 @@
 //   GET  /v1/apple/revoke-ready        POST /v1/apple/revoke
 //   POST /v1/links/claim               POST /v1/links/moved
 //   POST /link/open                    (public)
+//   POST /v1/test/sign-in              (staging only: TEST_SIGNIN_KEY, testSignIn.ts)
 import type { FastifyInstance, FastifyReply, FastifyRequest, RouteHandlerMethod } from "fastify";
 import { requireSession, requireSessionEvenIfRemoved, signedIn } from "../../auth.js";
 import { webOrigin } from "../dish/values.js";
@@ -24,6 +25,7 @@ import { approveMove, askToMove, declineMove, movesICanAnswer, myMove } from "./
 import { ctxOf, requireProof, type ProofOptions } from "./proofs.js";
 import { endSession, startSession } from "./sessions.js";
 import { signInWith } from "./signin.js";
+import { testSignIn, testSignInKey } from "./testSignIn.js";
 import { assertOwnsPeople, limit, refuse, type Body } from "./values.js";
 
 // Supabase's: any site may call these, because each needs a key or a code, and the web /i page reads /invites/peek.
@@ -112,6 +114,14 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
   const authLog = (req: FastifyRequest) => req.log.error.bind(req.log) as (fields: object, message: string) => void;
   on("POST", "/auth/apple", null, (req) => signInWith("apple", bodyOf(req), req.ip, authLog(req)));
   on("POST", "/auth/google", null, (req) => signInWith("google", bodyOf(req), req.ip, authLog(req)));
+
+  // Staging's scripts only (testSignIn.ts): without the key there's no route at all, so production answers 404 as for any unknown path.
+  const testKey = testSignInKey();
+  if (testKey) {
+    app.post("/v1/test/sign-in", { schema: { body: { type: "object" } }, preValidation: emptyIsObject }, async (req) =>
+      testSignIn(testKey, req.headers["x-test-signin-key"], bodyOf(req), req.ip, authLog(req)),
+    );
+  }
 
   // ---- what Convex held: a session token
 

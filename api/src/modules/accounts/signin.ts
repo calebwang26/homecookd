@@ -419,12 +419,20 @@ export async function signInWith(provider: Provider, b: Body, ip: string, log?: 
   if (!audiencesOf(provider).length) throw refuse(503, `${providerLabel(provider)} sign-in isn't set up yet.`);
   await limit("authid-ip", ip, 30, 10);
   const idToken = str(b.id_token, "id_token", { max: 8000, required: true })!;
+  return signInAs(() => idTokens().verify(provider, idToken), b, ip, log);
+}
+
+/**
+ * Everything after the provider: the same body, minus `id_token`. `identify` runs after the body is checked, so a bad field is still refused before the token,
+ * as it was. Staging's test sign-in (testSignIn.ts) comes in here with a made-up account, so a script signs in, joins and starts a family exactly as a phone does.
+ */
+export async function signInAs(identify: () => Promise<Who>, b: Body, ip: string, log?: Log) {
   const label = deviceLabel(b);
   const name = str(b.name, "name", { max: MAX_NAME });
   const role = roleOf(b.role);
   const claim = typeof b.claim_profile_id === "string" ? b.claim_profile_id.trim() : "";
   if (claim && !UUID.test(claim)) throw refuse(400, "claim_profile_id is not a valid id");
-  const who = await idTokens().verify(provider, idToken);
+  const who = await identify();
   const opts: Options = { name, role, label, ip, log };
   if (present(b.join_token) || present(b.link_ticket) || present(b.claim_profile_id)) return signInByLink(who, b, opts);
 

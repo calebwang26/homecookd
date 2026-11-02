@@ -78,8 +78,10 @@ module "env" {
   db_protected      = false
   alert_email       = "caleb.wang26@gmail.com"
   # EDIBLE_CODE_KEY seals join, craving, dinner and share links (api/src/sealed.ts). Its value is Supabase's, loaded with load-secrets.sh, so copied rows open. A
-  # name only goes on a service once its value is loaded: a secret with no value stops a task starting.
-  secret_names = ["SENTRY_DSN_API", "SENTRY_DSN_WORKER", "RATE_LIMIT_SALT", "ANTHROPIC_API_KEY", "CARTESIA_API_KEY", "EDIBLE_CODE_KEY"]
+  # name only goes on a service once its value is loaded: a secret with no value stops a task starting. TEST_SIGNIN_KEY turns on the api's test sign-in for
+  # scripts (api/src/modules/accounts/testSignIn.ts); production refuses it. It's named on the api in the same change because the merge's own deploy waits for
+  # an apply that refuses this (IAM), so nothing rolls out until Caleb has loaded its value (infra/README.md, "The app on staging").
+  secret_names = ["SENTRY_DSN_API", "SENTRY_DSN_WORKER", "RATE_LIMIT_SALT", "ANTHROPIC_API_KEY", "CARTESIA_API_KEY", "EDIBLE_CODE_KEY", "TEST_SIGNIN_KEY"]
 
   alb_allowed_cidrs    = var.alb_allowed_cidrs
   private_cors_origins = [module.web.url, "http://localhost:3105"]
@@ -116,7 +118,7 @@ module "env" {
       default_route = true
       uses_database = true
       # A secret with no value stops a task starting, so the real keys are named here only for a test window.
-      secrets = concat(["SENTRY_DSN_API", "RATE_LIMIT_SALT", "EDIBLE_CODE_KEY"], var.real_ai ? ["ANTHROPIC_API_KEY", "CARTESIA_API_KEY"] : [])
+      secrets = concat(["SENTRY_DSN_API", "RATE_LIMIT_SALT", "EDIBLE_CODE_KEY", "TEST_SIGNIN_KEY"], var.real_ai ? ["ANTHROPIC_API_KEY", "CARTESIA_API_KEY"] : [])
       env = merge(
         # OVERLOAD_SHED: overloaded, a request is turned away with a 503 and retry-after before any work (api/src/overload.ts). On here to test it; production decides with its size.
         { DISH_WEB_ORIGIN = module.web.url, DISH_DAILY_BUDGET_USD = var.dish_budget_usd, OVERLOAD_SHED = "on" },
@@ -143,9 +145,12 @@ module "web" {
 }
 
 module "front_door" {
-  source    = "../../modules/front_door"
-  name      = "homecookd-staging-front-door"
-  addresses = var.front_door
+  source = "../../modules/front_door"
+  name   = "homecookd-staging-front-door"
+  # api: the app's HTTPS address for staging. iOS won't call plain HTTP, and the load balancer has no certificate, so CloudFront answers on its own
+  # cloudfront.net name, with no DNS change, and passes every request through uncached. CloudFront to the load balancer is plain HTTP: staging holds no real
+  # families. The api then sees CloudFront's address as the caller's, so its per-address limits count all callers together here (contracts/ACCOUNTS.md).
+  addresses = merge({ api = { origin_domain = trimprefix(module.env.load_balancer_url, "http://"), origin_http_only = true } }, var.front_door)
 }
 
 output "load_balancer_url" { value = module.env.load_balancer_url }

@@ -180,6 +180,22 @@ it in the clear. So: made-up dishes and voices only, never real family content, 
 
 The cap is $1 a day on `dish_budget_usd`, plus Mom's overage and calls in flight.
 
+## The app on staging
+
+**The HTTPS address.** iOS won't call plain HTTP, so `module.front_door`'s `api` address is a CloudFront distribution in front of the load balancer, on its
+own `cloudfront.net` name with no DNS change: `terraform output front_door_domains`. Nothing is cached. CloudFront to the load balancer is plain HTTP,
+fine only because staging holds no real families. Behind CloudFront the api sees CloudFront's address as the caller's, so per-address limits are shared.
+
+**Staging's test sign-in.** Scripts can't do Sign in with Apple, so `POST /v1/test/sign-in` takes `/auth/apple`'s body with a `test_id` in place of the
+token, and the `x-test-signin-key` header (`api/src/modules/accounts/testSignIn.ts`, `docs/build/contracts/ACCOUNTS.md`). The route exists only while the
+api has `TEST_SIGNIN_KEY`, and the env module refuses that name in production. Its value is Caleb's to make and load, once:
+```bash
+grep -q '^TEST_SIGNIN_KEY=' /Users/calebwang/GitHub/homecookd/homecookd/.env || echo "TEST_SIGNIN_KEY=$(openssl rand -hex 32)" >> /Users/calebwang/GitHub/homecookd/homecookd/.env
+infra/scripts/load-secrets.sh staging TEST_SIGNIN_KEY   # this name only, so the real model keys aren't copied again
+```
+Order: the merge that names it (its own deploy waits for an apply that refuses it, IAM), then a hand apply, then the line above, then an api deploy.
+A deploy before the value is loaded can't start a task, and the running ones carry on.
+
 ## Database migrations
 
 `api/migrations/*.sql`, run by `api/src/migrate.ts` as a one-off task before each api rollout. A failure stops the rollout.
