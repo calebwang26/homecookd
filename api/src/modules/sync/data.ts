@@ -2,7 +2,6 @@
 // read-only, and a test reads api/src for it). Each row is its own transaction, so one row can't hold another's locks or fail another's write.
 import { randomUUID } from "node:crypto";
 import { db, tx, type Queryable } from "../../db.js";
-import { enqueue } from "../../outbox.js";
 import { BLANK_NAME } from "./merge.js";
 import type { Table } from "./sources.js";
 
@@ -65,12 +64,15 @@ export async function upsertFamily(id: string, build: (blank: boolean) => Row): 
 /**
  * Removes a recipe. A row that still points at it and may not cascade (a question holds a file key) keeps the row, so its contents go instead. That update
  * has to run before sync_deleted names the cook, because the trigger refuses any write to their recipes after: applyDeletion's order is what lets it through.
+ * True when the row went.
  */
-async function dropRecipe(c: Queryable, id: string): Promise<void> {
+async function dropRecipe(c: Queryable, id: string): Promise<boolean> {
   await c.query("savepoint drop_recipe");
   try {
     await c.query("delete from recipes where id = $1", [id]);
     await c.query("release savepoint drop_recipe");
+    await clearIssues(c, "recipes", id);
+    return true;
   } catch (error) {
     if ((error as { code?: string }).code !== "23503") throw error;
     await c.query("rollback to savepoint drop_recipe");
@@ -82,6 +84,7 @@ async function dropRecipe(c: Queryable, id: string): Promise<void> {
       [id, BLANK_NAME],
     );
     await noteIssue(c, "recipes", id, "recipe_blanked_still_referenced");
+    return false;
   }
 }
 
@@ -96,12 +99,17 @@ export type Deletion = {
   createdAt?: Date;
 };
 
+/** The account purge's start (accounts/deletion.ts, startDeletionIn), in the deletion's own transaction. */
+export type StartPurge = (c: Queryable) => Promise<unknown>;
+
 /**
- * An account deletion reaching the copy, all at once. Their recipes go and the row is blanked first, because after the record exists the triggers refuse
- * any further write. A person's lock means a row being written right now commits first and gets blanked here, or waits and is refused. Safe to repeat.
- * This also ends what lets them in: sessions, phones, sign-in links, push tokens. Their rows in areas that have moved go in sync.purge_person.
+ * An account deletion reaching the copy, all at once, in one transaction. `startPurge` runs as soon as the person's row is blank, and before their recipes
+ * go, so it finds what hangs on them (a dinner around one): it writes `account_deletions`, ends every way in (sessions, phones, sign-in links, push tokens)
+ * and queues the batches that reach every area that has moved. Their recipes go and the row is blanked before the record is written, because after it the
+ * triggers refuse any further write. A person's lock means a row being written right now commits first and gets blanked here, or waits and is refused.
+ * Safe to repeat. A repeat changes nothing, unless a question held one of their recipes last time and the purge has since taken the question: then the recipe goes.
  */
-export async function applyDeletion(d: Deletion): Promise<"applied" | "unchanged"> {
+export async function applyDeletion(d: Deletion, startPurge: StartPurge): Promise<"applied" | "unchanged"> {
   return tx(async (c) => {
     await c.query(WRITER);
     await lockPerson(c, d.personId);
@@ -109,15 +117,20 @@ export async function applyDeletion(d: Deletion): Promise<"applied" | "unchanged
     const person = (await c.query(`select family_id, deleted_at from people where id = $1`, [d.personId])).rows[0] as
       | { family_id: string; deleted_at: Date | null }
       | undefined;
-    if (known && person?.deleted_at) return "unchanged";
+    // The family before the person's row, as accounts' deletion takes them, and its sync lock before its row, as upsertFamily does: then none of them can deadlock.
+    await holdFamily(c, person?.family_id ?? d.familyId);
+    const { rows: recipes } = await c.query(`select id from recipes where cook_id = $1 or id = any($2)`, [d.personId, d.recipeIds]);
+    if (known && person?.deleted_at) {
+      await startPurge(c); // finds its row: nothing happens
+      let dropped = 0;
+      for (const recipe of recipes) if (await dropRecipe(c, recipe.id)) dropped += 1;
+      return dropped > 0 ? "applied" : "unchanged";
+    }
     const canInsert = !person && !!d.role && (await c.query(`select 1 from families where id = $1`, [d.familyId])).rows.length > 0;
     if (known && !person && !canInsert) return "unchanged";
 
-    const { rows: recipes } = await c.query(`select id from recipes where cook_id = $1 or id = any($2)`, [d.personId, d.recipeIds]);
-    for (const recipe of recipes) await dropRecipe(c, recipe.id);
-    await c.query(`delete from sync_recipe_seen where recipe_id = any($1)`, [[...recipes.map((recipe) => recipe.id), ...d.recipeIds]]);
-
     if (person) {
+      // Blanked here first, so the tombstone keeps Convex's time: the purge's start keeps a deleted_at it finds.
       await c.query(
         `update people set name = $3, relation = null, avatar_key = null, email = null, tz = null, share_cooking = null, memorial = false,
                 language = null, voice_clone_consented_at = null, cartesia_voice_id = null, approx_lat = null, approx_lng = null, campus = null,
@@ -125,13 +138,12 @@ export async function applyDeletion(d: Deletion): Promise<"applied" | "unchanged
           where id = $1`,
         [d.personId, d.at, BLANK_NAME],
       );
-      await c.query(`delete from sessions where person_id = $1`, [d.personId]);
-      await c.query(`update devices set person_id = null, label = null, revoked_at = coalesce(revoked_at, now()) where person_id = $1`, [d.personId]);
-      await c.query(`delete from identities where person_id = $1`, [d.personId]);
-      // A deleted person keeps no way back to this row (ACCOUNTS-MIGRATION.md, "Someone who left the family").
-      await c.query(`delete from left_identities where person_id = $1`, [d.personId]);
-      await c.query(`delete from push_tokens where person_id = $1`, [d.personId]);
-    } else if (canInsert) {
+      await startPurge(c);
+    }
+    for (const recipe of recipes) await dropRecipe(c, recipe.id);
+    await c.query(`delete from sync_recipe_seen where recipe_id = any($1)`, [[...recipes.map((recipe) => recipe.id), ...d.recipeIds]]);
+
+    if (canInsert) {
       // A tombstone only holds a place for rows pointing at it. If its old id is already taken, that's a duplicate to report, not a reason to fail.
       const { rowCount } = await c.query(
         `insert into people (id, family_id, supabase_id, name, role, deleted_at, created_at)
@@ -139,6 +151,7 @@ export async function applyDeletion(d: Deletion): Promise<"applied" | "unchanged
         [d.personId, d.familyId, d.supabaseId, BLANK_NAME, d.role, d.at, d.createdAt ?? null],
       );
       if (rowCount === 0) await noteIssue(c, "people", d.personId, "tombstone_not_written");
+      else await startPurge(c); // nothing can point at a new row yet, but every deleted person in the copy gets the same record
     }
 
     await c.query(
@@ -153,9 +166,13 @@ export async function applyDeletion(d: Deletion): Promise<"applied" | "unchanged
     }
     await clearIssues(c, "people", d.personId);
     if (person || canInsert) await blankFamilyIfEmpty(c, person?.family_id ?? d.familyId);
-    if (!known) await enqueue(c, { queue: "scheduled", payload: { task: "sync.purge_person", personId: d.personId } });
     return "applied";
   });
+}
+
+async function holdFamily(c: Queryable, familyId: string): Promise<void> {
+  await lockFamily(c, familyId);
+  await c.query(`select 1 from families where id = $1 for no key update`, [familyId]);
 }
 
 /**
@@ -327,11 +344,12 @@ export async function compareRow(table: Table, row: Row): Promise<"missing" | st
   return rows[0].missing ? "missing" : (rows[0].columns as string[]);
 }
 
-/** A deletion the copy should hold: its record there, the person blank or not there, and no recipe of theirs with anything in it. */
+/** A deletion the copy should hold: its record there, the person not there or blank with their account purge started, and no recipe of theirs with anything in it. */
 export async function deletionHolds(personId: string, recipeIds: string[]): Promise<boolean> {
   const { rows } = await db().query(
     `select exists (select 1 from sync_deleted where kind = 'person' and id = $1)
-        and not exists (select 1 from people where id = $1 and deleted_at is null)
+        and not exists (select 1 from people p where p.id = $1
+                         and (p.deleted_at is null or not exists (select 1 from account_deletions a where a.person_id = p.id)))
         and not exists (select 1 from recipes where (cook_id = $1 or id = any($2)) and ${RECIPE_HOLDS("$3")}) as holds`,
     [personId, recipeIds, BLANK_NAME],
   );
