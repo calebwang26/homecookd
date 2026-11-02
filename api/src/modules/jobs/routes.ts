@@ -39,6 +39,29 @@ const askForUploads = {
   },
 };
 
+const partsToSign = {
+  type: "object",
+  required: ["index", "partNumbers"],
+  properties: { index: { type: "integer", minimum: 1 }, partNumbers: { type: "array", items: { type: "integer" }, maxItems: 1000 } },
+};
+
+const partsDone = {
+  type: "object",
+  required: ["index", "parts"],
+  properties: {
+    index: { type: "integer", minimum: 1 },
+    parts: {
+      type: "array",
+      maxItems: 10000,
+      items: {
+        type: "object",
+        required: ["partNumber", "etag"],
+        properties: { partNumber: { type: "integer", minimum: 1 }, etag: { type: "string", minLength: 1, maxLength: 200 } },
+      },
+    },
+  },
+};
+
 const newJob = {
   type: "object",
   required: ["uploadId", "source"],
@@ -65,6 +88,15 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
   });
   // New: the signer's links lasted 7 days
   app.post("/v1/video-uploads/:uploadId/links", { schema: { params: byUpload }, config: { noBody: true } }, async (req) => await uploads.newLinks(signedIn(req), uploadIdOf(req)));
+  // New: a video over S3's 5 GiB limit for one PUT goes up in parts
+  app.post("/v1/video-uploads/:uploadId/parts", { schema: { params: byUpload, body: partsToSign } }, async (req) => {
+    const b = req.body as { index: number; partNumbers: number[] };
+    return await uploads.partLinks(signedIn(req), uploadIdOf(req), b.index, b.partNumbers);
+  });
+  app.post("/v1/video-uploads/:uploadId/parts/finish", { schema: { params: byUpload, body: partsDone } }, async (req) => {
+    const b = req.body as { index: number; parts: { partNumber: number; etag: string }[] };
+    return await uploads.finishParts(signedIn(req), uploadIdOf(req), b.index, b.parts);
+  });
   // New: the upload-complete check, which the signer's status file and the worker's release did
   app.post("/v1/video-uploads/:uploadId/complete", { schema: { params: byUpload }, config: { noBody: true } }, async (req) => await uploads.completeUpload(signedIn(req), uploadIdOf(req), trace(req)));
   // jobs.cancelUpload, and the signer's action: cancel

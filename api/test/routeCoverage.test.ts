@@ -244,6 +244,8 @@ const ROUTES: Record<string, SignedIn | Anonymous> = {
   // --- jobs, recipes and recordings
   "POST /v1/video-uploads": { call: (s, who) => post(s.app, who, "/v1/video-uploads", { videos: [VIDEO] }), otherFamily: madeAnew("A new folder of the caller's own, in their own family"), outsider: 403 },
   "POST /v1/video-uploads/:uploadId/links": { call: (s, who) => post(s.app, who, `/v1/video-uploads/${s.upload}/links`), otherFamily: 404, outsider: 404 },
+  "POST /v1/video-uploads/:uploadId/parts": { call: (s, who) => post(s.app, who, `/v1/video-uploads/${s.upload}/parts`, { index: 1, partNumbers: [1] }), otherFamily: 404, outsider: 404, notYet: { status: 400, why: "Its one small video goes up in one piece: jobsUploads.test.ts sends a big one" } },
+  "POST /v1/video-uploads/:uploadId/parts/finish": { call: (s, who) => post(s.app, who, `/v1/video-uploads/${s.upload}/parts/finish`, { index: 1, parts: [{ partNumber: 1, etag: "a" }] }), otherFamily: 404, outsider: 404, notYet: { status: 400, why: "Its one small video goes up in one piece: jobsUploads.test.ts sends a big one" } },
   "POST /v1/video-uploads/:uploadId/complete": { call: (s, who) => post(s.app, who, `/v1/video-uploads/${s.upload}/complete`), otherFamily: 404, outsider: 404 },
   "POST /v1/video-uploads/:uploadId/cancel": { call: (s, who) => post(s.app, who, `/v1/video-uploads/${s.upload}/cancel`), otherFamily: { why: "Looks only in the caller's family, and stops nothing there", check: (r) => assert.equal(r.data.stopped, false, r.body) }, outsider: 403 },
   "POST /v1/jobs": { call: (s, who) => post(s.app, who, "/v1/jobs", { uploadId: s.upload, source: "phone" }), otherFamily: 400, outsider: 403 },
