@@ -1,6 +1,6 @@
 // The team's side of "Report or block" (convex/reports.ts): what's open, and a review that settles it. No route: these answer only to the team, as Convex's internal
-// functions did. keep: it's fine, so it shows again for everyone but the families that reported it. Otherwise it leaves Community: a dinner is called off. Either way
-// every open report on it is resolved. A "family" report (a block) only gets resolved.
+// functions did, through src/reports.ts run as a one-off task. keep: it's fine, so it shows again for everyone but the families that reported it. Otherwise it leaves
+// Community: a dinner is called off. Either way every open report on it is resolved. A "family" report (a block) only gets resolved.
 //
 // A recipe's review can't write `recipes`, which is read-only until the jobs area moves (COMMUNITY-MIGRATION.md, blockers). So Convex's own review changes the recipe first, the
 // sync brings that here, and this resolves the reports only once the copy says so. Refused before that, nothing changes, and a recipe two families reported stays hidden.
@@ -42,6 +42,9 @@ export async function openReports() {
   });
   return out.sort((a, b) => a.firstAt - b.firstAt);
 }
+
+/** The team's script (src/reports.ts) reviews only an item with an open report, so a mistyped id changes nothing. */
+export const hasOpenReport = (kind: ReportKind, targetId: string) => data.hasOpenReport(db(), kind, targetId);
 
 /** How many reports it resolved. */
 export async function reviewReport(kind: ReportKind, targetId: string, keep: boolean): Promise<number> {
