@@ -5,9 +5,12 @@ import { after, test } from "node:test";
 import { randomUUID } from "node:crypto";
 import { db } from "../src/db.js";
 import { purgeDishForPerson } from "../src/modules/dish/account.js";
+import { linkByToken } from "../src/modules/dish/cravingData.js";
 import { CRAVING_TOTAL, DEFAULT_CRAVING_MESSAGE } from "../src/modules/dish/cravings.js";
 import { FAKE_WORDS } from "../src/modules/dish/model.js";
 import { sweep } from "../src/modules/dish/tasks.js";
+import { sha256Hex } from "../src/modules/dish/values.js";
+import { CRAVING_LINK_SALT, unseal } from "../src/sealed.js";
 import { call, family, ok, person, refusedWith, type Who, world } from "./communityHelpers.js";
 import { cravingCard, cravingLink, voiceUpload } from "./cravingHelpers.js";
 import { advance, answer, answersOf, anyString, askMom, getCard, hasDatabase, like, makeCard, MIN, model, rowOf, seedSpend, settle, store, TOKEN22 } from "./dishHelpers.js";
@@ -41,7 +44,7 @@ test("createLink: one live link per person, reused (a new message updates it); r
   const { url, token } = await cravingLink(t, dad);
   assert.equal(url, `https://homecookd.app/miss?c=${token}`);
   assert.match(token, TOKEN22);
-  like((await links())[0], { token, message: DEFAULT_CRAVING_MESSAGE, uses: 0, person_id: dad.personId, family_id: dad.familyId });
+  like((await links())[0], { token_hash: sha256Hex(token), message: DEFAULT_CRAVING_MESSAGE, uses: 0, person_id: dad.personId, family_id: dad.familyId });
 
   // Reused, any number of times; a new message replaces her line.
   assert.equal((await cravingLink(t, dad)).url, url);
@@ -64,8 +67,40 @@ test("createLink: one live link per person, reused (a new message updates it); r
   assert.equal((await links()).filter((l) => l.person_id === dad.personId).length, 2);
 
   // Used up, so she gets a new one.
-  await db().query("update craving_links set uses = $1 where token = $2", [CRAVING_TOTAL, fresh.token]);
+  await db().query("update craving_links set uses = $1 where token_hash = $2", [CRAVING_TOTAL, sha256Hex(fresh.token)]);
   assert.notEqual((await cravingLink(t, dad)).url, fresh.url);
+});
+
+test("her link's token is stored only as its sha256 and sealed: the row alone opens nothing, and she's shown the same link again", { skip }, async () => {
+  const { t, dad } = await wangs();
+  const { url, token } = await cravingLink(t, dad, "What do you miss, beta?");
+  const [row] = await links();
+  assert.ok(!JSON.stringify(row).includes(token), "no column holds the token");
+  assert.equal(await unseal(CRAVING_LINK_SALT, row.id, row.token_enc), token);
+  assert.equal(await unseal(CRAVING_LINK_SALT, "another-link", row.token_enc), null, "sealed to its own row");
+  assert.equal((await cravingLink(t, dad)).url, url);
+  // Found by the token, as the kid's page will; a wrong token or the hash itself finds nothing.
+  assert.equal((await linkByToken(db(), token))?.id, row.id);
+  assert.equal(await linkByToken(db(), `${token.slice(0, -1)}${token.endsWith("A") ? "B" : "A"}`), null);
+  assert.equal(await linkByToken(db(), row.token_hash), null);
+
+  // Without the key, nothing is made.
+  await ok(call(t, dad, "POST", "/v1/cravings/link/revoke"));
+  const key = process.env.EDIBLE_CODE_KEY;
+  delete process.env.EDIBLE_CODE_KEY;
+  try {
+    assert.equal((await call(t, dad, "POST", "/v1/cravings/link", {})).status, 500);
+  } finally {
+    process.env.EDIBLE_CODE_KEY = key;
+  }
+  assert.equal((await links()).length, 1);
+
+  // A live link that can't be opened gets a new one with her line; the old one is still found.
+  await db().query("update craving_links set revoked_at = null, token_enc = 'v1:AAAA.AAAA'");
+  const next = await cravingLink(t, dad);
+  assert.notEqual(next.token, token);
+  assert.equal((await links())[1].message, "What do you miss, beta?");
+  assert.equal((await linkByToken(db(), token))?.id, row.id);
 });
 
 test("two createLinks at once are one link", { skip }, async () => {

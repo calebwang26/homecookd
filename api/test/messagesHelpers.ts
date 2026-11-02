@@ -177,6 +177,7 @@ export async function familyRow(name: string): Promise<string> {
 
 export async function world(): Promise<World> {
   process.env.RATE_LIMIT_SALT = "test-salt-for-the-messages-limits";
+  process.env.EDIBLE_CODE_KEY = "test-code-key";
   delete process.env.MEDIA_BASE_URL;
   if (!migrated) {
     await freshDatabase();

@@ -130,7 +130,7 @@ test("Mom deletes: her answers, clips and version go; the card waits for an answ
 
 test("deleting a person deletes their craving links; a card made from one stays by the rules above", { skip }, async () => {
   const { t, familyId, dad, c } = await linkedCards();
-  const { rows } = await db().query("insert into craving_links (family_id, person_id, token, message) values ($1, $2, $3, 'hello') returning id", [familyId, dad, "L".repeat(22)]);
+  const { rows } = await db().query("insert into craving_links (family_id, person_id, token_hash, message) values ($1, $2, $3, 'hello') returning id", [familyId, dad, "a".repeat(64)]);
   await db().query("update dish_asks set craving_id = $2, requested_of = $3 where kid_token_hash = $1", [(await rowOf(c.kidToken)).kid_token_hash, rows[0].id, dad]);
   await deleteAccount(dad);
   assert.equal((await db().query("select 1 from craving_links")).rowCount, 0);

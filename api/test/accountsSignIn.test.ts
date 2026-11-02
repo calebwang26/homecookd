@@ -1,11 +1,12 @@
 // Sign in with Apple and Google, with and without a link. The real token checks run against fake provider keys. Carries over supabase/tests/api_test.ts and joinLinks_test.ts.
 import assert from "node:assert/strict";
-import { createHmac } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import { after, before, test } from "node:test";
 import { createLocalJWKSet, errors as joseErrors, SignJWT, type JWTVerifyGetKey } from "jose";
 import { db } from "../src/db.js";
 import { idTokensWith, useIdTokens } from "../src/modules/accounts/identity.js";
 import { signTicket, type JoinPayload } from "../src/modules/accounts/tickets.js";
+import { seal, SHARE_LINK_SALT, shareTokenHash } from "../src/sealed.js";
 import {
   Api,
   appleToken,
@@ -598,15 +599,23 @@ test("another tap linked the account first: this join backs out and signs in as 
 
 async function share(familyId: string, senderId: string | null) {
   const token = String((cards += 1)).padStart(10, "s");
-  await db().query(`insert into shares (token, family_id, library_id, sender_id) values ($1, $2, 'chicken-biryani', $3)`, [token, familyId, senderId]);
-  return token;
+  const id = randomUUID();
+  await db().query(`insert into shares (id, token_hash, token_enc, family_id, library_id, sender_id) values ($1, $2, $3, $4, 'chicken-biryani', $5)`, [
+    id,
+    shareTokenHash(token),
+    await seal(SHARE_LINK_SALT, id, token),
+    familyId,
+    senderId,
+  ]);
+  return { token, id };
 }
 
 test("Apple via a recipe link: joins as a learner by default; only an invited, not-yet-joined person can be claimed; the link fills up", { skip }, async () => {
   const { f, mom } = await family();
-  const token = await share(f.id, mom);
+  const { token, id: shareId } = await share(f.id, mom);
   const first = await api.apple({ id_token: await appleToken(keys, newSub()), share_token: token, name: "Sharer" });
   assert.equal(first.status, 200);
+  assert.equal((await row("signups", "person_id = $1", [first.data.profile_id])).share_token, `share:${shareId}`, "the log names the share, never its token");
   assert.equal((await row("people", "id = $1", [first.data.profile_id])).role, "kid");
   assert.deepEqual(await notes(f.id), ["Sharer joined from Mom's link"]);
 

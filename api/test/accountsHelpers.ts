@@ -7,7 +7,7 @@ import { buildApp } from "../src/app.js";
 import { hashToken } from "../src/auth.js";
 import { db } from "../src/db.js";
 import { idTokensWith, useIdTokens } from "../src/modules/accounts/identity.js";
-import { JOIN_LINK_SALT, seal } from "../src/modules/accounts/sealed.js";
+import { JOIN_LINK_SALT, seal } from "../src/sealed.js";
 import { freshDatabase, hasDatabase } from "./helpers.js";
 
 export { hasDatabase };

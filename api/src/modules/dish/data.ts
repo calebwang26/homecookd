@@ -20,7 +20,7 @@
 //   a card's model calls                      model_calls_ask                       written here, read by reports
 //   the day's alert already sent?             idempotency_keys primary key          one row
 // There are no list routes: a page is one card. Tokens are looked up by their sha256, so a lookup's timing says nothing about the
-// token, and no route compares a raw token to anything. A craving link's raw token isn't read here: its routes wait for the sync.
+// token, and no route compares a raw token to anything. A craving link is looked up the same way (cravingData.ts); its routes wait for the sync.
 import { db, type Queryable } from "../../db.js";
 import type { ModelCall } from "./model.js";
 import type { MissQuestion, QuestionId, Relation } from "./recipe/types.js";

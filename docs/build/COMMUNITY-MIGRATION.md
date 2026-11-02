@@ -162,6 +162,7 @@ The last command prints what the script said. A task takes about a minute to sta
 26. **A NUL byte is a 400 on every route.** `app.ts` looks through the params, the query and the body before any route's own checks, because Postgres text can't hold one and the error would be a 500. A cursor is encoded, so `paging.ts` checks inside it. Because this runs before a route's session check, a request with a NUL byte and no session gets 400 rather than 401, which says nothing about any row. On the dish routes the sentence is their usual "The body must be JSON."
 27. **A forged cursor with a date that can't be one is a 400,** checked before it reaches Postgres.
 28. **The team's review takes only an item with an open report.** Convex's `reports:review` took any id, so a wrong one could call off a dinner nobody reported. Running the same line twice is refused the second time.
+29. **Invite and craving tokens are stored sealed, and looked up by sha256** (SCHEMA.md, M6). Convex stored both as they are. A dinner whose sealed token can't be opened (another key, or a row from before) gets a new token, and its old link stops working. A craving link that can't be opened gets a new link with her line, and the old one still opens.
 
 ### Against SYSTEM-DESIGN.md
 
@@ -243,10 +244,11 @@ Report alerts go through `outbox` on the `scheduled` queue. A voice recipe's mer
 
 ## Secrets and env the api now needs (names only)
 
-Nothing new. `RATE_LIMIT_SALT`, `REPORT_ALERT_URL`, `REPORT_ALERT_TOKEN`, `REPORT_ALERT_EMAIL`, `DISH_WEB_ORIGIN` and `PRIVATE_BUCKET` are already set. No model is called from this area's own code, and voice recipes use the dish module's.
+`EDIBLE_CODE_KEY` (Nov 2), the key accounts already needs: a dinner's invite token and a craving link's are stored sealed with it (SCHEMA.md, M6). Without it, asking for either link is a 500, and a dinner's link still opens. `RATE_LIMIT_SALT`, `REPORT_ALERT_URL`, `REPORT_ALERT_TOKEN`, `REPORT_ALERT_EMAIL`, `DISH_WEB_ORIGIN` and `PRIVATE_BUCKET` are already set. No model is called from this area's own code, and voice recipes use the dish module's.
 
 ## What `infra/` needs (not done: this PR touches only `api/` and `docs/build/`)
 
+- `EDIBLE_CODE_KEY` on the api's `secret_names` and `secrets`, staging included: staging doesn't have it yet.
 - An EventBridge schedule into `scheduled`: `{"payload":{"task":"community.remind_open"}}` daily at 16:00 UTC, as Convex's cron. A switch gate (AWS-MIGRATION's Cutover list). Staging's is in `infra/envs/staging/main.tf` (#247, merged unapplied). Production's `schedules` has none yet.
 
 ## Invite opens and the database
@@ -260,7 +262,7 @@ An open that changes nothing (this phone's been counted, or the count has stoppe
 
 ## Before a backfill
 
-- `dinners.invite_token` is stored readable (SCHEMA.md M6, on AWS-MIGRATION's "Before real data").
+- `dinners.inviteToken` and `cravingLinks.token` go in sealed, as `077` stores them: the hash and the sealed token, never the token (SCHEMA.md, section 5, item 14).
 - A dinner's `recipe_id` needs its recipe copied first (M1's just-in-time upsert).
 
 ## Known limits

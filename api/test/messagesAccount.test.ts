@@ -5,6 +5,7 @@ import { after, test } from "node:test";
 import { db } from "../src/db.js";
 import { sweep } from "../src/modules/dish/tasks.js";
 import { deleteQuestionsOnRecipes, purgeMessagesForPerson, PURGE_BATCH } from "../src/modules/messages/account.js";
+import { shareTokenHash } from "../src/sealed.js";
 import { tx } from "../src/db.js";
 import { CHILI, circleOf, closeAll, DAL, drain, fileRow, get, logOf, newKey, ok, pairOf, phone, post, recipe, say, silent, skip, text, tokensOf, uploaded, type Who, type World, world } from "./messagesHelpers.js";
 
@@ -164,7 +165,7 @@ test("everything else of theirs: pending sends, share links, hearts, events, pus
   assert.equal(await count(`pending_sends where upload_id = 'up-theirs'`), 0);
   assert.ok(await marked(hello));
   assert.deepEqual((await db().query(`select recipient_ids from pending_sends where upload_id = 'up-to-them'`)).rows[0].recipient_ids, [w.leo.id]);
-  assert.equal((await db().query(`select sender_id from shares where token = $1`, [share.token])).rows[0].sender_id, null);
+  assert.equal((await db().query(`select sender_id from shares where token_hash = $1`, [shareTokenHash(share.token)])).rows[0].sender_id, null);
   assert.equal(await count(`favorites where person_id = $1`, [dad.id]), 0);
   assert.equal(await count(`recipe_events where person_id = $1`, [dad.id]), 0);
   assert.deepEqual((await db().query(`select person_id, cook_id from recipe_events`)).rows, [{ person_id: w.leo.id, cook_id: null }]);
