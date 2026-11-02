@@ -94,8 +94,8 @@ AWS_PROFILE=homecookd terraform init -backend-config="bucket=homecookd-tfstate-$
 AWS_PROFILE=homecookd terraform plan -out=role.tfplan     # should say: 2 to add, 0 to change, 0 to destroy
 AWS_PROFILE=homecookd terraform show -json role.tfplan > "$TMPDIR/role-plan.json" && AWS_PROFILE=homecookd python3 ../scripts/simulate_apply_role.py "$TMPDIR/role-plan.json"; rm "$TMPDIR/role-plan.json"   # should end: 0 wrong
 AWS_PROFILE=homecookd terraform apply role.tfplan
-gh variable set STAGING_INFRA_APPLY --body on --repo calebwang26/hackathon-homecookd    # the switch; any other value turns it off
-gh workflow run apply-staging.yml --ref aws-migration --repo calebwang26/hackathon-homecookd   # a first run: proves the login and the reads, stops after the check, and changes nothing
+gh variable set STAGING_INFRA_APPLY --body on --repo calebwang26/homecookd    # the switch; any other value turns it off
+gh workflow run apply-staging.yml --ref aws-migration --repo calebwang26/homecookd   # a first run: proves the login and the reads, stops after the check, and changes nothing
 ```
 
 **Things to know:**

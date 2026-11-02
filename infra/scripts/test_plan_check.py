@@ -581,7 +581,7 @@ def other_checks():
     for path in (HERE / "fixtures").iterdir():
         content = path.read_text()
         leftovers = (
-            "caleb" in content.replace("calebwang26@292613801", "").replace("calebwang26/hackathon-homecookd", ""),  # the repo's public login id and name
+            "caleb" in content.replace("calebwang26@292613801", "").replace("calebwang26/homecookd", ""),  # the repo's public login id and name
             pc.re.search(r"\b(?!123456789012\b)\d{12}\b", content),
             pc.re.search(r"[\w.+-]+@(?!example\.com)[\w-]+\.[a-z]{2,}", content),
             pc.KEY_VALUE.search(content),
