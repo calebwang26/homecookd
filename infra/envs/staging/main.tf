@@ -109,7 +109,8 @@ module "env" {
       # A secret with no value stops a task starting, so the real keys are named here only for a test window.
       secrets = concat(["SENTRY_DSN_API", "RATE_LIMIT_SALT"], var.real_ai ? ["ANTHROPIC_API_KEY", "CARTESIA_API_KEY"] : [])
       env = merge(
-        { DISH_WEB_ORIGIN = module.web.url, DISH_DAILY_BUDGET_USD = var.dish_budget_usd },
+        # OVERLOAD_SHED: overloaded, a request is turned away with a 503 and retry-after before any work (api/src/overload.ts). On here to test it; production decides with its size.
+        { DISH_WEB_ORIGIN = module.web.url, DISH_DAILY_BUDGET_USD = var.dish_budget_usd, OVERLOAD_SHED = "on" },
         var.real_ai ? {} : { DISH_FAKE_AI = "1" },
       )
     }
