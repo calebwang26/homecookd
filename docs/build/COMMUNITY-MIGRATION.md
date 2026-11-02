@@ -108,7 +108,9 @@ The last command prints what the script said. A task takes about a minute to sta
 
 **Who ran it.** The task can't tell: every run has the api's role. CloudTrail's `RunTask` event names the login and holds the command. The task's log has one line for the run, with the action, kind, id, decision and how many it resolved (`"msg":"reports reviewed"`), and no personal data.
 
-**What the log keeps.** Everything the task prints goes to the api's log group, kept 30 days. That includes each reported item's name, as Convex's listing showed, because the team can't judge a report without it (Against SYSTEM-DESIGN.md, below).
+**What the log keeps.** Everything the task prints goes to the api's log group, kept 30 days: ids, counts, reasons and times, never an item's name or who reported it.
+
+**First run on staging (Nov 2):** task definition 53. `open` exited 0 with "No open reports.", and a review of a dinner nobody reported exited 1, refused, with nothing changed. Both log lines carried ids only.
 
 ## Deferred
 
@@ -274,7 +276,7 @@ An open that changes nothing (this phone's been counted, or the count has stoppe
 ## Open questions, with recommendations
 
 1. **`sendVoiceRecipe` can't go through an adapter alone.** An old app uploads through Convex's `files.uploadUrl` and sends a Convex storage id. **Recommendation:** keep `cravings.sendVoiceRecipe` on Convex for old apps until they're gone, which means its cards must stay readable there, so switch all of `cravings.*` together. Only a new app uses the three steps.
-2. **Answered (Nov 2): how the team runs `openReports` and `reviewReport`.** Convex's were `npx convex run`. Now `api/src/reports.ts`, run as a one-off task: "The team's reports", above. No route, as recommended: a signed-in admin route would add a surface for no gain. It was a switch gate (AWS-MIGRATION's Cutover list) because Apple reviews report and block. What's left of the gate is a first run on staging, the app adapter, without which no report reaches the new api, and a way for the team to see what a reported item is once Convex is gone, because the listing prints ids only. **Recommendation:** a `show <kind> <id>` that the team runs from a laptop, not a task, so its output never reaches a log; it needs a database connection from outside the VPC, so Caleb's call.
+2. **Answered (Nov 2): how the team runs `openReports` and `reviewReport`.** Convex's were `npx convex run`. Now `api/src/reports.ts`, run as a one-off task: "The team's reports", above. No route, as recommended: a signed-in admin route would add a surface for no gain. It was a switch gate (AWS-MIGRATION's Cutover list) because Apple reviews report and block. It ran on staging on Nov 2. What's left of the gate is the app adapter, without which no report reaches the new api, and a way for the team to see what a reported item is once Convex is gone, because the listing prints ids only. **Recommendation:** a `show <kind> <id>` that the team runs from a laptop, not a task, so its output never reaches a log; it needs a database connection from outside the VPC, so Caleb's call.
 3. **`shareRequests.*` should switch with Messages, not Community.** `POST /v1/share-requests` already refuses to ask. `familyDishes` must read from the side the asks are written on, and until Messages moves that's Convex. **Recommendation:** an adapter keeps both on Convex until Messages switches.
 4. **`reports` and `blocks` move as one, once.** Convex's two-family hide and Postgres's would disagree if each side took reports during a window. **Recommendation:** freeze report writes for the area's planned window, copy, switch, as AWS-MIGRATION already describes.
 5. `TODO(caleb)`: the host's whole display name on `/invite/open` (kept from Convex), the demo venue's coordinates, and the 20-card link total are all still his, and carry their markers. The words homie asks with keep theirs on Convex.

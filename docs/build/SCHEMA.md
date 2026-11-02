@@ -409,7 +409,8 @@ Answered Oct 31:
 
 - **M1: yes, with conditions.** One-way sync. Postgres's copies of `families`, `people` and `recipes` are read-only until their area
   moves, and a scheduled reconcile counts differences. An account deletion reaches the copy within minutes, not on the next sync.
-  The sync is temporary, so removing it is on AWS-MIGRATION's Cutover list.
+  In the same transaction it starts the account's whole purge (section 4), so rows and files only Postgres has go too, whichever areas have
+  moved (ACCOUNTS-MIGRATION.md, "From the sync"). The sync is temporary, so removing it is on AWS-MIGRATION's Cutover list.
 - **M2: yes.** A `private` bucket, in its own infra PR, with versioning and old-version expiry like `uploads`.
 - **M3: keep `files` and `outbox`.** The sender must use `FOR UPDATE SKIP LOCKED`, and SQS consumers must tolerate repeats.
 - **M4: no change needed.** C1 keeps the other person's half, which is what `convex/account.test.ts` already pins. The behavior tests keep it; Supabase's purge is what changes.

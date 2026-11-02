@@ -2,7 +2,6 @@
 // the queue: SQS tries again, and after 3 tries it goes to the dead-letter queue, which raises an alert. Schedules: SYNC-MIGRATION.md.
 import * as Sentry from "@sentry/node";
 import { sendAlert } from "../../alerts.js";
-import { purgeDishForPerson } from "../dish/account.js";
 import type { Trace } from "../dish/budget.js";
 import * as data from "./data.js";
 import { runReconcile } from "./reconcile.js";
@@ -50,10 +49,5 @@ export const syncTasks: Record<string, (payload: Payload, trace: Trace) => Promi
     if (syncMode() !== "on") return;
     await runReconcile(run(trace));
   },
-  // Only ever deletes, so it runs whatever the switch says. It's queued with the deletion, in the same transaction. Each area that moves adds its purge here.
-  "sync.purge_person": async (payload) => {
-    const personId = payload.personId;
-    if (typeof personId !== "string" || !personId) throw new Error("a task is missing personId");
-    await purgeDishForPerson(personId);
-  },
+  // A deletion's purge is the account's own (`accounts.purge`), queued with the deletion in the same transaction: it reaches every area that has moved.
 };

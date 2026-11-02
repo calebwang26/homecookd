@@ -118,12 +118,15 @@ Caleb confirmed these on Oct 31, 2026.
 | Media first byte | p95 under 200 ms for files already in the CDN, measured at the CDN. Cache-miss time and hit rate are tracked with no target until measured |
 | Video job | 95% finish within 30 minutes, from upload complete to recipe ready, for videos up to a length set after measuring real jobs. Failed jobs count as misses, and the success rate is tracked with no target yet |
 | Load test before launch | 50 RPS sustained for 15 minutes on a realistic mix of requests, meeting the API speed targets with under 0.1% errors |
+| Load test, first measured (staging, Nov 2) | Met: 50 RPS for 15 minutes at p95 81 ms and p99 285 ms at the load balancer, no 5xx, 0.002% errors, on one 0.25 vCPU api task with the smallest database. Not met yet: overload failing fast (AWS-MIGRATION.md, "Load test on staging") |
 | Recovery, database | At most 5 minutes of data lost (RPO), and back up within 1 hour (RTO), for a failed zone, a bad release or accidental deletion. Losing a whole region isn't covered until the second-region backup exists |
 | Recovery, stored videos | Nothing already stored in S3 is lost in those same events. Video not yet uploaded stays on the phone. Region loss isn't covered yet |
 
 **Partly proven:** a database restore on staging (Oct 31): about 200 s of data at risk and 12 minutes to restore, on a nearly empty database with no api pointed at the copy.
 
-**Still unproven:** a timed restore with real data size and of S3, a load test, measured video jobs at several lengths on AWS, media
+**Partly proven:** the load test, on staging (Nov 2): 50 a second for 15 minutes met the speed and error targets on one small api task. It hasn't run on production's size, and overload doesn't yet fail fast (AWS-MIGRATION.md, "Load test on staging").
+
+**Still unproven:** a timed restore with real data size and of S3, measured video jobs at several lengths on AWS, media
 timing from India and the US with cache hit rate, and Sentry and request-level monitoring.
 
 **The new schema must record upload-finished and job-finished times.** Convex's `jobs` table has neither, so the video job

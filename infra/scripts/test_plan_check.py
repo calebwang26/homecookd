@@ -16,6 +16,7 @@ from pathlib import Path
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import plan_check as pc  # noqa: E402
+import role_reads  # noqa: E402
 
 BASE = json.loads((HERE / "fixtures/staging-plan.json").read_text())
 BACKEND = json.loads((HERE / "fixtures/backend.json").read_text())
@@ -559,6 +560,14 @@ def other_checks():
     if real:
         wrong.append(f"the real config should pass the file check: {real[0].text}")
 
+    # The apply role can read every type the plan refreshes, and the guard notices a type or a read going missing.
+    wrong += role_reads.check()
+    reads = {"aws_vpc": ["ec2:DescribeVpcs"], "gone_type": []}
+    found = role_reads.check(types={"aws_vpc", "aws_new_type"}, allowed=set(), reads=reads)
+    for want in ("aws_new_type is in the config", "gone_type is listed", "aws_vpc needs ec2:DescribeVpcs"):
+        if not any(want in f for f in found):
+            wrong.append(f"role_reads.check should report: {want}")
+
     # What goes out by email: no values, no account id.
     plan = fresh()
     edit_container(plan, API_TD, lambda c: (set_env(c, "ANTHROPIC_API_KEY", "sk-ant-the-value"), set_env(c, "DISH_FAKE_AI", None), add_secret(c, "CARTESIA_API_KEY", staging_secret("X"))))
@@ -572,7 +581,7 @@ def other_checks():
     for path in (HERE / "fixtures").iterdir():
         content = path.read_text()
         leftovers = (
-            "caleb" in content.replace("calebwang26@292613801", ""),
+            "caleb" in content.replace("calebwang26@292613801", "").replace("calebwang26/hackathon-homecookd", ""),  # the repo's public login id and name
             pc.re.search(r"\b(?!123456789012\b)\d{12}\b", content),
             pc.re.search(r"[\w.+-]+@(?!example\.com)[\w-]+\.[a-z]{2,}", content),
             pc.KEY_VALUE.search(content),

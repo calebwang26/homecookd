@@ -20,26 +20,25 @@ export const FOLDER_MAX = 5_000;
 export type Reached = { counts: { uploadObjects: number; mediaObjects: number }; problems: string[]; outOfTime: boolean };
 
 type Bucket = "uploads" | "media";
-type Item = { bucket: Bucket; key: string };
-
-const isFolder = (key: string) => key.endsWith("/");
+/** `folder` comes from the list it's on, never from the key's shape: a recipe folder written down without its slash must be refused, not taken for a file that isn't there. */
+type Item = { bucket: Bucket; key: string; folder: boolean };
 
 /** Why this can't be deleted, or null. Asked of the database each time, so whatever has started using it since the deletion was written down is seen. */
-async function refusal({ bucket, key }: Item): Promise<string | null> {
-  if (isFolder(key) && (!FOLDER.test(key) || SHARED.has(key))) return "with an unexpected name";
-  if (!isFolder(key) && bucket === "media" && (key === "library.json" || key.startsWith("library/"))) return "with an unexpected name";
+async function refusal({ bucket, key, folder }: Item): Promise<string | null> {
+  if (folder && (!FOLDER.test(key) || SHARED.has(key))) return "with an unexpected name";
+  if (!folder && (key.endsWith("/") || (bucket === "media" && (key === "library.json" || key.startsWith("library/"))))) return "with an unexpected name";
   const like = `${key}%`; // FOLDER has no LIKE wildcards in it, and a single key is only ever compared whole
   const { rows } = await db().query(
     bucket === "uploads"
-      ? `select exists (select 1 from jobs where ${isFolder(key) ? "upload_id = split_part($1, '/', 1)" : "upload_key = $1"})
-             or exists (select 1 from files where ${isFolder(key) ? "upload_id = split_part($1, '/', 1)" : "key = $1"} and delete_requested_at is null and deleted_at is null) as used`
-      : isFolder(key)
+      ? `select exists (select 1 from jobs where ${folder ? "upload_id = split_part($1, '/', 1)" : "upload_key = $1"})
+             or exists (select 1 from files where ${folder ? "upload_id = split_part($1, '/', 1)" : "key = $1"} and delete_requested_at is null and deleted_at is null) as used`
+      : folder
         ? `select exists (select 1 from recipes where media_prefix = $1 or recipe_json_key like $2 or cover_key like $2)
                or exists (select 1 from recordings where video_key like $2 or cover_key like $2)
                or exists (select 1 from files where key like $2 and delete_requested_at is null and deleted_at is null) as used`
         : `select exists (select 1 from recipes where recipe_json_key = $1 or cover_key = $1)
                or exists (select 1 from recordings where video_key = $1 or cover_key = $1) as used`,
-    bucket === "media" && isFolder(key) ? [key, like] : [key],
+    bucket === "media" && folder ? [key, like] : [key],
   );
   return rows[0].used ? "still in use" : null;
 }
@@ -52,8 +51,8 @@ async function ledgerHas(keys: string[]): Promise<Set<string>> {
 }
 
 /** Deletes what one item names, and says how many objects that was. */
-async function deleteItem(store: ObjectStore, { key }: Item): Promise<number | "too big"> {
-  if (!isFolder(key)) {
+async function deleteItem(store: ObjectStore, { key, folder }: Item): Promise<number | "too big"> {
+  if (!folder) {
     if (!(await store.head(key))) return 0; // so the count is what was there, not what was asked for
     await store.remove(key);
     return 1;
@@ -65,12 +64,14 @@ async function deleteItem(store: ObjectStore, { key }: Item): Promise<number | "
 }
 
 export async function reachS3(d: Deletion, deadline: number): Promise<Reached> {
-  const singles = [...d.upload_keys, ...d.media_keys].filter((k) => !isFolder(k));
-  const owned = await ledgerHas(singles);
-  const items: Item[] = [
-    ...d.upload_keys.map((key) => ({ bucket: "uploads" as const, key })),
-    ...[...d.media_prefixes, ...d.media_keys].map((key) => ({ bucket: "media" as const, key })),
-  ].filter((item) => !owned.has(item.key));
+  const all: Item[] = [
+    // A job's upload_key is one object or a folder (003_recipes_and_jobs.sql), and only the slash says which.
+    ...d.upload_keys.map((key) => ({ bucket: "uploads" as const, key, folder: key.endsWith("/") })),
+    ...d.media_prefixes.map((key) => ({ bucket: "media" as const, key, folder: true })),
+    ...d.media_keys.map((key) => ({ bucket: "media" as const, key, folder: false })),
+  ];
+  const owned = await ledgerHas(all.filter((item) => !item.folder).map((item) => item.key));
+  const items = all.filter((item) => item.folder || !owned.has(item.key));
 
   const reached: Reached = { counts: { uploadObjects: 0, mediaObjects: 0 }, problems: [], outOfTime: false };
   const refused = new Map<string, number>();
@@ -83,7 +84,7 @@ export async function reachS3(d: Deletion, deadline: number): Promise<Reached> {
     if (failed.has(item.bucket)) continue; // S3 said no once, and every other try would say it again
     const why = await refusal(item);
     if (why) {
-      const what = `${item.bucket === "uploads" ? "upload" : "media"} ${isFolder(item.key) ? "folders" : "files"} ${why}`;
+      const what = `${item.bucket === "uploads" ? "upload" : "media"} ${item.folder ? "folders" : "files"} ${why}`;
       refused.set(what, (refused.get(what) ?? 0) + 1);
       continue;
     }

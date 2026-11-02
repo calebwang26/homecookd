@@ -202,6 +202,12 @@ resource "aws_iam_role_policy" "apply" {
         Resource = "arn:aws:sns:${local.arn}:${local.name}-*"
       },
       {
+        Sid      = "ReadStagingLogs"
+        Effect   = "Allow"
+        Action   = ["logs:DescribeMetricFilters"]
+        Resource = "arn:aws:logs:${local.arn}:log-group:/${local.name}/*"
+      },
+      {
         Sid      = "ReadStagingSecretNames"
         Effect   = "Allow"
         Action   = ["secretsmanager:DescribeSecret", "secretsmanager:GetResourcePolicy"]
