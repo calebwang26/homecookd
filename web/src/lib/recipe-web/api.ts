@@ -34,7 +34,12 @@ export function isPlausibleToken(token: string | null): token is string {
   return !!token && /^[A-Za-z0-9_-]{4,64}$/.test(token);
 }
 
+/**
+ * NEXT_PUBLIC_DISH_UPLOADS=links is the build that points at the new api (docs/build/WEB-MIGRATION.md): there the token goes in
+ * the body of POST /v1/shares/open, so it stays out of logs. Unset, Supabase's GET /shares/:token as before.
+ */
 export async function getShare(token: string): Promise<Share> {
+  if (process.env.NEXT_PUBLIC_DISH_UPLOADS === 'links') return openShare(token);
   let res: Response;
   try {
     res = await request(`${API_URL}/shares/${encodeURIComponent(token)}`, { headers: { Accept: 'application/json' } });
@@ -46,6 +51,40 @@ export async function getShare(token: string): Promise<Share> {
   const data = (await res.json().catch(() => null)) as Share | null;
   if (!data || typeof data.recipe_url !== 'string') throw new LoadError('not-found');
   return data;
+}
+
+type OpenedShare = {
+  token: string;
+  libraryId: string;
+  recipeUrl: string;
+  sender: { name: string; relation: string | null; avatarKey: string | null } | null;
+  familyName: string | null;
+};
+
+/** The new api's answer, in the shape the page already reads. A 429 (120 opens in 10 minutes per IP) reads as "try again". */
+async function openShare(token: string): Promise<Share> {
+  let res: Response;
+  try {
+    res = await request(`${API_URL}/v1/shares/open`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
+      body: JSON.stringify({ token }),
+    });
+  } catch {
+    throw new LoadError('network');
+  }
+  if (res.status === 404 || res.status === 400) throw new LoadError('not-found');
+  if (!res.ok) throw new LoadError('network');
+  const data = (await res.json().catch(() => null)) as OpenedShare | null;
+  if (!data || typeof data.recipeUrl !== 'string') throw new LoadError('not-found');
+  const { sender } = data;
+  return {
+    token: data.token,
+    recipe_id: data.libraryId,
+    recipe_url: data.recipeUrl,
+    sender: sender ? { name: sender.name, relation: sender.relation ?? null, avatar_key: sender.avatarKey ?? null } : null,
+    family_name: data.familyName ?? null,
+  };
 }
 
 export async function getRecipe(url: string): Promise<Recipe> {
