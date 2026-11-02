@@ -742,6 +742,21 @@ test("a failed merge is finished by the kid's next look once Claude is back", { 
   assert.equal(model.calls.version, 2);
 });
 
+test("a kid's page polling queues one merge at a time, not one a look", { skip }, async () => {
+  const t = await newBackend();
+  const { kidToken, askToken } = await askedCard(t);
+  await answer(t, askToken, "q1");
+  await finish(t, askToken);
+  const row = await rowOf(kidToken);
+  const queued = async () => (await db().query(`select count(*)::int as n from outbox where payload->>'task' = 'dish.merge' and payload->>'askId' = $1`, [row.id])).rows[0].n as number;
+  assert.ok((await queued()) <= 1);
+  for (let i = 0; i < 5; i += 1) await getCard(t, kidToken);
+  assert.equal(await queued(), 1, "five looks, one message");
+  await advance(61_000);
+  await getCard(t, kidToken);
+  assert.equal(await queued(), 2, "one that was lost goes again a minute on");
+});
+
 test("what her answer changed carries the guess's value it replaced and her words (was, quote), to both pages", { skip }, async () => {
   const t = await newBackend();
   model.version = async (real) => {

@@ -266,6 +266,8 @@ async function writeVersion(input: VersionInput, spend: Spend): Promise<MissReci
     const out = raw && typeof raw === "object" ? raw : {};
     const r = applyMerge(input.draft, { ...out, answers }, ids, ids.map(question));
     if (!r.ok) return r;
+    // A count only: the reasons hold her words. Tells a line the model left out from one the checks refused.
+    if (r.dropped.length) spend.log?.info({ dropped: r.dropped.length }, "dish merge dropped lines the answers don't back");
     return { ok: true, value: r.version };
   };
   if (fake()) {

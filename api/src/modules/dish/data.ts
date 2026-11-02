@@ -45,6 +45,8 @@ export type CardRow = {
   status: CardStatus;
   merge_tries: number;
   merge_started_at: Date | null;
+  /** Written by noteMergeQueued and claimMerge, and not read back with the card. */
+  merge_queued_at?: Date | null;
   merged_at: Date | null;
   asked_at: Date | null;
   asked_via: string | null;
@@ -133,6 +135,12 @@ export async function insertCard(
 const JSON_COLUMNS = new Set(["guess", "version", "asked"]);
 
 /** Writes these columns of one card. The names come from CardRow, never from a request. */
+/** True when a merge's message should go now: none waiting, or the last one a minute ago and lost. */
+export async function noteMergeQueued(q: Queryable, id: string): Promise<boolean> {
+  const { rowCount } = await q.query(`update dish_asks set merge_queued_at = now() where id = $1 and (merge_queued_at is null or merge_queued_at < now() - interval '60 seconds')`, [id]);
+  return (rowCount ?? 0) > 0;
+}
+
 export async function patchCard(q: Queryable, id: string, fields: Partial<CardRow>): Promise<void> {
   const names = Object.keys(fields) as (keyof CardRow)[];
   if (names.length === 0) return;

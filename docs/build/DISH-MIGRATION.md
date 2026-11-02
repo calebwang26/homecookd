@@ -176,3 +176,5 @@ The load balancer's `idle_timeout` is 3700 s, and Fastify's default keep-alive i
 - **Mom's dead read link** in a browser (`IntroScreen`, `FillScreen`). It's the same hook as the kid's, which is tested.
 
 The 10-minute and daily rate tests can flake across a real window edge, as `rateLimit.test.ts` can.
+
+**A merge's message waits on the queue one at a time (Nov 1).** The real-models window showed 25 messages for about 5 merges, from the kid's page polling. `dish_asks.merge_queued_at` holds them back until a merge picks the message up, or a minute passes if it was lost; the claim in `merge.ts` still makes a repeat harmless. The merge also logs how many of Mom's lines the checks dropped, as a count, because nothing could tell a line the model left out from one the checks refused.
