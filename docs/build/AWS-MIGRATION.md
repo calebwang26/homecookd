@@ -136,7 +136,7 @@ a deleted version for its 28-day undo window, so the bytes are fully gone about 
 Before any backfill copies real rows into Postgres:
 
 - Seal `craving_links.token`, `dinners.invite_token` and `shares.token` (SCHEMA.md, M6).
-- ~~Caleb decides how long raw footage is kept~~: decided Nov 2, 14 days as built (above). `/privacy` must say it accurately when it names AWS.
+- How long raw footage is kept: decided by Caleb on Nov 2, 14 days as built (above). `/privacy` must say it accurately when it names AWS.
 - Count violations of every new uniqueness rule, CHECK and domain (SCHEMA.md, section 7).
 - The sweep reaches every bucket and row the purge can mark. Done on the branch (Nov 2): `jobs.sweep` reaches all three buckets, and the outside purge deletes the folders and
   files `account_deletions` lists (ACCOUNTS-MIGRATION.md). Still open: GCS. A backfilled deletion with GCS links stays open until something can delete there.
