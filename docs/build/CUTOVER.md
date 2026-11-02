@@ -138,7 +138,7 @@ Caleb picks one.
 ### 9. Submit 1.1. OK
 - **Who:** App Store/web. Salik submits.
 - **Do:** submit the build that passed step 8, not a new one. Under the App Review guard, in one PR: the per-guideline check (2.1 demo access, 4.8 sign-in, 5.1.1(v) delete account, 5.1.2 data sharing and AI consent), the reviewer notes for 1.1's sign-in (a family link, a name, then Sign in with Apple), the App Privacy answers from step 5, and screenshots of any screen that changed. Set 1.1's release to manual too, so it goes out only at step 10.
-- **Not known:** whether App Store Connect takes 1.1 while 1.0 waits as Pending Developer Release (open question 1). Find out before this step.
+- **App Store Connect won't start a new version while 1.0 waits as Pending Developer Release** (open question 1). So this step is: remove 1.0 from review ("Remove from review" in its version page, which is allowed from that state), then submit the AWS build in its place, as 1.0 with a new build number or as 1.1. It goes through review again. Releasing 1.0 instead would put real families on Convex, Supabase and GCS.
 - **Check:** 1.1 shows Waiting for Review. Production stays up and watched while Apple reviews, because the reviewer uses it.
 - **Back:** remove 1.1 from review, fix it, submit again.
 
@@ -247,7 +247,7 @@ Every phone still on the old services runs a TestFlight or development build, or
 
 ## Open questions
 
-1. **Submitting 1.1 while 1.0 is held.** Whether App Store Connect takes a new version while 1.0 waits as Pending Developer Release, or 1.0 has to be taken out of that state first, and whether that loses its approval. Caleb or Salik, before step 9.
+1. **Submitting 1.1 while 1.0 is held: partly answered (Nov 2).** A new version can't be created while 1.0 is Pending Developer Release. A developer who hit it could create the next version only after releasing the pending one. Apple's help lists Pending Developer Release among the states a version can be removed from review, after which a new build can be submitted, so this plan removes 1.0 from review and submits the AWS build, which is reviewed again (step 9). Not confirmed: one developer reports that a removed, approved version stayed locked until App Store Connect Support reset it. Caleb or Salik: try it, or ask Support, before step 9. Apple emails a reminder after 30 days in Pending Developer Release. Sources: [App and submission statuses](https://developer.apple.com/help/app-store-connect/reference/app-information/app-and-submission-statuses), [Remove a submission from review](https://developer.apple.com/help/app-store-connect/manage-submissions-to-app-review/remove-a-submission-from-review), forum threads [132412](https://developer.apple.com/forums/thread/132412) and [821386](https://developer.apple.com/forums/thread/821386).
 2. **Copy or start fresh** (step 7), Caleb's call. If copy: which tool. The sync copies three tables, and nothing copies the rest yet.
 3. **Convex's scheduled backups** (`infra/backups`, AWS-MIGRATION's phase 0). They were the gate before any area switched. With no real family on Convex, does one export before step 7, with the Oct 25 export, do instead? Not known either: whether Convex's free plan handles a daily export.
 4. **A demo family's deletion after the switch.** Their GCS files go by hand (Caleb, Nov 2). Their rows on Convex and Supabase too, or through the old delete (`convex/account.ts`, `pipeline/account_purge.py`)?
