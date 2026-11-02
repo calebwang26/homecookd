@@ -10,7 +10,7 @@
 //   One follow-up per recipe and id    questions_one_follow_up
 import type { Signed } from "../../auth.js";
 import { db, tx, type Queryable } from "../../db.js";
-import { ApiError, forbidden, notFound } from "../../errors.js";
+import { forbidden, invalid, notFound, refused } from "../../errors.js";
 import { once, requestHash } from "../../idempotency.js";
 import { enqueue } from "../../outbox.js";
 import { objectStore } from "../../storage.js";
@@ -22,7 +22,7 @@ import { models, type YesNo } from "./models.js";
 import { actorOf, type Write } from "./actor.js";
 import { shareOnYes } from "./storyCards.js";
 import { attachFile } from "./uploads.js";
-import { bad, decodeCursor, encodeCursor, isRowId, MAX_BODY, number, pageSize, text } from "./values.js";
+import { decodeCursor, encodeCursor, isRowId, MAX_BODY, noSuchRecipe, number, pageSize, text, WRITE_SOMETHING } from "./values.js";
 import { readLinks } from "./views.js";
 
 export type QuestionRow = {
@@ -145,17 +145,17 @@ const ASK_FIELDS = ["recipeId", "stepOrder", "text", "found"];
 /** From the voice service (Convex's /voice/question), with the kid's own session. */
 export async function ask(signed: Signed, body: Record<string, unknown>, w: Write) {
   const actor = await actorOf(signed);
-  const words = text(body.text, MAX_BODY);
-  if (!words) throw bad("body_required");
-  const stepOrder = number(body.stepOrder, { int: true });
+  const words = text(body.text, "text", MAX_BODY);
+  if (!words) throw invalid("text", WRITE_SOMETHING);
+  const stepOrder = number(body.stepOrder, "stepOrder", { int: true });
   let found: { startS: number; endS: number; quote: string } | null = null;
   if (body.found !== undefined && body.found !== null) {
     const f = body.found as Record<string, unknown>;
-    if (typeof f !== "object" || typeof f.startS !== "number" || typeof f.endS !== "number" || typeof f.quote !== "string") throw bad("bad_found");
+    if (typeof f !== "object" || typeof f.startS !== "number" || typeof f.endS !== "number" || typeof f.quote !== "string") throw invalid("found");
     found = { startS: f.startS, endS: f.endS, quote: f.quote.slice(0, MAX_BODY) };
   }
   const recipe = isRowId(body.recipeId) ? await familyRecipe(db(), actor.familyId, body.recipeId) : null;
-  if (!recipe) throw new ApiError(404, "no_such_recipe");
+  if (!recipe) throw noSuchRecipe();
   const status = found ? "found_in_video" : "asked_cook";
   const cook = await memberById(db(), recipe.cook_id);
   const { resourceId } = await once(
@@ -181,7 +181,7 @@ const ANSWER_FIELDS = ["text", "audioKey"];
 export async function answer(signed: Signed, questionId: string, body: Record<string, unknown>, w: Write) {
   const actor = await actorOf(signed);
   if (actor.me.role !== "cook") throw forbidden();
-  const words = text(body.text, MAX_BODY);
+  const words = text(body.text, "text", MAX_BODY);
   const audioKey = typeof body.audioKey === "string" && body.audioKey ? body.audioKey : null;
   if (!isRowId(questionId)) throw notFound();
   await once(
@@ -190,13 +190,13 @@ export async function answer(signed: Signed, questionId: string, body: Record<st
       const { rows } = await c.query(`select ${COLUMNS} from questions where id = $1 and family_id = $2 for update`, [questionId, actor.familyId]);
       const q: QuestionRow | undefined = rows[0];
       if (!q) throw notFound();
-      if (q.status !== "asked_cook") throw new ApiError(409, "already_answered");
+      if (q.status !== "asked_cook") throw refused(409, "answered", "That question already has an answer.");
       // Sharing a recipe, or saying what went into it, is its cook's answer alone, not any cook's in the family.
       if (q.kind !== "cooking") {
         const recipe = await familyRecipe(c, actor.familyId, q.recipe_id);
-        if (recipe?.cook_id !== actor.me.id) throw new ApiError(403, "only_the_recipes_cook");
+        if (recipe?.cook_id !== actor.me.id) throw forbidden("Only the recipe's cook can answer this.");
       }
-      if (!words && !audioKey) throw bad("answer_required");
+      if (!words && !audioKey) throw invalid(undefined, "Say or type an answer first.");
       if (audioKey) await attachFile(c, actor, audioKey, ["voice"]);
       await c.query(
         `update questions set status = 'answered', answer_by = $2, answer_text = $3, answer_audio_key = $4, answered_at = now() where id = $1`,

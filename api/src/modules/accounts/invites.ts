@@ -4,6 +4,7 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyRequest } from "fastify";
 import { db, tx, type Queryable } from "../../db.js";
+import { invalid, notFound } from "../../errors.js";
 import * as data from "./data.js";
 import { extId, toProfile, type InviteRow, type JoinLinkRow, type Person } from "./data.js";
 import { addPerson, mapUnique } from "./family.js";
@@ -68,7 +69,7 @@ export async function familyJoinLink(ctx: Ctx) {
     });
     if (expires) return { url: `${webUrl()}/i?t=${token}`, expires_at: expires.toISOString() };
   }
-  throw refuse(500, "Couldn't make a link. Please try again.");
+  throw refuse(500, "server_error", "Couldn't make a link. Please try again.");
 }
 
 /** Turns off the family's live links; the next call makes a new one. A link with no expiry, the TEST family's, is an operator's and stays. */
@@ -96,7 +97,7 @@ export async function claimableIn(q: Queryable, familyId: string, typed: unknown
 /** Misses count against the IP, on top of each route's own limit. */
 export async function inviteNotFound(ip: string, by: "token" | "code" = "token"): Promise<never> {
   await limit("badinvite", ip, 20, 10);
-  throw refuse(404, by === "code" ? BAD_INVITE_CODE : BAD_INVITE_LINK);
+  throw notFound(by === "code" ? BAD_INVITE_CODE : BAD_INVITE_LINK);
 }
 
 /** Every typed code is counted before it's looked up: per IP, and across the service, so many IPs together can't sweep 32^6 codes. Links are never slowed by this. */
@@ -113,7 +114,7 @@ async function inviteLookup(b: Body) {
     const c = code.toUpperCase().replace(/[\s-]/g, "");
     return { by: "code" as const, col: "code_hash" as const, hash: INVITE_CODE.test(c) ? sha256Hex(c) : null };
   }
-  throw refuse(400, "token or code is required");
+  throw invalid("token", "token or code is required");
 }
 
 /** Whether the phone sending x-device-key is already in this family. Reads only: a bad or signed-out key is simply false. Without the header it's left out. */
@@ -205,8 +206,8 @@ export async function makeInvite(ctx: Ctx, b: Body) {
   }
   if (given(b.profile_id)) {
     const p = profileIn(ctx, b.profile_id, "profile_id");
-    if (p.id === me.id) throw refuse(400, "You're already in.");
-    if ((await data.signedInIds(db(), [p.id])).has(p.id)) throw refuse(409, `${p.name} already joined.`);
+    if (p.id === me.id) throw invalid("profile_id", "You're already in.");
+    if ((await data.signedInIds(db(), [p.id])).has(p.id)) throw refuse(409, "already_joined", `${p.name} already joined.`);
     await counted();
     phone ??= await data.lastInvitePhone(db(), p.id);
     const invite = await tx(async (c) => {
@@ -222,12 +223,12 @@ export async function makeInvite(ctx: Ctx, b: Body) {
   const { invite, person } = await mapUnique(
     tx(async (c) => {
       const family = await data.lockFamily(c, ctx.family.id);
-      if (!family || family.blanked_at) throw refuse(404, "That family isn't on homecookd anymore.");
+      if (!family || family.blanked_at) throw notFound("That family isn't on homecookd anymore.");
       const members = (await data.peopleOf(c, ctx.family.id)).filter((p) => !p.removed_at);
       const person = await addPerson(c, ctx.family.id, members, { name, role, relation });
       return { person, invite: await createInvite(c, ctx, me.id, person.id, phone) };
     }),
-    (constraint) => (constraint === "people_family_name_unique" ? refuse(409, `${name} is already in this family`) : null),
+    (constraint) => (constraint === "people_family_name_unique" ? refuse(409, "name_taken", `${name} is already in this family`) : null),
   );
   return { invite: { ...invite, profile_id: extId(person) }, profile: { ...toProfile(person), invited: true } };
 }
@@ -242,7 +243,7 @@ export async function makeInvite(ctx: Ctx, b: Body) {
 export async function acceptInvite(req: FastifyRequest, b: Body) {
   const ip = req.ip;
   await limit("inviteaccept-ip", ip, 20, 10);
-  if (typeof b.token === "string" && JOIN_TOKEN.test(b.token.trim())) throw refuse(426, UPDATE_TO_JOIN);
+  if (typeof b.token === "string" && JOIN_TOKEN.test(b.token.trim())) throw refuse(426, "update_app", UPDATE_TO_JOIN);
   const look = await inviteLookup(b);
   const label = deviceLabel(b);
   if (!look.hash) return inviteNotFound(ip, look.by);
@@ -255,7 +256,7 @@ export async function acceptInvite(req: FastifyRequest, b: Body) {
       return { kind: "missed" as const, row };
     }
     const family = await data.lockFamily(c, inv.family_id);
-    if (!family || family.blanked_at) throw refuse(410, INVITE_GONE.revoked, { status: "revoked" });
+    if (!family || family.blanked_at) throw refuse(410, "gone", INVITE_GONE.revoked, { status: "revoked" });
     const person = inv.person_id ? await data.lockLivePerson(c, inv.person_id) : null;
     if (inv.person_id && !person) {
       await data.revokeInvite(c, inv.id);
@@ -266,14 +267,14 @@ export async function acceptInvite(req: FastifyRequest, b: Body) {
     if (person) await data.revokeInvitesOf(c, person.id, inv.id);
     return { kind: "joined" as const, inv, person, family, device };
   });
-  if (outcome.kind === "gone") throw refuse(410, INVITE_GONE.revoked, { status: "revoked" });
+  if (outcome.kind === "gone") throw refuse(410, "gone", INVITE_GONE.revoked, { status: "revoked" });
   if (outcome.kind === "missed") {
     const row = outcome.row;
     if (!row) return inviteNotFound(ip, look.by);
     const status = inviteStatus(row);
     // Still pending: another tap holds it right now. The next tap will work.
-    if (status === "pending") throw refuse(409, "Please tap Join again.");
-    throw refuse(410, INVITE_GONE[status], { status });
+    if (status === "pending") throw refuse(409, "retry", "Please tap Join again.");
+    throw refuse(410, "gone", INVITE_GONE[status], { status });
   }
   const { person, family, device, inv } = outcome;
   // A family invite posts no note yet: "<Name> joined." comes when the phone says who it is.

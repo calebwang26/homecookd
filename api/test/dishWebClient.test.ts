@@ -80,6 +80,8 @@ test("the site's client, unchanged but for its base URL", { skip }, async (t) =>
     await t.test("errors come back as the kinds its pages switch on", async () => {
       const kind = (p: Promise<unknown>) => p.then(() => "no error", (e: { kind: string }) => e.kind);
       assert.equal(await kind(site.getCard("Z".repeat(22))), "not-found");
+      const said = (p: Promise<unknown>) => p.then(() => "no error", (e: Error) => e.message);
+      assert.equal(await said(site.getCard("Z".repeat(22))), "This link doesn't work anymore.", "the sentence, read from `message`");
       assert.equal(await kind(site.createCard({ dish: "asdf qwerty", relation: "mom" })), "not-a-dish");
       assert.equal(await kind(site.updateCard(kidToken, { message: "fuck this" })), "words");
       await seedSpend(10);

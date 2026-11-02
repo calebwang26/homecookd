@@ -51,12 +51,12 @@ test("a delivery that fails halfway leaves nothing sent and the send still waiti
 test("pending sends: recipients are people here; a job that's someone else's or already delivered is refused; a re-register replaces the list", { skip }, async () => {
   const w = await world();
   const send = (body: Record<string, unknown>, who: Who = w.dad, key = newKey()) => post(w.app, who, "/v1/pending-sends", body, { key });
-  refused(await send({ uploadId: "BAD ID", recipientIds: [w.leo.id] }), 400, "bad_upload_id");
-  refused(await send({ uploadId: "up-1", recipientIds: [] }), 400, "bad_recipients");
+  refused(await send({ uploadId: "BAD ID", recipientIds: [w.leo.id] }), 400, "invalid", "uploadId");
+  refused(await send({ uploadId: "up-1", recipientIds: [] }), 400, "invalid", "recipientIds");
   refused(await send({ uploadId: "up-1", recipientIds: [w.stranger.id] }), 404);
-  refused(await send({ uploadId: "up-1", recipientIds: [w.dad.id] }), 400, "pick_someone_else");
+  refused(await send({ uploadId: "up-1", recipientIds: [w.dad.id] }), 400, "invalid", "recipientIds");
   ok(await send({ uploadId: "up-1", recipientIds: [w.leo.id] }));
-  refused(await send({ uploadId: "up-1", recipientIds: [w.strangerKid.id] }, w.stranger), 409, "upload_is_someone_elses");
+  refused(await send({ uploadId: "up-1", recipientIds: [w.strangerKid.id] }, w.stranger), 409, "conflict");
   ok(await send({ uploadId: "up-1", recipientIds: [w.nia.id] }));
   assert.deepEqual((await db().query(`select recipient_ids from pending_sends where upload_id = 'up-1'`)).rows[0].recipient_ids, [w.nia.id]);
   await deliverPending(w.family, "up-1", CHILI);
@@ -120,12 +120,12 @@ test("only the sender can change a recording's list, and only the sender can del
   const w = await world();
   ok(await post(w.app, w.mom, "/v1/pending-sends", { uploadId: "job-moms", recipientIds: [w.leo.id] }));
   const hijack = await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-moms", recipientIds: [w.nia.id] });
-  assert.deepEqual([hijack.status, hijack.data.error], [409, "upload_is_someone_elses"]);
+  assert.deepEqual([hijack.status, hijack.data.error], [409, "conflict"]);
   const row = (await db().query(`select sender_id, recipient_ids from pending_sends where upload_id = 'job-moms'`)).rows[0];
   assert.deepEqual([row.sender_id, row.recipient_ids], [w.mom.id, [w.leo.id]]);
 
   const fromDad = await post(w.app, w.dad, "/v1/pending-sends/job-moms/published", { libraryId: CHILI }, { key: null });
-  assert.deepEqual([fromDad.status, fromDad.data.error], [403, "not_your_recording"]);
+  assert.deepEqual([fromDad.status, fromDad.data.error, fromDad.data.message], [403, "forbidden", "Only whoever recorded this can send it."]);
   assert.equal((await db().query(`select delivered_at from pending_sends where upload_id = 'job-moms'`)).rows[0].delivered_at, null);
   assert.equal((await db().query(`select count(*)::int as n from messages`)).rows[0].n, 0, "no message went out as Mom");
 
@@ -139,7 +139,7 @@ test("a recording already published isn't delivered by someone else trying to re
   const w = await world();
   ok(await post(w.app, w.mom, "/v1/pending-sends", { uploadId: "job-fast-2", recipientIds: [w.leo.id] }));
   w.lib.published.set("job-fast-2", CHILI);
-  refused(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-fast-2", recipientIds: [w.leo.id] }), 409, "upload_is_someone_elses");
+  refused(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-fast-2", recipientIds: [w.leo.id] }), 409, "conflict");
   assert.equal((await db().query(`select count(*)::int as n from messages`)).rows[0].n, 0);
 });
 
@@ -152,7 +152,7 @@ test("a share link is one per family, dish and sender; opening it counts and nam
   assert.equal(made.url, `https://homecookd.app/r?s=${made.token}`);
   assert.equal(ok(await post(w.app, w.mom, "/v1/shares", { libraryId: CHILI }, { key: null })).token, made.token);
   assert.notEqual(ok(await post(w.app, w.dad, "/v1/shares", { libraryId: CHILI }, { key: null })).token, made.token);
-  refused(await post(w.app, w.mom, "/v1/shares", { libraryId: "no-such-dish" }, { key: null }), 404, "no_such_recipe");
+  refused(await post(w.app, w.mom, "/v1/shares", { libraryId: "no-such-dish" }, { key: null }), 404, "not_found", { message: "That recipe isn't here anymore." });
 
   process.env.MEDIA_BASE_URL = "https://media.test";
   const opened = ok(await post(w.app, null, "/v1/shares/open", { token: made.token }, { key: null }));
@@ -274,10 +274,10 @@ test("GET /dish-stats: the cook's name matches the library like cookProfile (cas
 test("PR 4: /dish-stats & /hearts/recent 400s", { skip }, async () => {
   const w = await world();
   const many = Array.from({ length: 51 }, (_, i) => `dad-${i}`).join(",");
-  refused(await get(w.app, w.dad, `/v1/dish-stats?ids=${many}`), 400, "too_many_ids");
-  refused(await get(w.app, w.dad, "/v1/dish-stats"), 400, "ids_required");
-  refused(await get(w.app, w.dad, "/v1/dish-stats?ids=Bad%20Id"), 400, "bad_ids");
-  refused(await get(w.app, w.dad, "/v1/hearts/recent?since=soon"), 400, "bad_time");
+  refused(await get(w.app, w.dad, `/v1/dish-stats?ids=${many}`), 400, "invalid", "ids");
+  refused(await get(w.app, w.dad, "/v1/dish-stats"), 400, "invalid", "ids");
+  refused(await get(w.app, w.dad, "/v1/dish-stats?ids=Bad%20Id"), 400, "invalid", "ids");
+  refused(await get(w.app, w.dad, "/v1/hearts/recent?since=soon"), 400, "invalid", "since");
 });
 
 test("parseDishIds: comma list, deduped, trimmed", () => {
@@ -326,8 +326,8 @@ test("favorites: heart and un-heart are the same however often; the list pages, 
   ok(await heart(w, w.leo, DAL, false));
   ok(await heart(w, w.leo, DAL, false));
   assert.deepEqual(ok(await get(w.app, w.leo, "/v1/favorites")).libraryIds, [CHILI]);
-  refused(await post(w.app, w.leo, "/v1/favorites", { libraryId: CHILI, on: "yes" }, { key: null }), 400, "on_must_be_boolean");
-  refused(await heart(w, w.leo, "no-such-dish"), 404, "no_such_recipe");
+  refused(await post(w.app, w.leo, "/v1/favorites", { libraryId: CHILI, on: "yes" }, { key: null }), 400, "invalid", "on");
+  refused(await heart(w, w.leo, "no-such-dish"), 404, "not_found", { message: "That recipe isn't here anymore." });
 });
 
 // --- events
@@ -335,10 +335,10 @@ test("favorites: heart and un-heart are the same however often; the list pages, 
 test("retention: POST /events takes started & heard with cook_id; recipe stats still count views & cooks only", { skip }, async () => {
   const w = await world();
   const ev = (body: Record<string, unknown>) => event(w, w.leo, body);
-  refused(await ev({ libraryId: DAL, kind: "heard", cookId: w.mom.id, durationS: 2 }), 400, "heard_too_short");
-  refused(await ev({ libraryId: DAL, kind: "heard", cookId: "nobody", durationS: 5 }), 400, "cook_not_in_family");
-  refused(await ev({ libraryId: DAL, kind: "heard", cookId: w.stranger.id, durationS: 5 }), 400, "cook_not_in_family");
-  refused(await ev({ libraryId: DAL, kind: "nope" }), 400, "bad_kind");
+  refused(await ev({ libraryId: DAL, kind: "heard", cookId: w.mom.id, durationS: 2 }), 400, "invalid", "durationS");
+  refused(await ev({ libraryId: DAL, kind: "heard", cookId: "nobody", durationS: 5 }), 400, "invalid", "cookId");
+  refused(await ev({ libraryId: DAL, kind: "heard", cookId: w.stranger.id, durationS: 5 }), 400, "invalid", "cookId");
+  refused(await ev({ libraryId: DAL, kind: "nope" }), 400, "invalid", "kind");
   assert.deepEqual(ok(await ev({ libraryId: DAL, kind: "heard", cookId: w.mom.id, durationS: 5, startS: 12 })), { ok: true, counted: true });
   assert.equal(ok(await ev({ libraryId: DAL, kind: "heard", cookId: w.mom.id, durationS: 5, startS: 12 })).counted, false); // same clip within 5 s
   assert.equal(ok(await ev({ libraryId: DAL, kind: "heard", cookId: w.mom.id, durationS: 7, startS: 40 })).counted, true); // another clip
@@ -433,7 +433,7 @@ test("dish activity: who cooked it with their note, who looked, and when it was 
   assert.equal(typeof act.lastSentAt, "string");
   await db().query(`update people set removed_at = now() where id = $1`, [w.leo.id]);
   assert.deepEqual(ok(await get(w.app, w.mom, `/v1/dishes/${DAL}/activity`)).cooked, []);
-  refused(await get(w.app, w.mom, "/v1/dishes/BAD/activity"), 400, "bad_library_id");
+  refused(await get(w.app, w.mom, "/v1/dishes/BAD/activity"), 400, "invalid", "libraryId");
 });
 
 // --- the library

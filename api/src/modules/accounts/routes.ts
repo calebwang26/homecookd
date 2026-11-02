@@ -16,6 +16,7 @@
 import type { FastifyInstance, FastifyReply, FastifyRequest, RouteHandlerMethod } from "fastify";
 import { requireSession, requireSessionEvenIfRemoved, signedIn } from "../../auth.js";
 import { EXPOSE } from "../../cors.js";
+import { sendError } from "../../errors.js";
 import { webOrigin } from "../dish/values.js";
 import { appleKey, revokeWithApple } from "./appleRevoke.js";
 import { deleteMe } from "./deletion.js";
@@ -88,7 +89,7 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
     }
   };
 
-  // Answers and refusals both carry it, or the web page can't read the sentence. Only these routes: /dish and /link/open have their own.
+  // Answers and refusals both carry it, or the web page can't read the refusal. Only these routes: /dish and /link/open have their own.
   app.addHook("onSend", async (req, reply) => {
     if (seen.has(req.routeOptions.url ?? "")) reply.headers(OPEN_CORS);
   });
@@ -153,7 +154,7 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
 
   const linkGuard = async (req: FastifyRequest, reply: FastifyReply) => {
     const cors = linkCors(req.headers.origin);
-    if (!cors) throw refuse(403, "This site can't use these routes.", { code: "origin" });
+    if (!cors) throw refuse(403, "origin", "This site can't use these routes.");
     reply.headers(cors);
   };
   app.post("/link/open", { ...object, preValidation: [linkGuard, emptyIsObject], config: { ownCors: true } }, async (req, reply) => {
@@ -162,6 +163,6 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
   });
   app.options("/link/open", { config: { ownCors: true } }, async (req, reply) => {
     const cors = linkCors(req.headers.origin);
-    return reply.status(cors ? 204 : 403).headers(cors || {}).send();
+    return cors ? reply.status(204).headers(cors).send() : sendError(reply, req, refuse(403, "origin", "This site can't use these routes."));
   });
 }

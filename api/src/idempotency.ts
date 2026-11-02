@@ -4,7 +4,7 @@ import { createHash } from "node:crypto";
 import type { FastifyRequest } from "fastify";
 import type { PoolClient } from "pg";
 import { tx } from "./db.js";
-import { ApiError } from "./errors.js";
+import { ApiError, invalid } from "./errors.js";
 
 const KEY = /^[A-Za-z0-9_-]{8,128}$/;
 
@@ -12,10 +12,10 @@ const KEY = /^[A-Za-z0-9_-]{8,128}$/;
 export function idempotencyKey(req: FastifyRequest, required: boolean): string | null {
   const given = req.headers["idempotency-key"];
   if (given === undefined) {
-    if (required) throw new ApiError(400, "idempotency_key_required");
+    if (required) throw invalid("Idempotency-Key", "Send an Idempotency-Key with this write.");
     return null;
   }
-  if (typeof given !== "string" || !KEY.test(given)) throw new ApiError(400, "bad_idempotency_key");
+  if (typeof given !== "string" || !KEY.test(given)) throw invalid("Idempotency-Key", "An Idempotency-Key is 8 to 128 letters, digits, - or _.");
   return given;
 }
 

@@ -3,7 +3,7 @@
 import { requireCook, type Signed } from "../../auth.js";
 import { db, tx, type Queryable } from "../../db.js";
 import { enqueue } from "../../outbox.js";
-import { notFound, refused } from "../../errors.js";
+import { invalid, notFound } from "../../errors.js";
 import { afterCursor, pageOf } from "../../paging.js";
 import { areFamilyKids, forKids, languageOf } from "../people/reads.js";
 import { notMoved, recipeWrites } from "../recipes/switch.js";
@@ -97,7 +97,7 @@ export async function createJob(signed: Signed, input: JobInput, requestId?: str
   requireCook(signed);
   await limited(signed.personId, RATE.jobs);
   const uploadId = input.uploadId.trim();
-  if (!UPLOAD_ID.test(uploadId)) throw refused(400, "bad_upload", UPLOAD_FIRST);
+  if (!UPLOAD_ID.test(uploadId)) throw invalid("uploadId", UPLOAD_FIRST);
   const uploadKey = `${uploadId}/`;
 
   return await tx(async (c) => {
@@ -106,7 +106,7 @@ export async function createJob(signed: Signed, input: JobInput, requestId?: str
     if (existing) return { status: 200, jobId: existing.id, recipeId: existing.recipe_id };
 
     const mine = files.length > 0 && files.every((f) => f.family_id === signed.familyId && f.owner_person_id === signed.personId && !f.delete_requested_at);
-    if (!mine || (await data.folderIsAnotherFamilys(c, signed.familyId, uploadKey))) throw refused(400, "bad_upload", UPLOAD_FIRST);
+    if (!mine || (await data.folderIsAnotherFamilys(c, signed.familyId, uploadKey))) throw invalid("uploadId", UPLOAD_FIRST);
 
     const writes = await recipeWrites(c);
     if (writes === "locked") throw notMoved(); // the worker couldn't save its recipe, so it would spend her money for nothing
@@ -119,7 +119,7 @@ export async function createJob(signed: Signed, input: JobInput, requestId?: str
     // The kids picked on Send, else the ones picked before homie's recording.
     const named = forKids(input);
     const kids = named.length ? named : (recording?.for_kid_ids ?? []);
-    if (!(await areFamilyKids(c, signed.familyId, kids))) throw refused(400, "bad_kid", "That person isn't in your family.");
+    if (!(await areFamilyKids(c, signed.familyId, kids))) throw invalid("forKidIds", "That person isn't in your family.");
 
     // A "processing" card shows in the library right away; the worker fills it in. With the recipes switch off there's no card, and it makes the row when it publishes.
     const recipeId =
@@ -145,7 +145,7 @@ export async function createJob(signed: Signed, input: JobInput, requestId?: str
 async function chooseLanguage(c: Queryable, signed: Signed, input: JobInput, recordingLanguage?: string): Promise<string> {
   if (input.language !== undefined) {
     const code = input.language.trim().toLowerCase();
-    if (!/^[a-z]{2}$/.test(code)) throw refused(400, "bad_language", "Pick a language from the list.");
+    if (!/^[a-z]{2}$/.test(code)) throw invalid("language", "Pick a language from the list.");
     return code;
   }
   return recordingLanguage ?? (await languageOf(c, signed.personId)) ?? "en";

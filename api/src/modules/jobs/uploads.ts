@@ -8,7 +8,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import type { Signed } from "../../auth.js";
 import { db, tx, type Queryable } from "../../db.js";
-import { ApiError, notFound, refused } from "../../errors.js";
+import { ApiError, invalid, notFound, providerDown, refused } from "../../errors.js";
 import { hit, subjectKey } from "../../rateLimit.js";
 import { uploadStore } from "../../storage.js";
 import * as data from "./data.js";
@@ -39,19 +39,18 @@ export const limited = (personId: string, ...limits: (typeof RATE)[keyof typeof 
 
 export type VideoAsked = { contentType: string; size: number; durationS?: number };
 
-const refuse = (sentence: string) => refused(400, "bad_upload", sentence);
 
 /** The signer's checks and its sentences. */
 function checkVideos(videos: VideoAsked[]): void {
-  if (videos.length < 1 || videos.length > MAX_VIDEOS) throw refuse(`Pick 1 to ${MAX_VIDEOS} videos.`);
+  if (videos.length < 1 || videos.length > MAX_VIDEOS) throw invalid("videos", `Pick 1 to ${MAX_VIDEOS} videos.`);
   let totalS = 0;
   for (const v of videos) {
-    if (!CONTENT_TYPE.test(v.contentType)) throw refuse("Every file must be a video.");
+    if (!CONTENT_TYPE.test(v.contentType)) throw invalid("videos", "Every file must be a video.");
     if (v.size > MAX_VIDEO_BYTES) throw refused(413, "too_large", "That video is too big to send. Try splitting it into shorter videos.");
-    if ((v.durationS ?? 0) > 24 * 3600) throw refuse("A video's length doesn't look right.");
+    if ((v.durationS ?? 0) > 24 * 3600) throw invalid("videos", "A video's length doesn't look right.");
     totalS += v.durationS ?? 0;
   }
-  if (totalS > MAX_HOURS * 3600) throw refuse(`That's more than ${MAX_HOURS} hours of video. Please pick fewer videos.`);
+  if (totalS > MAX_HOURS * 3600) throw invalid("videos", `That's more than ${MAX_HOURS} hours of video. Please pick fewer videos.`);
 }
 
 /** S3 being down isn't the caller's fault, and every call here is safe to repeat. */
@@ -60,7 +59,7 @@ async function storage<T>(call: () => Promise<T>): Promise<T> {
     return await call();
   } catch (error) {
     if (error instanceof ApiError) throw error;
-    throw Object.assign(new ApiError(502, "storage", {}, "The upload service is having trouble. Please try again in a minute."), { cause: error });
+    throw Object.assign(providerDown(502, "The upload service is having trouble. Please try again in a minute."), { cause: error });
   }
 }
 
@@ -141,8 +140,8 @@ const fileInParts = async (signed: Signed, uploadId: string, index: number) => {
   const files = await ownUpload(db(), signed, uploadId);
   if (cancelled(files)) throw notFound();
   const file = files[index - 1];
-  if (!file) throw refuse("That isn't one of this upload's videos.");
-  if (!inParts(file)) throw refuse("That video goes up in one piece.");
+  if (!file) throw invalid("index", "That isn't one of this upload's videos.");
+  if (!inParts(file)) throw invalid("index", "That video goes up in one piece.");
   return file;
 };
 
@@ -152,7 +151,7 @@ export async function partLinks(signed: Signed, uploadId: string, index: number,
   const file = await fileInParts(signed, uploadId, index);
   const size = Number(file.size_bytes);
   if (partNumbers.length === 0 || partNumbers.length > PARTS_AT_ONCE || partNumbers.some((n) => !Number.isInteger(n) || n < 1 || n > partCount(size))) {
-    throw refuse(`Ask for 1 to ${PARTS_AT_ONCE} parts of this video, numbered from 1 to ${partCount(size)}.`);
+    throw invalid("partNumbers", `Ask for 1 to ${PARTS_AT_ONCE} parts of this video, numbered from 1 to ${partCount(size)}.`);
   }
   const multipartId = file.multipart_id ?? (await data.saveMultipartId(db(), file.key, await storage(() => uploadStore().startParts(file.key, file.content_type))));
   await data.noteLinks(db(), uploadId); // a phone still at it: the overdue clock starts again
@@ -170,8 +169,8 @@ export async function finishParts(signed: Signed, uploadId: string, index: numbe
   const file = await fileInParts(signed, uploadId, index);
   const expected = partCount(Number(file.size_bytes));
   const numbers = parts.map((p) => p.partNumber).sort((a, b) => a - b);
-  if (numbers.length !== expected || numbers.some((n, i) => n !== i + 1)) throw refuse("That isn't every part of this video.");
-  if (!file.multipart_id) throw refuse("This video's upload hasn't started.");
+  if (numbers.length !== expected || numbers.some((n, i) => n !== i + 1)) throw invalid("parts", "That isn't every part of this video.");
+  if (!file.multipart_id) throw invalid("index", "This video's upload hasn't started.");
   const multipartId = file.multipart_id;
   if ((await landed([file])).length === 0) {
     await storage(() => uploadStore().finishParts(file.key, multipartId, [...parts].sort((a, b) => a.partNumber - b.partNumber)));

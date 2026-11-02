@@ -100,6 +100,8 @@ requests waiting on the event loop too, not only on the pool. Before production:
 
 Microservices, Kubernetes, Redis, read replicas and multi-region, until measurements call for them.
 
+Android: Caleb wants it eventually (Nov 2), so Google sign-in stays; not scheduled.
+
 ### Time
 
 No week estimates: Claude builds this, so the ones here were too human. Real numbers come after the first area is done. Real

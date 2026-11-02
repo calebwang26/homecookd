@@ -2,7 +2,7 @@
 // docs/build/COMMUNITY-MIGRATION.md has what an adapter does with the replies.
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { requireSession, signedIn } from "../../auth.js";
-import { ApiError } from "../../errors.js";
+import { invalid } from "../../errors.js";
 import { PLACE_KINDS, REPORT_REASONS, type PlaceKind, type ReportReason } from "./data.js";
 import { createDinner, getDinner, inviteLink, myDinners, requestJoin, respondToJoin } from "./dinners.js";
 import type { Reportable } from "./safety.js";
@@ -27,7 +27,7 @@ const OK = { ok: true };
 function idempotencyKey(req: FastifyRequest): string | undefined {
   const key = req.headers["idempotency-key"];
   if (key === undefined) return undefined;
-  if (typeof key !== "string" || !IDEMPOTENCY.test(key)) throw new ApiError(400, "bad_request");
+  if (typeof key !== "string" || !IDEMPOTENCY.test(key)) throw invalid("Idempotency-Key");
   return key;
 }
 

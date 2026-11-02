@@ -116,7 +116,7 @@ test("the photo note reads a file without holding it, and refuses what isn't min
   refused(await post(w.app, w.leo, "/v1/messages/photo-note", { recipeId: chili, photoKey: await uploaded(w, w.nia, "photo") }, { key: null }), 404, "not_found");
   refused(await post(w.app, w.leo, "/v1/messages/photo-note", { recipeId: chili, photoKey: await uploaded(w, w.leo, "voice") }, { key: null }), 404, "not_found");
   const theirs = await recipe(w.otherFamily, w.stranger.id);
-  refused(await post(w.app, w.leo, "/v1/messages/photo-note", { recipeId: theirs, photoKey: mine }, { key: null }), 404, "no_such_recipe");
+  refused(await post(w.app, w.leo, "/v1/messages/photo-note", { recipeId: theirs, photoKey: mine }, { key: null }), 404, "not_found", { message: "That recipe isn't here anymore." });
 });
 
 test("clipKey names public library media only: a private key is refused, whoever's it is, and it's never signed", { skip }, async () => {
@@ -142,11 +142,11 @@ test("clipKey names public library media only: a private key is refused, whoever
 test("uploads: type, size, one owner; a guess or someone else's key can't be confirmed; S3's word is checked", { skip }, async () => {
   const w = await world();
   const ask = (body: Record<string, unknown>) => post(w.app, w.mom, "/v1/uploads", body, { key: null });
-  refused(await ask({ kind: "video", contentType: "video/mp4", size: 100 }), 400, "bad_kind");
+  refused(await ask({ kind: "video", contentType: "video/mp4", size: 100 }), 400, "invalid", "kind");
   refused(await ask({ kind: "voice", contentType: "video/mp4", size: 100 }), 415, "bad_type");
   refused(await ask({ kind: "photo", contentType: "audio/m4a", size: 100 }), 415, "bad_type");
-  refused(await ask({ kind: "voice", contentType: "audio/m4a", size: 0 }), 400, "bad_size");
-  refused(await ask({ kind: "voice", contentType: "audio/m4a", size: "12" }), 400, "bad_size");
+  refused(await ask({ kind: "voice", contentType: "audio/m4a", size: 0 }), 400, "invalid", "size");
+  refused(await ask({ kind: "voice", contentType: "audio/m4a", size: "12" }), 400, "invalid", "size");
   refused(await ask({ kind: "voice", contentType: "audio/m4a", size: 20 * 1024 * 1024 + 1 }), 413, "too_large");
 
   const link = ok(await ask({ kind: "voice", contentType: "audio/m4a; x=1", size: 2000 }), 201);
@@ -172,7 +172,7 @@ test("uploads: type, size, one owner; a guess or someone else's key can't be con
 
   w.store.failHeads = true;
   const down = ok(await ask({ kind: "voice", contentType: "audio/m4a", size: 2000 }), 201);
-  refused(await confirm(w.mom, down.key), 502, "storage");
+  refused(await confirm(w.mom, down.key), 502, "provider_down");
 });
 
 test("a read link that can't be made is null, and the page still answers", { skip }, async () => {

@@ -3,22 +3,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { hashToken } from "../src/auth.js";
 import { db } from "../src/db.js";
-import {
-  Api,
-  bearer,
-  clearLimits,
-  code,
-  count,
-  device,
-  freshDatabase,
-  hasDatabase,
-  makeDevice,
-  makeFamily,
-  makePerson,
-  row,
-  setup,
-  SIGNED_OUT,
-} from "./accountsHelpers.js";
+import { Api, bearer, clearLimits, code, count, device, freshDatabase, hasDatabase, makeDevice, makeFamily, makePerson, row, said, setup, SIGNED_OUT } from "./accountsHelpers.js";
 import { session } from "./helpers.js";
 
 const skip = !hasDatabase;
@@ -105,11 +90,12 @@ test("unknown, malformed and revoked keys all get the exact signed-out 401", { s
   for (const key of ["x".repeat(43), "short", revoked.key]) {
     const { status, data } = await api.get("/family", device(key));
     assert.equal(status, 401);
-    assert.equal(data.error, SIGNED_OUT);
+    assert.deepEqual([data.error, data.message], ["signed_out", SIGNED_OUT]);
   }
   const none = await api.get("/family");
   assert.equal(none.status, 401);
-  assert.match(none.data.error, /Missing family code/);
+  assert.equal(none.data.error, "signed_out");
+  assert.match(none.data.message, /Missing family code/);
 });
 
 test("bad keys are limited per address", { skip }, async () => {
@@ -128,7 +114,8 @@ test("a removed person can't act, but GET /family still loads for them", { skip 
   assert.equal((await api.get("/family", device(shared.key, b))).status, 200);
   const refused = await api.post("/invites", {}, device(shared.key, b));
   assert.equal(refused.status, 403);
-  assert.match(refused.data.error, /was removed/);
+  assert.equal(refused.data.error, "removed_from_family");
+  assert.match(refused.data.message, /was removed/);
 });
 
 test("family code still works, and POST /devices swaps it for a key (never a key for a key)", { skip }, async () => {
@@ -145,7 +132,7 @@ test("family code still works, and POST /devices swaps it for a key (never a key
   assert.equal(again.status, 400);
   const wrong = await api.get("/family", code("NOPE-NOPE"));
   assert.equal(wrong.status, 401);
-  assert.equal(wrong.data.error, "Family code not recognised");
+  assert.deepEqual(said(wrong), ["signed_out", "Family code not recognised"]);
 });
 
 test("a code phone's write as someone phone-less is refused and never makes the phone theirs; it adds itself, and then it's that person's", { skip }, async () => {
@@ -154,7 +141,7 @@ test("a code phone's write as someone phone-less is refused and never makes the 
   const phone = await makeDevice(f.id, null, "code");
   assert.equal((await api.get("/family", device(phone.key, grandma))).data.device_profile_id, null, "a read never sets it");
   const refused = await api.post("/join-links", {}, device(phone.key, grandma));
-  assert.deepEqual([refused.status, refused.data.error], [403, "Add yourself first."]);
+  assert.deepEqual([refused.status, ...said(refused)], [403, "forbidden", "Add yourself first."]);
   assert.equal((await row("devices", "id = $1", [phone.id])).person_id, null);
   const added = await api.post("/profiles/self", { name: "Asha", role: "cook" }, device(phone.key));
   assert.equal(added.status, 200);
@@ -174,7 +161,7 @@ test("someone with their own phone can only be them from it: other phones and th
   const dads = await makeDevice(f.id, dad);
   const fromOther = await api.post("/invites", {}, device(dads.key, mom));
   assert.equal(fromOther.status, 403);
-  assert.equal(fromOther.data.error, "Mom uses their own phone.");
+  assert.deepEqual(said(fromOther), ["own_phone", "Mom uses their own phone."]);
   assert.equal((await api.post("/invites", {}, code(f.code, mom))).status, 403);
   assert.equal((await api.get("/move-requests", device(dads.key, mom))).status, 403, "a read too");
 });
@@ -206,12 +193,12 @@ test("sign-in refuses locked, invited and unknown people, and passes on a signed
     `insert into invites (family_id, inviter_id, person_id, token_hash, code_hash, expires_at) values ($1, $2, $3, $4, $5, now() + interval '1 day')`,
     [f.id, dad, amy, hashToken(`t-${amy}`), hashToken(`c-${amy}`)],
   );
-  const words = async (id: string) => (await mint(phone.key, id)).data.error;
-  assert.equal(await words(mom), "Mom uses their own phone.");
-  assert.equal(await words(amy), "They haven't joined yet.");
-  assert.match(await words("11111111-2222-4333-8444-555555555555"), /isn't part of this family/);
+  const words = async (id: string) => said(await mint(phone.key, id));
+  assert.deepEqual(await words(mom), ["own_phone", "Mom uses their own phone."]);
+  assert.deepEqual(await words(amy), ["forbidden", "They haven't joined yet."]);
+  assert.deepEqual(await words("11111111-2222-4333-8444-555555555555"), ["not_in_family", "That profile isn't part of this family"]);
   await db().query(`update devices set revoked_at = now() where id = $1`, [phone.id]);
-  assert.equal(await words(dad), SIGNED_OUT);
+  assert.deepEqual(await words(dad), ["signed_out", SIGNED_OUT]);
   assert.equal(await count("sessions", "person_id = $1", [dad]), 0);
 });
 
