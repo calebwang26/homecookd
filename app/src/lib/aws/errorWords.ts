@@ -10,6 +10,7 @@ import type { AwsError } from './errors';
 const SAME: Record<string, string> = {
   no_route: 'unavailable',
   accounts_not_moved: 'not_moved',
+  origin: 'forbidden', // never from the app (it sends no Origin)
 };
 
 function keyFor(code: string): WordKey | null {

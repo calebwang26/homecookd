@@ -302,6 +302,25 @@ await test('error words: by code in her language, by kind when the code is new, 
   assert.equal(W.errorWords(E.networkError(true)), WORDS.english('errors.timeout'));
 });
 
+// Every code the api can send (docs/build/contracts/ERROR-CODES.md on aws-migration, Nov 2), less the one no phone sees.
+const API_CODES = `invalid family_full signed_out sign_in_failed forbidden removed_from_family own_phone account_deleted not_in_family
+  only_self link_full ticket_expired origin other_left not_a_guest not_asked_of_you not_found no_route conflict name_taken
+  idempotency_conflict retry link_used already_joined already_on_card answered already_delivered already_asked full own_family
+  not_shared declined closed gone live_off too_large bad_type words not_a_dish update_app rate_limited budget server_error
+  not_moved provider_down unavailable not_set_up accounts_not_moved`.split(/\s+/);
+
+await test('every code the api can send has the app\'s own words, never the api\'s English', () => {
+  for (const code of API_CODES) {
+    const e = E.readError(400, JSON.stringify({ error: code, message: 'API ENGLISH' }), null);
+    assert.notEqual(W.errorWords(e), 'API ENGLISH', code);
+  }
+});
+
+await test('a setting missing on the server is a refusal: waiting won\'t help', () => {
+  assert.equal(E.readError(503, JSON.stringify({ error: 'not_set_up' }), null).kind, 'refused');
+  assert.equal(E.readError(503, JSON.stringify({ error: 'provider_down' }), null).kind, 'unavailable');
+});
+
 await test('switch on: a refusal with a code reads in her language; the session still sees the code', async () => {
   API.setApiAuth({ deviceKey: 'aws-key-5', code: null, profileId: 'p-mom' });
   API.setApiLanguage('hi');
