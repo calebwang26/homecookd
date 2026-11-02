@@ -41,7 +41,7 @@ Real codegen runs against the separate dev deployment `dutiful-mockingbird-919`,
 the preview key doesn't trip the CLI:
 ```bash
 mv .env .env.off
-T=$(grep '^CONVEX_OVERRIDE_ACCESS_TOKEN=' /Users/calebwang/hackathon-homecookd/.env | cut -d= -f2- | tr -d "\"'")
+T=$(grep '^CONVEX_OVERRIDE_ACCESS_TOKEN=' /Users/calebwang/GitHub/homecookd/hackathon-homecookd/.env | cut -d= -f2- | tr -d "\"'")
 CONVEX_OVERRIDE_ACCESS_TOKEN="$T" CONVEX_DEPLOYMENT=dev:dutiful-mockingbird-919 npx convex codegen
 mv .env.off .env
 ```

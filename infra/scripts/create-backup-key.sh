@@ -3,7 +3,7 @@
 # never appears on screen. Run it yourself, once, after infra/backups is applied: infra/scripts/create-backup-key.sh
 # Undo: Convex's delete_deploy_key with the name homecookd-aws-backup.
 set -euo pipefail
-ENV_FILE=/Users/calebwang/hackathon-homecookd/.env
+ENV_FILE=/Users/calebwang/GitHub/homecookd/hackathon-homecookd/.env
 TOKEN=$(grep '^CONVEX_OVERRIDE_ACCESS_TOKEN=' "$ENV_FILE" | cut -d= -f2-)
 RESPONSE=$(curl -sf -X POST https://api.convex.dev/v1/deployments/grand-dragon-649/create_deploy_key \
   -H "Authorization: Bearer $TOKEN" -H 'Content-Type: application/json' -d '{"name":"homecookd-aws-backup"}')
