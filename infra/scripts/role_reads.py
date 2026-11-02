@@ -17,6 +17,10 @@ STAGING = ROOT / "infra/envs/staging"
 ROLE = ROOT / "infra/staging-apply-role/main.tf"
 
 READS = {
+    # From the provider's source (6.71.0: appautoscaling/target.go and policy.go; the target's tags are read with the type), not a debug
+    # log: no target existed yet to refresh. Check them against one after the first apply.
+    "aws_appautoscaling_policy": ["application-autoscaling:DescribeScalingPolicies"],
+    "aws_appautoscaling_target": ["application-autoscaling:DescribeScalableTargets", "application-autoscaling:ListTagsForResource"],
     "aws_cloudfront_cache_policy": ["cloudfront:GetCachePolicy"],
     "aws_cloudfront_distribution": ["cloudfront:GetDistribution", "cloudfront:ListTagsForResource"],
     "aws_cloudfront_function": ["cloudfront:DescribeFunction", "cloudfront:GetFunction", "cloudfront:ListTagsForResource"],

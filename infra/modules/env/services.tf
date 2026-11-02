@@ -134,8 +134,14 @@ resource "aws_ecs_task_definition" "migrate" {
   }])
 }
 
+locals {
+  # An autoscaled service's count belongs to the autoscaler, so it lives in aws_ecs_service.scaled below. Everything else stays here.
+  scaled_services = { for k, s in var.services : k => s if s.autoscale != null }
+  ecs_services    = merge(aws_ecs_service.service, aws_ecs_service.scaled)
+}
+
 resource "aws_ecs_service" "service" {
-  for_each        = var.services
+  for_each        = { for k, s in var.services : k => s if s.autoscale == null }
   name            = each.key
   cluster         = aws_ecs_cluster.main.id
   task_definition = aws_ecs_task_definition.service[each.key].arn
@@ -164,6 +170,44 @@ resource "aws_ecs_service" "service" {
   # Each deploy registers its own task definition from CI (.github/workflows/deploy-aws.yml); Terraform doesn't undo it.
   lifecycle {
     ignore_changes = [task_definition]
+  }
+
+  depends_on = [aws_lb_listener.main]
+}
+
+# The same service, for those the autoscaler sizes (autoscaling.tf). Terraform sets the count once, when it creates the service, and
+# never again, or each apply would put it back while the autoscaler had grown it. lifecycle can't depend on a variable, so this is a
+# second block: keep it the same as the one above in everything else. Moving a running service between the two is a
+# `terraform state mv` (infra/README.md, "Autoscaling the api").
+resource "aws_ecs_service" "scaled" {
+  for_each        = local.scaled_services
+  name            = each.key
+  cluster         = aws_ecs_cluster.main.id
+  task_definition = aws_ecs_task_definition.service[each.key].arn
+  desired_count   = each.value.desired_count
+  launch_type     = "FARGATE"
+
+  network_configuration {
+    subnets         = aws_subnet.private[*].id
+    security_groups = [aws_security_group.service[each.key].id]
+  }
+
+  dynamic "load_balancer" {
+    for_each = contains(keys(local.lb_services), each.key) ? [1] : []
+    content {
+      target_group_arn = aws_lb_target_group.service[each.key].arn
+      container_name   = each.key
+      container_port   = each.value.port
+    }
+  }
+
+  deployment_circuit_breaker {
+    enable   = true
+    rollback = true
+  }
+
+  lifecycle {
+    ignore_changes = [task_definition, desired_count]
   }
 
   depends_on = [aws_lb_listener.main]
