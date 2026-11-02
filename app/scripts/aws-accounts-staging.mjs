@@ -66,11 +66,11 @@ await check('a /v1 route with no session is signed_out', async () => {
 });
 await check('GET /family with a made-up key is a 401, and the client drops that key', async () => {
   let heard = 0;
-  C.onDeadKey(() => (heard += 1));
+  const off = C.onDeadKey(() => (heard += 1));
   C.setAwsCredentials({ deviceKey: token(43), personId: randomUUID() });
   const e = await refused(A.accounts.family());
   assert.deepEqual([e.status, e.kind, heard, C.awsPersonId()], [401, 'signed_out', 1, null]);
-  C.onDeadKey(null);
+  off();
   return show(e);
 });
 await check('POST /v1/sessions/start with a made-up key is "This phone was signed out."', async () => {

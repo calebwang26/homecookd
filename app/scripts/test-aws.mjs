@@ -4,6 +4,8 @@
 //   src/lib/aws/client.ts    the two credentials, a session per person shared by concurrent calls, a 401 starting
 //                            the session again once, a dead device key heard once, and which calls retry
 //   src/lib/aws/accounts.ts  sign-in keeps the key it was given
+//   src/lib/api.ts           with the switch on, the screens' calls go to the AWS api with the same paths and
+//                            headers; the api's own "signed out" is heard once; a gateway's 401 never signs out
 //   node scripts/test-aws.mjs
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
@@ -25,6 +27,7 @@ const E = await import(pathToFileURL(join(root, 'src/lib/aws/errors.ts')).href);
 const C = await import(pathToFileURL(join(root, 'src/lib/aws/client.ts')).href);
 const A = await import(pathToFileURL(join(root, 'src/lib/aws/accounts.ts')).href);
 const cfg = await import(pathToFileURL(join(root, 'src/lib/aws/config.ts')).href);
+const API = await import(pathToFileURL(join(root, 'src/lib/api.ts')).href);
 
 let passed = 0;
 const test = async (name, fn) => {
@@ -176,7 +179,7 @@ await test("a /v1 401 starts the session again once and repeats the call once", 
 await test('a dead device key is heard once, and the phone forgets its key and sessions', async () => {
   signIn();
   let heard = 0;
-  C.onDeadKey(() => (heard += 1));
+  const off = C.onDeadKey(() => (heard += 1));
   fakeApi({
     'POST /v1/sessions/start': [sess('t1'), { status: 401, body: { error: 'This phone was signed out.' } }],
     'GET /v1/me': [{ status: 401, body: { error: 'signed_out' } }],
@@ -187,17 +190,17 @@ await test('a dead device key is heard once, and the phone forgets its key and s
   assert.equal(C.awsPersonId(), null);
   const again = await caught(A.accounts.family());
   assert.equal(again.kind, 'signed_out', 'no key is sent once it died');
-  C.onDeadKey(null);
+  off();
 });
 
 await test('a 401 on a family route kills the key too', async () => {
   signIn();
   let heard = 0;
-  C.onDeadKey(() => (heard += 1));
+  const off = C.onDeadKey(() => (heard += 1));
   fakeApi({ 'GET /family': [{ status: 401, body: { error: 'This phone was signed out.' } }] });
   await caught(A.accounts.family());
   assert.equal(heard, 1);
-  C.onDeadKey(null);
+  off();
 });
 
 await test('reads try once more when the api is down; then the caller keeps what it had', async () => {
@@ -253,6 +256,65 @@ await test('signing in keeps the key it was given; a needs_name answer keeps not
   assert.deepEqual(calls[0].body, { id_token: 'apple-token', name: 'Asha', role: 'cook' });
   assert.equal(calls[0].headers['x-device-key'], undefined);
   assert.equal(C.awsPersonId(), 'p-asha');
+});
+
+await test("a gateway's 401 page never signs the phone out; the api's own word does", async () => {
+  signIn();
+  let heard = 0;
+  const off = C.onDeadKey(() => (heard += 1));
+  fakeApi({ 'GET /family': [{ status: 401, body: '<html>401 Authorization Required</html>' }] });
+  assert.equal((await caught(A.accounts.family())).kind, 'unavailable');
+  fakeApi({ 'GET /family': [{ status: 401, body: { error: 'Missing family code (x-family-code header)' } }] });
+  await caught(A.accounts.family());
+  assert.equal(heard, 0, 'a 401 that is not the api saying the key is gone');
+  fakeApi({ 'GET /family': [{ status: 401, body: { error: 'signed_out', requestId: 'r' } }] });
+  await caught(A.accounts.family());
+  assert.equal(heard, 1);
+  off();
+});
+
+await test('switch on: the screens\' calls go to the AWS api with the phone key, and the person where a route needs one', async () => {
+  API.setApiAuth({ deviceKey: 'aws-key-1', code: null, profileId: 'p-mom' });
+  const calls = fakeApi({
+    'GET /family': [{ body: { family: { id: 'f1', name: 'x' }, profiles: [] } }],
+    'POST /join-links': [{ body: { url: 'https://homecookd.app/i?t=x', expires_at: null } }],
+  });
+  await API.api.family();
+  await API.api.joinLink();
+  assert.equal(calls[0].headers['x-device-key'], 'aws-key-1');
+  assert.equal(calls[0].headers['x-profile-id'], undefined, 'the family loads for the phone, as on Supabase');
+  assert.equal(calls[1].headers['x-profile-id'], 'p-mom');
+  assert.deepEqual(calls[1].body, {});
+});
+
+await test("switch on: the api's sentence comes back as the ApiError screens already show", async () => {
+  API.setApiAuth({ deviceKey: 'aws-key-2', code: null, profileId: 'p-mom' });
+  fakeApi({ 'POST /profiles': [{ status: 409, body: { error: 'Nani is already in this family', requestId: 'r' } }] });
+  const e = await caught(API.api.createProfile({ name: 'Nani', role: 'cook' }));
+  assert.equal(e.name, 'ApiError');
+  assert.deepEqual([e.status, e.message], [409, 'Nani is already in this family']);
+  assert.equal(API.errorMessage(e), 'Nani is already in this family');
+});
+
+await test('switch on: "This phone was signed out." tells the session once, and the key is dropped', async () => {
+  API.setApiAuth({ deviceKey: 'aws-key-3', code: null, profileId: 'p-mom' });
+  const told = [];
+  API.setSignedOutHandler((m) => told.push(m));
+  fakeApi({ 'GET /family': [{ status: 401, body: { error: 'This phone was signed out.', requestId: 'r' } }] });
+  await caught(API.api.family());
+  assert.deepEqual(told, ['This phone was signed out.']);
+  assert.equal(API.getApiAuth().key, null);
+  API.setSignedOutHandler(null);
+});
+
+await test('switch on: acting as someone who now uses their own phone lets them go', async () => {
+  API.setApiAuth({ deviceKey: 'aws-key-4', code: null, profileId: 'p-leo' });
+  const gone = [];
+  API.setProfileRemovedHandler((id) => gone.push(id));
+  fakeApi({ 'POST /join-links': [{ status: 403, body: { error: 'Leo uses their own phone.', requestId: 'r' } }] });
+  await caught(API.api.joinLink());
+  assert.deepEqual(gone, ['p-leo']);
+  API.setProfileRemovedHandler(null);
 });
 
 console.log(`\n${passed} passed`);

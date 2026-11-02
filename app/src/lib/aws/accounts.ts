@@ -119,14 +119,15 @@ export const accounts = {
     request<LinkPeek>('/invites/peek', { auth: 'none', body: name ? { token, name } : { token } }),
   /** Sign this phone out: the key and every session on it stop at once. The caller clears what it saved. */
   signOut: () => request<{ ok: true }>('/devices/revoke', { auth: 'key', body: {} }),
-  appleRevokeReady: () => request<{ ready: boolean }>('/v1/apple/revoke-ready', { auth: 'session' }),
-  appleRevoke: (authorizationCode: string) =>
-    request<{ revoked: boolean; reason?: string }>('/v1/apple/revoke', { auth: 'session', body: { authorizationCode }, timeoutMs: 40_000 }),
+  appleRevokeReady: (as?: string | null) => request<{ ready: boolean }>('/v1/apple/revoke-ready', { auth: 'session', as }),
+  appleRevoke: (authorizationCode: string, as?: string | null) =>
+    request<{ revoked: boolean; reason?: string }>('/v1/apple/revoke', { auth: 'session', as, body: { authorizationCode }, timeoutMs: 40_000 }),
   /** Delete this person's account (`as` a phone-less person to delete them). A retry's 401 means it worked. */
   deleteAccount: (as?: string | null) => request<{ deleted: true }>('/v1/account/delete', { auth: 'session', as, body: {} }),
   openCard: (token: string) => request<CardOpen>('/link/open', { auth: 'none', body: { token } }),
-  claimCard: (token: string) =>
-    request<{ dishAskId: string; side: 'kid' | 'cook'; sameFamily: boolean; taken: boolean }>('/v1/links/claim', { auth: 'session', body: { token } }),
-  /** After a move: bring their recipes along. */
-  moved: (receipt: string) => request<{ recipes: number; faces: number }>('/v1/links/moved', { auth: 'session', body: { receipt } }),
+  claimCard: (token: string, as?: string | null) =>
+    request<{ dishAskId: string; side: 'kid' | 'cook'; sameFamily: boolean; taken: boolean }>('/v1/links/claim', { auth: 'session', as, body: { token } }),
+  /** After a move: bring their recipes along, as the new person. */
+  moved: (receipt: string, as?: string | null) =>
+    request<{ recipes: number; faces: number }>('/v1/links/moved', { auth: 'session', as, body: { receipt } }),
 };
