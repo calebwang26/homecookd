@@ -18,7 +18,8 @@
 // Waiting for the sync: /dish/craving/peek and `cravingToken` on /dish/cards.
 import * as Sentry from "@sentry/node";
 import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
-import { isLockWait, isPoolWait } from "../../db.js";
+import { isPoolWait } from "../../db.js";
+import { isBusy, Overloaded } from "../../overload.js";
 import { ApiError, unavailable } from "../../errors.js";
 import { hit, subjectKey, type Limit } from "../../rateLimit.js";
 import type { Trace } from "./budget.js";
@@ -333,8 +334,8 @@ async function onError(error: FastifyError, req: FastifyRequest, reply: FastifyR
       : send(reply, 502, "model", "That didn't work. Try again.");
   }
   if (error instanceof ApiError && error.statusCode === 429) return send(reply.headers(error.headers), 429, "rate", TOO_MANY);
-  if (isLockWait(error) || isPoolWait(error)) {
-    req.log.warn({ err: { type: error.name, code: error.code }, poolWait: isPoolWait(error) }, "too busy to answer");
+  if (isBusy(error)) {
+    req.log.warn({ err: { type: error.name, code: error.code }, poolWait: isPoolWait(error), shed: error instanceof Overloaded ? error.reason : undefined }, "too busy to answer");
     return send(reply.headers(unavailable().headers), 503, "busy", "We're busy for a moment. Try again.");
   }
   if (error.code === "FST_ERR_CTP_BODY_TOO_LARGE") return send(reply, 413, "too_large", "That's too much to send at once.");

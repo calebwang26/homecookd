@@ -3,7 +3,7 @@
 import { randomUUID } from "node:crypto";
 import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastify";
 import * as Sentry from "@sentry/node";
-import { db, isLockWait, isPoolWait } from "./db.js";
+import { db, isPoolWait } from "./db.js";
 import { ApiError, unavailable } from "./errors.js";
 import { fieldPaths, fileGuard, lastName, looksLikeFileKey } from "./files.js";
 import { accountRoutes } from "./modules/accounts/routes.js";
@@ -17,6 +17,7 @@ import { peopleRoutes } from "./modules/people/routes.js";
 import { jobRoutes } from "./modules/jobs/routes.js";
 import { recipeRoutes } from "./modules/recipes/routes.js";
 import { recordingRoutes } from "./modules/recordings/routes.js";
+import { bounds, busyMeter, isBusy, lagMeter, Overloaded, shedder } from "./overload.js";
 
 declare module "fastify" {
   interface FastifyContextConfig {
@@ -137,6 +138,18 @@ export function buildApp(options: { logger?: object | boolean; logStream?: NodeJ
 
   guardFileKeys(app);
 
+  // Overloaded: turned away before any work, with the busy 503 (overload.ts). Off unless OVERLOAD_SHED=on.
+  const limit = bounds();
+  if (limit) {
+    const lag = lagMeter();
+    const busy = busyMeter();
+    app.addHook("onRequest", shedder(limit, busy.busy, lag.lagMs, () => db().waitingCount));
+    app.addHook("onClose", async () => {
+      lag.stop();
+      busy.stop();
+    });
+  }
+
   // Before any route's own checks, so no route has to remember: Postgres would answer with an error, and that would be a 500.
   app.addHook("preValidation", async (req) => {
     if (holdsNul([req.params, req.query, req.body])) throw new ApiError(400, "bad_request");
@@ -151,9 +164,9 @@ export function buildApp(options: { logger?: object | boolean; logStream?: NodeJ
     }
     if (error.validation) return reply.status(400).send({ error: "bad_request", requestId: req.id });
     // Too busy, and nothing was written: the phone may simply try again. An alarm on these belongs with the overload gate (AWS-MIGRATION.md).
-    if (isLockWait(error) || isPoolWait(error)) {
+    if (isBusy(error)) {
       const busy = unavailable();
-      req.log.warn({ err: { type: error.name, code: (error as { code?: string }).code }, poolWait: isPoolWait(error) }, "too busy to answer");
+      req.log.warn({ err: { type: error.name, code: (error as { code?: string }).code }, poolWait: isPoolWait(error), shed: error instanceof Overloaded ? error.reason : undefined }, "too busy to answer");
       return reply.status(busy.statusCode).headers(busy.headers).send({ error: busy.code, requestId: req.id });
     }
     const status = error.statusCode ?? 500;
