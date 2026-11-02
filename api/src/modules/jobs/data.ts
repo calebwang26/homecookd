@@ -169,9 +169,10 @@ export type UploadFile = {
   attached_at: Date | null;
   delete_requested_at: Date | null;
   last_link_at: Date | null;
+  multipart_id: string | null;
 };
 
-const FILE = `key, content_type, size_bytes, family_id, owner_person_id, uploaded_at, attached_at, delete_requested_at, last_link_at`;
+const FILE = `key, content_type, size_bytes, family_id, owner_person_id, uploaded_at, attached_at, delete_requested_at, last_link_at, multipart_id`;
 
 export async function uploadFiles(q: Queryable, uploadId: string): Promise<UploadFile[]> {
   const { rows } = await q.query(`select ${FILE} from files where upload_id = $1 order by key`, [uploadId]);
@@ -182,6 +183,12 @@ export async function uploadFiles(q: Queryable, uploadId: string): Promise<Uploa
 export async function lockUpload(c: Queryable, uploadId: string): Promise<UploadFile[]> {
   const { rows } = await c.query(`select ${FILE} from files where upload_id = $1 order by key for update`, [uploadId]);
   return rows;
+}
+
+/** The first one saved stays, and it's the one returned. */
+export async function saveMultipartId(q: Queryable, key: string, multipartId: string): Promise<string> {
+  const { rows } = await q.query(`update files set multipart_id = coalesce(multipart_id, $2) where key = $1 returning multipart_id`, [key, multipartId]);
+  return rows[0].multipart_id;
 }
 
 export async function insertUploadFile(

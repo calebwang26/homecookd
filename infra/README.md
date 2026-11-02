@@ -107,7 +107,7 @@ gh workflow run apply-staging.yml --ref aws-migration --repo calebwang26/hackath
 - **Alerts:** a refusal or failure emails Caleb through the `homecookd-staging-alerts` topic, and the run goes red. GitHub's own email
   goes only to whoever triggered the run, if they turned it on, so it isn't enough by itself. If the login itself fails, the topic
   can't be reached, and the red run is the only sign.
-- When `aws-migration` merges to `main` and goes away, the role's `branch` variable and this workflow's branch change together.
+- When `aws-migration` merges to `main` and goes away, the role's `branch` variable and this workflow's branch change together. So does staging's `deploy_branch`, or deploys stop logging in.
 
 ## Starting staging's voice service
 

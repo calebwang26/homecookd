@@ -31,6 +31,10 @@ export type FakeStore = ObjectStore & {
   failRemoves: boolean;
   failHeads: boolean;
   failGets: boolean;
+  partsStarted: string[];
+  partsFinished: { key: string; multipartId: string; parts: { partNumber: number; etag: string }[] }[];
+  /** A finish lands the object, at this size. */
+  landWhenFinished?: number;
 };
 
 export function fakeStore(): FakeStore {
@@ -41,11 +45,24 @@ export function fakeStore(): FakeStore {
     failRemoves: false,
     failHeads: false,
     failGets: false,
+    partsStarted: [],
+    partsFinished: [],
     put(url, bytes, contentType) {
       objects.set(new URL(url).pathname.slice(1), { bytes, contentType });
     },
     async presignPut(key, contentType) {
       return { url: `https://fake-s3.test/${key}`, headers: { "Content-Type": contentType }, expiresInS: UPLOAD_LINK_S };
+    },
+    async startParts(key) {
+      store.partsStarted.push(key);
+      return `multipart-${store.partsStarted.length}`;
+    },
+    async presignPart(key, multipartId, partNumber, size) {
+      return { url: `https://fake-s3.test/part/${key}?id=${multipartId}&n=${partNumber}&size=${size}`, headers: {}, expiresInS: UPLOAD_LINK_S };
+    },
+    async finishParts(key, multipartId, parts) {
+      store.partsFinished.push({ key, multipartId, parts });
+      if (store.landWhenFinished !== undefined) objects.set(key, { bytes: new Uint8Array(0), contentType: "video/mp4", size: store.landWhenFinished } as never);
     },
     async presignGet(key) {
       if (store.failGets) throw new Error("no credentials");
@@ -54,7 +71,7 @@ export function fakeStore(): FakeStore {
     async head(key) {
       if (store.failHeads) throw new Error("S3 is down");
       const o = objects.get(key);
-      return o ? { size: o.bytes.length, contentType: o.contentType } : null;
+      return o ? { size: (o as { size?: number }).size ?? o.bytes.length, contentType: o.contentType } : null;
     },
     async read(key) {
       const o = objects.get(key);

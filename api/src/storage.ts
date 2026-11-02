@@ -1,6 +1,15 @@
 // The `private` bucket, behind an interface so tests never touch AWS. Phones upload to S3 with a short-lived link and download with
 // another: bytes don't pass through a request (SYSTEM-DESIGN.md). The api reads a file itself only to hand it to a model.
-import { DeleteObjectCommand, GetObjectCommand, HeadObjectCommand, PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
+  DeleteObjectCommand,
+  GetObjectCommand,
+  HeadObjectCommand,
+  PutObjectCommand,
+  S3Client,
+  UploadPartCommand,
+} from "@aws-sdk/client-s3";
 import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 export type PresignedPut = { url: string; headers: Record<string, string>; expiresInS: number };
@@ -9,6 +18,11 @@ export interface ObjectStore {
   /** A link that accepts exactly this type and this many bytes, for a few minutes. */
   presignPut(key: string, contentType: string, size: number): Promise<PresignedPut>;
   presignGet(key: string): Promise<string>;
+  /** A file too big for one PUT, in parts. Returns S3's id for the upload. An unfinished one holds bytes nobody can list: the bucket's lifecycle rule aborts it after 7 days. */
+  startParts(key: string, contentType: string): Promise<string>;
+  /** A link that accepts exactly this many bytes as this part. */
+  presignPart(key: string, multipartId: string, partNumber: number, size: number): Promise<PresignedPut>;
+  finishParts(key: string, multipartId: string, parts: { partNumber: number; etag: string }[]): Promise<void>;
   /** Null when there's no such object. Throws when S3 can't say. `modified` is S3's own time for when the upload landed. */
   head(key: string): Promise<{ size: number; contentType: string | null; modified?: Date | null } | null>;
   read(key: string): Promise<{ bytes: Uint8Array; contentType: string | null } | null>;
@@ -65,6 +79,26 @@ export function s3Store(options: { bucket: string; client?: S3Client; now?: () =
         signableHeaders: new Set(["content-type", "content-length"]),
       });
       return { url, headers: { "Content-Type": contentType }, expiresInS: uploadLinkS };
+    },
+    async startParts(key, contentType) {
+      const { UploadId } = await send(new CreateMultipartUploadCommand({ Bucket, Key: key, ContentType: contentType }));
+      if (!UploadId) throw new Error("S3 gave no upload id");
+      return UploadId;
+    },
+    async presignPart(key, multipartId, partNumber, size) {
+      const command = new UploadPartCommand({ Bucket, Key: key, UploadId: multipartId, PartNumber: partNumber, ContentLength: size });
+      const url = await getSignedUrl(client, command, { expiresIn: uploadLinkS, signableHeaders: new Set(["content-length"]) });
+      return { url, headers: {}, expiresInS: uploadLinkS };
+    },
+    async finishParts(key, multipartId, parts) {
+      await send(
+        new CompleteMultipartUploadCommand({
+          Bucket,
+          Key: key,
+          UploadId: multipartId,
+          MultipartUpload: { Parts: parts.map((p) => ({ PartNumber: p.partNumber, ETag: p.etag })) },
+        }),
+      );
     },
     presignGet(key) {
       return getSignedUrl(client, new GetObjectCommand({ Bucket, Key: key }), {

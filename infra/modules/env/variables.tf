@@ -95,6 +95,18 @@ variable "alert_email" {
   type = string
 }
 
+variable "github_repository" {
+  description = "owner/name. GitHub's job_workflow_ref claim uses the name, so renaming the repo stops the deploy login until this changes"
+  type        = string
+  default     = "calebwang26/hackathon-homecookd"
+}
+
+variable "deploy_branch" {
+  description = "The one branch whose workflows can log in to deploy. When aws-migration merges to main and goes away, staging's value changes with it"
+  type        = string
+  default     = "main"
+}
+
 variable "github_subject_prefix" {
   description = "This repo as GitHub's login names it, with its permanent ids: gh api repos/<repo>/actions/oidc/customization/sub"
   type        = string
