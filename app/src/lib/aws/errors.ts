@@ -47,8 +47,9 @@ const CODE = /^[a-z][a-z0-9_]*$/;
 const UNREACHABLE = 'Can’t reach homecookd. Trying again.';
 // Older names for the same cases, until the error-shape PR renames them on the api.
 const RENAMED: Record<string, string> = { busy: 'unavailable', rate: 'rate_limited', server: 'server_error' };
-// Staging-only: that area's switch is off there. Nothing was written, and waiting won't help.
-const NOT_MOVED = new Set(['not_moved', 'accounts_not_moved']);
+// Nothing was written, and waiting won't help: a setting missing on the server, or (staging only) an area
+// whose switch is off there.
+const NOT_MOVED = new Set(['not_moved', 'accounts_not_moved', 'not_set_up']);
 
 function seconds(h: string | null): number | null {
   if (h == null || h.trim() === '') return null;
