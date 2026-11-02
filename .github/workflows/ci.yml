@@ -125,7 +125,7 @@ jobs:
         run: python3 infra/scripts/test_plan_check.py
       - name: Terraform's own tests (they plan with fake credentials, and reach nothing)
         run: |
-          for ROOT in backup-copy modules/front_door modules/bucket_copy; do
+          for ROOT in backup-copy modules/front_door modules/bucket_copy modules/env; do
             terraform -chdir="infra/$ROOT" init -backend=false -input=false >/dev/null
             terraform -chdir="infra/$ROOT" test
           done

@@ -144,6 +144,9 @@ resource "aws_iam_role_policy" "apply" {
           "ecs:DescribeTaskDefinition", "logs:DescribeLogGroups",
           # AWS's reference names the topic for this one, but the simulator refuses a subscription's ARN under a topic's name.
           "sns:GetSubscriptionAttributes",
+          # The api's autoscaling: the two describes take no resource, and a target's ARN holds a random id. Reads only: its writes are Caleb's.
+          "application-autoscaling:DescribeScalableTargets", "application-autoscaling:DescribeScalingPolicies",
+          "application-autoscaling:ListTagsForResource",
         ]
         Resource = "*"
       },

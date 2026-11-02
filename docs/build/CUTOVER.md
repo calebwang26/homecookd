@@ -37,6 +37,7 @@ Written Nov 1, 2026, rewritten Nov 2 (AWS backend chat). **A plan for review. On
 | Nov 2 | 1.0's release set to "Manually release this version" | App Store Connect, confirmed by Caleb |
 | Nov 2 | Load test on staging's one small task: 50 a second for 15 minutes met the targets | #270. AWS-MIGRATION.md, "Before production launch" |
 | Nov 2 | Overload turns work away with a 503 and `retry-after` (`OVERLOAD_SHED`) | #271 |
+| Nov 2 | The api as two tasks that grow to four on CPU, built (production's at 0 until step 6). Not applied: Caleb's staging apply first | #295 |
 | Nov 2 | Every workflow's actions pinned to commits, and gitleaks checked by sha256 | #267 |
 | Nov 2 | The budget alert's test email reached Caleb | #260 |
 
@@ -92,12 +93,13 @@ Before any real person's data reaches AWS or Sentry: the demo families' copy (st
 Likely to pass $300 a month (about $450-850 at 500 daily users), so it's Caleb's OK twice over. It can start right after step 3. Only its real video job waits for step 5.
 - **Who:** AWS backend writes the Terraform and runs the checks. Caleb reads the plan, applies it, and makes the DNS changes.
 - **Do, first:** give the GitHub `Production` environment required reviewers (`infra/README.md`, "Before production").
-- **Then bring `envs/production` up to what 1.1 needs:** every area's switch on from the start ("What production has on at launch", below), and the gaps AWS-MIGRATION lists for launch. Two api tasks, scaling to 4 (a PR is in progress). The bounded wait that also counts event-loop lag (AWS-MIGRATION.md, "A production gate: overload"). The limited database login, on in `envs/production` from the start (`db_iam_login`, proven on staging Nov 2).
+- **Then bring `envs/production` up to what 1.1 needs:** every area's switch on from the start ("What production has on at launch", below), and the gaps AWS-MIGRATION lists for launch. Two api tasks scaling to 4, built in #295 and proven on staging first (`infra/README.md`, "Autoscaling the api"). The bounded wait that also counts event-loop lag (AWS-MIGRATION.md, "A production gate: overload"). The limited database login, on in `envs/production` from the start (`db_iam_login`, proven on staging Nov 2).
   ```bash
   cd infra/envs/production && AWS_PROFILE=homecookd terraform plan   # Caleb reads this
   AWS_PROFILE=homecookd terraform apply
   ```
   Then Actions, "Deploy to AWS", `production`, `api`. Its migrate task runs first, with the master login, and makes the api's and worker's own logins. Then the worker.
+  Production's api starts here, not at step 10: its `desired_count` goes from 0 to 2, its autoscaling minimum, because the proofs below and in step 8 need it running. Nothing public calls it until step 10.
 - **HTTPS on `api.homecookd.app` and `media.homecookd.app`, Caleb's DNS step.** `homecookd.app`'s DNS is on Vercel (checked Nov 1, ADDRESSES-MIGRATION.md, "Steps for Caleb").
   1. Add `homecookd.app CAA 0 issue "amazon.com"` in Vercel, and keep the three CAA records already there. ACM can't issue a certificate until this exists.
   2. Two certificates: `api.homecookd.app` in us-west-2 for the load balancer (`certificate_arn`), and `media.homecookd.app` in us-east-1 for the media CloudFront (`media_domain`, `media_certificate_arn`). Add each validation CNAME in Vercel exactly as printed, and leave it there for renewals.

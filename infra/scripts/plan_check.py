@@ -72,6 +72,9 @@ DOORS = {
             "aws_ecr_lifecycle_policy", "aws_ecs_cluster", "aws_sns_topic", "aws_sns_topic_subscription",
             # A log line counted into a metric. The role can't write one (no logs:PutMetricFilter), so a change is Caleb's.
             "aws_cloudwatch_log_metric_filter",
+            # How many tasks the autoscaler may run, and when. A target's max is spend the count alone doesn't show, the account's
+            # first target makes an IAM role, and the role can't write either.
+            "aws_appautoscaling_target", "aws_appautoscaling_policy",
         ),
         (0, HELD),
     ),
@@ -102,7 +105,12 @@ FAKE_FLAGS = {
     "voice": {"VOICE_STUB": "1", "VOICE_FAKE_SPEECH": "1"},
     "worker": {},
 }
-ALLOWED_SECRETS = {"SENTRY_DSN_API", "SENTRY_DSN_WORKER", "RATE_LIMIT_SALT", "DB_CREDENTIALS"}
+# None of these spends money or reaches a model: the real model keys stay out, and only a real_ai window, by hand, names them. EDIBLE_CODE_KEY
+# seals links (api/src/sealed.ts), TEST_SIGNIN_KEY is the scripts' sign-in, LINK_JOIN_SECRET and LEFT_IDENTITY_SECRET are staging's own (make-salt.sh).
+ALLOWED_SECRETS = {
+    "SENTRY_DSN_API", "SENTRY_DSN_WORKER", "RATE_LIMIT_SALT", "DB_CREDENTIALS",
+    "EDIBLE_CODE_KEY", "TEST_SIGNIN_KEY", "LINK_JOIN_SECRET", "LEFT_IDENTITY_SECRET",
+}
 NO_KEY = "staging-no-key"
 KEY_NAME = re.compile(r"KEY|SECRET|TOKEN|PASSWORD|PASSWD|CREDENTIAL|DSN")
 KEY_VALUE = re.compile(r"sk-ant-|sk_car|AKIA[0-9A-Z]{16}|ASIA[0-9A-Z]{16}|-----BEGIN|ghp_|gho_|github_pat_")
@@ -110,6 +118,8 @@ CONTAINER_KEYS = {
     "name", "image", "essential", "stopTimeout", "portMappings", "environment", "secrets", "logConfiguration", "mountPoints",
     "systemControls", "volumesFrom", "cpu",
 }
+# The one entry point a task may set: the worker in queue mode (infra/envs/staging/main.tf). Any other runs what it likes in a staging image.
+ENTRY_POINTS = {"worker": ["python", "pipeline/queue_worker.py"]}
 LIVE_NAMES = re.compile(
     r"homecookd[-/](production|backups|tfstate)|grand-dragon-649|bsudybxsqvtwftsdmwmz|edible-|homecookd\.app|DEPLOY_ENV\W+production",
     re.I,
@@ -595,9 +605,12 @@ def no_key_shaped_values(plan):
 @guard(4)
 def task_runs_staging_image(plan):
     for r, service, defs in task_definitions(plan):
-        extra = sorted({k for c in defs for k in c} - CONTAINER_KEYS)
+        extra = sorted({k for c in defs for k in c} - CONTAINER_KEYS - {"entryPoint"})
         if extra:
             yield r["address"], f"sets container fields this check doesn't know: {', '.join(extra)}"
+        for c in defs:
+            if "entryPoint" in c and c["entryPoint"] != ENTRY_POINTS.get(service):
+                yield r["address"], "sets an entry point other than this service's own"
         for c in defs:
             image = rf"{plan.account}\.dkr\.ecr\.{REGION}\.amazonaws\.com/homecookd-staging/{re.escape(service)}:[\w.-]+"
             if not re.fullmatch(image, str(c.get("image"))):
@@ -650,17 +663,22 @@ def fargate_monthly(count, definition):
 
 
 def monthly_added(plan):
-    """What this plan adds, resource by resource: savings don't offset additions. Raises when a service's cost can't be worked out."""
+    """What this plan adds, resource by resource: savings don't offset additions. Raises when a service's cost can't be worked out.
+    An autoscaled service is priced at its target's max, because a bigger task there can run that many times."""
     total = 0.0
     definitions = {
         (after(r) or before(r)).get("family"): r for r in plan.resources if r["type"] == "aws_ecs_task_definition"
+    }
+    targets = {
+        str((after(r) or before(r)).get("resource_id")).rsplit("/", 1)[-1]: r for r in plan.resources if r["type"] == "aws_appautoscaling_target"
     }
     for r in plan.resources:
         if r["type"] == "aws_ecs_service":
             name = (after(r) or before(r)).get("name")
             definition = definitions[f"homecookd-staging-{name}"]
-            was = fargate_monthly(before(r).get("desired_count", 0), before(definition)) if before(r).get("desired_count") else 0
-            now = fargate_monthly(after(r)["desired_count"], after(definition)) if after(r).get("desired_count") else 0
+            count, sized = ("max_capacity", targets[name]) if name in targets else ("desired_count", r)
+            was = fargate_monthly(before(sized)[count], before(definition)) if before(r) and before(sized).get(count) else 0
+            now = fargate_monthly(after(sized)[count], after(definition)) if after(r) and after(sized).get(count) else 0
             total += max(0, now - was)
     for r in plan.managed_changes:
         rule = AUTO.get(r["type"])

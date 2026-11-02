@@ -82,7 +82,7 @@ The production gate. CUTOVER.md's step 6 checks each one before 1.1 is submitted
 | A restore drill | Not run. RDS's backup restored to a new instance, on production |
 | A deliberately killed service | Not run |
 | A load test | Passed on staging's one small task, Nov 2 (below). Still to run at production's task size and count, over HTTPS |
-| 2+ api tasks, autoscaling | A PR for two api tasks scaling to 4 is in progress |
+| 2+ api tasks, autoscaling | Built, Nov 2 (#295, below): production's api is 2 to 4 tasks, at 0 until it starts. Waits on Caleb's staging apply and the load test at 120 a second that shows it grow and come back |
 | HTTPS on `api.homecookd.app` | Waits on Caleb's DNS step (CUTOVER.md, step 6). Staging has HTTPS through CloudFront since Nov 2 (#285) |
 | A limited database login | Done on staging, Nov 2 (#273, applied in #280; `infra/README.md`, "Database logins"). On in `envs/production` from the start |
 | Alarms reach a person | The budget alert's test email reached Caleb, Nov 2 (#260). Production's alerts topic needs its email confirmed and one alarm fired |
@@ -90,16 +90,28 @@ The production gate. CUTOVER.md's step 6 checks each one before 1.1 is submitted
 | The GitHub `Production` environment has required reviewers | Not done (`infra/README.md`, "Before production") |
 | Every area's switch on, with the schedules and secrets | Not in `envs/production` yet (CUTOVER.md, "What production has on at launch") |
 
+**Built, Nov 2: two api tasks, and autoscaling on CPU** (`infra/modules/env/autoscaling.tf`; Caleb approved the shape). Production's
+api is two tasks of 0.5 vCPU and 1 GB in place of one of 1 vCPU and 2 GB: the same $36 a month, and a task or a zone can fail
+without an outage. When busy it grows to four ($72 a month). Staging runs the same 2 to 4 on its 0.25 vCPU tasks. AWS keeps the
+tasks' average CPU near 60%, on CPU rather than request count because CPU is what ran out in the load test below. Production stays at
+0 tasks until launch, and launch is one change: its api's `desired_count` from 0 to 2. Nothing in `api/src` keeps state in one
+task's memory that two tasks would get wrong: the outbox sender takes rows with `SKIP LOCKED`, scheduled work comes through SQS,
+rate limits, the dish budget and idempotency live in Postgres, and what's cached in memory (Apple's and Google's keys, derived sealing
+keys, the public library for 10 minutes) is the same on every task. The live polls' brake already counts per task (LIVE-UPDATES.md).
+One thing did change with it: a task taken away now finishes its requests for 90 s, not 30, because the autoscaler takes tasks
+away every day and making a card can wait 60 s on the guess. **Not proven yet:** the steps are in `infra/README.md`,
+"Autoscaling the api", and the proof is the load test at 120 a second, growing to 3 or 4 tasks and coming back.
+
 **A budget alert reaches a person (Nov 1).** The real-models window showed the budget's alert reaching only the logs, because `REPORT_ALERT_URL` isn't set on AWS. A log alarm to the alerts topic now emails it. Fired on staging on Nov 2, and the email reached Caleb. On production: the same, once.
 
 **A production gate: overload (Master Agent, Nov 1).** Today, with all connections busy, a request waits 5 s then answers a 500. Before
 production: a bounded wait queue that fails fast with a 503 and `retry-after`; the load balancer's health check stays as it is; an alarm on
-pool waits; autoscaling on request load. **The proof is a load test that exercises pool exhaustion.**
+pool waits; autoscaling on request load (built on CPU instead, Nov 2: the load test showed CPU runs out first). **The proof is a load test that exercises pool exhaustion.**
 
 **Measured, Nov 1 (made-up data, local Postgres, one process with a pool of 10):** a request waiting on a row lock keeps its connection. 200 requests at once on one card finish in 408 ms
 with no error, because each holds the row for about 2 ms. If something else holds that row, the queue takes the whole pool: with a row held 7 s and 10 waiting, one of the 10 got a 500, and `/ready`
 answered 503 after 5 s for anyone, on any family's behalf. With 40 waiting, 31 got a 500. At 3 s nothing failed, but everything else waited the 3 s. So one stuck row can stop a task for every family.
-**Built, Nov 2: turning work away when overloaded** (`api/src/overload.ts`, `OVERLOAD_SHED=on`, off by default and on in staging). Before any work, a request is turned away with the busy 503 and `retry-after`, and the "too busy to answer" line the alarm counts, when the event loop was busy for more than 98% of the last second, runs more than 500 ms late, or 50 requests already wait for a connection (`OVERLOAD_MAX_BUSY`, `OVERLOAD_MAX_LAG_MS`, `OVERLOAD_MAX_POOL_WAITING`). `/health` and `/ready` are never turned away. **Measured locally** on the api's image held to 0.25 vCPU and 512 MB, as staging's task is, with 1,500 requests at once: off, all answered 200 and the slowest took 9.5 s. On, a third to most of the card reads got the 503 (467 and 640 of 750 in two runs, nearly all on the busy share), and the slowest took 4.9 to 9.8 s on a machine busy with other work. **So it sheds work, but on this task size it can't answer fast:** the wait is before Node reads a request, and only more CPU shortens that. The real fix is a bigger task or a second one, with autoscaling: a production-sizing call for Caleb. The staging rerun waits for auto-apply to set the switch there.
+**Built, Nov 2: turning work away when overloaded** (`api/src/overload.ts`, `OVERLOAD_SHED=on`, off by default and on in staging). Before any work, a request is turned away with the busy 503 and `retry-after`, and the "too busy to answer" line the alarm counts, when the event loop was busy for more than 98% of the last second, runs more than 500 ms late, or 50 requests already wait for a connection (`OVERLOAD_MAX_BUSY`, `OVERLOAD_MAX_LAG_MS`, `OVERLOAD_MAX_POOL_WAITING`). `/health` and `/ready` are never turned away. **Measured locally** on the api's image held to 0.25 vCPU and 512 MB, as staging's task is, with 1,500 requests at once: off, all answered 200 and the slowest took 9.5 s. On, a third to most of the card reads got the 503 (467 and 640 of 750 in two runs, nearly all on the busy share), and the slowest took 4.9 to 9.8 s on a machine busy with other work. **So it sheds work, but on this task size it can't answer fast:** the wait is before Node reads a request, and only more CPU shortens that. The real fix is a bigger task or a second one, with autoscaling: a production-sizing call for Caleb (made Nov 2: two tasks of 0.5 vCPU, growing to four, above). The staging rerun waits for auto-apply to set the switch there.
 
 **Built after that measurement:** `lock_timeout` is 3 s, and a request that gives up on a lock or on the pool answers a 503 with `retry-after`, in every error handler. Nothing was written, so the phone may try again.
 **It isn't a cure.** Requests take connections in the order they came, so with 40 waiting on a stuck row, others still wait behind them. With 15, `/ready` answered 200. The bounded wait above is still the gate. A test (`api/test/busy.test.ts`) holds it to this.
