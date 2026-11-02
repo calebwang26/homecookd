@@ -117,23 +117,31 @@ test("recipes", { skip: !hasDatabase }, async (t) => {
     assert.equal((await call(app, null, "POST", `/v1/recipes/${id}/memories-opt-in`, { optIn: true })).status, 401);
   });
 
-  await t.test("the switch: off by default, and the flag and moved_at must both say so", async () => {
+  await t.test("the switch: off by default, the flag opens it, and a sync mid-copy always locks it", async () => {
     assert.equal(recipeWritesFlag({}), false);
     for (const wrong of ["true", "1", "ON", " on", "yes"]) assert.equal(recipeWritesFlag({ RECIPE_WRITES: wrong }), false, wrong);
     assert.equal(recipeWritesFlag({ RECIPE_WRITES: "on" }), true);
 
     const on = { RECIPE_WRITES: "on" };
     assert.equal(await recipeWrites(db(), {}), "closed");
-    assert.equal(await recipeWrites(db(), on), "closed", "the flag alone isn't enough");
-    await db().query(`update sync_copies set moved_at = now() where table_name = 'recipes'`);
-    assert.equal(await recipeWrites(db(), {}), "closed", "moved_at alone isn't enough");
-    assert.equal(await recipeWrites(db(), on), "open");
+    assert.equal(await recipeWrites(db(), on), "open", "one switch: no sync has run, so the flag alone opens it (production at launch)");
     await db().query(`update sync_copies set moved_at = null, read_only = true where table_name = 'recipes'`);
-    assert.equal(await recipeWrites(db(), on), "locked");
+    assert.equal(await recipeWrites(db(), on), "locked", "a sync copying the table owns it, whatever the flag says");
     assert.equal(await recipeWrites(db(), {}), "locked");
     await db().query(`update sync_copies set moved_at = now() where table_name = 'recipes'`);
     assert.equal(await recipeWrites(db(), {}), "closed", "moved, with the flag off");
     assert.equal(await recipeWrites(db(), on), "open");
+    // No sync row at all (a database the sync never touched) is the same as a sync that never ran. Rolled back, because other tests move this row.
+    const c = await db().connect();
+    try {
+      await c.query("begin");
+      await c.query(`delete from sync_copies where table_name = 'recipes'`);
+      assert.equal(await recipeWrites(c, on), "open");
+      assert.equal(await recipeWrites(c, {}), "closed");
+    } finally {
+      await c.query("rollback");
+      c.release();
+    }
     await closeRecipeWrites();
   });
 
