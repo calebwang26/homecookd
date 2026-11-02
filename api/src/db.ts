@@ -1,15 +1,36 @@
 // The Postgres pool. On AWS the host and login come from the task (infra/modules/env/services.tf); locally, DATABASE_URL.
 import { AsyncLocalStorage } from "node:async_hooks";
+import { Signer } from "@aws-sdk/rds-signer";
 import * as Sentry from "@sentry/node";
 import pg from "pg";
 
-function config(): pg.PoolConfig {
+/** Makes a password for each new connection. */
+export type TokenSource = (host: string, port: number, user: string) => () => Promise<string>;
+
+/** An RDS IAM token: signed with the task role, good for 15 minutes, and only for opening a connection, so an open one outlives it. */
+const iamTokens: TokenSource = (hostname, port, username) => {
+  const signer = new Signer({ hostname, port, username });
+  return () => signer.getAuthToken();
+};
+
+/**
+ * DB_IAM=1 is the limited login (api/migrations/078_app_logins.sql): DB_USER, with a fresh IAM token for each new connection, so no
+ * password exists anywhere. Without it, the master login in DB_CREDENTIALS. Either way the server's certificate is checked against
+ * RDS's (NODE_EXTRA_CA_CERTS, api/Dockerfile).
+ */
+export function config(env: NodeJS.ProcessEnv = process.env, tokens: TokenSource = iamTokens): pg.PoolConfig {
   // lock_timeout: a request waiting on a row keeps its connection, so without this one stuck row can take the whole pool, and every family with it (AWS-MIGRATION.md, overload).
   const base = { max: 10, connectionTimeoutMillis: 5_000, statement_timeout: 10_000, lock_timeout: 3_000, idleTimeoutMillis: 30_000 };
-  if (process.env.DATABASE_URL) return { ...base, connectionString: process.env.DATABASE_URL };
-  if (!process.env.DB_HOST || !process.env.DB_CREDENTIALS) throw new Error("No database settings");
-  const { username, password } = JSON.parse(process.env.DB_CREDENTIALS);
-  return { ...base, host: process.env.DB_HOST, database: "homecookd", user: username, password, ssl: { rejectUnauthorized: true } };
+  if (env.DATABASE_URL) return { ...base, connectionString: env.DATABASE_URL };
+  if (!env.DB_HOST) throw new Error("No database settings");
+  const server = { ...base, host: env.DB_HOST, port: 5432, database: "homecookd", ssl: { rejectUnauthorized: true } };
+  if (env.DB_IAM === "1") {
+    if (!env.DB_USER) throw new Error("No database settings");
+    return { ...server, user: env.DB_USER, password: tokens(env.DB_HOST, 5432, env.DB_USER) };
+  }
+  if (!env.DB_CREDENTIALS) throw new Error("No database settings");
+  const { username, password } = JSON.parse(env.DB_CREDENTIALS);
+  return { ...server, user: username, password };
 }
 
 let pool: pg.Pool | undefined;

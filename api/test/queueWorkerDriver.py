@@ -70,7 +70,7 @@ def run(store, op: dict):
 
 def main() -> None:
     request = json.load(sys.stdin)
-    store = queue_db.PostgresStore({"conninfo": request["dsn"]})
+    store = fakes.worker_store(request["dsn"])  # as the worker's own login: api/migrations/078_app_logins.sql
     logged = io.StringIO()
     results = []
     with contextlib.redirect_stdout(logged):

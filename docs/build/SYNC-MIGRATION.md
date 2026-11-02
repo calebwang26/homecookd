@@ -51,7 +51,8 @@ to change under a row. The accounts backfill brings them in. SCHEMA.md's "else t
 
 **Read-only.** Once a real run has happened, a trigger refuses any write to a copy unless the transaction set `homecookd.sync_writer`, and
 a test reads `api/src` for writes outside this module. This catches mistakes, not attackers, because everything logs in as one user. A limited
-login is on the Cutover list and is the real boundary. When an area moves, a migration sets `sync_copies.moved_at` for its table: the sync
+login is on the Cutover list and is the real boundary. The api's own login (`homecookd_api`, Nov 2) doesn't change that: the sync runs in the api,
+so that login still writes the copies. Only a separate login for the sync would. Not built. When an area moves, a migration sets `sync_copies.moved_at` for its table: the sync
 stops touching it and the api may write it.
 
 ## Account deletion
