@@ -54,7 +54,8 @@ ALLOW = [
         "elasticloadbalancing:DescribeTargetGroups cloudfront:GetCachePolicy cloudfront:GetDistribution "
         "cloudfront:GetOriginAccessControl cloudfront:GetOriginRequestPolicy cloudfront:GetResponseHeadersPolicy "
         "cloudfront:ListCachePolicies cloudfront:ListOriginRequestPolicies cloudfront:ListTagsForResource "
-        "ecs:DescribeTaskDefinition logs:DescribeLogGroups ecs:DeregisterTaskDefinition sns:GetSubscriptionAttributes",
+        "ecs:DescribeTaskDefinition logs:DescribeLogGroups ecs:DeregisterTaskDefinition sns:GetSubscriptionAttributes "
+        "application-autoscaling:DescribeScalableTargets application-autoscaling:DescribeScalingPolicies application-autoscaling:ListTagsForResource",
         ["*"],
         {},
     ),
@@ -149,6 +150,9 @@ DENY = ALL_NAMED + [
     ("sns:Subscribe sns:SetTopicAttributes sns:DeleteTopic", [TOPIC], {}),
     ("ecr:PutImage ecr:DeleteRepository ecr:SetRepositoryPolicy", [f"arn:aws:ecr:{R}:{A}:repository/homecookd-staging/api"], {}),
     ("organizations:DescribeOrganization budgets:ModifyBudget account:CloseAccount", ["*"], {}),
+    # How many tasks staging may run is Caleb's (plan_check.py holds autoscaling), and so is the role AWS makes for it
+    ("application-autoscaling:RegisterScalableTarget application-autoscaling:DeregisterScalableTarget application-autoscaling:PutScalingPolicy "
+     "application-autoscaling:DeleteScalingPolicy application-autoscaling:TagResource iam:CreateServiceLinkedRole", ["*"], {}),
 ]
 
 

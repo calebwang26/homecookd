@@ -65,6 +65,7 @@ exactly that plan. A plan with no changes does nothing.
 
 **What applies by itself** is short, and it's the `AUTO` table in `plan_check.py`: task definitions (settings and sizes), a service's
 count, alarms, log groups, queues, schedules, a new secret's name, S3 CORS, lifecycle rules that don't delete sooner, and the website's CloudFront Function.
+An autoscaled service's range (its target and policy) is held for Caleb, and its task size is priced at its most tasks.
 
 **What stops and goes to Caleb** with the commands to apply it himself:
 1. deleting or replacing a database or a bucket, or a new or shorter lifecycle rule that deletes files (the web bucket excepted)
@@ -121,6 +122,34 @@ Voice is only a smoke test of the setup here (homie is off, and voice stays on C
 2. Push the first image, from Actions ("Deploy to AWS") or by hand. Actions needs the repo variable `AWS_ACCOUNT_ID` and
    a GitHub environment named `staging`.
 3. `terraform apply -var voice_count=1`, then `curl <load_balancer_url>/health`. Then `terraform apply` again, back to 0.
+
+## Autoscaling the api
+
+The api runs 2 to 4 tasks, on staging now and on production at launch (`modules/env/autoscaling.tf`). AWS keeps their average CPU
+near 60%: it adds a task after 3 minutes over that, and takes one away after 15 minutes under it. CPU, not request count, because CPU
+is what ran out in the load test (`docs/build/AWS-MIGRATION.md`).
+
+**The count is a switch.** For an autoscaled service, `desired_count` (staging's `api_count`) is 0 for off or its `autoscale.min` for
+on. Off, the range is 0 to 0; on, it's min to max. Terraform sets the count only when it creates the service. After that the count is
+the autoscaler's, and a change to the range moves it into the range at once. Production's launch is its api's `desired_count` from 0
+to 2. To stop staging's api: `terraform apply -var api_count=0` (a merge plans the default back, and that comes to Caleb as refused).
+
+**Applying it on staging, once. Caleb, in this order:**
+1. Re-apply `infra/staging-apply-role` (the commands under "Merges apply staging"). It adds three autoscaling reads. Do it before step 3:
+   once a target exists, every auto-apply refreshes it, and without the reads each one fails at the plan.
+2. The merge's auto-apply is refused: autoscaling types are held, the api's service moves to its new block, and its target group's
+   drain time changes. Nothing is applied.
+3. By hand, in `infra/envs/staging`. The move keeps the running service; without it, Terraform would delete the api and make it again:
+   ```bash
+   AWS_PROFILE=homecookd terraform state mv 'module.env.aws_ecs_service.service["api"]' 'module.env.aws_ecs_service.scaled["api"]'
+   AWS_PROFILE=homecookd terraform plan    # 3 to add (target, policy, below-floor alarm), 1 to change (drain 30 s to 90 s), 0 to destroy
+   AWS_PROFILE=homecookd terraform apply
+   ```
+   The account's first target makes AWS's own role, `AWSServiceRoleForApplicationAutoScaling_ECSService`, and the api goes to 2 tasks.
+4. Check: `aws ecs describe-services --cluster homecookd-staging --services api --query 'services[0].[desiredCount,runningCount]'` and
+   `aws application-autoscaling describe-scaling-activities --service-namespace ecs`.
+5. Prove it: `node infra/scripts/load-test.mjs <staging api> --rps 120`. Two of staging's 0.25 vCPU tasks hold about 75 a second at 60%,
+   so it should grow to 3 or 4 within minutes, and go back to 2 about 20 minutes after the test.
 
 ## Starting the backups
 
@@ -226,7 +255,8 @@ IAM logins suit fewer than about 200 new connections a second. The api's pool op
 
 - Secret values never go in Terraform, because they would land in its state file. It holds the names only.
 - A deploy registers its own task definition, so Terraform ignores that field on the service. An env or size change in
-  Terraform reaches the service on the next deploy.
+  Terraform reaches the service on the next deploy. On an autoscaled service it ignores the count too ("Autoscaling the api"); a
+  deploy never sets the count either.
 - Staging is plain HTTP on the AWS address until a domain and certificate exist, which needs a DNS change (phase 1). With
   `VOICE_STUB=1` it accepts any token. That's acceptable only while voice is fake and has no real data, and `voice_count`
   stays 0 unless someone is testing.

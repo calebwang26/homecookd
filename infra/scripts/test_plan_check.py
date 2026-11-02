@@ -49,6 +49,7 @@ LB = ENV + "aws_lb.main"
 ROUTE = ENV + "aws_route_table_association.private[0]"
 INGRESS = ENV + 'aws_vpc_security_group_ingress_rule.service_from_alb["api"]'
 SUBSCRIPTION = ENV + "aws_sns_topic_subscription.email"
+TARGET = ENV + 'aws_appautoscaling_target.service["api"]'
 
 
 def fresh():
@@ -98,6 +99,19 @@ def add(plan, type_, name, after, unknown=None, module=ENV):
     }
     plan["resource_changes"].append(r)
     return r
+
+
+def keep(plan, type_, name, values):
+    """A resource the plan leaves as it is, the way every plan shows one once it exists."""
+    r = add(plan, type_, name, values)
+    r["change"].update(actions=["no-op"], before=copy.deepcopy(values), after_unknown={})
+    return r
+
+
+def autoscaled_api(plan, most=4):
+    """The api once the autoscaler sizes it (modules/env/autoscaling.tf): its target and policy, unchanged."""
+    keep(plan, "aws_appautoscaling_target", 'service["api"]', {"resource_id": "service/homecookd-staging/api", "min_capacity": 2, "max_capacity": most, "region": "us-west-2"})
+    keep(plan, "aws_appautoscaling_policy", 'cpu["api"]', {"name": "homecookd-staging-api-cpu", "resource_id": "service/homecookd-staging/api", "region": "us-west-2"})
 
 
 def edit_container(plan, address, fn):
@@ -176,6 +190,7 @@ ALLOWED = {
     "the website's rewrite function": lambda p: update(p, FUNCTION, code="// homecookd.app changed", etag="x"),
     "an env var": lambda p: edit_container(p, API_TD, lambda c: set_env(c, "LOG_LEVEL", "debug")),
     "just under the cost limit: 124 secret names at $0.40": lambda p: many(p, "aws_secretsmanager_secret", 124, {"name": "homecookd/staging/S"}),
+    "an autoscaled api, its target and policy unchanged": autoscaled_api,
 }
 
 
@@ -218,6 +233,12 @@ def api_size_up(p):
     r = edit_container(p, API_TD, lambda c: None)
     r["change"]["after"]["cpu"] = "4096"
     r["change"]["after"]["memory"] = "8192"
+
+
+def api_bigger_autoscaled(p):
+    """At its count of 1 this adds about $9, under the limit. The target lets it run 10, about $90."""
+    autoscaled_api(p, most=10)
+    edit_container(p, API_TD, lambda c: None)["change"]["after"].update(cpu="512", memory="1024")
 
 
 def service_without_definition(p):
@@ -455,6 +476,7 @@ REFUSED = {
     # Rule 5
     "the worker at one task, about $85": (worker_up, "cost_is_small"),
     "a bigger task under a running service": (api_size_up, "cost_is_small"),
+    "a bigger task under an autoscaled service, priced at its max": (api_bigger_autoscaled, "cost_is_small"),
     "at the limit: 125 secret names at $0.40": (lambda p: many(p, "aws_secretsmanager_secret", 125, {"name": "homecookd/staging/S"}), "cost_is_small"),
     "a service with no task definition to price": (service_without_definition, "cost_is_small"),
     "a task size that isn't a number": (lambda p: (update(p, API_SERVICE, desired_count=2), service_size_unreadable(p)), "cost_is_small"),
@@ -487,6 +509,8 @@ REFUSED = {
     "a door type's action": (lambda p: act(p, SUBSCRIPTION, "delete"), "held_types_are_never_automatic"),
     "where alerts go changes": (lambda p: update(p, SUBSCRIPTION, endpoint="someone@example.com"), "held_types_are_never_automatic"),
     "the database's size": (lambda p: update(p, DB, instance_class="db.r6g.4xlarge"), "held_types_are_never_automatic"),
+    "the autoscaler's range": (lambda p: (autoscaled_api(p), update(p, TARGET, max_capacity=40)), "held_types_are_never_automatic"),
+    "a new scaling policy": (lambda p: add(p, "aws_appautoscaling_policy", 'cpu["voice"]', {"name": "homecookd-staging-voice-cpu"}), "held_types_are_never_automatic"),
     "a type whose delete isn't allowed": (lambda p: act(p, JOBS, "delete"), "auto_actions"),
     "a secret's update isn't allowed": (lambda p: update(p, ENV + 'aws_secretsmanager_secret.app["SENTRY_DSN_API"]', description="x"), "auto_actions"),
     "the website function's replace isn't allowed": (lambda p: act(p, FUNCTION, "delete", "create"), "auto_actions"),

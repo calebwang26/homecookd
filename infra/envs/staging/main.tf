@@ -45,8 +45,9 @@ variable "alb_allowed_cidrs" {
 }
 
 variable "api_count" {
-  type    = number
-  default = 1
+  description = "0 turns the api off. 2 turns it on, and CPU then picks 2 to 4 tasks, as production will (infra/README.md, \"Autoscaling the api\")"
+  type        = number
+  default     = 2
 }
 
 variable "db_iam_login" {
@@ -113,6 +114,8 @@ module "env" {
       cpu           = 256
       memory        = 512
       desired_count = var.api_count
+      autoscale     = { min = 2, max = 4 }
+      drain_seconds = 90 # a task taken away finishes its requests first, and making a card can wait 60 s on the guess
       default_route = true
       uses_database = true
       # A secret with no value stops a task starting, so the real keys are named here only for a test window.
