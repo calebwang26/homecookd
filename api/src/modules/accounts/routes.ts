@@ -15,6 +15,7 @@
 //   POST /v1/test/sign-in              (staging only: TEST_SIGNIN_KEY, testSignIn.ts)
 import type { FastifyInstance, FastifyReply, FastifyRequest, RouteHandlerMethod } from "fastify";
 import { requireSession, requireSessionEvenIfRemoved, signedIn } from "../../auth.js";
+import { EXPOSE } from "../../cors.js";
 import { webOrigin } from "../dish/values.js";
 import { appleKey, revokeWithApple } from "./appleRevoke.js";
 import { deleteMe } from "./deletion.js";
@@ -31,8 +32,9 @@ import { assertOwnsPeople, limit, refuse, type Body } from "./values.js";
 // Supabase's: any site may call these, because each needs a key or a code, and the web /i page reads /invites/peek.
 const OPEN_CORS: Record<string, string> = {
   "access-control-allow-origin": "*",
-  "access-control-allow-headers": "content-type, x-device-key, x-family-code, x-profile-id, x-tz, authorization, apikey, x-client-info",
+  "access-control-allow-headers": "content-type, x-device-key, x-family-code, x-profile-id, x-tz, authorization, apikey, x-client-info, x-request-id, idempotency-key",
   "access-control-allow-methods": "GET, POST, OPTIONS",
+  "access-control-expose-headers": EXPOSE,
   "access-control-max-age": "86400",
 };
 
@@ -45,7 +47,8 @@ function linkCors(origin: string | undefined): Record<string, string> | false {
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type",
+    "Access-Control-Allow-Headers": "Content-Type, X-Request-Id, Idempotency-Key",
+    "Access-Control-Expose-Headers": EXPOSE,
     "Access-Control-Max-Age": "86400",
     Vary: "Origin",
   };
@@ -70,7 +73,7 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
   const on = (method: "GET" | "POST", url: string, proof: ProofOptions | null, handler: (req: FastifyRequest) => Promise<unknown>) => {
     if (!seen.has(url)) {
       seen.add(url);
-      app.options(url, async (_req, reply) => reply.status(204).headers(OPEN_CORS).send());
+      app.options(url, { config: { ownCors: true } }, async (_req, reply) => reply.status(204).headers(OPEN_CORS).send());
     }
     const route: RouteHandlerMethod = async (req, reply) => {
       const out = await handler(req);
@@ -78,10 +81,10 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
       return out === null || out === undefined ? reply.type("application/json").send("null") : reply.send(out);
     };
     if (method === "GET") {
-      app.get(url, { preValidation: proof ? requireProof(proof) : undefined }, route);
+      app.get(url, { preValidation: proof ? requireProof(proof) : undefined, config: { ownCors: true } }, route);
     } else {
       const hooks = proof ? [emptyIsObject, requireProof(proof)] : [emptyIsObject];
-      app.post(url, { schema: { body: { type: "object" } }, preValidation: hooks }, route);
+      app.post(url, { schema: { body: { type: "object" } }, preValidation: hooks, config: { ownCors: true } }, route);
     }
   };
 
@@ -153,11 +156,11 @@ export async function accountRoutes(app: FastifyInstance): Promise<void> {
     if (!cors) throw refuse(403, "This site can't use these routes.", { code: "origin" });
     reply.headers(cors);
   };
-  app.post("/link/open", { ...object, preValidation: [linkGuard, emptyIsObject] }, async (req, reply) => {
+  app.post("/link/open", { ...object, preValidation: [linkGuard, emptyIsObject], config: { ownCors: true } }, async (req, reply) => {
     reply.header("cache-control", "no-store");
     return openLink(bodyOf(req), req.ip);
   });
-  app.options("/link/open", async (req, reply) => {
+  app.options("/link/open", { config: { ownCors: true } }, async (req, reply) => {
     const cors = linkCors(req.headers.origin);
     return reply.status(cors ? 204 : 403).headers(cors || {}).send();
   });

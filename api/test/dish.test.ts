@@ -367,7 +367,8 @@ test("CORS: homecookd.app and local dev pages get their origin back, other sites
   const ok = await pre("https://www.homecookd.app");
   assert.equal(ok.status, 204);
   assert.equal(ok.headers["access-control-allow-origin"], "https://www.homecookd.app");
-  assert.equal(ok.headers["access-control-allow-headers"], "Content-Type, X-Dish-Token");
+  assert.equal(ok.headers["access-control-allow-headers"], "Content-Type, X-Dish-Token, X-Request-Id, Idempotency-Key");
+  assert.equal(ok.headers["access-control-expose-headers"], "retry-after, x-request-id");
   assert.equal(ok.headers["access-control-allow-methods"], "POST, OPTIONS");
   assert.equal((await pre("https://evil.example")).status, 403);
   assert.equal((await pre("https://homecookd.app.evil.example")).status, 403);
