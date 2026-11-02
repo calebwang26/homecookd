@@ -98,6 +98,7 @@ gh workflow run apply-staging.yml --ref aws-migration --repo calebwang26/hackath
 
 **Things to know:**
 - The workflow waits up to 10 minutes on Terraform's lock, then fails and tells Caleb. It never force-unlocks.
+- The provider lock file must carry the provider's hashes for Linux, which GitHub's runners are, as well as Macs: the workflow's init can't add them (`-lockfile=readonly`), and its plan then refuses the provider. After changing a provider version, run `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64` in `infra/envs/staging`.
 - A deploy from the same merge waits for the apply (`scripts/wait-for-apply.sh`). If the apply is refused the deploy stops, and it's
   re-run from Actions afterward.
 - A change to a task definition reaches the service on the next deploy, as before.
