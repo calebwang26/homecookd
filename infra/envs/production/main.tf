@@ -56,10 +56,13 @@ module "env" {
       drain_seconds = 3600
       secrets       = local.voice_secrets
     }
+    # Two small tasks, not one big one, so a task or a zone can fail without an outage. CPU adds up to two more when busy.
     api = {
-      cpu           = 1024
-      memory        = 2048
-      desired_count = 0
+      cpu           = 512
+      memory        = 1024
+      desired_count = 0 # launch: 2, its autoscale.min. Until then the range is 0 to 0 and nothing starts
+      autoscale     = { min = 2, max = 4 }
+      drain_seconds = 90 # a task taken away finishes its requests first, and making a card can wait 60 s on the guess
       default_route = true
       secrets       = local.api_secrets
       uses_database = true

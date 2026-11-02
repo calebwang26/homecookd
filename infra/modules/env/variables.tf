@@ -34,7 +34,7 @@ variable "db_protected" {
 }
 
 variable "services" {
-  description = "Fargate services. path_patterns empty = no load balancer. secrets = names from secret_names."
+  description = "Fargate services. path_patterns empty = no load balancer. secrets = names from secret_names. autoscale = CPU picks the count between min and max (autoscaling.tf)."
   type = map(object({
     cpu           = number
     memory        = number
@@ -47,7 +47,14 @@ variable "services" {
     secrets       = optional(list(string), [])
     uses_database = optional(bool, false)
     entry_point   = optional(list(string))
+    autoscale     = optional(object({ min = number, max = number }))
   }))
+  validation {
+    condition = alltrue([for s in values(var.services) : s.autoscale == null ? true : (
+      s.autoscale.min >= 1 && s.autoscale.max >= s.autoscale.min && contains([0, s.autoscale.min], s.desired_count)
+    )])
+    error_message = "An autoscaled service needs min at least 1 and max no lower. Its desired_count is only the switch: 0 for off, or its min for on."
+  }
   # The api turns on its test sign-in when it has this key (api/src/modules/accounts/testSignIn.ts). Scripts on staging need it; production never may.
   validation {
     condition     = var.environment != "production" || alltrue([for s in var.services : !contains(s.secrets, "TEST_SIGNIN_KEY") && !contains(keys(s.env), "TEST_SIGNIN_KEY")])

@@ -72,6 +72,9 @@ DOORS = {
             "aws_ecr_lifecycle_policy", "aws_ecs_cluster", "aws_sns_topic", "aws_sns_topic_subscription",
             # A log line counted into a metric. The role can't write one (no logs:PutMetricFilter), so a change is Caleb's.
             "aws_cloudwatch_log_metric_filter",
+            # How many tasks the autoscaler may run, and when. A target's max is spend the count alone doesn't show, the account's
+            # first target makes an IAM role, and the role can't write either.
+            "aws_appautoscaling_target", "aws_appautoscaling_policy",
         ),
         (0, HELD),
     ),
@@ -660,17 +663,22 @@ def fargate_monthly(count, definition):
 
 
 def monthly_added(plan):
-    """What this plan adds, resource by resource: savings don't offset additions. Raises when a service's cost can't be worked out."""
+    """What this plan adds, resource by resource: savings don't offset additions. Raises when a service's cost can't be worked out.
+    An autoscaled service is priced at its target's max, because a bigger task there can run that many times."""
     total = 0.0
     definitions = {
         (after(r) or before(r)).get("family"): r for r in plan.resources if r["type"] == "aws_ecs_task_definition"
+    }
+    targets = {
+        str((after(r) or before(r)).get("resource_id")).rsplit("/", 1)[-1]: r for r in plan.resources if r["type"] == "aws_appautoscaling_target"
     }
     for r in plan.resources:
         if r["type"] == "aws_ecs_service":
             name = (after(r) or before(r)).get("name")
             definition = definitions[f"homecookd-staging-{name}"]
-            was = fargate_monthly(before(r).get("desired_count", 0), before(definition)) if before(r).get("desired_count") else 0
-            now = fargate_monthly(after(r)["desired_count"], after(definition)) if after(r).get("desired_count") else 0
+            count, sized = ("max_capacity", targets[name]) if name in targets else ("desired_count", r)
+            was = fargate_monthly(before(sized)[count], before(definition)) if before(r) and before(sized).get(count) else 0
+            now = fargate_monthly(after(sized)[count], after(definition)) if after(r) and after(sized).get(count) else 0
             total += max(0, now - was)
     for r in plan.managed_changes:
         rule = AUTO.get(r["type"])

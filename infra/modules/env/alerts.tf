@@ -84,12 +84,13 @@ resource "aws_cloudwatch_metric_alarm" "api_slow" {
 }
 
 # The api's own work is what runs out first: the Nov 2 load test held one 0.25 vCPU task at 80% for 50 requests a second, with the database at 10%.
+# The average over its tasks. When it autoscales to 60% (autoscaling.tf), 85% means it's at its most tasks and still hot, or new ones aren't starting.
 resource "aws_cloudwatch_metric_alarm" "api_cpu" {
   alarm_name          = "${local.name}-api-cpu"
   alarm_description   = "The api's tasks are near their CPU limit, so requests are starting to queue"
   namespace           = "AWS/ECS"
   metric_name         = "CPUUtilization"
-  dimensions          = { ClusterName = aws_ecs_cluster.main.name, ServiceName = aws_ecs_service.service["api"].name }
+  dimensions          = { ClusterName = aws_ecs_cluster.main.name, ServiceName = local.ecs_services["api"].name }
   statistic           = "Average"
   period              = 60
   evaluation_periods  = 5
@@ -143,6 +144,27 @@ resource "aws_cloudwatch_metric_alarm" "service_unhealthy" {
   threshold           = 1
   comparison_operator = "LessThanThreshold"
   treat_missing_data  = "notBreaching" # a new service has no data yet; a real outage reports 0
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
+# With two tasks or more, one can be gone for good while the rest answer, and nothing above notices. A task replaced after a crash, or
+# the swap in a deploy, is back within about 2 minutes, so this waits 5.
+resource "aws_cloudwatch_metric_alarm" "service_below_floor" {
+  for_each          = { for k, s in local.lb_services : k => s if s.autoscale != null && s.desired_count > 0 }
+  alarm_name        = "${local.name}-${each.key}-below-floor"
+  alarm_description = "${each.key} has had fewer than ${each.value.autoscale.min} healthy tasks for 5 minutes"
+  namespace         = "AWS/ApplicationELB"
+  metric_name       = "HealthyHostCount"
+  dimensions = {
+    LoadBalancer = aws_lb.main.arn_suffix
+    TargetGroup  = aws_lb_target_group.service[each.key].arn_suffix
+  }
+  statistic           = "Minimum"
+  period              = 60
+  evaluation_periods  = 5
+  threshold           = each.value.autoscale.min
+  comparison_operator = "LessThanThreshold"
+  treat_missing_data  = "notBreaching"
   alarm_actions       = [aws_sns_topic.alerts.arn]
 }
 
