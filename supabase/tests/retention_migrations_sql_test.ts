@@ -6,7 +6,8 @@
 // - the cron file leaves one secret and one of each job however often it runs, and its functions
 //   are closed to client keys;
 // - table_activity (PR 5) runs against the real tables, not stand-ins;
-// - PR 3's postcard file (messages.rating) is a no-op after the plumbing file and stands on its own.
+// - PR 3's postcard file (messages.rating) is a no-op after the plumbing file and stands on its own;
+// - the later files that aren't retention's: link_join_unique, join_links, and app_builds_seen with its sweep.
 //
 // PGlite has no pg_cron, pg_net, Vault or pgcrypto, so small stand-ins with the same names and
 // signatures are made first and the `create extension` lines are skipped; nothing else is changed.
@@ -153,6 +154,7 @@ t("migrations: main + cooked_photos + retention apply in timestamp order, then a
     "20261018100400_retention_postcard.sql",
     "20261029090000_link_join_unique.sql", // not retention's, but later: one join per dish card side (V2-LINKING.md §2.4)
     "20261029100000_join_links.sql", // not retention's either: the family's join link (JOIN-SIMPLE.md §3)
+    "20261102120000_app_builds_seen.sql", // nor this: which app builds still call (CUTOVER.md step 13)
   ]);
   const db = await database();
   for (const table of ["push_tokens", "notification_log", "cooking_now"]) {
@@ -260,6 +262,7 @@ t("migrations: the cron file leaves one secret & one of each job, and only its o
   const db = await database(); // applied twice
   assertEquals(await one(db, `select count(*)::int as n from vault.secrets where name = 'edible_cron_secret'`), [{ n: 1 }]);
   assertEquals(await one(db, `select jobname, schedule from cron.job order by jobname`), [
+    { jobname: "homecookd-app-builds-sweep", schedule: "25 4 * * *" }, // 20261102120000_app_builds_seen.sql
     { jobname: "homecookd-cron-sweep", schedule: "15 4 * * *" },
     { jobname: "homecookd-hourly", schedule: "5 * * * *" },
   ]);
@@ -344,5 +347,58 @@ t("join_links: applies twice, the token is unique, client keys get nothing, and 
   assertEquals(await one(db, `select count(*)::int as n from public.join_links where inviter_id is null`), [{ n: 2 }]);
   await db.query(`delete from public.families where id = $1`, [FAM]);
   assertEquals(await one(db, `select count(*)::int as n from public.join_links`), [{ n: 0 }]);
+  await db.close();
+});
+
+t("app_builds_seen: applies twice, only the service role writes it, an upsert keeps first_seen, junk is refused", async () => {
+  const db = await database(); // every later file runs twice
+  assertEquals(await one(db, `select relrowsecurity as rls from pg_class where relname = 'app_builds_seen'`), [{ rls: true }]);
+  assertEquals(await one(db, `select count(*)::int as n from pg_policies where tablename = 'app_builds_seen'`), [{ n: 0 }]);
+  // What PostgREST runs for appBuilds.ts's upsert (on_conflict=day,platform,build, merge-duplicates), as the role it uses.
+  // Supabase's service_role bypasses RLS; the stand-in role is given the same here.
+  const upsert = (lastSeen: string, build = "6", platform = "ios") =>
+    db.query(`insert into public.app_builds_seen (day, platform, build, last_seen) values ('2026-11-02', $1, $2, $3)
+      on conflict (day, platform, build) do update
+        set day = excluded.day, platform = excluded.platform, build = excluded.build, last_seen = excluded.last_seen`,
+      [platform, build, lastSeen]);
+  await db.exec(`alter role service_role with bypassrls; set role service_role`);
+  await upsert("2026-11-02T10:00:00Z");
+  const [first] = await one<{ first_seen: Date }>(db, `select first_seen from public.app_builds_seen`);
+  await upsert("2026-11-02T18:00:00Z");
+  await upsert("2026-11-02T11:00:00Z", "unknown", "web");
+  await db.exec(`reset role`);
+  const rows = await one<{ platform: string; build: string; first_seen: Date; last_seen: Date }>(db,
+    `select platform, build, first_seen, last_seen from public.app_builds_seen order by platform`);
+  assertEquals(rows.map((r) => [r.platform, r.build, r.last_seen.toISOString()]), [
+    ["ios", "6", "2026-11-02T18:00:00.000Z"],
+    ["web", "unknown", "2026-11-02T11:00:00.000Z"],
+  ]);
+  assertEquals(rows[0].first_seen.getTime(), first.first_seen.getTime()); // the second write didn't move it
+
+  for (const role of ["anon", "authenticated"]) {
+    for (const priv of ["select", "insert", "update", "delete"]) {
+      assertEquals(await one(db, `select has_table_privilege($1, 'public.app_builds_seen', $2) as ok`, [role, priv]), [{ ok: false }], `${role} ${priv}`);
+    }
+    await db.exec(`set role ${role}`);
+    await assertRejects(() => upsert("2026-11-02T12:00:00Z", "7"), Error, "permission denied");
+    await db.exec(`reset role`);
+  }
+
+  for (const [platform, build] of [["windows", "6"], ["ios", "homecookd/6"], ["ios", "1.2.3.4"], ["ios", "1234567"], ["ios", ""], ["ios", "6 "]]) {
+    await assertRejects(() => upsert("2026-11-02T12:00:00Z", build, platform), Error, "check", `${platform} ${JSON.stringify(build)}`);
+  }
+  await upsert("2026-11-02T12:00:00Z", "1.0.12");
+  await db.close();
+});
+
+t("app_builds_seen: the daily sweep keeps 120 days", async () => {
+  const db = await database();
+  await db.exec(`insert into public.app_builds_seen (day, platform, build)
+    select (now() at time zone 'utc')::date - d, 'ios', '6' from unnest(array[0, 1, 119, 120, 121, 400]) as d`);
+  const [{ command }] = await one<{ command: string }>(db, `select command from cron.job where jobname = 'homecookd-app-builds-sweep'`);
+  await db.exec(command);
+  const left = await one<{ age: number }>(db,
+    `select ((now() at time zone 'utc')::date - day) as age from public.app_builds_seen order by day desc`);
+  assertEquals(left.map((r) => r.age), [0, 1, 119, 120]);
   await db.close();
 });
