@@ -232,7 +232,7 @@ node scripts/check-merge-safe.mjs --bundle web/out                 # after a web
 
 # AWS (infra/README.md; profile homecookd, refresh with: aws sso login --profile homecookd)
 cd infra/envs/staging && terraform init -backend=false && terraform validate   # no login needed
-cd infra/modules/front_door && terraform init -backend=false && terraform test   # also infra/backup-copy, infra/modules/bucket_copy; no login needed
+cd infra/modules/front_door && terraform init -backend=false && terraform test   # also infra/backup-copy, infra/modules/bucket_copy, infra/modules/env; no login needed
 cd infra/envs/staging && AWS_PROFILE=homecookd terraform plan        # production apply: Caleb's OK
 
 python3 infra/scripts/test_plan_check.py                                # what a merge may apply to staging by itself: every guard has a test that fails without it

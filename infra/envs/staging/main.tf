@@ -49,6 +49,12 @@ variable "api_count" {
   default = 1
 }
 
+variable "db_iam_login" {
+  description = "The api and worker log in to Postgres as their own limited users with IAM tokens. Steps and the way back: infra/README.md, \"Database logins\""
+  type        = bool
+  default     = false
+}
+
 variable "front_door" {
   description = "Phase 1's addresses, to prove them on staging. Empty is off, and a plain apply removes them. Shape: infra/modules/front_door/variables.tf. Steps: docs/build/ADDRESSES-MIGRATION.md"
   type        = any
@@ -75,6 +81,7 @@ module "env" {
 
   alb_allowed_cidrs    = var.alb_allowed_cidrs
   private_cors_origins = [module.web.url, "http://localhost:3105"]
+  db_iam_login         = var.db_iam_login
   schedules = {
     "dish.sweep"            = { expression = "rate(1 hour)", task = "dish.sweep" }
     "platform.prune"        = { expression = "rate(6 hours)", task = "platform.prune" }
@@ -109,7 +116,8 @@ module "env" {
       # A secret with no value stops a task starting, so the real keys are named here only for a test window.
       secrets = concat(["SENTRY_DSN_API", "RATE_LIMIT_SALT"], var.real_ai ? ["ANTHROPIC_API_KEY", "CARTESIA_API_KEY"] : [])
       env = merge(
-        { DISH_WEB_ORIGIN = module.web.url, DISH_DAILY_BUDGET_USD = var.dish_budget_usd },
+        # OVERLOAD_SHED: overloaded, a request is turned away with a 503 and retry-after before any work (api/src/overload.ts). On here to test it; production decides with its size.
+        { DISH_WEB_ORIGIN = module.web.url, DISH_DAILY_BUDGET_USD = var.dish_budget_usd, OVERLOAD_SHED = "on" },
         var.real_ai ? {} : { DISH_FAKE_AI = "1" },
       )
     }

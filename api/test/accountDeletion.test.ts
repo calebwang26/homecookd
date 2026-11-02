@@ -24,7 +24,7 @@ import {
   useVoiceClones,
 } from "../src/modules/accounts/deletion.js";
 import { claimCard } from "../src/modules/accounts/links.js";
-import { JOIN_LINK_SALT, seal } from "../src/modules/accounts/sealed.js";
+import { JOIN_LINK_SALT, seal } from "../src/sealed.js";
 import { cardOfToken } from "../src/modules/dish/links.js";
 import { purgeCommunityForPerson } from "../src/modules/community/account.js";
 import { purgeJobsForPerson, workerFolder } from "../src/modules/jobs/account.js";
@@ -218,7 +218,7 @@ async function kitchen(options: { events?: number } = {}) {
        values ($1, $2, 'dal', 'mom', $3, '{"dish": "KEEP-guess"}', $4, 'asked', $5, $6, $7, $8) returning id`,
       [sha(uniq("k")), sha(uniq("a")), fields.person === R ? "SECRET-R kid" : "KEEP-kid", message, f, fields.person ?? null, fields.asked ?? null, fields.craving ?? null],
     );
-  const craving = await id(`insert into craving_links (family_id, person_id, token, message) values ($1, $2, $3, 'SECRET-R what do you miss') returning id`, [f, R, uniq("crave")]);
+  const craving = await id(`insert into craving_links (family_id, person_id, token_hash, message) values ($1, $2, $3, 'SECRET-R what do you miss') returning id`, [f, R, sha(uniq("crave"))]);
   const herCard = await card({ person: R, asked: aai }, "SECRET-R message");
   const askedOfHer = await card({ person: shreya, asked: R, craving }, "KEEP-message");
   const answerClip = `dish/${uniq("clip")}`;
@@ -230,9 +230,9 @@ async function kitchen(options: { events?: number } = {}) {
   // Community.
   const dinner = (host: string, family: string, recipe: string | null, dish: string, address: string) =>
     id(
-      `insert into dinners (host_id, host_family_id, recipe_id, dish, starts_at, place_kind, place_name, address, approx_lat, approx_lng, seats, status, invite_token)
+      `insert into dinners (host_id, host_family_id, recipe_id, dish, starts_at, place_kind, place_name, address, approx_lat, approx_lng, seats, status, invite_token_hash)
        values ($1, $2, $3, $4, now() + interval '1 day', 'home', $5, $6, 42.36, -71.09, 4, 'open', $7) returning id`,
-      [host, family, recipe, dish, address, address, uniq("inv")],
+      [host, family, recipe, dish, address, address, sha(uniq("inv"))],
     );
   const herDinner = await dinner(R, f, poha, "SECRET-R poha night", "SECRET-R 12 Elm St");
   await q(`insert into dinner_requests (dinner_id, guest_id, guest_family_id, status) values ($1, $2, $3, 'pending')`, [herDinner, serene, z]);
@@ -262,7 +262,7 @@ async function kitchen(options: { events?: number } = {}) {
   const oldSignup = await id(`insert into signups (name, email, family_id) values ('SECRET-R old', $1, $2) returning id`, [email, f]); // an old row: no person on it, only her email
 
   // What she did with recipes, and the rest.
-  await q(`insert into shares (token, family_id, library_id, sender_id) values ($1, $2, 'poha', $3)`, [randomBytes(5).toString("hex"), f, R]);
+  await q(`insert into shares (token_hash, token_enc, family_id, library_id, sender_id) values ($1, 'v1:x.y', $2, 'poha', $3)`, [sha(uniq("share")), f, R]);
   await q(`insert into favorites (person_id, library_id) values ($1, 'poha')`, [R]);
   await q(`insert into recipe_events (family_id, person_id, library_id, kind) values ($1, $2, 'poha', 'viewed')`, [f, R]);
   const eventOfShreya = await id(`insert into recipe_events (family_id, person_id, library_id, kind, cook_id) values ($1, $2, 'bhakri', 'cooked', $3) returning id`, [f, shreya, R]);
@@ -439,9 +439,9 @@ test("at once, in one transaction: a tombstone, every way in closed, nothing of 
   const k = await kitchen();
   // Hers, around no recipe: only the at-once step takes it off the map.
   const hosted = await id(
-    `insert into dinners (host_id, host_family_id, dish, starts_at, place_kind, place_name, address, approx_lat, approx_lng, seats, status, invite_token)
+    `insert into dinners (host_id, host_family_id, dish, starts_at, place_kind, place_name, address, approx_lat, approx_lng, seats, status, invite_token_hash)
      values ($1, $2, 'SECRET-R hosted', now() + interval '1 day', 'home', 'SECRET-R', 'SECRET-R', 42.36, -71.09, 4, 'open', $3) returning id`,
-    [k.R, k.f, uniq("inv")],
+    [k.R, k.f, sha(uniq("inv"))],
   );
   await startDeletion(k.R, "person");
   const me = await row("people", "id = $1", [k.R]);
@@ -573,9 +573,9 @@ test("a recipe that lands after Community and Messages have had their turn: its 
       const late = await id(`insert into recipes (family_id, cook_id, title, status) values ($1, $2, 'SECRET-R later still', 'ready') returning id`, [k.f, k.R]);
       await q(`insert into questions (family_id, recipe_id, asked_by, text, status, answer_by, answer_audio_key) values ($1, $2, $3, 'KEEP-how long', 'answered', $3, $4)`, [k.f, late, k.shreya, lateFile]);
       dinner = await id(
-        `insert into dinners (host_id, host_family_id, recipe_id, dish, starts_at, place_kind, place_name, address, approx_lat, approx_lng, seats, status, invite_token)
+        `insert into dinners (host_id, host_family_id, recipe_id, dish, starts_at, place_kind, place_name, address, approx_lat, approx_lng, seats, status, invite_token_hash)
          values ($1, $2, $3, 'KEEP-a dish', now() + interval '1 day', 'home', 'KEEP-home', 'KEEP-address', 42.36, -71.09, 4, 'open', $4) returning id`,
-        [k.mei, k.z, late, uniq("inv")],
+        [k.mei, k.z, late, sha(uniq("inv"))],
       );
     },
   });

@@ -2,6 +2,7 @@
 // is SQL that belongs to another module and moves to it when that module merges: messages (circle notes, read marks, "has acted"), shares (a share link's family),
 // and recipes and jobs (re-homing a solo family's after a move). Nothing else in accounts/ reads those tables, apart from purgeSteps.ts, which lists its own.
 import { db, type Queryable } from "../../db.js";
+import { shareTokenHash } from "../../sealed.js";
 import { ownsPeople } from "./values.js";
 
 /** The family's one circle thread, made on first use. */
@@ -43,10 +44,11 @@ export async function actedIds(q: Queryable, ids: string[]): Promise<Set<string>
   return new Set(rows.map((r) => r.id));
 }
 
-export type Share = { token: string; family_id: string; sender_id: string | null };
+export type Share = { id: string; family_id: string; sender_id: string | null };
 
+/** Looked up by its keyed hash: the token itself isn't stored. */
 export async function shareByToken(q: Queryable, token: string): Promise<Share | null> {
-  const { rows } = await q.query(`select token, family_id, sender_id from shares where token = $1`, [token]);
+  const { rows } = await q.query(`select id, family_id, sender_id from shares where token_hash = $1`, [shareTokenHash(token)]);
   return rows[0] ?? null;
 }
 

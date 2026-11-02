@@ -1,6 +1,7 @@
 // A card asked of a parent: made through the kid's route, then tied to her with SQL, because `cravingToken` on POST /dish/cards still waits (COMMUNITY-MIGRATION.md).
 import type { FastifyInstance } from "fastify";
 import { db } from "../src/db.js";
+import { sha256Hex } from "../src/modules/dish/values.js";
 import { call, ok, type Who } from "./communityHelpers.js";
 import { clearWindow, makeCard, rowOf, store } from "./dishHelpers.js";
 
@@ -14,8 +15,8 @@ export async function cravingCard(t: FastifyInstance, who: Who, body: Record<str
   const made = await makeCard(t, body);
   const { token } = await cravingLink(t, who);
   await db().query(
-    `update dish_asks set family_id = $2, requested_of = $3, cook_claimed_at = now(), craving_id = (select id from craving_links where token = $4) where id = $1`,
-    [(await rowOf(made.kidToken)).id, who.familyId, who.personId, token],
+    `update dish_asks set family_id = $2, requested_of = $3, cook_claimed_at = now(), craving_id = (select id from craving_links where token_hash = $4) where id = $1`,
+    [(await rowOf(made.kidToken)).id, who.familyId, who.personId, sha256Hex(token)],
   );
   return { ...made, row: await rowOf(made.kidToken) };
 }

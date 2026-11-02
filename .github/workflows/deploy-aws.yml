@@ -61,12 +61,25 @@ jobs:
             current.json > next.json
           ARN=$(aws ecs register-task-definition --cli-input-json file://next.json --query taskDefinition.taskDefinitionArn --output text)
           if [ "$SERVICE" = api ]; then
+            # Migrations run as their own task, this release's image with the master database login, which the api and worker don't get (infra/README.md, "Database logins").
+            # Until infra has made that task, the api's own task runs them as before: it still has the master login then, because db_iam_login is off until it exists.
             NETWORK=$(aws ecs describe-services --cluster "$NAME" --services api \
               --query 'services[0].networkConfiguration' --output json)
-            TASK=$(aws ecs run-task --cluster "$NAME" --launch-type FARGATE --task-definition "$ARN" \
-              --network-configuration "$NETWORK" \
-              --overrides '{"containerOverrides":[{"name":"api","command":["node","dist/migrate.js"]}]}' \
-              --query 'tasks[0].taskArn' --output text)
+            if aws ecs describe-task-definition --task-definition "$NAME-migrate" --query taskDefinition > migrate.json 2>/dev/null; then
+              jq --arg image "$IMAGE" '.containerDefinitions[0].image = $image
+                | {family, containerDefinitions, taskRoleArn, executionRoleArn, networkMode, requiresCompatibilities, cpu, memory}' \
+                migrate.json > migrate-next.json
+              MIGRATE=$(aws ecs register-task-definition --cli-input-json file://migrate-next.json --query taskDefinition.taskDefinitionArn --output text)
+              TASK=$(aws ecs run-task --cluster "$NAME" --launch-type FARGATE --task-definition "$MIGRATE" \
+                --network-configuration "$NETWORK" \
+                --query 'tasks[0].taskArn' --output text)
+            else
+              echo "No $NAME-migrate task definition yet, so the api's task runs the migrations."
+              TASK=$(aws ecs run-task --cluster "$NAME" --launch-type FARGATE --task-definition "$ARN" \
+                --network-configuration "$NETWORK" \
+                --overrides '{"containerOverrides":[{"name":"api","command":["node","dist/migrate.js"]}]}' \
+                --query 'tasks[0].taskArn' --output text)
+            fi
             aws ecs wait tasks-stopped --cluster "$NAME" --tasks "$TASK"
             CODE=$(aws ecs describe-tasks --cluster "$NAME" --tasks "$TASK" --query 'tasks[0].containers[0].exitCode' --output text)
             if [ "$CODE" != 0 ]; then echo "Migrations failed ($CODE): nothing rolled out."; exit 1; fi

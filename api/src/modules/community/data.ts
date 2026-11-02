@@ -5,7 +5,7 @@
 //   blocks, both ways                      blocks unique, blocks_reverse                          500 each
 //   recipes hidden by two families         reports_target                                         the page's ids
 //   open dinners ahead                     dinners_open_upcoming                                  the caller's window
-//   a dinner, by id or by invite link      dinners primary key, invite_token (unique)             one row
+//   a dinner, by id or by invite link      dinners primary key, invite_token_hash (unique)        one row
 //   dinners I host                         dinners_host                                           the caller's page
 //   my asks to join                        dinner_requests_guest                                  the caller's page
 //   seats taken, asks on a dinner          dinner_requests (dinner_id, guest_id) unique           200 asks a dinner
@@ -149,13 +149,13 @@ export type DinnerRow = {
   approx_lng: string;
   seats: number;
   status: "open" | "full" | "cancelled";
-  invite_token: string | null;
+  invite_token_enc: string | null; // the invite token, sealed (dinners.ts); only its sha256 is looked up
   hidden_at: Date | null;
   cursor_at: string; // starts_at, to the microsecond
 };
 
 const DINNER = `d.id, d.host_id, d.host_family_id, d.recipe_id, d.dish, d.starts_at, d.place_kind, d.place_name, d.address, d.approx_lat, d.approx_lng,
-  d.seats, d.status, d.invite_token, d.hidden_at, d.starts_at::text as cursor_at`;
+  d.seats, d.status, d.invite_token_enc, d.hidden_at, d.starts_at::text as cursor_at`;
 
 export async function dinnerById(q: Queryable, id: string, lock = false): Promise<DinnerRow | null> {
   const { rows } = await q.query(`select ${DINNER} from dinners d where d.id = $1${lock ? " for update" : ""}`, [id]);
@@ -168,8 +168,8 @@ export async function dinnersByIds(q: Queryable, ids: string[]): Promise<Map<str
   return new Map(rows.map((row) => [row.id, row]));
 }
 
-export async function dinnerByInviteToken(q: Queryable, token: string): Promise<DinnerRow | null> {
-  const { rows } = await q.query(`select ${DINNER} from dinners d where d.invite_token = $1`, [token]);
+export async function dinnerByInviteHash(q: Queryable, tokenHash: string): Promise<DinnerRow | null> {
+  const { rows } = await q.query(`select ${DINNER} from dinners d where d.invite_token_hash = $1`, [tokenHash]);
   return rows[0] ?? null;
 }
 
@@ -245,10 +245,14 @@ export async function setDinnerFull(q: Queryable, id: string): Promise<void> {
   await q.query(`update dinners set status = 'full' where id = $1 and status = 'open'`, [id]);
 }
 
-/** A dinner's one invite token: the first ever stored stays. */
-export async function keepInviteToken(q: Queryable, id: string, fresh: string): Promise<string> {
-  const { rows } = await q.query(`update dinners set invite_token = coalesce(invite_token, $2) where id = $1 returning invite_token`, [id, fresh]);
-  return rows[0].invite_token;
+/** A dinner's sealed invite token, held until the transaction ends, so two first asks for a link store one. */
+export async function lockInviteToken(q: Queryable, id: string): Promise<string | null> {
+  const { rows } = await q.query(`select invite_token_enc from dinners where id = $1 for update`, [id]);
+  return rows[0]?.invite_token_enc ?? null;
+}
+
+export async function setInviteToken(q: Queryable, id: string, tokenHash: string, tokenEnc: string): Promise<void> {
+  await q.query(`update dinners set invite_token_hash = $2, invite_token_enc = $3 where id = $1`, [id, tokenHash, tokenEnc]);
 }
 
 export async function reviewDinner(q: Queryable, id: string, keep: boolean): Promise<void> {

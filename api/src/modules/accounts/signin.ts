@@ -373,7 +373,7 @@ async function joinByShare(who: Who, share: Share, name: string, role: Role, opt
     const joined = await mapUnique(
       tx(async (c) => {
         const members = await lockTargetFamily(c, share.family_id);
-        if ((await data.joinsVia(c, share.token, share.family_id)) >= MAX_JOINS_PER_SHARE) throw refuse(403, "This link is full. Ask your family for a new one.");
+        if ((await data.joinsVia(c, `share:${share.id}`, share.family_id)) >= MAX_JOINS_PER_SHARE) throw refuse(403, "This link is full. Ask your family for a new one.");
         const same = members.find((x) => x.name.toLowerCase() === name.toLowerCase());
         if (same) {
           const claimable = same.id !== share.sender_id && !same.email && !(await anySignedIn(c, [same.id])) && (await data.hasLiveInvite(c, same.id));
@@ -382,7 +382,7 @@ async function joinByShare(who: Who, share: Share, name: string, role: Role, opt
         const person = same ?? (await addPerson(c, share.family_id, members, { name, role }));
         if (!(await data.linkIdentity(c, who, person.id))) throw new LostLink();
         const device = await data.insertDevice(c, { familyId: share.family_id, personId: person.id, via: who.provider, label: opts.label });
-        await data.insertSignup(c, { name, email: who.email, shareToken: share.token, familyId: share.family_id, personId: person.id });
+        await data.insertSignup(c, { name, email: who.email, shareToken: `share:${share.id}`, familyId: share.family_id, personId: person.id });
         if (same) await data.revokeInvitesOf(c, same.id);
         return { person, device, sender: share.sender_id ? members.find((x) => x.id === share.sender_id) : undefined };
       }),
