@@ -17,7 +17,7 @@ Each of these writes a row the sync owns, so I stopped short. None is written ar
 
 1. **`community.setShare` writes `recipes.shared_at`.** No route: it answers the catch-all 404.
 2. **`community.setLocation` writes `people.approx_*` and `campus`.** No route.
-3. **The story card (`storyCards.writeStoryCard`) writes `recipes.story_card_*`.** It only runs after a share, so it waits with it. Community reads the card here.
+3. **The story card (`storyCards.writeStoryCard`) writes `recipes.story_card_*`.** Built in Messages, behind the recipes switch, with `shareOn` for 1 and 4 to call (MESSAGES-MIGRATION.md, "Story cards"). Community reads the card here.
 4. **`shareRequests.ask` from the cook's own tap, and `shareRequests.settle` on her yes, write `recipes.shared_at`.** Her tap answers 501 `not_moved`, and never says "shared" without sharing. `settle` isn't here (Deferred). **A kid's ask answers the same 501 and writes nothing.** That's a different reason: `questions` isn't read-only, but a row written here reaches no cook, no answer and no purge until Messages moves, so saying "asked" would be untrue.
 5. **A report's two-family hide, and `reports.review`, write `recipes.hidden_at` and `shared_at`.** See below, because this one had to keep working.
 
@@ -202,7 +202,7 @@ The last command prints what the script said. A task takes about a minute to sta
 - `safety.test.ts`: "a Muse card the filter catches goes plain" (writer).
 - `shareRequests.test.ts`: her typed yes, the two `TEXT_PROVIDER` tests, "without Gemini", the Marathi voice note, the yes/no reader, "only a yes" (Deferred).
 - `cravings.test.ts`: peek, a card tied to her, a card's name and words, the link's caps (card-making), `forMe` and `get`.
-- `lib/storyCard`'s `cleanCulture` and `parseMuseCard` assertions (writer).
+- `lib/storyCard`'s `cleanCulture` and `parseMuseCard` assertions (writer): carried in `messagesStoryCards.test.ts`.
 - `convex/account.test.ts`'s Community assertions move as `communityAccount.test.ts`, but the account purge itself isn't run.
 
 The 10-minute rate tests can flake across a real window edge, as `rateLimit.test.ts` can.

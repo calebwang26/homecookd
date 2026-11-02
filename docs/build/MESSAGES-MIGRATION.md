@@ -2,9 +2,9 @@
 
 Step 7 of `docs/build/AWS-MIGRATION.md`, the fourth item in its area order, Nov 1, 2026. A draft on `aws-migration`: nothing live points at it, and live Supabase, its data and what build 6 calls don't change. The code is `api/src/modules/messages/`, in the dish area's shape: routes check the input, the services hold the rules, and the data files hold the SQL and list each query with its index.
 
-It covers threads, messages, read marks, recipe notes, questions, follow-ups, shares, favorites, recipe events, pending sends, push tokens and pushes, the Sunday table and the monthly recap. It rebuilds `convex/messages.ts`, `questions.ts`, `followUps.ts`, `transcribe.ts`, `push.ts`, `pushEvents.ts`, `lib/push*.ts`, and those parts of Supabase's `index.ts`, `plumbing.ts`, `hearts.ts`, `table*.ts`, `recap*.ts`.
+It covers threads, messages, read marks, recipe notes, questions, follow-ups, shares, favorites, recipe events, pending sends, push tokens and pushes, the Sunday table and the monthly recap. It rebuilds `convex/messages.ts`, `questions.ts`, `followUps.ts`, `transcribe.ts`, `push.ts`, `pushEvents.ts`, `lib/push*.ts`, `storyCards.ts` with `community.shareOn`, and those parts of Supabase's `index.ts`, `plumbing.ts`, `hearts.ts`, `table*.ts`, `recap*.ts`.
 
-**Left for their own areas:** story cards (AWS-MIGRATION puts them here, but the brief didn't, and they write `recipes`), asking to share and the map (`shareRequests.ask`, `familyDishes`, `shareOn`: Community), Supabase's `/cooking` routes, `POST /web-events` and the lander half of `POST /events`, and `homie.news`.
+**Left for their own areas:** asking to share and the map (`shareRequests.ask`, `familyDishes`, `setShare`: Community), Supabase's `/cooking` routes, `POST /web-events` and the lander half of `POST /events`, and `homie.news`.
 
 ## Routes
 
@@ -31,6 +31,8 @@ Every route checks the session, and every route below `/v1`. The one exception i
 | `followUps.askFollowUps` | `askFollowUps()` in `questions.ts`, for the worker's step |
 | `followUps.decide`, `answerFor`, `settle` | task `questions.read_follow_up` |
 | `shareRequests.decide`, `answerFor`, `settle` | task `questions.read_share` |
+| `shareRequests.applyYes`, `community.shareOn` | `shareOnYes()` and `shareOn()` in `storyCards.ts`. Community's switch and her own tap call `shareOn()` once they're built |
+| `storyCards.writeStoryCard`, `storyFacts`, `saveStoryCard` | task `story_cards.write` |
 | `push.register`, `push.unregister` | `POST /v1/push-tokens`, `POST /v1/push-tokens/remove` |
 | `push.queue`, `queuePush` | `queuePush()` in `push.ts`, for other areas |
 | `push.deliver`, `forDelivery`, `finish` | task `push.deliver` |
@@ -154,8 +156,20 @@ Quote rotation reads `push_log.quote_key` for 15 days, leaving out pushes that w
 | `questions.translate` | Saves only where `text_for_cook` is empty |
 | `questions.transcribe` | A claim (`answer_transcribing_at`), so Ink runs once. The words and what reads them land together |
 | `questions.read_follow_up`, `read_share` | The read is noted once, by a conditional update |
+| `story_cards.write` | Writes only while a card is due, so a repeat finds the card already matching and calls no model |
 | `messages.hourly`, `nudge_family`, `recap_family` | Dedupe keys |
 | `messages.daily` | Prunes old pushes and marks day-old uploads, a batch at a time |
+
+## Story cards
+
+`storyCards.ts`, from Convex's `storyCards.ts` and `community.shareOn`. The pure rules sit with Community's reading half in `community/storyCard.ts`, as Convex's `lib/storyCard.ts` holds both.
+
+- **What starts one: sharing, never publishing.** On Convex every way the cook says yes runs `shareOn`: her switch (`community.setShare`), her own tap (`shareRequests.ask`) and her yes to a kid's ask (`shareRequests.settle`). It sets `shared_at` and, in the same transaction, queues the card when there's none yet or it no longer matches her answer about her stories. Here only the third is wired: `questions.read_share` reads her clear yes and `recipeEffects.shareYes` calls `shareOnYes`. The switch, her tap and the kid's ask are Community's and answer 501 or have no route (COMMUNITY-MIGRATION.md, blockers 1 and 4), so today the only share asks are ones copied from Convex.
+- **What it writes:** `recipes.story_card_text`, `_written_at`, `_used_stories`, `_culture` and `_quote`, in one statement. That's Convex's `storyCard` `{text, writtenAt, usedStories, culture, quote}`, which `GET /v1/recipes/:id` and Community's feed already read. Sonnet gets Convex's prompt and facts (her name, the dish, its first three steps, her quotes by number, and her stories only after her yes), held to Convex's JSON schema. Its answer goes through Convex's checks: one sentence of at most 25 words, a culture of one to three words or none, a quote picked by number from her own, and the word filter.
+- **Never half a card.** A failed call, no key, an unusable answer, a word the filter catches and a cook past her limit all give the plain line ("Rajani's Kanda Poha, from the Pawar family."), with no culture and her first quote, as on Convex. A save that fails leaves the old card as it was and fails the task, so the queue tries again.
+- **Who.** There's no route. Only the recipe's own cook, answering a share ask in her family, shares it: `POST /v1/questions/:id/answer` refuses another cook or a kid (403) and another family (404). Her family reads the whole card on `GET /v1/recipes/:id`. Other families read only its words, through Community's whitelist, as before.
+- **While `recipes` isn't the api's.** Both writes are in `recipes/writes.ts`, behind the switch, and do nothing unless it's open, like a stopped job's card. Locked or closed, her yes is kept on the question (`share_said`), nothing is shared or queued, and a card task already queued returns before the model, so nothing is paid for. Convex shares and writes the card meanwhile, and the sync brings both over. Answering 501, as the routes do, would send a task that isn't broken to the dead-letter queue.
+- **Limits and cost.** 30 cards an hour per cook (`messages-story-card`); past that, the plain line. Each call writes `model_calls` with `purpose = 'story_card'`, its prompt version and the recipe. No daily budget, as for the area's other calls.
 
 ## What a poll reads
 
@@ -186,7 +200,7 @@ The live-updates draft (`claude/aws-live`) plugs in here, and I built no subscri
 16. **Stats are counted in SQL,** so `/me/recipe-stats` no longer undercounts past 1000 rows, and the recap no longer pages.
 17. **The table's 60-second cache of old rows is gone.** SYSTEM-DESIGN: the api keeps no state in memory, and no measurement asks for one. The library's 10-minute cache stays, because it avoids an outside call per push.
 18. **A recap job with the library down fails its task,** so the queue retries it, and after 3 tries it raises the dead-letter alert. Supabase logged it and waited for the next hour. The next hour still tries here too.
-19. **Claude only.** No Gemini or Muse path: translate on Opus, the yes/no on Haiku, the photo note on Sonnet. Convex's flags still choose in production today, so comparing old and new needs them set to Claude.
+19. **Claude only.** No Gemini or Muse path: translate on Opus, the yes/no on Haiku, the photo note and the story card on Sonnet. Convex's flags still choose in production today, so comparing old and new needs them set to Claude.
 20. **Model calls write `model_calls`.** Ink's and the translations' costs don't count toward the dish ask's daily budget.
 21. **A voice note's transcript failing is logged and read as unclear,** with no retry, as on Convex.
 22. **`GET /v1/messages` shows every kind,** because the table is now shared. Nothing in the app reads it today.
@@ -198,6 +212,11 @@ The live-updates draft (`claude/aws-live`) plugs in here, and I built no subscri
 28. **A push that won't go keeps no words.** `none` and `capped` rows hold no title or body, as `skipped` rows don't. Known limits covers one that's waiting.
 29. **A read mark only moves forward,** so a late write can't turn read messages unread.
 30. **A forged cursor is a 400 `bad_request`, as on Community** (`paging.ts`), and a forged `after` a 400 `bad_time`. Either could reach Postgres as a 500 before.
+31. **Only her yes to a kid's ask starts a story card here.** Her switch and her own tap stay on Convex until Community builds them.
+32. **A repeat of the card task does nothing,** because it writes only while a card is due. Convex's wrote, and paid, every time it ran.
+33. **Story cards are limited** to 30 an hour per cook, then the plain line. Convex's weren't.
+34. **A failed card call is logged with its error's type only,** and a missing key is logged too. Convex logged the first 200 characters of the error, and nothing without a key.
+35. **A card's cost row names its recipe** (`model_calls.recipe_id`). Convex kept no cost row.
 
 ### Against SYSTEM-DESIGN.md
 
@@ -231,7 +250,7 @@ The live-updates draft (`claude/aws-live`) plugs in here, and I built no subscri
 These tables are read-only here. Each writes nothing today, and each needs its owner.
 
 1. **A follow-up's yes writes `recipes.addedIngredients`.** `recipeEffects.ingredientYes` runs in the settle's transaction and does nothing yet. The answer is stored either way (`follow_up_said`). **Recommendation:** the recipes area fills this in, and applies old yeses from `questions` when it moves.
-2. **A share's yes runs `shareOn`, which writes `recipes.sharedAt`.** The same: `recipeEffects.shareYes`, for Community. Community's own `shareRequests.ask` writes `questions`, so that's a table crossing to settle when both are in.
+2. **A share's yes runs `shareOn`, which writes `recipes.sharedAt`.** Built behind the recipes switch (Story cards, above): with writes open her yes shares the recipe and queues its card, and with them off it does nothing and her answer is kept. Community's own `shareRequests.ask` writes `questions`, so that's a table crossing to settle when both are in.
 3. **`x-tz` wrote `people.tz` on every call.** It isn't stored here. `GET /v1/table` reads the header for that request, and `POST /v1/push-tokens` stores a zone on the token, which pushes read when the person has none. **Recommendation:** the accounts area takes the header. Until then a kid's stored zone can go stale.
 4. **`x-profile-id` and a lent phone.** Supabase lets a phone write as a phone-less face, or read with no person at all. A session here is one person. Old builds can't go through `/v1` until the accounts step decides how an adapter speaks for them. **Recommendation:** an adapter-only path that takes a device key and a profile id, checks Supabase's owner rule, and calls these services directly.
 5. **`pushEvents` and system notes have callers elsewhere.** The dish area's merge doesn't queue `push.dish_answered` yet, because a card's `person_id` is always null until the sync. `postSystemNote` and `queuePush` are ready for accounts' "Sam joined." and "joined" pushes.
@@ -244,7 +263,8 @@ These tables are read-only here. Each writes nothing today, and each needs its o
 - `dropPushTokens` and `deleteQuestionsOnRecipes` are for the purge's at-once step: `questions` never cascades, so they must go before a recipe does.
 - A pair stays, pointing at the tombstone. If nothing is left in it, it drops out of the other person's inbox. Otherwise it reads `removed: true`, and the other person can't write to it.
 - Outbox rows left behind find nothing to do.
-- **`/privacy`:** still says "your one-to-one chats" go. Changing that is already on AWS-MIGRATION's "Waiting on Apple" list. No new store of family data was added.
+- **A story card** is columns on her recipe, so it goes with it at once (`accountDeletion.test.ts`'s kitchen holds one). A card task left behind finds no recipe, and one in the middle of its call writes nothing. Its cost row's `recipe_id` goes null.
+- **`/privacy`:** still says "your one-to-one chats" go. Changing that is already on AWS-MIGRATION's "Waiting on Apple" list. No new store of family data was added. A story card's facts go to Anthropic, which `/privacy` already names, as Convex's do with `WRITER_PROVIDER=claude`.
 
 ## Tests
 
@@ -260,6 +280,7 @@ These tables are read-only here. Each writes nothing today, and each needs its o
 | `messagesActivity.test.ts` | Pending sends, shares, hearts, events, stats, the library |
 | `messagesRetention.test.ts` | The history query, `GET /v1/table`, the nudge, `GET /v1/recap`, the recap push, the hourly job |
 | `messagesAccount.test.ts` | Section 4 and C1 |
+| `messagesStoryCards.test.ts` | Her yes shares and queues the card once, in Convex's fields, from Convex's facts; stories only after her yes; a card going plain and written again; another family, cook or kid refused; a failed or unusable answer giving the whole plain line; the limit; a failed save; the switch locked and closed; deletion; Claude's request against a stubbed fetch; the rules and prompt against Convex's |
 | `messagesLogs.test.ts` | No words, tokens, names or file keys in logs, and ids only in the outbox |
 | `routeCoverage.test.ts` | One table of every route the app registers, in every area: no session, expired, deleted, removed, another family, and someone outside the pair or a stated family-wide reason, then the same request working. An anonymous route says why and shows its capability refusing. A new route fails until it's added |
 | `messagesCopies.test.ts` | Fails when Supabase's `time.ts`, `table.ts`, `recap.ts`, Convex's `pushWords.ts`, or a prompt or cap changes, so a fix reaches both |
@@ -277,6 +298,7 @@ These tables are read-only here. Each writes nothing today, and each needs its o
 - **`convex/language.test.ts`:** the Gemini cases, for the same reason.
 - **`convex/followUps.test.ts`:** `recipes.get` carrying the ingredient, and `homie.news` naming the follow-up (their areas). `parseRecipeJson`: the worker's area.
 - **`convex/shareRequests.test.ts`:** asking, `familyDishes`, the day's wait after a no and the map: Community. Only the answering half is here.
+- **`convex/community.test.ts`'s story card tests:** carried, but not Muse's request shape, since this api has no Muse. Their `setShare` steps call `shareOn()` directly, because the switch has no route yet.
 - **`convex/links.test.ts`:** the end-to-end claim: needs accounts.
 - **`convex/account.test.ts`:** every table outside this area, and `deleteMe` itself.
 - **`supabase/tests/api_test.ts`:** sign-in, invites, devices, moves, the lander, `x-tz` storage (blocker 3), `PR 2` cooking, and `x-profile-id` cases (blocker 4).
