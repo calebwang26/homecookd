@@ -126,7 +126,7 @@ reads, S3's CORS, and SQS, on fake models.
 **Still to prove:** real Claude and Ink in a test window (`infra/README.md`, waiting on Caleb); the deployed site with an HTTPS api; Safari and a real iPhone
 recording. **A real video through the AWS pipeline waits until `/privacy` names AWS (Caleb, Nov 1).**
 
-## Raw footage goes after 14 days (Caleb, Nov 1)
+## Raw footage goes after 14 days (Caleb, Nov 1; confirmed Nov 2: keep it as built)
 
 The same rule as live GCS `uploads`, as a lifecycle rule on S3 `uploads`. A job re-run after that fails visibly at the upload listing, and past recipes can't be rebuilt from source. S3 keeps
 a deleted version for its 28-day undo window, so the bytes are fully gone about 42 days after upload. `/privacy` needs no change for the rule itself; it needs AWS named first.
@@ -136,7 +136,7 @@ a deleted version for its 28-day undo window, so the bytes are fully gone about 
 Before any backfill copies real rows into Postgres:
 
 - Seal `craving_links.token`, `dinners.invite_token` and `shares.token` (SCHEMA.md, M6).
-- Caleb decides how long raw footage is kept (above).
+- ~~Caleb decides how long raw footage is kept~~: decided Nov 2, 14 days as built (above). `/privacy` must say it accurately when it names AWS.
 - Count violations of every new uniqueness rule, CHECK and domain (SCHEMA.md, section 7).
 - The sweep reaches every bucket and row the purge can mark. Done on the branch (Nov 2): `jobs.sweep` reaches all three buckets, and the outside purge deletes the folders and
   files `account_deletions` lists (ACCOUNTS-MIGRATION.md). Still open: GCS. A backfilled deletion with GCS links stays open until something can delete there.
