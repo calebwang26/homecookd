@@ -48,7 +48,7 @@ export function useDoorsGate(): { show: boolean; seen: () => void; done: () => v
   const open = cook && !!id && seen?.profileId === id && !seen.seen;
   const key = id && family ? `${family.id}:${id}` : null;
   const recipes = useFresh(useLive<unknown[] | null>('recipes:list', null, never, open), key);
-  const jobs = useFresh(useLive<unknown[] | null>('jobs:mine', null, never, open), key);
+  const jobs = useFresh(useLive<unknown[] | null>('jobs:mine', null, never, open, {}, true), key);
 
   const decision = doorsDecision({
     me,
