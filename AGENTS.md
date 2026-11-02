@@ -73,7 +73,7 @@ follows it, and it wins over the docs below on UI/UX and flows.
   or `aws-migration`, or whose draft was superseded by a merged PR. Never delete `main`, `aws-migration`, a branch with an
   open PR, or a permanent section chat's worktree branch (`claude/aws-backend-b65c64`, `claude/in-app-recording-4c5510`,
   `claude/pipeline-times-cover-8be573`, and any other a chat works from). Deleting is remote-only; a merged PR's branch
-  can be restored from its page. On Nov 2 the Master Agent deleted 273 such branches (281 → 9, list in PR #PRNUM).
+  can be restored from its page. On Nov 2 the Master Agent deleted 273 such branches (281 → 9, list in PR #281).
 - **Section chats (Oct 26):** each codebase section has one permanent Claude chat that owns it (Voice & homie,
   Pipeline & recipes, Convex & accounts, App screens & recording, App Store, web & builds, and since Oct 29
   Notifications & linking, since Oct 31 AWS backend). Work goes to the owner of the files it touches: `docs/agents/memory/section-chats.md`.
