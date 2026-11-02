@@ -3,7 +3,7 @@
 //   node dist/reports.js open
 //   node dist/reports.js review <recipe|dinner|family> <targetId> <keep|remove>
 // Exit 0: done. 1: refused or failed, with the reason on the first line. 2: wrong arguments, and the database wasn't touched.
-// Everything printed lands in the task's CloudWatch log: what each item is, as Convex's listing showed, and never who reported it.
+// Everything printed lands in the task's CloudWatch log for 30 days, so it's ids, counts, reasons and times: never a dish, a family's name or who reported (SYSTEM-DESIGN, logs).
 import { fileURLToPath } from "node:url";
 import { db } from "./db.js";
 import { ApiError } from "./errors.js";
@@ -59,7 +59,7 @@ export async function run(args: string[], io: Io = { out: console.log, err: cons
   try {
     if (command.action === "open") {
       const items = await openReports();
-      for (const item of items) io.out(JSON.stringify({ ...item, firstAt: new Date(item.firstAt).toISOString() }));
+      for (const { kind, targetId, families, reasons, firstAt, hidden } of items) io.out(JSON.stringify({ kind, targetId, families, reasons, firstAt: new Date(firstAt).toISOString(), hidden }));
       const read = items.reduce((n, item) => n + item.reasons.length, 0);
       if (items.length === 0) io.out("No open reports.");
       if (read >= READ_AT_MOST) io.out(`Only the oldest ${READ_AT_MOST} open reports were read. Review these, then list again.`);

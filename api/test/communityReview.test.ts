@@ -38,7 +38,7 @@ async function reported() {
   return { ...w, salik, ngozi, rey, poha, night, later };
 }
 
-test("open lists each reported item once, oldest first, with what Convex's listing showed and nothing about who reported", { skip }, async () => {
+test("open lists each reported item once, oldest first, by id: no dish, no family's name, and nothing about who reported", { skip }, async () => {
   const { t, serene, caleb, salik, ngozi, rey, poha, night } = await reported();
   const kim = await person(await family("Kim home"), "Jun", "cook");
   await ok(block(t, rey, "recipe", await recipe(kim, { title: "Kimchi jjigae", sharedAt: 2 }))); // a block tells the team too: a "family" report
@@ -49,16 +49,16 @@ test("open lists each reported item once, oldest first, with what Convex's listi
   assert.equal(code, 0);
   assert.deepEqual(err, []);
   like(items, [
-    { kind: "recipe", targetId: poha, what: "Kanda Poha", families: 2, hidden: true },
-    { kind: "dinner", targetId: night, what: "Kanda Poha dinner", families: 2, reasons: ["other", "other"], hidden: true },
-    { kind: "family", targetId: kim.familyId, what: "Kim home", families: 1, reasons: ["none"], hidden: false },
+    { kind: "recipe", targetId: poha, families: 2, hidden: true },
+    { kind: "dinner", targetId: night, families: 2, reasons: ["other", "other"], hidden: true },
+    { kind: "family", targetId: kim.familyId, families: 1, reasons: ["none"], hidden: false },
   ]);
   assert.deepEqual([...items[0].reasons].sort(), ["not_food", "rude"]);
   const times = items.map((i) => i.firstAt);
   assert.ok(times.every((at) => new Date(at).toISOString() === at), times.join());
   assert.deepEqual([...times].sort(), times);
-  // The same as the service's, but for the time's format.
-  assert.deepEqual(items, (await openReports()).map((i) => ({ ...i, firstAt: new Date(i.firstAt).toISOString() })));
+  // The same as the service's, but for the time's format and without what each item is: a log keeps it 30 days.
+  assert.deepEqual(items, (await openReports()).map(({ what: _what, ...i }) => ({ ...i, firstAt: new Date(i.firstAt).toISOString() })));
   like(log, { level: "info", msg: "reports listed", action: "open", items: 3 });
 
   // Who reported is never printed: no reporter's id or name, and no reporter field at all.
