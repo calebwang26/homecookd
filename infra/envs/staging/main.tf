@@ -52,7 +52,7 @@ variable "api_count" {
 variable "db_iam_login" {
   description = "The api and worker log in to Postgres as their own limited users with IAM tokens. Steps and the way back: infra/README.md, \"Database logins\""
   type        = bool
-  default     = false
+  default     = true
 }
 
 variable "front_door" {
@@ -77,8 +77,8 @@ module "env" {
   db_backup_days    = 7
   db_protected      = false
   alert_email       = "caleb.wang26@gmail.com"
-  # EDIBLE_CODE_KEY seals join, craving, dinner and share links (api/src/sealed.ts). Its name comes first, then Caleb loads its value (load-secrets.sh, the same as
-  # Supabase's, so copied rows open), and only then does the api get it: a secret with no value stops a task starting.
+  # EDIBLE_CODE_KEY seals join, craving, dinner and share links (api/src/sealed.ts). Its value is Supabase's, loaded with load-secrets.sh, so copied rows open. A
+  # name only goes on a service once its value is loaded: a secret with no value stops a task starting.
   secret_names = ["SENTRY_DSN_API", "SENTRY_DSN_WORKER", "RATE_LIMIT_SALT", "ANTHROPIC_API_KEY", "CARTESIA_API_KEY", "EDIBLE_CODE_KEY"]
 
   alb_allowed_cidrs    = var.alb_allowed_cidrs
@@ -116,7 +116,7 @@ module "env" {
       default_route = true
       uses_database = true
       # A secret with no value stops a task starting, so the real keys are named here only for a test window.
-      secrets = concat(["SENTRY_DSN_API", "RATE_LIMIT_SALT"], var.real_ai ? ["ANTHROPIC_API_KEY", "CARTESIA_API_KEY"] : [])
+      secrets = concat(["SENTRY_DSN_API", "RATE_LIMIT_SALT", "EDIBLE_CODE_KEY"], var.real_ai ? ["ANTHROPIC_API_KEY", "CARTESIA_API_KEY"] : [])
       env = merge(
         # OVERLOAD_SHED: overloaded, a request is turned away with a 503 and retry-after before any work (api/src/overload.ts). On here to test it; production decides with its size.
         { DISH_WEB_ORIGIN = module.web.url, DISH_DAILY_BUDGET_USD = var.dish_budget_usd, OVERLOAD_SHED = "on" },

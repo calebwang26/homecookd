@@ -193,7 +193,7 @@ no other database the master login owns on the server (RDS's `postgres`). The wo
 sign-in or messages. Each logs in with an IAM token its task role signs for its own user (`rds-db:connect`), new for each connection,
 so no password exists anywhere. Only the migrate task gets the master login (`DB_CREDENTIALS`).
 
-`db_iam_login` moves the api and worker over. Staging has it off until the steps below are done. Production starts with it on: its
+`db_iam_login` moves the api and worker over. Staging has had it on since Nov 2, after the steps below. Production starts with it on: its
 first api deploy makes the two users before the api rolls out.
 
 **On staging, in this order.** Database and IAM changes never apply by themselves, so each apply here is Caleb's.
