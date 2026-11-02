@@ -5,6 +5,8 @@ import { after, test } from "node:test";
 import { db } from "../src/db.js";
 import { MAX_OPENS, OPEN_BURST, OPEN_BURST_MS } from "../src/modules/community/dinners.js";
 import { RATE } from "../src/modules/community/inviteRoutes.js";
+import { sha256Hex } from "../src/modules/dish/values.js";
+import { DINNER_INVITE_SALT, unseal } from "../src/sealed.js";
 import { ADDRESS, call, dinner, host, join, ok, openedEarlier, recipe, refusedWith, report, respond, startIt, type Who, world } from "./communityHelpers.js";
 import { clearWindow, hasDatabase, IP, randomIp } from "./dishHelpers.js";
 
@@ -49,6 +51,37 @@ test("one stable, unguessable link per dinner, for the host and the guests they 
   assert.notEqual(another.token, first.token);
   await db().query("update dinners set status = 'cancelled' where id = $1", [dinnerId]);
   await refusedWith(link(shreya), 404, /isn't happening anymore/);
+});
+
+test("the token is stored only as its sha256 and sealed: the row alone opens nothing, and the host is shown the same link again", { skip }, async () => {
+  const { shreya, dinnerId, link, get, open } = await dinnerWorld();
+  const { token } = await ok(link(shreya));
+  const row = (await db().query("select * from dinners where id = $1", [dinnerId])).rows[0];
+  assert.ok(!JSON.stringify(row).includes(token), "no column holds the token");
+  assert.equal(row.invite_token_hash, sha256Hex(token));
+  assert.equal(await unseal(DINNER_INVITE_SALT, dinnerId, row.invite_token_enc), token);
+  assert.equal(await unseal(DINNER_INVITE_SALT, "another-dinner", row.invite_token_enc), null, "sealed to its own dinner");
+  assert.equal((await ok(link(shreya))).token, token);
+  assert.equal((await open({ token, deviceId: device(1) })).statusCode, 200);
+  assert.equal((await open({ token: sha256Hex(token), deviceId: device(1) })).statusCode, 404, "its hash isn't a way in");
+
+  // Without the key, the link can't be shown, and it still opens: a plain sha256 needs no key.
+  const key = process.env.EDIBLE_CODE_KEY;
+  delete process.env.EDIBLE_CODE_KEY;
+  try {
+    assert.equal((await link(shreya)).status, 500);
+    assert.equal((await open({ token, deviceId: device(2) })).statusCode, 200);
+  } finally {
+    process.env.EDIBLE_CODE_KEY = key;
+  }
+
+  // One that can't be opened is replaced, and the old link stops working.
+  await db().query("update dinners set invite_token_enc = 'v1:AAAA.AAAA' where id = $1", [dinnerId]);
+  const fresh = (await ok(link(shreya))).token;
+  assert.notEqual(fresh, token);
+  assert.equal((await open({ token, deviceId: device(3) })).statusCode, 404);
+  assert.equal((await open({ token: fresh, deviceId: device(3) })).statusCode, 200);
+  assert.equal((await get(shreya)).inviteOpens, 3);
 });
 
 test("opening the link counts each phone once and tells it only the dish, the host's name and when", { skip }, async () => {

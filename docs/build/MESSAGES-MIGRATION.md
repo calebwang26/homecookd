@@ -198,6 +198,7 @@ The live-updates draft (`claude/aws-live`) plugs in here, and I built no subscri
 28. **A push that won't go keeps no words.** `none` and `capped` rows hold no title or body, as `skipped` rows don't. Known limits covers one that's waiting.
 29. **A read mark only moves forward,** so a late write can't turn read messages unread.
 30. **A forged cursor is a 400 `bad_request`, as on Community** (`paging.ts`), and a forged `after` a 400 `bad_time`. Either could reach Postgres as a 500 before.
+31. **A share link's token isn't stored** (SCHEMA.md, M6). Supabase kept it as the primary key. A share has an id now, its token is found by a hash keyed from `EDIBLE_CODE_KEY`, because 10 characters are few enough to search for, and it's sealed so the share sheet shows the same link again. A join through it is logged in `signups` as `share:<id>`. Without the key a share can't be made or opened. One whose sealed token can't be opened gets a new link, and the old one still opens.
 
 ### Against SYSTEM-DESIGN.md
 
@@ -291,7 +292,7 @@ These tables are read-only here. Each writes nothing today, and each needs its o
 ## What `infra/` needs (not done: this draft touches only `api/` and `docs/build/`)
 
 - **Settings:** `MEDIA_BASE_URL`, where public recipe media lives. Without it the library reads as unreachable: a send isn't held up, push copy says "a new recipe", a clip's link is null and `GET /v1/recap` answers 503.
-- **Secrets:** `EXPO_ACCESS_TOKEN`. `ANTHROPIC_API_KEY`, `CARTESIA_API_KEY` and `RATE_LIMIT_SALT` are already set for dish.
+- **Secrets:** `EXPO_ACCESS_TOKEN`, and `EDIBLE_CODE_KEY` (accounts' key, for share links), staging included. `ANTHROPIC_API_KEY`, `CARTESIA_API_KEY` and `RATE_LIMIT_SALT` are already set for dish.
 - **EventBridge schedules into `scheduled`:** `{"payload":{"task":"messages.hourly"}}` hourly, and `{"payload":{"task":"messages.daily"}}` daily.
 - **S3:** a phone's PUT has no CORS need. A website calling these routes would.
 
@@ -301,6 +302,8 @@ Add to AWS-MIGRATION's list, as backfill counts:
 - Doubles of a reaction (the new unique index).
 - Convex messages with `to == from`.
 - `questions.follow_up_said = 'yes'` with no matching ingredient, and share yeses, to apply when `recipes` moves.
+
+And copy Supabase's `shares` sealed, with the `signups` rows that name one rewritten to `share:<id>` (SCHEMA.md, section 5, item 14).
 
 ## Known limits
 
@@ -312,7 +315,7 @@ Add to AWS-MIGRATION's list, as backfill counts:
 1. **One photo, two sends.** `PostcardStep` sends the postcard to Supabase and the photo with its note to Convex, two uploads into two systems. On one api, sending one key to both routes gets a 404 on the second, because a file has one holder. App 1.1 needs one upload per route, or one call that does both. **Recommendation:** one call, which also means one card per dish in the cook's chat. `TODO(caleb)`: whether the note then sits on the postcard. Old builds aren't affected.
 2. **camelCase or snake_case.** I chose camelCase to match dish, which makes the adapter map Supabase's fields both ways. **Recommendation:** keep it, since the adapter goes away.
 3. **A person's push when Expo is down isn't retried.** Above, under SYSTEM-DESIGN.
-4. **`shares.token` is still readable,** on AWS-MIGRATION's list (M6).
+4. **Answered (Nov 2): `shares.token` is sealed** (difference 31).
 
 ## Not verified
 

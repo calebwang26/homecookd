@@ -8,7 +8,7 @@ import * as data from "./data.js";
 import { extId, toProfile, type InviteRow, type JoinLinkRow, type Person } from "./data.js";
 import { addPerson, mapUnique } from "./family.js";
 import { quietNote } from "./neighbors.js";
-import { JOIN_LINK_SALT, seal, unseal } from "./sealed.js";
+import { JOIN_LINK_SALT, seal, unseal } from "../../sealed.js";
 import { type Ctx, profileIn, requireMe } from "./proofs.js";
 import {
   BAD_INVITE_CODE,

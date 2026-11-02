@@ -1,16 +1,29 @@
-// Recoverable secrets, sealed: a family's code (families.code_enc) and a join link's token (join_links.token_enc), so "Invite family" shows the same link all
-// week. 'v1:' + base64(iv) + '.' + base64(ciphertext), AES-GCM with a key derived per purpose. Same format, salts and additional data as Supabase, so a row
-// copied across opens here when EDIBLE_CODE_KEY is the same key (docs/build/ACCOUNTS-MIGRATION.md, "Secrets"). There's no fallback key: unset, sealing refuses.
+// Recoverable secrets, sealed, so the app can show the same one again while a copy of the database alone opens nothing: a family's code (families.code_enc), a join
+// link's token (join_links.token_enc), a craving link's (craving_links.token_enc), a dinner's invite (dinners.invite_token_enc) and a share link's (shares.token_enc).
+// 'v1:' + base64(iv) + '.' + base64(ciphertext), AES-GCM with a key derived per purpose and the row's id as additional data. The first two use Supabase's format, salts
+// and additional data, so a row copied across opens here when EDIBLE_CODE_KEY is the same key (docs/build/ACCOUNTS-MIGRATION.md, "Secrets"). There's no fallback key:
+// unset, sealing refuses and nothing opens.
+import { createHmac, hkdfSync } from "node:crypto";
+
 const enc = new TextEncoder();
 const dec = new TextDecoder();
 const keys = new Map<string, Promise<CryptoKey>>();
 
 export const FAMILY_CODE_SALT = "homecookd-family-code-v1";
 export const JOIN_LINK_SALT = "homecookd-join-link-v1";
+export const CRAVING_LINK_SALT = "homecookd-craving-link-v1";
+export const DINNER_INVITE_SALT = "homecookd-dinner-invite-v1";
+export const SHARE_LINK_SALT = "homecookd-share-link-v1";
+const SHARE_LOOKUP_SALT = "homecookd-share-lookup-v1";
 
-function aesKey(salt: string): Promise<CryptoKey> {
+function secretOf(): string {
   const secret = process.env.EDIBLE_CODE_KEY?.trim();
   if (!secret) throw new Error("EDIBLE_CODE_KEY isn't set");
+  return secret;
+}
+
+function aesKey(salt: string): Promise<CryptoKey> {
+  const secret = secretOf();
   const id = `${secret}:${salt}`;
   let key = keys.get(id);
   if (!key) {
@@ -51,4 +64,13 @@ export async function unseal(salt: string, aad: string, sealed: string | null): 
   } catch {
     return null;
   }
+}
+
+/**
+ * What a share link is looked up by. Its token is the old apps' 10 characters, few enough that a copy of the database could be searched for plain sha256s, so this
+ * hash is keyed, with its own key from the same secret. Longer tokens (22 characters and up) are looked up by plain sha256, as sessions and join links are.
+ */
+export function shareTokenHash(token: string): string {
+  const key = Buffer.from(hkdfSync("sha256", secretOf(), SHARE_LOOKUP_SALT, "", 32));
+  return createHmac("sha256", key).update(token).digest("hex");
 }

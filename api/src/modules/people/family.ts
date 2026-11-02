@@ -43,9 +43,9 @@ export async function familyNameOf(q: Queryable, familyId: string): Promise<stri
   return rows[0]?.name ?? null;
 }
 
-/** How many people joined a family through one share link. Index: signups_share_token. */
-export async function joinsViaShare(q: Queryable, token: string, familyId: string): Promise<number> {
-  const { rows } = await q.query(`select count(*)::int as n from signups where share_token = $1 and family_id = $2`, [token, familyId]);
+/** How many people joined a family through one share link, which signups logs as 'share:<id>' (accounts/signin.ts). Index: signups_share_token. */
+export async function joinsViaShare(q: Queryable, shareId: string, familyId: string): Promise<number> {
+  const { rows } = await q.query(`select count(*)::int as n from signups where share_token = $1 and family_id = $2`, [`share:${shareId}`, familyId]);
   return rows[0].n;
 }
 

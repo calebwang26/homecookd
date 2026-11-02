@@ -18,6 +18,7 @@ Step 5 of `docs/build/AWS-MIGRATION.md`, Oct 31, 2026. A draft on `aws-migration
 **Deferred: they need `people` and `families`, so they wait for the one-way sync (SCHEMA.md, M1):**
 - `POST /dish/craving/peek` answers the catch-all 404 for now. It needs her first name and relation.
 - `cravingToken` on `POST /dish/cards` answers 404. Making a plain card instead would quietly not reach her.
+- When these two are built, they find the link with `cravingData.linkByToken`, by sha256: since `077` the token itself isn't stored (SCHEMA.md, M6).
 - Claiming a card, `dishAsks.forMe` and `get`. The signed-in `cravings.*` functions, `sendVoiceRecipe` and `setFilmingDay` are now built: `COMMUNITY-MIGRATION.md`.
 - `pushEvents.requested` and `answered`. `answered` does nothing without a `personId`, which is always null here.
 - `dish_asks.person_id`, `family_id` and `requested_of` stay null.

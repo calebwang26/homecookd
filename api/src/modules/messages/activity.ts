@@ -1,7 +1,7 @@
 // Share links, recordings on their way, hearts, and which recipes someone opened, cooked or listened to.
 //
 // SQL, with its index:
-//   A share link                       shares primary key, shares_family_library
+//   A share link                       shares.token_hash (unique), shares_family_library
 //   Recordings on their way            pending_sends primary key
 //   My hearts                          favorites primary key
 //   Hearts on a dish                   favorites_library
@@ -9,12 +9,13 @@
 //   An event, once per window          recipe_events_person_dedupe
 //   My stats                           recipe_events_person_recent, favorites primary key, messages_thread_kind
 //   One dish's activity                recipe_events_family_library, messages_family_library
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import type { Signed } from "../../auth.js";
 import { db, tx } from "../../db.js";
 import { ApiError, notFound } from "../../errors.js";
 import { once, requestHash } from "../../idempotency.js";
 import { hit, subjectKey, type Limit } from "../../rateLimit.js";
+import { seal, SHARE_LINK_SALT, shareTokenHash, unseal } from "../../sealed.js";
 import { familyNameOf, joinsViaShare, memberById, membersByIds } from "../people/family.js";
 import { iso } from "./data.js";
 import { dishesOf, library } from "./library.js";
@@ -48,22 +49,27 @@ function newToken(): string {
 
 const webUrl = () => (process.env.DISH_WEB_ORIGIN?.trim() || "https://homecookd.app").replace(/\/+$/, "");
 
-/** One stable link per family, dish and sender, so re-opening the share sheet reuses it, until it's full. */
+/**
+ * One stable link per family, dish and sender, so re-opening the share sheet reuses it, until it's full. The token is stored sealed and looked up by a keyed hash
+ * (sealed.ts). One that can't be opened (another key) gets a new link; the old one still opens.
+ */
 export async function makeShare(signed: Signed, body: Body) {
   const actor = await actorOf(signed);
   const dish = libraryId(body.libraryId, true)!;
   await checkDish(dish);
   const { rows } = await db().query(
-    `select token from shares where family_id = $1 and library_id = $2 and sender_id = $3 order by created_at desc limit 1`,
+    `select id, token_enc from shares where family_id = $1 and library_id = $2 and sender_id = $3 order by created_at desc limit 1`,
     [actor.familyId, dish, actor.me.id],
   );
-  let token: string | undefined = rows[0]?.token;
-  if (token && (await joinsViaShare(db(), token, actor.familyId)) >= MAX_JOINS_PER_LINK) token = undefined;
+  const last = rows[0];
+  let token = last ? await unseal(SHARE_LINK_SALT, last.id, last.token_enc) : null;
+  if (token && (await joinsViaShare(db(), last.id, actor.familyId)) >= MAX_JOINS_PER_LINK) token = null;
   for (let i = 0; !token && i < 5; i += 1) {
     const candidate = newToken();
+    const id = randomUUID();
     const made = await db().query(
-      `insert into shares (token, family_id, library_id, sender_id) values ($1, $2, $3, $4) on conflict (token) do nothing`,
-      [candidate, actor.familyId, dish, actor.me.id],
+      `insert into shares (id, token_hash, token_enc, family_id, library_id, sender_id) values ($1, $2, $3, $4, $5, $6) on conflict (token_hash) do nothing`,
+      [id, shareTokenHash(candidate), await seal(SHARE_LINK_SALT, id, candidate), actor.familyId, dish, actor.me.id],
     );
     if (made.rowCount) token = candidate;
   }
@@ -81,14 +87,14 @@ export async function openShare(token: unknown, ip: string) {
   await hit(subjectKey(ip), OPEN_LIMITS);
   if (typeof token !== "string" || !TOKEN.test(token)) throw notFound();
   const { rows } = await db().query(
-    `update shares set open_count = open_count + 1, last_opened_at = now() where token = $1 returning token, library_id, sender_id, family_id`,
-    [token],
+    `update shares set open_count = open_count + 1, last_opened_at = now() where token_hash = $1 returning library_id, sender_id, family_id`,
+    [shareTokenHash(token)],
   );
   const share = rows[0];
   if (!share) throw notFound();
   const sender = share.sender_id ? await memberById(db(), share.sender_id) : null;
   return {
-    token: share.token,
+    token,
     libraryId: share.library_id,
     recipeUrl: mediaUrl(`${share.library_id}/recipe.json`),
     sender: sender && !sender.deleted_at ? { name: sender.name, relation: sender.relation, avatarKey: sender.avatar_key } : null,
