@@ -75,7 +75,7 @@ Every route checks the session, and every route below `/v1`. The one exception i
 
 ### Refusals
 
-Every refusal is a code from contracts/ERROR-CODES.md. Since #288 every 400 is `invalid`, with the `field` that's wrong where there's one; before, each 400 had a code of its own (the old names are in brackets). An adapter maps each back to the sentence an old build reads.
+Every refusal is a code from contracts/ERROR-CODES.md. Since #290 every 400 is `invalid`, with the `field` that's wrong where there's one; before, each 400 had a code of its own (the old names are in brackets). An adapter maps each back to the sentence an old build reads.
 
 | Status, code (field) | Old sentence (Supabase unless marked) |
 |---|---|

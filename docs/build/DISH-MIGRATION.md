@@ -4,7 +4,7 @@ Step 5 of `docs/build/AWS-MIGRATION.md`, Oct 31, 2026. A draft on `aws-migration
 
 ## Routes
 
-**Moved, same path, shapes, statuses and sentences** (errors in the one shape since #288, the sentence as `message`)**:** `POST /dish/cards`, `/cards/get`, `/cards/update`, `/cards/ask`, `/cards/sent`, `/ask/peek`, `/ask/finish`, and `OPTIONS /dish/*`.
+**Moved, same path, shapes, statuses and sentences** (errors in the one shape since #290, the sentence as `message`)**:** `POST /dish/cards`, `/cards/get`, `/cards/update`, `/cards/ask`, `/cards/sent`, `/ask/peek`, `/ask/finish`, and `OPTIONS /dish/*`.
 
 **Moved, changed so bytes skip the api (see Open questions, 1):**
 
@@ -42,7 +42,7 @@ There's no session, so `fileKeys` can't apply. `fileId` is a capability, stored 
 4. **A file of the wrong kind is a 404, where Convex says 400** ("photos must be photos"), under the rule that every refusal reads the same. The site never sends the wrong kind.
 5. Attaching the same `voiceNote` twice is 200 with no change, where Convex says 404.
 6. Rate limits count an answer at its upload link, so `/dish/ask/answer` itself has only the bad-token limit. 30 answers in 10 minutes still holds.
-7. S3 failing is a new 502 `provider_down`, as a model's failure is. The site reads both as "busy". Since #288 `/dish/*` answers the api's one shape, `{error: <code>, message, requestId}`, and the site reads it with `NEXT_PUBLIC_DISH_UPLOADS=links` (contracts/ERROR-CODES.md).
+7. S3 failing is a new 502 `provider_down`, as a model's failure is. The site reads both as "busy". Since #290 `/dish/*` answers the api's one shape, `{error: <code>, message, requestId}`, and the site reads it with `NEXT_PUBLIC_DISH_UPLOADS=links` (contracts/ERROR-CODES.md).
 8. Craving routes, as above.
 9. No `DISH_IP_SALT` fallback: without `RATE_LIMIT_SALT` a route fails loudly. The IP comes from `req.ip`. Old `ip_key` values can't match new ones, and nothing compares them.
 10. Responses add `x-request-id` and, on a 429, `retry-after`.
