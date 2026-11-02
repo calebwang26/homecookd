@@ -194,7 +194,7 @@ test("only her own answer shares it: another family can't trigger it, and reads 
     const r = await poha(p.rajani);
     const q = await shareAsk(p, r);
     refused(await answer(p, p.w.stranger, q, "Yes"), 404, "not_found");
-    refused(await answer(p, p.aai, q, "Yes"), 403, "only_the_recipes_cook");
+    refused(await answer(p, p.aai, q, "Yes"), 403, "forbidden", { message: "Only the recipe's cook can answer this." });
     refused(await answer(p, p.shreya, q, "Yes"), 403, "forbidden");
     await drain();
     assert.deepEqual(await cardOf(r), { shared_at: null, text: null, written_at: null, used_stories: null, culture: null, quote: null });

@@ -1,6 +1,7 @@
-// The dish ask's limits, shapes and errors (docs/build/DISH-ASK-SPEC.md, convex/lib/dishAskValues.ts). The website reads `{error, code}`
-// with these statuses, and the sentences are shown to people, so none of them can change without changing the site.
+// The dish ask's limits, shapes and errors (docs/build/DISH-ASK-SPEC.md, convex/lib/dishAskValues.ts). The website reads the code in `error`
+// with these statuses and shows the sentence in `message` (app.ts's one shape), so none of them can change without changing the site.
 import { createHash } from "node:crypto";
+import { ApiError, retryAfter } from "../../errors.js";
 import type { MissQuestion, MissRecipe, QuestionId, Relation } from "./recipe/types.js";
 import { LIMITS } from "./recipe/validate.js";
 import type { Limit } from "../../rateLimit.js";
@@ -232,35 +233,24 @@ export function recipeTexts(r: StoredRecipe): string[] {
 // ---------------------------------------------------------------------------------------------
 // Errors
 
-export type FailCode =
-  | "bad_request"
-  | "origin"
-  | "not_found"
-  | "closed"
-  | "too_large"
-  | "bad_type"
-  | "not_a_dish"
-  | "words"
-  | "rate"
-  | "budget"
-  | "model"
-  | "not_set_up"
-  | "storage";
+/** A DishFail's `provider_down` is always S3 (502), which the routes log as a storage failure. A model's failure is routes.ts's own. */
+export type FailCode = "invalid" | "not_found" | "closed" | "too_large" | "bad_type" | "not_a_dish" | "words" | "budget" | "provider_down";
 
-/** Thrown inside tx(), it rolls the work back, as a ConvexError did. */
-export class DishFail extends Error {
-  constructor(
-    readonly status: number,
-    readonly code: FailCode,
-    readonly sentence: string,
-  ) {
-    super(code); // never the sentence: it can't reach a log by accident
+/** Thrown inside tx(), it rolls the work back, as a ConvexError did. app.ts sends it like any ApiError, its sentence as `message`. */
+export class DishFail extends ApiError {
+  declare readonly code: FailCode;
+  declare readonly sentence: string;
+
+  constructor(status: number, code: FailCode, sentence: string, extra: Record<string, unknown> = {}, headers: Record<string, string> = {}) {
+    super(status, code, headers, sentence, extra); // the error's own message is the code, never the sentence: it can't reach a log by accident
     this.name = "DishFail";
   }
 }
 
 export const fail = (status: number, code: FailCode, sentence: string) => new DishFail(status, code, sentence);
-export const badRequest = (sentence: string) => fail(400, "bad_request", sentence);
+/** `field` as the sentence names it ("edits[2].kind"); the caller gets it dotted, as app.ts names a schema's ("edits.2.kind"). */
+export const badRequest = (sentence: string, field?: string) =>
+  new DishFail(400, "invalid", sentence, field ? { field: field.replace(/\[(\d+)\]/g, ".$1") } : {});
 export const NOT_FOUND = "This link doesn't work anymore.";
 export const FILE_GONE = "That file doesn't work anymore. Add it again.";
 export const notFound = (sentence = NOT_FOUND) => fail(404, "not_found", sentence);
@@ -268,3 +258,6 @@ export const WORDS = "Some of those words can't be used here. Try other words.";
 export const SORRY = "Something went wrong on our side. Please try again.";
 export const TOO_MANY = "Too many tries. Please wait a few minutes and try again.";
 export const BUDGET = "homecookd has made all the recipes it can today. Try again tomorrow.";
+/** Today's budget is spent: try again when its UTC day (dayOf) turns over. */
+export const budgetSpent = (now = Date.now()) =>
+  new DishFail(429, "budget", BUDGET, {}, retryAfter((new Date(now).setUTCHours(24, 0, 0, 0) - now) / 1000));

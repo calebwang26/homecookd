@@ -6,11 +6,10 @@
 import { randomUUID } from "node:crypto";
 import type { Signed } from "../../auth.js";
 import { db, type Queryable } from "../../db.js";
-import { ApiError, notFound } from "../../errors.js";
+import { type ApiError, invalid, notFound, providerDown, refused } from "../../errors.js";
 import { hit, subjectKey } from "../../rateLimit.js";
 import { objectStore } from "../../storage.js";
 import { actorOf } from "./actor.js";
-import { bad } from "./values.js";
 
 const VOICE_TYPES: Record<string, string> = {
   "audio/m4a": "m4a",
@@ -33,7 +32,7 @@ async function storage<T>(call: () => Promise<T>): Promise<T> {
   try {
     return await call();
   } catch (error) {
-    throw Object.assign(new ApiError(502, "storage"), { cause: error });
+    throw Object.assign(providerDown(502), { cause: error });
   }
 }
 
@@ -41,14 +40,14 @@ async function storage<T>(call: () => Promise<T>): Promise<T> {
 export async function makeUpload(signed: Signed, body: Record<string, unknown>) {
   await actorOf(signed);
   const kind = body.kind;
-  if (kind !== "voice" && kind !== "photo") throw bad("bad_kind");
+  if (kind !== "voice" && kind !== "photo") throw invalid("kind");
   const types = kind === "voice" ? VOICE_TYPES : PHOTO_TYPES;
   const type = baseType(typeof body.contentType === "string" ? body.contentType : "");
   const ext = types[type];
-  if (!ext) throw new ApiError(415, "bad_type");
+  if (!ext) throw refused(415, "bad_type");
   const size = body.size;
-  if (typeof size !== "number" || !Number.isInteger(size) || size <= 0) throw bad("bad_size");
-  if (size > MAX_FILE_BYTES) throw new ApiError(413, "too_large");
+  if (typeof size !== "number" || !Number.isInteger(size) || size <= 0) throw invalid("size");
+  if (size > MAX_FILE_BYTES) throw refused(413, "too_large");
   await hit(subjectKey(signed.personId), [{ bucket: "messages-upload", max: 120, windowS: 3600 }]);
   const stored = type === "image/jpg" ? "image/jpeg" : type;
   const key = `private/messages/${signed.familyId}/${randomUUID()}.${ext}`;
@@ -77,9 +76,9 @@ export async function confirmUpload(signed: Signed, key: unknown) {
       await markForDeletion(db(), [key]);
       return error;
     };
-    if (seen.size === 0) throw await refuse(bad("bad_size"));
-    if (seen.size > MAX_FILE_BYTES) throw await refuse(new ApiError(413, "too_large"));
-    if (baseType(seen.contentType ?? "") !== file.content_type) throw await refuse(new ApiError(415, "bad_type"));
+    if (seen.size === 0) throw await refuse(invalid());
+    if (seen.size > MAX_FILE_BYTES) throw await refuse(refused(413, "too_large"));
+    if (baseType(seen.contentType ?? "") !== file.content_type) throw await refuse(refused(415, "bad_type"));
     await db().query(`update files set uploaded_at = coalesce(uploaded_at, now()), size_bytes = $2 where key = $1`, [key, seen.size]);
   }
   return { key, kind: file.kind, contentType: file.content_type };

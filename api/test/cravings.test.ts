@@ -52,9 +52,9 @@ test("createLink: one live link per person, reused (a new message updates it); r
   assert.equal((await links())[0].message, "What should I cook when you're home?");
 
   // Bad messages change nothing.
-  await refusedWith(call(t, dad, "POST", "/v1/cravings/link", { message: "x".repeat(301) }), 400, "Your message must be 1 to 300 characters.");
+  like(await refusedWith(call(t, dad, "POST", "/v1/cravings/link", { message: "x".repeat(301) }), 400, "Your message must be 1 to 300 characters."), { data: { error: "invalid", field: "message" } });
   await refusedWith(call(t, dad, "POST", "/v1/cravings/link", { message: "   " }), 400, /1 to 300/);
-  await refusedWith(call(t, dad, "POST", "/v1/cravings/link", { message: "what the fuck do you miss" }), 422, /can't be used here/);
+  like(await refusedWith(call(t, dad, "POST", "/v1/cravings/link", { message: "what the fuck do you miss" }), 422, /can't be used here/), { data: { error: "words" } });
   assert.equal((await links())[0].message, "What should I cook when you're home?");
   // Someone else's link is their own.
   assert.notEqual((await cravingLink(t, leo)).url, url);
@@ -165,9 +165,9 @@ test("forCook pages", { skip }, async () => {
 test("setFilmingDay: only the one it was asked of; the kid's card shows it; null clears it", { skip }, async () => {
   const { t, dad, leo, caleb } = await wangs();
   const { kidToken, row } = await cravingCard(t, dad);
-  await refusedWith(day(t, leo, row.id, 0), 403, "Only Dad can pick the day.");
-  await refusedWith(day(t, caleb, row.id, 0), 404, "Not found.");
-  for (const value of [7, -1, 1.5, "1", true]) await refusedWith(day(t, dad, row.id, value), 400, "Pick a day of the week.");
+  like(await refusedWith(day(t, leo, row.id, 0), 403, "Only Dad can pick the day."), { data: { error: "not_asked_of_you" } });
+  like(await refusedWith(day(t, caleb, row.id, 0), 404, "Not found."), { data: { error: "not_found" } });
+  for (const value of [7, -1, 1.5, "1", true]) like(await refusedWith(day(t, dad, row.id, value), 400, "Pick a day of the week."), { data: { error: "invalid", field: "day" } });
   assert.equal((await getCard(t, kidToken)).filmingDay, null);
 
   await ok(day(t, dad, row.id, 0));
@@ -185,16 +185,25 @@ test("sendVoiceRecipe: only the one it was asked of; a wrong type or size is ref
   await refusedWith(upload(caleb, { contentType: "audio/mp4", size: 400 }), 404, "Not found.");
 
   // Refused before a link exists, so nothing is stored.
-  await refusedWith(upload(dad, { contentType: "image/jpeg", size: 400 }), 415, "That recording type isn't supported.");
-  await refusedWith(upload(dad, { contentType: "audio/webm;codecs=opus", size: 5 * 1024 * 1024 + 1 }), 413, "That answer is too long.");
-  await refusedWith(upload(dad, { contentType: "audio/mp4", size: 0 }), 400, "The recording is empty.");
+  like(await refusedWith(upload(dad, { contentType: "image/jpeg", size: 400 }), 415, "That recording type isn't supported."), { data: { error: "bad_type" } });
+  like(await refusedWith(upload(dad, { contentType: "audio/webm;codecs=opus", size: 5 * 1024 * 1024 + 1 }), 413, "That answer is too long."), { data: { error: "too_large" } });
+  like(await refusedWith(upload(dad, { contentType: "audio/mp4", size: 0 }), 400, "The recording is empty."), { data: { error: "invalid", field: "size" } });
+  // S3 can't sign the link: safe to try again.
+  const presignPut = store.presignPut;
+  store.presignPut = async () => {
+    throw new Error("S3 is down");
+  };
+  like(await refusedWith(upload(dad, { contentType: "audio/mp4", size: 400 }), 502, "Something went wrong on our side. Please try again."), { data: { error: "provider_down" } });
+  store.presignPut = presignPut;
 
   const clip = await voiceUpload(t, dad, row.id);
   await refusedWith(send(t, leo, row.id, clip), 404); // the guard: not his file. An owner's rule is by person
   await refusedWith(send(t, caleb, row.id, clip), 404);
   assert.equal((await fileRow(clip)).delete_requested_at, null); // not theirs to delete
-  for (const durationS of [0.5, 126]) await refusedWith(send(t, dad, row.id, clip, { durationS }), 400, "A voice recipe is 1 second to 2 minutes long.");
-  await refusedWith(send(t, dad, row.id, clip, { language: "xx" }), 400, "Pick a language from the list.");
+  for (const durationS of [0.5, 126]) {
+    like(await refusedWith(send(t, dad, row.id, clip, { durationS }), 400, "A voice recipe is 1 second to 2 minutes long."), { data: { error: "invalid", field: "durationS" } });
+  }
+  like(await refusedWith(send(t, dad, row.id, clip, { language: "xx" }), 400, "Pick a language from the list."), { data: { error: "invalid", field: "language" } });
   assert.deepEqual(await answersOf(row.id), []);
   assert.equal(model.calls.transcribe, 0);
 });
@@ -204,11 +213,11 @@ test("a recording that isn't what its link was for is deleted and refused", { sk
   const { row } = await cravingCard(t, dad);
   const link = await ok(call(t, dad, "POST", `/v1/cravings/${row.id}/voice-recipe/upload`, { contentType: "audio/mp4", size: 400 }));
   store.put(link.uploadUrl, new Uint8Array(400).fill(1), "image/jpeg");
-  await refusedWith(send(t, dad, row.id, link.audioKey), 415, "That recording type isn't supported.");
+  like(await refusedWith(send(t, dad, row.id, link.audioKey), 415, "That recording type isn't supported."), { data: { error: "bad_type" } });
   assert.ok((await fileRow(link.audioKey)).delete_requested_at);
   const big = await ok(call(t, dad, "POST", `/v1/cravings/${row.id}/voice-recipe/upload`, { contentType: "audio/mp4", size: 400 }));
   store.put(big.uploadUrl, new Uint8Array(5 * 1024 * 1024 + 1), "audio/mp4");
-  await refusedWith(send(t, dad, row.id, big.audioKey), 413, "That answer is too long.");
+  like(await refusedWith(send(t, dad, row.id, big.audioKey), 413, "That answer is too long."), { data: { error: "too_large" } });
   assert.ok((await fileRow(big.audioKey)).delete_requested_at);
   // Nothing on S3 yet: the plain not-found, and the file waits.
   const none = await ok(call(t, dad, "POST", `/v1/cravings/${row.id}/voice-recipe/upload`, { contentType: "audio/mp4", size: 400 }));
@@ -369,7 +378,7 @@ test("sendVoiceRecipe takes the next free own question, and refuses when q4–q6
   assert.equal((await askMom(t, full.kidToken, [{ text: "Which pot?" }, { text: "How long?" }, { text: "What heat?" }])).status, 200);
   for (const q of ["q4", "q5", "q6"]) assert.equal((await answer(t, full.askToken, q, { ip: "192.0.2.90" })).status, 200);
   const clip = await voiceUpload(t, dad, full.row.id);
-  await refusedWith(send(t, dad, full.row.id, clip), 409, "This one already has her answer.");
+  like(await refusedWith(send(t, dad, full.row.id, clip), 409, "This one already has her answer."), { data: { error: "closed" } });
   assert.equal((await fileRow(clip)).attached_at, null); // refused before it was taken
 });
 

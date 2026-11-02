@@ -1,8 +1,8 @@
 // Keyset paging for lists (SCHEMA.md section 3): a page starts where the last one ended, so it costs the same however deep it goes, and a row added
 // meanwhile can't push another off the page. A cursor is opaque to callers, and its parts only ever reach SQL as query parameters.
-import { ApiError } from "./errors.js";
+import { invalid } from "./errors.js";
 
-export const badCursor = () => new ApiError(400, "bad_request");
+export const badCursor = () => invalid("cursor");
 
 export const encodeCursor = (parts: (string | number)[]) => Buffer.from(JSON.stringify(parts)).toString("base64url");
 

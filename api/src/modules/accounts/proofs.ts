@@ -3,6 +3,7 @@
 // Every rule here is about one question: may this phone act as this person right now? A database failure refuses: nothing here has a fallback.
 import type { FastifyRequest } from "fastify";
 import { db } from "../../db.js";
+import { forbidden, invalid, notFound, removedFromFamily, signedOut } from "../../errors.js";
 import { actedIds } from "./neighbors.js";
 import * as data from "./data.js";
 import type { Person, Via } from "./data.js";
@@ -43,7 +44,7 @@ export type ProofInput = { key?: string; code?: string; profileId?: string; ip: 
 /** A phone with no person of its own, from an opened invite or a family code. It reads the family, and adds itself before anything else (Caleb, Nov 1). */
 export const needsProfile = (device: Ctx["device"]) => !!device && !device.person_id;
 
-const ownPhone = (p: Person) => refuse(403, `${p.name} uses their own phone.`);
+export const ownPhone = (p: Person) => refuse(403, "own_phone", `${p.name} uses their own phone.`);
 
 /** Who has joined: signed in, or already acted in the family. */
 export async function joinedIds(ids: string[]): Promise<Set<string>> {
@@ -64,9 +65,9 @@ export async function prove(input: ProofInput, options: ProofOptions = {}): Prom
     const row = DEVICE_KEY.test(input.key) ? await data.deviceByKey(q, input.key) : null;
     if (!row) {
       await limit("badcode", input.ip, 20, 10); // same budget as wrong family codes
-      throw refuse(401, SIGNED_OUT);
+      throw signedOut(SIGNED_OUT);
     }
-    if (row.revoked_at || row.family_blanked_at) throw refuse(401, SIGNED_OUT);
+    if (row.revoked_at || row.family_blanked_at) throw signedOut(SIGNED_OUT);
     if (Date.now() - row.last_seen_at.getTime() > 10 * 60_000) await data.touchDevice(q, row.id).catch(() => {}); // best effort
     family = { id: row.family_id, supabase_id: row.family_supabase_id, name: row.family_name };
     device = { id: row.id, person_id: row.person_id, via: row.via };
@@ -75,41 +76,41 @@ export async function prove(input: ProofInput, options: ProofOptions = {}): Prom
     const row = input.code.length > 100 ? null : await data.familyByCode(q, input.code);
     if (!row || row.blanked_at) {
       await limit("badcode", input.ip, 20, 10);
-      throw refuse(401, "Family code not recognised");
+      throw signedOut("Family code not recognised");
     }
     await data.resealCode(q, row, input.code).catch(() => {}); // best effort
     family = { id: row.id, supabase_id: row.supabase_id, name: row.name };
   } else {
-    throw refuse(401, "Missing family code (x-family-code header)");
+    throw signedOut("Missing family code (x-family-code header)");
   }
 
   const [everyone, phones] = await Promise.all([data.peopleOf(q, family.id), data.peopleWithPhones(q, family.id)]);
   const profiles = everyone.filter((p) => !p.removed_at);
   // Removal revokes that person's phones; this only catches a request racing the removal.
   const owner = device?.person_id;
-  if (owner && !profiles.some((p) => p.id === owner)) throw refuse(401, SIGNED_OUT);
+  if (owner && !profiles.some((p) => p.id === owner)) throw signedOut(SIGNED_OUT);
 
   let me: Person | null = null;
   let meDeleted = false;
   const pid = options.ignoreMe ? undefined : input.profileId?.trim();
   if (pid) {
-    if (!UUID.test(pid)) throw refuse(400, "x-profile-id must be a profile id");
+    if (!UUID.test(pid)) throw invalid("x-profile-id", "x-profile-id must be a profile id");
     const id = pid.toLowerCase();
     const known = (p: Person) => p.id === id || p.supabase_id === id;
     me = profiles.find(known) ?? null;
     if (!me) {
       if (everyone.some(known)) {
-        if (!options.lenientMe) throw refuse(403, "That person was removed from this family. Pick who you are.");
+        if (!options.lenientMe) throw removedFromFamily("That person was removed from this family. Pick who you are.");
       } else {
         const gone = options.tombstoneOk ? await data.personByExtId(q, id) : null;
         if (gone?.deleted_at && gone.family_id === family.id) meDeleted = true;
-        else throw refuse(403, "That profile isn't part of this family");
+        else throw refuse(403, "not_in_family", "That profile isn't part of this family");
       }
     }
   }
   // A phone with no person says who it is before it writes: it adds itself or, from an invite, asks to move in as someone, which someone else approves. Writing as an existing
   // face never makes it theirs, so whoever opened a forwarded link, or holds the code, can't become Dad.
-  if (me && input.method !== "GET" && needsProfile(device)) throw refuse(403, "Add yourself first.");
+  if (me && input.method !== "GET" && needsProfile(device)) throw forbidden("Add yourself first.");
   // Someone with their own phone is only ever them from that phone: another phone, or the family code, gets 403, reads included.
   if (me && phones.has(me.id) && device?.person_id !== me.id) {
     if (!options.lenientMe) throw ownPhone(me);
@@ -117,7 +118,7 @@ export async function prove(input: ProofInput, options: ProofOptions = {}): Prom
   }
   // Nobody writes as someone only invited: until Dad taps his own link, a message "from Dad" would really be from whoever's phone this is.
   if (me && input.method !== "GET" && device?.person_id !== me.id && (await invitedOnly(me.id))) {
-    throw refuse(403, `${me.name} hasn't joined yet. Pick your own face.`);
+    throw forbidden(`${me.name} hasn't joined yet. Pick your own face.`);
   }
   return { family, profiles, everyone, me, device, phones, meDeleted };
 }
@@ -135,20 +136,20 @@ export const requireProof = (options: ProofOptions = {}) => async (req: FastifyR
 };
 
 export function ctxOf(req: FastifyRequest): Ctx {
-  if (!req.ctx) throw refuse(401, SIGNED_OUT); // a route that forgot requireProof refuses rather than runs
+  if (!req.ctx) throw signedOut(SIGNED_OUT); // a route that forgot requireProof refuses rather than runs
   return req.ctx;
 }
 
 export function requireMe(ctx: Ctx): Person {
-  if (!ctx.me) throw refuse(400, "x-profile-id header is required for this request");
+  if (!ctx.me) throw invalid("x-profile-id", "x-profile-id header is required for this request");
   return ctx.me;
 }
 
 export function profileIn(ctx: Ctx, id: unknown, field: string): Person {
-  if (typeof id !== "string" || !UUID.test(id)) throw refuse(400, `${field} must be a profile id`);
+  if (typeof id !== "string" || !UUID.test(id)) throw invalid(field, `${field} must be a profile id`);
   const lower = id.toLowerCase();
   const p = ctx.profiles.find((x) => x.id === lower || x.supabase_id === lower);
-  if (!p) throw refuse(404, `${field}: no such person in this family`);
+  if (!p) throw notFound(`${field}: no such person in this family`);
   return p;
 }
 

@@ -104,7 +104,7 @@
     "web/src/lib/dish/api.ts": {
       "switch": "NEXT_PUBLIC_DISH_UPLOADS",
       "why": "Upload links with it set, raw files to Convex without",
-      "fingerprint": "0bf584aff19e"
+      "fingerprint": "c240c92cee9a"
     }
   }
 }

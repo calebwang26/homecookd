@@ -1,6 +1,6 @@
-// Cravings' signed-in routes: the name of the Convex function each replaces is beside it. Card-making stays on POST /dish/cards. A refusal is `{error, message, requestId}`.
+// Cravings' signed-in routes: the name of the Convex function each replaces is beside it. Card-making stays on POST /dish/cards. A refusal is app.ts's one shape.
 import * as Sentry from "@sentry/node";
-import type { FastifyError, FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
+import type { FastifyError, FastifyInstance, FastifyRequest } from "fastify";
 import { requireSession, signedIn } from "../../auth.js";
 import type { Trace } from "./budget.js";
 import * as cravings from "./cravings.js";
@@ -20,15 +20,14 @@ async function confirmClip(req: FastifyRequest): Promise<void> {
   if (typeof key === "string" && key.length <= 300) await cravings.confirmOwnClip(signedIn(req), paramId(req), key);
 }
 
-/** The upload helpers speak in DishFail, with the sentences the app shows. Anything else goes to the app's own handler. */
-function onError(error: FastifyError, req: FastifyRequest, reply: FastifyReply) {
-  if (!(error instanceof DishFail)) throw error;
-  if (error.code === "storage") {
+/** S3 failing is logged here, with its cause; app.ts answers every error. */
+function onError(error: FastifyError, req: FastifyRequest): never {
+  if (error instanceof DishFail && error.code === "provider_down") {
     const cause = (error as { cause?: Error }).cause ?? error;
     req.log.error({ err: { type: cause.name } }, "craving storage failed");
     Sentry.captureException(cause, { tags: { request_id: String(req.id) } });
   }
-  return reply.code(error.status).send({ error: error.code, message: error.sentence, requestId: req.id });
+  throw error;
 }
 
 export async function cravingRoutes(app: FastifyInstance): Promise<void> {

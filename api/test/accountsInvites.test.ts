@@ -2,7 +2,7 @@
 import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { db } from "../src/db.js";
-import { Api, clearLimits, code, count, device, freshDatabase, hasDatabase, makeDevice, makeFamily, makeJoinLink, makePerson, row, setup, SIGNED_OUT } from "./accountsHelpers.js";
+import { Api, clearLimits, code, count, device, freshDatabase, hasDatabase, makeDevice, makeFamily, makeJoinLink, makePerson, row, said, setup, SIGNED_OUT } from "./accountsHelpers.js";
 
 const skip = !hasDatabase;
 let api: Api;
@@ -55,7 +55,7 @@ test("invite: create, peek, accept once, then 410; joined people aren't 'invited
   const again = await api.post("/invites/accept", { token });
   assert.equal(again.status, 410);
   assert.equal(again.data.status, "used");
-  assert.equal(again.data.error, "This invite was already used.");
+  assert.deepEqual(said(again), ["gone", "This invite was already used."]);
   const after2 = await api.get("/family", me);
   assert.equal(after2.data.profiles.find((p: { name: string }) => p.name === "Dad").invited, false);
   assert.ok(mom);
@@ -91,7 +91,8 @@ test("re-invite turns the old link off and keeps the number", { skip }, async ()
   assert.equal((await api.post("/invites/accept", { token: tokenOf(again.data.invite.url) })).status, 200);
   const late = await api.post("/invites", { profile_id: first.data.profile.id }, me);
   assert.equal(late.status, 409);
-  assert.match(late.data.error, /already joined/);
+  assert.equal(late.data.error, "already_joined");
+  assert.match(late.data.message, /already joined/);
 });
 
 test("expired and unknown invites", { skip }, async () => {
@@ -102,11 +103,11 @@ test("expired and unknown invites", { skip }, async () => {
   assert.equal((await api.post("/invites/peek", { token })).data.status, "expired");
   const late = await api.post("/invites/accept", { token });
   assert.equal(late.status, 410);
-  assert.equal(late.data.error, "This invite expired.");
+  assert.deepEqual(said(late), ["gone", "This invite expired."]);
   const unknown = await api.post("/invites/accept", { token: "A".repeat(16) });
   assert.equal(unknown.status, 404);
-  assert.equal(unknown.data.error, "That invite link doesn't work.");
-  assert.equal((await api.post("/invites/peek", { code: "AAAAAA" })).data.error, "That invite code doesn't work.");
+  assert.deepEqual(said(unknown), ["not_found", "That invite link doesn't work."]);
+  assert.deepEqual(said(await api.post("/invites/peek", { code: "AAAAAA" })), ["not_found", "That invite code doesn't work."]);
   assert.equal((await api.post("/invites/peek", {})).status, 400);
 });
 
@@ -116,12 +117,14 @@ test("typed codes are counted before lookup, per IP and service-wide; links aren
   for (let i = 0; i < 20; i += 1) assert.equal((await api.post("/invites/peek", { code: "AAAAAA" }, {}, ip)).status, 404);
   const blocked = await api.post("/invites/peek", { code: "AAAAAA" }, {}, ip);
   assert.equal(blocked.status, 429);
-  assert.match(blocked.data.error, /Too many tries/);
+  assert.equal(blocked.data.error, "rate_limited");
+  assert.match(blocked.data.message, /Too many tries/);
   await clearLimits();
   for (let i = 0; i < 100; i += 1) await api.post("/invites/peek", { code: "AAAAAA" }, {}, `192.0.3.${i}`);
   const busy = await api.post("/invites/peek", { code: "AAAAAA" }, {}, "192.0.4.1");
   assert.equal(busy.status, 429);
-  assert.match(busy.data.error, /busy/);
+  assert.equal(busy.data.error, "rate_limited");
+  assert.match(busy.data.message, /busy/);
   await clearLimits();
 });
 
@@ -146,7 +149,7 @@ test("a family-invite phone can't take a face: writes as anyone are 403 'Add you
   const joined = await api.post("/invites/accept", { token: tokenOf(made.data.invite.url) });
   const asGrandma = await api.post("/invites", {}, device(joined.data.device_key, grandma));
   assert.equal(asGrandma.status, 403);
-  assert.equal(asGrandma.data.error, "Add yourself first.");
+  assert.deepEqual(said(asGrandma), ["forbidden", "Add yourself first."]);
   assert.equal((await api.get("/family", device(joined.data.device_key, grandma))).status, 200, "reading as a phone-less face is fine");
 });
 
@@ -156,13 +159,15 @@ test("POST /profiles/self: a phone with no person adds its own, once, and is the
   const key = (await api.post("/invites/accept", { token: tokenOf(made.data.invite.url) })).data.device_key;
   const taken = await api.post("/profiles/self", { name: "mom", role: "learner" }, device(key));
   assert.equal(taken.status, 409);
-  assert.match(taken.data.error, /already in this family. Pick another name/);
+  assert.equal(taken.data.error, "name_taken");
+  assert.match(taken.data.message, /already in this family. Pick another name/);
   const self = await api.post("/profiles/self", { name: "Asha", role: "learner" }, device(key));
   assert.equal(self.status, 200);
   assert.deepEqual([self.data.role, self.data.has_phone, self.data.locked], ["learner", true, false]);
   const again = await api.post("/profiles/self", { name: "Other", role: "learner" }, device(key));
   assert.equal(again.status, 409);
-  assert.match(again.data.error, /already belongs to Asha/);
+  assert.equal(again.data.error, "conflict");
+  assert.match(again.data.message, /already belongs to Asha/);
   assert.equal((await db().query(`select body from messages where family_id = $1 and kind = 'system'`, [f.id])).rows[0].body, "Asha joined.");
 });
 
@@ -183,7 +188,7 @@ test("POST /profiles: names are unique per family, ignoring case, and old builds
   assert.equal((await api.post("/profiles", { name: "Grandpa", role: "cook" }, me)).status, 200);
   const same = await api.post("/profiles", { name: "GRANDPA", role: "cook" }, me);
   assert.equal(same.status, 409);
-  assert.equal(same.data.error, "GRANDPA is already in this family".replace("GRANDPA", "Grandpa"));
+  assert.deepEqual(said(same), ["name_taken", "GRANDPA is already in this family".replace("GRANDPA", "Grandpa")]);
   const withEmail = await api.post("/profiles", { name: "Eve", role: "cook", email: "eve@example.com" }, me);
   assert.equal(withEmail.status, 403);
   assert.equal((await api.post("/profiles", { name: "Eve", role: "cook", email: "eve@example.com" }, code(f.code))).status, 200);
@@ -196,7 +201,8 @@ test("a family stops at 30 people", { skip }, async () => {
   await db().query(`insert into people (family_id, name, role) select $1, 'Filler ' || g, 'kid' from generate_series(1, 29) g`, [f.id]);
   const full = await api.post("/profiles", { name: "One more", role: "learner" }, me);
   assert.equal(full.status, 400);
-  assert.match(full.data.error, /already has 30 people/);
+  assert.equal(full.data.error, "family_full");
+  assert.match(full.data.message, /already has 30 people/);
 });
 
 test("removing someone turns off the family invites they sent (named ones stay)", { skip }, async () => {
@@ -218,10 +224,10 @@ test("remove: nobody removes anyone else; leaving from your own phone signs it o
   const dadPhone = await makeDevice(f.id, dad);
   const refused = await api.post(`/profiles/${dad}/remove`, {}, me);
   assert.equal(refused.status, 403);
-  assert.equal(refused.data.error, "Only Dad can remove themselves.");
+  assert.deepEqual(said(refused), ["only_self", "Only Dad can remove themselves."]);
   const left = await api.post(`/profiles/${dad}/remove`, {}, device(dadPhone.key, dad));
   assert.equal(left.status, 200);
-  assert.equal((await api.get("/family", device(dadPhone.key))).data.error, SIGNED_OUT);
+  assert.deepEqual(said(await api.get("/family", device(dadPhone.key))), ["signed_out", SIGNED_OUT]);
   const stillThere = await api.get("/family", me);
   assert.deepEqual(stillThere.data.former_profiles.map((p: { name: string }) => p.name), ["Dad"]);
   assert.equal((await api.post(`/profiles/${dad}/remove`, {}, device(phone.key, mom))).status, 200, "someone already gone is fine: a repeated tap");
@@ -248,7 +254,7 @@ test("join links: one link for the family all week, peek says kind link, 1.0's a
   assert.deepEqual([peeked.data.kind, peeked.data.status, peeked.data.family_name, peeked.data.inviter.name], ["link", "pending", "The Wangs", "Mom"]);
   const onOld = await api.post("/invites/accept", { token });
   assert.equal(onOld.status, 426);
-  assert.equal(onOld.data.error, "Update homecookd to join this family.");
+  assert.deepEqual(said(onOld), ["update_app", "Update homecookd to join this family."]);
   assert.equal((await api.post("/join-links/revoke", {}, me)).data.ok, true);
   assert.equal((await api.post("/invites/peek", { token })).data.status, "revoked");
   const fresh = await api.post("/join-links", {}, me);
@@ -317,7 +323,8 @@ test("the routes' own limits", { skip }, async () => {
   for (let i = 0; i < 50; i += 1) assert.equal((await api.post("/invites", {}, me)).status, 200);
   const blocked = await api.post("/invites", {}, me);
   assert.equal(blocked.status, 429);
-  assert.match(blocked.data.error, /lot of invites/);
+  assert.equal(blocked.data.error, "rate_limited");
+  assert.match(blocked.data.message, /lot of invites/);
   await clearLimits();
   const real = tokenOf((await api.post("/join-links", {}, me)).data.url);
   for (let i = 0; i < 60; i += 1) assert.equal((await api.post("/invites/peek", { token: real }, {}, "192.0.5.1")).status, 200);

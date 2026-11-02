@@ -143,7 +143,7 @@ The last command prints what the script said. A task takes about a minute to sta
 7. **A host's no to a blocked guest is refused too.** Convex let the decline through, though the app never showed that row. Under the same rule it's now the same 404. On unblocking, the ask comes back pending.
 8. **`respondSwap` checks blocked before "already answered".** Otherwise that answer would say a row exists.
 9. **Refusals get real statuses:** 400, 403, 409, 422, as listed in each service. The sentences are Convex's, in `message`.
-10. **Validation before our sentences.** A wrong type (`recipeId: 12`, a `reason` not on the list) is a plain 400 `bad_request` with no sentence, where Convex's validator threw its own error. The app never sends these.
+10. **Validation before our sentences.** A wrong type (`recipeId: 12`, a `reason` not on the list) is a plain 400 `invalid`, with the `field` and no sentence, where Convex's validator threw its own error. The app never sends these.
 11. **`POST /invite/open` has per-address limits:** 120 opens per 10 minutes, and 20 tokens that name no dinner. A real link to a cancelled or hidden dinner answers the same 404 and doesn't count as a guess, so a dorm opening an old link can't be locked out. Convex had only the per-dinner burst. It's a 429 with `retry-after`, and the site reads anything but 200, 400 and 404 as "offline".
 12. **`/invite/open` needs `RATE_LIMIT_SALT`**, and a body over 1000 bytes is still its 400.
 13. **Report alerts** go through `outbox`, so a failed webhook is retried. Convex logged and moved on. The text's "Review:" line now names this doc in place of `npx convex run`.

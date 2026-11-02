@@ -5,7 +5,7 @@ import Fastify, { type FastifyInstance, type FastifyServerOptions } from "fastif
 import * as Sentry from "@sentry/node";
 import { appCors } from "./cors.js";
 import { db, isPoolWait } from "./db.js";
-import { ApiError, unavailable } from "./errors.js";
+import { ApiError, errorBody, invalid, noRoute, sendError, unavailable } from "./errors.js";
 import { fieldPaths, fileGuard, lastName, looksLikeFileKey } from "./files.js";
 import { accountRoutes } from "./modules/accounts/routes.js";
 import { inviteRoutes } from "./modules/community/inviteRoutes.js";
@@ -65,6 +65,39 @@ function holdsNul(root: unknown): boolean {
   }
   return false;
 }
+
+type FastifyFailure = Error & { statusCode?: number; code?: string; validation?: { instancePath?: string; params?: { missingProperty?: string } }[] };
+
+/** The one field a schema refused, as a caller names it ("name", "edits.0.kind"), when there's one. */
+function refusedField(validation: NonNullable<FastifyFailure["validation"]>): string | undefined {
+  const first = validation[0];
+  const path = [first?.instancePath?.replace(/^\//, "").replace(/\//g, "."), first?.params?.missingProperty].filter(Boolean).join(".");
+  return path || undefined;
+}
+
+/** Any error as the answer the caller gets. Only an ApiError says why; the rest is a code with the api's own words. */
+function asApiError(error: FastifyFailure, req: { log: FastifyInstance["log"]; id: unknown }): ApiError {
+  if (error instanceof ApiError) return error;
+  if (error.validation) return invalid(refusedField(error.validation));
+  // Too busy, and nothing was written: the phone may simply try again. An alarm counts these lines (infra/modules/env/alerts.tf).
+  if (isBusy(error)) {
+    req.log.warn({ err: { type: error.name, code: error.code }, poolWait: isPoolWait(error), shed: error instanceof Overloaded ? error.reason : undefined }, "too busy to answer");
+    return unavailable();
+  }
+  const status = error.statusCode ?? 500;
+  if (status >= 500) {
+    // Not the message: Postgres errors can carry row values, and family content never goes in logs.
+    req.log.error({ err: { type: error.name, code: error.code } }, "request failed");
+    Sentry.captureException(error, { tags: { request_id: String(req.id) } });
+    return new ApiError(500, "server_error", {}, SORRY);
+  }
+  if (error.code === "FST_ERR_CTP_BODY_TOO_LARGE") return new ApiError(413, "too_large", {}, "That's too much to send at once.");
+  // A body that isn't JSON (415 for its content type, 400 for its text) is bad input like any other, at Fastify's own status. `bad_type` is for a file's type.
+  const notJson = error.code?.startsWith("FST_ERR_CTP") || error instanceof SyntaxError;
+  return new ApiError(status, "invalid", {}, notJson ? "The body must be JSON." : undefined);
+}
+
+const SORRY = "Something went wrong on our side. Please try again.";
 
 /** Fails at start, not in production, for a route that could take a file key without saying so. */
 function guardFileKeys(app: FastifyInstance): void {
@@ -155,43 +188,25 @@ export function buildApp(options: { logger?: object | boolean; logStream?: NodeJ
 
   // Before any route's own checks, so no route has to remember: Postgres would answer with an error, and that would be a 500.
   app.addHook("preValidation", async (req) => {
-    if (holdsNul([req.params, req.query, req.body])) throw new ApiError(400, "bad_request");
+    if (holdsNul([req.params, req.query, req.body])) throw invalid();
   });
 
-  app.setNotFoundHandler((req, reply) => reply.status(404).send({ error: "not_found", requestId: req.id }));
+  app.setNotFoundHandler((req, reply) => sendError(reply, req, noRoute()));
 
-  app.setErrorHandler((error: Error & { statusCode?: number; validation?: unknown }, req, reply) => {
-    if (error instanceof ApiError) {
-      const message = error.sentence ? { message: error.sentence } : {};
-      return reply.status(error.statusCode).headers(error.headers).send({ ...error.extra, error: error.code, ...message, requestId: req.id });
-    }
-    if (error.validation) return reply.status(400).send({ error: "bad_request", requestId: req.id });
-    // Too busy, and nothing was written: the phone may simply try again. An alarm on these belongs with the overload gate (AWS-MIGRATION.md).
-    if (isBusy(error)) {
-      const busy = unavailable();
-      req.log.warn({ err: { type: error.name, code: (error as { code?: string }).code }, poolWait: isPoolWait(error), shed: error instanceof Overloaded ? error.reason : undefined }, "too busy to answer");
-      return reply.status(busy.statusCode).headers(busy.headers).send({ error: busy.code, requestId: req.id });
-    }
-    const status = error.statusCode ?? 500;
-    if (status >= 500) {
-      // Not the message: Postgres errors can carry row values, and family content never goes in logs.
-      req.log.error({ err: { type: error.name, code: (error as { code?: string }).code } }, "request failed");
-      Sentry.captureException(error, { tags: { request_id: String(req.id) } });
-      return reply.status(status).send({ error: "server_error", requestId: req.id });
-    }
-    return reply.status(status).send({ error: "bad_request", requestId: req.id });
-  });
+  // Every route's errors end here, /dish and /invite included: their own handlers note what they need and pass the rest on.
+  app.setErrorHandler((error: Error, req, reply) => sendError(reply, req, asApiError(error, req)));
 
   // For the load balancer: is this process up? Deliberately doesn't touch the database, or a database blip stops every task.
   app.get("/health", async () => "ok");
 
-  // For people and deploys: can it reach what it needs?
-  app.get("/ready", async (_req, reply) => {
+  // For people and deploys: can it reach what it needs? `database` stays beside the one shape, because people read it.
+  app.get("/ready", async (req, reply) => {
     try {
       await db().query("select 1");
       return { database: "ok" };
     } catch {
-      return reply.status(503).send({ database: "unreachable" });
+      const down = unavailable();
+      return reply.status(503).headers(down.headers).send({ database: "unreachable", ...errorBody(down, String(req.id)) });
     }
   });
 

@@ -42,15 +42,15 @@ test("an answer needs words or a voice note, and at most 2000 characters; a ques
   const w = await world();
   const chili = await recipe(w.family, w.dad.id);
   const { questionId } = await ask(w, w.leo, chili, "Beans?");
-  refused(await answer(w, w.dad, questionId, {}), 400, "answer_required");
-  refused(await answer(w, w.dad, questionId, { text: "   " }), 400, "answer_required");
-  refused(await answer(w, w.dad, questionId, { text: "x".repeat(2001) }), 400, "too_long");
+  refused(await answer(w, w.dad, questionId, {}), 400, "invalid", { field: undefined, message: "Say or type an answer first." });
+  refused(await answer(w, w.dad, questionId, { text: "   " }), 400, "invalid", { field: undefined, message: "Say or type an answer first." });
+  refused(await answer(w, w.dad, questionId, { text: "x".repeat(2001) }), 400, "invalid", { field: "text", message: "That message is too long." });
   ok(await answer(w, w.dad, questionId, { text: "Yes" }));
-  refused(await answer(w, w.dad, questionId, { text: "No" }), 409, "already_answered");
+  refused(await answer(w, w.dad, questionId, { text: "No" }), 409, "answered", { message: "That question already has an answer." });
   refused(await answer(w, w.dad, "no-such-question", { text: "No" }), 404);
-  refused(await post(w.app, w.leo, "/v1/questions", { recipeId: "nope", text: "?" }), 404, "no_such_recipe");
-  refused(await post(w.app, w.leo, "/v1/questions", { recipeId: chili }), 400, "body_required");
-  refused(await post(w.app, w.leo, "/v1/questions", { recipeId: chili, text: "?", found: { startS: "1" } }), 400, "bad_found");
+  refused(await post(w.app, w.leo, "/v1/questions", { recipeId: "nope", text: "?" }), 404, "not_found", { message: "That recipe isn't here anymore." });
+  refused(await post(w.app, w.leo, "/v1/questions", { recipeId: chili }), 400, "invalid", { field: "text", message: "Write something first." });
+  refused(await post(w.app, w.leo, "/v1/questions", { recipeId: chili, text: "?", found: { startS: "1" } }), 400, "invalid", "found");
 });
 
 test("any cook in the family can answer a cooking question; it isn't one of the recipe's own", { skip }, async () => {
@@ -223,7 +223,7 @@ test("only the recipe's own cook can answer a follow-up", { skip }, async () => 
   const poha = await recipe(w.family, w.mom.id);
   await publish(w, w.mom, poha, [SEEN]);
   const [q] = await followUps();
-  refused(await answer(w, w.dad, q.id, { text: "Yes" }), 403, "only_the_recipes_cook");
+  refused(await answer(w, w.dad, q.id, { text: "Yes" }), 403, "forbidden", { message: "Only the recipe's cook can answer this." });
 });
 
 test("a voice-note yes is read from its transcript", { skip }, async () => {
@@ -295,7 +295,7 @@ test("a share ask: only the recipe's cook answers; a voice note is read once Ink
   await db().query(`update people set language = 'mr' where id = $1`, [w.mom.id]);
   const poha = await recipe(w.family, w.mom.id);
   const id = await shareAsk(w, poha, w.leo);
-  refused(await answer(w, w.dad, id, { text: "Yes." }), 403, "only_the_recipes_cook");
+  refused(await answer(w, w.dad, id, { text: "Yes." }), 403, "forbidden", { message: "Only the recipe's cook can answer this." });
   refused(await answer(w, w.leo, id, { text: "Yes." }), 403);
   refused(await answer(w, w.stranger, id, { text: "Yes." }), 404);
   fakeModels.transcript = () => Promise.resolve("हो, चालेल.");
@@ -400,7 +400,7 @@ test("with Claude, Sonnet drafts the photo note, seeing the photo by its URL", {
     assert.equal(body.messages[0].content[1].type, "image");
     assert.equal(body.messages[0].content[1].source.type, "url");
     delete process.env.ANTHROPIC_API_KEY;
-    refused(await post(w.app, w.leo, "/v1/messages/photo-note", { recipeId: chili, photoKey: photo }, { key: null }), 503, "note_writer_not_set_up");
+    refused(await post(w.app, w.leo, "/v1/messages/photo-note", { recipeId: chili, photoKey: photo }, { key: null }), 503, "not_set_up");
   } finally {
     globalThis.fetch = realFetch;
     delete process.env.ANTHROPIC_API_KEY;

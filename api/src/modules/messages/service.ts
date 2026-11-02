@@ -4,7 +4,7 @@
 import type { PoolClient } from "pg";
 import type { Signed } from "../../auth.js";
 import { db, type Queryable } from "../../db.js";
-import { ApiError, notFound } from "../../errors.js";
+import { forbidden, invalid, notFound, refused } from "../../errors.js";
 import { once, requestHash } from "../../idempotency.js";
 import { enqueue } from "../../outbox.js";
 import type { Member } from "../people/family.js";
@@ -18,7 +18,7 @@ import { attachFile, isPublicClip, markForDeletion } from "./uploads.js";
 import { library } from "./library.js";
 import { isReaction } from "./pushRules.js";
 import { saveNote } from "./notes.js";
-import { bad, decodeCursor, encodeCursor, isoTime, isRowId, libraryId, MAX_BODY, MAX_RECIPIENTS, MAX_STEP, MAX_TRANSCRIPT, MAX_VOICE_S, number, pageSize, text } from "./values.js";
+import { decodeCursor, encodeCursor, isoTime, isRowId, libraryId, MAX_BODY, MAX_RECIPIENTS, MAX_STEP, MAX_TRANSCRIPT, MAX_VOICE_S, noSuchRecipe, number, pageSize, text, WRITE_SOMETHING } from "./values.js";
 import { messageViews, personView } from "./views.js";
 
 type Body = Record<string, unknown>;
@@ -33,7 +33,7 @@ export const otherOf = (t: ThreadRow, personId: string) => (t.a_person_id === pe
 function refuseIfOtherLeft(actor: Actor, t: ThreadRow): void {
   if (t.kind !== "pair") return;
   const other = actor.everyone.find((p) => p.id === otherOf(t, actor.me.id));
-  if (other && (other.removed_at || other.deleted_at)) throw new ApiError(403, "other_left");
+  if (other && (other.removed_at || other.deleted_at)) throw refused(403, "other_left", "They aren't in the family anymore.");
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -81,14 +81,14 @@ export async function inbox(signed: Signed, query: Record<string, unknown>) {
 
 export async function startPair(signed: Signed, body: Body) {
   const actor = await actorOf(signed);
-  const other = personHere(actor, body.otherId);
-  if (other.id === actor.me.id) throw bad("cant_message_yourself");
+  const other = personHere(actor, body.otherId, "otherId");
+  if (other.id === actor.me.id) throw invalid("otherId");
   const t = await data.ensurePair(db(), actor.familyId, actor.me.id, other.id);
   return { id: t.id, other: personView(other) };
 }
 
-function personHere(actor: Actor, id: unknown): Member {
-  if (!isRowId(id)) throw bad("bad_person_id");
+function personHere(actor: Actor, id: unknown, field: string): Member {
+  if (!isRowId(id)) throw invalid(field);
   const p = actor.here.find((x) => x.id === id);
   if (!p) throw notFound();
   return p;
@@ -105,7 +105,7 @@ export async function threadPage(signed: Signed, threadId: string, query: Record
   const actor = await actorOf(signed);
   const t = await threadFor(db(), actor, threadId);
   const limit = pageSize(query.limit);
-  const rows = await data.threadMessages(db(), t.id, limit, decodeCursor(query.cursor), isoTime(query.after));
+  const rows = await data.threadMessages(db(), t.id, limit, decodeCursor(query.cursor), isoTime(query.after, "after"));
   const views = await messageViews(actor.familyId, actor.everyone, [...rows].reverse(), new Map([[t.id, t]]));
   const oldest = rows.at(-1);
   return { messages: views, nextCursor: rows.length === limit && oldest ? encodeCursor(oldest.created_at, oldest.id) : null };
@@ -135,46 +135,45 @@ const KINDS = new Set(["text", "voice", "step", "recipe", "cooked", "request", "
 
 /** The voice fields of a voice message or a spoken question. */
 function parseVoice(body: Body, m: Parsed): void {
-  const duration = number(body.durationS, { min: 0, max: MAX_VOICE_S });
-  if (duration === null) throw bad("duration_required");
-  if (duration === 0) throw bad("bad_number");
-  const audioKey = text(body.audioKey, 1024);
-  const clipKey = text(body.clipKey, 1024);
+  const duration = number(body.durationS, "durationS", { min: 0, max: MAX_VOICE_S });
+  if (!duration) throw invalid("durationS");
+  const audioKey = text(body.audioKey, "audioKey", 1024);
+  const clipKey = text(body.clipKey, "clipKey", 1024);
   if (audioKey) m.audioKey = audioKey;
   else if (clipKey) {
     // A clip of a cook's recorded voice from the public library ("Hear Dad").
     if (!isPublicClip(clipKey)) throw notFound();
     m.clipKey = clipKey;
-  } else throw bad("audio_required");
+  } else throw invalid("audioKey");
   m.durationS = duration;
 }
 
 /** Everything that can be said about a body without the database. */
 export function parseMessage(body: Body): Parsed {
-  if (typeof body.kind !== "string" || !body.kind) throw bad("kind_required");
+  if (typeof body.kind !== "string" || !body.kind) throw invalid("kind");
   const kind = body.kind;
-  const words = text(body.body, MAX_BODY);
+  const words = text(body.body, "body", MAX_BODY);
   const dish = libraryId(body.libraryId, false);
-  const step = number(body.stepOrder, { int: true, min: 1, max: MAX_STEP });
-  const clipStart = number(body.clipStartS, { min: 0, max: 86_400 });
-  const clipEnd = number(body.clipEndS, { min: 0, max: 86_400 });
-  if (clipStart !== null && clipEnd !== null && clipEnd <= clipStart) throw bad("clip_end_before_start");
-  const transcript = text(body.transcript, MAX_TRANSCRIPT);
+  const step = number(body.stepOrder, "stepOrder", { int: true, min: 1, max: MAX_STEP });
+  const clipStart = number(body.clipStartS, "clipStartS", { min: 0, max: 86_400 });
+  const clipEnd = number(body.clipEndS, "clipEndS", { min: 0, max: 86_400 });
+  if (clipStart !== null && clipEnd !== null && clipEnd <= clipStart) throw invalid("clipEndS");
+  const transcript = text(body.transcript, "transcript", MAX_TRANSCRIPT);
   const m: Parsed = { kind, body: words, libraryId: dish, stepOrder: step, clipStartS: clipStart, clipEndS: clipEnd, replyToId: null };
   const spoken = !!body.audioKey || !!body.clipKey;
 
   switch (kind) {
     case "text":
     case "request":
-      if (!words) throw bad("body_required");
+      if (!words) throw invalid("body", WRITE_SOMETHING);
       break;
     case "recipe":
     case "cooked":
-      if (!dish) throw bad("library_id_required");
+      if (!dish) throw invalid("libraryId");
       if (kind === "cooked" && body.photoKey) m.photoKey = String(body.photoKey);
       break;
     case "step":
-      if (!dish || step === null) throw bad("step_needs_recipe");
+      if (!dish || step === null) throw invalid(dish ? "stepOrder" : "libraryId");
       break;
     case "voice":
       parseVoice(body, m);
@@ -184,21 +183,20 @@ export function parseMessage(body: Body): Parsed {
       if (spoken) {
         parseVoice(body, m);
         m.transcript = transcript;
-      } else if (!words) throw bad("body_required");
-      if (step !== null && !dish) throw bad("step_needs_recipe");
+      } else if (!words) throw invalid("body", WRITE_SOMETHING);
+      if (step !== null && !dish) throw invalid("libraryId");
       break;
     case "reaction":
-      if (!isReaction(words)) throw bad("bad_reaction");
+      if (!isReaction(words)) throw invalid("body");
       break;
-    case "system":
-      throw bad("system_not_sent");
+    case "system": // homecookd writes these; nobody sends one
     default:
-      throw bad("bad_kind");
+      throw invalid("kind");
   }
-  if (kind !== "voice" && kind !== "question" && (body.audioKey || body.clipKey)) throw bad("audio_only_on_voice");
-  if (kind !== "cooked" && body.photoKey) throw bad("photo_only_on_cooked");
+  if (kind !== "voice" && kind !== "question" && (body.audioKey || body.clipKey)) throw invalid(body.audioKey ? "audioKey" : "clipKey");
+  if (kind !== "cooked" && body.photoKey) throw invalid("photoKey");
   if (body.replyTo !== undefined && body.replyTo !== null) {
-    if (!isRowId(body.replyTo)) throw bad("bad_reply_to");
+    if (!isRowId(body.replyTo)) throw invalid("replyTo");
     m.replyToId = body.replyTo;
   }
   return m;
@@ -206,7 +204,7 @@ export function parseMessage(body: Body): Parsed {
 
 /** Checked before the transaction: a call that can wait 5 s on the library mustn't hold a row lock. False is a 404; null means it can't say, and a send isn't held up for that. */
 async function checkDish(id: string | null | undefined): Promise<void> {
-  if (id && (await library().exists(id)) === false) throw new ApiError(404, "no_such_recipe");
+  if (id && (await library().exists(id)) === false) throw noSuchRecipe();
 }
 
 /** The body of a send, in its transaction. Returns the message, which for a repeated "Just like mine" is the first one. */
@@ -214,13 +212,13 @@ async function sendIn(c: PoolClient, actor: Actor, t: ThreadRow, m: Parsed, requ
   let replyTo: MessageRow | null = null;
   if (m.replyToId) {
     replyTo = await data.messageInFamily(c, m.replyToId, actor.familyId);
-    if (!replyTo || replyTo.thread_id !== t.id) throw bad("reply_not_in_thread");
+    if (!replyTo || replyTo.thread_id !== t.id) throw invalid("replyTo");
     m.replyTo = replyTo.id;
   }
   if (m.kind === "reaction") {
     // A reaction answers a dish someone else made, or nothing (a heart mid-cook); never a question.
     const madeByOther = replyTo && replyTo.kind === "cooked" && replyTo.sender_id !== actor.me.id;
-    if ((replyTo && !madeByOther) || (m.body === "just_like_mine" && !replyTo)) throw bad("reaction_needs_dish");
+    if ((replyTo && !madeByOther) || (m.body === "just_like_mine" && !replyTo)) throw invalid("replyTo");
   }
   if (m.clipKey && !(await clipIsPublic(c, m.clipKey))) throw notFound();
   if (m.audioKey) await attachFile(c, actor, m.audioKey, ["voice"]);
@@ -280,19 +278,19 @@ const CONVEX_FIELDS = ["kind", "text", "audioKey", "photoKey", "to", "recipeId",
 export async function sendToPerson(signed: Signed, body: Body, w: Write) {
   const actor = await actorOf(signed);
   const kind = typeof body.kind === "string" ? body.kind : "";
-  if (!CONVEX_KINDS.has(kind)) throw bad("bad_kind");
-  const words = text(body.text, MAX_BODY);
-  if (kind === "text" && !words) throw bad("body_required");
-  if (kind === "text" && (body.audioKey || body.photoKey)) throw bad("text_has_no_file");
-  if (kind === "voice" && !body.audioKey) throw bad("audio_required");
-  if (kind === "photo" && !body.photoKey) throw bad("photo_required");
-  if (kind === "voice" && body.photoKey) throw bad("photo_only_on_cooked");
-  if (kind === "photo" && body.audioKey) throw bad("audio_only_on_voice");
-  const to = body.to === undefined || body.to === null ? null : personHere(actor, body.to);
-  if (to?.id === actor.me.id) throw bad("cant_message_yourself");
+  if (!CONVEX_KINDS.has(kind)) throw invalid("kind");
+  const words = text(body.text, "text", MAX_BODY);
+  if (kind === "text" && !words) throw invalid("text", WRITE_SOMETHING);
+  if (kind === "text" && (body.audioKey || body.photoKey)) throw invalid(body.audioKey ? "audioKey" : "photoKey");
+  if (kind === "voice" && !body.audioKey) throw invalid("audioKey");
+  if (kind === "photo" && !body.photoKey) throw invalid("photoKey");
+  if (kind === "voice" && body.photoKey) throw invalid("photoKey");
+  if (kind === "photo" && body.audioKey) throw invalid("audioKey");
+  const to = body.to === undefined || body.to === null ? null : personHere(actor, body.to, "to");
+  if (to?.id === actor.me.id) throw invalid("to");
   let recipeId: string | null = null;
   if (body.recipeId !== undefined && body.recipeId !== null) {
-    if (!isRowId(body.recipeId) || !(await familyRecipe(db(), actor.familyId, body.recipeId))) throw new ApiError(404, "no_such_recipe");
+    if (!isRowId(body.recipeId) || !(await familyRecipe(db(), actor.familyId, body.recipeId))) throw noSuchRecipe();
     recipeId = body.recipeId;
   }
   const m: Parsed = {
@@ -373,7 +371,7 @@ const POSTCARD_FIELDS = ["photoKey", "rating"];
 
 function postcardRating(v: unknown): number | null {
   if (v === undefined || v === null) return null;
-  if (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > 5) throw bad("bad_rating");
+  if (typeof v !== "number" || !Number.isInteger(v) || v < 1 || v > 5) throw invalid("rating");
   return v;
 }
 
@@ -388,10 +386,10 @@ export async function postcard(signed: Signed, messageId: string, body: Body, w:
   if (!row) throw notFound();
   // Someone outside the pair reads it as no message at all.
   const t = await threadFor(db(), actor, row.thread_id);
-  if (row.sender_id !== actor.me.id) throw new ApiError(403, "not_your_dish");
-  if (row.kind !== "cooked") throw bad("postcard_needs_dish");
+  if (row.sender_id !== actor.me.id) throw forbidden("Only whoever made the dish can send its postcard.");
+  if (row.kind !== "cooked") throw invalid("id");
   refuseIfOtherLeft(actor, t);
-  if (!body.photoKey) throw bad("photo_required");
+  if (!body.photoKey) throw invalid("photoKey");
   const photoKey = String(body.photoKey);
   const rating = postcardRating(body.rating);
   await once(
@@ -417,13 +415,13 @@ const SEND_RECIPE_FIELDS = ["libraryId", "note", "to"];
 export async function sendRecipe(signed: Signed, body: Body, w: Write) {
   const actor = await actorOf(signed);
   const dish = libraryId(body.libraryId, true)!;
-  const note = text(body.note, MAX_BODY);
+  const note = text(body.note, "note", MAX_BODY);
   let targets: Member[];
   if (body.to === "everyone") targets = actor.here.filter((p) => p.id !== actor.me.id);
   else if (Array.isArray(body.to) && body.to.length > 0 && body.to.length <= MAX_RECIPIENTS) {
-    targets = [...new Set(body.to.map((id) => personHere(actor, id)))].filter((p) => p.id !== actor.me.id);
-  } else throw bad("bad_recipients");
-  if (targets.length === 0) throw bad("pick_someone_else");
+    targets = [...new Set(body.to.map((id) => personHere(actor, id, "to")))].filter((p) => p.id !== actor.me.id);
+  } else throw invalid("to");
+  if (targets.length === 0) throw invalid("to");
   await checkDish(dish);
   const { resourceId } = await once(
     { scope: actor.me.id, key: w.key, route: "POST /v1/send-recipe", hash: requestHash(fields(body, SEND_RECIPE_FIELDS)) },

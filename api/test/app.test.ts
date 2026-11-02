@@ -81,10 +81,10 @@ test("an unknown path and a bad body answer without detail", async () => {
   });
   const missing = await app.inject("/nothing");
   assert.equal(missing.statusCode, 404);
-  assert.equal(missing.json().error, "not_found");
+  assert.equal(missing.json().error, "no_route", "a path no route has: an older api, not a missing row");
   const bad = await app.inject({ method: "POST", url: "/test/typed", payload: { n: "her secret masala" } });
   assert.equal(bad.statusCode, 400);
-  assert.equal(bad.json().error, "bad_request");
+  assert.deepEqual([bad.json().error, bad.json().field], ["invalid", "n"]);
   assert.doesNotMatch(bad.body, /masala/);
 });
 

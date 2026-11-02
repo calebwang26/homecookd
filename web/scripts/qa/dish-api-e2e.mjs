@@ -98,7 +98,7 @@ const shot = (page, name) => page.screenshot({ path: path.join(OUT, `${name}.png
 async function api(route, body) {
   const res = await fetch(`${API}${route}`, { method: 'POST', headers: { 'Content-Type': 'text/plain;charset=UTF-8' }, body: JSON.stringify(body), signal: AbortSignal.timeout(30_000) });
   const data = await res.json().catch(() => null);
-  if (!res.ok) throw new Error(`${route} answered ${res.status} ${data?.code ?? ''}`);
+  if (!res.ok) throw new Error(`${route} answered ${res.status} ${data?.error ?? ''}`);
   return data;
 }
 

@@ -4,7 +4,7 @@
 import { randomUUID } from "node:crypto";
 import type { Signed } from "../../auth.js";
 import { db, tx, type Queryable } from "../../db.js";
-import { notFound, refused } from "../../errors.js";
+import { invalid, notFound, refused } from "../../errors.js";
 import { afterCursor, pageOf } from "../../paging.js";
 import { CRAVING_LINK_SALT, seal, unseal } from "../../sealed.js";
 import { objectStore } from "../../storage.js";
@@ -40,7 +40,7 @@ const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
 
 function messageOf(raw: string): string {
   const line = raw.trim();
-  if (!line || line.length > CRAVING_MESSAGE_CHARS) throw refused(400, "bad_request", `Your message must be 1 to ${CRAVING_MESSAGE_CHARS} characters.`);
+  if (!line || line.length > CRAVING_MESSAGE_CHARS) throw invalid("message", `Your message must be 1 to ${CRAVING_MESSAGE_CHARS} characters.`);
   if (flagged(line)) throw refused(422, "words", WORDS);
   return line;
 }
@@ -140,7 +140,7 @@ async function askedOfMe(c: Queryable, signed: Signed, id: string, only: (name: 
 export async function setFilmingDay(signed: Signed, id: string, day: unknown): Promise<void> {
   await tx(async (c) => {
     const row = await askedOfMe(c, signed, id, (name) => `Only ${name} can pick the day.`, true);
-    if (day !== null && !(typeof day === "number" && Number.isInteger(day) && day >= 0 && day <= 6)) throw refused(400, "bad_request", "Pick a day of the week.");
+    if (day !== null && !(typeof day === "number" && Number.isInteger(day) && day >= 0 && day <= 6)) throw invalid("day", "Pick a day of the week.");
     await data.patchCard(c, row.id, { filming_day: day });
   });
 }
@@ -155,7 +155,7 @@ export async function requestVoiceUpload(signed: Signed, id: string, contentType
   const key = `private/dish/${randomUUID()}`;
   await cravingData.insertClip(db(), { key, contentType: type, size: bytes, capabilityHash: sha256Hex(randomBase62()), familyId: signed.familyId, personId: signed.personId, askId: id });
   const link = await objectStore().presignPut(key, type, bytes).catch((error) => {
-    throw Object.assign(fail(502, "storage", "Something went wrong on our side. Please try again."), { cause: error });
+    throw Object.assign(fail(502, "provider_down", "Something went wrong on our side. Please try again."), { cause: error });
   });
   return { audioKey: key, contentType: type, size: bytes, uploadUrl: link.url, uploadHeaders: link.headers, expiresInS: link.expiresInS };
 }
@@ -193,8 +193,8 @@ export async function sendVoiceRecipe(signed: Signed, a: { id: string; audioKey:
   const now = Date.now();
   await tx(async (c) => {
     const row = await askedOfMe(c, signed, a.id, (name) => `Only ${name} can answer this one.`, true);
-    if (!Number.isFinite(d) || d < 1 || d > MAX_CLIP_S + CLIP_SLACK_S) throw refused(400, "bad_request", `A voice recipe is 1 second to ${MAX_CLIP_S / 60} minutes long.`);
-    if (a.language !== undefined && !LANGS.includes(a.language)) throw refused(400, "bad_request", "Pick a language from the list.");
+    if (!Number.isFinite(d) || d < 1 || d > MAX_CLIP_S + CLIP_SLACK_S) throw invalid("durationS", `A voice recipe is 1 second to ${MAX_CLIP_S / 60} minutes long.`);
+    if (a.language !== undefined && !LANGS.includes(a.language)) throw invalid("language", "Pick a language from the list.");
     const mine = (await peopleByIds(c, [signed.personId])).get(signed.personId)?.language;
     const language = a.language ?? (mine && LANGS.includes(mine) ? mine : "en");
 

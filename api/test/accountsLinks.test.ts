@@ -6,7 +6,7 @@ import { hashToken } from "../src/auth.js";
 import { db } from "../src/db.js";
 import { cardRef, roleForSide, shareTokenForSide, signMoved, signTicket, verifyMoved, verifyTicket, type JoinPayload } from "../src/modules/accounts/tickets.js";
 import { newJti } from "../src/modules/accounts/values.js";
-import { Api, appleToken, bearer, clearLimits, count, freshDatabase, hasDatabase, type Keys, makeDevice, makeFamily, makePerson, row, SECRET, setup } from "./accountsHelpers.js";
+import { Api, appleToken, bearer, clearLimits, count, freshDatabase, hasDatabase, type Keys, makeDevice, makeFamily, makePerson, row, said, SECRET, setup } from "./accountsHelpers.js";
 import { session } from "./helpers.js";
 
 const skip = !hasDatabase;
@@ -111,7 +111,7 @@ const card = (id: string) => row("dish_asks", "id = $1", [id]);
 test("a dead, malformed or missing token", { skip }, async () => {
   assert.equal((await open("A".repeat(22))).status, 404);
   const short = await open("short");
-  assert.deepEqual([short.status, short.data.error, short.data.code], [404, "This link doesn't work anymore.", "not_found"]);
+  assert.deepEqual([short.status, ...said(short)], [404, "not_found", "This link doesn't work anymore."]);
   assert.equal((await open(undefined)).status, 400);
 });
 
@@ -174,7 +174,8 @@ test("Mom claims: she holds the cook side and gets her relation; someone else fi
   assert.equal((await api.post("/v1/links/claim", { token: c.askToken }, bearer(await session(zedFamily, zed)))).data.taken, true);
   const self = await api.post("/v1/links/claim", { token: c.askToken }, bearer(leoS));
   assert.equal(self.status, 409);
-  assert.match(self.data.error, /already on this card/);
+  assert.equal(self.data.error, "already_on_card");
+  assert.match(self.data.message, /already on this card/);
   assert.deepEqual([(await open(c.askToken)).data.joinable, (await open(c.askToken)).data.ticket], ["taken", null]);
 });
 
@@ -228,7 +229,8 @@ test("tickets are limited per card side (5 an hour), and opens per IP", { skip }
   for (let i = 0; i < 5; i += 1) assert.ok((await open(c.askToken, `198.18.0.${i + 1}`)).data.ticket);
   const blocked = await open(c.askToken, "198.18.0.99");
   assert.equal(blocked.status, 429);
-  assert.equal(blocked.data.code, "rate");
+  assert.deepEqual(said(blocked), ["rate_limited", "Too many tries. Please wait a few minutes and try again."]);
+  assert.ok(Number(blocked.headers["retry-after"]) > 0, "a 429 says when to come back");
   await clearLimits();
   for (let i = 0; i < 30; i += 1) await open(c.kidToken, "198.18.1.1");
   assert.equal((await open(c.kidToken, "198.18.1.1")).status, 429);
@@ -240,7 +242,7 @@ test("only our pages may call /link/open from a browser; the app's fetch sends n
   assert.equal((await open(c.kidToken, undefined, { origin: "https://homecookd.app" })).headers["access-control-allow-origin"], "https://homecookd.app");
   assert.equal((await open(c.kidToken, undefined, { origin: "http://localhost:3000" })).status, 200);
   const other = await open(c.kidToken, undefined, { origin: "https://evil.example" });
-  assert.deepEqual([other.status, other.data.code], [403, "origin"]);
+  assert.deepEqual([other.status, other.data.error], [403, "origin"]);
   assert.equal((await api.app.inject({ method: "OPTIONS", url: "/link/open", headers: { origin: "https://evil.example" } })).statusCode, 403);
   assert.equal((await api.app.inject({ method: "OPTIONS", url: "/link/open", headers: { origin: "https://homecookd.app" } })).statusCode, 204);
 });
@@ -324,7 +326,7 @@ test("a receipt that isn't signed, has expired, or names someone else moves noth
   const forged = good.replace(/.$/, (ch) => (ch === "A" ? "B" : "A"));
   for (const receipt of [forged, m.receipt({ exp: Date.now() - 1 })]) {
     const res = await api.post("/v1/links/moved", { receipt }, bearer(m.token));
-    assert.deepEqual([res.status, res.data.error], [403, words]);
+    assert.deepEqual([res.status, ...said(res)], [403, "forbidden", words]);
   }
   const leo = await makePerson(m.to.id, "Leo", "kid");
   assert.equal((await api.post("/v1/links/moved", { receipt: good }, bearer(await session(m.to.id, leo)))).status, 403);

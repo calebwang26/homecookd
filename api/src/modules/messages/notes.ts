@@ -2,14 +2,15 @@
 // with no row in `recipes`. These are Supabase's "question" messages, which are not the `questions` table (questions.ts): SCHEMA.md keeps the two apart.
 import type { Signed } from "../../auth.js";
 import { db, tx, type Queryable } from "../../db.js";
-import { ApiError, forbidden, notFound } from "../../errors.js";
+import { forbidden, invalid, notFound } from "../../errors.js";
+import { badCursor } from "../../paging.js";
 import { answersFor, questionTargets } from "./answers.js";
 import * as data from "./data.js";
 import type { MessageRow, NoteRow, ThreadRow } from "./data.js";
 import { library } from "./library.js";
 import { actorOf } from "./actor.js";
 import { threadFor } from "./threadAccess.js";
-import { bad, decodeCursor, encodeCursor, isRowId, LIBRARY_ID, norm, pageSize } from "./values.js";
+import { decodeCursor, encodeCursor, isRowId, LIBRARY_ID, norm, pageSize } from "./values.js";
 import { messageViews, NOTE_KINDS, noteViews, personView } from "./views.js";
 
 const QUESTION_KINDS = new Set(["question", "step"]);
@@ -25,7 +26,7 @@ export async function saveNote(c: Queryable, familyId: string, answer: MessageRo
   } else if (dish && step === null && q?.library_id === dish) {
     step = q.step_order;
   }
-  if (!dish) throw bad("not_about_a_recipe");
+  if (!dish) throw invalid("messageId");
   const words = answer.body ?? answer.transcript;
   if (!words && !answer.audio_key && !answer.clip_key) return null;
   return await data.insertNote(c, {
@@ -47,16 +48,16 @@ export async function saveNote(c: Queryable, familyId: string, answer: MessageRo
 export async function saveNoteByHand(signed: Signed, body: Record<string, unknown>) {
   const actor = await actorOf(signed);
   if (actor.me.role !== "cook") throw forbidden();
-  if (!isRowId(body.messageId)) throw bad("bad_message_id");
+  if (!isRowId(body.messageId)) throw invalid("messageId");
   const msg = await data.messageInFamily(db(), body.messageId, actor.familyId);
   if (!msg) throw notFound();
   // Someone outside the pair reads it as no message at all.
   await threadFor(db(), actor, msg.thread_id);
-  if (msg.sender_id !== actor.me.id) throw new ApiError(403, "not_your_message");
-  if (!NOTE_KINDS.has(msg.kind)) throw bad("cant_save_that_kind");
+  if (msg.sender_id !== actor.me.id) throw forbidden("You can only save your own messages.");
+  if (!NOTE_KINDS.has(msg.kind)) throw invalid("messageId");
   const question = msg.reply_to ? await data.messageInFamily(db(), msg.reply_to, actor.familyId) : null;
   const note = await tx((c) => saveNote(c, actor.familyId, msg, question));
-  if (!note) throw bad("nothing_to_save");
+  if (!note) throw invalid("messageId");
   return (await noteViews(actor.familyId, actor.everyone, [note]))[0];
 }
 
@@ -72,7 +73,7 @@ export async function removeNote(signed: Signed, id: string) {
   const me = actor.me;
   const cook = (await library().recipeInfo(note.library_id))?.cook_name ?? null;
   const allowed = note.answered_by === me.id || note.asked_by === me.id || (!!norm(me.name) && norm(cook) === norm(me.name));
-  if (!allowed) throw new ApiError(403, "cant_take_this_out");
+  if (!allowed) throw forbidden("Only the person who answered, the person who asked, or the cook can take this out.");
   await tx(async (c) => {
     if (!(await data.deleteNote(c, note.id, actor.familyId))) throw notFound();
     await data.clearReply(c, note.answer_message_id, actor.familyId);
@@ -81,7 +82,7 @@ export async function removeNote(signed: Signed, id: string) {
 }
 
 function dishParam(id: string): string {
-  if (!LIBRARY_ID.test(id)) throw bad("bad_library_id");
+  if (!LIBRARY_ID.test(id)) throw invalid("libraryId");
   return id;
 }
 
@@ -94,7 +95,7 @@ export async function notesOfDish(signed: Signed, libraryId: string, query: Reco
   const cursor = decodeCursor(query.cursor);
   const split = cursor?.id.indexOf(":") ?? -1;
   const after = cursor && split > 0 ? { step: Number(cursor.id.slice(0, split)), at: cursor.at, id: cursor.id.slice(split + 1) } : null;
-  if (cursor && (!after || !Number.isInteger(after.step) || after.step < 0 || after.step > 2147483647)) throw bad("bad_request");
+  if (cursor && (!after || !Number.isInteger(after.step) || after.step < 0 || after.step > 2147483647)) throw badCursor();
   const rows = await data.notesOfDish(db(), actor.familyId, dish, limit, after);
   const end = rows.at(-1);
   return {

@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { after, before, test } from "node:test";
 import { db } from "../src/db.js";
 import { keyMatches } from "../src/modules/accounts/testSignIn.js";
-import { Api, count, freshDatabase, hasDatabase, setup } from "./accountsHelpers.js";
+import { Api, count, freshDatabase, hasDatabase, said, setup } from "./accountsHelpers.js";
 
 const skip = !hasDatabase;
 const KEY = "made-up-test-signin-key";
@@ -49,7 +49,7 @@ test("a missing or wrong key is refused and makes nothing", { skip }, async () =
   assert.equal((await signIn({ test_id: "mallory", name: "Mallory", role: "cook" }, null)).status, 401);
   const wrong = await signIn({ test_id: "mallory", name: "Mallory", role: "cook" }, "not-the-key");
   assert.equal(wrong.status, 401);
-  assert.equal(wrong.data.error, "That test key isn't right.");
+  assert.deepEqual(said(wrong), ["signed_out", "That test key isn't right."]);
   assert.equal(await count("families"), before);
 });
 

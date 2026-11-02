@@ -46,7 +46,7 @@ test("a listed origin's preflight is answered for any /v1 path, and its answers 
 test("an origin that isn't listed, or no list at all, gets no CORS headers and the route's own answer", async () => {
   for (const [on, origin] of [[app, "https://evil.example"], [plain, APP]] as const) {
     const pre = await preflight(on, "/v1/me", origin);
-    assert.deepEqual([pre.statusCode, pre.json().error], [404, "not_found"]);
+    assert.deepEqual([pre.statusCode, pre.json().error], [404, "no_route"]);
     assert.equal(pre.headers["access-control-allow-origin"], undefined);
     const real = await on.inject({ url: "/v1/me", headers: { origin } });
     assert.equal(real.statusCode, 401);

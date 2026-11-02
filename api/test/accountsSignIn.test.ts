@@ -7,30 +7,7 @@ import { db } from "../src/db.js";
 import { idTokensWith, useIdTokens } from "../src/modules/accounts/identity.js";
 import { signTicket, type JoinPayload } from "../src/modules/accounts/tickets.js";
 import { seal, SHARE_LINK_SALT, shareTokenHash } from "../src/sealed.js";
-import {
-  Api,
-  appleToken,
-  APPLE_ISS,
-  bearer,
-  BUNDLE,
-  clearLimits,
-  count,
-  device,
-  freshDatabase,
-  GOOGLE_ISS,
-  googleToken,
-  hasDatabase,
-  type Keys,
-  makeDevice,
-  makeFamily,
-  makeJoinLink,
-  makePerson,
-  row,
-  SECRET,
-  setup,
-  SIGNED_OUT,
-  signToken,
-} from "./accountsHelpers.js";
+import { Api, APPLE_ISS, appleToken, bearer, BUNDLE, clearLimits, count, device, freshDatabase, GOOGLE_ISS, googleToken, hasDatabase, type Keys, makeDevice, makeFamily, makeJoinLink, makePerson, row, said, SECRET, setup, SIGNED_OUT, signToken } from "./accountsHelpers.js";
 
 const skip = !hasDatabase;
 let api: Api;
@@ -57,7 +34,7 @@ test("a forged token, signed by another key with the same key id, is refused", {
   const forged = await signToken(keys.forger, { sub: "victim", aud: BUNDLE, iss: APPLE_ISS });
   const res = await api.apple({ id_token: forged, name: "Mallory", role: "cook" });
   assert.equal(res.status, 401);
-  assert.equal(res.data.error, "That Apple sign-in didn't work. Please try again.");
+  assert.deepEqual(said(res), ["sign_in_failed", "That Apple sign-in didn't work. Please try again."]);
   assert.equal(await count("identities", "subject = 'victim'"), 0);
 });
 
@@ -69,7 +46,8 @@ test("an expired token is refused", { skip }, async () => {
 test("a wrong audience is 503 'not set up', since trying again can't help", { skip }, async () => {
   const res = await api.apple({ id_token: await appleToken(keys, "foreign", { aud: "com.other.app" }), name: "X", role: "cook" });
   assert.equal(res.status, 503);
-  assert.match(res.data.error, /isn't set up for this version/);
+  assert.equal(res.data.error, "not_set_up");
+  assert.match(res.data.message, /isn't set up for this version/);
   assert.equal(await count("identities", "subject = 'foreign'"), 0);
 });
 
@@ -117,7 +95,7 @@ test("keys that can't be fetched are 503, not a refusal: the person did nothing 
     useIdTokens(idTokensWith({ apple: down(error), google: good }));
     const res = await api.apple({ id_token: await appleToken(keys, newSub()) });
     assert.equal(res.status, 503, error.name);
-    assert.equal(res.data.error, "We couldn't reach Apple just now. Please try again.");
+    assert.deepEqual(said(res), ["provider_down", "We couldn't reach Apple just now. Please try again."]);
   }
   useIdTokens(idTokensWith({ apple: createLocalJWKSet({ keys: [keys.apple.jwk] }), google: good }));
 });
@@ -128,7 +106,7 @@ test("Google answers 503 until it's set up", { skip }, async () => {
   try {
     const res = await api.google({ id_token: "anything" });
     assert.equal(res.status, 503);
-    assert.equal(res.data.error, "Google sign-in isn't set up yet.");
+    assert.deepEqual(said(res), ["not_set_up", "Google sign-in isn't set up yet."]);
   } finally {
     process.env.GOOGLE_CLIENT_IDS = saved;
   }
@@ -145,7 +123,7 @@ test("Apple with no link: a name, then a role, then their own family; the same a
   assert.equal(await count("identities", "subject = $1", [sub]), 0, "nothing is made");
   const noRole = await api.apple({ id_token: token, name: "Asha" });
   assert.equal(noRole.status, 400);
-  assert.equal(noRole.data.error, "role must be cook or learner");
+  assert.deepEqual(said(noRole), ["invalid", "role must be cook or learner"]);
   const made = await api.apple({ id_token: token, name: "Asha", role: "cook", device_label: "iPhone" });
   assert.equal(made.status, 200);
   assert.deepEqual([made.data.existing, made.data.joined, made.data.family_name], [false, false, "Asha's family"]);
@@ -236,11 +214,11 @@ test("expired and revoked links get 410 with their sentence and make nothing; un
   const expired = await makeJoinLink(f.id, mom, { expires: "2026-01-01T00:00:00Z" });
   const res = await api.apple({ id_token: await appleToken(keys, newSub()), join_token: expired.token, name: "Late", role: "learner" });
   assert.equal(res.status, 410);
-  assert.deepEqual([res.data.error, res.data.status], ["This link expired.", "expired"]);
+  assert.deepEqual([...said(res), res.data.status], ["gone", "This link expired.", "expired"]);
   const revoked = await makeJoinLink(f.id, mom);
   await db().query(`update join_links set revoked_at = now() where id = $1`, [revoked.id]);
   const off = await api.apple({ id_token: await appleToken(keys, newSub()), join_token: revoked.token, name: "Late", role: "learner" });
-  assert.deepEqual([off.status, off.data.error], [410, "This link was turned off."]);
+  assert.deepEqual([off.status, ...said(off)], [410, "gone", "This link was turned off."]);
   assert.equal((await api.apple({ id_token: await appleToken(keys, newSub()), join_token: "Z".repeat(22), name: "Late" })).status, 404);
   assert.equal((await api.apple({ id_token: await appleToken(keys, newSub()), join_token: "short", name: "Late" })).status, 404);
   assert.equal(await count("people", "family_id = $1 and name = 'Late'", [f.id]), 0);
@@ -292,7 +270,7 @@ test("a known account in another family gets needs_move and nothing changes; mov
   assert.equal(await count("identities", "person_id = $1", [m.old.data.profile_id]), 0);
   assert.equal(await count("identities", "subject = $1 and person_id = $2", [m.sub, moved.data.profile_id]), 1);
   // A moved person: the old phone, the old session and the old face are all refused.
-  assert.equal((await api.get("/family", device(m.old.data.device_key))).data.error, SIGNED_OUT);
+  assert.deepEqual(said(await api.get("/family", device(m.old.data.device_key))), ["signed_out", SIGNED_OUT]);
   assert.equal((await api.get("/v1/me", bearer(session))).status, 401);
   assert.equal((await api.post("/v1/sessions/start", { deviceKey: m.old.data.device_key, profileId: m.old.data.profile_id })).status, 401);
   assert.deepEqual(await notes(m.oldFamily), ["Zed left"]);
@@ -358,15 +336,15 @@ test("a removed person trying every proof: their phone, their session, their acc
   const otherPhone = await makeDevice(f.id, mom);
   assert.equal((await api.post(`/profiles/${person}/remove`, {}, device(joined.data.device_key, person))).status, 200);
 
-  assert.equal((await api.get("/family", device(joined.data.device_key))).data.error, SIGNED_OUT, "their phone");
+  assert.deepEqual(said(await api.get("/family", device(joined.data.device_key))), ["signed_out", SIGNED_OUT], "their phone");
   assert.equal((await api.get("/v1/me", bearer(sessionToken))).status, 401, "their session, at once");
   assert.equal((await api.post("/v1/sessions/start", { deviceKey: joined.data.device_key, profileId: person })).status, 401);
   const asThem = await api.post("/v1/sessions/start", { deviceKey: otherPhone.key, profileId: person });
-  assert.deepEqual([asThem.status, asThem.data.error], [403, "That person isn't in this family anymore."], "someone else's phone can't mint one for them");
+  assert.deepEqual([asThem.status, ...said(asThem)], [403, "removed_from_family", "That person isn't in this family anymore."], "someone else's phone can't mint one for them");
   assert.equal((await api.post("/invites", {}, device(otherPhone.key, person))).status, 403);
   assert.equal(await count("identities", "person_id = $1", [person]), 0);
   const claim = await api.apple({ id_token: await appleToken(keys, newSub()), join_token: link.token, claim_profile_id: person });
-  assert.deepEqual([claim.status, claim.data.error], [409, "That person isn't in this family."]);
+  assert.deepEqual([claim.status, ...said(claim)], [409, "not_in_family", "That person isn't in this family."]);
   // Their account is free: they can come back through the link, as a new person.
   assert.equal((await api.apple({ id_token: token })).data.needs_name, true);
   const back = await api.apple({ id_token: token, join_token: link.token, name: "Leaver", role: "learner" });
@@ -415,7 +393,7 @@ test("a ticket joins once per card side, with the side's role; the family comes 
   for (const again of [ticket, signTicket(SECRET, payload({ fam, card, side: "cook", jti: "ZZZZZZZZZZZZZZZZ" }))]) {
     const res = await api.apple({ id_token: await appleToken(keys, newSub()), link_ticket: again, name: "Stranger" });
     assert.equal(res.status, 409);
-    assert.equal(res.data.error, "This link already brought someone in. Ask them for an invite.");
+    assert.deepEqual(said(res), ["link_used", "This link already brought someone in. Ask them for an invite."]);
   }
   assert.equal(await count("people", "family_id = $1 and name = 'Stranger'", [f.id]), 0);
   assert.equal((await api.apple({ id_token: await appleToken(keys, newSub()), link_ticket: signTicket(SECRET, payload({ fam, card, side: "kid", name: "Kid" })), name: "Kid" })).status, 200, "the other side is its own");
@@ -448,7 +426,7 @@ test("a name already in the family claims nobody, makes nothing, and the side st
   const ticket = signTicket(SECRET, payload({ fam, card }));
   const taken = await api.apple({ id_token: await appleToken(keys, newSub()), link_ticket: ticket, name: "mom" });
   assert.equal(taken.status, 409);
-  assert.equal(taken.data.error, "Mom is already in this family");
+  assert.deepEqual(said(taken), ["name_taken", "Mom is already in this family"]);
   assert.equal(await count("signups", "share_token = $1", [`link:${card}:cook`]), 0, "the side stays open");
   assert.equal((await api.apple({ id_token: await appleToken(keys, newSub()), link_ticket: ticket, name: "Amma" })).status, 200);
 });
@@ -463,7 +441,7 @@ test("bad, forged and expired tickets get 403; no secret 503; both kinds of link
   for (const [name, ticket] of Object.entries({ forged, expired, tampered, junk: "nope", extra: `${good}.x` })) {
     const res = await api.apple({ id_token: token, link_ticket: ticket, name: "Nope" });
     assert.equal(res.status, 403, name);
-    assert.equal(res.data.error, "This link didn't work. Open it again.", name);
+    assert.deepEqual(said(res), ["ticket_expired", "This link didn't work. Open it again."], name);
   }
   assert.equal((await api.apple({ id_token: token, link_ticket: 5, name: "Nope" })).status, 400);
   assert.equal((await api.apple({ id_token: token, join_token: "A".repeat(22), link_ticket: good })).status, 400);
@@ -540,12 +518,13 @@ test("a claim is refused for someone with a live phone or an account, another fa
   await db().query(`update people set removed_at = now() where id = $1`, [removed]);
   const elsewhere = await makePerson((await makeFamily()).id, "Elsewhere", "kid");
   const attempt = async (id: string) => api.apple({ id_token: await appleToken(keys, newSub()), join_token: link.token, claim_profile_id: id });
-  assert.deepEqual([(await attempt(phone)).status, (await attempt(phone)).data.error], [409, "That person is already on homecookd."]);
-  assert.equal((await attempt(accounted)).data.error, "That person is already on homecookd.");
+  const onPhone = await attempt(phone);
+  assert.deepEqual([onPhone.status, ...said(onPhone)], [409, "already_joined", "That person is already on homecookd."]);
+  assert.deepEqual(said(await attempt(accounted)), ["already_joined", "That person is already on homecookd."]);
   for (const id of [removed, elsewhere]) {
     const res = await attempt(id);
     assert.equal(res.status, 409);
-    assert.equal(res.data.error, "That person isn't in this family.");
+    assert.deepEqual(said(res), ["not_in_family", "That person isn't in this family."]);
   }
   assert.equal((await attempt("not-a-uuid")).status, 400);
 });
@@ -621,7 +600,7 @@ test("Apple via a recipe link: joins as a learner by default; only an invited, n
 
   const taken = await api.apple({ id_token: await appleToken(keys, newSub()), share_token: token, name: "Mom" });
   assert.equal(taken.status, 409);
-  assert.equal(taken.data.error, "Mom is already in this family. Try another name.");
+  assert.deepEqual(said(taken), ["name_taken", "Mom is already in this family. Try another name."]);
 
   const dad = await makePerson(f.id, "Dad");
   assert.equal((await api.apple({ id_token: await appleToken(keys, newSub()), share_token: token, name: "Dad" })).status, 409, "a face with no invite can't be claimed");
@@ -635,7 +614,7 @@ test("Apple via a recipe link: joins as a learner by default; only an invited, n
   for (let i = 0; i < 3; i += 1) assert.equal((await api.apple({ id_token: await appleToken(keys, newSub()), share_token: token, name: `Extra ${i}` })).status, 200);
   const full = await api.apple({ id_token: await appleToken(keys, newSub()), share_token: token, name: "Sixth" });
   assert.equal(full.status, 403);
-  assert.equal(full.data.error, "This link is full. Ask your family for a new one.");
+  assert.deepEqual(said(full), ["link_full", "This link is full. Ask your family for a new one."]);
 
   const dead = await api.apple({ id_token: await appleToken(keys, newSub()), share_token: "NOSUCHLINK", name: "Dead Link" });
   assert.equal(dead.status, 200, "a recipe link that no longer works still means a learner, with their own family");
@@ -664,7 +643,7 @@ test("the sentence on a 429 is the old one, with retry-after", { skip }, async (
   const ip = "192.0.2.51";
   for (let i = 0; i < 30; i += 1) await api.apple({ id_token: "junk" }, ip);
   const res = await api.apple({ id_token: "junk" }, ip);
-  assert.equal(res.data.error, "Too many attempts. Please wait a few minutes.");
+  assert.deepEqual(said(res), ["rate_limited", "Too many attempts. Please wait a few minutes."]);
   assert.ok(Number(res.headers["retry-after"]) > 0);
   await clearLimits();
 });

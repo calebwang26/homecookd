@@ -140,7 +140,7 @@ test("a forged cursor of the right shape is a 400 on every list: a date that can
     for (const at of BAD_TIMES) {
       const r = await call(t, serene, "GET", `${path}?cursor=${encode(parts(at))}`);
       assert.equal(r.status, 400, `${path} ${at}: ${JSON.stringify(r.data)}`);
-      assert.equal(r.data.error, "bad_request");
+      assert.deepEqual([r.data.error, r.data.field], ["invalid", "cursor"]);
     }
     // A real date in that shape is still a page, not a refusal.
     assert.equal((await call(t, serene, "GET", `${path}?cursor=${encode(parts("2026-02-28 23:59:59.123456+05:30"))}`)).status, 200, path);

@@ -4,7 +4,7 @@
 // file's key, so it isn't in config.fileKeys. Tested per route in jobs.test.ts.
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { requireSession, signedIn } from "../../auth.js";
-import { ApiError } from "../../errors.js";
+import { forbidden, invalid } from "../../errors.js";
 import * as service from "./service.js";
 import * as uploads from "./uploads.js";
 
@@ -20,7 +20,7 @@ const trace = (req: FastifyRequest) => String(req.id);
 
 function idempotencyKey(req: FastifyRequest): string {
   const key = req.headers["idempotency-key"];
-  if (typeof key !== "string" || !IDEMPOTENCY.test(key)) throw new ApiError(400, "bad_request");
+  if (typeof key !== "string" || !IDEMPOTENCY.test(key)) throw invalid("Idempotency-Key");
   return key;
 }
 
@@ -82,7 +82,7 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
   // cloud/signer's POST
   app.post("/v1/video-uploads", { schema: { body: askForUploads } }, async (req, reply) => {
     const signed = signedIn(req);
-    if (signed.role !== "cook") throw new ApiError(403, "forbidden");
+    if (signed.role !== "cook") throw forbidden();
     const { status, body } = await uploads.requestUpload(signed, (req.body as { videos: uploads.VideoAsked[] }).videos, idempotencyKey(req));
     return reply.code(status).send(body);
   });
