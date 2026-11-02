@@ -5,25 +5,29 @@ Oct 31, 2028; $100 expires Oct 17, 2027). Claude stays billed by Anthropic, and 
 
 **Staying outside AWS:** Cartesia, Apple, Expo/EAS, Moss for now, and Claude. Vercel goes too (phase 7, Caleb, Oct 31).
 
+**The switch-over plan is `docs/build/CUTOVER.md`:** one switch, Caleb's decision on Nov 2. 1.0 stays unreleased after Apple approves it, and 1.1, on the AWS api only, is the first public version.
+
 ## Rules for every phase
 
 - **Caleb's OK in chat, each time, for:** switching live traffic, touching production data, changing DNS, changing Cloud
   Run, Convex, Supabase or GCS, anything likely to add over $300 a month, and deleting anything this work didn't create.
 - **While Apple reviews 1.0 (build 6):** no EAS production updates, no Supabase `api` deploy, and nothing that changes
   what build 6 calls.
-- **Old addresses stay up until no phone uses them.** Build 6 has them compiled in, so the old services can't be
-  turned off when a phase ends. They go only when the app versions that call them are gone. Supabase's `api` can count
-  which builds still call it, read from each request's user agent. It's built and switched off (`LOG_APP_BUILDS`,
-  `docs/build/CUTOVER.md`, step 13).
-- Each step has a way back that takes minutes, until the old system is switched off for good.
+- **Old addresses stay up until no phone uses them.** Build 6 has them compiled in, but 1.0 is never released (Nov 2),
+  so only TestFlight builds and Apple's reviewer call them. They go when those are done with (CUTOVER.md, "After 1.1 is
+  out"). Supabase's `api` can count which builds still call it, read from each request's user agent. It's built and
+  switched off, and optional now (`LOG_APP_BUILDS`, CUTOVER.md, "Counting app builds").
+- Each step has a way back that takes minutes, until 1.1 is released. After that real families are on AWS only, and a
+  problem is fixed forward (CUTOVER.md, step 10).
 
 ## How the rewrite ships (Caleb, Oct 31)
 
 One long-lived branch, `aws-migration`, with one reviewable PR per area merged into it. **Nothing from it reaches `main` or production until
 Apple approves 1.0.** Merges into it do auto-deploy to staging, and once Caleb creates its role they apply staging's Terraform too, through a
-safety check. That makes a merge here a real gate, held only by the Master Agent's review (`infra/README.md`, "Merges apply staging"). After approval: app 1.1 with our own addresses first, then each area switches over on its own, with
-Convex as its way back until it's proven. Build 6 keeps calling the old services, so they stay up until those phones have
-updated. `main` keeps changing `convex/` meanwhile, so the branch merges `main` often and ports each change.
+safety check. That makes a merge here a real gate, held only by the Master Agent's review (`infra/README.md`, "Merges apply staging"). After approval (one switch, Caleb, Nov 2): 1.0 stays unreleased, production is built and proven, and
+1.1, which talks only to the AWS api, is proven on TestFlight and released as the first public version (`docs/build/CUTOVER.md`).
+The old services stay up for TestFlight builds until they're done with. `main` keeps changing `convex/` meanwhile, so the
+branch merges `main` often and ports each change.
 
 **The goal is a backend built to `docs/build/SYSTEM-DESIGN.md`, not only a move of hosting.**
 
@@ -34,8 +38,9 @@ In his words: "1. we're building the migration so that RIGHT when our app gets a
 The second is a hard rule. The first can't be literal, because a merge can't move data, DNS, phones or production. So the merge changes nothing live, every behavior sits behind a switch that defaults to today's, and `docs/build/CUTOVER.md` lists the steps after it. `scripts/check-merge-safe.mjs` checks the merge on every PR.
 
 **Before the rewrite starts:** staging fully tested, a real video job measured, and Caleb's OK on creating production,
-lifting the Supabase freeze, and any copy of real data into a test database. **Before any area switches over:** Convex backups
-running and a restore proven (phase 0).
+lifting the Supabase freeze, and any copy of real data into a test database. **Before 1.1 is submitted** (since Nov 2, in
+place of "before any area switches over"): production built and proven ("Before production launch", CUTOVER.md step 6).
+Whether Convex's scheduled backups (phase 0) still run is open (CUTOVER.md, open question 3).
 
 ### The Supabase freeze (Caleb, Oct 31)
 
@@ -56,20 +61,36 @@ and anything changing what build 6 calls, needs his separate OK.
 7. The remaining areas one at a time, with the live-updates replacement before the areas that need it.
 8. A backup copy in a separate AWS account or region. Written, off, and never applied: `docs/build/REGION-COPY.md`.
 
-### What each area must pass before it switches
+### What 1.1 must pass before it's submitted
 
-- The same behavior tests pass on old and new.
-- Old app versions keep working.
-- Old and new answers are compared on real requests, where practical.
-- Speed targets hold under load.
-- The way back has been tested.
+Since Nov 2 no area switches on its own, so this replaces "what each area must pass before it switches".
+
+- The same behavior tests pass on old and new, where the api copies a Convex or Supabase behavior.
+- 1.1 works end to end on TestFlight, against staging and then production (CUTOVER.md, steps 2 and 8).
+- Speed targets hold under load, at production's size (step 6).
+- Each step's way back has been tested, where it has one.
+
+Dropped on Nov 2: old app versions working against the new api, and old and new answers compared on real requests. No
+public phone runs 1.0.
 
 ### Before production launch
 
-A restore drill, a deliberately killed service, a load test, and these gaps closed: 2+ api tasks, autoscaling, HTTPS, and a
-limited database login. The login is built (Nov 2) and waits on Caleb's staging apply (`infra/README.md`, "Database logins").
+The production gate. CUTOVER.md's step 6 checks each one before 1.1 is submitted. As of Nov 2:
 
-**A budget alert reaches a person (Nov 1).** The real-models window showed the budget's alert reaching only the logs, because `REPORT_ALERT_URL` isn't set on AWS. A log alarm to the alerts topic now emails it. Before production: fire it once and see the email arrive.
+| Gate | State |
+|---|---|
+| A restore drill | Not run. RDS's backup restored to a new instance, on production |
+| A deliberately killed service | Not run |
+| A load test | Passed on staging's one small task, Nov 2 (below). Still to run at production's task size and count, over HTTPS |
+| 2+ api tasks, autoscaling | A PR for two api tasks scaling to 4 is in progress |
+| HTTPS on `api.homecookd.app` | Waits on Caleb's DNS step (CUTOVER.md, step 6). Staging has HTTPS through CloudFront since Nov 2 (#285) |
+| A limited database login | Done on staging, Nov 2 (#273, applied in #280; `infra/README.md`, "Database logins"). On in `envs/production` from the start |
+| Alarms reach a person | The budget alert's test email reached Caleb, Nov 2 (#260). Production's alerts topic needs its email confirmed and one alarm fired |
+| Overload fails fast | Shedding built, Nov 2 (`OVERLOAD_SHED`, #271). The bounded wait also has to count event-loop lag (below) |
+| The GitHub `Production` environment has required reviewers | Not done (`infra/README.md`, "Before production") |
+| Every area's switch on, with the schedules and secrets | Not in `envs/production` yet (CUTOVER.md, "What production has on at launch") |
+
+**A budget alert reaches a person (Nov 1).** The real-models window showed the budget's alert reaching only the logs, because `REPORT_ALERT_URL` isn't set on AWS. A log alarm to the alerts topic now emails it. Fired on staging on Nov 2, and the email reached Caleb. On production: the same, once.
 
 **A production gate: overload (Master Agent, Nov 1).** Today, with all connections busy, a request waits 5 s then answers a 500. Before
 production: a bounded wait queue that fails fast with a 503 and `retry-after`; the load balancer's health check stays as it is; an alarm on
@@ -109,14 +130,16 @@ time is set by Caleb's approvals, reviews, Apple, phones updating, and proof und
 
 ## Waiting on Apple's approval of 1.0
 
-Decided by Caleb on Oct 31. **To build, and blocked until the App Store approves the app:**
+Decided by Caleb on Oct 31. **To build, and blocked until the App Store approves the app.** Since Nov 2 these come before
+1.1, not before 1.0's release, which never happens. In CUTOVER.md they're steps 4 and 5.
 
 1. **Add AWS to `/privacy`** ("Where it's kept"), as one of the companies that stores data. It stays unchanged during review.
    Owner: App Store, web & builds, under the App Review guard.
 2. **Turn on the Convex backups** once that's live. Backups copy family data to AWS, so `/privacy` has to come first. The job
    is on `main` but not applied. Steps: `infra/README.md`, "Starting the backups". Until then, **there is no scheduled
-   backup of Convex**, which still runs on a preview deployment.
-3. **Restore test,** after the first export.
+   backup of Convex**, which still runs on a preview deployment. **Open since Nov 2:** with no real family on Convex, whether
+   the job still runs (CUTOVER.md, open question 3).
+3. **Restore test,** after the first export, if item 2 runs.
 4. **Change `/privacy`'s "your one-to-one chats".** Caleb decided the other person's half stays when someone deletes their account
    (SCHEMA.md, C1), so the page must say that. Have a lawyer read the new wording. Until then the page promises more than Convex
    does today.
@@ -146,7 +169,8 @@ a deleted version for its 28-day undo window, so the bytes are fully gone about 
 
 ## Before real data
 
-Before any backfill copies real rows into Postgres:
+Before any backfill copies real rows into Postgres. Since Nov 2 that's only if CUTOVER.md's step 7 copies the demo and test
+families once. Starting fresh, every row is written by the api itself.
 
 - Seal `craving_links.token`, `dinners.invite_token` and `shares.token` (SCHEMA.md, M6). Done on the branch (Nov 2, `077`): each keeps a hash for lookup and the
   token sealed with `EDIBLE_CODE_KEY`. Still open: the backfill must write them that way too (SCHEMA.md, section 5, item 14), and the api needs `EDIBLE_CODE_KEY` before
@@ -154,35 +178,36 @@ Before any backfill copies real rows into Postgres:
 - How long raw footage is kept: decided by Caleb on Nov 2, 14 days as built (above). `/privacy` must say it accurately when it names AWS.
 - Count violations of every new uniqueness rule, CHECK and domain (SCHEMA.md, section 7).
 - The sweep reaches every bucket and row the purge can mark. Done on the branch (Nov 2): `jobs.sweep` reaches all three buckets, and the outside purge deletes the folders and
-  files `account_deletions` lists (ACCOUNTS-MIGRATION.md). Still open: GCS. A backfilled deletion with GCS links stays open until something can delete there.
+  files `account_deletions` lists (ACCOUNTS-MIGRATION.md). GCS: dropped on Nov 2, so AWS won't reach it. A backfilled deletion with GCS links still
+  stays open on the api, with its reason, and a demo family's GCS files are deleted by hand within `/privacy`'s 30 days (CUTOVER.md, "After 1.1 is out").
 - Count doubled reactions and Convex messages sent to oneself, which the new schema refuses (MESSAGES-MIGRATION.md, "Before real data").
 
 ## Cutover list
 
-The steps, in order, with who runs each and the way back: `docs/build/CUTOVER.md`. The two things this list used to ask for before `main` changed on Nov 1:
-the sync stays on the branch and goes to `main` switched off, because the steps after the merge need it, and it comes off at the end. The laptop's worker no
-longer needs `sentry-sdk`.
+The steps, in order, with who runs each and the way back: `docs/build/CUTOVER.md`, one switch since Nov 2. The sync still goes to `main` switched off with
+the merge, and it never runs on real data now. The laptop's worker no longer needs `sentry-sdk`.
 
 Before production (CUTOVER.md, step 6):
 
-- Give the worker and api a limited database login in place of the master one. **Built (Nov 2):** each has its own user
+- Give the worker and api a limited database login in place of the master one. **Done on staging (Nov 2):** each has its own user
   (`api/migrations/078_app_logins.sql`), logs in with an IAM token, and can't change the schema. Only the migrate task keeps the master
-  login. Left: Caleb's staging apply and the switch, in the order in `infra/README.md`, "Database logins". Production starts with it on.
+  login. Applied on staging in #280 (`infra/README.md`, "Database logins"). Production starts with it on.
 - Pin the workflows' actions to commit SHAs, and add a checksum for the downloaded gitleaks. Done on the branch (Nov 2): every `uses:`
   names a commit, and gitleaks is checked against its sha256 before it runs (`infra/README.md`, "Pinned actions and tools").
+- Every area's switch on in production, with staging's schedules and the secrets 1.1 needs (CUTOVER.md, "What production has on at launch").
 
-Before any new-host link exists (CUTOVER.md, step 10):
+For 1.1 on production (CUTOVER.md, steps 1 and 6). **Community's gates (`COMMUNITY-MIGRATION.md`):** Apple reviews report and block, so each of these
+exists and is tested before 1.1 is submitted:
+  - The team can act on a report: `api/src/reports.ts` lists and reviews them as a one-off task (COMMUNITY-MIGRATION.md, "The team's reports"), and it ran on staging on Nov 2. Left: a way for the team to see what a reported item is once Convex is gone (the listing prints ids only).
+  - `community.remind_open` has its daily schedule. Staging's is in Terraform (#247). Production's `schedules` has none yet, so there a report left open would never remind anyone.
+  - 1.1's own calls to these routes (App screens). They don't exist yet, and nothing has called these routes.
 
-- `supabase/functions/api/index.ts:931` must accept the new media host: it refuses an `audio_url` not on `BUCKET_URL`, so "Hear
-  Dad" from a rewritten recipe fails with a 400. Needs a Supabase deploy, so Caleb's OK.
-- `pipeline/account_purge.py`'s `media_objects` must not silently skip a host that isn't GCS, ideally failing loudly on an unknown one,
-  before any new-host link exists. Otherwise a deleted account's file on S3 stays.
-- **Community's switch gates (`COMMUNITY-MIGRATION.md`).** Apple reviews report and block, so Community doesn't switch until each of these exists and is tested:
-  - The team can act on a report: `api/src/reports.ts` lists and reviews them as a one-off task (COMMUNITY-MIGRATION.md, "The team's reports"), and it ran on staging on Nov 2. Left: a way for the team to see what a reported item is once Convex is gone (the listing prints ids only), and the app adapter below, without which no report reaches the new api.
-  - `community.remind_open` has its daily schedule. Staging's is in Terraform (#247, merged unapplied). Production's `schedules` has none yet, so there a report left open would never remind anyone.
-  - The app adapter. It doesn't exist yet, and nothing has called these routes.
+**History since Nov 2,** because no old build reads a new-host link and AWS doesn't reach GCS: `supabase/functions/api/index.ts:931` accepting the new
+media host, and `pipeline/account_purge.py`'s `media_objects` skipping a host that isn't GCS. Both were "before any new-host link exists" (the old CUTOVER.md
+step 10).
 
-Removing the temporary one-way sync of `families`, `people` and `recipes` (SCHEMA.md, M1) is the end of the list: CUTOVER.md, step 14.
+The temporary one-way sync of `families`, `people` and `recipes` (SCHEMA.md, M1) never runs on real data now. Its code can come out later
+(SYNC-MIGRATION.md, "How it's removed"), Caleb's call.
 
 ## Priorities
 
@@ -193,18 +218,22 @@ Caleb's OK anyway).
 
 ## Phases
 
-| # | Phase | What it needs | Way back |
+Since Nov 2 phases 1 and 3 to 6 land together, at 1.1's release (CUTOVER.md). The sections below each phase are the Oct 31 plan, with a note where it changed.
+
+| # | Phase | Since Nov 2 | Way back |
 |---|---|---|---|
-| 0 | Safety | Scheduled Convex exports to S3 | Nothing to undo |
-| 1 | Our own addresses | DNS change, app 1.1 | Point the addresses back; old URLs still work |
-| 2 | Foundation and staging | This PR merged, about $100 a month | `terraform destroy` on staging |
-| 3 | Worker off the laptop (voice waits for homie) | Worker code changes | Keep the laptop worker ready; switch back |
-| 4 | Media | Copy of the GCS buckets, signer replaced | Addresses point back to GCS |
-| 5 | Supabase to RDS | Production database, the shared schema | Supabase stays the source until cutover, read-only after |
-| 6 | Convex to Postgres | One area at a time, the shared schema | Per area: route back to Convex |
-| 7 | Website off Vercel | S3 + CloudFront, a deploy workflow, a DNS change | Point DNS back to Vercel, kept running for a while |
+| 0 | Safety | Convex's scheduled exports to S3: open (CUTOVER.md, open question 3). Production's own RDS and S3 backups cover 1.1, with a restore drill in step 6 | Nothing to undo |
+| 1 | Our own addresses | `api.homecookd.app` and `media.homecookd.app` point straight at production, with no forwarding (step 6). 1.1 calls only them | Before release, remove the records |
+| 2 | Foundation and staging | Done: staging up since Oct 31, with HTTPS, test sign-in and accounts on since Nov 2 | `terraform destroy` on staging |
+| 3 | Worker off the laptop (voice waits for homie) | The queue worker runs in production from the start, sized by a real video job (step 6). The laptop worker stays for the old builds | Before release, nothing public uses it |
+| 4 | Media | 1.1 uploads to and reads from S3. GCS is copied once, or not at all (step 7) | Before release, delete the copies |
+| 5 | Supabase to RDS | 1.1 never calls Supabase. Its data is copied once, or not at all (step 7) | The same |
+| 6 | Convex to Postgres | Every area at once, each switch on in production from the start | The same. After release, fix forward |
+| 7 | Website off Vercel | The site's pages call the api from 1.1's release (step 10). When its hosting moves is open (CUTOVER.md, open question 5) | Point DNS back to Vercel, kept running for a while |
 
 ### 0. Safety
+**Since Nov 2:** no real family lands on Convex, so whether this job still runs is open (CUTOVER.md, open question 3).
+
 Convex runs on `grand-dragon-649`, a **preview** deployment. Its expiry was cleared on Oct 25, but it is still a preview,
 and moving to a Convex production deployment would change the URL that build 6 calls. So: a scheduled
 `npx convex export --include-file-storage` to a private, versioned S3 bucket, and one test restore into a throwaway
@@ -228,6 +257,9 @@ account is, so deleting an account's data stays in our code (`convex/account.ts`
 its schedule moves to EventBridge. The same rules in code; AWS only runs them on time.
 
 ### 1. Our own addresses
+**Replaced on Nov 2:** no forwarding. `api.homecookd.app` and `media.homecookd.app` point straight at production (CUTOVER.md, step 6), and 1.1
+calls only them. With homie off, 1.1 calls no voice address. The rest of this section is history.
+
 Ship `api.homecookd.app`, `media.homecookd.app` and a voice address in app 1.1, alongside the edible-to-homecookd rename.
 At first they only forward to today's Supabase, Convex, Cloud Run and GCS, so nothing moves. Every later phase then becomes
 a server-side switch with no app release.
@@ -257,6 +289,9 @@ disk and minutes, then choose Fargate or EC2. A cloud worker is a clear reliabil
 and an address its firmware can reach.
 
 ### 4. Media
+**Since Nov 2:** one pass or none (CUTOVER.md, step 7). Keeping two stores in step, old builds keeping the signer, and the purge
+reaching both stores (items 1, 3 and 4 below) are history. A demo family's GCS files are deleted by hand.
+
 1. Copy `edible-media-*` to S3 and keep copying new files. Read `pipeline/publish.py` first: it stores full
    `storage.googleapis.com` links in `recipe.json` and Convex, and `account_purge.py` only accepts that host. Stored links
    need rewriting or both hosts must work.
@@ -292,9 +327,13 @@ What makes it hard:
   but the server needs a replacement: job progress, messages and recording state need a WebSocket or polling.
 - **Transactions.** Every Convex mutation retries automatically on conflict. Postgres code has to handle this itself.
 - **IDs.** Keep Convex's ids as text keys, so links and references carry over.
-- **Build 6 and 1.0 phones** call Convex by function name, so Convex stays up until they're gone. Convex's functions
-  never see a request's headers, so they can't tell which build calls. Every signed-in phone also calls Supabase when it
-  opens, so Supabase's count stands in (CUTOVER.md, step 13).
+- **Build 6 and 1.0 phones** call Convex by function name, so Convex stays up until they're gone. Since Nov 2 those are
+  only TestFlight builds and Apple's reviewer. Convex's functions never see a request's headers, so they can't tell which
+  build calls. Every signed-in phone also calls Supabase when it opens, so Supabase's count stands in (CUTOVER.md,
+  "Counting app builds").
+
+**Replaced on Nov 2:** every area at once, each switch on in production from the start (CUTOVER.md, "What production has on
+at launch"). The order and the per-area freeze below are history.
 
 **Order, least-connected first:**
 1. The shared schema and api skeleton from the build order, session checks (read from Convex at first), test harness.
@@ -308,7 +347,8 @@ Each area: copy its data, freeze writes for a short planned window, switch its r
 back until the area is proven. Tables that cross areas are the risk, so each area's PR lists them first.
 
 ### 7. Website off Vercel
-What's built, the path table and the switch: `docs/build/WEB-MIGRATION.md`.
+What's built, the path table and the switch: `docs/build/WEB-MIGRATION.md`. **Since Nov 2:** the site's pages call the AWS api from 1.1's
+release (CUTOVER.md, step 10), wherever the site is hosted. Moving the hosting with the release or after it is open (open question 5).
 
 Added by Caleb on Oct 31, under the same rule: built on the migration branch, merged only after Apple approves. **This is
 the easiest piece.** `web/` is already a static export (`output: "export"` in `web/next.config.ts`), with no server code,
