@@ -6,6 +6,7 @@
 //   src/lib/aws/accounts.ts  sign-in keeps the key it was given
 //   src/lib/api.ts           with the switch on, the screens' calls go to the AWS api with the same paths and
 //                            headers; the api's own "signed out" is heard once; a gateway's 401 never signs out
+//   src/lib/aws/errorWords.ts the person's own words by code, in their language; an unknown code shows the api's sentence
 //   node scripts/test-aws.mjs
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
@@ -28,6 +29,8 @@ const C = await import(pathToFileURL(join(root, 'src/lib/aws/client.ts')).href);
 const A = await import(pathToFileURL(join(root, 'src/lib/aws/accounts.ts')).href);
 const cfg = await import(pathToFileURL(join(root, 'src/lib/aws/config.ts')).href);
 const API = await import(pathToFileURL(join(root, 'src/lib/api.ts')).href);
+const W = await import(pathToFileURL(join(root, 'src/lib/aws/errorWords.ts')).href);
+const WORDS = await import(pathToFileURL(join(root, 'src/lib/words/words.ts')).href);
 
 let passed = 0;
 const test = async (name, fn) => {
@@ -285,6 +288,28 @@ await test('switch on: the screens\' calls go to the AWS api with the phone key,
   assert.equal(calls[0].headers['x-profile-id'], undefined, 'the family loads for the phone, as on Supabase');
   assert.equal(calls[1].headers['x-profile-id'], 'p-mom');
   assert.deepEqual(calls[1].body, {});
+});
+
+await test('error words: by code in her language, by kind when the code is new, else the api\'s sentence', () => {
+  const ta = WORDS.wordsFor('ta');
+  const full = E.readError(409, JSON.stringify({ error: 'full', message: 'Every seat is taken.' }), null);
+  assert.equal(W.errorWords(full), 'Every seat is taken.');
+  assert.equal(W.errorWords(full, ta), ta('errors.full'));
+  assert.equal(W.errorWords(E.readError(404, '{"error":"no_route"}', null)), W.errorWords(E.readError(503, '<html/>', null)), 'no_route reads as down');
+  assert.equal(W.errorWords(E.readError(409, JSON.stringify({ error: 'brand_new_code', message: 'A new refusal.' }), null)), 'A new refusal.');
+  assert.equal(W.errorWords(E.readError(409, JSON.stringify({ error: 'Nani is already in this family' }), null)), 'Nani is already in this family');
+  assert.equal(W.errorWords(E.readError(429, JSON.stringify({ error: 'rate_limited' }), '5')), WORDS.english('errors.rate_limited'));
+  assert.equal(W.errorWords(E.networkError(true)), WORDS.english('errors.timeout'));
+});
+
+await test('switch on: a refusal with a code reads in her language; the session still sees the code', async () => {
+  API.setApiAuth({ deviceKey: 'aws-key-5', code: null, profileId: 'p-mom' });
+  API.setApiLanguage('hi');
+  fakeApi({ 'POST /profiles': [{ status: 409, body: { error: 'name_taken', message: 'Nani is already in this family', requestId: 'r' } }] });
+  const e = await caught(API.api.createProfile({ name: 'Nani', role: 'cook' }));
+  assert.equal(e.message, WORDS.wordsFor('hi')('errors.name_taken'));
+  assert.equal(e.body.error, 'name_taken');
+  API.setApiLanguage(null);
 });
 
 await test("switch on: the api's sentence comes back as the ApiError screens already show", async () => {

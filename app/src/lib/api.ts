@@ -24,7 +24,9 @@
 
 import { AWS_ON } from './aws/config';
 import { onDeadKey, request as awsRequest, setAwsCredentials, type RequestOpts } from './aws/client';
+import { errorWords } from './aws/errorWords';
 import { isAwsError } from './aws/errors';
+import { wordsFor } from './words/words';
 
 // Public addresses, so a store build works without app/.env (EAS cloud builds never see that
 // gitignored file, and an empty API_URL made every sign-in fail). .env still overrides them.
@@ -429,6 +431,12 @@ let auth: AuthState = { deviceKey: null, code: null, profileId: null };
 let signedOutHandler: ((message: string) => void) | null = null;
 let profileRemovedHandler: ((profileId: string) => void) | null = null;
 
+/** 1.1: the language the AWS api's refusals are shown in (the words provider sets it). */
+let errorLanguage: string | null = null;
+export function setApiLanguage(lang: string | null) {
+  errorLanguage = lang;
+}
+
 export function setApiAuth(next: Partial<AuthState>) {
   auth = { ...auth, ...next };
   if (AWS_ON) setAwsCredentials({ deviceKey: auth.deviceKey, personId: auth.profileId });
@@ -551,10 +559,11 @@ async function awsOnce<T>(path: string, o: CallOpts): Promise<T> {
     return await awsRequest<T>(path, opts);
   } catch (e) {
     if (!isAwsError(e)) throw e;
-    if (e.kind === 'network') throw new ApiError(e.code === 'timeout' ? 'That took too long. Check your connection and try again.' : "Can't reach homecookd right now. Check your connection.", 0, e.code === 'timeout' ? 'timeout' : 'network');
-    const msg = e.status >= 500 && !e.code ? 'Something went wrong on our side. Try again.' : e.message;
+    // The person's own words for its code, in their language (lib/aws/errorWords.ts).
+    const msg = errorWords(e, wordsFor(errorLanguage));
+    if (e.kind === 'network') throw new ApiError(msg, 0, e.code === 'timeout' ? 'timeout' : 'network');
     // The person this phone is acting as was removed, or now has their own phone: pick someone else.
-    if (e.status === 403 && authed && pid && pid === auth.profileId && (e.code === 'removed_from_family' || e.code === 'own_phone' || /\bremoved\b|uses their own phone/i.test(msg))) {
+    if (e.status === 403 && authed && pid && pid === auth.profileId && (e.code === 'removed_from_family' || e.code === 'own_phone' || /\bremoved\b|uses their own phone/i.test(e.message))) {
       auth = { ...auth, profileId: null };
       try {
         profileRemovedHandler?.(pid);
