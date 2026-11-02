@@ -78,10 +78,15 @@ Left as it is: Messages and Jobs both clear pending sends and spare uploads, bec
 
 ### Outside the database: read this before calling deletion finished
 
-`purgeOutside` deletes the Cartesia voice clone, and reports on the rest. **It doesn't reach most of S3 yet, and it says so.** The sweep reaches only the private bucket: anonymous uploads and anything a deletion marked there (AWS-MIGRATION.md, "Before real data"). It can't reach `media`, and nothing here can list a folder. So a deletion holding any of these keeps `external_purged_at` null, with the reason in `external_error` ("Not reached yet: 2 upload folders; ..."):
+`purgeOutside` deletes the Cartesia voice clone at once. Then it waits as long as the sweep does, 7 hours after the purge, because a link still in a phone's hands, the glasses' last upload or the worker finishing a job it was on could put a file back in a folder after it's emptied. Then it deletes from S3 what `account_deletions` lists and no `files` row names (`outside.ts`):
 
-- files marked by this deletion or owned by the person, and not yet deleted, which leaves `media`'s once the sweep has run;
-- `upload_keys`, `media_keys`, `media_prefixes`, `media_urls_legacy`.
+- `upload_keys` in `uploads`: each file, and each one-segment folder (`<upload id>/`) with everything in it;
+- `media_prefixes` in `media`: her recipe folders, and the folder each of her jobs publishes to;
+- `media_keys` in `media` with no row in the ledger. A key with a row is the sweep's, and `jobs.sweep` now reaches all three buckets.
+
+It deletes nothing still in use: a folder or file that a job, recipe, recording or unmarked `files` row names, a folder that isn't one segment as the worker and the signer name them, the bucket's own folders (`library/`, `jobs/`, `trash/`, `glasses/` and the rest), the public library, or a folder holding more than 5,000 files. Each of those keeps `external_purged_at` null, with the reason in `external_error` ("Not reached yet: 1 media folders still in use"), and so do files marked by this deletion or owned by the person and not yet swept, and GCS links (`media_urls_legacy`). An S3 failure is named by bucket and error type only, because S3's text can hold the account and the bucket. Out of time (60 s), it carries on in a new message, which doesn't count as an attempt. `external_counts` adds up what each attempt deleted.
+
+After a delete, S3's versioning keeps the bytes 28 days, inside `/privacy`'s 30, and the CDN can serve a cached copy for up to a day (the media cache policy's default; the worker's files say an hour). **Nothing here reaches GCS:** while Convex is the source, `account_purge.py` deletes there. After the switch GCS's copies still have to go for as long as GCS exists (MEDIA-MIGRATION.md), and how AWS reaches Google is Caleb's call, so a deletion holding GCS links stays open until that's built.
 
 It tries again with waits doubling from 10 minutes to a day, and after 10 tries raises `AccountOutsidePurgeGaveUp`. A person restarts it with `retryOutside`. **This must be built before real data or the switch**, and `/privacy` promises depend on it.
 
@@ -182,7 +187,7 @@ Everything in SCHEMA.md section 3, "Sessions and accounts", is used as written, 
 **Dependency:** `jose` 5.10.0.
 
 **App Review guard.** This is on the sign-in and delete-account paths, so **before this switches:** a per-guideline check in that PR, and the reviewer notes, App Store answers and legal pages updated with it. What I expect it to find:
-- **5.1.1(v):** delete account behaves the same on the phone, and revocation is kept. **But `/privacy` promises deletion within 30 days, and S3 isn't reached yet, so it can't switch until that's built.** It also needs "your one-to-one chats" changed (C1) and AWS added, both already on AWS-MIGRATION's list.
+- **5.1.1(v):** delete account behaves the same on the phone, and revocation is kept. `/privacy` promises deletion within 30 days: every S3 bucket is reached now, and **GCS isn't, so it can't switch while a deleted account can still have files there.** It also needs "your one-to-one chats" changed (C1) and AWS added, both already on AWS-MIGRATION's list.
 - **4.8:** unchanged. **2.1:** the reviewer's TEST family link with no expiry is tested here; the TEST family's code and faces are data, and a backfill must keep them.
 - **Nothing changes for build 6,** which keeps calling the old services.
 
@@ -194,7 +199,7 @@ Leaving signs a person out and frees their Apple login in one transaction (`remo
 
 ## Known limits
 
-- **The outside purge doesn't reach most of S3,** as above. This blocks real data.
+- **The outside purge doesn't reach GCS,** as above. It reaches every S3 bucket, with fakes only: no real folder has been listed or deleted on S3, and the api needs `s3:ListBucket` on `media` applied first.
 - **A phone with no person of its own gets no session (`POST /v1/sessions/start`):** 403 "Add yourself first.", whether it came by invite or by code (Caleb, Nov 1). Convex's `sessions.start` answers a code phone today, so the adapter has to send one to add itself first. Build 1.1 has no codes, and the switch is off, so this has no App Review effect. It can't write as an existing phone-less person either, so nothing makes the phone theirs: it adds itself (`POST /profiles/self`). No 1.0 build ever calls this api, and the sync is one-way into Postgres, so old builds aren't affected. `device_needs_profile` is true for both kinds here, where Supabase's says only an opened invite.
 - **A solo move deletes a face that can't come along** (the new family has that name, or is full). `needs_move` returns them as `would_delete`, and the app must warn before it sends `move: true`.
 - **When the last signed-in person leaves, what they left stays stored with no way in.** Leaving isn't deleting: their recipes and messages stay under the old row, unless they moved with `solo`. It's the same gap as someone who left and came back, and it's Caleb's call.
