@@ -91,9 +91,10 @@ follows it, and it wins over the docs below on UI/UX and flows.
   Supabase edge-function secrets (which key goes where: `docs/build/STACK.md`, "Keys").
 - **Where the checkout lives (Nov 2):** `/Users/calebwang/GitHub/homecookd/homecookd`, outside iCloud, next to
   `homecookd-backups` in the same `homecookd` folder (Caleb dropped the `hackathon-` from the folder name and, on Nov 2,
-  renamed the GitHub repo to `calebwang26/homecookd`; the old repo URL redirects). Two symlinks point at it and stay: `~/hackathon-homecookd` (the
-  Nov 1 home of the checkout; the worktrees' git metadata still names it) and `~/Documents/GitHub/hackathon-homecookd`
-  (the app won't move a session that runs in one of its worktrees). Every tracked file, script and `.env` link names
+  renamed the GitHub repo to `calebwang26/homecookd`; the old repo URL redirects). One symlink points at it and stays:
+  `~/Documents/GitHub/hackathon-homecookd` (the app won't move a session that runs in one of its worktrees); the
+  worktrees' git metadata names the real path.
+  Every tracked file, script and `.env` link names
   the real path. Never put the repo back under `~/Documents` (or any iCloud folder): iCloud evicts files there
   ("dataless"), and git, rsync and `mv` all hang on them. The worktrees' installed packages (`node_modules`, `.venv`,
   `web/.next`) were not copied in the Nov 1 move: run `npm ci` in a worktree that needs them.
