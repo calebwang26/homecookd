@@ -20,6 +20,7 @@ scripts/create-backup-key.sh   makes the Convex key for backups and stores it, u
 scripts/web-sync.sh, web-smoke.mjs   publish the website; check a running copy of it
 scripts/plan_check.py, test_plan_check.py   the safety check on staging's plans, and its tests
 scripts/simulate_apply_role.py   asks AWS's simulator what the apply role can and can't do; read-only
+scripts/load-test.mjs   the api's load test: 50 a second for 15 minutes, then a burst; staging on fake models only
 ```
 
 `.github/workflows/deploy-aws.yml` builds one service and rolls it out. It's manual and stores no keys.
@@ -38,6 +39,7 @@ cd infra/backup-copy && terraform init -backend=false && terraform test   # also
 # the website's CloudFront Function, against a real build
 cd web && npm ci && npm run build && cd .. && node --test infra/modules/web/rewrite.test.mjs
 node infra/scripts/web-smoke.mjs https://<address> [--noindex]   # reads only; the path table against a running site
+node infra/scripts/load-test.mjs http://<staging api> [--rps 50] [--minutes 15] [--burst 300]   # makes 4 made-up cards; refuses production
 
 # first time only
 cd infra/bootstrap && AWS_PROFILE=homecookd terraform init && AWS_PROFILE=homecookd terraform apply

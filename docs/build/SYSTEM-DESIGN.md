@@ -123,7 +123,9 @@ Caleb confirmed these on Oct 31, 2026.
 
 **Partly proven:** a database restore on staging (Oct 31): about 200 s of data at risk and 12 minutes to restore, on a nearly empty database with no api pointed at the copy.
 
-**Still unproven:** a timed restore with real data size and of S3, a load test, measured video jobs at several lengths on AWS, media
+**Partly proven:** the load test, on staging (Nov 2): 50 a second for 15 minutes met the speed and error targets on one small api task. It hasn't run on production's size, and overload doesn't yet fail fast (AWS-MIGRATION.md, "Load test on staging").
+
+**Still unproven:** a timed restore with real data size and of S3, measured video jobs at several lengths on AWS, media
 timing from India and the US with cache hit rate, and Sentry and request-level monitoring.
 
 **The new schema must record upload-finished and job-finished times.** Convex's `jobs` table has neither, so the video job
