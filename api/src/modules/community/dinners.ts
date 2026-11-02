@@ -7,6 +7,7 @@ import type { Signed } from "../../auth.js";
 import { db, tx } from "../../db.js";
 import { notFound, refused } from "../../errors.js";
 import { afterOf, decodeCursor, encodeCursor, type After } from "../../paging.js";
+import { DINNER_INVITE_SALT, seal, unseal } from "../../sealed.js";
 import { flagged } from "../dish/moderation.js";
 import { sha256Hex } from "../dish/values.js";
 import { familiesByIds, peopleByIds } from "../people/service.js";
@@ -218,7 +219,10 @@ export async function respondToJoin(signed: Signed, requestId: string, accept: b
 // ---------------------------------------------------------------------------------------------
 // "Invite friends"
 
-/** The dinner's one invite link, for the host or a guest they said yes to. The same link every time. */
+/**
+ * The dinner's one invite link, for the host or a guest they said yes to. The same link every time: the token is stored sealed, and only its sha256 is looked up. One
+ * that can't be opened (another key, or a dinner from before tokens were sealed) is replaced, and its old link stops working.
+ */
 export async function inviteLink(signed: Signed, dinnerId: string): Promise<{ token: string; url: string }> {
   const d = await data.dinnerById(db(), dinnerId);
   const dish = d?.recipe_id ? (await seenRecipes(db(), [d.recipe_id])).get(d.recipe_id) : null;
@@ -227,7 +231,15 @@ export async function inviteLink(signed: Signed, dinnerId: string): Promise<{ to
   if (d.host_id !== signed.personId && (await data.requestOfGuest(db(), dinnerId, signed.personId))?.status !== "accepted") {
     throw refused(403, "not_a_guest", "Only the host and their guests can invite friends.");
   }
-  const token = d.invite_token ?? (await data.keepInviteToken(db(), dinnerId, randomBytes(32).toString("base64url")));
+  const token =
+    (await unseal(DINNER_INVITE_SALT, d.id, d.invite_token_enc)) ??
+    (await tx(async (c) => {
+      const kept = await unseal(DINNER_INVITE_SALT, d.id, await data.lockInviteToken(c, d.id));
+      if (kept) return kept;
+      const fresh = randomBytes(32).toString("base64url");
+      await data.setInviteToken(c, d.id, sha256Hex(fresh), await seal(DINNER_INVITE_SALT, d.id, fresh));
+      return fresh;
+    }));
   return { token, url: `${INVITE_ORIGIN}/d?t=${token}` };
 }
 
@@ -238,7 +250,7 @@ export async function inviteLink(signed: Signed, dinnerId: string): Promise<{ to
  * TODO(caleb): this is the host's whole display name; if families put surnames in it, decide whether a link anyone can forward should show less.
  */
 export async function openInvite(token: string, deviceId: string): Promise<{ dinner: { dish: string; hostName: string; startsAt: number } | null; known: boolean }> {
-  const d = await data.dinnerByInviteToken(db(), token);
+  const d = await data.dinnerByInviteHash(db(), sha256Hex(token));
   if (!d) return { dinner: null, known: false };
   if (d.status === "cancelled" || d.hidden_at) return { dinner: null, known: true };
   if (d.recipe_id && (await seenRecipes(db(), [d.recipe_id])).get(d.recipe_id)?.hidden) return { dinner: null, known: true }; // its dish was hidden after reports

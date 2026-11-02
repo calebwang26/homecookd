@@ -6,6 +6,7 @@ import { after, test } from "node:test";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { db } from "../src/db.js";
+import { sha256Hex } from "../src/modules/dish/values.js";
 import { cravingCard, voiceUpload } from "./cravingHelpers.js";
 import {
   ADDRESS, block, call, cookTogether, dinner, family, feed, host, join, MISSING, ok, person, recipe, refusedWith, report, requestSwap, respond, respondSwap, sameAsMissing, setShared, tryHost, view, type Who, world,
@@ -356,8 +357,8 @@ test("races Convex's mutations used to stop", { skip }, async (s) => {
     const night = await host(t, rajani, poha);
     const links = await Promise.all(Array.from({ length: 5 }, () => ok(call(t, rajani, "POST", `/v1/dinners/${night}/invite-link`))));
     assert.equal(new Set(links.map((l) => l.token)).size, 1);
-    const { rows } = await db().query("select invite_token from dinners where id = $1", [night]);
-    assert.equal(rows[0].invite_token, links[0].token);
+    const { rows } = await db().query("select invite_token_hash from dinners where id = $1", [night]);
+    assert.equal(rows[0].invite_token_hash, sha256Hex(links[0].token));
   });
 });
 

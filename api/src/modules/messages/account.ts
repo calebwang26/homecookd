@@ -132,7 +132,7 @@ export async function purgeMessagesForPerson(personId: string, familyId: string,
   changed += off.rowCount ?? 0;
 
   await batches("shares", async (c, max) => {
-    const { rowCount } = await c.query(`update shares set sender_id = null where token in (select token from shares where sender_id = $1 limit $2)`, [personId, max]);
+    const { rowCount } = await c.query(`update shares set sender_id = null where id in (select id from shares where sender_id = $1 limit $2)`, [personId, max]);
     return rowCount ?? 0;
   });
   await batches("favorites", async (c, max) => {

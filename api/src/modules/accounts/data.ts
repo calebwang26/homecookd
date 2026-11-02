@@ -2,7 +2,7 @@
 // `families` or `people` goes through a function here that checks the switch (values.ts), so nothing can quietly write them while the sync owns them.
 import { createHmac, randomUUID } from "node:crypto";
 import type { Queryable } from "../../db.js";
-import { seal, FAMILY_CODE_SALT, unseal } from "./sealed.js";
+import { seal, FAMILY_CODE_SALT, unseal } from "../../sealed.js";
 import type { Who } from "./identity.js";
 import {
   assertOwnsPeople,

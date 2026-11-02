@@ -6,6 +6,7 @@ import type { Signed } from "../../auth.js";
 import { db, tx, type Queryable } from "../../db.js";
 import { notFound, refused } from "../../errors.js";
 import { afterCursor, pageOf } from "../../paging.js";
+import { CRAVING_LINK_SALT, seal, unseal } from "../../sealed.js";
 import { objectStore } from "../../storage.js";
 import { peopleByIds } from "../people/service.js";
 import type { Trace } from "./budget.js";
@@ -44,18 +45,32 @@ function messageOf(raw: string): string {
   return line;
 }
 
-/** Her craving link: her one live link, reused (a new `message` replaces its line). A new one is made when she has none, stopped it, or it made CRAVING_TOTAL cards. */
+/**
+ * Her craving link: her one live link, reused (a new `message` replaces its line). A new one is made when she has none, stopped it, or it made CRAVING_TOTAL cards.
+ * A live link whose sealed token can't be opened (another key, or a row from before tokens were sealed) gets a new one with her line, as a join link does; the old
+ * one still opens.
+ */
 export async function createLink(signed: Signed, message?: string): Promise<{ url: string }> {
   const line = message === undefined ? undefined : messageOf(message);
   return await tx(async (c) => {
     await cravingData.lockLinksOf(c, signed.personId);
-    const live = await cravingData.newestLink(c, signed.personId);
-    if (live && live.revoked_at === null && live.uses < CRAVING_TOTAL) {
+    const newest = await cravingData.newestLink(c, signed.personId);
+    const live = newest && newest.revoked_at === null && newest.uses < CRAVING_TOTAL ? newest : null;
+    const kept = live && (await unseal(CRAVING_LINK_SALT, live.id, live.token_enc));
+    if (live && kept) {
       if (line !== undefined && line !== live.message) await cravingData.setLinkMessage(c, live.id, line);
-      return { url: cravingUrl(live.token) };
+      return { url: cravingUrl(kept) };
     }
+    const id = randomUUID();
     const token = randomBase62();
-    await cravingData.insertLink(c, { familyId: signed.familyId, personId: signed.personId, token, message: line ?? DEFAULT_CRAVING_MESSAGE });
+    await cravingData.insertLink(c, {
+      id,
+      familyId: signed.familyId,
+      personId: signed.personId,
+      tokenHash: sha256Hex(token),
+      tokenEnc: await seal(CRAVING_LINK_SALT, id, token),
+      message: line ?? live?.message ?? DEFAULT_CRAVING_MESSAGE,
+    });
     return { url: cravingUrl(token) };
   });
 }

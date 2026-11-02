@@ -28,7 +28,7 @@ reference to a row that doesn't exist. A **tombstone** is a blanked row kept onl
 | `liveEvents` | `live_events` | Same |
 | `liveFrames` | `live_frames` | One row per recording, so the recording id is the primary key |
 | `liveWindows` | `live_windows` | `familyId` dropped, as above |
-| `dinners` | `dinners` | `recipe_id` may be null: another family's cancelled dinner can outlive the dish |
+| `dinners` | `dinners` | `recipe_id` may be null: another family's cancelled dinner can outlive the dish. `inviteToken` is sealed (M6) |
 | `dinnerInviteOpens` | `dinner_invite_opens` | |
 | `dinnerRequests` | `dinner_requests` | |
 | `swapRequests` | `swap_requests` | `kind` unset becomes `'swap'` |
@@ -38,7 +38,7 @@ reference to a row that doesn't exist. A **tombstone** is a blanked row kept onl
 | `pushTokens` | `push_tokens` | Merged with Supabase's |
 | `pushLog` | `push_log` | Merged with `notification_log` |
 | `dishAsks` | `dish_asks` | `momLang` moves to `dish_ask_translations`; `photos` becomes `photo_keys` |
-| `cravingLinks` | `craving_links` | |
+| `cravingLinks` | `craving_links` | `token` is sealed (M6) |
 | `dishAnswers` | `dish_answers` | Gains `english_settled` for Convex's three states of `english` |
 | `dishFiles` | `files` | The file ledger's public-route columns (`capability_hash`, `ip_key`) |
 | `dishSpend` | `daily_spend` | One row per day and scope, with `'dish_ask'` as today's scope |
@@ -56,7 +56,7 @@ Convex's other system table, `_scheduled_functions`, isn't counted above. What i
 | `threads` | `threads` | This shape wins |
 | `messages` | `messages` | This shape wins; `audio_path`, `audio_url`, `photo_path` become keys |
 | `thread_reads` | Theirs deleted |
-| `shares` | `shares` | |
+| `shares` | `shares` | Gains an id, and `token` is sealed (M6) |
 | `pending_sends` | `pending_sends` | `job_id` is the signer's folder, so it's renamed `upload_id`; a real `job_id` FK is added |
 | `recipe_events` | `recipe_events` | |
 | `signups` | `signups` | Gains `person_id`, so deletion can reach it |
@@ -194,7 +194,7 @@ limits and can now page.
 | Mom's page in her language | `inLangOf` | `dish_ask_translations (ask_id, lang)` primary key |
 | My cards, cards asked of me | `forMe`, `forCook` | `dish_asks_person_recent`, `dish_asks_requested_recent` |
 | A craving link's cards today | `checkLinkCaps` | `dish_asks_craving_recent` |
-| A craving link, her newest | `openLink`, `newestLink` | `craving_links.token` (unique), `craving_links_person_newest` |
+| A craving link, her newest | `openLink`, `newestLink` | `craving_links.token_hash` (unique), `craving_links_person_newest` |
 | Is this clip in use? | `saveVoiceRecipe` | `dish_answers.audio_key` (unique), `files` primary key |
 | An anonymous upload | `usableFile` | `files.capability_hash` (unique) |
 | Uploads nothing took | `dropOrphanFiles` | `files_orphans` |
@@ -209,7 +209,7 @@ limits and can now page.
 | Open dinners ahead | `community.feed` | `dinners_open_upcoming` (today it reads the oldest 100 open, past ones included) |
 | Dinner's guests, seats left | `acceptedCount`, `view` | `dinner_requests (dinner_id, guest_id)` unique |
 | My dinners, my asks | `dinners.mine` | `dinners_host`, `dinner_requests_guest` |
-| An invite link, its opens | `openInvite`, `inviteOpens` | `dinners.invite_token` (unique), `dinner_invite_opens` unique |
+| An invite link, its opens | `openInvite`, `inviteOpens` | `dinners.invite_token_hash` (unique), `dinner_invite_opens` unique |
 | My family's swaps, both ways | `familySwaps` | `swap_requests` unique, `swap_requests_asked_of_us` |
 | What my family reported | `shieldFor` | `reports (reporter_family_id, kind, target_id)` unique |
 | Who reported this | `fileReport`, `review` | `reports_target` |
@@ -237,7 +237,7 @@ limits and can now page.
 | Dish stats, my stats | `index.ts` 3204, 3260 | `recipe_events_family_library`, `recipe_events_person_recent` |
 | Sunday table, recap | `tablePr.ts`, `recapPr.ts` | `recipe_events_family_recent`, `pending_sends_family_delivered` |
 | Hearts | `hearts.ts` | `favorites` primary key, `favorites_library`, `favorites_recent` |
-| A share link | `index.ts` 2547, 2528 | `shares` primary key, `shares_family_library` |
+| A share link | `index.ts` 2547, 2528 | `shares.token_hash` (unique), `shares_family_library` |
 
 ### Jobs and recordings
 
@@ -358,9 +358,9 @@ still exist, also GCS and Supabase's rows and buckets: AWS-MIGRATION says purge 
 **Built:** `api/src/modules/accounts/purgeSteps.ts`, with `060_accounts.sql` adding `families.blanked_at`, `account_deletions.lists_cleared_at` and `files.purge_deletion_id`. Three small additions to this table came out of building it, all in `docs/build/ACCOUNTS-MIGRATION.md`: a family invite they sent is also revoked, a kept `link:` signup also loses its `person_id`, and a blanked family's phones, sessions and links stop.
 
 **Personal data** is tagged `-- personal` in the SQL. Also sensitive, though not readable as-is: `key_hash`, `token_hash`,
-`code_hash`, `kid_token_hash`, `ask_token_hash` (hashes of live credentials); `ip_key` and `rate_hits.key` (IP HMACs);
-`approx_*` (rounded place). Stored readable by design, so a leaked table gives working links: `craving_links.token`,
-`dinners.invite_token`, `shares.token`.
+`code_hash`, `kid_token_hash`, `ask_token_hash`, `invite_token_hash` (hashes of live credentials; `shares.token_hash` is keyed);
+`ip_key` and `rate_hits.key` (IP HMACs); `approx_*` (rounded place); and the sealed values, which open only with `EDIBLE_CODE_KEY`:
+`families.code_enc`, `join_links.token_enc`, `craving_links.token_enc`, `dinners.invite_token_enc`, `shares.token_enc` (M6).
 
 ## 5. How old data maps across (the hard parts)
 
@@ -396,6 +396,10 @@ still exist, also GCS and Supabase's rows and buckets: AWS-MIGRATION says purge 
 12. **Signups to people.** Old rows have no `person_id`. Match by email first, then family and name. Whatever doesn't match can
     only be removed by a person looking.
 13. **Moving one area at a time.** See question M1: it decides what gets copied when.
+14. **Link tokens go in sealed (M6).** `cravingLinks.token`, `dinners.inviteToken` and Supabase's `shares.token` are never copied as
+    they are. Each row gets its lookup hash (sha256; for a share, the keyed hash) and the token sealed with the row's id, through
+    `api/src/sealed.ts` with `EDIBLE_CODE_KEY`. A Supabase share gets a new id, and a `signups.share_token` holding its token becomes
+    `share:<id>`.
 
 ## 6. Open questions
 
@@ -411,7 +415,13 @@ Answered Oct 31:
 - **M4: no change needed.** C1 keeps the other person's half, which is what `convex/account.test.ts` already pins. The behavior tests keep it; Supabase's purge is what changes.
 - **M5: yes,** in the api skeleton PR. A transaction-per-file runner can't use `CREATE INDEX CONCURRENTLY`, so the runner needs a
   stated way to run a file outside a transaction once tables have real rows.
-- **M6: later, but before any backfill** copies real tokens in readable form. It's on AWS-MIGRATION's "Before real data" list.
+- **M6: done (Nov 2, `077_sealed_links.sql`),** before any backfill. Each of the three keeps a hash to look the token up by and the
+  token sealed as `join_links.token_enc` is (AES-GCM, `EDIBLE_CODE_KEY`, its own salt, the row's id as additional data), so its owner
+  is shown the same link again and a copy of the database alone opens none. Craving and dinner tokens are 22 characters and up, so
+  their hash is a plain sha256, as join links'. A share's token is the old apps' 10 characters, few enough to search for, so its
+  hash is keyed from the same secret. `shares` gained an id, and `signups` logs a join through one as `share:<id>`. A sealed token
+  that can't be opened gets a new link: a craving or share link's old one still opens, and a dinner's is replaced. Section 5, item
+  14 says how the backfill writes them.
 
 The questions as asked:
 

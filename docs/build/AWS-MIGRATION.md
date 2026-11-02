@@ -135,7 +135,9 @@ a deleted version for its 28-day undo window, so the bytes are fully gone about 
 
 Before any backfill copies real rows into Postgres:
 
-- Seal `craving_links.token`, `dinners.invite_token` and `shares.token` (SCHEMA.md, M6).
+- Seal `craving_links.token`, `dinners.invite_token` and `shares.token` (SCHEMA.md, M6). Done on the branch (Nov 2, `077`): each keeps a hash for lookup and the
+  token sealed with `EDIBLE_CODE_KEY`. Still open: the backfill must write them that way too (SCHEMA.md, section 5, item 14), and the api needs `EDIBLE_CODE_KEY` before
+  these links work anywhere, staging included.
 - How long raw footage is kept: decided by Caleb on Nov 2, 14 days as built (above). `/privacy` must say it accurately when it names AWS.
 - Count violations of every new uniqueness rule, CHECK and domain (SCHEMA.md, section 7).
 - The sweep reaches every bucket and row the purge can mark. Done on the branch (Nov 2): `jobs.sweep` reaches all three buckets, and the outside purge deletes the folders and

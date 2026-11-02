@@ -240,7 +240,7 @@ test("deletions reaching the copy", { skip: !hasDatabase }, async (t) => {
     const f = w.family();
     const cook = w.person(f, full);
     await w.syncAll();
-    await db().query(`insert into craving_links (family_id, person_id, token, message) values ($1, $2, 'madeup-token', 'her line')`, [f._id, cook._id]);
+    await db().query(`insert into craving_links (family_id, person_id, token_hash, message) values ($1, $2, repeat('a', 64), 'her line')`, [f._id, cook._id]);
     w.deleteAtSource(cook);
     await runDeletions(w.run());
     const log = { info: () => {}, warn: () => {}, error: () => {} };
