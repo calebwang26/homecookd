@@ -62,6 +62,7 @@ variable "front_door" {
 module "env" {
   source            = "../../modules/env"
   environment       = "staging"
+  deploy_branch     = "aws-migration"
   vpc_cidr          = "10.20.0.0/16"
   nat_gateways      = 1
   db_instance_class = "db.t4g.micro"
