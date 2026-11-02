@@ -72,11 +72,22 @@ this work, so production's values have to be listed from Vercel's settings at sw
 | Variable | If unset | Staging | Production, at the switch |
 |---|---|---|---|
 | `NEXT_PUBLIC_SITE_URL` | **`http://localhost:3000` in canonical links and share images, with no error, off Vercel** | `STAGING_WEB_URL` | `https://homecookd.app`. Must be set: the fallback only knows Vercel's variables |
-| `NEXT_PUBLIC_API_URL` | **Live Supabase** | `https://no-backend.invalid` | The backend that's live for `/r`, `/i`, web events |
+| `NEXT_PUBLIC_API_URL` | **Live Supabase** | `https://no-backend.invalid` | The backend that's live for `/r`, `/i`, web events. The new api only with `NEXT_PUBLIC_DISH_UPLOADS=links`, which moves `/r` to its route (below) |
 | `NEXT_PUBLIC_BUCKET_URL` | **Live GCS media** | `https://no-backend.invalid` | Whichever bucket or CDN is live |
 | `NEXT_PUBLIC_CONVEX_SITE_URL` | **Live Convex** (`/d`, `/miss`, `/a`) | `https://no-backend.invalid` | The backend that's live for those pages |
 | `NEXT_PUBLIC_DISH_URL` | Follows the Convex value | Unset | Unset, until the kid's web flow switches (`CUTOVER.md`, step 11) |
-| `NEXT_PUBLIC_DISH_UPLOADS` | Raw files, as Convex takes them | `STAGING_WEB_DISH_UPLOADS`, set to `links` only when staging's site points at the new api | Unset, until then; set with `NEXT_PUBLIC_DISH_URL` |
+| `NEXT_PUBLIC_DISH_UPLOADS` | Raw files, as Convex takes them | `STAGING_WEB_DISH_UPLOADS`, set to `links` only when staging's site points at the new api | Unset, until then; set with `NEXT_PUBLIC_DISH_URL` and `NEXT_PUBLIC_API_URL`. Despite its name it means "the new api": it also moves `/r` (below) |
+
+### What each page calls, before and after the switch
+
+Caleb, Nov 2: everything moves to AWS at once, so production gets one build with every value above pointing at the new api.
+
+| Page | Today (switch off) | New api (`links`, every URL at the api) | State |
+|---|---|---|---|
+| `/r` | `GET /shares/:token` on Supabase | `POST /v1/shares/open` `{token}`, its camelCase answer mapped to the old shape (`web/src/lib/recipe-web/api.ts`) | **Built.** Needs the site's origins in the api's `APP_WEB_ORIGINS`: the JSON POST preflights, and production allows none today (`api/src/cors.ts`) |
+| Web events (`/`, `/learn`, `/teach`) | `POST /web-events` beacon on Supabase | The same path, body and 204 on the api, so only the base URL changes | **Not built on the api yet.** AWS backend builds it (Nov 2). A beacon is text/plain and nothing reads its answer, so it needs no CORS |
+| `/i` | `POST /invites/peek` on Supabase | The same route on the api (`accounts/routes.ts`, open to any site) | No web change |
+| `/d`, `/miss`, `/a` | Convex's `/invite/open` and `/dish/*` | The api's `/invite/*` and `/dish/*` | `/miss` and `/a` built (`DISH-MIGRATION.md`); `/d` unchecked against the api's answer |
 | `NEXT_PUBLIC_APP_STORE_URL` | "Get the app" says it's in early testing | Unset | Copy from Vercel |
 | `NEXT_PUBLIC_EARLY_ACCESS_URL` | The form sends nothing | Unset | Copy from Vercel, if set |
 | `NEXT_PUBLIC_CONTACT_EMAIL` | `team@homecookd.app` | Unset | Copy from Vercel, if set |
