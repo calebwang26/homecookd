@@ -89,16 +89,14 @@ follows it, and it wins over the docs below on UI/UX and flows.
   credential or `LINK_JOIN_SECRET` (Convex and Supabase share it to sign join tickets) in `app/` or `web/`, or in any tracked file. `EXPO_PUBLIC_*` and `NEXT_PUBLIC_*` values ship to users.
   Never print `.env` values. Keys live only in the gitignored root `.env`, Convex env, Cloud Run secrets and
   Supabase edge-function secrets (which key goes where: `docs/build/STACK.md`, "Keys").
-- **Where the checkout lives (Nov 1):** the real folder is `/Users/calebwang/hackathon-homecookd`, outside iCloud.
-  The old path `/Users/calebwang/Documents/GitHub/hackathon-homecookd` is a symlink to it, so every path in this file,
-  the worktrees' `.env` links and the Claude Desktop sessions keep working. Never move the repo back under
-  `~/Documents`: iCloud evicts files there ("dataless"), and git, rsync and `mv` all hang on them. The old folder is
-  kept as `~/Documents/GitHub/hackathon-homecookd.icloud-old` until Caleb says to delete it. The worktrees' installed
-  packages (`node_modules`, `.venv`, `web/.next`) were not copied: run `npm ci` in a worktree that needs them.
-- **One `.env` for every key:** `/Users/calebwang/Documents/GitHub/hackathon-homecookd/.env` (the main checkout,
-  through the symlink above).
+- **Where the checkout lives (Nov 1):** `/Users/calebwang/hackathon-homecookd`, outside iCloud. It used to be
+  `~/Documents/GitHub/hackathon-homecookd`; that path is retired, and every chat, worktree and script uses the new one.
+  Never put the repo back under `~/Documents` (or any iCloud folder): iCloud evicts files there ("dataless"), and git,
+  rsync and `mv` all hang on them. The worktrees' installed packages (`node_modules`, `.venv`, `web/.next`) were not
+  copied in the move: run `npm ci` in a worktree that needs them.
+- **One `.env` for every key:** `/Users/calebwang/hackathon-homecookd/.env` (the main checkout).
   Add or change keys only there. A worktree never gets its own copy: link it with
-  `ln -s /Users/calebwang/Documents/GitHub/hackathon-homecookd/.env .env` from the worktree root. Only `app/.env`
+  `ln -s /Users/calebwang/hackathon-homecookd/.env .env` from the worktree root. Only `app/.env`
   (public `EXPO_PUBLIC_*` settings) and `web/.env.local` (written by the Vercel CLI) stay where their tools read them.
 - **Cartesia (voice):** Ink and Sonic run in the live voice service, plus a Convex action for voice-note
   transcription. Send `Cartesia-Version: 2026-08-14` on every call, and read https://docs.cartesia.ai/llms.txt
