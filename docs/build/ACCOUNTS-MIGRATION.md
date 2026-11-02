@@ -2,7 +2,7 @@
 
 The last item in `docs/build/AWS-MIGRATION.md`'s area order, Nov 1, 2026. A draft on `claude/aws-accounts`, off `aws-migration`: nothing live points at it. Live Supabase, its data and what build 6 calls don't change, and nothing switches without Caleb's separate OK. The code is `api/src/modules/accounts/`, shaped like the dish module: routes check the input, the files beside them hold the rules, `data.ts` holds the SQL.
 
-**The switch.** `ACCOUNTS_OWNS_PEOPLE=1` is off until this area moves. `families` and `people` belong to the temporary one-way sync until then (SCHEMA.md, M1; the `claude/aws-sync` draft), so with it off every write to those two tables answers 503 `accounts_not_moved` and changes nothing. A test reads the source and fails if another file starts writing them. **The one exception** is `startDeletion(personId, "sync")`, for the sync to call: M1 says a deletion reaches the copy within minutes. Reads, and writes to `devices` and `sessions`, aren't behind the switch, because no real rows or traffic reach them until the move.
+**The switch.** `ACCOUNTS_OWNS_PEOPLE=1` is off until this area moves. `families` and `people` belong to the temporary one-way sync until then (SCHEMA.md, M1; the `claude/aws-sync` draft), so with it off every write to those two tables answers 503 `accounts_not_moved` and changes nothing. A test reads the source and fails if another file starts writing them. **The one exception** is a deletion the sync passes on, `startDeletionIn(c, personId, "sync")`, in the transaction that writes the sync's own record: M1 says a deletion reaches the copy within minutes. "From the sync", below, says what it does. Reads, and writes to `devices` and `sessions`, aren't behind the switch, because no real rows or traffic reach them until the move.
 
 ## Routes, and the old route each replaces
 
@@ -76,6 +76,16 @@ Left as it is: Messages and Jobs both clear pending sends and spare uploads, bec
 
 **C5:** cleared by the sweep 60 days after the outside purge; `lists_cleared_at` records it.
 
+### From the sync
+
+While Convex and Supabase are the source, a deletion there reaches Postgres through the sync (`sync/service.ts`, `passOnDeletion`): from Convex's `accountDeletions`, and from any person Convex shows deleted with no such row (a tombstone in its people walk). Areas switch one at a time, so Postgres can hold rows and files of theirs that only it has, and the same promises hold as for the route: one transaction does the sync's record and this purge's start (`applyDeletion` with `startDeletionIn`), then the batches and the outside purge follow as above.
+
+- **In the one transaction, in this order:** the sync's locks (the person, then the family's lock and row, so it can't deadlock with this file's family-then-person order); the person blanked with Convex's deletion time; `startDeletionIn`, which writes `account_deletions`, ends every way in and queues the batches; then the sync drops their recipes, writes `sync_deleted` and does its own C2. The start comes before the recipes go so that it still finds a dinner around one. A failure anywhere rolls all of it back, and the sync's place doesn't pass it.
+- **Their recipes are the sync's while the copy is read-only.** `stopPersonsWork` and the jobs purge leave them, and the purge doesn't finish while any are left. A recipe a question still points at is emptied, not deleted. The messages purge takes the question, and the next pass that sees the tombstone deletes the recipe; then the hourly restart finishes the purge. With the sync paused (`SYNC_MODE=deletions`) no pass runs, so such a purge waits.
+- **C2 is the sync's while the switch is off.** It waits for its people walk and gives a name back if someone live lands, so `startDeletionIn` skips `endFamilyIfLast` and the purge's family step waits for the switch. Two writers would fight over the row, and `blanked_at` would stay on a family with live people.
+- **Someone with no row in the copy** gets only the sync's record, which keeps them out. Every column naming a person is a foreign key, so nothing can point at them. Their purge starts if their tombstone lands.
+- **The reconcile** counts a deletion as holding only if a person still in the copy also has an `account_deletions` row. The people walk passes every tombstone on again, so a missing one is started at the next pass.
+
 ### Outside the database: read this before calling deletion finished
 
 `purgeOutside` deletes the Cartesia voice clone at once. Then it waits as long as the sweep does, 7 hours after the purge, because a link still in a phone's hands, the glasses' last upload or the worker finishing a job it was on could put a file back in a folder after it's emptied. Then it deletes from S3 what `account_deletions` lists and no `files` row names (`outside.ts`):
@@ -148,6 +158,7 @@ Kept, in `appleRevoke.ts`: the same two calls in the same order, before the dele
 | `accountsLinks.test.ts` | The shared vectors, `/link/open`, claims, receipts, the switch |
 | `accountsApple.test.ts` | Revocation, against a stub of Apple's two endpoints |
 | `accountDeletion.test.ts` | Section 4, table by table; interrupted at every batch, both before and after its commit, and resumed through the schedule's path; a deleted person trying every proof; C2 and C5; the outside purge; the switch |
+| `syncDeletion.test.ts` | A deletion from the sync: its purge reaches rows only Postgres has, a repeat changes nothing, a failure keeps the sync's place and leaves nothing half done, a recipe a question held, the last person's family, someone not in the copy yet |
 
 **Carried over, with the same meaning:** all of `convex/joinTicket.test.ts`; 7 of 8 from `apple.test.ts`; 6 of 7 from `account.test.ts`; 9 of 11 from `links.test.ts`; 4 of 5 from `sessions.test.ts`, one of them changed as noted below; 5 of 7 from `accountPurge.test.ts`; the auth, invite, profile, join-link and move tests from `supabase/tests/api_test.ts`; `joinLinks_test.ts` and `link_test.ts`.
 

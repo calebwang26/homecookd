@@ -2,6 +2,7 @@
 // safe to repeat and to stop anywhere: outside calls happen between transactions, and a pass saves its place after each page. Logs and alerts carry
 // counts, row ids and rule names. Never a name, an email, a place or a recipe's words.
 import { db } from "../../db.js";
+import { startDeletionIn } from "../accounts/deletion.js";
 import * as data from "./data.js";
 import { lowerUuid, mergeFamily, mergePerson, mergeRecipe, RowRule } from "./merge.js";
 import { CursorExpired, type ConvexDeletion, type ConvexPerson, type ConvexRecipe, type ConvexFamily, type Rows, type Sources, type Table } from "./sources.js";
@@ -82,6 +83,13 @@ const tombstone = (person: ConvexPerson): data.Deletion => ({
   createdAt: new Date(person._creationTime),
 });
 
+/**
+ * A deletion from the old stores: the sync's record and the start of the account's whole purge, in one transaction (data.applyDeletion, accounts/deletion.ts),
+ * so rows only Postgres has go too, whichever areas have moved. A person with no row in the copy gets only the record, which keeps them out: nothing can point
+ * at them, and their purge starts if their tombstone lands.
+ */
+export const passOnDeletion = (d: data.Deletion) => data.applyDeletion(d, (c) => startDeletionIn(c, d.personId, "sync"));
+
 async function warnIfLate(run: Run): Promise<void> {
   const state = await data.readState("deletions");
   // A feed that has never worked fails its own message, which reaches the dead-letter alarm.
@@ -93,8 +101,8 @@ async function warnIfLate(run: Run): Promise<void> {
 }
 
 /**
- * Reads accountDeletions after our place and applies each. Convex alone is enough, so a Supabase outage can't delay a deletion. The place doesn't pass a
- * deletion that failed; the run throws at the end, so SQS tries again and repeated failures reach the dead-letter alarm.
+ * Reads accountDeletions after our place and passes each on. Convex alone is enough, so a Supabase outage can't delay a deletion. The place doesn't pass a
+ * deletion that failed, the purge's start included; the run throws at the end, so SQS tries again and repeated failures reach the dead-letter alarm.
  */
 export async function runDeletions(run: Run): Promise<{ ran: boolean; applied: number; failed: number }> {
   const lease = await data.takeLease("deletions", LEASE_S);
@@ -112,7 +120,7 @@ export async function runDeletions(run: Run): Promise<{ ran: boolean; applied: n
       for (const row of rows) {
         highest = Math.max(highest, row.creationTime);
         try {
-          if ((await data.applyDeletion(asDeletion(row))) === "applied") applied += 1;
+          if ((await passOnDeletion(asDeletion(row))) === "applied") applied += 1;
         } catch (error) {
           const rule = rowRule(error);
           if (!rule) throw error;
@@ -164,7 +172,7 @@ async function applyPeople(run: Run, rows: ConvexPerson[], stats: Stats): Promis
   for (const row of rows) {
     await oneRow(run, "people", String(row._id), stats, async () => {
       if (row.deletedAt !== undefined) {
-        const outcome = await data.applyDeletion(tombstone(row));
+        const outcome = await passOnDeletion(tombstone(row));
         return outcome === "applied" ? "applied" : "unchanged";
       }
       const profile = profiles.get(row.supabaseProfileId.toLowerCase()) ?? null;

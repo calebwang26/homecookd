@@ -13,7 +13,7 @@ import * as data from "./data.js";
 import { requestMossSync } from "./neighbors.js";
 import { reachS3, S3_GRACE_MS } from "./outside.js";
 import { DELETION, type Deletion, STEPS } from "./purgeSteps.js";
-import { assertOwnsPeople, refuse } from "./values.js";
+import { assertOwnsPeople, ownsPeople, refuse } from "./values.js";
 
 /** A purge with no batch for this long stopped; the schedule starts it again. Past this many restarts someone is told, and it's still tried. */
 export const PURGE_STUCK_MS = 30 * 60_000;
@@ -37,31 +37,35 @@ export type DeletionSource = "person" | "sync";
  * their jobs; abandon their recordings; cancel dinners; delete their recipes with those recipes' questions, cooking rows and swaps. Then the batches start.
  *
  * `source`: "person" is the route, and needs the switch (values.ts). "sync" is the one write that passes without it: a deletion arriving from Convex or Supabase while they're still the
- * source reaches Postgres's copy within minutes (SCHEMA.md, M1), and the sync draft calls this.
+ * source reaches Postgres's copy within minutes (SCHEMA.md, M1). The sync calls `startDeletionIn`, in the transaction that writes its own record (sync/data.ts, applyDeletion).
  *
- * Safe to run twice: a person already deleted finds their row, and nothing else happens.
+ * Safe to run twice: a person already deleted finds their row, and nothing else happens. Null when there's no such person.
  */
 export async function startDeletion(personId: string, source: DeletionSource, requestId?: string): Promise<string | null> {
+  return tx((c) => startDeletionIn(c, personId, source, requestId));
+}
+
+/** The same, in the caller's transaction. */
+export async function startDeletionIn(c: Queryable, personId: string, source: DeletionSource, requestId?: string): Promise<string | null> {
   if (source === "person") assertOwnsPeople();
-  return tx(async (c) => {
-    const { rows: found } = await c.query(`select family_id from people where id = $1`, [personId]);
-    if (!found[0]) return null;
-    const familyId: string = found[0].family_id;
-    // Whoever they were before they left or moved goes with them. The sync only passes on what the old system did, and that deletes one person.
-    const seen = source === "person" ? await data.earlierSelves(c, personId) : [];
-    // Family first, then person, everywhere: this is what serializes two last people, and a join, against the delete (C2). In id order, as a move does, so the two can't deadlock.
-    for (const id of [...new Set([familyId, ...seen.map((e) => e.family_id)])].sort()) await data.lockFamily(c, id);
-    // Read again under the locks: a move that finished while this waited has added to the chain.
-    const earlier = source === "person" ? await data.earlierSelves(c, personId) : [];
-    const wasSignedIn = source === "person" && (await data.signedInIds(c, [personId])).has(personId);
-    const deletionId = await deletePerson(c, personId, familyId, requestId);
-    await endFamilyIfLast(c, familyId, wasSignedIn, requestId);
-    for (const e of earlier) {
-      await deletePerson(c, e.id, e.family_id, requestId);
-      await data.blankFamilyIfEmpty(c, e.family_id);
-    }
-    return deletionId;
-  });
+  const { rows: found } = await c.query(`select family_id from people where id = $1`, [personId]);
+  if (!found[0]) return null;
+  const familyId: string = found[0].family_id;
+  // Whoever they were before they left or moved goes with them. The sync only passes on what the old system did, and that deletes one person.
+  const seen = source === "person" ? await data.earlierSelves(c, personId) : [];
+  // Family first, then person, everywhere: this is what serializes two last people, and a join, against the delete (C2). In id order, as a move does, so the two can't deadlock.
+  for (const id of [...new Set([familyId, ...seen.map((e) => e.family_id)])].sort()) await data.lockFamily(c, id);
+  // Read again under the locks: a move that finished while this waited has added to the chain.
+  const earlier = source === "person" ? await data.earlierSelves(c, personId) : [];
+  const wasSignedIn = source === "person" && (await data.signedInIds(c, [personId])).has(personId);
+  const deletionId = await deletePerson(c, personId, familyId, requestId);
+  // While the sync owns families, C2 is its own: it waits for its people walk, and gives the name back if someone live lands (sync/data.ts). Two would fight over the row.
+  if (ownsPeople()) await endFamilyIfLast(c, familyId, wasSignedIn, requestId);
+  for (const e of earlier) {
+    await deletePerson(c, e.id, e.family_id, requestId);
+    await data.blankFamilyIfEmpty(c, e.family_id);
+  }
+  return deletionId;
 }
 
 /**
