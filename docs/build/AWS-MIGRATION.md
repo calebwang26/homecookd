@@ -160,8 +160,8 @@ Before any new-host link exists (CUTOVER.md, step 10):
 - `pipeline/account_purge.py`'s `media_objects` must not silently skip a host that isn't GCS, ideally failing loudly on an unknown one,
   before any new-host link exists. Otherwise a deleted account's file on S3 stays.
 - **Community's switch gates (`COMMUNITY-MIGRATION.md`).** Apple reviews report and block, so Community doesn't switch until each of these exists and is tested:
-  - The team can act on a report: `reviewReport` has no route, script or task.
-  - `community.remind_open` has its daily schedule. Today nothing runs it, so a report left open would never remind anyone.
+  - The team can act on a report: `api/src/reports.ts` lists and reviews them as a one-off task (COMMUNITY-MIGRATION.md, "The team's reports"), tested on local Postgres only. Left: a first run on staging, and the app adapter below, without which no report reaches the new api.
+  - `community.remind_open` has its daily schedule. Staging's is in Terraform (#247, merged unapplied). Production's `schedules` has none yet, so there a report left open would never remind anyone.
   - The app adapter. It doesn't exist yet, and nothing has called these routes.
 
 Removing the temporary one-way sync of `families`, `people` and `recipes` (SCHEMA.md, M1) is the end of the list: CUTOVER.md, step 14.

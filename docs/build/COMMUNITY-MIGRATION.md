@@ -70,7 +70,45 @@ Everything under `/v1` needs `Authorization: Bearer <sessionToken>` and answers 
 
 An adapter turns any refusal into `ConvexError(message)`. Where a 404 has no `message`, the Convex function answered `null`.
 
-**Team only, no route:** `reports.open` and `reports.review` are `openReports()` and `reviewReport()` in `reports.ts` (Open questions, 2).
+**Team only, no route:** `reports.open` and `reports.review` are `openReports()` and `reviewReport()` in `reports.ts`, run by the team's script (below).
+
+## The team's reports
+
+Convex's `npx convex run reports:open` and `reports:review` are now `api/src/reports.ts`, run as a one-off ECS task with the api's own image, task definition and network, as the migrations are. There's no route, and nothing new in IAM or Terraform. A report's alert ("Review: …") points here.
+
+```bash
+node dist/reports.js open                                             # what's open
+node dist/reports.js review <recipe|dinner|family> <targetId> keep    # or remove
+```
+
+- **`open`** prints one line for each reported item, oldest first: its kind and id, what it is (the dish, the dinner, or for a block the family's name), how many families reported it, their reasons, when the first came, and whether it's hidden from everyone. These are Convex's fields. Who reported is never printed. It reads the oldest 500 open reports, and says so when there may be more.
+- **`review`** resolves every open report on the item. `keep`: it shows again for everyone but the families that reported it. `remove`: a dinner is called off and stays hidden. A recipe goes in the order under Blockers, 5: until the copy shows Convex's decision it's refused, nothing changes, and it prints the Convex command to run first. A block's report (`family`) only gets resolved, whichever word is given.
+- **A typo changes nothing.** The words must be exact, an id is only letters, digits, `-` and `_`, and the item must have an open report. So a wrong id, a wrong kind or a second run is refused. To act on something nobody reported, report it from the app first.
+- **Exit codes:** 0 done. 1 refused or failed: the reason is the first line, and nothing changed. 2 wrong arguments: the database wasn't touched.
+
+**Running it.** Log in with `aws sso login --profile homecookd`. The task definition and network come from the api service, as `deploy-aws.yml` does for migrations, because the family's newest revision can be Terraform's `bootstrap` image.
+
+```bash
+export AWS_PROFILE=homecookd AWS_REGION=us-west-2
+NAME=homecookd-staging                                       # or homecookd-production
+RUN='["node","dist/reports.js","open"]'
+# RUN='["node","dist/reports.js","review","<kind>","<targetId>","keep"]'    # or "remove"
+TD=$(aws ecs describe-services --cluster "$NAME" --services api --query 'services[0].taskDefinition' --output text)
+NETWORK=$(aws ecs describe-services --cluster "$NAME" --services api --query 'services[0].networkConfiguration' --output json)
+TASK=$(aws ecs run-task --cluster "$NAME" --launch-type FARGATE --task-definition "$TD" \
+  --network-configuration "$NETWORK" \
+  --overrides "{\"containerOverrides\":[{\"name\":\"api\",\"command\":$RUN}]}" \
+  --query 'tasks[0].taskArn' --output text)
+aws ecs wait tasks-stopped --cluster "$NAME" --tasks "$TASK"
+aws ecs describe-tasks --cluster "$NAME" --tasks "$TASK" --query 'tasks[0].containers[0].exitCode' --output text
+aws logs tail "/$NAME/api" --log-stream-names "api/api/${TASK##*/}" --since 1h --format short
+```
+
+The last command prints what the script said. A task takes about a minute to start. Locally: `cd api && DATABASE_URL=… npx tsx src/reports.ts open`, on made-up rows only.
+
+**Who ran it.** The task can't tell: every run has the api's role. CloudTrail's `RunTask` event names the login and holds the command. The task's log has one line for the run, with the action, kind, id, decision and how many it resolved (`"msg":"reports reviewed"`), and no personal data.
+
+**What the log keeps.** Everything the task prints goes to the api's log group, kept 30 days. That includes each reported item's name, as Convex's listing showed, because the team can't judge a report without it (Against SYSTEM-DESIGN.md, below).
 
 ## Deferred
 
@@ -121,12 +159,14 @@ An adapter turns any refusal into `ConvexError(message)`. Where a 404 has no `me
 25. **Reports' 500 limit.** `shieldFor` reads up to 500 reports and 500 blocks each way for a family, as Convex does. The order isn't by time in either.
 26. **A NUL byte is a 400 on every route.** `app.ts` looks through the params, the query and the body before any route's own checks, because Postgres text can't hold one and the error would be a 500. A cursor is encoded, so `paging.ts` checks inside it. Because this runs before a route's session check, a request with a NUL byte and no session gets 400 rather than 401, which says nothing about any row. On the dish routes the sentence is their usual "The body must be JSON."
 27. **A forged cursor with a date that can't be one is a 400,** checked before it reaches Postgres.
+28. **The team's review takes only an item with an open report.** Convex's `reports:review` took any id, so a wrong one could call off a dinner nobody reported. Running the same line twice is refused the second time.
 
 ### Against SYSTEM-DESIGN.md
 
 - **"Modules call each other's services, never each other's tables."** `community/data.ts` touches `questions` directly, because Messages has no module yet. Messages should take over `latestShareAsks`. Everything else goes through a service, and `recipes` got a small read-only module for it.
 - **"Writes from a phone take an idempotency key."** Only `POST /v1/dinners` needs one. Swaps, reports, blocks, invite links and voice recipes are safe to repeat as they are. `join` isn't quite: a retry after a lost reply says "You already asked to join.", as on Convex, and nothing is duplicated.
 - **`/invite/open` stays unversioned,** so the site and old apps need only a new host.
+- **"Never log family content."** The team's listing puts each reported item's name in the api's log group for 30 days: the dish's title, or a blocked family's name. A task's output has nowhere else to go, and a reviewer needs the name. Nothing about who reported is printed. `TODO(caleb)`: whether that's OK. The default is Convex's listing. The other way is printing ids only and looking each one up on Convex while recipes still live there.
 
 ## Tests
 
@@ -136,6 +176,7 @@ An adapter turns any refusal into `ConvexError(message)`. Where a 404 has no `me
 |---|---|
 | `community.test.ts` | `convex/community.test.ts`'s reading half |
 | `communitySafety.test.ts` | `convex/safety.test.ts`, plus the recipe review's order and the alert's contents |
+| `communityReview.test.ts` | The team's script: what `open` prints and leaves out, keep and remove, the recipe's refusal and its steps, wrong words and ids changing nothing, and the real entry point |
 | `communitySwaps.test.ts` | `convex/swaps.test.ts`, plus past-50-asks |
 | `communityInvites.test.ts` | `convex/dinnerInvites.test.ts`, plus many opens at once and the rate limits |
 | `communityShareAsks.test.ts` | `not_moved` for a kid and for her tap, with nothing written; the chooser's reading of asks; who may ask |
@@ -204,7 +245,7 @@ Nothing new. `RATE_LIMIT_SALT`, `REPORT_ALERT_URL`, `REPORT_ALERT_TOKEN`, `REPOR
 
 ## What `infra/` needs (not done: this PR touches only `api/` and `docs/build/`)
 
-- An EventBridge schedule into `scheduled`: `{"payload":{"task":"community.remind_open"}}` daily at 16:00 UTC, as Convex's cron. A switch gate (AWS-MIGRATION's Cutover list).
+- An EventBridge schedule into `scheduled`: `{"payload":{"task":"community.remind_open"}}` daily at 16:00 UTC, as Convex's cron. A switch gate (AWS-MIGRATION's Cutover list). Staging's is in `infra/envs/staging/main.tf` (#247, merged unapplied). Production's `schedules` has none yet.
 
 ## Invite opens and the database
 
@@ -231,7 +272,7 @@ An open that changes nothing (this phone's been counted, or the count has stoppe
 ## Open questions, with recommendations
 
 1. **`sendVoiceRecipe` can't go through an adapter alone.** An old app uploads through Convex's `files.uploadUrl` and sends a Convex storage id. **Recommendation:** keep `cravings.sendVoiceRecipe` on Convex for old apps until they're gone, which means its cards must stay readable there, so switch all of `cravings.*` together. Only a new app uses the three steps.
-2. **How the team runs `openReports` and `reviewReport`.** Convex's were `npx convex run`, and there's no equivalent here. This is a switch gate (AWS-MIGRATION's Cutover list): Apple reviews report and block, and the team must be able to act on a report. **Recommendation:** a small script run from a task, in the same PR as the switch. A signed-in admin route would add a surface for no gain.
+2. **Answered (Nov 2): how the team runs `openReports` and `reviewReport`.** Convex's were `npx convex run`. Now `api/src/reports.ts`, run as a one-off task: "The team's reports", above. No route, as recommended: a signed-in admin route would add a surface for no gain. It was a switch gate (AWS-MIGRATION's Cutover list) because Apple reviews report and block. What's left of the gate is a first run on staging, and the app adapter, without which no report reaches the new api.
 3. **`shareRequests.*` should switch with Messages, not Community.** `POST /v1/share-requests` already refuses to ask. `familyDishes` must read from the side the asks are written on, and until Messages moves that's Convex. **Recommendation:** an adapter keeps both on Convex until Messages switches.
 4. **`reports` and `blocks` move as one, once.** Convex's two-family hide and Postgres's would disagree if each side took reports during a window. **Recommendation:** freeze report writes for the area's planned window, copy, switch, as AWS-MIGRATION already describes.
 5. `TODO(caleb)`: the host's whole display name on `/invite/open` (kept from Convex), the demo venue's coordinates, and the 20-card link total are all still his, and carry their markers. The words homie asks with keep theirs on Convex.
