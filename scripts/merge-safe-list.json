@@ -105,6 +105,16 @@
       "switch": "NEXT_PUBLIC_DISH_UPLOADS",
       "why": "Upload links with it set, raw files to Convex without",
       "fingerprint": "c240c92cee9a"
+    },
+    "web/src/lib/recipe-web/api.ts": {
+      "switch": "NEXT_PUBLIC_DISH_UPLOADS",
+      "why": "/r opens a share with POST /v1/shares/open with it set, Supabase's GET /shares/:token without",
+      "fingerprint": "b2de8517f422"
+    },
+    "web/src/lib/recipe-web/types.ts": {
+      "switch": "NEXT_PUBLIC_DISH_UPLOADS",
+      "why": "A comment only",
+      "fingerprint": "d537f07ee548"
     }
   }
 }
