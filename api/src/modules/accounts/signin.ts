@@ -284,6 +284,7 @@ async function moveTo(who: Who, known: Known, target: Target, opts: Options) {
       const solo = !(await anySignedIn(c, others.map((p) => p.id)));
       const members = await lockTargetFamily(c, target.familyId);
       const { person, device } = await joinAsNew(c, who, target, opts.name ?? old.name, opts.label, members, () => removePerson(c, fromId, old.id));
+      await data.setPreviousPerson(c, person.id, old.id);
       const faces = solo ? await moveFaces(c, others, fromId, target.familyId, [...members, person]) : [];
       await endFamilyIfLast(c, fromId, true); // a face the new family has a name for doesn't come along, and doesn't keep the old one open
       return { person, device, solo, faces };

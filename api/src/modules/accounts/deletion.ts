@@ -39,21 +39,26 @@ export type DeletionSource = "person" | "sync";
  * source reaches Postgres's copy within minutes (SCHEMA.md, M1), and the sync draft calls this.
  *
  * Safe to run twice: a person already deleted finds their row, and nothing else happens.
- *
- * TODO(caleb): someone who moved families left a removed person behind in the old family, with their name and what they sent there. This deletes only who they are now, as JOIN-SIMPLE.md
- * section 4 approved and as today's code does. If a deletion should reach that old row too, a link from new person to old has to be written at the move, before moves start here.
  */
 export async function startDeletion(personId: string, source: DeletionSource, requestId?: string): Promise<string | null> {
   if (source === "person") assertOwnsPeople();
   return tx(async (c) => {
     const { rows: found } = await c.query(`select family_id from people where id = $1`, [personId]);
     if (!found[0]) return null;
-    // Family first, then person, everywhere: this is what serializes two last people, and a join, against the delete (C2).
-    await data.lockFamily(c, found[0].family_id);
-    // The sync only passes on what the old system did, and that deletes one person.
+    const familyId: string = found[0].family_id;
+    // Whoever they were before they left or moved goes with them. The sync only passes on what the old system did, and that deletes one person.
+    const seen = source === "person" ? await data.earlierSelves(c, personId) : [];
+    // Family first, then person, everywhere: this is what serializes two last people, and a join, against the delete (C2). In id order, as a move does, so the two can't deadlock.
+    for (const id of [...new Set([familyId, ...seen.map((e) => e.family_id)])].sort()) await data.lockFamily(c, id);
+    // Read again under the locks: a move that finished while this waited has added to the chain.
+    const earlier = source === "person" ? await data.earlierSelves(c, personId) : [];
     const wasSignedIn = source === "person" && (await data.signedInIds(c, [personId])).has(personId);
-    const deletionId = await deletePerson(c, personId, found[0].family_id, requestId);
-    await endFamilyIfLast(c, found[0].family_id, wasSignedIn, requestId);
+    const deletionId = await deletePerson(c, personId, familyId, requestId);
+    await endFamilyIfLast(c, familyId, wasSignedIn, requestId);
+    for (const e of earlier) {
+      await deletePerson(c, e.id, e.family_id, requestId);
+      await data.blankFamilyIfEmpty(c, e.family_id);
+    }
     return deletionId;
   });
 }
@@ -110,10 +115,12 @@ async function deletePerson(c: Queryable, personId: string, familyId: string, re
   // Blank. The check constraint refuses a tombstone that keeps anything personal.
   await c.query(
     `update people set name = 'Deleted', relation = null, avatar_key = null, email = null, tz = null, share_cooking = null, language = null, voice_clone_consented_at = null,
-            cartesia_voice_id = null, approx_lat = null, approx_lng = null, campus = null, deleted_at = coalesce(deleted_at, now())
+            cartesia_voice_id = null, approx_lat = null, approx_lng = null, campus = null, previous_person_id = null, deleted_at = coalesce(deleted_at, now())
       where id = $1`,
     [personId],
   );
+
+  await c.query(`delete from left_identities where person_id = $1`, [personId]);
 
   // Every way in ends here.
   await data.signPersonOut(c, personId);
@@ -168,7 +175,7 @@ class OutOfTime extends Error {}
  * check: a row a moment late, or a batch lost to a crash, is found before anyone says it's done. Safe to run twice at once: each batch holds the deletion's row, and each step finds only
  * what's left. Out of time, it queues itself.
  */
-export async function runPurge(deletionId: string, trace: Pick<Trace, "requestId">, options: PurgeOptions = {}): Promise<"done" | "more" | "missing"> {
+export async function runPurge(deletionId: string, trace: Pick<Trace, "requestId">, options: PurgeOptions = {}): Promise<"done" | "more" | "held" | "missing"> {
   const started = Date.now();
   const max = options.batch ?? PURGE_BATCH;
   const budget = options.budgetMs ?? PURGE_BUDGET_MS;
@@ -210,14 +217,19 @@ export async function runPurge(deletionId: string, trace: Pick<Trace, "requestId
       return "more";
     }
     if (touched > 0) continue;
-    await tx(async (c) => {
+    const finished = await tx(async (c) => {
       const d = await lockedDeletion(c, deletionId);
-      if (!d || d.purged_at) return;
+      if (!d || d.purged_at) return true;
+      // With the recipe copy read-only the sync takes them, normally within minutes. It isn't finished while they're here. That's not an error: restartPurges looks again, and
+      // someone hears if it keeps stopping.
+      const { rows: held } = await c.query(`select 1 from recipes where cook_id = $1 limit 1`, [d.person_id]);
+      if (held.length) return false;
       await c.query(`update account_deletions set purged_at = now() where id = $1`, [deletionId]);
       if (d.recipe_ids.length) await requestMossSync(c, d.family_id); // again at the end, for a recipe a worker published after the start
       await enqueue(c, { queue: "scheduled", payload: { task: "accounts.outside", deletionId }, requestId: trace.requestId });
+      return true;
     });
-    return "done";
+    return finished ? "done" : "held";
   }
 }
 
@@ -299,10 +311,15 @@ export async function purgeOutside(deletionId: string): Promise<"done" | "retry"
     `select count(*)::int as n from files where (purge_deletion_id = $1 or owner_person_id = $2) and deleted_at is null`,
     [d.id, d.person_id],
   );
+  // A key the sweep has already taken isn't left to report (a plate photo is noted here and also in the ledger). The rest can't be seen yet.
+  const media = await db().query(
+    `select count(*)::int as n from unnest($1::text[]) as k where not exists (select 1 from files f where f.key = k and f.deleted_at is not null)`,
+    [d.media_keys],
+  );
   const notReached: [string, number][] = [
     ["files marked and not deleted", left.rows[0].n],
     ["upload folders", d.upload_keys.length],
-    ["media files", d.media_keys.length],
+    ["media files", media.rows[0].n],
     ["recipe folders", d.media_prefixes.length],
     ["GCS links", d.media_urls_legacy.length],
   ];

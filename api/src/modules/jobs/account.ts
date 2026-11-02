@@ -148,6 +148,17 @@ export async function purgeJobsForPerson(personId: string, run: PurgeRun = ON_IT
     return rowCount ?? 0;
   });
 
+  // A kid's face on someone else's filming goes too, or it shows as "Deleted".
+  for (const table of ["recordings", "jobs"] as const) {
+    await batches(`${table} for them`, async (c, max) => {
+      const { rowCount } = await c.query(
+        `update ${table} set for_kid_ids = array_remove(for_kid_ids, $1) where id in (select id from ${table} where family_id = $2 and $1 = any(for_kid_ids) limit $3)`,
+        [personId, familyId, max],
+      );
+      return rowCount ?? 0;
+    });
+  }
+
   // Whatever else of theirs is still in the ledger: an upload nothing took, a plate photo.
   await batches("files", async (c, max) => {
     const { rowCount } = await c.query(

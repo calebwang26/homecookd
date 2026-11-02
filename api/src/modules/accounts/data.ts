@@ -1,6 +1,6 @@
 // The SQL for families, people and how a phone proves who it is. The index behind each read is named in SCHEMA.md section 3 ("Sessions and accounts"). Every write to
 // `families` or `people` goes through a function here that checks the switch (values.ts), so nothing can quietly write them while the sync owns them.
-import { randomUUID } from "node:crypto";
+import { createHmac, randomUUID } from "node:crypto";
 import type { Queryable } from "../../db.js";
 import { seal, FAMILY_CODE_SALT, unseal } from "./sealed.js";
 import type { Who } from "./identity.js";
@@ -297,7 +297,46 @@ export async function linkIdentity(q: Queryable, who: Who, personId: string): Pr
     `insert into identities (provider, subject, person_id, email) values ($1, $2, $3, $4) on conflict (provider, subject) do nothing`,
     [who.provider, who.sub, personId, who.email],
   );
-  return (rowCount ?? 0) > 0;
+  if (!rowCount) return false;
+  // Someone who left before, signing in again: only deleting them reads this (deletion.ts).
+  const hash = leftIdentityHash(who.provider, who.sub);
+  if (hash) {
+    const { rows } = await q.query(`delete from left_identities where hash = $1 returning person_id`, [hash]);
+    if (rows[0] && rows[0].person_id !== personId) await setPreviousPerson(q, personId, rows[0].person_id);
+  }
+  return true;
+}
+
+/** Keyed with a secret only this api holds (LINK_JOIN_SECRET is Convex's and Supabase's too), so the table can't be matched against a list of Apple ids. With no key set, nobody's link is kept: the api says so when it starts. */
+function leftIdentityHash(provider: string, subject: string): string | null {
+  const secret = process.env.LEFT_IDENTITY_SECRET?.trim();
+  return secret ? createHmac("sha256", secret).update(`${provider}:${subject}`).digest("hex") : null;
+}
+
+/** Before someone's identities go, when they leave. A later leave of the same account points at the newer row, and that row's own link reaches the older one. */
+export async function rememberLeftIdentities(q: Queryable, personId: string): Promise<void> {
+  const { rows } = await q.query(`select provider, subject from identities where person_id = $1`, [personId]);
+  for (const row of rows) {
+    const hash = leftIdentityHash(row.provider, row.subject);
+    if (hash) await q.query(`insert into left_identities (hash, person_id) values ($1, $2) on conflict (hash) do update set person_id = excluded.person_id`, [hash, personId]);
+  }
+}
+
+export async function setPreviousPerson(q: Queryable, personId: string, previousId: string): Promise<void> {
+  await q.query(`update people set previous_person_id = $2 where id = $1 and previous_person_id is null`, [personId, previousId]);
+}
+
+/** Who this person was before, oldest last, with where they are now. */
+export async function earlierSelves(q: Queryable, personId: string): Promise<{ id: string; family_id: string }[]> {
+  const { rows } = await q.query(
+    `with recursive chain as (
+       select previous_person_id as id from people where id = $1 and previous_person_id is not null
+       union select p.previous_person_id from people p join chain on p.id = chain.id where p.previous_person_id is not null
+     )
+     select p.id, p.family_id from chain join people p on p.id = chain.id`,
+    [personId],
+  );
+  return rows;
 }
 
 export async function setIdentityEmail(q: Queryable, who: Who, email: string): Promise<void> {

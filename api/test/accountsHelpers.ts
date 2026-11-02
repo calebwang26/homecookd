@@ -36,6 +36,7 @@ export async function setup(): Promise<Keys> {
     RATE_LIMIT_SALT: "test-salt",
     EDIBLE_CODE_KEY: "test-code-key",
     LINK_JOIN_SECRET: SECRET,
+    LEFT_IDENTITY_SECRET: "made-up-left-identity-secret",
     APPLE_AUDIENCES: BUNDLE,
     GOOGLE_CLIENT_IDS: GOOGLE_CLIENT,
   });
