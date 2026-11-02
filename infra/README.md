@@ -180,6 +180,27 @@ it in the clear. So: made-up dishes and voices only, never real family content, 
 
 The cap is $1 a day on `dish_budget_usd`, plus Mom's overage and calls in flight.
 
+## The app on staging
+
+**The HTTPS address.** iOS won't call plain HTTP, so `module.front_door`'s `api` address is a CloudFront distribution in front of the load balancer, on its
+own `cloudfront.net` name with no DNS change: `terraform output front_door_domains`. Nothing is cached. CloudFront to the load balancer is plain HTTP,
+fine only because staging holds no real families. Behind CloudFront the api sees CloudFront's address as the caller's, so per-address limits are shared.
+
+**Staging's test sign-in.** Scripts can't do Sign in with Apple, so `POST /v1/test/sign-in` takes `/auth/apple`'s body with a `test_id` in place of the
+token, and the `x-test-signin-key` header (`api/src/modules/accounts/testSignIn.ts`, `docs/build/contracts/ACCOUNTS.md`). The route exists only while the
+api has `TEST_SIGNIN_KEY`, and the env module refuses that name in production. Its value is Caleb's to make and load, once:
+```bash
+grep -q '^TEST_SIGNIN_KEY=' /Users/calebwang/GitHub/homecookd/homecookd/.env || echo "TEST_SIGNIN_KEY=$(openssl rand -hex 32)" >> /Users/calebwang/GitHub/homecookd/homecookd/.env
+infra/scripts/load-secrets.sh staging TEST_SIGNIN_KEY   # this name only, so the real model keys aren't copied again
+infra/scripts/make-salt.sh staging LINK_JOIN_SECRET LEFT_IDENTITY_SECRET   # staging's own random values, never production's
+```
+**Accounts is on for staging** (`ACCOUNTS_OWNS_PEOPLE=1`): staging runs no sync, so the api owns its people and families, and a sign-up, join or
+leave works there. Join links point at staging's own web page (`EDIBLE_WEB_URL`). The two link secrets are staging's own, made by `make-salt.sh`,
+so nobody needs to know them, and a link or ticket from staging never opens anywhere else.
+
+Order: the merge that names them (its own deploy waits for an apply that refuses it, IAM), then a hand apply, then the lines above, then an api
+deploy. A deploy before the values are loaded can't start a task, and the running ones carry on.
+
 ## Database migrations
 
 `api/migrations/*.sql`, run by `api/src/migrate.ts` as a one-off task before each api rollout. A failure stops the rollout.
