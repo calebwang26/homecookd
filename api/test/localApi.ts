@@ -82,6 +82,12 @@ const store: ObjectStore = {
   async remove(key) {
     objects.delete(key);
   },
+  async list(prefix, max) {
+    return [...objects.keys()].filter((k) => k.startsWith(prefix)).slice(0, max);
+  },
+  async removeMany(keys) {
+    for (const key of keys) objects.delete(key);
+  },
 };
 useObjectStore(store);
 

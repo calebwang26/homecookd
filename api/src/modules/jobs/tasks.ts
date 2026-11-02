@@ -4,7 +4,7 @@ import * as Sentry from "@sentry/node";
 import { db, tx } from "../../db.js";
 import { enqueue } from "../../outbox.js";
 import { afterOf, type After } from "../../paging.js";
-import { objectStore, uploadStore, VIDEO_LINK_S } from "../../storage.js";
+import { storeFor, VIDEO_LINK_S } from "../../storage.js";
 import type { Trace } from "../dish/budget.js";
 import { failRecipeIfOpen } from "../recipes/writes.js";
 import * as data from "./data.js";
@@ -107,7 +107,7 @@ export async function sweepUploads(trace: Trace, after: After | null = null): Pr
     let removed = 0;
     for (const file of files) {
       try {
-        await (file.bucket === "uploads" ? uploadStore() : objectStore()).remove(file.key);
+        await storeFor(file.bucket).remove(file.key);
         await data.markFileDeleted(file.key);
         removed += 1;
       } catch (error) {

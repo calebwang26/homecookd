@@ -238,9 +238,9 @@ export async function readUploadKey(c: Queryable, personId: string, key: string)
 }
 
 // ---------------------------------------------------------------------------------------------
-// The sweep. `dish.sweep` keeps the anonymous private uploads, and this takes every other file the purge can mark in the two buckets the api can reach.
+// The sweep. `dish.sweep` keeps the anonymous private uploads, and this takes every other file the purge can mark, in all three buckets.
 
-const REACHES = `bucket in ('uploads', 'private') and capability_hash is null`;
+const REACHES = `bucket in ('uploads', 'private', 'media') and capability_hash is null`;
 
 /**
  * Uploads no job took, with nothing landed and no phone asking for a link in this long. These may still have a file in S3 that nobody reported, so the sweep asks S3 before
@@ -292,7 +292,7 @@ export async function endedJobsWithOpenCards(limit: number): Promise<string[]> {
 }
 
 /** Marked at least `graceS` ago: an upload link still in a phone's hands could put a file back until it expires. */
-export async function filesToDelete(graceS: number, limit: number): Promise<{ key: string; bucket: "uploads" | "private" }[]> {
+export async function filesToDelete(graceS: number, limit: number): Promise<{ key: string; bucket: "uploads" | "private" | "media" }[]> {
   const { rows } = await db().query(
     `select key, bucket from files
       where ${REACHES} and delete_requested_at is not null and deleted_at is null and delete_requested_at < now() - make_interval(secs => $1)

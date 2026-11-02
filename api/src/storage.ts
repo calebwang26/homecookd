@@ -4,8 +4,10 @@ import {
   CompleteMultipartUploadCommand,
   CreateMultipartUploadCommand,
   DeleteObjectCommand,
+  DeleteObjectsCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
   UploadPartCommand,
@@ -28,6 +30,10 @@ export interface ObjectStore {
   read(key: string): Promise<{ bytes: Uint8Array; contentType: string | null } | null>;
   /** Deleting what's already gone is fine. */
   remove(key: string): Promise<void>;
+  /** Up to `max` keys under a prefix. The outside purge asks for one more than it will delete, to see a folder that's too big. */
+  list(prefix: string, max: number): Promise<string[]>;
+  /** Throws if S3 refused any of them, without naming them: a key can hold a slug of what a cook typed. */
+  removeMany(keys: string[]): Promise<void>;
 }
 
 /**
@@ -128,6 +134,22 @@ export function s3Store(options: { bucket: string; client?: S3Client; now?: () =
     async remove(key) {
       await send(new DeleteObjectCommand({ Bucket, Key: key }));
     },
+    async list(prefix, max) {
+      const keys: string[] = [];
+      let ContinuationToken: string | undefined;
+      do {
+        const out = await send(new ListObjectsV2Command({ Bucket, Prefix: prefix, MaxKeys: Math.min(1000, max - keys.length), ContinuationToken }));
+        for (const o of out.Contents ?? []) if (o.Key) keys.push(o.Key);
+        ContinuationToken = out.IsTruncated ? out.NextContinuationToken : undefined;
+      } while (ContinuationToken && keys.length < max);
+      return keys.slice(0, max);
+    },
+    async removeMany(keys) {
+      for (let i = 0; i < keys.length; i += 1000) {
+        const out = await send(new DeleteObjectsCommand({ Bucket, Delete: { Objects: keys.slice(i, i + 1000).map((Key) => ({ Key })), Quiet: true } }));
+        if (out.Errors?.length) throw new Error(`S3 refused ${out.Errors.length} deletes (${out.Errors[0].Code ?? "no code"})`);
+      }
+    },
   };
 }
 
@@ -163,3 +185,23 @@ export function uploadStore(): ObjectStore {
 export function useUploadStore(next: ObjectStore | undefined): void {
   videos = next;
 }
+
+let media: ObjectStore | undefined;
+
+/** The `media` bucket: published recipes, behind the CDN. The api only deletes here, for the outside purge and the sweep. */
+export function mediaStore(): ObjectStore {
+  if (!media) {
+    const bucket = process.env.MEDIA_BUCKET?.trim();
+    if (!bucket) throw new Error("MEDIA_BUCKET isn't set");
+    media = s3Store({ bucket });
+  }
+  return media;
+}
+
+/** For tests. */
+export function useMediaStore(next: ObjectStore | undefined): void {
+  media = next;
+}
+
+/** The store a `files` row's bucket names. */
+export const storeFor = (bucket: "uploads" | "private" | "media") => (bucket === "uploads" ? uploadStore() : bucket === "media" ? mediaStore() : objectStore());

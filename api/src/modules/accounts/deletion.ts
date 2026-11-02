@@ -11,6 +11,7 @@ import { stopPersonsWork } from "../jobs/account.js";
 import { dropPushTokens } from "../messages/account.js";
 import * as data from "./data.js";
 import { requestMossSync } from "./neighbors.js";
+import { reachS3, S3_GRACE_MS } from "./outside.js";
 import { DELETION, type Deletion, STEPS } from "./purgeSteps.js";
 import { assertOwnsPeople, ownsPeople, refuse } from "./values.js";
 
@@ -288,43 +289,47 @@ export const useVoiceClones = (next: VoiceClones) => {
 };
 
 /**
- * What's still outside: her voice clone, which this deletes, and what it can't reach, which it names. The sweep only reaches the private bucket's anonymous and signed-in uploads today, and nothing here
- * can list a folder in `media` or `uploads` yet (AWS-MIGRATION.md, "Before real data"), so a deletion holding any of those stays open, with the reason on its row, rather than saying it's
- * done. It's tried again later, each wait longer, and someone is told after the last attempt.
+ * What's still outside: her voice clone, the folders and files the purge wrote down in `uploads` and `media` (outside.ts), and the files the sweep deletes, which this waits for. Until all
+ * of it is gone, a deletion stays open with the reason on its row, rather than saying it's done. It's tried again later, each wait longer, and someone is told after the last attempt. GCS is
+ * out of its reach: a deletion holding GCS links stays open (AWS-MIGRATION.md, "Before real data").
  */
-export async function purgeOutside(deletionId: string): Promise<"done" | "retry" | "gave_up" | "not_ready" | "missing"> {
+export async function purgeOutside(deletionId: string, budgetMs = PURGE_BUDGET_MS): Promise<"done" | "more" | "retry" | "gave_up" | "not_ready" | "missing"> {
   const { rows } = await db().query(`select ${DELETION} from account_deletions where id = $1`, [deletionId]);
   const d: Deletion | undefined = rows[0];
   if (!d) return "missing";
   if (d.external_purged_at) return "done";
   if (!d.purged_at) return "not_ready"; // a late recipe could still add to the lists
   const problems: string[] = [];
-  const counts: Record<string, number> = {};
 
   if (d.voice_clone_id) {
     try {
       await voices.remove(d.voice_clone_id);
       await db().query(`update account_deletions set voice_clone_id = null where id = $1`, [d.id]);
-      counts.voiceClones = 1;
+      await addCounts(d.id, { voiceClones: 1 });
     } catch (error) {
       problems.push(`Cartesia: ${(error as Error).message}`.slice(0, 120));
     }
+  }
+
+  const inS3 = d.upload_keys.length + d.media_prefixes.length + d.media_keys.length > 0;
+  if (inS3 && Date.now() - d.purged_at.getTime() < S3_GRACE_MS) return "not_ready"; // her voice clone doesn't wait
+  if (inS3) {
+    const reached = await reachS3(d, Date.now() + budgetMs);
+    await addCounts(d.id, reached.counts);
+    if (reached.outOfTime) {
+      // Not a failure, so it doesn't count as an attempt. What's done stays done: a folder already emptied lists nothing.
+      await enqueue(db(), { queue: "scheduled", payload: { task: "accounts.outside", deletionId: d.id } });
+      return "more";
+    }
+    problems.push(...reached.problems);
   }
 
   const left = await db().query(
     `select count(*)::int as n from files where (purge_deletion_id = $1 or owner_person_id = $2) and deleted_at is null`,
     [d.id, d.person_id],
   );
-  // A key the sweep has already taken isn't left to report (a plate photo is noted here and also in the ledger). The rest can't be seen yet.
-  const media = await db().query(
-    `select count(*)::int as n from unnest($1::text[]) as k where not exists (select 1 from files f where f.key = k and f.deleted_at is not null)`,
-    [d.media_keys],
-  );
   const notReached: [string, number][] = [
     ["files marked and not deleted", left.rows[0].n],
-    ["upload folders", d.upload_keys.length],
-    ["media files", media.rows[0].n],
-    ["recipe folders", d.media_prefixes.length],
     ["GCS links", d.media_urls_legacy.length],
   ];
   for (const [what, n] of notReached) if (n) problems.push(`Not reached yet: ${n} ${what}`);
@@ -333,7 +338,7 @@ export async function purgeOutside(deletionId: string): Promise<"done" | "retry"
     const current = await lockedDeletion(c, d.id);
     if (!current || current.external_purged_at) return "done" as const;
     if (!problems.length) {
-      await c.query(`update account_deletions set external_purged_at = now(), external_tried_at = now(), external_error = null, external_counts = $2 where id = $1`, [d.id, JSON.stringify(counts)]);
+      await c.query(`update account_deletions set external_purged_at = now(), external_tried_at = now(), external_error = null where id = $1`, [d.id]);
       return "done" as const;
     }
     const attempts = current.external_attempts + 1;
@@ -342,6 +347,19 @@ export async function purgeOutside(deletionId: string): Promise<"done" | "retry"
     alert("AccountOutsidePurgeGaveUp", { deletion_id: d.id });
     return "gave_up" as const;
   });
+}
+
+/** What each attempt deleted, added to the row as it goes: a deletion done over several attempts reports all of it. */
+async function addCounts(deletionId: string, counts: Record<string, number>): Promise<void> {
+  const some = Object.fromEntries(Object.entries(counts).filter(([, n]) => n > 0));
+  if (!Object.keys(some).length) return;
+  await db().query(
+    `update account_deletions set external_counts = (
+       select jsonb_object_agg(k, n) from (
+         select k, sum(v::int)::int as n from (select * from jsonb_each_text(coalesce(external_counts, '{}')) union all select * from jsonb_each_text($2::jsonb)) as x(k, v) group by k) t)
+      where id = $1`,
+    [deletionId, JSON.stringify(some)],
+  );
 }
 
 /** After fixing why it failed: tried on the schedule's next pass, with a fresh count. One already finished is left alone. A person runs this. */

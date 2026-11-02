@@ -58,11 +58,11 @@ locals {
         Action   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
         Resource = ["${aws_s3_bucket.uploads.arn}/*", "${aws_s3_bucket.media.arn}/*", "${aws_s3_bucket.private.arn}/*"]
       },
-      # Without this, S3 answers 403 for a missing object, and a file not uploaded yet looks like an outage.
+      # Without this, S3 answers 403 for a missing object, and a file not uploaded yet looks like an outage. The outside purge lists a deleted person's folders in uploads and media.
       {
         Effect   = "Allow"
         Action   = "s3:ListBucket"
-        Resource = [aws_s3_bucket.private.arn, aws_s3_bucket.uploads.arn]
+        Resource = [aws_s3_bucket.private.arn, aws_s3_bucket.uploads.arn, aws_s3_bucket.media.arn]
       },
       {
         Effect   = "Allow"

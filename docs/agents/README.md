@@ -21,6 +21,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [merge-agent-approval](memory/merge-agent-approval.md) | Oct 24: every PR goes to the "Merge Agent" session for approval; it decides conflicts |
 | [auto-ship-merged-prs](memory/auto-ship-merged-prs.md) | Oct 25: the Merge Agent ships each merged fix/feature PR to TestFlight without asking, then tells Caleb what to test |
 | [aws-migration](memory/aws-migration.md) | Oct 31: all hosting moves to AWS in phases; what needs Caleb's OK |
+| [raw-footage-14-days](memory/raw-footage-14-days.md) | Nov 2: raw videos go 14 days after upload, with S3's 28-day undo copy; keep it as built |
 | [section-chats](memory/section-chats.md) | Oct 26: one permanent chat owns each codebase section; the Merge Agent routes work to them |
 | [claude-cost-settings](memory/claude-cost-settings.md) | Oct 26: homie's recording check on Haiku, Opus fast mode off, to keep Claude spend down |
 | [eval-cheap-by-default](memory/eval-cheap-by-default.md) | Oct 28: the language eval runs only the languages a change touches, 5-min clips, Batch API, $3 cap |
