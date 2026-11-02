@@ -4,7 +4,7 @@ import { randomBytes } from "node:crypto";
 import { after, before, test } from "node:test";
 import { db } from "../src/db.js";
 import { startDeletion, runPurge } from "../src/modules/accounts/deletion.js";
-import { applyDeletion } from "../src/modules/sync/data.js";
+import { passOnDeletion } from "../src/modules/sync/service.js";
 import { Api, appleToken, bearer, count, device, freshDatabase, hasDatabase, type Keys, makeDevice, makeFamily, makeJoinLink, makePerson, row, setup } from "./accountsHelpers.js";
 
 const skip = !hasDatabase;
@@ -132,7 +132,7 @@ test("someone who left, deleted through the old system, and signs up again is a 
   const first = await joinByLink(sub, "Asha");
   assert.equal((await api.post(`/profiles/${first.person}/remove`, {}, device(first.key, first.person))).status, 200);
   assert.equal(await count("left_identities", "person_id = $1", [first.person]), 1);
-  await applyDeletion({ personId: first.person, familyId: first.family, supabaseId: null, at: new Date(), recipeIds: [] });
+  await passOnDeletion({ personId: first.person, familyId: first.family, supabaseId: null, at: new Date(), recipeIds: [] });
   assert.ok((await row("people", "id = $1", [first.person])).deleted_at);
   assert.equal(await count("left_identities", "person_id = $1", [first.person]), 0);
   const back = await signUp(sub, "Asha");
@@ -144,7 +144,7 @@ test("the sync's deletion of a row in a chain clears its link", { skip }, async 
   await signUp(sub, "Zed");
   const two = await joinByLink(sub, "Zed Two", { move: true });
   assert.ok((await row("people", "id = $1", [two.person])).previous_person_id);
-  await applyDeletion({ personId: two.person, familyId: two.family, supabaseId: null, at: new Date(), recipeIds: [] });
+  await passOnDeletion({ personId: two.person, familyId: two.family, supabaseId: null, at: new Date(), recipeIds: [] });
   assert.equal((await row("people", "id = $1", [two.person])).previous_person_id, null);
 });
 

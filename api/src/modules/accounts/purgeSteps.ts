@@ -9,6 +9,7 @@ import { purgeDishForPerson } from "../dish/account.js";
 import { purgeJobsForPerson } from "../jobs/account.js";
 import { purgeMessagesForPerson } from "../messages/account.js";
 import { blankFamilyIfEmpty } from "./data.js";
+import { ownsPeople } from "./values.js";
 
 export type Deletion = {
   id: string;
@@ -101,5 +102,6 @@ export const STEPS: Step[] = [
   { name: "moves they decided", run: del(`update move_requests set decided_by = null where id in (select id from move_requests where decided_by = $1 limit $2)`) },
   { name: "signups", run: signups },
   { name: "files", run: filesOwned },
-  { name: "the family, if they were its last", run: (q, d) => blankFamilyIfEmpty(q, d.family_id).then((did) => (did ? 1 : 0)) },
+  // While the sync owns families, the copy is read-only and C2 is the sync's (deletion.ts, startDeletionIn).
+  { name: "the family, if they were its last", run: async (q, d) => (ownsPeople() && (await blankFamilyIfEmpty(q, d.family_id)) ? 1 : 0) },
 ];

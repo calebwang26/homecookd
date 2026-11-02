@@ -100,6 +100,7 @@ gh workflow run apply-staging.yml --ref aws-migration --repo calebwang26/hackath
 
 **Things to know:**
 - The workflow waits up to 10 minutes on Terraform's lock, then fails and tells Caleb. It never force-unlocks.
+- The apply role must be able to read every resource type the plan refreshes, or every apply fails at the plan. `infra/scripts/role_reads.py` lists each type with its reads, and `test_plan_check.py` fails when a type has no row or the role doesn't grant a read. A new type's reads come from a debug plan (`TF_LOG=debug`, each `HTTP Request Sent` line's `tf_resource_type` and `rpc.method`). Granting one is an IAM change, so Caleb re-applies `infra/staging-apply-role`.
 - The provider lock file must carry the provider's hashes for Linux, which GitHub's runners are, as well as Macs: the workflow's init can't add them (`-lockfile=readonly`), and its plan then refuses the provider. After changing a provider version, run `terraform providers lock -platform=linux_amd64 -platform=darwin_arm64 -platform=darwin_amd64` in `infra/envs/staging`.
 - A deploy from the same merge waits for the apply (`scripts/wait-for-apply.sh`). If the apply is refused the deploy stops, and it's
   re-run from Actions afterward.
