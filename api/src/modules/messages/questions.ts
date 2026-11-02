@@ -2,7 +2,7 @@
 // moment) or it goes to the cook, who answers by text or voice note. A "share" ask and the pipeline's own follow-up questions reach her the same way.
 //
 // Reading her yes writes `recipes`, which moves later: recipeEffects is where that plugs in (docs/build/MESSAGES-MIGRATION.md, blockers). The question row records
-// what was read either way, so nothing is lost and the recipes area can apply old answers when it moves.
+// what was read either way, so nothing is lost and the recipes area can apply old answers when it moves. A share's yes goes through storyCards.shareOn, behind the switch.
 //
 // SQL, with its index:
 //   A recipe's questions               questions_recipe_recent
@@ -20,6 +20,7 @@ import { familyRecipe, recipesByIds, type RecipeBrief } from "../recipes/read.js
 import { iso } from "./data.js";
 import { models, type YesNo } from "./models.js";
 import { actorOf, type Write } from "./actor.js";
+import { shareOnYes } from "./storyCards.js";
 import { attachFile } from "./uploads.js";
 import { bad, decodeCursor, encodeCursor, isRowId, MAX_BODY, number, pageSize, text } from "./values.js";
 import { readLinks } from "./views.js";
@@ -58,10 +59,13 @@ const COLUMNS = `id, family_id, recipe_id, step_order, asked_by, text, text_for_
 export const YES_NO_QUESTION = "May homie put your recipe on the neighborhood map?";
 const MAX_SAID = 300;
 
-/** Where a clear yes reaches `recipes`. Both do nothing until those writes move here (blockers), and a test can watch them. Both run in the settle's transaction. */
+/**
+ * Where a clear yes reaches `recipes`, in the settle's transaction, and a test can watch them. An ingredient does nothing until those writes move here (blockers). A share
+ * puts the recipe on the map and queues its story card, and does nothing either while writes are off.
+ */
 export const recipeEffects = {
   ingredientYes: async (_c: Queryable, _yes: { recipeId: string; name: string; said: string | null; step: number | null; questionId: string }): Promise<void> => {},
-  shareYes: async (_c: Queryable, _yes: { recipeId: string; familyId: string }): Promise<void> => {},
+  shareYes: (c: Queryable, yes: { recipeId: string; familyId: string }, requestId?: string): Promise<void> => shareOnYes(c, yes, requestId),
 };
 
 async function questionById(q: Queryable, id: string): Promise<QuestionRow | null> {
@@ -311,6 +315,6 @@ export async function readShare(questionId: string, trace: Trace): Promise<void>
     if (!rowCount || said !== "yes") return;
     const recipe = await familyRecipe(c, q.family_id, q.recipe_id);
     if (!recipe || recipe.status !== "ready" || q.answer_by !== recipe.cook_id) return;
-    await recipeEffects.shareYes(c, { recipeId: recipe.id, familyId: recipe.family_id });
+    await recipeEffects.shareYes(c, { recipeId: recipe.id, familyId: recipe.family_id }, trace.requestId);
   });
 }

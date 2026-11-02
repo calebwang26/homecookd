@@ -251,7 +251,7 @@ test("deletions reaching the copy", { skip: !hasDatabase }, async (t) => {
     const r = w.recipe(cook, { title: STORY });
     await w.syncAll();
     // Rows of areas that have moved: a craving link (dish), a voice note in the ledger (files) and another family's dinner around her dish (community).
-    await db().query(`insert into craving_links (family_id, person_id, token, message) values ($1, $2, 'madeup-token', 'her line')`, [f._id, cook._id]);
+    await db().query(`insert into craving_links (family_id, person_id, token_hash, message) values ($1, $2, repeat('a', 64), 'her line')`, [f._id, cook._id]);
     const voice = await file(f._id);
     await db().query(`update files set owner_person_id = $2 where key = $1`, [voice, cook._id]);
     const { rows: dinner } = await db().query(

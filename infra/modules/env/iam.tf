@@ -22,7 +22,7 @@ resource "aws_iam_role_policy_attachment" "execution_base" {
 }
 
 resource "aws_iam_role_policy" "execution_secrets" {
-  for_each = { for k, s in var.services : k => s if length(s.secrets) > 0 || s.uses_database }
+  for_each = { for k, s in var.services : k => s if length(s.secrets) > 0 || (s.uses_database && !var.db_iam_login) }
   role     = aws_iam_role.execution[each.key].id
   policy = jsonencode({
     Version = "2012-10-17"
@@ -31,10 +31,35 @@ resource "aws_iam_role_policy" "execution_secrets" {
       Action = "secretsmanager:GetSecretValue"
       Resource = concat(
         [for s in each.value.secrets : aws_secretsmanager_secret.app[s].arn],
-        each.value.uses_database ? [aws_db_instance.main.master_user_secret[0].secret_arn] : [],
+        each.value.uses_database && !var.db_iam_login ? [aws_db_instance.main.master_user_secret[0].secret_arn] : [],
       )
     }]
   })
+}
+
+# The migrate task (services.tf): starts it with the master login, the one secret it reads.
+resource "aws_iam_role" "migrate_execution" {
+  name               = "${local.name}-migrate-execution"
+  assume_role_policy = data.aws_iam_policy_document.ecs_assume.json
+}
+
+resource "aws_iam_role_policy_attachment" "migrate_execution_base" {
+  role       = aws_iam_role.migrate_execution.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+resource "aws_iam_role_policy" "migrate_execution_secret" {
+  role = aws_iam_role.migrate_execution.id
+  policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = [{ Effect = "Allow", Action = "secretsmanager:GetSecretValue", Resource = aws_db_instance.main.master_user_secret[0].secret_arn }]
+  })
+}
+
+# Its running code needs nothing from AWS, so this role has no permissions at all.
+resource "aws_iam_role" "migrate_task" {
+  name               = "${local.name}-migrate-task"
+  assume_role_policy = data.aws_iam_policy_document.ecs_assume.json
 }
 
 # What the running code may do.
@@ -45,6 +70,13 @@ resource "aws_iam_role" "task" {
 }
 
 locals {
+  # Signs an IAM token for the service's own Postgres login, and no other (database.tf, db_logins). Harmless before db_iam_login.
+  db_connect = { for k, user in local.db_logins : k => {
+    Effect   = "Allow"
+    Action   = "rds-db:connect"
+    Resource = "arn:aws:rds-db:${local.region}:${local.account_id}:dbuser:${aws_db_instance.main.resource_id}/${user}"
+  } }
+
   task_permissions = {
     # Task protection keeps a task with a live call from being stopped by a release.
     voice = [{
@@ -53,6 +85,7 @@ locals {
       Resource = "arn:aws:ecs:${local.region}:${local.account_id}:task/${local.name}/*"
     }]
     api = [
+      local.db_connect.api,
       {
         Effect   = "Allow"
         Action   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
@@ -76,6 +109,7 @@ locals {
       },
     ]
     worker = [
+      local.db_connect.worker,
       {
         Effect   = "Allow"
         Action   = ["s3:GetObject", "s3:DeleteObject"]
@@ -167,11 +201,11 @@ resource "aws_iam_role_policy" "deploy" {
       },
       # These two don't support naming a resource.
       { Effect = "Allow", Action = ["ecs:DescribeTaskDefinition", "ecs:RegisterTaskDefinition"], Resource = "*" },
-      # Runs database migrations as a one-off task before a release.
+      # Runs database migrations as a one-off task before a release: the migrate task only, the one with the master login.
       {
         Effect   = "Allow"
         Action   = "ecs:RunTask"
-        Resource = "arn:aws:ecs:${local.region}:${local.account_id}:task-definition/${local.name}-api:*"
+        Resource = "arn:aws:ecs:${local.region}:${local.account_id}:task-definition/${local.name}-migrate:*"
       },
       {
         Effect   = "Allow"
@@ -186,7 +220,7 @@ resource "aws_iam_role_policy" "deploy" {
       {
         Effect    = "Allow"
         Action    = "iam:PassRole"
-        Resource  = concat([for r in aws_iam_role.execution : r.arn], [for r in aws_iam_role.task : r.arn])
+        Resource  = concat([for r in aws_iam_role.execution : r.arn], [for r in aws_iam_role.task : r.arn], [aws_iam_role.migrate_execution.arn, aws_iam_role.migrate_task.arn])
         Condition = { StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" } }
       },
     ]

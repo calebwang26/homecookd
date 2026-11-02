@@ -17,7 +17,7 @@ Each of these writes a row the sync owns, so I stopped short. None is written ar
 
 1. **`community.setShare` writes `recipes.shared_at`.** No route: it answers the catch-all 404.
 2. **`community.setLocation` writes `people.approx_*` and `campus`.** No route.
-3. **The story card (`storyCards.writeStoryCard`) writes `recipes.story_card_*`.** It only runs after a share, so it waits with it. Community reads the card here.
+3. **The story card (`storyCards.writeStoryCard`) writes `recipes.story_card_*`.** Built in Messages, behind the recipes switch, with `shareOn` for 1 and 4 to call (MESSAGES-MIGRATION.md, "Story cards"). Community reads the card here.
 4. **`shareRequests.ask` from the cook's own tap, and `shareRequests.settle` on her yes, write `recipes.shared_at`.** Her tap answers 501 `not_moved`, and never says "shared" without sharing. `settle` isn't here (Deferred). **A kid's ask answers the same 501 and writes nothing.** That's a different reason: `questions` isn't read-only, but a row written here reaches no cook, no answer and no purge until Messages moves, so saying "asked" would be untrue.
 5. **A report's two-family hide, and `reports.review`, write `recipes.hidden_at` and `shared_at`.** See below, because this one had to keep working.
 
@@ -162,6 +162,7 @@ The last command prints what the script said. A task takes about a minute to sta
 26. **A NUL byte is a 400 on every route.** `app.ts` looks through the params, the query and the body before any route's own checks, because Postgres text can't hold one and the error would be a 500. A cursor is encoded, so `paging.ts` checks inside it. Because this runs before a route's session check, a request with a NUL byte and no session gets 400 rather than 401, which says nothing about any row. On the dish routes the sentence is their usual "The body must be JSON."
 27. **A forged cursor with a date that can't be one is a 400,** checked before it reaches Postgres.
 28. **The team's review takes only an item with an open report.** Convex's `reports:review` took any id, so a wrong one could call off a dinner nobody reported. Running the same line twice is refused the second time.
+29. **Invite and craving tokens are stored sealed, and looked up by sha256** (SCHEMA.md, M6). Convex stored both as they are. A dinner whose sealed token can't be opened (another key, or a row from before) gets a new token, and its old link stops working. A craving link that can't be opened gets a new link with her line, and the old one still opens.
 
 ### Against SYSTEM-DESIGN.md
 
@@ -204,7 +205,7 @@ The last command prints what the script said. A task takes about a minute to sta
 - `safety.test.ts`: "a Muse card the filter catches goes plain" (writer).
 - `shareRequests.test.ts`: her typed yes, the two `TEXT_PROVIDER` tests, "without Gemini", the Marathi voice note, the yes/no reader, "only a yes" (Deferred).
 - `cravings.test.ts`: peek, a card tied to her, a card's name and words, the link's caps (card-making), `forMe` and `get`.
-- `lib/storyCard`'s `cleanCulture` and `parseMuseCard` assertions (writer).
+- `lib/storyCard`'s `cleanCulture` and `parseMuseCard` assertions (writer): carried in `messagesStoryCards.test.ts`.
 - `convex/account.test.ts`'s Community assertions move as `communityAccount.test.ts`, but the account purge itself isn't run.
 
 The 10-minute rate tests can flake across a real window edge, as `rateLimit.test.ts` can.
@@ -243,10 +244,11 @@ Report alerts go through `outbox` on the `scheduled` queue. A voice recipe's mer
 
 ## Secrets and env the api now needs (names only)
 
-Nothing new. `RATE_LIMIT_SALT`, `REPORT_ALERT_URL`, `REPORT_ALERT_TOKEN`, `REPORT_ALERT_EMAIL`, `DISH_WEB_ORIGIN` and `PRIVATE_BUCKET` are already set. No model is called from this area's own code, and voice recipes use the dish module's.
+`EDIBLE_CODE_KEY` (Nov 2), the key accounts already needs: a dinner's invite token and a craving link's are stored sealed with it (SCHEMA.md, M6). Without it, asking for either link is a 500, and a dinner's link still opens. `RATE_LIMIT_SALT`, `REPORT_ALERT_URL`, `REPORT_ALERT_TOKEN`, `REPORT_ALERT_EMAIL`, `DISH_WEB_ORIGIN` and `PRIVATE_BUCKET` are already set. No model is called from this area's own code, and voice recipes use the dish module's.
 
 ## What `infra/` needs (not done: this PR touches only `api/` and `docs/build/`)
 
+- `EDIBLE_CODE_KEY` on the api's `secret_names` and `secrets`, staging included: staging doesn't have it yet.
 - An EventBridge schedule into `scheduled`: `{"payload":{"task":"community.remind_open"}}` daily at 16:00 UTC, as Convex's cron. A switch gate (AWS-MIGRATION's Cutover list). Staging's is in `infra/envs/staging/main.tf` (#247, merged unapplied). Production's `schedules` has none yet.
 
 ## Invite opens and the database
@@ -260,7 +262,7 @@ An open that changes nothing (this phone's been counted, or the count has stoppe
 
 ## Before a backfill
 
-- `dinners.invite_token` is stored readable (SCHEMA.md M6, on AWS-MIGRATION's "Before real data").
+- `dinners.inviteToken` and `cravingLinks.token` go in sealed, as `077` stores them: the hash and the sealed token, never the token (SCHEMA.md, section 5, item 14).
 - A dinner's `recipe_id` needs its recipe copied first (M1's just-in-time upsert).
 
 ## Known limits

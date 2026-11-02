@@ -1,9 +1,11 @@
 // Shares, pending sends, hearts and recipe events: supabase/tests/api_test.ts, hearts_test.ts and the pure helpers from them, on real Postgres.
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
 import { after, test } from "node:test";
 import { db } from "../src/db.js";
 import { deliverPending, HEARTS_RECENT_LIMIT, MAX_JOINS_PER_LINK, parseDishIds, parseSince } from "../src/modules/messages/activity.js";
 import { dishesOf, makeLibrary } from "../src/modules/messages/library.js";
+import { SHARE_LINK_SALT, shareTokenHash, unseal } from "../src/sealed.js";
 import { CHILI, closeAll, DAL, DAY_MS, drain, fileRow, get, newKey, ok, pairOf, phone, post, pushes, refused, RICE, skip, tokenFor, uploaded, type Who, type World, world } from "./messagesHelpers.js";
 
 const event = (w: World, who: Who, body: Record<string, unknown>) => post(w.app, who, "/v1/events", body, { key: null });
@@ -157,16 +159,45 @@ test("a share link is one per family, dish and sender; opening it counts and nam
   delete process.env.MEDIA_BASE_URL;
   assert.deepEqual([opened.libraryId, opened.recipeUrl, opened.sender.name], [CHILI, `https://media.test/${CHILI}/recipe.json`, "Mom"]);
   assert.match(opened.familyName, /^The Wangs/);
-  const row = (await db().query(`select open_count, last_opened_at from shares where token = $1`, [made.token])).rows[0];
+  const row = (await db().query(`select id, open_count, last_opened_at from shares where token_hash = $1`, [shareTokenHash(made.token)])).rows[0];
   assert.equal(row.open_count, 1);
   assert.notEqual(row.last_opened_at, null);
 
   for (const token of ["nope", "ABCDEFGHIJ", 12]) refused(await post(w.app, null, "/v1/shares/open", { token }, { key: null }), 404);
 
   for (let i = 0; i < MAX_JOINS_PER_LINK; i += 1) {
-    await db().query(`insert into signups (name, share_token, family_id) values ($1, $2, $3)`, [`Kid ${i}`, made.token, w.family]);
+    await db().query(`insert into signups (name, share_token, family_id) values ($1, $2, $3)`, [`Kid ${i}`, `share:${row.id}`, w.family]);
   }
   assert.notEqual(ok(await post(w.app, w.mom, "/v1/shares", { libraryId: CHILI }, { key: null })).token, made.token);
+});
+
+test("a share link's token is stored only as a keyed hash and sealed: the row alone opens nothing, and the family is shown the same link again", { skip }, async () => {
+  const w = await world();
+  const made = ok(await post(w.app, w.mom, "/v1/shares", { libraryId: CHILI }, { key: null }));
+  const [row] = (await db().query(`select * from shares`)).rows;
+  assert.ok(!JSON.stringify(row).includes(made.token), "no column holds the token");
+  assert.equal(row.token_hash, shareTokenHash(made.token));
+  assert.notEqual(row.token_hash, createHash("sha256").update(made.token).digest("hex"), "keyed, so a copy of the table can't be searched by plain sha256");
+  assert.equal(await unseal(SHARE_LINK_SALT, row.id, row.token_enc), made.token);
+  assert.equal(await unseal(SHARE_LINK_SALT, "another-row", row.token_enc), null, "sealed to its own row");
+  assert.equal(ok(await post(w.app, w.mom, "/v1/shares", { libraryId: CHILI }, { key: null })).token, made.token);
+
+  // One that can't be opened gets a new link; the old one still opens.
+  await db().query(`update shares set token_enc = 'v1:AAAA.AAAA'`);
+  const next = ok(await post(w.app, w.mom, "/v1/shares", { libraryId: CHILI }, { key: null }));
+  assert.notEqual(next.token, made.token);
+  ok(await post(w.app, null, "/v1/shares/open", { token: made.token }, { key: null }));
+
+  // Without the key nothing is made, and nothing opens: the hash needs it too.
+  const key = process.env.EDIBLE_CODE_KEY;
+  delete process.env.EDIBLE_CODE_KEY;
+  try {
+    refused(await post(w.app, w.dad, "/v1/shares", { libraryId: CHILI }, { key: null }), 500);
+    refused(await post(w.app, null, "/v1/shares/open", { token: next.token }, { key: null }), 500);
+  } finally {
+    process.env.EDIBLE_CODE_KEY = key;
+  }
+  assert.equal((await db().query(`select count(*)::int as n from shares`)).rows[0].n, 2);
 });
 
 test("opening a share link is limited by IP", { skip }, async () => {

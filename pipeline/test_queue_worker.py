@@ -450,6 +450,24 @@ class FakeContext:
         return [c for c in self.store.model_calls if c["job_id"] == job_id]
 
 
+WORKER_LOGIN = "homecookd_worker"  # api/migrations/078_app_logins.sql
+
+
+def worker_store(url: str) -> queue_db.PostgresStore:
+    """PostgresStore as the worker's own login, so a table it wasn't granted fails here before it fails on AWS. There's no IAM
+    locally: the test URL's superuser takes the role on each new connection. The scenarios' own setup (admin) stays superuser."""
+    store = queue_db.PostgresStore({"conninfo": url})
+    connect = store._connect
+
+    def as_worker():
+        conn = connect()
+        conn.execute(f"set role {WORKER_LOGIN}")
+        return conn
+
+    store._connect = as_worker
+    return store
+
+
 class PostgresContext:
     name = "postgres"
 
@@ -458,14 +476,14 @@ class PostgresContext:
         from psycopg.rows import dict_row
         self.admin = psycopg.connect(url, autocommit=True, row_factory=dict_row)
         self.url = url
-        self.store = queue_db.PostgresStore({"conninfo": url})
+        self.store = worker_store(url)
         self.family = self.admin.execute("insert into families (name) values (%s) returning id", (f"Fam {uuid.uuid4()}",)).fetchone()["id"]
         self.cook = self.admin.execute("insert into people (family_id, name, role, language) values (%s, 'Aaji Pawar', 'cook', 'mr') returning id",
                                        (self.family,)).fetchone()["id"]
         self.admin.execute("delete from daily_spend")
 
     def second_store(self):
-        return queue_db.PostgresStore({"conninfo": self.url})
+        return worker_store(self.url)
 
     def new_job(self, upload_key="up-1/", stage="queued", recipe=None, attempts=0, cost=None) -> str:
         recipe_id = None
@@ -1800,8 +1818,95 @@ def test_settings_match_the_real_queue():
     assert int(re.search(r"maxReceiveCount\s*=\s*(\d+)", tf).group(1)) == qw.MAX_RECEIVES
     assert int(re.search(r"visibility_timeout_seconds\s*=\s*(\d+)", tf).group(1)) >= qw.VISIBILITY_S
     services = (ROOT / "infra" / "modules" / "env" / "services.tf").read_text()
-    for name in ("JOBS_QUEUE_URL", "UPLOAD_BUCKET", "MEDIA_BUCKET", "PRIVATE_BUCKET", "DEPLOY_ENV", "DB_HOST", "DB_CREDENTIALS"):
+    for name in ("JOBS_QUEUE_URL", "UPLOAD_BUCKET", "MEDIA_BUCKET", "PRIVATE_BUCKET", "DEPLOY_ENV", "DB_HOST", "DB_CREDENTIALS", "DB_USER", "DB_IAM"):
         assert name in services, name
+    logins = (ROOT / "infra" / "modules" / "env" / "database.tf").read_text()
+    assert f'worker = "{WORKER_LOGIN}"' in logins  # the IAM user the task signs for is the role the migration makes
+
+
+# ---------- the worker's own database login (fakes: no AWS, no database) ----------
+
+class FakeRds:
+    """boto3's RDS client, as far as the token goes. The real one signs locally too, with the task role."""
+
+    def __init__(self):
+        self.asked = []
+
+    def generate_db_auth_token(self, **kwargs):
+        self.asked.append(kwargs)
+        return f"token-{len(self.asked)}"
+
+
+@contextlib.contextmanager
+def database_env(**values):
+    names = ("DATABASE_URL", "DB_HOST", "DB_USER", "DB_IAM", "DB_CREDENTIALS", "DB_CA_FILE")
+    saved = {k: os.environ.get(k) for k in names}
+    for k in names:
+        os.environ.pop(k, None)
+    os.environ.update(values)
+    try:
+        yield
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                os.environ.pop(k, None)
+            else:
+                os.environ[k] = v
+
+
+@contextlib.contextmanager
+def fake_psycopg():
+    """Stands in for psycopg.connect, so the store's own _connect runs here with or without psycopg installed."""
+    opened = []
+    fake = SimpleNamespace(connect=lambda **kwargs: opened.append(kwargs) or SimpleNamespace(closed=False))
+    rows = SimpleNamespace(dict_row=object())
+    saved = {k: sys.modules.get(k) for k in ("psycopg", "psycopg.rows")}
+    sys.modules.update({"psycopg": fake, "psycopg.rows": rows})
+    try:
+        yield opened
+    finally:
+        for k, v in saved.items():
+            if v is None:
+                sys.modules.pop(k, None)
+            else:
+                sys.modules[k] = v
+
+
+MASTER = json.dumps({"username": "homecookd", "password": "made-up-master"})
+
+
+def test_iam_login_signs_a_new_token_for_each_connection():
+    rds = FakeRds()
+    with database_env(DB_HOST="db.test", DB_IAM="1", DB_USER=WORKER_LOGIN, DB_CREDENTIALS=MASTER), fake_psycopg() as opened:
+        store = queue_db.PostgresStore(queue_db.dsn_from_env(rds))
+        assert rds.asked == [], "nothing is signed until a connection opens"
+        store._connect()
+        store._connect()  # a reconnect, say after a failover: the first token may be hours old
+    assert [o["password"] for o in opened] == ["token-1", "token-2"]
+    assert rds.asked == [{"DBHostname": "db.test", "Port": 5432, "DBUsername": WORKER_LOGIN}] * 2
+    for o in opened:
+        assert o["user"] == WORKER_LOGIN and o["host"] == "db.test" and o["port"] == 5432 and o["dbname"] == "homecookd"
+        assert o["sslmode"] == "verify-full" and o["sslrootcert"] == queue_db.CA_FILE  # IAM needs TLS, and the certificate is checked
+    assert not any("made-up-master" in str(v) for o in opened for v in o.values())
+
+
+def test_without_iam_the_master_login_is_unchanged():
+    rds = FakeRds()
+    with database_env(DB_HOST="db.test", DB_IAM="0", DB_USER=WORKER_LOGIN, DB_CREDENTIALS=MASTER), fake_psycopg() as opened:
+        queue_db.PostgresStore(queue_db.dsn_from_env(rds))._connect()
+    assert opened[0]["user"] == "homecookd" and opened[0]["password"] == "made-up-master" and opened[0]["sslmode"] == "verify-full"
+    with database_env(DATABASE_URL="postgres://u:p@127.0.0.1:5432/t", DB_IAM="1", DB_USER=WORKER_LOGIN, DB_HOST="db.test"):
+        assert queue_db.dsn_from_env(rds) == {"conninfo": "postgres://u:p@127.0.0.1:5432/t"}
+    assert rds.asked == []
+
+
+def test_iam_login_without_a_user_stops_at_start():
+    with database_env(DB_HOST="db.test", DB_IAM="1"):
+        try:
+            queue_db.dsn_from_env(FakeRds())
+            raise AssertionError("started with no user")
+        except KeyError as e:
+            assert e.args == ("DB_USER",)
 
 
 # ---------- boto3's own model of the calls (no network: the Stubber answers) ----------

@@ -109,8 +109,10 @@ Not `s3:ListBucket` on `private`, so a missing photo answers 403, which `downloa
 **Infra:** Fargate's default 20 GB disk may be too small; see below. Terraform leaves it until a job is measured: the measuring task sets it
 with `run-task --overrides '{"ephemeralStorage":{"sizeInGiB":100},"containerOverrides":[{"name":"worker","command":["--once"]}]}'`.
 
-**Database login (when the limited one replaces master):** read and write `jobs`, `recipes`, `questions`, `model_calls`, `daily_spend`;
-insert `outbox`; read `people`, `recordings`, `homie_prompts`.
+**Database login (`homecookd_worker`, `api/migrations/078_app_logins.sql`; built Nov 2, on with `db_iam_login`):** read and update `jobs`;
+read, insert and update `recipes`, `model_calls`, `daily_spend`; insert `questions` (reading only its follow-up key) and `outbox`; read `people`,
+`recordings`, `homie_prompts`, and the two sync tables `recipes`' triggers check. No delete. With it on, the task gets `DB_USER` and `DB_IAM=1`
+in place of `DB_CREDENTIALS`, and signs an IAM token per connection (`queue_db.iam_password`).
 
 ## Queries and their indexes
 

@@ -42,6 +42,8 @@ module "env" {
   db_protected      = true
   alert_email       = "caleb.wang26@gmail.com"
   secret_names      = toset(concat(local.voice_secrets, local.worker_secrets, local.api_secrets))
+  # The api and worker never get the master login here: migrations run as their own task (infra/README.md, "Database logins").
+  db_iam_login = true
 
   # TODO(caleb): certificate_arn, media_domain and media_certificate_arn need the DNS change in phase 1.
 

@@ -67,7 +67,7 @@ and anything changing what build 6 calls, needs his separate OK.
 ### Before production launch
 
 A restore drill, a deliberately killed service, a load test, and these gaps closed: 2+ api tasks, autoscaling, HTTPS, and a
-limited database login.
+limited database login. The login is built (Nov 2) and waits on Caleb's staging apply (`infra/README.md`, "Database logins").
 
 **A budget alert reaches a person (Nov 1).** The real-models window showed the budget's alert reaching only the logs, because `REPORT_ALERT_URL` isn't set on AWS. A log alarm to the alerts topic now emails it. Before production: fire it once and see the email arrive.
 
@@ -78,6 +78,8 @@ pool waits; autoscaling on request load. **The proof is a load test that exercis
 **Measured, Nov 1 (made-up data, local Postgres, one process with a pool of 10):** a request waiting on a row lock keeps its connection. 200 requests at once on one card finish in 408 ms
 with no error, because each holds the row for about 2 ms. If something else holds that row, the queue takes the whole pool: with a row held 7 s and 10 waiting, one of the 10 got a 500, and `/ready`
 answered 503 after 5 s for anyone, on any family's behalf. With 40 waiting, 31 got a 500. At 3 s nothing failed, but everything else waited the 3 s. So one stuck row can stop a task for every family.
+**Built, Nov 2: turning work away when overloaded** (`api/src/overload.ts`, `OVERLOAD_SHED=on`, off by default and on in staging). Before any work, a request is turned away with the busy 503 and `retry-after`, and the "too busy to answer" line the alarm counts, when the event loop was busy for more than 98% of the last second, runs more than 500 ms late, or 50 requests already wait for a connection (`OVERLOAD_MAX_BUSY`, `OVERLOAD_MAX_LAG_MS`, `OVERLOAD_MAX_POOL_WAITING`). `/health` and `/ready` are never turned away. **Measured locally** on the api's image held to 0.25 vCPU and 512 MB, as staging's task is, with 1,500 requests at once: off, all answered 200 and the slowest took 9.5 s. On, a third to most of the card reads got the 503 (467 and 640 of 750 in two runs, nearly all on the busy share), and the slowest took 4.9 to 9.8 s on a machine busy with other work. **So it sheds work, but on this task size it can't answer fast:** the wait is before Node reads a request, and only more CPU shortens that. The real fix is a bigger task or a second one, with autoscaling: a production-sizing call for Caleb. The staging rerun waits for auto-apply to set the switch there.
+
 **Built after that measurement:** `lock_timeout` is 3 s, and a request that gives up on a lock or on the pool answers a 503 with `retry-after`, in every error handler. Nothing was written, so the phone may try again.
 **It isn't a cure.** Requests take connections in the order they came, so with 40 waiting on a stuck row, others still wait behind them. With 15, `/ready` answered 200. The bounded wait above is still the gate. A test (`api/test/busy.test.ts`) holds it to this.
 
@@ -144,7 +146,9 @@ a deleted version for its 28-day undo window, so the bytes are fully gone about 
 
 Before any backfill copies real rows into Postgres:
 
-- Seal `craving_links.token`, `dinners.invite_token` and `shares.token` (SCHEMA.md, M6).
+- Seal `craving_links.token`, `dinners.invite_token` and `shares.token` (SCHEMA.md, M6). Done on the branch (Nov 2, `077`): each keeps a hash for lookup and the
+  token sealed with `EDIBLE_CODE_KEY`. Still open: the backfill must write them that way too (SCHEMA.md, section 5, item 14), and the api needs `EDIBLE_CODE_KEY` before
+  these links work anywhere, staging included.
 - How long raw footage is kept: decided by Caleb on Nov 2, 14 days as built (above). `/privacy` must say it accurately when it names AWS.
 - Count violations of every new uniqueness rule, CHECK and domain (SCHEMA.md, section 7).
 - The sweep reaches every bucket and row the purge can mark. Done on the branch (Nov 2): `jobs.sweep` reaches all three buckets, and the outside purge deletes the folders and
@@ -159,7 +163,9 @@ longer needs `sentry-sdk`.
 
 Before production (CUTOVER.md, step 6):
 
-- Give the worker and api a limited database login in place of the master one.
+- Give the worker and api a limited database login in place of the master one. **Built (Nov 2):** each has its own user
+  (`api/migrations/078_app_logins.sql`), logs in with an IAM token, and can't change the schema. Only the migrate task keeps the master
+  login. Left: Caleb's staging apply and the switch, in the order in `infra/README.md`, "Database logins". Production starts with it on.
 - Pin the workflows' actions to commit SHAs, and add a checksum for the downloaded gitleaks. Done on the branch (Nov 2): every `uses:`
   names a commit, and gitleaks is checked against its sha256 before it runs (`infra/README.md`, "Pinned actions and tools").
 
@@ -269,8 +275,9 @@ pg_cron with EventBridge, and re-running `two_sided_live`, `api-smoke` and `rete
 Supabase freeze has to be lifted for this, which is Caleb's call.
 
 Before real data arrives: create a limited app user for `api` and `worker`, and take the RDS master login
-(`DB_CREDENTIALS` in `infra/modules/env/services.tf`) out of their tasks. The deploy workflow's actions are pinned to commit
-SHAs (Nov 2).
+(`DB_CREDENTIALS` in `infra/modules/env/services.tf`) out of their tasks. Built Nov 2: `homecookd_api` and `homecookd_worker`, with
+IAM tokens, and the master login only in the migrate task. Staging moves over with `db_iam_login` after Caleb's apply. The deploy
+workflow's actions are pinned to commit SHAs (Nov 2).
 
 ### 6. Convex to Postgres
 Same shared schema as phase 5.

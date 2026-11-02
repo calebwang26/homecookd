@@ -28,6 +28,23 @@ export async function failRecipeIfOpen(c: Queryable, recipeId: string): Promise<
   return true;
 }
 
+/** community.shareOn's write: on the map from now. With writes off it's the sync's row, and Convex shares it. */
+export async function shareRecipeIfOpen(c: Queryable, recipeId: string): Promise<boolean> {
+  if ((await recipeWrites(c)) !== "open") return false;
+  await c.query(`update recipes set shared_at = now() where id = $1`, [recipeId]);
+  return true;
+}
+
+/** The story card, all of it in one statement, so a card is never part new and part old. With writes off, Convex writes its own. */
+export async function saveStoryCardIfOpen(c: Queryable, recipeId: string, card: { text: string; usedStories: boolean; culture: string | null; quote: string | null }): Promise<boolean> {
+  if ((await recipeWrites(c)) !== "open") return false;
+  await c.query(
+    `update recipes set story_card_text = $2, story_card_written_at = now(), story_card_used_stories = $3, story_card_culture = $4, story_card_quote = $5 where id = $1`,
+    [recipeId, card.text, card.usedStories, card.culture, card.quote],
+  );
+  return true;
+}
+
 /**
  * For the account purge, which doesn't wait for the flag: a deletion must happen. Only the sync's own rule stops it, and then the sync has already removed
  * the recipe (SYNC-MIGRATION.md, "Account deletion").

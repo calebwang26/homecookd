@@ -131,14 +131,31 @@ def recipe_row(raw: dict) -> dict:
             "language": language if re.fullmatch(r"[a-z]{2,3}", language) else None, "follow_ups": follow_ups}
 
 
-def dsn_from_env() -> dict:
-    """DATABASE_URL locally; on AWS the host and login the task already gets (infra/modules/env/services.tf), with RDS's
-    certificate checked, as api/src/db.ts does."""
+def iam_password(host: str, port: int, user: str, rds=None):
+    """A new RDS IAM token each time it's called: signed with the task role, good for 15 minutes, and only for opening a
+    connection, so an open one outlives it. Signing is local: no network call."""
+    def token() -> str:
+        nonlocal rds
+        if rds is None:
+            import boto3
+            rds = boto3.client("rds")  # the task's region and role
+        return rds.generate_db_auth_token(DBHostname=host, Port=port, DBUsername=user)
+    return token
+
+
+def dsn_from_env(rds=None) -> dict:
+    """DATABASE_URL locally. On AWS the host the task gets (infra/modules/env/services.tf), with RDS's certificate checked, as
+    api/src/db.ts does. DB_IAM=1 is the limited login (api/migrations/078_app_logins.sql): DB_USER, with a fresh IAM token for
+    each connection, so no password exists anywhere. Without it, the master login in DB_CREDENTIALS."""
     if url := os.environ.get("DATABASE_URL"):
         return {"conninfo": url}
+    server = {"host": os.environ["DB_HOST"], "port": 5432, "dbname": "homecookd", "sslmode": "verify-full",
+              "sslrootcert": os.environ.get("DB_CA_FILE") or CA_FILE}
+    if os.environ.get("DB_IAM") == "1":
+        user = os.environ["DB_USER"]
+        return {**server, "user": user, "password": iam_password(server["host"], server["port"], user, rds)}
     login = json.loads(os.environ["DB_CREDENTIALS"])
-    return {"host": os.environ["DB_HOST"], "dbname": "homecookd", "user": login["username"], "password": login["password"],
-            "sslmode": "verify-full", "sslrootcert": os.environ.get("DB_CA_FILE") or CA_FILE}
+    return {**server, "user": login["username"], "password": login["password"]}
 
 
 class PostgresStore:
@@ -149,7 +166,9 @@ class PostgresStore:
     def _connect(self):
         import psycopg
         from psycopg.rows import dict_row
-        return psycopg.connect(**self.dsn, autocommit=True, row_factory=dict_row, connect_timeout=10,
+        # A password that's a function is the IAM token: made fresh here, because a reconnect after a failover can come hours later.
+        dsn = {k: v() if callable(v) else v for k, v in self.dsn.items()}
+        return psycopg.connect(**dsn, autocommit=True, row_factory=dict_row, connect_timeout=10,
                                options="-c statement_timeout=30000", keepalives_idle=30, keepalives_interval=10,
                                keepalives_count=3)
 

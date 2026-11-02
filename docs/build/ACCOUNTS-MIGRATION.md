@@ -116,13 +116,13 @@ Kept, in `appleRevoke.ts`: the same two calls in the same order, before the dele
 6. **A purge that keeps stopping** is restarted every hour for good, alerting after 5. Convex stopped after 5 and logged a line.
 7. **The purge finishes only after an empty pass.** Convex finished after one pass over the steps.
 8. **`links.moved`'s `faces`** counts only faces with work to bring, so a repeat says 0. The move already took the faces across in one transaction. The app doesn't read this count.
-9. **`signups`** now gets `person_id`, and a deletion reaches it, by person and email.
+9. **`signups`** now gets `person_id`, and a deletion reaches it, by person and email. A join through a recipe link is logged as `share:<id>`, never the link's token (SCHEMA.md, M6).
 10. **Deletion also revokes family invites they sent,** as today's follow-up call to `/profiles/:id/remove` does, and `inviter_id` goes null.
 11. **`GET /family`'s `memorial`** is always present, since it can't be unreadable here.
 12. **Responses add `requestId` and `x-request-id`;** a 429 adds `retry-after`.
 13. **A malformed JSON body** gets `{error: "bad_request"}`, not "Body must be JSON". Nothing matches that sentence.
 14. **Rate limits** are fixed windows (SCHEMA.md's choice), with `RATE_LIMIT_SALT` and no fallback key.
-15. **Sealed values need `EDIBLE_CODE_KEY`.** Supabase fell back on its service key. A join link that can't be opened is replaced with a new one; a family code is sealed again on its next use.
+15. **Sealed values need `EDIBLE_CODE_KEY`.** Supabase fell back on its service key. A join link that can't be opened is replaced with a new one; a family code is sealed again on its next use. Since Nov 2 the same key seals craving, dinner and share links (`api/src/sealed.ts`), and a share link is found by a hash keyed from it, so changing the key stops every share link opening.
 16. **`/link/open` reads a family with no uuid as `no_family`,** rather than minting a ticket Supabase would refuse.
 17. **Marking a key with no row in `files` adds a row,** so a purge can't lose it. Only a backfill bug could cause that.
 

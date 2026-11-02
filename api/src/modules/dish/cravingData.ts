@@ -2,22 +2,39 @@
 //
 //   Query                                  Index                          Limit
 //   her newest link                        craving_links_person_newest    one row
+//   a link by its token                    craving_links.token_hash (unique)   one row
 //   the cards asked of her                 dish_asks_requested_recent     the caller's page
 //   those cards' answers                   dish_answers (ask_id, question_id)   6 a card
 //   a file by key                          files primary key              one row
 import type { Queryable } from "../../db.js";
 import type { After } from "../../paging.js";
 import type { AnswerRow, CardRow } from "./data.js";
+import { sha256Hex } from "./values.js";
 
-export type LinkRow = { id: string; token: string; message: string; uses: number; revoked_at: Date | null };
+/** Only the token's sha256 is looked up. `token_enc` is the token sealed, so she's shown her own link again (cravings.ts); null on a row from before that. */
+export type LinkRow = { id: string; family_id: string; person_id: string; token_enc: string | null; message: string; uses: number; revoked_at: Date | null };
+const LINK = `id, family_id, person_id, token_enc, message, uses, revoked_at`;
 
 export async function newestLink(q: Queryable, personId: string): Promise<LinkRow | null> {
-  const { rows } = await q.query(`select id, token, message, uses, revoked_at from craving_links where person_id = $1 order by created_at desc limit 1`, [personId]);
+  const { rows } = await q.query(`select ${LINK} from craving_links where person_id = $1 order by created_at desc limit 1`, [personId]);
   return rows[0] ?? null;
 }
 
-export async function insertLink(q: Queryable, l: { familyId: string; personId: string; token: string; message: string }): Promise<void> {
-  await q.query(`insert into craving_links (family_id, person_id, token, message) values ($1, $2, $3, $4)`, [l.familyId, l.personId, l.token, l.message]);
+/** For /dish/craving/peek and `cravingToken` on /dish/cards, once they're built (routes.ts). */
+export async function linkByToken(q: Queryable, token: string): Promise<LinkRow | null> {
+  const { rows } = await q.query(`select ${LINK} from craving_links where token_hash = $1`, [sha256Hex(token)]);
+  return rows[0] ?? null;
+}
+
+export async function insertLink(q: Queryable, l: { id: string; familyId: string; personId: string; tokenHash: string; tokenEnc: string; message: string }): Promise<void> {
+  await q.query(`insert into craving_links (id, family_id, person_id, token_hash, token_enc, message) values ($1, $2, $3, $4, $5, $6)`, [
+    l.id,
+    l.familyId,
+    l.personId,
+    l.tokenHash,
+    l.tokenEnc,
+    l.message,
+  ]);
 }
 
 export async function setLinkMessage(q: Queryable, id: string, message: string): Promise<void> {

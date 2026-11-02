@@ -95,20 +95,23 @@ export const pushes = (expo: FakeExpo) => expo.sent.flat().map((m) => [m.to, m.t
 // ---------------------------------------------------------------------------------------------
 // Models
 
+const FAKE_CARD = JSON.stringify({ story: "A family dish, shared with the neighbors.", culture: "", quote: 0 });
+
 export const fakeModels = {
   translate: (text: string, language: string): Promise<string> => Promise.resolve(`(${language}) ${text}`),
   yesNo: (_q: string, _a: string): Promise<"yes" | "no" | "unclear"> => Promise.resolve("unclear"),
   transcript: (): Promise<string> => Promise.resolve("Yes, rinse them first."),
   english: (w: string): Promise<string | null> => Promise.resolve(`(English) ${w}`),
   note: (_fact: string, _url: string): Promise<string> => Promise.resolve('"Made your chili, Dad. Not as good as yours yet!"'),
-  calls: { translate: [] as [string, string][], yesNo: [] as [string, string][], transcribe: [] as string[], english: [] as string[], note: [] as [string, string][] },
+  card: (_facts: string): Promise<string> => Promise.resolve(FAKE_CARD),
+  calls: { translate: [] as [string, string][], yesNo: [] as [string, string][], transcribe: [] as string[], english: [] as string[], note: [] as [string, string][], card: [] as string[] },
 };
 
 const realModels = { ...models };
 export const useRealModels = () => Object.assign(models, realModels);
 
 function standInModels(): void {
-  fakeModels.calls = { translate: [], yesNo: [], transcribe: [], english: [], note: [] };
+  fakeModels.calls = { translate: [], yesNo: [], transcribe: [], english: [], note: [], card: [] };
   fakeModels.translate = (text, language) => Promise.resolve(`(${language}) ${text}`);
   fakeModels.yesNo = () => Promise.resolve("unclear");
   fakeModels.transcript = () => Promise.resolve("Yes, rinse them first.");
@@ -133,6 +136,11 @@ function standInModels(): void {
   models.photoNote = (fact, url) => {
     fakeModels.calls.note.push([fact, url]);
     return fakeModels.note(fact, url);
+  };
+  fakeModels.card = () => Promise.resolve(FAKE_CARD);
+  models.storyCard = (facts) => {
+    fakeModels.calls.card.push(facts);
+    return fakeModels.card(facts);
   };
 }
 
@@ -177,6 +185,7 @@ export async function familyRow(name: string): Promise<string> {
 
 export async function world(): Promise<World> {
   process.env.RATE_LIMIT_SALT = "test-salt-for-the-messages-limits";
+  process.env.EDIBLE_CODE_KEY = "test-code-key";
   delete process.env.MEDIA_BASE_URL;
   if (!migrated) {
     await freshDatabase();

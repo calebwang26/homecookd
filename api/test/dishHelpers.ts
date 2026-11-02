@@ -144,6 +144,7 @@ let migrated = false;
 export async function newBackend(): Promise<FastifyInstance> {
   process.env.DISH_FAKE_AI = "1";
   process.env.RATE_LIMIT_SALT = "test-salt-for-the-dish-limits";
+  process.env.EDIBLE_CODE_KEY = "test-code-key";
   delete process.env.REPORT_ALERT_URL;
   if (!migrated) {
     await freshDatabase();
