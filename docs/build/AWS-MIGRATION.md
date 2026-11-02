@@ -151,7 +151,8 @@ longer needs `sentry-sdk`.
 Before production (CUTOVER.md, step 6):
 
 - Give the worker and api a limited database login in place of the master one.
-- Pin the workflows' actions to commit SHAs, and add a checksum for the downloaded gitleaks.
+- Pin the workflows' actions to commit SHAs, and add a checksum for the downloaded gitleaks. Done on the branch (Nov 2): every `uses:`
+  names a commit, and gitleaks is checked against its sha256 before it runs (`infra/README.md`, "Pinned actions and tools").
 
 Before any new-host link exists (CUTOVER.md, step 10):
 
@@ -258,8 +259,8 @@ pg_cron with EventBridge, and re-running `two_sided_live`, `api-smoke` and `rete
 Supabase freeze has to be lifted for this, which is Caleb's call.
 
 Before real data arrives: create a limited app user for `api` and `worker`, and take the RDS master login
-(`DB_CREDENTIALS` in `infra/modules/env/services.tf`) out of their tasks. When production deploys start, pin the deploy
-workflow's actions to commit SHAs.
+(`DB_CREDENTIALS` in `infra/modules/env/services.tf`) out of their tasks. The deploy workflow's actions are pinned to commit
+SHAs (Nov 2).
 
 ### 6. Convex to Postgres
 Same shared schema as phase 5.

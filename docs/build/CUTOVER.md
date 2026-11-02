@@ -93,7 +93,7 @@ No area may switch before this passes. Until it does, there's no scheduled backu
 ### 6. Production. OK
 Likely to pass $300 a month (about $450-850 at 500 daily users), so it's his OK twice over.
 - **Who:** Claude writes it, Caleb OKs the plan, then Claude applies.
-- **Do, first:** give the GitHub `Production` environment required reviewers. Then close the gaps the plan lists for launch: 2 or more api tasks, autoscaling, HTTPS, a limited database login for the worker and api in place of the master one, the workflows' actions pinned to commit SHAs, a checksum for the downloaded gitleaks.
+- **Do, first:** give the GitHub `Production` environment required reviewers. Then close the gaps the plan lists for launch: 2 or more api tasks, autoscaling, HTTPS, a limited database login for the worker and api in place of the master one. Done on the branch (Nov 2): the workflows' actions pinned to commit SHAs, and a checksum for the downloaded gitleaks (`infra/README.md`, "Pinned actions and tools").
   ```bash
   cd infra/envs/production && AWS_PROFILE=homecookd terraform plan   # Caleb reads this
   AWS_PROFILE=homecookd terraform apply
