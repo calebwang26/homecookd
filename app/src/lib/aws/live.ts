@@ -1,0 +1,123 @@
+// Live updates on the AWS api (1.1): GET /v1/live/<topic>?since=<version>, polled while someone is watching and
+// the app is in front (ACCOUNTS.md, "Live updates"; JOBS.md, "Live topic jobs"). One poller per topic and person,
+// shared by every screen that watches it, as a Convex subscription was. A second screen gets the last value at once.
+//
+// It waits the server's pollAfterMs between polls. A failed poll keeps what's on screen and backs off (retryDelayMs:
+// retry-after, else 5 s doubling to 60 s). It stops for good on signed_out, removed_from_family and live_off
+// (`onStop` hears which, so the screen can read on focus instead). No stubs: nothing is made up while it waits.
+// Pure TS: the app's front/back state comes in through setForeground (lib/aws/foreground.ts wires AppState).
+
+import { request } from './client';
+import { isAwsError, retryDelayMs, type AwsError } from './errors';
+
+type Answer<T> = { changed: boolean; version: string; pollAfterMs: number; data?: T };
+export type StopReason = 'signed_out' | 'removed_from_family' | 'live_off';
+
+type Watcher = { onData: (v: unknown) => void; onStop?: (why: StopReason) => void };
+type Poller = { watchers: Set<Watcher>; value?: unknown; hasValue: boolean; stopped: StopReason | null; kick: () => void; end: () => void };
+
+const pollers = new Map<string, Poller>();
+
+// The app's front/back state; always "in front" until something wires it (tests, the web).
+let inFront = () => true;
+const frontListeners = new Set<() => void>();
+/** lib/aws/foreground.ts calls this with AppState. `changed()` is how it says the app came to the front. */
+export function setForeground(isActive: () => boolean): { changed: () => void } {
+  inFront = isActive;
+  return { changed: () => frontListeners.forEach((f) => f()) };
+}
+
+let setTimer: (fn: () => void, ms: number) => unknown = (fn, ms) => setTimeout(fn, ms);
+let clearTimer: (t: unknown) => void = (t) => clearTimeout(t as ReturnType<typeof setTimeout>);
+/** Tests only: a fake clock. */
+export function setLiveTimersForTests(set: typeof setTimer, clear: typeof clearTimer) {
+  setTimer = set;
+  clearTimer = clear;
+}
+
+const STOPS = new Set<string>(['signed_out', 'removed_from_family', 'live_off']);
+
+function startPoller(key: string, topic: string, as: string | null): Poller {
+  let since = '';
+  let failures = 0;
+  let running = false;
+  let timer: unknown = null;
+  const later = (ms: number) => {
+    if (!poller.stopped && poller.watchers.size) timer = setTimer(tick, ms);
+  };
+  const stopFor = (why: StopReason) => {
+    poller.stopped = why;
+    poller.watchers.forEach((w) => w.onStop?.(why));
+    poller.end();
+  };
+  const tick = async () => {
+    timer = null;
+    // In the background: wait. Coming back to the front asks at once (kick).
+    if (poller.stopped || running || !poller.watchers.size || !inFront()) return;
+    running = true;
+    try {
+      const a = await request<Answer<unknown>>(`/v1/live/${encodeURIComponent(topic)}?since=${encodeURIComponent(since)}`, { auth: 'session', as });
+      failures = 0;
+      if (a.changed) {
+        since = a.version;
+        poller.value = a.data;
+        poller.hasValue = true;
+        poller.watchers.forEach((w) => w.onData(a.data));
+      }
+      later(a.pollAfterMs);
+    } catch (e) {
+      // A session that ended was already started again once inside request(); this is final.
+      if (isAwsError(e) && (STOPS.has(e.code) || e.kind === 'signed_out')) return stopFor(e.code === 'live_off' || e.code === 'removed_from_family' ? e.code : 'signed_out');
+      later(retryDelayMs(isAwsError(e) ? (e as AwsError) : null, failures++));
+    } finally {
+      running = false;
+    }
+  };
+  const kick = () => {
+    if (timer != null) clearTimer(timer);
+    timer = null;
+    void tick();
+  };
+  const poller: Poller = {
+    watchers: new Set(),
+    hasValue: false,
+    stopped: null,
+    kick,
+    end() {
+      if (timer != null) clearTimer(timer);
+      timer = null;
+      frontListeners.delete(kick);
+      if (pollers.get(key) === poller) pollers.delete(key);
+    },
+  };
+  frontListeners.add(kick);
+  return poller;
+}
+
+/**
+ * Watch a topic as `as` (default: whoever is using the app). `onData` gets the topic's data each time it changes,
+ * and at once if another screen already has it. Returns the way to stop watching; the poll stops with the last watcher.
+ */
+export function watchTopic<T>(topic: string, onData: (value: T) => void, opts: { as?: string | null; onStop?: (why: StopReason) => void } = {}): () => void {
+  const key = `${topic}:${opts.as ?? ''}`;
+  let poller = pollers.get(key);
+  const fresh = !poller;
+  if (!poller) {
+    poller = startPoller(key, topic, opts.as ?? null);
+    pollers.set(key, poller);
+  }
+  const w: Watcher = { onData: onData as (v: unknown) => void, onStop: opts.onStop };
+  poller.watchers.add(w);
+  if (poller.hasValue) onData(poller.value as T);
+  if (fresh) poller.kick();
+  const p = poller;
+  return () => {
+    p.watchers.delete(w);
+    if (!p.watchers.size) p.end();
+  };
+}
+
+/** Forget every poller (sign-out, a new key): the next watch starts over. */
+export function stopAllPolls() {
+  for (const p of [...pollers.values()]) p.end();
+}

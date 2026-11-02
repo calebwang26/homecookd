@@ -221,6 +221,8 @@ cd app && node scripts/test-retention.mjs                          # also test-t
 cd app && node scripts/test-aws.mjs                               # the 1.1 AWS client (src/lib/aws): error shapes, sessions, retries (fake fetch)
 cd app && node scripts/aws-accounts-staging.mjs                    # the same client against AWS staging: read-only Accounts checks
 cd app && node scripts/aws-accounts-flows.mjs                      # Accounts flows on AWS staging with test people (TEST_SIGNIN_KEY; deletes them after)
+cd app && node scripts/test-aws-jobs.mjs                          # the 1.1 Jobs client and live polls (fake fetch and clock)
+cd app && node scripts/aws-jobs-flows.mjs                          # Jobs on AWS staging: a real S3 upload, the job, polls, stops, cook-only (deletes test people)
 cd app && node scripts/draft-words.mjs                             # draft the cook app's missing words in every language (Claude); then test-words
 cd app && node scripts/sync-brand.mjs                             # the brand kit SVGs in assets/brand -> ui/brandSvgs.ts (test-brand checks them)
 
