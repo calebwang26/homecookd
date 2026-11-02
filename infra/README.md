@@ -131,6 +131,30 @@ Voice is only a smoke test of the setup here (homie is off, and voice stays on C
 4. Run the task once by hand, and check the zip in S3.
 5. `terraform apply -var job_count_enabled=true` turns on the daily schedule and the "missed" alarm.
 
+## Pinned actions and tools
+
+Every `uses:` in `.github/workflows/` names a commit, with its release in a comment:
+`actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0`. A tag can be moved to other code, and a commit can't. Every
+workflow uses the same commit for the same action. gitleaks, the one tool a workflow downloads, is checked against its sha256
+before it runs (`ci.yml`, job `secrets`).
+
+To bump an action, read its release notes first, then find the new release's commit:
+
+```bash
+gh api repos/<owner>/<repo>/git/ref/tags/<tag> --jq '.object.type + " " + .object.sha'
+# "tag <sha>" is an annotated tag: run gh api repos/<owner>/<repo>/git/tags/<sha> the same way until it says "commit"
+```
+
+Put that commit and the release on every line that uses the action, in every workflow. To bump gitleaks, change the version in
+its URL and the sha256 next to it, which is the `linux_x64` line of `gitleaks_<version>_checksums.txt` on that release:
+
+```bash
+D=$(mktemp -d) && gh release download v<version> --repo gitleaks/gitleaks --pattern '*_checksums.txt' --dir "$D" && grep linux_x64 "$D"/*
+```
+
+Not pinned: the `postgres:17` test database image in `ci.yml`, the runner images, and the Terraform version in `ci.yml`'s `infra`
+job, which takes the newest.
+
 ## Before production
 
 The deploy role trusts the GitHub environment's name, so anyone with write access could run the workflow against an
