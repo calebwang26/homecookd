@@ -87,6 +87,13 @@ connection timeout is also 5 s. Local tests now use `127.0.0.1`. The three earli
 **It does tell us something for production.** A request that starts a new connection stays tied to it: idle connections don't rescue it, so one slow lookup or handshake is a 500 with the pool half empty. `DB_HOST` is a
 name, and has to stay one because a failover moves the address. We haven't measured lookups on Fargate. **Recommendation:** in the same load test, count `timeout exceeded` errors with idle connections open, and try a `tx` again once on `isPoolWait` (nothing was written). Not built.
 
+**Load test on staging, Nov 2** (`infra/scripts/load-test.mjs`; fake models, made-up cards, one api task of 0.25 vCPU and 512 MB, the smallest database). 50 a second for 15 minutes: 45% the kid's page
+polling its card, 25% Mom's page, 15% `/ready`, 10% `/health`, 5% edits. **It meets the targets:** at the load balancer, p50 7 ms, p95 81 ms and p99 285 ms over the whole window (worst minute p99 475 ms), 41,997
+requests, no 5xx. From the laptop running it, 45,000 requests with 1 network error (0.002%), and a slower p99 that's the laptop's Wi-Fi. No "too busy", no pool timeout, no failed request in the api's log.
+**The limit is the api's CPU, not the database:** the task averaged 80% CPU (peak 90%) while the database peaked at 10% with its 10 connections busy. **Overload doesn't fail fast yet:** 300 requests at once all
+answered 200, slowest 2.2 s; 1,500 at once all answered 200, slowest 13 s. Requests wait for the CPU before they ever wait for the pool, so the pool's 503 never comes. The bounded wait above has to count
+requests waiting on the event loop too, not only on the pool. Before production: repeat it on production's task size and count, and over HTTPS.
+
 ### Not building
 
 Microservices, Kubernetes, Redis, read replicas and multi-region, until measurements call for them.
@@ -163,7 +170,7 @@ Before any new-host link exists (CUTOVER.md, step 10):
 - `pipeline/account_purge.py`'s `media_objects` must not silently skip a host that isn't GCS, ideally failing loudly on an unknown one,
   before any new-host link exists. Otherwise a deleted account's file on S3 stays.
 - **Community's switch gates (`COMMUNITY-MIGRATION.md`).** Apple reviews report and block, so Community doesn't switch until each of these exists and is tested:
-  - The team can act on a report: `api/src/reports.ts` lists and reviews them as a one-off task (COMMUNITY-MIGRATION.md, "The team's reports"), tested on local Postgres only. Left: a first run on staging, and the app adapter below, without which no report reaches the new api.
+  - The team can act on a report: `api/src/reports.ts` lists and reviews them as a one-off task (COMMUNITY-MIGRATION.md, "The team's reports"), and it ran on staging on Nov 2. Left: a way for the team to see what a reported item is once Convex is gone (the listing prints ids only), and the app adapter below, without which no report reaches the new api.
   - `community.remind_open` has its daily schedule. Staging's is in Terraform (#247, merged unapplied). Production's `schedules` has none yet, so there a report left open would never remind anyone.
   - The app adapter. It doesn't exist yet, and nothing has called these routes.
 

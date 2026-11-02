@@ -1417,6 +1417,75 @@ test("S3 failing is a retry that names only the bucket; running out of time carr
   }
 });
 
+test("a folder is a folder because of the list it's on: one written down without its slash is refused, not taken for a missing file", { skip }, async () => {
+  const folder = uniq("no-slash");
+  const { did } = await listed({ media_prefixes: [folder] });
+  const s3 = s3Fakes();
+  try {
+    put(s3.media, `${folder}/recipe.json`);
+    assert.equal(await purgeOutside(did), "retry", "never done with the folder still there");
+    assert.ok(s3.media.objects.has(`${folder}/recipe.json`));
+    assert.match((await one(`select external_error from account_deletions where id = $1`, [did])).external_error, /Not reached yet: 1 media folders with an unexpected name/);
+  } finally {
+    s3.done();
+  }
+});
+
+test(`a folder of exactly ${FOLDER_MAX} files is deleted, and one more waits for a person`, { skip }, async () => {
+  const [at, over] = [`${uniq("at-max")}/`, `${uniq("over-max")}/`];
+  const { did } = await listed({ media_prefixes: [at, over] });
+  const s3 = s3Fakes();
+  try {
+    for (let i = 0; i < FOLDER_MAX; i += 1) put(s3.media, `${at}${i}.jpg`, `${over}${i}.jpg`);
+    put(s3.media, `${over}last.jpg`);
+    assert.equal(await purgeOutside(did), "retry");
+    assert.equal([...s3.media.objects.keys()].filter((k) => k.startsWith(at)).length, 0);
+    assert.equal([...s3.media.objects.keys()].filter((k) => k.startsWith(over)).length, FOLDER_MAX + 1);
+    const row = await one(`select external_error, external_counts from account_deletions where id = $1`, [did]);
+    assert.equal(row.external_error, `Not reached yet: 1 media folders holding more than ${FOLDER_MAX} files`);
+    assert.equal(row.external_counts.mediaObjects, FOLDER_MAX);
+  } finally {
+    s3.done();
+  }
+});
+
+test("a folder holding someone else's file that nothing has marked is left", { skip }, async () => {
+  const folder = `${uniq("theirs-inside")}/`;
+  const other = await makeFamily();
+  const owner = await makePerson(other.id, "Owner");
+  await q(`insert into files (key, bucket, kind, family_id, owner_person_id, uploaded_at) values ($1, 'media', 'video', $2, $3, now())`, [`${folder}video.mp4`, other.id, owner]);
+  const { did } = await listed({ media_prefixes: [folder] });
+  const s3 = s3Fakes();
+  try {
+    put(s3.media, `${folder}video.mp4`, `${folder}recipe.json`);
+    assert.equal(await purgeOutside(did), "retry");
+    assert.equal(s3.media.objects.size, 2, "nothing in it was deleted");
+    assert.match((await one(`select external_error from account_deletions where id = $1`, [did])).external_error, /Not reached yet: 1 media folders still in use/);
+  } finally {
+    s3.done();
+  }
+});
+
+test("one run at a time: a deletion another run holds is left to it, and a crashed run's claim lapses", { skip }, async () => {
+  const folder = `${uniq("claimed")}/`;
+  const { did } = await listed({ media_prefixes: [folder] });
+  const s3 = s3Fakes();
+  try {
+    put(s3.media, `${folder}recipe.json`);
+    await q(`update account_deletions set external_claimed_until = now() + interval '1 hour' where id = $1`, [did]);
+    assert.equal(await purgeOutside(did), "busy");
+    assert.ok(s3.media.objects.has(`${folder}recipe.json`), "untouched");
+    assert.equal((await one(`select external_attempts from account_deletions where id = $1`, [did])).external_attempts, 0);
+
+    await q(`update account_deletions set external_claimed_until = now() - interval '1 second' where id = $1`, [did]);
+    assert.equal(await purgeOutside(did), "done");
+    const row = await one(`select external_claimed_until, external_counts from account_deletions where id = $1`, [did]);
+    assert.deepEqual([row.external_claimed_until, row.external_counts], [null, { mediaObjects: 1 }], "let go, and counted once");
+  } finally {
+    s3.done();
+  }
+});
+
 test("with nothing outside left, it's done, with its counts; a second report changes nothing", { skip }, async () => {
   const f = await makeFamily();
   const p = await makePerson(f.id, "Clean");
