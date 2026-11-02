@@ -101,7 +101,7 @@ Do this in your own worktree, not the main checkout:
 git fetch origin
 git worktree add ../merge-pr-<n> origin/main && cd ../merge-pr-<n>
 gh pr checkout <n>
-ln -s /Users/calebwang/Documents/GitHub/hackathon-homecookd/.env .env   # only if tests need keys
+ln -s /Users/calebwang/hackathon-homecookd/.env .env   # only if tests need keys
 ```
 
 **Safety (any failure means it's not ready):**
