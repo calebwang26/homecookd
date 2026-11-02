@@ -90,7 +90,8 @@ follows it, and it wins over the docs below on UI/UX and flows.
   Never print `.env` values. Keys live only in the gitignored root `.env`, Convex env, Cloud Run secrets and
   Supabase edge-function secrets (which key goes where: `docs/build/STACK.md`, "Keys").
 - **Where the checkout lives (Nov 1):** `/Users/calebwang/hackathon-homecookd`, outside iCloud. It used to be
-  `~/Documents/GitHub/hackathon-homecookd`; that path is retired, and every chat, worktree and script uses the new one.
+  `~/Documents/GitHub/hackathon-homecookd`; that path is now a symlink to the real folder, kept only because the app
+  won't move a session that runs in one of its worktrees. Every file, script and `.env` link names the new path.
   Never put the repo back under `~/Documents` (or any iCloud folder): iCloud evicts files there ("dataless"), and git,
   rsync and `mv` all hang on them. The worktrees' installed packages (`node_modules`, `.venv`, `web/.next`) were not
   copied in the move: run `npm ci` in a worktree that needs them.
