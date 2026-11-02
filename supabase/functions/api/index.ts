@@ -59,6 +59,7 @@ import {
   revokeJoinLinks,
   signInByLink,
 } from "./joinLinks.ts";
+import { LOG_APP_BUILDS, makeBuildLog } from "./appBuilds.ts";
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL")!;
 const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
@@ -3405,8 +3406,12 @@ function segmentsOf(url: URL): string[] {
   return i >= 0 ? segs.slice(i + 1) : segs;
 }
 
+/** Which app builds still call (appBuilds.ts, CUTOVER.md step 13). Does nothing while LOG_APP_BUILDS is false. */
+const buildLog = makeBuildLog({ on: LOG_APP_BUILDS, db, background: runInBackground });
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: CORS });
+  buildLog.record(req.headers.get("user-agent"));
   const url = new URL(req.url);
   const segs = segmentsOf(url);
   let bodyCache: Promise<Record<string, unknown>> | null = null;

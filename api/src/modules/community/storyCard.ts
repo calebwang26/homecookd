@@ -1,11 +1,14 @@
-// What neighbors read of a story card (convex/lib/storyCard.ts, the reading half). Writing a card waits with sharing, because it writes `recipes`
-// (COMMUNITY-MIGRATION.md). A quote is always one of her own step quotes, never a story.
+// The story card's pure rules (convex/lib/storyCard.ts): what neighbors read of a card, and what a model's answer may put on one. The writer is
+// messages/storyCards.ts. A quote is always one of her own step quotes, never a story, and the model only picks one by its number.
 import { flagged } from "../dish/moderation.js";
 import type { FamilyRow } from "../people/service.js";
 import type { RecipeRow, RecipeStep } from "../recipes/service.js";
 
+export const STORY_WORDS = 25;
 const QUOTE_WORDS = 20;
 const MAX_QUOTES = 12;
+
+export type Card = { text: string; culture: string | null; quote: string | null };
 
 const words = (s: string) => s.split(/\s+/).filter(Boolean).length;
 /** Trimmed, without wrapping double quotation marks. */
@@ -29,6 +32,52 @@ export function quoteChoices(steps: readonly Pick<RecipeStep, "order" | "quote">
   return out.slice(0, MAX_QUOTES);
 }
 
+/** "Maharashtrian", "Filipino", "Polish American"; anything else (long, vague, odd characters) is null. */
+export function cleanCulture(s: unknown): string | null {
+  if (typeof s !== "string") return null;
+  const c = s.trim().replace(/\s+/g, " ");
+  if (!c || c.length > 40 || words(c) > 3 || !/^\p{L}[\p{L}' -]*$/u.test(c)) return null;
+  return /^(unknown|none|other|various|home|family)$/i.test(c) ? null : c;
+}
+
+/** One sentence of at most 25 words, without wrapping quotation marks; else null (also for stray JSON). */
+export function cleanStory(s: unknown): string | null {
+  if (typeof s !== "string") return null;
+  const t = unquote(s);
+  const n = words(t);
+  return n > 0 && n <= STORY_WORDS && !/[{}]/.test(t) ? t : null;
+}
+
+/**
+ * The model's answer (JSON { story, culture, quote: number }, or a bare sentence) as a card, or null when the sentence isn't usable. A quote number that isn't
+ * on the list gives her first quote. Convex's parseMuseCard.
+ */
+export function parseCard(content: string, quotes: readonly string[]): Card | null {
+  const raw = content.trim().replace(/^```(?:json)?\s*|\s*```$/g, "");
+  let reply: unknown = raw;
+  try {
+    reply = JSON.parse(raw);
+  } catch {
+    // a bare sentence
+  }
+  const o = reply && typeof reply === "object" ? (reply as Record<string, unknown>) : { story: reply };
+  const text = cleanStory(o.story);
+  if (!text) return null;
+  const n = o.quote;
+  const picked = typeof n === "number" && Number.isInteger(n) && n >= 1 && n <= quotes.length ? quotes[n - 1] : null;
+  return { text, culture: cleanCulture(o.culture), quote: picked ?? quotes[0] ?? null };
+}
+
+/** Without the model: the plain line, no culture, and her first quote if she has one. */
+export function fallbackCard(text: string, quotes: readonly string[]): Card {
+  return { text, culture: null, quote: quotes[0] ?? null };
+}
+
+/** The cook's stories the model may use: only if she said yes to sharing them. */
+export function storiesFor(r: { memoriesOptIn: boolean; memories: readonly { kind: string; text: string }[] }): string[] {
+  return r.memoriesOptIn ? r.memories.filter((m) => m.kind === "story").slice(0, 3).map((m) => m.text) : [];
+}
+
 /** True when the card's quote is the English of words she said in another language. The app tags it "Translated". */
 export function quoteTranslated(steps: readonly Pick<RecipeStep, "order" | "quote" | "quoteOriginal">[], quote: string | null): boolean {
   if (!quote) return false;
@@ -42,7 +91,7 @@ export function quoteTranslated(steps: readonly Pick<RecipeStep, "order" | "quot
 }
 
 /** "Rajani's Kanda Poha, from the Pawar family." Never the family's private name. */
-function plainStory(f: { cookName: string; dish: string; publicName: string | null }): string {
+export function plainStory(f: { cookName: string; dish: string; publicName: string | null }): string {
   const whose = f.cookName ? `${f.cookName}'s ${f.dish}` : f.dish;
   return f.publicName ? `${whose}, from the ${f.publicName} family.` : `${whose}.`;
 }
@@ -67,7 +116,7 @@ export function publicCard(r: RecipeRow, cookName: string, family: FamilyRow | n
 }
 
 /** What other families read of a shared recipe: its name, its steps and the story card. A filtered step quote never reaches the card. */
-export function recipeWords(r: RecipeRow): string[] {
+export function recipeWords(r: Pick<RecipeRow, "title" | "steps" | "story_card_text" | "story_card_culture">): string[] {
   return [r.title, ...r.steps.flatMap((s) => [s.title, s.text]), r.story_card_text ?? "", r.story_card_culture ?? ""];
 }
 

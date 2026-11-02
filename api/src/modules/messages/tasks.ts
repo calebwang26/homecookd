@@ -15,6 +15,7 @@ import { dishName, messagePush, postcardKey, postcardPush, reactionPush } from "
 import { pushWords, relationLabel } from "./pushWords.js";
 import { readFollowUp, readShare, transcribeTask, translateTask } from "./questions.js";
 import { hourly, nudgeFamily, recapFamily } from "./retention.js";
+import { STORY_CARD_TASK, writeStoryCard } from "./storyCards.js";
 import { markSignedInOrphans } from "./uploads.js";
 
 type Payload = Record<string, unknown>;
@@ -148,4 +149,5 @@ export const messageTasks: Record<string, (payload: Payload, trace: Trace) => Pr
   "questions.transcribe": (payload, trace) => transcribeTask(text(payload, "questionId"), trace),
   "questions.read_follow_up": (payload, trace) => readFollowUp(text(payload, "questionId"), trace),
   "questions.read_share": (payload, trace) => readShare(text(payload, "questionId"), trace),
+  [STORY_CARD_TASK]: (payload, trace) => writeStoryCard(text(payload, "recipeId"), trace),
 };

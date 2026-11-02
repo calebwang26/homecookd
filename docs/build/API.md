@@ -165,6 +165,16 @@ TC="$(tr -d '\n' < docs/build/.test-family-code)"
 curl -s "$API/family" -H "x-family-code: $TC"
 ```
 
+## Which app builds call (off)
+
+`supabase/functions/api/appBuilds.ts`, switched off: `LOG_APP_BUILDS = false`. When it's on, every request but
+`OPTIONS` is read for its build. The build comes from iOS's own user agent (`homecookd/6 CFNetwork/… Darwin/…`, and
+build 6 is 1.0). OkHttp counts as `android` and a browser as `web`, both with build `unknown`. Anything else is `other`
+(the pipeline, `pg_net`, `curl`, a user agent over 512 characters). Each isolate upserts a (UTC day, platform, build)
+into `app_builds_seen` once, after the response, with a 2 s timeout and at most 50 a day. A failed write is logged by its
+kind only and never changes the answer. Nothing else is kept: not the user agent, the IP or the person. Rows go after
+120 days. Turning it on and reading it: `docs/build/CUTOVER.md`, step 13.
+
 ## Errors
 
 Always `{"error": "<human sentence>"}` with:
