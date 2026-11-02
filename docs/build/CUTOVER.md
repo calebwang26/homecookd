@@ -23,7 +23,8 @@ The second is a hard rule: no merge before Apple approves 1.0. The first is buil
 | Convex deploy, if someone runs it | Adds `POST /sync/page` and `/sync/deletions`, and four internal queries | With `SYNC_READ_SECRET` unset they answer 401 to everyone, before reading the body. No schema change | `convex/syncRead.test.ts`. Never deployed anywhere real |
 | The laptop's worker, once restarted | The same Convex mode | `observability.py` does nothing without `sentry_sdk`. `publish.py`'s new branch needs a bucket with `public_base`, and only queue mode's has one | `pipeline/test_worker_no_sentry.py`, `test_publish.py` |
 | GitHub Actions | PR checks only | `deploy-staging.yml` and `deploy-web.yml` start on a push to `aws-migration`, never `main`. `deploy-aws.yml` is manual. None runs `terraform apply` | The merge check reads every workflow |
-| EAS, App Store, Supabase | Nothing | The branch changes no file under `app/` or `supabase/` | The merge check fails if that changes |
+| EAS, App Store | Nothing | The branch changes no file under `app/` | The merge check fails if that changes |
+| Supabase | Nothing: no merge deploys it | The `api` function's log of app builds is off (`LOG_APP_BUILDS = false`), and its migration only adds an empty table and a daily clean-up. The next `api` deploy carries both, still off (step 13) | `supabase/tests/appBuilds_test.ts`. The merge check lists each file with its switch |
 | `voice/`, `cloud/`, glasses | Nothing | The branch changes no file there | The same |
 | `api/`, `infra/`, `tools/` | Nothing | Nothing live builds or calls them, and `infra/` only applies by hand | Read by hand. The check doesn't look inside them |
 
@@ -41,6 +42,7 @@ The second is a hard rule: no merge before Apple approves 1.0. The first is buil
 | Media copy | **Built,** never run on a real bucket | Its `--real-*` flags | `MEDIA-MIGRATION.md` |
 | Website on S3 and CloudFront | **Built,** on staging only | DNS | `WEB-MIGRATION.md` |
 | Convex backups | **Built,** not running | `job_count_enabled` | `infra/README.md` |
+| Which app builds still call Supabase | **Built,** never deployed | `LOG_APP_BUILDS` in `supabase/functions/api/appBuilds.ts` | Step 13 below |
 | Community, dinners, cravings' signed-in side | **Built,** fakes and local Postgres only. No app or site calls it | None yet: the app adapter isn't built | `COMMUNITY-MIGRATION.md` |
 | Live updates | **Built** for job progress, fakes and local Postgres only. No app calls it | None yet: the same | `LIVE-UPDATES.md` |
 | Messages, questions, push, the table, the recap | **Built,** fakes and local Postgres only. No app calls it, and no Expo or Claude has run against it. Story cards aren't built | None yet: the same | `MESSAGES-MIGRATION.md` |
@@ -152,11 +154,34 @@ Can go any time after step 4. `WEB-MIGRATION.md`, "The switch and the way back".
 - **Back:** point DNS at Vercel, in the time the TTL allows. Keep Vercel running for at least a few weeks.
 
 ### 13. Phones updating
-No command does this. Watch it, and wait.
+No command moves phones. Watch them, and wait.
 - **Who:** Caleb decides what's enough.
-- **Do:** the old services need to log each app version. **That isn't built, so this should be written before anyone needs the numbers.** A notice or a forced update in the app is a product call, and 1.0 has none.
-- **Check:** requests from 1.0 at Convex, Supabase, the signer and GCS over a whole month, since families cook on their own schedule.
-- **Back:** nothing moved.
+- **What's built (Nov 2), off:** Supabase's `api` can log which app builds call it. iOS already puts the build number in every request's user agent, `homecookd/6 CFNetwork/… Darwin/…` (build 6 is 1.0), so the app needs no change. Each day it keeps one row per platform and build in `app_builds_seen`, for 120 days. It never keeps the user agent, the IP or anything about the person. A browser counts as `web`, Android as `android`, both with no build, and anything else as `other`.
+- **Why Supabase's count covers Convex too:** the app calls Convex's functions by name over its WebSocket, so they never see a request's headers and can't log a build. But every phone that's signed in calls Supabase each time it opens (`GET /family`, then `GET /unread` every 15 s while someone is picked), on 1.0 and on today's builds. A phone nobody has signed in on calls neither until it signs in, which goes through Supabase. Convex's one HTTP route a phone calls, `/invite/open`, runs only when someone opens a dinner link.
+- **Do, to turn it on. OK (a Supabase deploy):** as soon as you can after step 2, so the numbers cover the weeks before step 14.
+  1. By PR on `main`, in `supabase/functions/api/appBuilds.ts`, change `export const LOG_APP_BUILDS: boolean = false;` to `true`. That's the only line.
+  2. Apply `supabase/migrations/20261102120000_app_builds_seen.sql`, then deploy `api` from merged `main` with every file in `supabase/functions/api/`, following AGENTS.md's deploy rule.
+
+  A notice or a forced update in the app is a product call, and 1.0 has none.
+- **Check:** Supabase's SQL editor, read-only. Builds seen per day, the last 30 days:
+  ```sql
+  select day, string_agg(platform || ' ' || build, ', ' order by platform, build) as builds
+    from public.app_builds_seen
+   where day > (now() at time zone 'utc')::date - 30
+   group by day
+   order by day desc;
+  ```
+  The last day build 6 called: `select max(day) from public.app_builds_seen where platform = 'ios' and build = '6';`. Our builds are small numbers, 6, 7 and up. Anything else under `ios` is another app.
+
+  The signer already logs each request's user agent, so it needs no code. Cloud Run keeps 30 days of request logs. Read-only, and it prints only the day and the build:
+  ```bash
+  gcloud logging read 'resource.type="cloud_run_revision" AND resource.labels.service_name="edible-upload" AND httpRequest.userAgent:"CFNetwork"' \
+    --project=project-11b9fc8a-1108-4ea8-a3b --freshness=30d --limit=100000 \
+    --format='value(timestamp.date("%Y-%m-%d"),httpRequest.userAgent)' \
+    | awk -F'\t' '{ split($2, ua, " "); split(ua[1], b, "/"); print $1, "build", b[2] }' | sort | uniq -c
+  ```
+  Only phones that film call the signer, so it's a smaller count. Nothing in the repo turns on GCS's request logs, so GCS isn't counted (not checked in the console). Watch a whole month, since families cook on their own schedule.
+- **Back:** set it to `false` and deploy again. The table can stay.
 
 ### 14. Turning things off, last. OK (each)
 Nothing here has a quick way back, so each waits until no phone calls it. Take a final export of each first.
@@ -165,9 +190,9 @@ Nothing here has a quick way back, so each waits until no phone calls it. Take a
 |---|---|---|
 | Sync | Every area moved | "How it's removed" in `SYNC-MIGRATION.md` |
 | Laptop worker | Jobs proven on the queue | Stop it. Keep the code until Convex goes |
-| Supabase | No version calls it, sign-in moved | Lift the freeze (Caleb's call). Export, pause the project, wait, then delete |
-| Convex | No version calls it. The backups job goes with it | Export, keep that copy no longer than `/privacy` allows, then shut the deployment down |
-| GCS and the signer | No build reads or writes it, and the purge covers S3 | `MEDIA-MIGRATION.md`, step 12 |
+| Supabase | No version calls it (step 13's count), sign-in moved | Lift the freeze (Caleb's call). Export, pause the project, wait, then delete |
+| Convex | No version calls it (step 13: Supabase's count stands in). The backups job goes with it | Export, keep that copy no longer than `/privacy` allows, then shut the deployment down |
+| GCS and the signer | No build reads or writes it (step 13's log query for the signer), and the purge covers S3 | `MEDIA-MIGRATION.md`, step 12 |
 | Cloud Run voice | Homie is back on AWS, or stays off. **Not confirmed** whether anything live, such as build 6, still calls it | Check first |
 | Vercel | The new site has been calm for weeks | Remove the project. PR previews end, so decide that first |
 
@@ -190,6 +215,7 @@ Nothing here has a quick way back, so each waits until no phone calls it. Take a
 ## What isn't known yet
 
 - How long App Review takes on 1.1, and how long phones take to leave 1.0 and 1.1 behind.
+- The exact user agent a store build sends. Step 13's parser follows the shape iOS and React Native send by default, and nothing here has seen a real one. If a build shows up only as `other`, check one request's user agent in Supabase's logs and widen the parser.
 - Whether Convex's WebSocket forwards through our address, and whether Convex's plan handles the daily export.
 - What a real video job costs and how long it takes on Fargate. This waits until `/privacy` names AWS (Caleb, Nov 1). Real Claude and Ink, Safari, and a real iPhone recording against the new api.
 - Whether a read link's 1 to 2 hours holds on a task's role credentials.

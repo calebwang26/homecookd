@@ -46,6 +46,31 @@
       "why": "Two Sentry calls, both no-ops on the laptop",
       "fingerprint": "207d7cf1bb6a"
     },
+    "supabase/functions/api/appBuilds.ts": {
+      "switch": "LOG_APP_BUILDS",
+      "why": "New. With the switch false, record() returns before it reads anything, and no merge deploys Supabase",
+      "fingerprint": "0a34c1006ead"
+    },
+    "supabase/functions/api/index.ts": {
+      "switch": "LOG_APP_BUILDS",
+      "why": "Makes the app-build log from the switch and calls it once per request, which does nothing while it's false",
+      "fingerprint": "30221ec68d63"
+    },
+    "supabase/migrations/20261102120000_app_builds_seen.sql": {
+      "switch": "LOG_APP_BUILDS, and applied by hand",
+      "why": "A new empty table and a daily clean-up. No merge applies a migration; the next api deploy applies it first (AGENTS.md)",
+      "fingerprint": "609f870ca939"
+    },
+    "supabase/tests/appBuilds_test.ts": {
+      "switch": "none needed: a test",
+      "why": "Nothing runs it after a merge",
+      "fingerprint": "6f67dbd6ebb3"
+    },
+    "supabase/tests/retention_migrations_sql_test.ts": {
+      "switch": "none needed: a test",
+      "why": "Lists the new migration and its clean-up job. Nothing runs it after a merge",
+      "fingerprint": "4dbd38709244"
+    },
     "web/vercel.json": {
       "switch": "the branch's name",
       "why": "Vercel stops building aws-migration and claude/aws-*. It names no branch that deploys live, so main and every other branch build as before",

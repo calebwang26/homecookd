@@ -12,7 +12,9 @@ Oct 31, 2028; $100 expires Oct 17, 2027). Claude stays billed by Anthropic, and 
 - **While Apple reviews 1.0 (build 6):** no EAS production updates, no Supabase `api` deploy, and nothing that changes
   what build 6 calls.
 - **Old addresses stay up until no phone uses them.** Build 6 has them compiled in, so the old services can't be
-  turned off when a phase ends. They go only when the app versions that call them are gone.
+  turned off when a phase ends. They go only when the app versions that call them are gone. Supabase's `api` can count
+  which builds still call it, read from each request's user agent. It's built and switched off (`LOG_APP_BUILDS`,
+  `docs/build/CUTOVER.md`, step 13).
 - Each step has a way back that takes minutes, until the old system is switched off for good.
 
 ## How the rewrite ships (Caleb, Oct 31)
@@ -253,7 +255,8 @@ The copy tool, the order of steps and the way back: `docs/build/MEDIA-MIGRATION.
 Supabase and Convex share one schema (`api/migrations/`), so this phase moves Supabase's data and routes into tables designed
 with Convex's, not a copy of Supabase's tables.
 
-**Size:** 7,727 lines in `supabase/functions/api/` (Deno), 15 migrations, 21 tables, and 6 references to pg_cron. It's
+**Size:** 7,727 lines in `supabase/functions/api/` (Deno), 15 migrations, 21 tables, and 6 references to pg_cron, as of
+Oct 31. The app-build log added one table and one daily job on Nov 2. It doesn't move: it goes when Supabase does. It's
 already Postgres, so `pg_dump` and restore is the easy part. The work is moving the Deno code to Node on Fargate, replacing
 pg_cron with EventBridge, and re-running `two_sided_live`, `api-smoke` and `retention_live` against the new host. The
 Supabase freeze has to be lifted for this, which is Caleb's call.
@@ -273,7 +276,9 @@ What makes it hard:
   but the server needs a replacement: job progress, messages and recording state need a WebSocket or polling.
 - **Transactions.** Every Convex mutation retries automatically on conflict. Postgres code has to handle this itself.
 - **IDs.** Keep Convex's ids as text keys, so links and references carry over.
-- **Build 6 and 1.0 phones** call Convex by function name, so Convex stays up until they're gone.
+- **Build 6 and 1.0 phones** call Convex by function name, so Convex stays up until they're gone. Convex's functions
+  never see a request's headers, so they can't tell which build calls. Every signed-in phone also calls Supabase when it
+  opens, so Supabase's count stands in (CUTOVER.md, step 13).
 
 **Order, least-connected first:**
 1. The shared schema and api skeleton from the build order, session checks (read from Convex at first), test harness.
