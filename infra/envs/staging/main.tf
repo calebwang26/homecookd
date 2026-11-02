@@ -77,7 +77,9 @@ module "env" {
   db_backup_days    = 7
   db_protected      = false
   alert_email       = "caleb.wang26@gmail.com"
-  secret_names      = ["SENTRY_DSN_API", "SENTRY_DSN_WORKER", "RATE_LIMIT_SALT", "ANTHROPIC_API_KEY", "CARTESIA_API_KEY"]
+  # EDIBLE_CODE_KEY seals join, craving, dinner and share links (api/src/sealed.ts). Its name comes first, then Caleb loads its value (load-secrets.sh, the same as
+  # Supabase's, so copied rows open), and only then does the api get it: a secret with no value stops a task starting.
+  secret_names = ["SENTRY_DSN_API", "SENTRY_DSN_WORKER", "RATE_LIMIT_SALT", "ANTHROPIC_API_KEY", "CARTESIA_API_KEY", "EDIBLE_CODE_KEY"]
 
   alb_allowed_cidrs    = var.alb_allowed_cidrs
   private_cors_origins = [module.web.url, "http://localhost:3105"]
