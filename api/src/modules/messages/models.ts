@@ -1,9 +1,10 @@
 // The models this area calls, behind one object so a test can stand in for each. Never Gemini: the text calls are Claude's and the voice is Cartesia's (AGENTS.md).
 // Each call has a timeout and a bounded retry, none runs inside a transaction, and each writes `model_calls`, which holds no family content. Nothing here logs
-// a model's words or a family's. Models are today's Convex picks: translate on Opus, the yes/no on Haiku, the photo note on Sonnet.
+// a model's words or a family's. Models are today's Convex picks: translate on Opus, the yes/no on Haiku, the photo note and the story card on Sonnet.
 import Anthropic from "@anthropic-ai/sdk";
 import { createHash } from "node:crypto";
 import { db } from "../../db.js";
+import { STORY_WORDS } from "../community/storyCard.js";
 import { claudeCost, type ModelCall, models as dishModels, newSpend, TRANSLATE_MODEL } from "../dish/model.js";
 
 export const YES_NO_MODEL = "claude-haiku-5-5";
@@ -79,12 +80,30 @@ export const NOTE_SYSTEM =
   "two sentences, no hashtags. Only mention what the photo or the facts given show; never " +
   "invent memories, people or how it tasted. Reply with the note only.";
 
-async function saveCalls(calls: ModelCall[]): Promise<void> {
+// Convex's (storyCards.ts). The model aims 5 words under the 25 cleanStory allows: Claude's first cards ran to 26-27 words, which fall back to the plain line.
+// Never a he or she: the family's names only.
+export const CARD_SYSTEM =
+  "You write a short card that introduces a family's home recipe to neighbors, as JSON. " +
+  `story: one warm sentence of at most ${STORY_WORDS - 5} words. Call the cook by name, never he, she, his or her. ` +
+  "Use only the facts given; never invent people, places, memories, history or how it tastes. No hashtags, no emoji, " +
+  "no quotation marks. culture: the food culture the dish comes from, in one to three words (like Maharashtrian, " +
+  "Filipino or Polish American), or an empty string if you can't tell. " +
+  "quote: the number of the cook's own words that best show how they cook, or 0 if none are given.";
+
+export const CARD_SCHEMA = {
+  type: "object",
+  properties: { story: { type: "string" }, culture: { type: "string" }, quote: { type: "integer" } },
+  required: ["story", "culture", "quote"],
+  additionalProperties: false,
+};
+
+/** `recipeId` names the recipe a call wrote for, while it's still there. */
+async function saveCalls(calls: ModelCall[], recipeId?: string): Promise<void> {
   for (const call of calls) {
     await db()
       .query(
-        `insert into model_calls (purpose, provider, model, prompt_version, attempt, input_tokens, output_tokens, thinking_tokens, cost_usd, price_known, seconds, ok, error)
-         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+        `insert into model_calls (purpose, provider, model, prompt_version, attempt, input_tokens, output_tokens, thinking_tokens, cost_usd, price_known, seconds, ok, error, recipe_id)
+         values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, (select id from recipes where id = $14))`,
         [
           call.purpose,
           call.provider,
@@ -99,6 +118,7 @@ async function saveCalls(calls: ModelCall[]): Promise<void> {
           call.seconds,
           call.ok,
           call.error,
+          recipeId ?? null,
         ],
       )
       // Losing a cost record must not lose her answer.
@@ -108,7 +128,7 @@ async function saveCalls(calls: ModelCall[]): Promise<void> {
 
 type Content = string | Anthropic.Beta.BetaContentBlockParam[];
 
-async function claude(purpose: string, version: string, model: string, effort: "low" | "medium", system: string, content: Content, schema?: Record<string, unknown>): Promise<string> {
+async function claude(purpose: string, version: string, model: string, effort: "low" | "medium", system: string, content: Content, schema?: Record<string, unknown>, recipeId?: string): Promise<string> {
   const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
   if (!apiKey) throw new NotSetUp();
   const started = Date.now();
@@ -130,6 +150,7 @@ async function claude(purpose: string, version: string, model: string, effort: "
     error: null,
     ...over,
   });
+  const save = (calls: ModelCall[]) => saveCalls(calls, recipeId);
   try {
     const res = await new Anthropic({ apiKey, maxRetries: 1, timeout: CALL_MS }).beta.messages.create({
       model,
@@ -141,7 +162,7 @@ async function claude(purpose: string, version: string, model: string, effort: "
     });
     const usage = res.usage as unknown as { input_tokens?: number; output_tokens?: number } | undefined;
     const clean = res.stop_reason === "end_turn";
-    await saveCalls([
+    await save([
       call({
         inputTokens: usage?.input_tokens ?? null,
         outputTokens: usage?.output_tokens ?? null,
@@ -153,7 +174,7 @@ async function claude(purpose: string, version: string, model: string, effort: "
     if (!clean) throw new Error(`stopped: ${res.stop_reason}`);
     return res.content.map((b) => (b.type === "text" ? b.text : "")).join("");
   } catch (error) {
-    if (!(error instanceof Error && error.message.startsWith("stopped:"))) await saveCalls([call({ ok: false, error: (error as Error).name.slice(0, 200) })]);
+    if (!(error instanceof Error && error.message.startsWith("stopped:"))) await save([call({ ok: false, error: (error as Error).name.slice(0, 200) })]);
     throw error;
   }
 }
@@ -177,6 +198,11 @@ async function photoNote(fact: string, photoUrl: string): Promise<string> {
   ]);
 }
 
+/** The story card's JSON text, held to CARD_SCHEMA. storyCards.ts checks it before anything is saved. Its cost row names the recipe. */
+async function storyCard(facts: string, recipeId: string): Promise<string> {
+  return await claude("story_card", promptVersion("story_card", CARD_SYSTEM), WRITER_MODEL, "low", CARD_SYSTEM, facts, CARD_SCHEMA, recipeId);
+}
+
 /** Ink, through the dish area's adapter: its timeout, its backup keys. The cost goes to `model_calls`, and never to the dish ask's budget. */
 async function transcribe(bytes: Uint8Array, contentType: string | null, language: string): Promise<string> {
   const spend = newSpend();
@@ -197,4 +223,4 @@ async function toEnglish(words: string): Promise<string | null> {
   }
 }
 
-export const models = { translateForCook, yesNo, photoNote, transcribe, toEnglish };
+export const models = { translateForCook, yesNo, photoNote, storyCard, transcribe, toEnglish };
