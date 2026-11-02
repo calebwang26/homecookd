@@ -258,7 +258,8 @@ export function useLive<T>(
 // Calls
 
 export function useLiveJobs(enabled = true): LiveJob[] {
-  return useLive<LiveJob[]>('jobs:mine', [], stub.watchJobs, enabled);
+  // Soft: an update that reaches a phone before jobs.mine is deployed must not stub all of Convex.
+  return useLive<LiveJob[]>('jobs:mine', [], stub.watchJobs, enabled, {}, true);
 }
 
 export function useCookQuestions(enabled = true): CookQuestion[] {

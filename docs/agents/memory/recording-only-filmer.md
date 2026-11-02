@@ -13,3 +13,4 @@ On 2026-11-01 Caleb set this for the 1.1 app: "The default and the uploading vid
 - Screens read `jobs.mine`, never `jobs.forFamily`, which stays only for 1.0's build 6.
 - Everyone else sees nothing until the recipe is published. Don't add a push for a job's upload, processing or failure to anyone but the cook.
 - `jobs.cancel` is unchanged: stopping a job still works across the family where it can still happen.
+- Until build 6 is retired this rule holds only in the app's screens: `recipes.list` and `jobs.forFamily` still let any session in the family read. Once build 6 is retired, remove `forFamily` and limit `jobs.cancel` and `jobs.cancelUpload` to the filmer (Convex & accounts).
