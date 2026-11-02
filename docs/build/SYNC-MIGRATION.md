@@ -59,13 +59,15 @@ stops touching it and the api may write it.
 
 A deletion is on record in `sync_deleted` within about a minute of Convex reading it. In one transaction it:
 
+- blanks the person (`people_tombstone_blank` checks it), with Convex's deletion time
+- starts the account's own purge (`startDeletionIn(c, id, "sync")`, ACCOUNTS-MIGRATION.md, "From the sync"): `account_deletions`, their sessions, phones,
+  sign-in links and push tokens ended, and the batches queued that reach every area that has moved. It comes before their recipes go, so it still finds
+  a dinner around one
 - removes their recipes, or empties one that a question still points at, so a reference can't block a deletion. This comes before the record is
-  written: after that, the trigger refuses any write to a deleted cook's recipes
-- blanks the person (`people_tombstone_blank` checks it)
-- deletes their sessions, identities and push tokens, and revokes their phones
+  written: after that, the trigger refuses any write to a deleted cook's recipes. The emptied one goes on a later pass, once the purge has taken the question
 - blanks the family if they were its last person (C2)
-- queues `sync.purge_person`, which purges areas that have moved (only dish today; each area adds its own)
 
+A person not in the copy yet gets the record alone, and the purge starts if their tombstone lands. A failure anywhere rolls the whole transaction back.
 `findSession` already refuses a deleted person, so access stops at that commit.
 
 **A stale row can't bring anyone back,** and that's enforced by triggers, not by the sync's care. A write of a live person or recipe takes
@@ -123,7 +125,7 @@ None of this has been done.
 
 ## How it's removed
 
-Set the schedules and `SYNC_MODE` off, delete `api/src/modules/sync/`, the import and spread in `scheduled.ts`, `api/test/sync*`, then
+Set the schedules and `SYNC_MODE` off, delete `api/src/modules/sync/`, the import and spread in `scheduled.ts`, `api/test/sync*`, the `"sync"` source in `accounts/deletion.ts`, then
 `convex/syncRead.ts`, `convex/lib/syncRoutes.ts`, its line in `convex/http.ts`, `syncReader` in `lib/http.ts` and their lines in `convex/_generated/api.d.ts`. Unset the secrets. A new migration
 drops the triggers, the three functions and the `sync_*` tables. A copied table whose area never moved needs its backfill first.
 
