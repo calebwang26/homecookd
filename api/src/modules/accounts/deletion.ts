@@ -289,12 +289,40 @@ export const useVoiceClones = (next: VoiceClones) => {
  * of it is gone, a deletion stays open with the reason on its row, rather than saying it's done. It's tried again later, each wait longer, and someone is told after the last attempt. GCS is
  * out of its reach: a deletion holding GCS links stays open (AWS-MIGRATION.md, "Before real data").
  */
-export async function purgeOutside(deletionId: string, budgetMs = PURGE_BUDGET_MS): Promise<"done" | "more" | "retry" | "gave_up" | "not_ready" | "missing"> {
-  const { rows } = await db().query(`select ${DELETION} from account_deletions where id = $1`, [deletionId]);
-  const d: Deletion | undefined = rows[0];
-  if (!d) return "missing";
-  if (d.external_purged_at) return "done";
-  if (!d.purged_at) return "not_ready"; // a late recipe could still add to the lists
+export async function purgeOutside(deletionId: string, budgetMs = PURGE_BUDGET_MS): Promise<"done" | "more" | "busy" | "retry" | "gave_up" | "not_ready" | "missing"> {
+  const first = await readDeletion(deletionId);
+  if (!first) return "missing";
+  if (first.external_purged_at) return "done";
+  if (!first.purged_at) return "not_ready"; // a late recipe could still add to the lists
+  if (!(await claimOutside(first.id))) return "busy"; // the run that has it carries on, or the schedule does once its claim lapses
+  try {
+    const d = await readDeletion(deletionId); // what that other run left
+    if (!d || d.external_purged_at) return "done";
+    return await outsideOnce({ ...d, purged_at: d.purged_at ?? first.purged_at }, budgetMs);
+  } finally {
+    await releaseOutside(first.id);
+  }
+}
+
+/** One run at a time. Longer than a run can take, its budget and then one last S3 call's retries, so a crashed run's claim lapses on its own. */
+export const OUTSIDE_CLAIM_S = 10 * 60;
+
+const readDeletion = async (id: string): Promise<Deletion | undefined> => (await db().query(`select ${DELETION} from account_deletions where id = $1`, [id])).rows[0];
+
+async function claimOutside(id: string): Promise<boolean> {
+  const { rowCount } = await db().query(
+    `update account_deletions set external_claimed_until = now() + make_interval(secs => $2)
+      where id = $1 and external_purged_at is null and (external_claimed_until is null or external_claimed_until < now())`,
+    [id, OUTSIDE_CLAIM_S],
+  );
+  return !!rowCount;
+}
+
+async function releaseOutside(id: string): Promise<void> {
+  await db().query(`update account_deletions set external_claimed_until = null where id = $1`, [id]);
+}
+
+async function outsideOnce(d: Deletion & { purged_at: Date }, budgetMs: number): Promise<"done" | "more" | "retry" | "gave_up" | "not_ready"> {
   const problems: string[] = [];
 
   if (d.voice_clone_id) {
@@ -313,7 +341,8 @@ export async function purgeOutside(deletionId: string, budgetMs = PURGE_BUDGET_M
     const reached = await reachS3(d, Date.now() + budgetMs);
     await addCounts(d.id, reached.counts);
     if (reached.outOfTime) {
-      // Not a failure, so it doesn't count as an attempt. What's done stays done: a folder already emptied lists nothing.
+      // Not a failure, so it doesn't count as an attempt. What's done stays done: a folder already emptied lists nothing. Let go first, so the next message can claim it.
+      await releaseOutside(d.id);
       await enqueue(db(), { queue: "scheduled", payload: { task: "accounts.outside", deletionId: d.id } });
       return "more";
     }
