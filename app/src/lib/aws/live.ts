@@ -27,6 +27,12 @@ export function setForeground(isActive: () => boolean): { changed: () => void } 
   return { changed: () => frontListeners.forEach((f) => f()) };
 }
 
+/** Hear the app coming back to the front (the recipes list reads again then). Returns the unsubscribe. */
+export function onFront(fn: () => void): () => void {
+  frontListeners.add(fn);
+  return () => frontListeners.delete(fn);
+}
+
 let setTimer: (fn: () => void, ms: number) => unknown = (fn, ms) => setTimeout(fn, ms);
 let clearTimer: (t: unknown) => void = (t) => clearTimeout(t as ReturnType<typeof setTimeout>);
 /** Tests only: a fake clock. */

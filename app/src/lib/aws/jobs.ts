@@ -71,10 +71,11 @@ const up = (uploadId: string, rest: string) => `/v1/video-uploads/${enc(uploadId
 
 export const jobs = {
   /** Links for one upload (1 to 20 videos, in the order the worker reads them). One Idempotency-Key per upload, saved before the call. */
-  newUpload: (videos: VideoSpec[], idempotencyKey: string) =>
-    request<NewUpload>('/v1/video-uploads', { auth: 'session', body: { videos }, idempotencyKey }),
+  newUpload: (videos: VideoSpec[], idempotencyKey: string, as?: string | null) =>
+    request<NewUpload>('/v1/video-uploads', { auth: 'session', as, body: { videos }, idempotencyKey }),
   /** Fresh links for the videos not in yet (a PUT answered 403: its link ran out). */
-  links: (uploadId: string) => request<Omit<NewUpload, 'uploadPath'>>(up(uploadId, '/links'), { auth: 'session', body: {} }),
+  links: (uploadId: string, as?: string | null) =>
+    request<Omit<NewUpload, 'uploadPath'>>(up(uploadId, '/links'), { auth: 'session', as, body: {} }),
   /** Links for some parts of a PARTS video, at most 100 numbers a call. */
   parts: (uploadId: string, index: number, partNumbers: number[]) =>
     request<{ uploadId: string; index: number; parts: PartLink[] }>(up(uploadId, '/parts'), { auth: 'session', body: { index, partNumbers } }),
@@ -82,29 +83,31 @@ export const jobs = {
   finishParts: (uploadId: string, index: number, parts: { partNumber: number; etag: string }[]) =>
     request<{ finished: boolean }>(up(uploadId, '/parts/finish'), { auth: 'session', body: { index, parts } }),
   /** Is it all in? `missing` lists the videos S3 doesn't have yet; once all are in, the job is queued. */
-  complete: (uploadId: string) => request<Complete>(up(uploadId, '/complete'), { auth: 'session', body: {} }),
+  complete: (uploadId: string, as?: string | null) => request<Complete>(up(uploadId, '/complete'), { auth: 'session', as, body: {} }),
   /** Stop by upload, before POST /v1/jobs has answered. Never a 404. */
-  cancelUpload: (uploadId: string) => request<{ stopped: boolean }>(up(uploadId, '/cancel'), { auth: 'session', body: {} }),
+  cancelUpload: (uploadId: string, as?: string | null) =>
+    request<{ stopped: boolean }>(up(uploadId, '/cancel'), { auth: 'session', as, body: {} }),
   /** The job, made straight after the links (before the bytes land). The same uploadId answers the same job. */
-  create: (input: { uploadId: string; title?: string; language?: string; forKidIds?: string[] }) =>
-    request<{ jobId: string; recipeId: string | null }>('/v1/jobs', { auth: 'session', body: { ...input, source: 'phone' } }),
-  list: (cursor?: string | null) =>
-    request<{ jobs: Job[]; nextCursor: string | null }>(`/v1/jobs${cursor ? `?cursor=${enc(cursor)}` : ''}`, { auth: 'session' }),
+  create: (input: { uploadId: string; title?: string; language?: string; forKidIds?: string[] }, as?: string | null) =>
+    request<{ jobId: string; recipeId: string | null }>('/v1/jobs', { auth: 'session', as, body: { ...input, source: 'phone' } }),
+  list: (cursor?: string | null, as?: string | null) =>
+    request<{ jobs: Job[]; nextCursor: string | null }>(`/v1/jobs${cursor ? `?cursor=${enc(cursor)}` : ''}`, { auth: 'session', as }),
   get: (jobId: string) => request<Job>(`/v1/jobs/${enc(jobId)}`, { auth: 'session' }),
   /** `stopped: false` once it's done or failed. Not hers: 404. */
-  cancel: (jobId: string) => request<{ stopped: boolean }>(`/v1/jobs/${enc(jobId)}/cancel`, { auth: 'session', body: {} }),
+  cancel: (jobId: string, as?: string | null) =>
+    request<{ stopped: boolean }>(`/v1/jobs/${enc(jobId)}/cancel`, { auth: 'session', as, body: {} }),
 };
 
 export const recipes = {
   /** One page (100): the family's ready recipes and her own of any status, newest first. */
-  page: (cursor?: string | null) =>
-    request<{ recipes: Recipe[]; nextCursor: string | null }>(`/v1/recipes${cursor ? `?cursor=${enc(cursor)}` : ''}`, { auth: 'session' }),
+  page: (cursor?: string | null, as?: string | null) =>
+    request<{ recipes: Recipe[]; nextCursor: string | null }>(`/v1/recipes${cursor ? `?cursor=${enc(cursor)}` : ''}`, { auth: 'session', as }),
   /** Every page. Families have tens of recipes, so this stops after `maxPages` as a guard. */
-  async all(maxPages = 20): Promise<Recipe[]> {
+  async all(maxPages = 20, as?: string | null): Promise<Recipe[]> {
     const out: Recipe[] = [];
     let cursor: string | null = null;
     for (let i = 0; i < maxPages; i++) {
-      const page: { recipes: Recipe[]; nextCursor: string | null } = await recipes.page(cursor);
+      const page: { recipes: Recipe[]; nextCursor: string | null } = await recipes.page(cursor, as);
       out.push(...page.recipes);
       if (!page.nextCursor) break;
       cursor = page.nextCursor;

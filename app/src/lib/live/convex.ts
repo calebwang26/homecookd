@@ -55,6 +55,10 @@ import { requireAiConsent } from '@/lib/aiConsent';
 import { accounts } from '@/lib/aws/accounts';
 import { AWS_ON } from '@/lib/aws/config';
 import { isAwsError } from '@/lib/aws/errors';
+import '@/lib/aws/foreground';
+import { jobs as awsJobs } from '@/lib/aws/jobs';
+import { watchTopic } from '@/lib/aws/live';
+import { readAwsRecipes, refreshAwsRecipes, watchAwsRecipes } from '@/lib/aws/recipesStore';
 import { getSession, useSession } from '@/lib/session';
 import { jobForUpload } from '@/lib/unsentLogic';
 import { secretGet } from '@/lib/storage';
@@ -209,6 +213,27 @@ const LIVE_RETRIES = 3;
 const LIVE_RETRY_MS = 10_000;
 
 /** A live query with the session token (plus `args`); `fallback` is the stub's live value. */
+/**
+ * The Convex reads that have moved to the AWS api (1.1), by name: jobs.mine is the `jobs` live topic (her own jobs
+ * only), recipes.list is GET /v1/recipes read on focus and when one of her jobs turns done.
+ */
+const AWS_LIVE: Record<string, (set: (v: unknown) => void, as: string | null) => () => void> = {
+  'jobs:mine': (set, as) => {
+    const done = new Set<string>();
+    return watchTopic<LiveJob[]>(
+      'jobs',
+      (list) => {
+        const fresh = list.filter((j) => j.stage === 'done' && !done.has(j._id));
+        fresh.forEach((j) => done.add(j._id));
+        if (fresh.length) refreshAwsRecipes();
+        set(list);
+      },
+      { as },
+    );
+  },
+  'recipes:list': (set, as) => watchAwsRecipes(set, as),
+};
+
 export function useLive<T>(
   name: string,
   initial: T,
@@ -226,6 +251,8 @@ export function useLive<T>(
   const argsKey = JSON.stringify(args);
   useEffect(() => {
     if (!enabled) return;
+    // 1.1 (AWS_ON): a moved area reads the AWS api; one that hasn't moved reads nothing (no stub, no Convex).
+    if (AWS_ON) return AWS_LIVE[name]?.((v) => setValue(v as T), meId ?? null);
     if (isStub || !client) return fallback(setValue);
     let off: (() => void) | null = null;
     let offStub: (() => void) | null = null;
@@ -299,6 +326,12 @@ function oneKid({ forKidIds, ...rest }: Record<string, unknown>): Record<string,
  */
 export async function createJob(uploadPath: string, source: JobSource, extras: JobExtras = {}, as?: string): Promise<void> {
   await requireAiConsent();
+  if (AWS_ON) {
+    // POST /v1/jobs: by uploadId (no slash), and no recordingId (1.1 makes no recording rows: JOBS.md flow 1).
+    const { title, language, forKidIds } = present(extras) as { title?: string; language?: string; forKidIds?: string[] };
+    await awsJobs.create({ uploadId: uploadPath.replace(/\/+$/, ''), title, language, forKidIds }, as);
+    return;
+  }
   const sessionToken = await token(as);
   const extra = present(extras);
   const run = (more: Record<string, unknown>) => call('mutation', 'jobs:create', { sessionToken, uploadPath, source, ...more }, () => stub.createJob(uploadPath, source));
@@ -318,12 +351,23 @@ export async function createJob(uploadPath: string, source: JobSource, extras: J
   }
 }
 
+/** A recording made on the phone alone (1.1, AWS_ON): no server row, so its calls answer here. */
+const LOCAL_RECORDING = 'local-rec-';
+const localRecordingId = () => `${LOCAL_RECORDING}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+export const isLocalRecording = (id: string | null | undefined) => !!id && id.startsWith(LOCAL_RECORDING);
+
 /**
  * homie's live session while a cook records (Track E). It starts in `intro`. Without `language` the
  * server uses her people.language (send one only when she picked it or it loaded).
  */
 export async function startRecording(input: { dish?: string; forKidIds?: string[]; language?: string; source: RecordingSource }): Promise<{ recordingId: string }> {
   await requireAiConsent();
+  // 1.1 makes no recording rows (homie is off): the in-app camera films under a phone-only id, and the dish,
+  // the kids and the language go on the job (JOBS.md open item 9). The glasses aren't in 1.1.
+  if (AWS_ON) {
+    if (input.source === 'glasses') throw new Error('The glasses aren’t ready in this version.');
+    return { recordingId: localRecordingId() };
+  }
   const sessionToken = await token();
   const args = { sessionToken, ...present(input) };
   const run = (a: Record<string, unknown>) => call<{ recordingId: string }>('mutation', 'live:startRecording', a, () => stub.startRecording(input), { strict: true });
@@ -342,6 +386,7 @@ export async function startRecording(input: { dish?: string; forKidIds?: string[
  * A stub recording ends on the stub.
  */
 export async function endRecording(recordingId: string, as?: string): Promise<boolean> {
+  if (isLocalRecording(recordingId)) return true;
   try {
     const sessionToken = await token(as);
     const r = await call<{ ok: boolean }>('mutation', 'live:endRecording', { sessionToken, recordingId }, () => stub.endRecording(recordingId), { soft: true });
@@ -357,6 +402,7 @@ export async function endRecording(recordingId: string, as?: string): Promise<bo
  * laptop keeps glasses footage from here until endRecording. True once filming; throws when it couldn't.
  */
 export async function startFilming(recordingId: string): Promise<boolean> {
+  if (isLocalRecording(recordingId)) return true;
   const sessionToken = await token();
   const r = await call<{ ok: boolean }>('mutation', 'live:startFilming', { sessionToken, recordingId }, () => stub.startFilming(recordingId), { strict: true });
   return !!r?.ok;
@@ -365,7 +411,8 @@ export async function startFilming(recordingId: string): Promise<boolean> {
 /** The plate photo homie asked for at the end of an in-app recording: the recipe's cover. False if it didn't save. */
 export async function setCover(recordingId: string, photoUri: string): Promise<boolean> {
   try {
-    if (recordingId.startsWith('stub-')) return true;
+    // TODO(caleb): 1.1 has no route for the plate photo (JOBS.md open item 10): the cover comes from the video.
+    if (recordingId.startsWith('stub-') || isLocalRecording(recordingId)) return true;
     const storageId = await uploadFile(photoUri, 'image/jpeg');
     if (storageId.startsWith('stub-file-')) return true;
     const sessionToken = await token();
@@ -386,6 +433,7 @@ export type RecordingJob = { id: string; stage: JobStage | null; error: string |
  * function not deployed, a recording it doesn't find). `as`: the cook (a profile id).
  */
 export async function recordingJob(recordingId: string, as?: string): Promise<RecordingJob | null | undefined> {
+  if (AWS_ON) return undefined; // no recording rows on AWS: a resend finds its job by upload (uploadJob)
   if (stubbed || !client) return undefined;
   try {
     const sessionToken = await token(as);
@@ -409,6 +457,16 @@ export async function recordingJob(recordingId: string, as?: string): Promise<Re
  * upload was made), undefined when Convex couldn't say. `as`: the cook (a profile id).
  */
 export async function uploadJob(uploadId: string | null, convexHadIt: boolean, as?: string): Promise<RecordingJob | null | undefined> {
+  if (AWS_ON) {
+    try {
+      const { jobs } = await awsJobs.list(null, as);
+      const job = jobForUpload(jobs, uploadId, convexHadIt);
+      return job ? { id: job.id, stage: job.stage as JobStage | null, error: job.error } : null;
+    } catch (e) {
+      console.warn('[aws] jobs', e instanceof Error ? e.message : e);
+      return undefined;
+    }
+  }
   if (stubbed || !client) return undefined;
   try {
     const sessionToken = await token(as);
@@ -465,12 +523,21 @@ const noLiveFrame = (onData: (v: LiveFrame | null) => void) => {
 
 /** Stops one of her family's jobs on Convex (the worker's later reports are ignored). True once stopped. */
 export async function cancelLiveJob(jobId: string, as?: string): Promise<boolean> {
+  if (AWS_ON) {
+    try {
+      return (await awsJobs.cancel(jobId, as)).stopped;
+    } catch (e) {
+      if (isAwsError(e) && e.code === 'not_found') return false; // not hers, or gone (Convex said false)
+      throw e;
+    }
+  }
   const sessionToken = await token(as);
   return call<boolean>('mutation', 'jobs:cancel', { sessionToken, jobId }, () => true, { soft: true });
 }
 
 /** jobs.cancelUpload: stops the job made from this upload ("<uploadId>/"), when the phone has no job id. */
 export async function cancelLiveUpload(uploadId: string): Promise<boolean> {
+  if (AWS_ON) return (await awsJobs.cancelUpload(uploadId.replace(/\/+$/, ''))).stopped;
   const sessionToken = await token();
   return call<boolean>('mutation', 'jobs:cancelUpload', { sessionToken, uploadId }, () => false, { soft: true });
 }
@@ -658,6 +725,7 @@ export async function convexPersonIdByName(name: string | null | undefined): Pro
  * people.family falls back to the name lookup above. Kids Convex doesn't know are left out.
  */
 export async function convexKidIds(kids: { id: string; name: string }[], as?: string): Promise<string[]> {
+  if (AWS_ON) return kids.map((k) => k.id); // one id per person on AWS: the family's ids are the job's
   if (!kids.length || stubbed) return [];
   const sessionToken = await convexSession(as).catch(() => null);
   if (!sessionToken) return [];
@@ -742,6 +810,15 @@ let recipes: Promise<Map<string, RecipeRef>> | null = null;
 
 /** library id -> the Convex recipe and its cook (recipes.list), read once until invalidated. Null while stubbed. */
 async function recipeMap(): Promise<Map<string, RecipeRef> | null> {
+  if (AWS_ON) {
+    recipes ??= readAwsRecipes()
+      .then((rows) => new Map(rows.filter((r) => r.libraryId).map((r) => [r.libraryId!, { recipeId: r._id, cookId: r.cookId }])))
+      .catch(() => {
+        recipes = null;
+        return new Map();
+      });
+    return recipes;
+  }
   const sessionToken = stubbed ? null : await convexSession();
   if (!sessionToken) return null;
   recipes ??= call<{ _id: string; libraryId?: string; cookId: string }[]>('query', 'recipes:list', { sessionToken }, () => [])
