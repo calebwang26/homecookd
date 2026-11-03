@@ -66,10 +66,24 @@ export async function failRecipeIfOpen(c: Queryable, recipeId: string): Promise<
   return true;
 }
 
-/** community.shareOn's write: on the map from now. With writes off it's the sync's row, and Convex shares it. */
-export async function shareRecipeIfOpen(c: Queryable, recipeId: string): Promise<boolean> {
+/**
+ * community.shareOn's write: on the map from now. Never one the team took down, even when the review lands between the caller's read and this (the update sees
+ * its commit). With writes off it's the sync's row, and Convex shares it.
+ */
+export async function shareRecipeIfOpen(c: Queryable, recipeId: string): Promise<"shared" | "taken_down" | "closed"> {
+  if ((await recipeWrites(c)) !== "open") return "closed";
+  const { rowCount } = await c.query(`update recipes set shared_at = now() where id = $1 and hidden_at is null`, [recipeId]);
+  return rowCount ? "shared" : "taken_down";
+}
+
+/**
+ * The team's review of a reported recipe (convex/reports.ts review): `remove` takes it off the map for good, unshared and hidden from every other family, and `keep`
+ * lifts a hide. A removed recipe can't be shared again until a `keep` (storyCards.ts shareOn). With writes off it's refused, and the script says so.
+ */
+export async function reviewRecipeIfOpen(c: Queryable, recipeId: string, keep: boolean): Promise<boolean> {
   if ((await recipeWrites(c)) !== "open") return false;
-  await c.query(`update recipes set shared_at = now() where id = $1`, [recipeId]);
+  if (keep) await c.query(`update recipes set hidden_at = null where id = $1`, [recipeId]);
+  else await c.query(`update recipes set shared_at = null, hidden_at = coalesce(hidden_at, now()) where id = $1`, [recipeId]);
   return true;
 }
 

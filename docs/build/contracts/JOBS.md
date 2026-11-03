@@ -326,7 +326,7 @@ Code: `api/src/modules/recipes/routes.ts`, `reads.ts`, `switch.ts`, `writes.ts`,
 | `language` | string | |
 | `sharedAt` | ms | On the Community map since |
 | `storyCard` | `{text, writtenAt?, usedStories?, culture?, quote?}` | |
-| `hiddenAt` | ms | Hidden after a Community report |
+| `hiddenAt` | ms | The team took it off the Community map after a report: `sharedAt` is cleared, and sharing it again is 409 `taken_down` until the team lifts it. Say so on her recipe page instead of the share switch |
 | `addedIngredients` | array | |
 
 **The recipes switch** (`switch.ts`): `open` needs `RECIPE_WRITES=on` (since the recipe-writes PR, `claude/aws-recipe-writes`; before it, also `sync_copies.moved_at`, which only the old sync set). Anything else is `closed` (no sync ever ran: no "processing" card, `recipeId: null`, opt-in 501) or `locked` (a read-only copy: `POST /v1/jobs` and opt-in 501). Staging sets no `RECIPE_WRITES` and runs no sync, so it's `closed` (read from `main.tf` and migration 012's defaults, not from the database).

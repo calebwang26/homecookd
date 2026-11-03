@@ -19,21 +19,27 @@ import { WORDS_SHAREABLE } from "./words.js";
 
 const DISHES_PAGE = 100;
 const PICK_RECIPE = "Pick one of your family's recipes.";
+const takenDown = () => refused(409, "taken_down", "Our team took this recipe off the map after a report. It stays with your family.");
 
-/** "shared": it's on the map (it was, or she's its cook and just shared it). "asked": waiting on the cook's answer. */
+/**
+ * "shared": it's on the map (it was, or she's its cook and just shared it). "asked": waiting on the cook's answer. One the team took down (community/reports.ts) is
+ * 409 `taken_down` for everyone in the family, so nobody asks her about it.
+ */
 export async function askToShare(signed: Signed, recipeId: string, requestId?: string): Promise<{ result: "shared" | "asked" }> {
   const recipe = (await recipesByIds(db(), [recipeId])).get(recipeId);
   if (!recipe || recipe.family_id !== signed.familyId || recipe.status !== "ready") throw notFound(PICK_RECIPE);
   if (recipe.shared_at) return { result: "shared" };
+  if (recipe.hidden_at) throw takenDown();
   if (recipe.cook_id !== signed.personId) return { result: await askCookToShare(signed, recipe, requestId) };
   if (flagged(...recipeWords(recipe))) throw refused(422, "words", WORDS_SHAREABLE);
   const shared = await shareMine(recipe.id, requestId);
   if (shared === "not_shareable") throw refused(422, "words", WORDS_SHAREABLE);
   if (shared === "not_moved") throw notMoved();
+  if (shared === "taken_down") throw takenDown();
   return { result: "shared" };
 }
 
-/** My family's ready dishes for the "Share your recipe" chooser: whose, mine, on the map, asked, and when she last said not now. */
+/** My family's ready dishes for the "Share your recipe" chooser: whose, mine, on the map, taken off it by the team, asked, and when she last said not now. */
 export async function familyDishes(signed: Signed, cursor?: string) {
   const rows = await readyRecipesOfFamily(db(), signed.familyId, afterCursor(cursor), DISHES_PAGE + 1);
   const page = rows.slice(0, DISHES_PAGE);
@@ -49,6 +55,7 @@ export async function familyDishes(signed: Signed, cursor?: string) {
         cookName: cooks.get(r.cook_id)?.name ?? "",
         mine: r.cook_id === signed.personId,
         shared: !!r.shared_at,
+        takenDown: !!r.hidden_at,
         asked: state.open,
         notNowAt: state.notNowAt,
       };

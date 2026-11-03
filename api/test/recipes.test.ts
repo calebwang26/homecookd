@@ -4,7 +4,16 @@ import { readFileSync } from "node:fs";
 import { after, test } from "node:test";
 import { recipesVersion } from "../src/modules/recipes/reads.js";
 import { recipeWrites, recipeWritesFlag } from "../src/modules/recipes/switch.js";
-import { deleteRecipeUnlessLocked, failRecipeIfOpen, insertProcessingRecipe, saveMemoriesOptIn, saveStoryCardIfOpen, saveTestRecipe, shareRecipeIfOpen } from "../src/modules/recipes/writes.js";
+import {
+  deleteRecipeUnlessLocked,
+  failRecipeIfOpen,
+  insertProcessingRecipe,
+  reviewRecipeIfOpen,
+  saveMemoriesOptIn,
+  saveStoryCardIfOpen,
+  saveTestRecipe,
+  shareRecipeIfOpen,
+} from "../src/modules/recipes/writes.js";
 import { call, closeRecipeWrites, db, family, freshDatabase, hasDatabase, lockRecipeCopy, MEDIA, openRecipeWrites, recipe, setUp, who, type Who } from "./jobsHelpers.js";
 
 const STEP = { order: 1, title: "Rinse", text: "Rinse it twice.", moment: { startS: 10, endS: 40 } };
@@ -191,7 +200,7 @@ test("recipes", { skip: !hasDatabase }, async (t) => {
   await t.test("every write in writes.ts asks the switch, and the trigger is still there behind it", async () => {
     const source = readFileSync(new URL("../src/modules/recipes/writes.ts", import.meta.url), "utf8");
     const functions = source.split(/^export async function /m).slice(1);
-    assert.equal(functions.length, 7);
+    assert.equal(functions.length, 8);
     for (const body of functions) {
       assert.match(body, /await recipeWrites\(c\)/, body.slice(0, 40));
       const asked = body.indexOf("recipeWrites(c)");
@@ -207,9 +216,11 @@ test("recipes", { skip: !hasDatabase }, async (t) => {
     await assert.rejects(saveTestRecipe(db(), made, null), { code: "not_moved" });
     await assert.rejects(saveTestRecipe(db(), made, id), { code: "not_moved" });
     assert.equal(await failRecipeIfOpen(db(), id), false);
-    assert.equal(await shareRecipeIfOpen(db(), id), false);
+    assert.equal(await shareRecipeIfOpen(db(), id), "closed");
     assert.equal(await saveStoryCardIfOpen(db(), id, { text: "x", usedStories: false, culture: null, quote: null }), false);
+    assert.equal(await reviewRecipeIfOpen(db(), id, false), false);
     assert.equal((await recipe(id)).shared_at, null);
+    assert.equal((await recipe(id)).hidden_at, null);
     await lockRecipeCopy();
     assert.equal(await deleteRecipeUnlessLocked(db(), id), false);
     assert.ok(await recipe(id), "locked: the sync's");

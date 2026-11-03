@@ -27,11 +27,12 @@ Each of these writes a row the sync owns, so I stopped short. None is written ar
 
 **What I did for 5.** The brief says the thresholds and hiding must carry over, and also that `recipes` can't be written, so the hide is worked out when it's read: a recipe counts as hidden when `hidden_at` is set or when `reports` holds open reports from 2 families. This writes nothing to `recipes`. Everything that asks whether a recipe is hidden goes through `seenRecipes` in `safety.ts`. A dinner is Community's own row, so its hide is stored, as on Convex.
 
-`reviewReport` can't write the recipe either, so a recipe's review works in this order. It's refused with `recipes_read_only`, and nothing changes, until the copy shows the decision:
-- **Take it down:** run Convex's `reports:review` with `keep: false`. Convex holds no reports for it, so it only changes the recipe. When the sync shows `hidden_at` set and `shared_at` null, `reviewReport` here resolves the reports.
-- **Keep it:** if the recipe has no `hidden_at`, `reviewReport` resolves the reports and the hide lifts. If Convex hid it before the move, run Convex's review with `keep: true` first.
+~~`reviewReport` can't write the recipe either, so a recipe's review starts on Convex and waits for the sync.~~ **Since Nov 2 (the one switch, no sync), `reviewReport` writes the recipe itself** (`recipes/writes.ts` `reviewRecipeIfOpen`), behind the recipes switch, as Convex's `reports:review` did:
+- **Take it down (`remove`):** `shared_at` cleared and `hidden_at` set, in the review's transaction. It's off every other family's map and its page is missing to them. Its own family sees `hiddenAt` on the recipe and `takenDown` in the share chooser, and sharing it again is 409 `taken_down` for anyone, including the cook's yes to an older ask.
+- **Keep it:** `hidden_at` cleared. A recipe the team took down stays unshared until its cook shares it again. The families that reported it never see it again either way.
+- **With the switch closed** (no `RECIPE_WRITES=on`, or a sync copying `recipes`): refused with `recipes_read_only`, and nothing changes, unless the row already says what the review would.
 
-When the jobs area moves `recipes`, `reviewReport` writes it directly, and the sync's two steps go away. The worked-out hide can stay, or `fileReport` can start storing it again.
+The two-family hide is still worked out when it's read, not stored.
 
 ## Routes
 
@@ -85,7 +86,7 @@ Convex's `npx convex run reports:open` and `reports:review` are now `api/src/rep
 | Each report, and each block (a `family` report) | `ALERT community report needs review` | `kind`, `targetId`, `families` (how many families have it open), `open` (all open reports) | `homecookd-<env>-community-report`: 1 or more in 5 minutes | Within about 5 minutes |
 | The daily `community.remind_open` (16:00 UTC), while any report is open over 12 hours | `ALERT community reports still open` | `open` (how many are over 12 hours) | `homecookd-<env>-community-reports-open`: 1 or more in an hour | Once each day it finds one |
 
-So the email comes first, and its description says what to do: run `open` (below), then `review` each item. The line's `targetId` is the id `open` prints. Neither line holds what the item is, who reported it, or why. With `REPORT_ALERT_URL` set (not on AWS), the webhook still goes as before. Staging's two log filters wait for Caleb's hand apply, because `plan_check.py` holds `aws_cloudwatch_log_metric_filter` (the alarms alone may apply by themselves). Production gets both with its apply, and its alerts email must be confirmed (CUTOVER.md, "What production has on at launch").
+So the email comes first, and its description says what to do: run `open` (below), then `review` each item. The line's `targetId` is the id `open` prints. Neither line holds what the item is, who reported it, or why. With `REPORT_ALERT_URL` set (not on AWS), the webhook still goes as before. Staging has both, applied by hand Nov 2 (`plan_check.py` holds `aws_cloudwatch_log_metric_filter`), and a test report set the alarm off 82 seconds later. Production gets both with its apply, and its alerts email must be confirmed (CUTOVER.md, "What production has on at launch").
 
 ```bash
 node dist/reports.js open                                             # what's open
