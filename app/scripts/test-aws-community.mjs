@@ -2,6 +2,7 @@
 //   src/lib/aws/community.ts  the feed read through every recipe page and on through `dinnersCursor`; a new dinner's
 //                             Idempotency-Key; report and block bodies; unblock as a DELETE with no body; lists to
 //                             their last page; the public invite open with no session
+//   src/lib/aws/jobs.ts       recipes.unshare: the share switch's off
 //   node scripts/test-aws-community.mjs
 import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
@@ -21,6 +22,7 @@ process.env.EXPO_PUBLIC_BACKEND = 'aws';
 process.env.EXPO_PUBLIC_AWS_URL = 'https://api.test';
 const C = await import(pathToFileURL(join(root, 'src/lib/aws/client.ts')).href);
 const K = await import(pathToFileURL(join(root, 'src/lib/aws/community.ts')).href);
+const J = await import(pathToFileURL(join(root, 'src/lib/aws/jobs.ts')).href);
 
 let passed = 0;
 const test = async (name, fn) => {
@@ -123,6 +125,19 @@ await test('opening an invite needs no session, and joining sends {}', async () 
   assert.equal(open.headers.authorization, undefined);
   assert.deepEqual(JSON.parse(open.body), { token: 't'.repeat(43), deviceId: 'device-0000000001' });
   assert.equal(rest.at(-1).body, '{}');
+});
+
+await test('the share switch\'s off: the recipe\'s own unshare route, sent {}, and taken_down read as such', async () => {
+  signIn();
+  const calls = fakeApi({
+    ...session,
+    'POST /v1/recipes/r%201/unshare': [{ body: { ok: true } }],
+    'POST /v1/recipes/r2/unshare': [{ status: 409, body: { error: 'taken_down', message: 'API', requestId: 'q' } }],
+  });
+  assert.deepEqual(await J.recipes.unshare('r 1'), { ok: true });
+  assert.equal(own(calls)[0].body, '{}');
+  const e = await J.recipes.unshare('r2').then(() => assert.fail('not refused'), (x) => x);
+  assert.deepEqual([e.status, e.code], [409, 'taken_down']);
 });
 
 console.log(`\n${passed} passed`);

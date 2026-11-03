@@ -36,6 +36,7 @@ import { AWS_ON } from '@/lib/aws/config';
 import { errorWords } from '@/lib/aws/errorWords';
 import { isAwsError } from '@/lib/aws/errors';
 import { community as awsCommunity } from '@/lib/aws/community';
+import { recipes as awsRecipes } from '@/lib/aws/jobs';
 import { newKey } from '@/lib/aws/legacy';
 import { kickReads } from '@/lib/aws/live';
 import { refreshAwsRecipes } from '@/lib/aws/recipesStore';
@@ -193,12 +194,11 @@ export function useCommunityRecipe(recipeId: string): CommunityRecipe | null | u
 export async function setShare(recipeId: string, on: boolean): Promise<void> {
   if (on) await requireAiConsent();
   if (AWS_ON) {
-    // Her own tap shares it (COMMUNITY.md). There's no "off" on the api yet (its open item 1): say so, never pretend.
-    if (!on) throw Object.assign(new Error('That can’t be turned off yet.'), { data: 'That can’t be turned off yet.' });
+    // Her own tap shares it (COMMUNITY.md); off is the recipe's own route (the cook only).
     try {
-      await aws(awsMessages.shareAsk(recipeId));
+      await aws<unknown>(on ? awsMessages.shareAsk(recipeId) : awsRecipes.unshare(recipeId));
     } finally {
-      sharesChanged(); // shared, or taken_down: the page shows which now, not at the next front
+      sharesChanged(); // on, off, or taken_down: the page shows which now, not at the next front
     }
     return;
   }

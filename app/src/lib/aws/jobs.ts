@@ -121,6 +121,8 @@ export const recipes = {
   get: (id: string) => request<Recipe>(`/v1/recipes/${enc(id)}`, { auth: 'session' }),
   memoriesOptIn: (id: string, optIn: boolean) =>
     request<{ ok: true }>(`/v1/recipes/${enc(id)}/memories-opt-in`, { auth: 'session', body: { optIn } }),
+  /** Takes her recipe off the Community map (the cook only). Already off: ok, nothing changes. Her story card is kept. */
+  unshare: (id: string, as?: string | null) => request<{ ok: true }>(`/v1/recipes/${enc(id)}/unshare`, { auth: 'session', as, body: {} }),
 };
 
 /** Before asking for links (JOBS.md flow 6): 1 to 20 videos, each a video/* of 1 byte to 20 GiB, 4 hours in all. */

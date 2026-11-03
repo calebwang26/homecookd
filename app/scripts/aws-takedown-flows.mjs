@@ -2,8 +2,10 @@
 // `reports.js review recipe <id> remove` (a one-off ECS task, the AWS backend chat's) takes one down, so this runs in
 // two steps with that in between:
 //   node scripts/aws-takedown-flows.mjs make <file>    a test cook, a ready recipe, shared by her own tap; saved to <file>
-//   node scripts/aws-takedown-flows.mjs check <file>   after `remove`: hiddenAt on the page, takenDown in the chooser,
-//                                                      sharing again is 409 taken_down in the app's words; then deletes her
+//   node scripts/aws-takedown-flows.mjs down <file>    after `remove`: hiddenAt on the page, takenDown in the chooser,
+//                                                      sharing again is 409 taken_down in the app's words
+//   node scripts/aws-takedown-flows.mjs back <file>    after `keep`: neither is set, her tap shares it again, and her
+//                                                      switch turns it off (unshare, #330); then deletes her
 //   node scripts/aws-takedown-flows.mjs delete <file>  delete her without checking (a run given up)
 // Files no report, so no alert email. Needs TEST_SIGNIN_KEY in the root .env (read here, never printed).
 import assert from 'node:assert/strict';
@@ -14,7 +16,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const [STEP, FILE] = process.argv.slice(2);
-if (!['make', 'check', 'delete'].includes(STEP) || !FILE) throw new Error('usage: aws-takedown-flows.mjs make|check|delete <file>');
+if (!['make', 'down', 'back', 'delete'].includes(STEP) || !FILE) throw new Error('usage: aws-takedown-flows.mjs make|down|back|delete <file>');
 const BASE = 'https://d2zh46br3dalyf.cloudfront.net';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const envLine = readFileSync(join(root, '..', '.env'), 'utf8').split('\n').find((l) => l.startsWith('TEST_SIGNIN_KEY='));
@@ -76,26 +78,49 @@ if (STEP === 'make') {
     assert.equal(r?.hiddenAt, undefined);
     assert.equal((await findDish(recipeId))?.takenDown, false, 'takenDown is sent, and false');
   });
-  console.log(`\nrecipe ${recipeId}: run \`reports.js review recipe ${recipeId} remove\`, then: check ${FILE}`);
+  console.log(`\nrecipe ${recipeId}: run \`reports.js review recipe ${recipeId} remove\`, then: down ${FILE}`);
   process.exit(0);
 }
 
 const { testId, recipeId } = JSON.parse(readFileSync(FILE, 'utf8'));
 const cook = await testSignIn({ test_id: testId, name: 'Takedown test cook', role: 'cook' });
 C.setAwsCredentials({ deviceKey: cook.device_key, personId: cook.profile_id });
+if (STEP === 'down') {
+  await check('the team took it down: hiddenAt set, sharedAt cleared, the chooser says takenDown', async () => {
+    const r = await findRecipe(recipeId);
+    assert.ok(r?.hiddenAt, 'hiddenAt');
+    assert.equal(r?.sharedAt, undefined, 'sharedAt cleared');
+    const d = await findDish(recipeId);
+    assert.deepEqual([d?.takenDown, d?.shared], [true, false]);
+  });
+  await check('sharing it again is 409 taken_down, in the app\'s words', async () => {
+    const e = await M.messages.shareAsk(recipeId).then(() => assert.fail('shared again'), (x) => x);
+    assert.deepEqual([e.status, e.code], [409, 'taken_down']);
+    assert.equal(W.errorWords(e), 'Our team took this recipe off the map after a report. It stays with your family.');
+  });
+  console.log(`\n${passed} passed. Run \`reports.js review recipe ${recipeId} keep\`, then: back ${FILE}`);
+  process.exit(0);
+}
+
 try {
-  if (STEP === 'check') {
-    await check('the team took it down: hiddenAt set, sharedAt cleared, the chooser says takenDown', async () => {
+  if (STEP === 'back') {
+    await check('the team kept it: hiddenAt cleared, not takenDown, still off the map until she shares it', async () => {
       const r = await findRecipe(recipeId);
-      assert.ok(r?.hiddenAt, 'hiddenAt');
-      assert.equal(r?.sharedAt, undefined, 'sharedAt cleared');
+      assert.equal(r?.hiddenAt, undefined, 'hiddenAt cleared');
       const d = await findDish(recipeId);
-      assert.deepEqual([d?.takenDown, d?.shared], [true, false]);
+      assert.deepEqual([d?.takenDown, d?.shared], [false, false]);
     });
-    await check('sharing it again is 409 taken_down, in the app\'s words', async () => {
-      const e = await M.messages.shareAsk(recipeId).then(() => assert.fail('shared again'), (x) => x);
-      assert.deepEqual([e.status, e.code], [409, 'taken_down']);
-      assert.equal(W.errorWords(e), 'Our team took this recipe off the map after a report. It stays with your family.');
+    await check('her tap shares it again', async () => {
+      assert.deepEqual(await M.messages.shareAsk(recipeId), { result: 'shared' });
+      assert.ok((await findRecipe(recipeId))?.sharedAt, 'sharedAt');
+    });
+    await check('her switch turns it off (unshare), twice is fine, and her tap puts it back', async () => {
+      assert.deepEqual(await J.recipes.unshare(recipeId), { ok: true });
+      assert.equal((await findRecipe(recipeId))?.sharedAt, undefined, 'off the map');
+      assert.equal((await findDish(recipeId))?.shared, false);
+      assert.deepEqual(await J.recipes.unshare(recipeId), { ok: true });
+      assert.deepEqual(await M.messages.shareAsk(recipeId), { result: 'shared' });
+      assert.ok((await findRecipe(recipeId))?.sharedAt, 'back on');
     });
   }
 } finally {
