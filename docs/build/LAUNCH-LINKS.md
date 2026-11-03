@@ -80,6 +80,44 @@ Expo Go can't get a push token for this project, and the app never asks for noti
   chat. Signing out of the kid's phone removes its token (no more pushes).
 - **Cook mode keeps the screen on:** check it on the same build (dev builds always keep it on).
 
+### 6c. The APNs key is missing (launch blocker, found Nov 3)
+On the build 11 phone run the token reached the api and the message reached Expo, but Expo answered
+"Could not find APNs credentials for com.salik.homecookd". No iOS push can be delivered until the key is added.
+- **What's there:** Expo project `@salikm1234/app`, bundle `com.salik.homecookd`, Apple team `73UV499FKN`
+  (Salik Mian, Individual): no push key. The Expo account's only APNs key (`YVY2H4MHZU`) is on a different
+  Apple team (`SVZ9ABX4SM`) for another app; a key works only for its own team, so it can't be reused.
+  Whether Salik's Apple account already has an APNs key needs his login to check. One whose `.p8` nobody kept is
+  no use (Apple lets you download it once), so making a new one is simplest.
+- **No new build:** builds 6 (1.0, in review) and 11 are both signed with `aps-environment = production` for
+  `73UV499FKN.com.salik.homecookd` (read from the downloaded builds' entitlements). The key lives on Expo, not in
+  the binary: no rebuild, no OTA update, no App Store Connect change. Tokens phones already sent start working,
+  and one key covers every build of this bundle id (production, staging, aws-staging).
+- **Cost:** none; APNs keys come with the Apple Developer membership.
+- **Who:** Salik's Apple ID. An Individual team has no other members who can make keys.
+
+**A. One command, Salik signs in.** On a Mac logged in to Expo as the project's account:
+1. `cd app && npx eas-cli credentials -p ios`, any build profile (all share `com.salik.homecookd`).
+2. "Push Notifications: Manage your Apple Push Notifications Key" → "Set up your project to use Push Notifications".
+3. Log in to the Apple account: Salik's Apple ID, password and the 2FA code; team `73UV499FKN`.
+4. "Generate a new Apple Push Notifications service key?" → Yes. EAS makes the key in his Apple account and stores it on Expo.
+5. Done when the summary lists a Push Key with a Key ID.
+
+**B. Salik on the web.**
+1. developer.apple.com → Account → Certificates, IDs & Profiles → Keys → "+".
+2. Name it "homecookd push", tick "Apple Push Notifications service (APNs)". If it asks, pick "Sandbox & Production"
+   and "Team Scoped (All Topics)". Continue → Register.
+3. Download the `.p8` (once only) and note the Key ID. The team ID is `73UV499FKN`.
+4. expo.dev → salikm1234 → project "app" → Credentials → iOS → `com.salik.homecookd` → Push Key → Add: upload the
+   `.p8` and enter the Key ID. Or send the `.p8` to Caleb privately and he adds it with step A's menu ("Use an
+   existing key"). Never put it in the repo or a chat.
+5. If Apple says the APNs key limit is reached, revoke an unused APNs key on the same Keys page first.
+
+**Check after:** resend a test message to a phone on build 11. Expo accepts it with no "Could not find APNs
+credentials" error, and it arrives.
+
+**Note:** this turns push on for 1.0 the moment the key lands. Any pushes the live backend sends start arriving on
+reviewers' and testers' phones too.
+
 ## 7. After it works
 - **Security:** remove `host.exp.Exponent` from `APPLE_AUDIENCES`, and from the api code default (`EXPO_GO_BUNDLE_ID`, marked `TODO(security)`). Any Expo Go project can get Apple tokens for that ID. Expo Go's Apple sign-in stops working after that, which is fine once TestFlight works.
 
