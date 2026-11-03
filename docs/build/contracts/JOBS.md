@@ -22,8 +22,8 @@ Nov 2, 2026. Read from `aws-migration` at `a1816615b`, and checked against stagi
 2. 1.1 makes no recording row: no route starts one (homie is off). So send the dish, the kids and the language on the job itself, and leave out `recordingId`.
 3. Make an `Idempotency-Key` (a uuid) for this upload. Save it on the phone with each video's path, `contentType`, exact `size` and `durationS`, before the first call.
 4. `POST /v1/video-uploads {videos: [{contentType, size, durationS}]}`. Save `uploadId`.
-5. `POST /v1/jobs {uploadId, source: "phone", title, language, forKidIds}` straight away, before the bytes land. Save `jobId`. The job waits as `uploading`. Making it early matters: if the phone never says it finished, the server's own check (`jobs.sweep`) queues it, and that check only looks at jobs that exist.
-6. If she picked people to send it to: `POST /v1/pending-sends {uploadId, recipientIds, helloKey?, helloDurationS?}` with its own `Idempotency-Key` (Messages area). Nothing delivers it yet when the recipe is done (open item 2).
+5. `POST /v1/jobs {uploadId, source: "phone", title, language, forKidIds, dishAskId?}` straight away (`dishAskId` only when she's filming for a request card), before the bytes land. Save `jobId`. The job waits as `uploading`. Making it early matters: if the phone never says it finished, the server's own check (`jobs.sweep`) queues it, and that check only looks at jobs that exist.
+6. If she picked people to send it to: `POST /v1/pending-sends {uploadId, recipientIds, helloKey?, helloDurationS?}` with its own `Idempotency-Key` (Messages area). It's delivered by itself when the recipe is ready (MESSAGES.md, flow 10).
 7. For each entry in `uploads`:
    - `method: "PUT"`: a background PUT of the whole file to `url`, with exactly `headers` (`Content-Type`) and the file's exact bytes. The link is signed for that type and that length, so a different size is refused by S3.
    - `method: "PARTS"`: flow 8.
@@ -245,6 +245,7 @@ Code: `api/src/modules/jobs/` (`routes.ts`, `uploads.ts`, `service.ts`, `data.ts
 | `language` | Optional, two letters (`"mr"`). Otherwise the recording's, then the cook's (`/v1/me`), then `"en"` |
 | `forKidIds` | Optional: up to 20 kids of this family, by `personId`. `forKidId` is the older single form |
 | `recordingId` | Optional: her own recording. 1.1 has none: leave it out |
+| `dishAskId` | Optional: the request card this recording answers, when she films from it (`/record?ask=<id>`). Once the recipe is ready, the card's kid gets the `filmed` push (MESSAGES.md, flow 9). Kept only for a card asked of her in her family; any other is left off, with no error, and the job is made all the same |
 
 **Answer:** 201 `{jobId, recipeId}` for a new job; 200 with the same job for the same `uploadId` (the body isn't compared: the first call's title and kids stay). `recipeId` is the "processing" card's id while recipe writes are on, and null otherwise (staging today); the job carries it once it's `done`. The job starts `uploading`, or `queued` if every video is already marked in.
 
@@ -388,7 +389,7 @@ From APP-BACKEND-INVENTORY.md on `main` (`0ed6ddeab`): its "Recording, upload an
 | Convex `liveEvents:frame` | `convex.ts:useLiveFrame` | `GET /v1/recordings/:id/frame` |
 | Convex `glasses:videos` | `convex.ts:useGlassesVideos` | `GET /v1/recordings/glasses-videos`: empty while the glasses are off |
 | Convex `homie:news` | `news.ts:useHomieNews` | **Not built** (off with homie) |
-| Supabase `POST /pending-sends` | `uploads.ts:ensurePendingSend` | `POST /v1/pending-sends {uploadId, recipientIds, helloKey?, helloDurationS?}`, `Idempotency-Key` required (Messages area). Delivery when the recipe is done isn't wired (open item 2) |
+| Supabase `POST /pending-sends` | `uploads.ts:ensurePendingSend` | `POST /v1/pending-sends {uploadId, recipientIds, helloKey?, helloDurationS?}`, `Idempotency-Key` required (Messages area). Delivered by itself when the recipe is ready (MESSAGES.md, flow 10) |
 | Convex `recipes:list` | `data.ts:useFamilyRecipes`, `useDoorsGate.ts`, `convex.ts:recipeMap`, `recipes.ts:useFamilyLibrary` | `GET /v1/recipes?cursor=`, 100 a page. No topic: read on focus and when a job turns `done`. A recipe that isn't `ready` shows only to its cook |
 | None today (`recipes.get`, `recipes.setMemoriesOptIn`) | | `GET /v1/recipes/:id`; `POST /v1/recipes/:id/memories-opt-in` |
 | Convex `cooking:current` (as a read) | `convex.ts` | `GET /v1/cooking`. Empty: nothing on AWS writes those rows. Its name-matching use is gone (ACCOUNTS.md) |
@@ -412,25 +413,35 @@ From APP-BACKEND-INVENTORY.md on `main` (`0ed6ddeab`): its "Recording, upload an
 
 | Setting | Effect |
 |---|---|
-| `worker` `desired_count = 0`, no model keys | Nothing takes a job: it reaches `queued` and stays there. No `done`, no recipe |
-| `RECIPE_WRITES=on` (from the recipe-writes PR) | The recipes switch is `open`: `POST /v1/jobs` makes the "processing" card and returns its `recipeId`, and edits and opt-in write. Until that PR is live on staging it's `closed`: `recipeId: null`, no card, opt-in 501 `not_moved` |
+| `worker` `desired_count = 0`, no model keys | Nothing takes a job: it reaches `queued` and stays there. No `done` and no recipe, except through `POST /v1/test/recipe` with `jobId` (below) |
+| `RECIPE_WRITES=on` (#300) | The recipes switch is `open`: `POST /v1/jobs` makes the "processing" card and returns its `recipeId`, and edits and opt-in write |
 | `jobs.sweep` at `rate(1 hour)` | A job whose phone never calls `/complete` waits up to an hour to become `queued` |
+| `JOBS_SINGLE_PUT_MAX_BYTES=20971520`, `JOBS_PART_BYTES=5242880` | A video over 20 MiB comes back as `PARTS` with `partBytes` 5,242,880 (5 MiB), so a 25 MiB video is 5 parts; up to 20 MiB it's one `PUT`. Production sets neither, and Terraform refuses them there: 5 GiB and 64 MiB |
 | `voice` `voice_count = 0`, `VOICE_STUB=1`, `VOICE_FAKE_SPEECH=1` | No voice service (503 HTML) |
-| `OVERLOAD_SHED=on`, one small api task | Some 503 `unavailable` under load |
+| `OVERLOAD_SHED=on`, two small api tasks scaling to 4 | Some 503 `unavailable` under load |
 | CloudFront in front | Every tester shares one address, so the live poll's 30 refused polls a minute is shared: a phone that keeps polling with a dead session gets everyone 429 for the rest of that minute |
 | The `uploads` bucket has no CORS rule | Videos upload from the iPhone build only, not the app's web build |
 | `uploads` expires raw videos after 14 days | As production |
 
-**A finished recipe without a real job: there's no way.** No route makes a `ready` recipe, the worker has no fake-model mode, and it runs no task on staging. A new family's `GET /v1/recipes` is `[]`. Two ways exist, neither the app's: API puts a made-up recipe row and its `recipe.json` into staging by hand (fake data is within its standing rules), or Caleb opens a real-AI window and the worker runs one job on his own test footage (WORKER-MIGRATION.md, "How to measure a real job"; it costs money). Open item 4.
+**A finished recipe without a real job: `POST /v1/test/recipe` (staging only).**
+- Headers: `Authorization: Bearer <a cook's sessionToken>` and `x-test-signin-key: <TEST_SIGNIN_KEY>`, the same key as `/v1/test/sign-in`. Without the key on the server the route doesn't exist (404 `no_route`), as in production.
+- Body, every field optional: `{title?, steps?, jobId?}`. `title` is up to 120 characters (default "Masala chai (test recipe)", or the job's own title); `steps` is 1 to 12 strings, each one step's instruction (default: three made-up steps with substeps, step ingredients and a quote).
+- **Without `jobId`:** a new ready recipe in her family, with her as its cook.
+- **With `jobId`** (one of her own jobs, at any stage before `done`, not stopped): it finishes that job as the worker's publish does. The job's "processing" card becomes the ready recipe (a new one if it has none), the job goes to `done` with progress 1 and its `recipeId`, and `recipe_published` goes on the outbox, which delivers a pending send registered for its upload and queues `filmed` for its request card, as a real publish does. `/v1/live/jobs` shows the move on its next poll, and the recipe opens from the job's `recipeId`.
+- **201** `{recipeId, recipeUrl}`; `recipeUrl` is the `recipeJsonUrl` `GET /v1/recipes/:id` returns. It lists and opens like a real recipe: `libraryId` `test-recipe-<12 hex>`, a `coverUrl`, steps with moments, one made-up story and one tip in `memories` (shown only to the cook until her opt-in), and a family `recipe.json` (`family: true`, no stories) whose media are a 24-second silent portrait video, a silent voice track, a cover and one still per step, at `test-recipe-<id>/<id>-a1/{play.mp4, voice.m4a, poster.jpg, steps/NN.jpg, recipe.json}`.
+- Refusals: 401 `signed_out` (no session, or a wrong or missing key), 403 `forbidden` (a kid), 400 `invalid` (more than 12 steps, an empty step, a title over 120), 404 `not_found` (a `jobId` that isn't hers), 409 `conflict` (that job is already done, failed or stopped), 501 `not_moved` (recipe writes closed), 502 `provider_down` (S3), 429 `rate_limited` (60 an hour per person).
+- Deleting her account removes it, files and all.
+
+**Testing parts with a small file.** On staging, pick a video over 20 MiB, e.g. 25 MiB (26,214,400 bytes). `POST /v1/video-uploads` answers it `{index, method: "PARTS", partBytes: 5242880, partCount: 5}`. Slice it into five 5 MiB parts (flow 8), `POST /parts` for their links, PUT each, keep each `ETag`, then `POST /parts/finish` and `/complete`. A video of 25 MiB plus 1 byte is 6 parts, the last one 1 byte. Once the job is `queued`, `POST /v1/test/recipe {jobId}` finishes it. The 20 GiB cap, the 120 link requests an hour (`/links` and `/parts` together) and the 1 to 100 parts per call are as in production.
 
 ## Open items
 
 Owners: **API** is the AWS backend chat, **App** is App screens & recording, **Caleb** is a decision only he makes.
 
 1. A failed job carries only an English sentence in `error`, with no code, so the app can't say it in the cook's language without matching text: API adds a code beside it (`no_steps`, `too_long`, `empty_upload`, `no_upload`, `cancelled`, `paused`, `failed`). **API**
-2. Nothing delivers a pending send when a recipe is done on AWS (`recipe_published` does nothing, and `publishedDish` reads the signer's old status file; MESSAGES-MIGRATION.md open item 6): the worker's task should call `deliverPending`, or the app calls `POST /v1/pending-sends/:uploadId/published {libraryId}` when it sees `done`. **API**
+2. ~~Nothing delivered a pending send when a recipe was done on AWS.~~ **Fixed in #311:** `recipe_published` delivers it (MESSAGES.md, flow 10), and a register after the publish reads the job, not the signer's old status file. The app calls nothing more. **API**
 3. No push tells a cook her recipe is ready; when one is added it goes to the job's `cook_id` only. **API**
-4. Staging can't produce a finished recipe, so the done screens can't be tested there: a made-up `ready` recipe on staging, or a fake-model worker task, would let them. **API**
+4. ~~Staging can't produce a finished recipe.~~ Done: `POST /v1/test/recipe` (above). **API**
 5. No route re-runs a failed job from its landed upload, so a retry sends the whole video again: say whether that's wanted. **Caleb**
 6. `/parts/finish` reports S3 refusing to join the parts (a wrong or missing `etag`) as 502 `provider_down`, which reads as "try again", and on a video `/complete` has already marked it answers `finished: false` or 502 instead of `true`. **API**
 7. `POST /v1/jobs`'s retry finds the job by family and folder, not by cook, so another cook with the same `uploadId` would get its `jobId` and `recipeId`: match on the cook too. **API**

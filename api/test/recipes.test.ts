@@ -4,7 +4,7 @@ import { readFileSync } from "node:fs";
 import { after, test } from "node:test";
 import { recipesVersion } from "../src/modules/recipes/reads.js";
 import { recipeWrites, recipeWritesFlag } from "../src/modules/recipes/switch.js";
-import { deleteRecipeUnlessLocked, failRecipeIfOpen, insertProcessingRecipe, saveMemoriesOptIn, saveStoryCardIfOpen, shareRecipeIfOpen } from "../src/modules/recipes/writes.js";
+import { deleteRecipeUnlessLocked, failRecipeIfOpen, insertProcessingRecipe, saveMemoriesOptIn, saveStoryCardIfOpen, saveTestRecipe, shareRecipeIfOpen } from "../src/modules/recipes/writes.js";
 import { call, closeRecipeWrites, db, family, freshDatabase, hasDatabase, lockRecipeCopy, MEDIA, openRecipeWrites, recipe, setUp, who, type Who } from "./jobsHelpers.js";
 
 const STEP = { order: 1, title: "Rinse", text: "Rinse it twice.", moment: { startS: 10, endS: 40 } };
@@ -117,23 +117,53 @@ test("recipes", { skip: !hasDatabase }, async (t) => {
     assert.equal((await call(app, null, "POST", `/v1/recipes/${id}/memories-opt-in`, { optIn: true })).status, 401);
   });
 
-  await t.test("the switch: off by default, and the flag and moved_at must both say so", async () => {
+  await t.test("a recipe that isn't ready is its cook's alone: to the rest of the family it reads as one that isn't there", async () => {
+    const mom = await who(home);
+    const cooking = await addRecipe(dad, { status: "processing" });
+    const failed = await addRecipe(dad, { status: "failed" });
+    const same = (got: { status: number; data: any }, missing: { status: number; data: any }, what: string) =>
+      assert.deepEqual([got.status, { ...got.data, requestId: 0 }], [missing.status, { ...missing.data, requestId: 0 }], what);
+    await openRecipeWrites();
+    for (const by of [leo, mom]) {
+      for (const id of [cooking, failed]) {
+        same(await get(by, id), await get(by, "no-such-recipe"), "read");
+        same(await optIn(by, id, true), await optIn(by, "no-such-recipe", true), "opt-in, where a 403 said it was there");
+      }
+      assert.ok(!(await call(app, by, "GET", "/v1/recipes")).data.recipes.some((r: { _id: string }) => r._id === cooking || r._id === failed));
+    }
+    assert.equal((await get(dad, cooking)).data.status, "processing");
+    assert.deepEqual((await optIn(dad, cooking, true)).data, { ok: true });
+    await db().query(`update recipes set status = 'ready' where id = $1`, [cooking]);
+    assert.equal((await get(leo, cooking)).status, 200);
+    assert.equal((await optIn(leo, cooking, true)).data.message, "Only the cook can share these.");
+    await closeRecipeWrites();
+  });
+
+  await t.test("the switch: off by default, the flag opens it, and a sync mid-copy always locks it", async () => {
     assert.equal(recipeWritesFlag({}), false);
     for (const wrong of ["true", "1", "ON", " on", "yes"]) assert.equal(recipeWritesFlag({ RECIPE_WRITES: wrong }), false, wrong);
     assert.equal(recipeWritesFlag({ RECIPE_WRITES: "on" }), true);
 
     const on = { RECIPE_WRITES: "on" };
     assert.equal(await recipeWrites(db(), {}), "closed");
-    assert.equal(await recipeWrites(db(), on), "closed", "the flag alone isn't enough");
-    await db().query(`update sync_copies set moved_at = now() where table_name = 'recipes'`);
-    assert.equal(await recipeWrites(db(), {}), "closed", "moved_at alone isn't enough");
-    assert.equal(await recipeWrites(db(), on), "open");
+    assert.equal(await recipeWrites(db(), on), "open", "one switch: no sync has run, so the flag alone opens it (production at launch)");
     await db().query(`update sync_copies set moved_at = null, read_only = true where table_name = 'recipes'`);
-    assert.equal(await recipeWrites(db(), on), "locked");
+    assert.equal(await recipeWrites(db(), on), "locked", "a sync copying the table owns it, whatever the flag says");
     assert.equal(await recipeWrites(db(), {}), "locked");
     await db().query(`update sync_copies set moved_at = now() where table_name = 'recipes'`);
     assert.equal(await recipeWrites(db(), {}), "closed", "moved, with the flag off");
     assert.equal(await recipeWrites(db(), on), "open");
+    // No sync row at all (a database the sync never touched) is the same as a sync that never ran. Rolled back, because other tests move this row.
+    const c = await db().connect();
+    try {
+      await c.query("begin");
+      await c.query(`delete from sync_copies where table_name = 'recipes'`);
+      assert.equal(await recipeWrites(c, on), "open");
+      assert.equal(await recipeWrites(c, {}), "closed");
+    } finally {
+      await c.query("rollback");
+      c.release();
+    }
     await closeRecipeWrites();
   });
 
@@ -161,7 +191,7 @@ test("recipes", { skip: !hasDatabase }, async (t) => {
   await t.test("every write in writes.ts asks the switch, and the trigger is still there behind it", async () => {
     const source = readFileSync(new URL("../src/modules/recipes/writes.ts", import.meta.url), "utf8");
     const functions = source.split(/^export async function /m).slice(1);
-    assert.equal(functions.length, 6);
+    assert.equal(functions.length, 7);
     for (const body of functions) {
       assert.match(body, /await recipeWrites\(c\)/, body.slice(0, 40));
       const asked = body.indexOf("recipeWrites(c)");
@@ -173,6 +203,9 @@ test("recipes", { skip: !hasDatabase }, async (t) => {
     const row = { familyId: home, cookId: dad.personId, title: "x", language: null };
     await assert.rejects(insertProcessingRecipe(db(), row), { code: "not_moved" });
     await assert.rejects(saveMemoriesOptIn(db(), id, true), { code: "not_moved" });
+    const made = { familyId: home, cookId: dad.personId, title: "x", libraryId: "test-recipe-x", mediaPrefix: "test-recipe-x/", recipeJsonKey: "test-recipe-x/a1/recipe.json", coverKey: "test-recipe-x/a1/poster.jpg", coverVersion: "0", steps: [], memories: [], language: null };
+    await assert.rejects(saveTestRecipe(db(), made, null), { code: "not_moved" });
+    await assert.rejects(saveTestRecipe(db(), made, id), { code: "not_moved" });
     assert.equal(await failRecipeIfOpen(db(), id), false);
     assert.equal(await shareRecipeIfOpen(db(), id), false);
     assert.equal(await saveStoryCardIfOpen(db(), id, { text: "x", usedStories: false, culture: null, quote: null }), false);

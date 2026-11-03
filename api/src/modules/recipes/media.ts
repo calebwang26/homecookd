@@ -1,5 +1,5 @@
 // A row holds a key, and a link is built when it's read, so hosts can change (SYSTEM-DESIGN.md). The worker's recipe.json keeps full CDN links, because the app reads them.
-const encodeKey = (key: string) => key.split("/").map(encodeURIComponent).join("/");
+export const encodeKey = (key: string) => key.split("/").map(encodeURIComponent).join("/");
 
 /** A public file in the media bucket, on the CDN. Fails loudly without its setting, as `objectStore()` does: a recipe with no picture would hide the mistake. */
 export function mediaUrl(key: string, version?: string | null): string {

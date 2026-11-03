@@ -7,7 +7,7 @@
 // SQL, with its index:
 //   A recipe's questions               questions_recipe_recent
 //   Questions waiting on a cook        questions_family_status_recent
-//   One follow-up per recipe and id    questions_one_follow_up
+//   A recipe's follow-ups              questions_recipe_recent
 import type { Signed } from "../../auth.js";
 import { db, tx, type Queryable } from "../../db.js";
 import { forbidden, invalid, notFound, refused } from "../../errors.js";
@@ -16,7 +16,7 @@ import { enqueue } from "../../outbox.js";
 import { objectStore } from "../../storage.js";
 import type { Trace } from "../dish/budget.js";
 import { memberById, type Member } from "../people/family.js";
-import { familyRecipe, recipesByIds, type RecipeBrief } from "../recipes/read.js";
+import { familyRecipe, recipeFor, recipesByIds, type RecipeBrief } from "../recipes/read.js";
 import { iso } from "./data.js";
 import { models, type YesNo } from "./models.js";
 import { actorOf, type Write } from "./actor.js";
@@ -99,10 +99,10 @@ async function views(rows: QuestionRow[], everyone: Member[], recipes: Map<strin
 
 const PAGE = { default: 100, max: 100 };
 
-/** questions.forRecipe. A share ask isn't about cooking: cook mode never plays its answer. */
+/** questions.forRecipe. A share ask isn't about cooking: cook mode never plays its answer. A recipe that isn't ready lists nothing but to its cook, like a missing one. */
 export async function forRecipe(signed: Signed, recipeId: string, query: Record<string, unknown>) {
   const actor = await actorOf(signed);
-  const recipe = isRowId(recipeId) ? await familyRecipe(db(), actor.familyId, recipeId) : null;
+  const recipe = isRowId(recipeId) ? await recipeFor(db(), actor.familyId, actor.me.id, recipeId) : null;
   if (!recipe) return { questions: [], nextCursor: null };
   const limit = pageSize(query.limit, PAGE);
   const cursor = decodeCursor(query.cursor);
@@ -142,7 +142,7 @@ const after = (c: Queryable, payload: { task: string; questionId: string; langua
 
 const ASK_FIELDS = ["recipeId", "stepOrder", "text", "found"];
 
-/** From the voice service (Convex's /voice/question), with the kid's own session. */
+/** From the voice service (Convex's /voice/question), with the kid's own session. Cook mode needs a finished recipe, so one that isn't ready is no recipe, to its cook too. */
 export async function ask(signed: Signed, body: Record<string, unknown>, w: Write) {
   const actor = await actorOf(signed);
   const words = text(body.text, "text", MAX_BODY);
@@ -154,7 +154,7 @@ export async function ask(signed: Signed, body: Record<string, unknown>, w: Writ
     if (typeof f !== "object" || typeof f.startS !== "number" || typeof f.endS !== "number" || typeof f.quote !== "string") throw invalid("found");
     found = { startS: f.startS, endS: f.endS, quote: f.quote.slice(0, MAX_BODY) };
   }
-  const recipe = isRowId(body.recipeId) ? await familyRecipe(db(), actor.familyId, body.recipeId) : null;
+  const recipe = isRowId(body.recipeId) ? await recipeFor(db(), actor.familyId, actor.me.id, body.recipeId, { readyOnly: true }) : null;
   if (!recipe) throw noSuchRecipe();
   const status = found ? "found_in_video" : "asked_cook";
   const cook = await memberById(db(), recipe.cook_id);
@@ -189,13 +189,12 @@ export async function answer(signed: Signed, questionId: string, body: Record<st
     async (c) => {
       const { rows } = await c.query(`select ${COLUMNS} from questions where id = $1 and family_id = $2 for update`, [questionId, actor.familyId]);
       const q: QuestionRow | undefined = rows[0];
-      if (!q) throw notFound();
+      // A question about a recipe this cook can't see is no question.
+      const recipe = q ? await recipeFor(c, actor.familyId, actor.me.id, q.recipe_id) : null;
+      if (!q || !recipe) throw notFound();
       if (q.status !== "asked_cook") throw refused(409, "answered", "That question already has an answer.");
       // Sharing a recipe, or saying what went into it, is its cook's answer alone, not any cook's in the family.
-      if (q.kind !== "cooking") {
-        const recipe = await familyRecipe(c, actor.familyId, q.recipe_id);
-        if (recipe?.cook_id !== actor.me.id) throw forbidden("Only the recipe's cook can answer this.");
-      }
+      if (q.kind !== "cooking" && recipe.cook_id !== actor.me.id) throw forbidden("Only the recipe's cook can answer this.");
       if (!words && !audioKey) throw invalid(undefined, "Say or type an answer first.");
       if (audioKey) await attachFile(c, actor, audioKey, ["voice"]);
       await c.query(
@@ -212,21 +211,17 @@ export async function answer(signed: Signed, questionId: string, body: Record<st
   return { ok: true };
 }
 
-export type FollowUp = { id: string; question: string; step?: number; ingredient?: string };
-
-/** Each follow-up she hasn't been asked yet (by its recipe.json id) becomes her open question. The worker calls this when a recipe is published. */
-export async function askFollowUps(c: Queryable, to: { recipeId: string; familyId: string; cookId: string; cookLanguage: string | null }, followUps: FollowUp[], requestId?: string): Promise<void> {
-  for (const f of followUps) {
-    const { rows } = await c.query(
-      `insert into questions (family_id, recipe_id, step_order, asked_by, text, kind, follow_up_id, follow_up_ingredient, status)
-       values ($1, $2, $3, $4, $5, 'follow_up', $6, $7, 'asked_cook')
-       on conflict (recipe_id, follow_up_id) where follow_up_id is not null do nothing returning id`,
-      [to.familyId, to.recipeId, f.step ?? null, to.cookId, f.question, f.id, f.ingredient ?? null],
-    );
-    if (rows[0] && to.cookLanguage && to.cookLanguage !== "en") {
-      await after(c, { task: "questions.translate", questionId: rows[0].id, language: to.cookLanguage }, requestId);
-    }
-  }
+/**
+ * The worker writes a published recipe's follow-ups itself, as her open questions from homie (pipeline/queue_db.py finish). Convex's askFollowUps also put each one in
+ * her language: that's done here, on the recipe_published message (published.ts). A repeat queues only what's still in English, and the task saves once.
+ */
+export async function translateFollowUps(c: Queryable, recipeId: string, language: string, requestId?: string): Promise<number> {
+  const { rows } = await c.query(
+    `select id from questions where recipe_id = $1 and kind = 'follow_up' and status = 'asked_cook' and text_for_cook is null order by created_at limit 50`,
+    [recipeId],
+  );
+  for (const r of rows) await after(c, { task: "questions.translate", questionId: r.id, language }, requestId);
+  return rows.length;
 }
 
 // ---------------------------------------------------------------------------------------------

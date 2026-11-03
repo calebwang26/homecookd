@@ -8,14 +8,14 @@ import { forbidden, invalid, notFound, refused } from "../../errors.js";
 import { once, requestHash } from "../../idempotency.js";
 import { enqueue } from "../../outbox.js";
 import type { Member } from "../people/family.js";
-import { familyRecipe } from "../recipes/read.js";
+import { recipeFor } from "../recipes/read.js";
 import { type Actor, actorOf, type Write } from "./actor.js";
 import { threadFor } from "./threadAccess.js";
 import { canAnswer, questionTargets } from "./answers.js";
 import * as data from "./data.js";
 import type { MessageRow, NewMessage, ThreadRow } from "./data.js";
 import { attachFile, isPublicClip, markForDeletion } from "./uploads.js";
-import { library } from "./library.js";
+import { checkDish } from "./library.js";
 import { isReaction } from "./pushRules.js";
 import { saveNote } from "./notes.js";
 import { decodeCursor, encodeCursor, isoTime, isRowId, libraryId, MAX_BODY, MAX_RECIPIENTS, MAX_STEP, MAX_TRANSCRIPT, MAX_VOICE_S, noSuchRecipe, number, pageSize, text, WRITE_SOMETHING } from "./values.js";
@@ -202,11 +202,6 @@ export function parseMessage(body: Body): Parsed {
   return m;
 }
 
-/** Checked before the transaction: a call that can wait 5 s on the library mustn't hold a row lock. False is a 404; null means it can't say, and a send isn't held up for that. */
-async function checkDish(id: string | null | undefined): Promise<void> {
-  if (id && (await library().exists(id)) === false) throw noSuchRecipe();
-}
-
 /** The body of a send, in its transaction. Returns the message, which for a repeated "Just like mine" is the first one. */
 async function sendIn(c: PoolClient, actor: Actor, t: ThreadRow, m: Parsed, requestId?: string): Promise<MessageRow> {
   let replyTo: MessageRow | null = null;
@@ -254,7 +249,7 @@ export async function sendToThread(signed: Signed, threadId: string, body: Body,
   const t = await threadFor(db(), actor, threadId);
   refuseIfOtherLeft(actor, t);
   const m = parseMessage(body);
-  await checkDish(m.libraryId);
+  await checkDish(actor.familyId, m.libraryId);
   const { resourceId } = await once(
     { scope: actor.me.id, key: w.key, route: "POST /v1/threads/:id/messages", hash: requestHash([t.id, fields(body, SEND_FIELDS)]) },
     async (c) => (await sendIn(c, actor, t, m, w.requestId)).id,
@@ -290,7 +285,8 @@ export async function sendToPerson(signed: Signed, body: Body, w: Write) {
   if (to?.id === actor.me.id) throw invalid("to");
   let recipeId: string | null = null;
   if (body.recipeId !== undefined && body.recipeId !== null) {
-    if (!isRowId(body.recipeId) || !(await familyRecipe(db(), actor.familyId, body.recipeId))) throw noSuchRecipe();
+    // The recipient reads the recipe's id, and its push names it, so one that isn't ready is no recipe here, to its cook too.
+    if (!isRowId(body.recipeId) || !(await recipeFor(db(), actor.familyId, actor.me.id, body.recipeId, { readyOnly: true }))) throw noSuchRecipe();
     recipeId = body.recipeId;
   }
   const m: Parsed = {
@@ -347,7 +343,7 @@ export async function madeMyDish(signed: Signed) {
   for (const m of recent) {
     if (m.kind !== "photo" || m.sender_id === actor.me.id || !m.recipe_id || !m.photo_key) continue;
     if (m.thread_id !== ring.id && !pairsMine.has(m.thread_id)) continue;
-    const recipe = await familyRecipe(db(), actor.familyId, m.recipe_id);
+    const recipe = await recipeFor(db(), actor.familyId, actor.me.id, m.recipe_id);
     if (!recipe || recipe.cook_id !== actor.me.id) continue;
     const views = await messageViews(actor.familyId, actor.everyone, [m]);
     if (!views[0].photoUrl) continue;
@@ -422,7 +418,7 @@ export async function sendRecipe(signed: Signed, body: Body, w: Write) {
     targets = [...new Set(body.to.map((id) => personHere(actor, id, "to")))].filter((p) => p.id !== actor.me.id);
   } else throw invalid("to");
   if (targets.length === 0) throw invalid("to");
-  await checkDish(dish);
+  await checkDish(actor.familyId, dish);
   const { resourceId } = await once(
     { scope: actor.me.id, key: w.key, route: "POST /v1/send-recipe", hash: requestHash(fields(body, SEND_RECIPE_FIELDS)) },
     async (c) => {

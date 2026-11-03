@@ -16,20 +16,18 @@ import { forbidden, invalid, notFound, refused } from "../../errors.js";
 import { once, requestHash } from "../../idempotency.js";
 import { hit, subjectKey, type Limit } from "../../rateLimit.js";
 import { seal, SHARE_LINK_SALT, shareTokenHash, unseal } from "../../sealed.js";
+import { uploadJob } from "../jobs/service.js";
 import { familyNameOf, joinsViaShare, memberById, membersByIds } from "../people/family.js";
+import { recipeJsonUrl } from "../recipes/read.js";
 import { iso } from "./data.js";
-import { dishesOf, library } from "./library.js";
+import { checkDish, dishesOf, library } from "./library.js";
 import { actorOf, type Write } from "./actor.js";
 import { deliverRecipe } from "./service.js";
 import { attachFile, markForDeletion } from "./uploads.js";
-import { decodeCursor, encodeCursor, isRowId, libraryId, LIBRARY_ID, MAX_RECIPIENTS, MAX_VOICE_S, noSuchRecipe, number, pageSize } from "./values.js";
-import { mediaUrl, personView } from "./views.js";
+import { decodeCursor, encodeCursor, isRowId, libraryId, LIBRARY_ID, MAX_RECIPIENTS, MAX_VOICE_S, number, pageSize } from "./values.js";
+import { personView } from "./views.js";
 
 type Body = Record<string, unknown>;
-
-async function checkDish(id: string): Promise<void> {
-  if ((await library().exists(id)) === false) throw noSuchRecipe();
-}
 
 // ---------------------------------------------------------------------------------------------
 // Share links
@@ -56,7 +54,7 @@ const webUrl = () => (process.env.DISH_WEB_ORIGIN?.trim() || "https://homecookd.
 export async function makeShare(signed: Signed, body: Body) {
   const actor = await actorOf(signed);
   const dish = libraryId(body.libraryId, true)!;
-  await checkDish(dish);
+  await checkDish(actor.familyId, dish);
   const { rows } = await db().query(
     `select id, token_enc from shares where family_id = $1 and library_id = $2 and sender_id = $3 order by created_at desc limit 1`,
     [actor.familyId, dish, actor.me.id],
@@ -81,7 +79,7 @@ export const OPEN_LIMITS: Limit[] = [{ bucket: "share-open", max: 120, windowS: 
 
 /**
  * A public link, with no session. The token comes in the body, not the path as on Supabase, because logs keep paths and a token is a capability. Rate limited by
- * IP, which Supabase's wasn't. Every failure reads the same.
+ * IP, which Supabase's wasn't. Every failure reads the same. `recipeUrl` is where the dish's recipe.json really is (recipeJsonUrl), so a recipe made on AWS opens too.
  */
 export async function openShare(token: unknown, ip: string) {
   await hit(subjectKey(ip), OPEN_LIMITS);
@@ -96,14 +94,14 @@ export async function openShare(token: unknown, ip: string) {
   return {
     token,
     libraryId: share.library_id,
-    recipeUrl: mediaUrl(`${share.library_id}/recipe.json`),
+    recipeUrl: await recipeJsonUrl(db(), share.family_id, share.library_id),
     sender: sender && !sender.deleted_at ? { name: sender.name, relation: sender.relation, avatarKey: sender.avatar_key } : null,
     familyName: await familyNameOf(db(), share.family_id),
   };
 }
 
 // ---------------------------------------------------------------------------------------------
-// Recordings on their way: the app registers who gets them, the worker says when it's published
+// Recordings on their way: the app registers who gets them, and the recipe's publish delivers them (published.ts, on the worker's recipe_published message)
 
 const UPLOAD_ID = LIBRARY_ID;
 
@@ -122,6 +120,9 @@ export async function registerPendingSend(signed: Signed, body: Body, w: Write) 
   if (recipients.length === 0) throw invalid("recipientIds");
   const helloKey = typeof body.helloKey === "string" && body.helloKey ? body.helloKey : null;
   const helloDuration = number(body.helloDurationS, "helloDurationS", { min: 0, max: MAX_VOICE_S });
+  // A recording is its cook's to send: someone else in the family with its upload id can't put their list on it.
+  const before = await uploadJob(actor.familyId, uploadId);
+  if (before && before.cookId !== actor.me.id) throw refused(409, "conflict");
 
   await once(
     { scope: actor.me.id, key: w.key, route: "POST /v1/pending-sends", hash: requestHash([uploadId, recipients, helloKey, helloDuration]) },
@@ -149,33 +150,42 @@ export async function registerPendingSend(signed: Signed, body: Body, w: Write) 
       return uploadId;
     },
   );
-  // If the recording was already published (fast pipeline, slow phone), deliver right away. The old host's job file: the worker's own call covers the rest.
-  const dish = await library().publishedDish(uploadId);
-  if (dish) {
-    const out = await deliverPending(actor.familyId, uploadId, dish, w.requestId, actor.me.id);
+  // Already published (a fast job, a slow phone): it goes now. Asked after this row committed, so a publish either sees the row or is seen here.
+  const job = await uploadJob(actor.familyId, uploadId);
+  if (job?.libraryId && job.cookId === actor.me.id) {
+    const out = await deliverPending(actor.familyId, uploadId, job.libraryId, w.requestId, actor.me.id, { id: job.jobId, cookId: job.cookId });
     return { ok: true, delivered: out.delivered };
   }
   return { ok: true };
 }
 
 /**
- * The recipe, and the hello when there is one, to each recipient still in the family. The claim and every message are one transaction, so a worker's retry
- * delivers nothing twice and a failure leaves nothing half-sent, where Supabase had to release its claim by hand.
+ * The recipe, and the hello when there is one, to each recipient still in the family: what send-recipe sends. The claim and every message are one transaction, so a
+ * retry delivers nothing twice and a failure leaves nothing half-sent, where Supabase had to release its claim by hand. `job`: the published job's, so only its cook's
+ * list goes, and the send is tied to the job.
  */
-export async function deliverPending(familyId: string, uploadId: string, dish: string, requestId?: string, onlySender?: string): Promise<{ delivered: number; already?: boolean }> {
+export async function deliverPending(
+  familyId: string,
+  uploadId: string,
+  dish: string,
+  requestId?: string,
+  onlySender?: string,
+  job?: { id: string; cookId: string },
+): Promise<{ delivered: number; already?: boolean }> {
   const out = await tx(async (c) => {
     if (onlySender) {
       const owner = await c.query(`select sender_id from pending_sends where upload_id = $1 and family_id = $2`, [uploadId, familyId]);
       if (owner.rows[0] && owner.rows[0].sender_id !== onlySender) throw forbidden("Only whoever recorded this can send it.");
     }
     const { rows } = await c.query(
-      `update pending_sends set delivered_at = now(), library_id = $3 where upload_id = $1 and family_id = $2 and delivered_at is null
+      `update pending_sends set delivered_at = now(), library_id = $3, job_id = coalesce($4, job_id)
+        where upload_id = $1 and family_id = $2 and delivered_at is null and ($5::text is null or sender_id = $5)
        returning sender_id, recipient_ids, hello_key, hello_duration_s`,
-      [uploadId, familyId, dish],
+      [uploadId, familyId, dish, job?.id ?? null, job?.cookId ?? null],
     );
     const row = rows[0];
     if (!row) {
-      const seen = await c.query(`select 1 from pending_sends where upload_id = $1 and family_id = $2`, [uploadId, familyId]);
+      const seen = await c.query(`select 1 from pending_sends where upload_id = $1 and family_id = $2 and delivered_at is not null`, [uploadId, familyId]);
       return seen.rowCount ? { delivered: 0, already: true } : { delivered: 0 };
     }
     const people = await membersByIds(c, row.recipient_ids);
@@ -217,7 +227,7 @@ export async function setFavorite(signed: Signed, body: Body) {
   const dish = libraryId(body.libraryId, true)!;
   if (typeof body.on !== "boolean") throw invalid("on");
   if (body.on) {
-    await checkDish(dish);
+    await checkDish(signed.familyId, dish);
     await db().query(`insert into favorites (person_id, library_id) values ($1, $2) on conflict do nothing`, [signed.personId, dish]);
   } else {
     await db().query(`delete from favorites where person_id = $1 and library_id = $2`, [signed.personId, dish]);
@@ -325,7 +335,7 @@ export async function recordEvent(signed: Signed, body: Body) {
   const duration = number(body.durationS, "durationS", { min: 0, max: 3600 });
   if (kind === "heard" && (duration === null || duration < HEARD_MIN_S)) throw invalid("durationS");
   const start = number(body.startS, "startS", { min: 0, max: 86_400 });
-  await checkDish(dish);
+  await checkDish(actor.familyId, dish);
   const windowS = kind === "viewed" ? 30 * 60 : kind === "heard" ? 5 : 60;
   return await tx(async (c) => {
     await c.query(`select pg_advisory_xact_lock(hashtext($1))`, [`event:${actor.me.id}:${dish}:${kind}`]);

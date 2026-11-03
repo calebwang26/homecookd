@@ -15,17 +15,17 @@ Step 7 of `docs/build/AWS-MIGRATION.md`, the fifth item in its area order, Nov 1
 | `questions` | Messages | The purge deletes those on her recipes, because they block the recipe's delete. Goes to Messages' module when it lands, as Community's draft also says |
 | `outbox`, `idempotency_keys`, `rate_hits` | Platform | As they're built to be used |
 
-## The switch for `recipes`: off
+## The switch for `recipes`: on for staging, and on in production at launch
 
-`api/src/modules/recipes/switch.ts`. SYNC-MIGRATION.md's rule is that a migration sets `sync_copies.moved_at` when an area moves, and then the api may write. This adds `RECIPE_WRITES=on` above that, so writes can go off with no release. **Both are off today, and nothing here turns them on.**
+`api/src/modules/recipes/switch.ts`. Since Nov 2 there's one switch at launch and no sync runs (CUTOVER.md), so `RECIPE_WRITES=on` opens writes by itself. Only a sync copying the table right now locks them. Before Nov 2, open also needed `sync_copies.moved_at`, which only the sync's own release set, so production would never have opened. **Staging has `RECIPE_WRITES=on`.**
 
 | State | When | Edits | A new job |
 |---|---|---|---|
-| open | `RECIPE_WRITES=on` and `moved_at` set | Written | Gets its "processing" card |
-| locked | The copy is read-only and not moved | 501 `not_moved` | 501 `not_moved`: the worker couldn't save its recipe at the end, so it would spend her money for nothing. A retry of a job already made still gets it |
-| closed | Anything else (the sync has never run: only fake data) | 501 `not_moved` | Made with no card, `recipeId: null`, and the worker makes the recipe when it publishes. This is how the whole loop runs on staging |
+| locked | The copy is read-only and not moved: a sync is copying, whatever the flag says | 501 `not_moved` | 501 `not_moved`: the worker couldn't save its recipe at the end, so it would spend her money for nothing. A retry of a job already made still gets it |
+| open | `RECIPE_WRITES=on` | Written | Gets its "processing" card |
+| closed | Anything else | 501 `not_moved` | Made with no card, `recipeId: null`, and the worker makes the recipe when it publishes |
 
-All of the api's writes to `recipes` are in `recipes/writes.ts`, and a test fails if one writes before it asks the switch. `sync.test.ts` still fails if any other file writes the table; that file is its one named exception, and the trigger still refuses until `moved_at` is set. The purge doesn't wait for the flag, because a deletion must happen: only `locked` stops it, and then the sync has already removed the recipe.
+All of the api's writes to `recipes` are in `recipes/writes.ts`, and a test fails if one writes before it asks the switch. `sync.test.ts` still fails if any other file writes the table; that file is its one named exception, and the trigger refuses while a copy is read-only and not moved, the same case as `locked`. The purge doesn't wait for the flag, because a deletion must happen: only `locked` stops it, and then the sync has already removed the recipe.
 
 **To switch on:** set `moved_at` in the release that switches the worker (SYNC-MIGRATION.md, decision 4), then the flag. It comes off with the sync: `sync_copies` goes then, so `switch.ts` goes too.
 
@@ -74,7 +74,7 @@ A `POST /v1/jobs` can still name a recording, with its guard, for rows that arri
 
 - **The signer's `action: delete`.** `lib/deletes.ts` still calls the signer, and the queue worker has no `deletions/` handling. A route needs a decision on what a delete does to S3 (the old path moves it to `trash/`, recoverable), and `s3:ListBucket` on media. So **the signer can't be turned off with this PR alone.**
 - **`recipes.setShare`, `setLocation`, the story card, reports' `hidden_at`.** COMMUNITY-MIGRATION.md's blockers. `recipes/writes.ts` is where they'd go once the switch is on.
-- **What Convex did when a recipe published.** The worker's `recipe_published` message is now understood and does nothing: Moss sync, translating follow-ups into her language, delivering a pending send and its push. Moss goes away after approval anyway (`moss-sync-off-after-approval`), and the other two are Messages'. `worker.synced`, `requestMossSync`, `reindexMissing` go with them. Linking `pending_sends.job_id` waits for that too.
+- **What Convex did when a recipe published.** Since #311 the worker's `recipe_published` message does Messages' part (`messages/published.ts`): translating follow-ups into her language, delivering a pending send and its push, tying `pending_sends.job_id`, and the `filmed` push for a job made for a request card. Moss sync isn't moved: it goes away after approval anyway (`moss-sync-off-after-approval`), and `worker.synced`, `requestMossSync`, `reindexMissing` go with it.
 - **`worker.nextDeletion`, `deletionDone`, `retryDeletion`.** The outside purge, with Accounts.
 
 ## Uploads, in place of the signer
@@ -172,7 +172,7 @@ The worker also deletes a stopped job's raw video as soon as it sees it, so the 
 
 ## Secrets and env the api now needs (names only)
 
-No new secrets. **Settings:** `MEDIA_BASE_URL` (new on the api), `RECIPE_WRITES` (leave unset). `UPLOAD_BUCKET`, `PRIVATE_BUCKET`, `JOBS_QUEUE_URL` and `SCHEDULED_QUEUE_URL` are already set. `RATE_LIMIT_SALT` is required, as it already is for the dish routes.
+No new secrets. **Settings:** `MEDIA_BASE_URL` (new on the api), `RECIPE_WRITES` (`on` on staging, and in production at launch). `UPLOAD_BUCKET`, `PRIVATE_BUCKET`, `JOBS_QUEUE_URL` and `SCHEDULED_QUEUE_URL` are already set. `RATE_LIMIT_SALT` is required, as it already is for the dish routes.
 
 ## What `infra/` needed (in the infra PR, not applied)
 

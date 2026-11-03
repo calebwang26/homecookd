@@ -34,12 +34,13 @@ variable "db_protected" {
 }
 
 variable "services" {
-  description = "Fargate services. path_patterns empty = no load balancer. secrets = names from secret_names. autoscale = CPU picks the count between min and max (autoscaling.tf)."
+  description = "Fargate services. path_patterns empty = no load balancer. secrets = names from secret_names. autoscale = CPU picks the count between min and max (autoscaling.tf). health_port = the load balancer checks /health there, not on port (the api's own thread, api/src/health.ts)."
   type = map(object({
     cpu           = number
     memory        = number
     desired_count = number
     port          = optional(number, 8080)
+    health_port   = optional(number)
     path_patterns = optional(list(string), [])
     default_route = optional(bool, false)
     drain_seconds = optional(number, 30)
@@ -59,6 +60,13 @@ variable "services" {
   validation {
     condition     = var.environment != "production" || alltrue([for s in var.services : !contains(s.secrets, "TEST_SIGNIN_KEY") && !contains(keys(s.env), "TEST_SIGNIN_KEY")])
     error_message = "TEST_SIGNIN_KEY is staging's only: in production it would let anyone with the key sign in without Apple."
+  }
+  # Staging's small video parts, so a phone can test them with a small file (api/src/modules/jobs/uploads.ts partSettings). Production keeps 5 GiB and 64 MiB.
+  validation {
+    condition = var.environment != "production" || alltrue([for s in var.services : alltrue([
+      for name in ["JOBS_SINGLE_PUT_MAX_BYTES", "JOBS_PART_BYTES"] : !contains(s.secrets, name) && !contains(keys(s.env), name)
+    ])])
+    error_message = "JOBS_SINGLE_PUT_MAX_BYTES and JOBS_PART_BYTES are staging's only: production's videos go up in one PUT to 5 GiB, then in 64 MiB parts."
   }
 }
 

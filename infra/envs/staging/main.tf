@@ -80,8 +80,9 @@ module "env" {
   alert_email       = "caleb.wang26@gmail.com"
   # EDIBLE_CODE_KEY seals join, craving, dinner and share links (api/src/sealed.ts). Its value is Supabase's, loaded with load-secrets.sh, so copied rows open. A
   # name only goes on a service once its value is loaded: a secret with no value stops a task starting. TEST_SIGNIN_KEY turns on the api's test sign-in for
-  # scripts (api/src/modules/accounts/testSignIn.ts); production refuses it. It's named on the api in the same change because the merge's own deploy waits for
-  # an apply that refuses this (IAM), so nothing rolls out until Caleb has loaded its value (infra/README.md, "The app on staging").
+  # scripts (api/src/modules/accounts/testSignIn.ts) and its made-up recipe (recipes/testRecipe.ts); production refuses it. It's named on the api in the same
+  # change because the merge's own deploy waits for an apply that refuses this (IAM), so nothing rolls out until Caleb has loaded its value (infra/README.md,
+  # "The app on staging").
   secret_names = ["SENTRY_DSN_API", "SENTRY_DSN_WORKER", "RATE_LIMIT_SALT", "ANTHROPIC_API_KEY", "CARTESIA_API_KEY", "EDIBLE_CODE_KEY", "TEST_SIGNIN_KEY", "LINK_JOIN_SECRET", "LEFT_IDENTITY_SECRET"]
 
   alb_allowed_cidrs = var.alb_allowed_cidrs
@@ -119,7 +120,8 @@ module "env" {
       memory        = 512
       desired_count = var.api_count
       autoscale     = { min = 2, max = 4 }
-      drain_seconds = 90 # a task taken away finishes its requests first, and making a card can wait 60 s on the guess
+      health_port   = 8081 # the load balancer's check, on its own thread (api/src/health.ts); the same as the image's HEALTH_PORT
+      drain_seconds = 90   # a task taken away finishes its requests first, and making a card can wait 60 s on the guess
       default_route = true
       uses_database = true
       # A secret with no value stops a task starting, so the real keys are named here only for a test window.
@@ -130,10 +132,16 @@ module "env" {
         # Accounts owns staging's people and families: staging runs no sync, and 1.1 signs up and joins here (docs/build/contracts/ACCOUNTS.md,
         # "Staging testing"). Join links point at staging's own /i page. LINK_JOIN_SECRET and LEFT_IDENTITY_SECRET are staging's own random values.
         { ACCOUNTS_OWNS_PEOPLE = "1", EDIBLE_WEB_URL = module.web.url },
+        # The api writes recipes: edits, share asks and story cards (api/src/modules/recipes/switch.ts). No sync runs here.
+        { RECIPE_WRITES = "on" },
         # The app's web build, for testing screens in a browser against staging (api/src/cors.ts); Expo takes the next free port. Production sets none.
         { APP_WEB_ORIGINS = "http://localhost:8081,http://localhost:8082,http://localhost:8083" },
         # The website's own pages, for the public routes they call from a browser (/v1/shares/open, /invite/*, /dish/*; api/src/cors.ts): staging's site.
         { SITE_ORIGINS = module.web.url },
+        # A video over 20 MiB goes up in parts, not over 5 GiB, so a small file tests them (api/src/modules/jobs/uploads.ts). Production may not set it (env module).
+        { JOBS_SINGLE_PUT_MAX_BYTES = "20971520" },
+        # Parts of 5 MiB, S3's smallest, not 64 MiB: a 25 MiB video comes back as 5 parts. Production may not set it either.
+        { JOBS_PART_BYTES = "5242880" },
         var.real_ai ? {} : { DISH_FAKE_AI = "1" },
       )
     }

@@ -197,7 +197,8 @@ export function buildApp(options: { logger?: object | boolean; logStream?: NodeJ
   // Every route's errors end here, /dish and /invite included: their own handlers note what they need and pass the rest on.
   app.setErrorHandler((error: Error, req, reply) => sendError(reply, req, asApiError(error, req)));
 
-  // For the load balancer: is this process up? Deliberately doesn't touch the database, or a database blip stops every task.
+  // Is this process up? For the deploy's smoke test and people. The load balancer asks health.ts's thread instead, which a busy event loop doesn't delay.
+  // Deliberately doesn't touch the database, or a database blip stops every task.
   app.get("/health", async () => "ok");
 
   // For people and deploys: can it reach what it needs? `database` stays beside the one shape, because people read it.

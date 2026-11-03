@@ -179,6 +179,47 @@ test("Mom claims: she holds the cook side and gets her relation; someone else fi
   assert.deepEqual([(await open(c.askToken)).data.joinable, (await open(c.askToken)).data.ticket], ["taken", null]);
 });
 
+test("a claim tells whoever holds the card's other side in this family, once: Mom reads who's on homecookd, the kid reads Mom joined (convex/links.ts)", { skip }, async () => {
+  const f = await ticketableFamily();
+  const leo = await makePerson(f.id, "Leo", "kid");
+  const dad = await makePerson(f.id, "Dad");
+  const nia = await makePerson(f.id, "Nia", "kid");
+  for (const [who, n] of [[leo, "leo"], [dad, "dad"], [nia, "nia"]]) {
+    await db().query(`insert into push_tokens (token, family_id, person_id, platform) values ($1, $2, $3, 'ios')`, [`ExponentPushToken[${n}]`, f.id, who]);
+  }
+  const claim = async (token: string, family: string, who: string) => assert.equal((await api.post("/v1/links/claim", { token }, bearer(await session(family, who)))).status, 200);
+  const away = await makeFamily();
+  const zed = await makePerson(away.id, "Zed");
+  const joined = async () =>
+    (
+      await db().query(`select person_id, title, body, url, dedupe_key, status from push_log where kind = 'joined' and person_id = any($1::text[]) order by created_at, id`, [
+        [leo, dad, nia, zed],
+      ])
+    ).rows.map((r) => [r.person_id, r.title, r.body, r.url, r.dedupe_key, r.status]);
+
+  // Mom's side first: nobody holds the kid's yet, so there's no one to tell.
+  const first = await makeCard();
+  await claim(first.askToken, f.id, dad);
+  assert.deepEqual(await joined(), []);
+  await claim(first.kidToken, f.id, leo);
+  const toDad = [dad, "Leo is on homecookd", "You're in the same kitchen now.", `/dish/${first.id}`, `joined:${first.id}:kid`, "queued"];
+  assert.deepEqual(await joined(), [toDad]);
+  await claim(first.kidToken, f.id, leo); // claiming again: once
+  assert.deepEqual(await joined(), [toDad]);
+
+  // The kid's side first: Mom's claim tells the kid, by the card's word for her.
+  const second = await makeCard();
+  await claim(second.kidToken, f.id, nia);
+  await claim(second.askToken, f.id, dad);
+  assert.deepEqual((await joined())[1], [nia, "Mom joined your kitchen", "You're in the same kitchen now.", `/dish/${second.id}`, `joined:${second.id}:cook`, "queued"]);
+
+  // The other side in another family hears nothing: the card stays where it was, and so do they.
+  const third = await makeCard();
+  await claim(third.kidToken, f.id, leo);
+  await claim(third.askToken, away.id, zed);
+  assert.equal((await joined()).length, 2);
+});
+
 test("a card in another family stays there: the claim puts it in their app, no one moves", { skip }, async () => {
   const f = await ticketableFamily();
   const other = await makeFamily();

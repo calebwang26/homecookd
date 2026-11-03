@@ -7,7 +7,7 @@ import { buildApp } from "../src/app.js";
 import { db } from "../src/db.js";
 import type { ExpoMessage, ExpoTicket } from "../src/modules/messages/expo.js";
 import { usePushSender } from "../src/modules/messages/expo.js";
-import { type Library, useLibrary } from "../src/modules/messages/library.js";
+import { type Library, makeLibrary, useLibrary } from "../src/modules/messages/library.js";
 import { models } from "../src/modules/messages/models.js";
 import { recipeEffects } from "../src/modules/messages/questions.js";
 import type { RecipeInfo } from "../src/modules/messages/recap.js";
@@ -32,7 +32,6 @@ export const NOODLES = "grandma-hand-pulled-noodle-soup";
 export type FakeLibrary = Library & {
   index: Map<string, RecipeInfo>;
   recipes: Map<string, { title: string; cook_name: string | null; sample: boolean; steps: { order: number; quote: string | null }[] }>;
-  published: Map<string, string>;
   down: boolean;
 };
 
@@ -50,7 +49,6 @@ export function fakeLibrary(): FakeLibrary {
       [DAL, { title: "Mom's Dal", cook_name: "Mom", sample: false, steps: [] }],
       [NOODLES, { title: "Noodle Soup", cook_name: "Grandma", sample: true, steps: [] }],
     ]),
-    published: new Map(),
     down: false,
     libraryIndex: async () => (lib.down ? new Map() : lib.index),
     recipeInfo: async (id) => {
@@ -58,7 +56,6 @@ export function fakeLibrary(): FakeLibrary {
       return r ? { id, ...r } : null;
     },
     exists: async (id) => (lib.down ? null : lib.recipes.has(id)),
-    publishedDish: async (id) => lib.published.get(id) ?? null,
   };
   return lib;
 }
@@ -282,6 +279,46 @@ export async function uploaded(w: World, who: Who, kind: "voice" | "photo" = "vo
 }
 
 export const fileRow = async (key: string) => (await db().query(`select * from files where key = $1`, [key])).rows[0];
+
+export const MEDIA = "https://media.test";
+
+/** Runs `call` with the media host set, as the api always has it: a link recipes build (recipes/media.ts) fails loudly without it. */
+export async function withMedia<T>(call: () => Promise<T>): Promise<T> {
+  process.env.MEDIA_BASE_URL = MEDIA;
+  try {
+    return await call();
+  } finally {
+    delete process.env.MEDIA_BASE_URL;
+  }
+}
+
+/** POST /v1/shares/open, with no session. */
+export const openShare = (app: FastifyInstance, token: unknown) => withMedia(() => post(app, null, "/v1/shares/open", { token }, { key: null }));
+
+/**
+ * A ready recipe as the AWS worker leaves it (pipeline/queue_db.py _save_recipe; POST /v1/test/recipe does the same): its files in the attempt's own folder,
+ * recipe-<id>/<job>-a1/, so nothing is at recipe-<id>/recipe.json. Made-up data only.
+ */
+export async function awsRecipe(cook: Who, o: { title?: string; status?: string } = {}): Promise<{ id: string; libraryId: string; jsonKey: string; json: object }> {
+  const libraryId = `recipe-${randomBytes(6).toString("hex")}`;
+  const jsonKey = `${libraryId}/${randomBytes(6).toString("hex")}-a1/recipe.json`;
+  const title = o.title ?? `${cook.name}'s Kanda Poha`;
+  const { rows } = await db().query(
+    `insert into recipes (family_id, cook_id, title, status, library_id, media_prefix, recipe_json_key, cover_key, cover_version)
+     values ($1, $2, $3, $4, $5, $6, $7, $8, 'v1') returning id`,
+    [cook.familyId, cook.id, title, o.status ?? "ready", libraryId, `${libraryId}/`, jsonKey, jsonKey.replace("recipe.json", "poster.jpg")],
+  );
+  return { id: rows[0].id, libraryId, jsonKey, json: { id: libraryId, title, cook: { name: cook.name }, family: true, steps: [] } };
+}
+
+/** The media CDN as storage.tf builds it, holding only these files: S3 answers 403 for any other key. */
+export function cdnLibrary(files: Record<string, object>): Library {
+  const cdn = (async (url: string) => {
+    const key = url.startsWith(`${MEDIA}/`) ? decodeURIComponent(url.slice(MEDIA.length + 1)) : "";
+    return key in files ? Response.json(files[key]) : new Response("<Error><Code>AccessDenied</Code></Error>", { status: 403 });
+  }) as unknown as typeof fetch;
+  return makeLibrary({ baseUrl: MEDIA, fetch: cdn });
+}
 
 export async function recipe(familyId: string, cookId: string, o: { title?: string; status?: string; libraryId?: string } = {}): Promise<string> {
   const { rows } = await db().query(`insert into recipes (family_id, cook_id, title, status, library_id) values ($1, $2, $3, $4, $5) returning id`, [

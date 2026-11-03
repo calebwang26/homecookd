@@ -7,7 +7,7 @@ import { sweep } from "../src/modules/dish/tasks.js";
 import { deleteQuestionsOnRecipes, purgeMessagesForPerson, PURGE_BATCH } from "../src/modules/messages/account.js";
 import { shareTokenHash } from "../src/sealed.js";
 import { tx } from "../src/db.js";
-import { CHILI, circleOf, closeAll, DAL, drain, fileRow, get, logOf, newKey, ok, pairOf, phone, post, recipe, say, silent, skip, text, tokensOf, uploaded, type Who, type World, world } from "./messagesHelpers.js";
+import { CHILI, circleOf, closeAll, DAL, drain, fileRow, get, logOf, newKey, ok, openShare, pairOf, phone, post, recipe, say, silent, skip, text, tokensOf, uploaded, type Who, type World, world } from "./messagesHelpers.js";
 
 const tombstone = (who: Who) =>
   db().query(
@@ -174,7 +174,7 @@ test("everything else of theirs: pending sends, share links, hearts, events, pus
   assert.equal(await count(`idempotency_keys where scope = $1`, [dad.id]), 0);
   assert.ok(await marked(spare));
   // A share link with its sender gone still opens, naming nobody.
-  const opened = ok(await post(w.app, null, "/v1/shares/open", { token: share.token }, { key: null }));
+  const opened = ok(await openShare(w.app, share.token));
   assert.equal(opened.sender, null);
 });
 

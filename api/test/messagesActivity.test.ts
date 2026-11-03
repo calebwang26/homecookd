@@ -1,12 +1,14 @@
 // Shares, pending sends, hearts and recipe events: supabase/tests/api_test.ts, hearts_test.ts and the pure helpers from them, on real Postgres.
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { after, test } from "node:test";
 import { db } from "../src/db.js";
+import { daily } from "../src/modules/messages/tasks.js";
+import { enqueue } from "../src/outbox.js";
 import { deliverPending, HEARTS_RECENT_LIMIT, MAX_JOINS_PER_LINK, parseDishIds, parseSince } from "../src/modules/messages/activity.js";
-import { dishesOf, makeLibrary } from "../src/modules/messages/library.js";
+import { dishesOf, makeLibrary, useLibrary } from "../src/modules/messages/library.js";
 import { SHARE_LINK_SALT, shareTokenHash, unseal } from "../src/sealed.js";
-import { CHILI, closeAll, DAL, DAY_MS, drain, fileRow, get, newKey, ok, pairOf, phone, post, pushes, refused, RICE, skip, tokenFor, uploaded, type Who, type World, world } from "./messagesHelpers.js";
+import { awsRecipe, CHILI, closeAll, DAL, DAY_MS, drain, drainTwice, fileRow, get, MEDIA, newKey, ok, openShare, pairOf, phone, post, pushes, recipe, refused, RICE, skip, tokenFor, uploaded, withMedia, type Who, type World, world } from "./messagesHelpers.js";
 
 const event = (w: World, who: Who, body: Record<string, unknown>) => post(w.app, who, "/v1/events", body, { key: null });
 const heart = (w: World, who: Who, libraryId: string, on = true) => post(w.app, who, "/v1/favorites", { libraryId, on }, { key: null });
@@ -65,7 +67,7 @@ test("pending sends: recipients are people here; a job that's someone else's or 
 
 test("a recording published before the phone registered goes out right away, with its hello", { skip }, async () => {
   const w = await world();
-  w.lib.published.set("job-fast", CHILI);
+  await jobFor(w, w.dad, "job-fast", { libraryId: CHILI });
   const hello = await uploaded(w, w.dad);
   assert.deepEqual(ok(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-fast", recipientIds: [w.leo.id], helloKey: hello, helloDurationS: 4 })), { ok: true, delivered: 1 });
   const pair = await pairOf(w, w.dad, w.leo);
@@ -138,9 +140,96 @@ test("only the sender can change a recording's list, and only the sender can del
 test("a recording already published isn't delivered by someone else trying to register it", { skip }, async () => {
   const w = await world();
   ok(await post(w.app, w.mom, "/v1/pending-sends", { uploadId: "job-fast-2", recipientIds: [w.leo.id] }));
-  w.lib.published.set("job-fast-2", CHILI);
+  await jobFor(w, w.mom, "job-fast-2", { libraryId: CHILI });
   refused(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-fast-2", recipientIds: [w.leo.id] }), 409, "conflict");
   assert.equal((await db().query(`select count(*)::int as n from messages`)).rows[0].n, 0);
+});
+
+test("a recording is its cook's to send: once a job has its upload, nobody else's list goes on it, published or not", { skip }, async () => {
+  const w = await world();
+  await jobFor(w, w.mom, "job-moms-2", { done: false });
+  refused(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-moms-2", recipientIds: [w.nia.id] }), 409, "conflict");
+  assert.equal((await db().query(`select count(*)::int as n from pending_sends`)).rows[0].n, 0);
+  assert.deepEqual(ok(await post(w.app, w.mom, "/v1/pending-sends", { uploadId: "job-moms-2", recipientIds: [w.leo.id] })), { ok: true });
+});
+
+// --- delivery when the recipe is published (published.ts, on the worker's recipe_published)
+
+/** A job for this upload as the worker leaves it: `done` with its ready recipe, or still running with its "processing" card. */
+async function jobFor(w: World, cook: Who, uploadId: string, o: { done?: boolean; libraryId?: string } = {}) {
+  const done = o.done !== false;
+  const libraryId = o.libraryId ?? `recipe-${randomUUID().slice(0, 8)}`;
+  const recipeId = await recipe(w.family, cook.id, { status: done ? "ready" : "processing", libraryId, title: "Sunday Chili" });
+  const { rows } = await db().query(
+    `insert into jobs (family_id, cook_id, recipe_id, upload_key, source, stage, progress, finished_at) values ($1, $2, $3, $4, 'phone', $5, $6, $7) returning id`,
+    [w.family, cook.id, recipeId, `${uploadId}/`, done ? "done" : "writing", done ? 1 : 0.5, done ? new Date() : null],
+  );
+  return { jobId: rows[0].id as string, recipeId, libraryId };
+}
+/** pipeline/queue_db.py finish: the recipe ready and the job done, then its follow-on message, which the queue runs. */
+async function finishJob(j: { jobId: string; recipeId: string }) {
+  await db().query(`update recipes set status = 'ready' where id = $1`, [j.recipeId]);
+  await db().query(`update jobs set stage = 'done', progress = 1, finished_at = now() where id = $1`, [j.jobId]);
+  await enqueue(db(), { queue: "scheduled", payload: { kind: "recipe_published", jobId: j.jobId, recipeId: j.recipeId } });
+}
+const pendingRow = async (uploadId: string) => (await db().query(`select delivered_at, library_id, job_id from pending_sends where upload_id = $1`, [uploadId])).rows[0];
+const threadKinds = async (w: World, from: Who, to: Who) => ok(await get(w.app, to, `/v1/threads/${await pairOf(w, from, to)}/messages`)).messages.map((m: any) => [m.kind, m.senderId, m.libraryId, m.durationS]);
+
+test("publishing delivers a pending send: each recipient gets what send-recipe sends, and the hello, once; SQS's repeat sends nothing", { skip }, async () => {
+  const w = await world();
+  await phone(w, w.leo, "leo");
+  await phone(w, w.nia, "nia");
+  const j = await jobFor(w, w.dad, "job-pub", { done: false });
+  const hello = await uploaded(w, w.dad);
+  ok(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-pub", recipientIds: [w.leo.id, w.nia.id], helloKey: hello, helloDurationS: 4 }));
+  await drain();
+  assert.equal((await db().query(`select count(*)::int as n from messages`)).rows[0].n, 0, "nothing goes while it's processing");
+
+  await finishJob(j);
+  await drainTwice(); // the message, and each push, handed over twice
+  for (const kid of [w.leo, w.nia]) assert.deepEqual(await threadKinds(w, w.dad, kid), [["recipe", w.dad.id, j.libraryId, null], ["voice", w.dad.id, j.libraryId, 4]]);
+  const row = await pendingRow("job-pub");
+  assert.ok(row.delivered_at);
+  assert.deepEqual([row.library_id, row.job_id], [j.libraryId, j.jobId]);
+  // One "Just in from Dad" each, as send-recipe's. This made-up recipe has no recipe.json, so the dish reads "A new recipe".
+  assert.deepEqual(pushes(w.expo).sort(), [[tokenFor("leo"), "Just in from Dad", "A new recipe", `/recipe/${j.libraryId}`], [tokenFor("nia"), "Just in from Dad", "A new recipe", `/recipe/${j.libraryId}`]]);
+
+  // The same message much later, and the phone's own /published: nothing more.
+  await finishJob(j);
+  await drain();
+  assert.deepEqual(ok(await post(w.app, w.dad, "/v1/pending-sends/job-pub/published", { libraryId: j.libraryId }, { key: null })), { delivered: 0, already: true });
+  assert.equal((await db().query(`select count(*)::int as n from messages`)).rows[0].n, 4);
+  assert.equal(w.expo.sent.flat().length, 2);
+  refused(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-pub", recipientIds: [w.leo.id] }), 409, "already_delivered");
+});
+
+test("a send for a recipe that never publishes stays pending: a job still running, stopped or failed delivers nothing, and the daily sweep leaves it be", { skip }, async () => {
+  const w = await world();
+  const hello = await uploaded(w, w.dad);
+  const running = await jobFor(w, w.dad, "job-slow", { done: false });
+  ok(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-slow", recipientIds: [w.leo.id], helloKey: hello }));
+  // A stray message while it's still running.
+  await enqueue(db(), { queue: "scheduled", payload: { kind: "recipe_published", jobId: running.jobId, recipeId: running.recipeId } });
+  await drain();
+  // Then it's stopped, and its card fails: a late message for it changes nothing either.
+  await db().query(`update jobs set stage = 'failed', cancelled_at = now(), finished_at = now() where id = $1`, [running.jobId]);
+  await db().query(`update recipes set status = 'failed' where id = $1`, [running.recipeId]);
+  await enqueue(db(), { queue: "scheduled", payload: { kind: "recipe_published", jobId: running.jobId, recipeId: running.recipeId } });
+  await drain();
+  await daily();
+  assert.equal((await db().query(`select count(*)::int as n from messages`)).rows[0].n, 0);
+  assert.deepEqual(await pendingRow("job-slow"), { delivered_at: null, library_id: null, job_id: null });
+  assert.equal((await fileRow(hello)).delete_requested_at, null, "her hello is kept with the send");
+});
+
+test("the publish delivers only the cook's own list: one someone else registered first for her upload id stays where it is", { skip }, async () => {
+  const w = await world();
+  ok(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-hers", recipientIds: [w.nia.id] })); // before her job existed
+  const j = await jobFor(w, w.mom, "job-hers", { done: false });
+  await finishJob(j);
+  await drain();
+  assert.equal((await db().query(`select count(*)::int as n from messages`)).rows[0].n, 0, "nothing goes out as Dad, or with Mom's recipe");
+  assert.equal((await pendingRow("job-hers")).delivered_at, null);
 });
 
 // --- shares
@@ -154,21 +243,49 @@ test("a share link is one per family, dish and sender; opening it counts and nam
   assert.notEqual(ok(await post(w.app, w.dad, "/v1/shares", { libraryId: CHILI }, { key: null })).token, made.token);
   refused(await post(w.app, w.mom, "/v1/shares", { libraryId: "no-such-dish" }, { key: null }), 404, "not_found", { message: "That recipe isn't here anymore." });
 
-  process.env.MEDIA_BASE_URL = "https://media.test";
-  const opened = ok(await post(w.app, null, "/v1/shares/open", { token: made.token }, { key: null }));
-  delete process.env.MEDIA_BASE_URL;
-  assert.deepEqual([opened.libraryId, opened.recipeUrl, opened.sender.name], [CHILI, `https://media.test/${CHILI}/recipe.json`, "Mom"]);
+  const opened = ok(await openShare(w.app, made.token));
+  assert.deepEqual([opened.libraryId, opened.recipeUrl, opened.sender.name], [CHILI, `${MEDIA}/${CHILI}/recipe.json`, "Mom"]);
   assert.match(opened.familyName, /^The Wangs/);
   const row = (await db().query(`select id, open_count, last_opened_at from shares where token_hash = $1`, [shareTokenHash(made.token)])).rows[0];
   assert.equal(row.open_count, 1);
   assert.notEqual(row.last_opened_at, null);
 
-  for (const token of ["nope", "ABCDEFGHIJ", 12]) refused(await post(w.app, null, "/v1/shares/open", { token }, { key: null }), 404);
+  for (const token of ["nope", "ABCDEFGHIJ", 12]) refused(await openShare(w.app, token), 404);
 
   for (let i = 0; i < MAX_JOINS_PER_LINK; i += 1) {
     await db().query(`insert into signups (name, share_token, family_id) values ($1, $2, $3)`, [`Kid ${i}`, `share:${row.id}`, w.family]);
   }
   assert.notEqual(ok(await post(w.app, w.mom, "/v1/shares", { libraryId: CHILI }, { key: null })).token, made.token);
+});
+
+test("a share of a recipe made on AWS opens at its own recipe.json, the link GET /v1/recipes/:id gives; a library dish keeps <libraryId>/recipe.json", { skip }, async () => {
+  const w = await world();
+  const poha = await awsRecipe(w.mom);
+  const share = ok(await post(w.app, w.mom, "/v1/shares", { libraryId: poha.libraryId }, { key: null }));
+  const opened = ok(await openShare(w.app, share.token));
+  const inApp = ok(await withMedia(() => get(w.app, w.leo, `/v1/recipes/${poha.id}`)));
+  assert.equal(opened.libraryId, poha.libraryId);
+  assert.equal(opened.recipeUrl, `${MEDIA}/${poha.jsonKey}`, "the attempt's folder, where the worker wrote it");
+  assert.equal(opened.recipeUrl, inApp.recipeJsonUrl, "the file the app reads");
+
+  // A library dish this family has no row for: the library's path, even when another family's own recipe has that id.
+  await db().query(`update recipes set library_id = $1 where id = $2`, [CHILI, (await awsRecipe(w.stranger)).id]);
+  const chili = ok(await post(w.app, w.dad, "/v1/shares", { libraryId: CHILI }, { key: null }));
+  assert.equal(ok(await openShare(w.app, chili.token)).recipeUrl, `${MEDIA}/${CHILI}/recipe.json`);
+});
+
+test("a share never points into a recipe that isn't ready: none is made for one, and one that stops being ready opens at nothing of its own", { skip }, async () => {
+  const w = await world();
+  const cooking = await awsRecipe(w.mom, { status: "processing" });
+  refused(await post(w.app, w.mom, "/v1/shares", { libraryId: cooking.libraryId }, { key: null }), 404, "not_found");
+  const poha = await awsRecipe(w.mom);
+  const share = ok(await post(w.app, w.mom, "/v1/shares", { libraryId: poha.libraryId }, { key: null }));
+  for (const status of ["processing", "failed"]) {
+    await db().query(`update recipes set status = $1 where id = $2`, [status, poha.id]);
+    const opened = ok(await openShare(w.app, share.token));
+    assert.equal(opened.recipeUrl, `${MEDIA}/${poha.libraryId}/recipe.json`, status); // the CDN's 403: the site says it can't find it
+    assert.ok(!JSON.stringify(opened).includes(poha.jsonKey.split("/")[1]), `${status}: nothing of its folder`);
+  }
 });
 
 test("a share link's token is stored only as a keyed hash and sealed: the row alone opens nothing, and the family is shown the same link again", { skip }, async () => {
@@ -186,14 +303,14 @@ test("a share link's token is stored only as a keyed hash and sealed: the row al
   await db().query(`update shares set token_enc = 'v1:AAAA.AAAA'`);
   const next = ok(await post(w.app, w.mom, "/v1/shares", { libraryId: CHILI }, { key: null }));
   assert.notEqual(next.token, made.token);
-  ok(await post(w.app, null, "/v1/shares/open", { token: made.token }, { key: null }));
+  ok(await openShare(w.app, made.token));
 
   // Without the key nothing is made, and nothing opens: the hash needs it too.
   const key = process.env.EDIBLE_CODE_KEY;
   delete process.env.EDIBLE_CODE_KEY;
   try {
     refused(await post(w.app, w.dad, "/v1/shares", { libraryId: CHILI }, { key: null }), 500);
-    refused(await post(w.app, null, "/v1/shares/open", { token: next.token }, { key: null }), 500);
+    refused(await openShare(w.app, next.token), 500);
   } finally {
     process.env.EDIBLE_CODE_KEY = key;
   }
@@ -487,8 +604,6 @@ test("makeLibrary reads library.json & recipe.json, caches 10 min, and never cac
       sample: false,
       steps: [{ order: 2, quote: "A pinch, then taste." }, { order: 1, quote: null }, { order: "x", quote: "dropped" }],
     },
-    "jobs/up-done.json": { status: "published", recipe_id: "mom-dal" },
-    "jobs/up-wait.json": { status: "processing" },
   };
   const fakeFetch = (async (url: string, init?: RequestInit) => {
     calls.push(`${init?.method ?? "GET"} ${url}`);
@@ -509,8 +624,6 @@ test("makeLibrary reads library.json & recipe.json, caches 10 min, and never cac
   assert.equal(await lib.recipeInfo("../library.json"), null); // never fetched
   assert.equal(await lib.exists("mom-dal"), true);
   assert.equal(await lib.exists("nope"), false);
-  assert.equal(await lib.publishedDish("up-done"), "mom-dal");
-  assert.equal(await lib.publishedDish("up-wait"), null);
   const fetched = calls.length;
 
   clock = 9 * 60_000; // still fresh: no fetches
@@ -528,6 +641,74 @@ test("makeLibrary reads library.json & recipe.json, caches 10 min, and never cac
   down = false;
   assert.equal((await lib.libraryIndex()).size, 2);
   assert.equal((await lib.recipeInfo("mom-dal"))?.title, "Mom's Dal");
+});
+
+/**
+ * The media CDN as storage.tf builds it: CloudFront reads the bucket with s3:GetObject alone, so S3 answers 403 for a key that isn't there. `answer` stands in for S3
+ * having trouble: a status for every request, or "down" for no answer at all.
+ */
+function mediaCdn(have: string[]) {
+  const state = { answer: null as number | "down" | null, calls: 0 };
+  const cdn = (async (url: string) => {
+    state.calls += 1;
+    if (state.answer === "down") throw new TypeError("fetch failed");
+    if (state.answer) return new Response("<Error/>", { status: state.answer });
+    const id = url.replace("https://media.test/", "").replace("/recipe.json", "");
+    return have.includes(id) ? Response.json({ id, title: "Mom's Dal" }) : new Response("<Error><Code>AccessDenied</Code></Error>", { status: 403 });
+  }) as unknown as typeof fetch;
+  return { state, lib: makeLibrary({ baseUrl: "https://media.test/", fetch: cdn }) };
+}
+
+test("exists: S3's 403 for a key that isn't there is missing; a 5xx or no answer can't say, and isn't kept", async () => {
+  const { state, lib } = mediaCdn([DAL]);
+  assert.equal(await lib.exists(DAL), true);
+  assert.equal(await lib.exists("made-up-dish"), false);
+  assert.equal(await lib.recipeInfo("made-up-dish"), null);
+  for (const answer of [500, 503, 429, "down"] as const) {
+    state.answer = answer;
+    assert.equal(await lib.exists("not-asked-before"), null, String(answer));
+  }
+  state.answer = null;
+  const before = state.calls;
+  assert.equal(await lib.exists("not-asked-before"), false); // asked again, not a kept outage
+  assert.equal(state.calls, before + 1);
+});
+
+test("a made-up libraryId is refused, as the CDN answers it, on every route that checks the dish; a real one works; an outage holds nothing up", { skip }, async () => {
+  const w = await world();
+  const { state, lib } = mediaCdn([DAL]);
+  useLibrary(lib);
+  const routes = async (who: Who, peer: Who): Promise<[string, (libraryId: string) => Promise<{ status: number; data: any; body: string }>][]> => {
+    const pair = await pairOf(w, who, peer);
+    return [
+      ["a thread message", (libraryId) => post(w.app, who, `/v1/threads/${pair}/messages`, { kind: "recipe", libraryId })],
+      ["send-recipe", (libraryId) => post(w.app, who, "/v1/send-recipe", { libraryId, to: [peer.id] })],
+      ["a share link", (libraryId) => post(w.app, who, "/v1/shares", { libraryId }, { key: null })],
+      ["a heart", (libraryId) => heart(w, who, libraryId)],
+      ["an event", (libraryId) => event(w, who, { libraryId, kind: "viewed" })],
+    ];
+  };
+  // Made on AWS, so its recipe.json is in the attempt's folder (recipe-…/…-a1/), and the CDN answers 403 at recipe-…/recipe.json: its row says it's there.
+  const ours = "recipe-0f8fad5bd9cb";
+  await recipe(w.family, w.dad.id, { libraryId: ours });
+  await recipe(w.family, w.dad.id, { libraryId: "recipe-failed1", status: "failed" });
+  const missing = (r: { status: number; data: any; body: string }) => refused(r, 404, "not_found", { message: "That recipe isn't here anymore." });
+
+  const leos = await routes(w.leo, w.mom);
+  for (const [what, call] of leos) {
+    missing(await call("made-up-dish"));
+    missing(await call("recipe-failed1"));
+    assert.ok((await call(DAL)).status < 300, what);
+    assert.ok((await call(ours)).status < 300, `${what}, the family's own`);
+  }
+  for (const [, call] of await routes(w.stranger, w.strangerKid)) missing(await call(ours)); // another family's own dish isn't in the library
+  assert.equal((await db().query(`select count(*)::int as n from messages where library_id in ('made-up-dish', 'recipe-failed1')`)).rows[0].n, 0);
+
+  // S3 or the network failing isn't the dish missing: as Supabase does, the send isn't held up for it.
+  for (const answer of [503, "down"] as const) {
+    state.answer = answer;
+    for (const [what, call] of leos) assert.ok((await call(`unknown-${answer}`)).status < 300, `${what}, ${answer}`);
+  }
 });
 
 after(closeAll);

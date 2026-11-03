@@ -2,10 +2,12 @@
 // What Convex wrote to `recipes` on a yes goes through recipeEffects here, so "the ingredient is added" reads "the effect ran once with these words" (a blocker in
 // MESSAGES-MIGRATION.md). recipe.json parsing stays with the worker's area.
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { after, test } from "node:test";
-import { db, tx } from "../src/db.js";
+import { db } from "../src/db.js";
 import { models, parseYesNo, yesNoPrompt } from "../src/modules/messages/models.js";
-import { askFollowUps, YES_NO_QUESTION } from "../src/modules/messages/questions.js";
+import { YES_NO_QUESTION } from "../src/modules/messages/questions.js";
+import { enqueue } from "../src/outbox.js";
 import { closeAll, drain, drainTwice, effects, fakeModels, get, ok, person, post, recipe, refused, skip, uploaded, useRealModels, type Who, type World, world } from "./messagesHelpers.js";
 
 const rowOf = async (id: string) => (await db().query(`select * from questions where id = $1`, [id])).rows[0];
@@ -161,8 +163,21 @@ test("a question found in the video is never translated: nobody's waiting on it"
 const SEEN = { id: "seen1", step: 2, question: "Step 2: we saw curry leaves but didn't hear it named. Does that go in, and how much?", ingredient: "curry leaves" };
 const GAP = { id: "q1", step: 1, question: "How long do you soak the poha?" };
 
-const publish = (w: World, cook: Who, recipeId: string, list: (typeof SEEN | typeof GAP)[], language: string | null = null) =>
-  tx((c) => askFollowUps(c, { recipeId, familyId: w.family, cookId: cook.id, cookLanguage: language }, list));
+/** As the worker publishes (pipeline/queue_db.py finish): her follow-ups as rows, the job done, and its recipe_published message, which the queue then runs. */
+async function publish(w: World, cook: Who, recipeId: string, list: (typeof SEEN | typeof GAP)[]): Promise<void> {
+  for (const f of list) {
+    await db().query(
+      `insert into questions (family_id, recipe_id, step_order, asked_by, text, kind, follow_up_id, follow_up_ingredient, status)
+       values ($1, $2, $3, $4, $5, 'follow_up', $6, $7, 'asked_cook') on conflict (recipe_id, follow_up_id) where follow_up_id is not null do nothing`,
+      [w.family, recipeId, f.step, cook.id, f.question, f.id, "ingredient" in f ? f.ingredient : null],
+    );
+  }
+  const { rows } = await db().query(
+    `insert into jobs (family_id, cook_id, recipe_id, upload_key, source, stage, progress, finished_at) values ($1, $2, $3, $4, 'phone', 'done', 1, now()) returning id`,
+    [w.family, cook.id, recipeId, `${randomUUID()}/`],
+  );
+  await enqueue(db(), { queue: "scheduled", payload: { kind: "recipe_published", jobId: rows[0].id, recipeId } });
+}
 const followUps = async () => (await db().query(`select * from questions where kind = 'follow_up' order by created_at`)).rows;
 
 test("a published recipe's follow-ups become the cook's open questions, once, from homie, in her language", { skip }, async () => {
@@ -170,8 +185,8 @@ test("a published recipe's follow-ups become the cook's open questions, once, fr
   const rajani = await person(w.family, "Rajani", "cook", { language: "mr" });
   const poha = await recipe(w.family, rajani.id, { title: "Kanda Poha" });
   fakeModels.translate = () => Promise.resolve("तुम्ही कढीपत्ता घातला का?");
-  await publish(w, rajani, poha, [SEEN, GAP], "mr");
-  await publish(w, rajani, poha, [SEEN, GAP], "mr"); // re-published: not asked twice
+  await publish(w, rajani, poha, [SEEN, GAP]);
+  await publish(w, rajani, poha, [SEEN, GAP]); // re-published: not asked twice
   await drain();
   const asked = await followUps();
   assert.equal(asked.length, 2);

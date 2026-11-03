@@ -10,7 +10,7 @@ import { db } from "../src/db.js";
 import { useUploadStore } from "../src/storage.js";
 import { fakeStore } from "./dishHelpers.js";
 import { cravingCard } from "./cravingHelpers.js";
-import { CHILI, closeAll, familyRow, get, newKey, ok, pairOf, person, post, recipe, type Reply, say, skip, text, type Who, type World, world } from "./messagesHelpers.js";
+import { CHILI, closeAll, familyRow, get, newKey, ok, openShare, pairOf, person, post, recipe, type Reply, say, skip, text, type Who, type World, world } from "./messagesHelpers.js";
 
 type Scene = World & {
   /** A family that dealt with this one: it asked for a swap and to come to dinner. `stranger` has had nothing to do with it. */
@@ -343,7 +343,7 @@ const ROUTES: Record<string, SignedIn | Anonymous> = {
   "POST /v1/dinners/:id/join": { call: (s, who) => post(s.app, who, `/v1/dinners/${s.dinner}/join`, undefined, { key: null }), works: async (s) => post(s.app, await person(await familyRow("The Newcomers"), "New", "kid"), `/v1/dinners/${s.dinner}/join`, undefined, { key: null }), otherFamily: { why: "Between families: asking to come is the point. It's pending until the host says yes", check: (r) => assert.equal(r.data.status ?? "pending", "pending") }, outsider: { familyWide: "Community isn't about a pair" } },
   "POST /v1/dinner-requests/:id/respond": { call: (s, who) => post(s.app, who, `/v1/dinner-requests/${s.joinRequest}/respond`, { accept: true }, { key: null }), otherFamily: 404, outsider: 404 },
   "POST /v1/dinners/:id/invite-link": { call: (s, who) => post(s.app, who, `/v1/dinners/${s.dinner}/invite-link`, undefined, { key: null }), otherFamily: 403, outsider: 403 },
-  "POST /v1/share-requests": { call: (s, who) => post(s.app, who, "/v1/share-requests", { recipeId: s.privateDish }, { key: null }), works: (s) => post(s.app, s.mom, "/v1/share-requests", { recipeId: s.privateDish }, { key: null }), otherFamily: 404, outsider: { familyWide: "Anyone in a family may ask its cook" }, notYet: { status: 501, why: "A cook's own tap writes recipes.shared_at, which moves later (COMMUNITY-MIGRATION.md)" } },
+  "POST /v1/share-requests": { call: (s, who) => post(s.app, who, "/v1/share-requests", { recipeId: s.privateDish }, { key: null }), works: (s) => post(s.app, s.leo, "/v1/share-requests", { recipeId: s.privateDish }, { key: null }), otherFamily: 404, outsider: { familyWide: "Anyone in a family may ask its cook" } },
   "GET /v1/share-requests/dishes": { call: (s, who) => get(s.app, who, "/v1/share-requests/dishes"), otherFamily: nothingOfTheirs, outsider: { familyWide: "A family's dishes" } },
 
   // --- cravings: asked of one person
@@ -376,8 +376,8 @@ const ROUTES: Record<string, SignedIn | Anonymous> = {
   "POST /v1/shares/open": {
     anonymous: "A recipe link someone sent: the token is the capability, and it's rate limited by IP",
     capability: async (s) => {
-      assert.equal((await post(s.app, null, "/v1/shares/open", { token: "ABCDEFGHIJ" }, { key: null })).status, 404);
-      ok(await post(s.app, null, "/v1/shares/open", { token: s.shareToken }, { key: null }));
+      assert.equal((await openShare(s.app, "ABCDEFGHIJ")).status, 404);
+      ok(await openShare(s.app, s.shareToken));
     },
   },
   "OPTIONS /v1/shares/open": {

@@ -1,15 +1,15 @@
 // The one switch for the api writing `recipes`. OFF.
 //
-// `recipes` is the temporary sync's copy until its area moves (docs/build/SYNC-MIGRATION.md). The rule there: a migration sets sync_copies.moved_at for the
-// table, in the release that switches the worker, and from then on the api may write it. This adds a flag on top, so turning writes off needs no release:
+// Since Nov 2 there's one switch for every area at launch (docs/build/CUTOVER.md), and no sync runs: the api owns `recipes` from its first row. So the flag
+// opens writes by itself, unless a sync is copying the table right now. Then the sync owns the rows (docs/build/SYNC-MIGRATION.md), whatever the flag says:
 //
-//   RECIPE_WRITES=on  AND  sync_copies.moved_at set   open: the routes write, and a new job gets its "processing" card.
-//   anything else, and the copy is read-only          locked: the sync owns the rows. Writes answer 501 not_moved, and so does a new job, since the worker
+//   the copy is read-only and not moved               locked: a sync is copying. Writes answer 501 not_moved, and so does a new job, since the worker
 //                                                     couldn't save its recipe at the end.
-//   anything else, and the copy isn't read-only       closed: the sync has never run, so only fake data is here. Writes answer 501 not_moved; a new job has no
-//                                                     card, and the worker makes the recipe when it publishes.
+//   RECIPE_WRITES=on                                  open: the routes write, and a new job gets its "processing" card.
+//   anything else                                     closed: writes answer 501 not_moved; a new job has no card, and the worker makes the recipe when it
+//                                                     publishes.
 //
-// Comes off with the sync: sync_copies goes then, and writes are simply open.
+// Before Nov 2, open also needed sync_copies.moved_at, which only the sync's own release set: production would never have opened.
 import type { Queryable } from "../../db.js";
 import { refused } from "../../errors.js";
 
@@ -21,9 +21,8 @@ export const recipeWritesFlag = (env: NodeJS.ProcessEnv = process.env) => env.RE
 export async function recipeWrites(q: Queryable, env: NodeJS.ProcessEnv = process.env): Promise<RecipeWrites> {
   const { rows } = await q.query(`select read_only, moved_at from sync_copies where table_name = 'recipes'`);
   const copy = rows[0] as { read_only: boolean; moved_at: Date | null } | undefined;
-  const moved = !!copy?.moved_at;
-  if (moved && recipeWritesFlag(env)) return "open";
-  return copy?.read_only && !moved ? "locked" : "closed";
+  if (copy?.read_only && !copy.moved_at) return "locked";
+  return recipeWritesFlag(env) ? "open" : "closed";
 }
 
 export const notMoved = () => refused(501, "not_moved", "This can't be done here yet.");

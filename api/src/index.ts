@@ -2,6 +2,7 @@ import { SendMessageCommand, SQSClient } from "@aws-sdk/client-sqs";
 import * as Sentry from "@sentry/node";
 import { buildApp } from "./app.js";
 import { db } from "./db.js";
+import { startHealthResponder } from "./health.js";
 import { oldestDueAgeS, oneAtATime, sendDue } from "./outbox.js";
 import { sqsReceiver, startConsumer } from "./scheduled.js";
 
@@ -60,3 +61,16 @@ for (const signal of ["SIGTERM", "SIGINT"] as const) {
 }
 
 await app.listen({ host: "0.0.0.0", port: Number(process.env.PORT ?? 8080) });
+
+// The load balancer's check, on its own thread so a busy task isn't taken for a dead one (health.ts). After listen, so it never says yes before the api
+// can answer. The image sets HEALTH_PORT; unset locally. Failing to start stops the task, as any failed start does.
+if (process.env.HEALTH_PORT) {
+  await startHealthResponder({
+    port: Number(process.env.HEALTH_PORT),
+    alive: () => app.server.listening,
+    onStop: (error) => {
+      app.log.error({ err: { type: error.name } }, "the health check's thread stopped");
+      Sentry.captureException(Object.assign(new Error("HealthThreadStopped"), { name: "HealthThreadStopped" }));
+    },
+  });
+}

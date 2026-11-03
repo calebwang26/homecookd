@@ -6,6 +6,7 @@ import { enqueue } from "../../outbox.js";
 import { afterOf, type After } from "../../paging.js";
 import { storeFor, VIDEO_LINK_S } from "../../storage.js";
 import type { Trace } from "../dish/budget.js";
+import { recipePublished as messagesOnPublish } from "../messages/published.js";
 import { failRecipeIfOpen } from "../recipes/writes.js";
 import * as data from "./data.js";
 import { NO_UPLOAD } from "./service.js";
@@ -128,13 +129,19 @@ export async function sweepUploads(trace: Trace, after: After | null = null): Pr
 }
 
 /**
- * The worker's follow-on message when a recipe goes live ({kind: 'recipe_published', jobId, recipeId}, pipeline/queue_db.py finish). Nothing more is owed here yet, so it
- * only has to be understood: without this it would fail three times and alarm. What Convex did at this moment (Moss, a follow-up's translation, delivering a pending send,
- * the push) waits for the areas that own it: JOBS-MIGRATION.md, "Deferred". Each must be safe to repeat when it's added here.
+ * The worker's follow-on message when a recipe goes live ({kind: 'recipe_published', jobId, recipeId}, pipeline/queue_db.py finish; staging's test recipe writes the same).
+ * What Convex did at this moment is Messages' (messages/published.ts), and safe to repeat. Moss isn't moved: it goes away after approval. Only a job that finished with
+ * this recipe counts, so a stray message, or one for a job stopped since, does nothing.
  */
 async function recipePublished(payload: Payload, trace: Trace): Promise<void> {
   const { jobId, recipeId } = payload;
   if (typeof jobId !== "string" || typeof recipeId !== "string") throw new Error("a recipe_published message is missing its ids");
+  const job = await data.jobById(db(), jobId);
+  if (!job || job.stage !== "done" || job.recipe_id !== recipeId) {
+    trace.log.info?.({ jobId, recipeId }, "recipe published, but its job didn't finish with it: nothing to do");
+    return;
+  }
+  await messagesOnPublish({ jobId, familyId: job.family_id, cookId: job.cook_id, recipeId, uploadId: job.upload_id, dishAskId: job.dish_ask_id }, trace);
   trace.log.info?.({ jobId, recipeId }, "recipe published");
 }
 

@@ -4,7 +4,7 @@
 //
 // Both writes go through recipes/writes.ts. Unless the recipes switch is open, nothing here shares or writes a card: while the sync owns the rows, Convex does both,
 // and the sync brings them over.
-import { db, type Queryable } from "../../db.js";
+import { db, tx, type Queryable } from "../../db.js";
 import { ApiError } from "../../errors.js";
 import { enqueue } from "../../outbox.js";
 import { hit, subjectKey } from "../../rateLimit.js";
@@ -41,6 +41,15 @@ export async function shareOn(c: Queryable, r: StoryCardSource, requestId?: stri
   if (!(await shareRecipeIfOpen(c, r.id))) return "not_moved";
   if (storyCardDue(r)) await enqueue(c, { queue: "scheduled", payload: { task: STORY_CARD_TASK, recipeId: r.id }, requestId });
   return "shared";
+}
+
+/** shareRequests.ask's first half: her own tap on her own ready recipe shares it at once. The caller has checked she's its cook and that it's ready. */
+export async function shareMine(recipeId: string, requestId?: string): Promise<Shared> {
+  return await tx(async (c) => {
+    const r = await storyCardSource(c, recipeId);
+    if (!r) return "not_moved";
+    return r.shared_at ? "shared" : await shareOn(c, r, requestId);
+  });
 }
 
 /** shareRequests.applyYes, in the settle's transaction: her clear yes shares her ready recipe, unless it's on the map already. readShare has checked she's its cook. */

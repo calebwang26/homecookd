@@ -1,45 +1,43 @@
 // "Put it on the map" for a family dish (convex/shareRequests.ts). Only its cook can share a recipe, so when someone else in the family asks, homie asks her: it
 // becomes one of her open questions, and only her clear yes shares it. Nobody outside the family can ask.
 //
-// Only what can be true here is here. Asking stays on Convex until Messages moves: a question written in Postgres reaches no cook, no answer and no purge, so a kid would
-// be told it was asked and she'd never hear. Her own tap and her yes write `recipes.shared_at`, which is read-only until the jobs area moves. Both answer `not_moved`, and an
-// adapter sends them to Convex (COMMUNITY-MIGRATION.md). Nothing here writes.
+// The ask and its question are Messages' (messages/shareAsks.ts), because Messages owns `questions`: so are her answer, homie's reading of it and what her yes does
+// (questions.ts read_share, storyCards.ts). Her own tap shares it at once, through recipes/writes.ts: with recipe writes off that's 501 `not_moved`, never "shared"
+// without it being so.
 import type { Signed } from "../../auth.js";
 import { db } from "../../db.js";
-import { ApiError, notFound, refused } from "../../errors.js";
+import { notFound, refused } from "../../errors.js";
 import { afterCursor, encodeCursor } from "../../paging.js";
 import { flagged } from "../dish/moderation.js";
+import { askCookToShare, askState, latestShareAsks } from "../messages/shareAsks.js";
+import { shareMine } from "../messages/storyCards.js";
 import { peopleByIds } from "../people/service.js";
+import { notMoved } from "../recipes/switch.js";
 import { readyRecipesOfFamily, recipesByIds } from "../recipes/service.js";
-import * as data from "./data.js";
-import type { ShareAsk } from "./data.js";
 import { recipeWords } from "./storyCard.js";
 import { WORDS_SHAREABLE } from "./words.js";
 
 const DISHES_PAGE = 100;
 const PICK_RECIPE = "Pick one of your family's recipes.";
 
-/** Where the newest ask stands. `open`: waiting on her, or on homie reading what she said. `notNowAt`: when homie read a no or an unclear answer. */
-function askState(q: ShareAsk | undefined): { open: boolean; notNowAt: number | null } {
-  if (!q) return { open: false, notNowAt: null };
-  if (q.share_said === null) return { open: true, notNowAt: null };
-  return { open: false, notNowAt: q.share_said === "yes" || !q.share_decided_at ? null : q.share_decided_at.getTime() };
-}
-
-/** "shared": it's on the map already. Anything that would ask her or share it answers `not_moved`: never "asked" or "shared" without it being so. */
-export async function askToShare(signed: Signed, recipeId: string): Promise<{ result: "shared" }> {
+/** "shared": it's on the map (it was, or she's its cook and just shared it). "asked": waiting on the cook's answer. */
+export async function askToShare(signed: Signed, recipeId: string, requestId?: string): Promise<{ result: "shared" | "asked" }> {
   const recipe = (await recipesByIds(db(), [recipeId])).get(recipeId);
   if (!recipe || recipe.family_id !== signed.familyId || recipe.status !== "ready") throw notFound(PICK_RECIPE);
   if (recipe.shared_at) return { result: "shared" };
-  if (recipe.cook_id === signed.personId && flagged(...recipeWords(recipe))) throw refused(422, "words", WORDS_SHAREABLE);
-  throw new ApiError(501, "not_moved", {}, "This can't be done here yet.");
+  if (recipe.cook_id !== signed.personId) return { result: await askCookToShare(signed, recipe, requestId) };
+  if (flagged(...recipeWords(recipe))) throw refused(422, "words", WORDS_SHAREABLE);
+  const shared = await shareMine(recipe.id, requestId);
+  if (shared === "not_shareable") throw refused(422, "words", WORDS_SHAREABLE);
+  if (shared === "not_moved") throw notMoved();
+  return { result: "shared" };
 }
 
 /** My family's ready dishes for the "Share your recipe" chooser: whose, mine, on the map, asked, and when she last said not now. */
 export async function familyDishes(signed: Signed, cursor?: string) {
   const rows = await readyRecipesOfFamily(db(), signed.familyId, afterCursor(cursor), DISHES_PAGE + 1);
   const page = rows.slice(0, DISHES_PAGE);
-  const asks = await data.latestShareAsks(db(), page.filter((r) => !r.shared_at).map((r) => r.id));
+  const asks = await latestShareAsks(db(), page.filter((r) => !r.shared_at).map((r) => r.id));
   const cooks = await peopleByIds(db(), page.map((r) => r.cook_id));
   const last = page.at(-1);
   return {

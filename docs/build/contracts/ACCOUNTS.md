@@ -58,7 +58,7 @@ Errors are the same on both: the one shape below.
 
 ### Errors
 
-**Agreed Nov 2 with App screens & recording, and what the api answers since the one-error-shape PR (#290).** Every code, where it comes from and what the app does: `ERROR-CODES.md`, the checklist for the app's words in each language.
+**Agreed Nov 2 with App screens & recording, and what the api answers since the one-error-shape PR (#291).** Every code, where it comes from and what the app does: `ERROR-CODES.md`, the checklist for the app's words in each language.
 - **One shape on every route:** `{error: <code>, message?: <English sentence>, requestId}`, plus extra fields only where a code needs them (`field` on `invalid`, `status` on `gone`). `retry-after` is a header, on 429 and 503.
 - **The app shows its own words, keyed by `error`, in the person's language.** `message` is an English fallback for a code the app doesn't know yet. Never show it when the code is known, and never match on its text.
 - **One code per case, never renamed once shipped.** The shared ones:
