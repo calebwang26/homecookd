@@ -125,11 +125,12 @@ Voice is only a smoke test of the setup here (homie is off, and voice stays on C
 
 ## Autoscaling the api
 
-The api runs 2 to 4 tasks, on staging now and on production at launch (`modules/env/autoscaling.tf`). AWS keeps their average CPU
-near 50%: it adds a task after 3 minutes over that, and takes one away after 15 minutes under it. CPU, not request count, because CPU
-is what ran out in the load test (`docs/build/AWS-MIGRATION.md`). It also adds one each minute the api is shedding (10 or more "too busy to
-answer" lines in a minute), because shedding starts long before 3 minutes of CPU do. The load balancer checks the api on its own health thread's
-port (`health_port`, 8081; `api/src/health.ts`), so a busy task isn't replaced as dead.
+The api runs 2 to 4 tasks, on staging now and on production at launch (`modules/env/autoscaling.tf`). AWS adds a task after 3 minutes
+with their average CPU over 50%. CPU, not request count, because CPU is what ran out in the load test (`docs/build/AWS-MIGRATION.md`). It also
+adds one each minute the api is shedding (10 or more "too busy to answer" lines in a minute), because shedding starts long before 3 minutes of
+CPU do. It takes one away after 15 minutes in a row under 25% CPU with nothing turned away, then waits 5 minutes before the next: target
+tracking only adds, since in the Nov 2 rerun its own scale-in undid a task shedding had just added (#316). The load balancer checks the api on
+its own health thread's port (`health_port`, 8081; `api/src/health.ts`), so a busy task isn't replaced as dead.
 
 **The count is a switch.** For an autoscaled service, `desired_count` (staging's `api_count`) is 0 for off or its `autoscale.min` for
 on. Off, the range is 0 to 0; on, it's min to max. Terraform sets the count only when it creates the service. After that the count is
@@ -170,6 +171,21 @@ step policy and its alarm, and sets the CPU target to 50%. No new types, so the 
    says healthy for every task, and `aws application-autoscaling describe-scaling-policies --service-namespace ecs` lists `-cpu` at 50 and `-shedding`.
 5. The rerun at 120 a second, as in step 5 above. `describe-scaling-activities` should show a task added within a few minutes and no task
    "replaced due to an unhealthy status" in `aws ecs describe-services --cluster homecookd-staging --services api --query 'services[0].events'`.
+
+**Applying the slow scale-in on staging, once (#316). Caleb, by hand.** It turns off target tracking's scale-in for the api and adds the
+`-scale-in` step policy and its alarm. No new types, so the apply role needs nothing.
+1. The merge's auto-apply is refused: autoscaling policies are held, and the new alarm's action is the new policy, not known until apply.
+   Nothing is applied.
+2. In `infra/envs/staging`:
+   ```bash
+   AWS_PROFILE=homecookd terraform plan    # 2 to add (the -scale-in policy and its alarm), 1 to change (-cpu's disable_scale_in to true), 0 to destroy
+   AWS_PROFILE=homecookd terraform apply
+   ```
+3. Check: `aws application-autoscaling describe-scaling-policies --service-namespace ecs --query 'ScalingPolicies[].[PolicyName,TargetTrackingScalingPolicyConfiguration.DisableScaleIn]'`
+   shows `-cpu` with `true`, and `-scale-in`. `aws cloudwatch describe-alarms --alarm-name-prefix TargetTracking-service/homecookd-staging/api --query 'MetricAlarms[].AlarmName'`
+   should list only the high alarm. `homecookd-staging-api-scale-in` sits in ALARM while staging idles at 2 tasks, where it can't take any away.
+4. Prove it with the next run at 120 a second: `describe-scaling-activities` should show no task taken away during the load, and then
+   one about 15 minutes after it ends and the next 5 minutes later, back to 2.
 
 ## Starting the backups
 
