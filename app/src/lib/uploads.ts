@@ -11,6 +11,9 @@ import { Platform } from 'react-native';
 import { webGetItem, webSetItem } from './legacyKeys';
 
 import { api, ApiError } from './api';
+import { awsPersonId } from './aws/client';
+import { AWS_ON } from './aws/config';
+import { checkVideos, jobs as awsJobs, type UploadLink } from './aws/jobs';
 import { cacheBuster, fetchJson } from './http';
 import { convexSession, convexSignedIn } from './live/convex';
 
@@ -23,6 +26,7 @@ const FAMILY_CODE = (process.env.EXPO_PUBLIC_FAMILY_CODE ?? '').trim();
 
 /** Screens pass the signed-in person's id from useSession() (the module snapshot can lag a render). */
 export function uploadsConfigured(profileId?: string | null): boolean {
+  if (AWS_ON) return !!(profileId ?? awsPersonId());
   return !!UPLOAD_URL && (!!FAMILY_CODE || convexSignedIn(profileId ?? undefined));
 }
 
@@ -323,6 +327,7 @@ export async function startUpload(input: StartUploadInput): Promise<StoredJob> {
   if (!uploadsConfigured(input.as)) throw new Error("Uploads aren't set up yet.");
   if (!uploadsSupportedHere) throw new Error('Uploads work from the homecookd app on your phone.');
   if (input.assets.some((a) => !fileOnPhone(a.uri))) throw new Error(MISSING_VIDEO);
+  if (AWS_ON) return startAwsUpload(input);
 
   const files = input.assets.map((a, i) => ({
     name: fileNameFor(a, i),
@@ -438,11 +443,152 @@ export async function startUpload(input: StartUploadInput): Promise<StoredJob> {
   return stored;
 }
 
+// ---------------------------------------------------------------------------
+// 1.1: the same upload on the AWS api (docs/build/contracts/JOBS.md flows 1 and 6). The links come from
+// POST /v1/video-uploads (its Idempotency-Key is this upload's own), the row is keyed by the uploadId (so
+// jobs.create's "<uploadId>/" and the live job's uploadPath match it as before), and each video is one
+// background PUT, signed for its exact type and length. A PUT answered 403 means its link ran out: ask for
+// new ones and go on. When every video is in, POST /complete queues the job. Videos over 5 GiB (PARTS) come
+// in the next PR.
+
+const AWS_MAX_LINK_REFRESHES = 3;
+
+function newKey(): string {
+  const g = globalThis as { crypto?: { randomUUID?: () => string } };
+  return g.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
+async function startAwsUpload(input: StartUploadInput): Promise<StoredJob> {
+  const videos = input.assets.map((a) => ({
+    contentType: contentTypeFor(a),
+    size: fileSizeFor(a),
+    ...(a.duration ? { durationS: Math.round(a.duration / 1000) } : null),
+  }));
+  const problem = checkVideos(videos);
+  if (problem === 'size') throw new Error(MISSING_VIDEO);
+  if (problem === 'length') throw new Error(`That's more than ${MAX_RECORDING_HOURS} hours of video. Pick fewer videos.`);
+  if (problem) throw new Error('Pick 1 to 20 videos.');
+  const made = await awsJobs.newUpload(videos, newKey(), input.as);
+  if (made.uploads.some((u) => u.method === 'PARTS')) {
+    // TODO(aws): parts (over 5 GiB) come in the next PR; stop this upload rather than leave it open.
+    void awsJobs.cancelUpload(made.uploadId, input.as).catch(() => {});
+    throw new Error('That video is too big to send yet. Try a shorter one.');
+  }
+  const jobId = made.uploadId;
+  const stored: StoredJob = {
+    job_id: jobId,
+    status_url: '',
+    title: input.title,
+    cook_name: input.cook_name,
+    relation: input.relation,
+    created_at: new Date().toISOString(),
+    file_count: input.assets.length,
+    local_state: 'uploading',
+    ...input.meta,
+  };
+  saveJobs([stored, ...loadJobs().filter((j) => j.job_id !== jobId)]);
+
+  const fileProgress: FileProgress[] = videos.map((v) => ({ sent: 0, total: v.size }));
+  progress.set(jobId, fileProgress);
+  progressStarted.set(jobId, Date.now());
+  let links = made.uploads as Extract<UploadLink, { method: 'PUT' }>[];
+  let refreshing: Promise<void> | null = null;
+  // One fresh set of links shared by every video whose PUT found its link expired.
+  const refresh = () =>
+    (refreshing ??= awsJobs
+      .links(jobId, input.as)
+      .then((r) => {
+        links = r.uploads.filter((u): u is Extract<UploadLink, { method: 'PUT' }> => u.method === 'PUT');
+      })
+      .finally(() => {
+        refreshing = null;
+      }));
+
+  const runs = videos.map(async (v, i) => {
+    const asset = input.assets[i];
+    let refreshes = 0;
+    for (let attempt = 1; ; ) {
+      const link = links.find((u) => u.index === i + 1);
+      if (!link) return; // the api has it already (a link set made after it landed lists only the rest)
+      if (!fileOnPhone(asset.uri)) throw new Error(`Upload ${i + 1} failed: ${MISSING_VIDEO}`);
+      const task = new File(asset.uri).createUploadTask(link.url, {
+        httpMethod: 'PUT',
+        headers: link.headers,
+        uploadType: UploadType.BINARY_CONTENT,
+        sessionType: 'background',
+        onProgress: ({ bytesSent, totalBytes }) => {
+          fileProgress[i] = { sent: bytesSent, total: totalBytes > 0 ? totalBytes : fileProgress[i].total };
+          emit(true);
+        },
+      });
+      trackTask(jobId, task);
+      let problem = '';
+      let retryable = true;
+      let expired = false;
+      try {
+        const result = await task.uploadAsync();
+        if (result.status >= 200 && result.status < 300) {
+          fileProgress[i] = { sent: v.size, total: v.size };
+          return;
+        }
+        problem = `(${result.status}) ${result.body?.slice(0, 200) ?? ''}`;
+        expired = result.status === 403;
+        retryable = result.status === 408 || result.status === 429 || result.status >= 500;
+      } catch (e) {
+        problem = String(e);
+      } finally {
+        untrackTask(jobId, task);
+      }
+      if (cancelledJobs.has(jobId)) return;
+      fileProgress[i] = { sent: 0, total: v.size };
+      emit();
+      if (expired && refreshes < AWS_MAX_LINK_REFRESHES) {
+        refreshes += 1; // its link ran out: new links, and the same try again
+        await refresh();
+        continue;
+      }
+      if (!retryable || attempt >= MAX_ATTEMPTS) throw new Error(`Upload ${i + 1} failed ${problem}`.trim());
+      console.warn(`[uploads] video ${i + 1} attempt ${attempt} failed, retrying`, problem);
+      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt - 1] ?? 30_000));
+      attempt += 1;
+      if (cancelledJobs.has(jobId)) return;
+    }
+  });
+
+  const settled = Promise.allSettled(runs).then(async (results) => {
+    if (cancelledJobs.has(jobId)) return false;
+    const failed = results.filter((r) => r.status === 'rejected') as PromiseRejectedResult[];
+    if (failed.length > 0) console.warn('[uploads] some videos failed', failed.map((f) => String(f.reason)));
+    // Every video in: ask the api to look (it queues the job). If that call never gets through, its own sweep
+    // finds the landed videos and queues the job anyway, so the row says sent either way.
+    if (failed.length === 0) await awsComplete(jobId, input.as);
+    updateJob(jobId, { local_state: failed.length > 0 ? 'failed' : 'uploaded' });
+    emit();
+    return failed.length === 0;
+  });
+  finishing.set(jobId, settled);
+  return stored;
+}
+
+/** POST /complete until the api agrees every video is in (a few tries; S3 can lag a moment). */
+async function awsComplete(uploadId: string, as?: string): Promise<void> {
+  for (let i = 0; i < 4; i++) {
+    try {
+      const c = await awsJobs.complete(uploadId, as);
+      if (c.complete || c.cancelled) return;
+    } catch (e) {
+      console.warn('[uploads] complete', e instanceof Error ? e.message : e);
+    }
+    await new Promise((r) => setTimeout(r, 2_000 * (i + 1)));
+  }
+}
+
 /**
  * Reads the job's public status JSON. 404 means the worker hasn't seen it yet -> 'uploading'.
  * Returns null on network errors so the caller keeps the last known state.
  */
 export async function fetchJobStatus(job: StoredJob): Promise<JobStatus | null> {
+  if (AWS_ON || !job.status_url) return null; // on AWS the live jobs poll says where it is (useLiveJobs)
   try {
     const { status, data } = await fetchJson(cacheBuster(job.status_url));
     if (status === 404 || status === 403) {
