@@ -11,8 +11,8 @@ Each area gets the same four proofs, in this order:
 3. **The web build at phone size, switch on, against staging.** Screenshots go in this folder, one subfolder per area.
 4. **With the switch off, every existing app test.** This shows today's builds are untouched.
 
-A phone with the switch on (background uploads, pushes) waits for the `aws-staging` EAS channel. That channel is the Master
-Agent's call, and it's never the `staging` or `production` channel.
+A fifth proof is a phone with the switch on (section 5). It runs on the `aws-staging` build profile and channel, never
+`staging` or `production`.
 
 ## 1. Unit tests (no network)
 
@@ -98,6 +98,35 @@ tab back to desktop size.
 cd app && npx tsc --noEmit && npx expo lint
 cd app && for t in test-aws test-aws-jobs test-aws-messages test-signin test-links test-consent test-who test-hearts test-recap test-table test-cooking test-voice-ui test-community-ui test-parent-jobs test-recording-ui test-doors test-words test-retention; do node scripts/$t.mjs > /dev/null && echo "ok $t" || echo "FAIL $t"; done
 ```
+
+## 5. A phone with the switch on
+
+`app/eas.json` has an `aws-staging` build profile. It extends `staging` (store distribution, the same Convex and voice
+URLs, build number auto-incremented), adds `EXPO_PUBLIC_BACKEND=aws` and staging's `EXPO_PUBLIC_AWS_URL`, and updates on
+its own channel, `aws-staging`. App Store, web & builds runs the build:
+
+```bash
+cd app && npx eas-cli build -p ios --profile aws-staging --auto-submit
+cd app && npx eas-cli update --channel aws-staging -m "<what changed>"   # JS-only fixes to this build only
+```
+
+The rules:
+- The build goes to the internal TestFlight group only.
+- It's never attached to the version in App Review, and never sent to external testers.
+- A switch-on update goes only to `--channel aws-staging`. On `staging` it would move testers' phones to AWS, and on
+  `production` it would reach the reviewed build.
+
+To check what the profile resolves to: `cd app && npx eas-cli config --profile aws-staging -p ios`.
+
+What the phone proves, which the web build can't:
+- **Filming and uploading from the device.** One clip in a single PUT, and one over 20 MiB in parts, each ending in a
+  finished recipe. Use `POST /v1/test/recipe {jobId}`: staging runs no worker.
+- **Pushes arriving.** For example a kid's message, a question and a finished recipe.
+- **Voice notes from the mic.**
+- **A report reaching the team's alerts email.** One report, made on purpose and named as a test.
+
+Sign in on the phone with a TEST family person (Sign in with Apple works on a device). Delete any test people made for it
+when you're done.
 
 ## Per area
 
