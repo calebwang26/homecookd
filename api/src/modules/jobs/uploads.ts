@@ -21,6 +21,27 @@ export const MAX_VIDEO_BYTES = 20 * 1024 ** 3;
 export const ONE_PUT_BYTES = 5 * 1024 ** 3;
 /** S3 wants at least 5 MiB and at most 10,000 parts. A dropped part costs this much to send again. */
 export const PART_BYTES = 64 * 1024 ** 2;
+/** S3's smallest part but the last. At this size the 20 GiB cap is 4,096 parts, still under S3's 10,000. */
+export const MIN_PART_BYTES = 5 * 1024 ** 2;
+
+/** A whole number of bytes from the environment, kept between `low` and `high`. Unset or not a whole number is the default. */
+function bytesSetting(raw: string | undefined, fallback: number, low: number, high: number): number {
+  const n = Number(raw?.trim() || NaN);
+  return Number.isSafeInteger(n) && n > 0 ? Math.min(high, Math.max(low, n)) : fallback;
+}
+
+/**
+ * Staging sets these small (JOBS_SINGLE_PUT_MAX_BYTES 20 MiB, JOBS_PART_BYTES 5 MiB), so a phone can test parts with a 25 MiB video. Production sets neither: its
+ * Terraform refuses them (infra/modules/env/variables.tf). A file's method and part size are worked out again on each call, so a change mid-upload would break the
+ * uploads in flight: change them only with a deploy, and on staging.
+ */
+export function partSettings(env: NodeJS.ProcessEnv = process.env): { onePutBytes: number; partBytes: number } {
+  return {
+    onePutBytes: bytesSetting(env.JOBS_SINGLE_PUT_MAX_BYTES, ONE_PUT_BYTES, 1, ONE_PUT_BYTES),
+    partBytes: bytesSetting(env.JOBS_PART_BYTES, PART_BYTES, MIN_PART_BYTES, ONE_PUT_BYTES),
+  };
+}
+
 const PARTS_AT_ONCE = 100;
 const CONTENT_TYPE = /^video\/[a-z0-9][a-z0-9.+-]{0,60}$/i;
 const EXTENSION: Record<string, string> = { "video/quicktime": ".mov", "video/mp4": ".mp4", "video/x-m4v": ".m4v" };
@@ -63,9 +84,12 @@ async function storage<T>(call: () => Promise<T>): Promise<T> {
   }
 }
 
-const inParts = (f: data.UploadFile) => Number(f.size_bytes) > ONE_PUT_BYTES;
-const partCount = (size: number) => Math.ceil(size / PART_BYTES);
-const partSize = (size: number, partNumber: number) => (partNumber < partCount(size) ? PART_BYTES : size - PART_BYTES * (partCount(size) - 1));
+const inParts = (f: data.UploadFile) => Number(f.size_bytes) > partSettings().onePutBytes;
+const partCount = (size: number) => Math.ceil(size / partSettings().partBytes);
+const partSize = (size: number, partNumber: number) => {
+  const { partBytes } = partSettings();
+  return partNumber < partCount(size) ? partBytes : size - partBytes * (partCount(size) - 1);
+};
 
 type Link =
   | { index: number; method: "PUT"; url: string; headers: Record<string, string>; expiresInS: number }
@@ -78,7 +102,7 @@ const linksFor = (files: data.UploadFile[], only: (f: data.UploadFile) => boolea
       files.flatMap((f, i): Promise<Link>[] => {
         if (!only(f)) return [];
         const size = Number(f.size_bytes);
-        if (inParts(f)) return [Promise.resolve({ index: i + 1, method: "PARTS" as const, partBytes: PART_BYTES, partCount: partCount(size) })];
+        if (inParts(f)) return [Promise.resolve({ index: i + 1, method: "PARTS" as const, partBytes: partSettings().partBytes, partCount: partCount(size) })];
         return [
           uploadStore()
             .presignPut(f.key, f.content_type, size)
