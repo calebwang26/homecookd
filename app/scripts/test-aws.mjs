@@ -302,7 +302,7 @@ await test('error words: by code in her language, by kind when the code is new, 
 const API_CODES = `invalid family_full signed_out sign_in_failed forbidden removed_from_family own_phone account_deleted not_in_family
   only_self link_full ticket_expired origin other_left not_a_guest not_asked_of_you not_found no_route conflict name_taken
   idempotency_conflict retry link_used already_joined already_on_card answered already_delivered already_asked full own_family
-  not_shared declined closed gone live_off too_large bad_type words not_a_dish update_app rate_limited budget server_error
+  not_shared taken_down declined closed gone live_off too_large bad_type words not_a_dish update_app rate_limited budget server_error
   not_moved provider_down unavailable not_set_up accounts_not_moved`.split(/\s+/);
 
 await test('every code the api can send has the app\'s own words, never the api\'s English', () => {

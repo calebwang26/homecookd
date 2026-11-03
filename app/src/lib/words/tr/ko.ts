@@ -992,6 +992,7 @@ const words: Translation = {
   'errors.answered': '이미 답하셨어요.',
   'errors.own_family': '우리 가족 것이에요.',
   'errors.not_shared': '먼저 이 레시피를 공유해 주세요.',
+  'errors.taken_down': '신고가 들어와서 저희 팀이 이 레시피를 지도에서 내렸어요. 가족분들께는 그대로 남아 있어요.',
   'errors.declined': '이번에는 어렵다고 하셨어요.',
   'errors.closed': '이 답변은 이미 보내셨어요.',
   'errors.words': '올릴 수 없는 말이 있어요. 다른 말로 써 주세요.',

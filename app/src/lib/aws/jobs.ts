@@ -62,6 +62,10 @@ export type Recipe = {
   stepCount?: number;
   memoriesOptIn?: boolean;
   language?: string;
+  /** On the Community map since. */
+  sharedAt?: number;
+  /** The team took it off the map after a report (sharedAt is cleared; sharing again is 409 taken_down). */
+  hiddenAt?: number;
 };
 
 export type Complete = { complete: boolean; missing: number[]; cancelled: boolean; job: { jobId: string; stage: JobStage } | null };
@@ -117,6 +121,8 @@ export const recipes = {
   get: (id: string) => request<Recipe>(`/v1/recipes/${enc(id)}`, { auth: 'session' }),
   memoriesOptIn: (id: string, optIn: boolean) =>
     request<{ ok: true }>(`/v1/recipes/${enc(id)}/memories-opt-in`, { auth: 'session', body: { optIn } }),
+  /** Takes her recipe off the Community map (the cook only). Already off: ok, nothing changes. Her story card is kept. */
+  unshare: (id: string, as?: string | null) => request<{ ok: true }>(`/v1/recipes/${enc(id)}/unshare`, { auth: 'session', as, body: {} }),
 };
 
 /** Before asking for links (JOBS.md flow 6): 1 to 20 videos, each a video/* of 1 byte to 20 GiB, 4 hours in all. */

@@ -992,6 +992,7 @@ const words: Translation = {
   'errors.answered': '您已经回答过了。',
   'errors.own_family': '这是您自己家的。',
   'errors.not_shared': '请先分享这个菜谱。',
+  'errors.taken_down': '有人举报后，我们的团队已把这道菜谱从地图上撤下。它仍会留在您的家人身边。',
   'errors.declined': '对方说这次先不了。',
   'errors.closed': '这些回答已经发送过了。',
   'errors.words': '有些词不能发，请换个说法试试。',

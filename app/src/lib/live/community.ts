@@ -36,8 +36,10 @@ import { AWS_ON } from '@/lib/aws/config';
 import { errorWords } from '@/lib/aws/errorWords';
 import { isAwsError } from '@/lib/aws/errors';
 import { community as awsCommunity } from '@/lib/aws/community';
+import { recipes as awsRecipes } from '@/lib/aws/jobs';
 import { newKey } from '@/lib/aws/legacy';
 import { kickReads } from '@/lib/aws/live';
+import { refreshAwsRecipes } from '@/lib/aws/recipesStore';
 import { messages as awsMessages } from '@/lib/aws/messages';
 import { english } from '@/lib/words/words';
 
@@ -83,7 +85,7 @@ export type BlockedFamily = { blockId: string; familyName: string };
  * One of my family's ready dishes, for "Share your recipe". `notNowAt`: when its cook last said not
  * now (or homie couldn't tell); the family can ask her again a day later (choices.ASK_AGAIN_MS).
  */
-export type FamilyDish = { recipeId: string; dish: string; cookName: string; mine: boolean; shared: boolean; asked: boolean; notNowAt: number | null };
+export type FamilyDish = { recipeId: string; dish: string; cookName: string; mine: boolean; shared: boolean; asked: boolean; notNowAt: number | null; takenDown?: boolean };
 
 export type SwapStatus = 'pending' | 'accepted' | 'declined';
 /** A swap, or (kind 'cook') an ask to cook the other family's dish together. */
@@ -137,6 +139,11 @@ async function aws<T>(p: Promise<T>): Promise<T> {
   }
 }
 const gone = (e: unknown) => (e as { code?: string } | null)?.code === 'not_found';
+/** A share changed (or was refused as taken down): read her recipes and the share chooser's dishes again now. */
+function sharesChanged() {
+  refreshAwsRecipes();
+  kickReads('share-dishes:');
+}
 const still =
   <T,>(value: T) =>
   (onData: (v: T) => void) => {
@@ -187,9 +194,12 @@ export function useCommunityRecipe(recipeId: string): CommunityRecipe | null | u
 export async function setShare(recipeId: string, on: boolean): Promise<void> {
   if (on) await requireAiConsent();
   if (AWS_ON) {
-    // Her own tap shares it (COMMUNITY.md). There's no "off" on the api yet (its open item 1): say so, never pretend.
-    if (!on) throw Object.assign(new Error('That can’t be turned off yet.'), { data: 'That can’t be turned off yet.' });
-    await aws(awsMessages.shareAsk(recipeId));
+    // Her own tap shares it (COMMUNITY.md); off is the recipe's own route (the cook only).
+    try {
+      await aws<unknown>(on ? awsMessages.shareAsk(recipeId) : awsRecipes.unshare(recipeId));
+    } finally {
+      sharesChanged(); // on, off, or taken_down: the page shows which now, not at the next front
+    }
     return;
   }
   const sessionToken = await token();
@@ -218,8 +228,10 @@ export async function askToShare(recipeId: string, cookName?: string): Promise<'
     } catch (e) {
       if (!isAwsError(e)) throw e;
       // Her no, within a day: name her from the dish we hold, never from the api's sentence.
-      if (e.code === 'declined') throw new Error(english('errors.share_declined', { name: cookName?.trim() || 'The cook' }));
-      throw new Error(errorWords(e));
+      const words = e.code === 'declined' ? english('errors.share_declined', { name: cookName?.trim() || 'The cook' }) : errorWords(e);
+      throw Object.assign(new Error(words), { data: words, code: e.code });
+    } finally {
+      sharesChanged();
     }
   }
   const sessionToken = await token();

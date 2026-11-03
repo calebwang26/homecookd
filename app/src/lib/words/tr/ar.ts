@@ -992,6 +992,7 @@ const words: Translation = {
   'errors.answered': 'سبق أن أجبت.',
   'errors.own_family': 'هذا يخص عائلتك.',
   'errors.not_shared': 'يُرجى مشاركة هذه الوصفة أولًا.',
+  'errors.taken_down': 'أزال فريقنا هذه الوصفة من الخريطة بعد بلاغ عنها. لكنها تبقى مع عائلتك.',
   'errors.declined': 'كان الرد: ليس هذه المرة.',
   'errors.closed': 'لقد أُرسلت هذه الإجابات من قبل.',
   'errors.words': 'بعض هذه الكلمات لا يمكن نشرها. يُرجى تجربة كلمات أخرى.',

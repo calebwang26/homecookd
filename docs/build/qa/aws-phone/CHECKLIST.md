@@ -12,7 +12,9 @@ mic, and a report reaching the team's alerts email.
 When you say you're ready, the App screens & recording chat makes two test families on staging and sends you two links:
 
 - **A family link** from "Asha (test)", a test cook. You join her family, so she can message you and finish your
-  recordings. Staging runs no worker, so a recording stops at "processing" until the chat finishes it.
+  recordings. Staging runs no worker, so a recording stops at "processing" until the chat finishes it. Asha can't see
+  your recording while it's processing, so the chat finishes the family's newest queued job as her:
+  `POST /v1/test/recipe {newestJob: true}` (#330). That's why you tell it after each recording, one at a time.
 - **A dinner link** (`/d/…`) from "Nadia (test)", a test cook in another family. You report her dinner.
 
 ## On the phone

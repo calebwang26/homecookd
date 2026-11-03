@@ -216,7 +216,7 @@ export const messages = {
   shareAsk: (recipeId: string, as?: string | null) => request<{ result: 'asked' | 'shared' }>('/v1/share-requests', { auth: 'session', as, body: { recipeId } }),
   shareDishes: (as?: string | null) =>
     all('dishes', (cursor) =>
-      request<Page<'dishes', { recipeId: string; dish: string; cookName: string; mine: boolean; shared: boolean; asked: boolean; notNowAt: number | null }>>(
+      request<Page<'dishes', { recipeId: string; dish: string; cookName: string; mine: boolean; shared: boolean; takenDown: boolean; asked: boolean; notNowAt: number | null }>>(
         `/v1/share-requests/dishes${q({ cursor })}`,
         { auth: 'session', as },
       ),
