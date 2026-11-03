@@ -117,6 +117,28 @@ test("recipes", { skip: !hasDatabase }, async (t) => {
     assert.equal((await call(app, null, "POST", `/v1/recipes/${id}/memories-opt-in`, { optIn: true })).status, 401);
   });
 
+  await t.test("a recipe that isn't ready is its cook's alone: to the rest of the family it reads as one that isn't there", async () => {
+    const mom = await who(home);
+    const cooking = await addRecipe(dad, { status: "processing" });
+    const failed = await addRecipe(dad, { status: "failed" });
+    const same = (got: { status: number; data: any }, missing: { status: number; data: any }, what: string) =>
+      assert.deepEqual([got.status, { ...got.data, requestId: 0 }], [missing.status, { ...missing.data, requestId: 0 }], what);
+    await openRecipeWrites();
+    for (const by of [leo, mom]) {
+      for (const id of [cooking, failed]) {
+        same(await get(by, id), await get(by, "no-such-recipe"), "read");
+        same(await optIn(by, id, true), await optIn(by, "no-such-recipe", true), "opt-in, where a 403 said it was there");
+      }
+      assert.ok(!(await call(app, by, "GET", "/v1/recipes")).data.recipes.some((r: { _id: string }) => r._id === cooking || r._id === failed));
+    }
+    assert.equal((await get(dad, cooking)).data.status, "processing");
+    assert.deepEqual((await optIn(dad, cooking, true)).data, { ok: true });
+    await db().query(`update recipes set status = 'ready' where id = $1`, [cooking]);
+    assert.equal((await get(leo, cooking)).status, 200);
+    assert.equal((await optIn(leo, cooking, true)).data.message, "Only the cook can share these.");
+    await closeRecipeWrites();
+  });
+
   await t.test("the switch: off by default, the flag opens it, and a sync mid-copy always locks it", async () => {
     assert.equal(recipeWritesFlag({}), false);
     for (const wrong of ["true", "1", "ON", " on", "yes"]) assert.equal(recipeWritesFlag({ RECIPE_WRITES: wrong }), false, wrong);

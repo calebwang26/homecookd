@@ -18,18 +18,14 @@ import { hit, subjectKey, type Limit } from "../../rateLimit.js";
 import { seal, SHARE_LINK_SALT, shareTokenHash, unseal } from "../../sealed.js";
 import { familyNameOf, joinsViaShare, memberById, membersByIds } from "../people/family.js";
 import { iso } from "./data.js";
-import { dishesOf, library } from "./library.js";
+import { checkDish, dishesOf, library } from "./library.js";
 import { actorOf, type Write } from "./actor.js";
 import { deliverRecipe } from "./service.js";
 import { attachFile, markForDeletion } from "./uploads.js";
-import { decodeCursor, encodeCursor, isRowId, libraryId, LIBRARY_ID, MAX_RECIPIENTS, MAX_VOICE_S, noSuchRecipe, number, pageSize } from "./values.js";
+import { decodeCursor, encodeCursor, isRowId, libraryId, LIBRARY_ID, MAX_RECIPIENTS, MAX_VOICE_S, number, pageSize } from "./values.js";
 import { mediaUrl, personView } from "./views.js";
 
 type Body = Record<string, unknown>;
-
-async function checkDish(id: string): Promise<void> {
-  if ((await library().exists(id)) === false) throw noSuchRecipe();
-}
 
 // ---------------------------------------------------------------------------------------------
 // Share links
@@ -56,7 +52,7 @@ const webUrl = () => (process.env.DISH_WEB_ORIGIN?.trim() || "https://homecookd.
 export async function makeShare(signed: Signed, body: Body) {
   const actor = await actorOf(signed);
   const dish = libraryId(body.libraryId, true)!;
-  await checkDish(dish);
+  await checkDish(actor.familyId, dish);
   const { rows } = await db().query(
     `select id, token_enc from shares where family_id = $1 and library_id = $2 and sender_id = $3 order by created_at desc limit 1`,
     [actor.familyId, dish, actor.me.id],
@@ -217,7 +213,7 @@ export async function setFavorite(signed: Signed, body: Body) {
   const dish = libraryId(body.libraryId, true)!;
   if (typeof body.on !== "boolean") throw invalid("on");
   if (body.on) {
-    await checkDish(dish);
+    await checkDish(signed.familyId, dish);
     await db().query(`insert into favorites (person_id, library_id) values ($1, $2) on conflict do nothing`, [signed.personId, dish]);
   } else {
     await db().query(`delete from favorites where person_id = $1 and library_id = $2`, [signed.personId, dish]);
@@ -325,7 +321,7 @@ export async function recordEvent(signed: Signed, body: Body) {
   const duration = number(body.durationS, "durationS", { min: 0, max: 3600 });
   if (kind === "heard" && (duration === null || duration < HEARD_MIN_S)) throw invalid("durationS");
   const start = number(body.startS, "startS", { min: 0, max: 86_400 });
-  await checkDish(dish);
+  await checkDish(actor.familyId, dish);
   const windowS = kind === "viewed" ? 30 * 60 : kind === "heard" ? 5 : 60;
   return await tx(async (c) => {
     await c.query(`select pg_advisory_xact_lock(hashtext($1))`, [`event:${actor.me.id}:${dish}:${kind}`]);

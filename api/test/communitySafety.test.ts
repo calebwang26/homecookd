@@ -202,6 +202,28 @@ test("only what you can see now can be reported or blocked", { skip }, async () 
   assert.equal((await reportRows()).length, 1);
 });
 
+test("a recipe that isn't ready can't be reported or blocked, the same as one that isn't there, in its own family and from one already blocked", { skip }, async () => {
+  const { t, rajani, shreya, serene, caleb } = await world();
+  const cooking = await recipe(rajani, { title: "Still Cooking", status: "processing" });
+  for (const [who, what] of [[shreya, "her own family"], [serene, "another family"]] as const) {
+    sameAsMissing(await report(t, who, "recipe", cooking), await report(t, who, "recipe", MISSING), `report, ${what}`);
+    sameAsMissing(await block(t, who, "recipe", cooking), await block(t, who, "recipe", MISSING), `block, ${what}`);
+  }
+  await refusedWith(report(t, rajani, "recipe", cooking), 409, /your family's/); // its cook knows it's there
+
+  // A family that blocked the Pawars blocking "again" by this id would say it exists.
+  const poha = await recipe(rajani, { sharedAt: 1 });
+  const later = await recipe(rajani, { title: "Next Sunday", status: "processing" });
+  await ok(block(t, serene, "recipe", poha));
+  sameAsMissing(await block(t, serene, "recipe", later), await block(t, serene, "recipe", MISSING), "block, already blocked");
+
+  // Once it's ready and shared, it's like any other.
+  await db().query("update recipes set status = 'ready', shared_at = now() where id = $1", [cooking]);
+  await refusedWith(report(t, shreya, "recipe", cooking), 409, /your family's/);
+  await ok(report(t, caleb, "recipe", cooking));
+  assert.deepEqual((await reportRows()).filter((r) => r.kind === "recipe").map((r) => r.target_id), [cooking]);
+});
+
 test("a block works both ways: no dishes, dinners or asks between the two families", { skip }, async () => {
   const { t, rajani, shreya, serene, serenesMom, caleb } = await world();
   const poha = await recipe(rajani, { sharedAt: 1 });
