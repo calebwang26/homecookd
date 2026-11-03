@@ -2,7 +2,7 @@
 // (pushWords.ts) and goes through queuePush, so no caller builds a title. A web-only kid has no person, so nothing is sent to them; they see Mom's answer when they
 // reopen their link. Who queues each:
 //   answered   dish/merge.ts: her version lands, or her clips go to the kid without one (push.dish_answered)
-//   craving    a kid making a card from her craving link (push.dish_requested): that card-making isn't on the api yet (dish/routes.ts), so nothing queues it
+//   craving    dish/service.ts createCard: a kid makes a card from her craving link, in the card's transaction (push.dish_requested)
 //   filmed     messages/published.ts: a recipe she filmed for the card is ready (push.dish_filmed)
 //   joined     accounts/links.ts claimCard, in the claim's own transaction
 import { db, tx, type Queryable } from "../../db.js";
