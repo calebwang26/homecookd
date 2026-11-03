@@ -6,6 +6,7 @@ import { after, test } from "node:test";
 import type { FastifyInstance } from "fastify";
 import { buildApp } from "../src/app.js";
 import { db } from "../src/db.js";
+import { requestHash } from "../src/idempotency.js";
 import { sha256Hex } from "../src/modules/dish/values.js";
 import { cravingCard, voiceUpload } from "./cravingHelpers.js";
 import {
@@ -451,6 +452,18 @@ test("a new dinner's key follows the shared rule: up to 128 characters, and a re
   assert.deepEqual(await ok(post(body, "retry-key-before")), old);
   await refusedWith(post({ ...body, seats: 3 }, "retry-key-before"), 409, "That was already sent with different details.");
   assert.equal((await db().query("select count(*)::int as n from dinners")).rows[0].n, 4);
+});
+
+test("a key she first used on another route is refused on a new dinner, even with the same hash, and makes nothing", { skip }, async () => {
+  const { t, rajani } = await world();
+  const poha = await recipe(rajani, { sharedAt: 1 });
+  const body = hostBody(poha);
+  await db().query(`insert into idempotency_keys (scope, key, route, request_hash, resource_id) values ($1, 'used-on-a-message', 'POST /v1/messages', $2, 'a-message-id')`, [
+    rajani.personId,
+    requestHash(body),
+  ]);
+  await refusedWith(call(t, rajani, "POST", "/v1/dinners", body, { "idempotency-key": "used-on-a-message" }), 409, "That was already sent with different details.");
+  assert.equal((await db().query("select count(*)::int as n from dinners")).rows[0].n, 0);
 });
 
 test("logs carry no family content, as production writes them", { skip }, async () => {
