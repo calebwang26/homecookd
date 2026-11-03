@@ -22,8 +22,6 @@ export interface Library {
   recipeInfo(id: string, key?: string): Promise<RecipeDetails | null>;
   /** False only when the host says it isn't there (a 404, or S3's 403). Null when it can't say (unreachable, a 5xx): Supabase doesn't block a send on that. */
   exists(id: string): Promise<boolean | null>;
-  /** The old pipeline's job file, for a phone registering a send after its recording was published. */
-  publishedDish(uploadId: string): Promise<string | null>;
 }
 
 const MINUTE = 60_000;
@@ -108,12 +106,6 @@ export function makeLibrary(o: { baseUrl: string; fetch?: typeof fetch; ttlMs?: 
         return null;
       }
     },
-    async publishedDish(uploadId) {
-      const got = await getJson(`${base}/jobs/${uploadId}.json`);
-      if (!got.ok || !got.body || typeof got.body !== "object") return null;
-      const job = got.body as Record<string, unknown>;
-      return job.status === "published" && typeof job.recipe_id === "string" && ID.test(job.recipe_id) ? job.recipe_id : null;
-    },
   };
 }
 
@@ -121,7 +113,6 @@ const unreachable: Library = {
   libraryIndex: async () => new Map(),
   recipeInfo: async () => null,
   exists: async () => null,
-  publishedDish: async () => null,
 };
 
 let current: Library | undefined;

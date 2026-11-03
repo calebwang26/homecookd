@@ -16,6 +16,7 @@ import { forbidden, invalid, notFound, refused } from "../../errors.js";
 import { once, requestHash } from "../../idempotency.js";
 import { hit, subjectKey, type Limit } from "../../rateLimit.js";
 import { seal, SHARE_LINK_SALT, shareTokenHash, unseal } from "../../sealed.js";
+import { uploadJob } from "../jobs/service.js";
 import { familyNameOf, joinsViaShare, memberById, membersByIds } from "../people/family.js";
 import { recipeJsonUrl } from "../recipes/read.js";
 import { iso } from "./data.js";
@@ -100,7 +101,7 @@ export async function openShare(token: unknown, ip: string) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Recordings on their way: the app registers who gets them, the worker says when it's published
+// Recordings on their way: the app registers who gets them, and the recipe's publish delivers them (published.ts, on the worker's recipe_published message)
 
 const UPLOAD_ID = LIBRARY_ID;
 
@@ -119,6 +120,9 @@ export async function registerPendingSend(signed: Signed, body: Body, w: Write) 
   if (recipients.length === 0) throw invalid("recipientIds");
   const helloKey = typeof body.helloKey === "string" && body.helloKey ? body.helloKey : null;
   const helloDuration = number(body.helloDurationS, "helloDurationS", { min: 0, max: MAX_VOICE_S });
+  // A recording is its cook's to send: someone else in the family with its upload id can't put their list on it.
+  const before = await uploadJob(actor.familyId, uploadId);
+  if (before && before.cookId !== actor.me.id) throw refused(409, "conflict");
 
   await once(
     { scope: actor.me.id, key: w.key, route: "POST /v1/pending-sends", hash: requestHash([uploadId, recipients, helloKey, helloDuration]) },
@@ -146,33 +150,42 @@ export async function registerPendingSend(signed: Signed, body: Body, w: Write) 
       return uploadId;
     },
   );
-  // If the recording was already published (fast pipeline, slow phone), deliver right away. The old host's job file: the worker's own call covers the rest.
-  const dish = await library().publishedDish(uploadId);
-  if (dish) {
-    const out = await deliverPending(actor.familyId, uploadId, dish, w.requestId, actor.me.id);
+  // Already published (a fast job, a slow phone): it goes now. Asked after this row committed, so a publish either sees the row or is seen here.
+  const job = await uploadJob(actor.familyId, uploadId);
+  if (job?.libraryId && job.cookId === actor.me.id) {
+    const out = await deliverPending(actor.familyId, uploadId, job.libraryId, w.requestId, actor.me.id, { id: job.jobId, cookId: job.cookId });
     return { ok: true, delivered: out.delivered };
   }
   return { ok: true };
 }
 
 /**
- * The recipe, and the hello when there is one, to each recipient still in the family. The claim and every message are one transaction, so a worker's retry
- * delivers nothing twice and a failure leaves nothing half-sent, where Supabase had to release its claim by hand.
+ * The recipe, and the hello when there is one, to each recipient still in the family: what send-recipe sends. The claim and every message are one transaction, so a
+ * retry delivers nothing twice and a failure leaves nothing half-sent, where Supabase had to release its claim by hand. `job`: the published job's, so only its cook's
+ * list goes, and the send is tied to the job.
  */
-export async function deliverPending(familyId: string, uploadId: string, dish: string, requestId?: string, onlySender?: string): Promise<{ delivered: number; already?: boolean }> {
+export async function deliverPending(
+  familyId: string,
+  uploadId: string,
+  dish: string,
+  requestId?: string,
+  onlySender?: string,
+  job?: { id: string; cookId: string },
+): Promise<{ delivered: number; already?: boolean }> {
   const out = await tx(async (c) => {
     if (onlySender) {
       const owner = await c.query(`select sender_id from pending_sends where upload_id = $1 and family_id = $2`, [uploadId, familyId]);
       if (owner.rows[0] && owner.rows[0].sender_id !== onlySender) throw forbidden("Only whoever recorded this can send it.");
     }
     const { rows } = await c.query(
-      `update pending_sends set delivered_at = now(), library_id = $3 where upload_id = $1 and family_id = $2 and delivered_at is null
+      `update pending_sends set delivered_at = now(), library_id = $3, job_id = coalesce($4, job_id)
+        where upload_id = $1 and family_id = $2 and delivered_at is null and ($5::text is null or sender_id = $5)
        returning sender_id, recipient_ids, hello_key, hello_duration_s`,
-      [uploadId, familyId, dish],
+      [uploadId, familyId, dish, job?.id ?? null, job?.cookId ?? null],
     );
     const row = rows[0];
     if (!row) {
-      const seen = await c.query(`select 1 from pending_sends where upload_id = $1 and family_id = $2`, [uploadId, familyId]);
+      const seen = await c.query(`select 1 from pending_sends where upload_id = $1 and family_id = $2 and delivered_at is not null`, [uploadId, familyId]);
       return seen.rowCount ? { delivered: 0, already: true } : { delivered: 0 };
     }
     const people = await membersByIds(c, row.recipient_ids);

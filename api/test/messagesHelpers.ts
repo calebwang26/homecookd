@@ -32,7 +32,6 @@ export const NOODLES = "grandma-hand-pulled-noodle-soup";
 export type FakeLibrary = Library & {
   index: Map<string, RecipeInfo>;
   recipes: Map<string, { title: string; cook_name: string | null; sample: boolean; steps: { order: number; quote: string | null }[] }>;
-  published: Map<string, string>;
   down: boolean;
 };
 
@@ -50,7 +49,6 @@ export function fakeLibrary(): FakeLibrary {
       [DAL, { title: "Mom's Dal", cook_name: "Mom", sample: false, steps: [] }],
       [NOODLES, { title: "Noodle Soup", cook_name: "Grandma", sample: true, steps: [] }],
     ]),
-    published: new Map(),
     down: false,
     libraryIndex: async () => (lib.down ? new Map() : lib.index),
     recipeInfo: async (id) => {
@@ -58,7 +56,6 @@ export function fakeLibrary(): FakeLibrary {
       return r ? { id, ...r } : null;
     },
     exists: async (id) => (lib.down ? null : lib.recipes.has(id)),
-    publishedDish: async (id) => lib.published.get(id) ?? null,
   };
   return lib;
 }

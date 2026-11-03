@@ -7,13 +7,14 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { after, before, test } from "node:test";
 import { db } from "../src/db.js";
+import { handleMessage } from "../src/scheduled.js";
 import { purgeOutside, runPurge, useVoiceClones } from "../src/modules/accounts/deletion.js";
 import { S3_GRACE_MS } from "../src/modules/accounts/outside.js";
 import { DURATION_S } from "../src/modules/recipes/testMedia.js";
 import { DEFAULT_TITLE, MAX_STEPS } from "../src/modules/recipes/testRecipe.js";
 import { useMediaStore, useObjectStore, useUploadStore } from "../src/storage.js";
 import { Api, freshDatabase, hasDatabase, setup } from "./accountsHelpers.js";
-import { fakeStore, type FakeStore } from "./dishHelpers.js";
+import { fakeStore, type FakeStore, silent } from "./dishHelpers.js";
 import { bearer, person, session } from "./helpers.js";
 
 const skip = !hasDatabase;
@@ -260,7 +261,7 @@ test("deleting the account removes it, its folder too", { skip }, async () => {
 // ---- given a job
 
 /** A video job through the real routes, up to `queued`: links, the PUT, the job (with its "processing" card), and /complete. */
-async function queuedJob(by: Who): Promise<{ jobId: string; cardId: string }> {
+async function queuedJob(by: Who): Promise<{ jobId: string; cardId: string; uploadId: string }> {
   seq += 1;
   const asked = await withKey.post("/v1/video-uploads", { videos: [{ contentType: "video/quicktime", size: 5, durationS: 60 }] }, { ...bearer(by.token), "idempotency-key": `test-recipe-job-${seq}` });
   assert.equal(asked.status, 201);
@@ -269,7 +270,7 @@ async function queuedJob(by: Who): Promise<{ jobId: string; cardId: string }> {
   const made = await withKey.post("/v1/jobs", { uploadId, source: "phone", title: "Thalipeeth" }, bearer(by.token));
   assert.equal(made.status, 201);
   assert.equal((await withKey.post(`/v1/video-uploads/${uploadId}/complete`, {}, bearer(by.token))).data.job.stage, "queued");
-  return { jobId: made.data.jobId, cardId: made.data.recipeId };
+  return { jobId: made.data.jobId, cardId: made.data.recipeId, uploadId };
 }
 
 const live = (by: Who, since?: string) => withKey.get(`/v1/live/jobs${since ? `?since=${encodeURIComponent(since)}` : ""}`, bearer(by.token));
@@ -308,6 +309,32 @@ test("given her queued job, it publishes as the worker does: the live topic move
   assert.equal(r.recipeJsonUrl, res.data.recipeUrl);
   assert.equal(recipeJson(res.data.recipeUrl).title, "Thalipeeth");
   assert.ok((await recipes(kid)).some((x) => x._id === cardId), "published: the family sees it now");
+});
+
+test("finishing her job delivers what she picked before it was done, as the worker's publish does, so staging can show it", { skip }, async () => {
+  const mom = await cook();
+  const kid = await memberOf(mom.familyId, "kid");
+  const { jobId, cardId, uploadId } = await queuedJob(mom);
+  const registered = await withKey.post("/v1/pending-sends", { uploadId, recipientIds: [kid.personId] }, { ...bearer(mom.token), "idempotency-key": `pending-send-${seq}` });
+  assert.deepEqual([registered.status, registered.data], [200, { ok: true }]);
+  assert.equal((await make(mom, { jobId })).status, 201);
+
+  // The follow-on message, handed over twice as SQS may.
+  const { rows } = await db().query(`select id, payload from outbox where queue = 'scheduled' and payload->>'kind' = 'recipe_published' and payload->>'jobId' = $1`, [jobId]);
+  assert.equal(rows.length, 1);
+  const body = JSON.stringify({ outboxId: String(rows[0].id), payload: rows[0].payload });
+  await handleMessage(body, silent);
+  await handleMessage(body, silent);
+
+  const libraryId = (await recipeRow(cardId)).library_id;
+  assert.match(libraryId, /^test-recipe-[0-9a-f]{12}$/);
+  const pair = (await withKey.post("/v1/threads", { otherId: mom.personId }, bearer(kid.token))).data.id;
+  const messages = (await withKey.get(`/v1/threads/${pair}/messages`, bearer(kid.token))).data.messages;
+  assert.deepEqual(messages.map((m: { kind: string; senderId: string; libraryId: string }) => [m.kind, m.senderId, m.libraryId]), [["recipe", mom.personId, libraryId]]);
+  const sent = (await db().query(`select delivered_at, library_id, job_id from pending_sends where upload_id = $1`, [uploadId])).rows[0];
+  assert.ok(sent.delivered_at);
+  assert.deepEqual([sent.library_id, sent.job_id], [libraryId, jobId]);
+  assert.equal((await db().query(`select count(*)::int as n from outbox where payload->>'task' = 'messages.push' and payload->>'messageId' = $1`, [messages[0].id])).rows[0].n, 1, "one push, queued once");
 });
 
 test("another cook's job, or another family's, is not found, and nothing moves", { skip }, async () => {

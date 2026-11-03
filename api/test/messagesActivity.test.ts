@@ -1,12 +1,14 @@
 // Shares, pending sends, hearts and recipe events: supabase/tests/api_test.ts, hearts_test.ts and the pure helpers from them, on real Postgres.
 import assert from "node:assert/strict";
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { after, test } from "node:test";
 import { db } from "../src/db.js";
+import { daily } from "../src/modules/messages/tasks.js";
+import { enqueue } from "../src/outbox.js";
 import { deliverPending, HEARTS_RECENT_LIMIT, MAX_JOINS_PER_LINK, parseDishIds, parseSince } from "../src/modules/messages/activity.js";
 import { dishesOf, makeLibrary, useLibrary } from "../src/modules/messages/library.js";
 import { SHARE_LINK_SALT, shareTokenHash, unseal } from "../src/sealed.js";
-import { awsRecipe, CHILI, closeAll, DAL, DAY_MS, drain, fileRow, get, MEDIA, newKey, ok, openShare, pairOf, phone, post, pushes, recipe, refused, RICE, skip, tokenFor, uploaded, withMedia, type Who, type World, world } from "./messagesHelpers.js";
+import { awsRecipe, CHILI, closeAll, DAL, DAY_MS, drain, drainTwice, fileRow, get, MEDIA, newKey, ok, openShare, pairOf, phone, post, pushes, recipe, refused, RICE, skip, tokenFor, uploaded, withMedia, type Who, type World, world } from "./messagesHelpers.js";
 
 const event = (w: World, who: Who, body: Record<string, unknown>) => post(w.app, who, "/v1/events", body, { key: null });
 const heart = (w: World, who: Who, libraryId: string, on = true) => post(w.app, who, "/v1/favorites", { libraryId, on }, { key: null });
@@ -65,7 +67,7 @@ test("pending sends: recipients are people here; a job that's someone else's or 
 
 test("a recording published before the phone registered goes out right away, with its hello", { skip }, async () => {
   const w = await world();
-  w.lib.published.set("job-fast", CHILI);
+  await jobFor(w, w.dad, "job-fast", { libraryId: CHILI });
   const hello = await uploaded(w, w.dad);
   assert.deepEqual(ok(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-fast", recipientIds: [w.leo.id], helloKey: hello, helloDurationS: 4 })), { ok: true, delivered: 1 });
   const pair = await pairOf(w, w.dad, w.leo);
@@ -138,9 +140,96 @@ test("only the sender can change a recording's list, and only the sender can del
 test("a recording already published isn't delivered by someone else trying to register it", { skip }, async () => {
   const w = await world();
   ok(await post(w.app, w.mom, "/v1/pending-sends", { uploadId: "job-fast-2", recipientIds: [w.leo.id] }));
-  w.lib.published.set("job-fast-2", CHILI);
+  await jobFor(w, w.mom, "job-fast-2", { libraryId: CHILI });
   refused(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-fast-2", recipientIds: [w.leo.id] }), 409, "conflict");
   assert.equal((await db().query(`select count(*)::int as n from messages`)).rows[0].n, 0);
+});
+
+test("a recording is its cook's to send: once a job has its upload, nobody else's list goes on it, published or not", { skip }, async () => {
+  const w = await world();
+  await jobFor(w, w.mom, "job-moms-2", { done: false });
+  refused(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-moms-2", recipientIds: [w.nia.id] }), 409, "conflict");
+  assert.equal((await db().query(`select count(*)::int as n from pending_sends`)).rows[0].n, 0);
+  assert.deepEqual(ok(await post(w.app, w.mom, "/v1/pending-sends", { uploadId: "job-moms-2", recipientIds: [w.leo.id] })), { ok: true });
+});
+
+// --- delivery when the recipe is published (published.ts, on the worker's recipe_published)
+
+/** A job for this upload as the worker leaves it: `done` with its ready recipe, or still running with its "processing" card. */
+async function jobFor(w: World, cook: Who, uploadId: string, o: { done?: boolean; libraryId?: string } = {}) {
+  const done = o.done !== false;
+  const libraryId = o.libraryId ?? `recipe-${randomUUID().slice(0, 8)}`;
+  const recipeId = await recipe(w.family, cook.id, { status: done ? "ready" : "processing", libraryId, title: "Sunday Chili" });
+  const { rows } = await db().query(
+    `insert into jobs (family_id, cook_id, recipe_id, upload_key, source, stage, progress, finished_at) values ($1, $2, $3, $4, 'phone', $5, $6, $7) returning id`,
+    [w.family, cook.id, recipeId, `${uploadId}/`, done ? "done" : "writing", done ? 1 : 0.5, done ? new Date() : null],
+  );
+  return { jobId: rows[0].id as string, recipeId, libraryId };
+}
+/** pipeline/queue_db.py finish: the recipe ready and the job done, then its follow-on message, which the queue runs. */
+async function finishJob(j: { jobId: string; recipeId: string }) {
+  await db().query(`update recipes set status = 'ready' where id = $1`, [j.recipeId]);
+  await db().query(`update jobs set stage = 'done', progress = 1, finished_at = now() where id = $1`, [j.jobId]);
+  await enqueue(db(), { queue: "scheduled", payload: { kind: "recipe_published", jobId: j.jobId, recipeId: j.recipeId } });
+}
+const pendingRow = async (uploadId: string) => (await db().query(`select delivered_at, library_id, job_id from pending_sends where upload_id = $1`, [uploadId])).rows[0];
+const threadKinds = async (w: World, from: Who, to: Who) => ok(await get(w.app, to, `/v1/threads/${await pairOf(w, from, to)}/messages`)).messages.map((m: any) => [m.kind, m.senderId, m.libraryId, m.durationS]);
+
+test("publishing delivers a pending send: each recipient gets what send-recipe sends, and the hello, once; SQS's repeat sends nothing", { skip }, async () => {
+  const w = await world();
+  await phone(w, w.leo, "leo");
+  await phone(w, w.nia, "nia");
+  const j = await jobFor(w, w.dad, "job-pub", { done: false });
+  const hello = await uploaded(w, w.dad);
+  ok(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-pub", recipientIds: [w.leo.id, w.nia.id], helloKey: hello, helloDurationS: 4 }));
+  await drain();
+  assert.equal((await db().query(`select count(*)::int as n from messages`)).rows[0].n, 0, "nothing goes while it's processing");
+
+  await finishJob(j);
+  await drainTwice(); // the message, and each push, handed over twice
+  for (const kid of [w.leo, w.nia]) assert.deepEqual(await threadKinds(w, w.dad, kid), [["recipe", w.dad.id, j.libraryId, null], ["voice", w.dad.id, j.libraryId, 4]]);
+  const row = await pendingRow("job-pub");
+  assert.ok(row.delivered_at);
+  assert.deepEqual([row.library_id, row.job_id], [j.libraryId, j.jobId]);
+  // One "Just in from Dad" each, as send-recipe's. This made-up recipe has no recipe.json, so the dish reads "A new recipe".
+  assert.deepEqual(pushes(w.expo).sort(), [[tokenFor("leo"), "Just in from Dad", "A new recipe", `/recipe/${j.libraryId}`], [tokenFor("nia"), "Just in from Dad", "A new recipe", `/recipe/${j.libraryId}`]]);
+
+  // The same message much later, and the phone's own /published: nothing more.
+  await finishJob(j);
+  await drain();
+  assert.deepEqual(ok(await post(w.app, w.dad, "/v1/pending-sends/job-pub/published", { libraryId: j.libraryId }, { key: null })), { delivered: 0, already: true });
+  assert.equal((await db().query(`select count(*)::int as n from messages`)).rows[0].n, 4);
+  assert.equal(w.expo.sent.flat().length, 2);
+  refused(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-pub", recipientIds: [w.leo.id] }), 409, "already_delivered");
+});
+
+test("a send for a recipe that never publishes stays pending: a job still running, stopped or failed delivers nothing, and the daily sweep leaves it be", { skip }, async () => {
+  const w = await world();
+  const hello = await uploaded(w, w.dad);
+  const running = await jobFor(w, w.dad, "job-slow", { done: false });
+  ok(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-slow", recipientIds: [w.leo.id], helloKey: hello }));
+  // A stray message while it's still running.
+  await enqueue(db(), { queue: "scheduled", payload: { kind: "recipe_published", jobId: running.jobId, recipeId: running.recipeId } });
+  await drain();
+  // Then it's stopped, and its card fails: a late message for it changes nothing either.
+  await db().query(`update jobs set stage = 'failed', cancelled_at = now(), finished_at = now() where id = $1`, [running.jobId]);
+  await db().query(`update recipes set status = 'failed' where id = $1`, [running.recipeId]);
+  await enqueue(db(), { queue: "scheduled", payload: { kind: "recipe_published", jobId: running.jobId, recipeId: running.recipeId } });
+  await drain();
+  await daily();
+  assert.equal((await db().query(`select count(*)::int as n from messages`)).rows[0].n, 0);
+  assert.deepEqual(await pendingRow("job-slow"), { delivered_at: null, library_id: null, job_id: null });
+  assert.equal((await fileRow(hello)).delete_requested_at, null, "her hello is kept with the send");
+});
+
+test("the publish delivers only the cook's own list: one someone else registered first for her upload id stays where it is", { skip }, async () => {
+  const w = await world();
+  ok(await post(w.app, w.dad, "/v1/pending-sends", { uploadId: "job-hers", recipientIds: [w.nia.id] })); // before her job existed
+  const j = await jobFor(w, w.mom, "job-hers", { done: false });
+  await finishJob(j);
+  await drain();
+  assert.equal((await db().query(`select count(*)::int as n from messages`)).rows[0].n, 0, "nothing goes out as Dad, or with Mom's recipe");
+  assert.equal((await pendingRow("job-hers")).delivered_at, null);
 });
 
 // --- shares
@@ -483,8 +572,6 @@ test("makeLibrary reads library.json & recipe.json, caches 10 min, and never cac
       sample: false,
       steps: [{ order: 2, quote: "A pinch, then taste." }, { order: 1, quote: null }, { order: "x", quote: "dropped" }],
     },
-    "jobs/up-done.json": { status: "published", recipe_id: "mom-dal" },
-    "jobs/up-wait.json": { status: "processing" },
   };
   const fakeFetch = (async (url: string, init?: RequestInit) => {
     calls.push(`${init?.method ?? "GET"} ${url}`);
@@ -505,8 +592,6 @@ test("makeLibrary reads library.json & recipe.json, caches 10 min, and never cac
   assert.equal(await lib.recipeInfo("../library.json"), null); // never fetched
   assert.equal(await lib.exists("mom-dal"), true);
   assert.equal(await lib.exists("nope"), false);
-  assert.equal(await lib.publishedDish("up-done"), "mom-dal");
-  assert.equal(await lib.publishedDish("up-wait"), null);
   const fetched = calls.length;
 
   clock = 9 * 60_000; // still fresh: no fetches

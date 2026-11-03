@@ -157,6 +157,17 @@ async function chooseLanguage(c: Queryable, signed: Signed, input: JobInput, rec
   return recordingLanguage ?? (await languageOf(c, signed.personId)) ?? "en";
 }
 
+/**
+ * Whose recording an upload is, and its ready recipe's library id once it's published: what a pending send needs (messages/activity.ts). Null when no job has the
+ * upload yet. `libraryId` only for a finished job whose recipe is ready, so a recipe still processing is never delivered.
+ */
+export async function uploadJob(familyId: string, uploadId: string): Promise<{ jobId: string; cookId: string; libraryId: string | null } | null> {
+  const job = await data.jobOfUpload(db(), familyId, uploadId);
+  if (!job) return null;
+  const published = job.stage === "done" && job.recipe_status === "ready" ? job.library_id : null;
+  return { jobId: job.id, cookId: job.cook_id, libraryId: published };
+}
+
 export async function listJobs(signed: Signed, cursor?: string) {
   const rows = await data.jobsOfCook(db(), signed.familyId, signed.personId, afterCursor(cursor), PAGE + 1);
   const page = pageOf(rows, PAGE);

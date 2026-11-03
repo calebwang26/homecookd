@@ -6,6 +6,7 @@
 //   a phone's retry of a job                 jobs_idempotency_unique      1
 //   is this folder another family's?         jobs_upload_key              20
 //   stop by upload folder                    jobs_family_upload           20
+//   an upload's job, for a pending send      jobs_family_upload           1
 //   jobs waiting on their upload             jobs_unfinished              the sweep's batch
 //   a person's jobs (the purge)              jobs_cook                    the purge's batch
 //   an upload's files                        files_upload                 at most MAX_VIDEOS
@@ -84,6 +85,21 @@ export async function jobForFolder(q: Queryable, familyId: string, uploadKey: st
 export async function folderIsAnotherFamilys(q: Queryable, familyId: string, uploadKey: string): Promise<boolean> {
   const { rows } = await q.query(`select family_id from jobs where upload_key = $1 order by created_at desc limit 20`, [uploadKey]);
   return rows.some((row) => row.family_id !== familyId);
+}
+
+/** The newest job for an upload in this family, and how its recipe stands: a pending send asks whose it is and whether it's out yet (messages/activity.ts). */
+export async function jobOfUpload(
+  q: Queryable,
+  familyId: string,
+  uploadId: string,
+): Promise<{ id: string; cook_id: string; stage: string; recipe_id: string | null; recipe_status: string | null; library_id: string | null } | null> {
+  const { rows } = await q.query(
+    `select j.id, j.cook_id, j.stage, j.recipe_id, r.status as recipe_status, r.library_id
+       from jobs j left join recipes r on r.id = j.recipe_id
+      where j.family_id = $1 and j.upload_id = $2 order by j.created_at desc limit 1`,
+    [familyId, uploadId],
+  );
+  return rows[0] ?? null;
 }
 
 export async function jobsOfFolder(q: Queryable, familyId: string, cookId: string, uploadId: string): Promise<JobRow[]> {

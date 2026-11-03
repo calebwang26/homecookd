@@ -65,7 +65,7 @@ Every route checks the session, and every route below `/v1`. The one exception i
 | `POST /shares` | `POST /v1/shares` | |
 | `GET /shares/:token` | `POST /v1/shares/open` `{token}` | So the token stays out of logs |
 | `POST /pending-sends` | `POST /v1/pending-sends` | `job_id` is `uploadId`, as in SCHEMA.md |
-| `POST /jobs/:job_id/published` | `POST /v1/pending-sends/:uploadId/published`, `deliverPending()` for the worker | Only the sender on the route. Supabase's took the family code, so the pipeline's call must become the worker's `deliverPending()` |
+| `POST /jobs/:job_id/published` | The worker's `recipe_published` message (`published.ts`, #311); `POST /v1/pending-sends/:uploadId/published` for the sender | Only the sender on the route. Supabase's took the family code; the pipeline needs no call now |
 | `POST /events` (signed in) | `POST /v1/events` | `start_s` is `startS` |
 | `GET /favorites`, `POST /favorites` | same under `/v1` | The POST no longer returns the whole list: read `GET /v1/favorites` after it |
 | `GET /me/recipe-stats` | `GET /v1/me/recipe-stats` | `{stats, nextCursor}` |
@@ -156,6 +156,7 @@ Quote rotation reads `push_log.quote_key` for 15 days, leaving out pushes that w
 | `questions.read_follow_up`, `read_share` | The read is noted once, by a conditional update |
 | `story_cards.write` | Writes only while a card is due, so a repeat finds the card already matching and calls no model |
 | `messages.hourly`, `nudge_family`, `recap_family` | Dedupe keys |
+| `recipe_published` (the worker's, in `jobs/tasks.ts`; Messages' part in `published.ts`) | The pending send's claim and messages are one transaction; a follow-up's translation saves once; `filmed` dedupes on its recipe |
 | `messages.daily` | Prunes old pushes and marks day-old uploads, a batch at a time |
 
 ## Story cards
@@ -219,6 +220,7 @@ The live-updates draft (`claude/aws-live`) plugs in here, and I built no subscri
 37. **A recipe that isn't ready is its cook's alone** (Caleb, Nov 1; `recipeFor` in `recipes/read.ts`). By its id, to anyone else, it's a missing recipe: asking in cook mode, the photo note and a message naming it are 404 "That recipe isn't here anymore.", its questions list empty, and a question on it is a 404 to another cook. Asking, the photo note and naming it in a message need a finished recipe, so they're refused to its cook too. Convex took any family recipe by id.
 38. **A made-up `libraryId` is a 404 now** (`checkDish` in `library.ts`). The media CDN reads S3 with `s3:GetObject` alone, so a missing `recipe.json` answers 403, which now reads as missing, like a 404. The family's own ready recipe is found by its row first, because the worker on AWS writes its `recipe.json` in the attempt's folder, not at `<id>/recipe.json`. A 5xx or no answer still can't say, isn't kept, and doesn't hold up a send.
 39. **A share's `recipeUrl` and a push's dish read the dish's real `recipe.json`** (`recipeJsonKey` in `recipes/read.ts`): the family's ready recipe's own key, as `GET /v1/recipes/:id` links it, else `<libraryId>/recipe.json`, the only place Supabase looked. A recipe that isn't ready is never used.
+40. **A pending send goes when the recipe's publish says so,** from the jobs table (#311), not the signer's job file. Only the recording's cook's list goes: a register for an upload whose job is another cook's is 409 `conflict`, and a list someone else registered before the job existed never goes. Supabase let anyone in the family register or deliver one.
 
 ### Against SYSTEM-DESIGN.md
 
@@ -256,7 +258,7 @@ These tables are read-only here. Each writes nothing today, and each needs its o
 3. **`x-tz` wrote `people.tz` on every call.** It isn't stored here. `GET /v1/table` reads the header for that request, and `POST /v1/push-tokens` stores a zone on the token, which pushes read when the person has none. **Recommendation:** the accounts area takes the header. Until then a kid's stored zone can go stale.
 4. **`x-profile-id` and a lent phone.** Supabase lets a phone write as a phone-less face, or read with no person at all. A session here is one person. Old builds can't go through `/v1` until the accounts step decides how an adapter speaks for them. **Recommendation:** an adapter-only path that takes a device key and a profile id, checks Supabase's owner rule, and calls these services directly.
 5. **`pushEvents` and system notes have callers elsewhere.** Since #311 the dish merge queues `push.dish_answered`, a claim (`accounts/links.ts`) queues `joined` through `queueJoined`, and a published job made for a request card queues `push.dish_filmed` (`pushEvents.ts`). `push.dish_requested` waits for card-making from a craving link (DISH-MIGRATION.md), and `postSystemNote` for accounts' "Sam joined.".
-6. **`POST /v1/pending-sends/:uploadId/published` is the sender's now, and the worker has no route yet.** **Recommendation:** when jobs move, the worker calls `deliverPending()` with no person.
+6. ~~**The worker had no way to deliver a pending send.**~~ **Done in #311:** its `recipe_published` message delivers it, from the job's cook only, and ties `pending_sends.job_id`.
 
 ## Account deletion
 

@@ -133,7 +133,11 @@ A story card is one AI sentence that introduces a shared recipe to neighbors, wi
 
 1. Send a dish: `POST /v1/send-recipe {libraryId, note?, to: "everyone" | [personId, …]}` with a key. It answers `{sent: [{personId, threadId, messageId}]}`: one `recipe` message in each pair, and a `recipe` push each.
 2. A recording on its way: `POST /v1/pending-sends {uploadId, recipientIds, helloKey?, helloDurationS?}` with a key (JOBS.md, flow 1, step 6). Sending again for the same `uploadId`, with a new key, replaces the list and the hello voice note.
-3. Delivery: `POST /v1/pending-sends/:uploadId/published {libraryId}`, by the sender, answers `{delivered}` (`already: true` if it went before). Each recipient gets the `recipe` message, then the hello after it, in their pair. Nothing on AWS calls this when a recipe is done (open item 9).
+3. Delivery is the server's: when the recipe is ready (the worker's publish, or `POST /v1/test/recipe {jobId}` on staging), each recipient still in the family gets what send-recipe sends, the `recipe` message with the dish's `libraryId`, then the hello after it, in their pair, and one `recipe` push. Once, however often the publish's message comes. Then the send is done, and registering it again is 409 `already_delivered`.
+4. Registered after the recipe is out: it goes at once, and the register answers `{ok: true, delivered}`.
+5. Only the recording's cook sends it. Once a job has the upload, a register by anyone else is 409 `conflict`, and a list someone else registered first never goes.
+6. A recording that never finishes (stopped, failed, still processing) delivers nothing, and the send stays as it is.
+7. `POST /v1/pending-sends/:uploadId/published {libraryId}`, by the sender, is still there and needn't be called: after a delivery it answers `{delivered: 0, already: true}`.
 
 ### 11. Hearts, stats, the table and the recap
 
@@ -347,7 +351,7 @@ Code: `service.ts` (`postcard`, `sendToPerson`, `madeMyDish`), `photoNote.ts`, `
 
 ### Share links, sending a recipe, recordings on their way
 
-Code: `activity.ts`, `service.ts` (`sendRecipe`, `deliverRecipe`), `api/src/sealed.ts`.
+Code: `activity.ts`, `service.ts` (`sendRecipe`, `deliverRecipe`), `published.ts` (delivery on the recipe's publish), `api/src/sealed.ts`.
 
 | Route | Who | Body | Answer |
 |---|---|---|---|
@@ -362,7 +366,7 @@ Code: `activity.ts`, `service.ts` (`sendRecipe`, `deliverRecipe`), `api/src/seal
 | `invalid` (400) | All but open | `field`: `libraryId`, `note`, `to` (none left once you're taken out), `uploadId`, `recipientIds`, `helloDurationS` | A bug |
 | `not_found` (404) | All | A dish that isn't there; someone not in the family; the hello not usable; on open, any bad token | Drop it. On open: "This link doesn't work anymore." |
 | `rate_limited` (429) | Open | 120 per 10 minutes per address | Wait `retry-after` |
-| `conflict` (409) | Pending send | That `uploadId` is someone else's | A bug |
+| `conflict` (409) | Pending send | That `uploadId` is someone else's: another person's list, or another cook's recording | A bug |
 | `already_delivered` (409) | Pending send | "That recipe was already delivered." | Stop |
 | `forbidden` (403) | Published | "Only whoever recorded this can send it." | A bug |
 | `idempotency_conflict` (409) | Keyed writes | A reused key | A bug |
@@ -385,7 +389,7 @@ Code: `activity.ts`, `retention.ts`, `table.ts`, `recap.ts`. "My dishes" are the
 
 ### Push tokens
 
-Code: `pushTokens.ts`, `push.ts`, `pushRules.ts`, `pushData.ts`, `expo.ts`, `tasks.ts`.
+Code: `pushTokens.ts`, `push.ts`, `pushRules.ts`, `pushData.ts`, `pushEvents.ts` (`answered`, `craving`, `filmed`, `joined`), `expo.ts`, `tasks.ts`.
 
 | Route | Body | Answer | Own codes |
 |---|---|---|---|
@@ -439,7 +443,7 @@ From APP-BACKEND-INVENTORY.md on `main` (`b16061e06`): its "Messages, questions 
 | Supabase `POST /shares` | `shareLink.ts:getShareLink` | `POST /v1/shares {libraryId}` |
 | Supabase `GET /shares/:id` | `handoff.ts:peekShare` | `POST /v1/shares/open {token}`, public: the token stays out of logs |
 | Supabase `POST /pending-sends` | `uploads.ts:ensurePendingSend` | `POST /v1/pending-sends`, with a key. `job_id` is `uploadId` |
-| Supabase `POST /jobs/:job_id/published` (defined, never called) | `api.ts:jobPublished` | `POST /v1/pending-sends/:uploadId/published {libraryId}`, the sender only |
+| Supabase `POST /jobs/:job_id/published` (defined, never called) | `api.ts:jobPublished` | Not needed: the recipe's publish delivers it (flow 10). `POST /v1/pending-sends/:uploadId/published {libraryId}` stays, the sender only |
 | Supabase `POST /events` | `messaging.ts:cooked`, `logViewed` | `POST /v1/events` |
 | Supabase `GET /favorites`, `POST /favorites` | `favorites.ts:load`, `send` | `GET /v1/favorites`: `{libraryIds, nextCursor}`. `POST /v1/favorites` no longer returns the list |
 | Supabase `GET /me/recipe-stats` | `stats.ts:load` | `GET /v1/me/recipe-stats`: `{stats, nextCursor}` |
@@ -468,7 +472,7 @@ From APP-BACKEND-INVENTORY.md on `main` (`b16061e06`): its "Messages, questions 
 | No `EXPO_ACCESS_TOKEN` | The api calls Expo with no token. This project's Expo needs none (V2-LINKING.md: Supabase's live pushes go without one), so staging's pushes should reach a real phone whose token was registered on staging. Not tried |
 | No `ANTHROPIC_API_KEY` on the api, unless a `real_ai` window | The photo note is 503 `not_set_up`. `textForCook` never lands, so the cook reads English. A share answer reads "unclear". A story card would be the plain line |
 | `DISH_FAKE_AI=1` | A voice answer's `answer.transcript` is the fake "Two big spoons of ketchup." (empty under 100 bytes). For a cook whose language isn't English, `answer.translation` is "(English) " and her words |
-| `worker` `desired_count = 0` | No recipe is ever `ready` (JOBS.md), so no pending send delivers, and a kid's `GET /v1/recipes` is `[]` |
+| `worker` `desired_count = 0` | No recipe is ever `ready` (JOBS.md) but through `POST /v1/test/recipe`, and a kid's `GET /v1/recipes` is `[]` until then. A pending send goes when the test recipe finishes its job |
 | `RECIPE_WRITES=on` (#300) | A cook's `POST /v1/jobs` makes a "processing" card with a `recipeId`, and `POST /v1/test/recipe` (#303) makes or finishes a ready one |
 | `MEDIA_BASE_URL` is staging's own media host, with no `library.json` and no library recipes (JOBS.md, open item 15) | `dish-stats` and `hearts/recent` answer empty. `GET /v1/recap?month=2026-11` answers 503 `provider_down`; any earlier month is `{empty: true}`. A test recipe from `POST /v1/test/recipe` is read from its own `recipe.json`, so its pushes name it, its postcard finds its cook, and its cook can take out a note. Any other dish: push copy says "A new recipe", a postcard in the circle finds no cook to push (in a pair it goes to the other person if they're a cook), and its cook can't take out a note by being its cook |
 | The `private` bucket's CORS allows PUTs only from staging's web site and `localhost:3105` | Voice notes and photos upload from an iPhone build only, not the app's web build on 8081 to 8083 |
@@ -480,6 +484,7 @@ From APP-BACKEND-INVENTORY.md on `main` (`b16061e06`): its "Messages, questions 
 - **Library dishes:** since #305 a `libraryId` must exist: the family's own ready recipe (found by its row), or a file on the media host. Staging's media host has no library recipes, so on staging use the `libraryId` of a test recipe from `POST /v1/test/recipe`; anything else is 404 `not_found`.
 - **Pushes:** use a TestFlight or dev build, register its token with `POST /v1/push-tokens`, and send from a second test person. Expect English words, and a test recipe's own title for its dish name. `joined`: claim a test card's two sides as two test people. `filmed`: make a job with `dishAskId` for a card asked of the cook, then `POST /v1/test/recipe {jobId}`.
 - **Models:** the photo note, the cook's translation and the share reading need a `real_ai` window, with Caleb's OK, since it costs money.
+- **Pending sends:** make a job (JOBS.md, flow 1), register a send for its `uploadId`, then `POST /v1/test/recipe {jobId}`: the recipients' pairs get the recipe and the hello within seconds.
 - **Share asks:** without a `real_ai` window every answer reads `unclear`, so after one answer that dish's asks are held off for 24 hours (409 `declined`). To ask again sooner on staging, use another test recipe.
 - **The nudge and the recap** go only to people with a registered token: a kid with a pair worth a note gets the nudge Sunday at 17:00 in their zone; the first recap push would be Dec 1, for November, and needs the library.
 
@@ -495,7 +500,7 @@ Owners: **API** is the AWS backend chat, **App** is App screens & recording, **C
 6. ~~The `answered`, `craving`, `filmed` and `joined` pushes had words and handlers but nothing on AWS sent them.~~ **Fixed in #311** for three, as on Convex (flow 9): the dish merge queues `answered` with her version, or when her clips go without one; a claim queues `joined` in its own transaction; and a job made for a request card (`dishAskId`, new on `POST /v1/jobs`) queues `filmed` when its recipe is ready, never before. `craving` still has no caller: it's queued where a kid makes a card from a craving link, and that isn't on AWS yet (DISH-MIGRATION.md). The app sends `dishAskId` from `record.tsx` when filming from a request. Cook-mode questions and answers still push nothing, as on Convex (open item 10). **API**, then **App** for `dishAskId`
 7. ~~`library().exists` counted only a 404 as missing.~~ **Fixed in #305:** S3's 403 behind the CDN reads as missing, so a made-up `libraryId` is 404 `not_found` on sends, send-recipe, shares, hearts and events; a 5xx or no answer still can't say, isn't cached, and doesn't hold up a send; the family's own ready recipe is found by its row first. **API**
 8. ~~Routes took another cook's processing recipe by id.~~ **Fixed in #305:** every route that takes a recipe id goes through one rule: to anyone but its cook, a recipe that isn't ready reads as a missing id (Caleb, Nov 1). Cook-mode ask, the photo note and `POST /v1/messages` with `recipeId` need it ready, from its cook too. **API**
-9. Nothing delivers a pending send when a recipe is done: `POST /v1/pending-sends` checks only the old pipeline's job file, and nothing calls `/published` (JOBS.md, open item 2). **API**
+9. ~~Nothing delivered a pending send when a recipe was done.~~ **Fixed in #311:** the worker's `recipe_published` message delivers it (`messages/published.ts`), and so does `POST /v1/test/recipe {jobId}`: what send-recipe sends, to each recipient once, the send marked delivered and tied to its job. A register after the publish delivers at once, from the jobs table, where it read the old signer's job file. Only the recording's cook's list goes (flow 10). **API**
 10. Neither a cook-mode question nor its answer sends a push, as on Convex, so the cook learns of it only on Home and the kid only in cook mode: say whether 1.1 wants those pushes. **Caleb**
 11. MESSAGES-MIGRATION.md, LIVE-UPDATES.md and a comment in `messages/routes.ts` disagree with the code in places (which writes honor a key, `askFollowUps` and `postSystemNote` callers, the infra still needed, `live_off` meaning "back to Convex"): bring them up to date. **API**
 
