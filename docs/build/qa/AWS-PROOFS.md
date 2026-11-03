@@ -118,6 +118,14 @@ The rules:
 
 To check what the profile resolves to: `cd app && npx eas-cli config --profile aws-staging -p ios`.
 
+The Convex and voice URLs carried over from `production` stay set, but with the switch on the app reads nothing from
+Convex. The voice URL is used only by homie, which is off (`HOMIE_ON = false`). Where the voice service runs for 1.1 is
+still open.
+
+The build lands in TestFlight under version 1.0.0, like builds 7 and 9, because `app.json` is at 1.0.0 and the runtime
+follows the app version. Uploading a build doesn't attach it to the review, and nobody selects it. Calling it 1.1.0 would
+be a version bump in `app.json`, which changes the runtime for every channel. That's the Master Agent's call.
+
 What the phone proves, which the web build can't:
 - **Filming and uploading from the device.** One clip in a single PUT, and one over 20 MiB in parts, each ending in a
   finished recipe. Use `POST /v1/test/recipe {jobId}`: staging runs no worker.
