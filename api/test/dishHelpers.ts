@@ -25,7 +25,7 @@ export const MIN = 60_000;
 // S3
 
 export type FakeStore = ObjectStore & {
-  objects: Map<string, { bytes: Uint8Array; contentType: string }>;
+  objects: Map<string, { bytes: Uint8Array; contentType: string; cacheControl?: string }>;
   put(url: string, bytes: Uint8Array, contentType: string): void;
   removed: string[];
   failRemoves: boolean;
@@ -39,7 +39,8 @@ export type FakeStore = ObjectStore & {
 };
 
 export function fakeStore(): FakeStore {
-  const objects = new Map<string, { bytes: Uint8Array; contentType: string }>();
+  const objects = new Map<string, { bytes: Uint8Array; contentType: string; cacheControl?: string }>();
+  let versions = 0;
   const store: FakeStore = {
     objects,
     removed: [],
@@ -90,6 +91,11 @@ export function fakeStore(): FakeStore {
     },
     async removeMany(keys) {
       for (const key of keys) await store.remove(key);
+    },
+    async write(key, bytes, contentType, cacheControl) {
+      objects.set(key, { bytes, contentType, ...(cacheControl ? { cacheControl } : {}) });
+      versions += 1;
+      return { version: `v${versions}` }; // a versioned bucket's id for this copy
     },
   };
   return store;

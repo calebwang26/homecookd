@@ -15,6 +15,12 @@ export async function namesOf(q: Queryable, ids: string[]): Promise<Map<string, 
   return new Map(rows.map((row) => [row.id, row.name]));
 }
 
+/** What a recipe.json says about its cook (pipeline/queue_db.py _context): her name, what the family calls her, and the language she cooks in. */
+export async function cookOf(q: Queryable, personId: string): Promise<{ name: string; relation: string | null; language: string | null } | null> {
+  const { rows } = await q.query(`select name, relation, language from people where id = $1`, [personId]);
+  return rows[0] ?? null;
+}
+
 export async function languageOf(q: Queryable, personId: string): Promise<string | null> {
   const { rows } = await q.query(`select language from people where id = $1`, [personId]);
   return rows[0]?.language ?? null;

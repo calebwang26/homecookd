@@ -61,6 +61,13 @@ variable "services" {
     condition     = var.environment != "production" || alltrue([for s in var.services : !contains(s.secrets, "TEST_SIGNIN_KEY") && !contains(keys(s.env), "TEST_SIGNIN_KEY")])
     error_message = "TEST_SIGNIN_KEY is staging's only: in production it would let anyone with the key sign in without Apple."
   }
+  # Staging's small video parts, so a phone can test them with a small file (api/src/modules/jobs/uploads.ts partSettings). Production keeps 5 GiB and 64 MiB.
+  validation {
+    condition = var.environment != "production" || alltrue([for s in var.services : alltrue([
+      for name in ["JOBS_SINGLE_PUT_MAX_BYTES", "JOBS_PART_BYTES"] : !contains(s.secrets, name) && !contains(keys(s.env), name)
+    ])])
+    error_message = "JOBS_SINGLE_PUT_MAX_BYTES and JOBS_PART_BYTES are staging's only: production's videos go up in one PUT to 5 GiB, then in 64 MiB parts."
+  }
 }
 
 variable "secret_names" {

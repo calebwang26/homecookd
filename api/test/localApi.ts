@@ -88,6 +88,10 @@ const store: ObjectStore = {
   async removeMany(keys) {
     for (const key of keys) objects.delete(key);
   },
+  async write(key, bytes, contentType) {
+    objects.set(key, { bytes, contentType });
+    return { version: null };
+  },
 };
 useObjectStore(store);
 

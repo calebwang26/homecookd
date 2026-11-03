@@ -34,6 +34,11 @@ export interface ObjectStore {
   list(prefix: string, max: number): Promise<string[]>;
   /** Throws if S3 refused any of them, without naming them: a key can hold a slug of what a cook typed. */
   removeMany(keys: string[]): Promise<void>;
+  /**
+   * A small file the api makes itself, in one request. Only staging's test recipe does (recipes/testRecipe.ts): a family's own files never pass through here.
+   * `version` is S3's id for this copy in a versioned bucket, the worker's `?v=` (pipeline/queue_aws.py).
+   */
+  write(key: string, bytes: Uint8Array, contentType: string, cacheControl?: string): Promise<{ version: string | null }>;
 }
 
 /**
@@ -150,6 +155,10 @@ export function s3Store(options: { bucket: string; client?: S3Client; now?: () =
         if (out.Errors?.length) throw new Error(`S3 refused ${out.Errors.length} deletes (${out.Errors[0].Code ?? "no code"})`);
       }
     },
+    async write(key, bytes, contentType, cacheControl) {
+      const out = await send(new PutObjectCommand({ Bucket, Key: key, Body: bytes, ContentType: contentType, ...(cacheControl ? { CacheControl: cacheControl } : {}) }));
+      return { version: out.VersionId ?? null };
+    },
   };
 }
 
@@ -188,7 +197,7 @@ export function useUploadStore(next: ObjectStore | undefined): void {
 
 let media: ObjectStore | undefined;
 
-/** The `media` bucket: published recipes, behind the CDN. The api only deletes here, for the outside purge and the sweep. */
+/** The `media` bucket: published recipes, behind the CDN. The api deletes here, for the outside purge and the sweep, and writes only staging's test recipe. */
 export function mediaStore(): ObjectStore {
   if (!media) {
     const bucket = process.env.MEDIA_BUCKET?.trim();
