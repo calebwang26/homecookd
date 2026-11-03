@@ -212,6 +212,16 @@ export const messages = {
   photoNote: (recipeId: string, photoKey: string, as?: string | null) =>
     request<{ draft: string; aiDrafted: true }>('/v1/messages/photo-note', { auth: 'session', as, body: { recipeId, photoKey }, timeoutMs: 100_000 }),
 
+  // Share asks (MESSAGES.md, "Share asks"): anyone asks a dish's cook to put it on the map; the cook's own tap shares it.
+  shareAsk: (recipeId: string, as?: string | null) => request<{ result: 'asked' | 'shared' }>('/v1/share-requests', { auth: 'session', as, body: { recipeId } }),
+  shareDishes: (as?: string | null) =>
+    all('dishes', (cursor) =>
+      request<Page<'dishes', { recipeId: string; dish: string; cookName: string; mine: boolean; shared: boolean; asked: boolean; notNowAt: number | null }>>(
+        `/v1/share-requests/dishes${q({ cursor })}`,
+        { auth: 'session', as },
+      ),
+    ),
+
   // Shares, sending a recipe, recordings on their way.
   share: (libraryId: string, as?: string | null) => request<{ token: string; url: string }>('/v1/shares', { auth: 'session', as, body: { libraryId } }),
   openShare: (token: string) =>

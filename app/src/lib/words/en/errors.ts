@@ -55,4 +55,6 @@ export const ERRORS = {
   'errors.not_a_guest': 'Only the host and their guests can invite friends.',
   'errors.not_asked_of_you': 'Someone else was asked this one.',
   'errors.live_off': 'This isn’t updating right now.',
+  // A share ask within a day of the cook's no (MESSAGES.md, "Share asks"); {name} is the dish's cook.
+  'errors.share_declined': '{name} said not now. Ask again tomorrow.',
 };

@@ -1015,6 +1015,7 @@ const words: Translation = {
   'errors.not_a_guest': 'ਸਿਰਫ਼ ਮੇਜ਼ਬਾਨ ਅਤੇ ਉਨ੍ਹਾਂ ਦੇ ਮਹਿਮਾਨ ਹੀ ਦੋਸਤਾਂ ਨੂੰ ਸੱਦ ਸਕਦੇ ਹਨ।',
   'errors.not_asked_of_you': 'ਇਹ ਗੱਲ ਕਿਸੇ ਹੋਰ ਨੂੰ ਪੁੱਛੀ ਗਈ ਸੀ।',
   'errors.live_off': 'ਇਹ ਹੁਣੇ ਅੱਪਡੇਟ ਨਹੀਂ ਹੋ ਰਿਹਾ।',
+  'errors.share_declined': '{name} ਨੇ ਕਿਹਾ ਹੁਣੇ ਨਹੀਂ। ਕੱਲ੍ਹ ਫਿਰ ਪੁੱਛ ਲੈਣਾ ਜੀ।',
 };
 
 export default words;

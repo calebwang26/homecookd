@@ -1015,6 +1015,7 @@ const words: Translation = {
   'errors.not_a_guest': 'ఆతిథ్యం ఇచ్చేవారు, వారి అతిథులు మాత్రమే స్నేహితులను ఆహ్వానించగలరు.',
   'errors.not_asked_of_you': 'ఇది వేరే వారిని అడిగారు.',
   'errors.live_off': 'ఇది ప్రస్తుతం అప్‌డేట్ అవ్వడం లేదు.',
+  'errors.share_declined': '{name} ఇప్పుడు వద్దు అన్నారు. రేపు మళ్ళీ అడగండి.',
 };
 
 export default words;

@@ -1015,6 +1015,7 @@ const words: Translation = {
   'errors.not_a_guest': 'Só o anfitrião e seus convidados podem convidar amigos.',
   'errors.not_asked_of_you': 'Essa pergunta foi feita para outra pessoa.',
   'errors.live_off': 'Isto não está atualizando agora.',
+  'errors.share_declined': '{name} disse que agora não. Peça de novo amanhã.',
 };
 
 export default words;

@@ -204,6 +204,63 @@ try {
     assert.deepEqual([first.counted, again.counted], [true, false]);
   });
 
+  await check('a share ask: the kid asks, the cook sees it in her open questions, only she may answer', async () => {
+    phone(kid);
+    const dishes = await M.messages.shareDishes();
+    assert.ok(dishes.some((d) => d.recipeId === recipe._id && !d.mine && !d.shared));
+    assert.deepEqual(await M.messages.shareAsk(recipe._id), { result: 'asked' });
+    assert.deepEqual(await M.messages.shareAsk(recipe._id), { result: 'asked' }, 'safe to repeat');
+    phone(cook);
+    const ask = (await M.messages.openQuestions()).find((q) => q.kind === 'share' && q.recipeId === recipe._id);
+    assert.ok(ask, 'in her open questions');
+    phone(cook2);
+    assert.equal((await refused(M.messages.answer(ask.id, { text: 'Yes' }, key()))).code, 'forbidden', 'another cook may not answer');
+    phone(cook);
+    await M.messages.answer(ask.id, { text: 'Not now.' }, key());
+    // No model on staging reads her answer, so it counts as "unclear", which is a not-now: asking again is declined.
+    await new Promise((r) => setTimeout(r, 4000));
+    phone(kid);
+    const e = await refused(M.messages.shareAsk(recipe._id));
+    assert.equal(e.code, 'declined');
+    return 'her not-now: declined for a day';
+  });
+
+  await check("the cook's own tap shares her dish", async () => {
+    phone(cook);
+    assert.deepEqual(await M.messages.shareAsk(recipe._id), { result: 'shared' });
+    phone(kid);
+    assert.ok((await M.messages.shareDishes()).some((d) => d.recipeId === recipe._id && d.shared));
+  });
+
+  await check('a recording on its way: its recipe reaches the kid when the job is published', async () => {
+    phone(cook);
+    const J = await import(pathToFileURL(join(root, 'src/lib/aws/jobs.ts')).href);
+    const bytes = randomBytes(64 * 1024);
+    const u = await J.jobs.newUpload([{ contentType: 'video/mp4', size: bytes.length, durationS: 3 }], key());
+    const job = await J.jobs.create({ uploadId: u.uploadId, title: `On its way ${run}` });
+    await M.messages.pendingSend({ uploadId: u.uploadId, recipientIds: [kid.profile_id] }, key());
+    const put = await fetch(u.uploads[0].url, { method: 'PUT', headers: u.uploads[0].headers, body: bytes });
+    assert.equal(put.status, 200);
+    await J.jobs.complete(u.uploadId);
+    const res = await fetch(`${BASE}/v1/test/recipe`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-signin-key': KEY, authorization: `Bearer ${(await A.accounts.session()).sessionToken}` },
+      body: JSON.stringify({ jobId: job.jobId }),
+    });
+    assert.equal(res.status, 201);
+    const done = await J.recipes.get(job.recipeId);
+    phone(kid);
+    let got = null;
+    for (let i = 0; i < 10 && !got; i++) {
+      const pairWithCook = (await M.messages.threads()).find((t) => t.kind === 'pair' && t.other.id === cook.profile_id);
+      const msgs = pairWithCook ? await M.messages.thread(pairWithCook.id) : [];
+      got = msgs.find((m) => m.kind === 'recipe' && m.libraryId === done.libraryId);
+      if (!got) await new Promise((r) => setTimeout(r, 2000));
+    }
+    assert.ok(got, 'a recipe message for the published dish in the kid\'s pair');
+    return done.title;
+  });
+
   await check('a push token registers and goes, as the phone\'s own person', async () => {
     phone(kid);
     const token = `ExponentPushToken[test-${run}]`;

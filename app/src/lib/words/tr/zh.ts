@@ -1015,6 +1015,7 @@ const words: Translation = {
   'errors.not_a_guest': '只有主人和受邀的客人才能邀请朋友。',
   'errors.not_asked_of_you': '这个问题问的是别人。',
   'errors.live_off': '这里现在不会更新。',
+  'errors.share_declined': '{name}说现在不方便。明天再问问吧。',
 };
 
 export default words;

@@ -1015,6 +1015,7 @@ const words: Translation = {
   'errors.not_a_guest': 'ફક્ત યજમાન અને તેમના મહેમાનો જ મિત્રોને બોલાવી શકે.',
   'errors.not_asked_of_you': 'આ સવાલ બીજા કોઈને પૂછાયો હતો.',
   'errors.live_off': 'આ અત્યારે અપડેટ થતું નથી.',
+  'errors.share_declined': '{name} એ હમણાં ના પાડી. કાલે ફરી પૂછજો.',
 };
 
 export default words;

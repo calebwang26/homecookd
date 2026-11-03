@@ -1015,6 +1015,7 @@ const words: Translation = {
   'errors.not_a_guest': 'सिर्फ़ मेज़बान और उनके मेहमान ही दोस्तों को न्योता दे सकते हैं।',
   'errors.not_asked_of_you': 'यह सवाल किसी और से पूछा गया था।',
   'errors.live_off': 'यह अभी अपडेट नहीं हो रहा है।',
+  'errors.share_declined': '{name} ने कहा, अभी नहीं। कल फिर से पूछिए।',
 };
 
 export default words;

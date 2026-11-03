@@ -1015,6 +1015,7 @@ const words: Translation = {
   'errors.not_a_guest': 'لا يدعو الأصدقاءَ إلا المضيفُ وضيوفه.',
   'errors.not_asked_of_you': 'هذا السؤال موجَّه إلى شخص آخر.',
   'errors.live_off': 'لا يتحدّث هذا الآن.',
+  'errors.share_declined': 'ردّ {name}: ليس الآن. يمكنك السؤال مرة أخرى غدًا.',
 };
 
 export default words;

@@ -1015,6 +1015,7 @@ const words: Translation = {
   'errors.not_a_guest': '주최하신 분과 그 손님만 친구를 초대할 수 있어요.',
   'errors.not_asked_of_you': '이건 다른 분께 드린 질문이에요.',
   'errors.live_off': '지금은 새로 고쳐지지 않고 있어요.',
+  'errors.share_declined': '{name}에게서 \'지금은 말고\'라는 답이 왔어요. 내일 다시 물어보세요.',
 };
 
 export default words;
