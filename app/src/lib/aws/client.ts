@@ -32,6 +32,8 @@ export type RequestOpts = {
   deviceKey?: string | null;
   /** For writes that create what someone wrote; the same key repeats safely. */
   idempotencyKey?: string;
+  /** Extra headers a route reads (GET /v1/table's x-tz). */
+  headers?: Record<string, string>;
   timeoutMs?: number;
   signal?: AbortSignal;
 };
@@ -118,6 +120,7 @@ async function once<T>(path: string, o: RequestOpts, rid: string, token: string 
     headers.authorization = `Bearer ${token}`;
   }
   if (o.idempotencyKey) headers['idempotency-key'] = o.idempotencyKey;
+  if (o.headers) Object.assign(headers, o.headers);
 
   const controller = new AbortController();
   const onAbort = () => controller.abort();
