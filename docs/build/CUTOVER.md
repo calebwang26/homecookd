@@ -111,7 +111,7 @@ Likely to pass $300 a month (about $450-850 at 500 daily users), so it's Caleb's
   - A restore drill: RDS's backup restored to a new instance, row counts compared, then the copy deleted.
   - A deliberately killed api task: the other one answers, and a new one starts.
   - The load test at production's task size and count, over HTTPS, with a burst that runs out the pool: no 500s, and autoscaling goes from 2 to 4 and back.
-  - The alarms reach a person: confirm the alerts topic's email subscription, fire one alarm, and see the email arrive.
+  - The alarms reach a person: confirm the alerts topic's email subscription, fire one alarm, and see the email arrive. Apple reviews report and block, so one of them is `homecookd-production-community-report` (`aws cloudwatch set-alarm-state --alarm-name homecookd-production-community-report --state-value ALARM --state-reason "test"`), and its email says to run the reports script.
   - `node web/scripts/qa/dish-api-e2e.mjs` against production, with its made-up dish. Production ignores `DISH_FAKE_AI`, so this uses real models at a small cost.
   - Once step 5 is live: a real video job on Caleb's own footage, measured for CPU, memory, disk and minutes. It sets the worker's size, and Fargate or EC2 (WORKER-MIGRATION.md, "How to measure a real job").
 - **Back:** nothing depends on it yet. Remove the DNS records, turn off the database's deletion protection (`db_protected`), and `terraform destroy`.
@@ -159,7 +159,7 @@ Each area's switch is on in production from step 6 and stays on through step 8's
 | Recipes, jobs, recordings | `RECIPE_WRITES=on`, `MEDIA_BASE_URL` (the env module sets it from the media address), `s3:ListBucket` on `uploads`, the hourly `jobs.sweep`, the worker's queue entry point and a count of 1 or more | Recipe writes also need `sync_copies.moved_at`, which no sync will set (step 1) |
 | Messages, questions, push, story cards | `EXPO_ACCESS_TOKEN`, `messages.hourly`, `messages.daily` | |
 | Live updates | `LIVE_OFF` unset | Topics other than `jobs` (step 1) |
-| Community | The daily `community.remind_open`, and the reports runbook (COMMUNITY-MIGRATION.md, "The team's reports") | The writes that waited for the sync (step 1) |
+| Community | The daily `community.remind_open`, the reports runbook (COMMUNITY-MIGRATION.md, "The team's reports"), and the report alarms, built in the env module (#323): a new report or block emails the alerts topic within minutes, and reports open past 12 hours email once a day | Production's alerts email must be confirmed, and a report alarm's email seen to arrive (step 6, "The alarms reach a person"). The writes that waited for the sync (step 1) |
 | Kid's web flow | The site's values (step 10), the dish budget, the hourly `dish.sweep` | The craving routes (step 1) |
 | Everything | `OVERLOAD_SHED=on`, `platform.prune`, Sentry's DSNs once step 5 names Sentry | |
 | Never in production | `SYNC_MODE` (the sync), `TEST_SIGNIN_KEY` (Terraform refuses it), `APP_WEB_ORIGINS` | |
