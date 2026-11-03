@@ -1,9 +1,15 @@
 // convex/safety.test.ts on the new api: a report hides a dish or dinner from the reporter's family at once and from everyone once two families reported it; a block works both ways
 // and refuses asks; the filter keeps bad words off the map and lets dish names in any language through. Titles are Convex's where the meaning is the same.
 import assert from "node:assert/strict";
+import { existsSync, readFileSync } from "node:fs";
+import { dirname, join as joinPath } from "node:path";
+import { Writable } from "node:stream";
 import { after, test } from "node:test";
+import { fileURLToPath } from "node:url";
 import type { FastifyInstance } from "fastify";
+import { buildApp } from "../src/app.js";
 import { db } from "../src/db.js";
+import { sendDue } from "../src/outbox.js";
 import { flagged } from "../src/modules/dish/moderation.js";
 import { WORDS_POSTABLE, WORDS_SHAREABLE } from "../src/modules/community/words.js";
 import { openReports, reviewReport } from "../src/modules/community/reports.js";
@@ -47,7 +53,7 @@ test("a report hides the dish and its dinner from the reporter's family only, at
   like(rows[0], { kind: "recipe", target_id: poha, target_family_id: rajani.familyId, reporter_family_id: serene.familyId, reporter_person_id: serene.personId, reason: "rude", status: "open" });
   // The team hears, with no family content, through the outbox.
   const { rows: sent } = await db().query("select payload from outbox");
-  assert.deepEqual(sent.map((r) => r.payload), [{ task: "community.report_alert", kind: "recipe", reason: "rude" }]);
+  assert.deepEqual(sent.map((r) => r.payload), [{ task: "community.report_alert", kind: "recipe", targetId: poha, reason: "rude" }]);
 });
 
 test("reports from two families hide a dish and a dinner from everyone else until the team reviews them", { skip }, async () => {
@@ -339,6 +345,87 @@ test("the team hears of a report with no family content, and a daily reminder wh
     globalThis.fetch = real;
     delete process.env.REPORT_ALERT_URL;
   }
+});
+
+// On AWS REPORT_ALERT_URL is unset, so these lines are how a report reaches a person: a log alarm counts each and emails the alerts topic (infra/modules/env/alerts.tf).
+const REPORT_LINE = "ALERT community report needs review";
+const OPEN_LINE = "ALERT community reports still open";
+
+/** Production's logger, as index.ts hands it to the queue's consumer, written where the test can read it. */
+function productionLog() {
+  const raw: string[] = [];
+  const app = buildApp({ logStream: new Writable({ write: (chunk, _enc, done) => (raw.push(String(chunk)), done()) }) });
+  const lines = () => raw.join("").split("\n").filter(Boolean).map((l) => JSON.parse(l));
+  return {
+    log: app.log as never,
+    alerts: () => lines().filter((l) => String(l.msg).startsWith("ALERT ")),
+    // Everything logged, without the machine's own name: a laptop's can hold a person's.
+    said: () => JSON.stringify(lines().map(({ hostname: _host, ...rest }) => rest)),
+  };
+}
+
+test("on AWS a report reaches the team as one log line an alarm counts: its kind, id and counts, and nothing else", { skip }, async () => {
+  const { t, rajani, serene, caleb } = await world();
+  assert.equal(process.env.REPORT_ALERT_URL, undefined, "as on AWS: no webhook");
+  const { handleMessage } = await import("../src/scheduled.js");
+  const out = productionLog();
+  const drain = async () => {
+    while ((await sendDue(db(), async (_queue, body) => handleMessage(body, out.log))) > 0);
+  };
+  const salik = await person(await family("Mian home"), "Salik", "kid");
+  const poha = await recipe(rajani, { sharedAt: 1 });
+
+  await ok(report(t, serene, "recipe", poha, "rude"));
+  await drain();
+  await ok(block(t, caleb, "recipe", poha)); // a block tells the team too, as a report of the family
+  await drain();
+  await ok(report(t, salik, "recipe", poha, "not_food"));
+  await drain();
+  const picked = out.alerts().map(({ level, msg, kind, targetId, families, open }) => ({ level, msg, kind, targetId, families, open }));
+  assert.deepEqual(picked, [
+    { level: 50, msg: REPORT_LINE, kind: "recipe", targetId: poha, families: 1, open: 1 },
+    { level: 50, msg: REPORT_LINE, kind: "family", targetId: rajani.familyId, families: 1, open: 2 },
+    { level: 50, msg: REPORT_LINE, kind: "recipe", targetId: poha, families: 2, open: 3 },
+  ]);
+  // An error, as the dish budget's line is, with only these fields: what review needs to find the item.
+  for (const line of out.alerts()) assert.deepEqual(Object.keys(line).filter((k) => !["level", "time", "pid", "hostname", "msg"].includes(k)).sort(), ["families", "kind", "open", "targetId"]);
+  // Never what the item is, who reported it, or why.
+  const all = out.said();
+  assert.ok(all.includes(REPORT_LINE));
+  const secrets = ["Kanda", "Poha", "Rajani", "Serene", "Caleb", "Salik", "Pawar", "Zhang", "Wang", "Mian", "rude", "not_food", "reason"];
+  for (const who of [serene, caleb, salik]) secrets.push(who.personId, who.familyId, who.token);
+  for (const word of secrets) assert.ok(!all.includes(word), word);
+});
+
+test("on AWS the daily reminder logs its line while a report stays open past 12 hours, and not when none is", { skip }, async () => {
+  const { t, rajani, serene } = await world();
+  const { handleMessage } = await import("../src/scheduled.js");
+  const out = productionLog();
+  const remind = () => handleMessage(JSON.stringify({ payload: { task: "community.remind_open" } }), out.log);
+
+  await remind(); // no reports at all
+  const poha = await recipe(rajani, { sharedAt: 1 });
+  await ok(report(t, serene, "recipe", poha, "rude"));
+  await remind(); // filed just now: nothing is stale yet
+  assert.deepEqual(out.alerts(), []);
+
+  await db().query("update reports set created_at = now() - interval '13 hours'");
+  await remind();
+  assert.deepEqual(out.alerts().map(({ level, msg, open }) => ({ level, msg, open })), [{ level: 50, msg: OPEN_LINE, open: 1 }]);
+  assert.ok(!out.said().includes(poha) && !out.said().includes("Poha"), "a count, not the item");
+
+  assert.equal(await reviewReport("recipe", poha, true), 1); // the team kept it: nothing open
+  await remind();
+  assert.equal(out.alerts().length, 1);
+});
+
+test("the alarms count exactly the api's lines", () => {
+  const alerts = joinPath(dirname(fileURLToPath(import.meta.url)), "..", "..", "infra", "modules", "env", "alerts.tf");
+  if (!existsSync(alerts)) return;
+  const tf = readFileSync(alerts, "utf8");
+  const pattern = (name: string) => /pattern\s*=\s*"(.*)"/.exec(tf.split(`resource "aws_cloudwatch_log_metric_filter" "${name}"`)[1] ?? "")?.[1];
+  assert.equal(pattern("community_report"), `\\"${REPORT_LINE}\\"`);
+  assert.equal(pattern("community_reports_open"), `\\"${OPEN_LINE}\\"`);
 });
 
 after(async () => {

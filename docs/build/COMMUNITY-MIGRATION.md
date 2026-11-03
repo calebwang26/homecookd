@@ -76,6 +76,15 @@ An adapter turns any refusal into `ConvexError(message)`. Where a 404 has no `me
 
 Convex's `npx convex run reports:open` and `reports:review` are now `api/src/reports.ts`, run as a one-off ECS task with the api's own image, task definition and network, as the migrations are. There's no route, and nothing new in IAM or Terraform. A report's alert ("Review: …") points here.
 
+**How a report reaches the team on AWS (Nov 2).** `REPORT_ALERT_URL` is unset on AWS, so `sendAlert`'s webhook never goes, as with the dish budget. Instead the api logs a line a log alarm counts (`api/src/modules/community/tasks.ts`, `infra/modules/env/alerts.tf`), and the alarm emails the env's alerts topic, `alert_email`:
+
+| When | Line (level 50, error) | Fields | Alarm | Email |
+|---|---|---|---|---|
+| Each report, and each block (a `family` report) | `ALERT community report needs review` | `kind`, `targetId`, `families` (how many families have it open), `open` (all open reports) | `homecookd-<env>-community-report`: 1 or more in 5 minutes | Within about 5 minutes |
+| The daily `community.remind_open` (16:00 UTC), while any report is open over 12 hours | `ALERT community reports still open` | `open` (how many are over 12 hours) | `homecookd-<env>-community-reports-open`: 1 or more in an hour | Once each day it finds one |
+
+So the email comes first, and its description says what to do: run `open` (below), then `review` each item. The line's `targetId` is the id `open` prints. Neither line holds what the item is, who reported it, or why. With `REPORT_ALERT_URL` set (not on AWS), the webhook still goes as before. Staging's two log filters wait for Caleb's hand apply, because `plan_check.py` holds `aws_cloudwatch_log_metric_filter` (the alarms alone may apply by themselves). Production gets both with its apply, and its alerts email must be confirmed (CUTOVER.md, "What production has on at launch").
+
 ```bash
 node dist/reports.js open                                             # what's open
 node dist/reports.js review <recipe|dinner|family> <targetId> keep    # or remove
@@ -108,7 +117,7 @@ The last command prints what the script said. A task takes about a minute to sta
 
 **Who ran it.** The task can't tell: every run has the api's role. CloudTrail's `RunTask` event names the login and holds the command. The task's log has one line for the run, with the action, kind, id, decision and how many it resolved (`"msg":"reports reviewed"`), and no personal data.
 
-**What the log keeps.** Everything the task prints goes to the api's log group, kept 30 days: ids, counts, reasons and times, never an item's name or who reported it.
+**What the log keeps.** Everything the task prints goes to the api's log group, kept 30 days: ids, counts, reasons and times, never an item's name or who reported it. The two alert lines above keep less: a kind, an id and counts.
 
 **First run on staging (Nov 2):** task definition 53. `open` exited 0 with "No open reports.", and a review of a dinner nobody reported exited 1, refused, with nothing changed. Both log lines carried ids only.
 
@@ -178,7 +187,7 @@ The last command prints what the script said. A task takes about a minute to sta
 | File | What |
 |---|---|
 | `community.test.ts` | `convex/community.test.ts`'s reading half |
-| `communitySafety.test.ts` | `convex/safety.test.ts`, plus the recipe review's order and the alert's contents |
+| `communitySafety.test.ts` | `convex/safety.test.ts`, plus the recipe review's order and the alert's contents, and on AWS the two alert lines through production's logger: their fields, nothing else, and the alarms' patterns matching them |
 | `communityReview.test.ts` | The team's script: what `open` prints and leaves out, keep and remove, the recipe's refusal and its steps, wrong words and ids changing nothing, and the real entry point |
 | `communitySwaps.test.ts` | `convex/swaps.test.ts`, plus past-50-asks |
 | `communityInvites.test.ts` | `convex/dinnerInvites.test.ts`, plus many opens at once and the rate limits |
@@ -216,11 +225,11 @@ The 10-minute rate tests can flake across a real window edge, as `rateLimit.test
 
 ## Long work
 
-Report alerts go through `outbox` on the `scheduled` queue. A voice recipe's merge goes through `dish.merge`, as Mom's Send does. Payloads hold a kind, a reason or an id.
+Report alerts go through `outbox` on the `scheduled` queue. A voice recipe's merge goes through `dish.merge`, as Mom's Send does. Payloads hold a kind, a reason or an id (a report's alert: its kind, `targetId` and reason; one queued before `targetId` was added still alarms, with `targetId` null).
 
 | Task | Why a repeat is safe |
 |---|---|
-| `community.report_alert` | It only tells the team, so a repeat tells them twice. There's no mark like the budget alert's, because one more ping about a report does no harm |
+| `community.report_alert` | It only tells the team, so a repeat tells them twice. There's no mark like the budget alert's, because one more ping about a report does no harm. On AWS a repeat is one more line, usually inside the same alarm period |
 | `community.remind_open` | Run by a schedule, and the same |
 
 ## Account deletion (SCHEMA.md section 4)
@@ -244,7 +253,7 @@ Report alerts go through `outbox` on the `scheduled` queue. A voice recipe's mer
 
 ## Secrets and env the api now needs (names only)
 
-`EDIBLE_CODE_KEY` (Nov 2), the key accounts already needs: a dinner's invite token and a craving link's are stored sealed with it (SCHEMA.md, M6). Without it, asking for either link is a 500, and a dinner's link still opens. `RATE_LIMIT_SALT`, `REPORT_ALERT_URL`, `REPORT_ALERT_TOKEN`, `REPORT_ALERT_EMAIL`, `DISH_WEB_ORIGIN` and `PRIVATE_BUCKET` are already set. No model is called from this area's own code, and voice recipes use the dish module's.
+`EDIBLE_CODE_KEY` (Nov 2), the key accounts already needs: a dinner's invite token and a craving link's are stored sealed with it (SCHEMA.md, M6). Without it, asking for either link is a 500, and a dinner's link still opens. `RATE_LIMIT_SALT`, `REPORT_ALERT_URL`, `REPORT_ALERT_TOKEN`, `REPORT_ALERT_EMAIL`, `DISH_WEB_ORIGIN` and `PRIVATE_BUCKET` are already set, except that `REPORT_ALERT_URL` stays unset on AWS: reports reach the team through the alarms in "The team's reports". No model is called from this area's own code, and voice recipes use the dish module's.
 
 ## What `infra/` needs (not done: this PR touches only `api/` and `docs/build/`)
 
