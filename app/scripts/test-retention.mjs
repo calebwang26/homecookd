@@ -1016,4 +1016,12 @@ await test('push: an ask waits for any open sheet, and a share-sheet send asks t
   assert.match(read('src/lib/messaging.ts'), /export function askAfterSend\(sentTo: string\[\] \| 'everyone'\)/);
 });
 
+await test('push: a recording that sends itself from the done screen asks like Send does', async () => {
+  // v2's phone recording never opens the Send screen (DoneView sends it), so the cook was never asked
+  // (build 11 phone run, Nov 3; build 6 too).
+  const done = readFileSync(join(root, 'src/components/record/DoneView.tsx'), 'utf8');
+  assert.match(done, /goHome\(\);\n[\s\S]{0,400}askForPushSoon\(\{ kind: 'cook-first-send', profileId: who\.id/);
+  assert.match(done, /if \(who && \(!lent \|\| lent\.id === who\.id\)\)/, 'never on a lent phone');
+});
+
 console.log(`\n${passed} tests passed`);
