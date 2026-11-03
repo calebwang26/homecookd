@@ -10,7 +10,8 @@ import { claimMerge, TRY } from "../src/modules/dish/merge.js";
 import { FAKE_WORDS, MS, newSpend } from "../src/modules/dish/model.js";
 import { SWEEP, sweep } from "../src/modules/dish/tasks.js";
 import { CLIP_WORST_MS, DAILY_BUDGET_USD, dayOf, HEAR_STALE_MS, MERGE_STALE_MS, sha256Hex } from "../src/modules/dish/values.js";
-import { handleMessage, type Received, startConsumer } from "../src/scheduled.js";
+import { SQSClient } from "@aws-sdk/client-sqs";
+import { DELETE_CLIENT, handleMessage, RECEIVE_CLIENT, type Received, sqsReceiver, startConsumer } from "../src/scheduled.js";
 import {
   advance,
   answer,
@@ -123,6 +124,111 @@ test("a failed read of the queue is waited out, and the loop goes on", async () 
     { handle: async () => {}, errorWaitMs: 1 },
   );
   await until(() => removed.length === 1).finally(() => consumer.stop());
+});
+
+// ---------------------------------------------------------------------------------------------
+// What a message's log lines say: enough to follow one through, never what it carries
+
+type Line = { level: "info" | "warn" | "error"; fields: Record<string, unknown>; message: string };
+function capture() {
+  const lines: Line[] = [];
+  const at = (level: Line["level"]) => (fields: object, message: string) => void lines.push({ level, fields: fields as Line["fields"], message });
+  return { lines, log: { info: at("info"), warn: at("warn"), error: at("error") } };
+}
+// The worker's follow-on message (pipeline/queue_db.py, finish), as the outbox sends it. Its ids stand in for anything a payload carries.
+const published = JSON.stringify({ outboxId: "267", requestId: "req-1", payload: { kind: "recipe_published", jobId: "job-private-1", recipeId: "recipe-private-1" } });
+
+test("a received message logs its receipt and its completion, with its task, outbox row and receive count", async () => {
+  const q = fakeQueue([{ id: "m1", body: published, receiveCount: 1, sentAt: Date.now() - 50 }]);
+  const { lines, log } = capture();
+  const consumer = startConsumer(q.receiver, log, { handle: async () => {} });
+  await until(() => lines.some((l) => l.message === "scheduled message done")).finally(() => consumer.stop());
+  assert.deepEqual(q.removed, ["m1"]);
+  const received = lines.filter((l) => l.message === "scheduled message received");
+  assert.deepEqual(received, [{ level: "info", fields: { task: "recipe_published", outboxId: "267", receiveCount: 1 }, message: "scheduled message received" }]);
+  const [done] = lines.filter((l) => l.message === "scheduled message done");
+  assert.equal(done.level, "info");
+  assert.deepEqual({ ...done.fields, ms: undefined }, { task: "recipe_published", outboxId: "267", receiveCount: 1, ms: undefined });
+  assert.equal(typeof done.fields.ms, "number");
+  assert.equal(lines.filter((l) => l.level === "warn").length, 0, "a first delivery isn't a warning");
+});
+
+test("a message SQS hands out a second time logs a warning with how late it is", async () => {
+  const q = fakeQueue([{ id: "m1", body: published, receiveCount: 2, sentAt: Date.now() - 300_000 }]);
+  const { lines, log } = capture();
+  const consumer = startConsumer(q.receiver, log, { handle: async () => {} });
+  await until(() => lines.some((l) => l.message === "scheduled message done")).finally(() => consumer.stop());
+  const warnings = lines.filter((l) => l.level === "warn");
+  assert.equal(warnings.length, 1);
+  assert.equal(warnings[0].message, "scheduled message redelivered");
+  const { lateS, ...rest } = warnings[0].fields;
+  assert.deepEqual(rest, { task: "recipe_published", outboxId: "267", receiveCount: 2 });
+  assert.ok(typeof lateS === "number" && lateS >= 300 && lateS <= 302, String(lateS));
+});
+
+test("those lines carry ids and names only: no payload, and a task name we don't know is only \"unknown\"", async () => {
+  const unknown = JSON.stringify({ outboxId: "9", payload: { task: "Mom's dal, with extra ghee", note: "call me after dinner" } });
+  const q = fakeQueue([
+    { id: "m1", body: published, receiveCount: 3, sentAt: Date.now() - 600_000 },
+    { id: "m2", body: unknown, receiveCount: 1 },
+    { id: "m3", body: "not json at all, Mom's secret", receiveCount: 1 },
+  ]);
+  const { lines, log } = capture();
+  const consumer = startConsumer(q.receiver, log, {
+    handle: async (body) => {
+      if (body !== published) throw new Error("A message with no known task");
+    },
+  });
+  await until(() => lines.filter((l) => l.message === "scheduled message done" || l.message === "a scheduled task failed").length === 3).finally(() =>
+    consumer.stop(),
+  );
+  const logged = JSON.stringify(lines);
+  for (const text of ["job-private-1", "recipe-private-1", "req-1", "dal", "ghee", "dinner", "secret"]) assert.ok(!logged.includes(text), text);
+  const failed = lines.filter((l) => l.message === "a scheduled task failed").map((l) => l.fields.task);
+  assert.deepEqual(failed, ["unknown", "unknown"]);
+  const allowed = new Set(["task", "outboxId", "receiveCount", "lateS", "ms", "err"]);
+  for (const line of lines) for (const key of Object.keys(line.fields)) assert.ok(allowed.has(key), key);
+});
+
+test("the clients: a receive tries once, a delete keeps its retry, both wait past the 20 s poll, and a receive asks for the count and send time", async () => {
+  for (const [config, attempts] of [
+    [RECEIVE_CLIENT, 1],
+    [DELETE_CLIENT, 2],
+  ] as const) {
+    assert.equal(config.maxAttempts, attempts);
+    const client = new SQSClient(config);
+    try {
+      assert.equal(await client.config.maxAttempts(), attempts, "what the SDK resolves");
+    } finally {
+      client.destroy();
+    }
+    assert.ok((config.requestHandler as { requestTimeout: number }).requestTimeout > 20_000);
+  }
+  const sent: Record<string, unknown>[] = [];
+  const sentAt = Date.now() - 300_000;
+  const fake = {
+    async send(command: { input: Record<string, unknown> }) {
+      sent.push(command.input);
+      return {
+        Messages: [
+          { ReceiptHandle: "h1", Body: published, Attributes: { ApproximateReceiveCount: "2", SentTimestamp: String(sentAt) } },
+          { ReceiptHandle: "h2", Body: published },
+        ],
+      };
+    },
+  };
+  const removed: Record<string, unknown>[] = [];
+  const deleting = { send: async (command: { input: Record<string, unknown> }) => void removed.push(command.input) };
+  const receiver = sqsReceiver("https://sqs.example/q", fake as never, deleting as never);
+  const got = await receiver.receive(5, new AbortController().signal);
+  await receiver.remove("h1");
+  assert.deepEqual(removed, [{ QueueUrl: "https://sqs.example/q", ReceiptHandle: "h1" }], "deletes go through the client that retries");
+  assert.deepEqual(sent[0].MessageSystemAttributeNames, ["ApproximateReceiveCount", "SentTimestamp"]);
+  assert.equal(sent[0].WaitTimeSeconds, 20);
+  assert.deepEqual(got, [
+    { id: "h1", body: published, receiveCount: 2, sentAt },
+    { id: "h2", body: published, receiveCount: undefined, sentAt: undefined },
+  ]);
 });
 
 test("a message with no known task throws, so it stays on the queue and reaches the dead-letter queue", async () => {
