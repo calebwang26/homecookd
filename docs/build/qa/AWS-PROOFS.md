@@ -107,8 +107,18 @@ its own channel, `aws-staging`. App Store, web & builds runs the build:
 
 ```bash
 cd app && npx eas-cli build -p ios --profile aws-staging --auto-submit
-cd app && npx eas-cli update --channel aws-staging -m "<what changed>"   # JS-only fixes to this build only
+scripts/safe-eas-update.sh aws-staging "<what changed>"                   # JS-only fixes to this build only
 ```
+
+An EAS Update doesn't read `eas.json`'s build env. The bundle is exported from your shell and `app/.env`, so always
+publish with `scripts/safe-eas-update.sh`, never a bare `eas update`. Here is what the script does:
+- **For `aws-staging`:** it sets the switch and staging's URL for the export, then checks that the bundle holds that
+  address.
+- **For any other channel:** it refuses if the switch is set in your shell, and refuses a bundle that holds that address.
+- **For `production`:** it always refuses.
+- **Every export:** it runs with `--clear`, because Metro's cache would otherwise carry the last export's env over.
+
+`--check-only` exports and checks without publishing.
 
 The rules:
 - The build goes to the internal TestFlight group only.
@@ -117,6 +127,14 @@ The rules:
   `production` it would reach the reviewed build.
 
 To check what the profile resolves to: `cd app && npx eas-cli config --profile aws-staging -p ios`.
+
+The Convex and voice URLs carried over from `production` stay set, but with the switch on the app reads nothing from
+Convex. The voice URL is used only by homie, which is off (`HOMIE_ON = false`). Where the voice service runs for 1.1 is
+still open.
+
+The build lands in TestFlight under version 1.0.0, like builds 7 and 9, because `app.json` is at 1.0.0 and the runtime
+follows the app version. Uploading a build doesn't attach it to the review, and nobody selects it. Calling it 1.1.0 would
+be a version bump in `app.json`, which changes the runtime for every channel. That's the Master Agent's call.
 
 What the phone proves, which the web build can't:
 - **Filming and uploading from the device.** One clip in a single PUT, and one over 20 MiB in parts, each ending in a
