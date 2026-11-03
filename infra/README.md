@@ -172,7 +172,7 @@ step policy and its alarm, and sets the CPU target to 50%. No new types, so the 
 5. The rerun at 120 a second, as in step 5 above. `describe-scaling-activities` should show a task added within a few minutes and no task
    "replaced due to an unhealthy status" in `aws ecs describe-services --cluster homecookd-staging --services api --query 'services[0].events'`.
 
-**Applying the slow scale-in on staging, once (#316). Caleb, by hand.** It turns off target tracking's scale-in for the api and adds the
+**Applying the slow scale-in on staging, once (#316). By hand, under Caleb's standing OK for staging.** It turns off target tracking's scale-in for the api and adds the
 `-scale-in` step policy and its alarm. No new types, so the apply role needs nothing.
 1. The merge's auto-apply is refused: autoscaling policies are held, and the new alarm's action is the new policy, not known until apply.
    Nothing is applied.
