@@ -1,6 +1,7 @@
 // The Jobs flows on AWS staging, through the app's own client (src/lib/aws), with test people from the staging-only
-// test sign-in (ACCOUNTS.md, "Staging testing"). It uploads real bytes to staging's S3 (made-up, 64 KiB: staging runs
-// no worker, so a job stops at queued), and deletes everyone it made.
+// test sign-in (ACCOUNTS.md, "Staging testing"). It uploads real bytes to staging's S3 (made-up: 64 KiB in one PUT,
+// and 25 MiB in 5 parts, staging's small part sizes), finishes a queued job the way the worker's publish does
+// (POST /v1/test/recipe: staging runs no worker), opens the recipe, and deletes everyone it made.
 //   node scripts/aws-jobs-flows.mjs [base url]      default: staging over HTTPS
 // Needs TEST_SIGNIN_KEY in the root .env (read here, never printed).
 import assert from 'node:assert/strict';
@@ -138,6 +139,10 @@ try {
     assert.deepEqual(await nextJobs(null), [], 'her live poll is empty');
     assert.equal((await refused(J.jobs.get(job.jobId))).code, 'not_found');
     assert.equal((await refused(J.jobs.cancel(job.jobId))).code, 'not_found');
+    if (job.recipeId) {
+      assert.ok(!(await J.recipes.all()).some((r) => r._id === job.recipeId), 'her processing card is hers alone');
+      assert.equal((await refused(J.recipes.get(job.recipeId))).code, 'not_found');
+    }
     phone(kid);
     assert.deepEqual((await J.jobs.list()).jobs, []);
     assert.equal((await refused(J.jobs.newUpload([video], `kid-${randomUUID()}`))).code, 'forbidden', 'a kid cannot film');
@@ -179,10 +184,52 @@ try {
     await J.jobs.cancel(j.jobId);
   });
 
-  await check('her recipes: none yet (no worker on staging), and the list answers', async () => {
+  let partsJob;
+  await check('a video over the parts threshold goes up in parts: cut, sent, ETags kept, joined, then queued', async () => {
     phone(cook);
-    const all = await J.recipes.all();
-    return `${all.length} recipe(s)`;
+    const big = randomBytes(25 * 1024 * 1024);
+    const u = await J.jobs.newUpload([{ contentType: 'video/quicktime', size: big.length, durationS: 60 }], `upload-${randomUUID()}`);
+    const link = u.uploads[0];
+    assert.equal(link.method, 'PARTS');
+    partsJob = await J.jobs.create({ uploadId: u.uploadId, title: `Big Biryani ${run}` });
+    const nums = Array.from({ length: link.partCount }, (_, k) => k + 1);
+    const { parts } = await J.jobs.parts(u.uploadId, link.index, nums);
+    const etags = [];
+    for (const p of parts) {
+      const { start, end } = J.partRange(big.length, link.partBytes, p.partNumber);
+      const res = await fetch(p.url, { method: 'PUT', headers: p.headers, body: big.subarray(start, end) });
+      assert.equal(res.status, 200, `part ${p.partNumber}`);
+      etags.push({ partNumber: p.partNumber, etag: res.headers.get('etag') });
+    }
+    assert.deepEqual(await J.jobs.finishParts(u.uploadId, link.index, etags), { finished: true });
+    const c = await J.jobs.complete(u.uploadId);
+    assert.deepEqual([c.complete, c.job?.stage], [true, 'queued']);
+    return `${link.partCount} parts of ${link.partBytes / 1024 / 1024} MiB`;
+  });
+
+  await check('finished as the worker publishes: the poll says done with its recipe, which is ready and opens', async () => {
+    const res = await fetch(`${BASE}/v1/test/recipe`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', 'x-test-signin-key': KEY, authorization: `Bearer ${(await A.accounts.session()).sessionToken}` },
+      body: JSON.stringify({ jobId: partsJob.jobId }),
+    });
+    assert.equal(res.status, 201, `test recipe answered ${res.status}`);
+    const list = await nextJobs(null);
+    const j = list.find((x) => x._id === partsJob.jobId);
+    assert.deepEqual([j?.stage, j?.progress], ['done', 1]);
+    assert.equal(j.recipeId, partsJob.recipeId, 'the processing card became the recipe');
+    const r = await J.recipes.get(j.recipeId);
+    assert.equal(r.status, 'ready');
+    assert.ok((await J.recipes.all()).some((x) => x._id === r._id), 'in her family list');
+    const file = await fetch(r.recipeJsonUrl);
+    assert.equal(file.status, 200, 'recipe.json on the media CDN');
+    const json = await file.json();
+    return `${r.title}: ${json.steps?.length ?? 0} steps`;
+  });
+
+  await check('a ready recipe shows to the family: the second cook sees it now', async () => {
+    phone(cook2);
+    assert.ok((await J.recipes.all()).some((x) => x._id === partsJob.recipeId));
   });
 } finally {
   L.stopAllPolls();

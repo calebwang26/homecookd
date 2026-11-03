@@ -13,7 +13,7 @@ import { webGetItem, webSetItem } from './legacyKeys';
 import { api, ApiError } from './api';
 import { awsPersonId } from './aws/client';
 import { AWS_ON } from './aws/config';
-import { checkVideos, jobs as awsJobs, type UploadLink } from './aws/jobs';
+import { checkVideos, jobs as awsJobs, partRange, type UploadLink } from './aws/jobs';
 import { cacheBuster, fetchJson } from './http';
 import { convexSession, convexSignedIn } from './live/convex';
 
@@ -444,18 +444,141 @@ export async function startUpload(input: StartUploadInput): Promise<StoredJob> {
 }
 
 // ---------------------------------------------------------------------------
-// 1.1: the same upload on the AWS api (docs/build/contracts/JOBS.md flows 1 and 6). The links come from
-// POST /v1/video-uploads (its Idempotency-Key is this upload's own), the row is keyed by the uploadId (so
-// jobs.create's "<uploadId>/" and the live job's uploadPath match it as before), and each video is one
-// background PUT, signed for its exact type and length. A PUT answered 403 means its link ran out: ask for
-// new ones and go on. When every video is in, POST /complete queues the job. Videos over 5 GiB (PARTS) come
-// in the next PR.
+// 1.1: the same upload on the AWS api (docs/build/contracts/JOBS.md flows 1, 6 and 8). The links come from
+// POST /v1/video-uploads (its Idempotency-Key is this upload's own), and the row is keyed by the uploadId (so
+// jobs.create's "<uploadId>/" and the live job's uploadPath match it as before). A video up to 5 GiB is one
+// background PUT, signed for its exact type and length. A bigger one comes back as numbered PARTS: each part is
+// cut from the video into its own file (a background upload sends whole files), PUT on its own link, its ETag
+// kept, the file deleted, and the parts joined with /parts/finish. A PUT answered 403 means its link ran out: new
+// links, the same try again. When every video is in, POST /complete queues the job.
 
 const AWS_MAX_LINK_REFRESHES = 3;
+type PutLink = { url: string; headers: Record<string, string> };
 
 function newKey(): string {
   const g = globalThis as { crypto?: { randomUUID?: () => string } };
   return g.crypto?.randomUUID?.() ?? `${Date.now().toString(36)}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+}
+
+/**
+ * One background PUT of `uri` to the link `fresh` gives, retried as the GCS uploads were (408, 429, 5xx), with new
+ * links on a 403. Resolves with S3's answer headers (a part's ETag), or null when the upload was stopped.
+ */
+async function awsPut(jobId: string, uri: string, fresh: (expired: boolean) => Promise<PutLink | null>, onSent: (sent: number) => void): Promise<Record<string, string> | null> {
+  let link = await fresh(false);
+  let refreshes = 0;
+  for (let attempt = 1; ; ) {
+    if (!link) return {}; // the api has it already
+    if (!fileOnPhone(uri)) throw new Error(MISSING_VIDEO);
+    const task = new File(uri).createUploadTask(link.url, {
+      httpMethod: 'PUT',
+      headers: link.headers,
+      uploadType: UploadType.BINARY_CONTENT,
+      sessionType: 'background',
+      onProgress: ({ bytesSent }) => {
+        onSent(bytesSent);
+        emit(true);
+      },
+    });
+    trackTask(jobId, task);
+    let problem = '';
+    let retryable = true;
+    let expired = false;
+    try {
+      const result = await task.uploadAsync();
+      if (result.status >= 200 && result.status < 300) return result.headers ?? {};
+      problem = `(${result.status}) ${result.body?.slice(0, 200) ?? ''}`;
+      expired = result.status === 403;
+      retryable = result.status === 408 || result.status === 429 || result.status >= 500;
+    } catch (e) {
+      problem = String(e);
+    } finally {
+      untrackTask(jobId, task);
+    }
+    if (cancelledJobs.has(jobId)) return null;
+    onSent(0);
+    emit();
+    if (expired && refreshes < AWS_MAX_LINK_REFRESHES) {
+      refreshes += 1;
+      link = await fresh(true);
+      continue;
+    }
+    if (!retryable || attempt >= MAX_ATTEMPTS) throw new Error(`failed ${problem}`.trim());
+    console.warn(`[uploads] attempt ${attempt} failed, retrying`, problem);
+    await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt - 1] ?? 30_000));
+    attempt += 1;
+    if (cancelledJobs.has(jobId)) return null;
+  }
+}
+
+/** The ETag S3 sent for a part, exactly as it came (quotes included). */
+function etagOf(headers: Record<string, string>): string | null {
+  for (const [k, v] of Object.entries(headers)) if (k.toLowerCase() === 'etag' && v) return v;
+  return null;
+}
+
+/** Part n of the video at `uri`, cut into its own file in the cache (deleted once it lands). */
+function writePart(uri: string, uploadId: string, index: number, n: number, start: number, end: number): string {
+  const part = new File(Paths.cache, `aws-part-${uploadId}-${index}-${n}`);
+  const src = new File(uri).open();
+  try {
+    src.offset = start;
+    const bytes = src.readBytes(end - start);
+    if (part.exists) part.delete();
+    part.create();
+    part.write(bytes);
+  } finally {
+    src.close();
+  }
+  return part.uri;
+}
+
+const dropPart = (uri: string) => {
+  try {
+    const f = new File(uri);
+    if (f.exists) f.delete();
+  } catch {
+    // the cache is cleared by the OS anyway
+  }
+};
+
+/** A PARTS video: every part cut, sent and joined. Throws when it can't be. */
+async function awsSendParts(jobId: string, as: string | undefined, uri: string, link: { index: number; partBytes: number; partCount: number }, size: number, onSent: (sent: number) => void) {
+  const { index, partBytes, partCount } = link;
+  const etags: { partNumber: number; etag: string }[] = [];
+  let links = new Map<number, PutLink>();
+  const fetchLinks = async (from: number) => {
+    const nums = Array.from({ length: Math.min(100, partCount - from + 1) }, (_, k) => from + k);
+    const r = await awsJobs.parts(jobId, index, nums, as);
+    links = new Map(r.parts.map((p) => [p.partNumber, { url: p.url, headers: p.headers }]));
+  };
+  let done = 0;
+  for (let n = 1; n <= partCount; n++) {
+    if (cancelledJobs.has(jobId)) return;
+    const { start, end } = partRange(size, partBytes, n);
+    const file = writePart(uri, jobId, index, n, start, end);
+    try {
+      const headers = await awsPut(
+        jobId,
+        file,
+        async (expired) => {
+          if (expired || !links.has(n)) await fetchLinks(n);
+          return links.get(n) ?? null;
+        },
+        (sent) => onSent(done + sent),
+      );
+      if (headers === null) return; // stopped
+      const etag = etagOf(headers);
+      if (!etag) throw new Error(`part ${n} came back without its ETag`);
+      etags.push({ partNumber: n, etag });
+      done += end - start;
+      onSent(done);
+    } finally {
+      dropPart(file);
+    }
+  }
+  const { finished } = await awsJobs.finishParts(jobId, index, etags, as);
+  if (!finished) throw new Error('the parts did not join');
 }
 
 async function startAwsUpload(input: StartUploadInput): Promise<StoredJob> {
@@ -469,11 +592,6 @@ async function startAwsUpload(input: StartUploadInput): Promise<StoredJob> {
   if (problem === 'length') throw new Error(`That's more than ${MAX_RECORDING_HOURS} hours of video. Pick fewer videos.`);
   if (problem) throw new Error('Pick 1 to 20 videos.');
   const made = await awsJobs.newUpload(videos, newKey(), input.as);
-  if (made.uploads.some((u) => u.method === 'PARTS')) {
-    // TODO(aws): parts (over 5 GiB) come in the next PR; stop this upload rather than leave it open.
-    void awsJobs.cancelUpload(made.uploadId, input.as).catch(() => {});
-    throw new Error('That video is too big to send yet. Try a shorter one.');
-  }
   const jobId = made.uploadId;
   const stored: StoredJob = {
     job_id: jobId,
@@ -491,14 +609,14 @@ async function startAwsUpload(input: StartUploadInput): Promise<StoredJob> {
   const fileProgress: FileProgress[] = videos.map((v) => ({ sent: 0, total: v.size }));
   progress.set(jobId, fileProgress);
   progressStarted.set(jobId, Date.now());
-  let links = made.uploads as Extract<UploadLink, { method: 'PUT' }>[];
+  let links: UploadLink[] = made.uploads;
   let refreshing: Promise<void> | null = null;
   // One fresh set of links shared by every video whose PUT found its link expired.
   const refresh = () =>
     (refreshing ??= awsJobs
       .links(jobId, input.as)
       .then((r) => {
-        links = r.uploads.filter((u): u is Extract<UploadLink, { method: 'PUT' }> => u.method === 'PUT');
+        links = r.uploads;
       })
       .finally(() => {
         refreshing = null;
@@ -506,52 +624,25 @@ async function startAwsUpload(input: StartUploadInput): Promise<StoredJob> {
 
   const runs = videos.map(async (v, i) => {
     const asset = input.assets[i];
-    let refreshes = 0;
-    for (let attempt = 1; ; ) {
-      const link = links.find((u) => u.index === i + 1);
-      if (!link) return; // the api has it already (a link set made after it landed lists only the rest)
-      if (!fileOnPhone(asset.uri)) throw new Error(`Upload ${i + 1} failed: ${MISSING_VIDEO}`);
-      const task = new File(asset.uri).createUploadTask(link.url, {
-        httpMethod: 'PUT',
-        headers: link.headers,
-        uploadType: UploadType.BINARY_CONTENT,
-        sessionType: 'background',
-        onProgress: ({ bytesSent, totalBytes }) => {
-          fileProgress[i] = { sent: bytesSent, total: totalBytes > 0 ? totalBytes : fileProgress[i].total };
-          emit(true);
+    const sent = (n: number) => {
+      fileProgress[i] = { sent: Math.min(n, v.size), total: v.size };
+    };
+    try {
+      const first = links.find((u) => u.index === i + 1);
+      if (first?.method === 'PARTS') return await awsSendParts(jobId, input.as, asset.uri, first, v.size, sent);
+      const put = await awsPut(
+        jobId,
+        asset.uri,
+        async (expired) => {
+          if (expired) await refresh();
+          const l = links.find((u) => u.index === i + 1);
+          return l?.method === 'PUT' ? l : null;
         },
-      });
-      trackTask(jobId, task);
-      let problem = '';
-      let retryable = true;
-      let expired = false;
-      try {
-        const result = await task.uploadAsync();
-        if (result.status >= 200 && result.status < 300) {
-          fileProgress[i] = { sent: v.size, total: v.size };
-          return;
-        }
-        problem = `(${result.status}) ${result.body?.slice(0, 200) ?? ''}`;
-        expired = result.status === 403;
-        retryable = result.status === 408 || result.status === 429 || result.status >= 500;
-      } catch (e) {
-        problem = String(e);
-      } finally {
-        untrackTask(jobId, task);
-      }
-      if (cancelledJobs.has(jobId)) return;
-      fileProgress[i] = { sent: 0, total: v.size };
-      emit();
-      if (expired && refreshes < AWS_MAX_LINK_REFRESHES) {
-        refreshes += 1; // its link ran out: new links, and the same try again
-        await refresh();
-        continue;
-      }
-      if (!retryable || attempt >= MAX_ATTEMPTS) throw new Error(`Upload ${i + 1} failed ${problem}`.trim());
-      console.warn(`[uploads] video ${i + 1} attempt ${attempt} failed, retrying`, problem);
-      await new Promise((resolve) => setTimeout(resolve, RETRY_DELAYS_MS[attempt - 1] ?? 30_000));
-      attempt += 1;
-      if (cancelledJobs.has(jobId)) return;
+        sent,
+      );
+      if (put) sent(v.size);
+    } catch (e) {
+      throw new Error(`Upload ${i + 1} ${e instanceof Error ? e.message : String(e)}`);
     }
   });
 

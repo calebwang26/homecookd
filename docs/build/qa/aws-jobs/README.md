@@ -11,3 +11,15 @@ The web build can't upload (no CORS on the uploads bucket, by design): uploading
    `error: "Cancelled."`, `cancelledAt` set (`POST /v1/jobs/:id/cancel`).
 
 The test cook was deleted afterwards.
+
+## A finished recipe (Nov 2, with staging's test recipe route)
+
+A second test cook whose real queued job was then finished by `POST /v1/test/recipe` (staging-only; it publishes as the
+worker does, with a made-up 3-step recipe).
+
+3. Recipes: "Your recipes" lists **Sunday Dal · ~10 min · 3 steps**, from `GET /v1/recipes`, its `recipe.json` read from
+   staging's media CDN. ("Family recipes" below is still the public `library.json` on GCS: JOBS.md open item 15.)
+4. Tapping it opens the recipe: the title, her quote, "See all 3 steps", "Watch yourself".
+
+The test cook was deleted afterwards.
+
