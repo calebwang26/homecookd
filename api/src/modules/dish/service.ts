@@ -437,14 +437,52 @@ async function translateForPage(askTokenHash: string, lang: string, trace: Trace
   }
 }
 
+/**
+ * How long Mom's first peek in a language waits for its translation. Past it her page opens in English with `translating: true`, the
+ * translation goes on, and a peek after it finishes has her language. Her page gives the peek 30 s (web/src/lib/dish/api.ts), and one
+ * translation took longer than that on Nov 2. An object, so a test can shorten it.
+ */
+export const MOM_PAGE_WAIT = { ms: 8_000 };
+
+/** True when it finished in time; it goes on either way. */
+async function within(work: Promise<void>, ms: number): Promise<boolean> {
+  let timer: NodeJS.Timeout | undefined;
+  const late = new Promise<false>((resolve) => (timer = setTimeout(() => resolve(false), ms)));
+  try {
+    return await Promise.race([work.then(() => true as const), late]);
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** One translation at a time per card and language in this task: a reload while it runs waits on the same call, not a second one. */
+const translatingNow = new Map<string, Promise<void>>();
+
+function translateOnce(askTokenHash: string, lang: string, trace: Trace): Promise<void> {
+  const key = `${askTokenHash}:${lang}`;
+  const running = translatingNow.get(key);
+  if (running) return running;
+  // translateForPage keeps a failed model call to itself. Anything else that fails once nobody waits is logged here.
+  const work = translateForPage(askTokenHash, lang, trace)
+    .catch((error) => trace.log.error({ lang, err: { type: (error as Error).name } }, "translating Mom's page failed"))
+    .finally(() => translatingNow.delete(key));
+  translatingNow.set(key, work);
+  return work;
+}
+
 export async function momPeek(askTokenHash: string, lang: string | undefined, trace: Trace) {
-  if (lang) await translateForPage(askTokenHash, lang, trace);
+  let translating = false;
+  if (lang) {
+    await byAsk(db(), askTokenHash); // a link that isn't one is its 404 here, before any translating starts
+    translating = !(await within(translateOnce(askTokenHash, lang, trace), MOM_PAGE_WAIT.ms));
+    if (translating) trace.log.warn({ lang, waitMs: MOM_PAGE_WAIT.ms }, "Mom's page opened before its translation");
+  }
   const now = Date.now();
   let row = await byAsk(db(), askTokenHash);
   if (row.opened_at === null || (lang && row.mom_page_lang !== lang)) {
     row = { ...row, ...(await data.markOpened(db(), row.id, new Date(now), lang ?? null)) };
   }
-  return await askJson(db(), await stateOf(db(), row, now), lang);
+  return { ...(await askJson(db(), await stateOf(db(), row, now), lang)), translating };
 }
 
 /** Mom may record an answer to a question she was asked: a new one, or again until it's in her version. */
