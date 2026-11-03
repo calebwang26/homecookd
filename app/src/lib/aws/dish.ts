@@ -6,9 +6,13 @@
 // PUT of exactly those bytes, then the send, which starts the merge (`voiceRecipe` goes writing, then ready or failed).
 
 import type { CravingAsk } from '../cravings';
+import type { MyCard } from '../dishView';
 import { request } from './client';
 
 const enc = encodeURIComponent;
+
+/** A card in the app, for its kid or its cook only (Convex's dishAsks.get); anyone else, or no card: 404. */
+export const dishCard = (id: string, as?: string | null) => request<MyCard>(`/v1/dish-asks/${enc(id)}`, { auth: 'session', as });
 
 export const cravings = {
   /** Every card asked of her, newest first, answered ones too (50 a page, read to the end). */

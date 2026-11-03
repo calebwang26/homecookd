@@ -137,7 +137,14 @@ export function stopAllPolls() {
 type ReadPoller<T> = { watchers: Set<(v: T) => void>; value?: T; hasValue: boolean; end: () => void };
 const reads = new Map<string, ReadPoller<unknown>>();
 
-export function watchRead<T>(key: string, read: (last: T | undefined) => Promise<T>, everyMs: number, onData: (v: T) => void): () => void {
+export function watchRead<T>(
+  key: string,
+  read: (last: T | undefined) => Promise<T>,
+  /** A number, or one picked from the last value (a card polls faster while it's merging). */
+  every: number | ((v: T) => number),
+  onData: (v: T) => void,
+): () => void {
+  const gap = (v: T | undefined) => (typeof every === 'number' ? every : v === undefined ? 15_000 : every(v));
   let p = reads.get(key) as ReadPoller<T> | undefined;
   if (!p) {
     let timer: unknown = null;
@@ -168,10 +175,10 @@ export function watchRead<T>(key: string, read: (last: T | undefined) => Promise
         poller.value = v;
         poller.hasValue = true;
         poller.watchers.forEach((w) => w(v));
-        later(everyMs);
+        later(gap(v));
       } catch (e) {
         if (isAwsError(e) && (e.kind === 'signed_out' || e.code === 'removed_from_family')) return poller.end();
-        later(Math.max(everyMs, retryDelayMs(isAwsError(e) ? e : null, failures++)));
+        later(Math.max(gap(poller.value), retryDelayMs(isAwsError(e) ? e : null, failures++)));
       } finally {
         running = false;
       }

@@ -16,3 +16,11 @@ joined from her link's ticket and claimed the cook side.
 
 Her voice recipe, its merge to `ready`, and a job with `dishAskId` publishing are proven by `aws-dish-flows`. Both test
 people were deleted.
+
+## The kid's card (Nov 3, the api's #321 live)
+
+5. Leo opens `/dish/<id>` (where the `answered` and `joined` pushes go), read from `GET /v1/dish-asks/:id`: **"Mom's
+   tomato egg · Mom answered"**, her voice note ("Hear Mom · 0:05"; staging's fake Ink hears "Two big spoons of
+   ketchup."), and her version's ingredients. Mom had answered with a voice recipe, merged to ready on staging.
+   Both test people were deleted afterwards.
+
