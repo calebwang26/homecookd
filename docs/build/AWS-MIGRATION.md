@@ -82,7 +82,7 @@ The production gate. CUTOVER.md's step 6 checks each one before 1.1 is submitted
 | A restore drill | Not run. RDS's backup restored to a new instance, on production |
 | A deliberately killed service | Not run |
 | A load test | Passed on staging's one small task, Nov 2 (below). Still to run at production's task size and count, over HTTPS |
-| 2+ api tasks, autoscaling | Built, Nov 2 (#295, below): production's api is 2 to 4 tasks, at 0 until it starts. Waits on Caleb's staging apply and the load test at 120 a second that shows it grow and come back |
+| 2+ api tasks, autoscaling | Built, Nov 2 (#295, below): production's api is 2 to 4 tasks, at 0 until it starts. On staging, the load test at 120 a second grew it late and its health check killed a busy task; tuned in #304. Waits on Caleb's staging apply of #304 and the rerun that shows it grow and come back |
 | HTTPS on `api.homecookd.app` | Waits on Caleb's DNS step (CUTOVER.md, step 6). Staging has HTTPS through CloudFront since Nov 2 (#285) |
 | A limited database login | Done on staging, Nov 2 (#273, applied in #280; `infra/README.md`, "Database logins"). On in `envs/production` from the start |
 | Alarms reach a person | The budget alert's test email reached Caleb, Nov 2 (#260). Production's alerts topic needs its email confirmed and one alarm fired |
@@ -93,19 +93,22 @@ The production gate. CUTOVER.md's step 6 checks each one before 1.1 is submitted
 **Built, Nov 2: two api tasks, and autoscaling on CPU** (`infra/modules/env/autoscaling.tf`; Caleb approved the shape). Production's
 api is two tasks of 0.5 vCPU and 1 GB in place of one of 1 vCPU and 2 GB: the same $36 a month, and a task or a zone can fail
 without an outage. When busy it grows to four ($72 a month). Staging runs the same 2 to 4 on its 0.25 vCPU tasks. AWS keeps the
-tasks' average CPU near 60%, on CPU rather than request count because CPU is what ran out in the load test below. Production stays at
+tasks' average CPU near 50% (60% until the load test with autoscaling, below), on CPU rather than request count because CPU is what ran out in the load test
+below, and adds a task each minute the api is shedding. Production stays at
 0 tasks until launch, and launch is one change: its api's `desired_count` from 0 to 2. Nothing in `api/src` keeps state in one
 task's memory that two tasks would get wrong: the outbox sender takes rows with `SKIP LOCKED`, scheduled work comes through SQS,
 rate limits, the dish budget and idempotency live in Postgres, and what's cached in memory (Apple's and Google's keys, derived sealing
 keys, the public library for 10 minutes) is the same on every task. The live polls' brake already counts per task (LIVE-UPDATES.md).
 One thing did change with it: a task taken away now finishes its requests for 90 s, not 30, because the autoscaler takes tasks
 away every day and making a card can wait 60 s on the guess. **Not proven yet:** the steps are in `infra/README.md`,
-"Autoscaling the api", and the proof is the load test at 120 a second, growing to 3 or 4 tasks and coming back.
+"Autoscaling the api". The first load test at 120 a second grew to 3 tasks only after 10 minutes, and lost one to its health check ("Load test with
+autoscaling, Nov 2", below). The proof is the rerun after #304, growing to 3 or 4 tasks and coming back.
 
 **A budget alert reaches a person (Nov 1).** The real-models window showed the budget's alert reaching only the logs, because `REPORT_ALERT_URL` isn't set on AWS. A log alarm to the alerts topic now emails it. Fired on staging on Nov 2, and the email reached Caleb. On production: the same, once.
 
 **A production gate: overload (Master Agent, Nov 1).** Today, with all connections busy, a request waits 5 s then answers a 500. Before
-production: a bounded wait queue that fails fast with a 503 and `retry-after`; the load balancer's health check stays as it is; an alarm on
+production: a bounded wait queue that fails fast with a 503 and `retry-after`; the load balancer's health check stays as it is (it moved to its own thread
+after the load test with autoscaling, Nov 2, below); an alarm on
 pool waits; autoscaling on request load (built on CPU instead, Nov 2: the load test showed CPU runs out first). **The proof is a load test that exercises pool exhaustion.**
 
 **Measured, Nov 1 (made-up data, local Postgres, one process with a pool of 10):** a request waiting on a row lock keeps its connection. 200 requests at once on one card finish in 408 ms
@@ -128,6 +131,38 @@ requests, no 5xx. From the laptop running it, 45,000 requests with 1 network err
 **The limit is the api's CPU, not the database:** the task averaged 80% CPU (peak 90%) while the database peaked at 10% with its 10 connections busy. **Overload doesn't fail fast yet:** 300 requests at once all
 answered 200, slowest 2.2 s; 1,500 at once all answered 200, slowest 13 s. Requests wait for the CPU before they ever wait for the pool, so the pool's 503 never comes. The bounded wait above has to count
 requests waiting on the event loop too, not only on the pool. Before production: repeat it on production's task size and count, and over HTTPS.
+
+**Load test with autoscaling, Nov 2** (`infra/scripts/load-test.mjs --rps 120`; staging's two 0.25 vCPU api tasks, autoscaling 2 to 4 on CPU at 60%, `OVERLOAD_SHED` on).
+120 a second for 12 minutes, about twice what two tasks carry: 86,401 requests, 11.8% not 2xx. About 9,860 of those were the shedder's 503 with `retry-after`
+(`api/src/overload.ts`), 195 client timeouts and 178 load balancer 504s, mostly in the first 2 minutes. p50 about 60 ms, p99 about 22 s. A burst of 1,500 at once
+after it: 726 turned away with the 503 and `retry-after`, no other 5xx, and `/ready` answered 200 all 750 times. **Two things went wrong:**
+- **A busy task was killed.** At 15:41:53 ECS "replaced 1 tasks due to an unhealthy status". The load balancer checked `/health` on the api's own port every
+  15 s, with 5 s to answer and 3 misses allowed (`infra/modules/env/load_balancer.tf`). `/health` waits in the event loop behind the CPU-bound work, so a
+  saturated task that was still answering was taken for a dead one, and capacity went down just when it was short.
+- **It grew late.** The api's average CPU by minute, 15:39 to 15:52: 1, 3, 79, 70, 55, 50, 75, 77, 80, 77, 74, 50, 67, 61%. Target tracking adds a task after
+  3 minutes in a row over its target. The replaced task's low CPU pulled the average under 60% for two minutes, which started that count again. It went from
+  2 to 3 tasks only at 15:50:29, about 10 minutes in, and never reached 4.
+
+**Built for each, Nov 2 (#304):**
+- **The load balancer's check has its own thread** (`api/src/health.ts`), so a saturated task isn't killed. A worker thread (`node:worker_threads`) answers
+  `/health` on port 8081 from its own event loop. Liveness comes from a heartbeat: the main thread writes the time into shared memory every second, and the
+  answer is 200 while that's under 30 s old, 503 after (and once the api's server stops listening). A saturated loop still reaches its timer every few seconds; a
+  stuck one never does, so a hung task is still replaced. The target group checks 8081 (the api's `health_port`), only the load balancer may reach it, and every
+  target group now allows 10 s to answer and 5 misses (75 s) in place of 5 s and 3. `/health` and `/ready` stay on the main port as they were, for the deploy's
+  smoke test and for people, and the shedder still never turns them away. **Why a thread rather than only longer tolerances:** the check would still wait
+  behind the work, and no timeout fits a loop that's behind by the 22 s this test's p99 reached; a longer one also slows replacing a task that really is dead.
+  The tests block the main loop for 2 s: the thread answers 200 during the block, while the main port's `/health` answers only after it, and with the beat
+  stale the thread answers 503 (`api/test/health.test.ts`). **Measured locally** on the api's image (Node 22) held to 0.25 vCPU and 512 MB, with 600
+  connections posting 200 KB bodies and shedding off: the main port's `/health` took 6.9 s at the median and 7.8 s at worst, past the old 5 s timeout, while
+  the thread answered in 7 ms (325 ms at worst), every one a 200. With shedding on and 300 connections, 490 ms against 4 ms. The thread's cost: the task
+  used 126 MB of its 512 under that load.
+- **It grows sooner.** CPU target tracking at 50% in place of 60%: the minutes above were 3 in a row over 50% by 15:43. And a step policy for shedding, since
+  shedding started in the first minute while CPU took 10 to act: a minute with 10 or more "too busy to answer" lines (the `api_busy` count) adds one task, and
+  AWS runs it again each minute the shedding goes on, after a 60 s cooldown, never past the max (`infra/modules/env/autoscaling.tf`). 10 is more than a held
+  row or a blip turns away; this test turned away about 800 a minute. The max stays at 4, so the most it can cost doesn't change.
+
+**A rerun at the same 120 a second follows**, once Caleb has applied it (`infra/README.md`, "Autoscaling the api"). It should show no task replaced, a third
+task within about 5 minutes and a fourth soon after, and the 503s and timeouts falling once they're up.
 
 ### Not building
 

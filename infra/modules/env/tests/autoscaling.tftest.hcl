@@ -1,5 +1,5 @@
-# terraform test, no AWS and no login. A service the autoscaler sizes (autoscaling.tf): off until its switch, then CPU picks its count.
-# The runs share one state, in order, the way applies follow each other.
+# terraform test, no AWS and no login. A service the autoscaler sizes (autoscaling.tf): off until its switch, then CPU and shedding pick its count.
+# Its load balancer check is on its own port (load_balancer.tf), so a busy task isn't replaced. The runs share one state, in order, the way applies follow each other.
 mock_provider "aws" {
   mock_data "aws_availability_zones" {
     defaults = { names = ["us-west-2a", "us-west-2b"] }
@@ -26,6 +26,9 @@ mock_provider "aws" {
   mock_resource "aws_lb_target_group" {
     defaults = { arn = "arn:aws:elasticloadbalancing:us-west-2:123456789012:targetgroup/test/1" }
   }
+  mock_resource "aws_appautoscaling_policy" {
+    defaults = { arn = "arn:aws:autoscaling:us-west-2:123456789012:scalingPolicy:test:resource/ecs/service/homecookd-test/api:policyName/test" }
+  }
   mock_resource "aws_lb_listener" {
     defaults = { arn = "arn:aws:elasticloadbalancing:us-west-2:123456789012:listener/app/test/1/1" }
   }
@@ -50,7 +53,7 @@ variables {
   alert_email       = "alerts@example.com"
   secret_names      = ["SENTRY_DSN_API"]
   services = {
-    api    = { cpu = 512, memory = 1024, desired_count = 0, autoscale = { min = 2, max = 4 }, default_route = true, uses_database = true }
+    api    = { cpu = 512, memory = 1024, desired_count = 0, autoscale = { min = 2, max = 4 }, health_port = 8081, default_route = true, uses_database = true }
     worker = { cpu = 1024, memory = 2048, desired_count = 0, uses_database = true }
     voice  = { cpu = 256, memory = 512, desired_count = 0, path_patterns = ["/cook*"] }
   }
@@ -88,6 +91,49 @@ run "off_until_launch" {
     condition     = toset(keys(aws_ecs_service.service)) == toset(["voice", "worker"]) && toset(keys(aws_appautoscaling_target.service)) == toset(["api"])
     error_message = "Services without autoscale stay where they were, with no target."
   }
+
+  assert {
+    condition     = toset(keys(aws_appautoscaling_policy.shedding)) == toset(["api"]) && toset(keys(aws_cloudwatch_metric_alarm.shedding)) == toset(["api"])
+    error_message = "Only the api scales on shedding: the line it counts is the api's. Off, the range of 0 to 0 caps it at nothing."
+  }
+}
+
+run "health_check_on_its_own_port" {
+  command = apply
+
+  assert {
+    condition = alltrue([for h in aws_lb_target_group.service["api"].health_check : (
+      h.path == "/health" && h.port == "8081" && h.interval == 15 && h.timeout == 10 && h.healthy_threshold == 2 && h.unhealthy_threshold == 5
+    )])
+    error_message = "The load balancer checks the api on its health thread's port, and allows 10 s and 5 misses before it gives up on a task."
+  }
+
+  assert {
+    condition = alltrue([for h in aws_lb_target_group.service["voice"].health_check : (
+      h.port == "traffic-port" && h.timeout == 10 && h.unhealthy_threshold == 5
+    )])
+    error_message = "A service without a health_port is checked on its own port, with the same longer tolerances."
+  }
+
+  assert {
+    condition = (
+      toset(keys(aws_vpc_security_group_ingress_rule.service_health_from_alb)) == toset(["api"])
+      && aws_vpc_security_group_ingress_rule.service_health_from_alb["api"].from_port == 8081
+      && aws_vpc_security_group_ingress_rule.service_health_from_alb["api"].to_port == 8081
+      && aws_vpc_security_group_ingress_rule.service_health_from_alb["api"].referenced_security_group_id == aws_security_group.alb.id
+      && aws_vpc_security_group_ingress_rule.service_health_from_alb["api"].security_group_id == aws_security_group.service["api"].id
+    )
+    error_message = "Only the load balancer may reach the api's health port, and only the api has one."
+  }
+
+  assert {
+    condition = (
+      jsondecode(aws_ecs_task_definition.service["api"].container_definitions)[0].portMappings == [{ containerPort = 8080 }, { containerPort = 8081 }]
+      && contains(jsondecode(aws_ecs_task_definition.service["api"].container_definitions)[0].environment, { name = "HEALTH_PORT", value = "8081" })
+      && jsondecode(aws_ecs_task_definition.service["voice"].container_definitions)[0].portMappings == [{ containerPort = 8080 }]
+    )
+    error_message = "The api's task maps the health port and is told it; voice keeps its one port."
+  }
 }
 
 run "launched" {
@@ -95,7 +141,7 @@ run "launched" {
 
   variables {
     services = {
-      api    = { cpu = 512, memory = 1024, desired_count = 2, autoscale = { min = 2, max = 4 }, default_route = true, uses_database = true }
+      api    = { cpu = 512, memory = 1024, desired_count = 2, autoscale = { min = 2, max = 4 }, health_port = 8081, default_route = true, uses_database = true }
       worker = { cpu = 1024, memory = 2048, desired_count = 0, uses_database = true }
       voice  = { cpu = 256, memory = 512, desired_count = 0, path_patterns = ["/cook*"] }
     }
@@ -113,10 +159,35 @@ run "launched" {
 
   assert {
     condition = alltrue([for c in aws_appautoscaling_policy.cpu["api"].target_tracking_scaling_policy_configuration : (
-      c.target_value == 60 && c.scale_out_cooldown == 60 && c.scale_in_cooldown == 300
+      c.target_value == 50 && c.scale_out_cooldown == 60 && c.scale_in_cooldown == 300
       && c.predefined_metric_specification[0].predefined_metric_type == "ECSServiceAverageCPUUtilization"
     )]) && aws_appautoscaling_policy.cpu["api"].resource_id == aws_appautoscaling_target.service["api"].resource_id
-    error_message = "The api's tasks are kept near 60% CPU on average."
+    error_message = "The api's tasks are kept near 50% CPU on average (60% grew too late on Nov 2)."
+  }
+
+  assert {
+    condition = aws_appautoscaling_policy.shedding["api"].policy_type == "StepScaling" && alltrue([
+      for c in aws_appautoscaling_policy.shedding["api"].step_scaling_policy_configuration : (
+        c.adjustment_type == "ChangeInCapacity" && c.cooldown == 60 && length(c.step_adjustment) == 1
+        && alltrue([for s in c.step_adjustment : s.scaling_adjustment == 1 && s.metric_interval_lower_bound == "0" && s.metric_interval_upper_bound == null])
+      )
+    ]) && aws_appautoscaling_policy.shedding["api"].resource_id == aws_appautoscaling_target.service["api"].resource_id
+    error_message = "Shedding adds one api task at a time, at most once a minute, on the same target, so its max still caps it."
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.shedding["api"].metric_name == aws_cloudwatch_log_metric_filter.api_busy.metric_transformation[0].name
+      && aws_cloudwatch_metric_alarm.shedding["api"].namespace == "homecookd/homecookd-test"
+      && aws_cloudwatch_metric_alarm.shedding["api"].statistic == "Sum"
+      && aws_cloudwatch_metric_alarm.shedding["api"].period == 60
+      && aws_cloudwatch_metric_alarm.shedding["api"].evaluation_periods == 1
+      && aws_cloudwatch_metric_alarm.shedding["api"].threshold == 10
+      && aws_cloudwatch_metric_alarm.shedding["api"].comparison_operator == "GreaterThanOrEqualToThreshold"
+      && aws_cloudwatch_metric_alarm.shedding["api"].treat_missing_data == "notBreaching"
+      && aws_cloudwatch_metric_alarm.shedding["api"].alarm_actions == toset([aws_appautoscaling_policy.shedding["api"].arn])
+    )
+    error_message = "One minute with 10 or more \"too busy to answer\" lines runs the step policy, and nothing else: no email, no other action."
   }
 
   assert {
@@ -130,7 +201,7 @@ run "fixed_counts_still_set_by_terraform" {
 
   variables {
     services = {
-      api    = { cpu = 512, memory = 1024, desired_count = 2, autoscale = { min = 2, max = 4 }, default_route = true, uses_database = true }
+      api    = { cpu = 512, memory = 1024, desired_count = 2, autoscale = { min = 2, max = 4 }, health_port = 8081, default_route = true, uses_database = true }
       worker = { cpu = 1024, memory = 2048, desired_count = 0, uses_database = true }
       voice  = { cpu = 256, memory = 512, desired_count = 1, path_patterns = ["/cook*"] }
     }

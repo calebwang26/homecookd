@@ -45,12 +45,19 @@ resource "aws_lb_target_group" "service" {
   target_type          = "ip"
   vpc_id               = aws_vpc.main.id
   deregistration_delay = each.value.drain_seconds
+  # A service with a health_port is checked there: the api answers it from its own thread, so a busy task isn't taken for a dead one (api/src/health.ts).
+  # On Nov 2 the old check (traffic port, 5 s to answer, 3 misses) replaced a saturated api task that was still answering. The longer timeout and 5 misses
+  # are for every service: a task is now replaced after 75 s of no answer, not 45.
   health_check {
     path                = "/health"
+    port                = each.value.health_port == null ? "traffic-port" : tostring(each.value.health_port)
     interval            = 15
+    timeout             = 10
     healthy_threshold   = 2
-    unhealthy_threshold = 3
+    unhealthy_threshold = 5
   }
+  # The rule that lets the load balancer reach the health port goes first, or the check would fail in between.
+  depends_on = [aws_vpc_security_group_ingress_rule.service_health_from_alb]
 }
 
 resource "aws_lb_listener" "main" {

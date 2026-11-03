@@ -48,6 +48,7 @@ LISTENER = ENV + "aws_lb_listener.main"
 LB = ENV + "aws_lb.main"
 ROUTE = ENV + "aws_route_table_association.private[0]"
 INGRESS = ENV + 'aws_vpc_security_group_ingress_rule.service_from_alb["api"]'
+API_TG = ENV + 'aws_lb_target_group.service["api"]'
 SUBSCRIPTION = ENV + "aws_sns_topic_subscription.email"
 TARGET = ENV + 'aws_appautoscaling_target.service["api"]'
 
@@ -112,6 +113,22 @@ def autoscaled_api(plan, most=4):
     """The api once the autoscaler sizes it (modules/env/autoscaling.tf): its target and policy, unchanged."""
     keep(plan, "aws_appautoscaling_target", 'service["api"]', {"resource_id": "service/homecookd-staging/api", "min_capacity": 2, "max_capacity": most, "region": "us-west-2"})
     keep(plan, "aws_appautoscaling_policy", 'cpu["api"]', {"name": "homecookd-staging-api-cpu", "resource_id": "service/homecookd-staging/api", "region": "us-west-2"})
+
+
+SHED_POLICY = f"arn:aws:autoscaling:us-west-2:{ACCOUNT}:scalingPolicy:0f1e2d3c-4b5a-6978-8a9b-0c1d2e3f4a5b:resource/ecs/service/homecookd-staging/api:policyName/homecookd-staging-api-shedding"
+
+
+def shedding_alarm(plan, policy_exists=True):
+    """The scale-out alarm (modules/env/autoscaling.tf), new. Its action is the api's step policy: known once the policy exists, unknown in the plan that makes both."""
+    autoscaled_api(plan)
+    if policy_exists:
+        keep(plan, "aws_appautoscaling_policy", 'shedding["api"]', {"name": "homecookd-staging-api-shedding", "arn": SHED_POLICY, "resource_id": "service/homecookd-staging/api", "region": "us-west-2"})
+    r = copy.deepcopy(next(c for c in VARIANTS["voice_one"]["changes"] if c["type"] == "aws_cloudwatch_metric_alarm"))
+    r.update(address=ENV + 'aws_cloudwatch_metric_alarm.shedding["api"]', name="shedding", index="api")
+    r["change"]["after"].update(alarm_name="homecookd-staging-api-shedding", namespace="homecookd/homecookd-staging", metric_name="ApiTooBusy", dimensions=None,
+                                statistic="Sum", threshold=10, alarm_actions=[SHED_POLICY] if policy_exists else [])
+    r["change"]["after_unknown"]["alarm_actions"] = [False] if policy_exists else [True]
+    plan["resource_changes"].append(r)
 
 
 def edit_container(plan, address, fn):
@@ -194,6 +211,9 @@ ALLOWED = {
     "the worker's own entry point, on a new revision": lambda p: edit_container(p, WORKER_TD, lambda c: set_env(c, "LOG_LEVEL", "debug")),
     "just under the cost limit: 124 secret names at $0.40": lambda p: many(p, "aws_secretsmanager_secret", 124, {"name": "homecookd/staging/S"}),
     "an autoscaled api, its target and policy unchanged": autoscaled_api,
+    "the api told its health port, and mapping it": lambda p: edit_container(p, API_TD, lambda c: (
+        c["portMappings"].append({"containerPort": 8081, "hostPort": 8081, "protocol": "tcp"}), set_env(c, "HEALTH_PORT", "8081"))),
+    "the shedding alarm, once its step policy exists": shedding_alarm,
 }
 
 
@@ -451,6 +471,8 @@ REFUSED = {
     "a new public ingress rule": (public_new_ingress, "public_paths_are_never_automatic"),
     "real: the load balancer's rules changing": (lambda p: p.update(variant("alb_locked")), "public_paths_are_never_automatic"),
     "a changed ingress rule": (lambda p: update(p, INGRESS, cidr_ipv4="0.0.0.0/0"), "public_paths_are_never_automatic"),
+    "the load balancer let in to the api's health port": (lambda p: add(p, "aws_vpc_security_group_ingress_rule", 'service_health_from_alb["api"]', {"from_port": 8081, "to_port": 8081, "ip_protocol": "tcp"}), "public_paths_are_never_automatic"),
+    "the health check moved to another port": (lambda p: update(p, API_TG, health_check=[{**find(p, API_TG)["change"]["before"]["health_check"][0], "port": "8081", "timeout": 10, "unhealthy_threshold": 5}]), "public_paths_are_never_automatic"),
     "a bucket policy": (lambda p: update(p, BUCKET_POLICY, policy='{"Statement":[{"Effect":"Allow","Principal":"*","Action":"s3:GetObject","Resource":"*"}]}'), "public_paths_are_never_automatic"),
     "a public access block off": (lambda p: update(p, PAB, block_public_policy=False), "public_paths_are_never_automatic"),
     "a public access block removed": (lambda p: act(p, PAB, "delete"), "public_paths_are_never_automatic"),
@@ -516,6 +538,10 @@ REFUSED = {
     "the database's size": (lambda p: update(p, DB, instance_class="db.r6g.4xlarge"), "held_types_are_never_automatic"),
     "the autoscaler's range": (lambda p: (autoscaled_api(p), update(p, TARGET, max_capacity=40)), "held_types_are_never_automatic"),
     "a new scaling policy": (lambda p: add(p, "aws_appautoscaling_policy", 'cpu["voice"]', {"name": "homecookd-staging-voice-cpu"}), "held_types_are_never_automatic"),
+    "the CPU target changed": (lambda p: (autoscaled_api(p), update(p, ENV + 'aws_appautoscaling_policy.cpu["api"]', target_tracking_scaling_policy_configuration=[{"target_value": 50}])), "held_types_are_never_automatic"),
+    "the shedding alarm in the same plan as its step policy": (lambda p: (shedding_alarm(p, policy_exists=False), add(p, "aws_appautoscaling_policy", 'shedding["api"]', {"name": "homecookd-staging-api-shedding"})), "held_types_are_never_automatic"),
+    "the shedding alarm's action unknown until apply": (lambda p: shedding_alarm(p, policy_exists=False), "fields_that_matter_are_known"),
+    "a log line counted into a metric": (lambda p: add(p, "aws_cloudwatch_log_metric_filter", "more", {"name": "homecookd-staging-more", "log_group_name": "/homecookd-staging/api"}), "held_types_are_never_automatic"),
     "a type whose delete isn't allowed": (lambda p: act(p, JOBS, "delete"), "auto_actions"),
     "a secret's update isn't allowed": (lambda p: update(p, ENV + 'aws_secretsmanager_secret.app["SENTRY_DSN_API"]', description="x"), "auto_actions"),
     "the website function's replace isn't allowed": (lambda p: act(p, FUNCTION, "delete", "create"), "auto_actions"),

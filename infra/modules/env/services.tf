@@ -54,6 +54,15 @@ resource "aws_vpc_security_group_ingress_rule" "service_from_alb" {
   to_port                      = each.value.port
 }
 
+resource "aws_vpc_security_group_ingress_rule" "service_health_from_alb" {
+  for_each                     = { for k, s in local.lb_services : k => s if s.health_port != null }
+  security_group_id            = aws_security_group.service[each.key].id
+  referenced_security_group_id = aws_security_group.alb.id
+  ip_protocol                  = "tcp"
+  from_port                    = each.value.health_port
+  to_port                      = each.value.health_port
+}
+
 locals {
   # What a service that uses the database is told. The limited login is only a user name: the task role signs a token for it
   # (iam.tf). The master login is a secret, and with db_iam_login only the migrate task below gets it.
@@ -78,8 +87,8 @@ resource "aws_ecs_task_definition" "service" {
     image        = "${aws_ecr_repository.service[each.key].repository_url}:bootstrap"
     essential    = true
     stopTimeout  = 120 # Fargate's maximum; long calls are held by task protection instead (docs/build/AWS-MIGRATION.md)
-    portMappings = contains(keys(local.lb_services), each.key) ? [{ containerPort = each.value.port }] : []
-    environment = [for k, v in merge(each.value.env, lookup(local.db_env, each.key, {}), each.key == "worker" ? { MEDIA_BASE_URL = local.media_url } : {}, {
+    portMappings = contains(keys(local.lb_services), each.key) ? [for p in [each.value.port, each.value.health_port] : { containerPort = p } if p != null] : []
+    environment = [for k, v in merge(each.value.env, lookup(local.db_env, each.key, {}), each.key == "worker" ? { MEDIA_BASE_URL = local.media_url } : {}, each.value.health_port == null ? {} : { HEALTH_PORT = tostring(each.value.health_port) }, {
       PORT                = tostring(each.value.port)
       MEDIA_BUCKET        = aws_s3_bucket.media.bucket
       MEDIA_BASE_URL      = local.media_url

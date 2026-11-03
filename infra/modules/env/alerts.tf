@@ -84,7 +84,7 @@ resource "aws_cloudwatch_metric_alarm" "api_slow" {
 }
 
 # The api's own work is what runs out first: the Nov 2 load test held one 0.25 vCPU task at 80% for 50 requests a second, with the database at 10%.
-# The average over its tasks. When it autoscales to 60% (autoscaling.tf), 85% means it's at its most tasks and still hot, or new ones aren't starting.
+# The average over its tasks. When it autoscales to 50% (autoscaling.tf), 85% means it's at its most tasks and still hot, or new ones aren't starting.
 resource "aws_cloudwatch_metric_alarm" "api_cpu" {
   alarm_name          = "${local.name}-api-cpu"
   alarm_description   = "The api's tasks are near their CPU limit, so requests are starting to queue"
@@ -103,6 +103,7 @@ resource "aws_cloudwatch_metric_alarm" "api_cpu" {
 
 # Requests turned away because every database connection, or the row they wanted, was busy: a 503 with retry-after ("too busy to answer" in app.ts, and in
 # the dish and invite routes' own handlers). A few in a burst is that working. More than this means the pool is too small or something holds rows (AWS-MIGRATION.md, "overload").
+# The same count also adds an api task, minute by minute (autoscaling.tf, "shedding").
 resource "aws_cloudwatch_log_metric_filter" "api_busy" {
   name           = "${local.name}-api-busy"
   log_group_name = aws_cloudwatch_log_group.service["api"].name

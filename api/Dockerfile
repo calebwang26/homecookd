@@ -14,6 +14,9 @@ ENV NODE_ENV=production
 ADD https://truststore.pki.rds.amazonaws.com/global/global-bundle.pem /app/rds-ca.pem
 RUN chmod 644 /app/rds-ca.pem
 ENV NODE_EXTRA_CA_CERTS=/app/rds-ca.pem
+# The load balancer's check, on its own thread (src/health.ts). In the image, not only in Terraform, so an image can roll out before the check moves to it.
+# The task definition sets the same port from the api's health_port (infra/envs/*/main.tf), and a test keeps the two equal.
+ENV HEALTH_PORT=8081
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY migrations ./migrations
