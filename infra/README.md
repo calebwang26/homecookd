@@ -129,7 +129,7 @@ The api runs 2 to 4 tasks, on staging now and on production at launch (`modules/
 with their average CPU over 50%. CPU, not request count, because CPU is what ran out in the load test (`docs/build/AWS-MIGRATION.md`). It also
 adds one each minute the api is shedding (10 or more "too busy to answer" lines in a minute), because shedding starts long before 3 minutes of
 CPU do. It takes one away after 15 minutes in a row under 25% CPU with nothing turned away, then waits 5 minutes before the next: target
-tracking only adds, since in the Nov 2 rerun its own scale-in undid a task shedding had just added (#316). The load balancer checks the api on
+tracking only adds, since in the Nov 2 rerun its own scale-in undid a task shedding had just added (#332). The load balancer checks the api on
 its own health thread's port (`health_port`, 8081; `api/src/health.ts`), so a busy task isn't replaced as dead.
 
 **The count is a switch.** For an autoscaled service, `desired_count` (staging's `api_count`) is 0 for off or its `autoscale.min` for
@@ -172,7 +172,7 @@ step policy and its alarm, and sets the CPU target to 50%. No new types, so the 
 5. The rerun at 120 a second, as in step 5 above. `describe-scaling-activities` should show a task added within a few minutes and no task
    "replaced due to an unhealthy status" in `aws ecs describe-services --cluster homecookd-staging --services api --query 'services[0].events'`.
 
-**Applying the slow scale-in on staging, once (#316). By hand, under Caleb's standing OK for staging.** It turns off target tracking's scale-in for the api and adds the
+**Applying the slow scale-in on staging, once (#332). By hand, under Caleb's standing OK for staging.** It turns off target tracking's scale-in for the api and adds the
 `-scale-in` step policy and its alarm. No new types, so the apply role needs nothing.
 1. The merge's auto-apply is refused: autoscaling policies are held, and the new alarm's action is the new policy, not known until apply.
    Nothing is applied.
