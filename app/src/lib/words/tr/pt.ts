@@ -992,6 +992,7 @@ const words: Translation = {
   'errors.answered': 'Você já respondeu.',
   'errors.own_family': 'Isto é da sua própria família.',
   'errors.not_shared': 'Compartilhe esta receita primeiro.',
+  'errors.taken_down': 'Nossa equipe tirou esta receita do mapa depois de uma denúncia. Ela continua com a sua família.',
   'errors.declined': 'Disseram que desta vez não.',
   'errors.closed': 'Estas respostas já foram enviadas.',
   'errors.words': 'Algumas dessas palavras não podem ser publicadas. Tente outras palavras.',

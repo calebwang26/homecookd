@@ -30,6 +30,7 @@ export const ERRORS = {
   'errors.answered': 'You already answered.',
   'errors.own_family': 'This is your own family’s.',
   'errors.not_shared': 'Share this recipe first.',
+  'errors.taken_down': 'Our team took this recipe off the map after a report. It stays with your family.',
   'errors.declined': 'They said not this time.',
   'errors.closed': 'These answers were already sent.',
   'errors.words': 'Some of those words can’t be posted. Try other words.',

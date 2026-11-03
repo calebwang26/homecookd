@@ -62,6 +62,10 @@ export type Recipe = {
   stepCount?: number;
   memoriesOptIn?: boolean;
   language?: string;
+  /** On the Community map since. */
+  sharedAt?: number;
+  /** The team took it off the map after a report (sharedAt is cleared; sharing again is 409 taken_down). */
+  hiddenAt?: number;
 };
 
 export type Complete = { complete: boolean; missing: number[]; cancelled: boolean; job: { jobId: string; stage: JobStage } | null };

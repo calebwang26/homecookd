@@ -992,6 +992,7 @@ const words: Translation = {
   'errors.answered': 'Sumagot na po kayo.',
   'errors.own_family': 'Sa sarili n\'yo pong pamilya ito.',
   'errors.not_shared': 'Ibahagi po muna ang recipe na ito.',
+  'errors.taken_down': 'Inalis po ng aming team ang recipe na ito sa mapa dahil sa isang report. Mananatili po ito sa inyong pamilya.',
   'errors.declined': 'Sabi po nila, hindi muna ngayon.',
   'errors.closed': 'Naipadala na po ang mga sagot na ito.',
   'errors.words': 'May mga salitang hindi po puwedeng i-post. Subukan po ang ibang salita.',
