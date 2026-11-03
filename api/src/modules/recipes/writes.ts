@@ -76,6 +76,13 @@ export async function shareRecipeIfOpen(c: Queryable, recipeId: string): Promise
   return rowCount ? "shared" : "taken_down";
 }
 
+/** community.setShare's "off": her own switch takes it off the map. The story card stays, for the next time she shares it. */
+export async function unshareRecipeIfOpen(c: Queryable, recipeId: string): Promise<boolean> {
+  if ((await recipeWrites(c)) !== "open") return false;
+  await c.query(`update recipes set shared_at = null where id = $1`, [recipeId]);
+  return true;
+}
+
 /**
  * The team's review of a reported recipe (convex/reports.ts review): `remove` takes it off the map for good, unshared and hidden from every other family, and `keep`
  * lifts a hide. A removed recipe can't be shared again until a `keep` (storyCards.ts shareOn). With writes off it's refused, and the script says so.

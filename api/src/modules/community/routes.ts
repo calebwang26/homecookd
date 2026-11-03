@@ -7,7 +7,7 @@ import { PLACE_KINDS, REPORT_REASONS, type PlaceKind, type ReportReason } from "
 import { createDinner, getDinner, inviteLink, myDinners, requestJoin, respondToJoin } from "./dinners.js";
 import type { Reportable } from "./safety.js";
 import * as service from "./service.js";
-import { askToShare, familyDishes } from "./shareAsks.js";
+import { askToShare, familyDishes, unshare } from "./shareAsks.js";
 
 const ID = { type: "string", minLength: 1, maxLength: 100 };
 const byId = { type: "object", required: ["id"], properties: { id: ID } };
@@ -129,4 +129,9 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
     async (req) => await askToShare(signedIn(req), (req.body as { recipeId: string }).recipeId, String(req.id)),
   );
   app.get("/v1/share-requests/dishes", { schema: { querystring: page } }, async (req) => await familyDishes(signedIn(req), cursorOf(req)));
+  // community.setShare with on: false (her switch). On is her tap on /v1/share-requests.
+  app.post("/v1/recipes/:id/unshare", { schema: { params: byId }, config: { noBody: true } }, async (req) => {
+    await unshare(signedIn(req), paramId(req));
+    return OK;
+  });
 }

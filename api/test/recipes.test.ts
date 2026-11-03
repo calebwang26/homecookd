@@ -13,6 +13,7 @@ import {
   saveStoryCardIfOpen,
   saveTestRecipe,
   shareRecipeIfOpen,
+  unshareRecipeIfOpen,
 } from "../src/modules/recipes/writes.js";
 import { call, closeRecipeWrites, db, family, freshDatabase, hasDatabase, lockRecipeCopy, MEDIA, openRecipeWrites, recipe, setUp, who, type Who } from "./jobsHelpers.js";
 
@@ -200,7 +201,7 @@ test("recipes", { skip: !hasDatabase }, async (t) => {
   await t.test("every write in writes.ts asks the switch, and the trigger is still there behind it", async () => {
     const source = readFileSync(new URL("../src/modules/recipes/writes.ts", import.meta.url), "utf8");
     const functions = source.split(/^export async function /m).slice(1);
-    assert.equal(functions.length, 8);
+    assert.equal(functions.length, 9);
     for (const body of functions) {
       assert.match(body, /await recipeWrites\(c\)/, body.slice(0, 40));
       const asked = body.indexOf("recipeWrites(c)");
@@ -219,6 +220,7 @@ test("recipes", { skip: !hasDatabase }, async (t) => {
     assert.equal(await shareRecipeIfOpen(db(), id), "closed");
     assert.equal(await saveStoryCardIfOpen(db(), id, { text: "x", usedStories: false, culture: null, quote: null }), false);
     assert.equal(await reviewRecipeIfOpen(db(), id, false), false);
+    assert.equal(await unshareRecipeIfOpen(db(), id), false);
     assert.equal((await recipe(id)).shared_at, null);
     assert.equal((await recipe(id)).hidden_at, null);
     await lockRecipeCopy();

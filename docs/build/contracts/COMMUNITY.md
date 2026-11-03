@@ -2,7 +2,7 @@
 
 Nov 2, 2026. Read from `aws-migration` at `2f71c8f24` (#323, the report alarm, included), and checked against staging with GET calls that change nothing, plus one test report that set off the alarm. For the App screens & recording chat, with a section for App Store, web & builds (the `/d` page). This covers the neighborhood feed and map, a shared recipe's page, swaps and "cook together", dinners (hosting, asking to join, the host's answer, the invite link and its public page), "Report or block" and the team's side of it. It's the fifth contract: [ACCOUNTS.md, "Conventions"](ACCOUNTS.md#conventions-all-areas) applies (the address, the session on every route here but `POST /invite/open`, JSON bodies, `Idempotency-Key`, paging, no stubs, polling), and every code is in [ERROR-CODES.md](ERROR-CODES.md). Share asks and story cards are in [MESSAGES.md](MESSAGES.md), flow 8; the cook's craving routes (`/v1/cravings*`) are in [DISH.md](DISH.md). Every person id is the `personId` a session returns, and a recipe id is a family recipe's `_id` from `GET /v1/recipes` (JOBS.md). Field names are Convex's, in camelCase, and times are epoch milliseconds.
 
-**Where it stands.** Every Community call in the app's wrappers has a route, except two: turning a shared recipe off (`community.setShare` with `on: false`) and setting a person's place (`community.setLocation`) (open items 1 and 2). No live topic and no push. The Community tab is off in the app since Oct 25 (`app/src/app/kid/_layout.tsx`, `href: null`); its screens stay in the code, and the cook's "Share with people nearby" switch on her recipe page (`my-recipe/[id].tsx`, `ShareNearbyRow`) still shows (open item 12).
+**Where it stands.** Every Community call in the app's wrappers has a route, except setting a person's place (`community.setLocation`, open item 2). No live topic and no push. The Community tab is off in the app since Oct 25 (`app/src/app/kid/_layout.tsx`, `href: null`); its screens stay in the code, and the cook's "Share with people nearby" switch on her recipe page (`my-recipe/[id].tsx`, `ShareNearbyRow`) still shows (open item 12).
 
 **Privacy.** What leaves a family, and how the code holds to it:
 
@@ -285,7 +285,16 @@ Also `unavailable`, `server_error` (every open is 500 without `RATE_LIMIT_SALT`)
 
 ### Share asks
 
-`POST /v1/share-requests {recipeId}` → `{result: "asked" | "shared"}` and `GET /v1/share-requests/dishes` are Community's routes (`shareAsks.ts`), but their contract is [MESSAGES.md, flow 8 and "Share asks"](MESSAGES.md#8-a-share-ask-and-its-story-card), because the ask is the cook's question. What it means here: `shared` sets `shared_at`, and from then the recipe is in other families' feeds, with its story card once the task has written it (the plain line until then, or on any failure). Her own tap on her own ready recipe is the only "on" switch. There's no "off" (open item 1).
+`POST /v1/share-requests {recipeId}` → `{result: "asked" | "shared"}` and `GET /v1/share-requests/dishes` are Community's routes (`shareAsks.ts`), but their contract is [MESSAGES.md, flow 8 and "Share asks"](MESSAGES.md#8-a-share-ask-and-its-story-card), because the ask is the cook's question. What it means here: `shared` sets `shared_at`, and from then the recipe is in other families' feeds, with its story card once the task has written it (the plain line until then, or on any failure). Her own tap on her own ready recipe is the only "on" switch.
+
+**Her switch, off:** `POST /v1/recipes/:id/unshare`, no body, answers `{ok: true}` (`shareAsks.ts` `unshare`, Convex's `setShare` with `on: false`). It clears `shared_at`, so the recipe leaves every other family's map and its page is missing to them. Its story card stays for the next time she shares it, and a dinner of it already posted goes on with `recipeId: null`. Off already: `{ok: true}`, nothing changes. Behind the recipes switch, like her tap.
+
+| Code | When | The app does |
+|---|---|---|
+| `forbidden` (403) | "Only the cook can take this off the map.": anyone else in her family | Show the switch only to its cook |
+| `not_found` (404) | "Pick one of your family's recipes.": another family's, missing, or not ready | Drop it |
+| `taken_down` (409) | The team took it off the map after a report: it's off already, and only the team can change that | Show that instead of the switch (`hiddenAt`) |
+| `not_moved` (501) | Recipe writes are off | Not in production 1.1 |
 
 ## Live topics
 
@@ -327,7 +336,7 @@ From `app/src/lib/live/community.ts` and `live/invite.ts` on `aws-migration`, an
 | Convex `community:feed {now, maxMiles?}`, live | `useCommunityFeed` | `GET /v1/community/feed?maxMiles=`: adds `nextCursor` and `dinnersCursor`; `now` is gone (the server's clock decides). Not live |
 | Convex `community:recipe`, live | `useCommunityRecipe` | `GET /v1/community/recipes/:id`. 404 where Convex gave null |
 | Convex `community:setShare {on: true}` | `setShare`, from `ShareNearbyRow.tsx` | `POST /v1/share-requests {recipeId}` as her own tap: `{result: "shared"}` |
-| Convex `community:setShare {on: false}` | the same | **Not built** (open item 1) |
+| Convex `community:setShare {on: false}` | the same | `POST /v1/recipes/:id/unshare`: `{ok: true}` ("Share asks", above). Its cook only |
 | Convex `community:setLocation` | `setLocation` (defined, no screen calls it) | **Not built** (open item 2) |
 | Convex `shareRequests:familyDishes`, `shareRequests:ask` | `useFamilyDishes`, `askToShare` | MESSAGES.md, "What the app calls today" |
 | Convex `community:mySwaps`, live | `useMySwaps` | `GET /v1/community/swaps`: `.swaps`, every page |
@@ -371,7 +380,7 @@ Each test person is one `test_id`, the same person every time. Use a new test re
 
 Owners: **API** is the AWS backend chat, **App** is App screens & recording, **Web** is App Store, web & builds, **Caleb** is a decision only he makes.
 
-1. No route turns sharing off. The cook's switch (`ShareNearbyRow.tsx`) calls Convex's `community:setShare` with `on: false`, which cleared `shared_at` and kept the card, for the recipe's cook only; on the api only "on" exists (her own tap on `POST /v1/share-requests`). `communityShareAsks.test.ts` checks there's no share route, and COMMUNITY-MIGRATION.md, blocker 1, held it back because the sync owned `recipes`. Since Nov 2 no sync runs (`recipes/switch.ts`), so it can be built behind the recipes switch, as her tap is. **API**
+1. ~~No route turns sharing off.~~ **Done (#329):** `POST /v1/recipes/:id/unshare`, her switch's off, for the recipe's cook only, behind the recipes switch ("Share asks", above). **App:** call it from `ShareNearbyRow` and drop the "can't be turned off yet" line.
 2. Nothing on the api sets a person's place: `setLocation` has no route (blocker 2; the same test), and only the sync and account deletion write `people.approx_*`. So everyone and every dinner sits at `DEMO_LOCATION` (`geo.ts`, a placeholder at MIT, `TODO(caleb)`), every distance reads "In your building", and `maxMiles` filters nothing. The app defines `setLocation` but no screen calls it. Say whether 1.1 asks for a place. **Caleb**, then API
 3. ~~The team can't take a recipe down.~~ **Done (#328):** `remove` unshares the recipe and sets `hidden_at` behind the recipes switch (`recipes/writes.ts` `reviewRecipeIfOpen`), as Convex's review did, and `keep` clears `hidden_at`. Sharing a taken-down recipe again is 409 `taken_down`, and its family sees `hiddenAt` and `takenDown` (flow 4, "The team"). **App:** on her recipe page, show that the team took it off the map in place of the share switch when `hiddenAt` is set.
 4. ~~Report alerts reach nobody on AWS.~~ **Done (#323):** a report or block logs its alert line, and an alarm emails the team within about 5 minutes. Open reports past 12 hours email once a day. Proven on staging Nov 2 (flow 4). Production gets the same with the production-config PR. **API**
