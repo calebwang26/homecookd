@@ -345,6 +345,15 @@ const ROUTES: Record<string, SignedIn | Anonymous> = {
   "POST /v1/dinners/:id/invite-link": { call: (s, who) => post(s.app, who, `/v1/dinners/${s.dinner}/invite-link`, undefined, { key: null }), otherFamily: 403, outsider: 403 },
   "POST /v1/share-requests": { call: (s, who) => post(s.app, who, "/v1/share-requests", { recipeId: s.privateDish }, { key: null }), works: (s) => post(s.app, s.leo, "/v1/share-requests", { recipeId: s.privateDish }, { key: null }), otherFamily: 404, outsider: { familyWide: "Anyone in a family may ask its cook" } },
   "GET /v1/share-requests/dishes": { call: (s, who) => get(s.app, who, "/v1/share-requests/dishes"), otherFamily: nothingOfTheirs, outsider: { familyWide: "A family's dishes" } },
+  "POST /v1/recipes/:id/unshare": {
+    call: (s, who) => post(s.app, who, `/v1/recipes/${s.poha}/unshare`, undefined, { key: null }),
+    otherFamily: 404,
+    outsider: 403,
+    notYet: { status: 501, why: "Recipe writes stay shut until the recipes switch: communityShareAsks.test.ts holds who may once it's open" },
+  },
+
+  // --- a dish card in the app: its kid or its cook (Mom holds this one's cook side)
+  "GET /v1/dish-asks/:id": { call: (s, who) => get(s.app, who, `/v1/dish-asks/${s.ask}`), otherFamily: 404, outsider: 404 },
 
   // --- cravings: asked of one person
   "POST /v1/cravings/link": { call: (s, who) => post(s.app, who, "/v1/cravings/link", {}, { key: null }), otherFamily: madeAnew("The caller's own link"), outsider: { familyWide: "The caller's own link" } },
@@ -421,6 +430,7 @@ const ROUTES: Record<string, SignedIn | Anonymous> = {
     },
   },
   "POST /dish/files/confirm": { anonymous: "fileId is the capability", capability: async (s) => assert.equal((await post(s.app, null, "/dish/files/confirm", { fileId: "Q".repeat(22) }, { key: null })).status, 404) },
+  "POST /dish/craving/peek": { anonymous: "A kid with no account opens a parent's craving link: cravingToken is the capability", capability: async (s) => assert.equal((await post(s.app, null, "/dish/craving/peek", { cravingToken: "Q".repeat(22) }, { key: null })).status, 404) },
   "POST /dish/cards": { anonymous: "A kid with no account makes a card: rate limited by IP, and a file it names must be its own capability", capability: async (s) => assert.equal((await post(s.app, null, "/dish/cards", { dish: "dal", photos: ["Q".repeat(22)] }, { key: null })).status, 404) },
   "POST /dish/cards/get": { anonymous: "kidToken is the capability", capability: async (s) => assert.equal((await post(s.app, null, "/dish/cards/get", { kidToken: "Q".repeat(22) }, { key: null })).status, 404) },
   "POST /dish/cards/update": { anonymous: "kidToken is the capability", capability: async (s) => assert.equal((await post(s.app, null, "/dish/cards/update", { kidToken: "Q".repeat(22), message: "x" }, { key: null })).status, 404) },

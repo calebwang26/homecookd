@@ -1,9 +1,11 @@
-// Cravings' signed-in routes: the name of the Convex function each replaces is beside it. Card-making stays on POST /dish/cards. A refusal is app.ts's one shape.
+// The dish module's signed-in routes, a card's and cravings': the name of the Convex function each replaces is beside it. Card-making stays on POST /dish/cards. A refusal is
+// app.ts's one shape.
 import * as Sentry from "@sentry/node";
 import type { FastifyError, FastifyInstance, FastifyRequest } from "fastify";
 import { requireSession, signedIn } from "../../auth.js";
 import type { Trace } from "./budget.js";
 import * as cravings from "./cravings.js";
+import { myCard } from "./service.js";
 import { DishFail } from "./values.js";
 
 const ID = { type: "string", minLength: 1, maxLength: 100 };
@@ -33,6 +35,9 @@ function onError(error: FastifyError, req: FastifyRequest): never {
 export async function cravingRoutes(app: FastifyInstance): Promise<void> {
   app.setErrorHandler(onError);
   app.addHook("preValidation", requireSession);
+
+  // dishAsks.get: /dish/<id>, which the `answered` and `joined` pushes open. Any role, for the card's kid or its cook.
+  app.get("/v1/dish-asks/:id", { schema: { params: byId } }, async (req) => await myCard(signedIn(req), paramId(req), traceOf(req)));
 
   // cravings.createLink, revokeLink
   app.post("/v1/cravings/link", { schema: { body: { type: "object", properties: { message: { type: "string", maxLength: 2000 } } } } }, async (req) =>

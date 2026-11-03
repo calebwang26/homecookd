@@ -95,7 +95,7 @@ Errors are the same on both: the one shape below.
 | 415 | `bad_type` (a file's type isn't allowed). A body with a content type that isn't JSON is 415 `invalid`. |
 | 422 | `words`, `not_a_dish` |
 | 426 | `update_app` (1.0 only) |
-| 429 | `rate_limited`, `budget` (`/dish/*`'s daily model budget), both with `retry-after` |
+| 429 | `rate_limited`, `budget` (`/dish/*`'s daily model budget), `link_full` (a craving link's caps on `/dish/cards`), each with `retry-after` |
 | 500 | `server_error` |
 | 501 | `not_moved` (staging only) |
 | 502, 503 | `provider_down`: S3 or a model (502); Apple's or Google's keys, or the recipe library (503). Nothing was written; try again. |

@@ -4,11 +4,15 @@ import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { fileURLToPath } from "node:url";
 import { after, test } from "node:test";
-import { db } from "../src/db.js";
-import { openReports } from "../src/modules/community/reports.js";
+import { db, tx } from "../src/db.js";
+import { openReports, reviewReport } from "../src/modules/community/reports.js";
+import { shareOnYes } from "../src/modules/messages/storyCards.js";
+import { shareRecipeIfOpen } from "../src/modules/recipes/writes.js";
 import { run } from "../src/reports.js";
-import { block, dishes, family, feed, host, ok, person, recipe, report, world } from "./communityHelpers.js";
+import { block, call, dishes, family, feed, host, ok, person, recipe, report, view, world } from "./communityHelpers.js";
 import { hasDatabase, like } from "./dishHelpers.js";
+import { closeRecipeWrites, openRecipeWrites } from "./jobsHelpers.js";
+import { withMedia } from "./messagesHelpers.js";
 
 const skip = !hasDatabase;
 
@@ -118,32 +122,84 @@ test("review keep and remove resolve the reports and do what reviewReport does",
   assert.deepEqual((await cli("open")).items, []);
 });
 
-test("a recipe's review prints Convex's step first, changes nothing, and goes through once the copy shows it", { skip }, async () => {
+test("with the recipes switch closed, a recipe's review is refused, says why and changes nothing, unless the row already says what it would", { skip }, async () => {
   const { poha } = await reported();
   const before = await reportsNow();
 
-  // A take-down while the copy is still shared.
   const early = await cli("review", "recipe", poha, "remove");
   assert.equal(early.code, 1);
-  assert.equal(early.err[0], `Refused: recipe ${poha} is still shared in the copy here, so taking it down starts on Convex. Nothing changed.`);
-  assert.ok(early.err[1].endsWith(`npx convex run --deployment grand-dragon-649 reports:review '{"kind": "recipe", "targetId": "${poha}", "keep": false}'`), early.err[1]);
-  assert.equal(early.err.at(-1), `  3. Run this again: node dist/reports.js review recipe ${poha} remove`);
+  assert.equal(
+    early.err[0],
+    `Refused: recipe writes aren't open here (RECIPE_WRITES isn't on, or a sync is copying recipes), so recipe ${poha} can't be taken down. Nothing changed.`,
+  );
+  assert.equal(early.err.at(-1), `  Open the recipes switch (recipes/switch.ts), then run this again: node dist/reports.js review recipe ${poha} remove`);
   like(early.log, { level: "warn", msg: "report review refused", kind: "recipe", targetId: poha, decision: "remove", code: "recipes_read_only" });
   assert.deepEqual(await reportsNow(), before);
+  like(await recipeRow(poha), { shared_at: (v: unknown) => v instanceof Date, hidden_at: null });
 
-  // Hidden on Convex before the move: keeping it starts there too.
+  // Hidden already: keeping it is a write too.
   await db().query("update recipes set hidden_at = now() where id = $1", [poha]);
   const hidden = await cli("review", "recipe", poha, "keep");
   assert.equal(hidden.code, 1);
-  assert.match(hidden.err[0], /^Refused: recipe \S+ is hidden in the copy here, so keeping it starts on Convex\. Nothing changed\.$/);
-  assert.ok(hidden.err[1].includes(`"keep": true}'`), hidden.err[1]);
+  assert.match(hidden.err[0], /, so recipe \S+ can't be shown again\. Nothing changed\.$/);
   assert.deepEqual(await reportsNow(), before);
 
-  // Convex's review ran and the sync copied it (SQL stands in for both): now it goes through.
-  await db().query("update recipes set shared_at = null, hidden_at = now() where id = $1", [poha]);
+  // Unshared and hidden already: nothing to write, so it goes through.
+  await db().query("update recipes set shared_at = null where id = $1", [poha]);
   const done = await cli("review", "recipe", poha, "remove");
   assert.equal(done.code, 0, done.err.join("\n"));
   like(done.log, { decision: "remove", resolved: 2 });
+});
+
+test("with the switch open, a recipe taken down leaves every other family's map for good, its family sees why, and only a keep lets it back", { skip }, async () => {
+  await openRecipeWrites();
+  try {
+    const { t, rajani, shreya, serene, rey } = await reported();
+    const upma = await recipe(rajani, { title: "Upma", sharedAt: 5 });
+    await ok(report(t, serene, "recipe", upma, "rude")); // one family's report: hidden from the Zhangs only
+    assert.ok((await dishes(t, rey)).includes("Upma"), "before the review, a family that didn't report it sees it");
+
+    const down = await cli("review", "recipe", upma, "remove");
+    assert.equal(down.code, 0, down.err.join("\n"));
+    assert.equal(down.out[0], `Resolved 1 report on recipe ${upma}.`);
+    like(down.log, { kind: "recipe", targetId: upma, decision: "remove", resolved: 1 });
+    like(await recipeRow(upma), { shared_at: null, hidden_at: (v: unknown) => v instanceof Date });
+
+    // Gone for every other family: not on the map, and its page the same as missing.
+    for (const who of [rey, serene]) {
+      assert.ok(!(await dishes(t, who)).includes("Upma"), who.personId);
+      assert.equal((await view(t, who, upma)).status, 404);
+    }
+
+    // Its own family: the recipe says when it was taken down, the chooser says so, and nobody can put it back, the cook's tap or anyone's ask.
+    const own = await ok(withMedia(() => call(t, shreya, "GET", `/v1/recipes/${upma}`)));
+    assert.equal(typeof own.hiddenAt, "number");
+    assert.equal(own.sharedAt, undefined);
+    const chooser = (await ok(call(t, shreya, "GET", "/v1/share-requests/dishes"))).dishes;
+    like(chooser.find((d: { recipeId: string }) => d.recipeId === upma), { shared: false, takenDown: true, asked: false });
+    assert.ok(chooser.filter((d: { recipeId: string }) => d.recipeId !== upma).every((d: { takenDown: boolean }) => d.takenDown === false));
+    for (const who of [rajani, shreya]) {
+      const again = await call(t, who, "POST", "/v1/share-requests", { recipeId: upma });
+      assert.equal(again.status, 409);
+      like(again.data, { error: "taken_down", message: "Our team took this recipe off the map after a report. It stays with your family." });
+    }
+    assert.deepEqual((await ok(call(t, rajani, "GET", `/v1/recipes/${upma}/questions`))).questions, [], "the kid's ask never reached her");
+    // Her yes to a question asked before the take-down, and a share that read the row before the review landed: neither writes.
+    await tx((c) => shareOnYes(c, { recipeId: upma, familyId: rajani.familyId }));
+    assert.equal(await shareRecipeIfOpen(db(), upma), "taken_down");
+    like(await recipeRow(upma), { shared_at: null });
+    assert.ok(!(await dishes(t, rey)).includes("Upma"));
+
+    // A keep (here straight from the service: nothing is open to review) lifts the hide. It's still unshared until she shares it again.
+    assert.equal(await reviewReport("recipe", upma, true), 0);
+    like(await recipeRow(upma), { shared_at: null, hidden_at: null });
+    assert.ok(!(await dishes(t, rey)).includes("Upma"));
+    like(await ok(call(t, rajani, "POST", "/v1/share-requests", { recipeId: upma })), { result: "shared" });
+    assert.ok((await dishes(t, rey)).includes("Upma"), "back on the map for a family that never reported it");
+    assert.ok(!(await dishes(t, serene)).includes("Upma"), "the family that reported it still never sees it");
+  } finally {
+    await closeRecipeWrites();
+  }
 });
 
 test("wrong words or a wrong id refuse, and nothing changes", { skip }, async () => {

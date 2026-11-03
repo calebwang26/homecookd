@@ -33,16 +33,11 @@ export function parse(args: string[]): Command | string {
   return { action: "review", kind: kind as ReportKind, targetId, keep: decision === "keep" };
 }
 
-/** What the team runs on Convex first, while `recipes` is read-only here (COMMUNITY-MIGRATION.md, blockers, 5). */
-function convexFirst(targetId: string, keep: boolean): string[] {
-  const again = `node dist/reports.js review recipe ${targetId} ${keep ? "keep" : "remove"}`;
+/** A recipe's review writes `recipes`, so it waits on the recipes switch (recipes/switch.ts): RECIPE_WRITES=on, with no sync copying the table. */
+function recipesClosed(targetId: string, keep: boolean): string[] {
   return [
-    keep
-      ? `Refused: recipe ${targetId} is hidden in the copy here, so keeping it starts on Convex. Nothing changed.`
-      : `Refused: recipe ${targetId} is still shared in the copy here, so taking it down starts on Convex. Nothing changed.`,
-    `  1. From the repo root, with the team token: npx convex run --deployment grand-dragon-649 reports:review '{"kind": "recipe", "targetId": "${targetId}", "keep": ${keep}}'`,
-    `  2. Wait for the sync to copy the recipe ${keep ? "with its hide lifted" : "hidden and unshared"}. Until then this is refused again and changes nothing.`,
-    `  3. Run this again: ${again}`,
+    `Refused: recipe writes aren't open here (RECIPE_WRITES isn't on, or a sync is copying recipes), so recipe ${targetId} can't be ${keep ? "shown again" : "taken down"}. Nothing changed.`,
+    `  Open the recipes switch (recipes/switch.ts), then run this again: node dist/reports.js review recipe ${targetId} ${keep ? "keep" : "remove"}`,
   ];
 }
 
@@ -78,7 +73,7 @@ export async function run(args: string[], io: Io = { out: console.log, err: cons
     return 0;
   } catch (error) {
     if (command.action === "review" && error instanceof ApiError && error.code === "recipes_read_only") {
-      for (const line of convexFirst(command.targetId, command.keep)) io.err(line);
+      for (const line of recipesClosed(command.targetId, command.keep)) io.err(line);
       log("warn", "report review refused", { ...fields, code: "recipes_read_only" });
       return 1;
     }

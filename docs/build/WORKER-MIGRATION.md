@@ -33,7 +33,7 @@ docker run --entrypoint python <image> pipeline/queue_worker.py [--once]
 
 It reads no `.env`, and exits unless `JOBS_QUEUE_URL`, `UPLOAD_BUCKET`, `MEDIA_BUCKET`, `MEDIA_BASE_URL` and `DEPLOY_ENV` are set.
 On staging, Terraform sets that entry point on the worker's container (`entry_point` in `infra/envs/staging/main.tf`). Production's has it
-too since #323 (not applied), with every step on Claude and Cartesia, 2 vCPU and 8 GB, and 0 tasks until a measured job sets its size. A Terraform apply that changes the worker registers a task definition with
+too since #PRODCFG (not applied), with every step on Claude and Cartesia, 2 vCPU and 8 GB, and 0 tasks until a measured job sets its size. A Terraform apply that changes the worker registers a task definition with
 the `:bootstrap` image, so run "Deploy to AWS" for `worker` before running a task by hand.
 
 **Message contract:** `{outboxId, requestId, payload: {jobId}}`, from `api/src/outbox.ts` with `queue: "jobs"`. The draft in

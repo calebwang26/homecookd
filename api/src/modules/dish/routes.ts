@@ -4,7 +4,8 @@
 //
 //   POST /dish/files?kind=photo|voice   {contentType, size}   -> 201 {fileId, kind, contentType, size, uploadUrl, uploadHeaders, expiresInS}  NEW SHAPE
 //   POST /dish/files/confirm            {fileId}              -> 201 {fileId, kind, contentType, size}  NEW
-//   POST /dish/cards                    {dish, relation?, kidName?, photos?, voiceNote?} -> 201 {kidToken, card}
+//   POST /dish/craving/peek             {cravingToken}        -> {parentName, relation, message}
+//   POST /dish/cards                    {dish, relation?, kidName?, photos?, voiceNote?, cravingToken?} -> 201 {kidToken, card}
 //   POST /dish/cards/get                {kidToken}            -> {card}
 //   POST /dish/cards/update             {kidToken, relation?, kidName?, message?, voiceNote?, voiceNoteS?, edits?} -> {card}
 //   POST /dish/cards/ask                {kidToken, questions} -> {card}
@@ -15,13 +16,13 @@
 //   POST /dish/ask/finish               {askToken, lang?}     -> {ask}
 //
 // Files go straight to S3 (SYSTEM-DESIGN.md), so the two routes that took raw bytes now give out a link: docs/build/DISH-MIGRATION.md.
-// Waiting for the sync: /dish/craving/peek and `cravingToken` on /dish/cards.
 import * as Sentry from "@sentry/node";
 import { EXPOSE, siteOrigins } from "../../cors.js";
 import type { FastifyError, FastifyInstance, FastifyRequest } from "fastify";
 import { ApiError, invalid, noRoute, notSetUp, providerDown, refused, sendError } from "../../errors.js";
 import { hit, subjectKey, type Limit } from "../../rateLimit.js";
 import type { Trace } from "./budget.js";
+import { linkForCard, peekLink } from "./cravingLinks.js";
 import { DishModelError } from "./model.js";
 import { flagged } from "./moderation.js";
 import type { QuestionId, Relation } from "./recipe/types.js";
@@ -196,19 +197,22 @@ function answerQuery(req: FastifyRequest): { questionId: QuestionId; language: s
  */
 const fields = (...names: string[]) => ({ type: "object", properties: Object.fromEntries(names.map((name) => [name, {}])) });
 
+/** A craving link's token: missing is a 400, malformed the one not-found, as an unknown one is. */
+function cravingOf(v: unknown): string {
+  if (typeof v !== "string" || !v) throw badRequest("cravingToken is required", "cravingToken");
+  if (!TOKEN.test(v)) throw notFound();
+  return v;
+}
+
+/** From her craving link, the card is a request to her: the kid's name and the link's checks come before any model runs (cravingLinks.ts). */
 async function createCard(req: FastifyRequest) {
   const b = bodyOf(req);
   const dish = str(b.dish, "dish", LIMITS.dish) ?? "";
   const kidName = str(b.kidName, "kidName", LIMITS.kidName);
-  const cravingToken = b.cravingToken;
-  if (cravingToken !== undefined && cravingToken !== null) {
-    if (typeof cravingToken !== "string" || !cravingToken) throw badRequest("cravingToken is required", "cravingToken");
-    if (!TOKEN.test(cravingToken)) throw notFound();
-    if (!kidName) throw badRequest("kidName is required", "kidName");
-    // A craving card needs her person and family, which wait for the one-way sync. Making a plain card instead would quietly not reach her.
-    throw notFound();
-  }
-  const relation = b.relation === undefined || b.relation === null ? "mom" : relationOf(b.relation);
+  const cravingToken = b.cravingToken === undefined || b.cravingToken === null ? null : cravingOf(b.cravingToken);
+  if (cravingToken && !kidName) throw badRequest("kidName is required", "kidName");
+  const craving = cravingToken ? await linkForCard(cravingToken) : null;
+  const relation = b.relation === undefined || b.relation === null ? (craving?.relation ?? "mom") : relationOf(b.relation);
   if (b.photos !== undefined && b.photos !== null && !Array.isArray(b.photos)) throw badRequest("photos must be a list of file ids", "photos");
   const photoIds = (b.photos as unknown[] | null | undefined) ?? [];
   if (photoIds.length > MAX_PHOTOS) throw badRequest(`At most ${MAX_PHOTOS} photos`, "photos");
@@ -217,7 +221,7 @@ async function createCard(req: FastifyRequest) {
   const voiceNote = b.voiceNote === undefined || b.voiceNote === null ? null : fileHash(b.voiceNote, "voiceNote");
   if (dish.length < 2 && !photos.length && !voiceNote) throw badRequest("dish must be 2 to 200 characters", "dish");
   if (flagged(dish, kidName)) throw fail(422, "words", WORDS);
-  return await service.createCard({ dish, relation, kidName, photos, voiceNote, ipKey: ipKeyOf(req) }, traceOf(req));
+  return await service.createCard({ dish, relation, kidName, photos, voiceNote, ipKey: ipKeyOf(req), cravingToken }, traceOf(req));
 }
 
 async function updateCard(req: FastifyRequest) {
@@ -385,6 +389,8 @@ export async function dishRoutes(app: FastifyInstance): Promise<void> {
 
   post("/files", fields("contentType", "size"), fileLink, { status: 201 });
   post("/files/confirm", fields("fileId"), fileConfirm, { status: 201, notFileKeys: ["fileId"] });
+  // The kid's page from a craving link: who's asking, and her line. An unknown token counts against the IP like any other.
+  post("/craving/peek", fields("cravingToken"), async (req) => await peekLink(cravingOf(bodyOf(req).cravingToken)));
   post("/cards", fields("dish", "relation", "kidName", "photos", "voiceNote", "cravingToken"), createCard, {
     status: 201,
     onRequest: limited(RATE.cards, RATE.cardsDay),

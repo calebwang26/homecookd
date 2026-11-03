@@ -1,4 +1,5 @@
-# terraform test, no AWS and no login. A service the autoscaler sizes (autoscaling.tf): off until its switch, then CPU and shedding pick its count.
+# terraform test, no AWS and no login. A service the autoscaler sizes (autoscaling.tf): off until its switch, then CPU and shedding grow it,
+# and 15 quiet minutes shrink it.
 # Its load balancer check is on its own port (load_balancer.tf), so a busy task isn't replaced. The runs share one state, in order, the way applies follow each other.
 mock_provider "aws" {
   mock_data "aws_availability_zones" {
@@ -96,6 +97,11 @@ run "off_until_launch" {
     condition     = toset(keys(aws_appautoscaling_policy.shedding)) == toset(["api"]) && toset(keys(aws_cloudwatch_metric_alarm.shedding)) == toset(["api"])
     error_message = "Only the api scales on shedding: the line it counts is the api's. Off, the range of 0 to 0 caps it at nothing."
   }
+
+  assert {
+    condition     = toset(keys(aws_appautoscaling_policy.scale_in)) == toset(["api"]) && toset(keys(aws_cloudwatch_metric_alarm.scale_in)) == toset(["api"])
+    error_message = "Only the api, which shedding grows, has the slow scale-in. Services without autoscale get none of it."
+  }
 }
 
 run "health_check_on_its_own_port" {
@@ -159,10 +165,54 @@ run "launched" {
 
   assert {
     condition = alltrue([for c in aws_appautoscaling_policy.cpu["api"].target_tracking_scaling_policy_configuration : (
-      c.target_value == 50 && c.scale_out_cooldown == 60 && c.scale_in_cooldown == 300
+      c.target_value == 50 && c.scale_out_cooldown == 60
       && c.predefined_metric_specification[0].predefined_metric_type == "ECSServiceAverageCPUUtilization"
     )]) && aws_appautoscaling_policy.cpu["api"].resource_id == aws_appautoscaling_target.service["api"].resource_id
     error_message = "The api's tasks are kept near 50% CPU on average (60% grew too late on Nov 2)."
+  }
+
+  assert {
+    condition     = alltrue([for c in aws_appautoscaling_policy.cpu["api"].target_tracking_scaling_policy_configuration : c.disable_scale_in == true])
+    error_message = "CPU tracking only adds api tasks: on Nov 2 its scale-in undid a task shedding had just added. The scale_in policy takes them away."
+  }
+
+  assert {
+    condition = aws_appautoscaling_policy.scale_in["api"].policy_type == "StepScaling" && alltrue([
+      for c in aws_appautoscaling_policy.scale_in["api"].step_scaling_policy_configuration : (
+        c.adjustment_type == "ChangeInCapacity" && c.cooldown == 300 && c.metric_aggregation_type == "Maximum" && length(c.step_adjustment) == 1
+        && alltrue([for s in c.step_adjustment : s.scaling_adjustment == -1 && s.metric_interval_upper_bound == "0" && s.metric_interval_lower_bound == null])
+      )
+    ]) && aws_appautoscaling_policy.scale_in["api"].resource_id == aws_appautoscaling_target.service["api"].resource_id
+    error_message = "Scale-in takes one api task away at a time, 5 minutes apart, on the same target, so the min still holds."
+  }
+
+  assert {
+    condition = (
+      aws_cloudwatch_metric_alarm.scale_in["api"].evaluation_periods == 15
+      && aws_cloudwatch_metric_alarm.scale_in["api"].datapoints_to_alarm == 15
+      && aws_cloudwatch_metric_alarm.scale_in["api"].threshold == 25
+      && aws_cloudwatch_metric_alarm.scale_in["api"].comparison_operator == "LessThanThreshold"
+      && aws_cloudwatch_metric_alarm.scale_in["api"].treat_missing_data == "notBreaching"
+      && aws_cloudwatch_metric_alarm.scale_in["api"].alarm_actions == toset([aws_appautoscaling_policy.scale_in["api"].arn])
+    )
+    error_message = "15 minutes in a row under 25%, missing minutes not counted as quiet, runs the scale-in policy and nothing else."
+  }
+
+  assert {
+    condition = (
+      toset([for q in aws_cloudwatch_metric_alarm.scale_in["api"].metric_query : q.id]) == toset(["quiet", "cpu", "busy"])
+      && [for q in aws_cloudwatch_metric_alarm.scale_in["api"].metric_query : q.expression if q.return_data == true] == ["cpu + 100 * busy"]
+      && alltrue([for q in aws_cloudwatch_metric_alarm.scale_in["api"].metric_query : alltrue([for m in q.metric : (
+        m.namespace == "AWS/ECS" && m.metric_name == "CPUUtilization" && m.stat == "Average" && m.period == 60
+        && m.dimensions == tomap({ ClusterName = "homecookd-test", ServiceName = "api" })
+      )]) if q.id == "cpu"])
+      && alltrue([for q in aws_cloudwatch_metric_alarm.scale_in["api"].metric_query : alltrue([for m in q.metric : (
+        m.namespace == aws_cloudwatch_log_metric_filter.api_busy.metric_transformation[0].namespace
+        && m.metric_name == aws_cloudwatch_log_metric_filter.api_busy.metric_transformation[0].name
+        && m.stat == "Sum" && m.period == 60
+      )]) if q.id == "busy"])
+    )
+    error_message = "A minute is quiet only with the api's average CPU under 25 and no request turned away: CPU plus 100 for each shedding line."
   }
 
   assert {
