@@ -802,6 +802,7 @@ JSON as `application/json` or `text/plain` (`navigator.sendBeacon`):
 most 60, so preview and test traffic can be filtered) -> `204`, no body. Stored in `lander_events`
 with nothing about the person (no IP, no user agent). `400` invalid, `413` over 64 KB, `429` after
 120 per 10 min per IP. Not `/events`: that path is the app's signed-in recipe activity.
+Also on the AWS api, the same path, body, limits and 204, with errors in its one shape (`api/src/modules/platform/routes.ts`, `docs/build/WEB-MIGRATION.md`).
 ```js
 navigator.sendBeacon(`${API}/web-events`, JSON.stringify({ event: "land", aud: "kid", signal: "aud", app: "app", path: "/learn", host: location.hostname }));
 ```

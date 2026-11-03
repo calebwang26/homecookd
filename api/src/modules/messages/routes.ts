@@ -5,6 +5,7 @@
 // every field, so app.ts's file-key check can see them. Writes that create what someone wrote require an Idempotency-Key header; the rest honor one.
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { requireSession, signedIn } from "../../auth.js";
+import { siteGuard } from "../../cors.js";
 import { idempotencyKey } from "../../idempotency.js";
 import { hit, subjectKey } from "../../rateLimit.js";
 import { chatQuestionsOfDish, notesOfDish, openChatQuestions, removeNote, saveNoteByHand } from "./notes.js";
@@ -92,8 +93,11 @@ export async function messageRoutes(app: FastifyInstance): Promise<void> {
 
   // Share links
   app.post("/v1/shares", { ...on, schema: { body: body("libraryId") } }, (r) => activity.makeShare(signedIn(r), payload(r)));
-  // Public: the link is the capability. Everything else here needs a session.
-  app.post("/v1/shares/open", { schema: { body: body("token") } }, (r) => activity.openShare(payload(r).token, r.ip));
+  // Public: the link is the capability. Everything else here needs a session. The website's /r calls it from a browser, and a JSON POST preflights, so it
+  // answers CORS itself, for SITE_ORIGINS only (cors.ts).
+  const fromSite = { onRequest: siteGuard, config: { ownCors: true } };
+  app.options("/v1/shares/open", fromSite, async (_r, reply) => reply.status(204).send());
+  app.post("/v1/shares/open", { ...fromSite, schema: { body: body("token") } }, (r) => activity.openShare(payload(r).token, r.ip));
 
   // Recordings on their way
   app.post(

@@ -15,6 +15,7 @@ import { dishRoutes } from "./modules/dish/routes.js";
 import { liveRoutes } from "./modules/live/routes.js";
 import { messageRoutes } from "./modules/messages/routes.js";
 import { peopleRoutes } from "./modules/people/routes.js";
+import { platformRoutes } from "./modules/platform/routes.js";
 import { jobRoutes } from "./modules/jobs/routes.js";
 import { recipeRoutes } from "./modules/recipes/routes.js";
 import { recordingRoutes } from "./modules/recordings/routes.js";
@@ -221,6 +222,7 @@ export function buildApp(options: { logger?: object | boolean; logStream?: NodeJ
   app.register(communityRoutes);
   app.register(cravingRoutes);
   app.register(inviteRoutes, { prefix: "/invite" });
+  app.register(platformRoutes);
   options.routes?.(app);
 
   return app;

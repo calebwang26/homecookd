@@ -314,6 +314,7 @@ test("every anonymous file field in the real app is checked: a guess is refused,
     // Signed-in routes, each with its own refusals in messagesFiles.test.ts. Not anonymous files, so not this test's guess.
     "/v1/uploads/confirm key": "not a file",
     "/v1/threads/:id/messages clipKey": "not a file",
+    "/web-events path": "not a file", // the lander's page, as text: webEvents.test.ts
   };
   const app = buildApp({ logger: false });
   await app.ready();

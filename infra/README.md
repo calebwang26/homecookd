@@ -230,6 +230,9 @@ so nobody needs to know them, and a link or ticket from staging never opens anyw
 Order: the merge that names them (its own deploy waits for an apply that refuses it, IAM), then a hand apply, then the lines above, then an api
 deploy. A deploy before the values are loaded can't start a task, and the running ones carry on.
 
+**The website's origins.** `SITE_ORIGINS` on the api (staging: `module.web.url`; production: `homecookd.app` and `www`) lets the site's pages call
+`/v1/shares/open`, `/invite/*` and `/dish/*` from a browser (`api/src/cors.ts`). It's the site's exact origins only, never Vercel's previews.
+
 ## Database migrations
 
 `api/migrations/*.sql`, run by `api/src/migrate.ts` as a one-off task before each api rollout. A failure stops the rollout.

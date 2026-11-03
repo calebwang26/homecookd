@@ -130,6 +130,8 @@ module "env" {
         { ACCOUNTS_OWNS_PEOPLE = "1", EDIBLE_WEB_URL = module.web.url },
         # The app's web build, for testing screens in a browser against staging (api/src/cors.ts); Expo takes the next free port. Production sets none.
         { APP_WEB_ORIGINS = "http://localhost:8081,http://localhost:8082,http://localhost:8083" },
+        # The website's own pages, for the public routes they call from a browser (/v1/shares/open, /invite/*, /dish/*; api/src/cors.ts): staging's site.
+        { SITE_ORIGINS = module.web.url },
         var.real_ai ? {} : { DISH_FAKE_AI = "1" },
       )
     }

@@ -187,6 +187,7 @@ test("a NUL byte in any route's id, query or body is refused, never a 500", { sk
   const reachable = found.filter((r) => r.url !== "/health" && r.url !== "/ready" && !r.url.includes("*"));
   assert.ok(reachable.length >= 35, `only ${reachable.length} routes`);
   const headers = { authorization: `Bearer ${serene.token}`, origin: "https://homecookd.app", "content-type": "application/json" };
+  process.env.SITE_ORIGINS = headers.origin; // as on production: /v1/shares/open lets in only the site's listed origins
   const NUL = "a\u0000b";
   let next = 0;
   for (const { method, url, body } of reachable) {
@@ -206,6 +207,7 @@ test("a NUL byte in any route's id, query or body is refused, never a 500", { sk
   // Nested, as a list's item and an object's field.
   const nested = await t.inject({ method: "POST", url: "/dish/cards/update", headers, payload: JSON.stringify({ kidToken: "A".repeat(22), edits: [{ kind: "line", text: NUL }] }) });
   assert.ok([400, 404].includes(nested.statusCode), nested.body);
+  delete process.env.SITE_ORIGINS;
 });
 
 test("every list pages: nothing is repeated or lost, and the same rows come back to the microsecond", { skip }, async (s) => {

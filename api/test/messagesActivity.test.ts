@@ -200,6 +200,38 @@ test("a share link's token is stored only as a keyed hash and sealed: the row al
   assert.equal((await db().query(`select count(*)::int as n from shares`)).rows[0].n, 2);
 });
 
+test("the website opens a share from a browser: its answer, a dead link and the limit all carry CORS for SITE_ORIGINS, and another site opens nothing", { skip }, async () => {
+  const w = await world();
+  const site = "https://homecookd.app";
+  process.env.SITE_ORIGINS = `${site},https://www.homecookd.app`;
+  try {
+    const made = ok(await post(w.app, w.mom, "/v1/shares", { libraryId: CHILI }, { key: null }));
+    const cors = (r: Awaited<ReturnType<typeof w.app.inject>>) => [r.headers["access-control-allow-origin"], r.headers["access-control-expose-headers"], r.headers.vary];
+    const open = (token: string, origin: string, ip = "192.0.2.210") =>
+      w.app.inject({ method: "POST", url: "/v1/shares/open", remoteAddress: ip, headers: { origin, "content-type": "application/json" }, payload: JSON.stringify({ token }) });
+
+    const opened = await open(made.token, site);
+    assert.equal(opened.statusCode, 200, opened.body);
+    assert.equal(opened.json().libraryId, CHILI);
+    assert.deepEqual(cors(opened), [site, "retry-after, x-request-id", "Origin"]);
+    const dead = await open("ABCDEFGHIJ", site);
+    assert.deepEqual([dead.statusCode, ...cors(dead)], [404, site, "retry-after, x-request-id", "Origin"], "the page can read that the link is gone");
+
+    const evil = await open(made.token, "https://evil.example");
+    assert.deepEqual([evil.statusCode, evil.json().error, evil.headers["access-control-allow-origin"]], [403, "origin", undefined]);
+    const row = (await db().query(`select open_count from shares where token_hash = $1`, [shareTokenHash(made.token)])).rows[0];
+    assert.equal(row.open_count, 1, "only the site's open counted");
+
+    const ip = "192.0.2.211";
+    for (let i = 0; i < 120; i += 1) await open("nope", site, ip);
+    const limited = await open("nope", site, ip);
+    assert.deepEqual([limited.statusCode, ...cors(limited)], [429, site, "retry-after, x-request-id", "Origin"]);
+    assert.ok(Number(limited.headers["retry-after"]) >= 1, "and the page may read when to come back");
+  } finally {
+    delete process.env.SITE_ORIGINS;
+  }
+});
+
 test("opening a share link is limited by IP", { skip }, async () => {
   const w = await world();
   const ip = "192.0.2.200";
