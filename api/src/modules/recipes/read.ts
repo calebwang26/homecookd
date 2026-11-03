@@ -6,10 +6,34 @@ export type RecipeBrief = { id: string; family_id: string; cook_id: string; titl
 
 const COLUMNS = `id, family_id, cook_id, title, status, library_id`;
 
-/** Convex's familyRecipe: another family's recipe reads as no recipe. Index: the primary key. */
+/** Convex's familyRecipe: another family's recipe reads as no recipe. Index: the primary key. Says nothing of who may see it: a route asks recipeFor. */
 export async function familyRecipe(q: Queryable, familyId: string, id: string): Promise<RecipeBrief | null> {
   const { rows } = await q.query(`select ${COLUMNS} from recipes where id = $1 and family_id = $2`, [id, familyId]);
   return rows[0] ?? null;
+}
+
+/**
+ * Caleb's rule (Nov 1): a recipe that isn't ready yet, or failed, is its cook's alone, like the job behind it. To anyone else it's no recipe at all, the same as a
+ * missing id. `readyOnly` is for what only a finished recipe can have (a cook-mode question, a photo of the dish made, a message about it): there it's no recipe to
+ * its cook either.
+ */
+export function shownTo(r: { status: string; cook_id: string }, personId: string, o: { readyOnly?: boolean } = {}): boolean {
+  return r.status === "ready" || (!o.readyOnly && r.cook_id === personId);
+}
+
+/** A family's recipe by id, as this person may act on it (shownTo): null reads the same as a missing id or another family's. */
+export async function recipeFor(q: Queryable, familyId: string, personId: string, id: string, o: { readyOnly?: boolean } = {}): Promise<RecipeBrief | null> {
+  const r = await familyRecipe(q, familyId, id);
+  return r && shownTo(r, personId, o) ? r : null;
+}
+
+/**
+ * Whether this family has a ready recipe by this library id. The worker on AWS writes its recipe.json in each attempt's own folder, not at `<id>/recipe.json`, so the
+ * media host can't say. Index: recipes_family_library.
+ */
+export async function familyHasDish(q: Queryable, familyId: string, libraryId: string): Promise<boolean> {
+  const { rowCount } = await q.query(`select 1 from recipes where family_id = $1 and library_id = $2 and status = 'ready' limit 1`, [familyId, libraryId]);
+  return !!rowCount;
 }
 
 export async function recipesByIds(q: Queryable, ids: string[]): Promise<RecipeBrief[]> {
