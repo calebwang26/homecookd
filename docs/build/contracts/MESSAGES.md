@@ -275,7 +275,7 @@ Code: `api/src/modules/community/shareAsks.ts` (the routes, Community's), `messa
 | Route | Who | Body or query | Answer |
 |---|---|---|---|
 | `POST /v1/share-requests` | Anyone in the family. Not the cook: asks her. The cook, on her own recipe: shares it | `{recipeId}`: a ready family recipe's `_id` | `{result: "asked" \| "shared"}` |
-| `GET /v1/share-requests/dishes` | Anyone in the family | `?cursor=` (100 a page) | `{dishes: [{recipeId, dish, cookName, mine, shared, asked, notNowAt}], nextCursor}`, newest first, ready dishes only |
+| `GET /v1/share-requests/dishes` | Anyone in the family | `?cursor=` (100 a page) | `{dishes: [{recipeId, dish, cookName, mine, shared, takenDown, asked, notNowAt}], nextCursor}`, newest first, ready dishes only. `takenDown`: the team took it off the map after a report, so don't offer it |
 
 - The question is a row in `questions`, so it reads as a Question (above) with `kind: "share"`, `askedBy` the asker, and `text` the words in flow 8, step 2.
 - Safe to repeat as sent: an open ask answers `asked` again, and a shared dish `shared`. No `Idempotency-Key` is read.
@@ -285,6 +285,7 @@ Code: `api/src/modules/community/shareAsks.ts` (the routes, Community's), `messa
 | `not_found` (404) | Ask | "Pick one of your family's recipes.": not this family's, missing, or not ready (to its cook too) | Drop it |
 | `declined` (409) | Ask | Within 24 hours of homie reading her no or unclear answer: "<Cook> said not now. Ask again tomorrow." The sentence names the cook | Say she said not now; offer it again after `notNowAt` + 24 h |
 | `words` (422) | Ask, her own tap | "Some words in this recipe can't go on the map. It stays with your family." | Say so; nothing changed |
+| `taken_down` (409) | Ask, her own tap | "Our team took this recipe off the map after a report. It stays with your family.": the team's review removed it (`hiddenAt`). Nobody is asked, and her yes to an older ask shares nothing | Say so; don't offer it (`takenDown`) |
 | `not_moved` (501) | Ask, her own tap | Recipe writes are off: nothing is shared | Not in production 1.1 (JOBS.md, open item 14) |
 | `forbidden` (403) | Answer (`POST /v1/questions/:id/answer`) | Anyone but the recipe's cook: "Only the recipe's cook can answer this." | Don't offer it |
 
