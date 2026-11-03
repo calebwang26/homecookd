@@ -78,8 +78,10 @@ To see what the page really called, run this in the tab:
 Calls for an area that hasn't moved yet answer 404 (for example `/threads` before Messages moved). That's expected:
 under the switch, nothing falls back to Supabase or Convex.
 
-What the web build can't prove:
-- Background uploads to S3: the uploads bucket has no CORS, by design. The flows script proves them.
+What the web build can and can't upload:
+- **Voice notes and photos: yes.** Staging's `private` bucket allows PUTs from `localhost:8081` to `8083` (#314). Proven
+  Nov 3 from `localhost:8083`: a voice note and a photo, each link, PUT and confirm answering 200.
+- **Videos: no.** The `uploads` bucket has no CORS, by design. The flows script proves them.
 - Pushes.
 - The in-app camera.
 
