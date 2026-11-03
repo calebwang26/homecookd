@@ -35,13 +35,13 @@ Nov 2, 2026. For the App screens & recording chat: the checklist of codes that n
 
 | Code | Where | The app does |
 |---|---|---|
-| `forbidden` | `/v1`: the role may not do this (a kid on a cook's route), or it isn't theirs (a postcard on someone else's dish, saving someone else's message, taking out a note, delivering someone else's recording, answering another cook's question, sharing another cook's recipe). `/v1/links/moved`: a receipt that can't be checked. **1.0 only:** "Add yourself first.", "They haven't joined yet.", emails on `POST /profiles`, the move-request rules | Don't offer what's refused. If it comes anyway, show "You can't do that" |
+| `forbidden` | `/v1`: the role may not do this (a kid on a cook's route), or it isn't theirs (a postcard on someone else's dish, saving someone else's message, taking out a note, delivering someone else's recording, answering another cook's question, sharing another cook's recipe, taking another cook's recipe off the map). `/v1/links/moved`: a receipt that can't be checked. **1.0 only:** "Add yourself first.", "They haven't joined yet.", emails on `POST /profiles`, the move-request rules | Don't offer what's refused. If it comes anyway, show "You can't do that" |
 | `removed_from_family` | Every `/v1` route with a session, except account deletion and Apple revocation: the session's person left the family. `/v1/sessions/start` and `/v1/links/claim` for someone who left. A family route whose `x-profile-id` left | Only account deletion still works for them. On a lent phone: "Pick who you are" |
 | `own_phone` | The family routes and `/v1/sessions/start`: acting as someone who has their own phone | "<Name> uses their own phone." Don't offer them as "me" (`/family`'s `locked`) |
 | `account_deleted` | `/v1/sessions/start` for someone who deleted their account | Clear the key and the tokens; say the account was deleted |
 | `not_in_family` | `x-profile-id` or `profileId` names someone who was never in this family (also 409 on a claim, below) | Reload `/family` and pick again |
 | `only_self` | `POST /profiles/:id/remove` for someone else | "Only <Name> can remove themselves." |
-| `link_full` | `/auth/apple` with `share_token`: a recipe link brings in at most 5 people | "This link is full. Ask your family for a new one." |
+| `link_full` | `/auth/apple` with `share_token`: a recipe link brings in at most 5 people. (Also 429 from `/dish/cards`, below) | "This link is full. Ask your family for a new one." |
 | `ticket_expired` | `/auth/apple` with `link_ticket`: the ticket is bad or older than 10 minutes | "This link didn't work. Open it again." Call `POST /link/open` again for a fresh ticket |
 | `origin` | `/dish/*`, `/link/open`, `/invite/open`, `/v1/shares/open` from a web page on another site (`/v1/shares/open` takes only `SITE_ORIGINS`) | Never from the app (it sends no `Origin`). On the web, a bug |
 | `other_left` | Messages: a conversation with someone who left the family | "<Name> isn't in the family anymore." |
@@ -73,6 +73,7 @@ Nov 2, 2026. For the App screens & recording chat: the checklist of codes that n
 | `full` | `POST /v1/dinners/:id/join`, and accepting a guest | "That dinner is full." |
 | `own_family` | Community: asking your own family for a recipe or a dinner | "This is your family's dinner." |
 | `not_shared` | Community: a dinner or a swap with a recipe that isn't shared | "Share this recipe first." |
+| `taken_down` | `POST /v1/share-requests`: the team took this recipe off the map after a report (its `hiddenAt` is set), for anyone in the family | "Our team took this recipe off the map after a report. It stays with your family." Don't offer sharing it (`takenDown` in the chooser) |
 | `declined` | Community: asking again after they said no. `POST /v1/share-requests` within 24 hours of the cook's no or unclear answer (MESSAGES.md, flow 8) | "They said not this time." For a share ask: "<Cook> said not now. Ask again tomorrow.", the cook named as in `message` |
 | `closed` | `/dish/*` and Cravings: the answers were already sent | "These answers were already sent." |
 
@@ -83,7 +84,7 @@ Nov 2, 2026. For the App screens & recording chat: the checklist of codes that n
 | `gone` (+`status`) | `/auth/apple` with `join_token`: `status` is `expired` or `revoked` (and `used` for a 1.0 invite). **1.0 only:** `/invites/accept`, and an expired move request | "This link expired." or "This link was turned off." Ask the family for a new link |
 | `live_off` (410) | `GET /v1/live/:topic`: the topic is turned off on the server | Stop polling it; read on focus (ACCOUNTS.md, open item 7) |
 | `too_large` (413) | Any body over its limit (1 MB; 64 KB on `/dish/*` and `/web-events`; 1,000 bytes on `/invite/open`). A file over its size when asking for an upload link (`/v1/uploads`, `/v1/video-uploads`, `/dish/files`, Cravings) | "That file is too big." Before sending, check the size |
-| `bad_type` (415) | A file whose content type isn't allowed: `/v1/uploads`, `/dish/files`, `/dish/ask/answer/upload`, raw bytes sent to `/dish/*` | Pick another file. A body that isn't JSON is `invalid`, not this |
+| `bad_type` (415) | A file whose content type isn't allowed, when asking for its upload link: `/v1/uploads`, `/dish/files`, `/dish/ask/answer/upload`, Cravings' `/v1/cravings/:id/voice-recipe/upload`. Bytes that aren't the type their link was signed for, at the check after the PUT, which deletes the upload: `/v1/uploads/confirm`, `/dish/files/confirm`, `/dish/ask/answer`, `/v1/cravings/:id/voice-recipe`. Raw bytes sent to `/dish/*` | Pick another file. A body that isn't JSON is `invalid`, not this |
 | `words` (422) | `/dish/cards*`, Cravings' message, Community dinners and share asks: blocked wording | "Some of those words can't be used here. Try other words." |
 | `not_a_dish` (422) | `POST /dish/cards`: what was typed isn't a dish | "Tell us a dish." |
 | `update_app` (426) | **1.0 only:** `/invites/accept` given a 1.1 family link | "Update homecookd to join this family." |
@@ -93,7 +94,8 @@ Nov 2, 2026. For the App screens & recording chat: the checklist of codes that n
 | Code | Where | The app does |
 |---|---|---|
 | `rate_limited` | Any limit: per address, per person, per family, per link. Header `retry-after` | Wait `retry-after` seconds, then retry. The refused call isn't counted |
-| `budget` | `/dish/cards` and Mom's answers: today's model budget is spent. `retry-after` runs to the next UTC midnight | "homecookd has made all the recipes it can today. Try again tomorrow." |
+| `budget` | `POST /dish/cards` only: today's model budget is spent. `retry-after` runs to the next UTC midnight. Mom's side never gets it: her clips are saved, and her hearing, translation and merge wait for the next day once they're $1 past it (DISH.md) | "homecookd has made all the recipes it can today. Try again tomorrow." |
+| `link_full` | `POST /dish/cards` with a `cravingToken`: her craving link made 20 cards in all, or 5 in the last 24 hours (both `TODO(caleb)`). `retry-after` is when the day's cap frees a card, or a day for a link that's used up. `message` keeps Convex's sentence, "This link has had a lot of requests. Ask for a new one." | Never from the app. On the web: make the kid's card a plain one, keeping what they typed (her next link from the app is a new one). The site's `isLinkBusy` matches the sentence today; it should read this code |
 
 ## 5xx
 
@@ -110,4 +112,4 @@ Nov 2, 2026. For the App screens & recording chat: the checklist of codes that n
 
 | Code | Where |
 |---|---|
-| `recipes_read_only` (409) | The team's report script (`api/src/reports.ts`), when a recipe's switch is locked. No phone sees it |
+| `recipes_read_only` (409) | The team's report script (`api/src/reports.ts`), when the recipes switch isn't open, so a recipe's review can't write it. No phone sees it |

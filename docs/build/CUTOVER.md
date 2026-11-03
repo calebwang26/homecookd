@@ -51,9 +51,8 @@ Before approval. Nothing here changes what build 6 calls.
 - **Known gaps, Nov 2:**
   - No route sets a person's language, and nothing stores a phone's time zone (ACCOUNTS.md, open items 5 and 6).
   - `jobs` is the only live topic (ACCOUNTS.md, "Live updates"). Each screen 1.1 keeps live needs its topic, or reads on focus.
-  - The craving routes and the claim: the api answers 404 to `/dish/craving/peek`, so `/miss?c=` falls back to a plain card that doesn't reach the parent (DISH-MIGRATION.md).
   - **Recipe writes can't open in production as built.** `api/src/modules/recipes/switch.ts` opens only with `RECIPE_WRITES=on` and the sync's `sync_copies.moved_at`, and the sync never runs now. Without a change, edits answer 501 `not_moved`, which ERROR-CODES.md says production 1.1 never sees. Story cards and a cook's share wait on the same switch.
-  - Community's writes that waited for the sync (`setShare`, `setLocation`, the cook's own share tap: COMMUNITY-MIGRATION.md, "Blockers"), if 1.1 uses them. The kid's Community tab is hidden (`docs/agents/memory/community-tab-off.md`).
+  - Community's writes that waited for the sync (`setShare`, `setLocation`, the cook's own share tap: COMMUNITY-MIGRATION.md, "Blockers"), if 1.1 uses them. **Nov 2:** her tap and her switch's off are built, behind the recipes switch (`POST /v1/share-requests`, `POST /v1/recipes/:id/unshare`); `setLocation` isn't (contracts/COMMUNITY.md, open item 2). The kid's Community tab is hidden (`docs/agents/memory/community-tab-off.md`).
   - The site's `/r` page reads Supabase's `GET /shares/:token`, and the site posts `/web-events` (`web/src/lib/recipe-web/api.ts`, `audience-route.ts`). The api has `POST /v1/shares/open` and no `/web-events`.
 - **Check:** each area's flows from the app's web build and from scripts against staging, as `app/scripts/aws-accounts-flows.mjs` does for Accounts. `cd api && npm test`. `node web/scripts/qa/dish-api-e2e.mjs` against staging. Made-up content only.
 - **Back:** nothing live changes. With the switch off every app build behaves as before, and the site's values stay unset.
@@ -111,7 +110,7 @@ Likely to pass $300 a month (about $450-850 at 500 daily users), so it's Caleb's
   - A restore drill: RDS's backup restored to a new instance, row counts compared, then the copy deleted.
   - A deliberately killed api task: the other one answers, and a new one starts.
   - The load test at production's task size and count, over HTTPS, with a burst that runs out the pool: no 500s, and autoscaling goes from 2 to 4 and back.
-  - The alarms reach a person: confirm the alerts topic's email subscription, fire one alarm, and see the email arrive.
+  - The alarms reach a person: confirm the alerts topic's email subscription, fire one alarm, and see the email arrive. Apple reviews report and block, so one of them is `homecookd-production-community-report` (`aws cloudwatch set-alarm-state --alarm-name homecookd-production-community-report --state-value ALARM --state-reason "test"`), and its email says to run the reports script.
   - `node web/scripts/qa/dish-api-e2e.mjs` against production, with its made-up dish. Production ignores `DISH_FAKE_AI`, so this uses real models at a small cost.
   - Once step 5 is live: a real video job on Caleb's own footage, measured for CPU, memory, disk and minutes. It sets the worker's size, and Fargate or EC2 (WORKER-MIGRATION.md, "How to measure a real job").
 - **Back:** nothing depends on it yet. Remove the DNS records, turn off the database's deletion protection (`db_protected`), and `terraform destroy`.
@@ -159,8 +158,8 @@ Each area's switch is on in production from step 6 and stays on through step 8's
 | Recipes, jobs, recordings | `RECIPE_WRITES=on`, `MEDIA_BASE_URL` (the env module sets it from the media address), `s3:ListBucket` on `uploads`, the hourly `jobs.sweep`, the worker's queue entry point and a count of 1 or more | Recipe writes also need `sync_copies.moved_at`, which no sync will set (step 1) |
 | Messages, questions, push, story cards | `EXPO_ACCESS_TOKEN`, `messages.hourly`, `messages.daily` | |
 | Live updates | `LIVE_OFF` unset | Topics other than `jobs` (step 1) |
-| Community | The daily `community.remind_open`, and the reports runbook (COMMUNITY-MIGRATION.md, "The team's reports") | The writes that waited for the sync (step 1) |
-| Kid's web flow | The site's values (step 10), the dish budget, the hourly `dish.sweep` | The craving routes (step 1) |
+| Community | The daily `community.remind_open`, the reports runbook (COMMUNITY-MIGRATION.md, "The team's reports"), and the report alarms, built in the env module (#323): a new report or block emails the alerts topic within minutes, and reports open past 12 hours email once a day | Production's alerts email must be confirmed, and a report alarm's email seen to arrive (step 6, "The alarms reach a person"). The writes that waited for the sync (step 1) |
+| Kid's web flow | The site's values (step 10), the dish budget, the hourly `dish.sweep` | |
 | Everything | `OVERLOAD_SHED=on`, `platform.prune`, Sentry's DSNs once step 5 names Sentry | |
 | Never in production | `SYNC_MODE` (the sync), `TEST_SIGNIN_KEY` (Terraform refuses it), `APP_WEB_ORIGINS` | |
 

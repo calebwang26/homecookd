@@ -1,13 +1,14 @@
 // The team's side of "Report or block" (convex/reports.ts): what's open, and a review that settles it. No route: these answer only to the team, as Convex's internal
 // functions did, through src/reports.ts run as a one-off task. keep: it's fine, so it shows again for everyone but the families that reported it. Otherwise it leaves
-// Community: a dinner is called off. Either way every open report on it is resolved. A "family" report (a block) only gets resolved.
+// Community: a dinner is called off, a recipe is unshared and hidden for good. Either way every open report on it is resolved. A "family" report (a block) only gets resolved.
 //
-// A recipe's review can't write `recipes`, which is read-only until the jobs area moves (COMMUNITY-MIGRATION.md, blockers). So Convex's own review changes the recipe first, the
-// sync brings that here, and this resolves the reports only once the copy says so. Refused before that, nothing changes, and a recipe two families reported stays hidden.
+// A recipe's review writes `recipes` through the recipes switch (recipes/switch.ts), as every recipe write does. Since Nov 2 no sync runs, so with RECIPE_WRITES=on it goes
+// through. With the switch closed or locked, it's refused (`recipes_read_only`) and nothing changes, unless the row already says what the review would.
 import { db, tx } from "../../db.js";
 import { ApiError } from "../../errors.js";
 import { familiesByIds } from "../people/service.js";
 import { recipesByIds } from "../recipes/service.js";
+import { reviewRecipeIfOpen } from "../recipes/writes.js";
 import * as data from "./data.js";
 import type { ReportKind } from "./data.js";
 import { seenRecipes } from "./safety.js";
@@ -52,7 +53,7 @@ export async function reviewReport(kind: ReportKind, targetId: string, keep: boo
     if (kind === "recipe") {
       const r = (await recipesByIds(c, [targetId])).get(targetId);
       const settled = !r || (keep ? r.hidden_at === null : r.hidden_at !== null && r.shared_at === null);
-      if (!settled) throw new ApiError(409, "recipes_read_only");
+      if (!settled && !(await reviewRecipeIfOpen(c, targetId, keep))) throw new ApiError(409, "recipes_read_only");
     }
     if (kind === "dinner" && (await data.dinnerById(c, targetId, true))) await data.reviewDinner(c, targetId, keep);
     return await data.resolveReports(c, kind, targetId);

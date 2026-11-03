@@ -19,8 +19,9 @@
 //   a person's craving links (purge)          craving_links_person_newest           100 a pass
 //   a card's model calls                      model_calls_ask                       written here, read by reports
 //   the day's alert already sent?             idempotency_keys primary key          one row
+//   a craving card's files join its family    files_ask                             the card's own
 // There are no list routes: a page is one card. Tokens are looked up by their sha256, so a lookup's timing says nothing about the
-// token, and no route compares a raw token to anything. A craving link is looked up the same way (cravingData.ts); its routes wait for the sync.
+// token, and no route compares a raw token to anything. A craving link is looked up the same way (cravingData.ts).
 import { db, type Queryable } from "../../db.js";
 import type { ModelCall } from "./model.js";
 import type { MissQuestion, QuestionId, Relation } from "./recipe/types.js";
@@ -122,14 +123,24 @@ export async function insertCard(
     message: string;
     genMs: number;
     ipKey: string;
+    /** From her craving link: in her family and asked of her, the cook side held from the start. Nobody joins her family. */
+    craving?: { linkId: string; familyId: string; personId: string } | null;
   },
 ): Promise<string> {
+  const c = card.craving ?? null;
   const { rows } = await q.query(
-    `insert into dish_asks (kid_token_hash, ask_token_hash, dish, relation, kid_name, guess, message, status, gen_ms, ip_key)
-     values ($1, $2, $3, $4, $5, $6, $7, 'draft', $8, $9) returning id`,
-    [card.kidTokenHash, card.askTokenHash, card.dish, card.relation, card.kidName, JSON.stringify(card.guess), card.message, card.genMs, card.ipKey],
+    `insert into dish_asks (kid_token_hash, ask_token_hash, dish, relation, kid_name, guess, message, status, gen_ms, ip_key,
+       craving_id, family_id, requested_of, cook_claimed_at)
+     values ($1, $2, $3, $4, $5, $6, $7, 'draft', $8, $9, $10, $11, $12, case when $10::text is null then null else now() end) returning id`,
+    [card.kidTokenHash, card.askTokenHash, card.dish, card.relation, card.kidName, JSON.stringify(card.guess), card.message, card.genMs, card.ipKey,
+      c?.linkId ?? null, c?.familyId ?? null, c?.personId ?? null],
   );
   return rows[0].id;
+}
+
+/** A card born in a family: its files are the family's, as a claim makes them (links.ts claimCardSide). */
+export async function filesJoinFamily(q: Queryable, askId: string, familyId: string): Promise<void> {
+  await q.query(`update files set family_id = $2 where ask_id = $1 and family_id is null`, [askId, familyId]);
 }
 
 const JSON_COLUMNS = new Set(["guess", "version", "asked"]);

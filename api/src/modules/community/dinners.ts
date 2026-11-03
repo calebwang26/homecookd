@@ -18,8 +18,8 @@ import { seenRecipes, type SeenRecipe, seesDinner, seesRecipe, type Shield, shie
 import { coverUrl, familyLabel } from "./storyCard.js";
 import { WORDS_POSTABLE } from "./words.js";
 
-/** Invite links open the website's /d page (or the app, where it's installed). */
-const INVITE_ORIGIN = "https://homecookd.app";
+/** Invite links open the website's /d page (or the app, where it's installed): the same site join links use (accounts/invites.ts), staging's own on staging. */
+const inviteOrigin = () => (process.env.EDIBLE_WEB_URL?.trim() || "https://homecookd.app").replace(/\/+$/, "");
 /** A dinner's "going" count stops growing from link opens here. */
 export const MAX_OPENS = 300;
 /** At most this many new phones count per dinner in OPEN_BURST_MS; past it, the page still opens, uncounted. */
@@ -240,7 +240,7 @@ export async function inviteLink(signed: Signed, dinnerId: string): Promise<{ to
       await data.setInviteToken(c, d.id, sha256Hex(fresh), await seal(DINNER_INVITE_SALT, d.id, fresh));
       return fresh;
     }));
-  return { token, url: `${INVITE_ORIGIN}/d?t=${token}` };
+  return { token, url: `${inviteOrigin()}/d?t=${token}` };
 }
 
 /**

@@ -50,6 +50,60 @@ resource "aws_cloudwatch_metric_alarm" "dish_budget" {
   alarm_actions       = [aws_sns_topic.alerts.arn]
 }
 
+# A Community report reaching a person, the same way: Apple reviews report and block, so one can't land silently. The api logs one line per report or block
+# (api/src/modules/community/tasks.ts), with its kind, id and counts only. An email within minutes of the first.
+resource "aws_cloudwatch_log_metric_filter" "community_report" {
+  name           = "${local.name}-community-report"
+  log_group_name = aws_cloudwatch_log_group.service["api"].name
+  pattern        = "\"ALERT community report needs review\""
+  metric_transformation {
+    name      = "CommunityReport"
+    namespace = "homecookd/${local.name}"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "community_report" {
+  alarm_name          = "${local.name}-community-report"
+  alarm_description   = "A Community report or block needs review. Run api/src/reports.ts open, then review <kind> <id> keep or remove, as a one-off task: docs/build/COMMUNITY-MIGRATION.md, The team's reports"
+  namespace           = "homecookd/${local.name}"
+  metric_name         = "CommunityReport"
+  statistic           = "Sum"
+  period              = 300
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
+# The daily reminder (community.remind_open, scheduled once a day) logs its line while any report is open past 12 hours. An hour's period sends one email for
+# each day's run, even if the queue delivers it twice, and is back to OK long before the next. A day-long period could stay in alarm across days and email once.
+resource "aws_cloudwatch_log_metric_filter" "community_reports_open" {
+  name           = "${local.name}-community-reports-open"
+  log_group_name = aws_cloudwatch_log_group.service["api"].name
+  pattern        = "\"ALERT community reports still open\""
+  metric_transformation {
+    name      = "CommunityReportsOpen"
+    namespace = "homecookd/${local.name}"
+    value     = "1"
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "community_reports_open" {
+  alarm_name          = "${local.name}-community-reports-open"
+  alarm_description   = "Community reports have been open for over 12 hours. Run api/src/reports.ts open, then review each, as a one-off task: docs/build/COMMUNITY-MIGRATION.md, The team's reports"
+  namespace           = "homecookd/${local.name}"
+  metric_name         = "CommunityReportsOpen"
+  statistic           = "Sum"
+  period              = 3600
+  evaluation_periods  = 1
+  threshold           = 1
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
 # The load balancer's own errors, not the api's: no healthy task to send to, or one that didn't answer in time.
 resource "aws_cloudwatch_metric_alarm" "alb_own_5xx" {
   alarm_name          = "${local.name}-alb-own-5xx"

@@ -82,7 +82,7 @@ The production gate. CUTOVER.md's step 6 checks each one before 1.1 is submitted
 | A restore drill | Not run. RDS's backup restored to a new instance, on production |
 | A deliberately killed service | Not run |
 | A load test | Passed on staging's one small task, Nov 2 (below). Still to run at production's task size and count, over HTTPS |
-| 2+ api tasks, autoscaling | Built, Nov 2 (#295, below): production's api is 2 to 4 tasks, at 0 until it starts. On staging, the load test at 120 a second grew it late and its health check killed a busy task; tuned in #304. Waits on Caleb's staging apply of #304 and the rerun that shows it grow and come back |
+| 2+ api tasks, autoscaling | Built, Nov 2 (#295, below): production's api is 2 to 4 tasks, at 0 until it starts. On staging, the load test at 120 a second grew it late and its health check killed a busy task; tuned in #304. The rerun grew it in a minute and found a scale-in flap, fixed in #332. Waits on its hand apply on staging (under Caleb's standing OK for staging) and a run that shows it come back to 2 after the load |
 | HTTPS on `api.homecookd.app` | Waits on Caleb's DNS step (CUTOVER.md, step 6). Staging has HTTPS through CloudFront since Nov 2 (#285) |
 | A limited database login | Done on staging, Nov 2 (#273, applied in #280; `infra/README.md`, "Database logins"). On in `envs/production` from the start |
 | Alarms reach a person | The budget alert's test email reached Caleb, Nov 2 (#260). Production's alerts topic needs its email confirmed and one alarm fired |
@@ -105,6 +105,8 @@ away every day and making a card can wait 60 s on the guess. **Not proven yet:**
 autoscaling, Nov 2", below). The proof is the rerun after #304, growing to 3 or 4 tasks and coming back.
 
 **A budget alert reaches a person (Nov 1).** The real-models window showed the budget's alert reaching only the logs, because `REPORT_ALERT_URL` isn't set on AWS. A log alarm to the alerts topic now emails it. Fired on staging on Nov 2, and the email reached Caleb. On production: the same, once.
+
+**A Community report reaches a person (Nov 2, #323).** Report and block had the same gap: `community.report_alert` and `community.remind_open` only called the webhook, so on AWS a report reached nobody, and Apple reviews report and block. Now each logs a line (`ALERT community report needs review`, and `ALERT community reports still open` from the daily reminder), counted by a log filter, with an alarm on each to the alerts topic, built the budget's way: a new report emails within about 5 minutes, open ones once a day. The email says to run `api/src/reports.ts` (COMMUNITY-MIGRATION.md, "The team's reports"). The lines carry a kind, an id and counts only. Not applied: staging's two log filters are Caleb's hand apply (`plan_check.py` holds log filters), and production's email is confirmed at CUTOVER.md step 6.
 
 **A production gate: overload (Master Agent, Nov 1).** Today, with all connections busy, a request waits 5 s then answers a 500. Before
 production: a bounded wait queue that fails fast with a 503 and `retry-after`; the load balancer's health check stays as it is (it moved to its own thread
@@ -169,7 +171,7 @@ after it: 726 turned away with the 503 and `retry-after`, no other 5xx, and `/re
   - 218, 330, 296 at 3 tasks
   - **36, 68, 25, 0, 56, 26 at 4 tasks, about 0.5%**
 - **The burst:** 0 bad 5xx. 559 were turned away with 503 and retry-after, and /ready answered 200 to all 750.
-- **Found: a scale-in flap.** At 18:07:10, target tracking's low alarm scaled 3 to 2 in the middle of the load. It had been in alarm through the idle minutes before the test, so it undid the step policy's first task 1.5 minutes later, and shedding added it back at 18:07:44. **Next:** target tracking with scale-in turned off, plus a separate slow scale-in (CPU under about 25% for 15 minutes, one task at a time), so a shedding scale-out isn't undone.
+- **Found: a scale-in flap.** At 18:07:10, target tracking's low alarm scaled 3 to 2 in the middle of the load. It had been in alarm through the idle minutes before the test, so it undid the step policy's first task 1.5 minutes later, and shedding added it back at 18:07:44. **Built, Nov 2 (#332):** target tracking only adds api tasks now (`disable_scale_in`), and a separate step policy takes one away after 15 minutes in a row under 25% average CPU with nothing turned away, then waits 5 minutes before the next, never below the min (`infra/modules/env/autoscaling.tf`, `scale_in`). Its alarm watches CPU plus 100 for each "too busy to answer" line, so a minute with shedding is never quiet, even before that minute's CPU reaches CloudWatch. A hand apply on staging, under the standing OK (`infra/README.md`, "Autoscaling the api"); the next run at 120 a second should show no task taken away during the load.
 - **Still short of the target:** 0.1% isn't met at four 0.25 vCPU tasks at 120 a second. Production's tasks are 0.5 vCPU, about twice the capacity each. The test should run again at production's size before launch.
 - #311's deploy rolled out during the burst only, after the steady window ended at 18:16:46.
 
@@ -267,6 +269,7 @@ Before production (CUTOVER.md, step 6):
 For 1.1 on production (CUTOVER.md, steps 1 and 6). **Community's gates (`COMMUNITY-MIGRATION.md`):** Apple reviews report and block, so each of these
 exists and is tested before 1.1 is submitted:
   - The team can act on a report: `api/src/reports.ts` lists and reviews them as a one-off task (COMMUNITY-MIGRATION.md, "The team's reports"), and it ran on staging on Nov 2. Left: a way for the team to see what a reported item is once Convex is gone (the listing prints ids only).
+  - A report reaches a person: built in #323, a log alarm emails the alerts topic ("A Community report reaches a person", above). Left: staging's hand apply and one report's email seen there, and production's email confirmed.
   - `community.remind_open` has its daily schedule. Staging's is in Terraform (#247). Production's `schedules` has none yet, so there a report left open would never remind anyone.
   - 1.1's own calls to these routes (App screens). They don't exist yet, and nothing has called these routes.
 

@@ -64,6 +64,7 @@ export async function fileReport(
 ): Promise<void> {
   const added = await data.insertReport(q, { ...by, kind: target.kind, targetId: target.id, targetFamilyId: target.familyId, reason });
   if (!added) return;
-  await enqueue(q, { queue: "scheduled", payload: { task: "community.report_alert", kind: target.kind, reason }, requestId });
+  // Ids only: the alert's log line names the item by its id, so the team can review it (tasks.ts).
+  await enqueue(q, { queue: "scheduled", payload: { task: "community.report_alert", kind: target.kind, targetId: target.id, reason }, requestId });
   if (target.kind === "dinner" && (await data.openReportFamilies(q, "dinner", target.id)) >= HIDE_AFTER) await data.hideDinner(q, target.id);
 }

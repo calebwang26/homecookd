@@ -2,6 +2,8 @@
 
 Step 7 of `docs/build/AWS-MIGRATION.md`, the third item in its area order, Oct 31, 2026. A draft on `aws-migration`: nothing live points at it. The code is `api/src/modules/community/`, `api/src/modules/dish/cravings.ts` and `cravingRoutes.ts`, plus read-only `modules/recipes/` and two read functions in `modules/people/`. `data.ts` and `cravingData.ts` list each query with its index, and `020_community.sql` adds two indexes.
 
+**The app's contract for this area is [contracts/COMMUNITY.md](contracts/COMMUNITY.md)** (Nov 2, for 1.1). It's read from the code since the one switch, so where this page still assumes a sync or an adapter, the contract wins (its "Doc drift").
+
 ## Tables that cross areas (AWS-MIGRATION asks for these first)
 
 | Table | Owner | What Community does |
@@ -25,11 +27,12 @@ Each of these writes a row the sync owns, so I stopped short. None is written ar
 
 **What I did for 5.** The brief says the thresholds and hiding must carry over, and also that `recipes` can't be written, so the hide is worked out when it's read: a recipe counts as hidden when `hidden_at` is set or when `reports` holds open reports from 2 families. This writes nothing to `recipes`. Everything that asks whether a recipe is hidden goes through `seenRecipes` in `safety.ts`. A dinner is Community's own row, so its hide is stored, as on Convex.
 
-`reviewReport` can't write the recipe either, so a recipe's review works in this order. It's refused with `recipes_read_only`, and nothing changes, until the copy shows the decision:
-- **Take it down:** run Convex's `reports:review` with `keep: false`. Convex holds no reports for it, so it only changes the recipe. When the sync shows `hidden_at` set and `shared_at` null, `reviewReport` here resolves the reports.
-- **Keep it:** if the recipe has no `hidden_at`, `reviewReport` resolves the reports and the hide lifts. If Convex hid it before the move, run Convex's review with `keep: true` first.
+~~`reviewReport` can't write the recipe either, so a recipe's review starts on Convex and waits for the sync.~~ **Since Nov 2 (the one switch, no sync), `reviewReport` writes the recipe itself** (`recipes/writes.ts` `reviewRecipeIfOpen`), behind the recipes switch, as Convex's `reports:review` did:
+- **Take it down (`remove`):** `shared_at` cleared and `hidden_at` set, in the review's transaction. It's off every other family's map and its page is missing to them. Its own family sees `hiddenAt` on the recipe and `takenDown` in the share chooser, and sharing it again is 409 `taken_down` for anyone, including the cook's yes to an older ask.
+- **Keep it:** `hidden_at` cleared. A recipe the team took down stays unshared until its cook shares it again. The families that reported it never see it again either way.
+- **With the switch closed** (no `RECIPE_WRITES=on`, or a sync copying `recipes`): refused with `recipes_read_only`, and nothing changes, unless the row already says what the review would.
 
-When the jobs area moves `recipes`, `reviewReport` writes it directly, and the sync's two steps go away. The worked-out hide can stay, or `fileReport` can start storing it again.
+The two-family hide is still worked out when it's read, not stored.
 
 ## Routes
 
@@ -76,6 +79,15 @@ An adapter turns any refusal into `ConvexError(message)`. Where a 404 has no `me
 
 Convex's `npx convex run reports:open` and `reports:review` are now `api/src/reports.ts`, run as a one-off ECS task with the api's own image, task definition and network, as the migrations are. There's no route, and nothing new in IAM or Terraform. A report's alert ("Review: …") points here.
 
+**How a report reaches the team on AWS (Nov 2).** `REPORT_ALERT_URL` is unset on AWS, so `sendAlert`'s webhook never goes, as with the dish budget. Instead the api logs a line a log alarm counts (`api/src/modules/community/tasks.ts`, `infra/modules/env/alerts.tf`), and the alarm emails the env's alerts topic, `alert_email`:
+
+| When | Line (level 50, error) | Fields | Alarm | Email |
+|---|---|---|---|---|
+| Each report, and each block (a `family` report) | `ALERT community report needs review` | `kind`, `targetId`, `families` (how many families have it open), `open` (all open reports) | `homecookd-<env>-community-report`: 1 or more in 5 minutes | Within about 5 minutes |
+| The daily `community.remind_open` (16:00 UTC), while any report is open over 12 hours | `ALERT community reports still open` | `open` (how many are over 12 hours) | `homecookd-<env>-community-reports-open`: 1 or more in an hour | Once each day it finds one |
+
+So the email comes first, and its description says what to do: run `open` (below), then `review` each item. The line's `targetId` is the id `open` prints. Neither line holds what the item is, who reported it, or why. With `REPORT_ALERT_URL` set (not on AWS), the webhook still goes as before. Staging has both, applied by hand Nov 2 (`plan_check.py` holds `aws_cloudwatch_log_metric_filter`), and a test report set the alarm off 82 seconds later. Production gets both with its apply, and its alerts email must be confirmed (CUTOVER.md, "What production has on at launch").
+
 ```bash
 node dist/reports.js open                                             # what's open
 node dist/reports.js review <recipe|dinner|family> <targetId> keep    # or remove
@@ -108,15 +120,15 @@ The last command prints what the script said. A task takes about a minute to sta
 
 **Who ran it.** The task can't tell: every run has the api's role. CloudTrail's `RunTask` event names the login and holds the command. The task's log has one line for the run, with the action, kind, id, decision and how many it resolved (`"msg":"reports reviewed"`), and no personal data.
 
-**What the log keeps.** Everything the task prints goes to the api's log group, kept 30 days: ids, counts, reasons and times, never an item's name or who reported it.
+**What the log keeps.** Everything the task prints goes to the api's log group, kept 30 days: ids, counts, reasons and times, never an item's name or who reported it. The two alert lines above keep less: a kind, an id and counts.
 
 **First run on staging (Nov 2):** task definition 53. `open` exited 0 with "No open reports.", and a review of a dinner nobody reported exited 1, refused, with nothing changed. Both log lines carried ids only.
 
 ## Deferred
 
 - ~~**Writing a share ask, `shareRequests.decide`, `settle`, `answerFor` and `questions.translateForCook`.**~~ **Done in #311,** in Messages: the 24-hour "said not now" refusal, `shareQuestion`'s words (`TODO(caleb)` kept), and a unique index for one open ask per dish (`079`). Its purge covers these rows.
-- **`dishAsks.forMe` and `get`, and claiming a card:** still with the dish area's signed-in step.
-- **`POST /dish/craving/peek` and `cravingToken` on `POST /dish/cards`:** "card-making stays with the dish module", so they still answer 404 (DISH-MIGRATION.md). **So a real craving card can't be made on the new api yet.** Tests make one with SQL. `people` is readable now, so these need only a small dish PR once the sync runs.
+- ~~**`dishAsks.forMe` and `get`, and claiming a card:** still with the dish area's signed-in step.~~ **Done** but `forMe`: claiming a card (`accounts/links.ts`), and `get` as `GET /v1/dish-asks/:id` (#321). `forMe` waits for App to say a screen lists a person's cards (contracts/DISH.md, open item 2).
+- ~~**`POST /dish/craving/peek` and `cravingToken` on `POST /dish/cards`:** "card-making stays with the dish module", so they still answer 404 (DISH-MIGRATION.md). **So a real craving card can't be made on the new api yet.** Tests make one with SQL. `people` is readable now, so these need only a small dish PR once the sync runs.~~ **Done in #321:** a real craving card is made on the new api, asked of her in her family, with the `craving` push. Tests make theirs through the route (`cravingHelpers.cravingCard`).
 - **`seedCommunity`:** the demo families come over by backfill (C6).
 - **`pushEvents`:** with push, in Messages. A dinner ask or a swap sends no push on Convex today, so nothing is lost here.
 
@@ -178,7 +190,7 @@ The last command prints what the script said. A task takes about a minute to sta
 | File | What |
 |---|---|
 | `community.test.ts` | `convex/community.test.ts`'s reading half |
-| `communitySafety.test.ts` | `convex/safety.test.ts`, plus the recipe review's order and the alert's contents |
+| `communitySafety.test.ts` | `convex/safety.test.ts`, plus the recipe review's order and the alert's contents, and on AWS the two alert lines through production's logger: their fields, nothing else, and the alarms' patterns matching them |
 | `communityReview.test.ts` | The team's script: what `open` prints and leaves out, keep and remove, the recipe's refusal and its steps, wrong words and ids changing nothing, and the real entry point |
 | `communitySwaps.test.ts` | `convex/swaps.test.ts`, plus past-50-asks |
 | `communityInvites.test.ts` | `convex/dinnerInvites.test.ts`, plus many opens at once and the rate limits |
@@ -194,7 +206,7 @@ The last command prints what the script said. A task takes about a minute to sta
 - `safety.test.ts`: 8 of 9.
 - `swaps.test.ts`: 3 of 3. `dinnerInvites.test.ts`: 4 of 4.
 - `shareRequests.test.ts` (#311): "after a no", "her own tap", the kid's ask, her typed yes and "only a yes", whole. The Marathi voice note and the yes/no reader are in `messagesQuestions.test.ts`.
-- `cravings.test.ts`: 5 whole (filming day, writing to ready, a silent clip and the budget, the next free question, the maker's deletion), 3 in part: `createLink` without its peeks and cards, `forCook` with a card tied by SQL, and the send's refusals, which now split between the link and the send.
+- `cravings.test.ts`: 5 whole (filming day, writing to ready, a silent clip and the budget, the next free question, the maker's deletion), 3 in part: `createLink` without its peeks and cards, `forCook`, and the send's refusals, which now split between the link and the send. Its cards come from her link through the route since #321, where they were tied by SQL.
 
 **Changed in meaning:** the refusals in difference 6 and 7. Covers: "Upload" and "Lookalike" can't be stored now, so the test asserts the column's check refuses them.
 
@@ -204,7 +216,7 @@ The last command prints what the script said. A task takes about a minute to sta
 - `community.test.ts`: `setLocation`, "only the recipe's own cook can share", the three Muse and Claude writer tests, and "Muse picks" (blocked), the two seed tests (seed deferred).
 - `safety.test.ts`: "a Muse card the filter catches goes plain" (writer).
 - `shareRequests.test.ts`: the two `TEXT_PROVIDER` tests and "without Gemini" (Claude only here).
-- `cravings.test.ts`: peek, a card tied to her, a card's name and words, the link's caps (card-making), `forMe` and `get`.
+- `cravings.test.ts`: `forMe`. Peek, a card tied to her, a card's name and words and the link's caps are `dishCravingCards.test.ts`, and `get` is `dishMyCard.test.ts` (#321).
 - `lib/storyCard`'s `cleanCulture` and `parseMuseCard` assertions (writer): carried in `messagesStoryCards.test.ts`.
 - `convex/account.test.ts`'s Community assertions move as `communityAccount.test.ts`, but the account purge itself isn't run.
 
@@ -216,11 +228,11 @@ The 10-minute rate tests can flake across a real window edge, as `rateLimit.test
 
 ## Long work
 
-Report alerts go through `outbox` on the `scheduled` queue. A voice recipe's merge goes through `dish.merge`, as Mom's Send does. Payloads hold a kind, a reason or an id.
+Report alerts go through `outbox` on the `scheduled` queue. A voice recipe's merge goes through `dish.merge`, as Mom's Send does. Payloads hold a kind, a reason or an id (a report's alert: its kind, `targetId` and reason; one queued before `targetId` was added still alarms, with `targetId` null).
 
 | Task | Why a repeat is safe |
 |---|---|
-| `community.report_alert` | It only tells the team, so a repeat tells them twice. There's no mark like the budget alert's, because one more ping about a report does no harm |
+| `community.report_alert` | It only tells the team, so a repeat tells them twice. There's no mark like the budget alert's, because one more ping about a report does no harm. On AWS a repeat is one more line, usually inside the same alarm period |
 | `community.remind_open` | Run by a schedule, and the same |
 
 ## Account deletion (SCHEMA.md section 4)
@@ -244,7 +256,7 @@ Report alerts go through `outbox` on the `scheduled` queue. A voice recipe's mer
 
 ## Secrets and env the api now needs (names only)
 
-`EDIBLE_CODE_KEY` (Nov 2), the key accounts already needs: a dinner's invite token and a craving link's are stored sealed with it (SCHEMA.md, M6). Without it, asking for either link is a 500, and a dinner's link still opens. `RATE_LIMIT_SALT`, `REPORT_ALERT_URL`, `REPORT_ALERT_TOKEN`, `REPORT_ALERT_EMAIL`, `DISH_WEB_ORIGIN` and `PRIVATE_BUCKET` are already set. No model is called from this area's own code, and voice recipes use the dish module's.
+`EDIBLE_CODE_KEY` (Nov 2), the key accounts already needs: a dinner's invite token and a craving link's are stored sealed with it (SCHEMA.md, M6). Without it, asking for either link is a 500, and a dinner's link still opens. `RATE_LIMIT_SALT`, `REPORT_ALERT_URL`, `REPORT_ALERT_TOKEN`, `REPORT_ALERT_EMAIL`, `DISH_WEB_ORIGIN` and `PRIVATE_BUCKET` are already set, except that `REPORT_ALERT_URL` stays unset on AWS: reports reach the team through the alarms in "The team's reports". No model is called from this area's own code, and voice recipes use the dish module's.
 
 ## What `infra/` needs (not done: this PR touches only `api/` and `docs/build/`)
 
