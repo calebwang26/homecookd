@@ -13,6 +13,8 @@ import * as ImagePicker from 'expo-image-picker';
 import { Linking, Platform } from 'react-native';
 
 import { api, ApiError } from './api';
+import { AWS_ON } from './aws/config';
+import { sendAwsFile } from './aws/sendFile';
 
 export type Photo = { uri: string; mimeType: string };
 
@@ -76,6 +78,8 @@ function sendableType(type: string): string {
 
 /** Uploads a photo to the private photos bucket. Returns its storage path for a postcard (or a `cooked` message). */
 export async function uploadPhoto(photo: Photo): Promise<string> {
+  // 1.1: the AWS api's upload (link, PUT, confirm); the key goes where the path went.
+  if (AWS_ON) return sendAwsFile('photo', sendableType(photo.mimeType || 'image/jpeg'), photo.uri);
   if (Platform.OS === 'web') {
     const blob = await (await fetch(photo.uri)).blob();
     const up = await api.photoUpload(sendableType(blob.type || photo.mimeType));
