@@ -362,6 +362,22 @@ test("races Convex's mutations used to stop", { skip }, async (s) => {
     const { rows } = await db().query("select invite_token_hash from dinners where id = $1", [night]);
     assert.equal(rows[0].invite_token_hash, sha256Hex(links[0].token));
   });
+
+  await s.test("an invite link opens the site this api serves: production's by default, staging's own on staging", async () => {
+    const night = await host(t, rajani, poha);
+    const before = process.env.EDIBLE_WEB_URL;
+    try {
+      delete process.env.EDIBLE_WEB_URL;
+      const prod = await ok(call(t, rajani, "POST", `/v1/dinners/${night}/invite-link`));
+      assert.equal(prod.url, `https://homecookd.app/d?t=${prod.token}`);
+      process.env.EDIBLE_WEB_URL = "https://staging-site.example/";
+      const staging = await ok(call(t, rajani, "POST", `/v1/dinners/${night}/invite-link`));
+      assert.equal(staging.url, `https://staging-site.example/d?t=${staging.token}`, "no double slash, and the same token");
+    } finally {
+      if (before === undefined) delete process.env.EDIBLE_WEB_URL;
+      else process.env.EDIBLE_WEB_URL = before;
+    }
+  });
 });
 
 test("a phone's retry of a new dinner, with its key, gets the first dinner back", { skip }, async () => {
