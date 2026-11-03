@@ -6,7 +6,7 @@ import { db } from "../src/db.js";
 import { deliverPending, HEARTS_RECENT_LIMIT, MAX_JOINS_PER_LINK, parseDishIds, parseSince } from "../src/modules/messages/activity.js";
 import { dishesOf, makeLibrary, useLibrary } from "../src/modules/messages/library.js";
 import { SHARE_LINK_SALT, shareTokenHash, unseal } from "../src/sealed.js";
-import { CHILI, closeAll, DAL, DAY_MS, drain, fileRow, get, newKey, ok, pairOf, phone, post, pushes, recipe, refused, RICE, skip, tokenFor, uploaded, type Who, type World, world } from "./messagesHelpers.js";
+import { awsRecipe, CHILI, closeAll, DAL, DAY_MS, drain, fileRow, get, MEDIA, newKey, ok, openShare, pairOf, phone, post, pushes, recipe, refused, RICE, skip, tokenFor, uploaded, withMedia, type Who, type World, world } from "./messagesHelpers.js";
 
 const event = (w: World, who: Who, body: Record<string, unknown>) => post(w.app, who, "/v1/events", body, { key: null });
 const heart = (w: World, who: Who, libraryId: string, on = true) => post(w.app, who, "/v1/favorites", { libraryId, on }, { key: null });
@@ -154,21 +154,49 @@ test("a share link is one per family, dish and sender; opening it counts and nam
   assert.notEqual(ok(await post(w.app, w.dad, "/v1/shares", { libraryId: CHILI }, { key: null })).token, made.token);
   refused(await post(w.app, w.mom, "/v1/shares", { libraryId: "no-such-dish" }, { key: null }), 404, "not_found", { message: "That recipe isn't here anymore." });
 
-  process.env.MEDIA_BASE_URL = "https://media.test";
-  const opened = ok(await post(w.app, null, "/v1/shares/open", { token: made.token }, { key: null }));
-  delete process.env.MEDIA_BASE_URL;
-  assert.deepEqual([opened.libraryId, opened.recipeUrl, opened.sender.name], [CHILI, `https://media.test/${CHILI}/recipe.json`, "Mom"]);
+  const opened = ok(await openShare(w.app, made.token));
+  assert.deepEqual([opened.libraryId, opened.recipeUrl, opened.sender.name], [CHILI, `${MEDIA}/${CHILI}/recipe.json`, "Mom"]);
   assert.match(opened.familyName, /^The Wangs/);
   const row = (await db().query(`select id, open_count, last_opened_at from shares where token_hash = $1`, [shareTokenHash(made.token)])).rows[0];
   assert.equal(row.open_count, 1);
   assert.notEqual(row.last_opened_at, null);
 
-  for (const token of ["nope", "ABCDEFGHIJ", 12]) refused(await post(w.app, null, "/v1/shares/open", { token }, { key: null }), 404);
+  for (const token of ["nope", "ABCDEFGHIJ", 12]) refused(await openShare(w.app, token), 404);
 
   for (let i = 0; i < MAX_JOINS_PER_LINK; i += 1) {
     await db().query(`insert into signups (name, share_token, family_id) values ($1, $2, $3)`, [`Kid ${i}`, `share:${row.id}`, w.family]);
   }
   assert.notEqual(ok(await post(w.app, w.mom, "/v1/shares", { libraryId: CHILI }, { key: null })).token, made.token);
+});
+
+test("a share of a recipe made on AWS opens at its own recipe.json, the link GET /v1/recipes/:id gives; a library dish keeps <libraryId>/recipe.json", { skip }, async () => {
+  const w = await world();
+  const poha = await awsRecipe(w.mom);
+  const share = ok(await post(w.app, w.mom, "/v1/shares", { libraryId: poha.libraryId }, { key: null }));
+  const opened = ok(await openShare(w.app, share.token));
+  const inApp = ok(await withMedia(() => get(w.app, w.leo, `/v1/recipes/${poha.id}`)));
+  assert.equal(opened.libraryId, poha.libraryId);
+  assert.equal(opened.recipeUrl, `${MEDIA}/${poha.jsonKey}`, "the attempt's folder, where the worker wrote it");
+  assert.equal(opened.recipeUrl, inApp.recipeJsonUrl, "the file the app reads");
+
+  // A library dish this family has no row for: the library's path, even when another family's own recipe has that id.
+  await db().query(`update recipes set library_id = $1 where id = $2`, [CHILI, (await awsRecipe(w.stranger)).id]);
+  const chili = ok(await post(w.app, w.dad, "/v1/shares", { libraryId: CHILI }, { key: null }));
+  assert.equal(ok(await openShare(w.app, chili.token)).recipeUrl, `${MEDIA}/${CHILI}/recipe.json`);
+});
+
+test("a share never points into a recipe that isn't ready: none is made for one, and one that stops being ready opens at nothing of its own", { skip }, async () => {
+  const w = await world();
+  const cooking = await awsRecipe(w.mom, { status: "processing" });
+  refused(await post(w.app, w.mom, "/v1/shares", { libraryId: cooking.libraryId }, { key: null }), 404, "not_found");
+  const poha = await awsRecipe(w.mom);
+  const share = ok(await post(w.app, w.mom, "/v1/shares", { libraryId: poha.libraryId }, { key: null }));
+  for (const status of ["processing", "failed"]) {
+    await db().query(`update recipes set status = $1 where id = $2`, [status, poha.id]);
+    const opened = ok(await openShare(w.app, share.token));
+    assert.equal(opened.recipeUrl, `${MEDIA}/${poha.libraryId}/recipe.json`, status); // the CDN's 403: the site says it can't find it
+    assert.ok(!JSON.stringify(opened).includes(poha.jsonKey.split("/")[1]), `${status}: nothing of its folder`);
+  }
 });
 
 test("a share link's token is stored only as a keyed hash and sealed: the row alone opens nothing, and the family is shown the same link again", { skip }, async () => {
@@ -186,14 +214,14 @@ test("a share link's token is stored only as a keyed hash and sealed: the row al
   await db().query(`update shares set token_enc = 'v1:AAAA.AAAA'`);
   const next = ok(await post(w.app, w.mom, "/v1/shares", { libraryId: CHILI }, { key: null }));
   assert.notEqual(next.token, made.token);
-  ok(await post(w.app, null, "/v1/shares/open", { token: made.token }, { key: null }));
+  ok(await openShare(w.app, made.token));
 
   // Without the key nothing is made, and nothing opens: the hash needs it too.
   const key = process.env.EDIBLE_CODE_KEY;
   delete process.env.EDIBLE_CODE_KEY;
   try {
     refused(await post(w.app, w.dad, "/v1/shares", { libraryId: CHILI }, { key: null }), 500);
-    refused(await post(w.app, null, "/v1/shares/open", { token: next.token }, { key: null }), 500);
+    refused(await openShare(w.app, next.token), 500);
   } finally {
     process.env.EDIBLE_CODE_KEY = key;
   }
