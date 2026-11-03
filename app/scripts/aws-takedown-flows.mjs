@@ -6,6 +6,7 @@
 //                                                      sharing again is 409 taken_down in the app's words
 //   node scripts/aws-takedown-flows.mjs back <file>    after `keep`: neither is set, her tap shares it again, and her
 //                                                      switch turns it off (unshare, #330); then deletes her
+//   node scripts/aws-takedown-flows.mjs off <file>     right after make, no takedown: only the switch's off; then deletes her
 //   node scripts/aws-takedown-flows.mjs delete <file>  delete her without checking (a run given up)
 // Files no report, so no alert email. Needs TEST_SIGNIN_KEY in the root .env (read here, never printed).
 import assert from 'node:assert/strict';
@@ -16,7 +17,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 
 const [STEP, FILE] = process.argv.slice(2);
-if (!['make', 'down', 'back', 'delete'].includes(STEP) || !FILE) throw new Error('usage: aws-takedown-flows.mjs make|down|back|delete <file>');
+if (!['make', 'down', 'back', 'off', 'delete'].includes(STEP) || !FILE) throw new Error('usage: aws-takedown-flows.mjs make|down|back|off|delete <file>');
 const BASE = 'https://d2zh46br3dalyf.cloudfront.net';
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const envLine = readFileSync(join(root, '..', '.env'), 'utf8').split('\n').find((l) => l.startsWith('TEST_SIGNIN_KEY='));
@@ -114,6 +115,8 @@ try {
       assert.deepEqual(await M.messages.shareAsk(recipeId), { result: 'shared' });
       assert.ok((await findRecipe(recipeId))?.sharedAt, 'sharedAt');
     });
+  }
+  if (STEP === 'back' || STEP === 'off') {
     await check('her switch turns it off (unshare), twice is fine, and her tap puts it back', async () => {
       assert.deepEqual(await J.recipes.unshare(recipeId), { ok: true });
       assert.equal((await findRecipe(recipeId))?.sharedAt, undefined, 'off the map');

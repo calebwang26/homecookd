@@ -12,12 +12,15 @@ one-off with no report filed, so no alert email. Then it ran `keep`.
 3. After `keep`: the plain switch again, "Off". The recipe stays off the map until she shares it.
 4. Her tap (after the AI notice) shares it again, and the row reads "On" at once. Before this PR it fell back to "Off"
    until the app came to the front again.
+5. Her tap on "On" (#330's unshare): "Off" at once, with no error.
 
 `aws-takedown-flows.mjs` checked the same through the app's client:
 - **Taken down:** `hiddenAt` set, `sharedAt` cleared, `takenDown: true` in the share chooser's list, and sharing again
   answers 409 `taken_down`, in the app's words.
 - **Kept:** all of those cleared, and her tap shares it again.
 - **Share off (#330):** `POST /v1/recipes/:id/unshare` takes it off. A second call is fine, and her tap puts it back.
+  This was run as `make` then `off` on a fresh cook. The `back` run's off check hit staging mid-rollout, where one task
+  still answered `no_route`, so it was rerun once both tasks served the route.
 
 The share chooser itself (Community's "Share your recipe") isn't reachable for a cook in the web build, so its line,
-"Our team took it off the map after a report.", is proven by `test-community-ui`. The test cook was deleted afterwards.
+"Our team took it off the map after a report.", is proven by `test-community-ui`. Every test cook was deleted afterwards (three runs, three cooks).
