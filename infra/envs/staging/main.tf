@@ -84,7 +84,7 @@ module "env" {
   # an apply that refuses this (IAM), so nothing rolls out until Caleb has loaded its value (infra/README.md, "The app on staging").
   secret_names = ["SENTRY_DSN_API", "SENTRY_DSN_WORKER", "RATE_LIMIT_SALT", "ANTHROPIC_API_KEY", "CARTESIA_API_KEY", "EDIBLE_CODE_KEY", "TEST_SIGNIN_KEY", "LINK_JOIN_SECRET", "LEFT_IDENTITY_SECRET"]
 
-  alb_allowed_cidrs    = var.alb_allowed_cidrs
+  alb_allowed_cidrs = var.alb_allowed_cidrs
   # The private bucket takes PUTs from these pages: staging's site, the web dev server (:3105), and the app's web build (:8081-8083, Expo moves to the
   # next free port) so voice notes, photos and postcards can be proven at phone size. Staging only; production lists its site alone.
   private_cors_origins = [module.web.url, "http://localhost:3105", "http://localhost:8081", "http://localhost:8082", "http://localhost:8083"]
