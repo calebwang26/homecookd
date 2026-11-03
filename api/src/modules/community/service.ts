@@ -10,7 +10,7 @@ import { notFound, refused } from "../../errors.js";
 import { afterCursor, afterOf, badCursor, decodeCursor, encodeCursor, pageOf } from "../../paging.js";
 import { flagged } from "../dish/moderation.js";
 import { familiesByIds, peopleByIds } from "../people/service.js";
-import { sharedRecipes } from "../recipes/service.js";
+import { sharedRecipes, shownTo } from "../recipes/service.js";
 import * as data from "./data.js";
 import type { DinnerRow, ReportReason, SwapRow } from "./data.js";
 import { distanceLabel, type LatLng, milesBetween, placeOf, roundToGrid } from "./geo.js";
@@ -262,7 +262,8 @@ async function ownerOf(c: Queryable, signed: Signed, kind: Reportable, targetId:
   let owner: { id: string; familyId: string; personId: string; visible: boolean } | null = null;
   if (kind === "recipe") {
     const r = (await seenRecipes(c, [targetId])).get(targetId);
-    if (r) owner = { id: r.id, familyId: r.family_id, personId: r.cook_id, visible: r.status === "ready" && !!r.shared_at && seesRecipe(shield, r) };
+    // One that isn't ready is no recipe, here too, to anyone but its cook: not "your family's", and not a block that's already there.
+    if (r && shownTo(r, signed.personId)) owner = { id: r.id, familyId: r.family_id, personId: r.cook_id, visible: r.status === "ready" && !!r.shared_at && seesRecipe(shield, r) };
   } else {
     const d = await data.dinnerById(c, targetId, true);
     if (d) {

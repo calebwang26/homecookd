@@ -6,8 +6,9 @@ import { db } from "../src/db.js";
 import { tx } from "../src/db.js";
 import { markRead } from "../src/modules/messages/data.js";
 import { NotSetUp } from "../src/modules/messages/models.js";
+import { useLibrary } from "../src/modules/messages/library.js";
 import { deliverRecipe, postSystemNote } from "../src/modules/messages/service.js";
-import { CHILI, circleOf, closeAll, DAL, drain, fakeModels, get, NOODLES, ok, pairOf, person, phone, post, pushes, recipe, refused, say, skip, text, tokenFor, uploaded, type World, world } from "./messagesHelpers.js";
+import { awsRecipe, cdnLibrary, CHILI, circleOf, closeAll, DAL, drain, fakeModels, get, NOODLES, ok, pairOf, person, phone, post, pushes, recipe, refused, say, skip, text, tokenFor, uploaded, type World, world } from "./messagesHelpers.js";
 
 const inbox = async (w: World, who: World["mom"]) => ok(await get(w.app, who, "/v1/threads")).threads;
 const unread = async (w: World, who: World["mom"]) => ok(await get(w.app, who, "/v1/unread")).total;
@@ -306,6 +307,17 @@ test("the asker and the dish's cook may take an answer out; nobody else may", { 
   const b = ok(await say(w, w.mom, ring, { kind: "text", body: "Twelve.", replyTo: q.id }));
   ok(await post(w.app, w.leo, `/v1/notes/${b.noteId}/remove`, undefined, { key: null })); // Leo asked
   assert.equal((await db().query(`select count(*)::int as n from recipe_notes`)).rows[0].n, 0);
+});
+
+test("a recipe made on AWS: its cook may take an answer out, found by the name in its own recipe.json", { skip }, async () => {
+  const w = await world();
+  const poha = await awsRecipe(w.mom);
+  useLibrary(cdnLibrary({ [poha.jsonKey]: poha.json }));
+  const ring = await circleOf(w);
+  const q = ok(await say(w, w.leo, ring, { kind: "question", body: "How much poha?", libraryId: poha.libraryId, stepOrder: 1 }));
+  const a = ok(await say(w, w.dad, ring, { kind: "text", body: "Two cups.", replyTo: q.id }));
+  refused(await post(w.app, w.nia, `/v1/notes/${a.noteId}/remove`, undefined, { key: null }), 403, "forbidden");
+  ok(await post(w.app, w.mom, `/v1/notes/${a.noteId}/remove`, undefined, { key: null }));
 });
 
 test("taking one answer out leaves a question someone else answered answered", { skip }, async () => {

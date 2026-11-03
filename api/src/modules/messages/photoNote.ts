@@ -5,7 +5,7 @@ import type { Signed } from "../../auth.js";
 import { db } from "../../db.js";
 import { invalid, notSetUp, providerDown } from "../../errors.js";
 import { hit, subjectKey } from "../../rateLimit.js";
-import { familyRecipe } from "../recipes/read.js";
+import { recipeFor } from "../recipes/read.js";
 import { models, NotSetUp } from "./models.js";
 import { actorOf } from "./actor.js";
 import { usableFile } from "./uploads.js";
@@ -14,9 +14,10 @@ import { readLink } from "./views.js";
 
 const NO_NOTE = "Couldn't draft a note just now.";
 
+/** A photo of the dish made from it, so a recipe that isn't ready is no recipe, to its cook too. */
 export async function sharePhoto(signed: Signed, body: Record<string, unknown>) {
   const actor = await actorOf(signed);
-  const recipe = isRowId(body.recipeId) ? await familyRecipe(db(), actor.familyId, body.recipeId) : null;
+  const recipe = isRowId(body.recipeId) ? await recipeFor(db(), actor.familyId, actor.me.id, body.recipeId, { readyOnly: true }) : null;
   if (!recipe) throw noSuchRecipe();
   if (typeof body.photoKey !== "string" || !body.photoKey) throw invalid("photoKey");
   await usableFile(db(), actor, body.photoKey, "photo");

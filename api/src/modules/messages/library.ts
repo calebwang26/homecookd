@@ -1,7 +1,11 @@
 // The public library: library.json and each recipe.json on the media host, read only for what a dish is called and whose it is. Supabase's plumbing.ts
 // makeLibrary and assertRecipe, behind an interface so tests never touch the network. Every call has a timeout, and none of them can fail a request: an
 // unreachable host reads as "unknown". A family's own recipe has a row in `recipes`, but most library ids don't, so this stays until media moves.
+import { db } from "../../db.js";
+import { encodeKey } from "../recipes/media.js";
+import { familyHasDish, recipeJsonKey } from "../recipes/read.js";
 import type { RecipeInfo } from "./recap.js";
+import { noSuchRecipe } from "./values.js";
 
 export type RecipeDetails = {
   id: string;
@@ -14,9 +18,9 @@ export type RecipeDetails = {
 export interface Library {
   /** library.json as id -> {title, cook_name, sample}. Empty when the host can't be reached. */
   libraryIndex(): Promise<Map<string, RecipeInfo>>;
-  /** One recipe.json, or null when it's missing or the host can't be reached. */
-  recipeInfo(id: string): Promise<RecipeDetails | null>;
-  /** False only when the host says it isn't there. Null when it can't say: Supabase doesn't block a send on that. */
+  /** One recipe.json, at `key` (recipeJsonKey: dishInfo finds it) or the library's own `<id>/recipe.json`. Null when it's missing or the host can't be reached. */
+  recipeInfo(id: string, key?: string): Promise<RecipeDetails | null>;
+  /** False only when the host says it isn't there (a 404, or S3's 403). Null when it can't say (unreachable, a 5xx): Supabase doesn't block a send on that. */
   exists(id: string): Promise<boolean | null>;
   /** The old pipeline's job file, for a phone registering a send after its recording was published. */
   publishedDish(uploadId: string): Promise<string | null>;
@@ -28,6 +32,8 @@ const RECIPE_CACHE_MAX = 500;
 const CALL_MS = 5_000;
 const ID = /^[a-z0-9][a-z0-9-]{0,99}$/;
 const str = (v: unknown) => (typeof v === "string" ? v : null);
+/** The media CDN reads its bucket with s3:GetObject alone (infra/modules/env/storage.tf), so S3 answers 403, not 404, for a key that isn't there. */
+const isMissing = (status: number) => status === 404 || status === 403;
 
 export function makeLibrary(o: { baseUrl: string; fetch?: typeof fetch; ttlMs?: number; clock?: () => number }): Library {
   const base = o.baseUrl.replace(/\/+$/, "");
@@ -43,7 +49,7 @@ export function makeLibrary(o: { baseUrl: string; fetch?: typeof fetch; ttlMs?: 
       const res = await doFetch(url, { signal: AbortSignal.timeout(CALL_MS) });
       if (!res.ok) {
         await res.body?.cancel();
-        return { ok: false, missing: res.status === 404 || res.status === 403 };
+        return { ok: false, missing: isMissing(res.status) };
       }
       return { ok: true, body: await res.json() };
     } catch {
@@ -64,11 +70,11 @@ export function makeLibrary(o: { baseUrl: string; fetch?: typeof fetch; ttlMs?: 
       index = { at: clock(), map };
       return map;
     },
-    async recipeInfo(id) {
+    async recipeInfo(id, key = `${id}/recipe.json`) {
       if (!ID.test(id)) return null;
-      const hit = recipes.get(id);
+      const hit = recipes.get(key);
       if (hit && clock() - hit.at < ttl) return hit.value;
-      const got = await getJson(`${base}/${id}/recipe.json`);
+      const got = await getJson(`${base}/${encodeKey(key)}`);
       if (!got.ok && !got.missing) return null; // unreachable: try again next time
       let value: RecipeDetails | null = null;
       if (got.ok && got.body && typeof got.body === "object") {
@@ -84,7 +90,7 @@ export function makeLibrary(o: { baseUrl: string; fetch?: typeof fetch; ttlMs?: 
         };
       }
       if (recipes.size >= RECIPE_CACHE_MAX) recipes.clear();
-      recipes.set(id, { at: clock(), value });
+      recipes.set(key, { at: clock(), value });
       return value;
     },
     async exists(id) {
@@ -93,7 +99,8 @@ export function makeLibrary(o: { baseUrl: string; fetch?: typeof fetch; ttlMs?: 
       try {
         const res = await doFetch(`${base}/${id}/recipe.json`, { method: "HEAD", signal: AbortSignal.timeout(CALL_MS) });
         await res.body?.cancel();
-        const ok = res.status !== 404;
+        if (!res.ok && !isMissing(res.status)) return null; // a 5xx or a 429 can't say, and isn't kept
+        const ok = res.ok;
         if (seen.size >= RECIPE_CACHE_MAX) seen.clear();
         seen.set(id, { at: clock(), ok });
         return ok;
@@ -130,6 +137,20 @@ export function library(): Library {
 /** For tests. */
 export function useLibrary(next: Library | undefined): void {
   current = next;
+}
+
+/**
+ * A dish someone names: this family's own ready recipe, by its row, or else what the library host says. Checked before a send's transaction: a call that can wait 5 s
+ * on the library mustn't hold a row lock. False is a 404; null means it can't say, and a send isn't held up for that.
+ */
+export async function checkDish(familyId: string, id: string | null | undefined): Promise<void> {
+  if (!id || (await familyHasDish(db(), familyId, id))) return;
+  if ((await library().exists(id)) === false) throw noSuchRecipe();
+}
+
+/** What a dish's recipe.json says, read where it is: the family's own ready recipe's file, or the library's (recipeJsonKey). */
+export async function dishInfo(familyId: string, id: string): Promise<RecipeDetails | null> {
+  return await library().recipeInfo(id, await recipeJsonKey(db(), familyId, id));
 }
 
 /** The ids of one person's dishes: entries whose cook_name is their name, case-insensitively (the app's cookProfile rule). Samples included. */

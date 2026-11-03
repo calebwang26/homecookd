@@ -214,6 +214,9 @@ The live-updates draft (`claude/aws-live`) plugs in here, and I built no subscri
 34. **Story cards are limited** to 30 an hour per cook, then the plain line. Convex's weren't.
 35. **A failed card call is logged with its error's type only,** and a missing key is logged too. Convex logged the first 200 characters of the error, and nothing without a key.
 36. **A card's cost row names its recipe** (`model_calls.recipe_id`). Convex kept no cost row.
+37. **A recipe that isn't ready is its cook's alone** (Caleb, Nov 1; `recipeFor` in `recipes/read.ts`). By its id, to anyone else, it's a missing recipe: asking in cook mode, the photo note and a message naming it are 404 "That recipe isn't here anymore.", its questions list empty, and a question on it is a 404 to another cook. Asking, the photo note and naming it in a message need a finished recipe, so they're refused to its cook too. Convex took any family recipe by id.
+38. **A made-up `libraryId` is a 404 now** (`checkDish` in `library.ts`). The media CDN reads S3 with `s3:GetObject` alone, so a missing `recipe.json` answers 403, which now reads as missing, like a 404. The family's own ready recipe is found by its row first, because the worker on AWS writes its `recipe.json` in the attempt's folder, not at `<id>/recipe.json`. A 5xx or no answer still can't say, isn't kept, and doesn't hold up a send.
+39. **A share's `recipeUrl` and a push's dish read the dish's real `recipe.json`** (`recipeJsonKey` in `recipes/read.ts`): the family's ready recipe's own key, as `GET /v1/recipes/:id` links it, else `<libraryId>/recipe.json`, the only place Supabase looked. A recipe that isn't ready is never used.
 
 ### Against SYSTEM-DESIGN.md
 
@@ -274,7 +277,8 @@ These tables are read-only here. Each writes nothing today, and each needs its o
 | `messagesIdempotency.test.ts` | Retries, a different body, racing tries, a failure halfway |
 | `messagesPush.test.ts` | `convex/push.test.ts`, `pushEvents`, `notify`, message pushes, postcards, Expo down, a repeat |
 | `messagesQuestions.test.ts` | Flow, translation, Ink, follow-ups, share answers, the real adapters' requests against a stubbed fetch |
-| `messagesActivity.test.ts` | Pending sends, shares, hearts, events, stats, the library |
+| `messagesActivity.test.ts` | Pending sends, shares, hearts, events, stats, the library, and S3's 403 for a missing dish (difference 38) |
+| `messagesProcessing.test.ts` | A recipe that isn't ready on every route that takes a recipe id: the same as a missing one, its cook's answer, and normal once ready (difference 37) |
 | `messagesRetention.test.ts` | The history query, `GET /v1/table`, the nudge, `GET /v1/recap`, the recap push, the hourly job |
 | `messagesAccount.test.ts` | Section 4 and C1 |
 | `messagesStoryCards.test.ts` | Her yes shares and queues the card once, in Convex's fields, from Convex's facts; stories only after her yes; a card going plain and written again; another family, cook or kid refused; a failed or unusable answer giving the whole plain line; the limit; a failed save; the switch locked and closed; deletion; Claude's request against a stubbed fetch; the rules and prompt against Convex's |

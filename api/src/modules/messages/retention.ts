@@ -20,7 +20,7 @@ import { actorOf } from "./actor.js";
 import { answersFor } from "./answers.js";
 import * as data from "./data.js";
 import { iso } from "./data.js";
-import { dishesOf, library, type RecipeDetails } from "./library.js";
+import { dishesOf, dishInfo, library, type RecipeDetails } from "./library.js";
 import { hasLivePhone, queuePush } from "./push.js";
 import * as pushData from "./pushData.js";
 import { dueProfiles } from "./pushRules.js";
@@ -203,7 +203,7 @@ export async function nudgeFamily(familyId: string, now: Date): Promise<number> 
     own ??= await familyRecordings(familyId);
     const recordings: Set<string> = own;
     const dishes = dishesOf(index, cook.name);
-    const real = (await Promise.all(dishes.filter((id) => recordings.has(id) && index.get(id)?.sample === false).map((id) => library().recipeInfo(id)))).filter(
+    const real = (await Promise.all(dishes.filter((id) => recordings.has(id) && index.get(id)?.sample === false).map((id) => dishInfo(familyId, id)))).filter(
       (r): r is RecipeDetails => r !== null,
     );
     const quote = pickNudgeQuote({

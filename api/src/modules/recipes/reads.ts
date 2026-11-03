@@ -13,6 +13,7 @@ import { notFound, refused } from "../../errors.js";
 import { afterCursor, pageOf, type After } from "../../paging.js";
 import { namesOf } from "../people/reads.js";
 import { mediaUrl, stockUrl } from "./media.js";
+import { shownTo } from "./read.js";
 import { saveMemoriesOptIn } from "./writes.js";
 
 export const PAGE = 100; // recipes.list's .take(100)
@@ -133,8 +134,7 @@ export async function listRecipes(signed: Signed, cursor?: string) {
 /** Null for a missing recipe and for another family's: they read the same. */
 export async function readRecipe(signed: Signed, id: string) {
   const row = await recipeById(db(), id);
-  if (!row || row.family_id !== signed.familyId) return null;
-  if (row.status !== "ready" && row.cook_id !== signed.personId) return null;
+  if (!row || row.family_id !== signed.familyId || !shownTo(row, signed.personId)) return null;
   const names = await namesOf(db(), [row.cook_id]);
   return recipeView(row, signed, names.get(row.cook_id) ?? "");
 }
@@ -150,7 +150,7 @@ const GONE = "That recipe isn't here anymore.";
 /** The cook's yes (or no) to sharing the stories and tips from this video. Who's asking is refused before the switch says anything. */
 export async function setMemoriesOptIn(signed: Signed, id: string, optIn: boolean): Promise<void> {
   const row = await recipeById(db(), id);
-  if (!row || row.family_id !== signed.familyId) throw notFound(GONE);
+  if (!row || row.family_id !== signed.familyId || !shownTo(row, signed.personId)) throw notFound(GONE);
   if (row.cook_id !== signed.personId) throw refused(403, "forbidden", "Only the cook can share these.");
   await saveMemoriesOptIn(db(), id, optIn);
 }

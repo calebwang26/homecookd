@@ -211,6 +211,18 @@ test("another family can't see it", { skip }, async () => {
   assert.deepEqual({ ...theirs.data, requestId: 0 }, { ...missing.data, requestId: 0 });
 });
 
+test("a share of it opens at the recipe.json it wrote, the link GET /v1/recipes/:id gives, for the site's /r to load", { skip }, async () => {
+  const mom = await cook();
+  const { recipeId, recipeUrl } = (await make(mom, { title: "Aai's poha" })).data;
+  const { libraryId } = (await withKey.get(`/v1/recipes/${recipeId}`, bearer(mom.token))).data;
+  const share = await withKey.post("/v1/shares", { libraryId }, bearer(mom.token));
+  assert.equal(share.status, 200);
+  const opened = await withKey.post("/v1/shares/open", { token: share.data.token });
+  assert.equal(opened.status, 200);
+  assert.equal(opened.data.recipeUrl, recipeUrl);
+  assert.equal(recipeJson(opened.data.recipeUrl).title, "Aai's poha");
+});
+
 test("with recipe writes closed it answers 501 not_moved, and nothing reaches the bucket", { skip }, async () => {
   const mom = await cook();
   const files = media.objects.size;
