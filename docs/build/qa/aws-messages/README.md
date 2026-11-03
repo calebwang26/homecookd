@@ -1,5 +1,7 @@
 # Messages on AWS staging: two phones in the web build (Nov 2, 2026)
 
+How to run these proofs again (and the next area's): [../AWS-PROOFS.md](../AWS-PROOFS.md).
+
 Two copies of the app's web build at phone size (375×812), both with `EXPO_PUBLIC_BACKEND=aws` against staging: Leo
 (a kid) on `localhost:8083` and Asha (a cook) on `localhost:8082`, a test family from the staging-only test sign-in,
 with a ready "Masala chai (test recipe)" of Asha's from `POST /v1/test/recipe`.

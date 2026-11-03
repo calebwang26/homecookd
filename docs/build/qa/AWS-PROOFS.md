@@ -1,0 +1,104 @@
+# Proving the 1.1 app on AWS staging
+
+How the app's AWS work (Accounts, Jobs and recording, Messages and questions) was proven, so whoever picks up the next
+area, or reruns these, can do the same. The contracts are in `docs/build/contracts/` on `aws-migration`. The app's AWS code
+is `app/src/lib/aws/`, used only when `EXPO_PUBLIC_BACKEND=aws`.
+
+Each area gets the same four proofs, in this order:
+
+1. **Unit tests with a fake server.** No network. They check paths, bodies, keys, error reading, retries and polls.
+2. **A flows script against staging.** It uses the app's own client and real test people, and deletes them after.
+3. **The web build at phone size, switch on, against staging.** Screenshots go in this folder, one subfolder per area.
+4. **With the switch off, every existing app test.** This shows today's builds are untouched.
+
+A phone with the switch on (background uploads, pushes) waits for the `aws-staging` EAS channel. That channel is the Master
+Agent's call, and it's never the `staging` or `production` channel.
+
+## 1. Unit tests (no network)
+
+```bash
+cd app && node scripts/test-aws.mjs            # client, errors, Accounts, api.ts under the switch, error words
+cd app && node scripts/test-aws-jobs.mjs       # Jobs client and live polls
+cd app && node scripts/test-aws-messages.mjs   # Messages client, polled reads, the legacy adapter
+```
+
+## 2. Flows on staging
+
+They need `TEST_SIGNIN_KEY` in the root `.env`. The scripts read it and never print it. It's for staging only: production
+refuses the route. Each script makes its own test people and deletes them at the end, even when a check fails.
+
+```bash
+cd app && node scripts/aws-accounts-staging.mjs   # read-only: health, errors, made-up keys and tokens
+cd app && node scripts/aws-accounts-flows.mjs     # sign-up, join by link, phone-less people, sign-out, delete
+cd app && node scripts/aws-jobs-flows.mjs         # S3 upload (one PUT and 5 parts), job, poll, stops, a finished recipe
+cd app && node scripts/aws-messages-flows.mjs     # chat, questions, uploads, postcards, shares, share asks, delivery
+```
+
+Things staging has for testing:
+- **`POST /v1/test/sign-in`** (header `x-test-signin-key`): `/auth/apple`'s body with `test_id` in place of `id_token`.
+  The same `test_id` is the same person each time. **Keep each test id** until that person is deleted, or you can't get
+  back in to delete them.
+- **`POST /v1/test/recipe`** (same header, plus a session): makes a ready recipe in the caller's family, or finishes a
+  queued job with `{jobId}` the way the worker publishes. Staging runs no worker.
+- **Small part sizes:** a video over 20 MiB comes back in 5 MiB parts, so a 25 MiB file tests parts. Production uses
+  5 GiB and 64 MiB.
+- No AI on staging: the photo note is `not_set_up`, and a share answer reads "unclear". Prove the yes paths another way
+  (the cook's own tap shares her dish), or ask Caleb for a real-AI window.
+
+## 3. The web build at phone size
+
+`.claude/launch.json` is local and not committed. Add configs like these, with one port per "phone". Staging's CORS allows
+`localhost:8081` to `8083`.
+
+```json
+{ "name": "homecookd-web-aws",   "runtimeExecutable": "bash", "port": 8083,
+  "runtimeArgs": ["-c", "cd app && EXPO_PUBLIC_BACKEND=aws EXPO_PUBLIC_AWS_URL=https://d2zh46br3dalyf.cloudfront.net npx expo start --web --port 8083 --clear"] },
+{ "name": "homecookd-web-aws-2", "runtimeExecutable": "bash", "port": 8082,
+  "runtimeArgs": ["-c", "cd app && EXPO_PUBLIC_BACKEND=aws EXPO_PUBLIC_AWS_URL=https://d2zh46br3dalyf.cloudfront.net npx expo start --web --port 8082"] }
+```
+
+Signing a browser in: Sign in with Apple doesn't run on the web build. Make the test person with a small script (test
+sign-in, and anything else the proof needs: a family link, a test recipe, a queued job), and keep its key and test id in
+a scratch file. Then, in that port's tab, put the key where the app keeps it and reload:
+
+```js
+localStorage.clear(); localStorage.setItem("homecookd.deviceKey", "<the test key>");
+localStorage.setItem("homecookd.deviceVia", "person"); location.href = "/";
+```
+
+Each port is its own origin, so it's its own phone. Two ports give a kid and a cook talking to each other (the Messages
+proof). Set the tab to 375×812 (the preview's mobile preset), and pick a language on first open.
+
+To see what the page really called, run this in the tab:
+
+```js
+[...new Set(performance.getEntriesByType('resource').filter(e => e.name.includes('cloudfront')).map(e => e.name + ' ' + e.responseStatus))]
+```
+
+Calls for an area that hasn't moved yet answer 404 (for example `/threads` before Messages moved). That's expected:
+under the switch, nothing falls back to Supabase or Convex.
+
+What the web build can't prove:
+- Background uploads to S3: the uploads bucket has no CORS, by design. The flows script proves them.
+- Pushes.
+- The in-app camera.
+
+Those wait for a phone build.
+
+When you're done, delete every test person (`POST /v1/account/delete` with their session), stop the servers, and put the
+tab back to desktop size.
+
+## 4. Switch off
+
+```bash
+cd app && npx tsc --noEmit && npx expo lint
+cd app && for t in test-aws test-aws-jobs test-aws-messages test-signin test-links test-consent test-who test-hearts test-recap test-table test-cooking test-voice-ui test-community-ui test-parent-jobs test-recording-ui test-doors test-words test-retention; do node scripts/$t.mjs > /dev/null && echo "ok $t" || echo "FAIL $t"; done
+```
+
+## Per area
+
+| Area | Screenshots and notes | PRs |
+|---|---|---|
+| Accounts | `aws-accounts/` | #286, #287, #288, #290, #293 |
+| Jobs and recording | `aws-jobs/` | #301, #302, #304 |
+| Messages and questions | `aws-messages/` | #307, #308, #312 |

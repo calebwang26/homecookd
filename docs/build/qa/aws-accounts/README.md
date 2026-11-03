@@ -1,5 +1,7 @@
 # Accounts on AWS staging: the web build at phone size (Nov 2, 2026)
 
+How to run these proofs again (and the next area's): [../AWS-PROOFS.md](../AWS-PROOFS.md).
+
 The app's web build (375×812) with `EXPO_PUBLIC_BACKEND=aws` against staging (https://d2zh46br3dalyf.cloudfront.net), for #287.
 Test people from the staging-only test sign-in; everyone made was deleted at the end.
 

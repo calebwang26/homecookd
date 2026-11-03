@@ -1,5 +1,7 @@
 # Jobs on AWS staging: the web build at phone size (Nov 2, 2026)
 
+How to run these proofs again (and the next area's): [../AWS-PROOFS.md](../AWS-PROOFS.md).
+
 The app's web build (375×812) with `EXPO_PUBLIC_BACKEND=aws` against staging, for the Jobs screens PR. A test cook from the
 staging-only test sign-in, with one real job made by a script: links from `POST /v1/video-uploads`, the job from
 `POST /v1/jobs`, 64 KiB PUT to staging's S3, `/complete` → `queued` (staging runs no worker, so it waits there).
