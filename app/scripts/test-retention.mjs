@@ -561,10 +561,10 @@ await test('push: no explainer and no OS prompt without a real push build', asyn
   assert.equal((await launch({ os: 'android' })).pushSupported(), true);
 });
 
-await test('push: never on the first launch; the next launch may ask', async () => {
+await test('push: the kid moments never on the first launch; the next launch may ask', async () => {
   kv.clear();
   const first = await launch();
-  for (const kind of ['kid-first-made', 'kid-first-question', 'cook-first-send']) {
+  for (const kind of ['kid-first-made', 'kid-first-question']) {
     assert.equal(await first.shouldAskPush(kind, 'kid-a', NOW), false, kind); // the whole first run
   }
   assert.ok(kv.has('push.firstLaunchAt'));
@@ -576,8 +576,9 @@ await test('push: never on the first launch; the next launch may ask', async () 
   assert.equal(await second.shouldAskPush('kid-first-made', '', NOW), false);
 });
 
-await test('push: v2’s two moments ask even on the first launch, and keep the other rules', async () => {
-  const V2 = ['kid-card-saved', 'cook-craving-sent'];
+await test('push: v2’s two moments and the cook’s first send ask even on the first launch, and keep the other rules', async () => {
+  // A new cook films and sends on her first day (build 11 phone run, Nov 3: never asked).
+  const V2 = ['kid-card-saved', 'cook-craving-sent', 'cook-first-send'];
   kv.clear();
   const first = await launch();
   assert.equal(await first.shouldAskPush('kid-first-made', 'kid-a', NOW), false); // the old ones still wait
@@ -999,6 +1000,20 @@ await test('push: a message push with the app open is noted for the double tap, 
     await env().handler.handleNotification({ request: { content: { data: { kind, url: '/recipe/r-1' } } } });
     assert.equal(typeof fresh.lastMessagePushAt(), 'number', kind);
   }
+});
+
+await test('push: an ask waits for any open sheet, and a share-sheet send asks too', async () => {
+  // iOS won't present the ask's Modal over another sheet's (the craving sheet, the share sheet), so
+  // the host only shows it with no sheet up; the share sheet's family row asks like Send does.
+  const read = (f) => readFileSync(join(root, f), 'utf8');
+  const host = read('src/components/push/PushAskSheet.tsx');
+  assert.match(host, /const sheetsUp = useSheetsUp\(\);/);
+  assert.match(host, /if \(ask && ask !== shown && sheetsUp === 0\) setShown\(ask\);/);
+  const sheet = read('src/components/ui/BottomSheet.tsx');
+  assert.match(sheet, /useEffect\(\(\) => setUp\(sheetId, mounted\), \[sheetId, mounted\]\);/);
+  assert.match(sheet, /export function useSheetsUp\(\): number/);
+  assert.match(read('src/components/share/sendRecipe.ts'), /askAfterSend\(to\);/);
+  assert.match(read('src/lib/messaging.ts'), /export function askAfterSend\(sentTo: string\[\] \| 'everyone'\)/);
 });
 
 console.log(`\n${passed} tests passed`);

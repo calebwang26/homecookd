@@ -922,12 +922,16 @@ const AFTER_SEND_MS = 600;
 
 /**
  * A cook's recipe card went out: "Want a note when Leo writes back?" (the first learner it went to),
- * a beat later, so the button's "Sent" is seen first.
+ * a beat later, so the button's "Sent" is seen first. Also the share sheet's family row and the parent
+ * "Send a recipe" sheet (components/share/sendRecipe), whose ask waits for their sheet to close.
  */
-function askAfterSend(sentTo: string[]) {
+export function askAfterSend(sentTo: string[] | 'everyone') {
   const who = askingPerson();
   if (!who || who.me.role !== 'cook') return;
-  const people = sentTo.map((id) => who.profiles.find((p) => p.id === id)).filter((p): p is Profile => !!p);
+  const people =
+    sentTo === 'everyone'
+      ? who.profiles.filter((p) => p.id !== who.me.id)
+      : sentTo.map((id) => who.profiles.find((p) => p.id === id)).filter((p): p is Profile => !!p);
   const to = people.find((p) => p.role === 'learner') ?? people[0];
   // Never about a memorial person (see askAfterQuestion).
   if (to && !to.memorial) askForPushSoon({ kind: 'cook-first-send', profileId: who.me.id, name: to.name, profile: to }, AFTER_SEND_MS);
