@@ -223,17 +223,20 @@ export async function insertDinner(
   return rows[0].id;
 }
 
+/** The route a new dinner's retry key is stored under. A person's keys share one table across routes, so a key used elsewhere is told apart by this. */
+export const DINNER_ROUTE = "dinners.create";
+
 /** A phone's retry of a new dinner. False when this person already used this key. Waits for a first call still in its transaction. */
 export async function claimRetryKey(q: Queryable, personId: string, key: string, hash: string): Promise<boolean> {
   const { rowCount } = await q.query(
-    `insert into idempotency_keys (scope, key, route, request_hash) values ($1, $2, 'dinners.create', $3) on conflict (scope, key) do nothing`,
-    [personId, key, hash],
+    `insert into idempotency_keys (scope, key, route, request_hash) values ($1, $2, $3, $4) on conflict (scope, key) do nothing`,
+    [personId, key, DINNER_ROUTE, hash],
   );
   return Boolean(rowCount);
 }
 
-export async function retryKeyOf(q: Queryable, personId: string, key: string): Promise<{ request_hash: string | null; resource_id: string | null } | null> {
-  const { rows } = await q.query(`select request_hash, resource_id from idempotency_keys where scope = $1 and key = $2`, [personId, key]);
+export async function retryKeyOf(q: Queryable, personId: string, key: string): Promise<{ route: string; request_hash: string | null; resource_id: string | null } | null> {
+  const { rows } = await q.query(`select route, request_hash, resource_id from idempotency_keys where scope = $1 and key = $2`, [personId, key]);
   return rows[0] ?? null;
 }
 
@@ -398,8 +401,12 @@ export async function swapsOfFamily(q: Queryable, familyId: string, blocked: str
 // ---------------------------------------------------------------------------------------------
 // Account deletion and leaving (account.ts). Each returns how many rows it touched, so a caller can loop.
 
+/** Every dinner they host, and the ones around their recipes that haven't started: another host's dinner that has keeps what it was. */
 export async function cancelDinnersOf(q: Queryable, personId: string, recipeIds: string[]): Promise<number> {
-  const { rowCount } = await q.query(`update dinners set status = 'cancelled' where status <> 'cancelled' and (host_id = $1 or recipe_id = any($2::text[]))`, [personId, recipeIds]);
+  const { rowCount } = await q.query(
+    `update dinners set status = 'cancelled' where status <> 'cancelled' and (host_id = $1 or (recipe_id = any($2::text[]) and starts_at > now()))`,
+    [personId, recipeIds],
+  );
   return rowCount ?? 0;
 }
 
@@ -415,10 +422,12 @@ export async function deleteHostedDinners(q: Queryable, personId: string, batch:
   return rowCount ?? 0;
 }
 
+/** Each loses the recipe, and keeps its dish's name. One that hasn't started is called off; one that has keeps what it was. */
 export async function detachDinnersFromRecipes(q: Queryable, recipeIds: string[], batch: number): Promise<number> {
   if (recipeIds.length === 0) return 0;
   const { rowCount } = await q.query(
-    `update dinners set status = 'cancelled', recipe_id = null where id in (select id from dinners where recipe_id = any($1::text[]) limit $2)`,
+    `update dinners set status = case when starts_at > now() then 'cancelled' else status end, recipe_id = null
+      where id in (select id from dinners where recipe_id = any($1::text[]) limit $2)`,
     [recipeIds, batch],
   );
   return rowCount ?? 0;

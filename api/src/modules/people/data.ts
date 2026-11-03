@@ -23,6 +23,7 @@ export type PersonRow = {
   language: string | null;
   approx_lat: string | null;
   approx_lng: string | null;
+  removed_at: Date | null;
   deleted_at: Date | null;
 };
 
@@ -31,7 +32,7 @@ export type FamilyRow = { id: string; name: string; public_name: string | null }
 // Both by primary key, for ids a caller's page already holds.
 export async function peopleByIds(q: Queryable, ids: string[]): Promise<Map<string, PersonRow>> {
   if (ids.length === 0) return new Map();
-  const { rows } = await q.query(`select id, family_id, name, language, approx_lat, approx_lng, deleted_at from people where id = any($1::text[])`, [[...new Set(ids)]]);
+  const { rows } = await q.query(`select id, family_id, name, language, approx_lat, approx_lng, removed_at, deleted_at from people where id = any($1::text[])`, [[...new Set(ids)]]);
   return new Map(rows.map((row) => [row.id, row]));
 }
 

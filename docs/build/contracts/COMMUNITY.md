@@ -15,7 +15,7 @@ Nov 2, 2026. Read from `aws-migration` at `2f71c8f24` (#323, the report alarm, i
 | The cover | A stock photo only (`https://homecookd.app/media/<cover_stock_path>`), never a video frame. The AWS worker writes `cover_stock_path = null`, so a 1.1 recipe's `coverUrl` is null | `storyCard.ts` `coverUrl`; `pipeline/queue_db.py` |
 | Places | Rounded to 2 decimals (about 1 km) and stored as `numeric(5,2)`. People see only `distanceLabel` and the grid cell. Nothing sets a place yet, so everyone sits at the demo venue (open item 2) | `geo.ts`; `006_community.sql` |
 | The story card | One she said no to the stories for reads as the plain line, with no culture | `storyCard.ts` `publicCard` |
-| A dinner's address | Only the host (the person, not the host's family) and guests the host accepted | `dinners.ts` `viewDinners` |
+| A dinner's address | Only the host (the person, not the host's family) and guests the host accepted, while it's on: once it's called off, only the host | `dinners.ts` `viewDinners` (#FOLLOWUPS) |
 | Who asked to join | Only the host, and never a guest from a family either side blocked | `dinners.ts` `viewDinners` |
 | The public invite page | Only the dish, the host's whole name and when. Never the place, the address or an id | `dinners.ts` `openInvite` |
 | Hidden, blocked, reported, filtered, another family's | The same 404 bytes as a missing row on every route, `requestId` aside | `errors.ts` `notFound`; `communityRoutes.test.ts` (29 cases) |
@@ -73,12 +73,12 @@ A route's `:id` is 1 to 100 characters; longer is 400 `invalid`, `field: "id"`.
 1. **Host.** Anyone in the family (any role) may host one of the family's ready, shared recipes, or another family's shared dish after their yes to "cook together". `POST /v1/dinners {recipeId, startsAt, placeKind?, placeName, address, seats}` with an `Idempotency-Key` answers 201 `{dinnerId}`. The dish name is the recipe's title at that moment.
 2. **Where it is.** The dinner sits on the host's own grid cell at the time it's made (the demo venue when they have none), never at the address: nothing reads the address but people. `placeName` is public. `address` is private.
 3. **Ask to join.** Anyone signed in from another family: `POST /v1/dinners/:id/join` answers `{requestId}`, pending. One ask per person per dinner, ever: after the host's no, asking again is 409 `already_asked`.
-4. **The host answers.** Only the host, not their family: `POST /v1/dinner-requests/:id/respond {accept}`, once per ask. A yes gives that guest the address. The yes that takes the last seat sets `status: "full"`, under the dinner's row lock, so two yeses can't both take it (409 `full` for the second). Under the same lock, a yes on a dinner that's called off or has started is 404 `not_found` ("That dinner isn't happening anymore."), so no guest gets the address of a dinner that's off. A no still answers the ask there: it gives nothing away.
+4. **The host answers.** Only the host, not their family: `POST /v1/dinner-requests/:id/respond {accept}`, once per ask. A yes gives that guest the address. The yes that takes the last seat sets `status: "full"`, under the dinner's row lock, so two yeses can't both take it (409 `full` for the second). Under the same lock, a yes on a dinner that's called off or has started is 404 `not_found` ("That dinner isn't happening anymore."), so no guest gets the address of a dinner that's off. A no still answers the ask there: it gives nothing away. A yes to a guest who has since gone from the family they asked from (they left it, moved to another, or deleted their account) is refused as a missing ask is, 404 `not_found` "Only the host can answer.", and their pending ask leaves the host's `requests`. A no still answers it, and an ask already answered stays in the list (#FOLLOWUPS).
 5. **Seats.** `seatsLeft` is `seats` minus accepted guests. Nothing frees a seat: there's no route to take back a yes or to leave a dinner.
 6. **Invite friends.** The host, or a guest they accepted: `POST /v1/dinners/:id/invite-link` answers `{token, url}`, the same link every time. Share `url`.
 7. **The link opens** on the website's `/d?t=` or in the app (`homecookd://d?t=`): `POST /invite/open {token, deviceId}`, public. It answers `{dish, hostName, startsAt}` and counts that phone or browser once in the dinner's `inviteOpens` ("X going"): while the dinner is ahead, at most 300 in all, and at most 60 new ones per 10 minutes. Past that, or once it has started, the page still opens, uncounted.
 8. **Reading.** `GET /v1/dinners/:id` for one (the host also sees `requests`); `GET /v1/dinners/mine` for the dinners this person hosts, then the ones they asked to join. A dinner someone else in the family hosts is in neither their feed nor their `mine`; it opens by id with `ours: true`.
-9. **Called off.** No route calls a dinner off, on the api or on Convex. `status: "cancelled"` comes only from the team taking it down; from its host, or the cook of its dish, deleting their account; or from its host leaving the family or moving to another, which calls off the dinners they host that haven't started, open or full (`accounts/family.ts` `removePerson`, `signin.ts` `moveFaces`; `community/account.ts` `cancelDinnersOfLeaver`). A dinner that has started keeps what it was, and another host's dinner of their dish goes on. The app shows "This dinner was called off." (`components/community/labels.ts`).
+9. **Called off.** No route calls a dinner off, on the api or on Convex. `status: "cancelled"` comes only from the team taking it down; from its host, or the cook of its dish, deleting their account (every dinner the host had, started or not, until the purge deletes them; another host's dinner of the cook's dish only if it hasn't started, and it loses its `recipeId` and keeps its dish's name either way: `community/account.ts`, #FOLLOWUPS); or from its host leaving the family or moving to another, which calls off the dinners they host that haven't started, open or full (`accounts/family.ts` `removePerson`, `signin.ts` `moveFaces`; `community/account.ts` `cancelDinnersOfLeaver`). A dinner that has started keeps what it was, and another host's dinner of their dish goes on. The app shows "This dinner was called off." (`components/community/labels.ts`).
 
 **Time and place rules.**
 
@@ -125,7 +125,7 @@ Code: `api/src/modules/community/` (`routes.ts`, `inviteRoutes.ts`, `service.ts`
 
 | Write | Key | Safe to send again? |
 |---|---|---|
-| `POST /v1/dinners` | Accepted, not required: 8 to 128 of `A-Z a-z 0-9 _ -`, as on every write (ACCOUNTS.md, `idempotency.ts`). Always send one | With a key, yes: the same key and body, its fields in any order, answer 201 with the first `dinnerId` for 7 days, even if the dish has been unshared or the time has passed since. Another body is 409 `idempotency_conflict`. Without a key a retry makes a second dinner |
+| `POST /v1/dinners` | Accepted, not required: 8 to 128 of `A-Z a-z 0-9 _ -`, as on every write (ACCOUNTS.md, `idempotency.ts`). Always send one | With a key, yes: the same key and body, its fields in any order, answer 201 with the first `dinnerId` for 7 days, even if the dish has been unshared or the time has passed since. Another body, or a key first used on another route, is 409 `idempotency_conflict`. Without a key a retry makes a second dinner |
 | `POST /v1/community/swaps`, `/cook-together` | Not read | Yes: the family's ask comes back |
 | `POST /v1/community/swaps/:id/respond`, `POST /v1/dinner-requests/:id/respond` | Not read | A retry after it worked is 409 `answered`: it worked |
 | `POST /v1/dinners/:id/join` | Not read | A retry after it worked is 409 `already_asked`: it worked |
@@ -205,7 +205,7 @@ Code: `api/src/modules/community/` (`routes.ts`, `inviteRoutes.ts`, `service.ts`
 | `GET /v1/dinners/mine` | Anyone | `?cursor=` | `{dinners: [Dinner], nextCursor}`: up to 50 they host, soonest first, then up to 50 of their newest asks' dinners, soonest first. Past and cancelled ones stay |
 | `GET /v1/dinners/:id` | Anyone who can see it (What another family sees) | | Dinner |
 | `POST /v1/dinners/:id/join` | Anyone outside the host's family | none | `{requestId}` |
-| `POST /v1/dinner-requests/:id/respond` | The host | `{accept: boolean}`: a yes only while the dinner is on and ahead; a no any time | `{ok: true}` |
+| `POST /v1/dinner-requests/:id/respond` | The host | `{accept: boolean}`: a yes only while the dinner is on and ahead, and the guest is still in the family they asked from; a no any time | `{ok: true}` |
 | `POST /v1/dinners/:id/invite-link` | The host, or a guest they accepted | none | `{token, url}`: `url` is `<EDIBLE_WEB_URL, else https://homecookd.app>/d?t=<token>` |
 
 **Dinner:**
@@ -227,8 +227,8 @@ Code: `api/src/modules/community/` (`routes.ts`, `inviteRoutes.ts`, `service.ts`
 | `inviteOpens` | Phones and browsers that opened the invite link, once each |
 | `isHost` | The viewer is the host (the person) |
 | `myRequest` | The viewer's own ask: `pending`, `accepted` or `declined`, or null |
-| `address` | Only for the host and accepted guests; else null |
-| `requests` | The host only: `[{requestId, guestName, status}]`, oldest first, at most 200, none from a blocked family. Null for everyone else |
+| `address` | Only for the host, and for accepted guests while `status` isn't `cancelled`; else null |
+| `requests` | The host only: `[{requestId, guestName, status}]`, oldest first, at most 200, none from a blocked family, and no pending one from a guest who has gone from the family they asked from (flow 3, step 4). Null for everyone else |
 
 | Code | Route | When | The app does |
 |---|---|---|---|
@@ -242,7 +242,7 @@ Code: `api/src/modules/community/` (`routes.ts`, `inviteRoutes.ts`, `service.ts`
 | `own_family` (409) | Join | "This is your family's dinner." | Don't offer it on `ours` |
 | `already_asked` (409) | Join | "You already asked to join.", after a no too | Reload |
 | `full` (409) | Join | "That dinner is full." | Say so |
-| `not_found` (404) | Respond | "Only the host can answer.": missing, not the host, or the guest's family and yours blocked | Drop it |
+| `not_found` (404) | Respond | "Only the host can answer.": missing, not the host, or the guest's family and yours blocked; for a yes, also a guest who has since left the family they asked from, moved to another or deleted their account | Drop it |
 | `answered` (409) | Respond | "You already answered." | Reload |
 | `not_found` (404) | Respond, a yes | "That dinner isn't happening anymore.": cancelled, or started. The ask stays pending, and a no still answers it | Show it's over |
 | `full` (409) | Respond, a yes | "Every seat is taken." | Reload |

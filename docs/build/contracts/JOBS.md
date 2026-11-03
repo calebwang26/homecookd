@@ -140,7 +140,7 @@ Code: `api/src/modules/jobs/` (`routes.ts`, `uploads.ts`, `service.ts`, `data.ts
 
 ### `POST /v1/video-uploads`: links for one upload
 
-**Header:** `Idempotency-Key`, required. This route takes 8 to 200 of `A-Z a-z 0-9 _ -` (the shared rule is 128: use a uuid). One key per upload.
+**Header:** `Idempotency-Key`, required: 8 to 128 of `A-Z a-z 0-9 _ -`, the shared rule (ACCOUNTS.md, `idempotency.ts`). Use a uuid. One key per upload.
 
 **Body:** `{videos: [{contentType, size, durationS?}]}`.
 
@@ -167,7 +167,7 @@ Code: `api/src/modules/jobs/` (`routes.ts`, `uploads.ts`, `service.ts`, `data.ts
 | Code | When | The app does |
 |---|---|---|
 | `forbidden` (403) | A kid | Don't offer Record to kids |
-| `invalid` (400), `field: "Idempotency-Key"` | Missing or malformed | A bug |
+| `invalid` (400), `field: "Idempotency-Key"` | Missing: "Send an Idempotency-Key with this write." Malformed: "An Idempotency-Key is 8 to 128 letters, digits, - or _.", as on every write | A bug |
 | `invalid` (400), `field: "videos"` | "Pick 1 to 20 videos.", "Every file must be a video.", "A video's length doesn't look right.", "That's more than 4 hours of video. Please pick fewer videos." | Check before sending |
 | `too_large` (413) | A video over 20 GiB | Check the size before sending |
 | `idempotency_conflict` (409) | This key with other videos, or on another route | A bug: a new upload needs a new key |
@@ -446,7 +446,7 @@ Owners: **API** is the AWS backend chat, **App** is App screens & recording, **C
 5. No route re-runs a failed job from its landed upload, so a retry sends the whole video again: say whether that's wanted. **Caleb**
 6. `/parts/finish` reports S3 refusing to join the parts (a wrong or missing `etag`) as 502 `provider_down`, which reads as "try again", and on a video `/complete` has already marked it answers `finished: false` or 502 instead of `true`. **API**
 7. `POST /v1/jobs`'s retry finds the job by family and folder, not by cook, so another cook with the same `uploadId` would get its `jobId` and `recipeId`: match on the cook too. **API**
-8. `/v1/video-uploads` checks its own `Idempotency-Key` rule (8 to 200 characters, no `message`) instead of the shared one in `idempotency.ts` (8 to 128). **API**
+8. ~~`/v1/video-uploads` checks its own `Idempotency-Key` rule (8 to 200 characters, no `message`).~~ **Fixed in #FOLLOWUPS:** it reads the key with `idempotency.ts`'s `idempotencyKey`, required: 8 to 128 characters, and the same 400 `invalid` with its message as every write. The app's key is a uuid (`app/src/lib/uploads.ts` `newKey` on `main`, 36 characters, or about 30 without `randomUUID`), so none it sends is refused now. The stored hash is the same as before, so a key from before the deploy still answers its upload.
 9. On iPhone the in-app camera starts with `live:startRecording`, which 1.1 doesn't have: `record.tsx` needs its no-recording path there too, sending `title`, `forKidIds` and `language` on `POST /v1/jobs`. **App**
 10. The plate photo (`live:setCover`) has no route, so a 1.1 recipe's cover comes from the video: say whether the plate photo should come back. **Caleb**
 11. Deleting a recipe (the signer's `action: delete`) isn't built (JOBS-MIGRATION.md, "Deferred, for other reasons"). **API**

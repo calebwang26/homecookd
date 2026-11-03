@@ -78,6 +78,16 @@ test("uploads", { skip: !hasDatabase }, async (t) => {
     assert.deepEqual(replies.map((r) => r.status).sort(), [200, 200, 200, 201]);
   });
 
+  await t.test("the key is the shared one: 8 to 128 of A-Z a-z 0-9 _ -, required, refused as on every write", async () => {
+    assert.equal((await ask([video], "k".repeat(128), sam)).status, 201);
+    for (const bad of ["k".repeat(129), "k".repeat(200), "short", "has spaces in it!"]) {
+      const r = await ask([video], bad, sam);
+      assert.deepEqual([r.status, r.data.error, r.data.field, r.data.message], [400, "invalid", "Idempotency-Key", "An Idempotency-Key is 8 to 128 letters, digits, - or _."], bad);
+    }
+    const none = await call(app, sam, "POST", "/v1/video-uploads", { videos: [video] });
+    assert.deepEqual([none.status, none.data.field, none.data.message], [400, "Idempotency-Key", "Send an Idempotency-Key with this write."]);
+  });
+
   await t.test("new links for what isn't in yet; everyone else reads the same not-found", async () => {
     const { uploadId, keys } = await askLinks(app, dad, 3);
     land(videos, keys[1]);

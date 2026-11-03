@@ -11,7 +11,7 @@ import { afterOf, decodeCursor, encodeCursor, type After } from "../../paging.js
 import { DINNER_INVITE_SALT, seal, unseal } from "../../sealed.js";
 import { flagged } from "../dish/moderation.js";
 import { sha256Hex } from "../dish/values.js";
-import { familiesByIds, peopleByIds } from "../people/service.js";
+import { familiesByIds, peopleByIds, type PersonRow } from "../people/service.js";
 import * as data from "./data.js";
 import type { DinnerRow, PlaceKind } from "./data.js";
 import { distanceLabel, milesBetween, placeOf, roundToGrid } from "./geo.js";
@@ -31,6 +31,9 @@ const MINE_PAGE = 50;
 const NOT_HAPPENING = "That dinner isn't happening anymore.";
 const PICK_RECIPE = "Pick one of your family's recipes.";
 
+/** A guest who is no longer in the family they asked from: they left it, moved to another, or deleted their account. */
+const goneFrom = (guest: PersonRow | undefined, familyId: string) => !guest || !!guest.removed_at || !!guest.deleted_at || guest.family_id !== familyId;
+
 /** What one person may see of these dinners. `recipes` holds their dishes. */
 async function viewDinners(signed: Signed, shield: Shield, dinners: DinnerRow[], recipes: Map<string, SeenRecipe>) {
   const ids = dinners.map((d) => d.id);
@@ -38,8 +41,10 @@ async function viewDinners(signed: Signed, shield: Shield, dinners: DinnerRow[],
   const accepted = await data.acceptedCounts(db(), ids);
   const mine = await data.myRequests(db(), ids, signed.personId);
   const opens = await data.inviteOpenCounts(db(), ids);
-  const asks = (await data.requestsOn(db(), hosted)).filter((r) => !shield.blocked.has(r.guest_family_id));
-  const people = await peopleByIds(db(), [signed.personId, ...dinners.map((d) => d.host_id), ...asks.map((r) => r.guest_id)]);
+  const onHosted = (await data.requestsOn(db(), hosted)).filter((r) => !shield.blocked.has(r.guest_family_id));
+  const people = await peopleByIds(db(), [signed.personId, ...dinners.map((d) => d.host_id), ...onHosted.map((r) => r.guest_id)]);
+  // A pending ask from a guest who has gone can't be said yes to, so it leaves the host's list. One already answered stays: it's what happened, and a yes holds its seat.
+  const asks = onHosted.filter((r) => r.status !== "pending" || !goneFrom(people.get(r.guest_id), r.guest_family_id));
   const families = await familiesByIds(db(), dinners.map((d) => d.host_family_id));
   const me = people.get(signed.personId);
   return dinners.map((d) => {
@@ -66,7 +71,8 @@ async function viewDinners(signed: Signed, shield: Shield, dinners: DinnerRow[],
       distanceLabel: distanceLabel(milesBetween(placeOf(me), placeOf(d))),
       isHost,
       myRequest: request ? { requestId: request.id, status: request.status } : null,
-      address: isHost || request?.status === "accepted" ? d.address : null,
+      // A guest the host let in reads it only while the dinner is on: once it's called off, only the host does.
+      address: isHost || (request?.status === "accepted" && d.status !== "cancelled") ? d.address : null,
       requests: isHost
         ? asks.filter((r) => r.dinner_id === d.id).map((r) => ({ requestId: r.id, guestName: people.get(r.guest_id)?.name ?? "", status: r.status }))
         : null,
@@ -106,9 +112,9 @@ export type NewDinner = { recipeId: string; startsAt: number; placeKind?: PlaceK
  */
 const hashAsSent = (input: NewDinner) => sha256Hex(JSON.stringify(input));
 
-/** What a used retry key answers: the first dinner for the same body, and a refusal for another. */
-function firstDinner(first: { request_hash: string | null; resource_id: string | null }, input: NewDinner, hash: string): { dinnerId: string } {
-  const same = first.request_hash === hash || first.request_hash === hashAsSent(input);
+/** What a used retry key answers: the first dinner for the same body, and a refusal for another body or a key first used on another route. */
+function firstDinner(first: { route: string; request_hash: string | null; resource_id: string | null }, input: NewDinner, hash: string): { dinnerId: string } {
+  const same = first.route === data.DINNER_ROUTE && (first.request_hash === hash || first.request_hash === hashAsSent(input));
   if (!same || !first.resource_id) throw refused(409, "idempotency_conflict", "That was already sent with different details.");
   return { dinnerId: first.resource_id };
 }
@@ -210,6 +216,9 @@ export async function requestJoin(signed: Signed, dinnerId: string): Promise<{ r
  * The host says yes or no. The dinner is full once every seat has an accepted guest. Under the dinner's row lock, so two yeses can't both take the last seat, and no yes
  * lands on a dinner that's been called off or has started: a yes hands over the address. A no on one still answers the ask, as a no on a full dinner does: it gives
  * nothing away, and the host still sees the ask on that dinner.
+ *
+ * No yes lets in a guest who has gone from the family they asked from either. Their ask has left the host's list (viewDinners), so it's refused as a missing ask is.
+ * A no still answers it. A guest who goes just after a yes is a guest who left after being let in, which can happen anyway, so their row isn't locked.
  */
 export async function respondToJoin(signed: Signed, requestId: string, accept: boolean): Promise<void> {
   await tx(async (c) => {
@@ -223,6 +232,7 @@ export async function respondToJoin(signed: Signed, requestId: string, accept: b
     if (r.status !== "pending") throw refused(409, "answered", "You already answered.");
     if (!accept) return await data.setRequestStatus(c, requestId, "declined");
     if (d.status === "cancelled" || d.starts_at.getTime() <= Date.now()) throw notFound(NOT_HAPPENING);
+    if (goneFrom((await peopleByIds(c, [r.guest_id])).get(r.guest_id), r.guest_family_id)) throw refuse();
     const taken = (await data.acceptedCounts(c, [d.id])).get(d.id) ?? 0;
     if (taken >= d.seats) throw refused(409, "full", "Every seat is taken.");
     await data.setRequestStatus(c, requestId, "accepted");
