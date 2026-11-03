@@ -22,7 +22,8 @@ const MAX_INLINE_WAIT_MS = 15_000;
 export type Credential = 'none' | 'key' | 'session';
 
 export type RequestOpts = {
-  method?: 'GET' | 'POST';
+  /** DELETE sends no body (COMMUNITY.md: unblock). */
+  method?: 'GET' | 'POST' | 'DELETE';
   body?: Record<string, unknown>;
   /** Which credential the route takes. */
   auth: Credential;
