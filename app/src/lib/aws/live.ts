@@ -126,4 +126,72 @@ export function watchTopic<T>(topic: string, onData: (value: T) => void, opts: {
 /** Forget every poller (sign-out, a new key): the next watch starts over. */
 export function stopAllPolls() {
   for (const p of [...pollers.values()]) p.end();
+  for (const p of [...reads.values()]) p.end();
 }
+
+// ---------------------------------------------------------------------------
+// Plain reads polled until their topics exist (MESSAGES.md, "Live topics": the inbox, a thread, open questions).
+// The same rules as a topic: one shared poll per key, only in front, every `everyMs`; a failure keeps what's on
+// screen and backs off; signed_out and removed_from_family stop it. `read` gets the last value (for an `after` cursor).
+
+type ReadPoller<T> = { watchers: Set<(v: T) => void>; value?: T; hasValue: boolean; end: () => void };
+const reads = new Map<string, ReadPoller<unknown>>();
+
+export function watchRead<T>(key: string, read: (last: T | undefined) => Promise<T>, everyMs: number, onData: (v: T) => void): () => void {
+  let p = reads.get(key) as ReadPoller<T> | undefined;
+  if (!p) {
+    let timer: unknown = null;
+    let failures = 0;
+    let running = false;
+    let stopped = false;
+    const poller: ReadPoller<T> = {
+      watchers: new Set(),
+      hasValue: false,
+      end() {
+        stopped = true;
+        if (timer != null) clearTimer(timer);
+        offFront();
+        if (reads.get(key) === poller) reads.delete(key);
+      },
+    };
+    const later = (ms: number) => {
+      if (!stopped) timer = setTimer(tick, ms);
+    };
+    const tick = async () => {
+      timer = null;
+      if (stopped || running) return;
+      if (!inFront()) return; // coming back to the front asks at once
+      running = true;
+      try {
+        const v = await read(poller.hasValue ? poller.value : undefined);
+        failures = 0;
+        poller.value = v;
+        poller.hasValue = true;
+        poller.watchers.forEach((w) => w(v));
+        later(everyMs);
+      } catch (e) {
+        if (isAwsError(e) && (e.kind === 'signed_out' || e.code === 'removed_from_family')) return poller.end();
+        later(Math.max(everyMs, retryDelayMs(isAwsError(e) ? e : null, failures++)));
+      } finally {
+        running = false;
+      }
+    };
+    const offFront = onFront(() => {
+      if (timer != null) clearTimer(timer);
+      timer = null;
+      void tick();
+    });
+    p = poller;
+    reads.set(key, poller as ReadPoller<unknown>);
+    void tick();
+  } else if (p.hasValue) {
+    onData(p.value as T);
+  }
+  p.watchers.add(onData);
+  const mine = p;
+  return () => {
+    mine.watchers.delete(onData);
+    if (!mine.watchers.size) mine.end();
+  };
+}
+
