@@ -173,6 +173,18 @@ after it: 726 turned away with the 503 and `retry-after`, no other 5xx, and `/re
 - **Still short of the target:** 0.1% isn't met at four 0.25 vCPU tasks at 120 a second. Production's tasks are 0.5 vCPU, about twice the capacity each. The test should run again at production's size before launch.
 - #311's deploy rolled out during the burst only, after the steady window ended at 18:16:46.
 
+**Production's size, in plain numbers (Nov 2).** Production's api is 2 to 4 tasks of 0.5 vCPU each (#295). It hasn't been measured at that size yet. These are staging's measurements, scaled.
+- **Measured on staging:**
+  - One 0.25 vCPU task carried 50 a second for 15 minutes with no 5xx (p99 285 ms at the load balancer).
+  - Four of them at 120 a second, 30 each, still gave about 0.5% errors, nearly all fast 503s from the shedder. The likely cause is event-loop spikes on very small tasks, which is why the line below is an estimate, not a promise.
+- **Estimate for production:** a 0.5 vCPU task has twice the CPU, so about 100 a second each at the same headroom. Two tasks would carry about **200 a second**, and four about **400 a second**, within 0.1%.
+- **What launch needs:** a few hundred families is single-digit requests a second, far below two tasks.
+- **The step past that,** in order:
+  1. Raise the max from 4 to 6. That costs only while load is there: about $18 a month for each extra 0.5 vCPU task that's running.
+  2. Then 1 vCPU tasks.
+  3. Past that, the next limits are the database: 10 connections per task, and the `db.t4g.medium`'s CPU, which peaked at 10% in the staging test on a smaller instance.
+- **The gate before launch:** rerun this test on production's size. That's 200 a second for 15 minutes on two tasks (the 0.1% target), then 400 a second, to see it scale to four.
+
 ### Not building
 
 Microservices, Kubernetes, Redis, read replicas and multi-region, until measurements call for them.
