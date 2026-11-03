@@ -183,6 +183,36 @@ resource "aws_cloudwatch_metric_alarm" "api_busy" {
   alarm_actions       = [aws_sns_topic.alerts.arn]
 }
 
+# A scheduled message SQS handed out again (api/src/scheduled.ts, "scheduled message redelivered"): its last try failed, or the answer
+# that carried it never reached the api, and it waited out the queue's 300 s visibility timeout. That's how a pending send came 5 minutes
+# late on Nov 2. A lost answer shows as this line with no "a scheduled task failed" before it for the same outboxId.
+resource "aws_cloudwatch_log_metric_filter" "scheduled_redelivered" {
+  name           = "${local.name}-scheduled-redelivered"
+  log_group_name = aws_cloudwatch_log_group.service["api"].name
+  pattern        = "\"scheduled message redelivered\""
+  metric_transformation {
+    name      = "ScheduledRedelivered"
+    namespace = "homecookd/${local.name}"
+    value     = "1"
+  }
+}
+
+# One now and then is SQS's at-least-once. A message is handed out 3 times at most, 5 minutes apart, so 5 in 15 minutes is several
+# messages: tasks failing together, or receives losing their answers.
+resource "aws_cloudwatch_metric_alarm" "scheduled_redelivered" {
+  alarm_name          = "${local.name}-scheduled-redelivered"
+  alarm_description   = "Scheduled messages keep being handed out again: tasks failing, or receives whose answer was lost, so pushes and sends run about 5 minutes late"
+  namespace           = aws_cloudwatch_log_metric_filter.scheduled_redelivered.metric_transformation[0].namespace
+  metric_name         = aws_cloudwatch_log_metric_filter.scheduled_redelivered.metric_transformation[0].name
+  statistic           = "Sum"
+  period              = 900
+  evaluation_periods  = 1
+  threshold           = 5
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  treat_missing_data  = "notBreaching"
+  alarm_actions       = [aws_sns_topic.alerts.arn]
+}
+
 resource "aws_cloudwatch_metric_alarm" "service_unhealthy" {
   for_each          = { for k, s in local.lb_services : k => s if s.desired_count > 0 }
   alarm_name        = "${local.name}-${each.key}-no-healthy-tasks"

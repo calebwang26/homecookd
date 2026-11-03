@@ -42,6 +42,9 @@ EventBridge schedules --> SQS --> api (replaces Convex and pg_cron jobs)
   Cartesia, Apple, Moss and Expo push. A failing outside service must not take down unrelated features.
 - **Assume every queue message can arrive twice.** SQS delivers at least once, so jobs must be safe to repeat: use a unique
   job id, and check before doing work. Writes from a phone that may retry take an idempotency key.
+  It can also arrive late: a message whose receive answer is lost stays hidden for the queue's visibility timeout (300 s on
+  `scheduled`) before SQS hands it out again. The `scheduled` consumer logs each message's receipt and completion, and warns
+  "scheduled message redelivered" with how late it is; 5 in 15 minutes alarms (`api/src/scheduled.ts`, `infra/modules/env/alerts.tf`).
 - **Failed jobs go to a dead-letter queue, and that raises an alert.** Nothing fails silently.
 - **Change contracts compatibly.** Old app versions stay in use for a long time, so add fields and don't rename or remove
   them while a version that calls them is still out there. Version the api.

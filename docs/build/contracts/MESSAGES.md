@@ -140,6 +140,8 @@ A story card is one AI sentence that introduces a shared recipe to neighbors, wi
 6. A recording that never finishes (stopped, failed, still processing) delivers nothing, and the send stays as it is.
 7. `POST /v1/pending-sends/:uploadId/published {libraryId}`, by the sender, is still there and needn't be called: after a delivery it answers `{delivered: 0, already: true}`.
 
+**At least once, and now and then about 5 minutes late.** The delivery rides the worker's `recipe_published` message on the `scheduled` queue, which SQS hands out at least once; a repeat delivers nothing twice (step 3). If the answer to the api's receive is lost on the way, SQS keeps that message hidden for its 300 s visibility timeout and then hands it out again, so the `recipe` message, the hello and the push arrive about 5 minutes after the recipe is ready. That happened once on Nov 2 (outbox row 267). The app shouldn't show a send as failed in that time. The api now logs each such message as "scheduled message redelivered", with how late it is.
+
 ### 11. Hearts, stats, the table and the recap
 
 Plain reads and writes, in "Routes": `POST /v1/events` when someone opens, starts, cooks or listens to a dish; hearts with `/v1/favorites`; her dishes' hearts and cooks with `/v1/dish-stats` and `/v1/hearts/recent`; one dish's activity for the share sheet; `GET /v1/table` with `x-tz`; and `GET /v1/recap?month=`.
