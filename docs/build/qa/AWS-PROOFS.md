@@ -34,6 +34,7 @@ cd app && node scripts/aws-jobs-flows.mjs         # S3 upload (one PUT and 5 par
 cd app && node scripts/aws-messages-flows.mjs     # chat, questions, uploads, postcards, shares, share asks, delivery
 cd app && node scripts/aws-dish-flows.mjs         # a web card claimed by kid and Mom, her requests, voice recipe, dishAskId
 cd app && node scripts/aws-community-flows.mjs    # feed, swaps, a dinner end to end, its invite link (no reports or blocks: on staging they email the team)
+cd app && node scripts/aws-takedown-flows.mjs make <file>   # then down and back: AWS backend takes it down and keeps it in between
 ```
 
 Things staging has for testing:
@@ -155,4 +156,5 @@ phone's staging account too.
 | Jobs and recording | `aws-jobs/` | #301, #302, #304 |
 | Messages and questions | `aws-messages/` | #307, #308, #312 |
 | Kids' asks | `aws-dish/` | #320, #324 |
-| Community | `aws-community/` | this PR |
+| Community | `aws-community/` | #326 |
+| Takedown and share off | `aws-takedown/` | this PR |
