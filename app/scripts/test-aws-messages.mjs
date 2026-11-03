@@ -2,6 +2,8 @@
 //   src/lib/aws/messages.ts  each route's path, body and Idempotency-Key; lists read to their last page; a thread
 //                            read since `after` paging back and kept in order; uploads checked before asking; push
 //                            tokens always as the phone's own person; the table's x-tz header
+//   src/lib/aws/legacy.ts    with the switch on, the screens' api.* calls answered by AWS in today's shapes:
+//                            snake_case, a kid as "learner", a send's fields renamed and keyed
 //   src/lib/aws/live.ts      watchRead: one shared poll per key, every everyMs, the last value handed to the reader
 //                            (for an `after` cursor), only in front, and stopping on signed_out
 //   node scripts/test-aws-messages.mjs
@@ -24,6 +26,7 @@ process.env.EXPO_PUBLIC_AWS_URL = 'https://api.test';
 const C = await import(pathToFileURL(join(root, 'src/lib/aws/client.ts')).href);
 const M = await import(pathToFileURL(join(root, 'src/lib/aws/messages.ts')).href);
 const L = await import(pathToFileURL(join(root, 'src/lib/aws/live.ts')).href);
+const API = await import(pathToFileURL(join(root, 'src/lib/api.ts')).href);
 
 let passed = 0;
 const test = async (name, fn) => {
@@ -205,6 +208,46 @@ await test('watchRead waits in the background, and stops for good on signed_out'
   await flush();
   assert.equal(timers.length, 0, 'no more polls after signed_out');
   off2();
+});
+
+const kidP = { id: 'p-leo', name: 'Leo', role: 'kid', relation: null, avatarKey: 'leo' };
+const momP = { id: 'p-mom', name: 'Mom', role: 'cook', relation: 'mom', avatarKey: null };
+const awsMsg = { id: 'm1', threadId: 't1', senderId: 'p-leo', createdAt: '2026-11-02T18:04:05.123456Z', kind: 'question', body: 'Salt?', libraryId: 'dal', stepOrder: 2, replyTo: null, photoUrl: null };
+
+await test("switch on: the inbox comes back in today's shape (snake_case, a kid is a learner)", async () => {
+  signIn();
+  API.setApiAuth({ deviceKey: `key-${phones}`, code: null, profileId: 'p-mom' });
+  fakeApi({ ...session, 'GET /v1/threads': [{ body: { threads: [{ id: 't1', kind: 'pair', other: kidP, members: [momP, kidP], last: awsMsg, unread: 2, libraryId: 'dal', postcards: 0 }], nextCursor: null } }] });
+  const [t] = await API.api.threads();
+  assert.deepEqual([t.id, t.kind, t.unread, t.recipe_id, t.other.role, t.other.avatar_key], ['t1', 'pair', 2, 'dal', 'learner', 'leo']);
+  assert.deepEqual([t.last.thread_id, t.last.sender_id, t.last.recipe_id, t.last.step_order, t.last.created_at], ['t1', 'p-leo', 'dal', 2, '2026-11-02T18:04:05.123456Z']);
+});
+
+await test("switch on: a screen's send is renamed to AWS fields and keyed", async () => {
+  signIn();
+  API.setApiAuth({ deviceKey: `key-${phones}`, code: null, profileId: 'p-mom' });
+  const calls = fakeApi({ ...session, 'POST /v1/threads/t1/messages': [{ body: { ...awsMsg, id: 'm2', kind: 'voice', senderId: 'p-mom' } }] });
+  const m = await API.api.sendMessage('t1', { kind: 'voice', duration_s: 7, audio_path: 'voice/k1', recipe_id: 'dal', step_order: 2, reply_to: 'm1' });
+  const c = own(calls)[0];
+  assert.deepEqual(c.body, { kind: 'voice', libraryId: 'dal', stepOrder: 2, replyTo: 'm1', audioKey: 'voice/k1', durationS: 7 });
+  assert.match(c.headers['idempotency-key'], /^[A-Za-z0-9_-]{8,}$/);
+  assert.equal(m.kind, 'voice');
+});
+
+await test('switch on: a postcard, a note removed, and send-recipe answer in the old words', async () => {
+  signIn();
+  API.setApiAuth({ deviceKey: `key-${phones}`, code: null, profileId: 'p-leo' });
+  const calls = fakeApi({
+    ...session,
+    'POST /v1/messages/m9/postcard': [{ body: { ...awsMsg, id: 'm9', kind: 'cooked', photoUrl: 'https://x/p.jpg', rating: 4 } }],
+    'POST /v1/notes/n1/remove': [{ body: { ok: true, answerMessageId: 'a1', questionMessageId: 'q1' } }],
+    'POST /v1/send-recipe': [{ body: { sent: [{ personId: 'p-mom', threadId: 't1', messageId: 'm3' }] } }],
+  });
+  const card = await API.api.postcard('m9', { photo_path: 'photo/k2', rating: 4 });
+  assert.deepEqual([card.photo_url, card.rating], ['https://x/p.jpg', 4]);
+  assert.deepEqual(own(calls)[0].body, { photoKey: 'photo/k2', rating: 4 });
+  assert.deepEqual(await API.api.removeNote('n1'), { ok: true, answer_message_id: 'a1', question_message_id: 'q1' });
+  assert.deepEqual(await API.api.sendRecipe({ recipe_id: 'dal', to: ['p-mom'] }), { sent: [{ profile_id: 'p-mom', thread_id: 't1', message_id: 'm3' }] });
 });
 
 console.log(`\n${passed} passed`);

@@ -25,6 +25,7 @@
 import { AWS_ON } from './aws/config';
 import { onDeadKey, request as awsRequest, setAwsCredentials, type RequestOpts } from './aws/client';
 import { errorWords } from './aws/errorWords';
+import { awsMessagesApi } from './aws/legacy';
 import { isAwsError } from './aws/errors';
 import { wordsFor } from './words/words';
 
@@ -682,7 +683,7 @@ const enc = encodeURIComponent;
 // ---------------------------------------------------------------------------------------------
 // Endpoints
 
-export const api = {
+const supabaseApi = {
   /** GET /family: the family, every profile (Mom, Dad, Grandma, Leo, Maya) and this phone's own profile. */
   family: (o: AuthOverride = {}) => call<FamilyInfo>('/family', { ...o, profileId: o.profileId ?? null }),
 
@@ -889,5 +890,11 @@ export const api = {
   /** GET /me/recipe-stats (me): my views, cooks, hearts and "sent to me" per dish. */
   recipeStats: (o: AuthOverride = {}) => call<RecipeStat[]>('/me/recipe-stats', { me: true, ...o }),
 };
+
+/**
+ * Every call the screens make. Under AWS_ON (1.1) the Messages ones are answered by the AWS api in today's shapes
+ * (lib/aws/legacy.ts); the rest go to the AWS api through awsOnce, with the same paths (the Accounts family routes).
+ */
+export const api: typeof supabaseApi = AWS_ON ? { ...supabaseApi, ...awsMessagesApi } : supabaseApi;
 
 export type Api = typeof api;

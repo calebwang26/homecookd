@@ -57,7 +57,10 @@ import { AWS_ON } from '@/lib/aws/config';
 import { isAwsError } from '@/lib/aws/errors';
 import '@/lib/aws/foreground';
 import { jobs as awsJobs } from '@/lib/aws/jobs';
-import { watchTopic } from '@/lib/aws/live';
+import { newKey } from '@/lib/aws/legacy';
+import { watchRead, watchTopic } from '@/lib/aws/live';
+import { messages as awsMessages, type Question as AwsQuestion } from '@/lib/aws/messages';
+import { sendAwsFile } from '@/lib/aws/sendFile';
 import { readAwsRecipes, refreshAwsRecipes, watchAwsRecipes } from '@/lib/aws/recipesStore';
 import { getSession, useSession } from '@/lib/session';
 import { jobForUpload } from '@/lib/unsentLogic';
@@ -217,7 +220,7 @@ const LIVE_RETRY_MS = 10_000;
  * The Convex reads that have moved to the AWS api (1.1), by name: jobs.mine is the `jobs` live topic (her own jobs
  * only), recipes.list is GET /v1/recipes read on focus and when one of her jobs turns done.
  */
-const AWS_LIVE: Record<string, (set: (v: unknown) => void, as: string | null) => () => void> = {
+const AWS_LIVE: Record<string, (set: (v: unknown) => void, as: string | null, args: Record<string, unknown>) => () => void> = {
   'jobs:mine': (set, as) => {
     const done = new Set<string>();
     return watchTopic<LiveJob[]>(
@@ -232,7 +235,49 @@ const AWS_LIVE: Record<string, (set: (v: unknown) => void, as: string | null) =>
     );
   },
   'recipes:list': (set, as) => watchAwsRecipes(set, as),
+  // No live topics for these yet (MESSAGES.md open item 1): the plain reads, polled at the planned pace.
+  'questions:openForCook': (set, as) =>
+    watchRead(`questions:open:${as ?? ''}`, () => awsMessages.openQuestions(as), 30_000, (qs) => set(qs.map(toCookQuestion))),
+  'questions:forRecipe': (set, as, args) => {
+    const recipeId = String(args.recipeId ?? '');
+    return watchRead(`questions:recipe:${as ?? ''}:${recipeId}`, () => awsMessages.recipeQuestions(recipeId, as), 10_000, (qs) => set(qs.map(toRecipeAnswer)));
+  },
+  'messages:madeMyDish': (set, as) =>
+    watchRead(`made-my-dish:${as ?? ''}`, () => awsMessages.madeMyDish(as), 60_000, (m) =>
+      set(m ? { ...m, libraryId: m.libraryId ?? undefined, text: m.text ?? undefined, at: Date.parse(m.at) } : null),
+    ),
 };
+
+/** An AWS cook-mode question in Convex's words (times in ms, `_id`). */
+function toCookQuestion(q: AwsQuestion): CookQuestion {
+  return {
+    _id: q.id,
+    _creationTime: Date.parse(q.createdAt),
+    recipeId: q.recipeId,
+    ...(q.stepOrder != null ? { stepOrder: q.stepOrder } : null),
+    text: q.text,
+    askedByName: q.askedByName,
+    recipeTitle: q.recipeTitle,
+    askedBy: q.askedBy,
+    ...(q.textForCook ? { textForCook: q.textForCook } : null),
+    ...(q.kind !== 'cooking' ? { kind: q.kind } : null),
+    ...(q.answer?.translation ? { answer: { translation: q.answer.translation } } : null),
+  };
+}
+
+function toRecipeAnswer(q: AwsQuestion) {
+  return {
+    _id: q.id,
+    _creationTime: Date.parse(q.createdAt),
+    status: q.status,
+    text: q.text,
+    askedByName: q.askedByName,
+    answerAudioUrl: q.answerAudioUrl,
+    recipeId: q.recipeId,
+    ...(q.stepOrder != null ? { stepOrder: q.stepOrder } : null),
+    ...(q.answer ? { answer: { text: q.answer.text ?? undefined, transcript: q.answer.transcript ?? undefined, translation: q.answer.translation ?? undefined } } : null),
+  };
+}
 
 export function useLive<T>(
   name: string,
@@ -252,7 +297,7 @@ export function useLive<T>(
   useEffect(() => {
     if (!enabled) return;
     // 1.1 (AWS_ON): a moved area reads the AWS api; one that hasn't moved reads nothing (no stub, no Convex).
-    if (AWS_ON) return AWS_LIVE[name]?.((v) => setValue(v as T), meId ?? null);
+    if (AWS_ON) return AWS_LIVE[name]?.((v) => setValue(v as T), meId ?? null, args);
     if (isStub || !client) return fallback(setValue);
     let off: (() => void) | null = null;
     let offStub: (() => void) | null = null;
@@ -753,6 +798,11 @@ async function uploadFile(uri: string, contentType: string): Promise<string> {
 /** The cook's answer: a voice note (push to talk), or typed words. */
 export async function answerQuestion(questionId: string, answer: { audioUri: string; contentType: string } | { text: string }): Promise<void> {
   await requireAiConsent();
+  if (AWS_ON) {
+    const a = 'audioUri' in answer ? { audioKey: await sendAwsFile('voice', answer.contentType, answer.audioUri) } : { text: answer.text };
+    await awsMessages.answer(questionId, a, newKey());
+    return;
+  }
   const sessionToken = await token();
   const audioId = 'audioUri' in answer ? await uploadFile(answer.audioUri, answer.contentType) : undefined;
   const text = 'text' in answer ? answer.text : undefined;
@@ -790,6 +840,13 @@ export type SharedPhoto = { draft: string; fileId: string; recipeId: string; coo
 /** The kid's dish photo: stored, and Muse drafts a note to the cook. Nothing is sent yet. */
 export async function sharePhoto(libraryId: string, photoUri: string): Promise<SharedPhoto> {
   await requireAiConsent();
+  if (AWS_ON) {
+    const { recipeId, cookId } = await convexRecipe(libraryId);
+    const fileId = await sendAwsFile('photo', 'image/jpeg', photoUri);
+    // No note writer (staging), or it failed: she writes her own words (MESSAGES.md, the photo note's codes).
+    const draft = await awsMessages.photoNote(recipeId, fileId).then((d) => d.draft, () => '');
+    return { draft, fileId, recipeId, cookId };
+  }
   const sessionToken = await token();
   const { recipeId, cookId } = await convexRecipe(libraryId);
   const fileId = await uploadFile(photoUri, 'image/jpeg');
@@ -799,6 +856,11 @@ export async function sharePhoto(libraryId: string, photoUri: string): Promise<S
 
 /** Sends the photo with the kid's words. It stays "AI-drafted" even if they edited Muse's draft. */
 export async function sendPhoto(shared: SharedPhoto, text: string): Promise<void> {
+  if (AWS_ON) {
+    const { fileId, recipeId, cookId } = shared;
+    await awsMessages.sendTo({ kind: 'photo', photoKey: fileId, recipeId, ...(cookId ? { to: cookId } : null), text, aiDrafted: !!shared.draft }, newKey());
+    return;
+  }
   const sessionToken = await token();
   const { fileId, recipeId, cookId } = shared;
   const to = cookId ?? undefined;

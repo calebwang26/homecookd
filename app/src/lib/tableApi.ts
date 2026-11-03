@@ -24,6 +24,9 @@ import { useCallback, useEffect, useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 
 import { API_URL, getApiAuth, getApiTimeZone } from './api';
+import { AWS_ON } from './aws/config';
+import { isAwsError } from './aws/errors';
+import { messages as awsMessages } from './aws/messages';
 import { useSession } from './session';
 import { asTable, type Table } from './sundayTable';
 
@@ -43,6 +46,14 @@ export class TableError extends Error {
 
 /** GET /table as `personId` (pairs included), or faces only when null. */
 async function getTable(personId: string | null): Promise<Table | null> {
+  if (AWS_ON) {
+    // GET /v1/table keeps Supabase's shape (MESSAGES.md); it needs a person on AWS.
+    try {
+      return asTable(await awsMessages.table(getApiTimeZone(), personId));
+    } catch (e) {
+      throw new TableError(isAwsError(e) ? e.status : 0, isAwsError(e) ? e.message : 'Can’t reach your family right now.');
+    }
+  }
   const auth = getApiAuth();
   const headers: Record<string, string> = { accept: 'application/json' };
   const tz = getApiTimeZone();
