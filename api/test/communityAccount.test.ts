@@ -6,7 +6,7 @@ import { hashToken } from "../src/auth.js";
 import { db } from "../src/db.js";
 import { cancelDinnersOfPerson, purgeCommunityForPerson } from "../src/modules/community/account.js";
 import {
-  block, call, cookTogether, family, feed, host, join, ok, person, recipe, refusedWith, report, requestSwap, respond, respondSwap, startIt, tryHost, type Who, world,
+  block, call, cookTogether, dinner, family, feed, host, join, ok, person, recipe, refusedWith, report, requestSwap, respond, respondSwap, startIt, tryHost, type Who, world,
 } from "./communityHelpers.js";
 import { hasDatabase, like } from "./dishHelpers.js";
 
@@ -108,6 +108,32 @@ test("a host who leaves the family: the dinners they host that haven't started a
   assert.deepEqual((await feed(t, caleb)).dinners.map((d: { dinnerId: string }) => d.dinnerId).sort(), [shreyas, meis].sort());
   await refusedWith(join(t, caleb, ahead), 404, "That dinner isn't happening anymore.");
   like((await call(t, serene, "GET", `/v1/dinners/${ahead}`)).data, { status: "cancelled" });
+});
+
+test("deleting someone calls off every dinner they host, started or not, but another host's dinner of their dish that has started keeps what it was", { skip }, async () => {
+  const { t, rajani, shreya, serene, caleb } = await world();
+  const poha = await recipe(rajani, { sharedAt: 1 });
+  const { swapId } = await ok(cookTogether(t, caleb, poha));
+  await ok(respondSwap(t, shreya, swapId, true));
+  const calebsLast = await host(t, caleb, poha);
+  const calebsNext = await host(t, caleb, poha);
+  const hersLast = await host(t, rajani, poha);
+  await ok(respond(t, rajani, (await ok(join(t, serene, hersLast))).requestId, true));
+  await startIt(calebsLast);
+  await startIt(hersLast);
+  const kept = await dinnerRow(calebsLast);
+
+  await cancelDinnersOfPerson(db(), rajani.personId);
+  assert.deepEqual(await dinnerRow(calebsLast), kept, "it happened: it isn't rewritten as called off");
+  assert.equal((await dinnerRow(calebsNext)).status, "cancelled", "her dish leaves the map at once");
+  // Hers goes in the batches. Until then it's called off, so her guest reads no address and its link opens nothing.
+  assert.equal((await dinnerRow(hersLast)).status, "cancelled");
+  like((await dinner(t, serene, hersLast)).data, { status: "cancelled", address: null });
+
+  await purgeCommunityForPerson(rajani.personId, rajani.familyId);
+  like(await dinnerRow(calebsLast), { status: "open", recipe_id: null, dish: "Kanda Poha" });
+  like(await dinnerRow(calebsNext), { status: "cancelled", recipe_id: null, dish: "Kanda Poha" });
+  assert.equal(await dinnerRow(hersLast), undefined);
 });
 
 test("deleting someone reaches every Community table as SCHEMA.md says", { skip }, async () => {

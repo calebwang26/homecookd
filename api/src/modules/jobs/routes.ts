@@ -4,7 +4,8 @@
 // file's key, so it isn't in config.fileKeys. Tested per route in jobs.test.ts.
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { requireSession, signedIn } from "../../auth.js";
-import { forbidden, invalid } from "../../errors.js";
+import { forbidden } from "../../errors.js";
+import { idempotencyKey } from "../../idempotency.js";
 import * as service from "./service.js";
 import * as uploads from "./uploads.js";
 
@@ -12,17 +13,10 @@ const ID = { type: "string", minLength: 1, maxLength: 100 };
 const byId = { type: "object", required: ["id"], properties: { id: ID } };
 const byUpload = { type: "object", required: ["uploadId"], properties: { uploadId: ID } };
 const page = { type: "object", properties: { cursor: { type: "string", maxLength: 500 } } };
-const IDEMPOTENCY = /^[A-Za-z0-9_-]{8,200}$/;
 
 const paramId = (req: FastifyRequest) => (req.params as { id: string }).id;
 const uploadIdOf = (req: FastifyRequest) => (req.params as { uploadId: string }).uploadId;
 const trace = (req: FastifyRequest) => String(req.id);
-
-function idempotencyKey(req: FastifyRequest): string {
-  const key = req.headers["idempotency-key"];
-  if (typeof key !== "string" || !IDEMPOTENCY.test(key)) throw invalid("Idempotency-Key");
-  return key;
-}
 
 const askForUploads = {
   type: "object",
@@ -84,7 +78,8 @@ export async function jobRoutes(app: FastifyInstance): Promise<void> {
   app.post("/v1/video-uploads", { schema: { body: askForUploads } }, async (req, reply) => {
     const signed = signedIn(req);
     if (signed.role !== "cook") throw forbidden();
-    const { status, body } = await uploads.requestUpload(signed, (req.body as { videos: uploads.VideoAsked[] }).videos, idempotencyKey(req));
+    // The shared key, and required: a phone saves it with the videos before this call (JOBS.md).
+    const { status, body } = await uploads.requestUpload(signed, (req.body as { videos: uploads.VideoAsked[] }).videos, idempotencyKey(req, true)!);
     return reply.code(status).send(body);
   });
   // New: the signer's links lasted 7 days

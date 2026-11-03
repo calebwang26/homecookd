@@ -4,7 +4,7 @@ import { after, test } from "node:test";
 import { db } from "../src/db.js";
 import { DEMO_LOCATION, distanceLabel, milesBetween, roundToGrid } from "../src/modules/community/geo.js";
 import { quoteChoices, quoteTranslated } from "../src/modules/community/storyCard.js";
-import { ADDRESS, call, family, feed, host, join, ok, person, recipe, refusedWith, respond, setShared, startIt, tryHost, view, world, dinner } from "./communityHelpers.js";
+import { ADDRESS, call, family, feed, host, join, ok, person, recipe, refusedWith, respond, setShared, startIt, tryHost, view, type Who, world, dinner } from "./communityHelpers.js";
 import { close, hasDatabase, like } from "./dishHelpers.js";
 
 const skip = !hasDatabase;
@@ -162,6 +162,49 @@ test("a host's yes on a dinner that's called off or has started is refused, so t
     await refusedWith(respond(t, rajani, no, false), 409, "You already answered.");
   }
   assert.equal((await db().query("select count(*)::int as n from dinner_requests where status = 'accepted'")).rows[0].n, 0);
+});
+
+test("once a dinner is called off, a guest the host let in no longer reads its address; the host still does", { skip }, async () => {
+  const { t, rajani, serene } = await world();
+  const poha = await recipe(rajani, { sharedAt: 1 });
+  const night = await host(t, rajani, poha);
+  await ok(respond(t, rajani, (await ok(join(t, serene, night))).requestId, true));
+  const fromMine = async (who: Who) => (await ok(call(t, who, "GET", "/v1/dinners/mine"))).dinners.find((d: { dinnerId: string }) => d.dinnerId === night);
+  like((await dinner(t, serene, night)).data, { address: ADDRESS });
+  like(await fromMine(serene), { address: ADDRESS });
+
+  await db().query("update dinners set status = 'cancelled' where id = $1", [night]);
+  like((await dinner(t, serene, night)).data, { status: "cancelled", address: null, myRequest: { status: "accepted" } });
+  like(await fromMine(serene), { status: "cancelled", address: null });
+  like((await dinner(t, rajani, night)).data, { status: "cancelled", address: ADDRESS, isHost: true });
+  like(await fromMine(rajani), { address: ADDRESS });
+});
+
+test("a host's yes to a guest who has since gone from their family is refused, and their pending ask leaves the host's list; a no still answers", { skip }, async () => {
+  const { t, rajani, serene, serenesMom, caleb } = await world();
+  const poha = await recipe(rajani, { sharedAt: 1 });
+  const night = await host(t, rajani, poha);
+  const salik = await person(await family("Mian home"), "Salik", "kid");
+  const ngozi = await person(await family("Okafor home"), "Ngozi", "cook");
+  const ask = async (who: Who) => (await ok(join(t, who, night))).requestId as string;
+  const [left, deleted, moved, stays] = [await ask(serene), await ask(caleb), await ask(salik), await ask(ngozi)];
+  const letIn = await ask(serenesMom);
+  await ok(respond(t, rajani, letIn, true));
+
+  // Serene leaves her family, Caleb deletes his account, Salik moves to another family; Mei leaves after the host let her in.
+  await db().query("update people set removed_at = now() where id = any($1::text[])", [[serene.personId, serenesMom.personId]]);
+  await db().query("update people set name = 'Deleted', approx_lat = null, approx_lng = null, deleted_at = now() where id = $1", [caleb.personId]);
+  await db().query("update people set family_id = $2 where id = $1", [salik.personId, await family("Somewhere else")]);
+
+  const requests = async () => (await dinner(t, rajani, night)).data.requests.map((r: { requestId: string; status: string }) => [r.requestId, r.status]);
+  assert.deepEqual(await requests(), [[stays, "pending"], [letIn, "accepted"]], "an answered ask stays: it's what happened");
+  assert.equal((await ok(call(t, rajani, "GET", "/v1/dinners/mine"))).dinners[0].requests.length, 2, "the same list in her own dinners");
+  for (const gone of [left, deleted, moved]) await refusedWith(respond(t, rajani, gone, true), 404, "Only the host can answer.");
+  assert.equal((await db().query("select count(*)::int as n from dinner_requests where status = 'accepted'")).rows[0].n, 1);
+  // A no still answers, and someone who stayed is let in as ever.
+  await ok(respond(t, rajani, left, false));
+  assert.equal((await db().query("select status from dinner_requests where id = $1", [left])).rows[0].status, "declined");
+  await ok(respond(t, rajani, stays, true));
 });
 
 test("the feed places each dish on its cook's grid cell, never finer, and the viewer at their own", { skip }, async () => {
