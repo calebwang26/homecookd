@@ -14,7 +14,8 @@
 //   files to delete from S3                  files_to_delete              the sweep's batch
 //   a phone's retry of asking for links      idempotency_keys primary key 1
 //
-// `jobs.stage` is written here only for 'uploading' to 'queued', and to 'failed' by a stop. Every other stage is the worker's (pipeline/queue_db.py).
+// `jobs.stage` is written here only for 'uploading' to 'queued', and to 'failed' by a stop. Every other stage is the worker's (pipeline/queue_db.py), except
+// staging's test recipe, which finishes a job the way the worker's final transaction does (finishTestJob).
 import { db, type Queryable } from "../../db.js";
 import { enqueue } from "../../outbox.js";
 import type { After } from "../../paging.js";
@@ -124,6 +125,22 @@ export async function queueJob(c: Queryable, jobId: string, uploadFinishedAt: Da
   );
   if (!rowCount) return false;
   await enqueue(c, { queue: "jobs", payload: { jobId }, requestId });
+  return true;
+}
+
+/**
+ * Staging only (recipes/testRecipe.ts): pipeline/queue_db.py finish's job update and follow-on message, in the caller's transaction, for a job nobody ran. A job
+ * that was never claimed counts one attempt, as the claim would have. No model ran, so there are no model_calls or follow-up questions to point at the recipe.
+ */
+export async function finishTestJob(c: Queryable, jobId: string, recipeId: string, requestId?: string): Promise<boolean> {
+  const { rowCount } = await c.query(
+    `update jobs set stage = 'done', progress = 1, error = null, attempts = greatest(attempts, 1), claimed_at = coalesce(claimed_at, now()), finished_at = now(),
+            updated_at = now(), recipe_id = $2, result_model = 'test-recipe', result_prompt_version = null
+      where id = $1 and stage not in ('done', 'failed') and cancelled_at is null`,
+    [jobId, recipeId],
+  );
+  if (!rowCount) return false;
+  await enqueue(c, { queue: "scheduled", payload: { kind: "recipe_published", jobId, recipeId }, requestId });
   return true;
 }
 

@@ -15,6 +15,44 @@ export async function insertProcessingRecipe(c: Queryable, r: { familyId: string
   return rows[0].id;
 }
 
+export type TestRecipe = {
+  familyId: string;
+  cookId: string;
+  title: string;
+  libraryId: string;
+  mediaPrefix: string;
+  recipeJsonKey: string;
+  coverKey: string;
+  coverVersion: string;
+  steps: object[];
+  memories: object[];
+  language: string | null;
+};
+
+/**
+ * Staging's made-up recipe (testRecipe.ts), saved as the worker saves a finished job's (pipeline/queue_db.py _save_recipe): the job's "processing" card is filled in, or
+ * there's a new ready row when it has none or it's gone.
+ */
+export async function saveTestRecipe(c: Queryable, r: TestRecipe, cardId: string | null): Promise<string> {
+  if ((await recipeWrites(c)) !== "open") throw notMoved();
+  const fields = [r.title, r.libraryId, r.mediaPrefix, r.recipeJsonKey, r.coverKey, r.coverVersion, JSON.stringify(r.steps), JSON.stringify(r.memories), r.language];
+  if (cardId) {
+    const { rows } = await c.query(
+      `update recipes set status = 'ready', title = $1, library_id = $2, media_prefix = $3, recipe_json_key = $4, cover_key = $5, cover_stock_path = null, cover_version = $6,
+              steps = $7::jsonb, memories = $8::jsonb, language = $9, moss_indexed_at = null
+        where id = $10 returning id`,
+      [...fields, cardId],
+    );
+    if (rows[0]) return rows[0].id;
+  }
+  const { rows } = await c.query(
+    `insert into recipes (title, library_id, media_prefix, recipe_json_key, cover_key, cover_version, steps, memories, language, memories_opt_in, family_id, cook_id, status)
+     values ($1, $2, $3, $4, $5, $6, $7::jsonb, $8::jsonb, $9, false, $10, $11, 'ready') returning id`,
+    [...fields, r.familyId, r.cookId],
+  );
+  return rows[0].id;
+}
+
 /** A null `moss_indexed_at` says the search index is behind, so whatever re-syncs it finds this row (recipes_moss_missing). */
 export async function saveMemoriesOptIn(c: Queryable, recipeId: string, optIn: boolean): Promise<void> {
   if ((await recipeWrites(c)) !== "open") throw notMoved();

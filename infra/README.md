@@ -230,6 +230,8 @@ so nobody needs to know them, and a link or ticket from staging never opens anyw
 Order: the merge that names them (its own deploy waits for an apply that refuses it, IAM), then a hand apply, then the lines above, then an api
 deploy. A deploy before the values are loaded can't start a task, and the running ones carry on.
 
+**Test data for the app's screens.** `POST /v1/test/recipe` (the same key and a cook's session) makes a made-up ready recipe, or finishes one of her jobs as the worker would, with small files under `test-recipe-<id>/` in the media bucket (`api/src/modules/recipes/testRecipe.ts`), and `JOBS_SINGLE_PUT_MAX_BYTES` 20 MiB with `JOBS_PART_BYTES` 5 MiB send a 25 MiB video up as 5 parts; the env module refuses both settings in production.
+
 ## Database migrations
 
 `api/migrations/*.sql`, run by `api/src/migrate.ts` as a one-off task before each api rollout. A failure stops the rollout.
