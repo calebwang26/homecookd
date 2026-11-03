@@ -236,7 +236,8 @@ export async function runPass(run: Run): Promise<PassResult> {
     };
 
     if (!state.at_table || !order.includes(state.at_table)) {
-      const fresh = state.finished_at && Date.now() - state.finished_at.getTime() < (run.passEveryMs ?? PASS_EVERY_MS);
+      // finished_at is Postgres's clock, which can be a few ms ahead of this one: a gap below 0 is no gap, so passEveryMs 0 always means "now".
+      const fresh = state.finished_at && Math.max(0, Date.now() - state.finished_at.getTime()) < (run.passEveryMs ?? PASS_EVERY_MS);
       if (fresh || order.length === 0) return { state: "idle", stats };
       await saved({ at_table: order[0], page_cursor: null, pass_no: state.pass_no + 1, started: true });
     }

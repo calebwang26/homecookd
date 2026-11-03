@@ -204,6 +204,20 @@ test("the sync's passes", { skip: !hasDatabase }, async (t) => {
     assert.equal((await stateOf("pass")).pass_no, "1");
   });
 
+  await t.test("with no wait, a pass starts even when Postgres's clock is ahead of the api's", async () => {
+    const w = new World();
+    w.family();
+    await w.syncAll();
+    // As when finished_at lands a few ms after this process's Date.now(): the flake that made passAll see "idle".
+    await db().query(`update sync_state set finished_at = now() + interval '5 seconds' where name = 'pass'`);
+    assert.notEqual((await runPass(w.run({ passEveryMs: 0 }))).state, "idle");
+    assert.equal((await stateOf("pass")).pass_no, "2");
+    // With a real wait, a finish "in the future" still counts as just now.
+    await w.syncAll();
+    await db().query(`update sync_state set finished_at = now() + interval '5 seconds' where name = 'pass'`);
+    assert.equal((await runPass(w.run({ passEveryMs: 60_000 }))).state, "idle");
+  });
+
   await t.test("a cursor Convex no longer knows starts that table again, safely", async () => {
     const w = new World();
     const f = w.family();
