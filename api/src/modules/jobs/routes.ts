@@ -73,6 +73,7 @@ const newJob = {
     forKidId: ID,
     forKidIds: { type: "array", maxItems: 100, items: ID },
     recordingId: ID,
+    dishAskId: ID,
   },
 };
 

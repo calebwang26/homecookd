@@ -6,6 +6,7 @@
 //   a phone's retry of a job                 jobs_idempotency_unique      1
 //   is this folder another family's?         jobs_upload_key              20
 //   stop by upload folder                    jobs_family_upload           20
+//   an upload's job, for a pending send      jobs_family_upload           1
 //   jobs waiting on their upload             jobs_unfinished              the sweep's batch
 //   a person's jobs (the purge)              jobs_cook                    the purge's batch
 //   an upload's files                        files_upload                 at most MAX_VIDEOS
@@ -43,11 +44,12 @@ export type JobRow = {
   upload_finished_at: Date | null;
   finished_at: Date | null;
   cancelled_at: Date | null;
+  dish_ask_id: string | null;
   cursor_at: string;
 };
 
 const JOB = `id, family_id, cook_id, recipe_id, recording_id, upload_key, upload_id, source, title, language, for_kid_ids, stage, progress, error, video_gaps, attempts,
-  claimed_at, created_at, updated_at, upload_finished_at, finished_at, cancelled_at, created_at::text as cursor_at`;
+  claimed_at, created_at, updated_at, upload_finished_at, finished_at, cancelled_at, dish_ask_id, created_at::text as cursor_at`;
 
 /** A job shows only to the cook who filmed it (Caleb, Nov 1). Everyone else sees the recipe once it's published. */
 export async function jobsOfCook(q: Queryable, familyId: string, cookId: string, before: After | null, limit: number): Promise<JobRow[]> {
@@ -85,6 +87,21 @@ export async function folderIsAnotherFamilys(q: Queryable, familyId: string, upl
   return rows.some((row) => row.family_id !== familyId);
 }
 
+/** The newest job for an upload in this family, and how its recipe stands: a pending send asks whose it is and whether it's out yet (messages/activity.ts). */
+export async function jobOfUpload(
+  q: Queryable,
+  familyId: string,
+  uploadId: string,
+): Promise<{ id: string; cook_id: string; stage: string; recipe_id: string | null; recipe_status: string | null; library_id: string | null } | null> {
+  const { rows } = await q.query(
+    `select j.id, j.cook_id, j.stage, j.recipe_id, r.status as recipe_status, r.library_id
+       from jobs j left join recipes r on r.id = j.recipe_id
+      where j.family_id = $1 and j.upload_id = $2 order by j.created_at desc limit 1`,
+    [familyId, uploadId],
+  );
+  return rows[0] ?? null;
+}
+
 export async function jobsOfFolder(q: Queryable, familyId: string, cookId: string, uploadId: string): Promise<JobRow[]> {
   const { rows } = await q.query(`select ${JOB} from jobs where family_id = $1 and cook_id = $2 and upload_id = $3 order by created_at desc limit 20`, [familyId, cookId, uploadId]);
   return rows;
@@ -102,13 +119,14 @@ export async function insertJob(
     title: string | null;
     language: string;
     forKidIds: string[];
+    dishAskId: string | null;
   },
 ): Promise<string> {
   const { rows } = await c.query(
-    `insert into jobs (family_id, cook_id, recipe_id, recording_id, upload_key, source, title, language, for_kid_ids, stage, progress, idempotency_key)
-     values ($1, $2, $3, $4, $5::text, $6, $7, $8, $9, 'uploading', 0, $5::text)
+    `insert into jobs (family_id, cook_id, recipe_id, recording_id, upload_key, source, title, language, for_kid_ids, dish_ask_id, stage, progress, idempotency_key)
+     values ($1, $2, $3, $4, $5::text, $6, $7, $8, $9, $10, 'uploading', 0, $5::text)
      returning id`,
-    [j.familyId, j.cookId, j.recipeId, j.recordingId, j.uploadKey, j.source, j.title, j.language, j.forKidIds],
+    [j.familyId, j.cookId, j.recipeId, j.recordingId, j.uploadKey, j.source, j.title, j.language, j.forKidIds, j.dishAskId],
   );
   return rows[0].id;
 }

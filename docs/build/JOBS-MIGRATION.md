@@ -74,7 +74,7 @@ A `POST /v1/jobs` can still name a recording, with its guard, for rows that arri
 
 - **The signer's `action: delete`.** `lib/deletes.ts` still calls the signer, and the queue worker has no `deletions/` handling. A route needs a decision on what a delete does to S3 (the old path moves it to `trash/`, recoverable), and `s3:ListBucket` on media. So **the signer can't be turned off with this PR alone.**
 - **`recipes.setShare`, `setLocation`, the story card, reports' `hidden_at`.** COMMUNITY-MIGRATION.md's blockers. `recipes/writes.ts` is where they'd go once the switch is on.
-- **What Convex did when a recipe published.** The worker's `recipe_published` message is now understood and does nothing: Moss sync, translating follow-ups into her language, delivering a pending send and its push. Moss goes away after approval anyway (`moss-sync-off-after-approval`), and the other two are Messages'. `worker.synced`, `requestMossSync`, `reindexMissing` go with them. Linking `pending_sends.job_id` waits for that too.
+- **What Convex did when a recipe published.** Since #311 the worker's `recipe_published` message does Messages' part (`messages/published.ts`): translating follow-ups into her language, delivering a pending send and its push, tying `pending_sends.job_id`, and the `filmed` push for a job made for a request card. Moss sync isn't moved: it goes away after approval anyway (`moss-sync-off-after-approval`), and `worker.synced`, `requestMossSync`, `reindexMissing` go with it.
 - **`worker.nextDeletion`, `deletionDone`, `retryDeletion`.** The outside purge, with Accounts.
 
 ## Uploads, in place of the signer

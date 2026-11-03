@@ -4,7 +4,7 @@ import { Writable } from "node:stream";
 import { after, test } from "node:test";
 import { buildApp } from "../src/app.js";
 import { db, family, freshDatabase, hasDatabase } from "./jobsHelpers.js";
-import { addJob, askLinks, call, closeRecipeWrites, jobMessages, job, land, lockRecipeCopy, newJob, openRecipeWrites, recipe, setUp, who, type Who } from "./jobsHelpers.js";
+import { addJob, askLinks, call, clearLimits, closeRecipeWrites, jobMessages, job, land, lockRecipeCopy, newJob, openRecipeWrites, recipe, setUp, who, type Who } from "./jobsHelpers.js";
 
 const UNFINISHED = ["uploading", "queued", "preparing", "understanding", "writing", "indexing"];
 
@@ -262,6 +262,30 @@ test("jobs", { skip: !hasDatabase }, async (t) => {
     assert.deepEqual(row.for_kid_ids, [leo.personId]);
     row = await job((await make({})).data.jobId);
     assert.deepEqual(row.for_kid_ids, []);
+  });
+
+  await t.test("a job keeps the request card it answers only when the card is hers; any other is left off, and the job is made all the same", async () => {
+    await clearLimits();
+    const card = async (requestedOf: string | null, familyId: string | null) =>
+      (
+        await db().query(
+          `insert into dish_asks (kid_token_hash, ask_token_hash, dish, relation, guess, message, status, requested_of, family_id)
+           values (md5(random()::text) || md5(random()::text), md5(random()::text) || md5(random()::text), 'braised pork', 'mom', '{}'::jsonb, 'Hi', 'asked', $1, $2) returning id`,
+          [requestedOf, familyId],
+        )
+      ).rows[0].id as string;
+    const make = async (dishAskId: string) => await newJob(app, dad, (await askLinks(app, dad)).uploadId, { dishAskId });
+    const hers = await card(dad.personId, dadsFamily);
+    const made = await make(hers);
+    assert.equal(made.status, 201);
+    assert.equal((await job(made.data.jobId)).dish_ask_id, hers);
+    const notHers = [await card(sam.personId, others), await card(null, dadsFamily), await card(dad.personId, others), "no-such-card"];
+    for (const other of notHers) {
+      const res = await make(other);
+      assert.equal(res.status, 201, other);
+      assert.equal((await job(res.data.jobId)).dish_ask_id, null, other);
+    }
+    assert.equal((await make("x".repeat(101))).status, 400);
   });
 
   await t.test("a recording attaches only for its own cook, and a language must be a code", async () => {

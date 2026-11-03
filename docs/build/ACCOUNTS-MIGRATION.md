@@ -37,7 +37,7 @@ The last item in `docs/build/AWS-MIGRATION.md`'s area order, Nov 1, 2026. A draf
 - `POST /auth/email`, `POST /signup`, `POST /profiles/:id/email`. Today's `app/src/lib/api.ts` doesn't call them, and `/auth/email` hands a family's code to anyone who types a known email (Supabase's own `TODO(security)`), so I didn't copy it. **`TODO(caleb)`: if a build still in use signs in this way, it has to be built before the switch.** I couldn't check build 6 itself.
 - `apple.checkSetup`, the one-time operator check.
 - `x-tz` syncing: the push area's.
-- The `joined` push on a claim: the push area's. Marked `TODO(aws-push)` in `links.ts`.
+- ~~The `joined` push on a claim.~~ Built in #311: `queueJoined` in `messages/pushEvents.ts`, in the claim's transaction.
 
 ## Two kinds of proof, kept apart
 

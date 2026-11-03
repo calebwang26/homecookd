@@ -6,6 +6,7 @@
 // - merge takes a claim first (mergeTries and mergeStartedAt together, only while none started in the last 3 minutes) and writes her version only
 //   while it still holds that claim. So a repeat does nothing, and a try a newer answer overtook writes nothing.
 // A failed try is tried again 3 minutes later, by this queue and by the kid's next look, at most 5 times.
+import type { PoolClient } from "pg";
 import { db, tx } from "../../db.js";
 import { enqueue } from "../../outbox.js";
 import { recordSpend, type Trace } from "./budget.js";
@@ -141,26 +142,33 @@ export async function claimMerge(askId: string) {
   });
 }
 
+/** "Mom answered", to the kid in the app (messages/pushEvents.ts). It dedupes on her version's time, else her Send's, so a repeat sends nothing. */
+const answered = (c: Pick<PoolClient, "query">, askId: string, requestId?: string) =>
+  enqueue(c, { queue: "scheduled", payload: { task: "push.dish_answered", askId }, requestId });
+
 /**
  * Ends a try that isn't running anymore, while it still holds the merge. `giveBack`: it didn't really try (a key isn't set, or today's
  * budget ran out), so the try doesn't count. Else it was the last try and it failed: the kid's card and Mom's page stop waiting at once.
  */
-async function releaseMerge(askId: string, claimedAt: Date, giveBack: boolean): Promise<void> {
+async function releaseMerge(askId: string, claimedAt: Date, giveBack: boolean, requestId?: string): Promise<void> {
   await tx(async (c) => {
     const row = await data.cardById(c, askId, true);
     if (row?.merge_started_at?.getTime() === claimedAt.getTime()) {
       await data.patchCard(c, askId, { merge_started_at: null, ...(giveBack ? { merge_tries: Math.max(0, row.merge_tries - 1) } : {}) });
+      // No version is coming: her clips go to the kid as they are (V2-LINKING.md §1.4).
+      if (!giveBack) await answered(c, askId, requestId);
     }
   });
 }
 
 /** Writes her version, only while the try that started at `claimedAt` still holds the merge. */
-export async function saveVersion(askId: string, claimedAt: Date, version: StoredRecipe, audioKeys: string[]): Promise<boolean> {
+export async function saveVersion(askId: string, claimedAt: Date, version: StoredRecipe, audioKeys: string[], requestId?: string): Promise<boolean> {
   return await tx(async (c) => {
     const row = await data.cardById(c, askId, true);
     if (row?.merge_started_at?.getTime() !== claimedAt.getTime()) return false;
     await data.patchCard(c, askId, { version, status: "answered", merged_at: new Date() });
     await data.markAnswersMerged(c, askId, audioKeys);
+    await answered(c, askId, requestId);
     return true;
   });
 }
@@ -208,7 +216,7 @@ export async function merge(askId: string, trace: Trace): Promise<void> {
   const tag = { askId, try: claim.tries, of: MAX_MERGES };
   const spend = newSpend(trace.log);
   const started = Date.now();
-  const release = (giveBack = true) => releaseMerge(askId, claim.claimedAt, giveBack);
+  const release = (giveBack = true) => releaseMerge(askId, claim.claimedAt, giveBack, trace.requestId);
   /** The next try 3 minutes on; after the last one, nothing more is coming. */
   const retry = async () => {
     if (claim.tries < MAX_MERGES) {
@@ -244,13 +252,14 @@ export async function merge(askId: string, trace: Trace): Promise<void> {
     const spoken = claim.answers.flatMap((a) => (a.words ? [{ id: a.questionId, words: a.words, english: a.english ?? null }] : []));
     if (!spoken.length) {
       trace.log.info(tag, "no speech in her clips");
+      await answered(db(), askId, trace.requestId); // her clips go to the kid as they are
       return;
     }
     if (!(await momBudgetLeft())) return await overBudget();
     const version = storedRecipe(await models.writeVersion({ draft: missRecipe(claim.guess), relation: claim.relation, asked: claim.asked, answers: spoken }, spend));
     if (flagged(...recipeTexts(version))) throw new Error("her version has a filtered word");
     await versionInPageLang(askId, version, spend);
-    if (!(await saveVersion(askId, claim.claimedAt, version, audioKeys))) {
+    if (!(await saveVersion(askId, claim.claimedAt, version, audioKeys, trace.requestId))) {
       trace.log.info(tag, "a newer try has her later answers; this one is dropped");
       return;
     }
