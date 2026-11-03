@@ -143,8 +143,9 @@ What the phone proves, which the web build can't:
 - **Voice notes from the mic.**
 - **A report reaching the team's alerts email.** One report, made on purpose and named as a test.
 
-Sign in on the phone with a TEST family person (Sign in with Apple works on a device). Delete any test people made for it
-when you're done.
+The step-by-step for the person holding the phone: [aws-phone/CHECKLIST.md](aws-phone/CHECKLIST.md). Sign in with Apple
+works against staging, so the phone joins a test cook's family by link. Delete every test person when you're done, the
+phone's staging account too.
 
 ## Per area
 
