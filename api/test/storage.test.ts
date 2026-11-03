@@ -66,6 +66,22 @@ test("head and read: a missing object is null, S3 being down throws", async () =
   await present.remove("k");
 });
 
+test("a write sends the bytes with their type and cache rule, and hands back S3's version id", async () => {
+  const asked: Record<string, unknown>[] = [];
+  const store = s3Store({
+    bucket: "hc-media-test",
+    client: client(async (command) => {
+      asked.push((command as { input: Record<string, unknown> }).input);
+      return asked.length === 1 ? { VersionId: "3HL4kqtJlcpXroDTDmJ" } : {};
+    }),
+  });
+  const bytes = new Uint8Array([1, 2, 3]);
+  assert.deepEqual(await store.write("test-recipe-a/a1/poster.jpg", bytes, "image/jpeg", "public, max-age=3600"), { version: "3HL4kqtJlcpXroDTDmJ" });
+  assert.deepEqual(asked[0], { Bucket: "hc-media-test", Key: "test-recipe-a/a1/poster.jpg", Body: bytes, ContentType: "image/jpeg", CacheControl: "public, max-age=3600" });
+  assert.deepEqual(await store.write("k", bytes, "application/json"), { version: null }, "an unversioned bucket has none");
+  assert.ok(!("CacheControl" in asked[1]));
+});
+
 test("listing a folder follows S3's pages up to the most asked for, and a delete S3 refuses throws without naming the key", async () => {
   const pages = [{ Contents: [{ Key: "f/1" }, { Key: "f/2" }], IsTruncated: true, NextContinuationToken: "t" }, { Contents: [{ Key: "f/3" }], IsTruncated: false }];
   const asked: Record<string, unknown>[] = [];

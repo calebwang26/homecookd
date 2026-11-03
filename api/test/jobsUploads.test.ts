@@ -4,7 +4,7 @@ import { after, test } from "node:test";
 import { S3Client } from "@aws-sdk/client-s3";
 import { handleMessage } from "../src/scheduled.js";
 import { s3Store, VIDEO_LINK_S } from "../src/storage.js";
-import { MAX_VIDEO_BYTES, ONE_PUT_BYTES, PART_BYTES, RATE } from "../src/modules/jobs/uploads.js";
+import { MAX_VIDEO_BYTES, MIN_PART_BYTES, ONE_PUT_BYTES, PART_BYTES, partSettings, RATE } from "../src/modules/jobs/uploads.js";
 import { SWEEP, sweepUploads } from "../src/modules/jobs/tasks.js";
 import { addJob, askLinks, call, clearLimits, db, family, freshDatabase, hasDatabase, job, jobMessages, land, newJob, openRecipeWrites, closeRecipeWrites, recipe, setUp, trace, who } from "./jobsHelpers.js";
 
@@ -368,6 +368,49 @@ test("uploads", { skip: !hasDatabase }, async (t) => {
     assert.equal(done.data.complete, true);
   });
 
+  await t.test("staging's small parts: a 25 MiB video is 5 parts of 5 MiB, and every other limit still holds", async () => {
+    const MiB = 1024 ** 2;
+    process.env.JOBS_SINGLE_PUT_MAX_BYTES = String(20 * MiB);
+    process.env.JOBS_PART_BYTES = String(5 * MiB);
+    try {
+      await clearLimits();
+      const asked = await ask([{ contentType: "video/mp4", size: 25 * MiB }, { contentType: "video/mp4", size: 20 * MiB }, { contentType: "video/mp4", size: 25 * MiB + 1 }]);
+      assert.equal(asked.status, 201);
+      const { uploadId, uploads } = asked.data;
+      assert.deepEqual(uploads[0], { index: 1, method: "PARTS", partBytes: 5 * MiB, partCount: 5 });
+      assert.equal(uploads[1].method, "PUT", "at the threshold it's still one PUT");
+      assert.deepEqual(uploads[2], { index: 3, method: "PARTS", partBytes: 5 * MiB, partCount: 6 });
+
+      const parts = (body: object) => call(app, dad, "POST", `/v1/video-uploads/${uploadId}/parts`, body);
+      const signed = (await parts({ index: 1, partNumbers: [1, 2, 3, 4, 5] })).data.parts.map((p: { url: string }) => Number(new URL(p.url).searchParams.get("size")));
+      assert.deepEqual(signed, [5, 5, 5, 5, 5].map((n) => n * MiB));
+      assert.deepEqual((await parts({ index: 3, partNumbers: [6] })).data.parts.map((p: { url: string }) => new URL(p.url).searchParams.get("size")), ["1"], "the last is what's left");
+      assert.equal((await parts({ index: 1, partNumbers: [6] })).status, 400, "the parts count is the video's own");
+      assert.equal((await parts({ index: 2, partNumbers: [1] })).status, 400, "a PUT video has no parts");
+      videos.landWhenFinished = 25 * MiB;
+      const all = [1, 2, 3, 4, 5].map((n) => ({ partNumber: n, etag: `e${n}` }));
+      assert.equal((await call(app, dad, "POST", `/v1/video-uploads/${uploadId}/parts/finish`, { index: 1, parts: all.slice(1) })).status, 400, "not every part");
+      assert.deepEqual((await call(app, dad, "POST", `/v1/video-uploads/${uploadId}/parts/finish`, { index: 1, parts: all })).data, { finished: true });
+      videos.landWhenFinished = undefined;
+
+      // The 20 GiB cap is the same, and so is 120 links an hour, however small the parts.
+      assert.equal((await ask([{ contentType: "video/mp4", size: MAX_VIDEO_BYTES + 1 }])).status, 413);
+      const capped = await ask([{ contentType: "video/mp4", size: MAX_VIDEO_BYTES }]);
+      assert.deepEqual(capped.data.uploads[0], { index: 1, method: "PARTS", partBytes: 5 * MiB, partCount: 4096 });
+      await clearLimits();
+      const links = () => call(app, dad, "POST", `/v1/video-uploads/${capped.data.uploadId}/parts`, { index: 1, partNumbers: [4096] });
+      for (let i = 0; i < RATE.links.max; i += 1) assert.equal((await links()).status, 200, `call ${i + 1}`);
+      assert.equal((await links()).status, 429);
+    } finally {
+      delete process.env.JOBS_SINGLE_PUT_MAX_BYTES;
+      delete process.env.JOBS_PART_BYTES;
+      videos.landWhenFinished = undefined;
+      await clearLimits();
+    }
+    const after = await ask([{ contentType: "video/mp4", size: 25 * MiB }]);
+    assert.equal(after.data.uploads[0].method, "PUT", "unset again: production's 5 GiB");
+  });
+
   await t.test("a video that joined up at the wrong size hasn't landed", async () => {
     const size = ONE_PUT_BYTES + 1;
     const { data } = await call(app, dad, "POST", "/v1/video-uploads", { videos: [{ contentType: "video/mp4", size }] }, { "idempotency-key": `wrong-${Date.now()}` });
@@ -478,6 +521,20 @@ test("uploads", { skip: !hasDatabase }, async (t) => {
   });
 
   await app.close();
+});
+
+test("the parts settings: today's sizes when unset, staging's when set, and never past S3's limits", () => {
+  const MiB = 1024 ** 2;
+  assert.deepEqual(partSettings({}), { onePutBytes: 5 * 1024 ** 3, partBytes: 64 * MiB });
+  assert.deepEqual(partSettings({}), { onePutBytes: ONE_PUT_BYTES, partBytes: PART_BYTES });
+  assert.deepEqual(partSettings({ JOBS_SINGLE_PUT_MAX_BYTES: "20971520", JOBS_PART_BYTES: "5242880" }), { onePutBytes: 20 * MiB, partBytes: 5 * MiB });
+  for (const junk of ["", " ", "abc", "-1", "0", "1.5", "NaN", "Infinity"]) {
+    assert.deepEqual(partSettings({ JOBS_SINGLE_PUT_MAX_BYTES: junk, JOBS_PART_BYTES: junk }), partSettings({}), JSON.stringify(junk));
+  }
+  assert.equal(partSettings({ JOBS_PART_BYTES: String(MiB) }).partBytes, MIN_PART_BYTES, "S3 refuses parts under 5 MiB but the last");
+  assert.equal(partSettings({ JOBS_PART_BYTES: String(6 * 1024 ** 3) }).partBytes, ONE_PUT_BYTES, "or over 5 GiB");
+  assert.equal(partSettings({ JOBS_SINGLE_PUT_MAX_BYTES: String(6 * 1024 ** 3) }).onePutBytes, ONE_PUT_BYTES, "one PUT can't take more than 5 GiB");
+  assert.ok(Math.ceil(MAX_VIDEO_BYTES / MIN_PART_BYTES) <= 10_000, "the cap in the smallest parts is within S3's 10,000");
 });
 
 test("the real S3 adapter signs a part for its upload, number, size and 6 hours, with no network", async () => {
