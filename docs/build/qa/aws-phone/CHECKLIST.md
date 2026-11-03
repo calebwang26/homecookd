@@ -23,7 +23,8 @@ Write down the time of each step, to the minute. The chat matches it against sta
 
 1. **Install build 11.** In TestFlight, homecookd → Previous builds, if needed → **11**. The build plain staging testers
    get is 9; it doesn't talk to AWS. If homecookd is already installed, install 11 over it.
-2. **Join Asha's family.** Tap the family link in Messages or Notes. Pasting it into Safari won't open the app. Give your
+2. **Join Asha's family.** Staging's links are on a cloudfront host the app doesn't claim, so the chat sends them as
+   `homecookd://` links: paste one into Safari's address bar, Go, then Open. Give your
    name, choose cook, and Sign in with Apple. On staging this makes a staging account under your Apple ID, which the
    chat deletes at the end. Allow notifications when asked.
    📸 Home after joining.
@@ -38,7 +39,8 @@ Write down the time of each step, to the minute. The chat matches it against sta
    When each recipe is finished there's a notification too: 📸 one of those.
 6. **Record a voice note.** In your chat with Asha, hold the mic, say a sentence, and send it.
    📸 The voice note in the thread. The chat plays it back on Asha's side.
-7. **Send one test report.** Tap the dinner link. At the foot of the dinner page: Report or block → Report → any
+7. **Send one test report.** Open the dinner page link (`homecookd://dinner/<id>`; the public `/d` invite screen has
+   no report). At the foot of the dinner page: Report or block → Report → any
    reason. 📸 The "Thanks" sheet. Don't block.
 8. **Check the alerts inbox.** The staging alarm emails the team's alerts address within about 5 minutes.
    📸 The email with its time. Tell the chat the report is in, and AWS backend closes it.
