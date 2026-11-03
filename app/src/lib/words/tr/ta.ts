@@ -1015,6 +1015,7 @@ const words: Translation = {
   'errors.not_a_guest': 'விருந்தளிப்பவரும் அவருடைய விருந்தினர்களும் மட்டுமே நண்பர்களை அழைக்க முடியும்.',
   'errors.not_asked_of_you': 'இது வேறொருவரிடம் கேட்கப்பட்டது.',
   'errors.live_off': 'இது இப்போது புதுப்பிக்கப்படவில்லை.',
+  'errors.share_declined': '{name} இப்போது வேண்டாம் என்றார். நாளை மீண்டும் கேளுங்கள்.',
 };
 
 export default words;

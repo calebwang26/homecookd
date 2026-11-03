@@ -1015,6 +1015,7 @@ const words: Translation = {
   'errors.not_a_guest': 'Ang host at ang mga bisita lang po niya ang puwedeng mag-imbita ng kaibigan.',
   'errors.not_asked_of_you': 'Iba po ang tinanong nito.',
   'errors.live_off': 'Hindi po ito nag-a-update ngayon.',
+  'errors.share_declined': 'Sabi ni {name}, hindi pa ngayon. Subukan po ulit bukas.',
 };
 
 export default words;

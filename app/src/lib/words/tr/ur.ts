@@ -1015,6 +1015,7 @@ const words: Translation = {
   'errors.not_a_guest': 'صرف میزبان اور ان کے مہمان ہی دوستوں کو بلا سکتے ہیں۔',
   'errors.not_asked_of_you': 'یہ سوال کسی اور سے پوچھا گیا تھا۔',
   'errors.live_off': 'یہ ابھی اپ ڈیٹ نہیں ہو رہا۔',
+  'errors.share_declined': '{name} نے کہا ابھی نہیں۔ کل دوبارہ پوچھیے۔',
 };
 
 export default words;

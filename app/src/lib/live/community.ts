@@ -32,6 +32,11 @@
 import { useEffect, useState } from 'react';
 
 import { requireAiConsent } from '@/lib/aiConsent';
+import { AWS_ON } from '@/lib/aws/config';
+import { errorWords } from '@/lib/aws/errorWords';
+import { isAwsError } from '@/lib/aws/errors';
+import { messages as awsMessages } from '@/lib/aws/messages';
+import { english } from '@/lib/words/words';
 
 import { call, token, useLive } from './convex';
 
@@ -174,12 +179,23 @@ export async function setLocation(lat: number, lng: number, campus?: string): Pr
 
 /** My family's ready dishes (null until it answers). */
 export function useFamilyDishes(enabled = true): FamilyDish[] | null {
+  // Under AWS_ON, useLive reads GET /v1/share-requests/dishes (lib/live/convex AWS_LIVE).
   return useLive<FamilyDish[] | null>('shareRequests:familyDishes', null, stubDishes, enabled, {}, true);
 }
 
 /** "shared": it's on the map now (mine, or it already was); "asked": homie asked its cook. */
-export async function askToShare(recipeId: string): Promise<'shared' | 'asked'> {
+export async function askToShare(recipeId: string, cookName?: string): Promise<'shared' | 'asked'> {
   await requireAiConsent();
+  if (AWS_ON) {
+    try {
+      return (await awsMessages.shareAsk(recipeId)).result;
+    } catch (e) {
+      if (!isAwsError(e)) throw e;
+      // Her no, within a day: name her from the dish we hold, never from the api's sentence.
+      if (e.code === 'declined') throw new Error(english('errors.share_declined', { name: cookName?.trim() || 'The cook' }));
+      throw new Error(errorWords(e));
+    }
+  }
   const sessionToken = await token();
   return call('mutation', 'shareRequests:ask', { sessionToken, recipeId }, () => 'asked' as const, { strict: true });
 }

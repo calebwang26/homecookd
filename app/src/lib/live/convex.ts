@@ -242,6 +242,7 @@ const AWS_LIVE: Record<string, (set: (v: unknown) => void, as: string | null, ar
     const recipeId = String(args.recipeId ?? '');
     return watchRead(`questions:recipe:${as ?? ''}:${recipeId}`, () => awsMessages.recipeQuestions(recipeId, as), 10_000, (qs) => set(qs.map(toRecipeAnswer)));
   },
+  'shareRequests:familyDishes': (set, as) => watchRead(`share-dishes:${as ?? ''}`, () => awsMessages.shareDishes(as), 60_000, set),
   'messages:madeMyDish': (set, as) =>
     watchRead(`made-my-dish:${as ?? ''}`, () => awsMessages.madeMyDish(as), 60_000, (m) =>
       set(m ? { ...m, libraryId: m.libraryId ?? undefined, text: m.text ?? undefined, at: Date.parse(m.at) } : null),
