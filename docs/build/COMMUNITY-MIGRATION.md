@@ -261,7 +261,7 @@ Report alerts go through `outbox` on the `scheduled` queue. A voice recipe's mer
 ## What `infra/` needs (not done: this PR touches only `api/` and `docs/build/`)
 
 - `EDIBLE_CODE_KEY` on the api's `secret_names` and `secrets`, staging included: staging doesn't have it yet.
-- An EventBridge schedule into `scheduled`: `{"payload":{"task":"community.remind_open"}}` daily at 16:00 UTC, as Convex's cron. A switch gate (AWS-MIGRATION's Cutover list). Staging's is in `infra/envs/staging/main.tf` (#247, merged unapplied). Production's `schedules` has none yet.
+- An EventBridge schedule into `scheduled`: `{"payload":{"task":"community.remind_open"}}` daily at 16:00 UTC, as Convex's cron. A switch gate (AWS-MIGRATION's Cutover list). Staging's is in `infra/envs/staging/main.tf` (#247), and production's in `infra/envs/production/main.tf` (#335, not applied).
 
 ## Invite opens and the database
 

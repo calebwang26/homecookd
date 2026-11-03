@@ -40,6 +40,7 @@ Written Nov 1, 2026, rewritten Nov 2 (AWS backend chat). **A plan for review. On
 | Nov 2 | The api as two tasks that grow to four on CPU, built (production's at 0 until step 6). Not applied: Caleb's staging apply first | #295 |
 | Nov 2 | Every workflow's actions pinned to commits, and gitleaks checked by sha256 | #267 |
 | Nov 2 | The budget alert's test email reached Caleb | #260 |
+| Nov 2 | `envs/production` written for launch: every switch on, the schedules, the secret names, the worker's queue mode, HTTPS waiting on the certificates. Not applied | #335. `infra/README.md`, "Production before launch" |
 
 ## The steps
 
@@ -51,7 +52,7 @@ Before approval. Nothing here changes what build 6 calls.
 - **Known gaps, Nov 2:**
   - No route sets a person's language, and nothing stores a phone's time zone (ACCOUNTS.md, open items 5 and 6).
   - `jobs` is the only live topic (ACCOUNTS.md, "Live updates"). Each screen 1.1 keeps live needs its topic, or reads on focus.
-  - **Recipe writes can't open in production as built.** `api/src/modules/recipes/switch.ts` opens only with `RECIPE_WRITES=on` and the sync's `sync_copies.moved_at`, and the sync never runs now. Without a change, edits answer 501 `not_moved`, which ERROR-CODES.md says production 1.1 never sees. Story cards and a cook's share wait on the same switch.
+  - ~~**Recipe writes can't open in production as built.**~~ Fixed Nov 2: `api/src/modules/recipes/switch.ts` opens with `RECIPE_WRITES=on` alone, unless a sync is copying (#300), and `envs/production` sets it (#335).
   - Community's writes that waited for the sync (`setShare`, `setLocation`, the cook's own share tap: COMMUNITY-MIGRATION.md, "Blockers"), if 1.1 uses them. **Nov 2:** her tap and her switch's off are built, behind the recipes switch (`POST /v1/share-requests`, `POST /v1/recipes/:id/unshare`); `setLocation` isn't (contracts/COMMUNITY.md, open item 2). The kid's Community tab is hidden (`docs/agents/memory/community-tab-off.md`).
   - The site's `/r` page reads Supabase's `GET /shares/:token`, and the site posts `/web-events` (`web/src/lib/recipe-web/api.ts`, `audience-route.ts`). The api has `POST /v1/shares/open` and no `/web-events`.
 - **Check:** each area's flows from the app's web build and from scripts against staging, as `app/scripts/aws-accounts-flows.mjs` does for Accounts. `cd api && npm test`. `node web/scripts/qa/dish-api-e2e.mjs` against staging. Made-up content only.
@@ -92,7 +93,7 @@ Before any real person's data reaches AWS or Sentry: the demo families' copy (st
 Likely to pass $300 a month (about $450-850 at 500 daily users), so it's Caleb's OK twice over. It can start right after step 3. Only its real video job waits for step 5.
 - **Who:** AWS backend writes the Terraform and runs the checks. Caleb reads the plan, applies it, and makes the DNS changes.
 - **Do, first:** give the GitHub `Production` environment required reviewers (`infra/README.md`, "Before production").
-- **Then bring `envs/production` up to what 1.1 needs:** every area's switch on from the start ("What production has on at launch", below), and the gaps AWS-MIGRATION lists for launch. Two api tasks scaling to 4, built in #295 and proven on staging first (`infra/README.md`, "Autoscaling the api"). The bounded wait that also counts event-loop lag (AWS-MIGRATION.md, "A production gate: overload"). The limited database login, on in `envs/production` from the start (`db_iam_login`, proven on staging Nov 2).
+- **Then bring `envs/production` up to what 1.1 needs:** every area's switch on from the start ("What production has on at launch", below), and the gaps AWS-MIGRATION lists for launch. Two api tasks scaling to 4, built in #295 and proven on staging first (`infra/README.md`, "Autoscaling the api"). The bounded wait that also counts event-loop lag (AWS-MIGRATION.md, "A production gate: overload"). The limited database login, on in `envs/production` from the start (`db_iam_login`, proven on staging Nov 2). **Written in #335, not applied.** Caleb's steps, in order (the certificates, the first apply, the secrets, the DNS records, turning the api on, the TEST family): `infra/README.md`, "Production before launch".
   ```bash
   cd infra/envs/production && AWS_PROFILE=homecookd terraform plan   # Caleb reads this
   AWS_PROFILE=homecookd terraform apply
@@ -109,16 +110,20 @@ Likely to pass $300 a month (about $450-850 at 500 daily users), so it's Caleb's
   - `/health` and `/ready` at `https://api.homecookd.app`. `/ready` answers `{"database":"ok"}` with the api on its own login.
   - A restore drill: RDS's backup restored to a new instance, row counts compared, then the copy deleted.
   - A deliberately killed api task: the other one answers, and a new one starts.
-  - The load test at production's task size and count, over HTTPS, with a burst that runs out the pool: no 500s, and autoscaling goes from 2 to 4 and back.
+  - The load test at production's task size and count, over HTTPS, with a burst that runs out the pool: no 500s, and autoscaling goes from 2 to 4 and back. **Not ready yet:** `infra/scripts/load-test.mjs` refuses any `homecookd.app` address, so it needs a production mode first, with made-up cards it cleans up after (AWS backend, before this step). Staging's last run passed at 3 to 4 small tasks (AWS-MIGRATION.md, "The run after the slow scale-in").
   - The alarms reach a person: confirm the alerts topic's email subscription, fire one alarm, and see the email arrive. Apple reviews report and block, so one of them is `homecookd-production-community-report` (`aws cloudwatch set-alarm-state --alarm-name homecookd-production-community-report --state-value ALARM --state-reason "test"`), and its email says to run the reports script.
   - `node web/scripts/qa/dish-api-e2e.mjs` against production, with its made-up dish. Production ignores `DISH_FAKE_AI`, so this uses real models at a small cost.
   - Once step 5 is live: a real video job on Caleb's own footage, measured for CPU, memory, disk and minutes. It sets the worker's size, and Fargate or EC2 (WORKER-MIGRATION.md, "How to measure a real job").
+- **Also before step 9 (AWS backend):**
+  - **Production's media bucket has no `library.json`,** so the public library is empty (contracts/JOBS.md, open item 15). Publish it to production's bucket once the media CloudFront is up.
+  - **The worker's disk** is Fargate's default 20 GB, and the env module has no setting for more yet (WORKER-MIGRATION.md). The measured job above says whether it's enough. If not, the setting comes with the worker's size.
 - **Back:** nothing depends on it yet. Remove the DNS records, turn off the database's deletion protection (`db_protected`), and `terraform destroy`.
 
 ### 7. The demo and test families: copy once, or start fresh. OK (real data)
 Caleb picks one.
 - **Who:** Caleb decides. AWS backend runs it. App Store/web updates the reviewer notes, under the App Review guard.
 - **Either way:** the TEST family that Apple's reviewer uses exists on production, with its faces (Mom, Dad, Grandma, Leo, Maya, Reviewer) and its Chicken Biryani (`docs/agents/memory/app-review-guard.md`), and the reviewer's link that doesn't expire (ACCOUNTS-MIGRATION.md, "What's needed at the switch"). The notes say how 1.1 joins it.
+- **Not built: the reviewer's link that doesn't expire.** A family's own links last 7 days, and the api keeps a link with no expiry only as an operator's (`api/src/modules/accounts/invites.ts`), which nothing makes on production yet. AWS backend builds a one-off task for it, as `dist/reports.js` is for reports, before step 9 (`infra/README.md`, "Production before launch", 8).
 - **Starting fresh:** nothing is copied, and `EDIBLE_CODE_KEY` can be production's own. The demo families sign in on 1.1 and start over. What's on Convex, Supabase and GCS stays there until those shut down.
 - **Copying once:**
   1. A fresh `npx convex export --include-file-storage` first, kept outside the repo, as the snapshot that's copied.
@@ -155,15 +160,15 @@ Each area's switch is on in production from step 6 and stays on through step 8's
 |---|---|---|
 | Accounts, sessions, the purge | `ACCOUNTS_OWNS_PEOPLE=1`, `LINK_JOIN_SECRET`, `LEFT_IDENTITY_SECRET` (set before the first sign-up and never changed, or someone who left can't be found when they come back), Apple's revocation keys, `EDIBLE_WEB_URL` at its default `https://homecookd.app`, the hourly `accounts.sweep` | `GOOGLE_CLIENT_IDS` waits for Caleb's Google clients (ACCOUNTS.md, item 8). Dropping Expo Go from `APPLE_AUDIENCES` is his `TODO(caleb)` (item 11) |
 | Links: join, craving, dinner, share | `EDIBLE_CODE_KEY`, set once and never changed: a share link is found by a hash keyed from it | If step 7 copies, it must be Supabase's value |
-| Recipes, jobs, recordings | `RECIPE_WRITES=on`, `MEDIA_BASE_URL` (the env module sets it from the media address), `s3:ListBucket` on `uploads`, the hourly `jobs.sweep`, the worker's queue entry point and a count of 1 or more | Recipe writes also need `sync_copies.moved_at`, which no sync will set (step 1) |
+| Recipes, jobs, recordings | `RECIPE_WRITES=on`, `MEDIA_BASE_URL` (the env module sets it from the media address), `s3:ListBucket` on `uploads`, `jobs.sweep` every 5 minutes (staging's is hourly), the worker's queue entry point and a count of 1 or more | The worker's count waits for the measured real job (`TODO(caleb)`). Since Nov 2, `RECIPE_WRITES=on` opens writes by itself (`switch.ts`) |
 | Messages, questions, push, story cards | `EXPO_ACCESS_TOKEN`, `messages.hourly`, `messages.daily` | |
 | Live updates | `LIVE_OFF` unset | Topics other than `jobs` (step 1) |
 | Community | The daily `community.remind_open`, the reports runbook (COMMUNITY-MIGRATION.md, "The team's reports"), and the report alarms, built in the env module (#323): a new report or block emails the alerts topic within minutes, and reports open past 12 hours email once a day | Production's alerts email must be confirmed, and a report alarm's email seen to arrive (step 6, "The alarms reach a person"). The writes that waited for the sync (step 1) |
 | Kid's web flow | The site's values (step 10), the dish budget, the hourly `dish.sweep` | |
-| Everything | `OVERLOAD_SHED=on`, `platform.prune`, Sentry's DSNs once step 5 names Sentry | |
+| Everything | `OVERLOAD_SHED=on`, `platform.prune`, Sentry's DSNs from the first task: production holds only made-up data until step 5 names Sentry, and Sentry gets an error's type and place only | |
 | Never in production | `SYNC_MODE` (the sync), `TEST_SIGNIN_KEY` (Terraform refuses it), `APP_WEB_ORIGINS` | |
 
-`envs/production` has none of these schedules today, and its api's secret list is older than most of this: it names `DISH_IP_SALT`, which nothing reads, and lacks `RATE_LIMIT_SALT`, `EDIBLE_CODE_KEY`, `LEFT_IDENTITY_SECRET` and the Sentry DSNs.
+Since #335 (Nov 2, not applied) `envs/production` sets every api and worker setting, secret name and schedule the middle column lists (the site's values are Vercel's, step 10). Its schedules start with the api, because only the api reads the scheduled queue. `DISH_IP_SALT`, `VOICE_SECRET`, `WORKER_SECRET` and `REPORT_ALERT_TOKEN` are gone from it, and so is the voice service: 1.1 calls none of it while homie is off.
 
 ## After 1.1 is out
 
