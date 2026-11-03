@@ -73,6 +73,7 @@ Nov 2, 2026. For the App screens & recording chat: the checklist of codes that n
 | `full` | `POST /v1/dinners/:id/join`, and accepting a guest | "That dinner is full." |
 | `own_family` | Community: asking your own family for a recipe or a dinner | "This is your family's dinner." |
 | `not_shared` | Community: a dinner or a swap with a recipe that isn't shared | "Share this recipe first." |
+| `taken_down` | `POST /v1/share-requests`: the team took this recipe off the map after a report (its `hiddenAt` is set), for anyone in the family | "Our team took this recipe off the map after a report. It stays with your family." Don't offer sharing it (`takenDown` in the chooser) |
 | `declined` | Community: asking again after they said no. `POST /v1/share-requests` within 24 hours of the cook's no or unclear answer (MESSAGES.md, flow 8) | "They said not this time." For a share ask: "<Cook> said not now. Ask again tomorrow.", the cook named as in `message` |
 | `closed` | `/dish/*` and Cravings: the answers were already sent | "These answers were already sent." |
 
@@ -111,4 +112,4 @@ Nov 2, 2026. For the App screens & recording chat: the checklist of codes that n
 
 | Code | Where |
 |---|---|
-| `recipes_read_only` (409) | The team's report script (`api/src/reports.ts`), when a recipe's switch is locked. No phone sees it |
+| `recipes_read_only` (409) | The team's report script (`api/src/reports.ts`), when the recipes switch isn't open, so a recipe's review can't write it. No phone sees it |

@@ -106,6 +106,8 @@ autoscaling, Nov 2", below). The proof is the rerun after #304, growing to 3 or 
 
 **A budget alert reaches a person (Nov 1).** The real-models window showed the budget's alert reaching only the logs, because `REPORT_ALERT_URL` isn't set on AWS. A log alarm to the alerts topic now emails it. Fired on staging on Nov 2, and the email reached Caleb. On production: the same, once.
 
+**A Community report reaches a person (Nov 2, #323).** Report and block had the same gap: `community.report_alert` and `community.remind_open` only called the webhook, so on AWS a report reached nobody, and Apple reviews report and block. Now each logs a line (`ALERT community report needs review`, and `ALERT community reports still open` from the daily reminder), counted by a log filter, with an alarm on each to the alerts topic, built the budget's way: a new report emails within about 5 minutes, open ones once a day. The email says to run `api/src/reports.ts` (COMMUNITY-MIGRATION.md, "The team's reports"). The lines carry a kind, an id and counts only. Not applied: staging's two log filters are Caleb's hand apply (`plan_check.py` holds log filters), and production's email is confirmed at CUTOVER.md step 6.
+
 **A production gate: overload (Master Agent, Nov 1).** Today, with all connections busy, a request waits 5 s then answers a 500. Before
 production: a bounded wait queue that fails fast with a 503 and `retry-after`; the load balancer's health check stays as it is (it moved to its own thread
 after the load test with autoscaling, Nov 2, below); an alarm on
@@ -267,6 +269,7 @@ Before production (CUTOVER.md, step 6):
 For 1.1 on production (CUTOVER.md, steps 1 and 6). **Community's gates (`COMMUNITY-MIGRATION.md`):** Apple reviews report and block, so each of these
 exists and is tested before 1.1 is submitted:
   - The team can act on a report: `api/src/reports.ts` lists and reviews them as a one-off task (COMMUNITY-MIGRATION.md, "The team's reports"), and it ran on staging on Nov 2. Left: a way for the team to see what a reported item is once Convex is gone (the listing prints ids only).
+  - A report reaches a person: built in #323, a log alarm emails the alerts topic ("A Community report reaches a person", above). Left: staging's hand apply and one report's email seen there, and production's email confirmed.
   - `community.remind_open` has its daily schedule. Staging's is in Terraform (#247). Production's `schedules` has none yet, so there a report left open would never remind anyone.
   - 1.1's own calls to these routes (App screens). They don't exist yet, and nothing has called these routes.
 

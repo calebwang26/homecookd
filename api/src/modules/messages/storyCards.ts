@@ -30,15 +30,19 @@ export function storyCardDue(r: StoryCardSource): boolean {
   return r.story_card_text === null || (r.story_card_used_stories !== false) !== withStories;
 }
 
-export type Shared = "shared" | "not_shareable" | "not_moved";
+export type Shared = "shared" | "not_shareable" | "not_moved" | "taken_down";
 
 /**
  * community.shareOn: puts a ready recipe on the map, for every way the cook says yes. The card is queued in the same transaction, the first time or when it no longer
- * matches her stories answer. Words the filter catches keep it in the family. The caller has checked who's asking and that it's ready.
+ * matches her stories answer. Words the filter catches keep it in the family, and so does the team's take-down (community/reports.ts), until a `keep`. The caller has
+ * checked who's asking and that it's ready.
  */
 export async function shareOn(c: Queryable, r: StoryCardSource, requestId?: string): Promise<Shared> {
+  if (r.hidden_at) return "taken_down";
   if (flagged(...recipeWords(r))) return "not_shareable";
-  if (!(await shareRecipeIfOpen(c, r.id))) return "not_moved";
+  const wrote = await shareRecipeIfOpen(c, r.id);
+  if (wrote === "closed") return "not_moved";
+  if (wrote === "taken_down") return "taken_down";
   if (storyCardDue(r)) await enqueue(c, { queue: "scheduled", payload: { task: STORY_CARD_TASK, recipeId: r.id }, requestId });
   return "shared";
 }

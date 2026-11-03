@@ -72,6 +72,7 @@ export type StoryCardSource = {
   memories: { kind: string; text: string }[];
   memories_opt_in: boolean;
   shared_at: Date | null;
+  hidden_at: Date | null;
   story_card_text: string | null;
   story_card_used_stories: boolean | null;
   story_card_culture: string | null;
@@ -81,7 +82,7 @@ export type StoryCardSource = {
 export async function storyCardSource(q: Queryable, id: string): Promise<StoryCardSource | null> {
   const { rows } = await q.query(
     `select id, family_id, cook_id, title, status, steps, case when memories_opt_in then memories else '[]'::jsonb end as memories, memories_opt_in, shared_at,
-            story_card_text, story_card_used_stories, story_card_culture
+            hidden_at, story_card_text, story_card_used_stories, story_card_culture
        from recipes where id = $1`,
     [id],
   );
