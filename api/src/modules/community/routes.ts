@@ -2,7 +2,7 @@
 // docs/build/COMMUNITY-MIGRATION.md has what an adapter does with the replies.
 import type { FastifyInstance, FastifyRequest } from "fastify";
 import { requireSession, signedIn } from "../../auth.js";
-import { invalid } from "../../errors.js";
+import { idempotencyKey } from "../../idempotency.js";
 import { PLACE_KINDS, REPORT_REASONS, type PlaceKind, type ReportReason } from "./data.js";
 import { createDinner, getDinner, inviteLink, myDinners, requestJoin, respondToJoin } from "./dinners.js";
 import type { Reportable } from "./safety.js";
@@ -18,18 +18,10 @@ const target = {
   kind: { type: "string", enum: ["recipe", "dinner"] },
   targetId: ID,
 };
-const IDEMPOTENCY = /^[A-Za-z0-9_-]{8,100}$/;
 
 const cursorOf = (req: FastifyRequest) => (req.query as { cursor?: string }).cursor;
 const paramId = (req: FastifyRequest) => (req.params as { id: string }).id;
 const OK = { ok: true };
-
-function idempotencyKey(req: FastifyRequest): string | undefined {
-  const key = req.headers["idempotency-key"];
-  if (key === undefined) return undefined;
-  if (typeof key !== "string" || !IDEMPOTENCY.test(key)) throw invalid("Idempotency-Key");
-  return key;
-}
 
 export async function communityRoutes(app: FastifyInstance): Promise<void> {
   // Everything here needs a session, before the body is looked at.
@@ -110,7 +102,8 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
     },
     async (req, reply) => {
       const body = req.body as { recipeId: string; startsAt: number; placeKind?: PlaceKind; placeName: string; address: string; seats: number };
-      return reply.code(201).send(await createDinner(signedIn(req), body, idempotencyKey(req)));
+      // The shared key, but not required here: old builds send none (dinners.ts).
+      return reply.code(201).send(await createDinner(signedIn(req), body, idempotencyKey(req, false)));
     },
   );
   app.get("/v1/dinners/mine", { schema: { querystring: page } }, async (req) => await myDinners(signedIn(req), cursorOf(req)));

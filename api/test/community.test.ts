@@ -140,6 +140,30 @@ test("a dinner's address reaches only the host and accepted guests", { skip }, a
   assert.equal((await get(serene)).recipeId, null);
 });
 
+test("a host's yes on a dinner that's called off or has started is refused, so the guest never reads its address; a no still answers", { skip }, async () => {
+  const { t, rajani, serene, caleb } = await world();
+  const poha = await recipe(rajani, { sharedAt: 1 });
+  const off = await host(t, rajani, poha);
+  const started = await host(t, rajani, poha);
+  const asks = async (dinnerId: string) => [(await ok(join(t, serene, dinnerId))).requestId, (await ok(join(t, caleb, dinnerId))).requestId];
+  const onOff = await asks(off);
+  const onStarted = await asks(started);
+  await db().query("update dinners set status = 'cancelled' where id = $1", [off]);
+  await startIt(started);
+
+  for (const [dinnerId, [yes, no]] of [[off, onOff], [started, onStarted]] as const) {
+    await refusedWith(respond(t, rajani, yes, true), 404, "That dinner isn't happening anymore.");
+    like((await dinner(t, serene, dinnerId)).data, { address: null, myRequest: { requestId: yes, status: "pending" }, seatsLeft: 4 });
+    const mine = await ok(call(t, serene, "GET", "/v1/dinners/mine"));
+    assert.equal(mine.dinners.find((d: { dinnerId: string }) => d.dinnerId === dinnerId).address, null);
+    // A no gives nothing away, so it answers an old ask as on any dinner.
+    await ok(respond(t, rajani, no, false));
+    like((await dinner(t, caleb, dinnerId)).data, { address: null, myRequest: { requestId: no, status: "declined" } });
+    await refusedWith(respond(t, rajani, no, false), 409, "You already answered.");
+  }
+  assert.equal((await db().query("select count(*)::int as n from dinner_requests where status = 'accepted'")).rows[0].n, 0);
+});
+
 test("the feed places each dish on its cook's grid cell, never finer, and the viewer at their own", { skip }, async () => {
   const { t, rajani, serene, serenesMom } = await world();
   // A finer position than the grid can't be stored: the column's type rounds it.

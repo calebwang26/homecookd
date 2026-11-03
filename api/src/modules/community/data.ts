@@ -16,6 +16,7 @@
 //   open reports                           reports_open                                           500
 //   reports on a thing                     reports_target                                         500
 //   is anything open on a thing            reports_target                                         one row
+//   a leaver's dinners ahead               dinners_host                                           what they host
 //   purge steps                            dinners_host, dinners_recipe, dinner_requests_guest, swap_requests_requester,
 //                                          swap_requests_their_recipe, swap_requests_my_recipe, reports_reporter_person, blocks_reverse   500 a pass
 import type { Queryable } from "../../db.js";
@@ -395,10 +396,16 @@ export async function swapsOfFamily(q: Queryable, familyId: string, blocked: str
 }
 
 // ---------------------------------------------------------------------------------------------
-// Account deletion (account.ts). Each returns how many rows it touched, so a caller can loop.
+// Account deletion and leaving (account.ts). Each returns how many rows it touched, so a caller can loop.
 
 export async function cancelDinnersOf(q: Queryable, personId: string, recipeIds: string[]): Promise<number> {
   const { rowCount } = await q.query(`update dinners set status = 'cancelled' where status <> 'cancelled' and (host_id = $1 or recipe_id = any($2::text[]))`, [personId, recipeIds]);
+  return rowCount ?? 0;
+}
+
+/** The dinners someone hosts that haven't started. One that has keeps what it was. */
+export async function cancelDinnersAheadOf(q: Queryable, personId: string): Promise<number> {
+  const { rowCount } = await q.query(`update dinners set status = 'cancelled' where host_id = $1 and status <> 'cancelled' and starts_at > now()`, [personId]);
   return rowCount ?? 0;
 }
 

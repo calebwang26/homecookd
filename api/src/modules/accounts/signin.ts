@@ -3,6 +3,7 @@
 // than guesses, and it can never land on a tombstone: a deleted person's accounts are unlinked, and no path here makes or claims anyone who has deleted.
 import { db, tx, type Queryable } from "../../db.js";
 import { invalid, notFound, notSetUp } from "../../errors.js";
+import { cancelDinnersOfLeaver } from "../community/account.js";
 import * as data from "./data.js";
 import { endFamilyIfLast } from "./deletion.js";
 import { extId, type Family, type Person } from "./data.js";
@@ -256,6 +257,7 @@ async function moveFaces(c: Queryable, faces: Person[], fromId: string, toId: st
     if (!(await data.moveFace(c, face.id, fromId, toId, sort))) continue;
     moved.push(face);
     await data.revokeInvitesOf(c, face.id); // an invite naming them still points at the old family
+    await cancelDinnersOfLeaver(c, face.id); // a dinner they host would too (its blocks, who it's `ours` to): it's called off
   }
   return moved;
 }

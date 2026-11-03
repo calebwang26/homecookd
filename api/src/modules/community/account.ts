@@ -1,5 +1,5 @@
-// What deleting an account does to Community (SCHEMA.md section 4). accounts/purgeSteps.ts and startDeletion call this. Community holds no file keys, so nothing here
-// marks a file. Both are safe to run again: each step leaves the person's lists as it goes.
+// What deleting an account, or leaving a family, does to Community (SCHEMA.md section 4). accounts/purgeSteps.ts, startDeletion and removePerson call this. Community
+// holds no file keys, so nothing here marks a file. All are safe to run again: each step leaves the person's lists as it goes.
 import { type Queryable, db } from "../../db.js";
 import { inBatches, ON_ITS_OWN, type PurgeRun } from "../../purge.js";
 import { recipeIdsOfCook } from "../recipes/service.js";
@@ -8,6 +8,15 @@ import * as data from "./data.js";
 /** At once, in the deletion's transaction: off the map now, the dinners they host and any around their recipes. */
 export async function cancelDinnersOfPerson(c: Queryable, personId: string): Promise<void> {
   await data.cancelDinnersOf(c, personId, await recipeIdsOfCook(c, personId));
+}
+
+/**
+ * At once, in the transaction that takes them out of a family (leaving, or a move to another): the dinners they host that haven't started are called off. Only the host
+ * may answer an ask, and they can't act in that family again. Unlike a deletion, dinners around their recipes go on, since the recipes stay, and a dinner that has
+ * started keeps what it was.
+ */
+export async function cancelDinnersOfLeaver(c: Queryable, personId: string): Promise<void> {
+  await data.cancelDinnersAheadOf(c, personId);
 }
 
 /**

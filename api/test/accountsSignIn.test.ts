@@ -240,6 +240,17 @@ test("a known account in the link's family just signs in, and nothing is used up
   assert.deepEqual([again.data.existing, again.data.joined, again.data.profile_id], [true, false, made.data.profile_id]);
 });
 
+/** A dinner hosted from this family, an hour ahead unless `startsIn` says otherwise. */
+async function dinnerOf(hostId: string, familyId: string, startsIn = "1 hour"): Promise<string> {
+  const { rows } = await db().query(
+    `insert into dinners (host_id, host_family_id, dish, starts_at, place_kind, place_name, address, approx_lat, approx_lng, seats, status)
+     values ($1, $2, 'Kanda Poha', now() + $3::interval, 'home', 'Our kitchen', '1 Test St', 42.36, -71.09, 4, 'open') returning id`,
+    [hostId, familyId, startsIn],
+  );
+  return rows[0].id;
+}
+const statusOf = async (dinnerId: string) => (await row("dinners", "id = $1", [dinnerId])).status;
+
 async function movable() {
   const sub = newSub();
   const token = await appleToken(keys, sub);
@@ -303,11 +314,28 @@ test("someone else still signing in to the old family: not solo, the faces stay"
   const other = await makePerson(m.oldFamily, "Sibling");
   await makeDevice(m.oldFamily, other);
   const face = await makePerson(m.oldFamily, "Grandma");
+  const zeds = await dinnerOf(m.old.data.profile_id, m.oldFamily);
+  const grandmas = await dinnerOf(face, m.oldFamily);
   assert.deepEqual((await api.apple({ id_token: m.token, join_token: m.link.token })).data.would_delete, [], "they stay, so nobody's deleted");
   const moved = await api.apple({ id_token: m.token, join_token: m.link.token, move: true });
   const receipt = JSON.parse(Buffer.from(moved.data.moved.receipt.split(".")[0], "base64url").toString());
   assert.equal(receipt.solo, false);
   assert.equal((await row("people", "id = $1", [face])).family_id, m.oldFamily);
+  assert.deepEqual([await statusOf(zeds), await statusOf(grandmas)], ["cancelled", "open"], "the mover's dinner is off; a face who stays keeps hers");
+});
+
+test("a move calls off the dinners ahead that the mover and the faces coming along host; one that has started, and the new family's, stay", { skip }, async () => {
+  const m = await movable();
+  const face = await makePerson(m.oldFamily, "Grandma");
+  const zeds = await dinnerOf(m.old.data.profile_id, m.oldFamily);
+  const zedsLast = await dinnerOf(m.old.data.profile_id, m.oldFamily, "-1 hour");
+  const grandmas = await dinnerOf(face, m.oldFamily);
+  const moms = await dinnerOf(m.mom, m.f.id);
+  const moved = await api.apple({ id_token: m.token, join_token: m.link.token, move: true });
+  assert.equal(moved.status, 200);
+  assert.equal((await row("people", "id = $1", [face])).family_id, m.f.id, "she came along");
+  assert.deepEqual([await statusOf(zeds), await statusOf(grandmas)], ["cancelled", "cancelled"]);
+  assert.deepEqual([await statusOf(zedsLast), await statusOf(moms)], ["open", "open"]);
 });
 
 test("a move with a name the new family has changes nothing; without the secret the receipt is null", { skip }, async () => {

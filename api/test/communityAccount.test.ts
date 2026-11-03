@@ -1,14 +1,25 @@
 // SCHEMA.md section 4 for Community's tables, called by hand: the account purge that will call it moves last. convex/account.test.ts's Community assertions, with what's marked new there.
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { after, test } from "node:test";
+import { hashToken } from "../src/auth.js";
 import { db } from "../src/db.js";
 import { cancelDinnersOfPerson, purgeCommunityForPerson } from "../src/modules/community/account.js";
-import { block, call, cookTogether, family, feed, host, join, ok, person, recipe, report, requestSwap, respond, respondSwap, tryHost, world } from "./communityHelpers.js";
+import {
+  block, call, cookTogether, family, feed, host, join, ok, person, recipe, refusedWith, report, requestSwap, respond, respondSwap, startIt, tryHost, type Who, world,
+} from "./communityHelpers.js";
 import { hasDatabase, like } from "./dishHelpers.js";
 
 const skip = !hasDatabase;
 const count = async (table: string, where = "true", args: unknown[] = []) => (await db().query(`select count(*)::int as n from ${table} where ${where}`, args)).rows[0].n;
 const dinnerRow = async (id: string) => (await db().query("select * from dinners where id = $1", [id])).rows[0];
+
+/** A phone of their own: its key. */
+async function phoneOf(who: Who): Promise<string> {
+  const key = randomBytes(32).toString("base64url");
+  await db().query(`insert into devices (family_id, person_id, key_hash, via, label) values ($1, $2, $3, 'apple', 'Test phone')`, [who.familyId, who.personId, hashToken(key)]);
+  return key;
+}
 
 async function deleted() {
   const w = await world();
@@ -54,6 +65,49 @@ test("at once: the dinners she hosts and any around her recipes are off the map"
   assert.equal((await join(t, serene, calebsNight)).status, 404);
   // Safe to run again.
   await cancelDinnersOfPerson(db(), rajani.personId);
+});
+
+test("a host who leaves the family: the dinners they host that haven't started are called off, and nothing else", { skip }, async () => {
+  const { t, rajani, shreya, serene, serenesMom, caleb } = await world();
+  const poha = await recipe(rajani, { sharedAt: 1 });
+  const dumplings = await recipe(serenesMom, { title: "Dumplings", sharedAt: 2 });
+  // Hers: one ahead with an ask nobody else could answer, one ahead and full, one that has started, one called off already.
+  const ahead = await host(t, rajani, poha);
+  await ok(join(t, serene, ahead));
+  const full = await host(t, rajani, poha, { seats: 1 });
+  await ok(respond(t, rajani, (await ok(join(t, serene, full))).requestId, true));
+  const started = await host(t, rajani, poha);
+  await startIt(started);
+  const off = await host(t, rajani, poha);
+  await db().query("update dinners set status = 'cancelled' where id = $1", [off]);
+  // Someone else's in her family, of her dish, and another family's.
+  const shreyas = await host(t, shreya, poha);
+  const meis = await host(t, serenesMom, dumplings);
+  const kept = { started: await dinnerRow(started), off: await dinnerRow(off) };
+
+  // "Leave the family", from her own phone. Shreya stays signed in on hers, so the family goes on.
+  const key = await phoneOf(rajani);
+  await phoneOf(shreya);
+  const owns = process.env.ACCOUNTS_OWNS_PEOPLE;
+  process.env.ACCOUNTS_OWNS_PEOPLE = "1";
+  try {
+    const left = await t.inject({ method: "POST", url: `/profiles/${rajani.personId}/remove`, headers: { "x-device-key": key, "x-profile-id": rajani.personId }, payload: {} });
+    assert.equal(left.statusCode, 200, left.body);
+  } finally {
+    if (owns === undefined) delete process.env.ACCOUNTS_OWNS_PEOPLE;
+    else process.env.ACCOUNTS_OWNS_PEOPLE = owns;
+  }
+
+  assert.equal((await dinnerRow(ahead)).status, "cancelled");
+  assert.equal((await dinnerRow(full)).status, "cancelled");
+  assert.deepEqual(await dinnerRow(started), kept.started, "one that has started keeps what it was");
+  assert.deepEqual(await dinnerRow(off), kept.off);
+  assert.equal((await dinnerRow(shreyas)).status, "open", "her dish's dinner, hosted by someone who stays");
+  assert.equal((await dinnerRow(meis)).status, "open");
+  // Off the map: the feed leaves hers out, and asking to join is refused.
+  assert.deepEqual((await feed(t, caleb)).dinners.map((d: { dinnerId: string }) => d.dinnerId).sort(), [shreyas, meis].sort());
+  await refusedWith(join(t, caleb, ahead), 404, "That dinner isn't happening anymore.");
+  like((await call(t, serene, "GET", `/v1/dinners/${ahead}`)).data, { status: "cancelled" });
 });
 
 test("deleting someone reaches every Community table as SCHEMA.md says", { skip }, async () => {
