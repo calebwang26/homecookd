@@ -77,11 +77,11 @@ export const jobs = {
   links: (uploadId: string, as?: string | null) =>
     request<Omit<NewUpload, 'uploadPath'>>(up(uploadId, '/links'), { auth: 'session', as, body: {} }),
   /** Links for some parts of a PARTS video, at most 100 numbers a call. */
-  parts: (uploadId: string, index: number, partNumbers: number[]) =>
-    request<{ uploadId: string; index: number; parts: PartLink[] }>(up(uploadId, '/parts'), { auth: 'session', body: { index, partNumbers } }),
+  parts: (uploadId: string, index: number, partNumbers: number[], as?: string | null) =>
+    request<{ uploadId: string; index: number; parts: PartLink[] }>(up(uploadId, '/parts'), { auth: 'session', as, body: { index, partNumbers } }),
   /** Join a PARTS video once every part has its ETag (exactly as S3 sent it, quotes included). */
-  finishParts: (uploadId: string, index: number, parts: { partNumber: number; etag: string }[]) =>
-    request<{ finished: boolean }>(up(uploadId, '/parts/finish'), { auth: 'session', body: { index, parts } }),
+  finishParts: (uploadId: string, index: number, parts: { partNumber: number; etag: string }[], as?: string | null) =>
+    request<{ finished: boolean }>(up(uploadId, '/parts/finish'), { auth: 'session', as, body: { index, parts } }),
   /** Is it all in? `missing` lists the videos S3 doesn't have yet; once all are in, the job is queued. */
   complete: (uploadId: string, as?: string | null) => request<Complete>(up(uploadId, '/complete'), { auth: 'session', as, body: {} }),
   /** Stop by upload, before POST /v1/jobs has answered. Never a 404. */
