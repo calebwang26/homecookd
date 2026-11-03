@@ -153,6 +153,9 @@ export type Card = {
   filmingDay: number | null;
 };
 
+/** A card in the app (GET /v1/dish-asks/:id): the Card, its id and the caller's side. `askUrl` is always null there. */
+export type MyCard = Omit<Card, "askUrl"> & { askUrl: null; id: string; side: "kid" | "cook" };
+
 export type Ask = {
   dish: string;
   relation: Relation;

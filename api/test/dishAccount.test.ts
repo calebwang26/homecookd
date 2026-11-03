@@ -1,6 +1,5 @@
-// What deleting an account does to the dish ask: convex/dishAsks.test.ts's three, with C3 and the new ip_key rule (SCHEMA.md section 4). Nothing
-// calls purgeDishForPerson yet, and `person_id` and `requested_of` stay null in real use until the sync exists, so these set them by hand, as
-// Convex's linkedCards helper does.
+// What deleting an account does to the dish ask: convex/dishAsks.test.ts's three, with C3 and the new ip_key rule (SCHEMA.md section 4). These call
+// purgeDishForPerson and set `person_id` and `requested_of` by hand, as Convex's linkedCards helper does; a claim or a craving link sets them in real use.
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { db } from "../src/db.js";

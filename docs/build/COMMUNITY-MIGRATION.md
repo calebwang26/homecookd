@@ -124,8 +124,8 @@ The last command prints what the script said. A task takes about a minute to sta
 ## Deferred
 
 - ~~**Writing a share ask, `shareRequests.decide`, `settle`, `answerFor` and `questions.translateForCook`.**~~ **Done in #311,** in Messages: the 24-hour "said not now" refusal, `shareQuestion`'s words (`TODO(caleb)` kept), and a unique index for one open ask per dish (`079`). Its purge covers these rows.
-- **`dishAsks.forMe` and `get`, and claiming a card:** still with the dish area's signed-in step.
-- **`POST /dish/craving/peek` and `cravingToken` on `POST /dish/cards`:** "card-making stays with the dish module", so they still answer 404 (DISH-MIGRATION.md). **So a real craving card can't be made on the new api yet.** Tests make one with SQL. `people` is readable now, so these need only a small dish PR once the sync runs.
+- ~~**`dishAsks.forMe` and `get`, and claiming a card:** still with the dish area's signed-in step.~~ **Done** but `forMe`: claiming a card (`accounts/links.ts`), and `get` as `GET /v1/dish-asks/:id` (#321). `forMe` waits for App to say a screen lists a person's cards (contracts/DISH.md, open item 2).
+- ~~**`POST /dish/craving/peek` and `cravingToken` on `POST /dish/cards`:** "card-making stays with the dish module", so they still answer 404 (DISH-MIGRATION.md). **So a real craving card can't be made on the new api yet.** Tests make one with SQL. `people` is readable now, so these need only a small dish PR once the sync runs.~~ **Done in #321:** a real craving card is made on the new api, asked of her in her family, with the `craving` push. Tests make theirs through the route (`cravingHelpers.cravingCard`).
 - **`seedCommunity`:** the demo families come over by backfill (C6).
 - **`pushEvents`:** with push, in Messages. A dinner ask or a swap sends no push on Convex today, so nothing is lost here.
 
@@ -203,7 +203,7 @@ The last command prints what the script said. A task takes about a minute to sta
 - `safety.test.ts`: 8 of 9.
 - `swaps.test.ts`: 3 of 3. `dinnerInvites.test.ts`: 4 of 4.
 - `shareRequests.test.ts` (#311): "after a no", "her own tap", the kid's ask, her typed yes and "only a yes", whole. The Marathi voice note and the yes/no reader are in `messagesQuestions.test.ts`.
-- `cravings.test.ts`: 5 whole (filming day, writing to ready, a silent clip and the budget, the next free question, the maker's deletion), 3 in part: `createLink` without its peeks and cards, `forCook` with a card tied by SQL, and the send's refusals, which now split between the link and the send.
+- `cravings.test.ts`: 5 whole (filming day, writing to ready, a silent clip and the budget, the next free question, the maker's deletion), 3 in part: `createLink` without its peeks and cards, `forCook`, and the send's refusals, which now split between the link and the send. Its cards come from her link through the route since #321, where they were tied by SQL.
 
 **Changed in meaning:** the refusals in difference 6 and 7. Covers: "Upload" and "Lookalike" can't be stored now, so the test asserts the column's check refuses them.
 
@@ -213,7 +213,7 @@ The last command prints what the script said. A task takes about a minute to sta
 - `community.test.ts`: `setLocation`, "only the recipe's own cook can share", the three Muse and Claude writer tests, and "Muse picks" (blocked), the two seed tests (seed deferred).
 - `safety.test.ts`: "a Muse card the filter catches goes plain" (writer).
 - `shareRequests.test.ts`: the two `TEXT_PROVIDER` tests and "without Gemini" (Claude only here).
-- `cravings.test.ts`: peek, a card tied to her, a card's name and words, the link's caps (card-making), `forMe` and `get`.
+- `cravings.test.ts`: `forMe`. Peek, a card tied to her, a card's name and words and the link's caps are `dishCravingCards.test.ts`, and `get` is `dishMyCard.test.ts` (#321).
 - `lib/storyCard`'s `cleanCulture` and `parseMuseCard` assertions (writer): carried in `messagesStoryCards.test.ts`.
 - `convex/account.test.ts`'s Community assertions move as `communityAccount.test.ts`, but the account purge itself isn't run.
 

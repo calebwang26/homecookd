@@ -51,7 +51,6 @@ Before approval. Nothing here changes what build 6 calls.
 - **Known gaps, Nov 2:**
   - No route sets a person's language, and nothing stores a phone's time zone (ACCOUNTS.md, open items 5 and 6).
   - `jobs` is the only live topic (ACCOUNTS.md, "Live updates"). Each screen 1.1 keeps live needs its topic, or reads on focus.
-  - The craving routes and the claim: the api answers 404 to `/dish/craving/peek`, so `/miss?c=` falls back to a plain card that doesn't reach the parent (DISH-MIGRATION.md).
   - **Recipe writes can't open in production as built.** `api/src/modules/recipes/switch.ts` opens only with `RECIPE_WRITES=on` and the sync's `sync_copies.moved_at`, and the sync never runs now. Without a change, edits answer 501 `not_moved`, which ERROR-CODES.md says production 1.1 never sees. Story cards and a cook's share wait on the same switch.
   - Community's writes that waited for the sync (`setShare`, `setLocation`, the cook's own share tap: COMMUNITY-MIGRATION.md, "Blockers"), if 1.1 uses them. The kid's Community tab is hidden (`docs/agents/memory/community-tab-off.md`).
   - The site's `/r` page reads Supabase's `GET /shares/:token`, and the site posts `/web-events` (`web/src/lib/recipe-web/api.ts`, `audience-route.ts`). The api has `POST /v1/shares/open` and no `/web-events`.
@@ -160,7 +159,7 @@ Each area's switch is on in production from step 6 and stays on through step 8's
 | Messages, questions, push, story cards | `EXPO_ACCESS_TOKEN`, `messages.hourly`, `messages.daily` | |
 | Live updates | `LIVE_OFF` unset | Topics other than `jobs` (step 1) |
 | Community | The daily `community.remind_open`, the reports runbook (COMMUNITY-MIGRATION.md, "The team's reports"), and the report alarms, built in the env module (#323): a new report or block emails the alerts topic within minutes, and reports open past 12 hours email once a day | Production's alerts email must be confirmed, and a report alarm's email seen to arrive (step 6, "The alarms reach a person"). The writes that waited for the sync (step 1) |
-| Kid's web flow | The site's values (step 10), the dish budget, the hourly `dish.sweep` | The craving routes (step 1) |
+| Kid's web flow | The site's values (step 10), the dish budget, the hourly `dish.sweep` | |
 | Everything | `OVERLOAD_SHED=on`, `platform.prune`, Sentry's DSNs once step 5 names Sentry | |
 | Never in production | `SYNC_MODE` (the sync), `TEST_SIGNIN_KEY` (Terraform refuses it), `APP_WEB_ORIGINS` | |
 
