@@ -16,9 +16,9 @@ Step 5 of `docs/build/AWS-MIGRATION.md`, Oct 31, 2026. A draft on `aws-migration
 | `POST /dish/ask/answer?q=&lang=&durationS=` | `X-Dish-Token`, the raw audio; `{ask}` | Same query and reply. The body is JSON `{askToken, fileId}`. Both routes still take the token in `X-Dish-Token`, but the site doesn't send it |
 
 **Once deferred for the one-way sync (SCHEMA.md, M1), now built.** 1.1 has no sync: the api owns `people` and `families`.
-- `POST /dish/craving/peek` and `cravingToken` on `POST /dish/cards` (#322, `cravingLinks.ts`), as Convex's: the link found with `cravingData.linkByToken`, by sha256 (since `077` the token itself isn't stored, SCHEMA.md M6), and the card born asked of her, in her family. Its caps are Convex's, 20 cards and 5 a day (contracts/DISH.md).
-- Claiming a card (`POST /v1/links/claim`, `accounts/links.ts`) and `dishAsks.get` (`GET /v1/dish-asks/:id`, #322). The signed-in `cravings.*` functions, `sendVoiceRecipe` and `setFilmingDay`: `COMMUNITY-MIGRATION.md`.
-- `pushEvents.requested`, the `craving` push, queued in the craving card's transaction (#322). `answered` is queued by the merge since #311 (`messages/pushEvents.ts`), and goes to a kid who has claimed the card.
+- `POST /dish/craving/peek` and `cravingToken` on `POST /dish/cards` (#321, `cravingLinks.ts`), as Convex's: the link found with `cravingData.linkByToken`, by sha256 (since `077` the token itself isn't stored, SCHEMA.md M6), and the card born asked of her, in her family. Its caps are Convex's, 20 cards and 5 a day (contracts/DISH.md).
+- Claiming a card (`POST /v1/links/claim`, `accounts/links.ts`) and `dishAsks.get` (`GET /v1/dish-asks/:id`, #321). The signed-in `cravings.*` functions, `sendVoiceRecipe` and `setFilmingDay`: `COMMUNITY-MIGRATION.md`.
+- `pushEvents.requested`, the `craving` push, queued in the craving card's transaction (#321). `answered` is queued by the merge since #311 (`messages/pushEvents.ts`), and goes to a kid who has claimed the card.
 - `dish_asks.person_id`, `family_id` and `requested_of`: a claim sets the side it takes, and the family when the card has none. A card from a craving link is born with `family_id` and `requested_of`.
 
 **Still deferred:** `dishAsks.forMe`, until App says a screen lists a person's cards (contracts/DISH.md, open item 2).
@@ -130,7 +130,7 @@ The load balancer's `idle_timeout` is 3700 s, and Fastify's default keep-alive i
 
 `web/` stays owned by App Store, web & builds. All of this is behind **`NEXT_PUBLIC_DISH_UPLOADS=links`**: unset, the site sends raw files to Convex as it always has, and the build holds none of the code below (`web/next.config.ts` always gives it a value, so the compiler drops the rest, and `scripts/check-merge-safe.mjs` reads the bundle). At the switch, set it and `NEXT_PUBLIC_DISH_URL` in one build (`CUTOVER.md`, step 11).
 
-**The craving routes it needed are built (#322).** `main`'s site reads `/miss?c=`, calls `POST /dish/craving/peek`, and makes the card with `cravingToken`, as on Convex. A full link answers Convex's sentence, so the site's `isLinkBusy` still matches it; it should read `link_full` instead (contracts/DISH.md, open item 11).
+**The craving routes it needed are built (#321).** `main`'s site reads `/miss?c=`, calls `POST /dish/craving/peek`, and makes the card with `cravingToken`, as on Convex. A full link answers Convex's sentence, so the site's `isLinkBusy` still matches it; it should read `link_full` instead (contracts/DISH.md, open item 11).
 
 - `web/src/lib/dish/api.ts`: `uploadFile` asks for the link with `blob.size`, PUTs to `uploadUrl` with `uploadHeaders`, then confirms. `sendAnswer` uses `/dish/ask/answer/upload`, a PUT, then `/dish/ask/answer`. Their callers don't change. A failed PUT, of any kind, reads as `busy`, as a 502 does. Limits: 15 s for each api call, and 30 s for a file's PUT or 45 s for a clip's. It reads the PUT's reply to the end, because Chrome reports a fetch with an unread body as cancelled.
 - **Preflights:** every api call stays `text/plain` with its token in the body, so none needs a preflight. That's why the two answer routes now take `askToken` in the body. With the header, each answer would have added two preflights, never cached, because `durationS` changes the URL. A PUT always needs one, from S3's CORS, so an answer costs 1 preflight, as the old raw route did.
