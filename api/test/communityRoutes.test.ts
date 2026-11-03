@@ -9,7 +9,8 @@ import { db } from "../src/db.js";
 import { sha256Hex } from "../src/modules/dish/values.js";
 import { cravingCard, voiceUpload } from "./cravingHelpers.js";
 import {
-  ADDRESS, block, call, cookTogether, dinner, family, feed, host, join, MISSING, ok, person, recipe, refusedWith, report, requestSwap, respond, respondSwap, sameAsMissing, setShared, tryHost, view, type Who, world,
+  ADDRESS, block, call, cookTogether, dinner, family, feed, host, hostBody, join, MISSING, ok, person, recipe, refusedWith, report, requestSwap, respond, respondSwap, sameAsMissing, setShared, tryHost, view, type Who,
+  world,
 } from "./communityHelpers.js";
 import { hasDatabase, IP, newBackend } from "./dishHelpers.js";
 
@@ -425,6 +426,31 @@ test("a retry gets its dinner back even when the checks would refuse it now", { 
   // Only the first dinner was ever made.
   const { rows } = await db().query("select count(*)::int as n from dinners");
   assert.equal(rows[0].n, 1);
+});
+
+test("a new dinner's key follows the shared rule: up to 128 characters, and a retry with the body's keys in another order is the same dinner", { skip }, async () => {
+  const { t, rajani } = await world();
+  const poha = await recipe(rajani, { sharedAt: 1 });
+  const post = (body: object, key: string) => call(t, rajani, "POST", "/v1/dinners", body, { "idempotency-key": key });
+  for (const length of [101, 128]) await ok(post(hostBody(poha), "k".repeat(length)));
+  const long = await refusedWith(post(hostBody(poha), "k".repeat(129)), 400, "An Idempotency-Key is 8 to 128 letters, digits, - or _.");
+  assert.equal(long.data.field, "Idempotency-Key");
+
+  const body = hostBody(poha);
+  const reordered = Object.fromEntries(Object.entries(body).reverse());
+  assert.notEqual(JSON.stringify(reordered), JSON.stringify(body));
+  const first = await ok(post(body, "retry-key-order"));
+  assert.deepEqual(await ok(post(reordered, "retry-key-order")), first);
+
+  // A key stored before the deploy holds the body's hash as it was sent: its retry after the deploy is still the first dinner, and another body is still refused.
+  const old = await ok(post(body, "retry-key-before"));
+  const asSent = sha256Hex(JSON.stringify(body));
+  const stored = await db().query("select request_hash from idempotency_keys where scope = $1 and key = $2", [rajani.personId, "retry-key-before"]);
+  assert.notEqual(stored.rows[0].request_hash, asSent, "the two hashes differ for this body");
+  await db().query("update idempotency_keys set request_hash = $3 where scope = $1 and key = $2", [rajani.personId, "retry-key-before", asSent]);
+  assert.deepEqual(await ok(post(body, "retry-key-before")), old);
+  await refusedWith(post({ ...body, seats: 3 }, "retry-key-before"), 409, "That was already sent with different details.");
+  assert.equal((await db().query("select count(*)::int as n from dinners")).rows[0].n, 4);
 });
 
 test("logs carry no family content, as production writes them", { skip }, async () => {

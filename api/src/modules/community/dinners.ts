@@ -6,6 +6,7 @@ import { randomBytes } from "node:crypto";
 import type { Signed } from "../../auth.js";
 import { db, tx } from "../../db.js";
 import { invalid, notFound, refused } from "../../errors.js";
+import { requestHash } from "../../idempotency.js";
 import { afterOf, decodeCursor, encodeCursor, type After } from "../../paging.js";
 import { DINNER_INVITE_SALT, seal, unseal } from "../../sealed.js";
 import { flagged } from "../dish/moderation.js";
@@ -98,22 +99,30 @@ function text(s: string, field: string, what: string): string {
 
 export type NewDinner = { recipeId: string; startsAt: number; placeKind?: PlaceKind; placeName: string; address: string; seats: number };
 
+/**
+ * Before this route used `requestHash`, a key stored the hash of the body as sent, its keys in the order they came. A first call made before the deploy still matches its
+ * retry after it this way, and no other body can (the two strings are equal only for the same fields). Those keys expire 7 days after the deploy
+ * (idempotency_keys.expires_at), and this can go then.
+ */
+const hashAsSent = (input: NewDinner) => sha256Hex(JSON.stringify(input));
+
 /** What a used retry key answers: the first dinner for the same body, and a refusal for another. */
-function firstDinner(first: { request_hash: string | null; resource_id: string | null }, hash: string): { dinnerId: string } {
-  if (first.request_hash !== hash || !first.resource_id) throw refused(409, "idempotency_conflict", "That was already sent with different details.");
+function firstDinner(first: { request_hash: string | null; resource_id: string | null }, input: NewDinner, hash: string): { dinnerId: string } {
+  const same = first.request_hash === hash || first.request_hash === hashAsSent(input);
+  if (!same || !first.resource_id) throw refused(409, "idempotency_conflict", "That was already sent with different details.");
   return { dinnerId: first.resource_id };
 }
 
 /**
- * `idempotencyKey`, from a phone that may retry: the same key and body gets the first dinner back, and the same key with another body is refused. Without one (old
- * builds), a retry makes a second dinner, as on Convex.
+ * `idempotencyKey`, from a phone that may retry: the same key and body gets the first dinner back, whatever order the body's keys come in, and the same key with another
+ * body is refused. Without one (old builds), a retry makes a second dinner, as on Convex.
  */
-export async function createDinner(signed: Signed, input: NewDinner, idempotencyKey?: string): Promise<{ dinnerId: string }> {
-  const hash = sha256Hex(JSON.stringify(input));
+export async function createDinner(signed: Signed, input: NewDinner, idempotencyKey?: string | null): Promise<{ dinnerId: string }> {
+  const hash = requestHash(input);
   // Before the checks: a retry gets its dinner back even if the dish has since been unshared or the time has passed.
   if (idempotencyKey) {
     const first = await data.retryKeyOf(db(), signed.personId, idempotencyKey);
-    if (first) return firstDinner(first, hash);
+    if (first) return firstDinner(first, input, hash);
   }
   const recipe = await hostable(signed, input.recipeId);
   if (input.startsAt <= Date.now()) throw invalid("startsAt", "Pick a time that hasn't passed.");
@@ -125,7 +134,7 @@ export async function createDinner(signed: Signed, input: NewDinner, idempotency
   return await tx(async (c) => {
     // A second call at the same moment passed the look above, and waits here on the row's primary key, so the first has finished by the time this returns false.
     if (idempotencyKey && !(await data.claimRetryKey(c, signed.personId, idempotencyKey, hash))) {
-      return firstDinner((await data.retryKeyOf(c, signed.personId, idempotencyKey))!, hash);
+      return firstDinner((await data.retryKeyOf(c, signed.personId, idempotencyKey))!, input, hash);
     }
     const dinnerId = await data.insertDinner(c, {
       hostId: signed.personId,
@@ -197,7 +206,11 @@ export async function requestJoin(signed: Signed, dinnerId: string): Promise<{ r
   return { requestId };
 }
 
-/** The host says yes or no. The dinner is full once every seat has an accepted guest. Under the dinner's row lock, so two yeses can't both take the last seat. */
+/**
+ * The host says yes or no. The dinner is full once every seat has an accepted guest. Under the dinner's row lock, so two yeses can't both take the last seat, and no yes
+ * lands on a dinner that's been called off or has started: a yes hands over the address. A no on one still answers the ask, as a no on a full dinner does: it gives
+ * nothing away, and the host still sees the ask on that dinner.
+ */
 export async function respondToJoin(signed: Signed, requestId: string, accept: boolean): Promise<void> {
   await tx(async (c) => {
     const refuse = () => notFound("Only the host can answer.");
@@ -209,6 +222,7 @@ export async function respondToJoin(signed: Signed, requestId: string, accept: b
     if (!r) throw refuse();
     if (r.status !== "pending") throw refused(409, "answered", "You already answered.");
     if (!accept) return await data.setRequestStatus(c, requestId, "declined");
+    if (d.status === "cancelled" || d.starts_at.getTime() <= Date.now()) throw notFound(NOT_HAPPENING);
     const taken = (await data.acceptedCounts(c, [d.id])).get(d.id) ?? 0;
     if (taken >= d.seats) throw refused(409, "full", "Every seat is taken.");
     await data.setRequestStatus(c, requestId, "accepted");

@@ -73,19 +73,19 @@ A route's `:id` is 1 to 100 characters; longer is 400 `invalid`, `field: "id"`.
 1. **Host.** Anyone in the family (any role) may host one of the family's ready, shared recipes, or another family's shared dish after their yes to "cook together". `POST /v1/dinners {recipeId, startsAt, placeKind?, placeName, address, seats}` with an `Idempotency-Key` answers 201 `{dinnerId}`. The dish name is the recipe's title at that moment.
 2. **Where it is.** The dinner sits on the host's own grid cell at the time it's made (the demo venue when they have none), never at the address: nothing reads the address but people. `placeName` is public. `address` is private.
 3. **Ask to join.** Anyone signed in from another family: `POST /v1/dinners/:id/join` answers `{requestId}`, pending. One ask per person per dinner, ever: after the host's no, asking again is 409 `already_asked`.
-4. **The host answers.** Only the host, not their family: `POST /v1/dinner-requests/:id/respond {accept}`, once per ask. A yes gives that guest the address. The yes that takes the last seat sets `status: "full"`, under the dinner's row lock, so two yeses can't both take it (409 `full` for the second).
+4. **The host answers.** Only the host, not their family: `POST /v1/dinner-requests/:id/respond {accept}`, once per ask. A yes gives that guest the address. The yes that takes the last seat sets `status: "full"`, under the dinner's row lock, so two yeses can't both take it (409 `full` for the second). Under the same lock, a yes on a dinner that's called off or has started is 404 `not_found` ("That dinner isn't happening anymore."), so no guest gets the address of a dinner that's off. A no still answers the ask there: it gives nothing away.
 5. **Seats.** `seatsLeft` is `seats` minus accepted guests. Nothing frees a seat: there's no route to take back a yes or to leave a dinner.
 6. **Invite friends.** The host, or a guest they accepted: `POST /v1/dinners/:id/invite-link` answers `{token, url}`, the same link every time. Share `url`.
 7. **The link opens** on the website's `/d?t=` or in the app (`homecookd://d?t=`): `POST /invite/open {token, deviceId}`, public. It answers `{dish, hostName, startsAt}` and counts that phone or browser once in the dinner's `inviteOpens` ("X going"): while the dinner is ahead, at most 300 in all, and at most 60 new ones per 10 minutes. Past that, or once it has started, the page still opens, uncounted.
 8. **Reading.** `GET /v1/dinners/:id` for one (the host also sees `requests`); `GET /v1/dinners/mine` for the dinners this person hosts, then the ones they asked to join. A dinner someone else in the family hosts is in neither their feed nor their `mine`; it opens by id with `ours: true`.
-9. **Called off.** No route calls a dinner off, on the api or on Convex. `status: "cancelled"` comes only from the team taking it down, or from its host, or the cook of its dish, deleting their account. The app shows "This dinner was called off." (`components/community/labels.ts`).
+9. **Called off.** No route calls a dinner off, on the api or on Convex. `status: "cancelled"` comes only from the team taking it down; from its host, or the cook of its dish, deleting their account; or from its host leaving the family or moving to another, which calls off the dinners they host that haven't started, open or full (`accounts/family.ts` `removePerson`, `signin.ts` `moveFaces`; `community/account.ts` `cancelDinnersOfLeaver`). A dinner that has started keeps what it was, and another host's dinner of their dish goes on. The app shows "This dinner was called off." (`components/community/labels.ts`).
 
 **Time and place rules.**
 
 | Rule | Code |
 |---|---|
 | `startsAt` must be after the server's clock when it's made ("Pick a time that hasn't passed."). No later limit but JavaScript's last date (8.64e15) | `dinners.ts` `createDinner`; `routes.ts` |
-| It leaves the feed the moment it starts (`starts_at > now()` in SQL), and asking to join is refused from then | `data.ts` `openDinnersAhead`; `dinners.ts` `requestJoin` |
+| It leaves the feed the moment it starts (`starts_at > now()` in SQL), and asking to join, and the host's yes, are refused from then | `data.ts` `openDinnersAhead`; `dinners.ts` `requestJoin`, `respondToJoin` |
 | `placeKind`: `campus_kitchen` (the default), `community_center`, `cafe` or `home` | `data.ts` `PLACE_KINDS` |
 | `placeName` and `address`: trimmed, 1 to 200 characters | `dinners.ts` `text` |
 | The word filter reads the dish's title, `placeName` and `address`: 422 `words` | `dinners.ts`; `dish/moderation.ts` |
@@ -125,7 +125,7 @@ Code: `api/src/modules/community/` (`routes.ts`, `inviteRoutes.ts`, `service.ts`
 
 | Write | Key | Safe to send again? |
 |---|---|---|
-| `POST /v1/dinners` | Accepted, not required: 8 to 100 of `A-Z a-z 0-9 _ -` (open item 11). Always send one | With a key, yes: the same key and body answer 201 with the first `dinnerId` for 7 days, even if the dish has been unshared or the time has passed since. Another body is 409 `idempotency_conflict`. Without a key a retry makes a second dinner |
+| `POST /v1/dinners` | Accepted, not required: 8 to 128 of `A-Z a-z 0-9 _ -`, as on every write (ACCOUNTS.md, `idempotency.ts`). Always send one | With a key, yes: the same key and body, its fields in any order, answer 201 with the first `dinnerId` for 7 days, even if the dish has been unshared or the time has passed since. Another body is 409 `idempotency_conflict`. Without a key a retry makes a second dinner |
 | `POST /v1/community/swaps`, `/cook-together` | Not read | Yes: the family's ask comes back |
 | `POST /v1/community/swaps/:id/respond`, `POST /v1/dinner-requests/:id/respond` | Not read | A retry after it worked is 409 `answered`: it worked |
 | `POST /v1/dinners/:id/join` | Not read | A retry after it worked is 409 `already_asked`: it worked |
@@ -201,11 +201,11 @@ Code: `api/src/modules/community/` (`routes.ts`, `inviteRoutes.ts`, `service.ts`
 
 | Route | Who | Body or query | Answer |
 |---|---|---|---|
-| `POST /v1/dinners` | Anyone, for a dish the family may host (flow 3) | `{recipeId, startsAt, placeKind?, placeName, address, seats}`; header `Idempotency-Key` | 201 `{dinnerId}` |
+| `POST /v1/dinners` | Anyone, for a dish the family may host (flow 3) | `{recipeId, startsAt, placeKind?, placeName, address, seats}`; header `Idempotency-Key` (8 to 128, not required) | 201 `{dinnerId}` |
 | `GET /v1/dinners/mine` | Anyone | `?cursor=` | `{dinners: [Dinner], nextCursor}`: up to 50 they host, soonest first, then up to 50 of their newest asks' dinners, soonest first. Past and cancelled ones stay |
 | `GET /v1/dinners/:id` | Anyone who can see it (What another family sees) | | Dinner |
 | `POST /v1/dinners/:id/join` | Anyone outside the host's family | none | `{requestId}` |
-| `POST /v1/dinner-requests/:id/respond` | The host | `{accept: boolean}` | `{ok: true}` |
+| `POST /v1/dinner-requests/:id/respond` | The host | `{accept: boolean}`: a yes only while the dinner is on and ahead; a no any time | `{ok: true}` |
 | `POST /v1/dinners/:id/invite-link` | The host, or a guest they accepted | none | `{token, url}`: `url` is `<EDIBLE_WEB_URL, else https://homecookd.app>/d?t=<token>` |
 
 **Dinner:**
@@ -234,7 +234,7 @@ Code: `api/src/modules/community/` (`routes.ts`, `inviteRoutes.ts`, `service.ts`
 |---|---|---|---|
 | `not_found` (404) | Host | "Pick one of your family's recipes.": missing; your family's but not ready; another family's that you can't see, isn't shared, or has no yes to "cook together" | Offer only dishes you may host |
 | `not_shared` (409) | Host | "Share this recipe first.": your family's ready recipe isn't on the map | Offer sharing first |
-| `invalid` (400) | Host | `field: "startsAt"` ("Pick a time that hasn't passed."), `"seats"` ("Seats go from 1 to 20."), `"placeName"` ("Add the place's name."), `"address"` ("Add the address."; also over 200), `"placeKind"`, `"Idempotency-Key"` (no `message`) | Check before sending |
+| `invalid` (400) | Host | `field: "startsAt"` ("Pick a time that hasn't passed."), `"seats"` ("Seats go from 1 to 20."), `"placeName"` ("Add the place's name."), `"address"` ("Add the address."; also over 200), `"placeKind"`, `"Idempotency-Key"` ("An Idempotency-Key is 8 to 128 letters, digits, - or _.", as on every write) | Check before sending |
 | `words` (422) | Host | "Some of those words can't go in Community. Try other words." | Say so |
 | `idempotency_conflict` (409) | Host | "That was already sent with different details.": a reused key | A bug: a new dinner needs a new key |
 | `not_found` (404) | Read | No `message` | Drop it |
@@ -244,6 +244,7 @@ Code: `api/src/modules/community/` (`routes.ts`, `inviteRoutes.ts`, `service.ts`
 | `full` (409) | Join | "That dinner is full." | Say so |
 | `not_found` (404) | Respond | "Only the host can answer.": missing, not the host, or the guest's family and yours blocked | Drop it |
 | `answered` (409) | Respond | "You already answered." | Reload |
+| `not_found` (404) | Respond, a yes | "That dinner isn't happening anymore.": cancelled, or started. The ask stays pending, and a no still answers it | Show it's over |
 | `full` (409) | Respond, a yes | "Every seat is taken." | Reload |
 | `not_found` (404) | Invite link | "That dinner isn't happening anymore.": missing, hidden from you, or cancelled | Show it's over |
 | `not_a_guest` (403) | Invite link | "Only the host and their guests can invite friends.": the host's family included | Show the button only to `isHost` or an accepted `myRequest` |
@@ -385,12 +386,12 @@ Owners: **API** is the AWS backend chat, **App** is App screens & recording, **W
 3. ~~The team can't take a recipe down.~~ **Done (#329):** `remove` unshares the recipe and sets `hidden_at` behind the recipes switch (`recipes/writes.ts` `reviewRecipeIfOpen`), as Convex's review did, and `keep` clears `hidden_at`. Sharing a taken-down recipe again is 409 `taken_down`, and its family sees `hiddenAt` and `takenDown` (flow 4, "The team"). **App:** on her recipe page, show that the team took it off the map in place of the share switch when `hiddenAt` is set.
 4. ~~Report alerts reach nobody on AWS.~~ **Done (#323):** a report or block logs its alert line, and an alarm emails the team within about 5 minutes. Open reports past 12 hours email once a day. Proven on staging Nov 2 (flow 4). Production gets the same with the production-config PR. **API**
 5. Once Convex is gone the team can't see what a reported item is: `node dist/reports.js open` prints ids only. COMMUNITY-MIGRATION.md, open question 2, recommends a `show <kind> <id>` run from a laptop, which needs a database connection from outside the VPC. **Caleb**
-6. A host who leaves the family, or moves to another, keeps their dinners. `removePerson` (`accounts/family.ts`) ends their sessions but touches no dinner, where account deletion cancels them (`deletion.ts`, `cancelDinnersOfPerson`). Their open dinners stay in the feed, and nobody can answer the asks: only the host may, and a host who left can't act in that family again (403 `removed_from_family`). **API**
-7. A host can still say yes on a cancelled or past dinner, and that guest then reads its address: `respondToJoin` (`dinners.ts`) checks neither (COMMUNITY-MIGRATION.md, Known limits). **API**
+6. ~~A host who leaves the family, or moves to another, keeps their dinners.~~ **Done (#337):** `removePerson` (`accounts/family.ts`), which "Leave the family" and a move to another family by link both run, now calls off the dinners the person hosts that haven't started, open or full, in the same transaction (`community/account.ts` `cancelDinnersOfLeaver`). So does a solo move for the phone-less faces who come along (`signin.ts` `moveFaces`), since a dinner stays with the family it was hosted from. A dinner that has started keeps what it was, and another host's dinner of their dish goes on, unlike a deletion (flow 3, step 9).
+7. ~~A host can still say yes on a cancelled or past dinner, and that guest then reads its address.~~ **Done (#337):** `respondToJoin` (`dinners.ts`) refuses a yes on a dinner that's cancelled or has started, under the dinner's row lock: 404 `not_found`, "That dinner isn't happening anymore.", as joining it is. The ask stays pending, and a no still answers it (flow 3, step 4).
 8. Production's settings for this area aren't in `infra/envs/production/main.tf` on `aws-migration` yet: `RATE_LIMIT_SALT` (every `/invite/open` is 500 without it), `EDIBLE_CODE_KEY` (asking for an invite link is 500), `RECIPE_WRITES=on` (her tap is 501) and the `community.remind_open` schedule. **Built** on `claude/aws-production-config`, a PR after this one. Its first apply is Caleb's. No `REPORT_ALERT_URL`: the alarm emails instead (item 4). **API**, with Caleb's OK for production
 9. No live topic for Community. LIVE-UPDATES.md plans `dinners:get` (30 s on the screen), the four lists (focus, 60 s) and `community:recipe` and `community:blocked` (focus only); `/v1/live/` serves `jobs` only. Until then the app reads the plain routes ("Live topics", above). **API**
 10. Nothing pushes: a host hears of a guest's ask, and a guest of the host's answer, only by opening the dinner; the same for swaps (COMMUNITY-MIGRATION.md, Deferred: Convex sent none). Say whether 1.1 wants these pushes. **Caleb**
-11. `POST /v1/dinners` checks its own `Idempotency-Key` (`routes.ts`: optional, 8 to 100 characters, 400 with no `message`) instead of `idempotency.ts`'s (8 to 128), and hashes the body as sent (`dinners.ts`, `JSON.stringify(input)`), so a retry that orders its keys differently is 409 `idempotency_conflict`; `idempotency.ts` sorts keys first. **API**
+11. ~~`POST /v1/dinners` checks its own `Idempotency-Key` and hashes the body as sent.~~ **Done (#337):** it reads the key with `idempotency.ts`'s `idempotencyKey`, still not required: 8 to 128 characters, and the same 400 `invalid` with its message as every write. It hashes the body with `requestHash`, keys sorted, so a retry that orders them differently is the same dinner. A key stored before the deploy still matches its retry by the old hash, as sent, until it expires 7 days on (`dinners.ts` `hashAsSent`).
 12. The Community tab is off in the app (Caleb, Oct 25, `kid/_layout.tsx`), but the cook's "Share with people nearby" switch shows on her recipe page, and the dinner and invite screens remain. Say whether 1.1 shows Community. If it does, the blocked list with Unblock (`YouCard.tsx`) lives on that tab and must stay reachable. **Caleb**, then App
 13. `TODO(caleb)`: the host's whole name on the public invite page, which anyone a guest forwards the link to sees (`dinners.ts` `openInvite`), and the demo venue's coordinates (`geo.ts`). **Caleb**
 14. `/d` calls `/invite/open` on Convex's host (`web/src/lib/dinner-invite.ts`, `CONVEX_SITE_URL`), and the app's `live/invite.ts` makes its host from `EXPO_PUBLIC_CONVEX_URL`: point both at the api. **Web**, **App**
@@ -406,6 +407,7 @@ Owners: **API** is the AWS backend chat, **App** is App screens & recording, **W
 7. ERROR-CODES.md, `declined`: "asking again after they said no". That's swaps and "cook together"; a guest the host turned down gets 409 `already_asked` when asking again.
 8. ERROR-CODES.md, `too_large`: leaves out `POST /v1/dinners`'s 16 KB body limit.
 9. ERROR-CODES.md, `not_moved`: "Never in production 1.1". That holds only once production sets `RECIPE_WRITES=on`, which `infra/envs/production/main.tf` doesn't yet (JOBS.md, open item 14).
-10. ACCOUNTS.md, "Requests": `Idempotency-Key` is 8 to 128 characters. `POST /v1/dinners` takes 8 to 100 (item 11 above).
+10. ~~ACCOUNTS.md, "Requests": `Idempotency-Key` is 8 to 128 characters. `POST /v1/dinners` takes 8 to 100.~~ **Done (#337):** it takes 8 to 128 (open item 11).
+11. COMMUNITY-MIGRATION.md, "Known limits": `dinners.respond` "still accepts on a cancelled or past dinner" ("kept for now"). Since #337 the api refuses that yes (open item 7). Convex still takes it, as its "Convex bugs noticed" says.
 
 No code is missing: every one this area sends is in ERROR-CODES.md (`invalid`, `signed_out`, `removed_from_family`, `not_a_guest`, `origin`, `not_found`, `no_route`, `own_family`, `not_shared`, `taken_down`, `declined`, `answered`, `already_asked`, `full`, `idempotency_conflict`, `too_large`, `words`, `rate_limited`, `not_moved`, `server_error`, `unavailable`, and the team script's `recipes_read_only`). Community never sends `forbidden`.

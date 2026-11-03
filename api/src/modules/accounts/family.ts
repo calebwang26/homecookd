@@ -2,6 +2,7 @@
 // code needed (put the invite back, delete the half-made profile) don't exist here: a failure leaves nothing behind.
 import { db, tx, type Queryable } from "../../db.js";
 import { invalid, notFound, refused, signedOut } from "../../errors.js";
+import { cancelDinnersOfLeaver } from "../community/account.js";
 import * as data from "./data.js";
 import { endFamilyIfLast } from "./deletion.js";
 import { extId, toProfile, type Family, type Person } from "./data.js";
@@ -44,7 +45,10 @@ export async function addPerson(
   return person;
 }
 
-/** Someone leaves softly: "Leave the family", and a move to another family. Phones and sessions end first, in the same transaction as the rest. */
+/**
+ * Someone leaves softly: "Leave the family", and a move to another family. Phones and sessions end first, in the same transaction as the rest, and the dinners they host
+ * that haven't started are called off, since nobody else can answer their asks.
+ */
 export async function removePerson(c: Queryable, familyId: string, personId: string): Promise<void> {
   assertOwnsPeople();
   await data.signPersonOut(c, personId);
@@ -53,6 +57,7 @@ export async function removePerson(c: Queryable, familyId: string, personId: str
   await data.dropIdentitiesOf(c, personId);
   await data.markPersonRemoved(c, familyId, personId);
   await data.closeMovesFor(c, familyId, personId);
+  await cancelDinnersOfLeaver(c, personId);
 }
 
 const lockedFor = (ctx: Ctx, personId: string) => ctx.phones.has(personId) && ctx.device?.person_id !== personId;
