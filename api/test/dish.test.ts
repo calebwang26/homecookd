@@ -1061,10 +1061,10 @@ test("a model call is written down with its cost and no family content", { skip 
   for (const secret of ["tomato", "ketchup", "Caleb", kidToken, askToken]) assert.ok(!all.includes(secret), secret);
 });
 
-test("/dish/craving/peek and a craving token wait for the sync: an honest not-found, never a card that doesn't reach her", { skip }, async () => {
+test("an unknown craving token is the one not-found, never a plain card that doesn't reach her (dishCravingCards.test.ts has the rest)", { skip }, async () => {
   const t = await newBackend();
-  like(await post(t, "/dish/craving/peek", { cravingToken: "A".repeat(22) }), { status: 404, data: { error: "no_route" } });
-  like(await post(t, "/dish/cards", { dish: "dal", kidName: "Cal", cravingToken: "A".repeat(22) }), { status: 404 });
+  like(await post(t, "/dish/craving/peek", { cravingToken: "A".repeat(22) }), { status: 404, data: { error: "not_found" } });
+  like(await post(t, "/dish/cards", { dish: "dal", kidName: "Cal", cravingToken: "A".repeat(22) }), { status: 404, data: { error: "not_found" } });
   like(await post(t, "/dish/cards", { dish: "dal", cravingToken: "A".repeat(22) }), { status: 400, data: { error: "invalid", field: "kidName", message: "kidName is required" } });
   assert.equal((await db().query("select 1 from dish_asks")).rowCount, 0);
   assert.equal(model.calls.guess, 0);

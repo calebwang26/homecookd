@@ -41,7 +41,7 @@ Nov 2, 2026. For the App screens & recording chat: the checklist of codes that n
 | `account_deleted` | `/v1/sessions/start` for someone who deleted their account | Clear the key and the tokens; say the account was deleted |
 | `not_in_family` | `x-profile-id` or `profileId` names someone who was never in this family (also 409 on a claim, below) | Reload `/family` and pick again |
 | `only_self` | `POST /profiles/:id/remove` for someone else | "Only <Name> can remove themselves." |
-| `link_full` | `/auth/apple` with `share_token`: a recipe link brings in at most 5 people | "This link is full. Ask your family for a new one." |
+| `link_full` | `/auth/apple` with `share_token`: a recipe link brings in at most 5 people. (Also 429 from `/dish/cards`, below) | "This link is full. Ask your family for a new one." |
 | `ticket_expired` | `/auth/apple` with `link_ticket`: the ticket is bad or older than 10 minutes | "This link didn't work. Open it again." Call `POST /link/open` again for a fresh ticket |
 | `origin` | `/dish/*`, `/link/open`, `/invite/open`, `/v1/shares/open` from a web page on another site (`/v1/shares/open` takes only `SITE_ORIGINS`) | Never from the app (it sends no `Origin`). On the web, a bug |
 | `other_left` | Messages: a conversation with someone who left the family | "<Name> isn't in the family anymore." |
@@ -94,6 +94,7 @@ Nov 2, 2026. For the App screens & recording chat: the checklist of codes that n
 |---|---|---|
 | `rate_limited` | Any limit: per address, per person, per family, per link. Header `retry-after` | Wait `retry-after` seconds, then retry. The refused call isn't counted |
 | `budget` | `/dish/cards` and Mom's answers: today's model budget is spent. `retry-after` runs to the next UTC midnight | "homecookd has made all the recipes it can today. Try again tomorrow." |
+| `link_full` | `POST /dish/cards` with a `cravingToken`: her craving link made 20 cards in all, or 5 in the last 24 hours (both `TODO(caleb)`). `retry-after` is when the day's cap frees a card, or a day for a link that's used up. `message` keeps Convex's sentence, "This link has had a lot of requests. Ask for a new one." | Never from the app. On the web: make the kid's card a plain one, keeping what they typed (her next link from the app is a new one). The site's `isLinkBusy` matches the sentence today; it should read this code |
 
 ## 5xx
 

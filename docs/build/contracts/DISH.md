@@ -2,7 +2,7 @@
 
 Nov 2, 2026. Read from `aws-migration` at `517368c95`, and checked against staging with calls that change nothing but rate-limit counters. For the App screens & recording chat, with a section for App Store, web & builds. This covers a kid asking a cook for a dish (a "card"), craving links, the cook's side of a card (her answers, her clips, her voice recipe, her filming day), the merge that writes her version, reading cards, claiming a card's side, filming a recipe for a card, and live updates for cards. It's the fourth contract: [ACCOUNTS.md, "Conventions"](ACCOUNTS.md#conventions-all-areas) applies (the address, the session, JSON bodies, `Idempotency-Key`, paging, no stubs, polling), every code is in [ERROR-CODES.md](ERROR-CODES.md), and [JOBS.md](JOBS.md) and [MESSAGES.md](MESSAGES.md) have the jobs and the pushes these hang off. Every person id is the `personId` a session returns. Times are epoch milliseconds.
 
-**Where it stands.** The web side (`/dish/*`) is built. The cook's side in the app (`/v1/cravings*`), the claim, and a signed-in read of one card by id (`GET /v1/dish-asks/:id`, Convex's `dishAsks.get`, #322) are built. **Two things aren't:** the list of a person's cards (`dishAsks.forMe`), and making a card from a craving link (`POST /dish/craving/peek`, `cravingToken`) (open items 2 and 3).
+**Where it stands.** The web side (`/dish/*`) is built, craving links included (`POST /dish/craving/peek`, `cravingToken` on `POST /dish/cards`, and the `craving` push, #322). The cook's side in the app (`/v1/cravings*`), the claim, and a signed-in read of one card by id (`GET /v1/dish-asks/:id`, Convex's `dishAsks.get`, #322) are built. **One thing isn't:** the list of a person's cards (`dishAsks.forMe`), which the app doesn't call today (open item 2).
 
 **Privacy.** A recipe that isn't ready is its cook's alone (#305), and her answers are hers until she sends them. How cards hold to it:
 
@@ -15,6 +15,7 @@ Nov 2, 2026. Read from `aws-migration` at `517368c95`, and checked against stagi
 | Her clips before Send | The kid's card lists no answer until she sends, or leaves them 20 minutes without Send (that counts as sent: the kid's look on the web or in the app, never hers). Words show only with her version | `pages.ts` `cardJson`, `service.ts` `kidLook` (`ABANDONED_MS`) |
 | Her requests | `GET /v1/cravings` and `/:id` show only cards asked of her. Her family's card asked of someone else is 403 `not_asked_of_you` on writes and 404 on the read | `cravings.ts` `getAsk`, `askedOfMe` |
 | A card in the app | `GET /v1/dish-asks/:id` answers only its kid (`person_id`) and its cook (`requested_of`). Anyone else, her family included, gets the same 404 as a card that isn't there | `service.ts` `myCard` |
+| A card from her craving link | Born in her family and asked of her (`family_id`, `requested_of`, `craving_id`, `cook_claimed_at`); the kid stays no one in the app until a claim, and nobody joins her family. The peek shows only her first name, what the family calls her and her line | `service.ts` `createCard`, `cravingLinks.ts` |
 
 ## Ids and tokens
 
@@ -23,7 +24,7 @@ Nov 2, 2026. Read from `aws-migration` at `517368c95`, and checked against stagi
 | `dishAskId` | uuid text | The app, after a claim | The card's id. The web never sees it |
 | `kidToken` | 22 base62 | The kid: `/miss?k=<kidToken>` | Reads and edits the card. Stored only as its sha256, so a lost one can't be sent again |
 | `askToken` | 22 base62 | Mom: `/a?t=<askToken>`, inside `card.askUrl` | Derived from `kidToken`. Reads her page and takes her answers |
-| craving token | 22 base62 | Kids: `/miss?c=<token>` | From `POST /v1/cravings/link`. Stored hashed and sealed |
+| craving token | 22 base62 | Kids: `/miss?c=<token>` | From `POST /v1/cravings/link`. Stored hashed and sealed. The web sends it as `cravingToken` |
 | `fileId` | 22 base62 | Whoever asked for the upload link | A capability for one web upload, never an S3 key |
 | `audioKey` | `private/dish/<uuid>` | The cook, for her voice recipe | A signed-in upload's key, checked by the file guard |
 
@@ -35,7 +36,10 @@ Nov 2, 2026. Read from `aws-migration` at `517368c95`, and checked against stagi
    2. `POST /dish/cards {dish, relation, kidName?, photos?, voiceNote?}` waits on the models (about 4 to 8 s, 60 s at most) and answers 201 `{kidToken, card}`, `status: "draft"`, with the guess and 3 suggested questions.
    3. The kid edits the guess and picks questions: `POST /dish/cards/update`, `POST /dish/cards/ask`.
    4. The kid shares `card.askUrl` and the page calls `POST /dish/cards/sent {via}`: `status: "asked"`.
-3. **The kid asks through a craving link** (`/miss?c=`): **not on AWS.** The page calls `POST /dish/craving/peek`, which answers 404 `no_route` (checked on staging), so it shows the plain page and the card isn't tied to her. `cravingToken` on `POST /dish/cards` answers 404 `not_found` before any model runs (checked on staging). Nothing queues the `craving` push. On Convex the card is born asked of her, in her family (open item 3).
+3. **The kid asks through a craving link** (`/miss?c=`):
+   1. `POST /dish/craving/peek {cravingToken}` → `{parentName, relation, message}`: her first name, what the family calls her, and her line. A dead link is 404 `not_found`, and the page shows the plain one.
+   2. `POST /dish/cards {dish, kidName, cravingToken, photos?, voiceNote?}`, with no `relation`: the kid is asking her, by what the family calls her when it's one of the six, else `mom`. Her link's checks run before any model: 404 for a dead link, 429 `link_full` past its caps.
+   3. The card is born asked of her, in her family (`requested_of`, `family_id`, `craving_id`, `cook_claimed_at`), `status: "draft"`. It's in her `GET /v1/cravings` at once, and the `craving` push goes to her with it ("<Kid> wants your <dish>", `/request/<id>`). The kid carries on as in flow 2.
 4. **The cook sees the ask and answers.**
    - **On the web** (`/a?t=`): `POST /dish/ask/peek {askToken, lang?}` (the first one sets `openedAt`); per question, `POST /dish/ask/answer/upload?q=&lang=&durationS=`, a PUT, `POST /dish/ask/answer?q=&lang=&durationS=`; then Send, `POST /dish/ask/finish`. The page polls peek every 2 s while `merging`.
    - **In the app** (after she claims the cook side, flow 8, or for a craving card): `GET /v1/cravings` lists what was asked of her; `POST /v1/cravings/:id/filming-day {day}` tells the kid the day; "Tell him now" is `POST /v1/cravings/:id/voice-recipe/upload`, a PUT, then `POST /v1/cravings/:id/voice-recipe {audioKey, durationS, language?}`. That one answer to "How do you make it?" sends at once and starts the merge; `voiceRecipe` goes `writing`, then `ready` or `failed`.
@@ -67,7 +71,8 @@ How to call them:
 |---|---|---|---|
 | `POST /dish/files?kind=photo\|voice` | `{contentType, size}` | 201 `{fileId, kind, contentType, size, uploadUrl, uploadHeaders, expiresInS}`. PUT the bytes to `uploadUrl` with `uploadHeaders` within `expiresInS` (120) | `invalid` (`kind`, `size`), `bad_type`, `too_large`, `rate_limited`, `provider_down` |
 | `POST /dish/files/confirm` | `{fileId}` | 201 `{fileId, kind, contentType, size}` once S3 has the bytes. Safe to repeat | `invalid` (`fileId`; "The file is empty."), `not_found`, `too_large`, `bad_type` (the bytes don't match: the file is deleted), `provider_down` |
-| `POST /dish/cards` | `{dish, relation?, kidName?, photos?, voiceNote?, cravingToken?}` | 201 `{kidToken, card}` | `invalid` (`dish`, `relation`, `kidName`, `photos`, `voiceNote`, `cravingToken`), `words`, `not_a_dish`, `budget`, `not_found` (a file; any `cravingToken`), `rate_limited`, `provider_down`, `not_set_up` |
+| `POST /dish/craving/peek` | `{cravingToken}` | `{parentName, relation, message}`. `relation` is what her family calls her ("Mom", "Aai"), or null | `invalid` (`cravingToken`), `not_found`, `rate_limited` (unknown tokens) |
+| `POST /dish/cards` | `{dish, relation?, kidName?, photos?, voiceNote?, cravingToken?}` | 201 `{kidToken, card}` | `invalid` (`dish`, `relation`, `kidName`, `photos`, `voiceNote`, `cravingToken`), `words`, `not_a_dish`, `budget`, `not_found` (a file; a craving link that's unknown, stopped, or whose maker left), `link_full` (the craving link's caps), `rate_limited`, `provider_down`, `not_set_up` |
 | `POST /dish/cards/get` | `{kidToken}` | `{card}` | `invalid` (`kidToken`), `not_found` |
 | `POST /dish/cards/update` | `{kidToken, relation?, kidName?, message?, voiceNote?, voiceNoteS?, edits?}` | `{card}` | `invalid`, `words`, `closed`, `not_found` |
 | `POST /dish/cards/ask` | `{kidToken, questions: [{id?, text?, about?}]}` | `{card}` | `invalid`, `words`, `closed`, `not_found`, `rate_limited` |
@@ -76,7 +81,6 @@ How to call them:
 | `POST /dish/ask/answer/upload` (`?q=&lang=&durationS=`) | `{askToken, contentType, size}` | 201 the upload link, as `/dish/files` | `invalid` (`q`, `lang`, `durationS`, `size`; `q`: "That question wasn't asked."), `bad_type`, `too_large`, `closed`, `not_found`, `rate_limited`, `provider_down` |
 | `POST /dish/ask/answer` (`?q=&lang=&durationS=`) | `{askToken, fileId}` | `{ask}` | `invalid`, `closed`, `not_found`, `provider_down` |
 | `POST /dish/ask/finish` | `{askToken, lang?}` | `{ask}` | `invalid`, `not_found` |
-| `POST /dish/craving/peek` | | **Not built** | 404 `no_route` |
 
 Every `/dish/*` route can also answer `origin` (a browser only), `too_large` (the body), `no_route`, `unavailable` and `server_error`.
 
@@ -86,7 +90,8 @@ Every `/dish/*` route can also answer `origin` (a browser only), `too_large` (th
 |---|---|
 | `dish` | 2 to 200 characters, unless there's a photo or a voice note |
 | `relation` | `mom`, `dad`, `grandma`, `grandpa`, `auntie`, `uncle`, or `none` (no one yet: asking is off). Defaults to `mom` |
-| `kidName` | Up to 40. Required with `cravingToken` |
+| `kidName` | Up to 40. Required with `cravingToken` ("kidName is required") |
+| `cravingToken` | The `c` of her `/miss?c=` link. A string, else 400; malformed is the same 404 as an unknown one. With it, leave out `relation` |
 | `photos` | Up to 3 `fileId`s of confirmed `photo` uploads, none twice. JPEG, PNG or WebP, 5 MB each |
 | `voiceNote` | A confirmed `voice` upload: 3 MB, one of `audio/webm`, `ogg`, `mp4`, `m4a`, `x-m4a`, `aac`, `mpeg`, `wav`. On `/cards/update`, `null` removes it |
 | `voiceNoteS` | The page's own measure, more than 0 and up to 60 s |
@@ -125,10 +130,11 @@ Links (`audioUrl`, `kidVoiceUrl`, `photoUrls`) are signed and good for 1 to 2 ho
 | `POST /dish/files` | 30 per 10 minutes |
 | `POST /dish/cards/ask` | 30 per 10 minutes |
 | `POST /dish/ask/answer/upload` | 30 per 10 minutes. `/dish/ask/answer` has only the next one |
-| An unknown token or file (any route, and `/link/open`) | 20 per 10 minutes, shared |
+| An unknown token or file (any route, and `/link/open`) | 20 per 10 minutes, shared. A dead craving link counts too |
 | Translating Mom's page | 3 tries an hour per card and language (never an error: her page stays English) |
+| A craving link's cards (per link, not address) | 5 in 24 hours and 20 in all (both `TODO(caleb)`): then 429 `link_full`. The peek still answers. A used-up link stays used up; her next "Share" in the app makes a new one |
 
-A 429's `message` is "Too many tries. Please wait a few minutes and try again.", with `retry-after`.
+A 429's `message` is "Too many tries. Please wait a few minutes and try again.", with `retry-after`. `link_full`'s is Convex's, "This link has had a lot of requests. Ask for a new one.", with `retry-after` when the day's cap frees a card (a day for a used-up link).
 
 **The daily model budget.** Every model call adds its cost to today's total (UTC day). Once it reaches `DISH_DAILY_BUDGET_USD` (production's default $10, `TODO(caleb)`; staging $1), `POST /dish/cards` is 429 `budget` ("homecookd has made all the recipes it can today. Try again tomorrow."), with `retry-after` to the next UTC midnight. Mom's side never gets `budget`: her clips are saved, and her hearing, translation and merge go on to $1 past the budget, then wait for the next day with `merging: false`. Calls in flight still land, so the total can pass the cap (DISH-MIGRATION.md, Known limits). The team gets one alert a day.
 
@@ -136,9 +142,9 @@ A 429's `message` is "Too many tries. Please wait a few minutes and try again.",
 
 | Route | Safe to send again? |
 |---|---|
-| `POST /dish/cards` | **No.** A retry can't be recognized: the first `kidToken` is gone, and its files answer `not_found`. Upload the files again and make a new card (DISH-MIGRATION.md, open question 2) |
+| `POST /dish/cards` | **No.** A retry can't be recognized: the first `kidToken` is gone, and its files answer `not_found`. Upload the files again and make a new card (DISH-MIGRATION.md, open question 2). From a craving link, each card counts against its caps and pushes her |
 | `/dish/files`, `/dish/ask/answer/upload` | Each call makes a new upload. One no card takes is deleted within the hour |
-| `/dish/files/confirm`, `/dish/cards/get`, `/update`, `/sent`, `/dish/ask/peek`, `/finish` | Yes. `voiceNote` and `fileId` attaches are one even when two race |
+| `/dish/files/confirm`, `/dish/craving/peek`, `/dish/cards/get`, `/update`, `/sent`, `/dish/ask/peek`, `/finish` | Yes. `voiceNote` and `fileId` attaches are one even when two race |
 | `/dish/ask/answer` | Yes: the same clip on the same question again changes nothing, even after Send |
 | `/dish/cards/ask` | Replaces the open questions with the same ones |
 
@@ -147,7 +153,8 @@ A 429's `message` is "Too many tries. Please wait a few minutes and try again.",
 | Code | When | Do |
 |---|---|---|
 | `invalid` (400, `field`) | A field above, dotted (`photos.0`, `edits.2.kind`, `questions.1.text`). No `field`: "The body must be a JSON object." | Fix the call. The sentence may be shown on the web |
-| `not_found` (404) | A token, `fileId` or `cravingToken` that doesn't work: "This link doesn't work anymore." or "That file doesn't work anymore. Add it again." Every refused file gets the same answer | A token: the link is dead. A file: upload it again |
+| `not_found` (404) | A token, `fileId` or `cravingToken` that doesn't work: "This link doesn't work anymore." or "That file doesn't work anymore. Add it again." Every refused file gets the same answer. A craving link is dead when it's unknown, stopped, or its maker left her family or deleted her account | A token: the link is dead. A file: upload it again. A craving link: the plain page |
+| `link_full` (429) | A craving link past its caps, on `/dish/cards` | The plain page, keeping what the kid typed. Read the code, not the sentence (open item 11) |
 | `closed` (409) | Her answers were sent ("<Mom> already sent her answers.", "These answers were already sent.", "That answer was already sent."), a card already sent can't go to `none`, or every question was answered | Reload the card |
 | `words` (422) | Blocked words in the dish, name, message, edits, questions, or the guess | "Some of those words can't be used here. Try other words." |
 | `not_a_dish` (422) | The models say it isn't a dish | "Tell us a dish." |
@@ -197,7 +204,7 @@ Every route here can also answer `signed_out`, `removed_from_family`, `unavailab
 
 - **Her link:** one live link, reused. A new `message` replaces its line (the default is "What do you miss from home? Tell me and I'll make it for you."). A new link is made when she has none, stopped hers, or it made 20 cards (`TODO(caleb)`). Cards a stopped link made stay.
 - **CravingAsk:** `{id, kidName, dish, guess: [{amount, name}], kidVoiceUrl, photoUrl, message, createdAt, answered, voiceRecipe: "writing" | "ready" | "failed" | null, filmingDay}`. `kidName` is `""` once the kid deleted their account. `answered` is true once her version exists (her web answers or her voice recipe), never from filming. `voiceRecipe` is `failed` when no words were heard or every merge try failed: she may send again, which replaces it.
-- **What's in her list:** cards whose cook is her (`requested_of`): a web ask whose cook side she claimed, or (not yet on AWS) a card from her craving link. There's no CravingAsk version of her clips or version: Mom's full view of a card is `GET /v1/dish-asks/:id`, above.
+- **What's in her list:** cards whose cook is her (`requested_of`): a web ask whose cook side she claimed, or a card from her craving link. There's no CravingAsk version of her clips or version: Mom's full view of a card is `GET /v1/dish-asks/:id`, above.
 - **The voice recipe:** `language` defaults to her person's language, else English. 1 to 125 s, saved as at most 120. The same `audioKey` again changes nothing. A second recording replaces the first. Her upload goes through the file guard: someone else's key is 404.
 - **Retries:** `link` returns the same link; `revoke` and `filming-day` are safe to repeat; `voice-recipe` with the same `audioKey` is too. Each `voice-recipe/upload` makes a new upload, deleted within the hour if unused.
 
@@ -225,7 +232,7 @@ Code: `api/src/modules/messages/pushEvents.ts`; words and limits in [MESSAGES.md
 |---|---|---|---|
 | `answered` | The card's kid | `/dish/<cardId>` | Queued by the merge |
 | `joined` | The other side, in the claimer's family | `/dish/<cardId>` | Queued by the claim |
-| `craving` | The cook who sent the craving link | `/request/<askId>` | Words and handler built; **nothing queues it** (MESSAGES.md, open item 6) |
+| `craving` | The cook who sent the craving link | `/request/<askId>` | Queued with the card from her link, in its transaction (`service.ts` `createCard`); once per card. At most 3 a day reach her, and one waits out her quiet hours (MESSAGES.md, flow 9) |
 | `filmed` | The card's kid, in the recipe's family | `/recipe/<recipeId>` | Queued when a job with `dishAskId` publishes a ready recipe |
 
 `/dish/<cardId>` reads `GET /v1/dish-asks/:id`. `/request/<askId>` reads `GET /v1/cravings/:id`. `/recipe/<recipeId>` reads `GET /v1/recipes/:id` (JOBS.md).
@@ -271,19 +278,19 @@ Code: `web/src/lib/dish/api.ts`, `components/miss/MissApp.tsx`, `components/mom/
 **The switch.** `NEXT_PUBLIC_DISH_UPLOADS === 'links'`, compiled in, selects the new api's way:
 - Files: ask for a link with the blob's size, PUT with `uploadHeaders`, confirm. Mom's clip: `/dish/ask/answer/upload`, a PUT, `/dish/ask/answer` with `{askToken, fileId}`. Unset, the site sends raw bytes to Convex.
 - Errors: reads the code from `error` and the sentence from `message`. Unset, it reads Convex's `{error: <sentence>, code}`.
-- Set it with `NEXT_PUBLIC_DISH_URL` (the base; it follows `NEXT_PUBLIC_CONVEX_SITE_URL` when unset) in one build (CUTOVER.md, step 11). **It waits on the craving routes** (open item 3).
+- Set it with `NEXT_PUBLIC_DISH_URL` (the base; it follows `NEXT_PUBLIC_CONVEX_SITE_URL` when unset) in one build (CUTOVER.md, step 11). The craving routes it waited on are built (#322).
 
 | Page | Calls | Expects |
 |---|---|---|
 | `/miss` | `/dish/files`, PUT, `/dish/files/confirm`; `/dish/cards` (60 s); `/dish/cards/get`; `/dish/cards/update`; `/dish/cards/ask` and `/dish/cards/sent` (kept alive: sent during the share tap) | `{kidToken, card}` and `{card}` as above. `?k=` reopens a card; `?c=` peeks first |
-| `/miss?c=` | `/dish/craving/peek {cravingToken}` → `{parentName, relation, message}`; then `/dish/cards` with `cravingToken` and `kidName`, no `relation` | **Not on AWS:** 404 `no_route`, which the page reads as a stopped link, so it shows the plain page and the card isn't tied to her |
+| `/miss?c=` | `/dish/craving/peek {cravingToken}` → `{parentName, relation, message}`; then `/dish/cards` with `cravingToken` and `kidName`, no `relation` | As Convex: a dead link is 404, which the page reads as stopped (the plain page). A full one is 429 with Convex's sentence, so `isLinkBusy` still matches it, now with the code `link_full` (open item 11). `dishWebClient.test.ts` runs the site's own `peekCraving`, `createCard` and `isLinkBusy` against it |
 | `/a` | `/dish/ask/peek` (30 s), `/dish/ask/answer/upload`, PUT, `/dish/ask/answer`, `/dish/ask/finish` | `{ask}` as above; polls peek every 2 s while `merging` |
 | `/d` | **Not `/dish/*`:** `POST /invite/open {token, deviceId}` on `NEXT_PUBLIC_CONVEX_SITE_URL` | `{dish, hostName, startsAt}`, 404 for a dead link. The api's `community/inviteRoutes.ts` answers the same (WEB-MIGRATION.md) |
 
 - **How the site reads an answer** (`call` in `api.ts`): 404 `not-found`; 429 `budget` when `error` is `budget`, else `rate`; 409 `closed`; 422 `words` when `error` is `words`, else `not-a-dish`; other 4xx `bad`; 5xx, a failed PUT, or a 200 that isn't JSON: `busy`; no answer: `network`. Timeouts: 15 s a call, 60 s a card, 30 s a file's PUT, 45 s a clip's.
 - **Every call is `text/plain`** with its token in the body, so none preflights. A PUT preflights against the `private` bucket's CORS, which allows `homecookd.app`, `www`, `DISH_WEB_ORIGIN` and localhost.
 - **CORS on the api:** `/dish/*` allows `SITE_ORIGINS`; on staging that's its site, `https://d3jv0pihavue4r.cloudfront.net` (preflight 204, checked). `/link/open` allows `DISH_WEB_ORIGIN` but not `SITE_ORIGINS`; on staging both are the same site. The site doesn't call `/link/open`.
-- `isLinkBusy` matches the words "a lot of requests" in `message`, Convex's sentence for a craving link past its caps. AWS has no such caps or sentence yet (open item 11).
+- `isLinkBusy` matches the words "a lot of requests" in `message`, Convex's sentence for a craving link past its caps. AWS answers the same 429 and sentence, with the code `link_full` (open item 11).
 - The api's Card adds `filmingDay`, which `web/src/lib/dish/types.ts` doesn't list. Harmless.
 
 ## Staging testing
@@ -312,7 +319,9 @@ What staging runs, from `infra/envs/staging/main.tf`:
 7. **Read it:** poll `POST /dish/cards/get {kidToken}` until `status: "answered"` and `version` is set (seconds, with fake models), or `GET /v1/cravings/<id>` until `voiceRecipe: "ready"`. In the app, `GET /v1/dish-asks/<id>` as kid-1 (`side: "kid"`) or cook-1 (`side: "cook"`) reads the same card; anyone else gets 404.
 8. **Filmed:** as cook-1, `POST /v1/jobs {…, dishAskId}`, then `POST /v1/test/recipe {jobId}` (JOBS.md). kid-1 gets `filmed`.
 
-Each test person is one `test_id`, the same person every time. A craving card can't be made on staging: tests make one with SQL.
+**A craving card:** as cook-1, `POST /v1/cravings/link {}` → `{url}`; its `c` is the token. `POST /dish/craving/peek {cravingToken}`, then `POST /dish/cards {dish: "braised pork", kidName: "Leo", cravingToken}` → 201. `GET /v1/cravings` as cook-1 lists it at once, and she gets `craving` if a push token is registered. A link makes 5 cards a day, so testers on one link share them.
+
+Each test person is one `test_id`, the same person every time.
 
 ## Open items
 
@@ -320,7 +329,7 @@ Owners: **API** is the AWS backend chat, **App** is App screens & recording, **W
 
 1. ~~**API, before the Dish screens:** a signed-in read of one card by id (Convex's `dishAsks.get`): `MyCard` (the Card plus `id` and `side`, `askUrl: null`) for its kid or its cook, 404 for anyone else; `/dish/<id>`, the `answered` and `joined` pushes, and Mom's view of her clips and version all need it.~~ **Fixed in #322:** `GET /v1/dish-asks/:id` answers `MyCard` to the card's kid and its cook, and the same 404 `not_found` as a missing card to anyone else (routes, above). The kid sees none of her clips until she sends or leaves them 20 minutes; her own read changes nothing. **API**
 2. **API, before the Dish screens, if App wants it:** the list of a person's cards on both sides (Convex's `dishAsks.forMe`, 50 newest); the app doesn't call it today, so App first says whether a kid's screen lists their cards.
-3. **API, before the Dish screens:** `POST /dish/craving/peek` and `cravingToken` on `POST /dish/cards` (the card born asked of her, in her family, with the link's caps of 5 a day and 20 in all), and the `craving` push with it; the migration docs say these wait for the one-way sync, but 1.1 has no sync and the api owns its people on staging, so only the PR is missing.
+3. ~~**API, before the Dish screens:** `POST /dish/craving/peek` and `cravingToken` on `POST /dish/cards` (the card born asked of her, in her family, with the link's caps of 5 a day and 20 in all), and the `craving` push with it; the migration docs say these wait for the one-way sync, but 1.1 has no sync and the api owns its people on staging, so only the PR is missing.~~ **Fixed in #322**, as Convex has them: the peek (`{parentName, relation, message}`; a dead link is 404, a full one still peeks), and a card from the link born asked of her in her family, its link checked before any model and again under the link's row lock, so cards racing for its last one make one. Past its caps it's 429 `link_full` (an existing code, at a new status), with Convex's sentence. The `craving` push is queued in the card's transaction, once per card (MESSAGES.md, open item 6). **API**
 4. API: the `dishAsks:get` live topic (15 s on the screen); until it's built, the app polls item 1's read.
 5. API: the `cravings:forCook` topic isn't built, and the plan's "focus, 60 s" can be the plain `GET /v1/cravings`: say which, so App builds it once.
 6. App: send `dishAskId` on `POST /v1/jobs` from `/record?ask=`; the id is `GET /v1/cravings`' `asks[].id`, which exists now.
@@ -328,7 +337,7 @@ Owners: **API** is the AWS backend chat, **App** is App screens & recording, **W
 8. API: ERROR-CODES.md says `budget` comes from `/dish/cards` "and Mom's answers", but only `/dish/cards` sends it; and its `bad_type` row leaves out `/dish/files/confirm` and the Cravings voice-recipe routes. Every code these routes send is listed.
 9. API: DISH-MIGRATION.md ("Deferred") and COMMUNITY-MIGRATION.md ("Deferred") still list claiming a card as not built and say `person_id`, `family_id` and `requested_of` stay null, and `routes.ts` and `cravingData.ts` say "waiting for the sync"; the claim is built and sets all three.
 10. Web, then API: a retried `POST /dish/cards` makes a second card or fails on its files (DISH-MIGRATION.md, open question 2, left for now).
-11. Web, with API: `isLinkBusy` matches words in `message`; when API builds item 3's caps, give them a code the site can read instead.
-12. Web: the switch (`NEXT_PUBLIC_DISH_UPLOADS=links` and `NEXT_PUBLIC_DISH_URL` in one build) waits on item 3, or `/miss?c=` links quietly stop reaching the cook.
+11. Web: `isLinkBusy` matches words in `message`. Since #322 the api's link caps answer 429 `link_full`, with Convex's sentence kept so today's check still works: read `error === "link_full"` instead.
+12. Web: the switch (`NEXT_PUBLIC_DISH_UPLOADS=links` and `NEXT_PUBLIC_DISH_URL` in one build) waited on item 3, which is built (#322), so `/miss?c=` links reach the cook on the api.
 13. App: confirm 1.1 makes no card in the app (the kid names the dish on the web, PRD-V2); if it should, it's `POST /dish/cards`, then a claim with the `kidToken`.
-14. Caleb: the `TODO(caleb)` numbers: production's daily budget ($10), Mom's overage ($1), a craving link's 20 cards, and the 30-day join window.
+14. Caleb: the `TODO(caleb)` numbers: production's daily budget ($10), Mom's overage ($1), a craving link's 20 cards and 5 a day, and the 30-day join window.

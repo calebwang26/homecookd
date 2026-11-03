@@ -7,7 +7,10 @@ import { dirname, join } from "node:path";
 import { after, test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { db } from "../src/db.js";
+import { CRAVING_TOTAL, LINK_BUSY } from "../src/modules/dish/cravingLinks.js";
+import { DEFAULT_CRAVING_MESSAGE } from "../src/modules/dish/cravings.js";
 import { FAKE_WORDS } from "../src/modules/dish/model.js";
+import { call, family, ok, person } from "./communityHelpers.js";
 import { askedCard, clearWindow, hasDatabase, model, newBackend, seedSpend, settle, store } from "./dishHelpers.js";
 
 const source = join(dirname(fileURLToPath(import.meta.url)), "..", "..", "web", "src", "lib", "dish", "api.ts");
@@ -101,6 +104,22 @@ test("the site's client, unchanged but for its base URL", { skip }, async (t) =>
       const made = await site.createCard({ dish: "a made-up blue lentil stew", relation: "mom", photos: [photo], voiceNote: voice });
       assert.equal(made.card.photoUrls.length, 1);
       assert.equal(model.calls.transcribe, 1);
+    });
+
+    await t.test("a parent's craving link: the peek, a card asked of her, and a full link that isLinkBusy still reads", async () => {
+      await clearWindow("dish-cards");
+      const dad = await person(await family("Wang family"), "Dad", "cook");
+      const token = new URL((await ok(call(app, dad, "POST", "/v1/cravings/link", {}))).url).searchParams.get("c")!;
+      assert.deepEqual(await site.peekCraving(token), { parentName: "Dad", relation: null, message: DEFAULT_CRAVING_MESSAGE });
+      const made = await site.createCard({ dish: "braised pork", kidName: "Caleb", cravingToken: token });
+      assert.equal(made.card.kidName, "Caleb");
+      assert.equal((await db().query("select 1 from dish_asks where requested_of = $1", [dad.personId])).rowCount, 1);
+      await db().query("update craving_links set uses = $1 where person_id = $2", [CRAVING_TOTAL, dad.personId]);
+      const busy = await site.createCard({ dish: "dal", kidName: "Caleb", cravingToken: token }).then(() => null, (e: { kind: string; message: string }) => e);
+      assert.deepEqual([busy?.kind, busy?.message], ["rate", LINK_BUSY]);
+      assert.equal(site.isLinkBusy(busy), true, "the site's check still reads it, by its words, until it reads `link_full`");
+      const kind = (p: Promise<unknown>) => p.then(() => "no error", (e: { kind: string }) => e.kind);
+      assert.equal(await kind(site.peekCraving("Q".repeat(22))), "not-found");
     });
 
     await t.test("Mom's answer, end to end: sendAnswer, Send, the merge, then the kid's page", async () => {

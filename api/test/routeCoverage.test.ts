@@ -424,6 +424,7 @@ const ROUTES: Record<string, SignedIn | Anonymous> = {
     },
   },
   "POST /dish/files/confirm": { anonymous: "fileId is the capability", capability: async (s) => assert.equal((await post(s.app, null, "/dish/files/confirm", { fileId: "Q".repeat(22) }, { key: null })).status, 404) },
+  "POST /dish/craving/peek": { anonymous: "A kid with no account opens a parent's craving link: cravingToken is the capability", capability: async (s) => assert.equal((await post(s.app, null, "/dish/craving/peek", { cravingToken: "Q".repeat(22) }, { key: null })).status, 404) },
   "POST /dish/cards": { anonymous: "A kid with no account makes a card: rate limited by IP, and a file it names must be its own capability", capability: async (s) => assert.equal((await post(s.app, null, "/dish/cards", { dish: "dal", photos: ["Q".repeat(22)] }, { key: null })).status, 404) },
   "POST /dish/cards/get": { anonymous: "kidToken is the capability", capability: async (s) => assert.equal((await post(s.app, null, "/dish/cards/get", { kidToken: "Q".repeat(22) }, { key: null })).status, 404) },
   "POST /dish/cards/update": { anonymous: "kidToken is the capability", capability: async (s) => assert.equal((await post(s.app, null, "/dish/cards/update", { kidToken: "Q".repeat(22), message: "x" }, { key: null })).status, 404) },

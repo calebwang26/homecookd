@@ -1,12 +1,13 @@
 // convex/cravings.test.ts on the new api, the signed-in side: her link, her requests, her filming day, and her voice recipe merged into her version. The models run in fake mode. Card-making
-// (peek, a card from the link, its caps) stays with the dish module and isn't here.
+// (peek, a card from the link, its caps, its push) is dishCravingCards.test.ts; forMe and get are dishMyCard.test.ts.
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { randomUUID } from "node:crypto";
 import { db } from "../src/db.js";
 import { purgeDishForPerson } from "../src/modules/dish/account.js";
 import { linkByToken } from "../src/modules/dish/cravingData.js";
-import { CRAVING_TOTAL, DEFAULT_CRAVING_MESSAGE } from "../src/modules/dish/cravings.js";
+import { CRAVING_TOTAL } from "../src/modules/dish/cravingLinks.js";
+import { DEFAULT_CRAVING_MESSAGE } from "../src/modules/dish/cravings.js";
 import { FAKE_WORDS } from "../src/modules/dish/model.js";
 import { sweep } from "../src/modules/dish/tasks.js";
 import { sha256Hex } from "../src/modules/dish/values.js";

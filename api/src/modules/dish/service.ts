@@ -10,6 +10,7 @@ import { ApiError, notFound as missing } from "../../errors.js";
 import { enqueue } from "../../outbox.js";
 import { hit } from "../../rateLimit.js";
 import { recordSpend, spentToday, type Trace } from "./budget.js";
+import { takeLink } from "./cravingLinks.js";
 import type { AnswerRow, CardRow } from "./data.js";
 import * as data from "./data.js";
 import type { Side } from "./links.js";
@@ -178,9 +179,12 @@ export async function confirmFileUpload(fileIdHash: string, fileId: string) {
  * Makes a card: Ink on the voice note, Claude's guess, the filter on the guess. The kid waits on this (the site's contract), so the models
  * run in the request, outside any transaction. A retry of this route can't be recognized: the first try's kid token isn't stored, so it
  * can't be handed back, and its files answer not-found (DISH-MIGRATION.md).
+ *
+ * From her craving link (`cravingToken`, checked once already by the route), the card is a request to her: the link is checked again under its row lock and counts the
+ * card, and the `craving` push is queued with it, all in the card's transaction.
  */
 export async function createCard(
-  input: { dish: string; relation: Relation; kidName: string | null; photos: string[]; voiceNote: string | null; ipKey: string },
+  input: { dish: string; relation: Relation; kidName: string | null; photos: string[]; voiceNote: string | null; ipKey: string; cravingToken?: string | null },
   trace: Trace,
 ) {
   if ((await spentToday()) >= DAILY_BUDGET_USD) throw budgetSpent();
@@ -214,6 +218,7 @@ export async function createCard(
     const askToken = askTokenFor(kidToken);
     const now = Date.now();
     const state = await tx(async (c) => {
+      const link = input.cravingToken ? await takeLink(c, input.cravingToken, now) : null;
       const id = await data.insertCard(c, {
         kidTokenHash: sha256Hex(kidToken),
         askTokenHash: sha256Hex(askToken),
@@ -224,12 +229,18 @@ export async function createCard(
         message: defaultMessage(input.relation, guess.dish),
         genMs: now - started,
         ipKey: input.ipKey,
+        craving: link ? { linkId: link.id, familyId: link.family_id, personId: link.person_id } : null,
       });
       const photoKeys: string[] = [];
       for (const h of input.photos) photoKeys.push(await attachFile(c, h, id, "photo"));
       // The voice note about the dish stays on the card, privately: no page gets it.
       const voiceKey = input.voiceNote ? await attachFile(c, input.voiceNote, id, "voice") : null;
       await data.patchCard(c, id, { photo_keys: photoKeys, dish_voice_note_key: voiceKey });
+      if (link) {
+        await data.filesJoinFamily(c, id, link.family_id);
+        // "Caleb wants your braised pork", once (messages/pushEvents.ts pushRequested, keyed by the card).
+        await enqueue(c, { queue: "scheduled", payload: { task: "push.dish_requested", askId: id }, requestId: trace.requestId });
+      }
       askId = id;
       return await stateOf(c, (await data.cardById(c, id))!, now);
     });

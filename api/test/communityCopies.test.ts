@@ -7,7 +7,8 @@ import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { MAX_OPENS, OPEN_BURST, OPEN_BURST_MS } from "../src/modules/community/dinners.js";
 import { HIDE_AFTER } from "../src/modules/community/safety.js";
-import { CRAVING_MESSAGE_CHARS, CRAVING_TOTAL, DEFAULT_CRAVING_MESSAGE, VOICE_RECIPE_QUESTION } from "../src/modules/dish/cravings.js";
+import { CRAVING_PER_DAY, CRAVING_TOTAL, LINK_BUSY } from "../src/modules/dish/cravingLinks.js";
+import { CRAVING_MESSAGE_CHARS, DEFAULT_CRAVING_MESSAGE, VOICE_RECIPE_QUESTION } from "../src/modules/dish/cravings.js";
 
 const root = join(dirname(fileURLToPath(import.meta.url)), "..", "..");
 const convex = (path: string) => readFileSync(join(root, "convex", path), "utf8");
@@ -39,6 +40,8 @@ test("the numbers and words are Convex's", { skip }, () => {
   assert.ok(dinners.includes("OPEN_BURST_MS = 10 * 60_000;"));
   const cravingLinks = convex("lib/cravingLinks.ts");
   assert.ok(cravingLinks.includes(`CRAVING_TOTAL = ${CRAVING_TOTAL};`));
+  assert.ok(cravingLinks.includes(`CRAVING_PER_DAY = ${CRAVING_PER_DAY};`));
+  assert.ok(cravingLinks.includes(JSON.stringify(LINK_BUSY)));
   assert.ok(cravingLinks.includes(`CRAVING_MESSAGE_CHARS = ${CRAVING_MESSAGE_CHARS};`));
   assert.ok(cravingLinks.includes(JSON.stringify(DEFAULT_CRAVING_MESSAGE)));
   assert.ok(convex("cravings.ts").includes(JSON.stringify(VOICE_RECIPE_QUESTION)));
