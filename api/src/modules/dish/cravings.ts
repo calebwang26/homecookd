@@ -1,6 +1,7 @@
 // Cravings' signed-in side (convex/cravings.ts, DISH-ASK-SPEC.md §8, PRD-V2 Phase 5): a parent in the app asks her kids what they miss from home. She shares her craving link;
-// a kid names a dish with no account, and the card is a request to her (card-making is routes.ts's). She sees her requests here, says which day she'll film it, or tells the
-// kid how she makes it by voice: one answer, merged into her version at once, as Mom's Send on the web is. A craving card never joins anyone to her family.
+// a kid names a dish with no account, and the card is a request to her (card-making is routes.ts's and service.ts's, the link's checks cravingLinks.ts's). She sees her
+// requests here, says which day she'll film it, or tells the kid how she makes it by voice: one answer, merged into her version at once, as Mom's Send on the web is. A
+// craving card never joins anyone to her family.
 import { randomUUID } from "node:crypto";
 import type { Signed } from "../../auth.js";
 import { db, tx, type Queryable } from "../../db.js";
@@ -12,6 +13,7 @@ import { peopleByIds } from "../people/service.js";
 import type { Trace } from "./budget.js";
 import * as cravingData from "./cravingData.js";
 import type { AskedRow } from "./cravingData.js";
+import { CRAVING_TOTAL, firstName } from "./cravingLinks.js";
 import type { AnswerRow } from "./data.js";
 import * as data from "./data.js";
 import { flagged } from "./moderation.js";
@@ -24,8 +26,6 @@ import { CLIP_SLACK_S, DishFail, fail, LANGS, MAX_CLIP_S, MAX_MERGES, randomBase
 
 export const DEFAULT_CRAVING_MESSAGE = "What do you miss from home? Tell me and I'll make it for you.";
 export const CRAVING_MESSAGE_CHARS = 300;
-/** TODO(caleb): cards one link may make in all; then createLink makes her a new one. */
-export const CRAVING_TOTAL = 20;
 /** What her voice recipe answers: one question, among the kid's own ids (q4–q6). */
 export const VOICE_RECIPE_QUESTION = "How do you make it?";
 /** Her requests, newest first. */
@@ -33,7 +33,6 @@ const ASKS_PAGE = 50;
 const NOT_FOUND = "Not found.";
 
 const cravingUrl = (token: string) => `${webOrigin()}/miss?c=${token}`;
-const firstName = (name: string) => name.trim().split(/\s+/)[0] || name;
 
 // ---------------------------------------------------------------------------------------------
 // Her link

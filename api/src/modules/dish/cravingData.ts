@@ -1,8 +1,10 @@
-// The signed-in side of cravings' SQL (the card-making side is data.ts's). Every query, and the index behind it:
+// Cravings' SQL: her links, the cards asked of her, and a link's checks when a kid makes a card from it (the card itself is data.ts's). Every query, and the index behind it:
 //
 //   Query                                  Index                          Limit
 //   her newest link                        craving_links_person_newest    one row
 //   a link by its token                    craving_links.token_hash (unique)   one row
+//   a link's cards in the last day         dish_asks_craving_recent       the daily cap
+//   count a card on its link               craving_links primary key      one row
 //   the cards asked of her                 dish_asks_requested_recent     the caller's page
 //   those cards' answers                   dish_answers (ask_id, question_id)   6 a card
 //   a file by key                          files primary key              one row
@@ -20,10 +22,23 @@ export async function newestLink(q: Queryable, personId: string): Promise<LinkRo
   return rows[0] ?? null;
 }
 
-/** For /dish/craving/peek and `cravingToken` on /dish/cards, once they're built (routes.ts). */
-export async function linkByToken(q: Queryable, token: string): Promise<LinkRow | null> {
-  const { rows } = await q.query(`select ${LINK} from craving_links where token_hash = $1`, [sha256Hex(token)]);
+/** For /dish/craving/peek and `cravingToken` on /dish/cards (cravingLinks.ts). `lock`: inside tx(), holds the link's row until commit. */
+export async function linkByToken(q: Queryable, token: string, lock = false): Promise<LinkRow | null> {
+  const { rows } = await q.query(`select ${LINK} from craving_links where token_hash = $1${lock ? " for update" : ""}`, [sha256Hex(token)]);
   return rows[0] ?? null;
+}
+
+/** When the link's newest cards since `since` were made, newest first, at most `limit`. */
+export async function cardTimesOfLink(q: Queryable, linkId: string, since: Date, limit: number): Promise<Date[]> {
+  const { rows } = await q.query(
+    `select created_at from dish_asks where craving_id = $1 and created_at > $2 order by created_at desc limit $3`,
+    [linkId, since, limit],
+  );
+  return rows.map((row) => row.created_at);
+}
+
+export async function countUse(q: Queryable, linkId: string): Promise<void> {
+  await q.query(`update craving_links set uses = uses + 1 where id = $1`, [linkId]);
 }
 
 export async function insertLink(q: Queryable, l: { id: string; familyId: string; personId: string; tokenHash: string; tokenEnc: string; message: string }): Promise<void> {

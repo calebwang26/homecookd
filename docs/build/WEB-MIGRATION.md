@@ -72,11 +72,14 @@ this work, so production's values have to be listed from Vercel's settings at sw
 | Variable | If unset | Staging | Production, at the switch |
 |---|---|---|---|
 | `NEXT_PUBLIC_SITE_URL` | **`http://localhost:3000` in canonical links and share images, with no error, off Vercel** | `STAGING_WEB_URL` | `https://homecookd.app`. Must be set: the fallback only knows Vercel's variables |
-| `NEXT_PUBLIC_API_URL` | **Live Supabase** | `https://no-backend.invalid` | The backend that's live for `/r`, `/i`, web events. The new api only with `NEXT_PUBLIC_DISH_UPLOADS=links`, which moves `/r` to its route (below) |
-| `NEXT_PUBLIC_BUCKET_URL` | **Live GCS media** | `https://no-backend.invalid` | Whichever bucket or CDN is live |
-| `NEXT_PUBLIC_CONVEX_SITE_URL` | **Live Convex** (`/d`, `/miss`, `/a`) | `https://no-backend.invalid` | The backend that's live for those pages |
-| `NEXT_PUBLIC_DISH_URL` | Follows the Convex value | Unset | Unset, until the kid's web flow switches (`CUTOVER.md`, step 11) |
-| `NEXT_PUBLIC_DISH_UPLOADS` | Raw files, as Convex takes them | `STAGING_WEB_DISH_UPLOADS`, set to `links` only when staging's site points at the new api | Unset, until then; set with `NEXT_PUBLIC_DISH_URL` and `NEXT_PUBLIC_API_URL`. Despite its name it means "the new api": it also moves `/r` (below) |
+| `NEXT_PUBLIC_API_URL` | **Live Supabase** | Staging's api, `https://d2zh46br3dalyf.cloudfront.net` (`STAGING_WEB_API_URL`, since Nov 2) | The backend that's live for `/r`, `/i`, web events. The new api only with `NEXT_PUBLIC_DISH_UPLOADS=links`, which moves `/r` to its route (below) |
+| `NEXT_PUBLIC_BUCKET_URL` | **Live GCS media** | Staging's media CDN, `https://d1l67cvw778iu0.cloudfront.net` (`STAGING_WEB_BUCKET_URL`) | Whichever bucket or CDN is live |
+| `NEXT_PUBLIC_CONVEX_SITE_URL` | **Live Convex** (`/d`, `/miss`, `/a`) | Staging's api (`STAGING_WEB_CONVEX_SITE_URL`) | The backend that's live for those pages |
+| `NEXT_PUBLIC_DISH_URL` | Follows the Convex value | Unset, so it follows the Convex value to staging's api | Unset, until the kid's web flow switches (`CUTOVER.md`, step 11) |
+| `NEXT_PUBLIC_DISH_UPLOADS` | Raw files, as Convex takes them | `links` (`STAGING_WEB_DISH_UPLOADS`, since Nov 2) | Unset, until then; set with `NEXT_PUBLIC_DISH_URL` and `NEXT_PUBLIC_API_URL`. Despite its name it means "the new api": it also moves `/r` (below) |
+| `NEXT_PUBLIC_APP_STORE_URL` | "Get the app" says it's in early testing | Unset | Copy from Vercel |
+| `NEXT_PUBLIC_EARLY_ACCESS_URL` | The form sends nothing | Unset | Copy from Vercel, if set |
+| `NEXT_PUBLIC_CONTACT_EMAIL` | `team@homecookd.app` | Unset | Copy from Vercel, if set |
 
 ### What each page calls, before and after the switch
 
@@ -84,19 +87,19 @@ Caleb, Nov 2: everything moves to AWS at once, so production gets one build with
 
 | Page | Today (switch off) | New api (`links`, every URL at the api) | State |
 |---|---|---|---|
-| `/r` | `GET /shares/:token` on Supabase | `POST /v1/shares/open` `{token}`, its camelCase answer mapped to the old shape (`web/src/lib/recipe-web/api.ts`) | **Built.** The JSON POST preflights, so the route answers CORS itself for `SITE_ORIGINS` only (`api/src/cors.ts`): production's api lists `https://homecookd.app` and `www`, staging's lists its own site. No Vercel previews |
-| Web events (`/`, `/learn`, `/teach`) | `POST /web-events` beacon on Supabase | The same path, body and 204 on the api, so only the base URL changes | **Built** (`api/src/modules/platform/routes.ts`), into the api's own `lander_events` (`008_platform.sql`, Supabase's columns). A beacon is text/plain and nothing reads its answer, so it has no CORS |
+| `/r` | `GET /shares/:token` on Supabase | `POST /v1/shares/open` `{token}`, its camelCase answer mapped to the old shape (`web/src/lib/recipe-web/api.ts`) | **Built.** The JSON POST preflights, so the route answers CORS itself for `SITE_ORIGINS` only (`api/src/cors.ts`): production's api lists `https://homecookd.app` and `www`, staging's lists its own site. No Vercel previews. **Checked on staging Nov 2:** a test share opens with its sender, ingredients and steps (recipe file from the media CDN), and a dead link says it couldn't find the recipe |
+| Web events (`/`, `/learn`, `/teach`) | `POST /web-events` beacon on Supabase | The same path, body and 204 on the api, so only the base URL changes | **Built** (`api/src/modules/platform/routes.ts`), into the api's own `lander_events` (`008_platform.sql`, Supabase's columns). A beacon is text/plain and nothing reads its answer, so it has no CORS. **Checked on staging Nov 2:** the lander's beacon goes to the api, and its `land`, `tap` and `switch` bodies each get 204 |
 | `/i` | `POST /invites/peek` on Supabase | The same route on the api (`accounts/routes.ts`, open to any site) | No web change |
-| `/d` | Convex's `POST /invite/open` `{token, deviceId}` | The same route on the api (`community/inviteRoutes.ts`): same body, same `{dish, hostName, startsAt}`, 404 for a dead link | **No web change:** `NEXT_PUBLIC_CONVEX_SITE_URL` at the api moves it. Checked Nov 2 against a local fake of the api's answers: a dinner opens, a dead link says it doesn't work, a 429 says try again. The api allows `homecookd.app`, `www`, localhost and `SITE_ORIGINS`, which on staging is its own site, so staging's site isn't refused on `/d` (or `/miss`, `/a`) |
-| `/miss`, `/a` | Convex's `/dish/*` | The api's `/dish/*` | Built (`DISH-MIGRATION.md`) |
-| `NEXT_PUBLIC_APP_STORE_URL` | "Get the app" says it's in early testing | Unset | Copy from Vercel |
-| `NEXT_PUBLIC_EARLY_ACCESS_URL` | The form sends nothing | Unset | Copy from Vercel, if set |
-| `NEXT_PUBLIC_CONTACT_EMAIL` | `team@homecookd.app` | Unset | Copy from Vercel, if set |
+| `/d` | Convex's `POST /invite/open` `{token, deviceId}` | The same route on the api (`community/inviteRoutes.ts`): same body, same `{dish, hostName, startsAt}`, 404 for a dead link | **No web change:** `NEXT_PUBLIC_CONVEX_SITE_URL` at the api moves it. Checked Nov 2 against a local fake of the api's answers: a dinner opens, a dead link says it doesn't work, a 429 says try again. The api allows `homecookd.app`, `www`, localhost and `SITE_ORIGINS`, which on staging is its own site, so staging's site isn't refused on `/d` (or `/miss`, `/a`). **Checked on staging Nov 2:** a test dinner opens with its dish, host and time |
+| `/miss`, `/a` | Convex's `/dish/*` | The api's `/dish/*` | Built (`DISH-MIGRATION.md`). **Checked on staging Nov 2** with `web/scripts/qa/dish-api-e2e.mjs --base <staging site> --api <staging api>`, fake models: a kid's card from a made-up dish and a test photo, Ask Mom, her three voice answers, Send, and the kid reopening to her version, with no failed request or CORS error. The script now times Mom's hold from when the page records (the deployed site's mic can open slower than the hold, and an early let-go is dropped on purpose). 2 of 3 runs passed; the third had one `/dish/ask/peek` from the script take over 30 s, which is with AWS backend |
 
-Staging's three backend values default to a name that can't resolve, so a public staging copy can't write to real families or spend
-the model budget. Its pages load, and anything that calls a backend shows its error state. The workflow fails if a staging build still
-contains a live backend's address. Point them at real backends only with the repo variables `STAGING_WEB_API_URL`,
-`STAGING_WEB_BUCKET_URL` and `STAGING_WEB_CONVEX_SITE_URL`, and only on purpose.
+Staging's site has pointed at staging's api since Nov 2, set by the repo variables `STAGING_WEB_API_URL`, `STAGING_WEB_BUCKET_URL`,
+`STAGING_WEB_CONVEX_SITE_URL` and `STAGING_WEB_DISH_UPLOADS`. With them unset it falls back to a name that can't resolve, so a
+staging copy can't write to real families or spend the model budget. The workflow fails if a staging build contains a live backend's
+address while `STAGING_WEB_CONVEX_SITE_URL` is unset. Never point these at a live backend.
+
+`/r` adds `?t=<minute>` to the recipe file's URL so caches can't hide a re-published recipe on GCS. The AWS media CDN drops `?t=` from
+its cache key, which is harmless: there `recipe.json` is served no-cache and other files carry their own `?v=`.
 
 Copied links on staging still say `https://homecookd.app` (`WEB_ORIGIN` in `web/src/lib/app-links.ts`). The build also fetches
 Fraunces from Google Fonts for the `og.jpg` images, so it needs internet access.
