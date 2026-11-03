@@ -327,7 +327,8 @@ test("the website opens a share from a browser: its answer, a dead link and the 
     const open = (token: string, origin: string, ip = "192.0.2.210") =>
       w.app.inject({ method: "POST", url: "/v1/shares/open", remoteAddress: ip, headers: { origin, "content-type": "application/json" }, payload: JSON.stringify({ token }) });
 
-    const opened = await open(made.token, site);
+    // A share's answer builds its recipe link from MEDIA_BASE_URL (#309), so the open that succeeds needs it set.
+    const opened = await withMedia(() => open(made.token, site));
     assert.equal(opened.statusCode, 200, opened.body);
     assert.equal(opened.json().libraryId, CHILI);
     assert.deepEqual(cors(opened), [site, "retry-after, x-request-id", "Origin"]);
