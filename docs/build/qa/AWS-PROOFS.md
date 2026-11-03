@@ -107,8 +107,18 @@ its own channel, `aws-staging`. App Store, web & builds runs the build:
 
 ```bash
 cd app && npx eas-cli build -p ios --profile aws-staging --auto-submit
-cd app && npx eas-cli update --channel aws-staging -m "<what changed>"   # JS-only fixes to this build only
+scripts/safe-eas-update.sh aws-staging "<what changed>"                   # JS-only fixes to this build only
 ```
+
+An EAS Update doesn't read `eas.json`'s build env. The bundle is exported from your shell and `app/.env`, so always
+publish with `scripts/safe-eas-update.sh`, never a bare `eas update`. Here is what the script does:
+- **For `aws-staging`:** it sets the switch and staging's URL for the export, then checks that the bundle holds that
+  address.
+- **For any other channel:** it refuses if the switch is set in your shell, and refuses a bundle that holds that address.
+- **For `production`:** it always refuses.
+- **Every export:** it runs with `--clear`, because Metro's cache would otherwise carry the last export's env over.
+
+`--check-only` exports and checks without publishing.
 
 The rules:
 - The build goes to the internal TestFlight group only.
