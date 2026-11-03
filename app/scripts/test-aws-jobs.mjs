@@ -1,6 +1,8 @@
 // Unit tests for the 1.1 Jobs client (TS run by Node's type stripping, against a fake fetch and clock; no network):
 //   src/lib/aws/jobs.ts   each route's path, body and Idempotency-Key; checking videos before asking for links;
 //                         a PARTS video's byte ranges; recipes paged to the end
+//   src/lib/aws/dish.ts   her requests read to the last page, one by id, her day, her link, the voice recipe's steps;
+//                         a job for a kid's card carries its dishAskId
 //   src/lib/aws/live.ts   one poll per topic and person shared by every watcher, waiting pollAfterMs, keeping the
 //                         last value through a failure and backing off, pausing in the background, and stopping
 //                         for good on signed_out / removed_from_family / live_off
@@ -24,6 +26,7 @@ process.env.EXPO_PUBLIC_AWS_URL = 'https://api.test';
 const C = await import(pathToFileURL(join(root, 'src/lib/aws/client.ts')).href);
 const J = await import(pathToFileURL(join(root, 'src/lib/aws/jobs.ts')).href);
 const L = await import(pathToFileURL(join(root, 'src/lib/aws/live.ts')).href);
+const D = await import(pathToFileURL(join(root, 'src/lib/aws/dish.ts')).href);
 
 let passed = 0;
 const test = async (name, fn) => {
@@ -268,6 +271,34 @@ await test("a phone-less person's watch is its own poll, with her own session", 
   assert.deepEqual(auths, ['Bearer t-p-mom', 'Bearer t-p-nani']);
   offMom();
   offNani();
+});
+
+await test("her requests: every page, one by id, her day, her link, the voice recipe's two calls", async () => {
+  signIn();
+  const calls = fakeApi({
+    ...session,
+    'GET /v1/cravings': [{ body: { asks: [{ id: 'a1' }], nextCursor: 'c' } }, { body: { asks: [{ id: 'a2' }], nextCursor: null } }],
+    'GET /v1/cravings/a%201': [{ body: { id: 'a 1' } }],
+    'POST /v1/cravings/a1/filming-day': [{ body: { ok: true } }],
+    'POST /v1/cravings/link': [{ body: { url: 'https://x/miss?c=abc' } }],
+    'POST /v1/cravings/a1/voice-recipe/upload': [{ status: 201, body: { audioKey: 'private/dish/k', uploadUrl: 'https://s3', uploadHeaders: {} } }],
+    'POST /v1/cravings/a1/voice-recipe': [{ body: { ok: true } }],
+  });
+  assert.deepEqual((await D.cravings.all()).map((a) => a.id), ['a1', 'a2']);
+  assert.equal((await D.cravings.get('a 1')).id, 'a 1');
+  await D.cravings.filmingDay('a1', null);
+  await D.cravings.link();
+  const up = await D.cravings.voiceUpload('a1', 'audio/mp4', 4096);
+  await D.cravings.voiceRecipe('a1', { audioKey: up.audioKey, durationS: 5 });
+  const bodies = calls.filter((c) => c.key.startsWith('POST /v1/cravings')).map((c) => c.body);
+  assert.deepEqual(bodies, [{ day: null }, {}, { contentType: 'audio/mp4', size: 4096 }, { audioKey: 'private/dish/k', durationS: 5 }]);
+});
+
+await test("a job for a kid's card carries its dishAskId", async () => {
+  signIn();
+  const calls = fakeApi({ ...session, 'POST /v1/jobs': [{ status: 201, body: { jobId: 'j', recipeId: null } }] });
+  await J.jobs.create({ uploadId: 'u1', title: 'Tomato egg', dishAskId: 'card-1' });
+  assert.equal(calls.at(-1).body.dishAskId, 'card-1');
 });
 
 console.log(`\n${passed} passed`);

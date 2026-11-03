@@ -1,10 +1,8 @@
-// What a failed AWS api call means, read the same way on every route (ACCOUNTS.md, "Errors").
+// What a failed AWS api call means, read the same way on every route (ACCOUNTS.md, "Errors"; ERROR-CODES.md).
 //
-// The agreed shape is {error: <code>, message?: <English sentence>, requestId}, with retry-after as a header.
-// Until the api's "one error shape" PR lands, staging still answers older shapes too: a sentence in `error`
-// (the Accounts routes), {error: <sentence>, code} (/dish, /link/open) and {error: <short text>} (/invite).
-// All of them come out as one AwsError. Screens pick their own words by `code`, in the person's language;
-// `message` is an English fallback for a code the app doesn't know yet, and its text is never matched.
+// Every route answers {error: <code>, message?: <English sentence>, requestId}, with retry-after as a header (the
+// api's #291). Screens pick their own words by `code`, in the person's language (errorWords.ts); `message` is an
+// English fallback for a code the app doesn't know yet, and its text is never matched.
 
 export type AwsErrorKind =
   | 'unavailable' // down, overloaded, rate-limited, or the route isn't there: keep what's on screen, retry later
@@ -45,8 +43,6 @@ export function isAwsError(e: unknown): e is AwsError {
 
 const CODE = /^[a-z][a-z0-9_]*$/;
 const UNREACHABLE = 'Can’t reach homecookd. Trying again.';
-// Older names for the same cases, until the error-shape PR renames them on the api.
-const RENAMED: Record<string, string> = { busy: 'unavailable', rate: 'rate_limited', server: 'server_error' };
 // Nothing was written, and waiting won't help: a setting missing on the server, or (staging only) an area
 // whose switch is off there.
 const NOT_MOVED = new Set(['not_moved', 'accounts_not_moved', 'not_set_up']);
@@ -72,12 +68,11 @@ export function readError(status: number, body: string, retryAfter: string | nul
   // Not JSON: nobody healthy answered (ACCOUNTS.md, "Not JSON, or 502/503/504 with no JSON body").
   if (!json) return new AwsError(UNREACHABLE, { status, code: 'unavailable', kind: 'unavailable', retryAfterS: wait });
 
-  const { error, message, code, requestId, ...extra } = json;
+  const { error, message, requestId, ...extra } = json;
   const err = text(error);
-  const old = text(code);
-  const raw = (err && CODE.test(err) ? err : null) ?? (old && CODE.test(old) ? old : null) ?? '';
-  const c = RENAMED[raw] ?? raw;
-  const sentence = text(message) ?? (err && !CODE.test(err) ? err : null) ?? (c || `Request failed (${status}).`);
+  // A body whose `error` isn't a code (something other than the api answered): no code, its words as the fallback.
+  const c = err && CODE.test(err) ? err : '';
+  const sentence = text(message) ?? (err && !c ? err : null) ?? (c || `Request failed (${status}).`);
   const kind: AwsErrorKind = NOT_MOVED.has(c)
     ? 'refused'
     : status === 401

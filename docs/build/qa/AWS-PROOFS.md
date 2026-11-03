@@ -32,6 +32,7 @@ cd app && node scripts/aws-accounts-staging.mjs   # read-only: health, errors, m
 cd app && node scripts/aws-accounts-flows.mjs     # sign-up, join by link, phone-less people, sign-out, delete
 cd app && node scripts/aws-jobs-flows.mjs         # S3 upload (one PUT and 5 parts), job, poll, stops, a finished recipe
 cd app && node scripts/aws-messages-flows.mjs     # chat, questions, uploads, postcards, shares, share asks, delivery
+cd app && node scripts/aws-dish-flows.mjs         # a web card claimed by kid and Mom, her requests, voice recipe, dishAskId
 ```
 
 Things staging has for testing:
@@ -104,3 +105,4 @@ cd app && for t in test-aws test-aws-jobs test-aws-messages test-signin test-lin
 | Accounts | `aws-accounts/` | #286, #287, #288, #290, #293 |
 | Jobs and recording | `aws-jobs/` | #301, #302, #304 |
 | Messages and questions | `aws-messages/` | #307, #308, #312 |
+| Kids' asks (the cook's side) | `aws-dish/` | this PR |
