@@ -1,7 +1,7 @@
 // The dish ask's rules (DISH-ASK-SPEC.md, ported from convex/dishAsks.ts and lib/dishAskRoutes.ts): a kid's card made with no account,
 // what Mom is asked, her voice answers. Her version is written after the reply (merge.ts).
 // - Asking: her answered questions stay first, at most 3 open and 6 in all (askedOf).
-// - Answers she left 20 minutes without Send count as sent (kidGet).
+// - Answers she left 20 minutes without Send count as sent when the kid looks, on the web or in the app (kidLook).
 // - A card is always changed under its row lock (tx + lock), because Postgres won't serialize these for us the way Convex did.
 // - No model or S3 call happens inside a transaction: each would hold a database connection while it waits.
 import type { Signed } from "../../auth.js";

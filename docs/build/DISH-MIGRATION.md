@@ -15,13 +15,13 @@ Step 5 of `docs/build/AWS-MIGRATION.md`, Oct 31, 2026. A draft on `aws-migration
 | `POST /dish/ask/answer/upload?q=&lang=&durationS=` | none | New. JSON `{askToken, contentType, size}`; 201 with an upload link. Runs every check the old route ran before storing, and takes the rate limit |
 | `POST /dish/ask/answer?q=&lang=&durationS=` | `X-Dish-Token`, the raw audio; `{ask}` | Same query and reply. The body is JSON `{askToken, fileId}`. Both routes still take the token in `X-Dish-Token`, but the site doesn't send it |
 
-**Deferred: they need `people` and `families`, so they wait for the one-way sync (SCHEMA.md, M1):**
-- `POST /dish/craving/peek` answers the catch-all 404 for now. It needs her first name and relation.
-- `cravingToken` on `POST /dish/cards` answers 404. Making a plain card instead would quietly not reach her.
-- When these two are built, they find the link with `cravingData.linkByToken`, by sha256: since `077` the token itself isn't stored (SCHEMA.md, M6).
-- Claiming a card, `dishAsks.forMe` and `get`. The signed-in `cravings.*` functions, `sendVoiceRecipe` and `setFilmingDay` are now built: `COMMUNITY-MIGRATION.md`.
-- `pushEvents.requested`, which goes with `cravingToken` above. `answered` is queued by the merge since #311 (`messages/pushEvents.ts`), and goes to a kid who has claimed the card.
-- `dish_asks.person_id`, `family_id` and `requested_of` stay null.
+**Once deferred for the one-way sync (SCHEMA.md, M1), now built.** 1.1 has no sync: the api owns `people` and `families`.
+- `POST /dish/craving/peek` and `cravingToken` on `POST /dish/cards` (#322, `cravingLinks.ts`), as Convex's: the link found with `cravingData.linkByToken`, by sha256 (since `077` the token itself isn't stored, SCHEMA.md M6), and the card born asked of her, in her family. Its caps are Convex's, 20 cards and 5 a day (contracts/DISH.md).
+- Claiming a card (`POST /v1/links/claim`, `accounts/links.ts`) and `dishAsks.get` (`GET /v1/dish-asks/:id`, #322). The signed-in `cravings.*` functions, `sendVoiceRecipe` and `setFilmingDay`: `COMMUNITY-MIGRATION.md`.
+- `pushEvents.requested`, the `craving` push, queued in the craving card's transaction (#322). `answered` is queued by the merge since #311 (`messages/pushEvents.ts`), and goes to a kid who has claimed the card.
+- `dish_asks.person_id`, `family_id` and `requested_of`: a claim sets the side it takes, and the family when the card has none. A card from a craving link is born with `family_id` and `requested_of`.
+
+**Still deferred:** `dishAsks.forMe`, until App says a screen lists a person's cards (contracts/DISH.md, open item 2).
 
 ## Anonymous file safety
 
@@ -43,7 +43,7 @@ There's no session, so `fileKeys` can't apply. `fileId` is a capability, stored 
 5. Attaching the same `voiceNote` twice is 200 with no change, where Convex says 404.
 6. Rate limits count an answer at its upload link, so `/dish/ask/answer` itself has only the bad-token limit. 30 answers in 10 minutes still holds.
 7. S3 failing is a new 502 `provider_down`, as a model's failure is. The site reads both as "busy". Since #290 `/dish/*` answers the api's one shape, `{error: <code>, message, requestId}`, and the site reads it with `NEXT_PUBLIC_DISH_UPLOADS=links` (contracts/ERROR-CODES.md).
-8. Craving routes, as above.
+8. Craving routes, as above. A link past its caps answers 429 `link_full` with Convex's sentence, where Convex answered 429 with the code `rate` (contracts/ERROR-CODES.md).
 9. No `DISH_IP_SALT` fallback: without `RATE_LIMIT_SALT` a route fails loudly. The IP comes from `req.ip`. Old `ip_key` values can't match new ones, and nothing compares them.
 10. Responses add `x-request-id` and, on a 429, `retry-after`.
 11. Other methods under `/dish/` get a JSON 404 here, not Convex's router 404.
@@ -78,6 +78,8 @@ There's no session, so `fileKeys` can't apply. `fileId` is a capability, stored 
 | `storage.test.ts` | The real S3 adapter's signing, with no network |
 | `dishWebClient.test.ts` | The site's own `web/src/lib/dish/api.ts` with `NEXT_PUBLIC_DISH_UPLOADS=links`, unchanged but for its base URL, over a local port: uploads and an answer end to end, with PUTs routed to the fake store, and a failed PUT reading as `busy` |
 | `dishCopies.test.ts` | Fails when Convex's recipe code, prompts or word list change, so a fix reaches both |
+| `dishCravingCards.test.ts` | `convex/cravings.test.ts`'s card-making half: the peek, a card tied to her, its name and words, the link's caps; plus a gone maker, cards racing for a link's last one, and the `craving` push going once |
+| `dishMyCard.test.ts` | Its `forMe and get` test's `get` half: each reader and the refusals, plus the kid's 20 minutes and her own read changing nothing |
 
 **Carried over:** 41 of 41 from `dishAsks.test.ts` and 20 of 20 from `dishAskModel.test.ts`. 60 keep their exact titles, and the kid-deletes test's title now also names the message and `ip_key`.
 
@@ -85,7 +87,7 @@ There's no session, so `fileKeys` can't apply. `fileId` is a capability, stored 
 
 **Changed only in how they run:** raw uploads became the link steps. Fake timers became `advance()`, which moves stored times back, because Postgres's clock can't be faked. A new rate window deletes that bucket's rows. Deletion calls `purgeDishForPerson` with `person_id` set by hand, because `account.deleteMe` isn't here.
 
-**Not carried, because they're deferred:** `convex/cravings.test.ts`, and any `pushEvents` or `account.test.ts` assertion on these cards.
+**Not carried:** `forMe` (not built). `convex/cravings.test.ts`'s signed-in half is `cravings.test.ts` (COMMUNITY-MIGRATION.md), and `pushEvents`' are in `messagesPush.test.ts`.
 
 **The pages, in real Chrome:**
 - `web/scripts/qa/dish-e2e.mjs` runs the site with `next dev` against its fake server, in either mode. `--uploads links` is this contract: a PUT endpoint that checks the signed type and size, a failed PUT and a dead read link. The default is today's: raw files, read links that never expire, and a clip that won't load reloads nothing. The fake refuses the contract it isn't speaking, so a site built for one fails against the other.
@@ -115,7 +117,7 @@ The load balancer's `idle_timeout` is 3700 s, and Fastify's default keep-alive i
 
 `account.ts` applies SCHEMA.md section 4 for dish asks, tested with hand-set ids: the kid's and Mom's rules, C3 (message and translations go, the guess stays), `ip_key`, and craving links.
 
-**Called by the account purge** (`docs/build/ACCOUNTS-MIGRATION.md`); `person_id` stays null until the sync or a claim sets it. **C4 runs in the sweep**, needing nothing else. I also null `files.ip_key` after 90 days; C4 names only the card, but the file's HMAC is the same data.
+**Called by the account purge** (`docs/build/ACCOUNTS-MIGRATION.md`); `person_id` is null until a kid-side claim sets it, and `requested_of` until a cook-side claim or her craving link does. **C4 runs in the sweep**, needing nothing else. I also null `files.ip_key` after 90 days; C4 names only the card, but the file's HMAC is the same data.
 
 ## Secrets and env the api now needs (names only)
 
@@ -128,7 +130,7 @@ The load balancer's `idle_timeout` is 3700 s, and Fastify's default keep-alive i
 
 `web/` stays owned by App Store, web & builds. All of this is behind **`NEXT_PUBLIC_DISH_UPLOADS=links`**: unset, the site sends raw files to Convex as it always has, and the build holds none of the code below (`web/next.config.ts` always gives it a value, so the compiler drops the rest, and `scripts/check-merge-safe.mjs` reads the bundle). At the switch, set it and `NEXT_PUBLIC_DISH_URL` in one build (`CUTOVER.md`, step 11).
 
-**The craving routes have to exist first.** `main`'s site now reads `/miss?c=` and calls `POST /dish/craving/peek`. Here that answers 404, which the site takes for a dead link, so a parent's link would quietly become a plain card. It's the "Deferred" list above, and the switch waits on it.
+**The craving routes it needed are built (#322).** `main`'s site reads `/miss?c=`, calls `POST /dish/craving/peek`, and makes the card with `cravingToken`, as on Convex. A full link answers Convex's sentence, so the site's `isLinkBusy` still matches it; it should read `link_full` instead (contracts/DISH.md, open item 11).
 
 - `web/src/lib/dish/api.ts`: `uploadFile` asks for the link with `blob.size`, PUTs to `uploadUrl` with `uploadHeaders`, then confirms. `sendAnswer` uses `/dish/ask/answer/upload`, a PUT, then `/dish/ask/answer`. Their callers don't change. A failed PUT, of any kind, reads as `busy`, as a 502 does. Limits: 15 s for each api call, and 30 s for a file's PUT or 45 s for a clip's. It reads the PUT's reply to the end, because Chrome reports a fetch with an unread body as cancelled.
 - **Preflights:** every api call stays `text/plain` with its token in the body, so none needs a preflight. That's why the two answer routes now take `askToken` in the body. With the header, each answer would have added two preflights, never cached, because `durationS` changes the URL. A PUT always needs one, from S3's CORS, so an answer costs 1 preflight, as the old raw route did.

@@ -83,7 +83,7 @@ Nov 2, 2026. For the App screens & recording chat: the checklist of codes that n
 | `gone` (+`status`) | `/auth/apple` with `join_token`: `status` is `expired` or `revoked` (and `used` for a 1.0 invite). **1.0 only:** `/invites/accept`, and an expired move request | "This link expired." or "This link was turned off." Ask the family for a new link |
 | `live_off` (410) | `GET /v1/live/:topic`: the topic is turned off on the server | Stop polling it; read on focus (ACCOUNTS.md, open item 7) |
 | `too_large` (413) | Any body over its limit (1 MB; 64 KB on `/dish/*` and `/web-events`; 1,000 bytes on `/invite/open`). A file over its size when asking for an upload link (`/v1/uploads`, `/v1/video-uploads`, `/dish/files`, Cravings) | "That file is too big." Before sending, check the size |
-| `bad_type` (415) | A file whose content type isn't allowed: `/v1/uploads`, `/dish/files`, `/dish/ask/answer/upload`, raw bytes sent to `/dish/*` | Pick another file. A body that isn't JSON is `invalid`, not this |
+| `bad_type` (415) | A file whose content type isn't allowed, when asking for its upload link: `/v1/uploads`, `/dish/files`, `/dish/ask/answer/upload`, Cravings' `/v1/cravings/:id/voice-recipe/upload`. Bytes that aren't the type their link was signed for, at the check after the PUT, which deletes the upload: `/v1/uploads/confirm`, `/dish/files/confirm`, `/dish/ask/answer`, `/v1/cravings/:id/voice-recipe`. Raw bytes sent to `/dish/*` | Pick another file. A body that isn't JSON is `invalid`, not this |
 | `words` (422) | `/dish/cards*`, Cravings' message, Community dinners and share asks: blocked wording | "Some of those words can't be used here. Try other words." |
 | `not_a_dish` (422) | `POST /dish/cards`: what was typed isn't a dish | "Tell us a dish." |
 | `update_app` (426) | **1.0 only:** `/invites/accept` given a 1.1 family link | "Update homecookd to join this family." |
@@ -93,7 +93,7 @@ Nov 2, 2026. For the App screens & recording chat: the checklist of codes that n
 | Code | Where | The app does |
 |---|---|---|
 | `rate_limited` | Any limit: per address, per person, per family, per link. Header `retry-after` | Wait `retry-after` seconds, then retry. The refused call isn't counted |
-| `budget` | `/dish/cards` and Mom's answers: today's model budget is spent. `retry-after` runs to the next UTC midnight | "homecookd has made all the recipes it can today. Try again tomorrow." |
+| `budget` | `POST /dish/cards` only: today's model budget is spent. `retry-after` runs to the next UTC midnight. Mom's side never gets it: her clips are saved, and her hearing, translation and merge wait for the next day once they're $1 past it (DISH.md) | "homecookd has made all the recipes it can today. Try again tomorrow." |
 | `link_full` | `POST /dish/cards` with a `cravingToken`: her craving link made 20 cards in all, or 5 in the last 24 hours (both `TODO(caleb)`). `retry-after` is when the day's cap frees a card, or a day for a link that's used up. `message` keeps Convex's sentence, "This link has had a lot of requests. Ask for a new one." | Never from the app. On the web: make the kid's card a plain one, keeping what they typed (her next link from the app is a new one). The site's `isLinkBusy` matches the sentence today; it should read this code |
 
 ## 5xx

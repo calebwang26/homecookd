@@ -1,6 +1,6 @@
 // What deleting an account does to the dish ask (SCHEMA.md section 4, C3). It goes by person: a card's family alone deletes nothing, and an
-// anonymous card has no person, so nothing reaches it until it's claimed. The account purge calls this (accounts/purgeSteps.ts); until the one-way
-// sync fills `people`, `person_id` and `requested_of` stay null. Each card is one transaction; a file is marked before its row goes.
+// anonymous card has no person, so nothing reaches it until it's claimed. The account purge calls this (accounts/purgeSteps.ts). A claim sets
+// `person_id` and `requested_of`, and a card from her craving link is born with `requested_of`. Each card is one transaction; a file is marked before its row goes.
 import { randomBytes } from "node:crypto";
 import { db, tx, type Queryable } from "../../db.js";
 import { markPurged, markPurgedIfKnown } from "../../purge.js";

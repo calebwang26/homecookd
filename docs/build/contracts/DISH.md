@@ -79,7 +79,7 @@ How to call them:
 | `POST /dish/cards/sent` | `{kidToken, via}` | `{card}` | `invalid` (`via`; "Pick who you're asking first."), `not_found` |
 | `POST /dish/ask/peek` | `{askToken, lang?}` | `{ask}` | `invalid` (`askToken`, `lang`), `not_found` |
 | `POST /dish/ask/answer/upload` (`?q=&lang=&durationS=`) | `{askToken, contentType, size}` | 201 the upload link, as `/dish/files` | `invalid` (`q`, `lang`, `durationS`, `size`; `q`: "That question wasn't asked."), `bad_type`, `too_large`, `closed`, `not_found`, `rate_limited`, `provider_down` |
-| `POST /dish/ask/answer` (`?q=&lang=&durationS=`) | `{askToken, fileId}` | `{ask}` | `invalid`, `closed`, `not_found`, `provider_down` |
+| `POST /dish/ask/answer` (`?q=&lang=&durationS=`) | `{askToken, fileId}` | `{ask}` | `invalid`, `closed`, `not_found`, `provider_down`, and at the server's check of her clip's bytes `too_large`, `bad_type` or `invalid` (empty), each deleting the upload |
 | `POST /dish/ask/finish` | `{askToken, lang?}` | `{ask}` | `invalid`, `not_found` |
 
 Every `/dish/*` route can also answer `origin` (a browser only), `too_large` (the body), `no_route`, `unavailable` and `server_error`.
@@ -334,8 +334,8 @@ Owners: **API** is the AWS backend chat, **App** is App screens & recording, **W
 5. API: the `cravings:forCook` topic isn't built, and the plan's "focus, 60 s" can be the plain `GET /v1/cravings`: say which, so App builds it once.
 6. App: send `dishAskId` on `POST /v1/jobs` from `/record?ask=`; the id is `GET /v1/cravings`' `asks[].id`, which exists now.
 7. App: read one ask with `GET /v1/cravings/:id` (from a push, and past the first page), not by finding it in the list.
-8. API: ERROR-CODES.md says `budget` comes from `/dish/cards` "and Mom's answers", but only `/dish/cards` sends it; and its `bad_type` row leaves out `/dish/files/confirm` and the Cravings voice-recipe routes. Every code these routes send is listed.
-9. API: DISH-MIGRATION.md ("Deferred") and COMMUNITY-MIGRATION.md ("Deferred") still list claiming a card as not built and say `person_id`, `family_id` and `requested_of` stay null, and `routes.ts` and `cravingData.ts` say "waiting for the sync"; the claim is built and sets all three.
+8. ~~API: ERROR-CODES.md says `budget` comes from `/dish/cards` "and Mom's answers", but only `/dish/cards` sends it; and its `bad_type` row leaves out `/dish/files/confirm` and the Cravings voice-recipe routes. Every code these routes send is listed.~~ **Fixed in #322:** `budget` is `POST /dish/cards` only, and `bad_type` names the link routes and the checks after the PUT (`/dish/files/confirm`, `/dish/ask/answer`, both voice-recipe routes, `/v1/uploads/confirm`). `/dish/ask/answer`'s row above now lists what its byte check sends. **API**
+9. ~~API: DISH-MIGRATION.md ("Deferred") and COMMUNITY-MIGRATION.md ("Deferred") still list claiming a card as not built and say `person_id`, `family_id` and `requested_of` stay null, and `routes.ts` and `cravingData.ts` say "waiting for the sync"; the claim is built and sets all three.~~ **Fixed in #322:** both docs' "Deferred" lists now say the claim, `get` and the craving routes are built and who sets those columns, and the comments are gone from `routes.ts`, `cravingData.ts`, `data.ts` and `account.ts`. **API**
 10. Web, then API: a retried `POST /dish/cards` makes a second card or fails on its files (DISH-MIGRATION.md, open question 2, left for now).
 11. Web: `isLinkBusy` matches words in `message`. Since #322 the api's link caps answer 429 `link_full`, with Convex's sentence kept so today's check still works: read `error === "link_full"` instead.
 12. Web: the switch (`NEXT_PUBLIC_DISH_UPLOADS=links` and `NEXT_PUBLIC_DISH_URL` in one build) waited on item 3, which is built (#322), so `/miss?c=` links reach the cook on the api.
