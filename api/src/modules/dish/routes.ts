@@ -17,7 +17,7 @@
 // Files go straight to S3 (SYSTEM-DESIGN.md), so the two routes that took raw bytes now give out a link: docs/build/DISH-MIGRATION.md.
 // Waiting for the sync: /dish/craving/peek and `cravingToken` on /dish/cards.
 import * as Sentry from "@sentry/node";
-import { EXPOSE } from "../../cors.js";
+import { EXPOSE, siteOrigins } from "../../cors.js";
 import type { FastifyError, FastifyInstance, FastifyRequest } from "fastify";
 import { ApiError, invalid, noRoute, notSetUp, providerDown, refused, sendError } from "../../errors.js";
 import { hit, subjectKey, type Limit } from "../../rateLimit.js";
@@ -57,10 +57,10 @@ type Body = Record<string, unknown>;
 
 const ORIGINS = [/^https:\/\/(www\.)?homecookd\.app$/, /^http:\/\/(localhost|127\.0\.0\.1|\[::1\])(:\d{1,5})?$/];
 
-/** The CORS headers for an allowed origin (none needed without one); false for another site. */
+/** The CORS headers for an allowed origin (ours, DISH_WEB_ORIGIN, or SITE_ORIGINS in cors.ts; none needed without one); false for another site. */
 function corsFor(origin: string | undefined): Record<string, string> | false {
   if (!origin) return { Vary: "Origin" };
-  if (!ORIGINS.some((o) => o.test(origin)) && origin !== webOrigin()) return false;
+  if (!ORIGINS.some((o) => o.test(origin)) && origin !== webOrigin() && !siteOrigins().has(origin)) return false;
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",

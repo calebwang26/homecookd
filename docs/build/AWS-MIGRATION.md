@@ -161,8 +161,29 @@ after it: 726 turned away with the 503 and `retry-after`, no other 5xx, and `/re
   AWS runs it again each minute the shedding goes on, after a 60 s cooldown, never past the max (`infra/modules/env/autoscaling.tf`). 10 is more than a held
   row or a blip turns away; this test turned away about 800 a minute. The max stays at 4, so the most it can cost doesn't change.
 
-**A rerun at the same 120 a second follows**, once Caleb has applied it (`infra/README.md`, "Autoscaling the api"). It should show no task replaced, a third
-task within about 5 minutes and a fourth soon after, and the 503s and timeouts falling once they're up.
+**The rerun, Nov 2 (18:04 to 18:17 PT, #310 applied; the same 120 a second for 12 minutes, then 1,500 at once).**
+- **No working task was killed:** no "unhealthy" replacement. The health thread on 8081 kept answering.
+- **Scale-out in a minute:** the shedding step policy added a task at 18:05:44, about 1 minute in. 4 tasks by 18:11, about 6 minutes in. The first run had a third only after 10 minutes and never a fourth.
+- **Errors: 9.1% not 2xx over the window** (first run 11.8%), p99 about 10 s (about 22 s). By minute, the load balancer's target 5xx out of about 7,200 requests:
+  - the first 3 minutes 668, 3,926, 1,563 (2 tasks, catching up)
+  - 218, 330, 296 at 3 tasks
+  - **36, 68, 25, 0, 56, 26 at 4 tasks, about 0.5%**
+- **The burst:** 0 bad 5xx. 559 were turned away with 503 and retry-after, and /ready answered 200 to all 750.
+- **Found: a scale-in flap.** At 18:07:10, target tracking's low alarm scaled 3 to 2 in the middle of the load. It had been in alarm through the idle minutes before the test, so it undid the step policy's first task 1.5 minutes later, and shedding added it back at 18:07:44. **Next:** target tracking with scale-in turned off, plus a separate slow scale-in (CPU under about 25% for 15 minutes, one task at a time), so a shedding scale-out isn't undone.
+- **Still short of the target:** 0.1% isn't met at four 0.25 vCPU tasks at 120 a second. Production's tasks are 0.5 vCPU, about twice the capacity each. The test should run again at production's size before launch.
+- #311's deploy rolled out during the burst only, after the steady window ended at 18:16:46.
+
+**Production's size, in plain numbers (Nov 2).** Production's api is 2 to 4 tasks of 0.5 vCPU each (#295). It hasn't been measured at that size yet. These are staging's measurements, scaled.
+- **Measured on staging:**
+  - One 0.25 vCPU task carried 50 a second for 15 minutes with no 5xx (p99 285 ms at the load balancer).
+  - Four of them at 120 a second, 30 each, still gave about 0.5% errors, nearly all fast 503s from the shedder. The likely cause is event-loop spikes on very small tasks, which is why the line below is an estimate, not a promise.
+- **Estimate for production:** a 0.5 vCPU task has twice the CPU, so about 100 a second each at the same headroom. Two tasks would carry about **200 a second**, and four about **400 a second**, within 0.1%.
+- **What launch needs:** a few hundred families is single-digit requests a second, far below two tasks.
+- **The step past that,** in order:
+  1. Raise the max from 4 to 6. That costs only while load is there: about $18 a month for each extra 0.5 vCPU task that's running.
+  2. Then 1 vCPU tasks.
+  3. Past that, the next limits are the database: 10 connections per task, and the `db.t4g.medium`'s CPU, which peaked at 10% in the staging test on a smaller instance.
+- **The gate before launch:** rerun this test on production's size. That's 200 a second for 15 minutes on two tasks (the 0.1% target), then 400 a second, to see it scale to four.
 
 ### Not building
 

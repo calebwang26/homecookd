@@ -85,8 +85,10 @@ module "env" {
   # "The app on staging").
   secret_names = ["SENTRY_DSN_API", "SENTRY_DSN_WORKER", "RATE_LIMIT_SALT", "ANTHROPIC_API_KEY", "CARTESIA_API_KEY", "EDIBLE_CODE_KEY", "TEST_SIGNIN_KEY", "LINK_JOIN_SECRET", "LEFT_IDENTITY_SECRET"]
 
-  alb_allowed_cidrs    = var.alb_allowed_cidrs
-  private_cors_origins = [module.web.url, "http://localhost:3105"]
+  alb_allowed_cidrs = var.alb_allowed_cidrs
+  # The private bucket takes PUTs from these pages: staging's site, the web dev server (:3105), and the app's web build (:8081-8083, Expo moves to the
+  # next free port) so voice notes, photos and postcards can be proven at phone size. Staging only; production lists its site alone.
+  private_cors_origins = [module.web.url, "http://localhost:3105", "http://localhost:8081", "http://localhost:8082", "http://localhost:8083"]
   db_iam_login         = var.db_iam_login
   schedules = {
     "dish.sweep"            = { expression = "rate(1 hour)", task = "dish.sweep" }
@@ -134,6 +136,8 @@ module "env" {
         { RECIPE_WRITES = "on" },
         # The app's web build, for testing screens in a browser against staging (api/src/cors.ts); Expo takes the next free port. Production sets none.
         { APP_WEB_ORIGINS = "http://localhost:8081,http://localhost:8082,http://localhost:8083" },
+        # The website's own pages, for the public routes they call from a browser (/v1/shares/open, /invite/*, /dish/*; api/src/cors.ts): staging's site.
+        { SITE_ORIGINS = module.web.url },
         # A video over 20 MiB goes up in parts, not over 5 GiB, so a small file tests them (api/src/modules/jobs/uploads.ts). Production may not set it (env module).
         { JOBS_SINGLE_PUT_MAX_BYTES = "20971520" },
         # Parts of 5 MiB, S3's smallest, not 64 MiB: a 25 MiB video comes back as 5 parts. Production may not set it either.

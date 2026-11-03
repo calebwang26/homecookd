@@ -380,6 +380,21 @@ const ROUTES: Record<string, SignedIn | Anonymous> = {
       ok(await openShare(s.app, s.shareToken));
     },
   },
+  "OPTIONS /v1/shares/open": {
+    anonymous: "A browser's preflight for the website's /r page. It reads nothing, and a site not in SITE_ORIGINS is refused",
+    capability: async (s) => {
+      const res = await s.app.inject({ method: "OPTIONS", url: "/v1/shares/open", headers: { origin: "https://evil.example" } });
+      assert.equal(res.statusCode, 403);
+    },
+  },
+  "POST /web-events": {
+    anonymous: "The lander's visit log: it opens nothing, returns nothing and stores nothing about the person, and it's rate limited by IP",
+    capability: async (s) => {
+      const logged = await post(s.app, null, "/web-events", { event: "land", aud: "kid" }, { key: null });
+      assert.deepEqual([logged.status, logged.body], [204, ""]);
+      assert.equal((await post(s.app, null, "/web-events", { event: "open", aud: "kid" }, { key: null })).status, 400);
+    },
+  },
   "OPTIONS /invite/open": {
     anonymous: "A browser's preflight for the dinner invite page. It reads nothing, and another site is refused",
     capability: async (s) => {

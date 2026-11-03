@@ -89,6 +89,7 @@ test("every 429 says when to come back, in the one shape", { skip }, async () =>
     ["/invite/open", "invite-open", 120, () => api.post("/invite/open", { token: TOKEN43, deviceId: TOKEN22 }, {}, ip)],
     ["sign-in", "authid-ip", 30, () => api.apple({ id_token: "x" }, ip)],
     ["a family link's peek", "invitepeek-ip", 60, () => api.post("/invites/peek", { token: TOKEN22 }, {}, ip)],
+    ["/web-events", "web-events", 120, () => api.post("/web-events", { event: "land", aud: "kid" }, {}, ip)],
   ];
   for (const [what, bucket, max, call] of cases) {
     await filled(bucket, ip, max, 600);

@@ -67,6 +67,8 @@ module "env" {
       default_route = true
       secrets       = local.api_secrets
       uses_database = true
+      # The website's own pages, for the public routes they call from a browser: /r opens a share (api/src/cors.ts). No Vercel previews.
+      env = { SITE_ORIGINS = "https://homecookd.app,https://www.homecookd.app" }
     }
     worker = {
       cpu           = 4096

@@ -190,7 +190,8 @@ test("every route in the real app with a key field refuses another family's, and
       }
     }
   }
-  const ownChecks = new Set(["/v1/uploads/confirm", "/v1/threads/:id/messages"]); // not uploaded yet, and public library media: messagesFiles.test.ts
+  // Not uploaded yet, and public library media: messagesFiles.test.ts. /web-events' `path` is the page the visitor saw on the site.
+  const ownChecks = new Set(["/v1/uploads/confirm", "/v1/threads/:id/messages", "/web-events"]);
   assert.ok(app.notFileKeyRoutes.every((route) => route.url.startsWith("/dish/") || ownChecks.has(route.url)), "only these may say a file field isn't a key");
 });
 

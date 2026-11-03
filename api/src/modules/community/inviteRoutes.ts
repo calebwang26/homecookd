@@ -1,10 +1,10 @@
 // POST /invite/open { token, deviceId } (convex/lib/inviteRoutes.ts): someone opened a dinner's invite link (homecookd.app/d?t=…, or the app's homecookd://d?t=…). Public: the
 // token is the capability, so anyone a guest sends the link to counts in "X going", once per phone or browser (deviceId is a random id that page keeps). The reply is only
-// { dish, hostName, startsAt }, or 404 when the link doesn't work. Browsers may call it from homecookd.app and local dev pages; a request from any other site is refused. The
-// app's own fetch sends no Origin. Errors are the api's one shape (errors.ts), and the site reads only the status. The path stays unversioned, so the site and old apps
-// need only a new host.
+// { dish, hostName, startsAt }, or 404 when the link doesn't work. Browsers may call it from homecookd.app, local dev pages and SITE_ORIGINS (cors.ts); a request from
+// any other site is refused. The app's own fetch sends no Origin. Errors are the api's one shape (errors.ts), and the site reads only the status. The path stays
+// unversioned, so the site and old apps need only a new host.
 import type { FastifyInstance } from "fastify";
-import { EXPOSE } from "../../cors.js";
+import { EXPOSE, siteOrigins } from "../../cors.js";
 import { invalid, noRoute, notFound, refused, sendError } from "../../errors.js";
 import { hit, subjectKey } from "../../rateLimit.js";
 import { openInvite } from "./dinners.js";
@@ -24,7 +24,7 @@ export const RATE = {
 /** The CORS headers for an allowed origin; false for a site that may not call this. */
 function corsFor(origin: string | undefined): Record<string, string> | false {
   if (!origin) return { Vary: "Origin" };
-  if (!ORIGINS.some((o) => o.test(origin))) return false;
+  if (!ORIGINS.some((o) => o.test(origin)) && !siteOrigins().has(origin)) return false;
   return {
     "Access-Control-Allow-Origin": origin,
     "Access-Control-Allow-Methods": "POST, OPTIONS",
