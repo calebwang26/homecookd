@@ -586,6 +586,29 @@ try {
   check('Hindi: M4 uses inLang.version for the card’s own words', (await hi.getByText('2 बड़े चम्मच').count()) === 1 && (await hi.getByText('अंडे, फेंटे हुए').count()) === 1 && (await hi.getByText('2 big spoons').count()) === 0);
   await shot(hi, 'M7-hindi-fills-in');
 
+  // A slow translation: the api gives up at 8 s with translating: true. English first, then one more peek ~10 s on.
+  fake.setSlowTranslate(4000);
+  await kid.goto(`${BASE}/miss`, { waitUntil: 'networkidle' });
+  await kid.getByLabel('The dish you miss').fill('mom’s tomato egg');
+  await kid.getByRole('button', { name: 'Make my recipe' }).click();
+  await kid.getByRole('heading', { name: 'What you need' }).waitFor({ timeout: 15000 });
+  await kid.locator('div').filter({ hasText: /^SaveAsk Mom$/ }).getByRole('button', { name: 'Ask Mom' }).click();
+  await kid.getByRole('dialog').getByRole('button', { name: 'Copy link' }).click();
+  await kid.waitForTimeout(600);
+  const card3 = fake.cards.get(kid.url().split('k=')[1]);
+  const logFrom = fake.log.length;
+  const slowPeeks = () => fake.log.slice(logFrom).filter((l) => l.path === '/dish/ask/peek').length;
+  const slow = await phone('hi-IN');
+  await slow.goto(`${BASE}/a?t=${card3.askToken}`, { waitUntil: 'domcontentloaded' });
+  await slow.getByRole('heading', { level: 1 }).waitFor();
+  await slow.waitForTimeout(1500);
+  check('Translating: English while her language is on its way', (await slow.getByText('माँ, आप अपना टमाटर अंडा').count()) === 0);
+  const firstPeeks = slowPeeks(); // dev's strict mode runs each first peek twice
+  await slow.getByText('माँ, आप अपना टमाटर अंडा').waitFor({ timeout: 15000 });
+  check('Translating: her language after one more peek', slowPeeks() === firstPeeks + 1, `${firstPeeks} → ${slowPeeks()}`);
+  await shot(slow, 'M7-hindi-after-translating');
+  fake.setSlowTranslate(0);
+
   // Her recipe in her language: her words with the English under them, the chrome and the sheet in Hindi.
   await hi.getByRole('dialog').waitFor({ timeout: 10000 });
   await hi.getByRole('dialog').getByRole('button', { name: /^रेसिपी खोलें/ }).click();

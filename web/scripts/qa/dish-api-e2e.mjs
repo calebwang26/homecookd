@@ -167,6 +167,17 @@ try {
   await shot(kid, '3-kid-asked');
   await kid.keyboard.press('Escape');
 
+  // A Hindi phone: her page opens in English and asks for her language; past 8 s the peek says translating and the page peeks again.
+  console.log('Mom in Hindi');
+  const hi = await phone('mom-hi', 'hi-IN');
+  await hi.goto(`${BASE}/a?t=${askToken}`, { waitUntil: 'load' });
+  await hi.getByRole('heading', { level: 1 }).waitFor({ timeout: 30_000 });
+  const hiPeek = (await api('/dish/ask/peek', { askToken, lang: 'hi' })).ask;
+  check('a peek in her language says whether it is still translating', typeof hiPeek.translating === 'boolean', String(hiPeek.translating));
+  check('translating and inLang never both', !(hiPeek.translating && hiPeek.inLang), `${hiPeek.translating}, ${hiPeek.inLang?.lang ?? null}`);
+  await shot(hi, '3b-mom-hindi');
+  await hi.context().close();
+
   // ── Mom ────────────────────────────────────────────────────────────────────────────────────
   console.log('Mom');
   const mom = await phone('mom');
