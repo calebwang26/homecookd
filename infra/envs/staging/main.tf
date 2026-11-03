@@ -118,7 +118,8 @@ module "env" {
       memory        = 512
       desired_count = var.api_count
       autoscale     = { min = 2, max = 4 }
-      drain_seconds = 90 # a task taken away finishes its requests first, and making a card can wait 60 s on the guess
+      health_port   = 8081 # the load balancer's check, on its own thread (api/src/health.ts); the same as the image's HEALTH_PORT
+      drain_seconds = 90   # a task taken away finishes its requests first, and making a card can wait 60 s on the guess
       default_route = true
       uses_database = true
       # A secret with no value stops a task starting, so the real keys are named here only for a test window.

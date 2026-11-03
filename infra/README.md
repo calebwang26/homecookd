@@ -126,8 +126,10 @@ Voice is only a smoke test of the setup here (homie is off, and voice stays on C
 ## Autoscaling the api
 
 The api runs 2 to 4 tasks, on staging now and on production at launch (`modules/env/autoscaling.tf`). AWS keeps their average CPU
-near 60%: it adds a task after 3 minutes over that, and takes one away after 15 minutes under it. CPU, not request count, because CPU
-is what ran out in the load test (`docs/build/AWS-MIGRATION.md`).
+near 50%: it adds a task after 3 minutes over that, and takes one away after 15 minutes under it. CPU, not request count, because CPU
+is what ran out in the load test (`docs/build/AWS-MIGRATION.md`). It also adds one each minute the api is shedding (10 or more "too busy to
+answer" lines in a minute), because shedding starts long before 3 minutes of CPU do. The load balancer checks the api on its own health thread's
+port (`health_port`, 8081; `api/src/health.ts`), so a busy task isn't replaced as dead.
 
 **The count is a switch.** For an autoscaled service, `desired_count` (staging's `api_count`) is 0 for off or its `autoscale.min` for
 on. Off, the range is 0 to 0; on, it's min to max. Terraform sets the count only when it creates the service. After that the count is
@@ -148,8 +150,26 @@ to 2. To stop staging's api: `terraform apply -var api_count=0` (a merge plans t
    The account's first target makes AWS's own role, `AWSServiceRoleForApplicationAutoScaling_ECSService`, and the api goes to 2 tasks.
 4. Check: `aws ecs describe-services --cluster homecookd-staging --services api --query 'services[0].[desiredCount,runningCount]'` and
    `aws application-autoscaling describe-scaling-activities --service-namespace ecs`.
-5. Prove it: `node infra/scripts/load-test.mjs <staging api> --rps 120`. Two of staging's 0.25 vCPU tasks hold about 75 a second at 60%,
+5. Prove it: `node infra/scripts/load-test.mjs <staging api> --rps 120`. Two of staging's 0.25 vCPU tasks hold about 60 a second at 50%,
    so it should grow to 3 or 4 within minutes, and go back to 2 about 20 minutes after the test.
+
+**Applying the Nov 2 tuning on staging, once (#304). Caleb, in this order.** It moves the check to the health thread's port, adds the shedding
+step policy and its alarm, and sets the CPU target to 50%. No new types, so the apply role needs nothing.
+1. The merge's auto-apply is refused: the target groups' checks and the rule letting the load balancer reach 8081 are network changes, and
+   autoscaling policies are held. Its deploy stops with it.
+2. **Deploy the api first**, from Actions: `gh workflow run deploy-aws.yml --ref aws-migration -f environment=staging -f service=api`. The image
+   sets `HEALTH_PORT` itself (`api/Dockerfile`), so its tasks answer on 8081 before the check moves there. Applied first, the check would fail on
+   every running task until a deploy landed, and ECS would keep replacing them.
+3. By hand, in `infra/envs/staging`:
+   ```bash
+   AWS_PROFILE=homecookd terraform plan    # adds the health port's rule, the step policy and its alarm, and the api's task definition with the port; changes both target groups' checks and the CPU target
+   AWS_PROFILE=homecookd terraform apply
+   ```
+   The rule is made before the check moves (`depends_on`). The new task definition reaches the tasks on the next deploy, and nothing waits on it.
+4. Check: `aws elbv2 describe-target-health --target-group-arn "$(aws elbv2 describe-target-groups --names homecookd-staging-api --query 'TargetGroups[0].TargetGroupArn' --output text)"`
+   says healthy for every task, and `aws application-autoscaling describe-scaling-policies --service-namespace ecs` lists `-cpu` at 50 and `-shedding`.
+5. The rerun at 120 a second, as in step 5 above. `describe-scaling-activities` should show a task added within a few minutes and no task
+   "replaced due to an unhealthy status" in `aws ecs describe-services --cluster homecookd-staging --services api --query 'services[0].events'`.
 
 ## Starting the backups
 

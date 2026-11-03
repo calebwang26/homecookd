@@ -34,12 +34,13 @@ variable "db_protected" {
 }
 
 variable "services" {
-  description = "Fargate services. path_patterns empty = no load balancer. secrets = names from secret_names. autoscale = CPU picks the count between min and max (autoscaling.tf)."
+  description = "Fargate services. path_patterns empty = no load balancer. secrets = names from secret_names. autoscale = CPU picks the count between min and max (autoscaling.tf). health_port = the load balancer checks /health there, not on port (the api's own thread, api/src/health.ts)."
   type = map(object({
     cpu           = number
     memory        = number
     desired_count = number
     port          = optional(number, 8080)
+    health_port   = optional(number)
     path_patterns = optional(list(string), [])
     default_route = optional(bool, false)
     drain_seconds = optional(number, 30)
