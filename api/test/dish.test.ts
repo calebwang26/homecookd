@@ -5,6 +5,7 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { db } from "../src/db.js";
 import { sweep } from "../src/modules/dish/tasks.js";
+import { MOM_PAGE_WAIT } from "../src/modules/dish/service.js";
 import { claimMerge, saveVersion } from "../src/modules/dish/merge.js";
 import { DishModelError, FAKE_COST, FAKE_WORDS } from "../src/modules/dish/model.js";
 import { askTokenFor, sha256Hex, TOO_MANY } from "../src/modules/dish/values.js";
@@ -105,8 +106,9 @@ test("a card's shape: exactly the fields the site's types name", { skip }, async
     "merging", "message", "openedAt", "photoUrls", "relation", "status", "version",
   ].sort());
   const ask = await peek(t, new URL(card.askUrl).searchParams.get("t")!);
+  // `translating` is the peek's own (Nov 2, the translation's time cap): the site's Ask type adds it as optional.
   assert.deepEqual(Object.keys(ask).sort(), [
-    "answered", "clips", "dish", "finished", "guess", "inLang", "kidName", "kidVoiceS", "kidVoiceUrl", "merging", "message", "photoUrls", "questions", "relation", "version",
+    "answered", "clips", "dish", "finished", "guess", "inLang", "kidName", "kidVoiceS", "kidVoiceUrl", "merging", "message", "photoUrls", "questions", "relation", "translating", "version",
   ].sort());
 });
 
@@ -538,6 +540,46 @@ test("Mom's page in her language: translated once and cached, again when the mes
   assert.equal((await answer(t, askToken, "q2", { lang: "hi" })).data.ask.inLang.lang, "hi");
   assert.equal((await post(t, "/dish/ask/finish", { askToken, lang: "mr" })).data.ask.inLang.lang, "mr");
   assert.equal(model.calls.forMom, 4);
+});
+
+test("a slow translation: her page opens in English with translating, a reload waits on the same call, and the next peek has her language", { skip }, async () => {
+  const t = await newBackend();
+  const { kidToken, askToken } = await askedCard(t);
+  const was = MOM_PAGE_WAIT.ms;
+  MOM_PAGE_WAIT.ms = 50;
+  let release: () => void = () => {};
+  const held = new Promise<void>((resolve) => (release = resolve));
+  model.forMom = async (realCall) => {
+    await held;
+    return await realCall();
+  };
+  try {
+    const first = await peek(t, askToken, "hi");
+    assert.equal(first.translating, true);
+    assert.equal(first.inLang, null);
+    assert.equal(first.dish, "tomato egg"); // the English page, at once
+    const reload = await peek(t, askToken, "hi");
+    assert.deepEqual([reload.translating, reload.inLang], [true, null]);
+    assert.equal(model.calls.forMom, 1, "the reload waited on the first call");
+
+    release();
+    const id = (await rowOf(kidToken)).id;
+    for (let i = 0; i < 100; i += 1) {
+      if ((await db().query("select 1 from dish_ask_translations where ask_id = $1 and lang = 'hi'", [id])).rows.length) break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    const after = await peek(t, askToken, "hi");
+    assert.equal(after.translating, false);
+    assert.equal(after.inLang.lang, "hi");
+    assert.equal(model.calls.forMom, 1, "cached by the call that went on");
+    // In time (the real wait), nothing changes: translated before it answers.
+    MOM_PAGE_WAIT.ms = was;
+    assert.equal((await peek(t, askToken, "mr")).translating, false);
+    assert.equal((await peek(t, askToken)).translating, false);
+  } finally {
+    release();
+    MOM_PAGE_WAIT.ms = was;
+  }
 });
 
 test("Mom's page stays in English past $11, when the translation fails, and when it has a filtered word", { skip }, async () => {
