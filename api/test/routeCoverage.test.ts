@@ -346,6 +346,9 @@ const ROUTES: Record<string, SignedIn | Anonymous> = {
   "POST /v1/share-requests": { call: (s, who) => post(s.app, who, "/v1/share-requests", { recipeId: s.privateDish }, { key: null }), works: (s) => post(s.app, s.leo, "/v1/share-requests", { recipeId: s.privateDish }, { key: null }), otherFamily: 404, outsider: { familyWide: "Anyone in a family may ask its cook" } },
   "GET /v1/share-requests/dishes": { call: (s, who) => get(s.app, who, "/v1/share-requests/dishes"), otherFamily: nothingOfTheirs, outsider: { familyWide: "A family's dishes" } },
 
+  // --- a dish card in the app: its kid or its cook (Mom holds this one's cook side)
+  "GET /v1/dish-asks/:id": { call: (s, who) => get(s.app, who, `/v1/dish-asks/${s.ask}`), otherFamily: 404, outsider: 404 },
+
   // --- cravings: asked of one person
   "POST /v1/cravings/link": { call: (s, who) => post(s.app, who, "/v1/cravings/link", {}, { key: null }), otherFamily: madeAnew("The caller's own link"), outsider: { familyWide: "The caller's own link" } },
   "POST /v1/cravings/link/revoke": { call: (s, who) => post(s.app, who, "/v1/cravings/link/revoke", undefined, { key: null }), otherFamily: madeAnew("The caller's own link"), outsider: { familyWide: "The caller's own link" } },

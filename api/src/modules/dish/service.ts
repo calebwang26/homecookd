@@ -4,13 +4,15 @@
 // - Answers she left 20 minutes without Send count as sent (kidGet).
 // - A card is always changed under its row lock (tx + lock), because Postgres won't serialize these for us the way Convex did.
 // - No model or S3 call happens inside a transaction: each would hold a database connection while it waits.
+import type { Signed } from "../../auth.js";
 import { db, tx, type Queryable } from "../../db.js";
-import { ApiError } from "../../errors.js";
+import { ApiError, notFound as missing } from "../../errors.js";
 import { enqueue } from "../../outbox.js";
 import { hit } from "../../rateLimit.js";
 import { recordSpend, spentToday, type Trace } from "./budget.js";
 import type { AnswerRow, CardRow } from "./data.js";
 import * as data from "./data.js";
+import type { Side } from "./links.js";
 import { type GuessResult, models, newSpend, type Photo } from "./model.js";
 import { flagged } from "./moderation.js";
 import { askJson, cardJson, due, fresh, saveTranslationIfCurrent, type State, stateOf, translationHash } from "./pages.js";
@@ -26,6 +28,7 @@ import {
   fail,
   missRecipe,
   MOM_OVERAGE_USD,
+  type MyCard,
   notFound,
   RATE,
   randomBase62,
@@ -36,10 +39,13 @@ import {
   WORDS,
 } from "./values.js";
 
-/** The Ask Mom text a card starts with. */
+/** A signed-in read's not-found: one sentence for a card that isn't there and one that isn't theirs, as cravings.ts has it. */
+const NOT_YOURS = "Not found.";
+
 /** What a push about a card needs (messages/tasks.ts): read-only, and the only thing another module asks of a card. */
 export const cardForPush = (askId: string) => data.cardById(db(), askId);
 
+/** The Ask Mom text a card starts with. */
 export const defaultMessage = (relation: Relation, dish: string) =>
   relation === "none" ? "" : `${RELATION_LABEL[relation]}, how do you make your ${dish}? I'm trying to make it here.`;
 
@@ -233,20 +239,24 @@ export async function createCard(
   }
 }
 
-/** The kid's card. Answers she left 20 minutes count as sent, and a merge that's due starts after the reply. */
-export async function kidGet(kid: Kid, trace: Trace) {
+/** Answers she left 20 minutes without Send, unless the kid asked since. */
+const left = (s: State) => {
+  const mine = fresh(s.answers);
+  if (s.row.finished_at || !mine.length) return false;
+  return Math.max(...mine.map((a) => a.created_at.getTime()), s.row.questions_at?.getTime() ?? 0) <= s.now - ABANDONED_MS;
+};
+
+/**
+ * The kid looks at their card, on the web or in the app: answers she left 20 minutes count as sent, and a merge that's due starts after the reply. `relock` reads the card
+ * again under its row lock, refusing it if it's no longer theirs.
+ */
+async function kidLook(row: CardRow, relock: (c: Queryable) => Promise<CardRow>, trace: Trace): Promise<State> {
   const now = Date.now();
-  const row = await byKid(db(), kid.kidTokenHash);
   const first = await stateOf(db(), row, now);
-  const left = (s: State) => {
-    const mine = fresh(s.answers);
-    if (s.row.finished_at || !mine.length) return false;
-    return Math.max(...mine.map((a) => a.created_at.getTime()), s.row.questions_at?.getTime() ?? 0) <= now - ABANDONED_MS;
-  };
   // Most looks change nothing, and stay out of the row lock.
-  if (!left(first) && !due(first)) return await cardJson(first, kid.askToken);
-  const state = await tx(async (c) => {
-    let locked = await byKid(c, kid.kidTokenHash, true);
+  if (!left(first) && !due(first)) return first;
+  return await tx(async (c) => {
+    let locked = await relock(c);
     let s = await stateOf(c, locked, now);
     if (left(s)) {
       await data.patchCard(c, locked.id, { finished_at: new Date(now) });
@@ -256,7 +266,33 @@ export async function kidGet(kid: Kid, trace: Trace) {
     await mergeLater(c, s, trace);
     return s;
   });
-  return await cardJson(state, kid.askToken);
+}
+
+/** The kid's card. */
+export async function kidGet(kid: Kid, trace: Trace) {
+  const row = await byKid(db(), kid.kidTokenHash);
+  return await cardJson(await kidLook(row, (c) => byKid(c, kid.kidTokenHash, true), trace), kid.askToken);
+}
+
+/** The side of a card this person holds: its kid (`person_id`) or the one asked (`requested_of`); null for anyone else. */
+const sideOf = (row: CardRow, personId: string): Side | null => (row.person_id === personId ? "kid" : row.requested_of === personId ? "cook" : null);
+
+/**
+ * GET /v1/dish-asks/:id (convex/dishAsks.ts get): the web's Card, plus its id and the side the caller holds, for its kid or its cook. Anyone else, and an id that isn't a
+ * card, get the one not-found. `askUrl` is null: only the kid token rebuilds it. The kid's look counts her answers left 20 minutes as sent, as the web's does. Hers changes
+ * nothing, as Convex's query didn't: what she sees of her own clips is what the kid sees.
+ */
+export async function myCard(signed: Signed, id: string, trace: Trace): Promise<MyCard> {
+  const row = await data.cardById(db(), id);
+  const side = row && sideOf(row, signed.personId);
+  if (!row || !side) throw missing(NOT_YOURS);
+  const relock = async (c: Queryable) => {
+    const again = await data.cardById(c, id, true);
+    if (!again || sideOf(again, signed.personId) !== "kid") throw missing(NOT_YOURS);
+    return again;
+  };
+  const state = side === "kid" ? await kidLook(row, relock, trace) : await stateOf(db(), row);
+  return { ...(await cardJson(state, "")), askUrl: null, id: row.id, side };
 }
 
 export async function kidUpdate(

@@ -2,7 +2,7 @@
 
 Nov 2, 2026. Read from `aws-migration` at `517368c95`, and checked against staging with calls that change nothing but rate-limit counters. For the App screens & recording chat, with a section for App Store, web & builds. This covers a kid asking a cook for a dish (a "card"), craving links, the cook's side of a card (her answers, her clips, her voice recipe, her filming day), the merge that writes her version, reading cards, claiming a card's side, filming a recipe for a card, and live updates for cards. It's the fourth contract: [ACCOUNTS.md, "Conventions"](ACCOUNTS.md#conventions-all-areas) applies (the address, the session, JSON bodies, `Idempotency-Key`, paging, no stubs, polling), every code is in [ERROR-CODES.md](ERROR-CODES.md), and [JOBS.md](JOBS.md) and [MESSAGES.md](MESSAGES.md) have the jobs and the pushes these hang off. Every person id is the `personId` a session returns. Times are epoch milliseconds.
 
-**Where it stands.** The web side (`/dish/*`) is built. The cook's side in the app (`/v1/cravings*`) and the claim are built. **Three things aren't:** a signed-in read of one card by id (Convex's `dishAsks.get`), the list of a person's cards (`dishAsks.forMe`), and making a card from a craving link (`POST /dish/craving/peek`, `cravingToken`). The first gates the Dish screens: the `answered` and `joined` pushes open `/dish/<id>`, and nothing on AWS answers it (open items 1 to 3).
+**Where it stands.** The web side (`/dish/*`) is built. The cook's side in the app (`/v1/cravings*`), the claim, and a signed-in read of one card by id (`GET /v1/dish-asks/:id`, Convex's `dishAsks.get`, #322) are built. **Two things aren't:** the list of a person's cards (`dishAsks.forMe`), and making a card from a craving link (`POST /dish/craving/peek`, `cravingToken`) (open items 2 and 3).
 
 **Privacy.** A recipe that isn't ready is its cook's alone (#305), and her answers are hers until she sends them. How cards hold to it:
 
@@ -12,8 +12,9 @@ Nov 2, 2026. Read from `aws-migration` at `517368c95`, and checked against stagi
 | `dishAskId` on `POST /v1/jobs` | Kept only for a card asked of her (`requested_of`) in her own family; any other is dropped with no error | `dish/links.ts` `isRequestOf`, `jobs/service.ts` |
 | The `filmed` push | Queued only when the recipe is `ready` and its cook is the card's cook, and sent only to a kid in the recipe's family | `messages/published.ts`, `pushEvents.ts` `pushFilmed` |
 | `answered` on an ask | Means her voice version exists. Filming never sets it, so a processing recipe shows nowhere on a card | `cravings.ts` `cravingAsk` |
-| Her clips before Send | The kid's card lists no answer until she sends, or leaves them 20 minutes without Send (that counts as sent). Words show only with her version | `pages.ts` `cardJson`, `service.ts` `kidGet` (`ABANDONED_MS`) |
+| Her clips before Send | The kid's card lists no answer until she sends, or leaves them 20 minutes without Send (that counts as sent: the kid's look on the web or in the app, never hers). Words show only with her version | `pages.ts` `cardJson`, `service.ts` `kidLook` (`ABANDONED_MS`) |
 | Her requests | `GET /v1/cravings` and `/:id` show only cards asked of her. Her family's card asked of someone else is 403 `not_asked_of_you` on writes and 404 on the read | `cravings.ts` `getAsk`, `askedOfMe` |
+| A card in the app | `GET /v1/dish-asks/:id` answers only its kid (`person_id`) and its cook (`requested_of`). Anyone else, her family included, gets the same 404 as a card that isn't there | `service.ts` `myCard` |
 
 ## Ids and tokens
 
@@ -42,12 +43,12 @@ Nov 2, 2026. Read from `aws-migration` at `517368c95`, and checked against stagi
 6. **A merge.** After Send (web) or her voice recipe (app), `dish.merge` writes her version from the guess and all her words, then the word filter reads it. All her answers or none. A failed try is tried again 3 minutes on, 5 tries at most. Mom's work may pass the daily budget by $1 (`MOM_OVERAGE_USD`); past that it waits for the next UTC day. While it runs, `merging` is true (about 10 to 20 s). It ends with `version` set and `status: "answered"`, or, when no version will come (no words heard, or every try failed), with her clips going to the kid as they are. Either end queues the `answered` push.
 7. **The kid gets the answer.**
    - **On the web:** `POST /dish/cards/get {kidToken}`, every 3 s while `merging`, else every 15 s while asked.
-   - **In the app:** the `answered` push opens `/dish/<id>`. **No AWS read answers `/dish/<id>`** (open item 1). Only a web-only kid with no person gets no push.
+   - **In the app:** the `answered` push opens `/dish/<id>`, which reads `GET /v1/dish-asks/<id>`: every 3 s while `merging`, else on focus (Live, below). Only a web-only kid with no person gets no push.
 8. **Claiming a card from a link** (ACCOUNTS.md, "A dish card's link"):
    1. `POST /link/open {token}` (the kid's or Mom's token) says which side and the dish, and gives a join `ticket` when the card has a family, that side was never claimed, and the card had activity in the last 30 days.
    2. Signed out with a ticket: sign in with `link_ticket`. The side sets the role.
    3. `POST /v1/links/claim {token}` answers `{dishAskId, side, sameFamily, taken}`. The kid's token makes them the card's kid (`person_id`), Mom's makes her its cook (`requested_of`, and her relation if she has none). A card with no family joins the caller's. It queues `joined` to the other side if they're in the claimer's family.
-   4. Open `/dish/<dishAskId>`. **Not readable yet** (open item 1). The cook side shows in `GET /v1/cravings` at once.
+   4. Open `/dish/<dishAskId>`: `GET /v1/dish-asks/<dishAskId>` answers either side at once. The cook side shows in `GET /v1/cravings` at once too.
 9. **Filming a recipe for a card.** From the request screen (`/record?ask=<id>`), send `dishAskId: <id>` on `POST /v1/jobs` (JOBS.md, flow 1). The id comes from `GET /v1/cravings`' `asks[].id`, which exists now. The app doesn't send it yet, to Convex or AWS (open item 6). When the recipe is `ready`, the kid gets `filmed`, which opens `/recipe/<recipeId>`. A card claimed across two families keeps working, but its job drops the id, so no `filmed` (the kid couldn't open that family's recipe anyway).
 
 ## Routes
@@ -157,6 +158,25 @@ A 429's `message` is "Too many tries. Please wait a few minutes and try again.",
 | `not_set_up` (503) | The model key isn't set | Say it isn't ready |
 | `origin` (403) | A browser on another site | A bug |
 
+### A card in the app: `GET /v1/dish-asks/:id` (session)
+
+Code: `api/src/modules/dish/cravingRoutes.ts`, `service.ts` `myCard`. Replaces Convex's `dishAsks.get`, which `dishCards.ts:useMyCard` reads for `/dish/[id]`.
+
+`Authorization: Bearer <sessionToken>`. Any role. No `Idempotency-Key`, no rate limit of its own.
+
+| Route | Answer | Codes |
+|---|---|---|
+| `GET /v1/dish-asks/:id` | `MyCard` | `not_found` ("Not found."): no such card, or the caller holds neither side. The same bytes for both |
+
+Every route here can also answer `invalid` (`id` over 100 characters), `signed_out`, `removed_from_family`, `unavailable` and `server_error`.
+
+- **MyCard** is the web's Card above, with `askUrl: null`, then `id` (the card's `dishAskId`) and `side: "kid" | "cook"`: `{dish, relation, kidName, status, guess, version, answers, merging, asked, message, kidVoiceUrl, kidVoiceS, photoUrls, askUrl, askedAt, openedAt, finishedAt, createdAt, filmingDay, id, side}`. Convex answered null where this answers 404.
+- **Who reads it:** the card's kid (`person_id`, after a kid-side claim) is `side: "kid"`; its cook (`requested_of`: a cook-side claim, or a card from her craving link) is `side: "cook"`. No one else, as on Convex: being in the card's family isn't enough.
+- **Her clips:** `answers` is the kid's list on both sides, so Mom sees her own clips here only once they've gone to the kid. Before her Send it's `[]`, `status` stays `asked` and `merging` is false. The kid's read counts her answers left 20 minutes without Send as sent, and starts her version (then `merging` is true), as `POST /dish/cards/get` does. Her own read changes nothing.
+- **Her version:** `version` and `status: "answered"` on both sides, once the merge lands (her web Send, or her voice recipe from `/v1/cravings/:id/voice-recipe`).
+- **Polling:** there's no live topic (Live, below). Read it again every 3 s while `merging`, else on focus.
+- **Retries:** a read; safe to repeat.
+
 ### The cook's routes in the app: `/v1/cravings*` (session)
 
 Code: `api/src/modules/dish/cravingRoutes.ts`, `cravings.ts`, `cravingData.ts`.
@@ -177,7 +197,7 @@ Every route here can also answer `signed_out`, `removed_from_family`, `unavailab
 
 - **Her link:** one live link, reused. A new `message` replaces its line (the default is "What do you miss from home? Tell me and I'll make it for you."). A new link is made when she has none, stopped hers, or it made 20 cards (`TODO(caleb)`). Cards a stopped link made stay.
 - **CravingAsk:** `{id, kidName, dish, guess: [{amount, name}], kidVoiceUrl, photoUrl, message, createdAt, answered, voiceRecipe: "writing" | "ready" | "failed" | null, filmingDay}`. `kidName` is `""` once the kid deleted their account. `answered` is true once her version exists (her web answers or her voice recipe), never from filming. `voiceRecipe` is `failed` when no words were heard or every merge try failed: she may send again, which replaces it.
-- **What's in her list:** cards whose cook is her (`requested_of`): a web ask whose cook side she claimed, or (not yet on AWS) a card from her craving link. There's no CravingAsk version of her clips or version: Mom's full view of a card is the missing read (open item 1).
+- **What's in her list:** cards whose cook is her (`requested_of`): a web ask whose cook side she claimed, or (not yet on AWS) a card from her craving link. There's no CravingAsk version of her clips or version: Mom's full view of a card is `GET /v1/dish-asks/:id`, above.
 - **The voice recipe:** `language` defaults to her person's language, else English. 1 to 125 s, saved as at most 120. The same `audioKey` again changes nothing. A second recording replaces the first. Her upload goes through the file guard: someone else's key is 404.
 - **Retries:** `link` returns the same link; `revoke` and `filming-day` are safe to repeat; `voice-recipe` with the same `audioKey` is too. Each `voice-recipe/upload` makes a new upload, deleted within the hour if unused.
 
@@ -203,12 +223,12 @@ Code: `api/src/modules/messages/pushEvents.ts`; words and limits in [MESSAGES.md
 
 | Kind | To | Opens | On AWS |
 |---|---|---|---|
-| `answered` | The card's kid | `/dish/<cardId>` | Queued by the merge. **Its screen has no read** |
-| `joined` | The other side, in the claimer's family | `/dish/<cardId>` | Queued by the claim. **Its screen has no read** |
+| `answered` | The card's kid | `/dish/<cardId>` | Queued by the merge |
+| `joined` | The other side, in the claimer's family | `/dish/<cardId>` | Queued by the claim |
 | `craving` | The cook who sent the craving link | `/request/<askId>` | Words and handler built; **nothing queues it** (MESSAGES.md, open item 6) |
 | `filmed` | The card's kid, in the recipe's family | `/recipe/<recipeId>` | Queued when a job with `dishAskId` publishes a ready recipe |
 
-`/request/<askId>` reads `GET /v1/cravings/:id`. `/recipe/<recipeId>` reads `GET /v1/recipes/:id` (JOBS.md).
+`/dish/<cardId>` reads `GET /v1/dish-asks/:id`. `/request/<askId>` reads `GET /v1/cravings/:id`. `/recipe/<recipeId>` reads `GET /v1/recipes/:id` (JOBS.md).
 
 ## Live
 
@@ -216,11 +236,11 @@ Code: `api/src/modules/messages/pushEvents.ts`; words and limits in [MESSAGES.md
 
 | Convex subscription | Screen | Plan (LIVE-UPDATES.md) | Today on AWS |
 |---|---|---|---|
-| `dishAsks:get` | `/dish/[id]` | A topic, 15 s on that screen | **Not built, and no plain read either** (open items 1, 4) |
+| `dishAsks:get` | `/dish/[id]` | A topic, 15 s on that screen | No topic (open item 4). Read `GET /v1/dish-asks/:id` on focus, and every 3 s while `merging` |
 | `cravings:forCook` | cook Home; `/record`, `/request/*` through `useCravingAsk` | On focus, and every 60 s | No topic. Read `GET /v1/cravings` (every page) on focus and every 60 s on cook Home |
 | `jobs:mine` | the processing card for a recipe filmed for a card | Built: `jobs` | JOBS.md |
 
-While a merge runs, the web polls faster: the kid's page every 3 s while `merging`, Mom's every 2 s. The app should do the same on `/dish/[id]` and `/request/voice` once it has a read: every 3 s while `merging` or `voiceRecipe: "writing"`, else on focus.
+While a merge runs, the web polls faster: the kid's page every 3 s while `merging`, Mom's every 2 s. The app should do the same on `/dish/[id]` (`GET /v1/dish-asks/:id`) and `/request/voice` (`GET /v1/cravings/:id`): every 3 s while `merging` or `voiceRecipe: "writing"`, else on focus.
 
 ## What the app calls today, and what replaces it
 
@@ -228,7 +248,7 @@ The rows come from APP-BACKEND-INVENTORY.md's "Cravings and kid asks (v2)" and "
 
 | Today | App wrapper | Screens | 1.1 |
 |---|---|---|---|
-| Convex `dishAsks:get`, live | `dishCards.ts:useMyCard` | `/dish/[id]` | **Not built** (open item 1). It answered `MyCard`: the Card above plus `id` and `side: "kid" \| "cook"`, `askUrl: null`, or null for anyone but its kid or cook |
+| Convex `dishAsks:get`, live | `dishCards.ts:useMyCard` | `/dish/[id]` | `GET /v1/dish-asks/:id` → `MyCard`, the same fields: the Card above plus `id` and `side: "kid" \| "cook"`, `askUrl: null`. 404 where Convex gave null. Not live: on focus, and every 3 s while `merging` |
 | Convex `dishAsks:forMe` | not called (only `dishView.ts`'s type names it) | | **Not built**, and not called today (open item 2) |
 | Convex `cravings:forCook`, live | `cravings.ts:useCravingAsks`, and `useCravingAsk(id)` finds one in that list | `/parent/home`, `/record`, `/request/[id]`, `/request/sent`, `/request/voice` | `GET /v1/cravings?cursor=` → `.asks`, every page; same fields. Not live: on focus and every 60 s |
 | Convex `cravings:get` | not called | | `GET /v1/cravings/:id`. Use it for `/request/<id>` from a push, and for an ask past the first page (open item 7). 404 where Convex gave null |
@@ -289,7 +309,7 @@ What staging runs, from `infra/envs/staging/main.tf`:
 6. **Her answer**, either way:
    - web: `POST /dish/ask/answer/upload?q=q1&lang=en&durationS=5 {askToken, contentType: "audio/mp4", size}`, PUT at least 100 bytes, `POST /dish/ask/answer?q=q1&lang=en&durationS=5 {askToken, fileId}`, `POST /dish/ask/finish {askToken}`;
    - app: `voice-recipe/upload`, a PUT, `voice-recipe {audioKey, durationS: 5}`.
-7. **Read it:** poll `POST /dish/cards/get {kidToken}` until `status: "answered"` and `version` is set (seconds, with fake models), or `GET /v1/cravings/<id>` until `voiceRecipe: "ready"`. In the app there's still no read by id.
+7. **Read it:** poll `POST /dish/cards/get {kidToken}` until `status: "answered"` and `version` is set (seconds, with fake models), or `GET /v1/cravings/<id>` until `voiceRecipe: "ready"`. In the app, `GET /v1/dish-asks/<id>` as kid-1 (`side: "kid"`) or cook-1 (`side: "cook"`) reads the same card; anyone else gets 404.
 8. **Filmed:** as cook-1, `POST /v1/jobs {…, dishAskId}`, then `POST /v1/test/recipe {jobId}` (JOBS.md). kid-1 gets `filmed`.
 
 Each test person is one `test_id`, the same person every time. A craving card can't be made on staging: tests make one with SQL.
@@ -298,7 +318,7 @@ Each test person is one `test_id`, the same person every time. A craving card ca
 
 Owners: **API** is the AWS backend chat, **App** is App screens & recording, **Web** is App Store, web & builds, **Caleb** is a decision only he makes.
 
-1. **API, before the Dish screens:** a signed-in read of one card by id (Convex's `dishAsks.get`): `MyCard` (the Card plus `id` and `side`, `askUrl: null`) for its kid or its cook, 404 for anyone else; `/dish/<id>`, the `answered` and `joined` pushes, and Mom's view of her clips and version all need it.
+1. ~~**API, before the Dish screens:** a signed-in read of one card by id (Convex's `dishAsks.get`): `MyCard` (the Card plus `id` and `side`, `askUrl: null`) for its kid or its cook, 404 for anyone else; `/dish/<id>`, the `answered` and `joined` pushes, and Mom's view of her clips and version all need it.~~ **Fixed in #322:** `GET /v1/dish-asks/:id` answers `MyCard` to the card's kid and its cook, and the same 404 `not_found` as a missing card to anyone else (routes, above). The kid sees none of her clips until she sends or leaves them 20 minutes; her own read changes nothing. **API**
 2. **API, before the Dish screens, if App wants it:** the list of a person's cards on both sides (Convex's `dishAsks.forMe`, 50 newest); the app doesn't call it today, so App first says whether a kid's screen lists their cards.
 3. **API, before the Dish screens:** `POST /dish/craving/peek` and `cravingToken` on `POST /dish/cards` (the card born asked of her, in her family, with the link's caps of 5 a day and 20 in all), and the `craving` push with it; the migration docs say these wait for the one-way sync, but 1.1 has no sync and the api owns its people on staging, so only the PR is missing.
 4. API: the `dishAsks:get` live topic (15 s on the screen); until it's built, the app polls item 1's read.
