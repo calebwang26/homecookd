@@ -71,11 +71,6 @@
       "why": "Lists the new migration and its clean-up job. Nothing runs it after a merge",
       "fingerprint": "4dbd38709244"
     },
-    "web/vercel.json": {
-      "switch": "the branch's name",
-      "why": "Vercel stops building aws-migration and claude/aws-*. It names no branch that deploys live, so main and every other branch build as before",
-      "fingerprint": "143d6f5ea59b"
-    },
     "web/next.config.ts": {
       "switch": "NEXT_PUBLIC_DISH_UPLOADS",
       "why": "Gives the switch a value in every build, so the new flow compiles out",
@@ -93,8 +88,8 @@
     },
     "web/src/components/mom/MomApp.tsx": {
       "switch": "NEXT_PUBLIC_DISH_UPLOADS",
-      "why": "The same, for Mom's page",
-      "fingerprint": "7ea5b914d641"
+      "why": "The same, for Mom's page. Its one re-peek runs only on a peek with translating: true, which only the new api sends",
+      "fingerprint": "55874d99f423"
     },
     "web/src/components/mom/MomScreens.tsx": {
       "switch": "NEXT_PUBLIC_DISH_UPLOADS",
@@ -106,6 +101,11 @@
       "why": "Upload links with it set, raw files to Convex without",
       "fingerprint": "c240c92cee9a"
     },
+    "web/src/lib/dish/types.ts": {
+      "switch": "NEXT_PUBLIC_DISH_UPLOADS",
+      "why": "Adds the optional Ask.translating, which only the new api sends; Convex's peek leaves it out",
+      "fingerprint": "e02d25ee79f3"
+    },
     "web/src/lib/recipe-web/api.ts": {
       "switch": "NEXT_PUBLIC_DISH_UPLOADS",
       "why": "/r opens a share with POST /v1/shares/open with it set, Supabase's GET /shares/:token without",
@@ -115,6 +115,11 @@
       "switch": "NEXT_PUBLIC_DISH_UPLOADS",
       "why": "A comment only",
       "fingerprint": "d537f07ee548"
+    },
+    "web/vercel.json": {
+      "switch": "the branch's name",
+      "why": "Vercel stops building aws-migration and claude/aws-*. It names no branch that deploys live, so main and every other branch build as before",
+      "fingerprint": "143d6f5ea59b"
     }
   }
 }
