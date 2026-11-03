@@ -60,7 +60,7 @@ import { jobs as awsJobs } from '@/lib/aws/jobs';
 import { newKey } from '@/lib/aws/legacy';
 import { watchRead, watchTopic } from '@/lib/aws/live';
 import { messages as awsMessages, type Question as AwsQuestion } from '@/lib/aws/messages';
-import { cravings as awsCravings } from '@/lib/aws/dish';
+import { cravings as awsCravings, dishCard as awsDishCard } from '@/lib/aws/dish';
 import { sendAwsFile } from '@/lib/aws/sendFile';
 import { readAwsRecipes, refreshAwsRecipes, watchAwsRecipes } from '@/lib/aws/recipesStore';
 import { getSession, useSession } from '@/lib/session';
@@ -244,7 +244,19 @@ const AWS_LIVE: Record<string, (set: (v: unknown) => void, as: string | null, ar
     return watchRead(`questions:recipe:${as ?? ''}:${recipeId}`, () => awsMessages.recipeQuestions(recipeId, as), 10_000, (qs) => set(qs.map(toRecipeAnswer)));
   },
   // Her requests: no topic (DISH.md, "Live"), so the plain read on focus and every minute.
-  'cravings:forCook': (set, as) => watchRead(`cravings:${as ?? ''}`, () => awsCravings.all(as), 60_000, set),
+  // A card: no topic (DISH.md item 4), so read it every 3 s while her answers merge, else every 15 s. Not hers or gone: null.
+  'dishAsks:get': (set, as, args) => {
+    const id = String(args.id ?? '');
+    return watchRead(
+      `dish-ask:${as ?? ''}:${id}`,
+      () => awsDishCard(id, as).catch((e) => (isAwsError(e) && e.code === 'not_found' ? null : Promise.reject(e))),
+      (card) => (card?.merging ? 3_000 : 15_000),
+      set,
+    );
+  },
+  // While one of her voice recipes is being written, every 3 s (DISH.md, "Live"); else every minute.
+  'cravings:forCook': (set, as) =>
+    watchRead(`cravings:${as ?? ''}`, () => awsCravings.all(as), (asks) => (asks.some((x) => x.voiceRecipe === 'writing') ? 3_000 : 60_000), set),
   'shareRequests:familyDishes': (set, as) => watchRead(`share-dishes:${as ?? ''}`, () => awsMessages.shareDishes(as), 60_000, set),
   'messages:madeMyDish': (set, as) =>
     watchRead(`made-my-dish:${as ?? ''}`, () => awsMessages.madeMyDish(as), 60_000, (m) =>

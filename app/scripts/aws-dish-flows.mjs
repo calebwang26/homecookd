@@ -139,6 +139,34 @@ try {
     assert.equal((await D.cravings.get(cardId)).voiceRecipe, 'ready');
   });
 
+  await check("the card in the app: its kid and its cook read it; another cook in the family gets 404", async () => {
+    phone(kid);
+    const mine = await D.dishCard(cardId);
+    assert.deepEqual([mine.id, mine.side, mine.status], [cardId, 'kid', 'answered']);
+    assert.ok(mine.version, "her version, after her voice recipe");
+    phone(mom);
+    assert.equal((await D.dishCard(cardId)).side, 'cook');
+    phone(other);
+    assert.equal((await refused(D.dishCard(cardId))).code, 'not_found');
+    return `${mine.version.ingredients?.length ?? 0} ingredients in her version`;
+  });
+
+  await check("a craving link: the kid's card is born asked of her, in her family, and shows in her requests", async () => {
+    phone(mom);
+    const { url } = await D.cravings.link('What do you miss?');
+    const cravingToken = new URL(url).searchParams.get('c');
+    const peek = await post('/dish/craving/peek', { cravingToken });
+    assert.equal(peek.status, 200, `peek answered ${peek.status}`);
+    assert.equal(peek.body.message, 'What do you miss?');
+    const made = await post('/dish/cards', { dish: 'dal', relation: 'mom', kidName: `Kid ${run}`, cravingToken });
+    assert.equal(made.status, 201, `cards answered ${made.status} ${JSON.stringify(made.body)?.slice(0, 120)}`);
+    const asks = await D.cravings.all();
+    // Staging's fake models give every card the same fixed guess ("tomato egg"), so find it by the kid's name.
+    const born = asks.find((x) => x.kidName === `Kid ${run}`);
+    assert.ok(born, 'in her requests at once, with no claim');
+    return peek.body.parentName;
+  });
+
   await check('a recording for the card carries its dishAskId and publishes', async () => {
     phone(mom);
     const bytes = randomBytes(64 * 1024);
