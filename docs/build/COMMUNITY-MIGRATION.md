@@ -244,12 +244,12 @@ Report alerts go through `outbox` on the `scheduled` queue. A voice recipe's mer
 
 ## Secrets and env the api now needs (names only)
 
-`EDIBLE_CODE_KEY` (Nov 2), the key accounts already needs: a dinner's invite token and a craving link's are stored sealed with it (SCHEMA.md, M6). Without it, asking for either link is a 500, and a dinner's link still opens. `RATE_LIMIT_SALT`, `REPORT_ALERT_URL`, `REPORT_ALERT_TOKEN`, `REPORT_ALERT_EMAIL`, `DISH_WEB_ORIGIN` and `PRIVATE_BUCKET` are already set. No model is called from this area's own code, and voice recipes use the dish module's.
+`EDIBLE_CODE_KEY` (Nov 2), the key accounts already needs: a dinner's invite token and a craving link's are stored sealed with it (SCHEMA.md, M6). Without it, asking for either link is a 500, and a dinner's link still opens. `RATE_LIMIT_SALT`, `DISH_WEB_ORIGIN` and `PRIVATE_BUCKET` are already set. `REPORT_ALERT_URL`, `REPORT_ALERT_TOKEN` and `REPORT_ALERT_EMAIL` aren't, on staging or production: alerts on AWS go through alarms (`infra/modules/env/alerts.tf`), so a report's alert and the reminder reach nobody there yet (`infra/README.md`, "Production before launch"). No model is called from this area's own code, and voice recipes use the dish module's.
 
 ## What `infra/` needs (not done: this PR touches only `api/` and `docs/build/`)
 
 - `EDIBLE_CODE_KEY` on the api's `secret_names` and `secrets`, staging included: staging doesn't have it yet.
-- An EventBridge schedule into `scheduled`: `{"payload":{"task":"community.remind_open"}}` daily at 16:00 UTC, as Convex's cron. A switch gate (AWS-MIGRATION's Cutover list). Staging's is in `infra/envs/staging/main.tf` (#247, merged unapplied). Production's `schedules` has none yet.
+- An EventBridge schedule into `scheduled`: `{"payload":{"task":"community.remind_open"}}` daily at 16:00 UTC, as Convex's cron. A switch gate (AWS-MIGRATION's Cutover list). Staging's is in `infra/envs/staging/main.tf` (#247), and production's in `infra/envs/production/main.tf` (#323, not applied).
 
 ## Invite opens and the database
 

@@ -88,7 +88,7 @@ The production gate. CUTOVER.md's step 6 checks each one before 1.1 is submitted
 | Alarms reach a person | The budget alert's test email reached Caleb, Nov 2 (#260). Production's alerts topic needs its email confirmed and one alarm fired |
 | Overload fails fast | Shedding built, Nov 2 (`OVERLOAD_SHED`, #271). The bounded wait also has to count event-loop lag (below) |
 | The GitHub `Production` environment has required reviewers | Not done (`infra/README.md`, "Before production") |
-| Every area's switch on, with the schedules and secrets | Not in `envs/production` yet (CUTOVER.md, "What production has on at launch") |
+| Every area's switch on, with the schedules and secrets | Written in `envs/production` (#323, Nov 2), not applied. Caleb's steps: `infra/README.md`, "Production before launch" |
 
 **Built, Nov 2: two api tasks, and autoscaling on CPU** (`infra/modules/env/autoscaling.tf`; Caleb approved the shape). Production's
 api is two tasks of 0.5 vCPU and 1 GB in place of one of 1 vCPU and 2 GB: the same $36 a month, and a task or a zone can fail
@@ -267,7 +267,7 @@ Before production (CUTOVER.md, step 6):
 For 1.1 on production (CUTOVER.md, steps 1 and 6). **Community's gates (`COMMUNITY-MIGRATION.md`):** Apple reviews report and block, so each of these
 exists and is tested before 1.1 is submitted:
   - The team can act on a report: `api/src/reports.ts` lists and reviews them as a one-off task (COMMUNITY-MIGRATION.md, "The team's reports"), and it ran on staging on Nov 2. Left: a way for the team to see what a reported item is once Convex is gone (the listing prints ids only).
-  - `community.remind_open` has its daily schedule. Staging's is in Terraform (#247). Production's `schedules` has none yet, so there a report left open would never remind anyone.
+  - `community.remind_open` has its daily schedule. Staging's is in Terraform (#247), and production's since #323 (not applied). **Still open:** on AWS the reminder and each new report's alert go through `REPORT_ALERT_URL`, which stays unset there, so they reach nobody until the api logs a line an alarm counts, as the dish budget's does.
   - 1.1's own calls to these routes (App screens). They don't exist yet, and nothing has called these routes.
 
 **History since Nov 2,** because no old build reads a new-host link and AWS doesn't reach GCS: `supabase/functions/api/index.ts:931` accepting the new

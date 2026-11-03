@@ -9,7 +9,7 @@ modules/env/      everything one environment has: network, Postgres, load balanc
                   secret names, alarms, roles
 modules/web/      the website on S3 + CloudFront, staging only so far (docs/build/WEB-MIGRATION.md)
 envs/staging/     the cheap copy: no real keys, no real data
-envs/production/  NOT created yet. Applying it needs Caleb's OK
+envs/production/  NOT created yet. Applying it needs Caleb's OK ("Production before launch" below)
 backups/          daily Convex exports to S3, with their own small network and a key only for this
 backup-copy/      a copy in a second region, off by default, never applied (docs/build/REGION-COPY.md; module: modules/bucket_copy/)
 addresses/        phase 1's api., media. and voice addresses, off by default, never applied (docs/build/ADDRESSES-MIGRATION.md; module: modules/front_door/)
@@ -212,6 +212,116 @@ The deploy role trusts the GitHub environment's name, so anyone with write acces
 environment called `production`. **A GitHub environment named `Production` already exists, with no required reviewers**
 (probably made by Vercel's deployments; GitHub ignores case in these names). It's harmless while the production deploy
 role doesn't exist. **Give it required reviewers (Caleb) before production is created.**
+
+## Production before launch
+
+`envs/production` has every area's switch on from the start (`docs/build/CUTOVER.md`, "What production has on at launch") and every task at
+0. Each step here is Caleb's: production, DNS and new spending need his OK in chat (AGENTS.md). In order, as CUTOVER.md's step 6.
+
+**1. First.** Required reviewers on the GitHub `Production` environment ("Before production", above). Production's deploys log in only from
+`main` (its `deploy_branch`), so they wait for CUTOVER.md's step 4, the merge.
+
+**2. The two certificates, before the first apply if possible.** ACM issues them only after a DNS check, so start here. With them in place,
+the first apply makes the load balancer's listener on 443 straight away.
+1. In Vercel's DNS for `homecookd.app`, add `CAA 0 issue "amazon.com"` on the apex, and keep the three CAA records already there.
+2. Ask for both, then read each one's validation record (it can take a few seconds to appear):
+   ```bash
+   aws acm request-certificate --profile homecookd --region us-west-2 --domain-name api.homecookd.app --validation-method DNS --query CertificateArn --output text
+   aws acm request-certificate --profile homecookd --region us-east-1 --domain-name media.homecookd.app --validation-method DNS --query CertificateArn --output text
+   aws acm describe-certificate --profile homecookd --region <its region> --certificate-arn <its arn> --query 'Certificate.DomainValidationOptions[0].ResourceRecord'
+   ```
+   Add each CNAME in Vercel exactly as printed, and leave it there: ACM renews with it. Then wait for both:
+   `aws acm wait certificate-validated --profile homecookd --region <its region> --certificate-arn <its arn>`.
+3. By PR, in `envs/production/main.tf` (its `TODO(caleb)`): the us-west-2 ARN as `certificate_arn`'s default, the us-east-1 ARN as
+   `media_certificate_arn`'s, and `"media.homecookd.app"` as `media_domain`'s. Defaults, not `-var`: an apply without the `-var` would take
+   HTTPS off. A certificate from the wrong region, or a domain without its certificate, is refused at plan. `MEDIA_BASE_URL` follows
+   `media_domain`, and `recipe.json` keeps full media links, so this lands before the first real recipe.
+
+If they come after the first apply, the same PR moves the listener from 80 to 443 and adds the redirect on 80. If AWS answers that port 80
+already has a listener, apply once more.
+
+**3. The first apply.**
+```bash
+aws sso login --profile homecookd
+cd infra/envs/production
+AWS_PROFILE=homecookd terraform init -backend-config="bucket=homecookd-tfstate-$(aws sts get-caller-identity --profile homecookd --query Account --output text)"
+AWS_PROFILE=homecookd terraform plan -out=production.tfplan
+AWS_PROFILE=homecookd terraform apply production.tfplan
+```
+It makes the network with two NAT gateways; Postgres (Multi-AZ `db.t4g.medium`, 14 days of restore points, deletion protection, IAM logins
+on); the load balancer; the three buckets and the media CloudFront; the queues; every alarm and the alerts topic; the cluster with the api
+and the worker at 0 tasks, and their image repositories; the secret names, empty; the roles, including the deploy role GitHub's
+`production` environment logs in to; and the migrate task. No schedules (they come with the api, step 7), no voice service, and nothing
+runs. Roughly $210 a month at list prices before any task starts, most of it the NAT gateways and the database.
+
+**4. The alarms' email.** AWS sends "AWS Notification - Subscription Confirmation" to caleb.wang26@gmail.com. Click its link: until then
+no alarm reaches anyone. Check it no longer says `PendingConfirmation`:
+`aws sns list-subscriptions --profile homecookd --region us-west-2 --query "Subscriptions[?contains(TopicArn, 'homecookd-production-alerts')].SubscriptionArn"`.
+The api's two health alarms (`-api-no-healthy-tasks`, `-api-below-floor`) are made when it's turned on.
+
+**5. The secrets,** after the apply and before any deploy: a task can't start while a secret it names is empty.
+```bash
+# Production's own random values, made once and never shown. The script won't replace one that's set.
+infra/scripts/make-salt.sh production RATE_LIMIT_SALT EDIBLE_CODE_KEY LINK_JOIN_SECRET LEFT_IDENTITY_SECRET
+# Caleb's keys from the root .env, by name. The script refuses production without names, because .env also holds Convex's and Supabase's EDIBLE_CODE_KEY and LINK_JOIN_SECRET.
+infra/scripts/load-secrets.sh production ANTHROPIC_API_KEY CARTESIA_API_KEY CARTESIA_API_KEYS_BACKUP SENTRY_DSN_API SENTRY_DSN_WORKER
+# Once their lines are in .env (below):
+infra/scripts/load-secrets.sh production APPLE_TEAM_ID APPLE_SIGNIN_KEY_ID APPLE_SIGNIN_PRIVATE_KEY EXPO_ACCESS_TOKEN
+```
+
+| Name | Value from | Why |
+|---|---|---|
+| `RATE_LIMIT_SALT`, `EDIBLE_CODE_KEY`, `LINK_JOIN_SECRET`, `LEFT_IDENTITY_SECRET` | `make-salt.sh`, new | Production starts fresh (CUTOVER.md, open question 2), so no copied link or ticket has to open here. Its own values mean nothing from staging or the old services opens on production, and the live ones stay where they are. Each is set before the first sign-up and never changed: share links are found by a hash keyed from `EDIBLE_CODE_KEY`, and someone who left is found again only with the same `LEFT_IDENTITY_SECRET` |
+| `ANTHROPIC_API_KEY`, `CARTESIA_API_KEY`, `CARTESIA_API_KEYS_BACKUP` | `.env` | Caleb's real model keys. Production always uses real models: it ignores `DISH_FAKE_AI` |
+| `SENTRY_DSN_API`, `SENTRY_DSN_WORKER` | `.env` | The same Sentry project as staging; `DEPLOY_ENV` keeps production's issues apart. Sentry gets an error's type and place only (`api/src/sentry.ts`, `pipeline/observability.py`), and production holds no real family before step 5 is live |
+| `APPLE_TEAM_ID`, `APPLE_SIGNIN_KEY_ID`, `APPLE_SIGNIN_PRIVATE_KEY` | Not in `.env` yet: add the key Convex revokes with today (`convex/apple.ts`) | Revoking Sign in with Apple before a delete (App Review 5.1.1(v)). The `.p8` goes on one line, its line breaks written as `\n` (`appleRevoke.ts` reads either) |
+| `EXPO_ACCESS_TOKEN` | Not in `.env` yet. `TODO(caleb)`: a token from expo.dev, or ask the AWS backend chat to drop the name | CUTOVER.md lists it for push. This project's pushes go without one today (contracts/MESSAGES.md, "Staging testing") |
+| `MOSS_PROJECT_ID`, `MOSS_PROJECT_KEY` | None, on purpose | CUTOVER.md, open question 7: the names stay, production sends nothing to Moss, and no task reads them |
+
+Check which are set, without printing any value:
+```bash
+export AWS_PROFILE=homecookd AWS_REGION=us-west-2
+for S in $(aws secretsmanager list-secrets --filters Key=name,Values=homecookd/production/ --query 'SecretList[].Name' --output text); do
+  aws secretsmanager get-secret-value --secret-id "$S" --query VersionId --output text >/dev/null 2>&1 && echo "set:   $S" || echo "empty: $S"
+done   # only the two MOSS names stay empty
+```
+
+**6. The two addresses.** Once step 2's PR is applied, `AWS_PROFILE=homecookd terraform output dns_targets` prints the two names. In
+Vercel: `CNAME api` to its `api` name and `CNAME media` to its `media` name, with a TTL of 60 at first. No record for the apex or `www`:
+universal links depend on them. Don't create these before the apply: there's nothing to point at.
+
+**7. Deploy, then turn the api on.** After CUTOVER.md's step 4, with a reviewer approving each run:
+```bash
+gh workflow run deploy-aws.yml --ref main -f environment=production -f service=api      # its migrate task runs first, with the master login, and makes the api's and worker's own logins
+gh workflow run deploy-aws.yml --ref main -f environment=production -f service=worker
+```
+Both still have 0 tasks. Then a one-line PR in `envs/production/main.tf`, `api_count = 0` to `2`, and Caleb's plan and apply. AWS sets the
+api's range to 2 to 4 and starts two tasks on the deployed image, and the apply makes the seven schedules and the api's two health alarms.
+```bash
+curl -s https://api.homecookd.app/health
+curl -s https://api.homecookd.app/ready    # {"database":"ok"}, on the api's own login
+aws ecs describe-services --profile homecookd --region us-west-2 --cluster homecookd-production --services api --query 'services[0].[desiredCount,runningCount]'
+```
+The same line back to 0 stops the api and its schedules. Then the rest of CUTOVER.md's step 6 gate: the restore drill, a killed task, the
+load test at production's size over HTTPS (`load-test.mjs` refuses production today, so it needs a change first), one alarm fired to the
+email, and `dish-api-e2e.mjs`. Once step 5 is live, the measured real video job sets the worker's size, disk and count (its `TODO(caleb)`).
+
+**8. The TEST family (CUTOVER.md, step 7).** Starting fresh, nothing is copied: Apple's reviewer family is made again on production.
+1. Through 1.1 itself, on step 8's TestFlight build: a sign-in with Apple makes the family, and its phone-less faces are added in the app
+   (Mom, Dad, Grandma, Leo, Maya, Reviewer, `docs/agents/memory/app-review-guard.md`).
+2. Its Chicken Biryani is a real video job, so it waits for step 5. Production has no made-up recipe: `POST /v1/test/recipe` needs
+   `TEST_SIGNIN_KEY`, which the env module refuses here.
+3. **Not built: the reviewer's link that doesn't expire.** A family's own links last 7 days (contracts/ACCOUNTS.md), and the api keeps a
+   link with no expiry only as an operator's (`api/src/modules/accounts/invites.ts`), which nothing makes on production yet. AWS backend
+   builds a one-off task for it, as `dist/reports.js` is for reports, before step 9.
+4. App Store/web writes in the reviewer notes how 1.1 joins it, under the App Review guard.
+
+**Still open for launch, outside this file:**
+- Community reports reach nobody on AWS. `community.report_alert` and `community.remind_open` send through `REPORT_ALERT_URL`, which stays
+  unset on AWS (`modules/env/alerts.tf`), and log no line an alarm could count. The dish budget's log alarm is the pattern to copy. Apple
+  reviews report and block, so this comes before step 9.
+- Production's media bucket has no `library.json`, so the public library is empty (contracts/JOBS.md, open item 15).
+- The worker's disk is Fargate's default 20 GB, and the env module has no setting for more yet (WORKER-MIGRATION.md).
 
 ## The kid's web flow on staging
 
