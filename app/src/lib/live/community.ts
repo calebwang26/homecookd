@@ -35,6 +35,9 @@ import { requireAiConsent } from '@/lib/aiConsent';
 import { AWS_ON } from '@/lib/aws/config';
 import { errorWords } from '@/lib/aws/errorWords';
 import { isAwsError } from '@/lib/aws/errors';
+import { community as awsCommunity } from '@/lib/aws/community';
+import { newKey } from '@/lib/aws/legacy';
+import { kickReads } from '@/lib/aws/live';
 import { messages as awsMessages } from '@/lib/aws/messages';
 import { english } from '@/lib/words/words';
 
@@ -119,6 +122,21 @@ export type Dinner = {
 };
 
 const EMPTY: CommunityFeed = { here: null, recipes: [], dinners: [] };
+
+/**
+ * 1.1 (AWS_ON): an api refusal as the error the Community screens read (`labels.ts` errorText reads `.data`), in the
+ * app's own words for its code. `gone` (not_found) lets report and block treat "already gone" as done.
+ */
+async function aws<T>(p: Promise<T>): Promise<T> {
+  try {
+    return await p;
+  } catch (e) {
+    if (!isAwsError(e)) throw e;
+    const words = errorWords(e);
+    throw Object.assign(new Error(words), { data: words, code: e.code });
+  }
+}
+const gone = (e: unknown) => (e as { code?: string } | null)?.code === 'not_found';
 const still =
   <T,>(value: T) =>
   (onData: (v: T) => void) => {
@@ -168,11 +186,19 @@ export function useCommunityRecipe(recipeId: string): CommunityRecipe | null | u
 /** On the map: Muse writes the dish's story card from her recipe, so only with this phone's yes to the AI companies. */
 export async function setShare(recipeId: string, on: boolean): Promise<void> {
   if (on) await requireAiConsent();
+  if (AWS_ON) {
+    // Her own tap shares it (COMMUNITY.md). There's no "off" on the api yet (its open item 1): say so, never pretend.
+    if (!on) throw Object.assign(new Error('That can’t be turned off yet.'), { data: 'That can’t be turned off yet.' });
+    await aws(awsMessages.shareAsk(recipeId));
+    return;
+  }
   const sessionToken = await token();
   await call('mutation', 'community:setShare', { sessionToken, recipeId, on }, () => null);
 }
 
 export async function setLocation(lat: number, lng: number, campus?: string): Promise<void> {
+  // TODO(aws): no route sets a place yet (COMMUNITY.md open item 2, Caleb's call); no screen calls this.
+  if (AWS_ON) return;
   const sessionToken = await token();
   await call('mutation', 'community:setLocation', { sessionToken, lat, lng, ...(campus ? { campus } : {}) }, () => null);
 }
@@ -205,6 +231,7 @@ export function useMySwaps(enabled = true): Swap[] {
 }
 
 export async function requestSwap(recipeId: string, myRecipeId?: string): Promise<string> {
+  if (AWS_ON) return (await aws(awsCommunity.requestSwap(recipeId, myRecipeId))).swapId;
   const sessionToken = await token();
   return call('mutation', 'community:requestSwap', { sessionToken, recipeId, ...(myRecipeId ? { myRecipeId } : {}) }, () => `stub-swap-${Date.now()}`, {
     strict: true,
@@ -212,11 +239,13 @@ export async function requestSwap(recipeId: string, myRecipeId?: string): Promis
 }
 
 export async function cookTogether(recipeId: string): Promise<string> {
+  if (AWS_ON) return (await aws(awsCommunity.cookTogether(recipeId))).swapId;
   const sessionToken = await token();
   return call('mutation', 'community:cookTogether', { sessionToken, recipeId }, () => `stub-cook-${Date.now()}`, { strict: true });
 }
 
 export async function respondSwap(swapId: string, accept: boolean): Promise<void> {
+  if (AWS_ON) return void (await aws(awsCommunity.respondSwap(swapId, accept)));
   const sessionToken = await token();
   await call('mutation', 'community:respondSwap', { sessionToken, swapId, accept }, () => null, { strict: true });
 }
@@ -224,6 +253,8 @@ export async function respondSwap(swapId: string, accept: boolean): Promise<void
 export type NewDinner = { recipeId: string; startsAt: number; placeKind?: PlaceKind; placeName: string; address: string; seats: number };
 
 export async function createDinner(dinner: NewDinner): Promise<string> {
+  // One key per dinner she hosts: the client repeats it on its own retries, so a lost answer never hosts twice.
+  if (AWS_ON) return (await aws(awsCommunity.createDinner(dinner, newKey()))).dinnerId;
   const sessionToken = await token();
   return call('mutation', 'dinners:create', { sessionToken, ...dinner }, () => `stub-dinner-${Date.now()}`);
 }
@@ -237,11 +268,13 @@ export function useMyDinners(): Dinner[] {
 }
 
 export async function requestJoin(dinnerId: string): Promise<string> {
+  if (AWS_ON) return (await aws(awsCommunity.join(dinnerId))).requestId;
   const sessionToken = await token();
   return call('mutation', 'dinners:requestJoin', { sessionToken, dinnerId }, () => `stub-request-${Date.now()}`);
 }
 
 export async function respond(requestId: string, accept: boolean): Promise<void> {
+  if (AWS_ON) return void (await aws(awsCommunity.respond(requestId, accept)));
   const sessionToken = await token();
   await call('mutation', 'dinners:respond', { sessionToken, requestId, accept }, () => null);
 }
@@ -250,6 +283,7 @@ export type InviteLink = { token: string; url: string };
 
 /** The dinner's one invite link ("https://homecookd.app/d?t=…"), the same every time. */
 export async function inviteLink(dinnerId: string): Promise<InviteLink> {
+  if (AWS_ON) return aws(awsCommunity.inviteLink(dinnerId));
   const sessionToken = await token();
   return call<InviteLink>(
     'action',
@@ -263,11 +297,22 @@ export async function inviteLink(dinnerId: string): Promise<InviteLink> {
 }
 
 export async function report(kind: Reportable, targetId: string, reason: ReportReason): Promise<void> {
+  // Already gone for her family (not_found): the report did its job; the sheet thanks her and closes.
+  if (AWS_ON) {
+    await aws(awsCommunity.report(kind, targetId, reason)).catch((e) => (gone(e) ? null : Promise.reject(e)));
+    kickReads('community:'); // the item leaves her family's feed: read it again now
+    return;
+  }
   const sessionToken = await token();
   await call('mutation', 'community:report', { sessionToken, kind, targetId, reason }, () => null, { strict: true });
 }
 
 export async function block(kind: Reportable, targetId: string): Promise<void> {
+  if (AWS_ON) {
+    await aws(awsCommunity.block(kind, targetId)).catch((e) => (gone(e) ? null : Promise.reject(e)));
+    kickReads('community:'); // the item leaves her family's feed: read it again now
+    return;
+  }
   const sessionToken = await token();
   await call('mutation', 'community:block', { sessionToken, kind, targetId }, () => null, { strict: true });
 }
@@ -278,6 +323,7 @@ export function useBlocked(enabled = true): BlockedFamily[] {
 }
 
 export async function unblock(blockId: string): Promise<void> {
+  if (AWS_ON) return void (await aws(awsCommunity.unblock(blockId)).catch((e) => (gone(e) ? null : Promise.reject(e))));
   const sessionToken = await token();
   await call('mutation', 'community:unblock', { sessionToken, blockId }, () => null, { strict: true });
 }

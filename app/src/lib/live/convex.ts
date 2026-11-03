@@ -60,6 +60,7 @@ import { jobs as awsJobs } from '@/lib/aws/jobs';
 import { newKey } from '@/lib/aws/legacy';
 import { watchRead, watchTopic } from '@/lib/aws/live';
 import { messages as awsMessages, type Question as AwsQuestion } from '@/lib/aws/messages';
+import { community as awsCommunity } from '@/lib/aws/community';
 import { cravings as awsCravings, dishCard as awsDishCard } from '@/lib/aws/dish';
 import { sendAwsFile } from '@/lib/aws/sendFile';
 import { readAwsRecipes, refreshAwsRecipes, watchAwsRecipes } from '@/lib/aws/recipesStore';
@@ -257,12 +258,32 @@ const AWS_LIVE: Record<string, (set: (v: unknown) => void, as: string | null, ar
   // While one of her voice recipes is being written, every 3 s (DISH.md, "Live"); else every minute.
   'cravings:forCook': (set, as) =>
     watchRead(`cravings:${as ?? ''}`, () => awsCravings.all(as), (asks) => (asks.some((x) => x.voiceRecipe === 'writing') ? 3_000 : 60_000), set),
+  // Community: no topics (COMMUNITY.md, "Live topics"). A dinner every 30 s while open, the lists every 60 s, the
+  // recipe page and the blocked list on focus (a long gap; coming to the front reads at once). Gone: null.
+  'community:feed': (set, as, args) => {
+    const maxMiles = typeof args.maxMiles === 'number' ? args.maxMiles : null;
+    return watchRead(`community:feed:${as ?? ''}:${maxMiles ?? ''}`, () => awsCommunity.feed(maxMiles, as), 60_000, set);
+  },
+  'community:recipe': (set, as, args) => {
+    const id = String(args.recipeId ?? '');
+    return watchRead(`community:recipe:${as ?? ''}:${id}`, () => awsCommunity.recipe(id, as).catch(nullIfGone), 600_000, set);
+  },
+  'community:mySwaps': (set, as) => watchRead(`community:swaps:${as ?? ''}`, () => awsCommunity.swaps(as), 60_000, set),
+  'community:blocked': (set, as) => watchRead(`community:blocked:${as ?? ''}`, () => awsCommunity.blocked(as), 600_000, set),
+  'dinners:get': (set, as, args) => {
+    const id = String(args.dinnerId ?? '');
+    return watchRead(`community:dinner:${as ?? ''}:${id}`, () => awsCommunity.dinner(id, as).catch(nullIfGone), 30_000, set);
+  },
+  'dinners:mine': (set, as) => watchRead(`community:dinners:${as ?? ''}`, () => awsCommunity.myDinners(as), 60_000, set),
   'shareRequests:familyDishes': (set, as) => watchRead(`share-dishes:${as ?? ''}`, () => awsMessages.shareDishes(as), 60_000, set),
   'messages:madeMyDish': (set, as) =>
     watchRead(`made-my-dish:${as ?? ''}`, () => awsMessages.madeMyDish(as), 60_000, (m) =>
       set(m ? { ...m, libraryId: m.libraryId ?? undefined, text: m.text ?? undefined, at: Date.parse(m.at) } : null),
     ),
 };
+
+/** A row another family can't see, or that's gone, reads as null (the screens' own "not there" state). */
+const nullIfGone = (e: unknown) => (isAwsError(e) && e.code === 'not_found' ? null : Promise.reject(e));
 
 /** An AWS cook-mode question in Convex's words (times in ms, `_id`). */
 function toCookQuestion(q: AwsQuestion): CookQuestion {

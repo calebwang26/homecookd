@@ -226,6 +226,8 @@ cd app && node scripts/aws-jobs-flows.mjs                          # Jobs on AWS
 cd app && node scripts/test-aws-messages.mjs                      # the 1.1 Messages client and polled reads (fake fetch and clock)
 cd app && node scripts/aws-messages-flows.mjs                      # Messages on AWS staging: chat, questions, uploads, postcards, shares (deletes test people)
 cd app && node scripts/aws-dish-flows.mjs                          # kids' asks on AWS staging: a web card claimed, her requests, voice recipe, dishAskId (deletes test people)
+cd app && node scripts/test-aws-community.mjs                     # the 1.1 Community client (fake fetch)
+cd app && node scripts/aws-community-flows.mjs                     # Community on AWS staging: feed, swaps, a dinner end to end, invite link (no reports: they email the team)
 cd app && node scripts/draft-words.mjs                             # draft the cook app's missing words in every language (Claude); then test-words
 cd app && node scripts/sync-brand.mjs                             # the brand kit SVGs in assets/brand -> ui/brandSvgs.ts (test-brand checks them)
 

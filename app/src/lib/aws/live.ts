@@ -124,6 +124,11 @@ export function watchTopic<T>(topic: string, onData: (value: T) => void, opts: {
 }
 
 /** Forget every poller (sign-out, a new key): the next watch starts over. */
+/** Read every polled read whose key starts with `prefix` again now (a write just changed what it shows). */
+export function kickReads(prefix: string) {
+  for (const [key, p] of reads) if (key.startsWith(prefix)) p.kick();
+}
+
 export function stopAllPolls() {
   for (const p of [...pollers.values()]) p.end();
   for (const p of [...reads.values()]) p.end();
@@ -134,7 +139,7 @@ export function stopAllPolls() {
 // The same rules as a topic: one shared poll per key, only in front, every `everyMs`; a failure keeps what's on
 // screen and backs off; signed_out and removed_from_family stop it. `read` gets the last value (for an `after` cursor).
 
-type ReadPoller<T> = { watchers: Set<(v: T) => void>; value?: T; hasValue: boolean; end: () => void };
+type ReadPoller<T> = { watchers: Set<(v: T) => void>; value?: T; hasValue: boolean; end: () => void; kick: () => void };
 const reads = new Map<string, ReadPoller<unknown>>();
 
 export function watchRead<T>(
@@ -154,6 +159,7 @@ export function watchRead<T>(
     const poller: ReadPoller<T> = {
       watchers: new Set(),
       hasValue: false,
+      kick: () => {},
       end() {
         stopped = true;
         if (timer != null) clearTimer(timer);
@@ -183,11 +189,12 @@ export function watchRead<T>(
         running = false;
       }
     };
-    const offFront = onFront(() => {
+    poller.kick = () => {
       if (timer != null) clearTimer(timer);
       timer = null;
       void tick();
-    });
+    };
+    const offFront = onFront(poller.kick);
     p = poller;
     reads.set(key, poller as ReadPoller<unknown>);
     void tick();
