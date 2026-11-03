@@ -107,6 +107,9 @@ async function hold(page, locator, ms) {
   const box = await locator.boundingBox();
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   await page.mouse.down();
+  // The first press opens the mic, and a let-go before it's open is dropped on purpose (QuestionScreen's NO_PROMPT_MS), so time
+  // the hold from when it records. On the deployed site the mic can take longer to open than the hold itself.
+  await page.waitForFunction((el) => el.getAttribute('aria-pressed') === 'true', await locator.elementHandle(), { timeout: 10_000 });
   await page.waitForTimeout(ms);
   await page.mouse.up();
 }
