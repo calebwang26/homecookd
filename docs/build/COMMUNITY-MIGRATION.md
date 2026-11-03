@@ -2,6 +2,8 @@
 
 Step 7 of `docs/build/AWS-MIGRATION.md`, the third item in its area order, Oct 31, 2026. A draft on `aws-migration`: nothing live points at it. The code is `api/src/modules/community/`, `api/src/modules/dish/cravings.ts` and `cravingRoutes.ts`, plus read-only `modules/recipes/` and two read functions in `modules/people/`. `data.ts` and `cravingData.ts` list each query with its index, and `020_community.sql` adds two indexes.
 
+**The app's contract for this area is [contracts/COMMUNITY.md](contracts/COMMUNITY.md)** (Nov 2, for 1.1). It's read from the code since the one switch, so where this page still assumes a sync or an adapter, the contract wins (its "Doc drift").
+
 ## Tables that cross areas (AWS-MIGRATION asks for these first)
 
 | Table | Owner | What Community does |
