@@ -60,6 +60,7 @@ import { jobs as awsJobs } from '@/lib/aws/jobs';
 import { newKey } from '@/lib/aws/legacy';
 import { watchRead, watchTopic } from '@/lib/aws/live';
 import { messages as awsMessages, type Question as AwsQuestion } from '@/lib/aws/messages';
+import { cravings as awsCravings } from '@/lib/aws/dish';
 import { sendAwsFile } from '@/lib/aws/sendFile';
 import { readAwsRecipes, refreshAwsRecipes, watchAwsRecipes } from '@/lib/aws/recipesStore';
 import { getSession, useSession } from '@/lib/session';
@@ -242,6 +243,8 @@ const AWS_LIVE: Record<string, (set: (v: unknown) => void, as: string | null, ar
     const recipeId = String(args.recipeId ?? '');
     return watchRead(`questions:recipe:${as ?? ''}:${recipeId}`, () => awsMessages.recipeQuestions(recipeId, as), 10_000, (qs) => set(qs.map(toRecipeAnswer)));
   },
+  // Her requests: no topic (DISH.md, "Live"), so the plain read on focus and every minute.
+  'cravings:forCook': (set, as) => watchRead(`cravings:${as ?? ''}`, () => awsCravings.all(as), 60_000, set),
   'shareRequests:familyDishes': (set, as) => watchRead(`share-dishes:${as ?? ''}`, () => awsMessages.shareDishes(as), 60_000, set),
   'messages:madeMyDish': (set, as) =>
     watchRead(`made-my-dish:${as ?? ''}`, () => awsMessages.madeMyDish(as), 60_000, (m) =>
@@ -350,7 +353,7 @@ export async function token(as?: string): Promise<string> {
   return t;
 }
 
-export type JobExtras = { title?: string; language?: string; forKidIds?: string[]; recordingId?: string };
+export type JobExtras = { title?: string; language?: string; forKidIds?: string[]; recordingId?: string; dishAskId?: string };
 
 /** Drops unset and empty fields (Convex validators refuse `undefined`-only noise and empty ids). */
 const present = (o: Record<string, unknown>) =>
@@ -374,12 +377,13 @@ export async function createJob(uploadPath: string, source: JobSource, extras: J
   await requireAiConsent();
   if (AWS_ON) {
     // POST /v1/jobs: by uploadId (no slash), and no recordingId (1.1 makes no recording rows: JOBS.md flow 1).
-    const { title, language, forKidIds } = present(extras) as { title?: string; language?: string; forKidIds?: string[] };
-    await awsJobs.create({ uploadId: uploadPath.replace(/\/+$/, ''), title, language, forKidIds }, as);
+    // dishAskId: the kid's card she filmed for, so the kid gets `filmed` (DISH.md); a card not asked of her is dropped.
+    const { title, language, forKidIds, dishAskId } = present(extras) as { title?: string; language?: string; forKidIds?: string[]; dishAskId?: string };
+    await awsJobs.create({ uploadId: uploadPath.replace(/\/+$/, ''), title, language, forKidIds, dishAskId }, as);
     return;
   }
   const sessionToken = await token(as);
-  const extra = present(extras);
+  const extra = present({ ...extras, dishAskId: undefined }); // Convex's jobs.create doesn't take the card
   const run = (more: Record<string, unknown>) => call('mutation', 'jobs:create', { sessionToken, uploadPath, source, ...more }, () => stub.createJob(uploadPath, source));
   try {
     await run(extra);
@@ -815,6 +819,7 @@ export async function answerQuestion(questionId: string, answer: { audioUri: str
 
 /** cravings.createLink: her live link (reused), carrying her line; null while the deployment has none. */
 export async function cravingLink(message?: string): Promise<string | null> {
+  if (AWS_ON) return (await awsCravings.link(message)).url; // no fallback link: an error is an error
   const sessionToken = await token();
   const r = await call<{ url: string } | null>('mutation', 'cravings:createLink', { sessionToken, message }, () => null, { soft: true });
   return r?.url ?? null;
@@ -823,6 +828,16 @@ export async function cravingLink(message?: string): Promise<string | null> {
 /** cravings.sendVoiceRecipe (an action) after files.uploadUrl. False while the deployment has none. */
 export async function sendCravingVoice(id: string, note: { uri: string; contentType: string; durationS: number }): Promise<boolean> {
   await requireAiConsent();
+  if (AWS_ON) {
+    // Three steps (DISH.md): a link for its exact type and size, the PUT, then the send that starts the merge.
+    const file = new File(note.uri);
+    if (!file.exists) throw new Error('That voice note isn’t on this phone any more.');
+    const up = await awsCravings.voiceUpload(id, note.contentType, file.size);
+    const put = await file.createUploadTask(up.uploadUrl, { httpMethod: 'PUT', headers: up.uploadHeaders, uploadType: UploadType.BINARY_CONTENT }).uploadAsync();
+    if (put.status < 200 || put.status >= 300) throw new Error('The voice recipe didn’t upload. Try again.');
+    await awsCravings.voiceRecipe(id, { audioKey: up.audioKey, durationS: Math.min(120, Math.max(1, Math.round(note.durationS))) });
+    return true;
+  }
   const sessionToken = await token();
   const audioId = await uploadFile(note.uri, note.contentType);
   const durationS = Math.min(120, Math.max(1, Math.round(note.durationS)));
@@ -832,6 +847,10 @@ export async function sendCravingVoice(id: string, note: { uri: string; contentT
 
 /** cravings.setFilmingDay: "Mom's filming it Sunday" on the kid's card (0 = Sunday … 6, null = none). */
 export async function setCravingDay(id: string, day: number | null): Promise<void> {
+  if (AWS_ON) {
+    await awsCravings.filmingDay(id, day);
+    return;
+  }
   const sessionToken = await token();
   await call('mutation', 'cravings:setFilmingDay', { sessionToken, id, day }, () => undefined, { soft: true });
 }

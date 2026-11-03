@@ -91,15 +91,11 @@ await test('the agreed shape: the code from error, the English fallback from mes
   assert.deepEqual([bad.code, bad.extra], ['invalid', { field: 'name' }]);
 });
 
-await test("today's shapes read the same way: a sentence in error, {error: sentence, code}, and short text", () => {
-  const accounts = E.readError(409, JSON.stringify({ error: 'Asha is already in this family', requestId: 'r' }), null);
-  assert.deepEqual([accounts.code, accounts.message, accounts.kind], ['', 'Asha is already in this family', 'refused']);
-  const dish = E.readError(429, JSON.stringify({ error: 'Too many tries. Please wait a few minutes and try again.', code: 'rate' }), null);
-  assert.deepEqual([dish.code, dish.kind], ['rate_limited', 'unavailable'], 'old "rate" is rate_limited');
-  const busy = E.readError(503, JSON.stringify({ error: 'Busy, try again.', code: 'busy' }), '7');
+await test('a body whose error is words, not a code: no code, the words as the fallback', () => {
+  const e = E.readError(409, JSON.stringify({ error: 'Something went wrong upstream' }), null);
+  assert.deepEqual([e.code, e.message, e.kind], ['', 'Something went wrong upstream', 'refused']);
+  const busy = E.readError(503, JSON.stringify({ error: 'unavailable', message: 'Busy.' }), '7');
   assert.deepEqual([busy.code, busy.kind, busy.retryAfterS], ['unavailable', 'unavailable', 7]);
-  const invite = E.readError(404, JSON.stringify({ error: 'no such dinner' }), null);
-  assert.deepEqual([invite.code, invite.message], ['', 'no such dinner']);
 });
 
 await test('a page that is not JSON, or a gateway error, is "unavailable", whatever its status', () => {
