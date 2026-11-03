@@ -70,6 +70,15 @@ export async function jobById(q: Queryable, id: string): Promise<JobRow | null> 
   return rows[0] ?? null;
 }
 
+/** Staging's /v1/test/recipe {newestJob} only: the family's newest queued job, whoever filmed it. Index: jobs_family_recent. */
+export async function newestQueuedJob(q: Queryable, familyId: string): Promise<JobRow | null> {
+  const { rows } = await q.query(
+    `select ${JOB} from jobs where family_id = $1 and stage = 'queued' and cancelled_at is null order by created_at desc, id desc limit 1`,
+    [familyId],
+  );
+  return rows[0] ?? null;
+}
+
 /** With a lock, so a stop and the worker's final transaction can't both win. */
 export async function lockJob(q: Queryable, id: string): Promise<JobRow | null> {
   const { rows } = await q.query(`select ${JOB} from jobs where id = $1 for update`, [id]);

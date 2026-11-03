@@ -352,6 +352,39 @@ test("another cook's job, or another family's, is not found, and nothing moves",
   assert.equal(media.objects.size, files);
 });
 
+test("newestJob finishes her family's newest queued job, whoever filmed it, as that cook's: a phone test's job only its cook can see", { skip }, async () => {
+  const mom = await cook(); // the real account on the phone
+  const tester = await memberOf(mom.familyId, "cook"); // the test cook beside her, who can't read her job's id
+  const older = await queuedJob(mom);
+  const newer = await queuedJob(mom);
+
+  const res = await make(tester, { newestJob: true });
+  assert.equal(res.status, 201);
+  assert.equal(res.data.recipeId, newer.cardId, "her own card becomes the recipe");
+  assert.equal((await jobRow(newer.jobId)).stage, "done");
+  assert.equal((await jobRow(older.jobId)).stage, "queued");
+  const row = await recipeRow(newer.cardId);
+  assert.deepEqual([row.cook_id, row.status], [mom.personId, "ready"], "hers, not the tester's");
+  const momsName = (await db().query(`select name from people where id = $1`, [mom.personId])).rows[0].name;
+  assert.equal(recipeJson(res.data.recipeUrl).cook.name, momsName, "her name in its recipe.json");
+  assert.ok((await recipes(mom)).some((x) => x._id === newer.cardId));
+
+  // Then the next newest, then none: 404 with nothing written.
+  assert.equal((await make(tester, { newestJob: true })).data.recipeId, older.cardId);
+  const files = media.objects.size;
+  const none = await make(tester, { newestJob: true });
+  assert.deepEqual([none.status, none.data.error, none.data.message], [404, "not_found", "No job in your family is waiting to finish."]);
+  assert.equal(media.objects.size, files);
+
+  // Not both at once; and another family's job is never a family's newest.
+  const waiting = await queuedJob(mom);
+  const both = await make(tester, { newestJob: true, jobId: waiting.jobId });
+  assert.deepEqual([both.status, both.data.error, both.data.field], [400, "invalid", "newestJob"]);
+  const stranger = await cook();
+  assert.equal((await make(stranger, { newestJob: true })).status, 404);
+  assert.equal((await jobRow(waiting.jobId)).stage, "queued");
+});
+
 test("a finished job can't be finished again: 409 conflict, and a stopped one is finished too", { skip }, async () => {
   const mom = await cook();
   const { jobId } = await queuedJob(mom);

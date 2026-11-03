@@ -5,6 +5,8 @@
 // It leaves what the worker's publish leaves (pipeline/queue_job.py, queue_worker.py _publish, queue_db.py finish): small made-up files in the media bucket in the worker's
 // layout, under a folder named test-recipe-<id>/ so nobody takes it for a family's, a recipe.json shaped as publish.py writes a family's, and a ready row pointing at them.
 // Given `jobId`, one of her own jobs that hasn't finished, it finishes that job as the worker's final transaction does, and the job's "processing" card becomes the recipe.
+// Given `newestJob: true` instead, it finishes the family's newest queued job, whoever filmed it, as that cook's: a phone test on a real account (Caleb's, Nov 2) films a
+// job only its cook can see, so the test cook beside him can't read its id.
 // The account purge takes it like any recipe: the row by its cook, the folder by media_prefix.
 import { randomBytes } from "node:crypto";
 import { requireCook, type Signed } from "../../auth.js";
@@ -33,10 +35,11 @@ export const TEST_RECIPE_BODY = {
     title: { type: "string", maxLength: 120 },
     steps: { type: "array", minItems: 1, maxItems: MAX_STEPS, items: { type: "string", minLength: 1, maxLength: 1000 } },
     jobId: { type: "string", minLength: 1, maxLength: 100 },
+    newestJob: { type: "boolean" },
   },
 };
 
-export type TestRecipeAsk = { title?: string; steps?: string[]; jobId?: string };
+export type TestRecipeAsk = { title?: string; steps?: string[]; jobId?: string; newestJob?: boolean };
 
 type MadeStep = { title: string; instruction: string; quote?: string; substeps?: string[]; uses?: { name: string; amount: string }[] };
 
@@ -94,6 +97,13 @@ async function finishable(signed: Signed, jobId: string): Promise<jobs.JobRow> {
   return job;
 }
 
+/** Her family's newest queued job, by any cook in it. Another family's is never one. */
+async function newestOfFamily(signed: Signed): Promise<jobs.JobRow> {
+  const job = await jobs.newestQueuedJob(db(), signed.familyId);
+  if (!job) throw notFound("No job in your family is waiting to finish.");
+  return job;
+}
+
 /** S3 being down isn't the caller's fault, and nothing was saved. */
 async function storage<T>(call: () => Promise<T>): Promise<T> {
   try {
@@ -109,9 +119,11 @@ export async function makeTestRecipe(signed: Signed, ask: TestRecipeAsk, request
   await hit(subjectKey(signed.personId), [LIMIT]);
   const steps = madeSteps(ask.steps);
   // Everything that can refuse comes before the files, so a refusal leaves nothing in the bucket. The switch and the job are asked again where the rows are written.
-  const job = ask.jobId ? await finishable(signed, ask.jobId) : null;
+  if (ask.jobId && ask.newestJob) throw invalid("newestJob", "Send jobId or newestJob, not both.");
+  const job = ask.jobId ? await finishable(signed, ask.jobId) : ask.newestJob ? await newestOfFamily(signed) : null;
   if ((await recipeWrites(db())) !== "open") throw notMoved();
-  const cook = await cookOf(db(), signed.personId);
+  const cookId = job?.cook_id ?? signed.personId; // the cook who filmed it
+  const cook = await cookOf(db(), cookId);
   if (!cook) throw notFound();
 
   const id = randomBytes(6).toString("hex");
@@ -184,7 +196,7 @@ export async function makeTestRecipe(signed: Signed, ask: TestRecipeAsk, request
     const last = timed[timed.length - 1];
     const row = {
       familyId: signed.familyId,
-      cookId: signed.personId,
+      cookId,
       title,
       libraryId: folder,
       mediaPrefix: `${folder}/`,
