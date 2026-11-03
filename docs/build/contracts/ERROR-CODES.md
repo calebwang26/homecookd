@@ -73,7 +73,7 @@ Nov 2, 2026. For the App screens & recording chat: the checklist of codes that n
 | `full` | `POST /v1/dinners/:id/join`, and accepting a guest | "That dinner is full." |
 | `own_family` | Community: asking your own family for a recipe or a dinner | "This is your family's dinner." |
 | `not_shared` | Community: a dinner or a swap with a recipe that isn't shared | "Share this recipe first." |
-| `declined` | Community: asking again after they said no | "They said not this time." |
+| `declined` | Community: asking again after they said no. `POST /v1/share-requests` within 24 hours of the cook's no or unclear answer (MESSAGES.md, flow 8) | "They said not this time." For a share ask: "<Cook> said not now. Ask again tomorrow.", the cook named as in `message` |
 | `closed` | `/dish/*` and Cravings: the answers were already sent | "These answers were already sent." |
 
 ## 410, 413, 415, 422, 426
@@ -100,7 +100,7 @@ Nov 2, 2026. For the App screens & recording chat: the checklist of codes that n
 | Code | Where | The app does |
 |---|---|---|
 | `server_error` (500) | Anything unexpected; also "Couldn't create your family.", "Couldn't make a link.", "Couldn't make an invite." | Reads: retry. Writes: retry only with the same `Idempotency-Key`; without one, "Didn't send, try again". An Accounts write is one transaction, so it happened fully or not at all |
-| `not_moved` (501) | **Staging only:** a route whose area's switch isn't on there (recipe writes, `/v1/test/recipe`, share asks) | Never in production 1.1. On staging, say it isn't built yet |
+| `not_moved` (501) | **Staging only:** a route whose area's switch isn't on there (recipe writes, among them a cook's own tap on `POST /v1/share-requests`; `/v1/test/recipe`) | Never in production 1.1. On staging, say it isn't built yet |
 | `provider_down` (502, 503) | 502: S3 or a model failed (uploads, the photo note, `/dish/*`, Cravings, video uploads). 503: Apple's or Google's keys couldn't be fetched, or the recipe library couldn't be reached (`/v1/recap`) | Nothing was written. "That didn't work. Try again in a moment." |
 | `unavailable` (503) | Any route: overload, a row lock that waited too long, or a full pool. Header `retry-after` (5 to 15 s). `/ready` too | Nothing was written. Keep what's on screen and retry after `retry-after` |
 | `not_set_up` (503) | A server setting isn't there: Google sign-in until `GOOGLE_CLIENT_IDS` is set, an app id not in `APPLE_AUDIENCES`, a `link_ticket` with no `LINK_JOIN_SECRET`, the photo note's or `/dish/*`'s model key | Retrying won't help. Hide the feature (the Google button) or say it isn't ready |

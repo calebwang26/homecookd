@@ -7,7 +7,7 @@ Step 7 of `docs/build/AWS-MIGRATION.md`, the third item in its area order, Oct 3
 | Table | Owner | What Community does |
 |---|---|---|
 | `families`, `people`, `recipes` | The temporary one-way sync | Reads only. Nothing in this PR writes them, and a test checks the purge doesn't |
-| `questions` | Messages, next | Reads `kind = 'share'` rows for the chooser and writes none. A kid's ask answers `not_moved` (Blockers, 4) |
+| `questions` | Messages | Share asks, through Messages' `messages/shareAsks.ts`: the chooser reads them, and a kid's ask writes one (#311) |
 | `dish_asks`, `dish_answers`, `craving_links`, `files` | Dish | Cravings' signed-in side, built inside the dish module so its SQL stays with its tables |
 | `outbox`, `idempotency_keys` | Platform | Report alerts, and a retry key on a new dinner |
 
@@ -18,7 +18,7 @@ Each of these writes a row the sync owns, so I stopped short. None is written ar
 1. **`community.setShare` writes `recipes.shared_at`.** No route: it answers the catch-all 404.
 2. **`community.setLocation` writes `people.approx_*` and `campus`.** No route.
 3. **The story card (`storyCards.writeStoryCard`) writes `recipes.story_card_*`.** Built in Messages, behind the recipes switch, with `shareOn` for 1 and 4 to call (MESSAGES-MIGRATION.md, "Story cards"). Community reads the card here.
-4. **`shareRequests.ask` from the cook's own tap, and `shareRequests.settle` on her yes, write `recipes.shared_at`.** Her tap answers 501 `not_moved`, and never says "shared" without sharing. `settle` isn't here (Deferred). **A kid's ask answers the same 501 and writes nothing.** That's a different reason: `questions` isn't read-only, but a row written here reaches no cook, no answer and no purge until Messages moves, so saying "asked" would be untrue.
+4. ~~**`shareRequests.ask` from the cook's own tap, and `shareRequests.settle` on her yes, write `recipes.shared_at`.**~~ **Done in #311:** a kid's ask is Messages' question, her answer is read by `questions.read_share`, and her tap and her yes share through `recipes/writes.ts`, behind the switch: with writes off her tap is still 501 `not_moved`, and her yes is kept on the question.
 5. **A report's two-family hide, and `reports.review`, write `recipes.hidden_at` and `shared_at`.** See below, because this one had to keep working.
 
 **Recommendation for 1 to 4:** an adapter keeps these on Convex until the jobs area moves `recipes`, and the sync brings the result to Postgres. A dish just shared takes as long as the sync to reach the feed, so M1's "within minutes" sets the delay. A person's new place does too. The alternative is moving ownership of those few columns to Postgres now, with the sync told to skip them. It gets rid of the delay, but Convex's own reads of `shared_at` (`storyFacts`, recipes.list) would then be wrong for as long as old phones use them, so I don't recommend it.
@@ -59,7 +59,7 @@ Everything under `/v1` needs `Authorization: Bearer <sessionToken>` and answers 
 | `dinners.respond` | `POST /v1/dinner-requests/:id/respond` `{accept}` | `{ok}` becomes `null` |
 | `dinners.inviteLink` | `POST /v1/dinners/:id/invite-link` | The same |
 | `/invite/open` | `POST /invite/open` | The same path, shapes and statuses, plus 429 |
-| `shareRequests.ask` | `POST /v1/share-requests` `{recipeId}` | `.result` (only ever `shared`); 501 `not_moved` goes to Convex, for her tap and a kid's ask alike |
+| `shareRequests.ask` | `POST /v1/share-requests` `{recipeId}` | `.result`, `asked` or `shared`. 409 `declined` within a day of her no becomes Convex's sentence, which `message` holds |
 | `shareRequests.familyDishes` | `GET /v1/share-requests/dishes?cursor=` | `.dishes` |
 | `cravings.createLink` | `POST /v1/cravings/link` `{message?}` (send `{}` for none) | The same |
 | `cravings.revokeLink` | `POST /v1/cravings/link/revoke` | `{ok}` becomes `null` |
@@ -114,7 +114,7 @@ The last command prints what the script said. A task takes about a minute to sta
 
 ## Deferred
 
-- **Writing a share ask, `shareRequests.decide`, `settle`, `answerFor` and `questions.translateForCook`:** with Messages, which owns `questions.answer`. `settle` also needs the blocker lifted. Messages also brings the 24-hour "said not now" refusal, `shareQuestion`'s words (`TODO(caleb)` there), and a unique index for one open ask per dish, which Convex's serialized mutation gives today. Its purge covers these rows.
+- ~~**Writing a share ask, `shareRequests.decide`, `settle`, `answerFor` and `questions.translateForCook`.**~~ **Done in #311,** in Messages: the 24-hour "said not now" refusal, `shareQuestion`'s words (`TODO(caleb)` kept), and a unique index for one open ask per dish (`079`). Its purge covers these rows.
 - **`dishAsks.forMe` and `get`, and claiming a card:** still with the dish area's signed-in step.
 - **`POST /dish/craving/peek` and `cravingToken` on `POST /dish/cards`:** "card-making stays with the dish module", so they still answer 404 (DISH-MIGRATION.md). **So a real craving card can't be made on the new api yet.** Tests make one with SQL. `people` is readable now, so these need only a small dish PR once the sync runs.
 - **`seedCommunity`:** the demo families come over by backfill (C6).
@@ -148,7 +148,7 @@ The last command prints what the script said. A task takes about a minute to sta
 12. **`/invite/open` needs `RATE_LIMIT_SALT`**, and a body over 1000 bytes is still its 400.
 13. **Report alerts** go through `outbox`, so a failed webhook is retried. Convex logged and moved on. The text's "Review:" line now names this doc in place of `npx convex run`.
 14. **The log line.** Convex logged `community report: <kind> <id> (<reason>)`. It's gone: the alert's payload holds the kind and reason, and there's no family content anywhere.
-15. **A share ask isn't made here.** A kid's `POST /v1/share-requests` answers 501 `not_moved`, including where Convex would say "asked" or "said not now", and the adapter sends it to Convex.
+15. **"Said not now" is a 409 `declined`** with Convex's sentence in `message`, where Convex threw it (#311). Before #311 every ask here answered 501 `not_moved`.
 16. **The chooser finds a share ask however many cooking questions follow it.** Convex read the newest 100 questions and could miss it.
 17. **Dinner retries.** `POST /v1/dinners` takes an optional `Idempotency-Key`: the same key and body returns the first dinner, even if the dish has since been unshared or the time has passed, and another body is a 409. Without one, as on old builds, a retry makes a second dinner, as on Convex.
 18. **The voice recipe is three steps,** because bytes skip the api: the upload link, the PUT, the send.
@@ -166,7 +166,7 @@ The last command prints what the script said. A task takes about a minute to sta
 
 ### Against SYSTEM-DESIGN.md
 
-- **"Modules call each other's services, never each other's tables."** `community/data.ts` touches `questions` directly, because Messages has no module yet. Messages should take over `latestShareAsks`. Everything else goes through a service, and `recipes` got a small read-only module for it.
+- **"Modules call each other's services, never each other's tables."** `latestShareAsks` and the ask moved to Messages (`messages/shareAsks.ts`, #311), so Community no longer touches `questions`. Everything else goes through a service, and `recipes` got a small read-only module for it.
 - **"Writes from a phone take an idempotency key."** Only `POST /v1/dinners` needs one. Swaps, reports, blocks, invite links and voice recipes are safe to repeat as they are. `join` isn't quite: a retry after a lost reply says "You already asked to join.", as on Convex, and nothing is duplicated.
 - **`/invite/open` stays unversioned,** so the site and old apps need only a new host.
 - **"Never log family content."** A task's output can only go to its CloudWatch log, so the team's listing prints ids, counts, reasons and times, never the dish's title or a blocked family's name (Master Agent, Nov 2, on #261). Convex's listing showed the name.
@@ -182,7 +182,7 @@ The last command prints what the script said. A task takes about a minute to sta
 | `communityReview.test.ts` | The team's script: what `open` prints and leaves out, keep and remove, the recipe's refusal and its steps, wrong words and ids changing nothing, and the real entry point |
 | `communitySwaps.test.ts` | `convex/swaps.test.ts`, plus past-50-asks |
 | `communityInvites.test.ts` | `convex/dinnerInvites.test.ts`, plus many opens at once and the rate limits |
-| `communityShareAsks.test.ts` | `not_moved` for a kid and for her tap, with nothing written; the chooser's reading of asks; who may ask |
+| `communityShareAsks.test.ts` | A kid's ask as her question, in her language, once however many ask; her yes sharing it and queuing the card; a no holding asks off for a day; only her answer counting; her tap open and closed; the chooser; who may ask |
 | `cravings.test.ts` | `convex/cravings.test.ts`'s signed-in side, plus the attach refusals and the sweep |
 | `communityRoutes.test.ts` | No session on every route (found mechanically), same-as-missing, forged cursors, a NUL byte on every route in the app (found mechanically), paging to the microsecond, races, retries, logs |
 | `communityAccount.test.ts` | SCHEMA.md section 4, called by hand |
@@ -193,7 +193,7 @@ The last command prints what the script said. A task takes about a minute to sta
 - `community.test.ts`: 9 of 19 whole (geo, whitelist, stock covers, past and full dinners, the address, grid cells, culture, a dish's dinner, a dinner's distance). 3 in part: "goes plain" and "without Muse" keep their reading half, with their titles reworded; "story card rules" keeps the quotes.
 - `safety.test.ts`: 8 of 9.
 - `swaps.test.ts`: 3 of 3. `dinnerInvites.test.ts`: 4 of 4.
-- `shareRequests.test.ts`: 3 in part. "After a no" keeps the chooser's half, on rows a test writes. "Her own tap" is a `not_moved` refusal. The kid's ask now pins `not_moved` with nothing written, which is the opposite of Convex's result, on purpose (Blockers, 4).
+- `shareRequests.test.ts` (#311): "after a no", "her own tap", the kid's ask, her typed yes and "only a yes", whole. The Marathi voice note and the yes/no reader are in `messagesQuestions.test.ts`.
 - `cravings.test.ts`: 5 whole (filming day, writing to ready, a silent clip and the budget, the next free question, the maker's deletion), 3 in part: `createLink` without its peeks and cards, `forCook` with a card tied by SQL, and the send's refusals, which now split between the link and the send.
 
 **Changed in meaning:** the refusals in difference 6 and 7. Covers: "Upload" and "Lookalike" can't be stored now, so the test asserts the column's check refuses them.
@@ -203,7 +203,7 @@ The last command prints what the script said. A task takes about a minute to sta
 **Not carried:**
 - `community.test.ts`: `setLocation`, "only the recipe's own cook can share", the three Muse and Claude writer tests, and "Muse picks" (blocked), the two seed tests (seed deferred).
 - `safety.test.ts`: "a Muse card the filter catches goes plain" (writer).
-- `shareRequests.test.ts`: her typed yes, the two `TEXT_PROVIDER` tests, "without Gemini", the Marathi voice note, the yes/no reader, "only a yes" (Deferred).
+- `shareRequests.test.ts`: the two `TEXT_PROVIDER` tests and "without Gemini" (Claude only here).
 - `cravings.test.ts`: peek, a card tied to her, a card's name and words, the link's caps (card-making), `forMe` and `get`.
 - `lib/storyCard`'s `cleanCulture` and `parseMuseCard` assertions (writer): carried in `messagesStoryCards.test.ts`.
 - `convex/account.test.ts`'s Community assertions move as `communityAccount.test.ts`, but the account purge itself isn't run.
@@ -277,7 +277,7 @@ An open that changes nothing (this phone's been counted, or the count has stoppe
 
 1. **`sendVoiceRecipe` can't go through an adapter alone.** An old app uploads through Convex's `files.uploadUrl` and sends a Convex storage id. **Recommendation:** keep `cravings.sendVoiceRecipe` on Convex for old apps until they're gone, which means its cards must stay readable there, so switch all of `cravings.*` together. Only a new app uses the three steps.
 2. **Answered (Nov 2): how the team runs `openReports` and `reviewReport`.** Convex's were `npx convex run`. Now `api/src/reports.ts`, run as a one-off task: "The team's reports", above. No route, as recommended: a signed-in admin route would add a surface for no gain. It was a switch gate (AWS-MIGRATION's Cutover list) because Apple reviews report and block. It ran on staging on Nov 2. What's left of the gate is the app adapter, without which no report reaches the new api, and a way for the team to see what a reported item is once Convex is gone, because the listing prints ids only. **Recommendation:** a `show <kind> <id>` that the team runs from a laptop, not a task, so its output never reaches a log; it needs a database connection from outside the VPC, so Caleb's call.
-3. **`shareRequests.*` should switch with Messages, not Community.** `POST /v1/share-requests` already refuses to ask. `familyDishes` must read from the side the asks are written on, and until Messages moves that's Convex. **Recommendation:** an adapter keeps both on Convex until Messages switches.
+3. **`shareRequests.*` should switch with Messages, not Community.** Since #311 the api writes asks too, but `familyDishes` must read from the side the asks are written on, and until Messages switches that's Convex. **Recommendation:** an adapter keeps both on Convex until Messages switches.
 4. **`reports` and `blocks` move as one, once.** Convex's two-family hide and Postgres's would disagree if each side took reports during a window. **Recommendation:** freeze report writes for the area's planned window, copy, switch, as AWS-MIGRATION already describes.
 5. `TODO(caleb)`: the host's whole display name on `/invite/open` (kept from Convex), the demo venue's coordinates, and the 20-card link total are all still his, and carry their markers. The words homie asks with keep theirs on Convex.
 

@@ -16,7 +16,6 @@
 //   open reports                           reports_open                                           500
 //   reports on a thing                     reports_target                                         500
 //   is anything open on a thing            reports_target                                         one row
-//   a recipe's share asks                  questions_share_recent                                 one a recipe
 //   purge steps                            dinners_host, dinners_recipe, dinner_requests_guest, swap_requests_requester,
 //                                          swap_requests_their_recipe, swap_requests_my_recipe, reports_reporter_person, blocks_reverse   500 a pass
 import type { Queryable } from "../../db.js";
@@ -393,22 +392,6 @@ export async function swapsOfFamily(q: Queryable, familyId: string, blocked: str
     before ? [familyId, blocked, limit, before.at, before.id] : [familyId, blocked, limit],
   );
   return rows;
-}
-
-// ---------------------------------------------------------------------------------------------
-// "Put it on the map": one kind of row in `questions`, which the Messages area owns next, read here only (COMMUNITY-MIGRATION.md).
-
-export type ShareAsk = { recipe_id: string; share_said: "yes" | "no" | "unclear" | null; share_decided_at: Date | null };
-
-export async function latestShareAsks(q: Queryable, recipeIds: string[]): Promise<Map<string, ShareAsk>> {
-  if (recipeIds.length === 0) return new Map();
-  const { rows } = await q.query(
-    `select distinct on (recipe_id) recipe_id, share_said, share_decided_at from questions
-      where kind = 'share' and recipe_id = any($1::text[])
-      order by recipe_id, created_at desc`,
-    [recipeIds],
-  );
-  return new Map(rows.map((row) => [row.recipe_id, row]));
 }
 
 // ---------------------------------------------------------------------------------------------

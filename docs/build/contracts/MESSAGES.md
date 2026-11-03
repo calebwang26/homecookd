@@ -9,7 +9,7 @@ Nov 2, 2026. Read from `aws-migration` at `d011766dc`, and checked against stagi
 | | Chat questions | Cook-mode questions |
 |---|---|---|
 | Stored as | A message of kind `question`, or a kid's `step` message with words | A row in `questions` |
-| Asked with | `POST /v1/threads/:id/messages` | `POST /v1/questions` |
+| Asked with | `POST /v1/threads/:id/messages` | `POST /v1/questions`; a share ask, `POST /v1/share-requests` (flow 8) |
 | Keyed by | `libraryId` | `recipeId` |
 | Who answers | In a pair, the one asked. In the circle, any cook but the asker | Any cook in the family. A share ask or a follow-up: only the recipe's cook |
 | How | A reply in the thread with `replyTo`, saved as a recipe note | `POST /v1/questions/:id/answer` |
@@ -86,18 +86,20 @@ Nov 2, 2026. Read from `aws-migration` at `d011766dc`, and checked against stagi
 2. Whoever opens it: `POST /v1/shares/open {token}`, with no session. It answers `{token, libraryId, recipeUrl, sender: {name, relation, avatarKey} | null, familyName}`. `recipeUrl` is the dish's `recipe.json`: for the family's own ready recipe, the same link as its `recipeJsonUrl` on `GET /v1/recipes/:id`; for a library dish, `<libraryId>/recipe.json`. Any bad token is 404 `not_found`.
 3. Someone new joins the sharer's family by signing in with `share_token` (ACCOUNTS.md, `POST /auth/apple`): at most 5 a link, then 403 `link_full`.
 
-### 8. A story card
+### 8. A share ask and its story card
 
-A story card is one AI sentence that introduces a shared recipe to neighbors, with a culture label and one of the cook's own quotes. The app only reads it: `storyCard: {text, writtenAt?, usedStories?, culture?, quote?}` on `GET /v1/recipes/:id` (JOBS.md). Label it AI.
+A story card is one AI sentence that introduces a shared recipe to neighbors, with a culture label and one of the cook's own quotes. The app only reads it: `storyCard: {text, writtenAt?, usedStories?, culture?, quote?}` on `GET /v1/recipes/:id` (JOBS.md). Label it AI. Sharing starts it, never publishing.
 
-1. A share ask is a cook-mode question with `kind: "share"` on her ready recipe. It's in her `GET /v1/questions/open`, and never in `GET /v1/recipes/:recipeId/questions`.
-2. She answers it as in flow 1, step 5. Only the recipe's cook may (403 `forbidden` for anyone else).
-3. A task reads her answer (Claude Haiku), after the transcript for a voice note. `shareDecision: {said: "yes" | "no" | "unclear", at}` lands on the question. Only a clear yes counts.
-4. Her yes on a ready recipe puts it on the neighborhood map (`sharedAt`) and queues the card, unless the word filter catches the recipe.
-5. A task writes the card (Claude Sonnet): at most 25 words, from her name, the dish, its first three steps, her quotes, and her stories only if she opted in. A failure, no key, or a 31st card in an hour for her gives the plain line ("Rajani's Kanda Poha, from the Pawar family.").
-6. Read `storyCard` on the recipe again. No push.
-
-**Nothing on AWS makes a share ask today** (open item 4), so 1.1 gets no new story cards.
+1. Anyone in the family but the recipe's cook asks: `POST /v1/share-requests {recipeId}`, on a ready family recipe. It answers `{result: "asked"}`. No key needed: asking again while it waits answers `asked` and writes nothing, so there's one open ask per dish, however many ask.
+2. The ask is a cook-mode question with `kind: "share"` on her recipe, from the asker, in Convex's words (`TODO(caleb)`): "Shreya wants to put your Kanda Poha on the map for neighbors. They'd see the recipe, one line you said and homie's guess at where the dish is from, never your video. Is that okay?". If her `language` isn't English, `textForCook` follows a few seconds later, as in flow 1. It's in her `GET /v1/questions/open`, and never in `GET /v1/recipes/:recipeId/questions`. No push, as on Convex.
+3. Her own tap on her own recipe is the same route: `{result: "shared"}`, on the map at once, with no question (501 `not_moved` while recipe writes are off: JOBS.md, open item 14). It's `{result: "shared"}` too, for anyone, when the dish is on the map already.
+4. She answers as in flow 1, step 5. Only the recipe's cook may (403 `forbidden` for anyone else).
+5. A task reads her answer (Claude Haiku), after the transcript for a voice note, against a fixed question, never the family's words. `shareDecision: {said: "yes" | "no" | "unclear", at}` lands on the question. Only a clear yes counts.
+6. Her yes on a ready recipe puts it on the neighborhood map (`sharedAt`) and queues the card, unless the word filter catches the recipe.
+7. A no, or an answer homie can't read, keeps it in the family, and for 24 hours from `shareDecision.at` anyone in the family who asks gets 409 `declined` ("Rajani said not now. Ask again tomorrow."). After that, asking makes a new question.
+8. A task writes the card (Claude Sonnet): at most 25 words, from her name, the dish, its first three steps, her quotes, and her stories only if she opted in. A failure, no key, or a 31st card in an hour for her gives the plain line ("Rajani's Kanda Poha, from the Pawar family.").
+9. Read `storyCard` on the recipe again. No push.
+10. The "Share your recipe" chooser: `GET /v1/share-requests/dishes` lists the family's ready dishes with `asked` (waiting on her, or on homie reading her answer) and `notNowAt` (when homie read a no or an unclear answer; compare it with 24 hours on the phone's clock).
 
 ### 9. Push tokens, and the pushes that exist
 
@@ -256,6 +258,26 @@ Code: `questions.ts`, `models.ts`.
 | `answered` (409) | Answer | It has an answer already | "You already answered." Reload |
 | `invalid` (400) | Answer | No field: "Say or type an answer first." `field: "text"`: too long | Check before sending |
 | `idempotency_conflict` (409) | Both | A reused key | A bug |
+
+### Share asks
+
+Code: `api/src/modules/community/shareAsks.ts` (the routes, Community's), `messages/shareAsks.ts` (the ask and its question), `questions.ts` (`read_share`), `storyCards.ts`. Field names and `notNowAt` (epoch ms) are Convex's, as in the rest of Community.
+
+| Route | Who | Body or query | Answer |
+|---|---|---|---|
+| `POST /v1/share-requests` | Anyone in the family. Not the cook: asks her. The cook, on her own recipe: shares it | `{recipeId}`: a ready family recipe's `_id` | `{result: "asked" \| "shared"}` |
+| `GET /v1/share-requests/dishes` | Anyone in the family | `?cursor=` (100 a page) | `{dishes: [{recipeId, dish, cookName, mine, shared, asked, notNowAt}], nextCursor}`, newest first, ready dishes only |
+
+- The question is a row in `questions`, so it reads as a Question (above) with `kind: "share"`, `askedBy` the asker, and `text` the words in flow 8, step 2.
+- Safe to repeat as sent: an open ask answers `asked` again, and a shared dish `shared`. No `Idempotency-Key` is read.
+
+| Code | Route | When | The app does |
+|---|---|---|---|
+| `not_found` (404) | Ask | "Pick one of your family's recipes.": not this family's, missing, or not ready (to its cook too) | Drop it |
+| `declined` (409) | Ask | Within 24 hours of homie reading her no or unclear answer: "<Cook> said not now. Ask again tomorrow." The sentence names the cook | Say she said not now; offer it again after `notNowAt` + 24 h |
+| `words` (422) | Ask, her own tap | "Some words in this recipe can't go on the map. It stays with your family." | Say so; nothing changed |
+| `not_moved` (501) | Ask, her own tap | Recipe writes are off: nothing is shared | Not in production 1.1 (JOBS.md, open item 14) |
+| `forbidden` (403) | Answer (`POST /v1/questions/:id/answer`) | Anyone but the recipe's cook: "Only the recipe's cook can answer this." | Don't offer it |
 
 ### Chat questions and recipe notes
 
@@ -425,7 +447,8 @@ From APP-BACKEND-INVENTORY.md on `main` (`b16061e06`): its "Messages, questions 
 | Supabase `POST /push-tokens` | `_layout.tsx:registerPush` | `POST /v1/push-tokens {token, platform, tz}`. `tz` in the body is new |
 | Supabase `POST /push-tokens/remove` | `session.tsx:SessionProvider` | `POST /v1/push-tokens/remove {token}` |
 | Convex `push:register`, `push:unregister` | `pushTokens.ts:convexPush` | Gone in 1.1: one token route serves every kind of push |
-| Convex `shareRequests:ask` | `community.ts:askToShare` | Community's `POST /v1/share-requests`, which answers 501 `not_moved`: nothing on AWS writes a share ask (open item 4) |
+| Convex `shareRequests:ask` | `community.ts:askToShare` | `POST /v1/share-requests {recipeId}`: `{result: "asked" | "shared"}` where Convex returned the word. A no within the day is 409 `declined`, where Convex threw its sentence |
+| Convex `shareRequests:familyDishes` | `community.ts:useFamilyDishes` | `GET /v1/share-requests/dishes`: `{dishes, nextCursor}`, not an array. Read every page. No live topic: read it on focus |
 | Supabase `POST /cooking`, `GET /cooking`, `POST /cooking/end`, `/profile/share-cooking` | `cookingApi.ts` | **Not built** (JOBS.md, open item 12) |
 
 ## Staging testing
@@ -453,6 +476,7 @@ From APP-BACKEND-INVENTORY.md on `main` (`b16061e06`): its "Messages, questions 
 - **Library dishes:** since #305 a `libraryId` must exist: the family's own ready recipe (found by its row), or a file on the media host. Staging's media host has no library recipes, so on staging use the `libraryId` of a test recipe from `POST /v1/test/recipe`; anything else is 404 `not_found`.
 - **Pushes:** use a TestFlight or dev build, register its token with `POST /v1/push-tokens`, and send from a second test person. Expect English words, and a test recipe's own title for its dish name.
 - **Models:** the photo note, the cook's translation and the share reading need a `real_ai` window, with Caleb's OK, since it costs money.
+- **Share asks:** without a `real_ai` window every answer reads `unclear`, so after one answer that dish's asks are held off for 24 hours (409 `declined`). To ask again sooner on staging, use another test recipe.
 - **The nudge and the recap** go only to people with a registered token: a kid with a pair worth a note gets the nudge Sunday at 17:00 in their zone; the first recap push would be Dec 1, for November, and needs the library.
 
 ## Open items
@@ -462,7 +486,7 @@ Owners: **API** is the AWS backend chat, **App** is App screens & recording, **C
 1. The live topics `questions:forRecipe` (10 s, cook mode), `questions:openForCook` (30 s, cook Home) and `messages:madeMyDish` aren't built: `/v1/live/` serves only `jobs`, so until they are the app polls the plain reads. **API**
 2. No live topic covers the circle, the inbox, unread or a thread, which LIVE-UPDATES.md plans as plain topics with an `after` cursor, so chat polls `GET /v1/unread`, `GET /v1/threads` and `GET /v1/threads/:id/messages?after=` as it polls Supabase today. **API**
 3. One photo can't go on both the postcard and the `photo` message, because a file has one holder and the second send is 404, and "made my dish" reads only `photo` messages: decide between two uploads per photo and one call that does both (MESSAGES-MIGRATION.md, open question 1, recommends one call). **Caleb**, then API or App
-4. Nothing on AWS makes a share ask (Community's `POST /v1/share-requests` answers 501 `not_moved` unless the recipe is already shared, in production too, though ERROR-CODES.md says `not_moved` is staging-only) or a follow-up question (`askFollowUps` has no caller), so `GET /v1/questions/open` holds only kids' questions and no story card is written. **API** **API, before the Messages screens.**
+4. ~~Nothing on AWS made a share ask or translated a follow-up question.~~ **Fixed in #311:** `POST /v1/share-requests` asks the cook, or shares her own dish (flow 8), and only the recipe's cook answers. Her yes shares it and queues the story card. A no holds asks off for 24 hours (409 `declined`), and there's one open ask per dish (a unique index). The worker's publish writes the follow-up questions, and its `recipe_published` message now has them translated into her language. **API**
 5. `POST /v1/questions` takes only `text`, so a kid's spoken cook-mode question needs the phone's own speech-to-text, the chat path (a `question` message with `audioKey`), or a voice field API would add: say which. **App**
 6. The `answered`, `craving`, `filmed` and `joined` pushes have words and handlers but nothing on AWS sends them, so v2's "Mom answered" and "Caleb is on homecookd" don't reach 1.1. **API** **API, before the Messages screens.**
 7. ~~`library().exists` counted only a 404 as missing.~~ **Fixed in #305:** S3's 403 behind the CDN reads as missing, so a made-up `libraryId` is 404 `not_found` on sends, send-recipe, shares, hearts and events; a 5xx or no answer still can't say, isn't cached, and doesn't hold up a send; the family's own ready recipe is found by its row first. **API**

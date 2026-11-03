@@ -126,7 +126,7 @@ export async function communityRoutes(app: FastifyInstance): Promise<void> {
   app.post(
     "/v1/share-requests",
     { schema: { body: { type: "object", required: ["recipeId"], properties: { recipeId: ID } } } },
-    async (req) => await askToShare(signedIn(req), (req.body as { recipeId: string }).recipeId),
+    async (req) => await askToShare(signedIn(req), (req.body as { recipeId: string }).recipeId, String(req.id)),
   );
   app.get("/v1/share-requests/dishes", { schema: { querystring: page } }, async (req) => await familyDishes(signedIn(req), cursorOf(req)));
 }
