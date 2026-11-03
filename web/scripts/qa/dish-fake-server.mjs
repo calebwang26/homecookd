@@ -165,6 +165,7 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
   let budgetSpent = false;
   let rateLimited = false;
   let failingUploads = false;
+  let slowTranslateMs = 0; // >0: the first Hindi peek gives up (translating: true) and the translation lands this long after
   let base = `http://localhost:${port}`;
   const byAsk = (t) => [...cards.values()].find((c) => c.askToken === t);
   const fileUrl = (id) => (id ? `${base}/files/${id}${links ? `?v=${linkGeneration}` : ''}` : null);
@@ -467,11 +468,15 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
         case '/dish/ask/peek': {
           c.openedAt ??= Date.now();
           let inLang = null;
-          if (b.lang === 'hi') {
+          if (b.lang === 'hi' && slowTranslateMs) {
+            c.hiReadyAt ??= Date.now() + slowTranslateMs;
+            if (Date.now() < c.hiReadyAt) return send(200, { ask: { ...askOut(c, null), translating: true } });
+            inLang = hindi(c.guess, c);
+          } else if (b.lang === 'hi') {
             await new Promise((r) => setTimeout(r, translateMs));
             inLang = hindi(c.guess, c);
           }
-          return send(200, { ask: askOut(c, inLang) });
+          return send(200, { ask: { ...askOut(c, inLang), translating: false } });
         }
         case '/dish/ask/finish':
           if (!c.answers.size) return send(200, { ask: askOut(c) });
@@ -506,6 +511,7 @@ export async function startFake({ port = 8791, site = 'http://localhost:3105', m
     setFailingUploads: (on) => (failingUploads = on),
     setBrokenFiles: (on) => (brokenFiles = on),
     expireLinks: () => (linkGeneration += 1),
+    setSlowTranslate: (ms) => (slowTranslateMs = ms),
     close: () => new Promise((r) => server.close(r)),
   };
 }

@@ -24,6 +24,7 @@ type Failure = 'not-found' | 'offline';
 
 const POLL_MS = 2000;
 const FILL_WAIT_MS = 45_000;
+const TRANSLATING_RETRY_MS = 10_000;
 
 export function MomApp() {
   return (
@@ -44,6 +45,7 @@ function Mom() {
   const [stage, setStage] = useState<Stage>('loading');
   const [failure, setFailure] = useState<Failure>('not-found');
   const [inLangs, setInLangs] = useState<Record<string, InLang | null>>({});
+  const [retryLang, setRetryLang] = useState<string | null>(null); // the one language still translating after the first peek
   const [english, setEnglish] = useState(false);
   const [list, setList] = useState<string[]>([]); // the question ids she's answering, fixed when she starts
   const [recordable, setRecordable] = useState(true);
@@ -87,13 +89,35 @@ function Mom() {
     if (!token || !ask || lang === 'en' || lang in inLangs) return;
     let live = true;
     peekAsk(token, lang).then(
-      (a) => live && setInLangs((m) => ({ ...m, [lang]: a.inLang?.lang === lang ? a.inLang : null })),
+      (a) => {
+        if (!live) return;
+        setInLangs((m) => ({ ...m, [lang]: a.inLang?.lang === lang ? a.inLang : null }));
+        if (a.translating && a.inLang?.lang !== lang) setRetryLang(lang);
+      },
       () => live && setInLangs((m) => ({ ...m, [lang]: null })),
     );
     return () => {
       live = false;
     };
   }, [token, ask, lang, inLangs]);
+
+  // The api stopped waiting at 8 s and answered in English: show that, and peek once more to pick up her language.
+  useEffect(() => {
+    if (!token || !retryLang) return;
+    let live = true;
+    const timer = window.setTimeout(() => {
+      peekAsk(token, retryLang).then(
+        (a) => {
+          if (live && a.inLang?.lang === retryLang) setInLangs((m) => ({ ...m, [retryLang]: a.inLang }));
+        },
+        () => {},
+      );
+    }, TRANSLATING_RETRY_MS);
+    return () => {
+      live = false;
+      window.clearTimeout(timer);
+    };
+  }, [token, retryLang]);
 
   // After Send: her version is written in 10–20 s.
   useEffect(() => {
