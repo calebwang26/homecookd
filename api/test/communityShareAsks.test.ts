@@ -187,6 +187,50 @@ test("her own tap shares it at once while recipe writes are open; with them off 
   }
 });
 
+test("her switch takes it off the map: only its cook, with recipe writes open; off already changes nothing; one the team took down is taken_down", { skip }, async () => {
+  const { t, rajani, shreya, serene, serenesMom } = await world();
+  const card = { text: "Rajani's varan, the Sunday dal.", usedStories: false };
+  const dal = await recipe(rajani, { title: "Varan", sharedAt: 1, card });
+  const off = (who: Who, id: string) => call(t, who, "POST", `/v1/recipes/${id}/unshare`);
+  const feedDishes = async (who: Who) => (await ok(call(t, who, "GET", "/v1/community/feed"))).recipes.map((r: { dish: string }) => r.dish);
+
+  // Writes closed: 501, nothing changed.
+  await refusedWith(off(rajani, dal), 501, NOT_MOVED);
+  assert.ok(await sharedAt(dal));
+
+  writes(true);
+  try {
+    // Only its cook: the kid in her family is 403, another family the same as missing, one still cooking no recipe.
+    await refusedWith(off(shreya, dal), 403, "Only the cook can take this off the map.");
+    sameAsMissing(await off(serenesMom, dal), await off(serenesMom, MISSING), "another family's recipe");
+    const cooking = await recipe(rajani, { title: "Still Cooking", status: "processing" });
+    await refusedWith(off(rajani, cooking), 404, "Pick one of your family's recipes.");
+    assert.ok(await sharedAt(dal));
+    assert.ok((await feedDishes(serene)).includes("Varan"));
+
+    // Off: gone from the neighbors' map, the chooser says so, the card stays for next time. Off again is fine and changes nothing.
+    assert.deepEqual(await ok(off(rajani, dal)), { ok: true });
+    assert.equal(await sharedAt(dal), null);
+    assert.ok(!(await feedDishes(serene)).includes("Varan"));
+    assert.equal((await call(t, serene, "GET", `/v1/community/recipes/${dal}`)).status, 404);
+    like((await familyDishes(t, shreya)).find((d: { recipeId: string }) => d.recipeId === dal), { shared: false, takenDown: false });
+    assert.equal((await db().query("select story_card_text from recipes where id = $1", [dal])).rows[0].story_card_text, card.text);
+    assert.deepEqual(await ok(off(rajani, dal)), { ok: true });
+
+    // Back on with her tap: the same card, so nothing new is queued.
+    assert.deepEqual(await ok(ask(t, rajani, dal)), { result: "shared" });
+    assert.ok((await feedDishes(serene)).includes("Varan"));
+    assert.deepEqual(await queued(STORY_CARD_TASK), []);
+
+    // Taken down by the team: it's off already, and only the team can change that.
+    await db().query("update recipes set shared_at = null, hidden_at = now() where id = $1", [dal]);
+    const down = await refusedWith(off(rajani, dal), 409, "Our team took this recipe off the map after a report. It stays with your family.");
+    assert.equal(down.data.error, "taken_down");
+  } finally {
+    writes(false);
+  }
+});
+
 test("the chooser: an ask is waiting until homie reads her answer; a no shows when she said it; a newer ask replaces it", { skip }, async () => {
   const { t, rajani, shreya } = await world();
   const poha = await recipe(rajani);
@@ -240,7 +284,7 @@ test("a dish already on the map says so, to the kid and to her, and asks nothing
   assert.deepEqual(await questionRows(), []);
 });
 
-test("setShare and setLocation aren't here: they write rows the sync owns", { skip }, async () => {
+test("setShare is only her tap and her switch (/v1/recipes/:id/unshare), and setLocation isn't here", { skip }, async () => {
   const { t, rajani } = await world();
   const dal = await recipe(rajani);
   for (const url of ["/v1/community/recipes/x/share", `/v1/community/recipes/${dal}/share`, "/v1/community/share", "/v1/community/location", "/v1/me/location"]) {
