@@ -17,13 +17,14 @@ import { once, requestHash } from "../../idempotency.js";
 import { hit, subjectKey, type Limit } from "../../rateLimit.js";
 import { seal, SHARE_LINK_SALT, shareTokenHash, unseal } from "../../sealed.js";
 import { familyNameOf, joinsViaShare, memberById, membersByIds } from "../people/family.js";
+import { recipeJsonUrl } from "../recipes/read.js";
 import { iso } from "./data.js";
 import { checkDish, dishesOf, library } from "./library.js";
 import { actorOf, type Write } from "./actor.js";
 import { deliverRecipe } from "./service.js";
 import { attachFile, markForDeletion } from "./uploads.js";
 import { decodeCursor, encodeCursor, isRowId, libraryId, LIBRARY_ID, MAX_RECIPIENTS, MAX_VOICE_S, number, pageSize } from "./values.js";
-import { mediaUrl, personView } from "./views.js";
+import { personView } from "./views.js";
 
 type Body = Record<string, unknown>;
 
@@ -77,7 +78,7 @@ export const OPEN_LIMITS: Limit[] = [{ bucket: "share-open", max: 120, windowS: 
 
 /**
  * A public link, with no session. The token comes in the body, not the path as on Supabase, because logs keep paths and a token is a capability. Rate limited by
- * IP, which Supabase's wasn't. Every failure reads the same.
+ * IP, which Supabase's wasn't. Every failure reads the same. `recipeUrl` is where the dish's recipe.json really is (recipeJsonUrl), so a recipe made on AWS opens too.
  */
 export async function openShare(token: unknown, ip: string) {
   await hit(subjectKey(ip), OPEN_LIMITS);
@@ -92,7 +93,7 @@ export async function openShare(token: unknown, ip: string) {
   return {
     token,
     libraryId: share.library_id,
-    recipeUrl: mediaUrl(`${share.library_id}/recipe.json`),
+    recipeUrl: await recipeJsonUrl(db(), share.family_id, share.library_id),
     sender: sender && !sender.deleted_at ? { name: sender.name, relation: sender.relation, avatarKey: sender.avatar_key } : null,
     familyName: await familyNameOf(db(), share.family_id),
   };

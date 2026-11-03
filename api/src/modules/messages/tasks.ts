@@ -8,7 +8,7 @@ import { recipesByIds } from "../recipes/read.js";
 import { questionTargets } from "./answers.js";
 import * as data from "./data.js";
 import type { MessageRow, ThreadRow } from "./data.js";
-import { library } from "./library.js";
+import { dishInfo } from "./library.js";
 import { deliver, KEEP_LOG_DAYS, queuePush, receipts } from "./push.js";
 import { cravingKey, pruneLog } from "./pushData.js";
 import { dishName, messagePush, postcardKey, postcardPush, reactionPush } from "./pushRules.js";
@@ -28,9 +28,9 @@ const text = (payload: Payload, name: string) => {
 
 const whenOf = (payload: Payload) => (typeof payload.nowMs === "number" ? new Date(payload.nowMs) : new Date());
 
-/** What a dish is called in push copy: the library's title, or a family recipe's. */
+/** What a dish is called in push copy: its recipe.json's title (dishInfo), or a family recipe's. */
 async function dishTitle(m: MessageRow): Promise<string | null> {
-  if (m.library_id) return (await library().recipeInfo(m.library_id))?.title || null;
+  if (m.library_id) return (await dishInfo(m.family_id, m.library_id))?.title || null;
   if (m.recipe_id) return (await recipesByIds(db(), [m.recipe_id]))[0]?.title || null;
   return null;
 }
@@ -57,7 +57,7 @@ async function pushMessage(messageId: string): Promise<void> {
   const { m, t, everyone, me } = ctx;
   if (m.kind === "reaction") {
     const answered = m.reply_to ? await data.messageInFamily(db(), m.reply_to, m.family_id) : null;
-    const info = m.library_id ? await library().recipeInfo(m.library_id) : null;
+    const info = m.library_id ? await dishInfo(m.family_id, m.library_id) : null;
     const p = reactionPush(m, me, answered, info ? dishName(info.title, info.cook_name) : null);
     const to = p ? everyone.find((x) => x.id === p.to) : null;
     if (p && to && stillHere(to)) await tx((c) => queuePush(c, { personId: to.id, ...p.copy, dedupeKey: p.dedupeKey }));
@@ -82,7 +82,7 @@ async function pushPostcard(messageId: string): Promise<void> {
   const ctx = await context(messageId);
   if (!ctx) return;
   const { m, t, everyone, me } = ctx;
-  const info = m.library_id ? await library().recipeInfo(m.library_id) : null;
+  const info = m.library_id ? await dishInfo(m.family_id, m.library_id) : null;
   const here = everyone.filter(stillHere);
   const norm = (s: string | null | undefined) => (s ?? "").trim().toLowerCase();
   const other = t.kind === "pair" ? (t.a_person_id === me.id ? t.b_person_id : t.a_person_id) : null;

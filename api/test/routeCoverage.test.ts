@@ -10,7 +10,7 @@ import { db } from "../src/db.js";
 import { useUploadStore } from "../src/storage.js";
 import { fakeStore } from "./dishHelpers.js";
 import { cravingCard } from "./cravingHelpers.js";
-import { CHILI, closeAll, familyRow, get, newKey, ok, pairOf, person, post, recipe, type Reply, say, skip, text, type Who, type World, world } from "./messagesHelpers.js";
+import { CHILI, closeAll, familyRow, get, newKey, ok, openShare, pairOf, person, post, recipe, type Reply, say, skip, text, type Who, type World, world } from "./messagesHelpers.js";
 
 type Scene = World & {
   /** A family that dealt with this one: it asked for a swap and to come to dinner. `stranger` has had nothing to do with it. */
@@ -376,8 +376,8 @@ const ROUTES: Record<string, SignedIn | Anonymous> = {
   "POST /v1/shares/open": {
     anonymous: "A recipe link someone sent: the token is the capability, and it's rate limited by IP",
     capability: async (s) => {
-      assert.equal((await post(s.app, null, "/v1/shares/open", { token: "ABCDEFGHIJ" }, { key: null })).status, 404);
-      ok(await post(s.app, null, "/v1/shares/open", { token: s.shareToken }, { key: null }));
+      assert.equal((await openShare(s.app, "ABCDEFGHIJ")).status, 404);
+      ok(await openShare(s.app, s.shareToken));
     },
   },
   "OPTIONS /invite/open": {

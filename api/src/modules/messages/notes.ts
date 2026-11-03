@@ -7,7 +7,7 @@ import { badCursor } from "../../paging.js";
 import { answersFor, questionTargets } from "./answers.js";
 import * as data from "./data.js";
 import type { MessageRow, NoteRow, ThreadRow } from "./data.js";
-import { library } from "./library.js";
+import { dishInfo } from "./library.js";
 import { actorOf } from "./actor.js";
 import { threadFor } from "./threadAccess.js";
 import { decodeCursor, encodeCursor, isRowId, LIBRARY_ID, norm, pageSize } from "./values.js";
@@ -71,7 +71,7 @@ export async function removeNote(signed: Signed, id: string) {
   const note = await data.noteInFamily(db(), id, actor.familyId);
   if (!note) throw notFound();
   const me = actor.me;
-  const cook = (await library().recipeInfo(note.library_id))?.cook_name ?? null;
+  const cook = (await dishInfo(actor.familyId, note.library_id))?.cook_name ?? null;
   const allowed = note.answered_by === me.id || note.asked_by === me.id || (!!norm(me.name) && norm(cook) === norm(me.name));
   if (!allowed) throw forbidden("Only the person who answered, the person who asked, or the cook can take this out.");
   await tx(async (c) => {

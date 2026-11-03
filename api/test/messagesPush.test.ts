@@ -6,12 +6,13 @@ import { db, tx } from "../src/db.js";
 import { purgeDishForPerson } from "../src/modules/dish/account.js";
 import { deliver, queuePush, RECEIPTS_AFTER_MS, type PushInput } from "../src/modules/messages/push.js";
 import { deadReceipts, EXPO_RECEIPTS_URL, sendExpoPush } from "../src/modules/messages/expo.js";
+import { useLibrary } from "../src/modules/messages/library.js";
 import { CRAVINGS_PER_DAY, DAILY_MAX } from "../src/modules/messages/push.js";
 import { quietDelayMs } from "../src/modules/messages/pushRules.js";
 import { pushWords } from "../src/modules/messages/pushWords.js";
 import { daily } from "../src/modules/messages/tasks.js";
 import { handleMessage } from "../src/scheduled.js";
-import { CHILI, circleOf, closeAll, DAL, drain, drainTwice, dueNow, get, logOf, ok, pairOf, person, phone, post, pushes, RICE, say, silent, skip, text, tokenFor, tokensOf, uploaded, type Who, type World, world } from "./messagesHelpers.js";
+import { awsRecipe, cdnLibrary, CHILI, circleOf, closeAll, DAL, drain, drainTwice, dueNow, get, logOf, ok, pairOf, person, phone, post, pushes, RICE, say, silent, skip, text, tokenFor, tokensOf, uploaded, type Who, type World, world } from "./messagesHelpers.js";
 
 const push = (personId: string, over: Partial<PushInput> = {}, now = new Date()) =>
   tx((c) =>
@@ -529,6 +530,36 @@ test("PR 3: the push names only the dish's cook: in the circle by name, never so
   ok(await post(w.app, w.leo, `/v1/messages/${blind.id}/postcard`, { photoKey: await uploaded(w, w.leo, "photo") }));
   await drain();
   assert.deepEqual(pushes(w.expo).map((x) => [x[0], x[1]]), [[tokenFor("mom"), "Leo made your recipe"]]);
+});
+
+test("a recipe made on AWS is named in its pushes from its own recipe.json; one that stops being ready isn't", { skip }, async () => {
+  const w = await world();
+  const poha = await awsRecipe(w.mom); // "Mom's Kanda Poha"
+  useLibrary(cdnLibrary({ [poha.jsonKey]: poha.json }));
+  await phone(w, w.mom, "mom");
+  await phone(w, w.leo, "leo");
+  ok(await post(w.app, w.mom, "/v1/send-recipe", { libraryId: poha.libraryId, to: [w.leo.id] }));
+  await drain();
+  assert.deepEqual(pushes(w.expo), [[tokenFor("leo"), "Just in from Mom", "Mom's Kanda Poha", `/recipe/${poha.libraryId}`]]);
+
+  // Leo made it: the postcard finds its cook by the name in its recipe.json, and her "Just like mine" names the dish.
+  w.expo.sent.length = 0;
+  const pair = await pairOf(w, w.leo, w.mom);
+  const card = await made(w, w.leo, pair, poha.libraryId);
+  ok(await post(w.app, w.leo, `/v1/messages/${card.id}/postcard`, { photoKey: await uploaded(w, w.leo, "photo") }));
+  ok(await say(w, w.mom, pair, { kind: "reaction", body: "just_like_mine", replyTo: card.id, libraryId: poha.libraryId }));
+  await drain();
+  assert.deepEqual(pushes(w.expo).map((x) => [x[0], x[1], x[2]]), [
+    [tokenFor("mom"), "Leo made your Kanda Poha", "Sent you a postcard."],
+    [tokenFor("leo"), "Mom", "“Just like mine.” on your Kanda Poha"],
+  ]);
+
+  // Sent while ready, pushed after it went back to processing: nothing is read from its folder.
+  w.expo.sent.length = 0;
+  ok(await post(w.app, w.mom, "/v1/send-recipe", { libraryId: poha.libraryId, to: [w.leo.id] }));
+  await db().query(`update recipes set status = 'processing' where id = $1`, [poha.id]);
+  await drain();
+  assert.deepEqual(pushes(w.expo).map((x) => [x[1], x[2]]), [["Just in from Mom", "A new recipe"]]);
 });
 
 // --- pushEvents

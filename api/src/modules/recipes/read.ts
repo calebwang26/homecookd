@@ -1,6 +1,7 @@
 // Read-only: what other modules may ask about a recipe. `recipes` moves with jobs, later; nothing here writes it.
 import type { Queryable } from "../../db.js";
 import type { RecipeStep } from "./data.js";
+import { mediaUrl } from "./media.js";
 
 export type RecipeBrief = { id: string; family_id: string; cook_id: string; title: string; status: string; library_id: string | null };
 
@@ -34,6 +35,25 @@ export async function recipeFor(q: Queryable, familyId: string, personId: string
 export async function familyHasDish(q: Queryable, familyId: string, libraryId: string): Promise<boolean> {
   const { rowCount } = await q.query(`select 1 from recipes where family_id = $1 and library_id = $2 and status = 'ready' limit 1`, [familyId, libraryId]);
   return !!rowCount;
+}
+
+/**
+ * Where a dish's recipe.json is, by its library id: this family's ready recipe's own key, the one GET /v1/recipes/:id links as `recipeJsonUrl`, or else the public
+ * library's `<libraryId>/recipe.json`. The worker on AWS writes it in each attempt's own folder (recipe-<id>/<job>-a<n>/), where the library's path misses. Only a ready
+ * row counts (shownTo): one that isn't ready reads as no row, so its key never leaves here. Index: recipes_family_library.
+ */
+export async function recipeJsonKey(q: Queryable, familyId: string, libraryId: string): Promise<string> {
+  const { rows } = await q.query(
+    `select recipe_json_key from recipes where family_id = $1 and library_id = $2 and status = 'ready' and recipe_json_key is not null
+      order by created_at desc, id desc limit 1`,
+    [familyId, libraryId],
+  );
+  return rows[0]?.recipe_json_key ?? `${libraryId}/recipe.json`;
+}
+
+/** The link to it, built as GET /v1/recipes/:id builds `recipeJsonUrl`. */
+export async function recipeJsonUrl(q: Queryable, familyId: string, libraryId: string): Promise<string> {
+  return mediaUrl(await recipeJsonKey(q, familyId, libraryId));
 }
 
 export async function recipesByIds(q: Queryable, ids: string[]): Promise<RecipeBrief[]> {

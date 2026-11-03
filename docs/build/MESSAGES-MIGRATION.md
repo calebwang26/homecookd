@@ -216,6 +216,7 @@ The live-updates draft (`claude/aws-live`) plugs in here, and I built no subscri
 36. **A card's cost row names its recipe** (`model_calls.recipe_id`). Convex kept no cost row.
 37. **A recipe that isn't ready is its cook's alone** (Caleb, Nov 1; `recipeFor` in `recipes/read.ts`). By its id, to anyone else, it's a missing recipe: asking in cook mode, the photo note and a message naming it are 404 "That recipe isn't here anymore.", its questions list empty, and a question on it is a 404 to another cook. Asking, the photo note and naming it in a message need a finished recipe, so they're refused to its cook too. Convex took any family recipe by id.
 38. **A made-up `libraryId` is a 404 now** (`checkDish` in `library.ts`). The media CDN reads S3 with `s3:GetObject` alone, so a missing `recipe.json` answers 403, which now reads as missing, like a 404. The family's own ready recipe is found by its row first, because the worker on AWS writes its `recipe.json` in the attempt's folder, not at `<id>/recipe.json`. A 5xx or no answer still can't say, isn't kept, and doesn't hold up a send.
+39. **A share's `recipeUrl` and a push's dish read the dish's real `recipe.json`** (`recipeJsonKey` in `recipes/read.ts`): the family's ready recipe's own key, as `GET /v1/recipes/:id` links it, else `<libraryId>/recipe.json`, the only place Supabase looked. A recipe that isn't ready is never used.
 
 ### Against SYSTEM-DESIGN.md
 
