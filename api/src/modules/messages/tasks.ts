@@ -1,18 +1,17 @@
 // This area's work on the `scheduled` queue. Each can arrive twice, so each is safe to repeat; each carries ids only; and one for a person or row that's gone does
 // nothing. A task that throws stays on the queue: SQS tries again, and after 3 tries it goes to the dead-letter queue, which raises an alert.
 import { db, tx } from "../../db.js";
-import { cardForPush } from "../dish/service.js";
 import type { Trace } from "../dish/budget.js";
-import { everyoneIn, memberById, type Member } from "../people/family.js";
+import { everyoneIn, type Member } from "../people/family.js";
 import { recipesByIds } from "../recipes/read.js";
 import { questionTargets } from "./answers.js";
 import * as data from "./data.js";
 import type { MessageRow, ThreadRow } from "./data.js";
 import { dishInfo } from "./library.js";
 import { deliver, KEEP_LOG_DAYS, queuePush, receipts } from "./push.js";
-import { cravingKey, pruneLog } from "./pushData.js";
+import { pruneLog } from "./pushData.js";
+import { pushAnswered, pushFilmed, pushRequested } from "./pushEvents.js";
 import { dishName, messagePush, postcardKey, postcardPush, reactionPush } from "./pushRules.js";
-import { pushWords, relationLabel } from "./pushWords.js";
 import { readFollowUp, readShare, transcribeTask, translateTask } from "./questions.js";
 import { hourly, nudgeFamily, recapFamily } from "./retention.js";
 import { STORY_CARD_TASK, writeStoryCard } from "./storyCards.js";
@@ -90,39 +89,6 @@ async function pushPostcard(messageId: string): Promise<void> {
   const to = info ? (other ? named.find((p) => p.id === other) : named.find((p) => p.role === "cook") ?? named[0]) : here.find((p) => p.id === other && p.role === "cook");
   if (!to || to.id === me.id) return;
   await tx((c) => queuePush(c, { personId: to.id, ...postcardPush(me.name, info), dedupeKey: postcardKey(m.id) }));
-}
-
-// ---------------------------------------------------------------------------------------------
-// v2's pushes about a dish card (Convex's pushEvents.ts). A web-only kid has no person, so nothing is sent; they see Mom's answer when they reopen their link.
-
-const dishOf = (card: { dish: string | null; guess: { dish?: string } | null }) => card.dish || card.guess?.dish || "";
-
-/** Mom's version landed, or her clips went to the kid without one. */
-async function pushAnswered(askId: string): Promise<void> {
-  const card = await cardForPush(askId);
-  if (!card?.person_id) return;
-  const language = (await memberById(db(), card.person_id))?.language ?? undefined;
-  const { title, body } = pushWords("answered", language, { relation: relationLabel(card.relation ?? undefined), dish: dishOf(card) });
-  const stamp = card.merged_at ?? card.finished_at ?? 0;
-  await tx((c) => queuePush(c, { personId: card.person_id!, kind: "answered", title, body, url: `/dish/${askId}`, dedupeKey: `answered:${askId}:${new Date(stamp).getTime()}` }));
-}
-
-/** A kid named a dish from the parent's craving link. */
-async function pushRequested(askId: string): Promise<void> {
-  const card = await cardForPush(askId);
-  if (!card?.requested_of) return;
-  const language = (await memberById(db(), card.requested_of))?.language ?? undefined;
-  const { title, body } = pushWords("craving", language, { kid: card.kid_name ?? undefined, dish: dishOf(card) });
-  await tx((c) => queuePush(c, { personId: card.requested_of!, kind: "craving", title, body, url: `/request/${askId}`, dedupeKey: cravingKey(askId) }));
-}
-
-/** A recipe Mom filmed for this card was published: the video is the upgrade to her voice answer. */
-async function pushFilmed(askId: string, recipeId: string): Promise<void> {
-  const card = await cardForPush(askId);
-  if (!card?.person_id) return;
-  const language = (await memberById(db(), card.person_id))?.language ?? undefined;
-  const { title, body } = pushWords("filmed", language, { relation: relationLabel(card.relation ?? undefined), dish: dishOf(card) });
-  await tx((c) => queuePush(c, { personId: card.person_id!, kind: "filmed", title, body, url: `/recipe/${recipeId}`, dedupeKey: `filmed:${recipeId}` }));
 }
 
 const BATCH = 500;

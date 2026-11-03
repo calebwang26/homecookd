@@ -40,7 +40,8 @@ Every route checks the session, and every route below `/v1`. The one exception i
 | `push.receipts`, `ticketsOf`, `forget` | task `push.receipts` |
 | `push.dropTokensOf`, `dropLogOf` | `account.ts` |
 | `push.prune` | task `messages.daily` |
-| `pushEvents.answered`, `requested`, `filmed` | tasks `push.dish_answered`, `push.dish_requested`, `push.dish_filmed` |
+| `pushEvents.answered`, `requested`, `filmed` | tasks `push.dish_answered`, `push.dish_requested`, `push.dish_filmed`, in `pushEvents.ts` (#311) |
+| `links.claim`'s "joined" push | `queueJoined()` in `pushEvents.ts`, in the claim's transaction (#311) |
 
 ### From Supabase
 
@@ -254,7 +255,7 @@ These tables are read-only here. Each writes nothing today, and each needs its o
 2. **A share's yes runs `shareOn`, which writes `recipes.sharedAt`.** Built behind the recipes switch (Story cards, above): with writes open her yes shares the recipe and queues its card, and with them off it does nothing and her answer is kept. The ask itself is written here since #311, so `questions` no longer crosses areas.
 3. **`x-tz` wrote `people.tz` on every call.** It isn't stored here. `GET /v1/table` reads the header for that request, and `POST /v1/push-tokens` stores a zone on the token, which pushes read when the person has none. **Recommendation:** the accounts area takes the header. Until then a kid's stored zone can go stale.
 4. **`x-profile-id` and a lent phone.** Supabase lets a phone write as a phone-less face, or read with no person at all. A session here is one person. Old builds can't go through `/v1` until the accounts step decides how an adapter speaks for them. **Recommendation:** an adapter-only path that takes a device key and a profile id, checks Supabase's owner rule, and calls these services directly.
-5. **`pushEvents` and system notes have callers elsewhere.** The dish area's merge doesn't queue `push.dish_answered` yet, because a card's `person_id` is always null until the sync. `postSystemNote` and `queuePush` are ready for accounts' "Sam joined." and "joined" pushes.
+5. **`pushEvents` and system notes have callers elsewhere.** Since #311 the dish merge queues `push.dish_answered`, a claim (`accounts/links.ts`) queues `joined` through `queueJoined`, and a published job made for a request card queues `push.dish_filmed` (`pushEvents.ts`). `push.dish_requested` waits for card-making from a craving link (DISH-MIGRATION.md), and `postSystemNote` for accounts' "Sam joined.".
 6. **`POST /v1/pending-sends/:uploadId/published` is the sender's now, and the worker has no route yet.** **Recommendation:** when jobs move, the worker calls `deliverPending()` with no person.
 
 ## Account deletion

@@ -43,11 +43,12 @@ export type JobRow = {
   upload_finished_at: Date | null;
   finished_at: Date | null;
   cancelled_at: Date | null;
+  dish_ask_id: string | null;
   cursor_at: string;
 };
 
 const JOB = `id, family_id, cook_id, recipe_id, recording_id, upload_key, upload_id, source, title, language, for_kid_ids, stage, progress, error, video_gaps, attempts,
-  claimed_at, created_at, updated_at, upload_finished_at, finished_at, cancelled_at, created_at::text as cursor_at`;
+  claimed_at, created_at, updated_at, upload_finished_at, finished_at, cancelled_at, dish_ask_id, created_at::text as cursor_at`;
 
 /** A job shows only to the cook who filmed it (Caleb, Nov 1). Everyone else sees the recipe once it's published. */
 export async function jobsOfCook(q: Queryable, familyId: string, cookId: string, before: After | null, limit: number): Promise<JobRow[]> {
@@ -102,13 +103,14 @@ export async function insertJob(
     title: string | null;
     language: string;
     forKidIds: string[];
+    dishAskId: string | null;
   },
 ): Promise<string> {
   const { rows } = await c.query(
-    `insert into jobs (family_id, cook_id, recipe_id, recording_id, upload_key, source, title, language, for_kid_ids, stage, progress, idempotency_key)
-     values ($1, $2, $3, $4, $5::text, $6, $7, $8, $9, 'uploading', 0, $5::text)
+    `insert into jobs (family_id, cook_id, recipe_id, recording_id, upload_key, source, title, language, for_kid_ids, dish_ask_id, stage, progress, idempotency_key)
+     values ($1, $2, $3, $4, $5::text, $6, $7, $8, $9, $10, 'uploading', 0, $5::text)
      returning id`,
-    [j.familyId, j.cookId, j.recipeId, j.recordingId, j.uploadKey, j.source, j.title, j.language, j.forKidIds],
+    [j.familyId, j.cookId, j.recipeId, j.recordingId, j.uploadKey, j.source, j.title, j.language, j.forKidIds, j.dishAskId],
   );
   return rows[0].id;
 }

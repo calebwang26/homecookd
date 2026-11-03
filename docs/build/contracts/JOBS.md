@@ -22,7 +22,7 @@ Nov 2, 2026. Read from `aws-migration` at `a1816615b`, and checked against stagi
 2. 1.1 makes no recording row: no route starts one (homie is off). So send the dish, the kids and the language on the job itself, and leave out `recordingId`.
 3. Make an `Idempotency-Key` (a uuid) for this upload. Save it on the phone with each video's path, `contentType`, exact `size` and `durationS`, before the first call.
 4. `POST /v1/video-uploads {videos: [{contentType, size, durationS}]}`. Save `uploadId`.
-5. `POST /v1/jobs {uploadId, source: "phone", title, language, forKidIds}` straight away, before the bytes land. Save `jobId`. The job waits as `uploading`. Making it early matters: if the phone never says it finished, the server's own check (`jobs.sweep`) queues it, and that check only looks at jobs that exist.
+5. `POST /v1/jobs {uploadId, source: "phone", title, language, forKidIds, dishAskId?}` straight away (`dishAskId` only when she's filming for a request card), before the bytes land. Save `jobId`. The job waits as `uploading`. Making it early matters: if the phone never says it finished, the server's own check (`jobs.sweep`) queues it, and that check only looks at jobs that exist.
 6. If she picked people to send it to: `POST /v1/pending-sends {uploadId, recipientIds, helloKey?, helloDurationS?}` with its own `Idempotency-Key` (Messages area). Nothing delivers it yet when the recipe is done (open item 2).
 7. For each entry in `uploads`:
    - `method: "PUT"`: a background PUT of the whole file to `url`, with exactly `headers` (`Content-Type`) and the file's exact bytes. The link is signed for that type and that length, so a different size is refused by S3.
@@ -245,6 +245,7 @@ Code: `api/src/modules/jobs/` (`routes.ts`, `uploads.ts`, `service.ts`, `data.ts
 | `language` | Optional, two letters (`"mr"`). Otherwise the recording's, then the cook's (`/v1/me`), then `"en"` |
 | `forKidIds` | Optional: up to 20 kids of this family, by `personId`. `forKidId` is the older single form |
 | `recordingId` | Optional: her own recording. 1.1 has none: leave it out |
+| `dishAskId` | Optional: the request card this recording answers, when she films from it (`/record?ask=<id>`). Once the recipe is ready, the card's kid gets the `filmed` push (MESSAGES.md, flow 9). Kept only for a card asked of her in her family; any other is left off, with no error, and the job is made all the same |
 
 **Answer:** 201 `{jobId, recipeId}` for a new job; 200 with the same job for the same `uploadId` (the body isn't compared: the first call's title and kids stay). `recipeId` is the "processing" card's id while recipe writes are on, and null otherwise (staging today); the job carries it once it's `done`. The job starts `uploading`, or `queued` if every video is already marked in.
 

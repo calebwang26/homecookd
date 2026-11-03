@@ -1,6 +1,7 @@
 // Pushes on real Postgres with a fake Expo: convex/push.test.ts, convex/links.test.ts's pushEvents, and the notify() and message-push tests from
 // supabase/tests/retention_test.ts and api_test.ts. Convex's and Supabase's kinds keep their own rules (SCHEMA.md), so both sets of tests run.
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { after, test } from "node:test";
 import { db, tx } from "../src/db.js";
 import { purgeDishForPerson } from "../src/modules/dish/account.js";
@@ -12,7 +13,7 @@ import { quietDelayMs } from "../src/modules/messages/pushRules.js";
 import { pushWords } from "../src/modules/messages/pushWords.js";
 import { daily } from "../src/modules/messages/tasks.js";
 import { handleMessage } from "../src/scheduled.js";
-import { awsRecipe, cdnLibrary, CHILI, circleOf, closeAll, DAL, drain, drainTwice, dueNow, get, logOf, ok, pairOf, person, phone, post, pushes, RICE, say, silent, skip, text, tokenFor, tokensOf, uploaded, type Who, type World, world } from "./messagesHelpers.js";
+import { awsRecipe, cdnLibrary, CHILI, circleOf, closeAll, DAL, drain, drainTwice, dueNow, get, logOf, ok, pairOf, person, phone, post, pushes, recipe, RICE, say, silent, skip, text, tokenFor, tokensOf, uploaded, type Who, type World, world } from "./messagesHelpers.js";
 
 const push = (personId: string, over: Partial<PushInput> = {}, now = new Date()) =>
   tx((c) =>
@@ -665,14 +666,56 @@ test("a craving waiting for morning doesn't go if its kid or cook has deleted, a
   assert.deepEqual(pushes(w.expo).map((p) => p[1]).sort(), ["Caleb wants your braised pork", "Your kid wants your braised pork"]);
 });
 
-test("pushEvents: a recipe Mom filmed goes to the kid once", { skip }, async () => {
+test("pushEvents: a recipe Mom filmed goes to the kid once, only once it's ready, only hers, and only to a kid who can open it", { skip }, async () => {
   const w = await world();
   await phone(w, w.leo, "leo");
-  const askId = await card(w, { person: w.leo.id });
-  await run({ task: "push.dish_filmed", askId, recipeId: "r1" });
-  await run({ task: "push.dish_filmed", askId, recipeId: "r1" });
+  await phone(w, w.strangerKid, "serene");
+  const askId = await card(w, { person: w.leo.id, requestedOf: w.dad.id });
+  const cooking = await recipe(w.family, w.dad.id, { status: "processing" });
+  const moms = await recipe(w.family, w.mom.id);
+  for (const recipeId of [cooking, moms, "no-such-recipe"]) await run({ task: "push.dish_filmed", askId, recipeId });
+  // A kid who claimed the card from another family can't open the recipe, so isn't told of it.
+  const theirs = await card(w, { person: w.strangerKid.id, requestedOf: w.dad.id });
+  const dads = await recipe(w.family, w.dad.id);
+  await run({ task: "push.dish_filmed", askId: theirs, recipeId: dads });
+  assert.equal((await db().query(`select count(*)::int as n from push_log where kind = 'filmed'`)).rows[0].n, 0);
+
+  await run({ task: "push.dish_filmed", askId, recipeId: dads });
+  await run({ task: "push.dish_filmed", askId, recipeId: dads });
   await drain();
-  assert.deepEqual(pushes(w.expo), [[tokenFor("leo"), "Mom filmed braised pork", "Watch Mom make it.", "/recipe/r1"]]);
+  assert.deepEqual(pushes(w.expo), [[tokenFor("leo"), "Mom filmed braised pork", "Watch Mom make it.", `/recipe/${dads}`]]);
+});
+
+test("filmed is queued when the job made for her request card publishes, once however often the message comes, and never for another job", { skip }, async () => {
+  const w = await world();
+  await phone(w, w.leo, "leo");
+  const askId = await card(w, { person: w.leo.id, requestedOf: w.dad.id });
+  const job = async (recipeId: string, o: { dishAskId?: string; stage?: string } = {}) =>
+    (
+      await db().query(
+        `insert into jobs (family_id, cook_id, recipe_id, upload_key, source, stage, progress, finished_at, dish_ask_id) values ($1, $2, $3, $4, 'phone', $5, 1, now(), $6) returning id`,
+        [w.family, w.dad.id, recipeId, `${randomUUID()}/`, o.stage ?? "done", o.dishAskId ?? null],
+      )
+    ).rows[0].id as string;
+  const published = (jobId: string, recipeId: string) => run({ kind: "recipe_published", jobId, recipeId });
+  const filmedQueued = async () => (await db().query(`select payload from outbox where payload->>'task' = 'push.dish_filmed'`)).rows.map((r) => r.payload);
+
+  // A recipe that isn't ready, a job that didn't finish with it, and a job for no card: nothing.
+  const cooking = await recipe(w.family, w.dad.id, { status: "processing" });
+  await published(await job(cooking, { dishAskId: askId }), cooking);
+  const stopped = await recipe(w.family, w.dad.id);
+  await published(await job(stopped, { dishAskId: askId, stage: "failed" }), stopped);
+  const plain = await recipe(w.family, w.dad.id);
+  await published(await job(plain), plain);
+  assert.deepEqual(await filmedQueued(), []);
+
+  const pork = await recipe(w.family, w.dad.id, { title: "Braised Pork" });
+  const made = await job(pork, { dishAskId: askId });
+  await published(made, pork);
+  await published(made, pork); // SQS's repeat
+  assert.deepEqual(await filmedQueued(), [{ task: "push.dish_filmed", askId, recipeId: pork }, { task: "push.dish_filmed", askId, recipeId: pork }]);
+  await drain();
+  assert.deepEqual(pushes(w.expo), [[tokenFor("leo"), "Mom filmed braised pork", "Watch Mom make it.", `/recipe/${pork}`]]);
 });
 
 after(closeAll);

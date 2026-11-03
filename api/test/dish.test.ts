@@ -629,6 +629,10 @@ test("ask/answer: 30 per IP in 10 minutes", { skip }, async () => {
   like(await answer(t, askToken, "q1"), { status: 429, data: { error: "rate_limited" } });
 });
 
+/** "Mom answered" pushes queued for a card (merge.ts). */
+const answeredQueued = async (askId: string) =>
+  (await db().query(`select count(*)::int as n from outbox where payload->>'task' = 'push.dish_answered' and payload->>'askId' = $1`, [askId])).rows[0].n as number;
+
 test("Send: finished and merging at once, then her version in her words; the kid gets it with her clip; no more answers", { skip }, async () => {
   const t = await newBackend();
   const { kidToken, askToken } = await askedCard(t);
@@ -651,12 +655,15 @@ test("Send: finished and merging at once, then her version in her words; the kid
   like(card.answers, [{ id: "q1", words: FAKE_WORDS, english: null, audioUrl: anyString, durationS: 4.2 }]);
   assert.ok((await rowOf(kidToken)).merged_at);
   assert.equal(model.calls.version, 1);
+  // "Mom answered" goes on the queue with her version (messages/pushEvents.ts sends it to the kid, if they have the app).
+  assert.equal(await answeredQueued((await rowOf(kidToken)).id), 1);
 
   like(await answer(t, askToken, "q1"), { status: 409, data: { error: "closed", message: "These answers were already sent." } });
   // Send again changes nothing, and no merge runs twice.
   like((await finish(t, askToken)).data.ask, { finished: true, merging: false });
   await settle();
   assert.equal(model.calls.version, 1);
+  assert.equal(await answeredQueued((await rowOf(kidToken)).id), 1);
 
   // Send with nothing answered keeps her link open.
   const other = await askedCard(t, "192.0.2.20");
@@ -717,6 +724,7 @@ test("a failed merge is tried again 3 minutes later, 5 tries at most; then the k
   like(card, { status: "answered", version: null, merging: false });
   assert.deepEqual(card.answers.map((a: { id: string; words: string }) => [a.id, a.words]), [["q1", ""]]);
   assert.equal((await peek(t, askToken)).merging, false); // right after the last try, not 3 minutes on
+  assert.equal(await answeredQueued(row.id), 1, "her clips go to the kid as they are, and the kid hears so once");
   await advance(60 * MIN);
   await getCard(t, kidToken);
   await settle();

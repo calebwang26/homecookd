@@ -1,4 +1,5 @@
-// What claim on install needs from a card (convex/links.ts; docs/build/V2-LINKING.md section 2). The accounts module asks here rather than read this module's tables.
+// What other modules need from a card: claim on install (convex/links.ts; docs/build/V2-LINKING.md section 2), and whether a job's card is its cook's (jobs/service.ts).
+// They ask here rather than read this module's tables.
 import type { Queryable } from "../../db.js";
 import { personIsLive } from "../people/service.js";
 import * as data from "./data.js";
@@ -22,6 +23,12 @@ export const otherSideOf = (card: CardRow, side: Side) => (side === "kid" ? card
 export const claimedOnce = (card: CardRow, side: Side) => (side === "kid" ? card.kid_claimed_at : card.cook_claimed_at) !== null;
 
 export const liveHolder = async (q: Queryable, id: string | null) => (id && (await personIsLive(q, id)) ? id : null);
+
+/** Whether this card is asked of her, in her family: a request from her craving link, or a card whose cook side she claimed. Index: the primary key. */
+export async function isRequestOf(q: Queryable, askId: string, personId: string, familyId: string): Promise<boolean> {
+  const { rowCount } = await q.query(`select 1 from dish_asks where id = $1 and requested_of = $2 and family_id = $3`, [askId, personId, familyId]);
+  return !!rowCount;
+}
 
 /** The language Mom answered in, so the app can pre-pick her cook language. */
 export async function answerLanguage(q: Queryable, askId: string): Promise<string | null> {

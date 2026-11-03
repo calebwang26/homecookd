@@ -141,7 +141,7 @@ async function recipePublished(payload: Payload, trace: Trace): Promise<void> {
     trace.log.info?.({ jobId, recipeId }, "recipe published, but its job didn't finish with it: nothing to do");
     return;
   }
-  await messagesOnPublish({ jobId, familyId: job.family_id, cookId: job.cook_id, recipeId, uploadId: job.upload_id }, trace);
+  await messagesOnPublish({ jobId, familyId: job.family_id, cookId: job.cook_id, recipeId, uploadId: job.upload_id, dishAskId: job.dish_ask_id }, trace);
   trace.log.info?.({ jobId, recipeId }, "recipe published");
 }
 

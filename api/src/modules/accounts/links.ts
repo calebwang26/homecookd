@@ -5,6 +5,7 @@ import type { Signed } from "../../auth.js";
 import { db, tx } from "../../db.js";
 import { forbidden, invalid, notFound, removedFromFamily } from "../../errors.js";
 import * as cards from "../dish/links.js";
+import { queueJoined } from "../messages/pushEvents.js";
 import * as data from "./data.js";
 import { extId } from "./data.js";
 import { rehomeCookWork, requestMossSync } from "./neighbors.js";
@@ -91,7 +92,7 @@ export async function claimCard(signed: Signed, b: Body) {
     const holder = await cards.liveHolder(c, cards.holderOf(card, side));
     if (holder) return { ...result, taken: holder !== signed.personId };
     await cards.claimCardSide(c, card, side, signed.personId, familyId);
-    // TODO(aws-push): the "joined" push to the other side (convex/links.ts) waits for the push area.
+    await queueJoined(c, { cardId: card.id, side, relation: card.relation, joinerId: signed.personId, otherId: cards.otherSideOf(card, side), familyId: signed.familyId });
     if (side === "cook") await data.setRelationIfUnset(c, signed.personId, relationLabel(card.relation));
     return { ...result, taken: false };
   });

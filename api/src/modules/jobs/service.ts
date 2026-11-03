@@ -5,6 +5,7 @@ import { db, tx, type Queryable } from "../../db.js";
 import { enqueue } from "../../outbox.js";
 import { invalid, notFound } from "../../errors.js";
 import { afterCursor, pageOf } from "../../paging.js";
+import { isRequestOf } from "../dish/links.js";
 import { areFamilyKids, forKids, languageOf } from "../people/reads.js";
 import { notMoved, recipeWrites } from "../recipes/switch.js";
 import { failRecipeIfOpen, insertProcessingRecipe } from "../recipes/writes.js";
@@ -87,6 +88,8 @@ export type JobInput = {
   forKidId?: string;
   forKidIds?: string[];
   recordingId?: string;
+  /** The request card this recording answers (V2-LINKING.md §1.4), for its "filmed" push. */
+  dishAskId?: string;
 };
 
 /**
@@ -120,6 +123,8 @@ export async function createJob(signed: Signed, input: JobInput, requestId?: str
     const named = forKids(input);
     const kids = named.length ? named : (recording?.for_kid_ids ?? []);
     if (!(await areFamilyKids(c, signed.familyId, kids))) throw invalid("forKidIds", "That person isn't in your family.");
+    // Only a card asked of her, in her family. Any other is left off and the job made all the same: a recording is never refused over a push.
+    const dishAskId = input.dishAskId && (await isRequestOf(c, input.dishAskId, signed.personId, signed.familyId)) ? input.dishAskId : null;
 
     // A "processing" card shows in the library right away; the worker fills it in. With the recipes switch off there's no card, and it makes the row when it publishes.
     const recipeId =
@@ -134,6 +139,7 @@ export async function createJob(signed: Signed, input: JobInput, requestId?: str
       title,
       language,
       forKidIds: kids,
+      dishAskId,
     });
     if (recording) await noteRecordingJob(c, recording.id, jobId);
     await data.attachUpload(c, uploadId);

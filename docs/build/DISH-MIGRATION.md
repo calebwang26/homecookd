@@ -20,7 +20,7 @@ Step 5 of `docs/build/AWS-MIGRATION.md`, Oct 31, 2026. A draft on `aws-migration
 - `cravingToken` on `POST /dish/cards` answers 404. Making a plain card instead would quietly not reach her.
 - When these two are built, they find the link with `cravingData.linkByToken`, by sha256: since `077` the token itself isn't stored (SCHEMA.md, M6).
 - Claiming a card, `dishAsks.forMe` and `get`. The signed-in `cravings.*` functions, `sendVoiceRecipe` and `setFilmingDay` are now built: `COMMUNITY-MIGRATION.md`.
-- `pushEvents.requested` and `answered`. `answered` does nothing without a `personId`, which is always null here.
+- `pushEvents.requested`, which goes with `cravingToken` above. `answered` is queued by the merge since #311 (`messages/pushEvents.ts`), and goes to a kid who has claimed the card.
 - `dish_asks.person_id`, `family_id` and `requested_of` stay null.
 
 ## Anonymous file safety
