@@ -1,4 +1,4 @@
-# Plans infra/envs/staging when a merge into aws-migration changes it, checks the saved plan, and applies exactly that plan. Anything
+# Plans infra/envs/staging when a merge into main changes it (aws-migration until Nov 6), checks the saved plan, and applies exactly that plan. Anything
 # the check refuses stops here and goes to Caleb, with the commands to run it himself (infra/README.md, "Merges apply staging").
 #
 # Does nothing until Caleb has created the role (infra/staging-apply-role) and set the repo variable STAGING_INFRA_APPLY to "on".
@@ -15,7 +15,7 @@ on:
         type: boolean
         default: false
   push:
-    branches: [aws-migration]
+    branches: [main]
     paths:
       - "infra/envs/staging/**"
       - "infra/modules/**"
@@ -35,7 +35,7 @@ defaults:
 
 jobs:
   apply:
-    if: vars.STAGING_INFRA_APPLY == 'on' && github.ref == 'refs/heads/aws-migration'
+    if: vars.STAGING_INFRA_APPLY == 'on' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-24.04
     environment: staging-infra
     timeout-minutes: 45
@@ -47,7 +47,7 @@ jobs:
       # Each action is pinned to a commit, since whatever runs in this job can act as the role.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
         with:
-          ref: aws-migration
+          ref: main
           persist-credentials: false
 
       - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2

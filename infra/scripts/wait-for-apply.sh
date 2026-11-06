@@ -15,7 +15,7 @@ for _ in $(seq 1 92); do
     # Either a newer merge took its place in the queue, and that run applies this commit's Terraform too, or someone stopped it part way,
     # which can leave staging half applied. Only a newer run that finished well says it's safe to go on.
     "completed cancelled "*)
-      NEWER=$(gh run list --workflow apply-staging.yml --branch aws-migration --limit 20 --json status,conclusion,createdAt --jq "[.[] | select(.createdAt > \"${RESULT##* }\") | \"\(.status) \(.conclusion)\"] | join(\",\")" 2>/dev/null)
+      NEWER=$(gh run list --workflow apply-staging.yml --branch main --limit 20 --json status,conclusion,createdAt --jq "[.[] | select(.createdAt > \"${RESULT##* }\") | \"\(.status) \(.conclusion)\"] | join(\",\")" 2>/dev/null)
       case "$NEWER" in
         *"completed success"*) echo "That apply was replaced by a newer one, which finished. Going ahead."; exit 0 ;;
         *queued* | *in_progress* | *waiting* | *pending* | *requested*) ;;

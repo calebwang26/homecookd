@@ -1,8 +1,8 @@
-# Every merge into aws-migration deploys what changed to staging, then checks it answers. Staging has no real keys or data.
+# Every merge into main deploys what changed to staging (aws-migration until Nov 6), then checks it answers. Staging has no real keys or data.
 name: Deploy to staging
 on:
   push:
-    branches: [aws-migration]
+    branches: [main]
     paths:
       - "api/**"
       - "pipeline/**"
