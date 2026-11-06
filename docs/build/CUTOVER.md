@@ -143,7 +143,7 @@ Caleb picks one.
 - **Back:** delete the copies from production's database and S3. The originals in Convex, Supabase and GCS never changed.
 
 ### 8. Prove 1.1 on TestFlight against production
-- **Who:** App screens builds 1.1 with `EXPO_PUBLIC_BACKEND=aws`, `EXPO_PUBLIC_AWS_URL=https://api.homecookd.app` and `EXPO_PUBLIC_BUCKET_URL=https://media.homecookd.app` (where the app reads `library.json`; unset, it's GCS), on the production profile. This is the build step 9 submits. Caleb tests it. App Store/web builds the site locally with step 10's values: production's api allows `localhost` (DISH-MIGRATION.md).
+- **Who:** App screens builds 1.1 with `EXPO_PUBLIC_BACKEND=aws`, `EXPO_PUBLIC_AWS_URL=https://api.homecookd.app` and `EXPO_PUBLIC_BUCKET_URL=https://media.homecookd.app` (where the app reads `library.json`; unset, it's GCS), on the `production-aws` EAS profile (#346), never `production`, which still reaches build 6. This is the build step 9 submits. Caleb tests it. App Store/web builds the site locally with step 10's values: production's api allows `localhost` (DISH-MIGRATION.md).
 - **Check:** step 2's list again on production, now with real models: a recording all the way to a recipe, a push, delete account. The reviewer's path from the notes, on the TEST family. A demo family's recipes, if step 7 copied them. The site's pages: a card made on `/miss` and answered on `/a`, a family link on `/i`, a share on `/r`, a dinner on `/d`. Production's alarms stay quiet.
 - **Back:** fix it and build again. Nothing public changed. The test people it made are deleted through the app's own delete.
 
