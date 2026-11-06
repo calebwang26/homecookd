@@ -60,4 +60,12 @@ export const SHARE = {
   'share.invite.titleNoName': 'Join our family table on homecookd',
   'share.invite.a11yNames': '{title} {names}.',
   'share.invite.a11yNamesMore': '{title} {names} and {count} more.',
+  // The cook's "Share with people nearby" switch at the foot of her recipe (components/community/ShareNearbyRow).
+  'share.nearby.label': 'Share with people nearby',
+  'share.nearby.on': 'On',
+  'share.nearby.off': 'Off',
+  'share.nearby.offMap': 'Off the map',
+  'share.nearby.offMapA11y': 'Off the map. {why}',
+  'share.nearby.whatNeighborsSee': 'Neighbors see the recipe text, one line you said and an AI guess at where it’s from, never your video or voice.',
+  'share.nearby.saveFailed': 'Couldn’t save that. Try again.',
 } as const satisfies Record<`share.${string}`, string>;

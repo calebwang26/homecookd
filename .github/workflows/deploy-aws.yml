@@ -28,6 +28,7 @@ permissions:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     environment: ${{ inputs.environment }}
     env:
       NAME: homecookd-${{ inputs.environment }}
