@@ -1,7 +1,7 @@
 import type { Recipe } from './types';
 
 // 22 recipe cards: the 5 real app recipes (spelled exactly as in the screen recordings),
-// the hero's salad (cut from the hero video), the dumplings added in app-record, and 15 example families.
+// the hero's salad (cut from the hero video), the dumplings from the old app tour, and 15 example families.
 // Card titles render as `{cook}'s {dish}`. Cook names are English relations, optionally
 // with a first name. Only 3 cards carry an original-language line (es, it, ko), always
 // with the English in feelQuote. Cards from other families are illustrations.
@@ -99,7 +99,7 @@ export const RECIPES: Recipe[] = [
     imageAlt: 'A mom and her daughter laughing as she tears lettuce over a board of chopped tomatoes.',
     source: 'hero',
   },
-  // The dumplings added in the app-record screen recording (the family table's sixth recipe)
+  // The dumplings from the old app tour (the family table's sixth recipe)
   {
     id: 'grandma-dumplings',
     dish: 'Sunday Dumplings',

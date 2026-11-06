@@ -11,7 +11,7 @@
 //   54–76  fold (a7 M14): the six cards fly into the folder grid; the panel scales in behind them
 //          (59), the trailing photos turn into full recipe cards, the step cards flip once they're in
 //          their cells (64–74), the panel's header (title, then "+ Add a recipe") and the tabs settle in
-//   74–92  the phone (real app-library recording) rises to rest in front of the folder's bottom-right corner
+//   74–92  the phone (real web-version recording) rises to rest in front of the folder's bottom-right corner
 //   80     the deck copy hands over to the interactive FolderGrid (and back below 76)
 //
 // Hand-off from DeckFilm (lib/motion/deckHandoff.ts): the pass-down fan closes into a stack and the pin

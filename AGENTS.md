@@ -238,6 +238,7 @@ cd app && node scripts/sync-brand.mjs                             # the brand ki
 cd web && npm run dev -- --port 3000
 cd web && npm ci && npm run build                                  # confirm a PR's web/ builds
 node web/scripts/qa/dish-e2e.mjs --base http://localhost:3105 --out /tmp/dish-e2e   # v2 /miss + /a vs the local /dish fake (site: cd web && NEXT_PUBLIC_DISH_URL=http://localhost:8791 npx next dev --port 3105)
+node web/scripts/qa/record-tour.mjs --base http://localhost:3105 --out /tmp/tour && web/scripts/qa/tour-encode.sh /tmp/tour   # re-record the lander's tour clips from /miss and /a (site: a fake-api build served on 3105, see the script)
 
 # convex (repo root)
 npx vitest run                                                     # convex-test suites (convex/*.test.ts)

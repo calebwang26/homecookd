@@ -37,7 +37,7 @@ const BROWSER_LANG: [RegExp, LineId][] = [
   [/^(tl|fil)/, 'tl'],
   [/^hi/, 'hi'],
   [/^ko/, 'ko'],
-  [/^it/, 'it'],
+  [/^pt/, 'pt'],
 ];
 
 const INTERVAL_S = 3.2;
