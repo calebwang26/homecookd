@@ -7,6 +7,9 @@
 //                                                family's recipes come along (docs/build/JOIN-SIMPLE.md §4)
 // openLink never throws; claimLink and linksMoved throw when nothing happened (offline, not deployed).
 import { siteUrl } from '@/components/community/invite';
+import { accounts } from '@/lib/aws/accounts';
+import { AWS_ON } from '@/lib/aws/config';
+import { isAwsError } from '@/lib/aws/errors';
 import { parseClaimed, parseLinkInfo, type Claimed, type LinkInfo } from '@/lib/linkClaim';
 
 import { call, token as sessionFor } from './convex';
@@ -20,6 +23,14 @@ export type OpenedLink = { ok: true; link: LinkInfo } | { ok: false; why: 'gone'
 
 export async function openLink(token: string | null | undefined): Promise<OpenedLink> {
   if (!token || !TOKEN.test(token)) return { ok: false, why: 'gone' };
+  if (AWS_ON) {
+    try {
+      const link = parseLinkInfo(await accounts.openCard(token));
+      return link ? { ok: true, link } : { ok: false, why: 'offline' };
+    } catch (e) {
+      return isAwsError(e) && (e.status === 404 || e.status === 400) ? { ok: false, why: 'gone' } : { ok: false, why: 'offline' };
+    }
+  }
   if (!SITE) return { ok: false, why: 'offline' };
   const ctrl = new AbortController();
   const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
@@ -42,6 +53,11 @@ export async function openLink(token: string | null | undefined): Promise<Opened
 
 /** `as`: the person claiming (a profile id), by default whoever is in. Idempotent on the server. */
 export async function claimLink(token: string, as?: string): Promise<Claimed> {
+  if (AWS_ON) {
+    const claimed = parseClaimed(await accounts.claimCard(token, as));
+    if (!claimed) throw new Error('links.claim gave no card.');
+    return claimed;
+  }
   const sessionToken = await sessionFor(as);
   const notYet = () => {
     throw new Error('links.claim isn’t on the server yet.');
@@ -56,6 +72,7 @@ export async function claimLink(token: string, as?: string): Promise<Claimed> {
  * family's recipes (session hands it over: setLinksMoved in the root layout). Run once per move.
  */
 export async function linksMoved(receipt: string, profileId: string): Promise<{ recipes: number; faces: number }> {
+  if (AWS_ON) return accounts.moved(receipt, profileId);
   const sessionToken = await sessionFor(profileId);
   const none = { recipes: 0, faces: 0 };
   return call('mutation', 'links:moved', { sessionToken, receipt }, () => none, { strict: true });

@@ -264,11 +264,12 @@ AWS_PROFILE=homecookd terraform init -backend-config="bucket=homecookd-tfstate-$
 AWS_PROFILE=homecookd terraform plan -out=production.tfplan
 AWS_PROFILE=homecookd terraform apply production.tfplan
 ```
-It makes the network with two NAT gateways; Postgres (Multi-AZ `db.t4g.medium`, 14 days of restore points, deletion protection, IAM logins
+It makes the network with one NAT gateway; Postgres (`db.t4g.small` in one zone, lean at launch, Caleb Nov 5; 14 days of restore points, deletion protection, IAM logins
 on); the load balancer; the three buckets and the media CloudFront; the queues; every alarm and the alerts topic; the cluster with the api
 and the worker at 0 tasks, and their image repositories; the secret names, empty; the roles, including the deploy role GitHub's
 `production` environment logs in to; and the migrate task. No schedules (they come with the api, step 7), no voice service, and nothing
-runs. Roughly $210 a month at list prices before any task starts, most of it the NAT gateways and the database.
+runs. Roughly $95 a month at list prices before any task starts, most of it the NAT gateway, the database and the load balancer; about $36 more
+with the api's two tasks. The full setup (two NAT gateways, a Multi-AZ `db.t4g.medium`, about $210) is three lines in `envs/production/main.tf`, by PR.
 
 **4. The alarms' email.** AWS sends "AWS Notification - Subscription Confirmation" to caleb.wang26@gmail.com. Click its link: until then
 no alarm reaches anyone. Check it no longer says `PendingConfirmation`:

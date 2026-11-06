@@ -77,7 +77,7 @@ HTTP errors are JSON `{ error }`: `400` bad body, `401` wrong secret or signed-o
   into it (`withMemories`, `app/src/lib/familyLibrary.ts`). A file published before that still has them all, so
   the kid's library strips them itself when a row has no `memories` and no opt-in.
 - `jobs.create({ uploadPath, source })` → `{ jobId, recipeId }` (cook only; adds a `processing` recipe card),
-  `jobs.forFamily` (live progress)
+  `jobs.mine` (live progress, the cook's own; `jobs.forFamily` stays for 1.0)
 - `questions.forRecipe({ recipeId })`, `questions.openForCook` (questions about this cook's recipes),
   `questions.answer({ questionId, text?, audioId? })` (cook only; a voice note gets an Ink transcript in the cook's
   `people.language`, plus `answer.translation`, Gemini's English, when that isn't English; set it with `seed:language`)

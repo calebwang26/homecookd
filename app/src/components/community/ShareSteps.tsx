@@ -37,7 +37,7 @@ export function ShareSteps({
     // The map's story card is Muse's (and an ask is translated for the cook): asked first, once.
     if (!(await ensureAiConsent())) return;
     try {
-      const done = await askToShare(d.recipeId);
+      const done = await askToShare(d.recipeId, d.cookName);
       haptic('success');
       toast.show(done === 'shared' ? 'It’s on the map.' : `Asked ${d.cookName.trim() || 'the cook'}`);
     } catch (e) {

@@ -8,12 +8,15 @@ import { File, Paths } from 'expo-file-system';
 import { Platform } from 'react-native';
 import { webGetItem, webSetItem } from './legacyKeys';
 
+import { AWS_ON } from './aws/config';
 import { signerHeaders, UPLOAD_URL, uploadsConfigured } from './uploads';
 
 const TIMEOUT_MS = 15000;
 
 /** Asks the upload service to delete the recipe. Resolves on success, throws otherwise. */
 export async function requestDelete(id: string): Promise<void> {
+  // TODO(aws): deleting a recipe isn't on the AWS api yet (JOBS.md open item 11); nothing offers it under the switch.
+  if (AWS_ON) throw new Error("Deleting isn't ready yet.");
   if (!uploadsConfigured()) throw new Error("Deleting isn't set up yet.");
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);
@@ -45,6 +48,7 @@ export async function requestDelete(id: string): Promise<void> {
  * Resolves on success, throws otherwise.
  */
 export async function requestCancel(jobId: string): Promise<void> {
+  if (AWS_ON) return; // the AWS stops (jobs.cancel, cancelUpload) delete the upload's files themselves
   if (!uploadsConfigured()) throw new Error("Cancelling isn't set up yet.");
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), TIMEOUT_MS);

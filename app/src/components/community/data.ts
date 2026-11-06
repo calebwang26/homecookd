@@ -11,8 +11,8 @@ import type { FamilyRecipe } from '@/lib/familyLibrary';
 import type { FeedRecipe } from '@/lib/live/community';
 import { useLive } from '@/lib/live/convex';
 
-/** A recipes.list row, with the cook's share switch (set = shared with people nearby). */
-export type SharableRecipe = FamilyRecipe & { sharedAt?: number };
+/** A recipes.list row, with the cook's share switch (set = shared with people nearby) and, on AWS, the team's takedown. */
+export type SharableRecipe = FamilyRecipe & { sharedAt?: number; hiddenAt?: number };
 
 const noRecipes = (onData: (v: SharableRecipe[] | null) => void) => {
   onData([]);

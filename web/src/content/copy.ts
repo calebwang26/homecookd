@@ -29,8 +29,8 @@ export const copy = {
       auntie: "Auntie",
       uncle: "Uncle",
     },
-    cta: "Get early access",
-    ctaMobile: "Early access",
+    cta: "Make your dish",
+    ctaMobile: "Make your dish",
     skipLink: "Skip to how it works",
   },
 
@@ -69,11 +69,11 @@ export const copy = {
   passDown: {
     // what the app does, moved here from the hero sub (Caleb, Oct 17); the brand line is cut.
     // {R} etc. = the picked relation (Mom by default), filled where it renders.
-    h2: "Too far to cook together? {R} films {herself} cooking, and you get {her} homemade recipe.",
-    accent: ["homemade", "recipe."],
+    h2: "Too far to cook together? Name the dish you miss, and {R} fills in the rest.",
+    accent: ["fills", "in", "the", "rest."],
     sub: "Every family has a dish only one person really knows. Keep it, with them in it.",
     chips: ["Grandma", "Dad"],
-    cta: "Get early access",
+    cta: "Make it tonight",
     link: "How it works",
     deckListLabel: "A few family recipes, shown as examples:",
   },
@@ -102,9 +102,9 @@ export const copy = {
       },
       {
         numeral: "3",
-        title: "They add the videos. Sent.",
+        title: "Their recipe lands on your phone.",
         sticker: ["Love,", "Grandma"],
-        imageAlt: "The Add a recipe screen in homecookd, with Sunday dumplings typed in and Grandma picked as the cook.",
+        imageAlt: "Mom’s tomato egg in homecookd: her amounts in her own words, with a play button to hear her say each one.",
       },
     ],
   },
@@ -128,47 +128,45 @@ export const copy = {
     eyebrow: "The app",
     h2: "Here's the real thing.",
     accent: ["real"],
-    note: "screen recordings, straight from the app",
-    // The whole pipeline, word for word the same on /teach (the 50/50 rule): Grandma records, we
-    // write it in her words, it's sent, it's passed down. Each row names what its clip shows.
+    note: "real screens, from the site and the app",
     rows: [
       {
         number: "01",
-        clip: "app-add",
-        title: "Film it. Pick the videos.",
-        body: "The cook films like always, then picks the videos from their phone.",
-        chip: "Sunday dumplings · Grandma",
-        tab: "Film it",
+        clip: "web-miss",
+        title: "Name the dish you miss.",
+        body: "Type it in and get a version you can cook tonight. Then tap Ask Mom.",
+        chip: "mom’s tomato egg · ~2 eggs",
+        tab: "Ask",
       },
       {
         number: "02",
-        clip: "app-recipe",
-        title: "Their recipe, their words.",
-        body: "We write it up. “Two heaping rice bowls” stays theirs, ~3 cups beside it.",
-        chip: "warm like a baby's bath · ~1 cup",
-        tab: "Recipe",
+        clip: "web-answer",
+        title: "Mom answers by voice.",
+        body: "She hears your note, sees your guess, and fixes it out loud. No app needed.",
+        chip: "Hold to talk · 3 questions",
+        tab: "She answers",
       },
       {
         number: "03",
-        clip: "app-keep",
-        title: "Send it to your loved ones.",
-        body: "It lands at the family table. Tap Share to send it on.",
-        chip: "Our family table",
-        tab: "Send it",
+        clip: "web-version",
+        title: "Her recipe, her words.",
+        body: "Her answers land in the recipe. Tap play to hear her say it.",
+        chip: "Hear Mom · 0:05",
+        tab: "Her recipe",
       },
       {
         number: "04",
-        clip: "app-watch",
-        title: "Passed down. Cooked again.",
-        body: "Anyone in the family can cook it, hear their voice, and ask them about it.",
-        chip: "Watch · Mix the dough",
-        tab: "Cook it",
+        clip: "app-request",
+        title: "Then she films it.",
+        body: "In the app, she sets a reminder for the day she makes it, and films it like always.",
+        chip: "Film it next time you make it",
+        tab: "Film it",
       },
     ],
-    // The real text the app hands to the share sheet (captured in app-recordings.md).
-    sharePayload: "Grandma's Red-Braised Pork Belly by Grandma — from our family table",
-    shareLabel: "What Share sends",
-    shareSr: "Tapping Share sends this text: “{payload}”",
+    // The message Ask Mom really sends with the link (MissApp's AskSheet default, in the kid's voice).
+    sharePayload: "Mom, how do you make your tomato egg? I'm trying to make it here.",
+    shareLabel: "What Ask Mom sends",
+    shareSr: "Ask Mom sends this message with the link: “{payload}”",
     tablistLabel: "What the app does",
     pauseTabs: "Pause the app tour",
     playTabs: "Play the app tour",
@@ -194,14 +192,14 @@ export const copy = {
     // say plainly what the feature does: their words, translated automatically (Caleb, Oct 17)
     h2: "Their words. Translated.",
     accent: ["Translated."],
-    body: "They explain it best in Chinese, and you catch about half. Soon you'll follow in English, with their words right above.",
+    body: "They explain it best in Chinese, and you catch about half. Now you follow in English, with their words right above.",
     starAlt: "A grandmother and her granddaughter smile as they fold dumplings together over a steamer basket.",
-    sticker: ["Coming to", "the app"],
+    sticker: ["13", "languages"],
     radioLabel: "Pick a language",
     saidLabel: "{cook} said",
     youRead: "You read",
     rule: "Their words always stay on top.",
-    note: "Today the app is English only. Translation rolls out during early access.",
+    note: "Cooks can talk in any of 13 languages, from Hindi to Tagalog.",
     pause: "Pause languages",
     play: "Play languages",
     // TODO(native-check): every `original` line needs a native speaker before launch.
@@ -262,15 +260,15 @@ export const copy = {
         english: "It's all in the hands.",
       },
       {
-        id: "it",
-        chip: "Italiano Italian",
-        lang: "it",
-        cook: "Grandma Lucia",
+        id: "pt",
+        chip: "Português Portuguese",
+        lang: "pt",
+        cook: "Vovó Ana",
         relation: "grandma",
-        recipeId: "nonna-lasagna",
-        dish: "Lasagna",
-        original: "Il ragù non ha fretta.",
-        english: "Ragù is never in a hurry.",
+        recipeId: "mom-banana-bread",
+        dish: "Banana Bread",
+        original: "Banana bem madura, quase preta. É aí que fica doce.",
+        english: "Very ripe bananas, almost black. That's when it gets sweet.",
       },
     ],
   },
@@ -313,7 +311,7 @@ export const copy = {
     faq: [
       {
         q: "Does {R} need to download anything?",
-        a: "Only if they want to add the videos themselves. Otherwise {R} just props up a phone, cooks and talks like always, and sends you the videos to add.",
+        a: "No. You send {R} a link, and {R} answers your questions by voice, right in the browser. To film the dish, {R} gets the app.",
       },
       {
         q: "Is there any special gear?",
@@ -321,7 +319,7 @@ export const copy = {
       },
       {
         q: "Do they have to speak English?",
-        a: "For now, homecookd works in English. Translation rolls out during early access, with more languages over time, and their own words will always stay on top.",
+        a: "No. They can cook and answer in any of 13 languages, like Hindi, Mandarin, Spanish, Tagalog, Korean or Arabic. Their own words stay on top, with English below.",
       },
       {
         q: "What if the dish takes all day?",
@@ -329,7 +327,7 @@ export const copy = {
       },
       {
         q: "How does homecookd write the recipe?",
-        a: "Claude, an AI from Anthropic, watches the videos and reads what the cook said, then writes the steps. Amounts stay in the cook's own words, with an estimate like ~1 cup beside them, and their stories come along too.",
+        a: "Claude, an AI from Anthropic, writes it. From the dish you name, it makes a first version built on estimates, marked with a ~. When the cook answers or films, it uses their own words, and their stories come along too.",
       },
       {
         q: "I've never really cooked. Can I do this?",
@@ -364,7 +362,7 @@ export const copy = {
     error: "That email looks a little off. Mind checking it?",
     networkError: "That didn't go through. Mind trying again?",
     success: "You're on the list. Now go call {R}.",
-    shareButton: "Send this to {R}",
+    shareButton: "Ask {R} for a dish",
     shareTitle: "homecookd",
     shareText: "{R}, will you teach me your best dish this Sunday? Just prop up your phone, cook and talk like always, and send me the video. I'll keep the recipe in your voice.",
     copied: "Copied. Paste it to {R}.",
@@ -374,7 +372,7 @@ export const copy = {
     smsLabel: "Text it",
     emailLinkLabel: "Email it",
     emailSubject: "Will you teach me?",
-    pills: ["Any phone", "No measuring for the cook", "Free in early access"],
+    pills: ["Starts in your browser", "No measuring for the cook", "Free in early access"],
     sticker: ["Free", "Early access"],
     note: "they'll love being asked.",
     // the right-hand star answering the H2 (decorative speech bubble)
@@ -387,9 +385,9 @@ export const copy = {
   },
 
   footer: {
-    prompt: "Hungry for home? Get\u00a0early\u00a0access and start with one dish.", // keeps "Get early access" on one line
-    button: { before: "Get", after: "early access" },
-    buttonA11yLabel: "Get early access",
+    prompt: "Hungry for home? Name the dish and make it\u00a0tonight.",
+    button: { before: "Make your", after: "dish" },
+    buttonA11yLabel: "Make your dish",
     linksPrimary: [
       { label: "How it works", href: "#how-it-works" },
       { label: "The app", href: "#see-it-work" },
@@ -409,28 +407,23 @@ export const copy = {
     credits: "Photo credits",
     creditsIntro: "Photos and video from Pexels.",
     creditsThanks: "Thank you to:",
-    disclaimer: "App clips are real screen recordings of homecookd, shown with demo recipes and stock cooking video. Other families on this page are illustrations.",
+    disclaimer: "App clips are real screen recordings of homecookd, shown with demo recipes. Other families on this page are illustrations.",
     copyright: "© 2026 homecookd",
   },
 
   meta: {
     siteName: "homecookd",
     title: "homecookd: cook it like Mom does",
-    description: "Too far to cook together? They film themselves cooking, and homecookd turns it into a recipe you can follow, in their own voice. Free in early access.",
+    description: "Name the dish you miss and get a version you can cook tonight. Mom answers by voice, and her recipe lands in her own words. Free in early access.",
     ogAlt: "Cook it like Mom does. homecookd.",
   },
 
   // aria-labels for the real screen recordings (also used by src/content/media.ts).
   appClips: {
-    "app-record": "Screen recording of homecookd: five prompts to read before cooking, then a new recipe called Sunday dumplings with Grandma as the cook.",
-    "app-recipe": "Screen recording of homecookd: Grandma's Hand-Pulled Noodle Soup, with ingredients in her words and estimates beside them. Flour and salt get checked off.",
-    "app-cook": "Screen recording of homecookd: cook mode for Dad's Sunday Chili, with a highlighted cue, his story and the Hear Dad button.",
-    "app-share": "Screen recording of homecookd: Grandma's Red-Braised Pork Belly, then a tap on Share.",
-    "app-library": "Screen recording of homecookd: the family table, filtered to Dad, then Grandma, then everyone.",
-    "app-questions": "Screen recording of homecookd: three follow-up questions to ask Dad about his chili.",
-    "app-add": "Screen recording of homecookd: adding a recipe called Sunday dumplings, picking Grandma as the cook, then choosing two videos from the phone.",
-    "app-watch": "Screen recording of homecookd: step 1 of Grandma's noodle soup in cook mode. Tapping the photo plays that step's video, with her words below as a transcript. The video is a stock clip standing in for a family recording.",
-    "app-keep": "Screen recording of homecookd: the family table filtered to Grandma, then her Red-Braised Pork Belly, then a tap on Share.",
+    "web-miss": "Screen recording of homecookd.app/miss: typing mom’s tomato egg, getting tonight’s version with estimated amounts, then the Ask Mom sheet with the message.",
+    "web-answer": "Screen recording of homecookd.app on Mom’s phone: Caleb wants to make your tomato egg, his guess, three questions she answers by holding to talk, then her version filling in and Sent to Caleb.",
+    "web-version": "Screen recording of the kid’s card on homecookd.app: Mom’s tomato egg, From Mom’s kitchen, her amounts in her own words with a play button for each.",
+    "app-request": "The homecookd app on the cook’s phone: Leo wants your tomato egg, Leo’s guess, and Film it next time you make it.",
   },
 } as const;
 

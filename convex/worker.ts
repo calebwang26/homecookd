@@ -261,13 +261,16 @@ export const synced = internalMutation({
     familyId: v.id("families"),
     recipeIds: v.array(v.id("recipes")),
     ok: v.boolean(),
+    // MOSS_SYNC=off: the index was deleted, so nothing is indexed (reindexMissing finds them all later).
+    cleared: v.optional(v.boolean()),
     retry: v.optional(v.object({ attempt: v.number(), inMs: v.number() })),
   },
   returns: v.null(),
-  handler: async (ctx, { familyId, recipeIds, ok, retry }) => {
+  handler: async (ctx, { familyId, recipeIds, ok, cleared, retry }) => {
     const now = Date.now();
     for (const id of recipeIds) {
-      if (ok && (await ctx.db.get("recipes", id))) await ctx.db.patch("recipes", id, { mossIndexedAt: now });
+      if (!(ok || cleared) || !(await ctx.db.get("recipes", id))) continue;
+      await ctx.db.patch("recipes", id, { mossIndexedAt: cleared ? undefined : now });
     }
     const included = new Set<string>(recipeIds);
     const jobs = await ctx.db
@@ -390,6 +393,21 @@ export const retryDeletion = internalMutation({
     if (d.externalPurgedAt !== undefined) return "done";
     await ctx.db.patch("accountDeletions", deletionId, { externalAttempts: undefined, externalTriedAt: undefined });
     return "queued";
+  },
+});
+
+/** Syncs every family once, as after flipping MOSS_SYNC (off: each family's index is deleted):
+ *    npx convex run worker:syncAllFamilies */
+export const syncAllFamilies = internalMutation({
+  args: {},
+  returns: v.number(),
+  handler: async (ctx) => {
+    let n = 0;
+    for await (const family of ctx.db.query("families")) {
+      await requestMossSync(ctx, family._id);
+      n++;
+    }
+    return n;
   },
 });
 

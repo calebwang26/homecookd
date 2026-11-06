@@ -8,11 +8,14 @@
 // on, Muse writes the dish's story card, so turning it on asks first the first time (lib/aiConsent;
 // "Not now" leaves it off). Hidden unless this dish has a ready Convex row and the
 // person here is its cook (the server checks that again).
+// On AWS, a recipe the team took off the map after a report (`hiddenAt`) shows that instead of the
+// switch, and can't be turned on until the team lifts it (JOBS.md, `hiddenAt`).
 import { useState } from 'react';
 import { StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 
 import { haptic, PressableScale, Txt, useToast } from '@/components/ui';
 import { ensureAiConsent } from '@/lib/aiConsent';
+import { AWS_ON } from '@/lib/aws/config';
 import { setShare } from '@/lib/live/community';
 import { colors } from '@/theme/tokens';
 
@@ -22,6 +25,8 @@ import { errorText } from './labels';
 // TODO(caleb): the words a cook reads before she shares (the map card shows one line she said and
 // Muse's guess at the dish's culture, tagged AI).
 const WHAT_NEIGHBORS_SEE = 'Neighbors see the recipe text, one line you said and homie’s guess at where it’s from, never your video or voice.';
+// errors.taken_down's English (the api's 409 says the same).
+const TAKEN_DOWN = 'Our team took this recipe off the map after a report. It stays with your family.';
 
 const norm = (s: string | null | undefined) => (s ?? '').trim().toLowerCase();
 
@@ -43,6 +48,23 @@ export function ShareNearbyRow({ libraryId, me, style }: ShareNearbyRowProps) {
   const [saving, setSaving] = useState(false);
 
   if (!isCook || !row || row.status !== 'ready' || norm(row.cookName) !== norm(me?.name)) return null;
+  if (AWS_ON && row.hiddenAt) {
+    return (
+      <View style={[styles.wrap, style]} accessible accessibilityLabel={`Off the map. ${TAKEN_DOWN}`}>
+        <View style={styles.row}>
+          <Txt variant="label" weight={600} color={colors.muted}>
+            Share with people nearby ·{' '}
+            <Txt variant="label" weight={700} color={colors.muted}>
+              Off the map
+            </Txt>
+          </Txt>
+        </View>
+        <Txt variant="caption" align="center">
+          {TAKEN_DOWN}
+        </Txt>
+      </View>
+    );
+  }
   const live = !!row.sharedAt;
   const on = saving && wanted !== null ? wanted : live;
 
