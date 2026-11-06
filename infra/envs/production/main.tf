@@ -150,6 +150,7 @@ module "env" {
     # The spend caps are the code's, Caleb's $12 a job and $30 a day (PIPELINE_JOB_CAP_USD, PIPELINE_DAILY_CAP_USD). TODO(caleb): the size, Fargate or
     # EC2, a bigger disk, and a count of 1 or more, from the real video job CUTOVER.md's step 6 measures. Until then it's the size that job is measured at.
     worker = {
+      # TODO(caleb): disk_gib (21 to 200) once the measured job's disk_peak_mb says 20 GiB isn't enough. Unset is Fargate's 20 GiB.
       cpu           = 2048
       memory        = 8192
       desired_count = 0
