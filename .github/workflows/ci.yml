@@ -123,6 +123,8 @@ jobs:
           done
       - name: The safety check on staging's plans
         run: python3 infra/scripts/test_plan_check.py
+      - name: The load test's address guards (no network)
+        run: node --test infra/scripts/load-test.test.mjs
       - name: Terraform's own tests (they plan with fake credentials, and reach nothing)
         run: |
           for ROOT in backup-copy modules/front_door modules/bucket_copy modules/env; do
