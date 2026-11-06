@@ -26,7 +26,7 @@ $DETAILS
 
 To apply it yourself, after reading the plan:
 
-  git switch aws-migration && git pull
+  git switch main && git pull
   cd infra/envs/staging
   AWS_PROFILE=homecookd terraform init -backend-config=\"bucket=homecookd-tfstate-\$(aws sts get-caller-identity --profile homecookd --query Account --output text)\"
   AWS_PROFILE=homecookd terraform plan -out=human.tfplan

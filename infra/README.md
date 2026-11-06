@@ -53,9 +53,9 @@ AWS_PROFILE=homecookd terraform apply
 
 ## Merges apply staging
 
-**This widens what a merge can do.** Merging into `aws-migration` used to deploy code. Once this is switched on, a merge that
+**This widens what a merge can do.** Merging into `main` (into `aws-migration` until Nov 6) used to deploy code. Once this is switched on, a merge that
 touches `envs/staging` or `modules/` also changes staging's infrastructure, with nobody at a terminal. **So a merge into
-`aws-migration` is a real gate, and the only thing enforcing it is the Master Agent's review.** We have no GitHub Pro, so GitHub can't
+`main` is a real gate, and the only thing enforcing it is the Master Agent's review.** We have no GitHub Pro, so GitHub can't
 require checks or block a direct push. Anyone with write access can push to the branch, including changes to the check itself.
 The role below is what limits the damage when that gate fails. It's worth reading as the real boundary, with the check as the
 friendly layer on top.
@@ -81,7 +81,7 @@ An autoscaled service's range (its target and policy) is held for Caleb, and its
 **The role (`staging-apply-role/`) can't do most of that anyway.** It has no IAM write at all, so it can't change its own trust or
 permissions, or give another role more and run code as it. It can't write security groups, routes, load balancers, CloudFront
 distributions, bucket policies, or an existing secret's value, can't delete or change the database, and can't delete a bucket. It logs in only from
-`apply-staging.yml`, on `aws-migration`, in the GitHub environment `staging-infra`.
+`apply-staging.yml`, on `main` (on `aws-migration` until Nov 6), in the GitHub environment `staging-infra`.
 
 **If you add a type to `AUTO`**, also add what it needs to the role, list it in `scripts/simulate_apply_role.py`, and ask Caleb to apply
 the role. A new type refused until then is working as intended.
@@ -96,7 +96,7 @@ AWS_PROFILE=homecookd terraform plan -out=role.tfplan     # should say: 2 to add
 AWS_PROFILE=homecookd terraform show -json role.tfplan > "$TMPDIR/role-plan.json" && AWS_PROFILE=homecookd python3 ../scripts/simulate_apply_role.py "$TMPDIR/role-plan.json"; rm "$TMPDIR/role-plan.json"   # should end: 0 wrong
 AWS_PROFILE=homecookd terraform apply role.tfplan
 gh variable set STAGING_INFRA_APPLY --body on --repo calebwang26/homecookd    # the switch; any other value turns it off
-gh workflow run apply-staging.yml --ref aws-migration --repo calebwang26/homecookd   # a first run: proves the login and the reads, stops after the check, and changes nothing
+gh workflow run apply-staging.yml --ref main --repo calebwang26/homecookd   # a first run: proves the login and the reads, stops after the check, and changes nothing
 ```
 
 **Things to know:**
@@ -112,7 +112,7 @@ gh workflow run apply-staging.yml --ref aws-migration --repo calebwang26/homecoo
 - **Alerts:** a refusal or failure emails Caleb through the `homecookd-staging-alerts` topic, and the run goes red. GitHub's own email
   goes only to whoever triggered the run, if they turned it on, so it isn't enough by itself. If the login itself fails, the topic
   can't be reached, and the red run is the only sign.
-- When `aws-migration` merges to `main` and goes away, the role's `branch` variable and this workflow's branch change together. So does staging's `deploy_branch`, or deploys stop logging in.
+- **Nov 6: moved to `main`.** `aws-migration` merged into `main` and retired, so the role's `branch` variable, this workflow's branch and staging's `deploy_branch` all say `main` now. The two trust changes are hand applies: `cd infra/staging-apply-role && terraform plan && terraform apply` (the apply role can't change itself), then `cd infra/envs/staging && terraform plan && terraform apply` (`plan_check.py` holds IAM). Each plan is 0 to add, 1 to change: only `refs/heads/aws-migration` becoming `refs/heads/main` in the trust policy. Until both are applied, staging's deploys and applies from `main` fail to log in, and change nothing.
 
 ## Starting staging's voice service
 
@@ -158,7 +158,7 @@ to 2. To stop staging's api: `terraform apply -var api_count=0` (a merge plans t
 step policy and its alarm, and sets the CPU target to 50%. No new types, so the apply role needs nothing.
 1. The merge's auto-apply is refused: the target groups' checks and the rule letting the load balancer reach 8081 are network changes, and
    autoscaling policies are held. Its deploy stops with it.
-2. **Deploy the api first**, from Actions: `gh workflow run deploy-aws.yml --ref aws-migration -f environment=staging -f service=api`. The image
+2. **Deploy the api first**, from Actions: `gh workflow run deploy-aws.yml --ref main -f environment=staging -f service=api`. The image
    sets `HEALTH_PORT` itself (`api/Dockerfile`), so its tasks answer on 8081 before the check moves there. Applied first, the check would fail on
    every running task until a deploy landed, and ECS would keep replacing them.
 3. By hand, in `infra/envs/staging`:
