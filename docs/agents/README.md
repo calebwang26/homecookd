@@ -22,6 +22,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [merge-agent-approval](memory/merge-agent-approval.md) | Oct 24: every PR goes to the "Merge Agent" session for approval; it decides conflicts |
 | [auto-ship-merged-prs](memory/auto-ship-merged-prs.md) | Oct 25: the Merge Agent ships each merged fix/feature PR to TestFlight without asking, then tells Caleb what to test |
 | [aws-migration](memory/aws-migration.md) | Oct 31: all hosting moves to AWS in phases; what needs Caleb's OK |
+| [raw-footage-14-days](memory/raw-footage-14-days.md) | Nov 2: raw videos go 14 days after upload, with S3's 28-day undo copy; keep it as built |
 | [section-chats](memory/section-chats.md) | Oct 26: one permanent chat owns each codebase section; the Merge Agent routes work to them |
 | [claude-cost-settings](memory/claude-cost-settings.md) | Oct 26: homie's recording check on Haiku, Opus fast mode off, to keep Claude spend down |
 | [eval-cheap-by-default](memory/eval-cheap-by-default.md) | Oct 28: the language eval runs only the languages a change touches, 5-min clips, Batch API, $3 cap |
@@ -33,7 +34,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [demo-family-shreya](memory/demo-family-shreya.md) | Oct 24: the demo is Shreya Pawar's family; her grandma cooks and records in Marathi |
 | [demo-test-dishes](memory/demo-test-dishes.md) | Oct 24: demos, examples and tests use Swordfish steak and Poha (real dishes, real footage) |
 | [homie-off](memory/homie-off.md) | Oct 29: homie's voice is switched off for launch (`lib/homie/switch.ts`); no code deleted; legal text left as is |
-| [moss-sync-off-after-approval](memory/moss-sync-off-after-approval.md) | Oct 31: stop sending recipes to Moss once 1.0 is out of App Review; a switch, not removing the keys, so deleted accounts still leave Moss |
+| [moss-sync-off-after-approval](memory/moss-sync-off-after-approval.md) | Oct 31: stop sending recipes to Moss once 1.0 is out of App Review; a switch, not removing the keys, so deleted accounts still leave Moss; built Nov 5 as `MOSS_SYNC=off` |
 | [homie-voice](memory/homie-voice.md) | Oct 24: homie is Riya bilingual, asked for as auditioned (locale, speed 0.85, moods), cousin tone; Gemini TTS backup |
 | [cook-languages](memory/cook-languages.md) | Oct 24: 12 more cook languages on Cartesia (ink-whisper) + Claude, no Gemini; Oct 26: the cook's whole app in her language (language screen, `lib/words`) |
 | [marathi-dropped](memory/marathi-dropped.md) | Oct 26: Marathi is no longer a cook language; 13 integrated languages (English + 12) |
@@ -72,6 +73,8 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [lander-reference-dribbble-food](memory/lander-reference-dribbble-food.md) | Where Caleb looks for lander inspiration |
 | [learning-the-stack](memory/learning-the-stack.md) | Caleb is learning the codebase; the teach → quiz loop |
 | [edible-hackathon](memory/edible-hackathon.md) | Origin: Oct 11 hackathon, PRD is the source of truth |
+| [family-ends-with-last-signed-in](memory/family-ends-with-last-signed-in.md) | A family ends with its last signed-in person; who may delete a phone-less person |
+| [person-who-comes-back](memory/person-who-comes-back.md) | Someone who left or moved and came back is tied to their old row, only for deletion |
 
 Not copied: a note about Claude's Workflow tool, which doesn't apply to Codex. "The App UI session" and
 "the other session" in these notes were other Claude Code sessions, so they no longer exist.

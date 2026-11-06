@@ -26,7 +26,7 @@
 process.env.TZ = 'America/New_York';
 
 import assert from 'node:assert/strict';
-import { existsSync } from 'node:fs';
+import { existsSync, readFileSync } from 'node:fs';
 import { registerHooks } from 'node:module';
 import { dirname, join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -229,8 +229,8 @@ test('neighborhood names: at their real places, never under a circle or "You", o
   assert.deepEqual(G.placeAreas(null, SIZE), []);
 });
 
-test('the privacy note names the one line she said and homie’s guess at where it’s from', () => {
-  const guess = 'and homie’s guess at where it’s from.';
+test('the privacy note names the one line she said and an AI guess at where it’s from (homie is off)', () => {
+  const guess = 'and an AI guess at where it’s from.';
   assert.equal(L.privacyNote('Rajani'), `Rajani’s video and voice stay in the family. Neighbors see the recipe text, one line Rajani said ${guess}`);
   assert.equal(L.privacyNote('James'), `James’ video and voice stay in the family. Neighbors see the recipe text, one line James said ${guess}`);
   assert.equal(L.privacyNote(null), `The cook’s video and voice stay in the family. Neighbors see the recipe text, one line the cook said ${guess}`);
@@ -355,11 +355,11 @@ test('Connect: join her dinner (when there is one), swap recipes, cook together;
 
 const dish = (over = {}) => ({ recipeId: 'r1', dish: 'Kanda Poha', cookName: 'Grandma Rajani', mine: false, shared: false, asked: false, notNowAt: null, ...over });
 
-test('Share your recipe: put it on the map (homie asks the cook first), host a dinner', () => {
+test('Share your recipe: put it on the map (the cook is asked first), host a dinner', () => {
   assert.deepEqual(C.shareChoices([dish()], NOW), {
     title: 'Share Grandma Rajani’s Kanda Poha',
     rows: [
-      { key: 'map', title: 'Put it on the map', line: 'homie asks Grandma Rajani first. The video stays private.', primary: true, disabled: false },
+      { key: 'map', title: 'Put it on the map', line: 'We ask Grandma Rajani first. The video stays private.', primary: true, disabled: false },
       { key: 'host', title: 'Host a dinner', line: 'Pick a time and place. Neighbors ask to join.', primary: false },
     ],
   });
@@ -368,16 +368,16 @@ test('Share your recipe: put it on the map (homie asks the cook first), host a d
   assert.deepEqual(mapRow([dish({ shared: true })]), ['Put it on the map', 'It’s on the map.', false, true]);
   // The map row only says how things stand: "Host a dinner" is the green button.
   assert.deepEqual(rowsOf(C.shareChoices([dish({ asked: true })], NOW).rows)[1], ['Host a dinner', 'Pick a time and place. Neighbors ask to join.', true, false]);
-  assert.deepEqual(mapRow([dish({ mine: true })]), ['Put it on the map', 'Neighbors see the recipe text, one line you said and homie’s guess at where it’s from.', true, false]);
+  assert.deepEqual(mapRow([dish({ mine: true })]), ['Put it on the map', 'Neighbors see the recipe text, one line you said and an AI guess at where it’s from.', true, false]);
   assert.equal(C.shareChoices([dish({ mine: true })], NOW).title, 'Share your Kanda Poha');
   assert.deepEqual(mapRow([]), ['Put it on the map', 'Your family hasn’t recorded a dish yet.', false, true]);
   assert.deepEqual(mapRow(null), ['Put it on the map', 'One moment…', false, true]);
   const two = [dish(), dish({ recipeId: 'r2', dish: 'Varan', cookName: 'Dad', shared: true })];
   assert.equal(C.shareChoices(two, NOW).title, 'Share your family’s dish');
-  assert.deepEqual(mapRow(two), ['Put it on the map', 'Pick a dish. homie asks its cook first.', true, false]);
+  assert.deepEqual(mapRow(two), ['Put it on the map', 'Pick a dish. We ask its cook first.', true, false]);
   assert.deepEqual(mapRow(two.map((d) => ({ ...d, shared: true }))), ['Put it on the map', 'Your family’s dishes are on the map.', false, true]);
   assert.deepEqual(rowsOf(C.dishRows(two, NOW)), [
-    ['Kanda Poha', 'homie asks Grandma Rajani first. The video stays private.', false, false],
+    ['Kanda Poha', 'We ask Grandma Rajani first. The video stays private.', false, false],
     ['Varan', 'It’s on the map.', false, true],
   ]);
 });
@@ -398,7 +398,7 @@ test('after she says not now, the kid sees it and can’t ask again for a day', 
   // A day later the ask is back; a fresh ask or her yes win over an old "not now".
   const dayLater = hourAgo + C.ASK_AGAIN_MS;
   assert.ok(!C.saidNotNow(no, dayLater));
-  assert.deepEqual(rowsOf(C.shareChoices([no], dayLater).rows)[0], ['Put it on the map', 'homie asks Grandma Rajani first. The video stays private.', true, false]);
+  assert.deepEqual(rowsOf(C.shareChoices([no], dayLater).rows)[0], ['Put it on the map', 'We ask Grandma Rajani first. The video stays private.', true, false]);
   assert.ok(!C.saidNotNow({ ...no, asked: true }, NOW));
   assert.ok(!C.saidNotNow({ ...no, shared: true }, NOW));
   assert.equal(C.mapLine({ ...no, asked: true }, NOW), 'Asked Grandma Rajani');
@@ -409,7 +409,7 @@ test('a dish the team took off the map says so, and nobody can put it back on', 
   assert.deepEqual(rowsOf(C.shareChoices([down], NOW).rows)[0], ['Put it on the map', 'Our team took it off the map after a report.', false, true]);
   assert.deepEqual(rowsOf(C.dishRows([down, dish({ recipeId: 'r2', dish: 'Varan' })], NOW)).map((r) => r.slice(1)), [
     ['Our team took it off the map after a report.', false, true],
-    ['homie asks Grandma Rajani first. The video stays private.', false, false],
+    ['We ask Grandma Rajani first. The video stays private.', false, false],
   ]);
 });
 
@@ -554,6 +554,12 @@ test('report or block: the sheet’s words', () => {
   // Plain short copy: no em dashes anywhere in it.
   const all = [R.REPORT_LINK, R.BLOCK_LINE, R.REPORTED.title, R.REPORTED.subtitle, R.BLOCKED.title, ...R.REPORT_REASONS.map((r) => r.label)];
   assert.ok(all.every((s) => !s.includes('—')));
+});
+
+test('the cook’s share row reads in her words, with no homie (homie is off)', () => {
+  const row = readFileSync(join(root, 'src/components/community/ShareNearbyRow.tsx'), 'utf8');
+  assert.doesNotMatch(row.replace(/^\s*\/\/.*$/gm, ''), /homie|'Share with people nearby'|'Off the map'/);
+  assert.match(row, /t\('share\.nearby\.whatNeighborsSee'\)/);
 });
 
 console.log(`\n${passed} passed`);

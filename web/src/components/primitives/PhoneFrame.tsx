@@ -1,7 +1,7 @@
 // Phone for the REAL screen recordings only (brief 5 "PhoneFrame"). Never put drawn app UI in it.
 // Server-safe.
 //
-//   <PhoneFrame width="clamp(260px, 21vw, 330px)"><AppClip name="app-recipe" playWhenVisible label={APP_CLIPS['app-recipe'].label} /></PhoneFrame>
+//   <PhoneFrame width="clamp(260px, 21vw, 330px)"><AppClip name="web-miss" playWhenVisible label={APP_CLIPS['web-miss'].label} /></PhoneFrame>
 //   <PhoneFrame width="300px" hand>…</PhoneFrame>      // a8 hand cutout (HAND_PHONE); the hand bleeds off the bottom-right
 //   <PhoneFrame width="240px" tilt={-4} shadow={false}>…</PhoneFrame>
 //

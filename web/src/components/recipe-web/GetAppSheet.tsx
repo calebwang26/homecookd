@@ -1,8 +1,8 @@
 'use client';
 // Get App -> this bottom sheet (motion spec 4): the hand-off to the app (FEEDBACK-OCT16c section C).
 // Joining happens in the app (it has no email sign-in), so the sheet only gets them there: "Get the
-// app" copies this recipe's link for the app's "Paste invite", then opens the store; "Open
-// homecookd" copies it too and opens the app on this link. A share link joins them as a learner.
+// app" copies this recipe's link, then opens the store; "Open homecookd" copies it too and opens
+// the app on this link. A share link joins them as a learner.
 import { useEffect, useRef } from 'react';
 import { motion } from 'motion/react';
 import { Handoff } from '@/components/invite/Handoff';
@@ -80,9 +80,9 @@ export function GetAppSheet({ onClose, share, reduced }: { onClose: () => void; 
               openUrl={appSchemeUrl('r', { s: token })}
               askName={sender?.name ?? null}
               phone={isPhoneOrTablet()}
-              // Both buttons copy the link, so Paste invite has it even when the app doesn't open.
-              // No-break spaces keep the button names whole when the line wraps.
-              hint={'Already have it? Open\u00A0homecookd and tap Paste\u00A0invite.'}
+              // The app doesn't pick up a copied /r link, so the way back in is Open homecookd here.
+              // No-break spaces keep the button name whole when the line wraps.
+              hint={'Already have it? Tap Open\u00A0homecookd.'}
             />
           </div>
         </motion.div>

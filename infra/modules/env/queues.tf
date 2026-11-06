@@ -56,3 +56,15 @@ resource "aws_iam_role_policy" "scheduler" {
     Statement = [{ Effect = "Allow", Action = "sqs:SendMessage", Resource = aws_sqs_queue.scheduled.arn }]
   })
 }
+
+resource "aws_scheduler_schedule" "task" {
+  for_each            = var.schedules
+  name                = "${local.name}-${replace(each.key, ".", "-")}"
+  schedule_expression = each.value.expression
+  flexible_time_window { mode = "OFF" }
+  target {
+    arn      = aws_sqs_queue.scheduled.arn
+    role_arn = aws_iam_role.scheduler.arn
+    input    = jsonencode({ payload = { task = each.value.task } })
+  }
+}

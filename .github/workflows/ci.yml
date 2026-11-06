@@ -1,0 +1,245 @@
+# Runs on every PR to main: only the checks for what changed, plus the secret scan. One final job, "checks", is the one to require, so a
+# skipped job never blocks a merge. Nothing here deploys anything. (Until Nov 6 this ran on PRs to aws-migration, with a merge-safe job proving that
+# merging it into main changed nothing live; that merge is done, and the one proof nothing else makes, the site's bundle with the switches off, is in
+# the web job below.)
+name: Checks
+on:
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+# A new push to a PR makes its earlier run moot: cancel that one, never a run on another PR.
+concurrency:
+  group: checks-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      infra: ${{ steps.diff.outputs.infra }}
+      convex: ${{ steps.diff.outputs.convex }}
+      voice: ${{ steps.diff.outputs.voice }}
+      pipeline: ${{ steps.diff.outputs.pipeline }}
+      api: ${{ steps.diff.outputs.api }}
+      tools: ${{ steps.diff.outputs.tools }}
+      web: ${{ steps.diff.outputs.web }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      - id: diff
+        run: |
+          FILES=$(git diff --name-only "origin/$GITHUB_BASE_REF...HEAD")
+          for AREA in infra convex voice pipeline api web tools; do
+            echo "$FILES" | grep -q "^$AREA/" && echo "$AREA=true" >> "$GITHUB_OUTPUT" || echo "$AREA=false" >> "$GITHUB_OUTPUT"
+          done
+
+  secrets:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 0
+      # gitleaks 8.24.0. The sha256 is the linux_x64 line of gitleaks_8.24.0_checksums.txt on its GitHub release. A new version changes
+      # the URL and the sha256 together (infra/README.md, "Pinned actions and tools").
+      - name: Scan this PR's commits
+        run: |
+          curl -sSfL -o "$RUNNER_TEMP/gitleaks.tar.gz" https://github.com/gitleaks/gitleaks/releases/download/v8.24.0/gitleaks_8.24.0_linux_x64.tar.gz
+          echo "cb49b7de5ee986510fe8666ca0273a6cc15eb82571f2f14832c9e8920751f3a4  $RUNNER_TEMP/gitleaks.tar.gz" | sha256sum -c -
+          tar xzf "$RUNNER_TEMP/gitleaks.tar.gz" gitleaks
+          ./gitleaks git --no-banner --redact -v --log-opts="origin/$GITHUB_BASE_REF..HEAD" # -v says which rule and file; --redact keeps the value out of the log
+
+  infra:
+    needs: changes
+    if: needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_wrapper: false
+      - run: terraform fmt -check -recursive infra
+      - name: Validate every root
+        run: |
+          for ROOT in bootstrap backups backup-copy addresses staging-apply-role envs/staging envs/production; do
+            terraform -chdir="infra/$ROOT" init -backend=false -input=false >/dev/null
+            terraform -chdir="infra/$ROOT" validate
+          done
+      - name: The safety check on staging's plans
+        run: python3 infra/scripts/test_plan_check.py
+      - name: The load test's address guards (no network)
+        run: node --test infra/scripts/load-test.test.mjs
+      - name: Terraform's own tests (they plan with fake credentials, and reach nothing)
+        run: |
+          for ROOT in backup-copy modules/front_door modules/bucket_copy modules/env; do
+            terraform -chdir="infra/$ROOT" init -backend=false -input=false >/dev/null
+            terraform -chdir="infra/$ROOT" test
+          done
+
+  convex:
+    needs: changes
+    if: needs.changes.outputs.convex == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: package-lock.json
+      - run: npm ci
+      - run: npx tsc -p convex --noEmit
+      - run: npx vitest run
+
+  voice:
+    needs: changes
+    if: needs.changes.outputs.voice == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: voice
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: voice/package-lock.json
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  pipeline:
+    needs: changes
+    if: needs.changes.outputs.pipeline == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: homecookd_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      TEST_DATABASE_URL: postgres://postgres:ci-only@localhost:5432/homecookd_test
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            pipeline/requirements.txt
+            pipeline/requirements-queue.txt
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - run: pip install -r pipeline/requirements.txt -r pipeline/requirements-queue.txt
+      - name: Unit tests (fakes only)
+        run: |
+          for TEST in pipeline/test_*.py; do
+            echo "== $TEST"
+            python "$TEST"
+          done
+
+  api:
+    needs: changes
+    # The pipeline too: api/test/jobsWorker.test.ts runs the real queue worker's code against these routes.
+    if: needs.changes.outputs.api == 'true' || needs.changes.outputs.pipeline == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_PASSWORD: ci-only
+          POSTGRES_DB: homecookd_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres" --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: api
+    env:
+      TEST_DATABASE_URL: postgres://postgres:ci-only@localhost:5432/homecookd_test
+      PIPELINE_PYTHON: python
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: api/package-lock.json
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            pipeline/requirements.txt
+            pipeline/requirements-queue.txt
+      - run: pip install -r ../pipeline/requirements.txt -r ../pipeline/requirements-queue.txt
+      # jobsWorker.test.ts skips when it can't import these, and a skip here would hide the contract.
+      - run: python -c "import psycopg, sentry_sdk"
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm test
+
+  # The site still builds, and the CloudFront Function still serves every file in that build as Vercel would.
+  web:
+    needs: changes
+    if: needs.changes.outputs.web == 'true' || needs.changes.outputs.infra == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      - run: npm ci && npm run build
+        working-directory: web
+      - run: node --test infra/modules/web/rewrite.test.mjs
+      # No NEXT_PUBLIC_* on this build, as Vercel's main build has none until 1.1's release (CUTOVER.md, step 10): its bundle must stay today's site.
+      - run: node scripts/check-merge-safe.mjs --bundle web/out
+
+  media-copy:
+    needs: changes
+    if: needs.changes.outputs.tools == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: tools/media-copy
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+          cache: pip
+          cache-dependency-path: |
+            tools/media-copy/requirements.txt
+            tools/media-copy/requirements-test.txt
+      - run: pip install -r requirements.txt -r requirements-test.txt
+      - run: python test_media_copy.py
+      - run: python test_sample_library.py
+      - run: python test_stores.py # the fake GCS server isn't here, so its part skips
+
+  checks:
+    if: always()
+    needs: [changes, secrets, infra, convex, voice, pipeline, api, web, media-copy]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Fail if any check failed
+        run: |
+          echo '${{ toJSON(needs.*.result) }}' | grep -qE '"(failure|cancelled)"' && exit 1 || exit 0

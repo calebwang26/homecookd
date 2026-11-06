@@ -23,11 +23,13 @@ Write down the time of each step, to the minute. The chat matches it against sta
 
 1. **Install build 11.** In TestFlight, homecookd → Previous builds, if needed → **11**. The build plain staging testers
    get is 9; it doesn't talk to AWS. If homecookd is already installed, install 11 over it.
-2. **Join Asha's family.** Tap the family link in Messages or Notes. Pasting it into Safari won't open the app. Give your
+2. **Join Asha's family.** Staging's links are on a cloudfront host the app doesn't claim, so the chat sends them as
+   `homecookd://` links: paste one into Safari's address bar, Go, then Open. Give your
    name, choose cook, and Sign in with Apple. On staging this makes a staging account under your Apple ID, which the
-   chat deletes at the end. Allow notifications when asked.
+   chat deletes at the end. The app doesn't ask about notifications yet: it asks after your first recording is sent (#341, #342).
    📸 Home after joining.
-3. **Film a short recording.** Record, then a clip of 10 to 20 seconds, then send it.
+3. **Film a short recording.** Record, then a clip of 10 to 20 seconds, then send it. Back on Home, "Want a note when
+   Asha writes back?": Yes, then Allow.
    📸 The "processing" card. Tell the chat, and it finishes the recording.
    📸 The finished recipe.
 4. **Film a long recording.** Over 20 MB, which on staging uploads in parts: about a minute at the camera's normal
@@ -35,10 +37,12 @@ Write down the time of each step, to the minute. The chat matches it against sta
    📸 The "processing" card. Then 📸 the finished recipe after the chat finishes it.
 5. **Get notifications.** Lock the phone. The chat sends you a message from Asha.
    📸 The notification on the lock screen.
-   When each recipe is finished there's a notification too: 📸 one of those.
+   Staging's test route finishes a recording without a "recipe ready" push, so that one is checked on production
+   (PRODUCTION-CHECKLIST.md).
 6. **Record a voice note.** In your chat with Asha, hold the mic, say a sentence, and send it.
    📸 The voice note in the thread. The chat plays it back on Asha's side.
-7. **Send one test report.** Tap the dinner link. At the foot of the dinner page: Report or block → Report → any
+7. **Send one test report.** Open the dinner page link (`homecookd://dinner/<id>`; the public `/d` invite screen has
+   no report). At the foot of the dinner page: Report or block → Report → any
    reason. 📸 The "Thanks" sheet. Don't block.
 8. **Check the alerts inbox.** The staging alarm emails the team's alerts address within about 5 minutes.
    📸 The email with its time. Tell the chat the report is in, and AWS backend closes it.
