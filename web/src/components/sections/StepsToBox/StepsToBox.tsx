@@ -280,7 +280,7 @@ function StepsToBoxKid() {
 
         <div className={s.phone} data-phone="">
           <Handset width="100%">
-            <AppClip name="app-library" playWhenVisible label={APP_CLIPS['app-library'].label} />
+            <AppClip name="web-version" playWhenVisible label={APP_CLIPS['web-version'].label} />
           </Handset>
         </div>
       </div>

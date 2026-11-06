@@ -2,7 +2,7 @@
 // {R} follows the "Cooking with" picker.
 //
 // Desktop: grid 5/7. Left (sticky while the list is read): H2, Caveat note, and the real
-// app-questions recording in a phone, captioned. Right: native <details> accordion (works with
+// web-answer recording in a phone, captioned. Right: native <details> accordion (works with
 // no JS; the open/close height animates where ::details-content is supported, snaps elsewhere).
 // Tablet (768–1023): H2 + note beside a small phone, then the accordion.
 // Phones (< 768): H2, note, accordion. No phone (brief 8.11; it kept the section over its scroll budget).
