@@ -39,7 +39,7 @@ const NO_DISH = 'family recipe';
 
 export type SendInput = {
   me: Profile;
-  draft: Pick<Draft, 'glasses' | 'language' | 'recordingId'>;
+  draft: Pick<Draft, 'glasses' | 'language' | 'recordingId'> & Partial<Pick<Draft, 'dishAskId'>>;
   /** The videos to send (the selected ones). */
   clips: DraftClip[];
   /** The kids it's for (Convex jobs.create forKidIds): every kid for everyone, none for nobody. */
@@ -56,7 +56,7 @@ export type SendInput = {
   thumb?: string | null;
 };
 
-export type JobFields = Pick<Draft, 'glasses' | 'language' | 'recordingId'> & { kids: { id: string; name: string }[]; title: string };
+export type JobFields = Pick<Draft, 'glasses' | 'language' | 'recordingId'> & { kids: { id: string; name: string }[]; title: string; dishAskId?: string | null };
 
 /**
  * Convex said no to what was asked (a ConvexError carries its sentence in `data`): not a dropped line,
@@ -73,12 +73,12 @@ const refused = (e: unknown) => {
  * (not from a recording, whose job must stay linked to it for the resend after a crash) with nothing
  * but the folder: the recipe matters more than who it's for.
  */
-export async function makeJob(uploadId: string, as: string, { kids, glasses, language, recordingId, title }: JobFields): Promise<void> {
+export async function makeJob(uploadId: string, as: string, { kids, glasses, language, recordingId, title, dishAskId }: JobFields): Promise<void> {
   const path = `${uploadId}/`;
   const source = glasses ? 'glasses' : 'phone';
   const forKidIds = await convexKidIds(kids, as);
   const tries: Record<string, unknown>[] = [
-    { title: title || undefined, language: language ?? undefined, forKidIds, recordingId: recordingId ?? undefined },
+    { title: title || undefined, language: language ?? undefined, forKidIds, recordingId: recordingId ?? undefined, dishAskId: dishAskId ?? undefined },
     { title: title || undefined, recordingId: recordingId ?? undefined },
   ];
   if (!recordingId) tries.push({});
@@ -133,7 +133,7 @@ export async function sendDraft({ me, draft, clips, kids, recipients, toLabel, d
   await requireAiConsent();
   const title = dish.slice(0, MAX_TITLE);
   const totalS = clips.reduce((a, c) => a + (c.asset.duration ?? 0) / 1000, 0);
-  const { glasses, language, recordingId } = draft;
+  const { glasses, language, recordingId, dishAskId = null } = draft;
   const noteId = note ?? recordingId ?? null;
   const job = await startUpload({
     as: me.id,
@@ -152,7 +152,7 @@ export async function sendDraft({ me, draft, clips, kids, recipients, toLabel, d
       thumb_video_uri: thumb ?? clips[0]?.asset.uri ?? null,
       recording_id: recordingId ?? null,
       unsent_id: noteId !== recordingId ? noteId : null,
-      job_fields: { glasses, language: language ?? null, title, kids: kids.map((k) => ({ id: k.id, name: k.name })) },
+      job_fields: { glasses, language: language ?? null, title, kids: kids.map((k) => ({ id: k.id, name: k.name })), dishAskId },
     },
   });
   // The live progress (Convex jobs, hackathon): the worker finds the videos in "<job_id>/". A failure

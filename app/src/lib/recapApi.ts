@@ -17,6 +17,9 @@
 // runs under Node in scripts/test-recap.mjs. The server's shapes are supabase/functions/api/recap.ts &
 // recapPr.ts; every number on a slide is a count from the database for that month.
 import { API_URL, getApiAuth, getApiTimeZone } from './api';
+import { AWS_ON } from './aws/config';
+import { isAwsError } from './aws/errors';
+import { messages as awsMessages } from './aws/messages';
 import { kvGet, kvSet } from './storage';
 
 export type RecapPhoto = { message_id: string; photo_url: string; recipe_id: string | null; at: string };
@@ -191,6 +194,15 @@ export class RecapError extends Error {
 const TIMEOUT_MS = 10_000;
 
 async function call<T>(path: string): Promise<T> {
+  if (AWS_ON) {
+    // GET /v1/recap keeps Supabase's shape (MESSAGES.md).
+    const month = new URLSearchParams(path.split('?')[1] ?? '').get('month');
+    try {
+      return (await awsMessages.recap(month)) as T;
+    } catch (e) {
+      throw new RecapError(isAwsError(e) ? e.status : 0, isAwsError(e) ? e.message : 'Can’t reach your family right now. Try again.');
+    }
+  }
   const auth = getApiAuth();
   if (!auth.profileId || (!auth.key && !auth.code)) throw new RecapError(0, 'Pick who you are first.');
   const headers: Record<string, string> = { accept: 'application/json', 'x-profile-id': auth.profileId };

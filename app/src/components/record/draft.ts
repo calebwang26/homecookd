@@ -35,9 +35,11 @@ export type Draft = {
   language: string | null;
   /** homie's live session for these videos (phone camera), for jobs.create. */
   recordingId: string | null;
+  /** The kid's card she's filming for (/record?ask=), so the kid hears when it's ready (the `filmed` push). */
+  dishAskId: string | null;
 };
 
-const EMPTY: Draft = { clips: [], dish: null, requestFrom: null, forKids: null, everyone: false, glasses: false, language: null, recordingId: null };
+const EMPTY: Draft = { clips: [], dish: null, requestFrom: null, forKids: null, everyone: false, glasses: false, language: null, recordingId: null, dishAskId: null };
 
 let draft: Draft = EMPTY;
 const listeners = new Set<() => void>();
@@ -85,7 +87,7 @@ export function addClips(clips: DraftClip[], ctx: { dish?: string | null; reques
 }
 
 /** What the pre-record sheet settled, before any video is in. It replaces what was there. */
-export function setDraftMeta(meta: Partial<Pick<Draft, 'dish' | 'requestFrom' | 'forKids' | 'everyone' | 'language' | 'recordingId'>>) {
+export function setDraftMeta(meta: Partial<Pick<Draft, 'dish' | 'requestFrom' | 'forKids' | 'everyone' | 'language' | 'recordingId' | 'dishAskId'>>) {
   set({ ...draft, ...meta });
 }
 

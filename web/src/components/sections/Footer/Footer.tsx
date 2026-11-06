@@ -8,7 +8,7 @@
 // Server component; only the wordmark and the credits disclosure hydrate.
 import { useAudience, useCopy } from '@/components/providers/CopyProvider';
 import { otherAudience } from '@/content/audience';
-import { switchHref } from '@/lib/audience-route';
+import { MISS_HREF, switchHref } from '@/lib/audience-route';
 import { Button } from '@/components/primitives/Button';
 import { FooterWordmark } from '@/components/primitives/FooterWordmark';
 import { CONTACT_EMAIL, MADE_BY } from '@/content/site';
@@ -54,7 +54,7 @@ export function Footer() {
         <div className={s.ask}>
           <p className={s.prompt}>{f.prompt}</p>
           <Button
-            href="#early-access"
+            href={audience === 'kid' ? MISS_HREF : '#early-access'}
             variant="primary"
             size="lg"
             arrow

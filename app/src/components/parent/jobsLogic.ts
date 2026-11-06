@@ -1,4 +1,4 @@
-// A recording on its way, read from the worker's live stage (Convex jobs.forFamily), pure (node
+// A recording on its way, read from the worker's live stage (Convex jobs.mine), pure (node
 // scripts/test-parent-jobs.mjs). ProcessingRow and PendingRecipes use these.
 //   stageHint(stage, t)                        the row's line for each stage still going
 //   uploadingView(live, received, expected, t) stage 'uploading': the worker is still waiting for the

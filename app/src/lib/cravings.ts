@@ -22,9 +22,11 @@
 //   await sendVoiceRecipe(ask.id, note)          -> { status: 'writing' }
 //   await setFilmingDay(ask.id, 0)               "Mom's filming it Sunday" for the kid (0 = Sunday … 6, null = none)
 //   await cravingSent(profileId) / noteCravingSent(profileId)   she shared the link once (Home's card)
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Platform } from 'react-native';
 
+import { AWS_ON } from './aws/config';
+import { cravings as awsCravings } from './aws/dish';
 import { cravingLink, sendCravingVoice, setCravingDay, useLive } from './live/convex';
 import { useSession } from './session';
 import { kvGet, kvSet } from './storage';
@@ -114,7 +116,21 @@ export function useCravingAsks(): readonly CravingAsk[] {
 /** One ask, live (null: unknown, or not loaded yet). */
 export function useCravingAsk(id: string | null | undefined): CravingAsk | null {
   const all = useCravingAsks();
-  return (id && all.find((a) => a.id === id)) || null;
+  const listed = (id && all.find((a) => a.id === id)) || null;
+  // 1.1 (AWS): one not in the list (a push, or past the first pages) is read by its id (DISH.md open item 7).
+  const [byId, setById] = useState<CravingAsk | null>(null);
+  useEffect(() => {
+    if (!AWS_ON || !id || listed) return;
+    let live = true;
+    awsCravings.get(id).then(
+      (a) => live && setById(a),
+      () => {}, // not hers, or gone: nothing to show
+    );
+    return () => {
+      live = false;
+    };
+  }, [id, listed]);
+  return listed ?? (byId?.id === id ? byId : null);
 }
 
 export function getCravingAsk(id: string): CravingAsk | null {
@@ -123,6 +139,8 @@ export function getCravingAsk(id: string): CravingAsk | null {
 
 /** The link she sends her kids, carrying her line (cravings.createLink; the plain /miss page until it's deployed). */
 export async function createCravingLink(message?: string): Promise<{ url: string }> {
+  // 1.1 (AWS): no fallback to the plain /miss page (no stubs); a failure is shown as one.
+  if (AWS_ON) return { url: (await cravingLink(message?.trim() || undefined))! };
   return { url: (await cravingLink(message?.trim() || undefined)) ?? 'https://homecookd.app/miss' };
 }
 

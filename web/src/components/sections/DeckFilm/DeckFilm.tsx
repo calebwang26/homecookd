@@ -16,6 +16,7 @@
 import { useCallback, useContext, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { copy } from '@/content/copy';
 import { useAudience, useCopy } from '@/components/providers/CopyProvider';
+import { MISS_HREF } from '@/lib/audience-route';
 import { HERO } from '@/content/media';
 import { FAN, FAN_MOBILE, getRecipe } from '@/content/recipes';
 import { HeroVideo } from '@/components/primitives/HeroVideo';
@@ -286,7 +287,7 @@ function DeckFilmKid() {
               <div className={s.passFoot} data-f="passFoot">
                 <p className={`t-lead ${s.passSub}`}>{copy.passDown.sub}</p>
                 <div className={s.ctaRow}>
-                  <Button href="#early-access" variant="primary" size="md" arrow>
+                  <Button href={MISS_HREF} variant="primary" size="md" arrow>
                     {copy.passDown.cta}
                   </Button>
                   <a className={s.textLink} href="#how-it-works">

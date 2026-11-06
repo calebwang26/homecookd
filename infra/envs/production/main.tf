@@ -79,27 +79,34 @@ locals {
   api_secrets = [
     "ANTHROPIC_API_KEY", "CARTESIA_API_KEY", "CARTESIA_API_KEYS_BACKUP", "SENTRY_DSN_API",
     "RATE_LIMIT_SALT", "EDIBLE_CODE_KEY", "LINK_JOIN_SECRET", "LEFT_IDENTITY_SECRET",
-    # Sign in with Apple's revocation before a delete (App Review 5.1.1(v), api/src/modules/accounts/appleRevoke.ts), and Expo's push token.
-    "APPLE_TEAM_ID", "APPLE_SIGNIN_KEY_ID", "APPLE_SIGNIN_PRIVATE_KEY", "EXPO_ACCESS_TOKEN",
   ]
-  worker_secrets = ["ANTHROPIC_API_KEY", "CARTESIA_API_KEY", "CARTESIA_API_KEYS_BACKUP", "SENTRY_DSN_WORKER"]
+  # Named, but not on the api's task until their values exist, since an empty one stops the task starting (Nov 5: production went up before Caleb had them).
+  # Sign in with Apple's revocation before a delete (App Review 5.1.1(v), api/src/modules/accounts/appleRevoke.ts: without them a delete goes ahead
+  # unrevoked) and Expo's push token (optional: pushes go without one). TODO(caleb): once each is loaded (infra/README.md step 5), move it into
+  # api_secrets by PR, and apply. Before 1.1 is public, the Apple three at least.
+  api_secrets_later = ["APPLE_TEAM_ID", "APPLE_SIGNIN_KEY_ID", "APPLE_SIGNIN_PRIVATE_KEY", "EXPO_ACCESS_TOKEN"]
+  worker_secrets    = ["ANTHROPIC_API_KEY", "CARTESIA_API_KEY", "CARTESIA_API_KEYS_BACKUP", "SENTRY_DSN_WORKER"]
   # Caleb, Nov 2 (CUTOVER.md, open question 7): production sends nothing to Moss, and the key names stay. No service here reads them, so they stay empty.
   moss_names = ["MOSS_PROJECT_ID", "MOSS_PROJECT_KEY"]
 }
 
 module "env" {
-  source            = "../../modules/env"
-  environment       = "production"
-  vpc_cidr          = "10.30.0.0/16"
-  nat_gateways      = 2
-  db_instance_class = "db.t4g.medium"
-  db_multi_az       = true
+  source      = "../../modules/env"
+  environment = "production"
+  vpc_cidr    = "10.30.0.0/16"
+  # Lean at launch (Caleb, Nov 5): one NAT gateway and a db.t4g.small in one zone, about $95 a month before any task runs. A zone outage stops outbound
+  # calls and the database until that zone is back; nothing is lost (backups below). The full setup, about $210, is these three lines, by PR, with no
+  # data loss: nat_gateways = 2, db_instance_class = "db.t4g.medium", db_multi_az = true. Multi-AZ's change runs in place; the instance class change
+  # restarts the database for a few minutes, so do it in a quiet hour.
+  nat_gateways      = 1
+  db_instance_class = "db.t4g.small"
+  db_multi_az       = false
   db_allocated_gb   = 50
   db_backup_days    = 14
   db_protected      = true
   # Every alarm emails this, once the link in AWS's confirmation email is clicked.
   alert_email  = "caleb.wang26@gmail.com"
-  secret_names = toset(concat(local.api_secrets, local.worker_secrets, local.moss_names))
+  secret_names = toset(concat(local.api_secrets, local.api_secrets_later, local.worker_secrets, local.moss_names))
   # The api and worker never get the master login here: migrations run as their own task (infra/README.md, "Database logins").
   db_iam_login = true
 

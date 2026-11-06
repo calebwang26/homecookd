@@ -4,7 +4,7 @@ Two windows on the laptop, both left open, laptop plugged in, same hotspot as th
 
 ```
 ~/edible-glasses/tools/run_receiver.sh                                   # 1. saves the glasses' stream
-cd ~/hackathon-homecookd && .venv/bin/python pipeline/worker.py          # 2. turns videos into recipes
+cd ~/GitHub/homecookd/homecookd && .venv/bin/python pipeline/worker.py          # 2. turns videos into recipes
 ```
 
 1. Power the glasses on (power-cycle them right before she starts).

@@ -25,16 +25,18 @@
 // TODO(caleb): `npx eas-cli init` (writes the projectId) and Apple push credentials
 // (docs/build/LAUNCH-LINKS.md); until then pushSupported() is false everywhere.
 //
-// When to ask (never on the first launch, one explainer sheet, then the OS prompt):
+// When to ask (one explainer sheet, then the OS prompt; most moments never on the first launch):
 //   kid-first-made      right after "I made it"        "Want a note when Mom answers?"
 //   kid-first-question  after sending a question       "Want a note when Mom answers?"
-//   cook-first-send     right after a Send             "Want a note when Leo writes back?"
+//   cook-first-send     right after a Send, or a recipe "Want a note when Leo writes back?"
+//                       sent from the share sheet's family row
 //                       ("cooks it" once a cooking push exists: PushAskSheet COOK_ASK_COOKS_IT)
 //   kid-card-saved      a dish card claimed in the app  "Want a note when Mom answers?"
 //                       (v2: components/signin/ClaimLink)
 //   cook-craving-sent   right after she shares the      "Want a note when they pick a dish?"
 //                       "what are you craving?" link
-// The two v2 moments ask even on the first launch: both happen right after installing.
+// The two v2 moments and cook-first-send ask even on the first launch: they happen right after
+// installing (a new cook films and sends on her first day, so waiting for a later launch never asked her).
 // "First" means the first of these moments while asking is allowed: a moment skipped (first launch,
 // a "Not now" still inside its 30 days) asks again the next time it happens. Every moment shares one
 // 30-day snooze per profile (kv `push.askedAt.<profileId>`, ms since epoch), set by "Not now" and by
@@ -82,7 +84,7 @@ const TOKEN_KEY = 'push.token'; // this phone's token, so sign-out can remove it
 const LAUNCH_KEY = 'push.firstLaunchAt';
 const askKey = (profileId: string) => `push.askedAt.${profileId}`;
 /** Moments that happen right after installing, so they may ask on the very first launch. */
-const FIRST_LAUNCH_ASKS: ReadonlySet<PushAskKind> = new Set(['kid-card-saved', 'cook-craving-sent']);
+const FIRST_LAUNCH_ASKS: ReadonlySet<PushAskKind> = new Set(['kid-card-saved', 'cook-craving-sent', 'cook-first-send']);
 
 let loaded: NotificationsModule | null | undefined;
 
