@@ -345,7 +345,8 @@ email, and `dish-api-e2e.mjs`. Once step 5 is live, the measured real video job 
   Proven on staging Nov 2. Production gets it with this apply; confirm its alerts email (CUTOVER.md, step 6).
 - `infra/scripts/load-test.mjs` refuses production's address, so step 6's load test needs a production mode first (CUTOVER.md, step 6).
 - Production's media bucket has no `library.json`, so the public library is empty (contracts/JOBS.md, open item 15).
-- The worker's disk is Fargate's default 20 GB, and the env module has no setting for more yet (WORKER-MIGRATION.md).
+- The worker's disk is Fargate's default 20 GB. The env module's `disk_gib` sets more, 21 to 200 GiB (#364), and `plan_check.py` prices what's past 20.
+  Production's worker leaves it unset until the measured real video job (CUTOVER.md, step 6) gives the number (WORKER-MIGRATION.md).
 
 ## The kid's web flow on staging
 
