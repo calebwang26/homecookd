@@ -123,6 +123,34 @@ GCS's exact CRC32C, and a file that can't prove it isn't touched. `rewrite --und
 it, its row goes back to `failed`, and the next sync copies it fresh from GCS. S3's old version also lasts 28 days. Rewritten links
 keep working if `media.homecookd.app` is pointed back at GCS.
 
+## The sample library
+
+Added Nov 5 (#NNN). Production starts fresh (CUTOVER.md, open question 2), so nothing above runs there and its media bucket has no
+`library.json`. Three things read the public library from the media host:
+
+| Reader | What it reads | Without it |
+|---|---|---|
+| App 1.1, `app/src/lib/recipes.ts` `fetchLibrary` and `fetchRecipe` (on `main`) | `<EXPO_PUBLIC_BUCKET_URL>/library.json`, then each entry's `recipe_url` | The bundled copy (`app/assets/data/library.json`), with GCS links. No error. Unset, `EXPO_PUBLIC_BUCKET_URL` is GCS, so 1.1's build sets it to `https://media.homecookd.app` (CUTOVER.md, step 8) |
+| The api, `api/src/modules/messages/library.ts` | `<MEDIA_BASE_URL>/library.json` and `<id>/recipe.json` | No library dish: `dish-stats` and `hearts/recent` empty, the recap 503, and a heart, event, favorite, send or share naming one is 404 `not_found` |
+| The site's `/r` | A share's `recipeUrl` from `POST /v1/shares/open`: `<MEDIA_BASE_URL>/<id>/recipe.json` for a library dish | A shared sample doesn't open, once step 10 points the site at the api |
+
+`tools/media-copy/sample_library.py` writes it. A dry run by default, and the dry run never touches S3.
+
+- **What goes in:** the made-up samples in `data/synthetic/` and their photos in `data/synthetic/posters/`, read from the repo. `--from-gcs
+  <id>` adds a video sample from GCS's media bucket: its `recipe.json` and exactly the files it links to, nothing else in its folder. A
+  recipe is taken only with `"sample": true` and not `"family": true`, and it's checked against `pipeline/schema.py` when pydantic is there.
+- **Links:** every one points at `--media-base`, with `?v=` (GCS's generation, or a hash of a repo file) so a changed file gets a new link
+  past CloudFront's cache. A link outside the recipe's own folder, a file that isn't there, or any GCS link left over is refused.
+- **Order:** media, then each `recipe.json`, then `library.json`, which lists exactly what that run publishes. Every key is checked before
+  the first write. A key the tool didn't write (no `written-by: sample-library` metadata) is never replaced. Unchanged files are skipped.
+- **Guards, before any client exists:** `--write` to anything but a local endpoint needs `--library-bucket-caleb-ok`. `--from-gcs` needs
+  `--real-buckets-read-only-caleb-ok`, dry run included, and never goes to a staging bucket or a local endpoint. `--to` must be a media
+  bucket; `--media-base` must be https and not GCS. An id must be one lowercase segment, not a shared folder (`library`, `jobs`, `trash`,
+  ...) and not a worker's `recipe-<job>`. `--out` writes the built JSON for reading, outside the repo only.
+
+The run, after production's apply, is in CUTOVER.md's step 6. Staging can take the repo's samples the same way, which gives its `dish-stats`
+and recap something to count (contracts/MESSAGES.md). Tests: `python test_sample_library.py` (no network).
+
 ## Order at the switch
 
 Each step needs Caleb's OK in chat.
