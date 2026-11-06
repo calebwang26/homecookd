@@ -173,10 +173,15 @@ with `cookProfile(recipe, profiles)` (`lib/messaging.ts`, used by `cooked()`). K
   for testing. Guard everything so **Expo Go never crashes** (same pattern as the Google sign-in module).
 - New `app/src/lib/push.ts`: ask permission, get the Expo push token, `POST /push-tokens`, remove on
   sign-out, & route taps (`data.url` → `router.push`).
-- **When to ask** (never on first launch; one in-app explainer sheet first, then the iOS prompt):
+- **When to ask** (never on first launch, except the cook's first Send; one in-app explainer sheet first,
+  then the iOS prompt):
   - kid: right after their first "I made it" ("Want a note when Mom answers?"), or when they send
     their first question;
-  - cook: right after their first Send ("Want a note when Leo cooks it?").
+  - cook: right after their first Send ("Want a note when Leo cooks it?"), including a recipe sent from
+    the share sheet's family row, and **even on the first launch** (Nov 3, #341: a new cook films and
+    sends on her first day, so waiting for a later launch never asked her; approved by the Master Agent as
+    the default, reversible). Every other first-launch refusal stays.
+  - An ask made while another sheet is open waits until that sheet closes (iOS drops a second Modal).
   - "Not now" → don't ask again for 30 days.
 - **Time zone:** send `x-tz: <Intl.DateTimeFormat().resolvedOptions().timeZone>` on every API call
   (`lib/api.ts`); the server stores it on the acting profile when it changes. Default

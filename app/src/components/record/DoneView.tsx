@@ -11,6 +11,7 @@ import { useEffect, useRef } from 'react';
 import { AccessibilityInfo, StyleSheet, View } from 'react-native';
 import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-reanimated';
 
+import { askForPushSoon } from '@/components/push/PushAskSheet';
 import { Txt, useToast } from '@/components/ui';
 import { errorMessage } from '@/lib/api';
 import { useSession } from '@/lib/session';
@@ -34,7 +35,7 @@ function goHome() {
 
 export function DoneView({ source, lang, kidName, preview = false }: { source: 'phone' | 'glasses'; lang: string; kidName: string | null; preview?: boolean }) {
   const reduce = useReducedMotion();
-  const { me, family, profiles, learners } = useSession();
+  const { me, owner, family, profiles, learners } = useSession();
   const draft = useDraft();
   const toast = useToast();
 
@@ -42,9 +43,9 @@ export function DoneView({ source, lang, kidName, preview = false }: { source: '
   const line = doneLine(recordWords(lang), { kid: to.everyone ? null : (to.label ?? kidName), everyone: to.everyone, nobody: to.nobody });
 
   // The mount effect below runs once; it reads who it's for from here.
-  const latest = useRef({ me, to, toast, familyId: family?.id ?? null });
+  const latest = useRef({ me, owner, to, toast, familyId: family?.id ?? null });
   useEffect(() => {
-    latest.current = { me, to, toast, familyId: family?.id ?? null };
+    latest.current = { me, owner, to, toast, familyId: family?.id ?? null };
   });
 
   useEffect(() => {
@@ -83,8 +84,15 @@ export function DoneView({ source, lang, kidName, preview = false }: { source: '
     };
     void Promise.all([wait(DONE_HOLD_MS), send()]).then(([, ok]) => {
       if (!alive) return;
-      if (ok) goHome();
-      else router.replace('/send');
+      if (!ok) return router.replace('/send');
+      goHome();
+      // Her recording went out without the Send screen, so this is the cook's "first send" moment:
+      // "Want a note when Leo writes back?" once Home has settled (never on a lent phone).
+      const { me: who, owner: lent, to } = latest.current;
+      const first = to.recipients.find((p) => p.role === 'learner') ?? to.recipients[0];
+      if (who && (!lent || lent.id === who.id)) {
+        askForPushSoon({ kind: 'cook-first-send', profileId: who.id, name: first?.name ?? '', profile: first });
+      }
     });
     return () => {
       alive = false;

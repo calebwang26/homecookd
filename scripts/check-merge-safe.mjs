@@ -142,6 +142,8 @@ function bundle(out) {
 
 // EXPO_PUBLIC_* and NEXT_PUBLIC_* ship to every phone and browser. A new name fails until someone reviews it and adds it here.
 const PUBLIC_ENV = new Set([
+  // EXPO_PUBLIC_BACKEND and EXPO_PUBLIC_AWS_URL are the 1.1 switch and the api's address: public by design (the api takes a session token, never a key).
+  'EXPO_PUBLIC_BACKEND', 'EXPO_PUBLIC_AWS_URL',
   'EXPO_PUBLIC_API_URL', 'EXPO_PUBLIC_BUCKET_URL', 'EXPO_PUBLIC_CONVEX_URL', 'EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID',
   'EXPO_PUBLIC_GOOGLE_WEB_CLIENT_ID', 'EXPO_PUBLIC_UPLOAD_URL', 'EXPO_PUBLIC_VOICE_URL', 'EXPO_PUBLIC_WEB_URL',
   'NEXT_PUBLIC_API_URL', 'NEXT_PUBLIC_APP_STORE_URL', 'NEXT_PUBLIC_BUCKET_URL', 'NEXT_PUBLIC_CONTACT_EMAIL',
