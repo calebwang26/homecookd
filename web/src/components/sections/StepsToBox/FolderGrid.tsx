@@ -30,7 +30,7 @@ export const BOX_RECIPES: Recipe[] = BOX.map(getRecipe);
 // The folder mirrors the app's own family-table screen (its title, tabs and add button), so these
 // words are the same in both versions and come straight from copy.ts.
 const TABS = copy.recipeBox.tabs;
-const { folderTitle: FOLDER_TITLE, folderAccent: FOLDER_ACCENT } = copy.recipeBox; // the app-library screen's own title
+const { folderTitle: FOLDER_TITLE, folderAccent: FOLDER_ACCENT } = copy.recipeBox; // the app's family table title
 const [TITLE_BEFORE, TITLE_AFTER] = FOLDER_TITLE.split(FOLDER_ACCENT);
 
 // "+ Add a recipe": on the narrowest phones the pill reads "+ Add" (the rest stays in the

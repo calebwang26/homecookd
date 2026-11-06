@@ -64,7 +64,7 @@ for (const [path, type] of [
 check('missing hashed file', (await get('/_next/static/nope.js', { method: 'HEAD' })).status, 404);
 
 // Safari won't play a video from a server that ignores ranges.
-const video = await get('/media/app/app-cook.mp4', { headers: { range: 'bytes=0-1' } });
+const video = await get('/media/app/web-miss.mp4', { headers: { range: 'bytes=0-1' } });
 check('video range status', video.status, 206);
 await video.arrayBuffer();
 
