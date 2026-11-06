@@ -76,7 +76,7 @@ PRIVACY AND SAFETY
 - Nothing is sent to an AI service until the person taps "OK, continue"; "Not now" cancels. Signing out withdraws it.
 - Delete account: tap your name at the top of Home, then "Account & privacy", then the red "Delete my account". It asks first, then deletes your account, messages and voice notes, and your recipes.
 - The privacy policy and terms are linked from "Account & privacy" and the sign-in screen.
-- A dish another family shares nearby, and a dinner invite, have "Report or block". Reports email our team within minutes, hide the item for the reporter, and hide it for everyone after two families report it. Shared text is filtered for objectionable words.
+- Dishes stay inside the family: this version has no screen for browsing other families' dishes. A cook can choose to share a recipe's text with people nearby (off by default, never her video or voice), and shared text is filtered for objectionable words. Where a family is invited to another family's dinner, the dinner page has "Report or block": a report emails our team within minutes and hides the item for the reporter, and reports from two families hide it for everyone.
 - The camera and microphone are used only while someone is filming or recording a voice note.
 
 Contact: team@homecookd.app
@@ -109,6 +109,10 @@ AWS is a service provider, not a data type. Privacy policy URL unchanged.
   deletes for good.
 - **5.1.2(i):** the consent sheet, /privacy and the notes name the same AI services for the same jobs (#357, #358); the
   AWS build sends nothing to Moss or Gemini.
-- **1.2 User-generated content:** Report or block on shared dishes and dinners, the word filter, and email to the team
-  (`docs/build/contracts/COMMUNITY.md`). Open for App screens: the Community tab is hidden, so check how a reviewer
-  reaches a neighbor's dish in 1.1 (a dinner link at least), and say it in the notes.
+- **1.2 User-generated content:** in 1.1 no one can browse other families' dishes (the kid's Community tab is hidden; the
+  parent's tabs are Home, Messages, Recipes), so the notes don't send the reviewer to screens they can't reach. A cook
+  can still turn on "Share with people nearby" on her own recipe (`components/community/ShareNearbyRow.tsx`), and the
+  shared text passes the word filter. Another family's content shows only on a dinner invite, which has Report or
+  block, and reports email the team (`docs/build/contracts/COMMUNITY.md`). The fix for 1.2 (a "Dishes near you"
+  section behind a switch with a seeded neighbour family, or Report or block on the /d invite screen) is on the
+  tracker for Caleb to pick.
