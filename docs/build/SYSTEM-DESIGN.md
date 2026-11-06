@@ -42,6 +42,9 @@ EventBridge schedules --> SQS --> api (replaces Convex and pg_cron jobs)
   Cartesia, Apple, Moss and Expo push. A failing outside service must not take down unrelated features.
 - **Assume every queue message can arrive twice.** SQS delivers at least once, so jobs must be safe to repeat: use a unique
   job id, and check before doing work. Writes from a phone that may retry take an idempotency key.
+  It can also arrive late: a message whose receive answer is lost stays hidden for the queue's visibility timeout (300 s on
+  `scheduled`) before SQS hands it out again. The `scheduled` consumer logs each message's receipt and completion, and warns
+  "scheduled message redelivered" with how late it is; 5 in 15 minutes alarms (`api/src/scheduled.ts`, `infra/modules/env/alerts.tf`).
 - **Failed jobs go to a dead-letter queue, and that raises an alert.** Nothing fails silently.
 - **Change contracts compatibly.** Old app versions stay in use for a long time, so add fields and don't rename or remove
   them while a version that calls them is still out there. Version the api.
@@ -118,10 +121,15 @@ Caleb confirmed these on Oct 31, 2026.
 | Media first byte | p95 under 200 ms for files already in the CDN, measured at the CDN. Cache-miss time and hit rate are tracked with no target until measured |
 | Video job | 95% finish within 30 minutes, from upload complete to recipe ready, for videos up to a length set after measuring real jobs. Failed jobs count as misses, and the success rate is tracked with no target yet |
 | Load test before launch | 50 RPS sustained for 15 minutes on a realistic mix of requests, meeting the API speed targets with under 0.1% errors |
+| Load test, first measured (staging, Nov 2) | Met: 50 RPS for 15 minutes at p95 81 ms and p99 285 ms at the load balancer, no 5xx, 0.002% errors, on one 0.25 vCPU api task with the smallest database. Not met yet: overload failing fast (AWS-MIGRATION.md, "Load test on staging") |
 | Recovery, database | At most 5 minutes of data lost (RPO), and back up within 1 hour (RTO), for a failed zone, a bad release or accidental deletion. Losing a whole region isn't covered until the second-region backup exists |
 | Recovery, stored videos | Nothing already stored in S3 is lost in those same events. Video not yet uploaded stays on the phone. Region loss isn't covered yet |
 
-**Still unproven:** a timed restore of the database and S3, a load test, measured video jobs at several lengths on AWS, media
+**Partly proven:** a database restore on staging (Oct 31): about 200 s of data at risk and 12 minutes to restore, on a nearly empty database with no api pointed at the copy.
+
+**Partly proven:** the load test, on staging (Nov 2): 50 a second for 15 minutes met the speed and error targets on one small api task. It hasn't run on production's size, and overload doesn't yet fail fast (AWS-MIGRATION.md, "Load test on staging").
+
+**Still unproven:** a timed restore with real data size and of S3, measured video jobs at several lengths on AWS, media
 timing from India and the US with cache hit rate, and Sentry and request-level monitoring.
 
 **The new schema must record upload-finished and job-finished times.** Convex's `jobs` table has neither, so the video job
@@ -148,7 +156,8 @@ Prefer rolling back to patching forward under pressure.
 ## Delivery (CI/CD)
 
 - **Every PR runs tests automatically** (type checks, unit tests, Terraform validate, secret scan). A failing check blocks merge.
-- **Merging to the main line deploys to staging automatically** and runs smoke tests.
+- **Merging to the main line deploys to staging automatically** and runs smoke tests. It also applies staging's Terraform, when a safety
+  check on the plan passes; anything it refuses goes to Caleb (`infra/README.md`, "Merges apply staging").
 - **Production uses the same image, after one human approval,** through GitHub environment reviewers. It rolls out gradually
   and rolls back on failure. Deploy logins use OIDC, with no stored keys.
 - **Infrastructure changes only through Terraform.** Staging and production differ in size, not shape.
@@ -158,7 +167,7 @@ Prefer rolling back to patching forward under pressure.
 ## Tests
 
 Business rules get unit tests. Each api route gets an integration test against real Postgres, including the case where the
-wrong user is refused. Each area moved from Convex passes the same behavior tests before and after. Before launch: a load
+wrong user is refused: a row in `api/test/routeCoverage.test.ts`, which fails on any route that isn't there. Each area moved from Convex passes the same behavior tests before and after. Before launch: a load
 test, a restore drill, and a deliberately killed task.
 
 ## Definition of done

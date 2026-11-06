@@ -17,6 +17,12 @@ if [ "$CHANNEL" = "production" ]; then
   echo "REFUSED: no updates to the production channel while 1.0 is in App Review (it reaches the reviewed build)." >&2
   exit 1
 fi
+# The 1.1 build on production AWS (CUTOVER step 8). Its updates would need the switch and production's URL, which this
+# script doesn't set yet, and an update there reaches the build Apple reviews: refused until that's added with Caleb's OK.
+if [ "$CHANNEL" = "production-aws" ]; then
+  echo "REFUSED: no updates to production-aws yet (the 1.1 review build). Build again from main instead." >&2
+  exit 1
+fi
 if [ -n "${EXPO_PUBLIC_FAMILY_CODE:-}" ]; then
   echo "REFUSED: EXPO_PUBLIC_FAMILY_CODE is set in this shell, and it would ship to every phone. Unset it." >&2
   exit 1
