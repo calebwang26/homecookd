@@ -79,10 +79,13 @@ locals {
   api_secrets = [
     "ANTHROPIC_API_KEY", "CARTESIA_API_KEY", "CARTESIA_API_KEYS_BACKUP", "SENTRY_DSN_API",
     "RATE_LIMIT_SALT", "EDIBLE_CODE_KEY", "LINK_JOIN_SECRET", "LEFT_IDENTITY_SECRET",
-    # Sign in with Apple's revocation before a delete (App Review 5.1.1(v), api/src/modules/accounts/appleRevoke.ts), and Expo's push token.
-    "APPLE_TEAM_ID", "APPLE_SIGNIN_KEY_ID", "APPLE_SIGNIN_PRIVATE_KEY", "EXPO_ACCESS_TOKEN",
   ]
-  worker_secrets = ["ANTHROPIC_API_KEY", "CARTESIA_API_KEY", "CARTESIA_API_KEYS_BACKUP", "SENTRY_DSN_WORKER"]
+  # Named, but not on the api's task until their values exist, since an empty one stops the task starting (Nov 5: production went up before Caleb had them).
+  # Sign in with Apple's revocation before a delete (App Review 5.1.1(v), api/src/modules/accounts/appleRevoke.ts: without them a delete goes ahead
+  # unrevoked) and Expo's push token (optional: pushes go without one). TODO(caleb): once each is loaded (infra/README.md step 5), move it into
+  # api_secrets by PR, and apply. Before 1.1 is public, the Apple three at least.
+  api_secrets_later = ["APPLE_TEAM_ID", "APPLE_SIGNIN_KEY_ID", "APPLE_SIGNIN_PRIVATE_KEY", "EXPO_ACCESS_TOKEN"]
+  worker_secrets    = ["ANTHROPIC_API_KEY", "CARTESIA_API_KEY", "CARTESIA_API_KEYS_BACKUP", "SENTRY_DSN_WORKER"]
   # Caleb, Nov 2 (CUTOVER.md, open question 7): production sends nothing to Moss, and the key names stay. No service here reads them, so they stay empty.
   moss_names = ["MOSS_PROJECT_ID", "MOSS_PROJECT_KEY"]
 }
@@ -103,7 +106,7 @@ module "env" {
   db_protected      = true
   # Every alarm emails this, once the link in AWS's confirmation email is clicked.
   alert_email  = "caleb.wang26@gmail.com"
-  secret_names = toset(concat(local.api_secrets, local.worker_secrets, local.moss_names))
+  secret_names = toset(concat(local.api_secrets, local.api_secrets_later, local.worker_secrets, local.moss_names))
   # The api and worker never get the master login here: migrations run as their own task (infra/README.md, "Database logins").
   db_iam_login = true
 
