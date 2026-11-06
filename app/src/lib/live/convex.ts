@@ -1,7 +1,7 @@
 // Track A boundary: every call the app makes to Convex (docs/build/STACK.md "App → Convex").
 //
 //   const token = await convexSession();                 sessions.start with this phone's device key
-//   useLiveJobs()                                        jobs.forFamily, live (parent progress)
+//   useLiveJobs()                                        jobs.mine, live (parent progress)
 //   useCookQuestions()                                   questions.openForCook, live
 //   await createJob(uploadPath, source)                  jobs.create
 //   await answerQuestion(id, { audioUri })               files.uploadUrl + questions.answer
@@ -12,7 +12,7 @@
 //   const { recordingId } = await startRecording({ dish, forKidIds, language?, source })  live.startRecording
 //   useRecording(recordingId)                            live.recording, live (the recording screen)
 //   await recordingJob(recordingId, cookId)              live.recording's job and its stage, once (a resend after a crash)
-//   await uploadJob(uploadId, cookId)                    the same for a Send-screen upload, by its folder (jobs.forFamily)
+//   await uploadJob(uploadId, cookId)                    the same for a Send-screen upload, by its folder (jobs.mine)
 //   await endRecording(recordingId, as?)                 live.endRecording: the stop button with no voice line
 //   await startFilming(recordingId)                      live.startFilming: glasses, her Start button
 //   await setCover(recordingId, photoUri)                files.uploadUrl + live.setCover: the plate photo (in-app filming)
@@ -49,8 +49,21 @@ import { ConvexClient } from 'convex/browser';
 import { makeFunctionReference, type FunctionType } from 'convex/server';
 import { File, UploadType } from 'expo-file-system';
 import { useEffect, useState, useSyncExternalStore } from 'react';
+import { AppState } from 'react-native';
 
 import { requireAiConsent } from '@/lib/aiConsent';
+import { accounts } from '@/lib/aws/accounts';
+import { AWS_ON } from '@/lib/aws/config';
+import { isAwsError } from '@/lib/aws/errors';
+import '@/lib/aws/foreground';
+import { jobs as awsJobs } from '@/lib/aws/jobs';
+import { newKey } from '@/lib/aws/legacy';
+import { watchRead, watchTopic } from '@/lib/aws/live';
+import { messages as awsMessages, type Question as AwsQuestion } from '@/lib/aws/messages';
+import { community as awsCommunity } from '@/lib/aws/community';
+import { cravings as awsCravings, dishCard as awsDishCard } from '@/lib/aws/dish';
+import { sendAwsFile } from '@/lib/aws/sendFile';
+import { readAwsRecipes, refreshAwsRecipes, watchAwsRecipes } from '@/lib/aws/recipesStore';
 import { getSession, useSession } from '@/lib/session';
 import { jobForUpload } from '@/lib/unsentLogic';
 import { secretGet } from '@/lib/storage';
@@ -205,6 +218,104 @@ const LIVE_RETRIES = 3;
 const LIVE_RETRY_MS = 10_000;
 
 /** A live query with the session token (plus `args`); `fallback` is the stub's live value. */
+/**
+ * The Convex reads that have moved to the AWS api (1.1), by name: jobs.mine is the `jobs` live topic (her own jobs
+ * only), recipes.list is GET /v1/recipes read on focus and when one of her jobs turns done.
+ */
+const AWS_LIVE: Record<string, (set: (v: unknown) => void, as: string | null, args: Record<string, unknown>) => () => void> = {
+  'jobs:mine': (set, as) => {
+    const done = new Set<string>();
+    return watchTopic<LiveJob[]>(
+      'jobs',
+      (list) => {
+        const fresh = list.filter((j) => j.stage === 'done' && !done.has(j._id));
+        fresh.forEach((j) => done.add(j._id));
+        if (fresh.length) refreshAwsRecipes();
+        set(list);
+      },
+      { as },
+    );
+  },
+  'recipes:list': (set, as) => watchAwsRecipes(set, as),
+  // No live topics for these yet (MESSAGES.md open item 1): the plain reads, polled at the planned pace.
+  'questions:openForCook': (set, as) =>
+    watchRead(`questions:open:${as ?? ''}`, () => awsMessages.openQuestions(as), 30_000, (qs) => set(qs.map(toCookQuestion))),
+  'questions:forRecipe': (set, as, args) => {
+    const recipeId = String(args.recipeId ?? '');
+    return watchRead(`questions:recipe:${as ?? ''}:${recipeId}`, () => awsMessages.recipeQuestions(recipeId, as), 10_000, (qs) => set(qs.map(toRecipeAnswer)));
+  },
+  // Her requests: no topic (DISH.md, "Live"), so the plain read on focus and every minute.
+  // A card: no topic (DISH.md item 4), so read it every 3 s while her answers merge, else every 15 s. Not hers or gone: null.
+  'dishAsks:get': (set, as, args) => {
+    const id = String(args.id ?? '');
+    return watchRead(
+      `dish-ask:${as ?? ''}:${id}`,
+      () => awsDishCard(id, as).catch((e) => (isAwsError(e) && e.code === 'not_found' ? null : Promise.reject(e))),
+      (card) => (card?.merging ? 3_000 : 15_000),
+      set,
+    );
+  },
+  // While one of her voice recipes is being written, every 3 s (DISH.md, "Live"); else every minute.
+  'cravings:forCook': (set, as) =>
+    watchRead(`cravings:${as ?? ''}`, () => awsCravings.all(as), (asks) => (asks.some((x) => x.voiceRecipe === 'writing') ? 3_000 : 60_000), set),
+  // Community: no topics (COMMUNITY.md, "Live topics"). A dinner every 30 s while open, the lists every 60 s, the
+  // recipe page and the blocked list on focus (a long gap; coming to the front reads at once). Gone: null.
+  'community:feed': (set, as, args) => {
+    const maxMiles = typeof args.maxMiles === 'number' ? args.maxMiles : null;
+    return watchRead(`community:feed:${as ?? ''}:${maxMiles ?? ''}`, () => awsCommunity.feed(maxMiles, as), 60_000, set);
+  },
+  'community:recipe': (set, as, args) => {
+    const id = String(args.recipeId ?? '');
+    return watchRead(`community:recipe:${as ?? ''}:${id}`, () => awsCommunity.recipe(id, as).catch(nullIfGone), 600_000, set);
+  },
+  'community:mySwaps': (set, as) => watchRead(`community:swaps:${as ?? ''}`, () => awsCommunity.swaps(as), 60_000, set),
+  'community:blocked': (set, as) => watchRead(`community:blocked:${as ?? ''}`, () => awsCommunity.blocked(as), 600_000, set),
+  'dinners:get': (set, as, args) => {
+    const id = String(args.dinnerId ?? '');
+    return watchRead(`community:dinner:${as ?? ''}:${id}`, () => awsCommunity.dinner(id, as).catch(nullIfGone), 30_000, set);
+  },
+  'dinners:mine': (set, as) => watchRead(`community:dinners:${as ?? ''}`, () => awsCommunity.myDinners(as), 60_000, set),
+  'shareRequests:familyDishes': (set, as) => watchRead(`share-dishes:${as ?? ''}`, () => awsMessages.shareDishes(as), 60_000, set),
+  'messages:madeMyDish': (set, as) =>
+    watchRead(`made-my-dish:${as ?? ''}`, () => awsMessages.madeMyDish(as), 60_000, (m) =>
+      set(m ? { ...m, libraryId: m.libraryId ?? undefined, text: m.text ?? undefined, at: Date.parse(m.at) } : null),
+    ),
+};
+
+/** A row another family can't see, or that's gone, reads as null (the screens' own "not there" state). */
+const nullIfGone = (e: unknown) => (isAwsError(e) && e.code === 'not_found' ? null : Promise.reject(e));
+
+/** An AWS cook-mode question in Convex's words (times in ms, `_id`). */
+function toCookQuestion(q: AwsQuestion): CookQuestion {
+  return {
+    _id: q.id,
+    _creationTime: Date.parse(q.createdAt),
+    recipeId: q.recipeId,
+    ...(q.stepOrder != null ? { stepOrder: q.stepOrder } : null),
+    text: q.text,
+    askedByName: q.askedByName,
+    recipeTitle: q.recipeTitle,
+    askedBy: q.askedBy,
+    ...(q.textForCook ? { textForCook: q.textForCook } : null),
+    ...(q.kind !== 'cooking' ? { kind: q.kind } : null),
+    ...(q.answer?.translation ? { answer: { translation: q.answer.translation } } : null),
+  };
+}
+
+function toRecipeAnswer(q: AwsQuestion) {
+  return {
+    _id: q.id,
+    _creationTime: Date.parse(q.createdAt),
+    status: q.status,
+    text: q.text,
+    askedByName: q.askedByName,
+    answerAudioUrl: q.answerAudioUrl,
+    recipeId: q.recipeId,
+    ...(q.stepOrder != null ? { stepOrder: q.stepOrder } : null),
+    ...(q.answer ? { answer: { text: q.answer.text ?? undefined, transcript: q.answer.transcript ?? undefined, translation: q.answer.translation ?? undefined } } : null),
+  };
+}
+
 export function useLive<T>(
   name: string,
   initial: T,
@@ -222,6 +333,8 @@ export function useLive<T>(
   const argsKey = JSON.stringify(args);
   useEffect(() => {
     if (!enabled) return;
+    // 1.1 (AWS_ON): a moved area reads the AWS api; one that hasn't moved reads nothing (no stub, no Convex).
+    if (AWS_ON) return AWS_LIVE[name]?.((v) => setValue(v as T), meId ?? null, args);
     if (isStub || !client) return fallback(setValue);
     let off: (() => void) | null = null;
     let offStub: (() => void) | null = null;
@@ -258,7 +371,8 @@ export function useLive<T>(
 // Calls
 
 export function useLiveJobs(enabled = true): LiveJob[] {
-  return useLive<LiveJob[]>('jobs:forFamily', [], stub.watchJobs, enabled);
+  // Soft: an update that reaches a phone before jobs.mine is deployed must not stub all of Convex.
+  return useLive<LiveJob[]>('jobs:mine', [], stub.watchJobs, enabled, {}, true);
 }
 
 export function useCookQuestions(enabled = true): CookQuestion[] {
@@ -272,7 +386,7 @@ export async function token(as?: string): Promise<string> {
   return t;
 }
 
-export type JobExtras = { title?: string; language?: string; forKidIds?: string[]; recordingId?: string };
+export type JobExtras = { title?: string; language?: string; forKidIds?: string[]; recordingId?: string; dishAskId?: string };
 
 /** Drops unset and empty fields (Convex validators refuse `undefined`-only noise and empty ids). */
 const present = (o: Record<string, unknown>) =>
@@ -294,8 +408,15 @@ function oneKid({ forKidIds, ...rest }: Record<string, unknown>): Record<string,
  */
 export async function createJob(uploadPath: string, source: JobSource, extras: JobExtras = {}, as?: string): Promise<void> {
   await requireAiConsent();
+  if (AWS_ON) {
+    // POST /v1/jobs: by uploadId (no slash), and no recordingId (1.1 makes no recording rows: JOBS.md flow 1).
+    // dishAskId: the kid's card she filmed for, so the kid gets `filmed` (DISH.md); a card not asked of her is dropped.
+    const { title, language, forKidIds, dishAskId } = present(extras) as { title?: string; language?: string; forKidIds?: string[]; dishAskId?: string };
+    await awsJobs.create({ uploadId: uploadPath.replace(/\/+$/, ''), title, language, forKidIds, dishAskId }, as);
+    return;
+  }
   const sessionToken = await token(as);
-  const extra = present(extras);
+  const extra = present({ ...extras, dishAskId: undefined }); // Convex's jobs.create doesn't take the card
   const run = (more: Record<string, unknown>) => call('mutation', 'jobs:create', { sessionToken, uploadPath, source, ...more }, () => stub.createJob(uploadPath, source));
   try {
     await run(extra);
@@ -313,12 +434,23 @@ export async function createJob(uploadPath: string, source: JobSource, extras: J
   }
 }
 
+/** A recording made on the phone alone (1.1, AWS_ON): no server row, so its calls answer here. */
+const LOCAL_RECORDING = 'local-rec-';
+const localRecordingId = () => `${LOCAL_RECORDING}${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+export const isLocalRecording = (id: string | null | undefined) => !!id && id.startsWith(LOCAL_RECORDING);
+
 /**
  * homie's live session while a cook records (Track E). It starts in `intro`. Without `language` the
  * server uses her people.language (send one only when she picked it or it loaded).
  */
 export async function startRecording(input: { dish?: string; forKidIds?: string[]; language?: string; source: RecordingSource }): Promise<{ recordingId: string }> {
   await requireAiConsent();
+  // 1.1 makes no recording rows (homie is off): the in-app camera films under a phone-only id, and the dish,
+  // the kids and the language go on the job (JOBS.md open item 9). The glasses aren't in 1.1.
+  if (AWS_ON) {
+    if (input.source === 'glasses') throw new Error('The glasses aren’t ready in this version.');
+    return { recordingId: localRecordingId() };
+  }
   const sessionToken = await token();
   const args = { sessionToken, ...present(input) };
   const run = (a: Record<string, unknown>) => call<{ recordingId: string }>('mutation', 'live:startRecording', a, () => stub.startRecording(input), { strict: true });
@@ -337,6 +469,7 @@ export async function startRecording(input: { dish?: string; forKidIds?: string[
  * A stub recording ends on the stub.
  */
 export async function endRecording(recordingId: string, as?: string): Promise<boolean> {
+  if (isLocalRecording(recordingId)) return true;
   try {
     const sessionToken = await token(as);
     const r = await call<{ ok: boolean }>('mutation', 'live:endRecording', { sessionToken, recordingId }, () => stub.endRecording(recordingId), { soft: true });
@@ -352,6 +485,7 @@ export async function endRecording(recordingId: string, as?: string): Promise<bo
  * laptop keeps glasses footage from here until endRecording. True once filming; throws when it couldn't.
  */
 export async function startFilming(recordingId: string): Promise<boolean> {
+  if (isLocalRecording(recordingId)) return true;
   const sessionToken = await token();
   const r = await call<{ ok: boolean }>('mutation', 'live:startFilming', { sessionToken, recordingId }, () => stub.startFilming(recordingId), { strict: true });
   return !!r?.ok;
@@ -360,7 +494,8 @@ export async function startFilming(recordingId: string): Promise<boolean> {
 /** The plate photo homie asked for at the end of an in-app recording: the recipe's cover. False if it didn't save. */
 export async function setCover(recordingId: string, photoUri: string): Promise<boolean> {
   try {
-    if (recordingId.startsWith('stub-')) return true;
+    // TODO(caleb): 1.1 has no route for the plate photo (JOBS.md open item 10): the cover comes from the video.
+    if (recordingId.startsWith('stub-') || isLocalRecording(recordingId)) return true;
     const storageId = await uploadFile(photoUri, 'image/jpeg');
     if (storageId.startsWith('stub-file-')) return true;
     const sessionToken = await token();
@@ -381,13 +516,14 @@ export type RecordingJob = { id: string; stage: JobStage | null; error: string |
  * function not deployed, a recording it doesn't find). `as`: the cook (a profile id).
  */
 export async function recordingJob(recordingId: string, as?: string): Promise<RecordingJob | null | undefined> {
+  if (AWS_ON) return undefined; // no recording rows on AWS: a resend finds its job by upload (uploadJob)
   if (stubbed || !client) return undefined;
   try {
     const sessionToken = await token(as);
     const row = await call<LiveRecording | null | undefined>('query', 'live:recording', { sessionToken, recordingId }, () => undefined, { soft: true });
     if (!row) return undefined;
     if (!row.jobId) return null;
-    const jobs = await call<LiveJob[] | undefined>('query', 'jobs:forFamily', { sessionToken }, () => undefined, { soft: true });
+    const jobs = await call<LiveJob[] | undefined>('query', 'jobs:mine', { sessionToken }, () => undefined, { soft: true });
     if (!jobs) return undefined;
     const job = jobs.find((j) => j._id === row.jobId);
     return { id: row.jobId, stage: job?.stage ?? null, error: job?.error ?? null };
@@ -400,19 +536,29 @@ export async function recordingJob(recordingId: string, as?: string): Promise<Re
 /**
  * The Convex job for a Send-screen upload (the folder "<uploadId>/"), asked once before a resend after a
  * crash (lib/unsentLogic jobForUpload): stage null when this phone saw Convex take it (`convexHadIt`, its
- * row's convex_job 'ok') but it's no longer among the family's newest, null when there's no job (or no
+ * row's convex_job 'ok') but it's no longer among her newest, null when there's no job (or no
  * upload was made), undefined when Convex couldn't say. `as`: the cook (a profile id).
  */
 export async function uploadJob(uploadId: string | null, convexHadIt: boolean, as?: string): Promise<RecordingJob | null | undefined> {
+  if (AWS_ON) {
+    try {
+      const { jobs } = await awsJobs.list(null, as);
+      const job = jobForUpload(jobs, uploadId, convexHadIt);
+      return job ? { id: job.id, stage: job.stage as JobStage | null, error: job.error } : null;
+    } catch (e) {
+      console.warn('[aws] jobs', e instanceof Error ? e.message : e);
+      return undefined;
+    }
+  }
   if (stubbed || !client) return undefined;
   try {
     const sessionToken = await token(as);
-    const jobs = await call<LiveJob[] | undefined>('query', 'jobs:forFamily', { sessionToken }, () => undefined, { soft: true });
+    const jobs = await call<LiveJob[] | undefined>('query', 'jobs:mine', { sessionToken }, () => undefined, { soft: true });
     if (!jobs) return undefined;
     const job = jobForUpload(jobs, uploadId, convexHadIt);
     return job ? { id: job.id, stage: job.stage as JobStage | null, error: job.error } : null;
   } catch (e) {
-    console.warn('[convex] jobs.forFamily', String(e).slice(0, 160));
+    console.warn('[convex] jobs.mine', String(e).slice(0, 160));
     return undefined;
   }
 }
@@ -460,12 +606,21 @@ const noLiveFrame = (onData: (v: LiveFrame | null) => void) => {
 
 /** Stops one of her family's jobs on Convex (the worker's later reports are ignored). True once stopped. */
 export async function cancelLiveJob(jobId: string, as?: string): Promise<boolean> {
+  if (AWS_ON) {
+    try {
+      return (await awsJobs.cancel(jobId, as)).stopped;
+    } catch (e) {
+      if (isAwsError(e) && e.code === 'not_found') return false; // not hers, or gone (Convex said false)
+      throw e;
+    }
+  }
   const sessionToken = await token(as);
   return call<boolean>('mutation', 'jobs:cancel', { sessionToken, jobId }, () => true, { soft: true });
 }
 
 /** jobs.cancelUpload: stops the job made from this upload ("<uploadId>/"), when the phone has no job id. */
 export async function cancelLiveUpload(uploadId: string): Promise<boolean> {
+  if (AWS_ON) return (await awsJobs.cancelUpload(uploadId.replace(/\/+$/, ''))).stopped;
   const sessionToken = await token();
   return call<boolean>('mutation', 'jobs:cancelUpload', { sessionToken, uploadId }, () => false, { soft: true });
 }
@@ -495,8 +650,40 @@ const noGlassesVideos = (onData: (v: GlassesVideo[]) => void) => {
   return () => {};
 };
 
-/** Who this is on Convex, with their language ('en' when unset). Null until it loads. */
-export function useMe(enabled = true): Me | null {
+/** Who this is on Convex (on AWS under the 1.1 switch), with their language ('en' when unset). Null until it loads. */
+export const useMe: (enabled?: boolean) => Me | null = AWS_ON ? useAwsMe : useConvexMe;
+
+/**
+ * GET /v1/me for whoever is in: read when they change and when the app comes back to the front (it isn't
+ * live on AWS: ACCOUNTS.md, "Live updates"). Her relation comes from the family, as on Convex. Null until it loads.
+ */
+function useAwsMe(enabled = true): Me | null {
+  const { me } = useSession();
+  const [value, setValue] = useState<Me | null>(null);
+  const [front, setFront] = useState(0);
+  useEffect(() => {
+    const sub = AppState.addEventListener('change', (s) => s === 'active' && setFront((n) => n + 1));
+    return () => sub.remove();
+  }, []);
+  const id = me?.id ?? null;
+  const relation = me?.relation ?? undefined;
+  useEffect(() => {
+    if (!enabled || !id) return;
+    let live = true;
+    accounts.me(id).then(
+      ({ person }) => {
+        if (live) setValue({ personId: person.id, name: person.name, role: person.role, language: person.language ?? 'en', ...(relation ? { relation } : null) });
+      },
+      () => {}, // keep what we had; the next focus asks again
+    );
+    return () => {
+      live = false;
+    };
+  }, [enabled, id, relation, front]);
+  return value && value.personId === id ? value : null;
+}
+
+function useConvexMe(enabled = true): Me | null {
   // The stub's value comes from the hook's own person (useSession), not the module snapshot, which
   // isn't published yet right after sign-in; useLive subscribes again when that person changes.
   const { me } = useSession();
@@ -510,6 +697,8 @@ export function useMe(enabled = true): Me | null {
  * this phone until it closes). Throws when it didn't save.
  */
 export async function setLanguage(language: string, profileId?: string): Promise<'saved' | 'stub'> {
+  // TODO(aws): no AWS route saves a language yet (ACCOUNTS.md open item 8): this phone keeps her pick.
+  if (AWS_ON) return 'stub';
   const sessionToken = await convexSession(profileId);
   if (!sessionToken) throw new Error('Sign in first.');
   let viaStub = false;
@@ -531,6 +720,15 @@ const accountDeleted = (e: unknown) => /this account was deleted/i.test(String(e
  * Throws when it didn't happen.
  */
 export async function deleteMyAccount(profileId: string): Promise<'deleted' | 'stub'> {
+  if (AWS_ON) {
+    try {
+      await accounts.deleteAccount(profileId);
+    } catch (e) {
+      // A retry after a lost answer: their session is gone (401), or sessions/start says "deleted" (403).
+      if (!isAwsError(e) || !(e.status === 401 || accountDeleted(e.message))) throw e;
+    }
+    return 'deleted';
+  }
   if (stubbed || !client) return 'stub';
   const deviceKey = await secretGet('deviceKey');
   if (!deviceKey) throw new Error('Sign in first.');
@@ -547,6 +745,7 @@ export async function deleteMyAccount(profileId: string): Promise<'deleted' | 's
 
 /** Whether Convex has the Sign in with Apple key yet (apple.revokeReady). False on the stub or any trouble. */
 export async function appleRevokeReady(profileId: string): Promise<boolean> {
+  if (AWS_ON) return accounts.appleRevokeReady(profileId).then((r) => r.ready === true, () => false);
   if (stubbed) return false;
   try {
     const sessionToken = await convexSession(profileId);
@@ -562,6 +761,12 @@ export async function appleRevokeReady(profileId: string): Promise<boolean> {
  * throws: "Delete my account" goes on either way. Called before deleteMyAccount, which ends the session.
  */
 export async function revokeAppleSignIn(profileId: string, authorizationCode: string): Promise<boolean> {
+  if (AWS_ON) {
+    return accounts.appleRevoke(authorizationCode, profileId).then(
+      (r) => r.revoked === true,
+      () => false,
+    );
+  }
   if (stubbed) return false;
   try {
     const sessionToken = await convexSession(profileId);
@@ -603,6 +808,7 @@ export async function convexPersonIdByName(name: string | null | undefined): Pro
  * people.family falls back to the name lookup above. Kids Convex doesn't know are left out.
  */
 export async function convexKidIds(kids: { id: string; name: string }[], as?: string): Promise<string[]> {
+  if (AWS_ON) return kids.map((k) => k.id); // one id per person on AWS: the family's ids are the job's
   if (!kids.length || stubbed) return [];
   const sessionToken = await convexSession(as).catch(() => null);
   if (!sessionToken) return [];
@@ -630,6 +836,11 @@ async function uploadFile(uri: string, contentType: string): Promise<string> {
 /** The cook's answer: a voice note (push to talk), or typed words. */
 export async function answerQuestion(questionId: string, answer: { audioUri: string; contentType: string } | { text: string }): Promise<void> {
   await requireAiConsent();
+  if (AWS_ON) {
+    const a = 'audioUri' in answer ? { audioKey: await sendAwsFile('voice', answer.contentType, answer.audioUri) } : { text: answer.text };
+    await awsMessages.answer(questionId, a, newKey());
+    return;
+  }
   const sessionToken = await token();
   const audioId = 'audioUri' in answer ? await uploadFile(answer.audioUri, answer.contentType) : undefined;
   const text = 'text' in answer ? answer.text : undefined;
@@ -641,6 +852,7 @@ export async function answerQuestion(questionId: string, answer: { audioUri: str
 
 /** cravings.createLink: her live link (reused), carrying her line; null while the deployment has none. */
 export async function cravingLink(message?: string): Promise<string | null> {
+  if (AWS_ON) return (await awsCravings.link(message)).url; // no fallback link: an error is an error
   const sessionToken = await token();
   const r = await call<{ url: string } | null>('mutation', 'cravings:createLink', { sessionToken, message }, () => null, { soft: true });
   return r?.url ?? null;
@@ -649,6 +861,16 @@ export async function cravingLink(message?: string): Promise<string | null> {
 /** cravings.sendVoiceRecipe (an action) after files.uploadUrl. False while the deployment has none. */
 export async function sendCravingVoice(id: string, note: { uri: string; contentType: string; durationS: number }): Promise<boolean> {
   await requireAiConsent();
+  if (AWS_ON) {
+    // Three steps (DISH.md): a link for its exact type and size, the PUT, then the send that starts the merge.
+    const file = new File(note.uri);
+    if (!file.exists) throw new Error('That voice note isn’t on this phone any more.');
+    const up = await awsCravings.voiceUpload(id, note.contentType, file.size);
+    const put = await file.createUploadTask(up.uploadUrl, { httpMethod: 'PUT', headers: up.uploadHeaders, uploadType: UploadType.BINARY_CONTENT }).uploadAsync();
+    if (put.status < 200 || put.status >= 300) throw new Error('The voice recipe didn’t upload. Try again.');
+    await awsCravings.voiceRecipe(id, { audioKey: up.audioKey, durationS: Math.min(120, Math.max(1, Math.round(note.durationS))) });
+    return true;
+  }
   const sessionToken = await token();
   const audioId = await uploadFile(note.uri, note.contentType);
   const durationS = Math.min(120, Math.max(1, Math.round(note.durationS)));
@@ -658,6 +880,10 @@ export async function sendCravingVoice(id: string, note: { uri: string; contentT
 
 /** cravings.setFilmingDay: "Mom's filming it Sunday" on the kid's card (0 = Sunday … 6, null = none). */
 export async function setCravingDay(id: string, day: number | null): Promise<void> {
+  if (AWS_ON) {
+    await awsCravings.filmingDay(id, day);
+    return;
+  }
   const sessionToken = await token();
   await call('mutation', 'cravings:setFilmingDay', { sessionToken, id, day }, () => undefined, { soft: true });
 }
@@ -667,6 +893,13 @@ export type SharedPhoto = { draft: string; fileId: string; recipeId: string; coo
 /** The kid's dish photo: stored, and Muse drafts a note to the cook. Nothing is sent yet. */
 export async function sharePhoto(libraryId: string, photoUri: string): Promise<SharedPhoto> {
   await requireAiConsent();
+  if (AWS_ON) {
+    const { recipeId, cookId } = await convexRecipe(libraryId);
+    const fileId = await sendAwsFile('photo', 'image/jpeg', photoUri);
+    // No note writer (staging), or it failed: she writes her own words (MESSAGES.md, the photo note's codes).
+    const draft = await awsMessages.photoNote(recipeId, fileId).then((d) => d.draft, () => '');
+    return { draft, fileId, recipeId, cookId };
+  }
   const sessionToken = await token();
   const { recipeId, cookId } = await convexRecipe(libraryId);
   const fileId = await uploadFile(photoUri, 'image/jpeg');
@@ -676,6 +909,11 @@ export async function sharePhoto(libraryId: string, photoUri: string): Promise<S
 
 /** Sends the photo with the kid's words. It stays "AI-drafted" even if they edited Muse's draft. */
 export async function sendPhoto(shared: SharedPhoto, text: string): Promise<void> {
+  if (AWS_ON) {
+    const { fileId, recipeId, cookId } = shared;
+    await awsMessages.sendTo({ kind: 'photo', photoKey: fileId, recipeId, ...(cookId ? { to: cookId } : null), text, aiDrafted: !!shared.draft }, newKey());
+    return;
+  }
   const sessionToken = await token();
   const { fileId, recipeId, cookId } = shared;
   const to = cookId ?? undefined;
@@ -687,6 +925,15 @@ let recipes: Promise<Map<string, RecipeRef>> | null = null;
 
 /** library id -> the Convex recipe and its cook (recipes.list), read once until invalidated. Null while stubbed. */
 async function recipeMap(): Promise<Map<string, RecipeRef> | null> {
+  if (AWS_ON) {
+    recipes ??= readAwsRecipes()
+      .then((rows) => new Map(rows.filter((r) => r.libraryId).map((r) => [r.libraryId!, { recipeId: r._id, cookId: r.cookId }])))
+      .catch(() => {
+        recipes = null;
+        return new Map();
+      });
+    return recipes;
+  }
   const sessionToken = stubbed ? null : await convexSession();
   if (!sessionToken) return null;
   recipes ??= call<{ _id: string; libraryId?: string; cookId: string }[]>('query', 'recipes:list', { sessionToken }, () => [])

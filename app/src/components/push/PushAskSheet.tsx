@@ -28,7 +28,7 @@
 import { useState, useSyncExternalStore } from 'react';
 import { StyleSheet, View } from 'react-native';
 
-import { ActionButton, Avatar, BottomSheet, EggMark, PressableScale, Txt, type ActionState, type AvatarProps } from '@/components/ui';
+import { ActionButton, Avatar, BottomSheet, EggMark, PressableScale, Txt, useSheetsUp, type ActionState, type AvatarProps } from '@/components/ui';
 import { pushAskWho, requestAndRegister, shouldAskPush, snoozePushAsk, type PushAskKind, type RegisterPush } from '@/lib/push';
 import { useWords } from '@/lib/words/useWords';
 import { english, type T } from '@/lib/words/words';
@@ -164,9 +164,12 @@ export function askForPushSoon(ask: PushAsk, delayMs = SOON_MS): void {
 
 export function PushAskHost({ register }: { register: RegisterPush }) {
   const ask = useSyncExternalStore(subscribe, () => pending, () => pending);
+  // An ask made while another sheet is up (the craving sheet, the share sheet's family row) waits
+  // for it to go: iOS won't present this Modal over that one, and the ask would be lost.
+  const sheetsUp = useSheetsUp();
   // The ask on screen; kept after it closes so its words stay while the sheet slides away.
   const [shown, setShown] = useState<Ask | null>(null);
-  if (ask && ask !== shown) setShown(ask);
+  if (ask && ask !== shown && sheetsUp === 0) setShown(ask);
   if (!shown) return null;
 
   const close = () => {

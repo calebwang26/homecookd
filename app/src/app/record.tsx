@@ -109,7 +109,7 @@ export default function RecordScreen() {
     // Filming a kid's ask: once it's sent, the ask is filmed and its reminder stops (sendKept: askFilmed).
     noteFilmingAsk(fromAsk ? askId : null);
     const first = kids[0]?.id ?? null;
-    setDraftMeta({ dish: typed || null, requestFrom: first, forKids: who, everyone, language, recordingId: null });
+    setDraftMeta({ dish: typed || null, requestFrom: first, forKids: who, everyone, language, recordingId: null, dishAskId: fromAsk ? askId : null });
     const picked: PickContext = { dish: typed || null, requestFrom: first };
     if (source === 'library' || (source === 'camera' && phoneOnly)) {
       setSheet(false);

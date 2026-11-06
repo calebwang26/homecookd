@@ -107,7 +107,7 @@ export const PATHS = [
   ok('/brand/mark.svg', 'brand/mark.svg', 'image/svg+xml'),
   ok('/patterns/swirl-sun.svg', 'patterns/swirl-sun.svg', 'image/svg+xml'),
   ok('/fonts/fraunces-roman-latin.0ba5251864.woff2', 'fonts/fraunces-roman-latin.0ba5251864.woff2', 'font/woff2', CACHE.immutable),
-  ok('/media/app/app-cook.mp4', 'media/app/app-cook.mp4', 'video/mp4', CACHE.media),
+  ok('/media/app/web-miss.mp4', 'media/app/web-miss.mp4', 'video/mp4', CACHE.media),
   ok('/media/stock/credits.json', 'media/stock/credits.json', 'application/json; charset=utf-8', CACHE.media),
 
   // Anything else.

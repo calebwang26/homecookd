@@ -59,13 +59,13 @@ export function StepCard({ index, layout = 'card', decorative = true, sizes, pla
             <Img src={PHOTOS.handsKneading.src} alt={decorative ? '' : step.imageAlt} fill sizes={imgSizes} focus="58% 55%" className={styles.photo} />
           ) : (
             <span className={styles.screen}>
-              {/* app-record-add.jpg is the frame at 11.5s: "Sunday dumplings" typed, Grandma picked */}
+              {/* web-version's last frame: Mom's tomato egg, her words on the card */}
               <Img
-                src={plain ? APP_STILLS.shareEnd.src : APP_STILLS.recordAdd.src}
+                src={APP_STILLS.herVersion.src}
                 alt={decorative ? '' : step.imageAlt}
                 fill
                 sizes={layout === 'row' ? '30vw' : '(min-width: 1024px) 14vw, 30vw'}
-                focus={plain ? '50% 14%' : '50% 21%'}
+                focus="50% 18%"
                 className={styles.photo}
               />
             </span>

@@ -1,7 +1,7 @@
 'use client';
 // A real homecookd screen recording (brief 5 "AppClip"). Put it inside <PhoneFrame>.
 //
-//   <AppClip name="app-library" playWhenVisible label={APP_CLIPS['app-library'].label} />      // uncontrolled
+//   <AppClip name="web-version" playWhenVisible label={APP_CLIPS['web-version'].label} />      // uncontrolled
 //   <AppClip name={row.clip} active={i === active} preload={i === active || i === active + 1 ? 'auto' : 'none'}
 //            loop={false} onEnded={next} label={APP_CLIPS[row.clip].label} />                   // controlled
 //
@@ -33,7 +33,7 @@ export interface AppClipProps {
   label: string;
   /** 'auto' only for the active and next clip */
   preload?: 'none' | 'metadata' | 'auto';
-  /** override the poster (e.g. APP_STILLS.recordAdd.src) */
+  /** override the poster (e.g. APP_STILLS.herVersion.src) */
   poster?: string;
   className?: string;
   style?: CSSProperties;

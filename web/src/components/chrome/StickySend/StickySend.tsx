@@ -1,17 +1,15 @@
 'use client';
-// The kid page's sticky "Send this to {R}" (QA B18), phones only (CSS hides it from 768px up).
-// The one thing /learn asks for is getting a parent to film, so the button follows the scroll:
+// The kid page's sticky "Ask {R} for a dish" (QA B18), phones only (CSS hides it from 768px up).
+// The one thing /learn asks for is naming the dish on /miss (MISS_HREF), so the button follows the scroll:
 // it rises in once the hero's own send button is gone, steps aside while the pass-down's own buttons are
 // live (they sit at the same spot), and leaves for good at the final section, which has its own.
-// Mounted by the Lander on /learn only. Sending works like the hero's (useSend: share sheet, else
-// "Copied." with the link shown).
+// Mounted by the Lander on /learn only.
 import { useEffect, useState } from 'react';
 import { useCopy } from '@/components/providers/CopyProvider';
 import { useRelation } from '@/components/providers/RelationProvider';
 import { Button } from '@/components/primitives/Button';
-import { ShareGlyph } from '@/components/icons/Icons';
 import { fill } from '@/lib/relation';
-import { useSend } from './SendPanel';
+import { MISS_HREF, logTap } from '@/lib/audience-route';
 import s from './StickySend.module.css';
 
 /** visible somewhere in the viewport, and not switched off by the film (data-off) */
@@ -24,7 +22,6 @@ function showing(el: Element | null): boolean {
 export function StickySend() {
   const copy = useCopy();
   const { relation } = useRelation();
-  const { send, panel } = useSend('sticky');
   const [on, setOn] = useState(false);
 
   useEffect(() => {
@@ -57,11 +54,10 @@ export function StickySend() {
   return (
     <>
       <div className={s.sticky} data-on={on ? '' : undefined}>
-        <Button variant="hero" size="md" block onClick={send} icon={<ShareGlyph name="message" size={20} />}>
+        <Button href={MISS_HREF} variant="hero" size="md" block arrow onClick={() => logTap('kid', 'sticky')}>
           {fill(copy.finalCta.shareButton, relation)}
         </Button>
       </div>
-      {panel}
     </>
   );
 }
