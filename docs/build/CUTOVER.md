@@ -193,6 +193,20 @@ Not part of the launch. Each needs Caleb's OK, and nothing here has a quick way 
 | Vercel | The site has moved and been calm for weeks | Remove the project. PR previews end, so decide that first |
 | `/privacy` | Each store above, once it holds nobody's data | Drop it from "Where it's kept", under the App Review guard |
 
+**Convex's final export** (Convex & accounts runs it when the Master Agent says, Caleb's OK, before the deployment is shut down). It reads live family data and copies it to this Mac, outside the repo and outside iCloud. Run it from that folder, so the CLI reads no project `.env` and the team token picks the deployment:
+
+```bash
+cd /Users/calebwang/GitHub/homecookd/homecookd-backups && \
+CONVEX_OVERRIDE_ACCESS_TOKEN=$(grep '^CONVEX_OVERRIDE_ACCESS_TOKEN=' /Users/calebwang/GitHub/homecookd/homecookd/.env | cut -d= -f2-) \
+npx convex@1.48.0 export --deployment grand-dragon-649 --include-file-storage \
+  --path "grand-dragon-649-final-$(date -u +%Y-%m-%d).zip"
+```
+
+- **Where it goes:** `/Users/calebwang/GitHub/homecookd/homecookd-backups/grand-dragon-649-final-<date>.zip`, beside the Oct 25 export. Never into the repo, a session's scratch folder or `~/Documents`.
+- **Check it:** `unzip -l` lists every table (28 on Nov 5, from `npx convex data --deployment grand-dragon-649` with the same token) and a `_storage/` folder; write `shasum -a 256` of the zip into a `README.txt` beside it with the date and the table count.
+- **How long it's kept:** no longer than `/privacy` allows, then deleted, as the Oct 25 export is (by about Dec 24, 2026).
+- **Checked Nov 5:** the team token with `--deployment grand-dragon-649` reads the deployment (`npx convex data`, read-only). The export itself hasn't been run.
+
 **A demo family member who asks to be deleted after the switch:** their account on AWS goes through 1.1's own delete, whose purge reaches every S3 bucket. AWS never reaches GCS, so their GCS files are deleted by hand, within `/privacy`'s 30 days. Their rows still on Convex and Supabase are open question 4.
 
 Every phone still on the old services runs a TestFlight or development build, or is Apple's reviewer. A TestFlight build stops opening 90 days after it's uploaded, and Caleb can ask the testers to move to 1.1. That's how "nobody opens an old build" is known. The count below is optional.
