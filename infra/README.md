@@ -337,7 +337,7 @@ email, and `dish-api-e2e.mjs`. Once step 5 is live, the measured real video job 
 - ~~Community reports reach nobody on AWS.~~ Built in #323: a report or block logs a line, and a log alarm emails the alerts topic.
   Proven on staging Nov 2. Production gets it with this apply; confirm its alerts email (CUTOVER.md, step 6).
 - `infra/scripts/load-test.mjs` refuses production's address, so step 6's load test needs a production mode first (CUTOVER.md, step 6).
-- The sample library on production's media bucket (contracts/JOBS.md, open item 15, built in #NNN). Without it the api knows no library
+- The sample library on production's media bucket (contracts/JOBS.md, open item 15, built in #366). Without it the api knows no library
   dish, and 1.1 shows its bundled copy's GCS links. After step 6, with Caleb's OK for the write and his pick of samples (CUTOVER.md, step 6):
   ```bash
   cd tools/media-copy && pip install -r requirements.txt

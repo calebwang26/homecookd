@@ -125,7 +125,7 @@ keep working if `media.homecookd.app` is pointed back at GCS.
 
 ## The sample library
 
-Added Nov 5 (#NNN). Production starts fresh (CUTOVER.md, open question 2), so nothing above runs there and its media bucket has no
+Added Nov 5 (#366). Production starts fresh (CUTOVER.md, open question 2), so nothing above runs there and its media bucket has no
 `library.json`. Three things read the public library from the media host:
 
 | Reader | What it reads | Without it |

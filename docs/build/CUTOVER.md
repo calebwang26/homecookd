@@ -115,7 +115,7 @@ Likely to pass $300 a month (about $450-850 at 500 daily users), so it's Caleb's
   - `node web/scripts/qa/dish-api-e2e.mjs` against production, with its made-up dish. Production ignores `DISH_FAKE_AI`, so this uses real models at a small cost.
   - Once step 5 is live: a real video job on Caleb's own footage, measured for CPU, memory, disk and minutes. It sets the worker's size, and Fargate or EC2 (WORKER-MIGRATION.md, "How to measure a real job").
 - **Also before step 9 (AWS backend):**
-  - **The sample library on production's media bucket** (contracts/JOBS.md, open item 15, built in #NNN). Starting fresh copies nothing, so the bucket has no `library.json`: the api then knows no library dish (a heart, send or share naming a sample is 404, and the recap is 503), and 1.1 falls back to its bundled copy, whose links are GCS's. Once `media.homecookd.app` answers (step 2's PR applied, and its CNAME):
+  - **The sample library on production's media bucket** (contracts/JOBS.md, open item 15, built in #366). Starting fresh copies nothing, so the bucket has no `library.json`: the api then knows no library dish (a heart, send or share naming a sample is 404, and the recap is 503), and 1.1 falls back to its bundled copy, whose links are GCS's. Once `media.homecookd.app` answers (step 2's PR applied, and its CNAME):
   ```bash
   cd tools/media-copy && pip install -r requirements.txt
   ACCOUNT=$(aws sts get-caller-identity --profile homecookd --query Account --output text)
