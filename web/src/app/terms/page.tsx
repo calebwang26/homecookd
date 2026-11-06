@@ -17,7 +17,7 @@ export const metadata: Metadata = {
   alternates: { canonical: '/terms' },
 };
 
-const UPDATED = 'October 25, 2026';
+const UPDATED = 'November 5, 2026';
 
 const mail = (
   <a className={s.link} href={`mailto:${CONTACT_EMAIL}`}>
@@ -63,8 +63,7 @@ export default function TermsPage() {
           already sent to your family.
         </p>
         <p>
-          Only add what you have the right to share. Ask before you film or record someone, and only clone your own
-          voice.
+          Only add what you have the right to share. Ask before you film or record someone.
         </p>
       </section>
 

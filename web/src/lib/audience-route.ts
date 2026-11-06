@@ -147,3 +147,6 @@ export function logTap(aud: Audience, ui: TapUi): void {
   if (typeof window === 'undefined' || !canLog()) return;
   send({ event: 'tap', ui, signal: arrivalSignal(), ...common(aud) });
 }
+
+/** The kid's web flow (PRD-V2): name the dish, get tonight's version, then Ask Mom from there. */
+export const MISS_HREF = '/miss';

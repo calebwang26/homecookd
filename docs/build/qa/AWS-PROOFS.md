@@ -144,9 +144,12 @@ What the phone proves, which the web build can't:
 - **Voice notes from the mic.**
 - **A report reaching the team's alerts email.** One report, made on purpose and named as a test.
 
-The step-by-step for the person holding the phone: [aws-phone/CHECKLIST.md](aws-phone/CHECKLIST.md). Sign in with Apple
+The step-by-step for the person holding the phone: [aws-phone/CHECKLIST.md](aws-phone/CHECKLIST.md). Build 11's run, Nov 3: [aws-phone/README.md](aws-phone/README.md). Sign in with Apple
 works against staging, so the phone joins a test cook's family by link. Delete every test person when you're done, the
 phone's staging account too.
+
+The api's own load and scale-in proofs (120 requests a second, then 1,500 at once) are in `docs/build/AWS-MIGRATION.md` on
+`aws-migration`, "The run after the slow scale-in".
 
 ## Per area
 
@@ -157,4 +160,5 @@ phone's staging account too.
 | Messages and questions | `aws-messages/` | #307, #308, #312 |
 | Kids' asks | `aws-dish/` | #320, #324 |
 | Community | `aws-community/` | #326 |
-| Takedown and share off | `aws-takedown/` | this PR |
+| Takedown and share off | `aws-takedown/` | #333 |
+| A phone on staging (build 11) | `aws-phone/` | #341, #342, this PR |
