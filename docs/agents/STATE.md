@@ -6,8 +6,9 @@ older note in `memory/` disagrees, this file wins.
 
 ## Repo
 
-- GitHub: `calebwang26/hackathon-homecookd`. Local: `~/Documents/GitHub/hackathon-homecookd`. The older repo
-  `calebwang26/homecookd` (formerly EDIBLE-venturehacks) is now `Homecooked-Old`.
+- GitHub: `calebwang26/homecookd` (renamed from `hackathon-homecookd` on Nov 2; the old URL redirects). Local:
+  `/Users/calebwang/GitHub/homecookd/homecookd`, outside iCloud. The even older repo (formerly EDIBLE-venturehacks)
+  is `Homecooked-Old`.
 - As of Oct 21, all 16 worktrees under `.worktrees/` are clean and fully merged
   into main, so they can be removed with `git worktree remove .worktrees/<name>` once Caleb agrees.
 - Untracked files in the main checkout: `demo/*.png` (Expo Go QR codes and screenshots). These are Caleb's. Leave them alone.
@@ -1198,3 +1199,4 @@ Before starting work, compare the last commit here with `git log origin/main` to
 - Nov 3 · #343 · Claude (App Store, web & builds) · **The missing APNs key is written up for launch** (docs/build/LAUNCH-LINKS.md 6c): Expo has no push key for `com.salik.homecookd` (team `73UV499FKN`), so no iOS push is delivered. Builds 6 and 11 already carry `aps-environment = production`, so 1.0 needs no new build. Two ways to add the key, both needing Salik's Apple ID and free, plus the check after. Push switches on for 1.0 the moment the key lands. Open: Salik or Caleb adds the key.
 - Nov 5 · #(this PR) · Claude (Master Agent) · **Fresh section chats**: the desktop app reads a chat's whole transcript on its main thread, and the permanent chats' transcripts had grown to 58–98 MB, freezing every chat. `docs/agents/HANDOFFS-2026-11-05.md` holds one handoff per section chat and the rule: refresh a chat past ~40 MB with a handoff written there; archive, never delete. `section-chats.md` updated. No code.
 - Nov 5 · #350 · Claude (AWS backend) · **Production launches lean** (Caleb in the AWS backend chat, Nov 5: "Lean"). `envs/production`: one NAT gateway and a `db.t4g.small` in one zone, about $95 a month before any task runs (was two NATs and a Multi-AZ `db.t4g.medium`, about $210). The full setup is three lines, by PR, with no data loss (the comment beside them). A zone outage stops outbound calls and the database until it's back. infra/README.md's step 3 says so. Applied by hand by AWS backend on Caleb's word, from this branch.
+- Nov 5 · #(this PR) · Claude (General Questions) · **No homecookd left in iCloud; chats moved to the terminal** (Caleb: "get rid of our dependence on the shortcut and then delete it"). The 8 permanent chats now run in Terminal tabs and were reopened from the real folders (`claude -r <id>` from each chat's real path keeps its history), so the `~/Documents/GitHub/hackathon-homecookd` symlink was deleted; the 62 GB `.icloud-old` copy and `~/Developer/GitHub-old` were already gone. AGENTS.md: the symlink rule replaced, PRs go to the session titled Master Agent, and the launcher `~/homecookd-chats.command` (untracked, Caleb's Mac). Repo section above fixed. No code.
