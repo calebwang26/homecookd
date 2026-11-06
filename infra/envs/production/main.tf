@@ -58,7 +58,7 @@ locals {
   # The switch (#295): 0 until Caleb starts production in CUTOVER.md's step 6, then 2, the api's autoscale.min. One line, by PR, then his apply. A local, not a
   # variable, so no later apply can turn production off by leaving out a -var. It starts the schedules too: only the api reads the scheduled queue
   # (api/src/scheduled.ts), so with no api they'd sit for SQS's 4 days, set off the queue-age alarm, and all run at once when it starts.
-  api_count = 0
+  api_count = 2
 
   # Staging's rates, but jobs.sweep runs every 5 minutes, as JOBS-MIGRATION.md says. It's how a job finds its upload when the phone never said it finished
   # (the old worker re-queued every 30 s), so hourly could leave a cook's video waiting up to an hour. Staging's stays hourly.

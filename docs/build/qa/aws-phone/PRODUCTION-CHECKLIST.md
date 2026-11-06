@@ -20,10 +20,12 @@ Write down the time of each step, to the minute. The chat matches it against pro
 
 1. **Install the build.** TestFlight → homecookd → the new build number the chat names. Install it over whatever is there.
 2. **Sign in.** Open homecookd, start a family as a cook, give your name, Sign in with Apple. 📸 Home.
-3. **A family link.** On the profiles screen ("Who's in the kitchen?"), tap **Invite family** and send the link to yourself. Open it on the second phone (or in Safari on a Mac for
+3. **A family link.** Tap your name at the top of Home ("Who's in the kitchen?"), then the **+** under the cooks or
+   the ones who miss it, and send the invite link to yourself. Open it on the second phone (or in Safari on a Mac for
    the web's `/i` page) and join with a name. 📸 both sides showing the new person.
-4. **Add someone with no phone.** Profiles → **Invite family** → **No phone? Add them to this phone** (a grandparent, say). 📸 the profile.
-5. **Sign out and back in.** Profiles → **Sign out**, then Sign in with Apple again. Same family, same people. 📸 Home.
+4. **Add someone with no phone.** Your name → **+** → **No phone? Add them to this phone** (a grandparent, say). 📸 the profile.
+5. **Sign out and back in.** Your name → **Account & privacy** → **Sign out of this phone** → **Sign out**, then Sign in
+   with Apple again. Same family, same people. 📸 Home.
 6. **A recording, all the way to a recipe.** Record a real dish for a minute or two, with talking. Send it. This uses the
    real models, so it takes a few minutes. 📸 the "processing" card, then 📸 the finished recipe with its steps, and play
    one step's video.
@@ -34,7 +36,8 @@ Write down the time of each step, to the minute. The chat matches it against pro
 9. **The reviewer's path.** On the TEST family, follow the 1.1 reviewer notes in "homecookd App Store submission for
    Salik" exactly as written: the TEST family link, the reviewer's name, Sign in with Apple, then each thing the notes say
    to try. 📸 each screen the notes name. Anything that doesn't match the notes word for word is a failure.
-10. **Delete account.** Profiles → your face → **Delete your account**, and the same for the step 3 person on their phone. 📸 the screen after. The
+10. **Delete account.** Your name → **Account & privacy** → the red **Delete my account** (the path in the reviewer
+    notes), and the same for the step 3 person on their phone. 📸 the screen after. The
     TEST family's reviewer is deleted the same way afterwards, unless the notes say to leave them.
 
 ## The chat checks, at the same time
