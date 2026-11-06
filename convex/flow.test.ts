@@ -29,6 +29,10 @@ vi.mock("@moss-js/moss", () => ({
       moss.calls.push({ op: "deleteDocs", name, arg: ids });
       for (const id of ids) moss.indexes.get(name)!.delete(id);
     }
+    async deleteIndex(name: string) {
+      moss.calls.push({ op: "deleteIndex", name, arg: null });
+      if (!moss.indexes.delete(name)) throw Object.assign(new Error("not found"), { status: 404 });
+    }
   },
 }));
 
@@ -49,6 +53,7 @@ afterEach(() => {
   delete process.env.ANTHROPIC_API_KEY;
   delete process.env.TEXT_PROVIDER;
   delete process.env.WRITER_PROVIDER;
+  delete process.env.MOSS_SYNC;
 });
 
 const post = (t: Backend, path: string, body: unknown, secret: Record<string, string>) =>
@@ -402,4 +407,38 @@ test("Moss: a sync that never reported back stops blocking after 10 minutes", as
   expect(await t.mutation(internal.worker.reindexMissing, {})).toBe(1);
   await t.finishAllScheduledFunctions(vi.runAllTimers);
   expect(moss.calls.map((c) => c.op)).toEqual(["createIndex"]);
+});
+
+test("Moss: MOSS_SYNC=off sends nothing, deletes the family's index, and jobs still finish", async () => {
+  stubFetch();
+  const t = newBackend();
+  const dad = await signIn(t, "p-dad");
+  const chiliId = await addRecipe(t, dad.familyId, dad.personId);
+  await t.mutation(internal.worker.reindexMissing, {});
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(moss.indexes.has(`family-${dad.familyId}`)).toBe(true);
+
+  process.env.MOSS_SYNC = "off";
+  moss.calls = [];
+  const porkId = await addRecipe(t, dad.familyId, dad.personId);
+  const jobId = await t.run((ctx) =>
+    ctx.db.insert("jobs", { familyId: dad.familyId, cookId: dad.personId, recipeId: porkId, uploadPath: "pork/", source: "phone", stage: "indexing", progress: 0.95 }),
+  );
+  expect(await t.mutation(internal.worker.syncAllFamilies, {})).toBe(1);
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(moss.calls.map((c) => c.op)).toEqual(["deleteIndex"]);
+  expect(moss.indexes.size).toBe(0);
+  expect((await t.run((ctx) => ctx.db.get("jobs", jobId)))?.stage).toBe("done");
+  // Nothing counts as indexed, so turning it back on and running reindexMissing sends every recipe.
+  for (const id of [chiliId, porkId]) expect((await t.run((ctx) => ctx.db.get("recipes", id)))?.mossIndexedAt).toBeUndefined();
+
+  // Off and already gone: a second pass is fine.
+  await t.mutation(internal.worker.syncAllFamilies, {});
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(moss.calls.filter((c) => c.op !== "deleteIndex")).toEqual([]);
+
+  delete process.env.MOSS_SYNC;
+  expect(await t.mutation(internal.worker.reindexMissing, {})).toBe(1);
+  await t.finishAllScheduledFunctions(vi.runAllTimers);
+  expect(moss.indexes.get(`family-${dad.familyId}`)?.size).toBe(6);
 });
