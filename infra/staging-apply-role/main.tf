@@ -41,9 +41,9 @@ variable "github_repo" {
 }
 
 variable "branch" {
-  description = "The only branch that can log in. Becomes main when aws-migration is merged and retired"
+  description = "The only branch that can log in. main since Nov 6, when aws-migration merged and retired"
   type        = string
-  default     = "aws-migration"
+  default     = "main"
 }
 
 data "aws_caller_identity" "current" {}

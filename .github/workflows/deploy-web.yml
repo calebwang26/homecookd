@@ -6,7 +6,7 @@ name: Deploy website to staging
 on:
   workflow_dispatch:
   push:
-    branches: [aws-migration]
+    branches: [main]
     paths:
       - "web/**"
       - "infra/scripts/web-*"

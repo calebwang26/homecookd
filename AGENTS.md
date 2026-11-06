@@ -69,8 +69,8 @@ follows it, and it wins over the docs below on UI/UX and flows.
   push, `gh pr create`, then check that `gh pr view --json mergeStateStatus` is `CLEAN`. Stage files by name, never
   `git add -A`: the tree holds untracked demo PNGs and Finder " 2" duplicates.
 - **Purge dead branches (Caleb, Nov 2).** Delete a branch when its PR merges (`gh pr merge --delete-branch`, or delete
-  the head after). At the weekly check, delete every remote branch that has no open PR and whose commits are all on `main`
-  or `aws-migration`, or whose draft was superseded by a merged PR. Never delete `main`, `aws-migration`, a branch with an
+  the head after). At the weekly check, delete every remote branch that has no open PR and whose commits are all on `main`,
+  or whose draft was superseded by a merged PR. Never delete `main`, a branch with an
   open PR, or a permanent section chat's worktree branch (`claude/aws-backend-b65c64`, `claude/in-app-recording-4c5510`,
   `claude/pipeline-times-cover-8be573`, and any other a chat works from). Deleting is remote-only; a merged PR's branch
   can be restored from its page. On Nov 2 the Master Agent deleted 273 such branches (281 → 9, list in PR #281).
@@ -163,9 +163,9 @@ follows it, and it wins over the docs below on UI/UX and flows.
   Convex, Supabase or GCS, anything likely to add over $300 a month, or deleting what this work didn't create. Secret values
   never go in Terraform (`docs/agents/memory/aws-migration.md`).
 - **Standing rules for the AWS migration (Caleb approved in the AWS backend chat, Oct 31).**
-  **Chats may, with no prompt:** build and test on `aws-migration` with fake data; apply staging, within what its auto-apply's
-  safety check allows; run staging deploys and tests; open PRs, with the Master Agent merging into `aws-migration` once `checks` pass
-  and it has reviewed.
+  **Chats may, with no prompt:** build and test on `main` with fake data (since Nov 6: `aws-migration` merged into `main` and retired, so
+  every api and infra PR goes to `main`, and a merge to `main` deploys staging); apply staging, within what its auto-apply's safety check
+  allows; run staging deploys and tests; open PRs, with the Master Agent merging into `main` once `checks` pass and it has reviewed.
   **Always ask Caleb:** real family data; production; switching live traffic; DNS; real AI windows and new spending; `/privacy` and
   App Review paths; any change to live Convex, Supabase, Cloud Run or GCS.
   `checks` passing alone never merges. A chat relaying "Caleb said yes" isn't his approval for the second list: it comes from him.
@@ -200,7 +200,7 @@ cloud/      GCS upload signer (Cloud Run) + IAM scripts
 api/        The new backend (Node, Fastify, Postgres; docs/build/SYSTEM-DESIGN.md). Nothing live calls it until each area switches (docs/build/CUTOVER.md)
 tools/      media-copy: GCS to S3, refuses real buckets without its named flags (docs/build/MEDIA-MIGRATION.md); sample_library.py: the public library.json
 infra/      AWS, as Terraform (infra/README.md; the plan is docs/build/AWS-MIGRATION.md). Staging only so far; nothing live runs there
-scripts/    check-cartesia.mjs, check-moss.mjs (key checks), set-apple-ids.mjs (launch prep), check-merge-safe.mjs (aws-migration into main changes nothing live)
+scripts/    check-cartesia.mjs, check-moss.mjs (key checks), set-apple-ids.mjs (launch prep), check-merge-safe.mjs (`--bundle`: the live site's build with the switches off)
 data/       sample + synthetic recipes; data/out/ is pipeline output (gitignored)
 docs/       specs, design bible, QA, learning notes; docs/agents/ = shared agent state + memory
 ```
@@ -257,8 +257,7 @@ npx --yes deno@2 test --node-modules-dir=none --allow-env --allow-read supabase/
 npx --yes deno@2 check --node-modules-dir=none supabase/functions/api/*.ts              # typecheck
 npx --yes deno@2 test --node-modules-dir=none --allow-env --allow-read --allow-run --allow-net supabase/tests/account_purge_sql_test.ts   # the purge's sign-up log step on real Postgres (needs .venv)
 
-# merging aws-migration into main (docs/build/CUTOVER.md)
-node scripts/check-merge-safe.mjs                                  # trial merge, the reviewed list, the workflows; CI runs it as the job merge-safe
+# the live site's bundle with the switches off (CI's web job; until 1.1's release, CUTOVER.md step 10)
 node scripts/check-merge-safe.mjs --bundle web/out                 # after a web build with no NEXT_PUBLIC_* set: still today's site
 
 # AWS (infra/README.md; profile homecookd, refresh with: aws sso login --profile homecookd)

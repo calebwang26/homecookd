@@ -132,7 +132,7 @@ variable "github_repository" {
 }
 
 variable "deploy_branch" {
-  description = "The one branch whose workflows can log in to deploy. When aws-migration merges to main and goes away, staging's value changes with it"
+  description = "The one branch whose workflows can log in to deploy: main for both environments since aws-migration merged and retired (Nov 6)"
   type        = string
   default     = "main"
 }
