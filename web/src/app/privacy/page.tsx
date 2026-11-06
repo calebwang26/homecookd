@@ -6,9 +6,10 @@
 //   videos, clips, recipe photos, recipe.json  Google Cloud buckets at open, unlisted links (pipeline/)
 //   recipes, family, messages, voice notes,    Convex (convex/schema.ts) and Supabase (sign-in, invites,
 //     photos sent home                         older screens; voice notes + photos in private buckets)
-//   AI                                         Claude (watches video stills, writes, translates),
-//                                              Cartesia (transcripts, Ink), Moss (finds the moment, while
-//                                              Convex still syncs to it), Gemini (glasses only). homie's voice
+//   AI                                         Claude (videos and photos, writes, translates the family's
+//                                              questions), Cartesia (transcripts); the AWS build sends nothing to
+//                                              Moss or Gemini, listed as old services until they're off. Matches
+//                                              the consent sheet's words (#357). homie's voice
 //                                              is off (app/src/lib/homie/switch.ts): no live mic stream, no
 //                                              hands-free cooking, no cloned voice. Turning homie on means
 //                                              changing this page first (docs/agents/memory/homie-off.md)
@@ -119,20 +120,19 @@ export default function PrivacyPage() {
         <p>homecookd asks your permission in the app before sending these services anything.</p>
         <ul className={s.list}>
           <li>
-            <strong>Anthropic Claude</strong> watches cooking videos and reads what the cook said, then writes the recipe,
-            its stories and dish ideas. It also translates, and drafts notes you can edit before you send them.
+            <strong>Anthropic Claude</strong> watches your videos and photos, writes the recipe and its stories, and
+            translates your family’s questions into your language. It also drafts notes you can edit before you send
+            them.
           </li>
           <li>
-            <strong>Cartesia</strong> turns speech into text: voice notes, voice answers and what the cook says in a
-            video.
-          </li>
-          <li>
-            <strong>Moss</strong> searches what the cook said, to find the moment in the video that answers a question.
-          </li>
-          <li>
-            <strong>Google Gemini</strong> watches videos filmed with homecookd glasses.
+            <strong>Cartesia</strong> writes down what you say in your videos and voice notes.
           </li>
         </ul>
+        <p>
+          Before our move to AWS, <strong>Moss</strong> searched what a cook said to find a moment in the video, and{' '}
+          <strong>Google Gemini</strong> watched videos filmed with homecookd glasses. The app sends them nothing now.
+          They still hold some of that data until we turn them off.
+        </p>
         <p>They get only what each task needs, and we use them only to run homecookd.</p>
       </section>
 
