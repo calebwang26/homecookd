@@ -13,7 +13,8 @@
 // when your spot opens. No card, no spam."), and "Or just cook, and send the videos to your kids to
 // add." sits under the sign-up for a cook who'd rather not download anything (copy "" = not shown).
 //
-// Share: navigator.share({ title, text, url: origin/?for=<r> }); when there's no share sheet, it fails
+// The kid version's button opens /miss (MISS_HREF), where the real "Ask Mom" lives. The parent version shares:
+// navigator.share({ title, text, url: origin/learn?for=<r> }); when there's no share sheet, it fails
 // or it doesn't answer in 3 s, the message is copied and the link shows as selectable text with
 // sms: / mailto: links (QA B18: every send ends in something visible).
 import { animate } from 'motion';
@@ -21,6 +22,7 @@ import { useEffect, useId, useRef, useState, type FormEvent } from 'react';
 import { useAudience, useCopy } from '@/components/providers/CopyProvider';
 import { fill } from '@/lib/relation';
 import { inviteUrl, mailtoHref, shareInvite, smsHref, type ShareResult } from '@/lib/share';
+import { MISS_HREF } from '@/lib/audience-route';
 import { EASE } from '@/lib/motion/tokens';
 import { MQ_FINE_POINTER } from '@/lib/motion/media';
 import { ANCHOR_EVENT } from '@/components/providers/LenisProvider';
@@ -202,9 +204,15 @@ export function EarlyAccessForm() {
       </div>
 
       <div ref={shareRef} className={s.shareRow}>
-        <Button variant="outlineCream" size="md" onClick={onShare} icon={<ShareGlyph name="message" size={20} />}>
-          {fill(T.shareButton, relation)}
-        </Button>
+        {audience === 'kid' ? (
+          <Button href={MISS_HREF} variant="outlineCream" size="md" arrow>
+            {fill(T.shareButton, relation)}
+          </Button>
+        ) : (
+          <Button variant="outlineCream" size="md" onClick={onShare} icon={<ShareGlyph name="message" size={20} />}>
+            {fill(T.shareButton, relation)}
+          </Button>
+        )}
         {T.note ? (
           <HandNote arrow="left" tone="chartreuse" rotate={-5} className={s.note}>
             {T.note}
