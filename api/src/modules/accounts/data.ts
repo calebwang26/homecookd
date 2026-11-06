@@ -466,6 +466,26 @@ export async function revokeJoinLinksOf(q: Queryable, familyId: string): Promise
   await q.query(`update join_links set revoked_at = now() where family_id = $1 and revoked_at is null and expires_at is not null`, [familyId]);
 }
 
+/** Every operator's link still on, any family's: no expiry, not revoked. Only the TEST family should have one (reviewerLink.ts). */
+export async function liveOperatorLinks(q: Queryable): Promise<JoinLinkRow[]> {
+  const { rows } = await q.query(`select ${JOIN_LINK} from join_links where expires_at is null and revoked_at is null order by created_at`);
+  return rows;
+}
+
+export async function insertOperatorLink(q: Queryable, l: { id: string; familyId: string; tokenHash: string; tokenEnc: string }): Promise<boolean> {
+  const { rowCount } = await q.query(
+    `insert into join_links (id, family_id, inviter_id, token_hash, token_enc, expires_at) values ($1, $2, null, $3, $4, null) on conflict (token_hash) do nothing`,
+    [l.id, l.familyId, l.tokenHash, l.tokenEnc],
+  );
+  return rowCount === 1;
+}
+
+/** Turns off a family's operator links, and only those: the family's own 7-day links stay. How many went off. */
+export async function revokeOperatorLinksOf(q: Queryable, familyId: string): Promise<number> {
+  const { rowCount } = await q.query(`update join_links set revoked_at = now() where family_id = $1 and revoked_at is null and expires_at is null`, [familyId]);
+  return rowCount ?? 0;
+}
+
 // ---------------------------------------------------------------------------------------------
 // Move requests
 
