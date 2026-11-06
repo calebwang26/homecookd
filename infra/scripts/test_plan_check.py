@@ -214,6 +214,8 @@ ALLOWED = {
     "the api told its health port, and mapping it": lambda p: edit_container(p, API_TD, lambda c: (
         c["portMappings"].append({"containerPort": 8081, "hostPort": 8081, "protocol": "tcp"}), set_env(c, "HEALTH_PORT", "8081"))),
     "the shedding alarm, once its step policy exists": shedding_alarm,
+    "a bigger disk on the worker, at no tasks": lambda p: bigger_disk(p, WORKER_TD, 100),
+    "a 200 GiB disk under the running api, about $15": lambda p: bigger_disk(p, API_TD, 200),
 }
 
 
@@ -262,6 +264,11 @@ def api_bigger_autoscaled(p):
     """At its count of 1 this adds about $9, under the limit. The target lets it run 10, about $90."""
     autoscaled_api(p, most=10)
     edit_container(p, API_TD, lambda c: None)["change"]["after"].update(cpu="512", memory="1024")
+
+
+def bigger_disk(p, address, gib):
+    """A new revision with Fargate disk past the free 20 GiB (modules/env's disk_gib), as the provider shows the block."""
+    edit_container(p, address, lambda c: None)["change"]["after"]["ephemeral_storage"] = [{"size_in_gib": gib}]
 
 
 def service_without_definition(p):
@@ -505,6 +512,8 @@ REFUSED = {
     "a bigger task under a running service": (api_size_up, "cost_is_small"),
     "a bigger task under an autoscaled service, priced at its max": (api_bigger_autoscaled, "cost_is_small"),
     "at the limit: 125 secret names at $0.40": (lambda p: many(p, "aws_secretsmanager_secret", 125, {"name": "homecookd/staging/S"}), "cost_is_small"),
+    "a 200 GiB disk under an autoscaled api, about $58 at its max": (lambda p: (autoscaled_api(p), bigger_disk(p, API_TD, 200)), "cost_is_small"),
+    "a disk size that isn't a number": (lambda p: (update(p, API_SERVICE, desired_count=2), bigger_disk(p, API_TD, "lots")), "cost_is_small"),
     "a service with no task definition to price": (service_without_definition, "cost_is_small"),
     "a task size that isn't a number": (lambda p: (update(p, API_SERVICE, desired_count=2), service_size_unreadable(p)), "cost_is_small"),
     "an unknown type can't be estimated": (lambda p: add(p, "aws_instance", "x", {"instance_type": "p5.48xlarge"}), "known_types"),

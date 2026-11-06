@@ -82,6 +82,14 @@ resource "aws_ecs_task_definition" "service" {
   execution_role_arn       = aws_iam_role.execution[each.key].arn
   task_role_arn            = aws_iam_role.task[each.key].arn
 
+  # Unset = no block, Fargate's free 20 GiB. A video job downloads its clips, then makes frames and a cut (docs/build/WORKER-MIGRATION.md).
+  dynamic "ephemeral_storage" {
+    for_each = each.value.disk_gib == null ? [] : [each.value.disk_gib]
+    content {
+      size_in_gib = ephemeral_storage.value
+    }
+  }
+
   container_definitions = jsonencode([merge({
     name         = each.key
     image        = "${aws_ecr_repository.service[each.key].repository_url}:bootstrap"

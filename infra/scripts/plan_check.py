@@ -36,6 +36,8 @@ HOURS = 730
 # plan can't show that. DOORS never apply here, so they need no price, and a type in neither table is refused, unpriced.
 FARGATE_VCPU_HOUR = 0.04048
 FARGATE_GB_HOUR = 0.004445
+FARGATE_DISK_GB_HOUR = 0.000111  # ephemeral storage past the free 20 GiB (modules/env's disk_gib)
+FARGATE_FREE_DISK_GB = 20
 
 Auto = namedtuple("Auto", "actions scope known monthly forbidden", defaults=((),))
 AUTO = {
@@ -659,7 +661,9 @@ def no_secret_values(plan):
 
 
 def fargate_monthly(count, definition):
-    return count * HOURS * (int(definition["cpu"]) / 1024 * FARGATE_VCPU_HOUR + int(definition["memory"]) / 1024 * FARGATE_GB_HOUR)
+    disk = sum(int(e["size_in_gib"]) for e in definition.get("ephemeral_storage") or [])
+    extra_disk = max(0, disk - FARGATE_FREE_DISK_GB) * FARGATE_DISK_GB_HOUR
+    return count * HOURS * (int(definition["cpu"]) / 1024 * FARGATE_VCPU_HOUR + int(definition["memory"]) / 1024 * FARGATE_GB_HOUR + extra_disk)
 
 
 def monthly_added(plan):

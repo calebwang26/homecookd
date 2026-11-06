@@ -116,7 +116,7 @@ Likely to pass $300 a month (about $450-850 at 500 daily users), so it's Caleb's
   - Once step 5 is live: a real video job on Caleb's own footage, measured for CPU, memory, disk and minutes. It sets the worker's size, and Fargate or EC2 (WORKER-MIGRATION.md, "How to measure a real job").
 - **Also before step 9 (AWS backend):**
   - **Production's media bucket has no `library.json`,** so the public library is empty (contracts/JOBS.md, open item 15). Publish it to production's bucket once the media CloudFront is up.
-  - **The worker's disk** is Fargate's default 20 GB, and the env module has no setting for more yet (WORKER-MIGRATION.md). The measured job above says whether it's enough. If not, the setting comes with the worker's size.
+  - **The worker's disk** is Fargate's default 20 GB. The env module's `disk_gib` sets more, 21 to 200 GiB (#364); production's worker leaves it unset, with a `TODO(caleb)`. The measured job above (`disk_peak_mb`) says whether 20 is enough, and if not, sets `disk_gib` with the worker's size (WORKER-MIGRATION.md).
 - **Back:** nothing depends on it yet. Remove the DNS records, turn off the database's deletion protection (`db_protected`), and `terraform destroy`.
 
 ### 7. The demo and test families: copy once, or start fresh. OK (real data)

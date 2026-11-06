@@ -111,8 +111,8 @@ export function mapLine(d: FamilyDish, now: number): string {
   if (d.takenDown) return 'Our team took it off the map after a report.';
   if (d.asked) return `Asked ${cook}`;
   if (saidNotNow(d, now)) return `${cook.charAt(0).toUpperCase()}${cook.slice(1)} said not now`;
-  if (d.mine) return 'Neighbors see the recipe text, one line you said and homie’s guess at where it’s from.';
-  return `homie asks ${cook} first. The video stays private.`;
+  if (d.mine) return 'Neighbors see the recipe text, one line you said and an AI guess at where it’s from.';
+  return `We ask ${cook} first. The video stays private.`;
 }
 
 /** "Share your recipe": the title and the two rows. `dishes` is null while it loads. */
@@ -124,7 +124,7 @@ export function shareChoices(dishes: FamilyDish[] | null, now: number): { title:
   else if (!dishes.length) map = { key: 'map', title: 'Put it on the map', line: 'Your family hasn’t recorded a dish yet.', disabled: true };
   else if (one) map = { key: 'map', title: 'Put it on the map', line: mapLine(one, now), disabled: settled(one, now) };
   else if (dishes.every((d) => d.shared)) map = { key: 'map', title: 'Put it on the map', line: 'Your family’s dishes are on the map.', disabled: true };
-  else map = { key: 'map', title: 'Put it on the map', line: 'Pick a dish. homie asks its cook first.' };
+  else map = { key: 'map', title: 'Put it on the map', line: 'Pick a dish. We ask its cook first.' };
   return { title, rows: firstGreen([map, HOST_ROW]) };
 }
 
