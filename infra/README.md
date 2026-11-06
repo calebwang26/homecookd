@@ -327,9 +327,35 @@ email, and `dish-api-e2e.mjs`. Once step 5 is live, the measured real video job 
    (Mom, Dad, Grandma, Leo, Maya, Reviewer, `docs/agents/memory/app-review-guard.md`).
 2. Its Chicken Biryani is a real video job, so it waits for step 5. Production has no made-up recipe: `POST /v1/test/recipe` needs
    `TEST_SIGNIN_KEY`, which the env module refuses here.
-3. **Not built: the reviewer's link that doesn't expire.** A family's own links last 7 days (contracts/ACCOUNTS.md), and the api keeps a
-   link with no expiry only as an operator's (`api/src/modules/accounts/invites.ts`), which nothing makes on production yet. AWS backend
-   builds a one-off task for it, as `dist/reports.js` is for reports, before step 9.
+3. **The reviewer's link that doesn't expire (#NNN).** A family's own links last 7 days (contracts/ACCOUNTS.md), so this one is an
+   operator's, made by `api/src/reviewerLink.ts` as a one-off task with the api's image, as `dist/reports.js` is for reports
+   (COMMUNITY-MIGRATION.md, "The team's reports"). No route makes one. `<familyId>` is the TEST family's id, `family.id` in `GET /family`.
+   ```bash
+   export AWS_PROFILE=homecookd AWS_REGION=us-west-2
+   NAME=homecookd-production                                    # homecookd-staging to try it first
+   RUN='["node","dist/reviewerLink.js","make","<familyId>"]'
+   # RUN='["node","dist/reviewerLink.js","revoke","<familyId>"]'    # a leaked link: it stops at once
+   TD=$(aws ecs describe-services --cluster "$NAME" --services api --query 'services[0].taskDefinition' --output text)
+   NETWORK=$(aws ecs describe-services --cluster "$NAME" --services api --query 'services[0].networkConfiguration' --output json)
+   TASK=$(aws ecs run-task --cluster "$NAME" --launch-type FARGATE --task-definition "$TD" \
+     --network-configuration "$NETWORK" \
+     --overrides "{\"containerOverrides\":[{\"name\":\"api\",\"command\":$RUN}]}" \
+     --query 'tasks[0].taskArn' --output text)
+   aws ecs wait tasks-stopped --cluster "$NAME" --tasks "$TASK"
+   aws ecs describe-tasks --cluster "$NAME" --tasks "$TASK" --query 'tasks[0].containers[0].exitCode' --output text
+   aws logs tail "/$NAME/api" --log-stream-names "api/api/${TASK##*/}" --since 1h --format short
+   ```
+   - **`make`** prints the link once, on its own line (`https://homecookd.app/i?t=<22 characters>`, from `EDIBLE_WEB_URL`), and how many
+     people the family has, as a check that the id is the TEST family's (its faces from 8.1, removed ones not counted). Run it again and it prints the same link: the
+     token is kept sealed (`join_links.token_enc`), so it can always be shown again and needs no copy anywhere else.
+   - **Where the link goes:** only the task's own log stream, which keeps it 30 days, and never in its JSON line. That log is read only by
+     the team, who could run `make` again anyway, and the link goes into Apple's reviewer notes. Copy it into the notes, then delete the
+     stream if you like: `aws logs delete-log-stream --log-group-name "/$NAME/api" --log-stream-name "api/api/${TASK##*/}"`.
+   - **Refused (exit 1), nothing changed:** a family that isn't there or was deleted; another family already has a link with no expiry
+     (only the TEST family gets one, so it's a wrong id); or the link can't be opened with this `EDIBLE_CODE_KEY` (`revoke`, then `make`,
+     and put the new link in the notes). A wrong word is exit 2 and never reaches the database.
+   - **`revoke`** turns it off at once. The family's own 7-day links keep working, and the next `make` is a new link, so the reviewer notes
+     change with it.
 4. App Store/web writes in the reviewer notes how 1.1 joins it, under the App Review guard.
 
 **Still open for launch, outside this file:**

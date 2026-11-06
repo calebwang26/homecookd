@@ -123,7 +123,7 @@ Likely to pass $300 a month (about $450-850 at 500 daily users), so it's Caleb's
 Caleb picks one.
 - **Who:** Caleb decides. AWS backend runs it. App Store/web updates the reviewer notes, under the App Review guard.
 - **Either way:** the TEST family that Apple's reviewer uses exists on production, with its faces (Mom, Dad, Grandma, Leo, Maya, Reviewer) and its Chicken Biryani (`docs/agents/memory/app-review-guard.md`), and the reviewer's link that doesn't expire (ACCOUNTS-MIGRATION.md, "What's needed at the switch"). The notes say how 1.1 joins it.
-- **Not built: the reviewer's link that doesn't expire.** A family's own links last 7 days, and the api keeps a link with no expiry only as an operator's (`api/src/modules/accounts/invites.ts`), which nothing makes on production yet. AWS backend builds a one-off task for it, as `dist/reports.js` is for reports, before step 9 (`infra/README.md`, "Production before launch", 8).
+- **The reviewer's link that doesn't expire (#NNN):** a family's own links last 7 days, so this one is an operator's, made by the one-off task `node dist/reviewerLink.js make <familyId>` on the TEST family once it exists, before step 9. `revoke` turns a leaked one off. The run command, where the link is printed and why: `infra/README.md`, "Production before launch", 8.3.
 - **Starting fresh:** nothing is copied, and `EDIBLE_CODE_KEY` can be production's own. The demo families sign in on 1.1 and start over. What's on Convex, Supabase and GCS stays there until those shut down.
 - **Copying once:**
   1. A fresh `npx convex export --include-file-storage` first, kept outside the repo, as the snapshot that's copied.
