@@ -40,6 +40,14 @@
         "EXPO_PUBLIC_BACKEND": "aws",
         "EXPO_PUBLIC_AWS_URL": "https://d2zh46br3dalyf.cloudfront.net"
       }
+    },
+    "production-aws": {
+      "extends": "production",
+      "channel": "production-aws",
+      "env": {
+        "EXPO_PUBLIC_BACKEND": "aws",
+        "EXPO_PUBLIC_AWS_URL": "https://api.homecookd.app"
+      }
     }
   },
   "submit": {
@@ -54,6 +62,11 @@
       }
     },
     "aws-staging": {
+      "ios": {
+        "ascAppId": "6825621614"
+      }
+    },
+    "production-aws": {
       "ios": {
         "ascAppId": "6825621614"
       }
