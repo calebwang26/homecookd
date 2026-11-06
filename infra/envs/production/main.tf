@@ -88,12 +88,16 @@ locals {
 }
 
 module "env" {
-  source            = "../../modules/env"
-  environment       = "production"
-  vpc_cidr          = "10.30.0.0/16"
-  nat_gateways      = 2
-  db_instance_class = "db.t4g.medium"
-  db_multi_az       = true
+  source      = "../../modules/env"
+  environment = "production"
+  vpc_cidr    = "10.30.0.0/16"
+  # Lean at launch (Caleb, Nov 5): one NAT gateway and a db.t4g.small in one zone, about $95 a month before any task runs. A zone outage stops outbound
+  # calls and the database until that zone is back; nothing is lost (backups below). The full setup, about $210, is these three lines, by PR, with no
+  # data loss: nat_gateways = 2, db_instance_class = "db.t4g.medium", db_multi_az = true. Multi-AZ's change runs in place; the instance class change
+  # restarts the database for a few minutes, so do it in a quiet hour.
+  nat_gateways      = 1
+  db_instance_class = "db.t4g.small"
+  db_multi_az       = false
   db_allocated_gb   = 50
   db_backup_days    = 14
   db_protected      = true
