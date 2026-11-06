@@ -113,6 +113,8 @@ export type Ask = {
   finished: boolean;
   version: Recipe | null;
   merging: boolean;
+  /** Peek only: it stopped waiting for her language (8 s) and answered in English; the translation goes on. */
+  translating?: boolean;
 };
 
 /** POST /dish/craving/peek: who sent the craving link, and her line (§8). `relation` is what the family calls her. */

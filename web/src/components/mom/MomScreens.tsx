@@ -30,9 +30,9 @@ function EnglishToggle({ toggle }: { toggle: Toggle }) {
 
 // ── M1 ────────────────────────────────────────────────────────────────────────────────────────
 
-export function IntroScreen({ ask, kid, message, toggle, onNext }: { ask: Ask; kid: string; message: string; toggle: Toggle; onNext: () => void }) {
+export function IntroScreen({ ask, kid, message, toggle, onNext, onStale }: { ask: Ask; kid: string; message: string; toggle: Toggle; onNext: () => void; onStale: () => void }) {
   const { t } = useLang();
-  const audio = useAudio();
+  const audio = useAudio(onStale);
   const duration = ask.kidVoiceS;
   const url = ask.kidVoiceUrl;
 
@@ -241,10 +241,10 @@ function fillRows(recipe: Recipe, answered: Set<QuestionId>, merged: boolean): F
 }
 
 /** `guess` and `version` in the page's language when they are translated (inLang); her quotes stay as she said them. */
-export function FillScreen({ ask, guess, version, onDone }: { ask: Ask; guess: Recipe; version: Recipe | null; onDone: () => void }) {
+export function FillScreen({ ask, guess, version, onDone, onStale }: { ask: Ask; guess: Recipe; version: Recipe | null; onDone: () => void; onStale: () => void }) {
   const { t } = useLang();
   const rel = useRel();
-  const audio = useAudio();
+  const audio = useAudio(onStale);
   const answered = new Set(ask.answered);
   const recipe = version ?? guess;
   const merged = !!version;

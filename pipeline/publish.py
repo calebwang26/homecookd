@@ -57,7 +57,8 @@ def _bucket() -> storage.Bucket:
 
 
 def public_url(bucket: storage.Bucket, path: str) -> str:
-    return f"https://storage.googleapis.com/{bucket.name}/{path}"
+    base = getattr(bucket, "public_base", None)  # queue mode's S3 bucket (queue_aws.py); a GCS bucket has none
+    return f"{base}/{path}" if base else f"https://storage.googleapis.com/{bucket.name}/{path}"
 
 
 def versioned_url(bucket: storage.Bucket, blob: storage.Blob) -> str:

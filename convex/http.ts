@@ -15,6 +15,7 @@ import { registerInviteRoutes } from "./lib/inviteRoutes";
 import { registerLinkRoutes } from "./lib/linkRoutes";
 import { registerLiveRoutes } from "./lib/liveRoutes";
 import { parseRecipeJson } from "./lib/recipeJson";
+import { registerSyncRoutes } from "./lib/syncRoutes";
 
 const http = httpRouter();
 
@@ -226,5 +227,6 @@ registerGlassesRoutes(http);
 registerInviteRoutes(http);
 registerDishAskRoutes(http);
 registerLinkRoutes(http);
+registerSyncRoutes(http);
 
 export default http;

@@ -60,6 +60,7 @@ from google.cloud.storage.retry import DEFAULT_RETRY
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import account_purge  # noqa: E402
+import observability  # noqa: E402
 import prep  # noqa: E402
 import process  # noqa: E402
 import publish  # noqa: E402
@@ -605,6 +606,7 @@ def handle_convex(convex: Convex, job: dict, media: storage.Bucket, uploads: sto
             return
         except (Exception, SystemExit) as e:  # noqa: BLE001 - any failure fails this job; the loop keeps running
             traceback.print_exc()
+            observability.report_failure(e, job_id)
             return fail(MSG_NO_STEPS if isinstance(e, process.NoStepsError) else MSG_FAILED, f"{type(e).__name__}: {e}")
     shutil.rmtree(folder, ignore_errors=True)
     stages = ", ".join(f"{k} at {v / 60:.1f}" for k, v in timings.items())
@@ -754,6 +756,7 @@ def run_pass(media: storage.Bucket, uploads: storage.Bucket) -> None:
 
 def main() -> None:
     load_dotenv(ROOT / ".env")
+    observability.init_sentry()
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--once", action="store_true")
     ap.add_argument("--interval", type=int,
