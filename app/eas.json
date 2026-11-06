@@ -32,6 +32,14 @@
     "staging": {
       "extends": "production",
       "channel": "staging"
+    },
+    "aws-staging": {
+      "extends": "staging",
+      "channel": "aws-staging",
+      "env": {
+        "EXPO_PUBLIC_BACKEND": "aws",
+        "EXPO_PUBLIC_AWS_URL": "https://d2zh46br3dalyf.cloudfront.net"
+      }
     }
   },
   "submit": {
@@ -41,6 +49,11 @@
       }
     },
     "staging": {
+      "ios": {
+        "ascAppId": "6825621614"
+      }
+    },
+    "aws-staging": {
       "ios": {
         "ascAppId": "6825621614"
       }

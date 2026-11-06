@@ -5,8 +5,9 @@ metadata:
   type: project
 ---
 
-Since 2026-10-26 (Caleb), each section of the codebase has one permanent Claude Desktop chat that owns it, and nobody
-archives them. Send work to the chat that owns the files it touches; the **Merge Agent** (head agent) reviews, merges
+Since 2026-10-26 (Caleb), each section of the codebase has one permanent Claude Desktop chat that owns it. A chat is
+refreshed (fresh session, same title, handoff in `docs/agents/HANDOFFS-<date>.md`, old one archived) once its transcript
+passes about 40 MB (Caleb, Nov 5): the desktop app freezes opening bigger ones. Send work to the chat that owns the files it touches; the **Merge Agent** (head agent) reviews, merges
 and ships every PR, routes new work, and keeps the "homecookd work tracker" doc (one table per section).
 
 | Chat (title) | Owns |

@@ -21,15 +21,21 @@ The paths:
 - **Sign-in path the reviewer uses:** `app/src/app/join.tsx`, `join-code.tsx`, `i.tsx`,
   `app/src/components/signin/SignInScreen.tsx` ("Have a family code?", the terms line), `app/src/app/index.tsx`
   ("Who's in the kitchen?"), `convex/sessions.ts`, `convex/lib/auth.ts`.
+  On the AWS api (1.1): `api/src/auth.ts`, `api/src/modules/accounts/{signin,sessions,identity,proofs,links}.ts`,
+  and the app's `app/src/lib/aws/{accounts,client}.ts`.
 - **AI consent (5.1.2(i)):** `app/src/lib/aiConsent.ts` (`ensureAiConsent`), the sheet
   `app/src/components/consent/AiConsentSheet.tsx` (mounted in `app/src/app/_layout.tsx`), and every place that asks
   before sending (listed in `app/scripts/test-consent.mjs`). Since Oct 26 it's a small sheet at first use, not a
   screen after sign-in.
 - **Delete account (5.1.1(v)):** `app/src/components/profiles/DeleteAccountSheet.tsx`, `deleteAccount` /
   `accountRemoval` in `app/src/lib/session.tsx`, `app/src/lib/auth/apple.ts`, `convex/account.ts`, `convex/apple.ts`.
+  On the AWS api: `api/src/modules/accounts/{deletion,purgeSteps,outside}.ts`, the revoke and delete routes in
+  `api/src/modules/accounts/routes.ts`, and `api/src/purge.ts`.
 - **Report and block (1.2):** `app/src/components/community/ReportSheet.tsx`, `report.ts`,
   `app/src/app/community/[id].tsx`, `app/src/app/dinner/[id].tsx`, `convex/lib/safety.ts`, `convex/lib/moderation.ts`,
   `convex/reports.ts`, `convex/alerts.ts`.
+  On the AWS api: `api/src/modules/community/{safety,reports,tasks}.ts`, `api/src/reports.ts`, and the community
+  report alarms in `infra/modules/env/alerts.tf` (a report must reach a person: 1.2 and /terms' "within a day").
 - **Links Apple opens:** `app/src/lib/links.ts`, `web/src/app/privacy/`, `web/src/app/terms/`.
 - **Listing assets:** the icon and name in `app/app.json` / `app/assets/images/icon.png`, `docs/app-store/screenshots/`.
 - **Review data:** the TEST family's code and its faces (Mom, Dad, Grandma, Leo, Maya, Reviewer) and its

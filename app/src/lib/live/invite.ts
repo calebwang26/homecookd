@@ -3,6 +3,9 @@
 // dinner counts this phone once in "X going", whoever is signed in (or nobody). The reply is only the
 // dish, the host's name and when (convex/lib/inviteRoutes.ts). The web page /d does the same.
 import { isInviteToken, parseOpened, randomId, siteUrl, type OpenedDinner } from '@/components/community/invite';
+import { community as awsCommunity } from '@/lib/aws/community';
+import { AWS_ON } from '@/lib/aws/config';
+import { isAwsError } from '@/lib/aws/errors';
 import { kvGet, kvSet } from '@/lib/storage';
 
 const SITE = siteUrl(process.env.EXPO_PUBLIC_CONVEX_URL);
@@ -27,6 +30,15 @@ export type Opened = { ok: true; dinner: OpenedDinner } | { ok: false; why: 'gon
 
 export async function openInvite(token: string | null | undefined): Promise<Opened> {
   if (!isInviteToken(token)) return { ok: false, why: 'gone' };
+  if (AWS_ON) {
+    // POST /invite/open on the AWS api (COMMUNITY.md, item 14): the same body and answer. 429 reads as "try again".
+    try {
+      const dinner = parseOpened(await awsCommunity.openInvite(token, await deviceId()));
+      return dinner ? { ok: true, dinner } : { ok: false, why: 'offline' };
+    } catch (e) {
+      return isAwsError(e) && (e.status === 404 || e.status === 400) ? { ok: false, why: 'gone' } : { ok: false, why: 'offline' };
+    }
+  }
   if (!SITE) return { ok: false, why: 'offline' };
   try {
     const res = await fetch(`${SITE}/invite/open`, {

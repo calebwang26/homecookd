@@ -12,7 +12,7 @@
 // (who gets it) until the backend has it; drops a job once its recipe is in the library and, when
 // it was for someone, the backend knows who gets it (a late POST delivers right away). So a
 // finished row disappears and the real recipe takes its place. The worker's live stage comes from
-// Convex jobs.forFamily (matched by the upload folder, "<job_id>/"). In Convex mode the worker
+// Convex jobs.mine, only this cook's own (Caleb, Nov 1) (matched by the upload folder, "<job_id>/"). In Convex mode the worker
 // writes no status file, so a job is also done once its live stage is 'done' and its recipe (the
 // job's Convex recipeId, mapped to a library id through recipes.list) is in the library.
 import { router, useFocusEffect } from 'expo-router';
@@ -68,7 +68,7 @@ const uploadIdOf = (l: LiveJob) => l.uploadPath.replace(/\/$/, '');
 const RUNNING = new Set(['uploading', 'queued', 'preparing', 'understanding', 'writing', 'indexing']);
 
 /**
- * A Convex job this phone didn't send (the laptop's glasses jobs, another phone's) as a row: no upload
+ * Her own Convex job this phone didn't send (the laptop's glasses jobs, her other phone's) as a row: no upload
  * here, so it reads straight from the worker's live stage. Its id is the Convex job id.
  */
 function liveOnlyJob(l: LiveJob, t: T): StoredJob {
@@ -147,7 +147,7 @@ export function usePendingRecipes(): PendingState {
 
   // The worker's live job per upload folder ("<job_id>/").
   const liveByJob = useMemo(() => new Map<string, LiveJob>(liveJobs.map((l) => [uploadIdOf(l), l])), [liveJobs]);
-  // Jobs still running that no local row covers (the laptop's glasses jobs, another phone's uploads),
+  // Jobs still running that no local row covers (her glasses jobs, her uploads from another phone),
   // except one from an upload she just stopped (its jobs.create landed late: stopped below).
   const liveOnly = useMemo(() => {
     const mine = new Set(jobs.map((j) => j.job_id));
