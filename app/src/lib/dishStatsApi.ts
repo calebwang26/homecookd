@@ -14,6 +14,8 @@
 // TODO(wiring): fold these into lib/api.ts as api.dishStats / api.heartsRecent with DishStats and
 // HeartRecent next to them (RETENTION-WIRING.md, "PR 4 wiring" A1), then make this file re-export them.
 import { API_URL, getApiAuth } from './api';
+import { AWS_ON } from './aws/config';
+import { messages as awsMessages } from './aws/messages';
 import type { DishStats } from './kitchenCounts';
 
 export type { DishStat, DishStats } from './kitchenCounts';
@@ -84,6 +86,7 @@ export function batches(ids: readonly string[], size = DISH_STATS_BATCH): string
 /** GET /dish-stats for any number of my dishes (50 per call, in parallel). {} for none. */
 export async function fetchDishStats(ids: readonly string[], o: CallOpts = {}): Promise<DishStats> {
   const parts = batches(cleanIds(ids));
+  if (AWS_ON) return awsDishStats(parts, o);
   const answers = await Promise.all(parts.map((b) => get<DishStats>(`/dish-stats?ids=${b.map(encodeURIComponent).join(',')}`, o)));
   const out: DishStats = {};
   for (const a of answers) if (a && typeof a === 'object' && !Array.isArray(a)) Object.assign(out, a);
@@ -94,6 +97,25 @@ export async function fetchDishStats(ids: readonly string[], o: CallOpts = {}): 
 export async function fetchHeartsRecent(since?: Date | string | null, o: CallOpts = {}): Promise<HeartRecent[]> {
   const d = since ? (since instanceof Date ? since : new Date(since)) : null;
   const iso = d && Number.isFinite(d.getTime()) ? d.toISOString() : null; // a bad date: the server's default
+  if (AWS_ON) {
+    const rows = await awsMessages.heartsRecent(iso, o.profileId ?? null).catch(() => []);
+    return rows.map((r) => ({ profile_id: r.personId, recipe_id: r.libraryId, at: r.at }));
+  }
   const rows = await get<HeartRecent[]>(iso ? `/hearts/recent?since=${encodeURIComponent(iso)}` : '/hearts/recent', o);
   return Array.isArray(rows) ? rows : [];
+}
+
+type AwsDishStat = { hearts: { count: number; by: { personId: string; at: string }[] }; cooked: { count: number; by: { personId: string; count: number; lastAt: string }[] } };
+
+/** 1.1: GET /v1/dish-stats, in the screens' words. A failed batch shows nothing for those dishes, never an error. */
+async function awsDishStats(parts: string[][], o: CallOpts): Promise<DishStats> {
+  const out: DishStats = {};
+  const answers = await Promise.all(parts.map((b) => awsMessages.dishStats(b, o.profileId ?? null).catch(() => ({}))));
+  for (const a of answers)
+    for (const [id, st] of Object.entries(a as Record<string, AwsDishStat>))
+      out[id] = {
+        hearts: { count: st.hearts.count, by: st.hearts.by.map((h) => ({ profile_id: h.personId, at: h.at })) },
+        cooked: { count: st.cooked.count, by: st.cooked.by.map((c) => ({ profile_id: c.personId, count: c.count, last_at: c.lastAt })) },
+      };
+  return out;
 }

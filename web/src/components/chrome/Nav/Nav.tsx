@@ -14,7 +14,8 @@
 // width, QA B22) · "Early access"; no hamburger. Below 375px the mascot alone carries the brand.
 // Intro (a7 M1): logo first, then the items blur in left → right, 50ms apart, once.
 import { useEffect, useRef, type CSSProperties } from 'react';
-import { useCopy } from '@/components/providers/CopyProvider';
+import { useAudience, useCopy } from '@/components/providers/CopyProvider';
+import { MISS_HREF } from '@/lib/audience-route';
 import { Logo } from '@/components/primitives/Logo';
 import { Button } from '@/components/primitives/Button';
 import { RelationPicker } from '@/components/chrome/RelationPicker/RelationPicker';
@@ -68,6 +69,8 @@ export function Nav() {
 
   const copy = useCopy();
   const n = copy.nav;
+  // the kid version's button opens /miss, the parent's goes to the early-access form
+  const ctaHref = useAudience() === 'kid' ? MISS_HREF : '#early-access';
   // Stagger index for the intro (logo 0, links 1–4, picker, CTA).
   const item = (i: number) => ({ 'data-nav-item': '', style: { '--i': i } as CSSProperties });
   const last = n.links.length + 1;
@@ -103,10 +106,10 @@ export function Nav() {
               <RelationPicker className={s.picker} />
             </div>
             <div className={s.ctaSlot} {...item(last + 1)}>
-              <Button href="#early-access" variant="primary" size="sm" arrow className={s.ctaWide}>
+              <Button href={ctaHref} variant="primary" size="sm" arrow className={s.ctaWide}>
                 {n.cta}
               </Button>
-              <Button href="#early-access" variant="primary" size="sm" className={s.ctaNarrow}>
+              <Button href={ctaHref} variant="primary" size="sm" className={s.ctaNarrow}>
                 {n.ctaMobile}
               </Button>
             </div>

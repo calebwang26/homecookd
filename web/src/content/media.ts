@@ -31,35 +31,27 @@ export const HERO = {
   },
 } as const;
 
-/** Real screen recordings (780×1688, 30fps). Labels say what the clip really shows (brief 7.2). */
+/**
+ * Real screen recordings (780×1688, 30fps). Labels say what the clip really shows (brief 7.2). The web-* clips are the
+ * live pages (/miss, /a and the kid's card) recorded against the /dish fake (scripts/qa/record-tour.mjs); app-request
+ * is the app's own request screen on AWS staging (build 11), held still (scripts/qa/tour-encode.sh).
+ */
 export const APP_CLIPS: Record<AppClipName, { src: string; poster: string; label: string; duration: number }> = {
-  'app-record': { src: '/media/app/app-record.mp4', poster: '/media/app/app-record.jpg', label: copy.appClips['app-record'], duration: 12.8 },
-  'app-recipe': { src: '/media/app/app-recipe.mp4', poster: '/media/app/app-recipe.jpg', label: copy.appClips['app-recipe'], duration: 4.8 },
-  'app-cook': { src: '/media/app/app-cook.mp4', poster: '/media/app/app-cook.jpg', label: copy.appClips['app-cook'], duration: 13.5 },
-  'app-share': { src: '/media/app/app-share.mp4', poster: '/media/app/app-share.jpg', label: copy.appClips['app-share'], duration: 8.8 },
-  'app-library': { src: '/media/app/app-library.mp4', poster: '/media/app/app-library.jpg', label: copy.appClips['app-library'], duration: 12.2 },
-  'app-questions': { src: '/media/app/app-questions.mp4', poster: '/media/app/app-questions.jpg', label: copy.appClips['app-questions'], duration: 13.7 },
-  'app-add': { src: '/media/app/app-add.mp4', poster: '/media/app/app-add.jpg', label: copy.appClips['app-add'], duration: 5.7 },
-  // the video playing inside the app is a Pexels stock clip standing in for a family recording
-  'app-watch': { src: '/media/app/app-watch.mp4', poster: '/media/app/app-watch.jpg', label: copy.appClips['app-watch'], duration: 5.1 },
-  'app-keep': { src: '/media/app/app-keep.mp4', poster: '/media/app/app-keep.jpg', label: copy.appClips['app-keep'], duration: 5.0 },
+  'web-miss': { src: '/media/app/web-miss.mp4', poster: '/media/app/web-miss.jpg', label: copy.appClips['web-miss'], duration: 8.4 },
+  'web-answer': { src: '/media/app/web-answer.mp4', poster: '/media/app/web-answer.jpg', label: copy.appClips['web-answer'], duration: 9.8 },
+  'web-version': { src: '/media/app/web-version.mp4', poster: '/media/app/web-version.jpg', label: copy.appClips['web-version'], duration: 7.0 },
+  'app-request': { src: '/media/app/app-request.mp4', poster: '/media/app/app-request.jpg', label: copy.appClips['app-request'], duration: 5.0 },
 };
 
-/** Extra real-app stills made by scripts/media.mjs (step 4). */
+/** Extra real stills: the last frame of web-version (Mom's tomato egg, her words on the card). */
 export const APP_STILLS = {
-  /** app-record at 11.5s: "Add a recipe" with "Sunday dumplings" typed and Grandma picked (no tap ring) */
-  recordAdd: {
-    src: '/media/app/app-record-add.jpg',
-    alt: 'The Add a recipe screen in homecookd, with Sunday dumplings typed in and Grandma picked as the cook.',
+  herVersion: {
+    src: '/media/app/web-version-words.jpg',
+    alt: 'Mom’s tomato egg in homecookd: her amounts in her own words, with a play button to hear her say each one.',
     width: 780,
     height: 1688,
   },
-  /** last frame of app-share (the share sheet is NOT visible in the current file) */
-  shareEnd: { src: '/media/app/app-share-end.jpg', alt: "Grandma's Red-Braised Pork Belly in homecookd.", width: 780, height: 1688 },
 } as const;
-
-/** Has app-share been re-recorded with the native share sheet? (brief 7.2). Flip when it lands. */
-export const APP_SHARE_HAS_SHEET = false;
 
 export interface HandPhone {
   src: string;

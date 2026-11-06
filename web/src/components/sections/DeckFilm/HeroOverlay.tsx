@@ -19,20 +19,17 @@
 // Both versions carry a second button under the CTA to the other version (switchHref: a plain link,
 // so it works before hydration; the pick rides in the URL).
 //
-// Kid version (QA B18): the main button is "Send this to {R}" (the page's one job is getting a parent
-// to film), and "Get early access" is the text link under the switch. Sending opens the share sheet,
-// else shows "Copied." with the link (useSend, StickySend/SendPanel). No motion imports here: this is
-// a first-screen file (FEEDBACK-OCT16 E).
+// Kid version: the main button opens /miss (MISS_HREF), where the kid names the dish and the real
+// "Ask Mom" sends it home (PRD-V2 section 1), and "Get early access" is the text link under the switch.
+// No motion imports here: this is a first-screen file (FEEDBACK-OCT16 E).
 import { motionNow } from '@/lib/motion/lazy';
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type RefObject } from 'react';
 import { useAudience, useCopy } from '@/components/providers/CopyProvider';
 import { LetterArc } from '@/components/motion/LetterArc';
 import { Button } from '@/components/primitives/Button';
-import { ShareGlyph } from '@/components/icons/Icons';
-import { useSend } from '@/components/chrome/StickySend/SendPanel';
 import { useRelation } from '@/components/providers/RelationProvider';
 import { fill } from '@/lib/relation';
-import { logTap, switchHref } from '@/lib/audience-route';
+import { MISS_HREF, logTap, switchHref } from '@/lib/audience-route';
 import { usePause } from '@/components/providers/PauseProvider';
 import { useMotionOK } from '@/components/providers/MotionProvider';
 import { EASE } from '@/lib/motion/tokens';
@@ -204,7 +201,6 @@ export function HeroOverlay() {
   const h1Word = explicit ? fill(copy.hero.explicitWord, relation) : copy.hero.relationDefault;
   const h1Label = fixed ? fixed.split('\n').join(' ') : `${copy.hero.h1Before} ${h1Word} ${copy.hero.h1After}`;
   const kid = audience === 'kid';
-  const { send, panel } = useSend('send');
 
   return (
     <div className={s.overlay} data-f="overlay" data-theme="dark">
@@ -233,7 +229,7 @@ export function HeroOverlay() {
             switch; the kid page's "what it does" line is the pass-down heading right below */}
         <div className={s.ctaWrap} data-hero-item="">
           {kid ? (
-            <Button variant="hero" size="lg" className={s.heroCta} onClick={send} icon={<ShareGlyph name="message" size={22} />}>
+            <Button href={MISS_HREF} variant="hero" size="lg" arrow className={s.heroCta} onClick={() => logTap(audience, 'send')}>
               {fill(copy.finalCta.shareButton, relation)}
             </Button>
           ) : (
@@ -260,7 +256,6 @@ export function HeroOverlay() {
           </a>
         ) : null}
       </div>
-      {kid ? panel : null}
     </div>
   );
 }

@@ -27,6 +27,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Linking, Platform } from 'react-native';
 
 import { api, ApiError, type Message } from './api';
+import { AWS_ON } from './aws/config';
+import { sendAwsFile } from './aws/sendFile';
 import { useClipAudio, type ClipAudio } from './media';
 
 /** The server's limit (API.md: voice <= 5 min). Recording stops itself here. */
@@ -191,6 +193,8 @@ export type VoiceRecorder = ReturnType<typeof useVoiceRecorder>;
 
 /** Uploads a recording to the private voice bucket. Returns the storage path for a `voice` message. */
 export async function uploadVoice(rec: VoiceRecording): Promise<{ path: string; duration_s: number }> {
+  // 1.1: the AWS api's upload (link, PUT, confirm); the key goes where the path went.
+  if (AWS_ON) return { path: await sendAwsFile('voice', rec.contentType || (Platform.OS === 'web' ? 'audio/webm' : 'audio/m4a'), rec.uri), duration_s: rec.duration_s };
   if (Platform.OS === 'web') {
     const blob = await (await fetch(rec.uri)).blob();
     const type = (blob.type || rec.contentType || 'audio/webm').split(';')[0].trim() || 'audio/webm';

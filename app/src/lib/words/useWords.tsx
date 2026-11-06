@@ -11,6 +11,7 @@
 //   const { t } = useWords();   <Txt>{t('parent.tab.home')}</Txt>
 import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
 
+import { setApiLanguage } from '@/lib/api';
 import { activeLanguage } from '@/lib/languages';
 import { setLanguage, useMe } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
@@ -90,6 +91,9 @@ export function UiLanguageProvider({ children }: { children: ReactNode }) {
     },
     [id, saved],
   );
+
+  // The AWS api's refusals read in her language too (lib/api.ts).
+  useEffect(() => setApiLanguage(lang), [lang]);
 
   const value = useMemo<UiLanguage>(
     () => ({ lang, t: wordsFor(lang), rtl: isRtl(lang), needsChoice: cook && !!mine && saved != null && !chosen, choose }),
