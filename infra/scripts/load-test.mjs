@@ -5,20 +5,34 @@
 // Staging only, on fake models (DISH_FAKE_AI=1): it makes a few made-up cards ("LOADTEST …") through the kid's page's own routes, then reads them as the kid's page
 // and Mom's page poll, with a few edits. One machine's address, so it stays inside the per-address limits: cards are made once, and only reads and edits repeat.
 // Times here include the trip from this machine. The load balancer's own p95 and p99 are what the targets mean, and it prints how to read them.
+//
+// Production (CUTOVER.md step 6's gate):
+//   LOAD_TEST_PRODUCTION=yes node infra/scripts/load-test.mjs https://api.homecookd.app --production --cards 2 [--rps 200] [--minutes 12] [--burst 1500]
+// - Both keys, HTTPS, and only that address (load-test-args.mjs). It prints its plan and waits 10 s, so Ctrl-C stops it before anything is made.
+// - Production ignores DISH_FAKE_AI, so making a card is one real Claude guess (Haiku, about $0.001). Only the setup makes cards, and --cards must be said:
+//   nothing after it reaches a model. Mom's page is read without `lang`, because a peek with one translates her page on Opus (up to about $0.30).
+// - The load balancer sees this machine's own address, so the per-address limits are real: 6 cards in 10 minutes and 30 a day, 30 asks in 10 minutes.
+//   The steady mix and the burst have no per-address limit, so the only 429 to expect is making cards again too soon.
+// - The cards stay: no route or task deletes an anonymous card. They're drafts nobody else can see (no account, no family, never sent), and it prints each
+//   one's kid_token_hash, which is all a deletion needs (infra/README.md, "Production before launch", step 7).
+import { createHash } from 'node:crypto';
+import { settings } from './load-test-args.mjs';
 
-const args = process.argv.slice(2);
-const base = (args[0] ?? '').replace(/\/+$/, '');
-const flag = (name, fallback) => {
-  const i = args.indexOf(`--${name}`);
-  return i > 0 ? Number(args[i + 1]) : fallback;
-};
-const RPS = flag('rps', 50);
-const MINUTES = flag('minutes', 15);
-const BURST = flag('burst', 300);
-const CARDS = Math.min(flag('cards', 4), 6); // the per-address limit is 6 cards in 10 minutes
-if (!/^https?:\/\//.test(base) || /homecookd\.app|production/.test(base) || ![RPS, MINUTES, BURST, CARDS].every((n) => Number.isFinite(n) && n >= 0)) {
-  console.error('usage: load-test.mjs <staging api url> [--rps 50] [--minutes 15] [--burst 300] [--cards 4]   (never production)');
+const s = settings(process.argv.slice(2), process.env);
+if (s.error) {
+  console.error(s.error);
   process.exit(2);
+}
+const { base, production } = s;
+const RPS = s.rps;
+const MINUTES = s.minutes;
+const BURST = s.burst;
+const CARDS = s.cards;
+
+if (production) {
+  console.log(`PRODUCTION: ${base}. ${CARDS} made-up cards (${CARDS} Claude guesses, about $${(CARDS * 0.001).toFixed(3)}), then ${RPS} a second for ${MINUTES} minutes, ` +
+    `then ${BURST} at once. The cards stay until they're deleted. Starting in 10 s; Ctrl-C stops it.`);
+  await new Promise((r) => setTimeout(r, 10_000));
 }
 
 const results = new Map(); // route -> { ms: number[], status: Map<string, number> }
@@ -68,10 +82,18 @@ function report(title) {
 // ---- Setup: the kid makes cards and asks Mom, as the site does.
 const kids = [];
 const moms = [];
+/** On production, what deleting this run's cards needs: the database keeps only each kid token's sha256, and a hash opens nothing. */
+function leftBehind() {
+  if (!production || !kids.length) return;
+  console.log(`\nThese ${kids.length} made-up cards stay on production until they're deleted (infra/README.md, "Production before launch", step 7). kid_token_hash:`);
+  for (const t of kids) console.log(`  ${createHash('sha256').update(t).digest('hex')}`);
+}
 for (let i = 0; i < CARDS; i += 1) {
   const made = await call('/dish/cards', { dish: `LOADTEST poha ${i + 1}`, relation: 'mom', kidName: 'Load Test' });
   if (made.status !== 201) {
-    console.error(`Making a card answered ${made.status} ${made.data?.error ?? ''}: is this staging, on fake models, with the address under its card limit?`);
+    const where = production ? "production, with its Claude key set and the day's dish budget left," : 'staging, on fake models,';
+    console.error(`Making a card answered ${made.status} ${made.data?.error ?? ''}: is this ${where} with the address under its card limit${production ? ' (6 in 10 minutes, 30 a day)' : ''}?`);
+    leftBehind();
     process.exit(1);
   }
   kids.push(made.data.kidToken);
@@ -81,8 +103,10 @@ for (let i = 0; i < CARDS; i += 1) {
 }
 if (!moms.length) console.log("No card could ask Mom, so the mix has no Mom's page reads.");
 report(`Setup: ${kids.length} cards, ${moms.length} asked`);
+leftBehind();
 
 // ---- Steady: 50 a second, spread evenly, for 15 minutes. Polls are most of it, as LIVE-UPDATES.md expects.
+// None of it reaches a model, on production too: a card read starts no merge while nobody has answered, Mom's page has no `lang`, and an edit is a row write.
 const pick = (list) => list[Math.floor(Math.random() * list.length)];
 const MIX = [
   [45, () => call('/dish/cards/get', { kidToken: pick(kids) })],
@@ -129,4 +153,9 @@ console.log(`Steady errors: ${steady.total ? ((100 * steady.bad) / steady.total)
 console.log(`Burst: ${fiveHundreds} answers that were a 5xx other than a 503 with retry-after (target 0)`);
 console.log('The load balancer\'s own p95/p99 for the steady window: aws cloudwatch get-metric-statistics --namespace AWS/ApplicationELB --metric-name TargetResponseTime ' +
   `--dimensions Name=LoadBalancer,Value=<app/…> --start-time ${startedAt.toISOString()} --end-time ${endedAt.toISOString()} --period 60 --extended-statistics p95 p99`);
+if (production) {
+  console.log('Autoscaling should come back to 2 tasks about 25 minutes after the load: aws ecs describe-services --profile homecookd --region us-west-2 ' +
+    "--cluster homecookd-production --services api --query 'services[0].[desiredCount,runningCount]'");
+  leftBehind();
+}
 process.exit(steady.total && steady.bad / steady.total < 0.001 && fiveHundreds === 0 ? 0 : 1);

@@ -20,7 +20,8 @@ scripts/create-backup-key.sh   makes the Convex key for backups and stores it, u
 scripts/web-sync.sh, web-smoke.mjs   publish the website; check a running copy of it
 scripts/plan_check.py, test_plan_check.py   the safety check on staging's plans, and its tests
 scripts/simulate_apply_role.py   asks AWS's simulator what the apply role can and can't do; read-only
-scripts/load-test.mjs   the api's load test: 50 a second for 15 minutes, then a burst; staging on fake models only
+scripts/load-test.mjs   the api's load test: 50 a second for 15 minutes, then a burst; staging on fake models, or production with --production
+scripts/load-test-args.mjs, load-test.test.mjs   its address and argument guards, and their tests (no network)
 ```
 
 `.github/workflows/deploy-aws.yml` builds one service and rolls it out. It's manual and stores no keys.
@@ -39,7 +40,8 @@ cd infra/backup-copy && terraform init -backend=false && terraform test   # also
 # the website's CloudFront Function, against a real build
 cd web && npm ci && npm run build && cd .. && node --test infra/modules/web/rewrite.test.mjs
 node infra/scripts/web-smoke.mjs https://<address> [--noindex]   # reads only; the path table against a running site
-node infra/scripts/load-test.mjs http://<staging api> [--rps 50] [--minutes 15] [--burst 300]   # makes 4 made-up cards; refuses production
+node infra/scripts/load-test.mjs http://<staging api> [--rps 50] [--minutes 15] [--burst 300]   # makes 4 made-up cards; refuses production without --production
+node --test infra/scripts/load-test.test.mjs                     # its guards, no network
 
 # first time only
 cd infra/bootstrap && AWS_PROFILE=homecookd terraform init && AWS_PROFILE=homecookd terraform apply
@@ -327,8 +329,25 @@ curl -s https://api.homecookd.app/ready    # {"database":"ok"}, on the api's own
 aws ecs describe-services --profile homecookd --region us-west-2 --cluster homecookd-production --services api --query 'services[0].[desiredCount,runningCount]'
 ```
 The same line back to 0 stops the api and its schedules. Then the rest of CUTOVER.md's step 6 gate: the restore drill, a killed task, the
-load test at production's size over HTTPS (`load-test.mjs` refuses production today, so it needs a change first), one alarm fired to the
-email, and `dish-api-e2e.mjs`. Once step 5 is live, the measured real video job sets the worker's size, disk and count (its `TODO(caleb)`).
+load test at production's size over HTTPS (below), one alarm fired to the email, and `dish-api-e2e.mjs`. Once step 5 is live, the measured
+real video job sets the worker's size, disk and count (its `TODO(caleb)`).
+
+The load test, from a laptop on its own address (not a shared office one: the card limit counts per address):
+```bash
+LOAD_TEST_PRODUCTION=yes node infra/scripts/load-test.mjs https://api.homecookd.app --production --cards 2 --rps 200 --minutes 12 --burst 1500
+```
+- **Why 200 a second:** two of staging's 0.25 vCPU tasks held about 60 a second at 50% CPU, so production's two 0.5 vCPU tasks hold about
+  120. 200 keeps them over their 50% target, so autoscaling has to reach 4. Four run near 40% at 200, well over the 25% that takes one
+  away, so none goes mid-load. Pass: under 0.1% not 2xx over the window, and no 5xx in the burst but the 503 with retry-after.
+- **Cost:** each card is one real Claude guess (Haiku, about $0.001), so about $0.002. Nothing after the setup reaches a model.
+- **Limits:** the card limit is real here (6 in 10 minutes, 30 a day, per address), so running it again within 10 minutes stops at
+  setup with a 429. Nothing else it calls has a per-address limit.
+- **And back:** it prints the `describe-services` line above. `desiredCount` should be 4 near the end and 2 again about 25 minutes after.
+- **Its cards stay.** No route or task deletes an anonymous card (only an account's purge deletes cards, and only that account's). They're
+  drafts nobody else can see: no account, no family, never sent. The run prints each one's `kid_token_hash`; keep that list.
+  **Not built, `TODO(caleb)`:** a one-off task like `dist/reports.js`, `node dist/loadtest-cleanup.js <kid_token_hash>…`, deleting only a
+  card that has that hash, a `LOADTEST` dish, the kid name `Load Test`, no person, family or craving link, no answers, and is under 2 days
+  old, and printing counts only. Without it they stay until someone deletes them by hand.
 
 **8. The TEST family (CUTOVER.md, step 7).** Starting fresh, nothing is copied: Apple's reviewer family is made again on production.
 1. Through 1.1 itself, on step 8's TestFlight build: a sign-in with Apple makes the family, and its phone-less faces are added in the app
@@ -369,7 +388,8 @@ email, and `dish-api-e2e.mjs`. Once step 5 is live, the measured real video job 
 **Still open for launch, outside this file:**
 - ~~Community reports reach nobody on AWS.~~ Built in #323: a report or block logs a line, and a log alarm emails the alerts topic.
   Proven on staging Nov 2. Production gets it with this apply; confirm its alerts email (CUTOVER.md, step 6).
-- `infra/scripts/load-test.mjs` refuses production's address, so step 6's load test needs a production mode first (CUTOVER.md, step 6).
+- ~~`infra/scripts/load-test.mjs` refuses production's address.~~ It has a production mode (#368, step 7 above). Its made-up cards still
+  need the cleanup task there before they can be deleted.
 - The sample library on production's media bucket (contracts/JOBS.md, open item 15, built in #366). Without it the api knows no library
   dish, and 1.1 shows its bundled copy's GCS links. After step 6, with Caleb's OK for the write and his pick of samples (CUTOVER.md, step 6):
   ```bash
