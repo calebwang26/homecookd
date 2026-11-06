@@ -71,10 +71,10 @@ export const COMMON = {
   'common.list.or': '{first} or {last}',
   // The sheet before something goes to the AI companies the first time (components/consent/AiConsentSheet).
   'common.ai.title': 'homecookd uses AI for this',
-  'common.ai.line': 'Your videos, photos and voice go to AI services to write the recipe and to listen while you cook. Never for ads.',
+  'common.ai.line': 'Your videos, photos and voice go to AI services to write the recipe and to translate your family’s messages. Never for ads.',
   'common.ai.seeWho': 'See who',
-  'common.ai.claude': 'Watches your videos, writes the recipe and helps you cook.',
-  'common.ai.cartesia': 'Hears your voice and reads steps aloud.',
+  'common.ai.claude': 'Watches your videos and photos, writes the recipe, and translates your family’s questions into your language.',
+  'common.ai.cartesia': 'Writes down what you say in your videos and voice notes.',
   'common.ai.moss': 'Searches what the cook said.',
   'common.ai.gemini': 'Watches videos filmed with homecookd glasses.',
   'common.ai.row': '{name}. {job}',

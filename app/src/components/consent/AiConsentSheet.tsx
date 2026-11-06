@@ -2,7 +2,7 @@
 // guideline 5.1.2(i); lib/aiConsent asks for it):
 //   homecookd uses AI for this
 //   Your videos, photos and voice go to AI services ... Never for ads.
-//   See who ˅            opens the four companies and what each gets, in place
+//   See who ˅            opens the companies and what each gets, in place (1.1 on AWS: Claude and Cartesia only)
 //   Privacy policy       homecookd.app/privacy in the app's browser sheet
 //   [ OK, continue ]     the yes, saved on this phone; the action goes on
 //   Not now              nothing is sent; the action doesn't start (closing the sheet is the same)
@@ -13,17 +13,26 @@ import { ScrollView, StyleSheet, View } from 'react-native';
 
 import { ActionButton, BottomSheet, ChevronDownIcon, ChevronUpIcon, PressableScale, Txt } from '@/components/ui';
 import { answerAiConsent, useAiConsentAsking } from '@/lib/aiConsent';
+import { AWS_ON } from '@/lib/aws/config';
 import { openPage, PRIVACY_URL } from '@/lib/links';
 import { useWords } from '@/lib/words/useWords';
 import type { WordKey } from '@/lib/words/words';
 import { colors, radii } from '@/theme/tokens';
 
-/** Who gets what (`job`: its words' key). A change here means a new AI_CONSENT_KEY version, so everyone is asked again. */
+/**
+ * Who gets what (`job`: its words' key). A company added here means a new AI_CONSENT_KEY version, so everyone is
+ * asked again; one taken away doesn't. 1.1 on AWS sends nothing to Moss (Caleb, Nov 2) or Gemini (no glasses, and
+ * every pipeline step is Claude's), so they aren't named there.
+ */
 export const AI_COMPANIES: { name: string; job: WordKey }[] = [
   { name: 'Anthropic Claude', job: 'common.ai.claude' },
   { name: 'Cartesia', job: 'common.ai.cartesia' },
-  { name: 'Moss', job: 'common.ai.moss' },
-  { name: 'Google Gemini', job: 'common.ai.gemini' },
+  ...(AWS_ON
+    ? []
+    : ([
+        { name: 'Moss', job: 'common.ai.moss' },
+        { name: 'Google Gemini', job: 'common.ai.gemini' },
+      ] as const)),
 ];
 
 export function AiConsentHost() {
