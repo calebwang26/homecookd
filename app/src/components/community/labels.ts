@@ -135,14 +135,14 @@ export function whose(name: string): string {
 
 /**
  * "Rajani’s video and voice stay in the family. Neighbors see the recipe text, one line Rajani said
- * and homie’s guess at where it’s from." (the line is the map card's quote; the guess is Muse's
+ * and an AI guess at where it’s from." (the line is the map card's quote; the guess is Muse's
  * culture label, tagged AI on the card).
  * TODO(caleb): the mockup says "stay with her family"; we don't know a cook's gender (Papa Vikram,
  * Grandpa Joe), so it says "in the family". The words about the quote and the guess are new too.
  */
 export function privacyNote(cookName: string | null | undefined): string {
   const name = (cookName ?? '').trim();
-  return `${whose(name)} video and voice stay in the family. Neighbors see the recipe text, one line ${name || 'the cook'} said and homie’s guess at where it’s from.`;
+  return `${whose(name)} video and voice stay in the family. Neighbors see the recipe text, one line ${name || 'the cook'} said and an AI guess at where it’s from.`;
 }
 
 export const PLACE_KINDS: { key: PlaceKind; label: string }[] = [
