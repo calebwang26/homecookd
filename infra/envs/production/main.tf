@@ -21,38 +21,36 @@ provider "aws" {
   }
 }
 
-# HTTPS on api.homecookd.app and media.homecookd.app (CUTOVER.md, step 6). Unset, the load balancer is plain HTTP on its AWS name and media is on its
-# cloudfront.net name. TODO(caleb): once ACM has issued the two certificates, put their ARNs and the media domain in these defaults by PR. Not with -var: an
-# apply without it would take HTTPS off again. Steps: infra/README.md, "Production before launch".
-variable "certificate_arn" {
+# HTTPS on api.homecookd.app and media.homecookd.app (CUTOVER.md, step 6). ACM issued both certificates on Nov 6 (their DNS checks are in Vercel, and stay
+# there for renewals). Their ids are here, not their ARNs, so the account id stays out of the repo: the ARNs are built below from the account this applies
+# to. Defaults, not -var: an apply without the -var would take HTTPS off again. Steps: infra/README.md, "Production before launch".
+variable "api_certificate_id" {
   description = "ACM certificate for api.homecookd.app, in us-west-2, on the load balancer itself, so the api sees each caller's own address"
   type        = string
-  default     = null
+  default     = "a667dbe9-e9b5-498a-bf38-7478a6cc282a"
   validation {
-    condition     = var.certificate_arn == null || can(regex("^arn:aws:acm:us-west-2:[0-9]{12}:certificate/", var.certificate_arn))
-    error_message = "The load balancer's certificate is an ACM certificate in us-west-2."
+    condition     = can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", var.api_certificate_id))
+    error_message = "An ACM certificate id: the uuid at the end of its ARN."
   }
 }
 
 variable "media_domain" {
   description = "media.homecookd.app, on the media CloudFront. MEDIA_BASE_URL follows it"
   type        = string
-  default     = null
+  default     = "media.homecookd.app"
 }
 
-variable "media_certificate_arn" {
+variable "media_certificate_id" {
   description = "ACM certificate for media_domain, in us-east-1: CloudFront takes no other region's"
   type        = string
-  default     = null
+  default     = "75afb58a-bd1b-4da1-94aa-84bb7c6060c1"
   validation {
-    condition     = (var.media_certificate_arn == null) == (var.media_domain == null)
-    error_message = "media_domain and media_certificate_arn are set together."
-  }
-  validation {
-    condition     = var.media_certificate_arn == null || can(regex("^arn:aws:acm:us-east-1:[0-9]{12}:certificate/", var.media_certificate_arn))
-    error_message = "CloudFront takes only an ACM certificate in us-east-1."
+    condition     = can(regex("^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$", var.media_certificate_id))
+    error_message = "An ACM certificate id: the uuid at the end of its ARN."
   }
 }
+
+data "aws_caller_identity" "current" {}
 
 locals {
   # The switch (#295): 0 until Caleb starts production in CUTOVER.md's step 6, then 2, the api's autoscale.min. One line, by PR, then his apply. A local, not a
@@ -110,9 +108,10 @@ module "env" {
   # The api and worker never get the master login here: migrations run as their own task (infra/README.md, "Database logins").
   db_iam_login = true
 
-  certificate_arn       = var.certificate_arn
+  # The regions are fixed here: the load balancer's is us-west-2, and CloudFront takes only us-east-1's.
+  certificate_arn       = "arn:aws:acm:us-west-2:${data.aws_caller_identity.current.account_id}:certificate/${var.api_certificate_id}"
   media_domain          = var.media_domain
-  media_certificate_arn = var.media_certificate_arn
+  media_certificate_arn = "arn:aws:acm:us-east-1:${data.aws_caller_identity.current.account_id}:certificate/${var.media_certificate_id}"
 
   # The site's pages PUT voice notes and photos to the private bucket with presigned links (DISH-MIGRATION.md). localhost:3105 is the site built locally
   # against production in CUTOVER.md's step 8, as the api allows localhost (DISH-MIGRATION.md's TODO(caleb) would close both). No app web build here.
