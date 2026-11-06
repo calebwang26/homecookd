@@ -17,7 +17,7 @@ export type Body = Record<string, unknown>;
 export type Handler = (ctx: ActionCtx, body: Body) => Promise<Response>;
 
 /** A POST route behind one shared secret, with a JSON object body. */
-export function secured(header: "x-worker-secret" | "x-voice-secret" | "x-glasses-secret", envName: string, handler: Handler) {
+export function secured(header: "x-worker-secret" | "x-voice-secret" | "x-glasses-secret" | "x-sync-secret", envName: string, handler: Handler) {
   return httpAction(async (ctx, req) => {
     if (!sameSecret(req.headers.get(header), process.env[envName])) return fail(401, "wrong secret");
     const text = await req.text();
@@ -40,3 +40,4 @@ export const isNum = (x: unknown): x is number => typeof x === "number" && Numbe
 export const worker = (handler: Handler) => secured("x-worker-secret", "WORKER_SECRET", handler);
 export const voice = (handler: Handler) => secured("x-voice-secret", "VOICE_SECRET", handler);
 export const glasses = (handler: Handler) => secured("x-glasses-secret", "GLASSES_SECRET", handler);
+export const syncReader = (handler: Handler) => secured("x-sync-secret", "SYNC_READ_SECRET", handler);

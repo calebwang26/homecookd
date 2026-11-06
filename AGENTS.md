@@ -197,8 +197,10 @@ glasses/    ESP32 glasses → GCP VM (Python): WS ingest, MP4 mux, GCS upload, C
 supabase/   Frozen: functions/api (today's sign-in, invites, older screens), migrations/, tests/
 pipeline/   Python: prep.py → process.py (Gemini) → Muse Spark → publish.py, and worker.py (claims jobs from Convex)
 cloud/      GCS upload signer (Cloud Run) + IAM scripts
+api/        The new backend (Node, Fastify, Postgres; docs/build/SYSTEM-DESIGN.md). Nothing live calls it until each area switches (docs/build/CUTOVER.md)
+tools/      media-copy: GCS to S3, refuses real buckets without its named flags (docs/build/MEDIA-MIGRATION.md)
 infra/      AWS, as Terraform (infra/README.md; the plan is docs/build/AWS-MIGRATION.md). Staging only so far; nothing live runs there
-scripts/    check-cartesia.mjs, check-moss.mjs (key checks), set-apple-ids.mjs (launch prep)
+scripts/    check-cartesia.mjs, check-moss.mjs (key checks), set-apple-ids.mjs (launch prep), check-merge-safe.mjs (aws-migration into main changes nothing live)
 data/       sample + synthetic recipes; data/out/ is pipeline output (gitignored)
 docs/       specs, design bible, QA, learning notes; docs/agents/ = shared agent state + memory
 ```
@@ -217,6 +219,7 @@ cd app && npx eas-cli build -p ios --profile staging --auto-submit  # internal-t
 scripts/safe-eas-update.sh staging "<what changed>"                   # JS-only fix to testers (never a bare eas update); while 1.0 is in review never --channel production (that reaches build 6, the reviewed build)
 cd app && npx eas-cli build -p ios --profile aws-staging --auto-submit  # 1.1 on AWS staging (switch on), internal testers only, never attached to a version in review
 scripts/safe-eas-update.sh aws-staging "<what changed>" [--check-only]  # every EAS Update goes through this: it sets the AWS switch for aws-staging only, refuses it elsewhere, refuses production
+cd app && npx eas-cli build -p ios --profile production-aws --auto-submit  # CUTOVER step 8: 1.1 on production AWS (api.homecookd.app), the build step 9 submits; only on the Master Agent's word that production is ready; no EAS Updates to its channel yet
 node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
 cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent/links/doors/reminders/dish/brand
@@ -231,6 +234,7 @@ cd app && node scripts/aws-dish-flows.mjs                          # kids' asks 
 cd app && node scripts/test-aws-community.mjs                     # the 1.1 Community client (fake fetch)
 cd app && node scripts/aws-community-flows.mjs                     # Community on AWS staging: feed, swaps, a dinner end to end, invite link (no reports: they email the team)
 cd app && node scripts/aws-takedown-flows.mjs make|down|back|off <file>  # the team's takedown and keep on staging (AWS backend runs remove/keep between steps); make then off: share off alone
+cd app && node scripts/aws-phone-run.mjs setup|finish|message|voice|delete <file>  # the staging side of a phone check (aws-phone/CHECKLIST.md): test cooks and links, finish jobs, a push, the voice note
 cd app && node scripts/draft-words.mjs                             # draft the cook app's missing words in every language (Claude); then test-words
 cd app && node scripts/sync-brand.mjs                             # the brand kit SVGs in assets/brand -> ui/brandSvgs.ts (test-brand checks them)
 
@@ -238,6 +242,9 @@ cd app && node scripts/sync-brand.mjs                             # the brand ki
 cd web && npm run dev -- --port 3000
 cd web && npm ci && npm run build                                  # confirm a PR's web/ builds
 node web/scripts/qa/dish-e2e.mjs --base http://localhost:3105 --out /tmp/dish-e2e   # v2 /miss + /a vs the local /dish fake (site: cd web && NEXT_PUBLIC_DISH_URL=http://localhost:8791 npx next dev --port 3105)
+  # the new api's uploads: add NEXT_PUBLIC_DISH_UPLOADS=links to the site and --uploads links here. Unset, as on main, the site sends raw files to Convex.
+
+node web/scripts/qa/dish-api-e2e.mjs --base http://localhost:3105 --api <api url> --out /tmp/dish-api-e2e   # the same flow against the new api (site built with NEXT_PUBLIC_DISH_UPLOADS=links); made-up content only
 
 # convex (repo root)
 npx vitest run                                                     # convex-test suites (convex/*.test.ts)
@@ -249,9 +256,32 @@ npx --yes deno@2 test --node-modules-dir=none --allow-env --allow-read supabase/
 npx --yes deno@2 check --node-modules-dir=none supabase/functions/api/*.ts              # typecheck
 npx --yes deno@2 test --node-modules-dir=none --allow-env --allow-read --allow-run --allow-net supabase/tests/account_purge_sql_test.ts   # the purge's sign-up log step on real Postgres (needs .venv)
 
+# merging aws-migration into main (docs/build/CUTOVER.md)
+node scripts/check-merge-safe.mjs                                  # trial merge, the reviewed list, the workflows; CI runs it as the job merge-safe
+node scripts/check-merge-safe.mjs --bundle web/out                 # after a web build with no NEXT_PUBLIC_* set: still today's site
+
 # AWS (infra/README.md; profile homecookd, refresh with: aws sso login --profile homecookd)
 cd infra/envs/staging && terraform init -backend=false && terraform validate   # no login needed
+cd infra/modules/front_door && terraform init -backend=false && terraform test   # also infra/backup-copy, infra/modules/bucket_copy, infra/modules/env; no login needed
 cd infra/envs/staging && AWS_PROFILE=homecookd terraform plan        # production apply: Caleb's OK
+
+python3 infra/scripts/test_plan_check.py                                # what a merge may apply to staging by itself: every guard has a test that fails without it
+
+# website on AWS (staging only; infra/modules/web, docs/build/WEB-MIGRATION.md)
+cd web && npm run build && cd .. && node --test infra/modules/web/rewrite.test.mjs   # the URL rules against every real file in web/out
+node infra/scripts/web-smoke.mjs https://homecookd.app                            # the same paths, against a running site
+node infra/scripts/load-test.mjs http://<staging api>                             # the api's load test (staging, fake models): 50 RPS for 15 min, then a burst
+
+# new backend (api/; TEST_DATABASE_URL adds the real-Postgres tests)
+cd api && npm ci && npm run typecheck && npm test
+docker run -d --rm --name hc-pg -e POSTGRES_PASSWORD=t -e POSTGRES_DB=t -p 15439:5432 postgres:17   # then: cd api && TEST_DATABASE_URL=postgres://postgres:t@127.0.0.1:15439/t npm test (not localhost: on a Mac its lookup can take 5 s, and a test fails)
+PIPELINE_PYTHON=.venv/bin/python   # also set this for api tests: jobsWorker.test.ts runs the real queue worker, and skips without psycopg and sentry_sdk (pipeline/requirements-queue.txt)
+node dist/reports.js open          # and review <kind> <id> keep|remove: the team acting on a Community report, as a one-off api task (COMMUNITY-MIGRATION.md, "The team's reports")
+
+# temporary sync into Postgres: off by default, never on real data without Caleb's OK (docs/build/SYNC-MIGRATION.md)
+
+# media copy (tools/media-copy; never against real buckets without Caleb's OK and /privacy listing AWS)
+cd tools/media-copy && python3 test_media_copy.py && python3 test_stores.py
 
 # upload signer (cloud/signer)
 python3 cloud/signer/test_main.py                                  # sign-in check (Convex + GCS faked)
@@ -291,6 +321,9 @@ voice/deploy.sh                                                    # Cloud Run h
 .venv/bin/python pipeline/worker.py [--once]                        # claim Convex jobs (--gcs: the old GCS job files)
 .venv/bin/python pipeline/worker.py --purge-dry-run                 # what each deleted account's purge would delete
 .venv/bin/python pipeline/process.py --id <id> --rewrite            # re-write recipe.json from the cached extraction
+
+.venv/bin/python pipeline/test_queue_worker.py                     # the queue worker (TEST_DATABASE_URL adds real Postgres; needs requirements-queue.txt)
+python pipeline/queue_worker.py                                     # queue mode, on AWS only (docs/build/WORKER-MIGRATION.md)
 
 # glasses VM (glasses/README.md; uses .venv + ffmpeg)
 .venv/bin/python glasses/ingest/test_server.py                      # unit tests: the VM's state machine

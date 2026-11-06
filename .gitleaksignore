@@ -1,0 +1,4 @@
+# gitleaks fingerprints that are not secrets. One per line: <commit>:<file>:<rule>:<line>.
+# A fake S3 key in a test fixture (audioKey: private/dish/k) that generic-api-key mistakes for a key.
+2c82bcb0a75621852313c204efb750f891c7c56d:app/scripts/test-aws-jobs.mjs:generic-api-key:284
+2c82bcb0a75621852313c204efb750f891c7c56d:app/scripts/test-aws-jobs.mjs:generic-api-key:294

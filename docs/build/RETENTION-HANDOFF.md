@@ -173,8 +173,8 @@ with `cookProfile(recipe, profiles)` (`lib/messaging.ts`, used by `cooked()`). K
   for testing. Guard everything so **Expo Go never crashes** (same pattern as the Google sign-in module).
 - New `app/src/lib/push.ts`: ask permission, get the Expo push token, `POST /push-tokens`, remove on
   sign-out, & route taps (`data.url` → `router.push`).
-- **When to ask** (never on first launch, except the cook's first Send; one in-app explainer sheet first,
-  then the iOS prompt):
+- **When to ask** (never on first launch, except the cook's first Send and v2's two moments, a kid's dish card
+  saved and the cook's craving link shared; one in-app explainer sheet first, then the iOS prompt):
   - kid: right after their first "I made it" ("Want a note when Mom answers?"), or when they send
     their first question;
   - cook: right after their first Send ("Want a note when Leo cooks it?"), including a recipe sent from

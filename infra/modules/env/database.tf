@@ -38,4 +38,13 @@ resource "aws_db_instance" "main" {
   skip_final_snapshot         = !var.db_protected
   final_snapshot_identifier   = var.db_protected ? "${local.name}-final" : null
   copy_tags_to_snapshot       = true
+  # The api and worker log in with IAM tokens, so their logins have no password at all (db_logins below). Turning it on changes no
+  # existing login. Without apply_immediately it waits for the maintenance window (infra/README.md, "Database logins").
+  iam_database_authentication_enabled = true
+}
+
+locals {
+  # Each service's own Postgres login, made by api/migrations/078_app_logins.sql: rows only, no schema changes. Only the migrate task
+  # (services.tf) keeps the master login. A new service that uses the database needs its own role there, and a line here.
+  db_logins = { api = "homecookd_api", worker = "homecookd_worker" }
 }

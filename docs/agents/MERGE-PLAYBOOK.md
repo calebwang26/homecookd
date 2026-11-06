@@ -1,7 +1,7 @@
 # Merge playbook
 
 How the **Merge Agent** session takes in PRs, puts them in order, checks them, resolves conflicts and merges them
-into `main` for calebwang26/hackathon-homecookd. Written Oct 24, 2026, the day before the demo.
+into `main` for calebwang26/homecookd. Written Oct 24, 2026, the day before the demo.
 
 The rule behind it (AGENTS.md, `memory/merge-agent-approval.md`): every session sends its PR here, nobody else
 merges, and the Merge Agent decides how conflicting PRs merge.
@@ -250,6 +250,8 @@ with a clean `web/` build.
   Tell the PR's session not to deploy (only the Merge Agent ships, so there are never two EAS Updates), log the
   versions in STATE.md, then tell Caleb what to test. Docs-only PRs need no deploy. Supabase `api` deploys and
   destructive data changes still need his explicit OK. See `memory/auto-ship-merged-prs.md`.
+- **Auto-ship doesn't cover `aws-migration` into `main`.** Merge it only after Apple approves 1.0, and hold its Convex deploy and worker restart for Caleb's OK. The order, and
+  what changes nothing: `docs/build/CUTOVER.md`, steps 1 to 3. The job `merge-safe` must be green; with no GitHub Pro, nothing else enforces that.
 - **Before every ship, check for direct pushes (Caleb, Oct 25):** list the commits on main's first-parent line since
   the last check that aren't "Merge pull request #N" (someone pushed straight to main, so no one reviewed them). Read
   their diffs, scan them for secrets and junk, and run the tests that cover the files they touch. Anything off: hold

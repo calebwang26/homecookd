@@ -5,6 +5,11 @@
 //   cd web && NEXT_PUBLIC_DISH_URL=http://localhost:8791 npx next dev --port 3105
 //   node web/scripts/qa/dish-e2e.mjs --base http://localhost:3105 --out /tmp/dish-e2e
 //
+// That's today's site against today's contract, raw files to Convex. The new api's way of sending files is its own run: the site
+// built for it, and the fake told to speak it (docs/build/CUTOVER.md). Each contract refuses the other, so a site built for one fails against the other:
+//   cd web && NEXT_PUBLIC_DISH_URL=http://localhost:8791 NEXT_PUBLIC_DISH_UPLOADS=links npx next dev --port 3105
+//   node web/scripts/qa/dish-e2e.mjs --uploads links --base http://localhost:3105 --out /tmp/dish-e2e-links
+//
 // It covers: a kid makes a card (K1 → K2, no stock photo of another dish), Save (K4), Ask Mom (K3, the
 // voice note's empty and recorded states), Mom answers all 3 by voice (M1–M6), the kid reopens and sees
 // Mom's version (her amount, his struck guess, her words); the daily budget's 429 (K5); the language
@@ -14,7 +19,7 @@
 // any other tap says "Get the app", and the sheet copies the page's link, then opens the store. A parent's craving link (/miss?c=, §8): her name and line,
 // the kid's name required, the card tied to her; a stopped, bad or full link falls back to the plain page. Every screen
 // is shot at 390×844 (--width N for another width) into --out. Exits 1 on a failure. Flags: --base, --out, --chrome (default:
-// /Applications/Google Chrome.app), --port (fake).
+// /Applications/Google Chrome.app), --port (fake), --uploads (raw, the default, or links).
 import { createRequire } from 'node:module';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
@@ -32,6 +37,8 @@ const BASE = String(args.base ?? 'http://localhost:3105').replace(/\/+$/, '');
 const OUT = path.resolve(String(args.out ?? '/tmp/dish-e2e'));
 const CHROME = String(args.chrome ?? '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome');
 const PHONE = { width: Number(args.width ?? 390), height: 844 }; // --width 360 checks the narrow phones
+const UPLOADS = String(args.uploads ?? 'raw');
+const LINKS = UPLOADS === 'links';
 mkdirSync(OUT, { recursive: true });
 
 const failures = [];
@@ -45,7 +52,8 @@ function check(name, ok, detail) {
   }
 }
 
-const fake = await startFake({ port: Number(args.port ?? 8791), site: BASE, mergeMs: 2500, translateMs: 1500 });
+console.log(`Uploads: ${UPLOADS}`);
+const fake = await startFake({ port: Number(args.port ?? 8791), site: BASE, mergeMs: 2500, translateMs: 1500, uploads: UPLOADS });
 const browser = await chromium.launch({
   executablePath: CHROME,
   headless: true,
@@ -247,7 +255,14 @@ try {
   await mom.getByText('3 of 3').waitFor({ timeout: 10000 });
   await hold(mom, mic, 1500);
   await mom.getByText('Writing it in your words').waitFor({ timeout: 10000 });
-  check('M3: answers went up as raw audio with the token in a header', fake.log.filter((l) => l.path === '/dish/ask/answer').every((l) => l.token === card.askToken && /^audio\//.test(l.type) && !('t' in l.query)));
+  const answerCalls = fake.log.filter((l) => l.path === '/dish/ask/answer');
+  if (LINKS) {
+    const puts = fake.log.filter((l) => l.path === '/__storage');
+    check('M3: her clips went straight to storage, as audio', puts.length === 3 && puts.every((l) => /^audio\//.test(l.type) && l.size > 0 && !/;/.test(l.type)), JSON.stringify(puts));
+    check('M3: the answers named the file, with the token in the body and no preflight', answerCalls.length === 3 && answerCalls.every((l) => l.token === card.askToken && !l.preflighted && !('t' in l.query)), JSON.stringify(answerCalls));
+  } else {
+    check('M3: answers went up as raw audio with the token in a header', answerCalls.length === 3 && answerCalls.every((l) => l.token === card.askToken && /^audio\//.test(l.type) && !('t' in l.query)), JSON.stringify(answerCalls));
+  }
   await shot(mom, 'M4-waiting');
   await mom.getByText('2 big spoons').waitFor({ timeout: 15000 });
   await mom.waitForTimeout(500);
@@ -303,6 +318,31 @@ try {
   check('Kid: her own words', k6.includes('Two big spoons. Don’t be shy.'));
   check('Kid: her clips play', (await kid.getByRole('button', { name: 'Hear Mom say it' }).count()) >= 2);
   check('Kid: "Your last dish" remembered', true);
+  const hear = kid.getByRole('button', { name: 'Hear Mom say it' }).first();
+  const reloads = () => fake.log.filter((l) => l.path === '/dish/cards/get').length;
+  const reloadsBefore = reloads();
+  if (LINKS) {
+    // A read link dies after an hour: the tap fails, the card reloads for a fresh one, and the next tap plays.
+    fake.expireLinks();
+    await hear.click();
+    await kid.waitForTimeout(1200);
+    check('Links: a dead read link reloads the card', reloads() === reloadsBefore + 1, `${reloadsBefore} -> ${reloads()}`);
+    check('Links: the failed tap leaves the button off', (await hear.getAttribute('aria-pressed')) === 'false');
+  } else {
+    // Today's links never expire, so a clip that won't load stays a failed tap: nothing is fetched again.
+    fake.setBrokenFiles(true);
+    await hear.click();
+    await kid.waitForTimeout(1200);
+    check('Audio: a clip that won’t load doesn’t reload the card', reloads() === reloadsBefore, `${reloadsBefore} -> ${reloads()}`);
+    check('Audio: the failed tap leaves the button off', (await hear.getAttribute('aria-pressed')) === 'false');
+    fake.setBrokenFiles(false);
+  }
+  await hear.click();
+  await kid.waitForTimeout(400);
+  check('Audio: the next tap plays her clip', (await kid.getByRole('button', { name: /Stop|Pause/ }).count()) + (await kid.locator('button[aria-pressed="true"]').count()) >= 1);
+  await kid.locator('button[aria-pressed="true"]').first().click().catch(() => {});
+  // The console's error for the dead link is the point of this check, not an error on the page.
+  kid.errors = [];
   await shot(kid, 'K6-moms-version');
   await shot(kid, 'K6-moms-version-full', { full: true });
 
@@ -334,6 +374,23 @@ try {
   });
   await kid.goto(kidUrl, { waitUntil: 'networkidle' });
   await kid.getByText('From Mom’s kitchen').waitFor();
+
+  // A failed upload reads as "busy" (with links, that's the PUT): the kid's dish stays in the box, and trying again works.
+  fake.setFailingUploads(true);
+  await kid.goto(`${BASE}/miss`, { waitUntil: 'networkidle' });
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M/AAAMBAQAY3Y2wAAAAAElFTkSuQmCC', 'base64');
+  await kid.locator('input[type="file"][accept="image/*"]').setInputFiles({ name: 'dish.png', mimeType: 'image/png', buffer: png });
+  await kid.getByLabel('The dish you miss').fill('mom’s tomato egg');
+  await kid.getByRole('button', { name: 'Make my recipe' }).click();
+  await kid.getByRole('button', { name: 'Make my recipe' }).waitFor({ timeout: 15000 });
+  check('Upload: a failed upload leaves the dish in the box', (await kid.getByLabel('The dish you miss').inputValue()) === 'mom’s tomato egg');
+  await shot(kid, 'K1-upload-failed');
+  kid.errors = [];
+  fake.setFailingUploads(false);
+  await kid.getByRole('button', { name: 'Make my recipe' }).click();
+  await kid.getByRole('heading', { name: 'What you need' }).waitFor({ timeout: 15000 });
+  const withPhoto = fake.cards.get(kid.url().split('k=')[1]);
+  check('Upload: trying again works, and the card has the photo', withPhoto.photos.length === 1, JSON.stringify(withPhoto.photos));
 
   // ── K5: the daily budget ────────────────────────────────────────────────────────────────────
   fake.setBudget(true);
@@ -529,6 +586,29 @@ try {
   check('Hindi: M4 uses inLang.version for the card’s own words', (await hi.getByText('2 बड़े चम्मच').count()) === 1 && (await hi.getByText('अंडे, फेंटे हुए').count()) === 1 && (await hi.getByText('2 big spoons').count()) === 0);
   await shot(hi, 'M7-hindi-fills-in');
 
+  // A slow translation: the api gives up at 8 s with translating: true. English first, then one more peek ~10 s on.
+  fake.setSlowTranslate(4000);
+  await kid.goto(`${BASE}/miss`, { waitUntil: 'networkidle' });
+  await kid.getByLabel('The dish you miss').fill('mom’s tomato egg');
+  await kid.getByRole('button', { name: 'Make my recipe' }).click();
+  await kid.getByRole('heading', { name: 'What you need' }).waitFor({ timeout: 15000 });
+  await kid.locator('div').filter({ hasText: /^SaveAsk Mom$/ }).getByRole('button', { name: 'Ask Mom' }).click();
+  await kid.getByRole('dialog').getByRole('button', { name: 'Copy link' }).click();
+  await kid.waitForTimeout(600);
+  const card3 = fake.cards.get(kid.url().split('k=')[1]);
+  const logFrom = fake.log.length;
+  const slowPeeks = () => fake.log.slice(logFrom).filter((l) => l.path === '/dish/ask/peek').length;
+  const slow = await phone('hi-IN');
+  await slow.goto(`${BASE}/a?t=${card3.askToken}`, { waitUntil: 'domcontentloaded' });
+  await slow.getByRole('heading', { level: 1 }).waitFor();
+  await slow.waitForTimeout(1500);
+  check('Translating: English while her language is on its way', (await slow.getByText('माँ, आप अपना टमाटर अंडा').count()) === 0);
+  const firstPeeks = slowPeeks(); // dev's strict mode runs each first peek twice
+  await slow.getByText('माँ, आप अपना टमाटर अंडा').waitFor({ timeout: 15000 });
+  check('Translating: her language after one more peek', slowPeeks() === firstPeeks + 1, `${firstPeeks} → ${slowPeeks()}`);
+  await shot(slow, 'M7-hindi-after-translating');
+  fake.setSlowTranslate(0);
+
   // Her recipe in her language: her words with the English under them, the chrome and the sheet in Hindi.
   await hi.getByRole('dialog').waitFor({ timeout: 10000 });
   await hi.getByRole('dialog').getByRole('button', { name: /^रेसिपी खोलें/ }).click();
@@ -607,6 +687,11 @@ try {
   await crHi.getByRole('heading', { name: /का सवाल/ }).waitFor();
   check('C6: Hindi: her line as she wrote it', (await crHi.getByText(line).count()) === 1);
   await shot(crHi, 'C6-craving-hindi', { full: true });
+
+  // ── Which contract the whole run used ───────────────────────────────────────────────────────
+  const newRoutes = fake.log.filter((l) => l.path === '/__storage' || l.path === '/dish/files/confirm' || l.path === '/dish/ask/answer/upload');
+  if (LINKS) check('Uploads: every file went by link', newRoutes.length > 0);
+  else check('Uploads: nothing called the new routes, and every file went up raw', newRoutes.length === 0 && fake.log.some((l) => l.path === '/dish/files' && /^image\//.test(l.type)), JSON.stringify(newRoutes.slice(0, 3)));
 } catch (e) {
   failures.push(`crashed: ${e.stack ?? e}`);
   console.log(`  ✗ crashed: ${e.message}`);

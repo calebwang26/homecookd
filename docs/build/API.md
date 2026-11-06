@@ -165,6 +165,16 @@ TC="$(tr -d '\n' < docs/build/.test-family-code)"
 curl -s "$API/family" -H "x-family-code: $TC"
 ```
 
+## Which app builds call (off)
+
+`supabase/functions/api/appBuilds.ts`, switched off: `LOG_APP_BUILDS = false`. When it's on, every request but
+`OPTIONS` is read for its build. The build comes from iOS's own user agent (`homecookd/6 CFNetwork/… Darwin/…`, and
+build 6 is 1.0). OkHttp counts as `android` and a browser as `web`, both with build `unknown`. Anything else is `other`
+(the pipeline, `pg_net`, `curl`, a user agent over 512 characters). Each isolate upserts a (UTC day, platform, build)
+into `app_builds_seen` once, after the response, with a 2 s timeout and at most 50 a day. A failed write is logged by its
+kind only and never changes the answer. Nothing else is kept: not the user agent, the IP or the person. Rows go after
+120 days. Turning it on and reading it: `docs/build/CUTOVER.md`, step 13.
+
 ## Errors
 
 Always `{"error": "<human sentence>"}` with:
@@ -792,6 +802,7 @@ JSON as `application/json` or `text/plain` (`navigator.sendBeacon`):
 most 60, so preview and test traffic can be filtered) -> `204`, no body. Stored in `lander_events`
 with nothing about the person (no IP, no user agent). `400` invalid, `413` over 64 KB, `429` after
 120 per 10 min per IP. Not `/events`: that path is the app's signed-in recipe activity.
+Also on the AWS api, the same path, body, limits and 204, with errors in its one shape (`api/src/modules/platform/routes.ts`, `docs/build/WEB-MIGRATION.md`).
 ```js
 navigator.sendBeacon(`${API}/web-events`, JSON.stringify({ event: "land", aud: "kid", signal: "aud", app: "app", path: "/learn", host: location.hostname }));
 ```

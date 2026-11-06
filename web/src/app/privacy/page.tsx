@@ -6,9 +6,12 @@
 //   videos, clips, recipe photos, recipe.json  Google Cloud buckets at open, unlisted links (pipeline/)
 //   recipes, family, messages, voice notes,    Convex (convex/schema.ts) and Supabase (sign-in, invites,
 //     photos sent home                         older screens; voice notes + photos in private buckets)
-//   AI                                         Claude (watches video stills, writes, translates, homie),
-//                                              Cartesia (transcripts, Ink, Sonic, a cloned voice with
-//                                              consent), Moss (finds the moment), Gemini (glasses only)
+//   AI                                         Claude (watches video stills, writes, translates),
+//                                              Cartesia (transcripts, Ink), Moss (finds the moment, while
+//                                              Convex still syncs to it), Gemini (glasses only). homie's voice
+//                                              is off (app/src/lib/homie/switch.ts): no live mic stream, no
+//                                              hands-free cooking, no cloned voice. Turning homie on means
+//                                              changing this page first (docs/agents/memory/homie-off.md)
 //   Community                                  place rounded to ~1 km, never shown (convex/lib/geo.ts)
 //   Delete account                             the app's profile sheet (convex/account.ts); media in GCS
 //                                              and Supabase rows are purged from accountDeletions
@@ -17,6 +20,14 @@
 //                                              photos, voice notes, message, her answers + translation;
 //                                              Claude (guess, her version, translation), Cartesia Ink;
 //                                              links stored hashed; IP as HMAC only; kept until asked to delete
+//   AWS (1.1, CUTOVER.md step 5)               the api's Postgres and S3 in us-west-2 (infra/envs/production);
+//                                              raw uploads expire after 14 days, old S3 versions after 28
+//                                              (infra/modules/env/storage.tf); database backups 14 days
+//   Sentry                                     the api and worker only: an error's type and place, scrubbed
+//                                              of request data (api/src/sentry.ts); not in the app or site
+//   one-to-one chats on delete                 what they sent goes, the other person's half stays (SCHEMA.md C1)
+//   Expo                                       delivers pushes (api/src/modules/messages/expo.ts)
+// TODO(caleb): a lawyer reads "Where it's kept" and the one-to-one chats line (AWS-MIGRATION.md item 4).
 // TODO(caleb): the legal entity and address, and confirm the 30-day deletion windows (docs/app-store).
 // Links home are plain <a>: '/' must load in full so ROUTE_GATE (the layout's <head> script) runs.
 /* eslint-disable @next/next/no-html-link-for-pages */
@@ -31,7 +42,7 @@ export const metadata: Metadata = {
   alternates: { canonical: '/privacy' },
 };
 
-const UPDATED = 'October 29, 2026';
+const UPDATED = 'November 5, 2026';
 
 const mail = (
   <a className={s.link} href={`mailto:${CONTACT_EMAIL}`}>
@@ -68,13 +79,8 @@ export default function PrivacyPage() {
             and questions and answers about a recipe.
           </li>
           <li>
-            <strong>Your voice while cooking:</strong> when you cook hands-free, the app sends your microphone to our
-            voice service so it hears “next” or a question. While a cook films in the app, the helper listens and looks
-            at the camera to know when to speak.
-          </li>
-          <li>
-            <strong>A cloned voice, only if you say yes:</strong> a cook can let us copy their voice to read their
-            recipes aloud. We ask first, keep a record of the yes, and they can turn it off.
+            <strong>Your voice:</strong> the voice notes and voice answers you record, and what you say in the cooking
+            videos you film. The microphone is on only while you record.
           </li>
           <li>
             <strong>Community:</strong> if your family joins, your place rounded to about 1 km (never shown to anyone)
@@ -102,8 +108,7 @@ export default function PrivacyPage() {
           How we use it
         </h2>
         <p>
-          To write recipes from your videos, cook with you hands-free, send messages, questions and photos between your
-          family, send the notifications you asked for, keep homecookd safe, and fix and improve it. Never for ads.
+          To write recipes from your videos and voice answers, send messages, questions and photos between your family, send the notifications you asked for, keep homecookd safe, and fix and improve it. Never for ads.
         </p>
       </section>
 
@@ -115,12 +120,11 @@ export default function PrivacyPage() {
         <ul className={s.list}>
           <li>
             <strong>Anthropic Claude</strong> watches cooking videos and reads what the cook said, then writes the recipe,
-            its stories and dish ideas. It also translates, drafts notes you can edit before you send them, and decides how
-            to help while you cook hands-free or film.
+            its stories and dish ideas. It also translates, and drafts notes you can edit before you send them.
           </li>
           <li>
-            <strong>Cartesia</strong> turns speech into text, reads steps aloud, and makes a cloned voice only with the
-            cook’s yes.
+            <strong>Cartesia</strong> turns speech into text: voice notes, voice answers and what the cook says in a
+            video.
           </li>
           <li>
             <strong>Moss</strong> searches what the cook said, to find the moment in the video that answers a question.
@@ -170,10 +174,17 @@ export default function PrivacyPage() {
           Where it’s kept
         </h2>
         <p>
-          Recipes, family details, messages, voice notes and photos are stored with Convex and Supabase, two database
-          services. Cooking videos, clips and recipe photos are stored with Google Cloud. This website runs on Vercel.
-          They store data for us and may not use it for anything else.
+          Your account, recipes, family details, messages, voice notes, photos and cooking videos are stored with Amazon
+          Web Services (AWS), in the United States. We’re moving there from Convex and Supabase, two database services,
+          and Google Cloud, which stores videos, clips and recipe photos. Until the move is done, some of it is still
+          stored with them too. This website runs on Vercel.
         </p>
+        <p>
+          When something breaks on our servers, Sentry, an error-reporting service, gets what kind of error it was and
+          where in our code it happened. Never your recipes, messages, voice, photos or account details. Expo and Apple
+          deliver the notifications you allow.
+        </p>
+        <p>They work for us and may not use your data for anything else.</p>
       </section>
 
       <section className={s.block} aria-labelledby="see">
@@ -203,8 +214,12 @@ export default function PrivacyPage() {
         </h2>
         <p>
           While your account is open. When you delete it, we delete your data within 30 days, and it leaves our backups
-          within 30 more. That includes the messages and voice notes you sent, and your one-to-one chats. What others
-          posted in the family chat stays.
+          within 30 more. That includes the messages and voice notes you sent, in the family chat and in one-to-one
+          chats. What others sent stays, in both, so they keep their side of the conversation.
+        </p>
+        <p>
+          The full cooking videos you film or upload are deleted 14 days after they reach us, and leave our backups
+          within 30 more. The recipe keeps its short clips and photos for as long as the recipe stays.
         </p>
       </section>
 
@@ -218,9 +233,8 @@ export default function PrivacyPage() {
             deletes your account, messages and voice notes, and a cook’s recipes.
           </li>
           <li>
-            <strong>Take back a yes</strong> at any time: turn off the cloned voice, Community sharing or notifications
-            in the app, or write to us to stop sending your data to AI services. Recipe writing and hands-free cooking
-            can’t work without them.
+            <strong>Take back a yes</strong> at any time: turn off Community sharing or notifications in the app, or
+            write to us to stop sending your data to AI services. Recipe writing can’t work without them.
           </li>
           <li>
             <strong>Get a copy, or fix something:</strong> write to {mail} and we’ll answer within 30 days. Depending on
