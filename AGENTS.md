@@ -219,6 +219,7 @@ cd app && npx eas-cli build -p ios --profile staging --auto-submit  # internal-t
 scripts/safe-eas-update.sh staging "<what changed>"                   # JS-only fix to testers (never a bare eas update); while 1.0 is in review never --channel production (that reaches build 6, the reviewed build)
 cd app && npx eas-cli build -p ios --profile aws-staging --auto-submit  # 1.1 on AWS staging (switch on), internal testers only, never attached to a version in review
 scripts/safe-eas-update.sh aws-staging "<what changed>" [--check-only]  # every EAS Update goes through this: it sets the AWS switch for aws-staging only, refuses it elsewhere, refuses production
+cd app && npx eas-cli build -p ios --profile production-aws --auto-submit  # CUTOVER step 8: 1.1 on production AWS (api.homecookd.app), the build step 9 submits; only on the Master Agent's word that production is ready; no EAS Updates to its channel yet
 node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
 cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent/links/doors/reminders/dish/brand
@@ -233,6 +234,7 @@ cd app && node scripts/aws-dish-flows.mjs                          # kids' asks 
 cd app && node scripts/test-aws-community.mjs                     # the 1.1 Community client (fake fetch)
 cd app && node scripts/aws-community-flows.mjs                     # Community on AWS staging: feed, swaps, a dinner end to end, invite link (no reports: they email the team)
 cd app && node scripts/aws-takedown-flows.mjs make|down|back|off <file>  # the team's takedown and keep on staging (AWS backend runs remove/keep between steps); make then off: share off alone
+cd app && node scripts/aws-phone-run.mjs setup|finish|message|voice|delete <file>  # the staging side of a phone check (aws-phone/CHECKLIST.md): test cooks and links, finish jobs, a push, the voice note
 cd app && node scripts/draft-words.mjs                             # draft the cook app's missing words in every language (Claude); then test-words
 cd app && node scripts/sync-brand.mjs                             # the brand kit SVGs in assets/brand -> ui/brandSvgs.ts (test-brand checks them)
 
