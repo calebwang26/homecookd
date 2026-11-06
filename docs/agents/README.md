@@ -16,6 +16,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [v2-user-pathway](memory/v2-user-pathway.md) | Oct 29: the next version is built around one user pathway (kid on the web → Ask Mom → parent answers by voice → film in the app); docs/PRD-V2.md |
 | [app-review-guard](memory/app-review-guard.md) | A PR touching what App Review checks: Apple check first, then update the reviewer notes, answers and legal pages in the same PR |
 | [brand-homecookd](memory/brand-homecookd.md) | The name is always lowercase homecookd; which internal names stay "edible" |
+| [recording-only-filmer](memory/recording-only-filmer.md) | Nov 1: a recording in progress or failed shows and notifies only the cook who filmed it (`jobs.mine`) |
 | [brand-egg](memory/brand-egg.md) | Oct 30: the logo and mascot are a smiling egg (the pot is retired); palette Kitchen tile: pale sage page, ink, yolk (main), bottle green (second); no lavender or peach; `docs/brand/` |
 | [git-pr-workflow](memory/git-pr-workflow.md) | PR-only shipping, merge main first, stage by name, the Vercel Root Directory gotcha |
 | [merge-agent-approval](memory/merge-agent-approval.md) | Oct 24: every PR goes to the "Merge Agent" session for approval; it decides conflicts |
@@ -33,7 +34,7 @@ Claude's private memory. It's now the only copy that counts, so add new facts he
 | [demo-family-shreya](memory/demo-family-shreya.md) | Oct 24: the demo is Shreya Pawar's family; her grandma cooks and records in Marathi |
 | [demo-test-dishes](memory/demo-test-dishes.md) | Oct 24: demos, examples and tests use Swordfish steak and Poha (real dishes, real footage) |
 | [homie-off](memory/homie-off.md) | Oct 29: homie's voice is switched off for launch (`lib/homie/switch.ts`); no code deleted; legal text left as is |
-| [moss-sync-off-after-approval](memory/moss-sync-off-after-approval.md) | Oct 31: stop sending recipes to Moss once 1.0 is out of App Review; a switch, not removing the keys, so deleted accounts still leave Moss |
+| [moss-sync-off-after-approval](memory/moss-sync-off-after-approval.md) | Oct 31: stop sending recipes to Moss once 1.0 is out of App Review; a switch, not removing the keys, so deleted accounts still leave Moss; built Nov 5 as `MOSS_SYNC=off` |
 | [homie-voice](memory/homie-voice.md) | Oct 24: homie is Riya bilingual, asked for as auditioned (locale, speed 0.85, moods), cousin tone; Gemini TTS backup |
 | [cook-languages](memory/cook-languages.md) | Oct 24: 12 more cook languages on Cartesia (ink-whisper) + Claude, no Gemini; Oct 26: the cook's whole app in her language (language screen, `lib/words`) |
 | [marathi-dropped](memory/marathi-dropped.md) | Oct 26: Marathi is no longer a cook language; 13 integrated languages (English + 12) |

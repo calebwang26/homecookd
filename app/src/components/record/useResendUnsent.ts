@@ -16,6 +16,7 @@ import { useEffect, useRef } from 'react';
 import { AppState } from 'react-native';
 
 import type { Profile } from '@/lib/api';
+import { AWS_ON } from '@/lib/aws/config';
 import { cancelLiveJob, recordingJob, uploadJob } from '@/lib/live/convex';
 import { useSession } from '@/lib/session';
 import { clipFile, resendStep, sendsBySelf, type Unsent, type UnsentClip } from '@/lib/unsentLogic';
@@ -48,7 +49,8 @@ async function resendOne(u: Unsent, cook: Profile, profiles: Profile[], learners
   const here = clipsHere(u);
   const recordingId = u.local ? null : u.recordingId;
   const seen = loadJobs().find((j) => j.job_id === u.jobId);
-  const job = u.local ? await uploadJob(u.jobId, seen?.convex_job === 'ok', cook.id) : await recordingJob(u.recordingId, cook.id);
+  // On AWS there are no recording rows: every note's job is found by its upload.
+  const job = u.local || AWS_ON ? await uploadJob(u.jobId, seen?.convex_job === 'ok', cook.id) : await recordingJob(u.recordingId, cook.id);
   const row = loadJobs().find((j) => j.job_id === u.jobId);
   const step = resendStep(u, { convexJob: job, upload: row?.local_state ?? null, clipsHere: here.length, now: Date.now() });
   if (step === 'wait') return void looked.delete(u.recordingId);

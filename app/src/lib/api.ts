@@ -17,6 +17,17 @@
 // Every request has a 10 s timeout (longer for sign-in and joining, which do more on the server). Safe (idempotent) calls retry once on a network error or 5xx;
 // calls that create something retry once only on 502/503/504 (the request never reached the
 // function), so a message is never sent twice.
+// 1.1 (EXPO_PUBLIC_BACKEND=aws, lib/aws/config.ts): the same routes go to the AWS api instead, through
+// lib/aws/client.ts, which does the retrying; the Accounts routes keep their paths and shapes there
+// (docs/build/contracts/ACCOUNTS.md on aws-migration). Only the api's own word that the key is gone signs
+// this phone out (the client's onDeadKey).
+
+import { AWS_ON } from './aws/config';
+import { onDeadKey, request as awsRequest, setAwsCredentials, type RequestOpts } from './aws/client';
+import { errorWords } from './aws/errorWords';
+import { awsMessagesApi } from './aws/legacy';
+import { isAwsError } from './aws/errors';
+import { wordsFor } from './words/words';
 
 // Public addresses, so a store build works without app/.env (EAS cloud builds never see that
 // gitignored file, and an empty API_URL made every sign-in fail). .env still overrides them.
@@ -421,8 +432,26 @@ let auth: AuthState = { deviceKey: null, code: null, profileId: null };
 let signedOutHandler: ((message: string) => void) | null = null;
 let profileRemovedHandler: ((profileId: string) => void) | null = null;
 
+/** 1.1: the language the AWS api's refusals are shown in (the words provider sets it). */
+let errorLanguage: string | null = null;
+export function setApiLanguage(lang: string | null) {
+  errorLanguage = lang;
+}
+
 export function setApiAuth(next: Partial<AuthState>) {
   auth = { ...auth, ...next };
+  if (AWS_ON) setAwsCredentials({ deviceKey: auth.deviceKey, personId: auth.profileId });
+}
+
+if (AWS_ON) {
+  onDeadKey(() => {
+    auth = { ...auth, deviceKey: null, profileId: null };
+    try {
+      signedOutHandler?.(SIGNED_OUT);
+    } catch {
+      // the session's trouble
+    }
+  });
 }
 
 let timeZone: string | null = null;
@@ -509,7 +538,46 @@ function credentialFor(o: CallOpts): { deviceKey: string; code: null } | { devic
   return code ? { deviceKey: null, code } : null;
 }
 
+/** A call to the AWS api (1.1): its AwsError comes back as the ApiError the screens already read. */
+async function awsOnce<T>(path: string, o: CallOpts): Promise<T> {
+  const overridden = o.deviceKey !== undefined || o.code !== undefined;
+  const key = overridden ? (o.deviceKey ?? null) : auth.deviceKey;
+  const pid = o.profileId !== undefined ? o.profileId : auth.profileId;
+  if (o.me && !pid && o.authed !== false) throw new ApiError('Pick who you are first.', 403, 'config');
+  const authed = o.authed !== false;
+  if (authed && !key) throw new ApiError('Sign in to see your family.', 401, 'config');
+  const opts: RequestOpts = {
+    method: o.method ?? 'GET',
+    body: o.body as Record<string, unknown> | undefined,
+    // A public route sends this phone's key only when asked (peek's same_family).
+    auth: authed || (o.withKey && key) ? 'key' : 'none',
+    as: authed ? pid : null,
+    deviceKey: key,
+    timeoutMs: o.timeoutMs ?? TIMEOUT_MS,
+    signal: o.signal,
+  };
+  try {
+    return await awsRequest<T>(path, opts);
+  } catch (e) {
+    if (!isAwsError(e)) throw e;
+    // The person's own words for its code, in their language (lib/aws/errorWords.ts).
+    const msg = errorWords(e, wordsFor(errorLanguage));
+    if (e.kind === 'network') throw new ApiError(msg, 0, e.code === 'timeout' ? 'timeout' : 'network');
+    // The person this phone is acting as was removed, or now has their own phone: pick someone else.
+    if (e.status === 403 && authed && pid && pid === auth.profileId && (e.code === 'removed_from_family' || e.code === 'own_phone' || /\bremoved\b|uses their own phone/i.test(e.message))) {
+      auth = { ...auth, profileId: null };
+      try {
+        profileRemovedHandler?.(pid);
+      } catch {
+        // the session's trouble
+      }
+    }
+    throw new ApiError(msg, e.status, 'http', { ...e.extra, error: e.code || e.message, code: e.code, requestId: e.requestId });
+  }
+}
+
 async function once<T>(path: string, o: CallOpts): Promise<T> {
+  if (AWS_ON) return awsOnce<T>(path, o);
   if (!API_URL) throw new ApiError("Messages aren't set up in this build yet.", 0, 'config');
   const headers: Record<string, string> = { accept: 'application/json' };
   if (o.body !== undefined) headers['content-type'] = 'application/json';
@@ -592,6 +660,7 @@ async function once<T>(path: string, o: CallOpts): Promise<T> {
 }
 
 async function call<T>(path: string, o: CallOpts = {}): Promise<T> {
+  if (AWS_ON) return awsOnce<T>(path, o); // lib/aws/client.ts retries where it's safe
   const retry: Retry = o.retry ?? ((o.method ?? 'GET') === 'GET' ? 'safe' : 'none');
   try {
     return await once<T>(path, o);
@@ -614,7 +683,7 @@ const enc = encodeURIComponent;
 // ---------------------------------------------------------------------------------------------
 // Endpoints
 
-export const api = {
+const supabaseApi = {
   /** GET /family: the family, every profile (Mom, Dad, Grandma, Leo, Maya) and this phone's own profile. */
   family: (o: AuthOverride = {}) => call<FamilyInfo>('/family', { ...o, profileId: o.profileId ?? null }),
 
@@ -821,5 +890,11 @@ export const api = {
   /** GET /me/recipe-stats (me): my views, cooks, hearts and "sent to me" per dish. */
   recipeStats: (o: AuthOverride = {}) => call<RecipeStat[]>('/me/recipe-stats', { me: true, ...o }),
 };
+
+/**
+ * Every call the screens make. Under AWS_ON (1.1) the Messages ones are answered by the AWS api in today's shapes
+ * (lib/aws/legacy.ts); the rest go to the AWS api through awsOnce, with the same paths (the Accounts family routes).
+ */
+export const api: typeof supabaseApi = AWS_ON ? { ...supabaseApi, ...awsMessagesApi } : supabaseApi;
 
 export type Api = typeof api;

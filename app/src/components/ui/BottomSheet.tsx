@@ -83,6 +83,21 @@ function subscribeClosing(l: () => void) {
   };
 }
 
+// Sheets whose Modal is up (open or closing). UIKit won't present a Modal from the root while
+// another is up, so a sheet that isn't nested in another (the push ask) waits for none (useSheetsUp).
+const up = new Set<string>();
+function setUp(id: string, on: boolean) {
+  if (on === up.has(id)) return;
+  if (on) up.add(id);
+  else up.delete(id);
+  closingListeners.forEach((l) => l());
+}
+
+/** How many sheets have their Modal up right now. */
+export function useSheetsUp(): number {
+  return useSyncExternalStore(subscribeClosing, () => up.size, () => 0);
+}
+
 export function BottomSheet({
   visible,
   onClose,
@@ -140,6 +155,8 @@ export function BottomSheet({
     setClosing(sheetId, mounted && !visible);
   }, [sheetId, mounted, visible]);
   useEffect(() => () => setClosing(sheetId, false), [sheetId]);
+  useEffect(() => setUp(sheetId, mounted), [sheetId, mounted]);
+  useEffect(() => () => setUp(sheetId, false), [sheetId]);
 
   // Latest callbacks behind stable handlers (react-native-web re-fires onShow when it changes).
   const traceRef = useRef(onTrace);

@@ -1,7 +1,7 @@
 // Shared content types (docs/lander-build-brief.md section 6.1, verbatim).
 export type Relation = 'mom' | 'dad' | 'grandma' | 'grandpa' | 'auntie' | 'uncle';
 export type Tint = 'sage'|'limeWash'|'butter'|'lemon'|'apricotSoft'|'peach'|'blush'|'ube'|'green'|'forest'|'sun'|'chartreuse';
-export type AppClipName = 'app-library'|'app-recipe'|'app-cook'|'app-share'|'app-record'|'app-questions'|'app-add'|'app-watch'|'app-keep';
+export type AppClipName = 'web-miss'|'web-answer'|'web-version'|'app-request';
 
 export interface Recipe {
   id: string;

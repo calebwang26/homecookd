@@ -8,30 +8,27 @@ import { optSrc } from '@/lib/imageLoader';
 export const ROW_COUNT = copy.seeItWork.rows.length;
 
 /**
- * Everything the stage can show, in order: one real recording per row, each ~5s (a visitor gives
- * a row a few seconds). The rows walk the whole pipeline, the same on both versions: record (the
- * Add a recipe form), her words (the recipe), send (the family table filtered to Grandma, her pork
- * belly, then the Share tap), pass it down (cook mode's Watch). app-keep never shows the share
- * sheet (brief 7.2): the text the app really hands to the sheet is shown beside the phone, never on
- * the screen. app-watch plays a Pexels stock clip inside the real Watch sheet, standing in for a
- * family recording (app-recordings.md, clip 9).
+ * Everything the stage can show, in order: one real recording per row. The rows walk today's pathway (PRD-V2), the
+ * same on both versions: the kid names the dish on /miss and taps Ask Mom (the sheet with the message is the share
+ * moment), Mom answers by voice on /a and her version fills in, the kid's card shows her words and her voice, and
+ * the app asks her to film it next time. The text Ask Mom really sends is shown beside the phone.
  */
-export const SLIDES: readonly AppClipName[] = ['app-add', 'app-recipe', 'app-keep', 'app-watch'];
+export const SLIDES: readonly AppClipName[] = ['web-miss', 'web-answer', 'web-version', 'app-request'];
 
 /** slides per row, in play order (a row with more than one chains them) */
 export const ROW_SLIDES: readonly (readonly number[])[] = [[0], [1], [2], [3]];
 
-/** app-keep, the recording with the Share tap */
-export const SHARE_SLIDE = SLIDES.indexOf('app-keep');
-/** app-keep: the Share tap lands at ~3.2s (app-recordings.md, clip 10) */
-export const SHARE_TAP_AT = 3.2;
+/** web-miss, the recording with the Ask Mom sheet */
+export const SHARE_SLIDE = SLIDES.indexOf('web-miss');
+/** web-miss: the Ask Mom sheet is up at ~6.0s */
+export const SHARE_TAP_AT = 6.0;
 
 export const rowOfSlide = (s: number) => ROW_SLIDES.findIndex((r) => r.includes(s));
 
 /** the row that sends the recipe: its words carry the share bubble and the share sentence */
 export const SHARE_ROW = rowOfSlide(SHARE_SLIDE);
-/** the row whose recording is cook mode's Watch: its chip gets the ▶ */
-export const WATCH_ROW = rowOfSlide(SLIDES.indexOf('app-watch'));
+/** the row whose recording plays her voice on the card: its chip gets the ▶ */
+export const WATCH_ROW = rowOfSlide(SLIDES.indexOf('web-version'));
 
 /** a row with one recording loops it natively; a row with several chains them */
 export const singleClipRow = (s: number) => ROW_SLIDES[rowOfSlide(s)].length === 1;
@@ -56,9 +53,9 @@ export const START_AT: Partial<Record<AppClipName, number>> = {};
  * from poster to video never jumps.
  */
 const POSTERS: Partial<Record<AppClipName, string>> = {
-  'app-add': '/media/app/app-add-picked.jpg', // 5.4s: dish, cook and two videos picked
-  'app-recipe': '/media/app/app-recipe-words.jpg', // 2.05s: Ingredients open, nothing checked
-  'app-watch': '/media/app/app-watch-sheet.jpg', // 4.8s: the step's video playing, her 2nd line lit
+  'web-miss': '/media/app/web-miss-ask.jpg', // the end: the Ask Mom sheet with the message, link copied
+  'web-answer': '/media/app/web-answer-sent.jpg', // the end: "Sent to Caleb."
+  'web-version': '/media/app/web-version-words.jpg', // the end: her amounts and words on the card
 };
 
 /** 640w WebP posters (the screen is ≤ 300 CSS px wide) instead of the 50–150KB JPGs */

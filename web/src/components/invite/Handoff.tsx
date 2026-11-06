@@ -2,15 +2,17 @@
 // The web's two ways into the app (FEEDBACK-OCT16c section C), shared by the /i invite page and the
 // /r "Get the app" sheet:
 //   Get the app    -> puts the link on the clipboard inside the tap (Safari only allows it there).
-//                     Copied: "Copied. In the app, tap Paste invite." stays up long enough to read,
+//                     Copied: `copied` (by default "Copied. Once homecookd is installed, come back and
+//                     tap Open homecookd.") stays up long enough to read,
 //                     then the store opens. Not copied: they stay here and are told to come back
 //                     and tap Open homecookd. Either way the button is a real store link, so a
 //                     second tap goes straight there.
 //                     No store link for this phone yet -> says plainly that homecookd is in early
 //                     testing and who to message. No link is ever made up.
 //   Open homecookd -> the app's scheme (a universal link never opens the app from its own domain).
-//                     It copies the link too, inside the tap: where the app doesn't answer the
-//                     scheme, opening homecookd by hand and tapping Paste invite still works.
+//                     It copies the link too, inside the tap: the app picks up a copied /i, /miss or /a
+//                     link by itself on its first screen (app/src/components/signin/useLinkPickup.ts).
+//                     The app has no Paste invite since 1.1 (join by link only).
 // On a computer neither works, so it says "Open this link on your phone." instead.
 //
 // TODO(caleb): once NEXT_PUBLIC_APP_STORE_URL is set, check on a real iPhone that the store opens
@@ -22,7 +24,7 @@ import s from './Handoff.module.css';
 
 type Note = 'copied' | 'not-copied' | 'testing' | null;
 
-/** How long "Copied. In the app, tap Paste invite." shows before the store opens. */
+/** How long the "Copied." note shows before the store opens. */
 const READ_MS = 1600;
 
 export function Handoff({
@@ -31,9 +33,9 @@ export function Handoff({
   askName,
   phone,
   hint,
-  copied = 'Copied. In the app, tap Paste invite.',
+  copied = 'Copied. Once homecookd is installed, come back and tap Open homecookd.',
 }: {
-  /** What "Get the app" copies (the invite or share link; the app's Paste invite reads it). */
+  /** What "Get the app" copies (the invite or share link). */
   link: string;
   /** homecookd://… for "Open homecookd". */
   openUrl: string;
