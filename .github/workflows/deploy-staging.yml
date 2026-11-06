@@ -6,15 +6,22 @@ on:
     paths:
       - "api/**"
       - "pipeline/**"
+      - "!**/*.md" # a README or note alone deploys nothing
 
 permissions:
   id-token: write
   contents: read
   actions: read # to see whether apply-staging.yml has finished
 
+# One deploy at a time, and a later merge waits its turn: a deploy is never cancelled halfway.
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
 jobs:
   changes:
     runs-on: ubuntu-latest
+    timeout-minutes: 50 # it waits for apply-staging.yml, which may take its whole 45
     outputs:
       api: ${{ steps.diff.outputs.api }}
       worker: ${{ steps.diff.outputs.worker }}

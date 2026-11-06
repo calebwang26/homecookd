@@ -227,14 +227,21 @@ job, which takes the newest.
 The deploy role trusts the GitHub environment's name, so anyone with write access could run the workflow against an
 environment called `production`. **A GitHub environment named `Production` already exists, with no required reviewers**
 (probably made by Vercel's deployments; GitHub ignores case in these names). It's harmless while the production deploy
-role doesn't exist. **Give it required reviewers (Caleb) before production is created.**
+role doesn't exist. ~~**Give it required reviewers (Caleb) before production is created.**~~
+
+**Known gap (Nov 5): GitHub can't give it required reviewers on this plan.** The API answers 422, "the billing plan supports the required
+reviewers protection rule": a private repository needs GitHub Team for environment protection rules, as it did for branch protection before Pro. So
+nothing stops a run against `production` but the deploy role's own trust (the environment's name, and `main` as its `deploy_branch`). Until the plan
+changes, the gate is people: the Master Agent reviews every PR that reaches `main`, and production's deploys and applies run only on Caleb's word in the
+AWS backend chat. Add the reviewers if the plan ever allows it: `gh api -X PUT repos/calebwang26/homecookd/environments/Production` with
+`reviewers[][type]=User` and Caleb's user id.
 
 ## Production before launch
 
 `envs/production` has every area's switch on from the start (`docs/build/CUTOVER.md`, "What production has on at launch") and every task at
 0. Each step here is Caleb's: production, DNS and new spending need his OK in chat (AGENTS.md). In order, as CUTOVER.md's step 6.
 
-**1. First.** Required reviewers on the GitHub `Production` environment ("Before production", above). Production's deploys log in only from
+**1. First.** ~~Required reviewers on the GitHub `Production` environment~~: not available on this plan ("Before production", above, the known gap). Production's deploys log in only from
 `main` (its `deploy_branch`), so they wait for CUTOVER.md's step 4, the merge.
 
 **2. The two certificates, before the first apply if possible.** ACM issues them only after a DNS check, so start here. With them in place,
