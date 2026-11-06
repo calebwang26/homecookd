@@ -2,7 +2,7 @@
 // Media pipeline (brief section 7.1). Idempotent: skips outputs that already exist unless --force.
 //   node scripts/media.mjs           # everything
 //   node scripts/media.mjs --force   # rebuild everything
-//   node scripts/media.mjs --only=covers,posters,hand,video,hero,icons,webp,report
+//   node scripts/media.mjs --only=covers,hand,video,hero,icons,webp,report
 //
 // 1. Copy the real app covers from ../data/synthetic/posters → public/media/app-covers/
 // 2. WebP at 160/320/480/640/960/1280/1920 for every jpg/png in public/media/{stock,app-covers,app}
@@ -11,8 +11,7 @@
 //    Quality starts at 78 and steps down (72 → 66 → 60) only when a file is over its width's budget
 //    (brief 11: cards 640w ≤ 60KB, tiles 320w ≤ 25KB, photos 1280w ≤ 180KB). Alpha PNGs stay at 78.
 // 3. A pre-blurred 96px `-blur.webp` for each photo-*.jpg (a6 mobile layer).
-// 4. Extra app posters: app-record-add.jpg (11.5s: "Sunday dumplings" typed, Grandma picked, no tap
-//    ring; 9.5s in the brief is mid-typing) and app-share-end.jpg (last frame).
+// 4. (The tour's clips and their posters come from scripts/qa/record-tour.mjs and tour-encode.sh.)
 // 4b. hand-phone-clean.png: the hand cutout with its light background fringe removed (see the step).
 // 5. Hero loop seam check (SSIM first vs last frame); writes *-loop.mp4 with a 0.6s crossfade if < 0.9,
 //    plus hero-loop-poster(-mobile).jpg = frame 0 of each loop file (so poster → video never jumps).
@@ -42,8 +41,6 @@ export const WIDTHS = [160, 320, 480, 640, 960, 1280, 1920];
 /** KB per output width (brief 11). The 1920 bucket only serves full-bleed photos and the hero poster. */
 export const BUDGET_KB = { 160: 10, 320: 25, 480: 42, 640: 60, 960: 110, 1280: 180, 1920: 260 };
 const QUALITIES = [78, 72, 66, 60];
-/** app-record.mp4 frame for the "Add a recipe" still (typed + Grandma picked, no tap ring) */
-const RECORD_ADD_AT = 11.5;
 const need = (out) => FORCE || !existsSync(out);
 const log = (...a) => console.log('[media]', ...a);
 
@@ -64,21 +61,6 @@ if (run('covers')) {
     const to = path.join(dst, `${n}.jpg`);
     if (!existsSync(from)) { log('MISSING cover', from); continue; }
     if (need(to)) { copyFileSync(from, to); log('cover', n); }
-  }
-}
-
-// 4. Extra app posters (before webp so they get optimized too)
-if (run('posters')) {
-  const app = path.join(MEDIA, 'app');
-  const add = path.join(app, 'app-record-add.jpg');
-  if (need(add) && existsSync(path.join(app, 'app-record.mp4'))) {
-    execFileSync(FFMPEG, ['-y', '-loglevel', 'error', '-ss', String(RECORD_ADD_AT), '-i', path.join(app, 'app-record.mp4'), '-frames:v', '1', '-q:v', '2', add]);
-    log('poster app-record-add.jpg');
-  }
-  const end = path.join(app, 'app-share-end.jpg');
-  if (need(end) && existsSync(path.join(app, 'app-share.mp4'))) {
-    execFileSync(FFMPEG, ['-y', '-loglevel', 'error', '-sseof', '-0.1', '-i', path.join(app, 'app-share.mp4'), '-frames:v', '1', '-q:v', '3', '-update', '1', end]);
-    log('poster app-share-end.jpg');
   }
 }
 
