@@ -6,6 +6,48 @@ resource "aws_s3_bucket" "uploads" {
   bucket = "${local.name}-uploads-${local.account_id}"
 }
 
+# Voice notes and photos between family members: never on the CDN's public path, read only with short presigned links.
+resource "aws_s3_bucket" "private" {
+  bucket = "${local.name}-private-${local.account_id}"
+}
+
+resource "aws_s3_bucket_public_access_block" "private" {
+  bucket                  = aws_s3_bucket.private.id
+  block_public_acls       = true
+  block_public_policy     = true
+  ignore_public_acls      = true
+  restrict_public_buckets = true
+}
+
+resource "aws_s3_bucket_versioning" "private" {
+  bucket = aws_s3_bucket.private.id
+  versioning_configuration { status = "Enabled" }
+}
+
+resource "aws_s3_bucket_lifecycle_configuration" "private" {
+  bucket     = aws_s3_bucket.private.id
+  depends_on = [aws_s3_bucket_versioning.private]
+  rule {
+    id     = "old-versions-and-abandoned-uploads"
+    status = "Enabled"
+    filter {}
+    expiration { expired_object_delete_marker = true }
+    noncurrent_version_expiration { noncurrent_days = 28 }
+    abort_incomplete_multipart_upload { days_after_initiation = 7 }
+  }
+}
+
+resource "aws_s3_bucket_cors_configuration" "private" {
+  count  = length(var.private_cors_origins) > 0 ? 1 : 0
+  bucket = aws_s3_bucket.private.id
+  cors_rule {
+    allowed_origins = var.private_cors_origins
+    allowed_methods = ["PUT"]
+    allowed_headers = ["Content-Type"]
+    max_age_seconds = 3600
+  }
+}
+
 resource "aws_s3_bucket_public_access_block" "media" {
   bucket                  = aws_s3_bucket.media.id
   block_public_acls       = true
@@ -38,6 +80,8 @@ resource "aws_s3_bucket_lifecycle_configuration" "media" {
     filter {}
     expiration { expired_object_delete_marker = true }
     noncurrent_version_expiration { noncurrent_days = 28 }
+    # An abandoned upload holds family bytes that no listing or purge can see.
+    abort_incomplete_multipart_upload { days_after_initiation = 7 }
   }
 }
 
@@ -58,6 +102,13 @@ resource "aws_s3_bucket_lifecycle_configuration" "uploads" {
     noncurrent_version_expiration { noncurrent_days = 28 }
     abort_incomplete_multipart_upload { days_after_initiation = 7 }
   }
+  # Caleb, Nov 1: raw footage goes after 14 days, as on GCS today. The rule above keeps the deleted version for its undo window.
+  rule {
+    id     = "raw-footage-14-days"
+    status = "Enabled"
+    filter {}
+    expiration { days = 14 }
+  }
 }
 
 # The same rule as cloud/media-cors.json.
@@ -72,6 +123,10 @@ resource "aws_s3_bucket_cors_configuration" "media" {
   }
 }
 
+locals {
+  media_url = "https://${var.media_domain != null ? var.media_domain : aws_cloudfront_distribution.media.domain_name}"
+}
+
 resource "aws_cloudfront_origin_access_control" "media" {
   name                              = "${local.name}-media"
   origin_access_control_origin_type = "s3"
@@ -79,8 +134,22 @@ resource "aws_cloudfront_origin_access_control" "media" {
   signing_protocol                  = "sigv4"
 }
 
-data "aws_cloudfront_cache_policy" "optimized" {
-  name = "Managed-CachingOptimized"
+# Like Managed-CachingOptimized, with publish.py's ?v= in the cache key, or a replaced file stays stale until it expires.
+resource "aws_cloudfront_cache_policy" "media" {
+  name        = "${local.name}-media"
+  default_ttl = 86400
+  max_ttl     = 31536000
+  min_ttl     = 1
+  parameters_in_cache_key_and_forwarded_to_origin {
+    enable_accept_encoding_brotli = true
+    enable_accept_encoding_gzip   = true
+    cookies_config { cookie_behavior = "none" }
+    headers_config { header_behavior = "none" }
+    query_strings_config {
+      query_string_behavior = "whitelist"
+      query_strings { items = ["v"] }
+    }
+  }
 }
 
 data "aws_cloudfront_origin_request_policy" "cors" {
@@ -104,7 +173,7 @@ resource "aws_cloudfront_distribution" "media" {
     viewer_protocol_policy   = "redirect-to-https"
     allowed_methods          = ["GET", "HEAD", "OPTIONS"]
     cached_methods           = ["GET", "HEAD"]
-    cache_policy_id          = data.aws_cloudfront_cache_policy.optimized.id
+    cache_policy_id          = aws_cloudfront_cache_policy.media.id
     origin_request_policy_id = data.aws_cloudfront_origin_request_policy.cors.id
     compress                 = true
   }

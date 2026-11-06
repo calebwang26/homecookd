@@ -1,0 +1,50 @@
+# Every merge into aws-migration deploys what changed to staging, then checks it answers. Staging has no real keys or data.
+name: Deploy to staging
+on:
+  push:
+    branches: [aws-migration]
+    paths:
+      - "api/**"
+      - "pipeline/**"
+
+permissions:
+  id-token: write
+  contents: read
+  actions: read # to see whether apply-staging.yml has finished
+
+jobs:
+  changes:
+    runs-on: ubuntu-latest
+    outputs:
+      api: ${{ steps.diff.outputs.api }}
+      worker: ${{ steps.diff.outputs.worker }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4.4.0
+        with:
+          fetch-depth: 2
+      - name: Let Terraform go first
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPLY_SWITCH: ${{ vars.STAGING_INFRA_APPLY }}
+        run: bash infra/scripts/wait-for-apply.sh
+      - id: diff
+        run: |
+          FILES=$(git diff --name-only HEAD~1 HEAD)
+          echo "$FILES" | grep -q '^api/' && echo "api=true" >> "$GITHUB_OUTPUT" || echo "api=false" >> "$GITHUB_OUTPUT"
+          echo "$FILES" | grep -q '^pipeline/' && echo "worker=true" >> "$GITHUB_OUTPUT" || echo "worker=false" >> "$GITHUB_OUTPUT"
+
+  api:
+    needs: changes
+    if: needs.changes.outputs.api == 'true'
+    uses: ./.github/workflows/deploy-aws.yml
+    with:
+      environment: staging
+      service: api
+
+  worker:
+    needs: changes
+    if: needs.changes.outputs.worker == 'true'
+    uses: ./.github/workflows/deploy-aws.yml
+    with:
+      environment: staging
+      service: worker

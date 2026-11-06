@@ -54,7 +54,7 @@ export type Recipe = {
   special: Special[];
 };
 
-/** GET /shares/:token (public). See docs/build/SPEC.md section 4. */
+/** GET /shares/:token (public; docs/build/SPEC.md section 4), or the new api's POST /v1/shares/open mapped to it (api.ts). */
 export type Share = {
   token: string;
   recipe_id: string;

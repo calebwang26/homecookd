@@ -1,4 +1,10 @@
 {
+  "git": {
+    "deploymentEnabled": {
+      "aws-migration": false,
+      "claude/aws-*": false
+    }
+  },
   "headers": [
     {
       "source": "/fonts/(.*)",
