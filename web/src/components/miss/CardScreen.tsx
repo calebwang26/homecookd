@@ -29,7 +29,7 @@ export function CardScreen({ token, initial, onNewDish }: Props) {
   const [saving, setSaving] = useState(false);
   const [locked, setLocked] = useState(false); // the locked recipe view over the card, from its ingredients
   const { toast, show } = useToast();
-  const audio = useAudio();
+  const audio = useAudio(useCallback(() => void getCard(token).then(setCard, () => {}), [token]));
 
   // The kid shapes the guess until Mom has sent her answers: what to ask (picked) and what to fix (edits).
   const shaping = !card.finishedAt && !card.version;

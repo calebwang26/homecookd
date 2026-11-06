@@ -22,7 +22,7 @@ resource "aws_iam_role_policy_attachment" "execution_base" {
 }
 
 resource "aws_iam_role_policy" "execution_secrets" {
-  for_each = { for k, s in var.services : k => s if length(s.secrets) > 0 || s.uses_database }
+  for_each = { for k, s in var.services : k => s if length(s.secrets) > 0 || (s.uses_database && !var.db_iam_login) }
   role     = aws_iam_role.execution[each.key].id
   policy = jsonencode({
     Version = "2012-10-17"
@@ -31,10 +31,35 @@ resource "aws_iam_role_policy" "execution_secrets" {
       Action = "secretsmanager:GetSecretValue"
       Resource = concat(
         [for s in each.value.secrets : aws_secretsmanager_secret.app[s].arn],
-        each.value.uses_database ? [aws_db_instance.main.master_user_secret[0].secret_arn] : [],
+        each.value.uses_database && !var.db_iam_login ? [aws_db_instance.main.master_user_secret[0].secret_arn] : [],
       )
     }]
   })
+}
+
+# The migrate task (services.tf): starts it with the master login, the one secret it reads.
+resource "aws_iam_role" "migrate_execution" {
+  name               = "${local.name}-migrate-execution"
+  assume_role_policy = data.aws_iam_policy_document.ecs_assume.json
+}
+
+resource "aws_iam_role_policy_attachment" "migrate_execution_base" {
+  role       = aws_iam_role.migrate_execution.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
+}
+
+resource "aws_iam_role_policy" "migrate_execution_secret" {
+  role = aws_iam_role.migrate_execution.id
+  policy = jsonencode({
+    Version   = "2012-10-17"
+    Statement = [{ Effect = "Allow", Action = "secretsmanager:GetSecretValue", Resource = aws_db_instance.main.master_user_secret[0].secret_arn }]
+  })
+}
+
+# Its running code needs nothing from AWS, so this role has no permissions at all.
+resource "aws_iam_role" "migrate_task" {
+  name               = "${local.name}-migrate-task"
+  assume_role_policy = data.aws_iam_policy_document.ecs_assume.json
 }
 
 # What the running code may do.
@@ -45,6 +70,13 @@ resource "aws_iam_role" "task" {
 }
 
 locals {
+  # Signs an IAM token for the service's own Postgres login, and no other (database.tf, db_logins). Harmless before db_iam_login.
+  db_connect = { for k, user in local.db_logins : k => {
+    Effect   = "Allow"
+    Action   = "rds-db:connect"
+    Resource = "arn:aws:rds-db:${local.region}:${local.account_id}:dbuser:${aws_db_instance.main.resource_id}/${user}"
+  } }
+
   task_permissions = {
     # Task protection keeps a task with a live call from being stopped by a release.
     voice = [{
@@ -53,15 +85,22 @@ locals {
       Resource = "arn:aws:ecs:${local.region}:${local.account_id}:task/${local.name}/*"
     }]
     api = [
+      local.db_connect.api,
       {
         Effect   = "Allow"
         Action   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
-        Resource = ["${aws_s3_bucket.uploads.arn}/*", "${aws_s3_bucket.media.arn}/*"]
+        Resource = ["${aws_s3_bucket.uploads.arn}/*", "${aws_s3_bucket.media.arn}/*", "${aws_s3_bucket.private.arn}/*"]
+      },
+      # Without this, S3 answers 403 for a missing object, and a file not uploaded yet looks like an outage. The outside purge lists a deleted person's folders in uploads and media.
+      {
+        Effect   = "Allow"
+        Action   = "s3:ListBucket"
+        Resource = [aws_s3_bucket.private.arn, aws_s3_bucket.uploads.arn, aws_s3_bucket.media.arn]
       },
       {
         Effect   = "Allow"
         Action   = ["sqs:SendMessage"]
-        Resource = aws_sqs_queue.jobs.arn
+        Resource = [aws_sqs_queue.jobs.arn, aws_sqs_queue.scheduled.arn]
       },
       {
         Effect   = "Allow"
@@ -70,6 +109,7 @@ locals {
       },
     ]
     worker = [
+      local.db_connect.worker,
       {
         Effect   = "Allow"
         Action   = ["s3:GetObject", "s3:DeleteObject"]
@@ -79,6 +119,18 @@ locals {
         Effect   = "Allow"
         Action   = ["s3:PutObject", "s3:GetObject", "s3:DeleteObject"]
         Resource = "${aws_s3_bucket.media.arn}/*"
+      },
+      # A job reads its upload's listing, and a cancel lists what it published. Without this S3 also answers 403 for a missing key.
+      {
+        Effect   = "Allow"
+        Action   = "s3:ListBucket"
+        Resource = [aws_s3_bucket.uploads.arn, aws_s3_bucket.media.arn]
+      },
+      # The cook's plate photo, read only. A missing photo answers 403 here, which pipeline/queue_aws.py treats as no photo.
+      {
+        Effect   = "Allow"
+        Action   = "s3:GetObject"
+        Resource = "${aws_s3_bucket.private.arn}/*"
       },
       {
         Effect   = "Allow"
@@ -95,8 +147,9 @@ resource "aws_iam_role_policy" "task" {
   policy   = jsonencode({ Version = "2012-10-17", Statement = each.value })
 }
 
-# GitHub Actions' deploy login. No stored keys, and only a job running in this repo's matching GitHub environment
-# can use it. It can push images and roll services; it can't change the network, the database or secrets.
+# GitHub Actions' deploy login. No stored keys. Three things must all match: this repo's GitHub environment (sub), the deploy branch (ref), and one of the
+# two deploy workflows on that branch (job_workflow_ref). Without the last two, any branch with a workflow naming the environment could log in. It can push images and roll
+# services; it can't change the network, the database or secrets.
 data "aws_iam_policy_document" "deploy_assume" {
   statement {
     actions = ["sts:AssumeRoleWithWebIdentity"]
@@ -113,6 +166,16 @@ data "aws_iam_policy_document" "deploy_assume" {
       test     = "StringEquals"
       variable = "token.actions.githubusercontent.com:sub"
       values   = ["${var.github_subject_prefix}:environment:${var.environment}"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:ref"
+      values   = ["refs/heads/${var.deploy_branch}"]
+    }
+    condition {
+      test     = "StringEquals"
+      variable = "token.actions.githubusercontent.com:job_workflow_ref"
+      values   = [for f in ["deploy-aws.yml", "deploy-web.yml"] : "${var.github_repository}/.github/workflows/${f}@refs/heads/${var.deploy_branch}"]
     }
   }
 }
@@ -131,13 +194,24 @@ resource "aws_iam_role_policy" "deploy" {
       {
         Effect = "Allow"
         Action = [
-          "ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:CompleteLayerUpload", "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchCheckLayerAvailability", "ecr:BatchGetImage", "ecr:CompleteLayerUpload", "ecr:DescribeImages", "ecr:GetDownloadUrlForLayer",
           "ecr:InitiateLayerUpload", "ecr:PutImage", "ecr:UploadLayerPart",
         ]
         Resource = [for r in aws_ecr_repository.service : r.arn]
       },
       # These two don't support naming a resource.
       { Effect = "Allow", Action = ["ecs:DescribeTaskDefinition", "ecs:RegisterTaskDefinition"], Resource = "*" },
+      # Runs database migrations as a one-off task before a release: the migrate task only, the one with the master login.
+      {
+        Effect   = "Allow"
+        Action   = "ecs:RunTask"
+        Resource = "arn:aws:ecs:${local.region}:${local.account_id}:task-definition/${local.name}-migrate:*"
+      },
+      {
+        Effect   = "Allow"
+        Action   = "ecs:DescribeTasks"
+        Resource = "arn:aws:ecs:${local.region}:${local.account_id}:task/${local.name}/*"
+      },
       {
         Effect   = "Allow"
         Action   = ["ecs:DescribeServices", "ecs:UpdateService"]
@@ -146,7 +220,7 @@ resource "aws_iam_role_policy" "deploy" {
       {
         Effect    = "Allow"
         Action    = "iam:PassRole"
-        Resource  = concat([for r in aws_iam_role.execution : r.arn], [for r in aws_iam_role.task : r.arn])
+        Resource  = concat([for r in aws_iam_role.execution : r.arn], [for r in aws_iam_role.task : r.arn], [aws_iam_role.migrate_execution.arn, aws_iam_role.migrate_task.arn])
         Condition = { StringEquals = { "iam:PassedToService" = "ecs-tasks.amazonaws.com" } }
       },
     ]
