@@ -74,11 +74,12 @@ follows it, and it wins over the docs below on UI/UX and flows.
   open PR, or a permanent section chat's worktree branch (`claude/aws-backend-b65c64`, `claude/in-app-recording-4c5510`,
   `claude/pipeline-times-cover-8be573`, and any other a chat works from). Deleting is remote-only; a merged PR's branch
   can be restored from its page. On Nov 2 the Master Agent deleted 273 such branches (281 → 9, list in PR #281).
-- **Section chats (Oct 26):** each codebase section has one permanent Claude chat that owns it (Voice & homie,
+- **Section chats (Oct 26):** since Nov 5 they run in Terminal tabs, not the desktop app; `~/homecookd-chats.command`
+  (on Caleb's Mac, untracked) reopens the Master Agent, every section chat and a text copy of the work tracker. Each codebase section has one permanent Claude chat that owns it (Voice & homie,
   Pipeline & recipes, Convex & accounts, App screens & recording, App Store, web & builds, and since Oct 29
   Notifications & linking, since Oct 31 AWS backend). Work goes to the owner of the files it touches: `docs/agents/memory/section-chats.md`.
 - **The Merge Agent approves every PR.** After `gh pr create`, send the PR (number, link, branch, files touched,
-  one-line summary) to the Claude Desktop session titled **Merge Agent** (Claude Code: `ListAgents`, then
+  one-line summary) to the Claude Code session titled **Master Agent** (Claude Code: `ListAgents`, then
   `SendMessage`; Codex or Salik: ask Caleb to pass it on). Don't merge until it approves. When PRs conflict, the
   Merge Agent decides how they merge, and its call is final. How it reviews, orders and resolves PRs, and what a PR
   message should contain: `docs/agents/MERGE-PLAYBOOK.md`.
@@ -97,11 +98,10 @@ follows it, and it wins over the docs below on UI/UX and flows.
   Supabase edge-function secrets (which key goes where: `docs/build/STACK.md`, "Keys").
 - **Where the checkout lives (Nov 2):** `/Users/calebwang/GitHub/homecookd/homecookd`, outside iCloud, next to
   `homecookd-backups` in the same `homecookd` folder (Caleb dropped the `hackathon-` from the folder name and, on Nov 2,
-  renamed the GitHub repo to `calebwang26/homecookd`; the old repo URL redirects). One symlink points at it and stays:
-  `~/Documents/GitHub/hackathon-homecookd` (the app won't move a session that runs in one of its worktrees); the
-  worktrees' git metadata names the real path.
-  Every tracked file, script and `.env` link names
-  the real path. Never put the repo back under `~/Documents` (or any iCloud folder): iCloud evicts files there
+  renamed the GitHub repo to `calebwang26/homecookd`; the old repo URL redirects). The old
+  `~/Documents/GitHub/hackathon-homecookd` symlink was deleted on Nov 5, once the chats moved to the terminal and
+  reopened from the real folders, so nothing of homecookd is left in iCloud. Every tracked file, script, `.env` link
+  and worktree's git metadata names the real path. Never put the repo back under `~/Documents` (or any iCloud folder): iCloud evicts files there
   ("dataless"), and git, rsync and `mv` all hang on them. The worktrees' installed packages (`node_modules`, `.venv`,
   `web/.next`) were not copied in the Nov 1 move: run `npm ci` in a worktree that needs them.
 - **One `.env` for every key:** `/Users/calebwang/GitHub/homecookd/homecookd/.env` (the main checkout).
@@ -219,6 +219,7 @@ cd app && npx eas-cli build -p ios --profile staging --auto-submit  # internal-t
 scripts/safe-eas-update.sh staging "<what changed>"                   # JS-only fix to testers (never a bare eas update); while 1.0 is in review never --channel production (that reaches build 6, the reviewed build)
 cd app && npx eas-cli build -p ios --profile aws-staging --auto-submit  # 1.1 on AWS staging (switch on), internal testers only, never attached to a version in review
 scripts/safe-eas-update.sh aws-staging "<what changed>" [--check-only]  # every EAS Update goes through this: it sets the AWS switch for aws-staging only, refuses it elsewhere, refuses production
+cd app && npx eas-cli build -p ios --profile production-aws --auto-submit  # CUTOVER step 8: 1.1 on production AWS (api.homecookd.app), the build step 9 submits; only on the Master Agent's word that production is ready; no EAS Updates to its channel yet
 node app/scripts/pcm-echo-server.mjs                               # test socket for the mic (EXPO_PUBLIC_VOICE_URL=ws://<mac-ip>:8787)
 cd app && npx tsc --noEmit && npx expo lint
 cd app && node scripts/test-retention.mjs                          # also test-table/hearts/recap/cooking/recommend/languages/homie/voice-ui/recording-ui/parent-jobs/community-ui/who/words/signin/consent/links/doors/reminders/dish/brand
