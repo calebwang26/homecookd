@@ -328,7 +328,7 @@ email, and `dish-api-e2e.mjs`. Once step 5 is live, the measured real video job 
    (Mom, Dad, Grandma, Leo, Maya, Reviewer, `docs/agents/memory/app-review-guard.md`).
 2. Its Chicken Biryani is a real video job, so it waits for step 5. Production has no made-up recipe: `POST /v1/test/recipe` needs
    `TEST_SIGNIN_KEY`, which the env module refuses here.
-3. **The reviewer's link that doesn't expire (#NNN).** A family's own links last 7 days (contracts/ACCOUNTS.md), so this one is an
+3. **The reviewer's link that doesn't expire (#365).** A family's own links last 7 days (contracts/ACCOUNTS.md), so this one is an
    operator's, made by `api/src/reviewerLink.ts` as a one-off task with the api's image, as `dist/reports.js` is for reports
    (COMMUNITY-MIGRATION.md, "The team's reports"). No route makes one. `<familyId>` is the TEST family's id, `family.id` in `GET /family`.
    ```bash
