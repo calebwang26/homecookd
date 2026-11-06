@@ -352,7 +352,7 @@ export const cardTitle = (r: Recipe) => `${r.cook}'s ${r.dish}`;
 export const FAN = ['nonna-lasagna', 'dziadek-pierogi', 'nana-apple-pie', 'auntie-dee-mac', 'grandpa-rey-adobo', 'dad-chili', 'mom-salad']; // left→right; last = front video card
 export const FAN_MOBILE = ['dziadek-pierogi', 'nana-apple-pie', 'auntie-dee-mac', 'dad-chili', 'mom-salad']; // a subsequence of FAN, same order
 // Example cards in FAN use the green/yellow tints (brand lead); blush/peach stay on real app covers.
-export const BOX = ['grandma-noodle-soup', 'dad-chili', 'auntie-lin-pancakes', 'grandma-pork-belly', 'dad-fish', 'grandma-dumplings']; // the real family table + the dumplings added in app-record
+export const BOX = ['grandma-noodle-soup', 'dad-chili', 'auntie-lin-pancakes', 'grandma-pork-belly', 'dad-fish', 'grandma-dumplings']; // the real family table + the dumplings from the old app tour
 // All 21 recipes + 3 repeats (mama-jollof, grandpa-rey-adobo, dad-chili). Each row alternates
 // F/M (wrap-around included), has 6 F and 6 M, mixes app and example cards, and no tile
 // sits next to its own repeat.
