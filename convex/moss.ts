@@ -4,6 +4,9 @@
 // one sends every ready recipe and removes what shouldn't be there (a cook who took back the stories,
 // or deleted her account). A Moss error is tried again a few times (RETRY_MS), then left to the next
 // change or `worker:reindexMissing`.
+// MOSS_SYNC=off (Caleb, Oct 31: stop once Apple approves 1.0) stops sending: a sync then only deletes the family's index and
+// clears `mossIndexedAt`, so jobs still finish and a deleted account leaves nothing in Moss. Turning it back on:
+// unset it, then `npx convex run worker:reindexMissing` (needed before homie's voice cooking returns).
 // The SDK is used because Moss's REST API can't create an index (convex.json lists it as external).
 import { MossClient } from "@moss-js/moss";
 import { v } from "convex/values";
@@ -18,6 +21,9 @@ export const RETRY_MS = [30_000, 2 * 60_000, 5 * 60_000];
 const notFound = (e: unknown) =>
   (e as { status?: unknown } | null)?.status === 404 || /not found|does ?n[o’']t exist|no such index/i.test(String(e));
 
+/** True while MOSS_SYNC=off: nothing is sent to Moss. */
+export const syncOff = () => process.env.MOSS_SYNC === "off";
+
 export const syncFamily = internalAction({
   args: { familyId: v.id("families"), attempt: v.optional(v.number()) },
   returns: v.null(),
@@ -25,6 +31,7 @@ export const syncFamily = internalAction({
     const recipes = await ctx.runQuery(internal.worker.syncInput, { familyId });
     const projectId = process.env.MOSS_PROJECT_ID;
     const projectKey = process.env.MOSS_PROJECT_KEY;
+    const off = syncOff();
     let ok = false;
     let failed = false;
     if (!projectId || !projectKey) {
@@ -33,9 +40,9 @@ export const syncFamily = internalAction({
       try {
         const moss = new MossClient(projectId, projectKey);
         const name = mossIndexName(familyId);
-        const docs = recipes.flatMap((r) => [...stepDocs(r), ...(r.memoriesOptIn ? memoryDocs(r) : [])]);
+        const docs = off ? [] : recipes.flatMap((r) => [...stepDocs(r), ...(r.memoriesOptIn ? memoryDocs(r) : [])]);
         if (!docs.length) {
-          // Nothing left to find (say the only cook deleted her account): no index keeps any of it.
+          // Nothing left to find (the sync is off, or the only cook deleted her account): no index keeps any of it.
           await moss.deleteIndex(name).catch((e) => {
             if (!notFound(e)) throw e;
           });
@@ -59,7 +66,13 @@ export const syncFamily = internalAction({
       }
     }
     const retry = failed && attempt < RETRY_MS.length ? { attempt: attempt + 1, inMs: RETRY_MS[attempt] } : undefined;
-    await ctx.runMutation(internal.worker.synced, { familyId, recipeIds: recipes.map((r) => r._id), ok, ...(retry ? { retry } : {}) });
+    await ctx.runMutation(internal.worker.synced, {
+      familyId,
+      recipeIds: recipes.map((r) => r._id),
+      ok: ok && !off,
+      ...(off && ok ? { cleared: true } : {}),
+      ...(retry ? { retry } : {}),
+    });
     return null;
   },
 });
