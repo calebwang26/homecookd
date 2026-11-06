@@ -106,7 +106,7 @@ Staging has none of those keys today. `QUEUE_WORKER_DEBUG` shows the steps' outp
 **Permissions (`infra/modules/env/iam.tf`):** `s3:ListBucket` on `uploads` and `media`, and `s3:GetObject` on `private` for the plate photo.
 Not `s3:ListBucket` on `private`, so a missing photo answers 403, which `download_cover` already treats as no photo.
 
-**Infra:** Fargate's default 20 GB disk may be too small; see below. The env module's per-service `disk_gib` (21 to 200 GiB, #NNN) sets the task's
+**Infra:** Fargate's default 20 GB disk may be too small; see below. The env module's per-service `disk_gib` (21 to 200 GiB, #364) sets the task's
 disk; unset keeps the default. Production's worker leaves it unset until a job is measured (its `TODO(caleb)`): the measured job's `disk_peak_mb`
 sets the number. The measuring task gets its disk with
 `run-task --overrides '{"ephemeralStorage":{"sizeInGiB":100},"containerOverrides":[{"name":"worker","command":["--once"]}]}'`.
