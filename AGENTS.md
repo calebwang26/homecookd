@@ -234,6 +234,7 @@ cd app && node scripts/aws-dish-flows.mjs                          # kids' asks 
 cd app && node scripts/test-aws-community.mjs                     # the 1.1 Community client (fake fetch)
 cd app && node scripts/aws-community-flows.mjs                     # Community on AWS staging: feed, swaps, a dinner end to end, invite link (no reports: they email the team)
 cd app && node scripts/aws-takedown-flows.mjs make|down|back|off <file>  # the team's takedown and keep on staging (AWS backend runs remove/keep between steps); make then off: share off alone
+cd app && node scripts/aws-phone-run.mjs setup|finish|message|voice|delete <file>  # the staging side of a phone check (aws-phone/CHECKLIST.md): test cooks and links, finish jobs, a push, the voice note
 cd app && node scripts/draft-words.mjs                             # draft the cook app's missing words in every language (Claude); then test-words
 cd app && node scripts/sync-brand.mjs                             # the brand kit SVGs in assets/brand -> ui/brandSvgs.ts (test-brand checks them)
 
