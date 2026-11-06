@@ -198,7 +198,7 @@ supabase/   Frozen: functions/api (today's sign-in, invites, older screens), mig
 pipeline/   Python: prep.py → process.py (Gemini) → Muse Spark → publish.py, and worker.py (claims jobs from Convex)
 cloud/      GCS upload signer (Cloud Run) + IAM scripts
 api/        The new backend (Node, Fastify, Postgres; docs/build/SYSTEM-DESIGN.md). Nothing live calls it until each area switches (docs/build/CUTOVER.md)
-tools/      media-copy: GCS to S3, refuses real buckets without its named flags (docs/build/MEDIA-MIGRATION.md)
+tools/      media-copy: GCS to S3, refuses real buckets without its named flags (docs/build/MEDIA-MIGRATION.md); sample_library.py: the public library.json
 infra/      AWS, as Terraform (infra/README.md; the plan is docs/build/AWS-MIGRATION.md). Staging only so far; nothing live runs there
 scripts/    check-cartesia.mjs, check-moss.mjs (key checks), set-apple-ids.mjs (launch prep), check-merge-safe.mjs (aws-migration into main changes nothing live)
 data/       sample + synthetic recipes; data/out/ is pipeline output (gitignored)
@@ -282,7 +282,8 @@ node dist/reports.js open          # and review <kind> <id> keep|remove: the tea
 # temporary sync into Postgres: off by default, never on real data without Caleb's OK (docs/build/SYNC-MIGRATION.md)
 
 # media copy (tools/media-copy; never against real buckets without Caleb's OK and /privacy listing AWS)
-cd tools/media-copy && python3 test_media_copy.py && python3 test_stores.py
+cd tools/media-copy && python3 test_media_copy.py && python3 test_stores.py && python3 test_sample_library.py
+cd tools/media-copy && python3 sample_library.py --to <media bucket> --media-base <its https host>   # dry run: the sample library.json it would write (--write: Caleb's OK)
 
 # upload signer (cloud/signer)
 python3 cloud/signer/test_main.py                                  # sign-in check (Convex + GCS faked)

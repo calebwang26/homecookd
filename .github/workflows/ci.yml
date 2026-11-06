@@ -304,6 +304,7 @@ jobs:
             tools/media-copy/requirements-test.txt
       - run: pip install -r requirements.txt -r requirements-test.txt
       - run: python test_media_copy.py
+      - run: python test_sample_library.py
       - run: python test_stores.py # the fake GCS server isn't here, so its part skips
 
   checks:

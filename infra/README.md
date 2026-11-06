@@ -370,7 +370,14 @@ email, and `dish-api-e2e.mjs`. Once step 5 is live, the measured real video job 
 - ~~Community reports reach nobody on AWS.~~ Built in #323: a report or block logs a line, and a log alarm emails the alerts topic.
   Proven on staging Nov 2. Production gets it with this apply; confirm its alerts email (CUTOVER.md, step 6).
 - `infra/scripts/load-test.mjs` refuses production's address, so step 6's load test needs a production mode first (CUTOVER.md, step 6).
-- Production's media bucket has no `library.json`, so the public library is empty (contracts/JOBS.md, open item 15).
+- The sample library on production's media bucket (contracts/JOBS.md, open item 15, built in #366). Without it the api knows no library
+  dish, and 1.1 shows its bundled copy's GCS links. After step 6, with Caleb's OK for the write and his pick of samples (CUTOVER.md, step 6):
+  ```bash
+  cd tools/media-copy && pip install -r requirements.txt
+  ACCOUNT=$(aws sts get-caller-identity --profile homecookd --query Account --output text)
+  python3 sample_library.py --to homecookd-production-media-$ACCOUNT --media-base https://media.homecookd.app   # dry run
+  AWS_PROFILE=homecookd AWS_REGION=us-west-2 python3 sample_library.py --to homecookd-production-media-$ACCOUNT --media-base https://media.homecookd.app --write --library-bucket-caleb-ok
+  ```
 - The worker's disk is Fargate's default 20 GB. The env module's `disk_gib` sets more, 21 to 200 GiB (#364), and `plan_check.py` prices what's past 20.
   Production's worker leaves it unset until the measured real video job (CUTOVER.md, step 6) gives the number (WORKER-MIGRATION.md).
 
