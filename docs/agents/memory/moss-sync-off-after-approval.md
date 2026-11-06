@@ -12,7 +12,9 @@ work, and family recipes go to one more outside service, for a search nobody on 
 **Why it waits:** the build in App Review was described as still including voice cooking, the one thing that searches
 Moss (`voice/src/cook.ts`). The consent sheet and `/privacy` also name Moss, and they stay true while recipes are sent.
 
-**How to apply** (Convex & accounts owns this; the switch is built, Nov 5, `MOSS_SYNC=off` in `convex/moss.ts`):
+**Done Nov 6:** the switch is built (`MOSS_SYNC=off`, #347), flipped, and every family's index deleted (Moss lists 0). The steps below are kept for the record and for turning it back on.
+
+**How to apply** (Convex & accounts owns this; `MOSS_SYNC=off` in `convex/moss.ts`):
 1. Start only when 1.0 is out of review and the live build has `HOMIE_ON = false`. Confirm both first.
 2. Don't remove `MOSS_PROJECT_ID` or `MOSS_PROJECT_KEY` from Convex to stop it. Recipes would still finish, but
    `syncFamily` would skip Moss entirely, so a deleted account's steps and stories would stay in its index.
